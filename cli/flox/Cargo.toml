@@ -16,7 +16,7 @@ close_fds.workspace = true
 crossterm.workspace = true
 derive_more.workspace = true
 dirs.workspace = true
-flox-catalog.workspace = true
+floxhub-client.workspace = true
 flox-rust-sdk.workspace = true
 fslock.workspace = true
 futures.workspace = true
@@ -62,7 +62,7 @@ nef-lock-catalog.workspace = true
 flox-manifest.workspace = true
 
 [dev-dependencies]
-flox-catalog = { workspace = true, features = ["tests"] }
+floxhub-client = { workspace = true, features = ["tests"] }
 pretty_assertions.workspace = true
 proptest.workspace = true
 proptest-derive.workspace = true

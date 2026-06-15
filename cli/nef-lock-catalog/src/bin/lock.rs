@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use anyhow::Result;
 use clap::Parser;
-use flox_catalog::{CatalogClient, CatalogClientConfig, CatalogMockMode, DEFAULT_CATALOG_URL};
+use floxhub_client::{DEFAULT_CATALOG_URL, FloxhubClient, FloxhubClientConfig, FloxhubMockMode};
 use nef_lock_catalog::{LockOptions, lock_config_with_options, read_config, write_lock};
 use tracing_subscriber::fmt::format::FmtSpan;
 use tracing_subscriber::layer::SubscriberExt;
@@ -38,18 +38,20 @@ async fn main() -> Result<()> {
             .ok()
             .map(|token| token.parse())
             .transpose()?;
-        let auth_context =
-            flox_catalog::AuthContext::from_mode(&flox_catalog::AuthnMode::Auth0, floxhub_token);
+        let auth_context = floxhub_client::AuthContext::from_mode(
+            &floxhub_client::AuthnMode::Auth0,
+            floxhub_token,
+        );
 
-        let config = CatalogClientConfig {
-            catalog_url,
+        let config = FloxhubClientConfig {
+            base_url: catalog_url,
             extra_headers: Default::default(),
-            mock_mode: CatalogMockMode::default_from_env(),
+            mock_mode: FloxhubMockMode::default_from_env(),
             auth_context,
             user_agent: None,
         };
 
-        CatalogClient::new(config)?
+        FloxhubClient::new(config)?
     };
 
     let config = read_config(&cli.config)?;

@@ -2,8 +2,8 @@ use anyhow::{Context, Result, bail};
 use bpaf::Bpaf;
 use chrono::offset::Utc;
 use chrono::{DateTime, Duration};
-use flox_catalog::{AuthContext, AuthnMode};
 use flox_rust_sdk::flox::{FLOX_VERSION, Flox, FloxhubToken};
+use floxhub_client::{AuthContext, AuthnMode};
 use indoc::formatdoc;
 use oauth2::basic::{
     BasicClient,

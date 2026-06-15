@@ -3,17 +3,17 @@ use std::fmt::Debug;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, LazyLock, Mutex};
 
-use flox_catalog::{
+use floxhub_client::{
     ApiResponseValue,
     BaseCatalogInfo,
     BaseCatalogUrl,
-    CatalogClient,
-    CatalogClientConfig,
-    CatalogClientError,
-    CatalogMockMode,
+    CatalogClientTrait,
     CatalogStoreConfig,
     CheckBuildResponse,
-    ClientTrait,
+    FloxhubClient,
+    FloxhubClientConfig,
+    FloxhubClientError,
+    FloxhubMockMode,
     LockedSourceItem,
     PackageDetails,
     PackageGroup,
@@ -78,7 +78,7 @@ pub enum Response {
     Search(SearchResults),
     GetStoreInfo(StoreInfoResponse),
     GetStorepathStatus(StorepathStatusResponse),
-    Error(GenericResponse<flox_catalog::ApiErrorResponse>),
+    Error(GenericResponse<floxhub_client::ApiErrorResponse>),
     Publish(PublishResponse),
     CreatePackage,
     PublishBuild,
@@ -109,192 +109,6 @@ pub enum MockDataError {
 //     responses.extend(deserialized);
 //     Ok(responses)
 // }
-
-/// Either a client for the actual catalog service,
-/// or a mock client for testing.
-#[derive(Debug)]
-#[allow(clippy::large_enum_variant)]
-pub enum Client {
-    Catalog(CatalogClient),
-    Mock(MockClient),
-}
-
-impl From<CatalogClient> for Client {
-    fn from(c: CatalogClient) -> Self {
-        Client::Catalog(c)
-    }
-}
-
-impl From<MockClient> for Client {
-    fn from(c: MockClient) -> Self {
-        Client::Mock(c)
-    }
-}
-
-impl ClientTrait for Client {
-    async fn resolve(
-        &self,
-        package_groups: Vec<PackageGroup>,
-    ) -> Result<Vec<ResolvedPackageGroup>, ResolveError> {
-        match self {
-            Client::Catalog(c) => c.resolve(package_groups).await,
-            Client::Mock(c) => c.resolve(package_groups).await,
-        }
-    }
-
-    async fn search_with_spinner(
-        &self,
-        search_term: impl AsRef<str> + Send + Sync,
-        system: PackageSystem,
-        limit: SearchLimit,
-    ) -> Result<SearchResults, SearchError> {
-        match self {
-            Client::Catalog(c) => c.search_with_spinner(search_term, system, limit).await,
-            Client::Mock(c) => c.search_with_spinner(search_term, system, limit).await,
-        }
-    }
-
-    async fn search(
-        &self,
-        search_term: impl AsRef<str> + Send + Sync,
-        system: PackageSystem,
-        limit: SearchLimit,
-    ) -> Result<SearchResults, SearchError> {
-        match self {
-            Client::Catalog(c) => c.search(search_term, system, limit).await,
-            Client::Mock(c) => c.search(search_term, system, limit).await,
-        }
-    }
-
-    async fn package_versions(
-        &self,
-        attr_path: impl AsRef<str> + Send + Sync,
-    ) -> Result<PackageDetails, VersionsError> {
-        match self {
-            Client::Catalog(c) => c.package_versions(attr_path).await,
-            Client::Mock(c) => c.package_versions(attr_path).await,
-        }
-    }
-
-    async fn publish_info(
-        &self,
-        catalog_name: impl AsRef<str> + Send + Sync,
-        package_name: impl AsRef<str> + Send + Sync,
-    ) -> Result<PublishResponse, CatalogClientError> {
-        match self {
-            Client::Catalog(c) => c.publish_info(catalog_name, package_name).await,
-            Client::Mock(c) => c.publish_info(catalog_name, package_name).await,
-        }
-    }
-
-    async fn create_package(
-        &self,
-        catalog_name: impl AsRef<str> + Send + Sync,
-        package_name: impl AsRef<str> + Send + Sync,
-        original_url: impl AsRef<str> + Send + Sync,
-    ) -> Result<(), CatalogClientError> {
-        match self {
-            Client::Catalog(c) => {
-                c.create_package(catalog_name, package_name, original_url)
-                    .await
-            },
-            Client::Mock(c) => {
-                c.create_package(catalog_name, package_name, original_url)
-                    .await
-            },
-        }
-    }
-
-    async fn publish_build(
-        &self,
-        catalog_name: impl AsRef<str> + Send + Sync,
-        package_name: impl AsRef<str> + Send + Sync,
-        build_info: &UserBuildPublish,
-    ) -> Result<(), CatalogClientError> {
-        match self {
-            Client::Catalog(c) => {
-                c.publish_build(catalog_name, package_name, build_info)
-                    .await
-            },
-            Client::Mock(c) => {
-                c.publish_build(catalog_name, package_name, build_info)
-                    .await
-            },
-        }
-    }
-
-    async fn get_store_info(
-        &self,
-        derivations: Vec<String>,
-    ) -> Result<HashMap<String, Vec<StoreInfo>>, CatalogClientError> {
-        match self {
-            Client::Catalog(c) => c.get_store_info(derivations).await,
-            Client::Mock(c) => c.get_store_info(derivations).await,
-        }
-    }
-
-    async fn is_publish_complete(
-        &self,
-        store_paths: &[String],
-    ) -> Result<bool, CatalogClientError> {
-        match self {
-            Client::Catalog(c) => c.is_publish_complete(store_paths).await,
-            Client::Mock(c) => c.is_publish_complete(store_paths).await,
-        }
-    }
-
-    async fn get_base_catalog_info(&self) -> Result<BaseCatalogInfo, CatalogClientError> {
-        match self {
-            Client::Catalog(c) => c.get_base_catalog_info().await,
-            Client::Mock(c) => c.get_base_catalog_info().await,
-        }
-    }
-
-    async fn get_catalog_locked_sources(
-        &self,
-        catalog_name: impl AsRef<str> + Send + Sync,
-    ) -> Result<ResultsPage<LockedSourceItem>, CatalogClientError> {
-        match self {
-            Client::Catalog(c) => c.get_catalog_locked_sources(catalog_name).await,
-            Client::Mock(c) => c.get_catalog_locked_sources(catalog_name).await,
-        }
-    }
-
-    async fn check_build_already_recorded(
-        &self,
-        catalog_name: impl AsRef<str> + Send + Sync,
-        package_name: impl AsRef<str> + Send + Sync,
-        source_url: &Url,
-        source_rev: &str,
-        nixpkgs_rev: &str,
-        system: PackageSystem,
-    ) -> Result<CheckBuildResponse, CatalogClientError> {
-        match self {
-            Client::Catalog(c) => {
-                c.check_build_already_recorded(
-                    catalog_name,
-                    package_name,
-                    source_url,
-                    source_rev,
-                    nixpkgs_rev,
-                    system,
-                )
-                .await
-            },
-            Client::Mock(c) => {
-                c.check_build_already_recorded(
-                    catalog_name,
-                    package_name,
-                    source_url,
-                    source_rev,
-                    nixpkgs_rev,
-                    system,
-                )
-                .await
-            },
-        }
-    }
-}
 
 #[derive(Clone, Copy, Debug, Default, derive_more::Display, PartialEq)]
 /// The QoS class of a catalog request.
@@ -368,7 +182,7 @@ impl MockClient {
     }
 }
 
-impl ClientTrait for MockClient {
+impl CatalogClientTrait for MockClient {
     async fn resolve(
         &self,
         _package_groups: Vec<PackageGroup>,
@@ -380,8 +194,8 @@ impl ClientTrait for MockClient {
             .pop_front();
         match mock_resp {
             Some(Response::Resolve(resp)) => Ok(resp),
-            Some(Response::Error(err)) => Err(ResolveError::CatalogClientError(
-                CatalogClientError::APIError(flox_catalog::ApiError::ErrorResponse(
+            Some(Response::Error(err)) => Err(ResolveError::FloxhubClientError(
+                FloxhubClientError::APIError(floxhub_client::ApiError::ErrorResponse(
                     err.try_into()
                         .expect("couldn't convert mock error response"),
                 )),
@@ -423,8 +237,8 @@ impl ClientTrait for MockClient {
                 results: vec![],
                 count: Some(0),
             }),
-            Some(Response::Error(err)) => Err(SearchError::CatalogClientError(
-                CatalogClientError::APIError(flox_catalog::ApiError::ErrorResponse(
+            Some(Response::Error(err)) => Err(SearchError::FloxhubClientError(
+                FloxhubClientError::APIError(floxhub_client::ApiError::ErrorResponse(
                     err.try_into()
                         .expect("couldn't convert mock error response"),
                 )),
@@ -445,8 +259,8 @@ impl ClientTrait for MockClient {
         match mock_resp {
             Some(Response::Packages(resp)) => Ok(resp),
             Some(Response::Error(err)) if err.status == 404 => Err(VersionsError::NotFound),
-            Some(Response::Error(err)) => Err(VersionsError::CatalogClientError(
-                CatalogClientError::APIError(flox_catalog::ApiError::ErrorResponse(
+            Some(Response::Error(err)) => Err(VersionsError::FloxhubClientError(
+                FloxhubClientError::APIError(floxhub_client::ApiError::ErrorResponse(
                     err.try_into()
                         .expect("couldn't convert mock error response"),
                 )),
@@ -459,7 +273,7 @@ impl ClientTrait for MockClient {
         &self,
         _catalog_name: impl AsRef<str> + Send + Sync,
         _package_name: impl AsRef<str> + Send + Sync,
-    ) -> Result<PublishResponse, CatalogClientError> {
+    ) -> Result<PublishResponse, FloxhubClientError> {
         let mock_resp = self
             .mock_responses
             .lock()
@@ -477,7 +291,7 @@ impl ClientTrait for MockClient {
         _catalog_name: impl AsRef<str> + Send + Sync,
         _package_name: impl AsRef<str> + Send + Sync,
         _original_url: impl AsRef<str> + Send + Sync,
-    ) -> Result<(), CatalogClientError> {
+    ) -> Result<(), FloxhubClientError> {
         let mock_resp = self
             .mock_responses
             .lock()
@@ -495,7 +309,7 @@ impl ClientTrait for MockClient {
         _catalog_name: impl AsRef<str> + Send + Sync,
         _package_name: impl AsRef<str> + Send + Sync,
         _build_info: &UserBuildPublish,
-    ) -> Result<(), CatalogClientError> {
+    ) -> Result<(), FloxhubClientError> {
         let mock_resp = self
             .mock_responses
             .lock()
@@ -511,7 +325,7 @@ impl ClientTrait for MockClient {
     async fn get_store_info(
         &self,
         _derivations: Vec<String>,
-    ) -> Result<HashMap<String, Vec<StoreInfo>>, CatalogClientError> {
+    ) -> Result<HashMap<String, Vec<StoreInfo>>, FloxhubClientError> {
         let mock_resp = self
             .mock_responses
             .lock()
@@ -526,7 +340,7 @@ impl ClientTrait for MockClient {
     async fn is_publish_complete(
         &self,
         _store_paths: &[String],
-    ) -> Result<bool, CatalogClientError> {
+    ) -> Result<bool, FloxhubClientError> {
         let mock_resp = self
             .mock_responses
             .lock()
@@ -544,7 +358,7 @@ impl ClientTrait for MockClient {
         Ok(all_narinfo_available)
     }
 
-    async fn get_base_catalog_info(&self) -> Result<BaseCatalogInfo, CatalogClientError> {
+    async fn get_base_catalog_info(&self) -> Result<BaseCatalogInfo, FloxhubClientError> {
         let mock_resp = self
             .mock_responses
             .lock()
@@ -562,7 +376,7 @@ impl ClientTrait for MockClient {
     async fn get_catalog_locked_sources(
         &self,
         _catalog_name: impl AsRef<str> + Send + Sync,
-    ) -> Result<ResultsPage<LockedSourceItem>, CatalogClientError> {
+    ) -> Result<ResultsPage<LockedSourceItem>, FloxhubClientError> {
         unimplemented!("get_catalog_locked_sources not implemented for MockClient")
     }
 
@@ -574,7 +388,7 @@ impl ClientTrait for MockClient {
         _source_rev: &str,
         _nixpkgs_rev: &str,
         _system: PackageSystem,
-    ) -> Result<CheckBuildResponse, CatalogClientError> {
+    ) -> Result<CheckBuildResponse, FloxhubClientError> {
         unimplemented!("check_build_already_recorded is not supported in MockClient")
     }
 }
@@ -619,9 +433,9 @@ pub fn mock_base_catalog_url() -> BaseCatalogUrl {
 /// Otherwise attr
 pub async fn base_catalog_url_for_stability_arg(
     stability: Option<&str>,
-    base_catalog_info_fut: impl IntoFuture<Output = Result<BaseCatalogInfo, CatalogClientError>>,
+    base_catalog_info_fut: impl IntoFuture<Output = Result<BaseCatalogInfo, FloxhubClientError>>,
     toplevel_derived_url: Option<&BaseCatalogUrl>,
-) -> Result<BaseCatalogUrl, CatalogClientError> {
+) -> Result<BaseCatalogUrl, FloxhubClientError> {
     let url = match (stability, toplevel_derived_url) {
         (Some(stability), _) => {
             let base_catalog_info = base_catalog_info_fut.await?;
@@ -635,7 +449,7 @@ pub async fn base_catalog_url_for_stability_arg(
 
             let url = base_catalog_info
                 .url_for_latest_page_with_stability(stability)
-                .ok_or_else(|| CatalogClientError::StabilityError(make_error_message()))?;
+                .ok_or_else(|| FloxhubClientError::StabilityError(make_error_message()))?;
 
             info!(%url, %stability, "using page from user provided stability");
             url
@@ -657,7 +471,7 @@ pub async fn base_catalog_url_for_stability_arg(
 
             let url = base_catalog_info
                 .url_for_latest_page_with_default_stability()
-                .ok_or_else(|| CatalogClientError::StabilityError(make_error_message()))?;
+                .ok_or_else(|| FloxhubClientError::StabilityError(make_error_message()))?;
 
             info!(%url, "using page from default stability");
             url
@@ -671,8 +485,9 @@ pub async fn get_base_nixpkgs_url(
     flox: &Flox,
     stability: Option<&str>,
     env_metadata: &CheckedEnvironmentMetadata,
-) -> Result<BaseCatalogUrl, CatalogClientError> {
-    let base_catalog_info_fut = flox.catalog_client.get_base_catalog_info();
+) -> Result<BaseCatalogUrl, FloxhubClientError> {
+    let catalog = &flox.floxhub_client;
+    let base_catalog_info_fut = catalog.get_base_catalog_info();
 
     base_catalog_url_for_stability_arg(
         stability,
@@ -683,7 +498,7 @@ pub async fn get_base_nixpkgs_url(
 }
 
 pub mod test_helpers {
-    use flox_catalog::{AuthContext, AuthnMode, DEFAULT_CATALOG_URL};
+    use floxhub_client::{AuthContext, AuthnMode, DEFAULT_CATALOG_URL};
     use pollster::FutureExt;
     use tempfile::TempDir;
 
@@ -749,32 +564,30 @@ pub mod test_helpers {
         }
     }
 
-    /// Create a mock client that will replay from a given file.
+    /// Create a [`FloxhubClient`] that will replay from a given file.
     ///
     /// Tests must be run with `#[tokio::test(flavor = "multi_thread")]` to
     /// allow the `MockServer` to run in another thread.
     ///
     /// This should be used to replay mocks generated by mk_data.
-    /// In general, auto_recording_catalog_client is preferred.
-    pub async fn catalog_replay_client(path: impl AsRef<Path>) -> Client {
-        let catalog_config = CatalogClientConfig {
-            catalog_url: "https://not_used".to_string(),
+    /// In general, `auto_recording_catalog_client` is preferred.
+    pub async fn catalog_replay_client(path: impl AsRef<Path>) -> FloxhubClient {
+        let catalog_config = FloxhubClientConfig {
+            base_url: "https://not_used".to_string(),
             extra_headers: Default::default(),
-            mock_mode: CatalogMockMode::Replay(path.as_ref().to_path_buf()),
+            mock_mode: FloxhubMockMode::Replay(path.as_ref().to_path_buf()),
             auth_context: AuthContext::from_mode(&AuthnMode::Auth0, None),
             user_agent: None,
         };
-        Client::Catalog(
-            CatalogClient::new(catalog_config).expect("failed to create catalog client"),
-        )
+        FloxhubClient::new(catalog_config).expect("failed to create catalog client")
     }
 
-    /// Create a mock client that will either record to or replay from a given
-    /// file name depending on whether `_FLOX_UNIT_TEST_RECORD` is set.
+    /// Create a [`FloxhubClient`] that will either record to or replay from a
+    /// given file name depending on whether `_FLOX_UNIT_TEST_RECORD` is set.
     ///
     /// Tests must be run with `#[tokio::test(flavor = "multi_thread")]` to
     /// allow the `MockServer` to run in another thread.
-    pub fn auto_recording_catalog_client(filename: &str) -> Client {
+    pub fn auto_recording_catalog_client(filename: &str) -> FloxhubClient {
         let auth = NixAuth::from_tempdir_and_token(TempDir::new().unwrap(), None);
         let record = get_record_directive();
         auto_recording_client_inner(
@@ -786,8 +599,8 @@ pub mod test_helpers {
         )
     }
 
-    /// Similar to [auto_recording_catalog_client] but authenticates against a dev
-    /// instance of the catalog-server using a token from
+    /// Similar to [`auto_recording_catalog_client`] but authenticates against a
+    /// dev instance of the catalog-server using a token from the test users file.
     pub fn auto_recording_catalog_client_for_authed_local_services(
         mut flox: Flox,
         user: PublishTestUser,
@@ -804,22 +617,22 @@ pub mod test_helpers {
         let auth = NixAuth::from_flox(&flox).unwrap();
         let base_url = "http://localhost:8010";
         let client = auto_recording_client_inner(filename, base_url, user, &auth, record);
-        flox.catalog_client = client;
+        flox.floxhub_client = client;
 
         (flox, auth)
     }
 
-    /// Generic handler for creating a mock catalog client.
+    /// Generic handler for creating a replay/record FloxhubClient.
     fn auto_recording_client_inner(
         filename: &str,
         base_url: &str,
         user: PublishTestUser,
         auth: &NixAuth,
         record: RecordMockData,
-    ) -> Client {
+    ) -> FloxhubClient {
         let mut path = UNIT_TEST_GENERATED.join(filename);
         path.set_extension("yaml");
-        let (mock_mode, catalog_url) = match record {
+        let (mock_mode, base_url_str) = match record {
             RecordMockData::Missing => {
                 // TODO(zmitchell, 2025-07-23): it would be convenient if we
                 // also detected empty mock files as "missing" since a failed
@@ -829,70 +642,59 @@ pub mod test_helpers {
                 if path.exists() {
                     // Use an existing recording
                     (
-                        CatalogMockMode::Replay(path),
+                        FloxhubMockMode::Replay(path),
                         "https://not_used".to_string(),
                     )
                 } else {
                     // Generate a new recording
-                    (CatalogMockMode::Record(path), base_url.to_string())
+                    (FloxhubMockMode::Record(path), base_url.to_string())
                 }
             },
             RecordMockData::False => {
                 // Use an existing recording
                 (
-                    CatalogMockMode::Replay(path),
+                    FloxhubMockMode::Replay(path),
                     "https://not_used".to_string(),
                 )
             },
             RecordMockData::Force => {
                 // Regenerate existing recording
-                (CatalogMockMode::Record(path), base_url.to_string())
+                (FloxhubMockMode::Record(path), base_url.to_string())
             },
         };
 
-        let catalog_config = CatalogClientConfig {
-            catalog_url: catalog_url.clone(),
+        let catalog_config = FloxhubClientConfig {
+            base_url: base_url_str.clone(),
             extra_headers: Default::default(),
             mock_mode: mock_mode.clone(),
             auth_context: AuthContext::from_mode(&AuthnMode::Auth0, auth.token().cloned()),
             user_agent: None,
         };
-        let client_inner =
-            CatalogClient::new(catalog_config).expect("failed to create catalog client");
-        let mut client = Client::Catalog(client_inner);
-        if matches!(mock_mode, CatalogMockMode::Record(_)) && user == PublishTestUser::WithCatalogs
+        let mut client =
+            FloxhubClient::new(catalog_config).expect("failed to create catalog client");
+        if matches!(mock_mode, FloxhubMockMode::Record(_)) && user == PublishTestUser::WithCatalogs
         {
             ensure_test_catalogs_exist(&client).block_on();
-            if let Client::Catalog(ref mut client_inner) = client {
-                // Delete all of the setup operations from the recording.
-                client_inner.reset_recording();
-            }
+            // Delete all of the setup operations from the recording.
+            client.reset_recording();
         }
         client
     }
 
-    /// Clear mock responses and then load provided responses
-    pub fn reset_mocks(client: &mut Client, responses: Vec<Response>) {
-        let Client::Mock(client) = client else {
-            panic!("mocks can only be used with a MockClient");
-        };
-
-        client.reset_mocks(responses);
+    /// Clear mock responses and then load provided responses.
+    pub fn reset_mocks(mock: &mut MockClient, responses: Vec<Response>) {
+        mock.reset_mocks(responses);
     }
 
     /// Create a catalog with the given name and config.
     ///
     /// Will continue with config and not return an error if the catalog already exists.
     pub async fn create_catalog_with_config(
-        client: &Client,
+        client: &FloxhubClient,
         name: &str,
         config: &CatalogStoreConfig,
         exists_ok: bool,
-    ) -> Result<(), CatalogClientError> {
-        let Client::Catalog(client) = client else {
-            panic!("can only be used with a CatalogClient");
-        };
-
+    ) -> Result<(), FloxhubClientError> {
         // This also performs validation that the name meets the catalog name requirements.
         let catalog_name = str_to_catalog_name(name)?;
 
@@ -905,14 +707,14 @@ pub mod test_helpers {
             // Continue if already exists.
             Err(e) if e.status() == Some(StatusCode::CONFLICT) => {
                 if !exists_ok {
-                    return Err(CatalogClientError::Other(
+                    return Err(FloxhubClientError::Other(
                         "catalog already existed".to_string(),
                     ));
                 }
                 // return Ok(());
             },
             Err(e) => {
-                return Err(CatalogClientError::APIError(e));
+                return Err(FloxhubClientError::APIError(e));
             },
         }
 
@@ -923,7 +725,7 @@ pub mod test_helpers {
                 config,
             )
             .await
-            .map_err(CatalogClientError::APIError)?;
+            .map_err(FloxhubClientError::APIError)?;
 
         Ok(())
     }
@@ -935,7 +737,7 @@ pub mod test_helpers {
 
     /// Ensures that the test org catalog exists, ignoring errors that arise from
     /// trying to create it when it already exists.
-    pub async fn ensure_test_catalogs_exist(client: &Client) {
+    pub async fn ensure_test_catalogs_exist(client: &FloxhubClient) {
         let config = CatalogStoreConfig::MetaOnly;
         create_catalog_with_config(client, TEST_READ_WRITE_CATALOG_NAME, &config, true)
             .await
@@ -1026,7 +828,7 @@ mod tests {
         // - POST to /catalog/catalogs?name=<catalog_name_raw>
         // - PUT to /catalog/catalogs/<catalog_name_raw>/store/config
         create_catalog_with_config(
-            &flox.catalog_client,
+            &flox.floxhub_client,
             catalog_name_raw,
             &CatalogStoreConfig::MetaOnly,
             false,

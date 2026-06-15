@@ -3,7 +3,6 @@ use std::path::{Path, PathBuf};
 use std::{fs, io};
 
 use enum_dispatch::enum_dispatch;
-use flox_catalog::ResolveError;
 use flox_core::activate::mode::ActivateMode;
 use flox_core::data::environment_ref::{
     ActivateEnvironmentRef,
@@ -15,6 +14,7 @@ pub use flox_core::{Version, path_hash};
 use flox_manifest::lockfile::{LockedInclude, Lockfile, LockfileError};
 use flox_manifest::raw::{PackageToInstall, PackageToModify};
 use flox_manifest::{Manifest, ManifestError, Migrated, Validated};
+use floxhub_client::ResolveError;
 use generations::{GenerationId, GenerationsError};
 use indoc::formatdoc;
 use managed_environment::ManagedEnvironment;
@@ -1539,7 +1539,7 @@ mod migration_tests {
             hello.pkg-path = "hello"
         "#});
 
-        flox.catalog_client =
+        flox.floxhub_client =
             catalog_replay_client(GENERATED_DATA.join("resolve/hello.yaml")).await;
 
         setup_locked_included_env(&flox, tempdir.path(), &included_manifest);
@@ -1573,7 +1573,7 @@ mod migration_tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn v1_including_latest_with_outputs_all_is_migrated() {
         let (mut flox, tempdir) = flox_instance();
-        flox.catalog_client = catalog_replay_client(GENERATED_DATA.join("envs/bash.yaml")).await;
+        flox.floxhub_client = catalog_replay_client(GENERATED_DATA.join("envs/bash.yaml")).await;
 
         let included_manifest = with_latest_schema(indoc! {r#"
             [install]
@@ -1604,7 +1604,7 @@ mod migration_tests {
             bash.outputs = ["out"]
         "#});
 
-        flox.catalog_client = catalog_replay_client(GENERATED_DATA.join("envs/bash.yaml")).await;
+        flox.floxhub_client = catalog_replay_client(GENERATED_DATA.join("envs/bash.yaml")).await;
 
         setup_locked_included_env(&flox, tempdir.path(), &included_manifest);
 
@@ -1650,7 +1650,7 @@ mod migration_tests {
             bash.outputs = "all"
         "#});
 
-        flox.catalog_client = catalog_replay_client(GENERATED_DATA.join("envs/bash.yaml")).await;
+        flox.floxhub_client = catalog_replay_client(GENERATED_DATA.join("envs/bash.yaml")).await;
 
         included_env.edit(&flox, updated_included_manifest).unwrap();
 
@@ -1717,7 +1717,7 @@ mod migration_tests {
             bash.outputs = "all"
         "#});
 
-        flox.catalog_client = catalog_replay_client(GENERATED_DATA.join("envs/bash.yaml")).await;
+        flox.floxhub_client = catalog_replay_client(GENERATED_DATA.join("envs/bash.yaml")).await;
 
         let result = composer.edit(&flox, edited_manifest).unwrap();
         let EditResult::Changed { new_lockfile, .. } = result else {
@@ -1794,7 +1794,7 @@ mod migration_tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn v1_manifest_doesnt_migrate_when_hello_is_installed() {
         let (mut flox, _tempdir) = flox_instance();
-        flox.catalog_client =
+        flox.floxhub_client =
             catalog_replay_client(GENERATED_DATA.join("resolve/hello.yaml")).await;
         let mut env = new_path_environment(&flox, "version = 1");
         _ = env.lockfile(&flox).unwrap(); // make sure a lockfile exists
@@ -1829,7 +1829,7 @@ mod migration_tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn v1_manifest_migrates_when_bash_is_installed() {
         let (mut flox, _tempdir) = flox_instance();
-        flox.catalog_client = catalog_replay_client(GENERATED_DATA.join("envs/bash.yaml")).await;
+        flox.floxhub_client = catalog_replay_client(GENERATED_DATA.join("envs/bash.yaml")).await;
         let mut env = new_path_environment(&flox, "version = 1");
         _ = env.lockfile(&flox).unwrap(); // make sure a lockfile exists
         assert_eq!(

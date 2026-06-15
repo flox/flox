@@ -1773,7 +1773,6 @@ mod test {
         new_core_environment_with_lockfile,
     };
     use crate::models::floxmeta::floxmeta_dir;
-    use crate::providers::catalog::MockClient;
     use crate::providers::catalog::test_helpers::catalog_replay_client;
     use crate::providers::git::GitCommandProvider;
     use crate::providers::git::tests::{commit_file, test_git_options};
@@ -1969,10 +1968,7 @@ mod test {
     #[test]
     fn test_sync_local() {
         let owner = EnvironmentOwner::from_str("owner").unwrap();
-        let (mut flox, _temp_dir_handle) = flox_instance_with_optional_floxhub(Some(&owner));
-
-        let client = MockClient::new();
-        flox.catalog_client = client.into();
+        let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub(Some(&owner));
 
         let mut managed_env = test_helpers::mock_managed_environment_unlocked(
             &flox,
@@ -2040,7 +2036,7 @@ mod test {
             .local_env_or_copy_current_generation(&flox)
             .unwrap();
 
-        flox.catalog_client =
+        flox.floxhub_client =
             catalog_replay_client(GENERATED_DATA.join("resolve/hello.yaml")).await;
 
         let mut new_manifest = ManifestLatest::default();
@@ -2497,7 +2493,7 @@ mod test {
         let owner = "owner".parse().unwrap();
         let (mut flox, temp_dir) = flox_instance_with_optional_floxhub(Some(&owner));
 
-        flox.catalog_client =
+        flox.floxhub_client =
             catalog_replay_client(GENERATED_DATA.join("resolve/hello.yaml")).await;
 
         let mut env = mock_managed_environment_in(&flox, "version = 1", owner, &temp_dir, None);
@@ -2531,7 +2527,7 @@ mod test {
         let owner = "owner".parse().unwrap();
         let (mut flox, temp_dir) = flox_instance_with_optional_floxhub(Some(&owner));
 
-        flox.catalog_client =
+        flox.floxhub_client =
             catalog_replay_client(GENERATED_DATA.join("resolve/hello.yaml")).await;
 
         let package = "hello".to_string();
@@ -2624,7 +2620,7 @@ mod test {
             hello.pkg-path = "hello"
         "#};
 
-        flox.catalog_client =
+        flox.floxhub_client =
             catalog_replay_client(GENERATED_DATA.join("resolve/old_hello.yaml")).await;
 
         let mut env = mock_managed_environment_in(&flox, manifest, owner, &temp_dir, None);
@@ -2634,7 +2630,7 @@ mod test {
             "initialised environment should have generation 1"
         );
 
-        flox.catalog_client =
+        flox.floxhub_client =
             catalog_replay_client(GENERATED_DATA.join("resolve/hello.yaml")).await;
 
         env.upgrade(&flox, &[]).unwrap();
@@ -2716,7 +2712,7 @@ mod test {
         let owner = "owner".parse().unwrap();
         let (mut flox, tempdir) = flox_instance_with_optional_floxhub(Some(&owner));
 
-        flox.catalog_client = catalog_replay_client(GENERATED_DATA.join("empty.yaml")).await;
+        flox.floxhub_client = catalog_replay_client(GENERATED_DATA.join("empty.yaml")).await;
         let initial_manifest = indoc! {r#"
             version = 1
             [install]
@@ -2730,7 +2726,7 @@ mod test {
             Some("test-env"),
         );
 
-        flox.catalog_client =
+        flox.floxhub_client =
             catalog_replay_client(GENERATED_DATA.join("resolve/hello.yaml")).await;
         environment
             .install(
@@ -2768,16 +2764,12 @@ mod compare_remote_tests {
     use super::*;
     use crate::flox::test_helpers::flox_instance_with_optional_floxhub;
     use crate::models::environment::managed_environment::test_helpers::mock_managed_environment_in;
-    use crate::providers::catalog::MockClient;
 
     /// Helper to create a pair of environment instances at different paths
     /// sharing the same remote environment
     fn setup_env_pair(env_name: &str) -> (Flox, TempDir, ManagedEnvironment, ManagedEnvironment) {
         let owner = "owner".parse().unwrap();
-        let (mut flox, temp_dir_handle) = flox_instance_with_optional_floxhub(Some(&owner));
-
-        let client = MockClient::new();
-        flox.catalog_client = client.into();
+        let (flox, temp_dir_handle) = flox_instance_with_optional_floxhub(Some(&owner));
 
         // Create first instance (env_a)
         let project_a_path = flox.temp_dir.join("project_a");

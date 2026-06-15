@@ -4,9 +4,9 @@ use std::io::Write;
 
 use anyhow::{Result, bail};
 use bpaf::Bpaf;
-use flox_catalog::{ClientTrait, PackageBuild, PackageDetails, VersionsError};
 use flox_rust_sdk::data::System;
 use flox_rust_sdk::flox::Flox;
+use floxhub_client::{CatalogClientTrait, PackageBuild, PackageDetails, VersionsError};
 use tracing::instrument;
 
 use crate::subcommand_metric;
@@ -29,7 +29,7 @@ impl Show {
         sentry_set_tag("pkg_path", &self.pkg_path);
 
         tracing::debug!("using catalog client for show");
-        let results = match flox.catalog_client.package_versions(&self.pkg_path).await {
+        let results = match flox.floxhub_client.package_versions(&self.pkg_path).await {
             Ok(results) => results,
             // Below, results.is_empty() is used to mean the search_term
             // didn't match a package.
@@ -193,9 +193,9 @@ fn render_show_catalog(
 
 #[cfg(test)]
 mod test {
-    use flox_catalog::{PackageOutput, PackageOutputs, PackageSystem};
     use flox_rust_sdk::flox::test_helpers::flox_instance;
     use flox_rust_sdk::providers::catalog::test_helpers::auto_recording_catalog_client;
+    use floxhub_client::{PackageOutput, PackageOutputs, PackageSystem};
     use indoc::indoc;
     use pretty_assertions::assert_eq;
 
@@ -204,7 +204,7 @@ mod test {
     #[tokio::test]
     async fn show_handles_404() {
         let (mut flox, _temp_dir_handle) = flox_instance();
-        flox.catalog_client = auto_recording_catalog_client("show_handles_404");
+        flox.floxhub_client = auto_recording_catalog_client("show_handles_404");
         let search_term = "search_term";
         let err = Show {
             pkg_path: search_term.to_string(),

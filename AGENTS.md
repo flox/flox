@@ -231,7 +231,7 @@ If so, add a `## Release Notes` section to the PR description describing the cha
     architecture names, `NixFlakeref` for flake refs,
     `BaseCatalogUrl` for catalog URLs. Check the relevant
     provider module for existing types, e.g. when working with
-    catalog information check `cli/flox-catalog/src/types.rs`.
+    catalog information check `cli/floxhub-client/src/types.rs`.
   - **User-visible message syntax, structure, and content:**
     - Use complete sentences. Do not use "I", "we", or "flox"
       as the subject — drop it instead
@@ -291,7 +291,7 @@ If so, add a `## Release Notes` section to the PR description describing the cha
   - **Naming new helpers:** Before introducing a helper
     function, search for the naming convention used by similar
     helpers in the same file. Follow established patterns
-    (`str_to_x` for query-param parsers in `flox-catalog`,
+    (`str_to_x` for query-param parsers in `floxhub-client`,
     `with_x` / `from_x` patterns elsewhere) rather than
     introducing a new convention.
   - **Deprecated infrastructure:** Before adding an
