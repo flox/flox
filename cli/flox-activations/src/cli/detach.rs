@@ -67,12 +67,7 @@ impl DetachArgs {
 mod test {
     use flox_core::activate::mode::ActivateMode;
     use flox_core::activations::test_helpers::{read_activation_state, write_activation_state};
-    use flox_core::activations::{
-        ActivationState,
-        StartIdentifier,
-        StartOrAttachResult,
-        activation_state_dir_path,
-    };
+    use flox_core::activations::{ActivationState, StartOrAttachResult, activation_state_dir_path};
     use tempfile::TempDir;
 
     use super::DetachArgs;
@@ -90,14 +85,17 @@ mod test {
             dot_flox_path.join("run/default"),
         );
         state.set_executive_pid(1);
-        let start_id = StartIdentifier::new("/nix/store/test");
-        state.start_or_attach(pid, &start_id.store_path);
+        // Use the identifier minted by start_or_attach: StartIdentifier is
+        // timestamped, so a locally constructed one names a different start
+        // state dir whenever the millisecond ticks in between.
+        let StartOrAttachResult::Start { start_id } = state.start_or_attach(pid, "/nix/store/test")
+        else {
+            panic!("expected Start for pid");
+        };
         write_activation_state(tmp.path(), &dot_flox_path, state);
         let activation_state_dir = activation_state_dir_path(tmp.path(), &dot_flox_path);
         let start_state_dir = start_id.start_state_dir(&activation_state_dir).unwrap();
         std::fs::create_dir_all(&start_state_dir).unwrap();
-
-        let activation_state_dir = activation_state_dir_path(tmp.path(), &dot_flox_path);
 
         let args = DetachArgs {
             activation_state_dir,
