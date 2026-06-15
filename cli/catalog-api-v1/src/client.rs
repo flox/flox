@@ -325,41 +325,51 @@ manifest packages were built via the traditional flox manifest workflow.*/
     ///  "title": "CatalogPage",
     ///  "examples": [
     ///    {
-    ///      "attr_path": "curl",
-    ///      "broken": false,
-    ///      "catalog": "nixpkgs",
-    ///      "derivation": "/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-curl-8.5.0.drv",
-    ///      "description": "A command line tool for transferring files with URL syntax",
-    ///      "insecure": false,
-    ///      "license": "curl",
-    ///      "locked_url": "https://github.com/flox/nixpkgs?rev=abc123def456",
-    ///      "missing_builds": false,
-    ///      "name": "curl-8.5.0",
-    ///      "outputs": [
+    ///      "complete": true,
+    ///      "messages": [],
+    ///      "packages": [
     ///        {
-    ///          "name": "out",
-    ///          "store_path": "/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-curl-8.5.0"
-    ///        },
-    ///        {
-    ///          "name": "man",
-    ///          "store_path": "/nix/store/cccccccccccccccccccccccccccccccc-curl-8.5.0-man"
+    ///          "attr_path": "curl",
+    ///          "broken": false,
+    ///          "catalog": "nixpkgs",
+    ///          "derivation": "/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-curl-8.5.0.drv",
+    ///          "description": "A command line tool for transferring files with URL syntax",
+    ///          "insecure": false,
+    ///          "install_id": "curl",
+    ///          "license": "curl",
+    ///          "locked_url": "https://github.com/flox/nixpkgs?rev=abc123def456",
+    ///          "missing_builds": false,
+    ///          "name": "curl-8.5.0",
+    ///          "outputs": [
+    ///            {
+    ///              "name": "out",
+    ///              "store_path": "/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-curl-8.5.0"
+    ///            },
+    ///            {
+    ///              "name": "man",
+    ///              "store_path": "/nix/store/cccccccccccccccccccccccccccccccc-curl-8.5.0-man"
+    ///            }
+    ///          ],
+    ///          "outputs_to_install": [
+    ///            "out",
+    ///            "man"
+    ///          ],
+    ///          "pkg_path": "curl",
+    ///          "pname": "curl",
+    ///          "rev": "abc123def456",
+    ///          "rev_count": 12345,
+    ///          "rev_date": "2024-01-15T00:00:00Z",
+    ///          "scrape_date": "2024-01-15T00:00:00Z",
+    ///          "stabilities": [
+    ///            "stable"
+    ///          ],
+    ///          "system": "x86_64-linux",
+    ///          "unfree": false,
+    ///          "version": "8.5.0"
     ///        }
     ///      ],
-    ///      "outputs_to_install": [
-    ///        "out",
-    ///        "man"
-    ///      ],
-    ///      "pkg_path": "curl",
-    ///      "pname": "curl",
-    ///      "rev": "abc123def456",
-    ///      "rev_count": 12345,
-    ///      "rev_date": "2024-01-15T00:00:00Z",
-    ///      "stabilities": [
-    ///        "stable"
-    ///      ],
-    ///      "system": "x86_64-linux",
-    ///      "unfree": false,
-    ///      "version": "8.5.0"
+    ///      "page": 1,
+    ///      "url": "https://github.com/flox/nixpkgs?rev=abc123def456"
     ///    }
     ///  ],
     ///  "type": "object",
@@ -1096,6 +1106,91 @@ Attributes:
             value.clone()
         }
     }
+    /**A single entry in the flat locked-inputs map.
+
+On the publish request side: catalog, attr_path, build_type, source are
+required.  inputs is left null (inputs null = "unknown").
+
+On the lookup response side: all fields may be present.  inputs expresses
+the DAG edges using the tri-state SBOM convention:
+  inputs: [k, ...]  — known direct inputs (by key)
+  inputs: []        — explicitly no dependencies
+  inputs null       — unknown / not stated
+
+attr_path is a list of components, e.g. ["python3Packages", "boolex"].
+A flat catalog entry collapses what the CLI lockfile represents as a
+hierarchy of single-component package-set / package nodes.  Giving the
+CLI the components lets it re-expand that hierarchy.  A list is also
+unambiguous where a dot-joined string is not — Nix attr paths may
+contain quoted dotted components, e.g. python3Packages."foo.bar".
+
+Wire behavior: inputs defaults to None and serializes as explicit JSON
+null — it is not dropped.  "Unknown" is encoded as null on the wire,
+never as an absent key (do not add exclude_none).
+
+Use key() to build the canonical flat-map key for this entry.*/
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "LockedInputEntry",
+    ///  "description": "A single entry in the flat locked-inputs map.\n\nOn the publish request side: catalog, attr_path, build_type, source are\nrequired.  inputs is left null (inputs null = \"unknown\").\n\nOn the lookup response side: all fields may be present.  inputs expresses\nthe DAG edges using the tri-state SBOM convention:\n  inputs: [k, ...]  — known direct inputs (by key)\n  inputs: []        — explicitly no dependencies\n  inputs null       — unknown / not stated\n\nattr_path is a list of components, e.g. [\"python3Packages\", \"boolex\"].\nA flat catalog entry collapses what the CLI lockfile represents as a\nhierarchy of single-component package-set / package nodes.  Giving the\nCLI the components lets it re-expand that hierarchy.  A list is also\nunambiguous where a dot-joined string is not — Nix attr paths may\ncontain quoted dotted components, e.g. python3Packages.\"foo.bar\".\n\nWire behavior: inputs defaults to None and serializes as explicit JSON\nnull — it is not dropped.  \"Unknown\" is encoded as null on the wire,\nnever as an absent key (do not add exclude_none).\n\nUse key() to build the canonical flat-map key for this entry.",
+    ///  "type": "object",
+    ///  "required": [
+    ///    "attr_path",
+    ///    "build_type",
+    ///    "catalog",
+    ///    "source"
+    ///  ],
+    ///  "properties": {
+    ///    "attr_path": {
+    ///      "title": "Attr Path",
+    ///      "type": "array",
+    ///      "items": {
+    ///        "type": "string"
+    ///      }
+    ///    },
+    ///    "build_type": {
+    ///      "$ref": "#/components/schemas/BuildType"
+    ///    },
+    ///    "catalog": {
+    ///      "title": "Catalog",
+    ///      "type": "string"
+    ///    },
+    ///    "inputs": {
+    ///      "title": "Inputs",
+    ///      "type": [
+    ///        "array",
+    ///        "null"
+    ///      ],
+    ///      "items": {
+    ///        "type": "string"
+    ///      }
+    ///    },
+    ///    "source": {
+    ///      "title": "Source",
+    ///      "type": "object",
+    ///      "additionalProperties": true
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
+    pub struct LockedInputEntry {
+        pub attr_path: ::std::vec::Vec<::std::string::String>,
+        pub build_type: BuildType,
+        pub catalog: ::std::string::String,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub inputs: ::std::option::Option<::std::vec::Vec<::std::string::String>>,
+        pub source: ::serde_json::Map<::std::string::String, ::serde_json::Value>,
+    }
+    impl ::std::convert::From<&LockedInputEntry> for LockedInputEntry {
+        fn from(value: &LockedInputEntry) -> Self {
+            value.clone()
+        }
+    }
     ///A single entry in the /locked-sources response.
     ///
     /// <details><summary>JSON schema</summary>
@@ -1685,10 +1780,16 @@ Attributes:
     ///        "drv_path": "/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-curl-8.5.0.drv",
     ///        "license": "curl",
     ///        "name": "curl-8.5.0",
-    ///        "outputs": {
-    ///          "man": "/nix/store/cccccccccccccccccccccccccccccccc-curl-8.5.0-man",
-    ///          "out": "/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-curl-8.5.0"
-    ///        },
+    ///        "outputs": [
+    ///          {
+    ///            "name": "out",
+    ///            "store_path": "/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-curl-8.5.0"
+    ///          },
+    ///          {
+    ///            "name": "man",
+    ///            "store_path": "/nix/store/cccccccccccccccccccccccccccccccc-curl-8.5.0-man"
+    ///          }
+    ///        ],
     ///        "outputs_to_install": [
     ///          "out",
     ///          "man"
@@ -1908,10 +2009,16 @@ Attributes:
     ///        "drv_path": "/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-curl-8.5.0.drv",
     ///        "license": "curl",
     ///        "name": "curl-8.5.0",
-    ///        "outputs": {
-    ///          "man": "/nix/store/cccccccccccccccccccccccccccccccc-curl-8.5.0-man",
-    ///          "out": "/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-curl-8.5.0"
-    ///        },
+    ///        "outputs": [
+    ///          {
+    ///            "name": "out",
+    ///            "store_path": "/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-curl-8.5.0"
+    ///          },
+    ///          {
+    ///            "name": "man",
+    ///            "store_path": "/nix/store/cccccccccccccccccccccccccccccccc-curl-8.5.0-man"
+    ///          }
+    ///        ],
     ///        "outputs_to_install": [
     ///          "out",
     ///          "man"
@@ -1977,6 +2084,16 @@ Attributes:
     ///        "null"
     ///      ]
     ///    },
+    ///    "locked_inputs": {
+    ///      "title": "Locked Inputs",
+    ///      "type": [
+    ///        "object",
+    ///        "null"
+    ///      ],
+    ///      "additionalProperties": {
+    ///        "$ref": "#/components/schemas/LockedInputEntry"
+    ///      }
+    ///    },
     ///    "narinfos": {
     ///      "$ref": "#/components/schemas/NarInfos"
     ///    },
@@ -2040,6 +2157,10 @@ Attributes:
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
         pub locked_base_catalog_url: ::std::option::Option<::std::string::String>,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub locked_inputs: ::std::option::Option<
+            ::std::collections::HashMap<::std::string::String, LockedInputEntry>,
+        >,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
         pub narinfos: ::std::option::Option<NarInfos>,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
         pub narinfos_source_url: ::std::option::Option<::std::string::String>,
@@ -2075,10 +2196,16 @@ Attributes:
     ///      "drv_path": "/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-curl-8.5.0.drv",
     ///      "license": "curl",
     ///      "name": "curl-8.5.0",
-    ///      "outputs": {
-    ///        "man": "/nix/store/cccccccccccccccccccccccccccccccc-curl-8.5.0-man",
-    ///        "out": "/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-curl-8.5.0"
-    ///      },
+    ///      "outputs": [
+    ///        {
+    ///          "name": "out",
+    ///          "store_path": "/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-curl-8.5.0"
+    ///        },
+    ///        {
+    ///          "name": "man",
+    ///          "store_path": "/nix/store/cccccccccccccccccccccccccccccccc-curl-8.5.0-man"
+    ///        }
+    ///      ],
     ///      "outputs_to_install": [
     ///        "out",
     ///        "man"
@@ -3004,22 +3131,25 @@ Attributes:
     ///{
     ///  "title": "PackageSearchResult",
     ///  "examples": [
-    ///    [
-    ///      {
-    ///        "attr_path": "foo.bar.curl",
-    ///        "catalog": "nixpkgs",
-    ///        "description": "A very nice Item",
-    ///        "name": "curl",
-    ///        "pkg_path": "foo.bar.curl",
-    ///        "pname": "curl",
-    ///        "stabilities": [
-    ///          "stable",
-    ///          "unstable"
-    ///        ],
-    ///        "system": "x86_64-linux",
-    ///        "version": "1.0"
-    ///      }
-    ///    ]
+    ///    {
+    ///      "items": [
+    ///        {
+    ///          "attr_path": "foo.bar.curl",
+    ///          "catalog": "nixpkgs",
+    ///          "description": "A very nice Item",
+    ///          "name": "curl",
+    ///          "pkg_path": "foo.bar.curl",
+    ///          "pname": "curl",
+    ///          "stabilities": [
+    ///            "stable",
+    ///            "unstable"
+    ///          ],
+    ///          "system": "x86_64-linux",
+    ///          "version": "1.0"
+    ///        }
+    ///      ],
+    ///      "total_count": 1
+    ///    }
     ///  ],
     ///  "type": "object",
     ///  "required": [
@@ -3851,41 +3981,56 @@ Attributes:
     ///  "title": "ResolvedPackageGroup",
     ///  "examples": [
     ///    {
-    ///      "attr_path": "curl",
-    ///      "broken": false,
-    ///      "catalog": "nixpkgs",
-    ///      "derivation": "/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-curl-8.5.0.drv",
-    ///      "description": "A command line tool for transferring files with URL syntax",
-    ///      "insecure": false,
-    ///      "license": "curl",
-    ///      "locked_url": "https://github.com/flox/nixpkgs?rev=abc123def456",
-    ///      "missing_builds": false,
-    ///      "name": "curl-8.5.0",
-    ///      "outputs": [
-    ///        {
-    ///          "name": "out",
-    ///          "store_path": "/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-curl-8.5.0"
-    ///        },
-    ///        {
-    ///          "name": "man",
-    ///          "store_path": "/nix/store/cccccccccccccccccccccccccccccccc-curl-8.5.0-man"
-    ///        }
-    ///      ],
-    ///      "outputs_to_install": [
-    ///        "out",
-    ///        "man"
-    ///      ],
-    ///      "pkg_path": "curl",
-    ///      "pname": "curl",
-    ///      "rev": "abc123def456",
-    ///      "rev_count": 12345,
-    ///      "rev_date": "2024-01-15T00:00:00Z",
-    ///      "stabilities": [
-    ///        "stable"
-    ///      ],
-    ///      "system": "x86_64-linux",
-    ///      "unfree": false,
-    ///      "version": "8.5.0"
+    ///      "candidate_pages": [],
+    ///      "messages": [],
+    ///      "name": "test",
+    ///      "page": {
+    ///        "complete": true,
+    ///        "messages": [],
+    ///        "packages": [
+    ///          {
+    ///            "attr_path": "curl",
+    ///            "broken": false,
+    ///            "catalog": "nixpkgs",
+    ///            "derivation": "/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-curl-8.5.0.drv",
+    ///            "description": "A command line tool for transferring files with URL syntax",
+    ///            "insecure": false,
+    ///            "install_id": "curl",
+    ///            "license": "curl",
+    ///            "locked_url": "https://github.com/flox/nixpkgs?rev=abc123def456",
+    ///            "missing_builds": false,
+    ///            "name": "curl-8.5.0",
+    ///            "outputs": [
+    ///              {
+    ///                "name": "out",
+    ///                "store_path": "/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-curl-8.5.0"
+    ///              },
+    ///              {
+    ///                "name": "man",
+    ///                "store_path": "/nix/store/cccccccccccccccccccccccccccccccc-curl-8.5.0-man"
+    ///              }
+    ///            ],
+    ///            "outputs_to_install": [
+    ///              "out",
+    ///              "man"
+    ///            ],
+    ///            "pkg_path": "curl",
+    ///            "pname": "curl",
+    ///            "rev": "abc123def456",
+    ///            "rev_count": 12345,
+    ///            "rev_date": "2024-01-15T00:00:00Z",
+    ///            "scrape_date": "2024-01-15T00:00:00Z",
+    ///            "stabilities": [
+    ///              "stable"
+    ///            ],
+    ///            "system": "x86_64-linux",
+    ///            "unfree": false,
+    ///            "version": "8.5.0"
+    ///          }
+    ///        ],
+    ///        "page": 1,
+    ///        "url": "https://github.com/flox/nixpkgs?rev=abc123def456"
+    ///      }
     ///    }
     ///  ],
     ///  "type": "object",
