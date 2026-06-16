@@ -664,6 +664,9 @@ where
                 version: build_metadata.version.clone(),
             },
             locked_base_catalog_url: Some(self.package_metadata.base_catalog_ref.to_string()),
+            // The server is authoritative for the locked-inputs DAG; the CLI
+            // leaves it unset on publish (see PackageBuildWithNarInfo schema).
+            locked_inputs: None,
             base_catalog_rev_count: None,
             base_catalog_rev_date: None,
             url: self.env_metadata.build_repo_meta.url.to_string(),
