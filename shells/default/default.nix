@@ -11,6 +11,7 @@
   just,
   krb5,
   lib,
+  rust-toolchain,
   rustPlatform,
   mkShell,
   nix-unit,
@@ -46,6 +47,9 @@ let
       podman
       procps
       pstree
+      # Pin `rust-analyzer` to the same `fenix.stable` toolchain as `rustc`,
+      # so editor/LSP code intelligence matches the workspace toolchain.
+      rust-toolchain.rust-analyzer
       shfmt
       treefmt
       yamlfmt
