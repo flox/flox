@@ -158,12 +158,12 @@ fn ensure_prompt_hook_available(config: &Config) -> Result<()> {
 }
 
 /// The data needed to deactivate the front-of-stack active environment.
-struct DeactivationTarget {
+pub(crate) struct DeactivationTarget {
     /// Activation state dir, for the `flox-activations detach` call.
-    activation_state_dir: PathBuf,
+    pub(crate) activation_state_dir: PathBuf,
     /// Rendered env link (`$FLOX_ENV`) the activate path used, needed to restore
     /// the prompt and PATH on an in-place deactivation.
-    flox_env: PathBuf,
+    pub(crate) flox_env: PathBuf,
 }
 
 /// Resolve an active-stack entry into the data needed to deactivate it.
@@ -175,7 +175,10 @@ struct DeactivationTarget {
 /// one be torn down. This is also where a future `flox deactivate <ENV>`
 /// argument would resolve a specific environment rather than the last-active
 /// one.
-fn open_deactivation_target(flox: &Flox, active: ActiveEnvironment) -> Result<DeactivationTarget> {
+pub(crate) fn open_deactivation_target(
+    flox: &Flox,
+    active: ActiveEnvironment,
+) -> Result<DeactivationTarget> {
     let mode = active.mode;
     let mut concrete_env = active
         .environment
