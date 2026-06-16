@@ -325,41 +325,51 @@ manifest packages were built via the traditional flox manifest workflow.*/
     ///  "title": "CatalogPage",
     ///  "examples": [
     ///    {
-    ///      "attr_path": "curl",
-    ///      "broken": false,
-    ///      "catalog": "nixpkgs",
-    ///      "derivation": "/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-curl-8.5.0.drv",
-    ///      "description": "A command line tool for transferring files with URL syntax",
-    ///      "insecure": false,
-    ///      "license": "curl",
-    ///      "locked_url": "https://github.com/flox/nixpkgs?rev=abc123def456",
-    ///      "missing_builds": false,
-    ///      "name": "curl-8.5.0",
-    ///      "outputs": [
+    ///      "complete": true,
+    ///      "messages": [],
+    ///      "packages": [
     ///        {
-    ///          "name": "out",
-    ///          "store_path": "/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-curl-8.5.0"
-    ///        },
-    ///        {
-    ///          "name": "man",
-    ///          "store_path": "/nix/store/cccccccccccccccccccccccccccccccc-curl-8.5.0-man"
+    ///          "attr_path": "curl",
+    ///          "broken": false,
+    ///          "catalog": "nixpkgs",
+    ///          "derivation": "/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-curl-8.5.0.drv",
+    ///          "description": "A command line tool for transferring files with URL syntax",
+    ///          "insecure": false,
+    ///          "install_id": "curl",
+    ///          "license": "curl",
+    ///          "locked_url": "https://github.com/flox/nixpkgs?rev=abc123def456",
+    ///          "missing_builds": false,
+    ///          "name": "curl-8.5.0",
+    ///          "outputs": [
+    ///            {
+    ///              "name": "out",
+    ///              "store_path": "/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-curl-8.5.0"
+    ///            },
+    ///            {
+    ///              "name": "man",
+    ///              "store_path": "/nix/store/cccccccccccccccccccccccccccccccc-curl-8.5.0-man"
+    ///            }
+    ///          ],
+    ///          "outputs_to_install": [
+    ///            "out",
+    ///            "man"
+    ///          ],
+    ///          "pkg_path": "curl",
+    ///          "pname": "curl",
+    ///          "rev": "abc123def456",
+    ///          "rev_count": 12345,
+    ///          "rev_date": "2024-01-15T00:00:00Z",
+    ///          "scrape_date": "2024-01-15T00:00:00Z",
+    ///          "stabilities": [
+    ///            "stable"
+    ///          ],
+    ///          "system": "x86_64-linux",
+    ///          "unfree": false,
+    ///          "version": "8.5.0"
     ///        }
     ///      ],
-    ///      "outputs_to_install": [
-    ///        "out",
-    ///        "man"
-    ///      ],
-    ///      "pkg_path": "curl",
-    ///      "pname": "curl",
-    ///      "rev": "abc123def456",
-    ///      "rev_count": 12345,
-    ///      "rev_date": "2024-01-15T00:00:00Z",
-    ///      "stabilities": [
-    ///        "stable"
-    ///      ],
-    ///      "system": "x86_64-linux",
-    ///      "unfree": false,
-    ///      "version": "8.5.0"
+    ///      "page": 1,
+    ///      "url": "https://github.com/flox/nixpkgs?rev=abc123def456"
     ///    }
     ///  ],
     ///  "type": "object",
@@ -1096,6 +1106,183 @@ Attributes:
             value.clone()
         }
     }
+    /**A locked git flakeref, in its attribute form.
+
+Locked inputs are only ever tracked as git flakerefs, so this models a git
+source honestly rather than a generic flakeref: type must equal "git", and
+the four git fields are required — url (source), rev (commit), ref (the
+existing CLI lockfile contract), and dir (the subdir holding build
+instructions).  The CLI needs all of them to rebuild a locked input.  A git
+flakeref is still an open attribute set, so any git-native attribute beyond
+these (e.g. narHash) flows through unchanged via extra="allow"; the contract
+boundary validates field presence and that type == "git", not the
+flakeref's deeper semantics (the downstream publish path parses url + rev
+for storage identity).
+
+The round-trip is value/dict-equal: with every named field required there
+are no unset fields to emit as null, and extras serialize verbatim, so the
+default model_dump reproduces the input attribute set (no injected nulls).
+Key ORDER is not preserved or relied upon — the identity hash reads url/rev
+values, not the serialized form.*/
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "LockedGitSource",
+    ///  "description": "A locked git flakeref, in its attribute form.\n\nLocked inputs are only ever tracked as git flakerefs, so this models a git\nsource honestly rather than a generic flakeref: type must equal \"git\", and\nthe four git fields are required — url (source), rev (commit), ref (the\nexisting CLI lockfile contract), and dir (the subdir holding build\ninstructions).  The CLI needs all of them to rebuild a locked input.  A git\nflakeref is still an open attribute set, so any git-native attribute beyond\nthese (e.g. narHash) flows through unchanged via extra=\"allow\"; the contract\nboundary validates field presence and that type == \"git\", not the\nflakeref's deeper semantics (the downstream publish path parses url + rev\nfor storage identity).\n\nThe round-trip is value/dict-equal: with every named field required there\nare no unset fields to emit as null, and extras serialize verbatim, so the\ndefault model_dump reproduces the input attribute set (no injected nulls).\nKey ORDER is not preserved or relied upon — the identity hash reads url/rev\nvalues, not the serialized form.",
+    ///  "type": "object",
+    ///  "required": [
+    ///    "dir",
+    ///    "ref",
+    ///    "rev",
+    ///    "type",
+    ///    "url"
+    ///  ],
+    ///  "properties": {
+    ///    "dir": {
+    ///      "title": "Dir",
+    ///      "type": "string"
+    ///    },
+    ///    "ref": {
+    ///      "title": "Ref",
+    ///      "type": "string"
+    ///    },
+    ///    "rev": {
+    ///      "title": "Rev",
+    ///      "type": "string"
+    ///    },
+    ///    "type": {
+    ///      "title": "Type",
+    ///      "type": "string"
+    ///    },
+    ///    "url": {
+    ///      "title": "Url",
+    ///      "type": "string"
+    ///    }
+    ///  },
+    ///  "additionalProperties": true
+    ///}
+    /// ```
+    /// </details>
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
+    pub struct LockedGitSource {
+        pub dir: ::std::string::String,
+        #[serde(rename = "ref")]
+        pub ref_: ::std::string::String,
+        pub rev: ::std::string::String,
+        #[serde(rename = "type")]
+        pub type_: ::std::string::String,
+        pub url: ::std::string::String,
+    }
+    impl ::std::convert::From<&LockedGitSource> for LockedGitSource {
+        fn from(value: &LockedGitSource) -> Self {
+            value.clone()
+        }
+    }
+    /**A single entry in the flat locked-inputs map.
+
+One type, two directions (intentionally NOT split into two models — the
+publish entry is the same entity with its edges not yet stated):
+
+- Publish request: the CLI sends {catalog, attr_path, build_type, source,
+  locked_inputs_hash} and leaves inputs null.  Null here means "not stated
+  — the server is authoritative for the DAG": the CLI knows its direct
+  inputs but is not the source of truth, and the server reconstructs the
+  DAG from package_inputs (keyed by locked_inputs_hash).
+- Lookup response: all fields are present and inputs is populated with the
+  full transitive-closure DAG.
+
+inputs uses the tri-state SBOM convention in both directions:
+  inputs: [k, ...]  — known direct inputs (by key)
+  inputs: []        — explicitly no dependencies
+  inputs null       — not stated (server is authoritative for the DAG)
+
+attr_path is a list of components, e.g. ["python3Packages", "boolex"].
+A flat catalog entry collapses what the CLI lockfile represents as a
+hierarchy of single-component package-set / package nodes.  Giving the
+CLI the components lets it re-expand that hierarchy.  A list is also
+unambiguous where a dot-joined string is not — Nix attr paths may
+contain quoted dotted components, e.g. python3Packages."foo.bar".
+
+locked_inputs_hash is REQUIRED on every entry: the closure identity hash is
+the round-trip disambiguator that pins which recorded build a locked input
+refers to (lookup response → CLI → publish request).  A publish request
+missing it fails validation (422) at this contract boundary — there is no
+hash-free / old-client fallback.  It always serializes as a string.
+
+Wire behavior: a null `inputs` (the tri-state "not stated") is emitted as
+an explicit null — deliberately, NOT dropped; do not add exclude_none here.
+The source sub-model never emits nulls at all: its named attributes are
+all required, and unknown ones pass through verbatim (see LockedGitSource).
+
+Use key() to build the canonical flat-map key for this entry.*/
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "LockedInputEntry",
+    ///  "description": "A single entry in the flat locked-inputs map.\n\nOne type, two directions (intentionally NOT split into two models — the\npublish entry is the same entity with its edges not yet stated):\n\n- Publish request: the CLI sends {catalog, attr_path, build_type, source,\n  locked_inputs_hash} and leaves inputs null.  Null here means \"not stated\n  — the server is authoritative for the DAG\": the CLI knows its direct\n  inputs but is not the source of truth, and the server reconstructs the\n  DAG from package_inputs (keyed by locked_inputs_hash).\n- Lookup response: all fields are present and inputs is populated with the\n  full transitive-closure DAG.\n\ninputs uses the tri-state SBOM convention in both directions:\n  inputs: [k, ...]  — known direct inputs (by key)\n  inputs: []        — explicitly no dependencies\n  inputs null       — not stated (server is authoritative for the DAG)\n\nattr_path is a list of components, e.g. [\"python3Packages\", \"boolex\"].\nA flat catalog entry collapses what the CLI lockfile represents as a\nhierarchy of single-component package-set / package nodes.  Giving the\nCLI the components lets it re-expand that hierarchy.  A list is also\nunambiguous where a dot-joined string is not — Nix attr paths may\ncontain quoted dotted components, e.g. python3Packages.\"foo.bar\".\n\nlocked_inputs_hash is REQUIRED on every entry: the closure identity hash is\nthe round-trip disambiguator that pins which recorded build a locked input\nrefers to (lookup response → CLI → publish request).  A publish request\nmissing it fails validation (422) at this contract boundary — there is no\nhash-free / old-client fallback.  It always serializes as a string.\n\nWire behavior: a null `inputs` (the tri-state \"not stated\") is emitted as\nan explicit null — deliberately, NOT dropped; do not add exclude_none here.\nThe source sub-model never emits nulls at all: its named attributes are\nall required, and unknown ones pass through verbatim (see LockedGitSource).\n\nUse key() to build the canonical flat-map key for this entry.",
+    ///  "type": "object",
+    ///  "required": [
+    ///    "attr_path",
+    ///    "build_type",
+    ///    "catalog",
+    ///    "locked_inputs_hash",
+    ///    "source"
+    ///  ],
+    ///  "properties": {
+    ///    "attr_path": {
+    ///      "title": "Attr Path",
+    ///      "type": "array",
+    ///      "items": {
+    ///        "type": "string"
+    ///      }
+    ///    },
+    ///    "build_type": {
+    ///      "$ref": "#/components/schemas/BuildType"
+    ///    },
+    ///    "catalog": {
+    ///      "title": "Catalog",
+    ///      "type": "string"
+    ///    },
+    ///    "inputs": {
+    ///      "title": "Inputs",
+    ///      "type": [
+    ///        "array",
+    ///        "null"
+    ///      ],
+    ///      "items": {
+    ///        "type": "string"
+    ///      }
+    ///    },
+    ///    "locked_inputs_hash": {
+    ///      "title": "Locked Inputs Hash",
+    ///      "type": "string"
+    ///    },
+    ///    "source": {
+    ///      "$ref": "#/components/schemas/LockedGitSource"
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
+    pub struct LockedInputEntry {
+        pub attr_path: ::std::vec::Vec<::std::string::String>,
+        pub build_type: BuildType,
+        pub catalog: ::std::string::String,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub inputs: ::std::option::Option<::std::vec::Vec<::std::string::String>>,
+        pub locked_inputs_hash: ::std::string::String,
+        pub source: LockedGitSource,
+    }
+    impl ::std::convert::From<&LockedInputEntry> for LockedInputEntry {
+        fn from(value: &LockedInputEntry) -> Self {
+            value.clone()
+        }
+    }
     ///A single entry in the /locked-sources response.
     ///
     /// <details><summary>JSON schema</summary>
@@ -1685,10 +1872,16 @@ Attributes:
     ///        "drv_path": "/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-curl-8.5.0.drv",
     ///        "license": "curl",
     ///        "name": "curl-8.5.0",
-    ///        "outputs": {
-    ///          "man": "/nix/store/cccccccccccccccccccccccccccccccc-curl-8.5.0-man",
-    ///          "out": "/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-curl-8.5.0"
-    ///        },
+    ///        "outputs": [
+    ///          {
+    ///            "name": "out",
+    ///            "store_path": "/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-curl-8.5.0"
+    ///          },
+    ///          {
+    ///            "name": "man",
+    ///            "store_path": "/nix/store/cccccccccccccccccccccccccccccccc-curl-8.5.0-man"
+    ///          }
+    ///        ],
     ///        "outputs_to_install": [
     ///          "out",
     ///          "man"
@@ -1908,10 +2101,16 @@ Attributes:
     ///        "drv_path": "/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-curl-8.5.0.drv",
     ///        "license": "curl",
     ///        "name": "curl-8.5.0",
-    ///        "outputs": {
-    ///          "man": "/nix/store/cccccccccccccccccccccccccccccccc-curl-8.5.0-man",
-    ///          "out": "/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-curl-8.5.0"
-    ///        },
+    ///        "outputs": [
+    ///          {
+    ///            "name": "out",
+    ///            "store_path": "/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-curl-8.5.0"
+    ///          },
+    ///          {
+    ///            "name": "man",
+    ///            "store_path": "/nix/store/cccccccccccccccccccccccccccccccc-curl-8.5.0-man"
+    ///          }
+    ///        ],
     ///        "outputs_to_install": [
     ///          "out",
     ///          "man"
@@ -1977,6 +2176,16 @@ Attributes:
     ///        "null"
     ///      ]
     ///    },
+    ///    "locked_inputs": {
+    ///      "title": "Locked Inputs",
+    ///      "type": [
+    ///        "object",
+    ///        "null"
+    ///      ],
+    ///      "additionalProperties": {
+    ///        "$ref": "#/components/schemas/LockedInputEntry"
+    ///      }
+    ///    },
     ///    "narinfos": {
     ///      "$ref": "#/components/schemas/NarInfos"
     ///    },
@@ -2040,6 +2249,10 @@ Attributes:
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
         pub locked_base_catalog_url: ::std::option::Option<::std::string::String>,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub locked_inputs: ::std::option::Option<
+            ::std::collections::HashMap<::std::string::String, LockedInputEntry>,
+        >,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
         pub narinfos: ::std::option::Option<NarInfos>,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
         pub narinfos_source_url: ::std::option::Option<::std::string::String>,
@@ -2075,10 +2288,16 @@ Attributes:
     ///      "drv_path": "/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-curl-8.5.0.drv",
     ///      "license": "curl",
     ///      "name": "curl-8.5.0",
-    ///      "outputs": {
-    ///        "man": "/nix/store/cccccccccccccccccccccccccccccccc-curl-8.5.0-man",
-    ///        "out": "/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-curl-8.5.0"
-    ///      },
+    ///      "outputs": [
+    ///        {
+    ///          "name": "out",
+    ///          "store_path": "/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-curl-8.5.0"
+    ///        },
+    ///        {
+    ///          "name": "man",
+    ///          "store_path": "/nix/store/cccccccccccccccccccccccccccccccc-curl-8.5.0-man"
+    ///        }
+    ///      ],
     ///      "outputs_to_install": [
     ///        "out",
     ///        "man"
@@ -3004,22 +3223,25 @@ Attributes:
     ///{
     ///  "title": "PackageSearchResult",
     ///  "examples": [
-    ///    [
-    ///      {
-    ///        "attr_path": "foo.bar.curl",
-    ///        "catalog": "nixpkgs",
-    ///        "description": "A very nice Item",
-    ///        "name": "curl",
-    ///        "pkg_path": "foo.bar.curl",
-    ///        "pname": "curl",
-    ///        "stabilities": [
-    ///          "stable",
-    ///          "unstable"
-    ///        ],
-    ///        "system": "x86_64-linux",
-    ///        "version": "1.0"
-    ///      }
-    ///    ]
+    ///    {
+    ///      "items": [
+    ///        {
+    ///          "attr_path": "foo.bar.curl",
+    ///          "catalog": "nixpkgs",
+    ///          "description": "A very nice Item",
+    ///          "name": "curl",
+    ///          "pkg_path": "foo.bar.curl",
+    ///          "pname": "curl",
+    ///          "stabilities": [
+    ///            "stable",
+    ///            "unstable"
+    ///          ],
+    ///          "system": "x86_64-linux",
+    ///          "version": "1.0"
+    ///        }
+    ///      ],
+    ///      "total_count": 1
+    ///    }
     ///  ],
     ///  "type": "object",
     ///  "required": [
@@ -3851,41 +4073,56 @@ Attributes:
     ///  "title": "ResolvedPackageGroup",
     ///  "examples": [
     ///    {
-    ///      "attr_path": "curl",
-    ///      "broken": false,
-    ///      "catalog": "nixpkgs",
-    ///      "derivation": "/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-curl-8.5.0.drv",
-    ///      "description": "A command line tool for transferring files with URL syntax",
-    ///      "insecure": false,
-    ///      "license": "curl",
-    ///      "locked_url": "https://github.com/flox/nixpkgs?rev=abc123def456",
-    ///      "missing_builds": false,
-    ///      "name": "curl-8.5.0",
-    ///      "outputs": [
-    ///        {
-    ///          "name": "out",
-    ///          "store_path": "/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-curl-8.5.0"
-    ///        },
-    ///        {
-    ///          "name": "man",
-    ///          "store_path": "/nix/store/cccccccccccccccccccccccccccccccc-curl-8.5.0-man"
-    ///        }
-    ///      ],
-    ///      "outputs_to_install": [
-    ///        "out",
-    ///        "man"
-    ///      ],
-    ///      "pkg_path": "curl",
-    ///      "pname": "curl",
-    ///      "rev": "abc123def456",
-    ///      "rev_count": 12345,
-    ///      "rev_date": "2024-01-15T00:00:00Z",
-    ///      "stabilities": [
-    ///        "stable"
-    ///      ],
-    ///      "system": "x86_64-linux",
-    ///      "unfree": false,
-    ///      "version": "8.5.0"
+    ///      "candidate_pages": [],
+    ///      "messages": [],
+    ///      "name": "test",
+    ///      "page": {
+    ///        "complete": true,
+    ///        "messages": [],
+    ///        "packages": [
+    ///          {
+    ///            "attr_path": "curl",
+    ///            "broken": false,
+    ///            "catalog": "nixpkgs",
+    ///            "derivation": "/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-curl-8.5.0.drv",
+    ///            "description": "A command line tool for transferring files with URL syntax",
+    ///            "insecure": false,
+    ///            "install_id": "curl",
+    ///            "license": "curl",
+    ///            "locked_url": "https://github.com/flox/nixpkgs?rev=abc123def456",
+    ///            "missing_builds": false,
+    ///            "name": "curl-8.5.0",
+    ///            "outputs": [
+    ///              {
+    ///                "name": "out",
+    ///                "store_path": "/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-curl-8.5.0"
+    ///              },
+    ///              {
+    ///                "name": "man",
+    ///                "store_path": "/nix/store/cccccccccccccccccccccccccccccccc-curl-8.5.0-man"
+    ///              }
+    ///            ],
+    ///            "outputs_to_install": [
+    ///              "out",
+    ///              "man"
+    ///            ],
+    ///            "pkg_path": "curl",
+    ///            "pname": "curl",
+    ///            "rev": "abc123def456",
+    ///            "rev_count": 12345,
+    ///            "rev_date": "2024-01-15T00:00:00Z",
+    ///            "scrape_date": "2024-01-15T00:00:00Z",
+    ///            "stabilities": [
+    ///              "stable"
+    ///            ],
+    ///            "system": "x86_64-linux",
+    ///            "unfree": false,
+    ///            "version": "8.5.0"
+    ///          }
+    ///        ],
+    ///        "page": 1,
+    ///        "url": "https://github.com/flox/nixpkgs?rev=abc123def456"
+    ///      }
     ///    }
     ///  ],
     ///  "type": "object",
