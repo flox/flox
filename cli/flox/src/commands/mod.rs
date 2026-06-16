@@ -15,6 +15,7 @@ mod general;
 mod generations;
 mod hook_env;
 mod include;
+mod info;
 mod init;
 mod install;
 mod list;
@@ -773,6 +774,10 @@ enum DiscoverCommands {
     /// Show details about a single package
     #[bpaf(command, long("show"), footer("Run 'man flox-show' for more details."))]
     Show(#[bpaf(external(show::show))] show::Show),
+
+    /// Show an environment's README and a summary of what it provides
+    #[bpaf(command, long("info"), footer("Run 'man flox-info' for more details."))]
+    Info(#[bpaf(external(info::info))] info::Info),
 }
 
 impl DiscoverCommands {
@@ -780,6 +785,7 @@ impl DiscoverCommands {
         match self {
             DiscoverCommands::Search(args) => args.handle(config, flox).await?,
             DiscoverCommands::Show(args) => args.handle(flox).await?,
+            DiscoverCommands::Info(args) => args.handle(flox).await?,
         }
         Ok(())
     }
@@ -788,6 +794,7 @@ impl DiscoverCommands {
         match self {
             DiscoverCommands::Search(_) => "search",
             DiscoverCommands::Show(_) => "show",
+            DiscoverCommands::Info(_) => "info",
         }
     }
 }

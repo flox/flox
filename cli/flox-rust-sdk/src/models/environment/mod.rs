@@ -79,6 +79,11 @@ pub const CACHE_DIR_NAME: &str = "cache";
 pub const LIB_DIR_NAME: &str = "lib";
 pub const LOG_DIR_NAME: &str = "log";
 pub const ENV_DIR_NAME: &str = "env";
+/// The environment's README, a Markdown file authored by the user that
+/// documents what the environment provides and how to use it. It lives
+/// alongside the manifest in [`ENV_DIR_NAME`] so that it is committed into
+/// every generation and travels with the environment on push and pull.
+pub const README_FILENAME: &str = "README.md";
 
 /// This variable is used in tests to override what path to use for the socket.
 pub const FLOX_SERVICES_SOCKET_OVERRIDE_VAR: &str = "_FLOX_SERVICES_SOCKET_OVERRIDE";
@@ -236,6 +241,27 @@ pub trait Environment: Send {
 
     /// Returns the lockfile if it already exists.
     fn existing_lockfile(&self, flox: &Flox) -> Result<Option<Lockfile>, EnvironmentError>;
+
+    /// Path to the environment's README.
+    ///
+    /// The README lives alongside the manifest in the `env/` directory. The
+    /// path may not exist.
+    fn readme_path(&self, flox: &Flox) -> Result<PathBuf, EnvironmentError> {
+        Ok(self.manifest_path(flox)?.with_file_name(README_FILENAME))
+    }
+
+    /// Returns the contents of the environment's README, if it has one.
+    ///
+    /// Because the README is committed into every generation, this works for
+    /// path, managed, and remote environments alike.
+    fn readme(&self, flox: &Flox) -> Result<Option<String>, EnvironmentError> {
+        let readme_path = self.readme_path(flox)?;
+        match fs::read_to_string(&readme_path) {
+            Ok(contents) => Ok(Some(contents)),
+            Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(None),
+            Err(err) => Err(EnvironmentError::ReadReadme(err)),
+        }
+    }
 
     /// Returns the environment name
     fn name(&self) -> EnvironmentName;
@@ -853,6 +879,11 @@ pub enum EnvironmentError {
     ReadManifest(#[source] std::io::Error),
     #[error("couldn't write manifest")]
     WriteManifest(#[source] std::io::Error),
+
+    #[error("could not read README")]
+    ReadReadme(#[source] std::io::Error),
+    #[error("could not write README")]
+    WriteReadme(#[source] std::io::Error),
 
     #[error("failed to create GC roots directory")]
     CreateGcRootDir(#[source] std::io::Error),
@@ -1644,7 +1675,7 @@ mod migration_tests {
             .to_string();
 
         expect![[r#"
-            schema-version = "1.13.0"
+            schema-version = "1.14.0"
         "#]]
         .assert_eq(&manifest_contents);
     }

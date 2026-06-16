@@ -14,7 +14,7 @@ pub use crate::parsed::v1_11_0::MinimumCliVersion;
 // so the latest schema re-exports that copy rather than common's.
 pub use crate::parsed::v1_13_0::BuildSandbox;
 use crate::{Manifest, ManifestError, TypedOnly};
-pub type ManifestLatest = crate::parsed::v1_13_0::ManifestV1_13_0;
+pub type ManifestLatest = crate::parsed::v1_14_0::ManifestV1_14_0;
 
 impl ManifestLatest {
     /// Try to return a manifest in its original schema
@@ -67,6 +67,15 @@ impl ManifestLatest {
                 untyped
             },
             KnownSchemaVersion::V1_13_0 => {
+                let mut untyped =
+                    serde_json::to_value(self).map_err(ManifestError::SerializeJson)?;
+                let map = untyped
+                    .as_object_mut()
+                    .expect("all valid manifests should serialize to JSON objects");
+                map.insert("schema-version".into(), "1.13.0".into());
+                untyped
+            },
+            KnownSchemaVersion::V1_14_0 => {
                 return Ok(Some(self.as_typed_only()));
             },
         };
@@ -249,7 +258,7 @@ mod tests {
             .as_maybe_backwards_compatible(KnownSchemaVersion::V1_12_0, None)
             .unwrap();
 
-        assert_eq!(compat.get_schema_version(), KnownSchemaVersion::V1_13_0);
+        assert_eq!(compat.get_schema_version(), KnownSchemaVersion::V1_14_0);
     }
 
     // FIXME
