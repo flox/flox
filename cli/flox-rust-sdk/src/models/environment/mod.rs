@@ -10,6 +10,7 @@ use flox_core::data::environment_ref::{
     EnvironmentOwner,
     RemoteEnvironmentRef,
 };
+use flox_core::traceable_path;
 pub use flox_core::{Version, path_hash};
 use flox_manifest::lockfile::{LockedInclude, Lockfile, LockfileError};
 use flox_manifest::raw::{PackageToInstall, PackageToModify};
@@ -1036,6 +1037,44 @@ pub fn find_dot_flox(initial_dir: &Path) -> Result<Option<DotFlox>, EnvironmentE
     Ok(None)
 }
 
+/// Searches for all `.flox` directories from `initial_dir` up to the
+/// filesystem root, for auto-activation.
+///
+/// Unlike [`find_dot_flox`] the search does not stop at a git repository
+/// boundary: auto-activation should see every environment an interactive
+/// shell is "inside", regardless of how the directories are version
+/// controlled.
+///
+/// A `.flox` directory that cannot be parsed is skipped with a debug log
+/// rather than failing discovery, so one broken environment can't break every
+/// shell prompt.
+///
+/// Environments are returned outermost-first (closest to the filesystem root
+/// first), which is the order they should be activated in so that the
+/// innermost environment ends up on top of the activation stack.
+pub fn find_all_dot_flox(initial_dir: &Path) -> Result<Vec<DotFlox>, EnvironmentError> {
+    let path = CanonicalPath::new(initial_dir).map_err(EnvironmentError::StartDiscoveryDir)?;
+
+    let mut found = Vec::new();
+    for ancestor in path.ancestors() {
+        let tentative_dot_flox = ancestor.join(DOT_FLOX);
+        if !tentative_dot_flox.exists() {
+            continue;
+        }
+        match DotFlox::open_in(ancestor) {
+            Ok(dot_flox) => found.push(dot_flox),
+            Err(err) => debug!(
+                path = traceable_path(&tentative_dot_flox),
+                %err,
+                "skipping invalid .flox during auto-activation discovery"
+            ),
+        }
+    }
+    // `ancestors()` yields innermost-first; activation order is outermost-first.
+    found.reverse();
+    Ok(found)
+}
+
 /// Return a path to the services socket given a unique identifier
 ///
 /// Socket paths cannot exceed 104 characters on macOS
@@ -1357,6 +1396,123 @@ mod test {
 
         let found_environment = find_dot_flox(&start_path).unwrap();
         assert_eq!(found_environment, None);
+    }
+
+    /// All environments in the ancestor chain are found, outermost-first,
+    /// without requiring a git repo.
+    ///
+    /// .
+    /// ├── .flox
+    /// │   └── env.json
+    /// └── foo
+    ///     ├── .flox
+    ///     │   └── env.json
+    ///     └── bar
+    #[test]
+    fn discovers_all_dot_flox_upwards_outermost_first() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let path = temp_dir.path();
+        let outer_dot_flox = path.join(DOT_FLOX);
+        let foo = path.join("foo");
+        let inner_dot_flox = foo.join(DOT_FLOX);
+        let start_path = foo.join("bar");
+        std::fs::create_dir_all(&outer_dot_flox).unwrap();
+        std::fs::create_dir_all(&inner_dot_flox).unwrap();
+        std::fs::create_dir_all(&start_path).unwrap();
+        for dot_flox in [&outer_dot_flox, &inner_dot_flox] {
+            fs::write(
+                dot_flox.join(ENVIRONMENT_POINTER_FILENAME),
+                serde_json::to_string_pretty(&*MANAGED_ENV_POINTER).unwrap(),
+            )
+            .unwrap();
+        }
+
+        let found_environments = find_all_dot_flox(&start_path).unwrap();
+        assert_eq!(found_environments, vec![
+            DotFlox {
+                path: outer_dot_flox.canonicalize().unwrap(),
+                pointer: (*MANAGED_ENV_POINTER).clone()
+            },
+            DotFlox {
+                path: inner_dot_flox.canonicalize().unwrap(),
+                pointer: (*MANAGED_ENV_POINTER).clone()
+            },
+        ]);
+    }
+
+    /// Discovery for auto-activation does not stop at a git repository
+    /// boundary.
+    ///
+    /// .
+    /// ├── .flox
+    /// │   └── env.json
+    /// └── foo
+    ///     ├── .git
+    ///     └── bar
+    #[test]
+    fn discovers_all_dot_flox_above_git_repo() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let path = temp_dir.path();
+        let actual_dot_flox = path.join(DOT_FLOX);
+        let foo = path.join("foo");
+        let start_path = foo.join("bar");
+        std::fs::create_dir_all(&actual_dot_flox).unwrap();
+        std::fs::create_dir_all(&start_path).unwrap();
+        fs::write(
+            actual_dot_flox.join(ENVIRONMENT_POINTER_FILENAME),
+            serde_json::to_string_pretty(&*MANAGED_ENV_POINTER).unwrap(),
+        )
+        .unwrap();
+
+        GitCommandProvider::init(&foo, false).unwrap();
+
+        let found_environments = find_all_dot_flox(&start_path).unwrap();
+        assert_eq!(found_environments, vec![DotFlox {
+            path: actual_dot_flox.canonicalize().unwrap(),
+            pointer: (*MANAGED_ENV_POINTER).clone()
+        }]);
+    }
+
+    /// An invalid `.flox` directory is skipped without failing discovery of
+    /// other environments.
+    ///
+    /// .
+    /// ├── .flox
+    /// │   └── env.json
+    /// └── foo
+    ///     ├── .flox        (empty, invalid)
+    ///     └── bar
+    #[test]
+    fn skips_invalid_dot_flox_during_discovery() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let path = temp_dir.path();
+        let outer_dot_flox = path.join(DOT_FLOX);
+        let foo = path.join("foo");
+        let invalid_dot_flox = foo.join(DOT_FLOX);
+        let start_path = foo.join("bar");
+        std::fs::create_dir_all(&outer_dot_flox).unwrap();
+        std::fs::create_dir_all(&invalid_dot_flox).unwrap();
+        std::fs::create_dir_all(&start_path).unwrap();
+        fs::write(
+            outer_dot_flox.join(ENVIRONMENT_POINTER_FILENAME),
+            serde_json::to_string_pretty(&*MANAGED_ENV_POINTER).unwrap(),
+        )
+        .unwrap();
+
+        let found_environments = find_all_dot_flox(&start_path).unwrap();
+        assert_eq!(found_environments, vec![DotFlox {
+            path: outer_dot_flox.canonicalize().unwrap(),
+            pointer: (*MANAGED_ENV_POINTER).clone()
+        }]);
+    }
+
+    #[test]
+    fn finds_no_dot_flox_in_plain_ancestry() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let start_path = temp_dir.path().join("foo").join("bar");
+        std::fs::create_dir_all(&start_path).unwrap();
+        let found_environments = find_all_dot_flox(&start_path).unwrap();
+        assert_eq!(found_environments, Vec::new());
     }
 
     #[test]
