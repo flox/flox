@@ -123,10 +123,13 @@ pub fn generate_bash_profile_commands(
 
     // The prompt hook exports `_FLOX_PROMPT_HOOK_VERSION` at registration (see
     // hook.rs) so a subprocess like `flox deactivate` can detect a compatible
-    // hook. It is set shell-side, so it isn't part of the env-var diff; unset it
-    // on deactivation so it doesn't leak into the restored environment.
-    // Unconditional: a no-op when no hook was registered.
-    if let Action::Deactivate(_) = action {
+    // hook. It is set shell-side, so it isn't part of the env-var diff. Only the
+    // outermost deactivate clears it: the prompt hook stays registered while any
+    // activation remains on the stack, so unsetting it on an inner deactivate
+    // would make the next `flox deactivate` wrongly report the hook missing.
+    if let Action::Deactivate(ctx) = action
+        && ctx.restore_diff.is_outermost_deactivate()
+    {
         stmts.push(todo_drop_unset(PROMPT_HOOK_VERSION_ENV));
     }
 
