@@ -1,7 +1,7 @@
 {
   "lockfile-version": 1,
   "manifest": {
-    "schema-version": "1.12.0",
+    "schema-version": "1.13.0",
     "install": {
       "python3": {
         "pkg-path": "python3",
@@ -23,28 +23,29 @@
     {
       "attr_path": "python3",
       "broken": false,
-      "derivation": "/nix/store/krwwaljrhx0f8rykjbxzwhjqhn8iq64d-python3-3.13.12.drv",
+      "derivation": "/nix/store/bknb559vqzsgsrjz47gr6yfl8ivz60cs-python3-3.13.13.drv",
       "description": "High-level dynamically-typed programming language",
       "install_id": "python3",
       "license": "Python-2.0",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=b12141ef619e0a9c1c84dc8c684040326f27cdcc",
-      "name": "python3-3.13.12",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=9ae611a455b90cf061d8f332b977e387bda8e1ca",
+      "name": "python3-3.13.13",
       "pname": "python3",
-      "rev": "b12141ef619e0a9c1c84dc8c684040326f27cdcc",
-      "rev_count": 982522,
-      "rev_date": "2026-04-18T21:33:21Z",
-      "scrape_date": "2026-04-21T06:03:59.651315Z",
+      "rev": "9ae611a455b90cf061d8f332b977e387bda8e1ca",
+      "rev_count": 1014179,
+      "rev_date": "2026-06-10T06:56:03Z",
+      "scrape_date": "2026-06-12T03:14:27.814071Z",
       "stabilities": [
+        "staging",
         "unstable"
       ],
       "unfree": false,
-      "version": "3.13.12",
+      "version": "3.13.13",
       "outputs_to_install": [
         "out",
         "out"
       ],
       "outputs": {
-        "out": "/nix/store/qabiwfbf61gaky68k0klvyjvd8zavmxb-python3-3.13.12"
+        "out": "/nix/store/ygxqin6ydzjfawywqpp5pal8wv6sf5bh-python3-3.13.13"
       },
       "system": "aarch64-darwin",
       "group": "toplevel",
@@ -53,31 +54,31 @@
     {
       "attr_path": "python3",
       "broken": false,
-      "derivation": "/nix/store/nxvwxd34qjxfwm1cx3kpalrd6xcsydla-python3-3.13.12.drv",
+      "derivation": "/nix/store/x2hqw4p7ypn5mh08wgv4h37g6pqnw9ka-python3-3.13.13.drv",
       "description": "High-level dynamically-typed programming language",
       "install_id": "python3",
       "license": "Python-2.0",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=b12141ef619e0a9c1c84dc8c684040326f27cdcc",
-      "name": "python3-3.13.12",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=9ae611a455b90cf061d8f332b977e387bda8e1ca",
+      "name": "python3-3.13.13",
       "pname": "python3",
-      "rev": "b12141ef619e0a9c1c84dc8c684040326f27cdcc",
-      "rev_count": 982522,
-      "rev_date": "2026-04-18T21:33:21Z",
-      "scrape_date": "2026-04-21T06:37:36.385855Z",
+      "rev": "9ae611a455b90cf061d8f332b977e387bda8e1ca",
+      "rev_count": 1014179,
+      "rev_date": "2026-06-10T06:56:03Z",
+      "scrape_date": "2026-06-12T03:45:38.592692Z",
       "stabilities": [
+        "staging",
         "unstable"
       ],
       "unfree": false,
-      "version": "3.13.12",
+      "version": "3.13.13",
       "outputs_to_install": [
-        "out",
         "out",
         "out",
         "out"
       ],
       "outputs": {
-        "debug": "/nix/store/q6kvsi3vgc4xvnp3yzibg03a22cw86r2-python3-3.13.12-debug",
-        "out": "/nix/store/nnz5k19wbai97d7y2x11qaq6dgxzhq4w-python3-3.13.12"
+        "debug": "/nix/store/wsi1phrz2gvs0xa8gxsq34mbdpr0s6h0-python3-3.13.13-debug",
+        "out": "/nix/store/lqn6mbgzzdrqq2qkwddcmxj9z6amdd86-python3-3.13.13"
       },
       "system": "aarch64-linux",
       "group": "toplevel",
@@ -86,28 +87,29 @@
     {
       "attr_path": "python3",
       "broken": false,
-      "derivation": "/nix/store/0bqzghzk3p5ss7wvxgfjw2k49wmiddkj-python3-3.13.12.drv",
+      "derivation": "/nix/store/klsjr5grg2dlgbsimgczsz32s6h0s7ps-python3-3.13.13.drv",
       "description": "High-level dynamically-typed programming language",
       "install_id": "python3",
       "license": "Python-2.0",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=b12141ef619e0a9c1c84dc8c684040326f27cdcc",
-      "name": "python3-3.13.12",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=9ae611a455b90cf061d8f332b977e387bda8e1ca",
+      "name": "python3-3.13.13",
       "pname": "python3",
-      "rev": "b12141ef619e0a9c1c84dc8c684040326f27cdcc",
-      "rev_count": 982522,
-      "rev_date": "2026-04-18T21:33:21Z",
-      "scrape_date": "2026-04-21T07:08:52.539311Z",
+      "rev": "9ae611a455b90cf061d8f332b977e387bda8e1ca",
+      "rev_count": 1014179,
+      "rev_date": "2026-06-10T06:56:03Z",
+      "scrape_date": "2026-06-12T04:15:20.916035Z",
       "stabilities": [
+        "staging",
         "unstable"
       ],
       "unfree": false,
-      "version": "3.13.12",
+      "version": "3.13.13",
       "outputs_to_install": [
         "out",
         "out"
       ],
       "outputs": {
-        "out": "/nix/store/qcpx0pjlgkigibqijdy1wsy2kmc8shd2-python3-3.13.12"
+        "out": "/nix/store/fyyi8b1dpk3xpjnn52rznnpvlyivds97-python3-3.13.13"
       },
       "system": "x86_64-darwin",
       "group": "toplevel",
@@ -116,24 +118,24 @@
     {
       "attr_path": "python3",
       "broken": false,
-      "derivation": "/nix/store/makmgpqhagbsvfs49dywc7r7a0kv8any-python3-3.13.12.drv",
+      "derivation": "/nix/store/3qs947by1lp93b4gnfisb3jx67mpkd3c-python3-3.13.13.drv",
       "description": "High-level dynamically-typed programming language",
       "install_id": "python3",
       "license": "Python-2.0",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=b12141ef619e0a9c1c84dc8c684040326f27cdcc",
-      "name": "python3-3.13.12",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=9ae611a455b90cf061d8f332b977e387bda8e1ca",
+      "name": "python3-3.13.13",
       "pname": "python3",
-      "rev": "b12141ef619e0a9c1c84dc8c684040326f27cdcc",
-      "rev_count": 982522,
-      "rev_date": "2026-04-18T21:33:21Z",
-      "scrape_date": "2026-04-21T07:45:44.760344Z",
+      "rev": "9ae611a455b90cf061d8f332b977e387bda8e1ca",
+      "rev_count": 1014179,
+      "rev_date": "2026-06-10T06:56:03Z",
+      "scrape_date": "2026-06-12T04:48:40.918714Z",
       "stabilities": [
+        "staging",
         "unstable"
       ],
       "unfree": false,
-      "version": "3.13.12",
+      "version": "3.13.13",
       "outputs_to_install": [
-        "out",
         "out",
         "out",
         "out",
@@ -142,8 +144,8 @@
         "out"
       ],
       "outputs": {
-        "debug": "/nix/store/nj0fy51wymai8wp1y7dbk08g6pvjw1a1-python3-3.13.12-debug",
-        "out": "/nix/store/pzdalg368npikvpq4ncz2saxnz19v53k-python3-3.13.12"
+        "debug": "/nix/store/f8f8fd1yyvay2916vv1lk77v4cy5p3wz-python3-3.13.13-debug",
+        "out": "/nix/store/60m4rxhg2fldqaak400c0lry96ijrzqn-python3-3.13.13"
       },
       "system": "x86_64-linux",
       "group": "toplevel",
@@ -152,29 +154,29 @@
     {
       "attr_path": "python313Packages.requests",
       "broken": false,
-      "derivation": "/nix/store/g5gcbm3mrk5naw42ygxqam9yxp48zj20-python3.13-requests-2.32.5.drv",
+      "derivation": "/nix/store/qi95zd94r3wh1xpknqpa4iggsc7lrmc1-python3.13-requests-2.33.1.drv",
       "description": "HTTP library for Python",
       "install_id": "requests",
       "license": "Apache-2.0",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=b12141ef619e0a9c1c84dc8c684040326f27cdcc",
-      "name": "python3.13-requests-2.32.5",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=9ae611a455b90cf061d8f332b977e387bda8e1ca",
+      "name": "python3.13-requests-2.33.1",
       "pname": "requests",
-      "rev": "b12141ef619e0a9c1c84dc8c684040326f27cdcc",
-      "rev_count": 982522,
-      "rev_date": "2026-04-18T21:33:21Z",
-      "scrape_date": "2026-04-21T06:04:14.872484Z",
+      "rev": "9ae611a455b90cf061d8f332b977e387bda8e1ca",
+      "rev_count": 1014179,
+      "rev_date": "2026-06-10T06:56:03Z",
+      "scrape_date": "2026-06-12T03:14:44.641084Z",
       "stabilities": [
+        "staging",
         "unstable"
       ],
       "unfree": false,
-      "version": "2.32.5",
+      "version": "2.33.1",
       "outputs_to_install": [
-        "out",
         "out"
       ],
       "outputs": {
-        "dist": "/nix/store/sw23w3rfwnq8mr5zy6dmxf6a71h5xqyy-python3.13-requests-2.32.5-dist",
-        "out": "/nix/store/zjnfxjxq8vbapq5w5mqkfk6gyf978nzg-python3.13-requests-2.32.5"
+        "dist": "/nix/store/isfcllmb42l3sd79jcixnm8vbhhqwh9k-python3.13-requests-2.33.1-dist",
+        "out": "/nix/store/8jgxjg04810x68njbl6ivhb92vmvd4dn-python3.13-requests-2.33.1"
       },
       "system": "aarch64-darwin",
       "group": "toplevel",
@@ -183,30 +185,30 @@
     {
       "attr_path": "python313Packages.requests",
       "broken": false,
-      "derivation": "/nix/store/d2idfh78n2662nhfv13fj0sd7d0v77ml-python3.13-requests-2.32.5.drv",
+      "derivation": "/nix/store/jsiya94kq3phf0pdya9vghyq1drjp5fi-python3.13-requests-2.33.1.drv",
       "description": "HTTP library for Python",
       "install_id": "requests",
       "license": "Apache-2.0",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=b12141ef619e0a9c1c84dc8c684040326f27cdcc",
-      "name": "python3.13-requests-2.32.5",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=9ae611a455b90cf061d8f332b977e387bda8e1ca",
+      "name": "python3.13-requests-2.33.1",
       "pname": "requests",
-      "rev": "b12141ef619e0a9c1c84dc8c684040326f27cdcc",
-      "rev_count": 982522,
-      "rev_date": "2026-04-18T21:33:21Z",
-      "scrape_date": "2026-04-21T06:37:55.345418Z",
+      "rev": "9ae611a455b90cf061d8f332b977e387bda8e1ca",
+      "rev_count": 1014179,
+      "rev_date": "2026-06-10T06:56:03Z",
+      "scrape_date": "2026-06-12T03:45:59.193810Z",
       "stabilities": [
+        "staging",
         "unstable"
       ],
       "unfree": false,
-      "version": "2.32.5",
+      "version": "2.33.1",
       "outputs_to_install": [
-        "out",
         "out",
         "out"
       ],
       "outputs": {
-        "dist": "/nix/store/mql3lj72asdfg7sqglv4d24rlc0wsqky-python3.13-requests-2.32.5-dist",
-        "out": "/nix/store/s8mjykmxhnahk83nr9mww6ybp9g7wwj5-python3.13-requests-2.32.5"
+        "dist": "/nix/store/72xwphndy1djjjbg538l7qals7dca3d0-python3.13-requests-2.33.1-dist",
+        "out": "/nix/store/p0n645ld0lzvbys0cy7g8bx8sfw4wwsr-python3.13-requests-2.33.1"
       },
       "system": "aarch64-linux",
       "group": "toplevel",
@@ -215,28 +217,29 @@
     {
       "attr_path": "python313Packages.requests",
       "broken": false,
-      "derivation": "/nix/store/m0qhim8xd3xwb8ax38hplinvyrpjd844-python3.13-requests-2.32.5.drv",
+      "derivation": "/nix/store/warjqmzklvmbzpaxbi6niqjmkjflr10j-python3.13-requests-2.33.1.drv",
       "description": "HTTP library for Python",
       "install_id": "requests",
       "license": "Apache-2.0",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=b12141ef619e0a9c1c84dc8c684040326f27cdcc",
-      "name": "python3.13-requests-2.32.5",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=9ae611a455b90cf061d8f332b977e387bda8e1ca",
+      "name": "python3.13-requests-2.33.1",
       "pname": "requests",
-      "rev": "b12141ef619e0a9c1c84dc8c684040326f27cdcc",
-      "rev_count": 982522,
-      "rev_date": "2026-04-18T21:33:21Z",
-      "scrape_date": "2026-04-21T07:09:08.197521Z",
+      "rev": "9ae611a455b90cf061d8f332b977e387bda8e1ca",
+      "rev_count": 1014179,
+      "rev_date": "2026-06-10T06:56:03Z",
+      "scrape_date": "2026-06-12T04:15:38.474568Z",
       "stabilities": [
+        "staging",
         "unstable"
       ],
       "unfree": false,
-      "version": "2.32.5",
+      "version": "2.33.1",
       "outputs_to_install": [
         "out"
       ],
       "outputs": {
-        "dist": "/nix/store/xaam4ahz5i2a5pbcnvshng7vzli69jjy-python3.13-requests-2.32.5-dist",
-        "out": "/nix/store/b8wlzskjz5rwqx6kaw47w3916wq6pp7w-python3.13-requests-2.32.5"
+        "dist": "/nix/store/v9d9nz52wm600ihq9i4bi2bqahi3hp6s-python3.13-requests-2.33.1-dist",
+        "out": "/nix/store/g2fmjpnq80hi1vdpvhk9ss4x44bvgd1l-python3.13-requests-2.33.1"
       },
       "system": "x86_64-darwin",
       "group": "toplevel",
@@ -245,30 +248,31 @@
     {
       "attr_path": "python313Packages.requests",
       "broken": false,
-      "derivation": "/nix/store/rn76imqsq53m7ha2a9p7d16qac8vd89s-python3.13-requests-2.32.5.drv",
+      "derivation": "/nix/store/2j4nqxkbcpm37k9v4w6dkb8jr1s133b1-python3.13-requests-2.33.1.drv",
       "description": "HTTP library for Python",
       "install_id": "requests",
       "license": "Apache-2.0",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=b12141ef619e0a9c1c84dc8c684040326f27cdcc",
-      "name": "python3.13-requests-2.32.5",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=9ae611a455b90cf061d8f332b977e387bda8e1ca",
+      "name": "python3.13-requests-2.33.1",
       "pname": "requests",
-      "rev": "b12141ef619e0a9c1c84dc8c684040326f27cdcc",
-      "rev_count": 982522,
-      "rev_date": "2026-04-18T21:33:21Z",
-      "scrape_date": "2026-04-21T07:46:05.127316Z",
+      "rev": "9ae611a455b90cf061d8f332b977e387bda8e1ca",
+      "rev_count": 1014179,
+      "rev_date": "2026-06-10T06:56:03Z",
+      "scrape_date": "2026-06-12T04:49:01.194544Z",
       "stabilities": [
+        "staging",
         "unstable"
       ],
       "unfree": false,
-      "version": "2.32.5",
+      "version": "2.33.1",
       "outputs_to_install": [
         "out",
         "out",
         "out"
       ],
       "outputs": {
-        "dist": "/nix/store/pxxn1yrjcazvxvbn83cah8a3vrm45icn-python3.13-requests-2.32.5-dist",
-        "out": "/nix/store/knlk45h5km3r1i6i38izw3cmk6xznpqz-python3.13-requests-2.32.5"
+        "dist": "/nix/store/8kf15vc271zsvlwy7is55c6v49r0095i-python3.13-requests-2.33.1-dist",
+        "out": "/nix/store/rks4c012hxa7z01sfc7w4p7mn74zfp2x-python3.13-requests-2.33.1"
       },
       "system": "x86_64-linux",
       "group": "toplevel",

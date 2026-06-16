@@ -3,10 +3,10 @@ when:
   method: POST
   body: '{"original_url":"https://git.example.com/test/repo.git"}'
 then:
-  status: 200
+  status: 201
   header:
   - name: date
-    value: Mon, 16 Mar 2026 15:54:11 GMT
+    value: Mon, 15 Jun 2026 13:14:03 GMT
   - name: server
     value: uvicorn
   - name: content-length
@@ -23,28 +23,11 @@ then:
   status: 200
   header:
   - name: date
-    value: Mon, 16 Mar 2026 15:54:11 GMT
+    value: Mon, 15 Jun 2026 13:14:03 GMT
   - name: server
     value: uvicorn
   - name: content-length
-    value: '85'
+    value: '728'
   - name: content-type
     value: application/json
-  body: '{"ingress_uri":null,"ingress_auth":null,"catalog_store_config":{"store_type":"null"}}'
----
-when:
-  path: /api/v1/catalog/catalogs/test_user_no_catalogs/packages/mypkg3/builds
-  method: POST
-  body: '{"build_type":"manifest","derivation":{"broken":false,"description":"dummy","drv_path":"dummy","name":"mypkg3","outputs":[{"name":"out","store_path":"/nix/store/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA-foo"}],"pname":"mypkg3","system":"x86_64-linux","version":"1.0.0"},"dot_flox_dir":"","locked_base_catalog_url":"https://github.com/flox/nixpkgs?rev=5e0ca22929f3342b19569b21b2f3462f053e497b","ref":"dummy","rev":"dummy","rev_count":0,"rev_date":"2025-01-01T12:00:00Z","url":"https://git.example.com/test/repo.git"}'
-then:
-  status: 200
-  header:
-  - name: date
-    value: Mon, 16 Mar 2026 15:54:12 GMT
-  - name: server
-    value: uvicorn
-  - name: content-length
-    value: '2'
-  - name: content-type
-    value: application/json
-  body: '{}'
+  body: '{"ingress_uri":"s3://ingress-cache/cache/test_user_no_catalogs?endpoint=http://0.0.0.0:56124&scheme=http","ingress_auth":{"aws-s3":{"envs":{"AWS_ACCESS_KEY_ID":"ASIARZPUZDIKCM26RGW7","AWS_SECRET_ACCESS_KEY":"DV6Lyt3cVPvWBt4HC6cWErfJjmeio6lKWOug0cR/","AWS_SESSION_TOKEN":"FQoGZXIvYXdzEBYaDZ0IF3hmicNNC4WvyU4IE0FWmsvG+K/mIcHPmcU6v7Emou6rS+50xoJ86rsDN3IJoqZNbszsQLOmRwffBuVnwQhYHLq5ovMW3lo2wT16lA2J5EjzLsG8UujLztBk3v4CLvHT1Uwm2tNtqci31kfuvJrfyC8y2SDeRs0ktgX8LVV514oHnBgUj+y/F1hva0AsY6s1t1+rARtkU9LKsABG5h5ylrU0huD7V0g7z6DtxJqSTxxf2AP6yBrPRWRoFAf8gL2bd9JC8akr5e32xxpPxKpB10ZeBpyRoQhldqsN9oQ7eNb6t+pgByV7jBVcziQM6rpZAlAZRLeBTLD9MgY=","AWS_REGION":"us-east-1"}}},"catalog_store_config":{"store_type":"publisher","publisher_url":null}}'
