@@ -5,6 +5,7 @@ use crate::parsed::v1_10_0::ManifestV1_10_0;
 use crate::parsed::v1_11_0::ManifestV1_11_0;
 use crate::parsed::v1_12_0::ManifestV1_12_0;
 use crate::parsed::v1_13_0::ManifestV1_13_0;
+use crate::parsed::v1_14_0::ManifestV1_14_0;
 use crate::{Manifest, Migrated, MigratedTypedOnly, Parsed, TypedOnly, Validated};
 
 /// A trait that allows you to generically extract a concrete inner manifest
@@ -66,6 +67,7 @@ impl InnerManifestMarker for ManifestV1_10_0 {}
 impl InnerManifestMarker for ManifestV1_11_0 {}
 impl InnerManifestMarker for ManifestV1_12_0 {}
 impl InnerManifestMarker for ManifestV1_13_0 {}
+impl InnerManifestMarker for ManifestV1_14_0 {}
 
 /// This trait is used to define which concrete manifest types can
 /// be extracted from `Manifest<State>` and in which `State`s.
@@ -164,6 +166,24 @@ impl GetInnerManifest<ManifestV1_13_0> for Manifest<Validated> {
     }
 }
 
+impl GetInnerManifest<ManifestV1_14_0> for Manifest<Validated> {
+    fn get_inner_manifest(&self) -> Option<&ManifestV1_14_0> {
+        if let Parsed::V1_14_0(ref manifest) = self.inner.parsed {
+            Some(manifest)
+        } else {
+            None
+        }
+    }
+
+    fn get_inner_manifest_mut(&mut self) -> Option<&mut ManifestV1_14_0> {
+        if let Parsed::V1_14_0(ref mut manifest) = self.inner.parsed {
+            Some(manifest)
+        } else {
+            None
+        }
+    }
+}
+
 impl GetInnerManifest<ManifestV1> for Manifest<TypedOnly> {
     fn get_inner_manifest(&self) -> Option<&ManifestV1> {
         if let Parsed::V1(ref manifest) = self.inner.parsed {
@@ -254,6 +274,24 @@ impl GetInnerManifest<ManifestV1_13_0> for Manifest<TypedOnly> {
     }
 }
 
+impl GetInnerManifest<ManifestV1_14_0> for Manifest<TypedOnly> {
+    fn get_inner_manifest(&self) -> Option<&ManifestV1_14_0> {
+        if let Parsed::V1_14_0(ref manifest) = self.inner.parsed {
+            Some(manifest)
+        } else {
+            None
+        }
+    }
+
+    fn get_inner_manifest_mut(&mut self) -> Option<&mut ManifestV1_14_0> {
+        if let Parsed::V1_14_0(ref mut manifest) = self.inner.parsed {
+            Some(manifest)
+        } else {
+            None
+        }
+    }
+}
+
 impl GetInnerManifest<ManifestV1> for Manifest<Migrated> {
     fn get_inner_manifest(&self) -> Option<&ManifestV1> {
         None
@@ -296,10 +334,20 @@ impl GetInnerManifest<ManifestV1_12_0> for Manifest<Migrated> {
 
 impl GetInnerManifest<ManifestV1_13_0> for Manifest<Migrated> {
     fn get_inner_manifest(&self) -> Option<&ManifestV1_13_0> {
-        Some(&self.inner.migrated_parsed)
+        None
     }
 
     fn get_inner_manifest_mut(&mut self) -> Option<&mut ManifestV1_13_0> {
+        None
+    }
+}
+
+impl GetInnerManifest<ManifestV1_14_0> for Manifest<Migrated> {
+    fn get_inner_manifest(&self) -> Option<&ManifestV1_14_0> {
+        Some(&self.inner.migrated_parsed)
+    }
+
+    fn get_inner_manifest_mut(&mut self) -> Option<&mut ManifestV1_14_0> {
         Some(&mut self.inner.migrated_parsed)
     }
 }
@@ -346,10 +394,20 @@ impl GetInnerManifest<ManifestV1_12_0> for Manifest<MigratedTypedOnly> {
 
 impl GetInnerManifest<ManifestV1_13_0> for Manifest<MigratedTypedOnly> {
     fn get_inner_manifest(&self) -> Option<&ManifestV1_13_0> {
-        Some(&self.inner.migrated_parsed)
+        None
     }
 
     fn get_inner_manifest_mut(&mut self) -> Option<&mut ManifestV1_13_0> {
+        None
+    }
+}
+
+impl GetInnerManifest<ManifestV1_14_0> for Manifest<MigratedTypedOnly> {
+    fn get_inner_manifest(&self) -> Option<&ManifestV1_14_0> {
+        Some(&self.inner.migrated_parsed)
+    }
+
+    fn get_inner_manifest_mut(&mut self) -> Option<&mut ManifestV1_14_0> {
         Some(&mut self.inner.migrated_parsed)
     }
 }

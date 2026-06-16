@@ -23,7 +23,7 @@ use tracing::{debug, info_span, instrument};
 use crate::commands::{SHELL_COMPLETION_DIR, ensure_auth, environment_description};
 use crate::subcommand_metric;
 use crate::utils::dialog::Dialog;
-use crate::utils::message;
+use crate::utils::{message, readme};
 
 mod go;
 mod node;
@@ -240,6 +240,18 @@ async fn init_local_environment(
         debug!("creating environment");
         PathEnvironment::init(path_pointer, dir, &customization, flox)?
     };
+
+    // Scaffold a starter README so the environment is self-documenting from the
+    // start. It travels with the environment on push/pull and is rendered by
+    // `flox info`, on activate, and on FloxHub. Skip it for `--bare`, which is
+    // intentionally minimal.
+    if !bare {
+        let readme_path = env.readme_path(flox)?;
+        if !readme_path.exists() {
+            std::fs::write(&readme_path, readme::template(&name.to_string()))
+                .context("failed to write README")?;
+        }
+    }
 
     let env_in_git_repo = GitCommandProvider::discover(dir).is_ok();
 

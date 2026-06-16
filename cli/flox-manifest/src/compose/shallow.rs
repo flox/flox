@@ -379,6 +379,13 @@ impl ManifestMergeTrait for ShallowMerger {
         let merged_manifest = ManifestLatest {
             schema_version,
             minimum_cli_version,
+            // The higher-priority manifest's description wins; included
+            // environments only contribute a description when the including
+            // manifest has none of its own.
+            description: high_priority
+                .description
+                .clone()
+                .or_else(|| low_priority.description.clone()),
             install,
             vars,
             hook,

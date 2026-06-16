@@ -40,7 +40,7 @@ use crate::commands::{EnvironmentSelectError, SHELL_COMPLETION_FILE, ensure_auth
 use crate::utils::dialog::{Confirm, Dialog};
 use crate::utils::errors::format_error;
 use crate::utils::events::env_detail_from_concrete;
-use crate::utils::message;
+use crate::utils::{message, readme};
 use crate::{environment_subcommand_metric, subcommand_metric};
 
 // Edit declarative environment configuration
@@ -77,6 +77,12 @@ pub enum EditAction {
     /// (Only available for managed environments)
     #[bpaf(long)]
     Reset,
+
+    /// Edit the environment's README in $EDITOR
+    ///
+    /// (Only available for local environments)
+    #[bpaf(long("readme"))]
+    Readme,
 }
 
 impl Edit {
@@ -198,8 +204,47 @@ impl Edit {
 
                 message::updated("Environment changes reset to current generation.");
             },
+
+            EditAction::Readme => {
+                let span = tracing::info_span!("readme");
+                let _guard = span.enter();
+                Self::edit_readme(&flox, &mut detected_environment).await?;
+            },
         };
 
+        Ok(())
+    }
+
+    /// Interactively edit the environment's README in `$EDITOR`, seeding a
+    /// starter template when the environment doesn't have one yet.
+    async fn edit_readme(flox: &Flox, environment: &mut ConcreteEnvironment) -> Result<()> {
+        let ConcreteEnvironment::Path(path_environment) = environment else {
+            bail!(formatdoc! {"
+                Editing a README is only supported for local environments.
+                Edit the README where the environment lives, then run 'flox push' to share it."
+            });
+        };
+
+        if !Dialog::can_prompt() {
+            bail!("Can't edit interactively in non-interactive context");
+        }
+
+        let readme_path = path_environment.readme_path(flox)?;
+        if !readme_path.exists() {
+            let name = path_environment.name();
+            std::fs::write(&readme_path, readme::template(&name.to_string()))
+                .context("failed to create README")?;
+        }
+
+        let (editor, args) = Self::determine_editor()?;
+        let before = std::fs::read_to_string(&readme_path).unwrap_or_default();
+        let after = Self::edited_manifest_contents(&readme_path, &editor, &args)?;
+
+        if before == after {
+            message::warning("No changes made to README.");
+        } else {
+            message::updated("README updated.");
+        }
         Ok(())
     }
 

@@ -21,6 +21,7 @@ impl CommonFields for Parsed {
             Parsed::V1_11_0(m) => &m.services,
             Parsed::V1_12_0(m) => &m.services.service_map,
             Parsed::V1_13_0(m) => &m.services.service_map,
+            Parsed::V1_14_0(m) => &m.services.service_map,
         }
     }
 
@@ -31,6 +32,7 @@ impl CommonFields for Parsed {
             Parsed::V1_11_0(m) => &m.options,
             Parsed::V1_12_0(m) => &m.options,
             Parsed::V1_13_0(m) => &m.options,
+            Parsed::V1_14_0(m) => &m.options,
         }
     }
 
@@ -42,6 +44,7 @@ impl CommonFields for Parsed {
             Parsed::V1_11_0(m) => &mut m.options,
             Parsed::V1_12_0(m) => &mut m.options,
             Parsed::V1_13_0(m) => &mut m.options,
+            Parsed::V1_14_0(m) => &mut m.options,
         }
     }
 }
