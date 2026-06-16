@@ -64,8 +64,8 @@ use crate::config::{AutoActivationPreference, Config, EnvironmentPromptConfig};
 use crate::utils::detect_shell::{detect_shell_for_in_place, detect_shell_for_subshell};
 use crate::utils::errors::format_diverged_metadata;
 use crate::utils::events::env_detail_from_concrete;
-use crate::utils::message;
 use crate::utils::upgrade_output::{count_upgrade_categories, format_upgrade_summary};
+use crate::utils::{message, readme};
 use crate::{Exit, environment_subcommand_metric, subcommand_metric, utils};
 
 #[derive(Debug, Clone, Bpaf)]
@@ -793,16 +793,25 @@ fn print_readme_summary(env: &ConcreteEnvironment, description: Option<String>, 
         return;
     }
 
-    let has_readme = matches!(env.readme(flox), Ok(Some(readme)) if !readme.trim().is_empty());
+    // Only point users at a README that has actually been written. A README
+    // still matching the `flox init` scaffold is just a placeholder and isn't
+    // worth surfacing on every activation.
+    let has_meaningful_readme = match env.readme(flox) {
+        Ok(Some(contents)) => {
+            let trimmed = contents.trim();
+            !trimmed.is_empty() && trimmed != readme::template(&env.name().to_string()).trim()
+        },
+        _ => false,
+    };
 
-    if description.is_none() && !has_readme {
+    if description.is_none() && !has_meaningful_readme {
         return;
     }
 
     if let Some(description) = description {
         message::plain(description);
     }
-    if has_readme {
+    if has_meaningful_readme {
         message::info("Run 'flox info' to view this environment's README.");
     }
 }
