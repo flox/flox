@@ -507,6 +507,17 @@ impl ActivateOptions {
                 self.generation,
                 mode.clone(),
             );
+
+            // On a fresh interactive activation, surface the environment's
+            // description and a pointer to its README so users see what it
+            // provides and how to learn more.
+            if invocation_type == InvocationType::Interactive {
+                print_readme_summary(
+                    &concrete_environment,
+                    manifest.as_latest_schema().description.clone(),
+                    &flox,
+                );
+            }
         };
 
         // Determine values for `set_prompt` and `hide_default_prompt`, taking
@@ -773,6 +784,29 @@ impl ActivateOptions {
 /// Upon activation flox will start a detached process to check for upgrades.
 /// Future activations will be able to read the upgrade information from a file
 /// and notify the user if there are any upgrades available using this function.
+/// Print a short summary of the environment on an interactive activation:
+/// its one-line description (from the manifest) and a hint to view the full
+/// README with `flox info`. Skipped when the environment has neither, or when
+/// `FLOX_NO_README_SUMMARY` is set.
+fn print_readme_summary(env: &ConcreteEnvironment, description: Option<String>, flox: &Flox) {
+    if std::env::var_os("FLOX_NO_README_SUMMARY").is_some() {
+        return;
+    }
+
+    let has_readme = matches!(env.readme(flox), Ok(Some(readme)) if !readme.trim().is_empty());
+
+    if description.is_none() && !has_readme {
+        return;
+    }
+
+    if let Some(description) = description {
+        message::plain(description);
+    }
+    if has_readme {
+        message::info("Run 'flox info' to view this environment's README.");
+    }
+}
+
 /// See [spawn_detached_check_for_upgrades_process] for more information
 /// on the upgrade check process.
 ///
