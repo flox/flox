@@ -1,6 +1,8 @@
 # shellcheck shell=bash
 # shellcheck disable=SC2154
-"$_flox_activate_tracer" "$_activate_d/set-prompt.bash" START
+# A previous in-place deactivation in this shell unsets the tracer, so default
+# to a no-op rather than executing an empty command when sourced again.
+"${_flox_activate_tracer:-true}" "${_activate_d:-}/set-prompt.bash" START
 
 # Tweak the (already customized) prompt: add a flox indicator.
 _flox_set_prompt() {
@@ -49,4 +51,4 @@ elif [ -n "${FLOX_SAVE_BASH_PS1:-}" ]; then
 fi
 unset -f _flox_set_prompt
 
-"$_flox_activate_tracer" "$_activate_d/set-prompt.bash" END
+"${_flox_activate_tracer:-true}" "${_activate_d:-}/set-prompt.bash" END

@@ -543,9 +543,15 @@ FLOX_COLD_START_UNSET=(
   # as spurious env-diff records.
   -u _FLOX_PROMPT_HOOK_VERSION
   -u _FLOX_INVOCATION_TYPE
-  # A leaked auto-activate flag makes the prompt hook set _FLOX_HOOK_FIRED
-  # inside interactive test sessions, which also surfaces in the env diff.
+  # A leaked auto-activate flag makes the prompt hook auto-activate inside
+  # interactive test sessions, which also surfaces in the env diff.
   -u FLOX_FEATURES_AUTO_ACTIVATE
+  # State vars maintained by the prompt hook in any outer shell that
+  # activated with auto-activate enabled (e.g. a developer's own terminal).
+  # _FLOX_HOOK_FIRED is only set by older flox versions but can still leak
+  # from an outer shell running one.
+  -u _FLOX_AUTO_ACTIVATED_ENVIRONMENTS
+  -u _FLOX_SUPPRESSED_ENVIRONMENTS
   -u _FLOX_HOOK_FIRED
 )
 
@@ -861,7 +867,6 @@ EOF
   if [[ "$OSTYPE" == darwin* ]]; then
     assert_output - <<EOF
 FLOX_ORIG_HOME
-FLOX_SAVE_TCSH_PROMPT
 FLOX_TCSH_INIT_SCRIPT
 GROUP
 HOST
@@ -878,7 +883,6 @@ EOF
   else
     assert_output - <<EOF
 FLOX_ORIG_HOME
-FLOX_SAVE_TCSH_PROMPT
 FLOX_TCSH_INIT_SCRIPT
 GROUP
 HOST
@@ -1055,11 +1059,11 @@ EOF
 
   output=$(diff_env_dumps "$BEFORE" "$AFTER"); status=$?
   assert_success
-  # FLOX_SAVE_TCSH_PROMPT is a macOS-only tcsh interactive leak.
+  # macOS and Linux differ only in the SSL cert var (SSL_CERT_FILE vs
+  # SSL_CERT_DIR).
   if [[ "$OSTYPE" == darwin* ]]; then
     assert_output - <<EOF
 FLOX_ORIG_HOME
-FLOX_SAVE_TCSH_PROMPT
 FLOX_TCSH_INIT_SCRIPT
 GROUP
 HOST
@@ -1079,7 +1083,6 @@ EOF
   else
     assert_output - <<EOF
 FLOX_ORIG_HOME
-FLOX_SAVE_TCSH_PROMPT
 FLOX_TCSH_INIT_SCRIPT
 GROUP
 HOST

@@ -3,17 +3,6 @@ use std::fmt::Display;
 use std::path::PathBuf;
 use std::str::FromStr;
 
-use flox_catalog::{
-    MessageLevel,
-    MsgAttrPathNotFoundNotFoundForAllSystems,
-    MsgAttrPathNotFoundNotInCatalog,
-    MsgAttrPathNotFoundSystemsNotOnSamePage,
-    MsgConstraintsTooTight,
-    MsgUnknown,
-    PackageGroup,
-    ResolutionMessage,
-    ResolvedPackageGroup,
-};
 use flox_core::Version;
 use flox_core::data::System;
 use flox_manifest::compose::shallow::ShallowMerger;
@@ -48,6 +37,17 @@ use flox_manifest::parsed::latest::{
 use flox_manifest::parsed::{Inner, latest};
 use flox_manifest::raw::DEFAULT_SYSTEMS_STR;
 use flox_manifest::{Manifest, ManifestError, MigratedTypedOnly};
+use floxhub_client::{
+    MessageLevel,
+    MsgAttrPathNotFoundNotFoundForAllSystems,
+    MsgAttrPathNotFoundNotInCatalog,
+    MsgAttrPathNotFoundSystemsNotOnSamePage,
+    MsgConstraintsTooTight,
+    MsgUnknown,
+    PackageGroup,
+    ResolutionMessage,
+    ResolvedPackageGroup,
+};
 use indent::{indent_all_by, indent_by};
 use indoc::formatdoc;
 use itertools::{Either, Itertools};
@@ -66,7 +66,7 @@ use crate::providers::flake_installable_locker::{
 #[derive(Debug, thiserror::Error)]
 pub enum ResolveError {
     #[error("failed to resolve packages")]
-    CatalogResolve(#[from] flox_catalog::ResolveError),
+    CatalogResolve(#[from] floxhub_client::ResolveError),
 
     // todo: this should probably part of some validation logic of the manifest file
     //       rather than occurring during the locking process creation
@@ -250,7 +250,7 @@ impl LockManifest {
                 .iter()
                 .sorted()
                 .map(|s| {
-                    flox_catalog::PackageSystem::from_str(s)
+                    floxhub_client::PackageSystem::from_str(s)
                         .map_err(|_| ResolveError::UnrecognizedSystem(s.to_string()))
                 })
                 .collect::<Result<Vec<_>, _>>()
@@ -286,7 +286,7 @@ impl LockManifest {
                         .and_then(|(_, locked_package)| locked_package.as_catalog_package_ref())
                         .map(|locked_package| locked_package.derivation.clone());
 
-                    let descriptor = flox_catalog::PackageDescriptor {
+                    let descriptor = floxhub_client::PackageDescriptor {
                         install_id: id.clone(),
                         attr_path: desc.pkg_path.clone(),
                         derivation: locked_derivation,
@@ -359,14 +359,11 @@ impl LockManifest {
         )
         .map_err(EnvironmentError::Recoverable)?;
 
-        let packages = Self::resolve_manifest(
-            &merged,
-            seed_lockfile,
-            &flox.catalog_client,
-            &flox.installable_locker,
-        )
-        .await
-        .map_err(|e| EnvironmentError::Core(CoreEnvironmentError::Resolve(e)))?;
+        let catalog = &flox.floxhub_client;
+        let packages =
+            Self::resolve_manifest(&merged, seed_lockfile, catalog, &flox.installable_locker)
+                .await
+                .map_err(|e| EnvironmentError::Core(CoreEnvironmentError::Resolve(e)))?;
 
         let proposed_lockfile = Lockfile {
             version: Version,
@@ -640,7 +637,7 @@ impl LockManifest {
     async fn resolve_manifest(
         manifest: &ManifestLatest,
         seed_lockfile: Option<&Lockfile>,
-        client: &impl flox_catalog::ClientTrait,
+        client: &impl floxhub_client::CatalogClientTrait,
         installable_locker: &impl InstallableLocker,
     ) -> Result<Vec<LockedPackage>, ResolveError> {
         let catalog_groups = Self::collect_resolution_package_groups(manifest, seed_lockfile)?;
@@ -1085,8 +1082,8 @@ impl LockManifest {
     /// Lock a set of flake installables and return the locked packages.
     /// Errors are collected into [ResolutionFailures] and returned as a single error.
     ///
-    /// This is the equivalent to
-    /// [catalog::ClientTrait::resolve] and passing the result to [Self::locked_packages_from_resolution]
+    /// This is the eequivalent to
+    /// [catalog::CatalogClientTrait::resolve] and passing the result to [Self::locked_packages_from_resolution]
     /// in the context of flake installables.
     /// At this point flake installables are resolved sequentially.
     /// In further iterations we may want to resolve them in parallel,
@@ -1358,14 +1355,6 @@ fn format_multiple_resolution_failures(failures: &[ResolutionFailure]) -> String
 mod tests {
     use std::sync::LazyLock;
 
-    use flox_catalog::{
-        CatalogPage,
-        PackageDescriptor,
-        PackageOutput,
-        PackageOutputs,
-        PackageResolutionInfo,
-        PackageSystem,
-    };
     use flox_core::data::environment_ref::RemoteEnvironmentRef;
     use flox_manifest::TypedOnly;
     use flox_manifest::lockfile::LockedInstallable;
@@ -1382,6 +1371,14 @@ mod tests {
     };
     use flox_manifest::test_helpers::with_latest_schema;
     use flox_test_utils::GENERATED_DATA;
+    use floxhub_client::{
+        CatalogPage,
+        PackageDescriptor,
+        PackageOutput,
+        PackageOutputs,
+        PackageResolutionInfo,
+        PackageSystem,
+    };
     use indoc::indoc;
     use pollster::FutureExt;
     use pretty_assertions::assert_eq;
@@ -1497,7 +1494,7 @@ mod tests {
                 allow_unfree: None,
                 allowed_licenses: None,
                 allow_missing_builds: None,
-                systems: vec![flox_catalog::PackageSystem::Aarch64Darwin],
+                systems: vec![floxhub_client::PackageSystem::Aarch64Darwin],
             }],
         }]
     });
@@ -1540,7 +1537,7 @@ mod tests {
                     allow_unfree: None,
                     allowed_licenses: None,
                     allow_missing_builds: None,
-                    systems: vec![flox_catalog::PackageSystem::Aarch64Darwin],
+                    systems: vec![floxhub_client::PackageSystem::Aarch64Darwin],
                 },
                 PackageDescriptor {
                     allow_pre_releases: None,
@@ -1553,7 +1550,7 @@ mod tests {
                     allow_unfree: None,
                     allowed_licenses: None,
                     allow_missing_builds: None,
-                    systems: vec![flox_catalog::PackageSystem::X8664Linux],
+                    systems: vec![floxhub_client::PackageSystem::X8664Linux],
                 },
                 PackageDescriptor {
                     allow_pre_releases: None,
@@ -1566,7 +1563,7 @@ mod tests {
                     allow_unfree: None,
                     allowed_licenses: None,
                     allow_missing_builds: None,
-                    systems: vec![flox_catalog::PackageSystem::Aarch64Darwin],
+                    systems: vec![floxhub_client::PackageSystem::Aarch64Darwin],
                 },
                 PackageDescriptor {
                     allow_pre_releases: None,
@@ -1579,7 +1576,7 @@ mod tests {
                     allow_unfree: None,
                     allowed_licenses: None,
                     allow_missing_builds: None,
-                    systems: vec![flox_catalog::PackageSystem::X8664Linux],
+                    systems: vec![floxhub_client::PackageSystem::X8664Linux],
                 },
             ],
         }];

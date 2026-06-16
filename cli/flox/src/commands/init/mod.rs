@@ -4,7 +4,6 @@ use std::str::FromStr;
 
 use anyhow::{Context, Result, anyhow, bail};
 use bpaf::Bpaf;
-use flox_catalog::{ClientTrait, PackageDescriptor, PackageGroup, PackageResolutionInfo};
 use flox_core::activate::mode::ActivateMode;
 use flox_core::data::environment_ref::{DEFAULT_NAME, EnvironmentName, RemoteEnvironmentRef};
 use flox_manifest::raw::{CatalogPackage, PackageToInstall};
@@ -16,6 +15,7 @@ use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment, PathP
 use flox_rust_sdk::providers::catalog::ALL_SYSTEMS;
 use flox_rust_sdk::providers::git::{GitCommandProvider, GitProvider};
 use flox_rust_sdk::providers::manifest_init::ManifestInitializer;
+use floxhub_client::{CatalogClientTrait, PackageDescriptor, PackageGroup, PackageResolutionInfo};
 use indoc::{formatdoc, indoc};
 use path_dedot::ParseDot;
 use tracing::{debug, info_span, instrument};
@@ -527,8 +527,8 @@ impl From<ProvidedPackage> for CatalogPackage {
     }
 }
 
-impl From<flox_catalog::PackageResolutionInfo> for ProvidedPackage {
-    fn from(value: flox_catalog::PackageResolutionInfo) -> Self {
+impl From<floxhub_client::PackageResolutionInfo> for ProvidedPackage {
+    fn from(value: floxhub_client::PackageResolutionInfo) -> Self {
         Self {
             name: value.install_id,
             attr_path: value.attr_path.into(),
@@ -538,8 +538,8 @@ impl From<flox_catalog::PackageResolutionInfo> for ProvidedPackage {
     }
 }
 
-impl From<&flox_catalog::PackageResolutionInfo> for ProvidedPackage {
-    fn from(value: &flox_catalog::PackageResolutionInfo) -> Self {
+impl From<&floxhub_client::PackageResolutionInfo> for ProvidedPackage {
+    fn from(value: &floxhub_client::PackageResolutionInfo) -> Self {
         Self {
             name: value.install_id.clone(),
             attr_path: value.attr_path.clone().into(),
@@ -577,8 +577,8 @@ async fn try_find_compatible_package(
             "using catalog client to find compatible package version"
         );
 
-        let resolved_groups = flox
-            .catalog_client
+        let catalog = &flox.floxhub_client;
+        let resolved_groups = catalog
             .resolve(vec![PackageGroup {
                 descriptors: vec![PackageDescriptor {
                     attr_path: attr_path.to_string(),
@@ -642,7 +642,8 @@ async fn try_find_compatible_major_version_package(
         .iter()
         .map(|pkg_name| group_for_single_package(pkg_name.as_ref(), version))
         .collect::<Vec<_>>();
-    let resolved_groups = flox.catalog_client.resolve(pkg_groups).await?;
+    let catalog = &flox.floxhub_client;
+    let resolved_groups = catalog.resolve(pkg_groups).await?;
     let candidate_pkgs: Vec<ProvidedPackage> = resolved_groups
         .into_iter()
         .filter_map(|maybe_pkg_group| {

@@ -513,7 +513,7 @@ mod tests {
         std::fs::write(&gowork_path, "go 1.21.0\n").unwrap();
         let go_work_env = ("GOWORK", Some(gowork_path.to_str().unwrap()));
 
-        flox.catalog_client =
+        flox.floxhub_client =
             auto_recording_catalog_client("go_work_system_from_env_var_with_catalog");
 
         temp_env::async_with_vars([go_work_env], async move {
@@ -540,7 +540,7 @@ mod tests {
     async fn go_version_from_content_returns_compatible_version_with_catalog() {
         let (mut flox, _temp_dir_handle) = flox_instance();
 
-        flox.catalog_client = auto_recording_catalog_client(
+        flox.floxhub_client = auto_recording_catalog_client(
             "go_version_from_content_returns_compatible_version_with_catalog",
         );
 
@@ -574,7 +574,7 @@ mod tests {
     async fn go_version_from_content_returns_none_on_incompatible_version_with_catalog() {
         let (mut flox, _temp_dir_handle) = flox_instance();
 
-        flox.catalog_client = auto_recording_catalog_client(
+        flox.floxhub_client = auto_recording_catalog_client(
             "go_version_from_content_returns_none_on_incompatible_version_with_catalog",
         );
 

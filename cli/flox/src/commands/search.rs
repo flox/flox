@@ -3,9 +3,9 @@ use std::num::NonZeroU8;
 
 use anyhow::{Result, bail};
 use bpaf::Bpaf;
-use flox_catalog::{ClientTrait, SearchResults};
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::providers::catalog::SearchTerm;
+use floxhub_client::{CatalogClientTrait, SearchResults};
 use indoc::{formatdoc, indoc};
 use tracing::{debug, instrument};
 
@@ -75,7 +75,8 @@ impl Search {
                 },
             };
 
-            flox.catalog_client
+            let catalog = &flox.floxhub_client;
+            catalog
                 .search_with_spinner(parsed_search, flox.system.clone().try_into()?, limit)
                 .await?
         };
@@ -87,10 +88,12 @@ impl Search {
         } else {
             debug!("printing search results as user facing");
 
+            let system = flox.system.clone();
+            let catalog = &flox.floxhub_client;
             let suggestion = DidYouMean::<SearchSuggestion>::new(
                 search_term,
-                &flox.catalog_client,
-                flox.system,
+                catalog,
+                system,
                 stderr_supports_color(),
             );
 
