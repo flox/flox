@@ -84,6 +84,138 @@ pub mod types {
             value.clone()
         }
     }
+    /**Request body for the /build-inputs/lookup endpoint.
+
+A lookup names a `stability` (required) and one or more `groups` of
+references to resolve, optionally anchored at a `reference_point`.  It is
+system-independent — the response is source revs + DAG edges, which carry
+no system — so the request body has no system field.*/
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "BuildInputsLookupRequest",
+    ///  "description": "Request body for the /build-inputs/lookup endpoint.\n\nA lookup names a `stability` (required) and one or more `groups` of\nreferences to resolve, optionally anchored at a `reference_point`.  It is\nsystem-independent — the response is source revs + DAG edges, which carry\nno system — so the request body has no system field.",
+    ///  "type": "object",
+    ///  "required": [
+    ///    "groups",
+    ///    "stability"
+    ///  ],
+    ///  "properties": {
+    ///    "groups": {
+    ///      "title": "Groups",
+    ///      "type": "array",
+    ///      "items": {
+    ///        "$ref": "#/components/schemas/LookupGroup"
+    ///      }
+    ///    },
+    ///    "reference_point": {
+    ///      "$ref": "#/components/schemas/ReferencePoint"
+    ///    },
+    ///    "stability": {
+    ///      "title": "Stability",
+    ///      "type": "string",
+    ///      "minLength": 1
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
+    pub struct BuildInputsLookupRequest {
+        pub groups: ::std::vec::Vec<LookupGroup>,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub reference_point: ::std::option::Option<ReferencePoint>,
+        pub stability: Stability,
+    }
+    impl ::std::convert::From<&BuildInputsLookupRequest> for BuildInputsLookupRequest {
+        fn from(value: &BuildInputsLookupRequest) -> Self {
+            value.clone()
+        }
+    }
+    ///Response body for the /build-inputs/lookup endpoint.
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "BuildInputsLookupResponse",
+    ///  "description": "Response body for the /build-inputs/lookup endpoint.",
+    ///  "type": "object",
+    ///  "required": [
+    ///    "groups"
+    ///  ],
+    ///  "properties": {
+    ///    "groups": {
+    ///      "title": "Groups",
+    ///      "type": "object",
+    ///      "additionalProperties": {
+    ///        "$ref": "#/components/schemas/GroupResult"
+    ///      }
+    ///    },
+    ///    "version": {
+    ///      "title": "Version",
+    ///      "default": 1,
+    ///      "type": "integer"
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
+    pub struct BuildInputsLookupResponse {
+        pub groups: ::std::collections::HashMap<::std::string::String, GroupResult>,
+        #[serde(default = "defaults::default_u64::<i64, 1>")]
+        pub version: i64,
+    }
+    impl ::std::convert::From<&BuildInputsLookupResponse> for BuildInputsLookupResponse {
+        fn from(value: &BuildInputsLookupResponse) -> Self {
+            value.clone()
+        }
+    }
+    ///Reference to a specific build by catalog, attr_path, and revision.
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "BuildRef",
+    ///  "description": "Reference to a specific build by catalog, attr_path, and revision.",
+    ///  "type": "object",
+    ///  "required": [
+    ///    "attr_path",
+    ///    "catalog",
+    ///    "rev"
+    ///  ],
+    ///  "properties": {
+    ///    "attr_path": {
+    ///      "title": "Attr Path",
+    ///      "type": "string"
+    ///    },
+    ///    "catalog": {
+    ///      "title": "Catalog",
+    ///      "type": "string"
+    ///    },
+    ///    "rev": {
+    ///      "title": "Rev",
+    ///      "type": "string"
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
+    pub struct BuildRef {
+        pub attr_path: ::std::string::String,
+        pub catalog: ::std::string::String,
+        pub rev: ::std::string::String,
+    }
+    impl ::std::convert::From<&BuildRef> for BuildRef {
+        fn from(value: &BuildRef) -> Self {
+            value.clone()
+        }
+    }
     ///Source provenance for a published package.
     ///
     /// <details><summary>JSON schema</summary>
@@ -325,41 +457,51 @@ manifest packages were built via the traditional flox manifest workflow.*/
     ///  "title": "CatalogPage",
     ///  "examples": [
     ///    {
-    ///      "attr_path": "curl",
-    ///      "broken": false,
-    ///      "catalog": "nixpkgs",
-    ///      "derivation": "/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-curl-8.5.0.drv",
-    ///      "description": "A command line tool for transferring files with URL syntax",
-    ///      "insecure": false,
-    ///      "license": "curl",
-    ///      "locked_url": "https://github.com/flox/nixpkgs?rev=abc123def456",
-    ///      "missing_builds": false,
-    ///      "name": "curl-8.5.0",
-    ///      "outputs": [
+    ///      "complete": true,
+    ///      "messages": [],
+    ///      "packages": [
     ///        {
-    ///          "name": "out",
-    ///          "store_path": "/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-curl-8.5.0"
-    ///        },
-    ///        {
-    ///          "name": "man",
-    ///          "store_path": "/nix/store/cccccccccccccccccccccccccccccccc-curl-8.5.0-man"
+    ///          "attr_path": "curl",
+    ///          "broken": false,
+    ///          "catalog": "nixpkgs",
+    ///          "derivation": "/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-curl-8.5.0.drv",
+    ///          "description": "A command line tool for transferring files with URL syntax",
+    ///          "insecure": false,
+    ///          "install_id": "curl",
+    ///          "license": "curl",
+    ///          "locked_url": "https://github.com/flox/nixpkgs?rev=abc123def456",
+    ///          "missing_builds": false,
+    ///          "name": "curl-8.5.0",
+    ///          "outputs": [
+    ///            {
+    ///              "name": "out",
+    ///              "store_path": "/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-curl-8.5.0"
+    ///            },
+    ///            {
+    ///              "name": "man",
+    ///              "store_path": "/nix/store/cccccccccccccccccccccccccccccccc-curl-8.5.0-man"
+    ///            }
+    ///          ],
+    ///          "outputs_to_install": [
+    ///            "out",
+    ///            "man"
+    ///          ],
+    ///          "pkg_path": "curl",
+    ///          "pname": "curl",
+    ///          "rev": "abc123def456",
+    ///          "rev_count": 12345,
+    ///          "rev_date": "2024-01-15T00:00:00Z",
+    ///          "scrape_date": "2024-01-15T00:00:00Z",
+    ///          "stabilities": [
+    ///            "stable"
+    ///          ],
+    ///          "system": "x86_64-linux",
+    ///          "unfree": false,
+    ///          "version": "8.5.0"
     ///        }
     ///      ],
-    ///      "outputs_to_install": [
-    ///        "out",
-    ///        "man"
-    ///      ],
-    ///      "pkg_path": "curl",
-    ///      "pname": "curl",
-    ///      "rev": "abc123def456",
-    ///      "rev_count": 12345,
-    ///      "rev_date": "2024-01-15T00:00:00Z",
-    ///      "stabilities": [
-    ///        "stable"
-    ///      ],
-    ///      "system": "x86_64-linux",
-    ///      "unfree": false,
-    ///      "version": "8.5.0"
+    ///      "page": 1,
+    ///      "url": "https://github.com/flox/nixpkgs?rev=abc123def456"
     ///    }
     ///  ],
     ///  "type": "object",
@@ -1032,6 +1174,82 @@ Attributes:
             value.clone()
         }
     }
+    /**Result for a single LookupGroup.
+
+lock carries the resolved LockedInputs map (full transitive closure).
+unresolvable is scoped INSIDE the group (never at the top-level response).
+Keeping unresolvable entries group-scoped is the contract the lookup
+handler must respect when building this response.
+
+matched maps locked-input keys (same namespace as lock — every matched
+key must also exist in lock) to the list of raw user-query strings that
+directly pulled this entry in.  A direct dep matched by several queries
+has several entries in its value list; a wildcard query pulling several
+deps means that query string appears under several keys.  Roots are
+implicit — they are the keys of matched.
+
+matched is response-only; it must NOT appear on the publish request path.
+Use pydantic.Field(default_factory=dict) so an empty match set serializes
+cleanly (mirrors how unresolvable defaults).*/
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "GroupResult",
+    ///  "description": "Result for a single LookupGroup.\n\nlock carries the resolved LockedInputs map (full transitive closure).\nunresolvable is scoped INSIDE the group (never at the top-level response).\nKeeping unresolvable entries group-scoped is the contract the lookup\nhandler must respect when building this response.\n\nmatched maps locked-input keys (same namespace as lock — every matched\nkey must also exist in lock) to the list of raw user-query strings that\ndirectly pulled this entry in.  A direct dep matched by several queries\nhas several entries in its value list; a wildcard query pulling several\ndeps means that query string appears under several keys.  Roots are\nimplicit — they are the keys of matched.\n\nmatched is response-only; it must NOT appear on the publish request path.\nUse pydantic.Field(default_factory=dict) so an empty match set serializes\ncleanly (mirrors how unresolvable defaults).",
+    ///  "type": "object",
+    ///  "required": [
+    ///    "lock"
+    ///  ],
+    ///  "properties": {
+    ///    "lock": {
+    ///      "title": "Lock",
+    ///      "type": "object",
+    ///      "additionalProperties": {
+    ///        "$ref": "#/components/schemas/LockedInputEntry"
+    ///      }
+    ///    },
+    ///    "matched": {
+    ///      "title": "Matched",
+    ///      "type": "object",
+    ///      "additionalProperties": {
+    ///        "type": "array",
+    ///        "items": {
+    ///          "type": "string"
+    ///        }
+    ///      }
+    ///    },
+    ///    "unresolvable": {
+    ///      "title": "Unresolvable",
+    ///      "type": "array",
+    ///      "items": {
+    ///        "$ref": "#/components/schemas/UnresolvableEntry"
+    ///      }
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
+    pub struct GroupResult {
+        pub lock: ::std::collections::HashMap<::std::string::String, LockedInputEntry>,
+        #[serde(
+            default,
+            skip_serializing_if = ":: std :: collections :: HashMap::is_empty"
+        )]
+        pub matched: ::std::collections::HashMap<
+            ::std::string::String,
+            ::std::vec::Vec<::std::string::String>,
+        >,
+        #[serde(default, skip_serializing_if = "::std::vec::Vec::is_empty")]
+        pub unresolvable: ::std::vec::Vec<UnresolvableEntry>,
+    }
+    impl ::std::convert::From<&GroupResult> for GroupResult {
+        fn from(value: &GroupResult) -> Self {
+            value.clone()
+        }
+    }
     ///`HealthCheck`
     ///
     /// <details><summary>JSON schema</summary>
@@ -1093,6 +1311,183 @@ Attributes:
     }
     impl ::std::convert::From<&HealthCheck> for HealthCheck {
         fn from(value: &HealthCheck) -> Self {
+            value.clone()
+        }
+    }
+    /**A locked git flakeref, in its attribute form.
+
+Locked inputs are only ever tracked as git flakerefs, so this models a git
+source honestly rather than a generic flakeref: type must equal "git", and
+the four git fields are required — url (source), rev (commit), ref (the
+existing CLI lockfile contract), and dir (the subdir holding build
+instructions).  The CLI needs all of them to rebuild a locked input.  A git
+flakeref is still an open attribute set, so any git-native attribute beyond
+these (e.g. narHash) flows through unchanged via extra="allow"; the contract
+boundary validates field presence and that type == "git", not the
+flakeref's deeper semantics (the downstream publish path parses url + rev
+for storage identity).
+
+The round-trip is value/dict-equal: with every named field required there
+are no unset fields to emit as null, and extras serialize verbatim, so the
+default model_dump reproduces the input attribute set (no injected nulls).
+Key ORDER is not preserved or relied upon — the identity hash reads url/rev
+values, not the serialized form.*/
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "LockedGitSource",
+    ///  "description": "A locked git flakeref, in its attribute form.\n\nLocked inputs are only ever tracked as git flakerefs, so this models a git\nsource honestly rather than a generic flakeref: type must equal \"git\", and\nthe four git fields are required — url (source), rev (commit), ref (the\nexisting CLI lockfile contract), and dir (the subdir holding build\ninstructions).  The CLI needs all of them to rebuild a locked input.  A git\nflakeref is still an open attribute set, so any git-native attribute beyond\nthese (e.g. narHash) flows through unchanged via extra=\"allow\"; the contract\nboundary validates field presence and that type == \"git\", not the\nflakeref's deeper semantics (the downstream publish path parses url + rev\nfor storage identity).\n\nThe round-trip is value/dict-equal: with every named field required there\nare no unset fields to emit as null, and extras serialize verbatim, so the\ndefault model_dump reproduces the input attribute set (no injected nulls).\nKey ORDER is not preserved or relied upon — the identity hash reads url/rev\nvalues, not the serialized form.",
+    ///  "type": "object",
+    ///  "required": [
+    ///    "dir",
+    ///    "ref",
+    ///    "rev",
+    ///    "type",
+    ///    "url"
+    ///  ],
+    ///  "properties": {
+    ///    "dir": {
+    ///      "title": "Dir",
+    ///      "type": "string"
+    ///    },
+    ///    "ref": {
+    ///      "title": "Ref",
+    ///      "type": "string"
+    ///    },
+    ///    "rev": {
+    ///      "title": "Rev",
+    ///      "type": "string"
+    ///    },
+    ///    "type": {
+    ///      "title": "Type",
+    ///      "type": "string"
+    ///    },
+    ///    "url": {
+    ///      "title": "Url",
+    ///      "type": "string"
+    ///    }
+    ///  },
+    ///  "additionalProperties": true
+    ///}
+    /// ```
+    /// </details>
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
+    pub struct LockedGitSource {
+        pub dir: ::std::string::String,
+        #[serde(rename = "ref")]
+        pub ref_: ::std::string::String,
+        pub rev: ::std::string::String,
+        #[serde(rename = "type")]
+        pub type_: ::std::string::String,
+        pub url: ::std::string::String,
+    }
+    impl ::std::convert::From<&LockedGitSource> for LockedGitSource {
+        fn from(value: &LockedGitSource) -> Self {
+            value.clone()
+        }
+    }
+    /**A single entry in the flat locked-inputs map.
+
+One type, two directions (intentionally NOT split into two models — the
+publish entry is the same entity with its edges not yet stated):
+
+- Publish request: the CLI sends {catalog, attr_path, build_type, source,
+  locked_inputs_hash} and leaves inputs null.  Null here means "not stated
+  — the server is authoritative for the DAG": the CLI knows its direct
+  inputs but is not the source of truth, and the server reconstructs the
+  DAG from package_inputs (keyed by locked_inputs_hash).
+- Lookup response: all fields are present and inputs is populated with the
+  full transitive-closure DAG.
+
+inputs uses the tri-state SBOM convention in both directions:
+  inputs: [k, ...]  — known direct inputs (by key)
+  inputs: []        — explicitly no dependencies
+  inputs null       — not stated (server is authoritative for the DAG)
+
+attr_path is a list of components, e.g. ["python3Packages", "boolex"].
+A flat catalog entry collapses what the CLI lockfile represents as a
+hierarchy of single-component package-set / package nodes.  Giving the
+CLI the components lets it re-expand that hierarchy.  A list is also
+unambiguous where a dot-joined string is not — Nix attr paths may
+contain quoted dotted components, e.g. python3Packages."foo.bar".
+
+locked_inputs_hash is REQUIRED on every entry: the closure identity hash is
+the round-trip disambiguator that pins which recorded build a locked input
+refers to (lookup response → CLI → publish request).  A publish request
+missing it fails validation (422) at this contract boundary — there is no
+hash-free / old-client fallback.  It always serializes as a string.
+
+Wire behavior: a null `inputs` (the tri-state "not stated") is emitted as
+an explicit null — deliberately, NOT dropped; do not add exclude_none here.
+The source sub-model never emits nulls at all: its named attributes are
+all required, and unknown ones pass through verbatim (see LockedGitSource).
+
+Use key() to build the canonical flat-map key for this entry.*/
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "LockedInputEntry",
+    ///  "description": "A single entry in the flat locked-inputs map.\n\nOne type, two directions (intentionally NOT split into two models — the\npublish entry is the same entity with its edges not yet stated):\n\n- Publish request: the CLI sends {catalog, attr_path, build_type, source,\n  locked_inputs_hash} and leaves inputs null.  Null here means \"not stated\n  — the server is authoritative for the DAG\": the CLI knows its direct\n  inputs but is not the source of truth, and the server reconstructs the\n  DAG from package_inputs (keyed by locked_inputs_hash).\n- Lookup response: all fields are present and inputs is populated with the\n  full transitive-closure DAG.\n\ninputs uses the tri-state SBOM convention in both directions:\n  inputs: [k, ...]  — known direct inputs (by key)\n  inputs: []        — explicitly no dependencies\n  inputs null       — not stated (server is authoritative for the DAG)\n\nattr_path is a list of components, e.g. [\"python3Packages\", \"boolex\"].\nA flat catalog entry collapses what the CLI lockfile represents as a\nhierarchy of single-component package-set / package nodes.  Giving the\nCLI the components lets it re-expand that hierarchy.  A list is also\nunambiguous where a dot-joined string is not — Nix attr paths may\ncontain quoted dotted components, e.g. python3Packages.\"foo.bar\".\n\nlocked_inputs_hash is REQUIRED on every entry: the closure identity hash is\nthe round-trip disambiguator that pins which recorded build a locked input\nrefers to (lookup response → CLI → publish request).  A publish request\nmissing it fails validation (422) at this contract boundary — there is no\nhash-free / old-client fallback.  It always serializes as a string.\n\nWire behavior: a null `inputs` (the tri-state \"not stated\") is emitted as\nan explicit null — deliberately, NOT dropped; do not add exclude_none here.\nThe source sub-model never emits nulls at all: its named attributes are\nall required, and unknown ones pass through verbatim (see LockedGitSource).\n\nUse key() to build the canonical flat-map key for this entry.",
+    ///  "type": "object",
+    ///  "required": [
+    ///    "attr_path",
+    ///    "build_type",
+    ///    "catalog",
+    ///    "locked_inputs_hash",
+    ///    "source"
+    ///  ],
+    ///  "properties": {
+    ///    "attr_path": {
+    ///      "title": "Attr Path",
+    ///      "type": "array",
+    ///      "items": {
+    ///        "type": "string"
+    ///      }
+    ///    },
+    ///    "build_type": {
+    ///      "$ref": "#/components/schemas/BuildType"
+    ///    },
+    ///    "catalog": {
+    ///      "title": "Catalog",
+    ///      "type": "string"
+    ///    },
+    ///    "inputs": {
+    ///      "title": "Inputs",
+    ///      "type": [
+    ///        "array",
+    ///        "null"
+    ///      ],
+    ///      "items": {
+    ///        "type": "string"
+    ///      }
+    ///    },
+    ///    "locked_inputs_hash": {
+    ///      "title": "Locked Inputs Hash",
+    ///      "type": "string"
+    ///    },
+    ///    "source": {
+    ///      "$ref": "#/components/schemas/LockedGitSource"
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
+    pub struct LockedInputEntry {
+        pub attr_path: ::std::vec::Vec<::std::string::String>,
+        pub build_type: BuildType,
+        pub catalog: ::std::string::String,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub inputs: ::std::option::Option<::std::vec::Vec<::std::string::String>>,
+        pub locked_inputs_hash: ::std::string::String,
+        pub source: LockedGitSource,
+    }
+    impl ::std::convert::From<&LockedInputEntry> for LockedInputEntry {
+        fn from(value: &LockedInputEntry) -> Self {
             value.clone()
         }
     }
@@ -1180,6 +1575,49 @@ Attributes:
     }
     impl ::std::convert::From<&LockedSourcesResponse> for LockedSourcesResponse {
         fn from(value: &LockedSourcesResponse) -> Self {
+            value.clone()
+        }
+    }
+    /**A named group of reference strings for a build-inputs lookup.
+
+references is flat and mixed-kind; the server disambiguates.
+Sentinel strings like 'catalogs.<owner>' and 'python3Packages.*' are
+accepted without validation — the server handles expansion.*/
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "LookupGroup",
+    ///  "description": "A named group of reference strings for a build-inputs lookup.\n\nreferences is flat and mixed-kind; the server disambiguates.\nSentinel strings like 'catalogs.<owner>' and 'python3Packages.*' are\naccepted without validation — the server handles expansion.",
+    ///  "type": "object",
+    ///  "required": [
+    ///    "key",
+    ///    "references"
+    ///  ],
+    ///  "properties": {
+    ///    "key": {
+    ///      "title": "Key",
+    ///      "type": "string"
+    ///    },
+    ///    "references": {
+    ///      "title": "References",
+    ///      "type": "array",
+    ///      "items": {
+    ///        "type": "string"
+    ///      }
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
+    pub struct LookupGroup {
+        pub key: ::std::string::String,
+        pub references: ::std::vec::Vec<::std::string::String>,
+    }
+    impl ::std::convert::From<&LookupGroup> for LookupGroup {
+        fn from(value: &LookupGroup) -> Self {
             value.clone()
         }
     }
@@ -1685,10 +2123,16 @@ Attributes:
     ///        "drv_path": "/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-curl-8.5.0.drv",
     ///        "license": "curl",
     ///        "name": "curl-8.5.0",
-    ///        "outputs": {
-    ///          "man": "/nix/store/cccccccccccccccccccccccccccccccc-curl-8.5.0-man",
-    ///          "out": "/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-curl-8.5.0"
-    ///        },
+    ///        "outputs": [
+    ///          {
+    ///            "name": "out",
+    ///            "store_path": "/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-curl-8.5.0"
+    ///          },
+    ///          {
+    ///            "name": "man",
+    ///            "store_path": "/nix/store/cccccccccccccccccccccccccccccccc-curl-8.5.0-man"
+    ///          }
+    ///        ],
     ///        "outputs_to_install": [
     ///          "out",
     ///          "man"
@@ -1908,10 +2352,16 @@ Attributes:
     ///        "drv_path": "/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-curl-8.5.0.drv",
     ///        "license": "curl",
     ///        "name": "curl-8.5.0",
-    ///        "outputs": {
-    ///          "man": "/nix/store/cccccccccccccccccccccccccccccccc-curl-8.5.0-man",
-    ///          "out": "/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-curl-8.5.0"
-    ///        },
+    ///        "outputs": [
+    ///          {
+    ///            "name": "out",
+    ///            "store_path": "/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-curl-8.5.0"
+    ///          },
+    ///          {
+    ///            "name": "man",
+    ///            "store_path": "/nix/store/cccccccccccccccccccccccccccccccc-curl-8.5.0-man"
+    ///          }
+    ///        ],
     ///        "outputs_to_install": [
     ///          "out",
     ///          "man"
@@ -1977,6 +2427,16 @@ Attributes:
     ///        "null"
     ///      ]
     ///    },
+    ///    "locked_inputs": {
+    ///      "title": "Locked Inputs",
+    ///      "type": [
+    ///        "object",
+    ///        "null"
+    ///      ],
+    ///      "additionalProperties": {
+    ///        "$ref": "#/components/schemas/LockedInputEntry"
+    ///      }
+    ///    },
     ///    "narinfos": {
     ///      "$ref": "#/components/schemas/NarInfos"
     ///    },
@@ -2040,6 +2500,10 @@ Attributes:
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
         pub locked_base_catalog_url: ::std::option::Option<::std::string::String>,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub locked_inputs: ::std::option::Option<
+            ::std::collections::HashMap<::std::string::String, LockedInputEntry>,
+        >,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
         pub narinfos: ::std::option::Option<NarInfos>,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
         pub narinfos_source_url: ::std::option::Option<::std::string::String>,
@@ -2075,10 +2539,16 @@ Attributes:
     ///      "drv_path": "/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-curl-8.5.0.drv",
     ///      "license": "curl",
     ///      "name": "curl-8.5.0",
-    ///      "outputs": {
-    ///        "man": "/nix/store/cccccccccccccccccccccccccccccccc-curl-8.5.0-man",
-    ///        "out": "/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-curl-8.5.0"
-    ///      },
+    ///      "outputs": [
+    ///        {
+    ///          "name": "out",
+    ///          "store_path": "/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-curl-8.5.0"
+    ///        },
+    ///        {
+    ///          "name": "man",
+    ///          "store_path": "/nix/store/cccccccccccccccccccccccccccccccc-curl-8.5.0-man"
+    ///        }
+    ///      ],
     ///      "outputs_to_install": [
     ///        "out",
     ///        "man"
@@ -3004,22 +3474,25 @@ Attributes:
     ///{
     ///  "title": "PackageSearchResult",
     ///  "examples": [
-    ///    [
-    ///      {
-    ///        "attr_path": "foo.bar.curl",
-    ///        "catalog": "nixpkgs",
-    ///        "description": "A very nice Item",
-    ///        "name": "curl",
-    ///        "pkg_path": "foo.bar.curl",
-    ///        "pname": "curl",
-    ///        "stabilities": [
-    ///          "stable",
-    ///          "unstable"
-    ///        ],
-    ///        "system": "x86_64-linux",
-    ///        "version": "1.0"
-    ///      }
-    ///    ]
+    ///    {
+    ///      "items": [
+    ///        {
+    ///          "attr_path": "foo.bar.curl",
+    ///          "catalog": "nixpkgs",
+    ///          "description": "A very nice Item",
+    ///          "name": "curl",
+    ///          "pkg_path": "foo.bar.curl",
+    ///          "pname": "curl",
+    ///          "stabilities": [
+    ///            "stable",
+    ///            "unstable"
+    ///          ],
+    ///          "system": "x86_64-linux",
+    ///          "version": "1.0"
+    ///        }
+    ///      ],
+    ///      "total_count": 1
+    ///    }
     ///  ],
     ///  "type": "object",
     ///  "required": [
@@ -3580,6 +4053,56 @@ Attributes:
             value.clone()
         }
     }
+    /**Temporal anchor for a build-inputs lookup.
+
+At most one of as_of_date / as_of_build may be set.  When both are
+absent the server interprets this as "now".  Uses a plain optional-
+fields model with a model_validator — NOT a discriminated union —
+because the two anchors carry different value types.*/
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "ReferencePoint",
+    ///  "description": "Temporal anchor for a build-inputs lookup.\n\nAt most one of as_of_date / as_of_build may be set.  When both are\nabsent the server interprets this as \"now\".  Uses a plain optional-\nfields model with a model_validator — NOT a discriminated union —\nbecause the two anchors carry different value types.",
+    ///  "type": "object",
+    ///  "properties": {
+    ///    "as_of_build": {
+    ///      "$ref": "#/components/schemas/BuildRef"
+    ///    },
+    ///    "as_of_date": {
+    ///      "title": "As Of Date",
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ],
+    ///      "format": "date-time"
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
+    pub struct ReferencePoint {
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub as_of_build: ::std::option::Option<BuildRef>,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub as_of_date: ::std::option::Option<::chrono::DateTime<::chrono::offset::Utc>>,
+    }
+    impl ::std::convert::From<&ReferencePoint> for ReferencePoint {
+        fn from(value: &ReferencePoint) -> Self {
+            value.clone()
+        }
+    }
+    impl ::std::default::Default for ReferencePoint {
+        fn default() -> Self {
+            Self {
+                as_of_build: Default::default(),
+                as_of_date: Default::default(),
+            }
+        }
+    }
     ///`ResolutionMessageGeneral`
     ///
     /// <details><summary>JSON schema</summary>
@@ -3851,41 +4374,56 @@ Attributes:
     ///  "title": "ResolvedPackageGroup",
     ///  "examples": [
     ///    {
-    ///      "attr_path": "curl",
-    ///      "broken": false,
-    ///      "catalog": "nixpkgs",
-    ///      "derivation": "/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-curl-8.5.0.drv",
-    ///      "description": "A command line tool for transferring files with URL syntax",
-    ///      "insecure": false,
-    ///      "license": "curl",
-    ///      "locked_url": "https://github.com/flox/nixpkgs?rev=abc123def456",
-    ///      "missing_builds": false,
-    ///      "name": "curl-8.5.0",
-    ///      "outputs": [
-    ///        {
-    ///          "name": "out",
-    ///          "store_path": "/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-curl-8.5.0"
-    ///        },
-    ///        {
-    ///          "name": "man",
-    ///          "store_path": "/nix/store/cccccccccccccccccccccccccccccccc-curl-8.5.0-man"
-    ///        }
-    ///      ],
-    ///      "outputs_to_install": [
-    ///        "out",
-    ///        "man"
-    ///      ],
-    ///      "pkg_path": "curl",
-    ///      "pname": "curl",
-    ///      "rev": "abc123def456",
-    ///      "rev_count": 12345,
-    ///      "rev_date": "2024-01-15T00:00:00Z",
-    ///      "stabilities": [
-    ///        "stable"
-    ///      ],
-    ///      "system": "x86_64-linux",
-    ///      "unfree": false,
-    ///      "version": "8.5.0"
+    ///      "candidate_pages": [],
+    ///      "messages": [],
+    ///      "name": "test",
+    ///      "page": {
+    ///        "complete": true,
+    ///        "messages": [],
+    ///        "packages": [
+    ///          {
+    ///            "attr_path": "curl",
+    ///            "broken": false,
+    ///            "catalog": "nixpkgs",
+    ///            "derivation": "/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-curl-8.5.0.drv",
+    ///            "description": "A command line tool for transferring files with URL syntax",
+    ///            "insecure": false,
+    ///            "install_id": "curl",
+    ///            "license": "curl",
+    ///            "locked_url": "https://github.com/flox/nixpkgs?rev=abc123def456",
+    ///            "missing_builds": false,
+    ///            "name": "curl-8.5.0",
+    ///            "outputs": [
+    ///              {
+    ///                "name": "out",
+    ///                "store_path": "/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-curl-8.5.0"
+    ///              },
+    ///              {
+    ///                "name": "man",
+    ///                "store_path": "/nix/store/cccccccccccccccccccccccccccccccc-curl-8.5.0-man"
+    ///              }
+    ///            ],
+    ///            "outputs_to_install": [
+    ///              "out",
+    ///              "man"
+    ///            ],
+    ///            "pkg_path": "curl",
+    ///            "pname": "curl",
+    ///            "rev": "abc123def456",
+    ///            "rev_count": 12345,
+    ///            "rev_date": "2024-01-15T00:00:00Z",
+    ///            "scrape_date": "2024-01-15T00:00:00Z",
+    ///            "stabilities": [
+    ///              "stable"
+    ///            ],
+    ///            "system": "x86_64-linux",
+    ///            "unfree": false,
+    ///            "version": "8.5.0"
+    ///          }
+    ///        ],
+    ///        "page": 1,
+    ///        "url": "https://github.com/flox/nixpkgs?rev=abc123def456"
+    ///      }
     ///    }
     ///  ],
     ///  "type": "object",
@@ -4178,6 +4716,84 @@ Attributes:
             value.clone()
         }
     }
+    ///`Stability`
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "Stability",
+    ///  "type": "string",
+    ///  "minLength": 1
+    ///}
+    /// ```
+    /// </details>
+    #[derive(::serde::Serialize, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+    #[serde(transparent)]
+    pub struct Stability(::std::string::String);
+    impl ::std::ops::Deref for Stability {
+        type Target = ::std::string::String;
+        fn deref(&self) -> &::std::string::String {
+            &self.0
+        }
+    }
+    impl ::std::convert::From<Stability> for ::std::string::String {
+        fn from(value: Stability) -> Self {
+            value.0
+        }
+    }
+    impl ::std::convert::From<&Stability> for Stability {
+        fn from(value: &Stability) -> Self {
+            value.clone()
+        }
+    }
+    impl ::std::str::FromStr for Stability {
+        type Err = self::error::ConversionError;
+        fn from_str(
+            value: &str,
+        ) -> ::std::result::Result<Self, self::error::ConversionError> {
+            if value.chars().count() < 1usize {
+                return Err("shorter than 1 characters".into());
+            }
+            Ok(Self(value.to_string()))
+        }
+    }
+    impl ::std::convert::TryFrom<&str> for Stability {
+        type Error = self::error::ConversionError;
+        fn try_from(
+            value: &str,
+        ) -> ::std::result::Result<Self, self::error::ConversionError> {
+            value.parse()
+        }
+    }
+    impl ::std::convert::TryFrom<&::std::string::String> for Stability {
+        type Error = self::error::ConversionError;
+        fn try_from(
+            value: &::std::string::String,
+        ) -> ::std::result::Result<Self, self::error::ConversionError> {
+            value.parse()
+        }
+    }
+    impl ::std::convert::TryFrom<::std::string::String> for Stability {
+        type Error = self::error::ConversionError;
+        fn try_from(
+            value: ::std::string::String,
+        ) -> ::std::result::Result<Self, self::error::ConversionError> {
+            value.parse()
+        }
+    }
+    impl<'de> ::serde::Deserialize<'de> for Stability {
+        fn deserialize<D>(deserializer: D) -> ::std::result::Result<Self, D::Error>
+        where
+            D: ::serde::Deserializer<'de>,
+        {
+            ::std::string::String::deserialize(deserializer)?
+                .parse()
+                .map_err(|e: self::error::ConversionError| {
+                    <D::Error as ::serde::de::Error>::custom(e.to_string())
+                })
+        }
+    }
     ///`StabilityInfo`
     ///
     /// <details><summary>JSON schema</summary>
@@ -4446,6 +5062,90 @@ Attributes:
             value.clone()
         }
     }
+    ///A single unresolvable reference within a lookup group.
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "UnresolvableEntry",
+    ///  "description": "A single unresolvable reference within a lookup group.",
+    ///  "type": "object",
+    ///  "required": [
+    ///    "chain",
+    ///    "leaf",
+    ///    "reference"
+    ///  ],
+    ///  "properties": {
+    ///    "chain": {
+    ///      "title": "Chain",
+    ///      "type": "array",
+    ///      "items": {
+    ///        "type": "string"
+    ///      }
+    ///    },
+    ///    "leaf": {
+    ///      "$ref": "#/components/schemas/UnresolvableLeaf"
+    ///    },
+    ///    "reference": {
+    ///      "title": "Reference",
+    ///      "type": "string"
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
+    pub struct UnresolvableEntry {
+        pub chain: ::std::vec::Vec<::std::string::String>,
+        pub leaf: UnresolvableLeaf,
+        pub reference: ::std::string::String,
+    }
+    impl ::std::convert::From<&UnresolvableEntry> for UnresolvableEntry {
+        fn from(value: &UnresolvableEntry) -> Self {
+            value.clone()
+        }
+    }
+    /**Uniform shape for an unresolvable dependency.
+
+Serializes as {"unresolvable": {}} — exactly one shape, no cause/reason
+fields at the leaf level. If a future change needs structured error
+detail, introduce a typed `reason` field here.*/
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "UnresolvableLeaf",
+    ///  "description": "Uniform shape for an unresolvable dependency.\n\nSerializes as {\"unresolvable\": {}} — exactly one shape, no cause/reason\nfields at the leaf level. If a future change needs structured error\ndetail, introduce a typed `reason` field here.",
+    ///  "type": "object",
+    ///  "properties": {
+    ///    "unresolvable": {
+    ///      "title": "Unresolvable",
+    ///      "type": "object",
+    ///      "additionalProperties": true
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
+    pub struct UnresolvableLeaf {
+        #[serde(default, skip_serializing_if = "::serde_json::Map::is_empty")]
+        pub unresolvable: ::serde_json::Map<::std::string::String, ::serde_json::Value>,
+    }
+    impl ::std::convert::From<&UnresolvableLeaf> for UnresolvableLeaf {
+        fn from(value: &UnresolvableLeaf) -> Self {
+            value.clone()
+        }
+    }
+    impl ::std::default::Default for UnresolvableLeaf {
+        fn default() -> Self {
+            Self {
+                unresolvable: Default::default(),
+            }
+        }
+    }
     ///`UserCatalog`
     ///
     /// <details><summary>JSON schema</summary>
@@ -4605,6 +5305,13 @@ Attributes:
     }
     /// Generation of default values for serde.
     pub mod defaults {
+        pub(super) fn default_u64<T, const V: u64>() -> T
+        where
+            T: ::std::convert::TryFrom<u64>,
+            <T as ::std::convert::TryFrom<u64>>::Error: ::std::fmt::Debug,
+        {
+            T::try_from(V).unwrap()
+        }
         pub(super) fn build_source_dir() -> ::std::string::String {
             ".flox".to_string()
         }
@@ -4725,6 +5432,58 @@ impl ClientInfo<crate::hooks::RequestHooks> for Client {
 impl ClientHooks<crate::hooks::RequestHooks> for &Client {}
 #[allow(clippy::all)]
 impl Client {
+    /**Lookup
+
+Resolve build inputs for one or more reference groups.
+
+Stub: the request is validated against the contract, but resolution is
+not yet implemented.  Per-group orchestration, reference-point
+resolution, auth redaction, and tree assembly land in AI-169 (depends on
+AI-168).  Returns 501 until then.
+
+Sends a `POST` request to `/api/v1/catalog/build-inputs/lookup`
+
+*/
+    pub async fn lookup_api_v1_catalog_build_inputs_lookup_post<'a>(
+        &'a self,
+        body: &'a types::BuildInputsLookupRequest,
+    ) -> Result<
+        ResponseValue<types::BuildInputsLookupResponse>,
+        Error<types::ErrorResponse>,
+    > {
+        let url = format!("{}/api/v1/catalog/build-inputs/lookup", self.baseurl,);
+        let mut header_map = ::reqwest::header::HeaderMap::with_capacity(1usize);
+        header_map
+            .append(
+                ::reqwest::header::HeaderName::from_static("api-version"),
+                ::reqwest::header::HeaderValue::from_static(Self::api_version()),
+            );
+        #[allow(unused_mut)]
+        let mut request = self
+            .client
+            .post(url)
+            .header(
+                ::reqwest::header::ACCEPT,
+                ::reqwest::header::HeaderValue::from_static("application/json"),
+            )
+            .json(&body)
+            .headers(header_map)
+            .build()?;
+        let info = OperationInfo {
+            operation_id: "lookup_api_v1_catalog_build_inputs_lookup_post",
+        };
+        self.pre(&mut request, &info).await?;
+        let result = self.exec(request, &info).await;
+        self.post(&result, &info).await?;
+        let response = result?;
+        match response.status().as_u16() {
+            200u16 => ResponseValue::from_response(response).await,
+            422u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            _ => Err(Error::UnexpectedResponse(response)),
+        }
+    }
     /**Create a new user catalog
 
 Create a new user catalog

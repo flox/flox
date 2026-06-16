@@ -244,6 +244,48 @@
         }
       }
     },
+    "/api/v1/catalog/build-inputs/lookup": {
+      "post": {
+        "tags": [
+          "build-inputs"
+        ],
+        "summary": "Lookup",
+        "description": "Resolve build inputs for one or more reference groups.\n\nStub: the request is validated against the contract, but resolution is\nnot yet implemented.  Per-group orchestration, reference-point\nresolution, auth redaction, and tree assembly land in AI-169 (depends on\nAI-168).  Returns 501 until then.",
+        "operationId": "lookup_api_v1_catalog_build_inputs_lookup_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BuildInputsLookupRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BuildInputsLookupResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/catalog/settings/{key}": {
       "post": {
         "tags": [
@@ -1657,7 +1699,7 @@
           "info"
         ],
         "summary": "Look up derivation info by NAR file name",
-        "description": "Look up derivation information by NAR file name.\n\nPath Parameters:\n- **nar_file**: The NAR file name to look up\n\nReturns:\n- **NarFileLookup**: Derivation info including attr_path, system, and\n  outputs for the package associated with this NAR file.\n\nNote: Requires authentication and flox organization membership.",
+        "description": "Look up derivation information by NAR file name.\n\nPath Parameters:\n- **nar_file**: The NAR file name to look up\n\nReturns:\n- **NarFileLookup**: Derivation info including attr_path, system, and\n  outputs for the package associated with this NAR file.\n\nNote: Requires authentication and superuser (flox staff) access.",
         "operationId": "nar_file_lookup_api_v1_catalog_info_nar__nar_file__get",
         "security": [
           {
@@ -1718,7 +1760,7 @@
           "info"
         ],
         "summary": "Get a raw dependency report for a storepath (excluding /nix/store/ prefix)",
-        "description": "Get a raw dependency report for a store path.\n\nPath Parameters:\n- **storepath**: The store path to analyze (excluding /nix/store/ prefix)\n\nReturns:\n- **RawDependencyReport**: Dependency graph with all transitive dependencies,\n  including store paths, derivation info, and dependency relationships.\n\nNote: Requires authentication and flox organization membership.",
+        "description": "Get a raw dependency report for a store path.\n\nPath Parameters:\n- **storepath**: The store path to analyze (excluding /nix/store/ prefix)\n\nReturns:\n- **RawDependencyReport**: Dependency graph with all transitive dependencies,\n  including store paths, derivation info, and dependency relationships.\n\nNote: Requires authentication and superuser (flox staff) access.",
         "operationId": "raw_dependency_report_api_v1_catalog_info_dependencies__storepath__raw_get",
         "security": [
           {
@@ -1769,7 +1811,7 @@
           "info"
         ],
         "summary": "Get an SPDX report for a storepath (excluding /nix/store/ prefix)",
-        "description": "Get an SPDX 2.3 format dependency report for a store path.\n\nPath Parameters:\n- **storepath**: The store path to analyze (excluding /nix/store/ prefix)\n\nReturns:\n- **dict**: SPDX 2.3 JSON document containing package information and\n  dependency relationships in standard SBOM format.\n\nNote: Requires authentication and flox organization membership.",
+        "description": "Get an SPDX 2.3 format dependency report for a store path.\n\nPath Parameters:\n- **storepath**: The store path to analyze (excluding /nix/store/ prefix)\n\nReturns:\n- **dict**: SPDX 2.3 JSON document containing package information and\n  dependency relationships in standard SBOM format.\n\nNote: Requires authentication and superuser (flox staff) access.",
         "operationId": "spdx_report_api_v1_catalog_info_dependencies__storepath__spdx_get",
         "security": [
           {
@@ -2098,6 +2140,80 @@
         ],
         "title": "BaseCatalogInfo"
       },
+      "BuildInputsLookupRequest": {
+        "properties": {
+          "stability": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Stability"
+          },
+          "reference_point": {
+            "nullable": true,
+            "$ref": "#/components/schemas/ReferencePoint"
+          },
+          "groups": {
+            "items": {
+              "$ref": "#/components/schemas/LookupGroup"
+            },
+            "type": "array",
+            "title": "Groups"
+          }
+        },
+        "type": "object",
+        "required": [
+          "stability",
+          "groups"
+        ],
+        "title": "BuildInputsLookupRequest",
+        "description": "Request body for the /build-inputs/lookup endpoint.\n\nA lookup names a `stability` (required) and one or more `groups` of\nreferences to resolve, optionally anchored at a `reference_point`.  It is\nsystem-independent \u2014 the response is source revs + DAG edges, which carry\nno system \u2014 so the request body has no system field."
+      },
+      "BuildInputsLookupResponse": {
+        "properties": {
+          "version": {
+            "type": "integer",
+            "const": 1,
+            "title": "Version",
+            "default": 1
+          },
+          "groups": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/GroupResult"
+            },
+            "type": "object",
+            "title": "Groups"
+          }
+        },
+        "type": "object",
+        "required": [
+          "groups"
+        ],
+        "title": "BuildInputsLookupResponse",
+        "description": "Response body for the /build-inputs/lookup endpoint."
+      },
+      "BuildRef": {
+        "properties": {
+          "catalog": {
+            "type": "string",
+            "title": "Catalog"
+          },
+          "attr_path": {
+            "type": "string",
+            "title": "Attr Path"
+          },
+          "rev": {
+            "type": "string",
+            "title": "Rev"
+          }
+        },
+        "type": "object",
+        "required": [
+          "catalog",
+          "attr_path",
+          "rev"
+        ],
+        "title": "BuildRef",
+        "description": "Reference to a specific build by catalog, attr_path, and revision."
+      },
       "BuildSource": {
         "properties": {
           "type": {
@@ -2181,41 +2297,51 @@
         ],
         "title": "CatalogPage",
         "example": {
-          "attr_path": "curl",
-          "broken": false,
-          "catalog": "nixpkgs",
-          "derivation": "/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-curl-8.5.0.drv",
-          "description": "A command line tool for transferring files with URL syntax",
-          "insecure": false,
-          "license": "curl",
-          "locked_url": "https://github.com/flox/nixpkgs?rev=abc123def456",
-          "missing_builds": false,
-          "name": "curl-8.5.0",
-          "outputs": [
+          "complete": true,
+          "messages": [],
+          "packages": [
             {
-              "name": "out",
-              "store_path": "/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-curl-8.5.0"
-            },
-            {
-              "name": "man",
-              "store_path": "/nix/store/cccccccccccccccccccccccccccccccc-curl-8.5.0-man"
+              "attr_path": "curl",
+              "broken": false,
+              "catalog": "nixpkgs",
+              "derivation": "/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-curl-8.5.0.drv",
+              "description": "A command line tool for transferring files with URL syntax",
+              "insecure": false,
+              "install_id": "curl",
+              "license": "curl",
+              "locked_url": "https://github.com/flox/nixpkgs?rev=abc123def456",
+              "missing_builds": false,
+              "name": "curl-8.5.0",
+              "outputs": [
+                {
+                  "name": "out",
+                  "store_path": "/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-curl-8.5.0"
+                },
+                {
+                  "name": "man",
+                  "store_path": "/nix/store/cccccccccccccccccccccccccccccccc-curl-8.5.0-man"
+                }
+              ],
+              "outputs_to_install": [
+                "out",
+                "man"
+              ],
+              "pkg_path": "curl",
+              "pname": "curl",
+              "rev": "abc123def456",
+              "rev_count": 12345,
+              "rev_date": "2024-01-15T00:00:00Z",
+              "scrape_date": "2024-01-15T00:00:00Z",
+              "stabilities": [
+                "stable"
+              ],
+              "system": "x86_64-linux",
+              "unfree": false,
+              "version": "8.5.0"
             }
           ],
-          "outputs_to_install": [
-            "out",
-            "man"
-          ],
-          "pkg_path": "curl",
-          "pname": "curl",
-          "rev": "abc123def456",
-          "rev_count": 12345,
-          "rev_date": "2024-01-15T00:00:00Z",
-          "stabilities": [
-            "stable"
-          ],
-          "system": "x86_64-linux",
-          "unfree": false,
-          "version": "8.5.0"
+          "page": 1,
+          "url": "https://github.com/flox/nixpkgs?rev=abc123def456"
         }
       },
       "CatalogStatus": {
@@ -2523,6 +2649,40 @@
         ],
         "title": "ErrorResponse"
       },
+      "GroupResult": {
+        "properties": {
+          "lock": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/LockedInputEntry"
+            },
+            "type": "object",
+            "title": "Lock"
+          },
+          "unresolvable": {
+            "items": {
+              "$ref": "#/components/schemas/UnresolvableEntry"
+            },
+            "type": "array",
+            "title": "Unresolvable"
+          },
+          "matched": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "type": "object",
+            "title": "Matched"
+          }
+        },
+        "type": "object",
+        "required": [
+          "lock"
+        ],
+        "title": "GroupResult",
+        "description": "Result for a single LookupGroup.\n\nlock carries the resolved LockedInputs map (full transitive closure).\nunresolvable is scoped INSIDE the group (never at the top-level response).\nKeeping unresolvable entries group-scoped is the contract the lookup\nhandler must respect when building this response.\n\nmatched maps locked-input keys (same namespace as lock \u2014 every matched\nkey must also exist in lock) to the list of raw user-query strings that\ndirectly pulled this entry in.  A direct dep matched by several queries\nhas several entries in its value list; a wildcard query pulling several\ndeps means that query string appears under several keys.  Roots are\nimplicit \u2014 they are the keys of matched.\n\nmatched is response-only; it must NOT appear on the publish request path.\nUse pydantic.Field(default_factory=dict) so an empty match set serializes\ncleanly (mirrors how unresolvable defaults)."
+      },
       "HealthCheck": {
         "properties": {
           "check_parameters": {
@@ -2572,6 +2732,85 @@
           "show_elapsed_ms"
         ],
         "title": "HealthCheck"
+      },
+      "LockedGitSource": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "git",
+            "title": "Type"
+          },
+          "url": {
+            "type": "string",
+            "title": "Url"
+          },
+          "rev": {
+            "type": "string",
+            "title": "Rev"
+          },
+          "ref": {
+            "type": "string",
+            "title": "Ref"
+          },
+          "dir": {
+            "type": "string",
+            "title": "Dir"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "type",
+          "url",
+          "rev",
+          "ref",
+          "dir"
+        ],
+        "title": "LockedGitSource",
+        "description": "A locked git flakeref, in its attribute form.\n\nLocked inputs are only ever tracked as git flakerefs, so this models a git\nsource honestly rather than a generic flakeref: type must equal \"git\", and\nthe four git fields are required \u2014 url (source), rev (commit), ref (the\nexisting CLI lockfile contract), and dir (the subdir holding build\ninstructions).  The CLI needs all of them to rebuild a locked input.  A git\nflakeref is still an open attribute set, so any git-native attribute beyond\nthese (e.g. narHash) flows through unchanged via extra=\"allow\"; the contract\nboundary validates field presence and that type == \"git\", not the\nflakeref's deeper semantics (the downstream publish path parses url + rev\nfor storage identity).\n\nThe round-trip is value/dict-equal: with every named field required there\nare no unset fields to emit as null, and extras serialize verbatim, so the\ndefault model_dump reproduces the input attribute set (no injected nulls).\nKey ORDER is not preserved or relied upon \u2014 the identity hash reads url/rev\nvalues, not the serialized form."
+      },
+      "LockedInputEntry": {
+        "properties": {
+          "catalog": {
+            "type": "string",
+            "title": "Catalog"
+          },
+          "attr_path": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Attr Path"
+          },
+          "build_type": {
+            "$ref": "#/components/schemas/BuildType"
+          },
+          "source": {
+            "$ref": "#/components/schemas/LockedGitSource"
+          },
+          "inputs": {
+            "title": "Inputs",
+            "nullable": true,
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "locked_inputs_hash": {
+            "type": "string",
+            "title": "Locked Inputs Hash"
+          }
+        },
+        "type": "object",
+        "required": [
+          "catalog",
+          "attr_path",
+          "build_type",
+          "source",
+          "locked_inputs_hash"
+        ],
+        "title": "LockedInputEntry",
+        "description": "A single entry in the flat locked-inputs map.\n\nOne type, two directions (intentionally NOT split into two models \u2014 the\npublish entry is the same entity with its edges not yet stated):\n\n- Publish request: the CLI sends {catalog, attr_path, build_type, source,\n  locked_inputs_hash} and leaves inputs null.  Null here means \"not stated\n  \u2014 the server is authoritative for the DAG\": the CLI knows its direct\n  inputs but is not the source of truth, and the server reconstructs the\n  DAG from package_inputs (keyed by locked_inputs_hash).\n- Lookup response: all fields are present and inputs is populated with the\n  full transitive-closure DAG.\n\ninputs uses the tri-state SBOM convention in both directions:\n  inputs: [k, ...]  \u2014 known direct inputs (by key)\n  inputs: []        \u2014 explicitly no dependencies\n  inputs null       \u2014 not stated (server is authoritative for the DAG)\n\nattr_path is a list of components, e.g. [\"python3Packages\", \"boolex\"].\nA flat catalog entry collapses what the CLI lockfile represents as a\nhierarchy of single-component package-set / package nodes.  Giving the\nCLI the components lets it re-expand that hierarchy.  A list is also\nunambiguous where a dot-joined string is not \u2014 Nix attr paths may\ncontain quoted dotted components, e.g. python3Packages.\"foo.bar\".\n\nlocked_inputs_hash is REQUIRED on every entry: the closure identity hash is\nthe round-trip disambiguator that pins which recorded build a locked input\nrefers to (lookup response \u2192 CLI \u2192 publish request).  A publish request\nmissing it fails validation (422) at this contract boundary \u2014 there is no\nhash-free / old-client fallback.  It always serializes as a string.\n\nWire behavior: a null `inputs` (the tri-state \"not stated\") is emitted as\nan explicit null \u2014 deliberately, NOT dropped; do not add exclude_none here.\nThe source sub-model never emits nulls at all: its named attributes are\nall required, and unknown ones pass through verbatim (see LockedGitSource).\n\nUse key() to build the canonical flat-map key for this entry."
       },
       "LockedSourceItem": {
         "properties": {
@@ -2623,6 +2862,28 @@
           "total_count"
         ],
         "title": "LockedSourcesResponse"
+      },
+      "LookupGroup": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "references": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "References"
+          }
+        },
+        "type": "object",
+        "required": [
+          "key",
+          "references"
+        ],
+        "title": "LookupGroup",
+        "description": "A named group of reference strings for a build-inputs lookup.\n\nreferences is flat and mixed-kind; the server disambiguates.\nSentinel strings like 'catalogs.<owner>' and 'python3Packages.*' are\naccepted without validation \u2014 the server handles expansion."
       },
       "MessageLevel": {
         "type": "string",
@@ -2852,10 +3113,16 @@
             "drv_path": "/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-curl-8.5.0.drv",
             "license": "curl",
             "name": "curl-8.5.0",
-            "outputs": {
-              "man": "/nix/store/cccccccccccccccccccccccccccccccc-curl-8.5.0-man",
-              "out": "/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-curl-8.5.0"
-            },
+            "outputs": [
+              {
+                "name": "out",
+                "store_path": "/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-curl-8.5.0"
+              },
+              {
+                "name": "man",
+                "store_path": "/nix/store/cccccccccccccccccccccccccccccccc-curl-8.5.0-man"
+              }
+            ],
             "outputs_to_install": [
               "out",
               "man"
@@ -2963,6 +3230,14 @@
             "title": "Narinfos Source Version",
             "nullable": true,
             "type": "integer"
+          },
+          "locked_inputs": {
+            "title": "Locked Inputs",
+            "nullable": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/LockedInputEntry"
+            },
+            "type": "object"
           }
         },
         "type": "object",
@@ -2983,10 +3258,16 @@
             "drv_path": "/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-curl-8.5.0.drv",
             "license": "curl",
             "name": "curl-8.5.0",
-            "outputs": {
-              "man": "/nix/store/cccccccccccccccccccccccccccccccc-curl-8.5.0-man",
-              "out": "/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-curl-8.5.0"
-            },
+            "outputs": [
+              {
+                "name": "out",
+                "store_path": "/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-curl-8.5.0"
+              },
+              {
+                "name": "man",
+                "store_path": "/nix/store/cccccccccccccccccccccccccccccccc-curl-8.5.0-man"
+              }
+            ],
             "outputs_to_install": [
               "out",
               "man"
@@ -3080,10 +3361,16 @@
           "drv_path": "/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-curl-8.5.0.drv",
           "license": "curl",
           "name": "curl-8.5.0",
-          "outputs": {
-            "man": "/nix/store/cccccccccccccccccccccccccccccccc-curl-8.5.0-man",
-            "out": "/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-curl-8.5.0"
-          },
+          "outputs": [
+            {
+              "name": "out",
+              "store_path": "/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-curl-8.5.0"
+            },
+            {
+              "name": "man",
+              "store_path": "/nix/store/cccccccccccccccccccccccccccccccc-curl-8.5.0-man"
+            }
+          ],
           "outputs_to_install": [
             "out",
             "man"
@@ -3538,22 +3825,25 @@
           "total_count"
         ],
         "title": "PackageSearchResult",
-        "example": [
-          {
-            "attr_path": "foo.bar.curl",
-            "catalog": "nixpkgs",
-            "description": "A very nice Item",
-            "name": "curl",
-            "pkg_path": "foo.bar.curl",
-            "pname": "curl",
-            "stabilities": [
-              "stable",
-              "unstable"
-            ],
-            "system": "x86_64-linux",
-            "version": "1.0"
-          }
-        ]
+        "example": {
+          "items": [
+            {
+              "attr_path": "foo.bar.curl",
+              "catalog": "nixpkgs",
+              "description": "A very nice Item",
+              "name": "curl",
+              "pkg_path": "foo.bar.curl",
+              "pname": "curl",
+              "stabilities": [
+                "stable",
+                "unstable"
+              ],
+              "system": "x86_64-linux",
+              "version": "1.0"
+            }
+          ],
+          "total_count": 1
+        }
       },
       "PackageSystem": {
         "type": "string",
@@ -3748,6 +4038,23 @@
           "dependencies"
         ],
         "title": "RawDependencyReport"
+      },
+      "ReferencePoint": {
+        "properties": {
+          "as_of_date": {
+            "title": "As Of Date",
+            "nullable": true,
+            "type": "string",
+            "format": "date-time"
+          },
+          "as_of_build": {
+            "nullable": true,
+            "$ref": "#/components/schemas/BuildRef"
+          }
+        },
+        "type": "object",
+        "title": "ReferencePoint",
+        "description": "Temporal anchor for a build-inputs lookup.\n\nAt most one of as_of_date / as_of_build may be set.  When both are\nabsent the server interprets this as \"now\".  Uses a plain optional-\nfields model with a model_validator \u2014 NOT a discriminated union \u2014\nbecause the two anchors carry different value types."
       },
       "ResolutionMessageGeneral": {
         "properties": {
@@ -3954,41 +4261,56 @@
         ],
         "title": "ResolvedPackageGroup",
         "example": {
-          "attr_path": "curl",
-          "broken": false,
-          "catalog": "nixpkgs",
-          "derivation": "/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-curl-8.5.0.drv",
-          "description": "A command line tool for transferring files with URL syntax",
-          "insecure": false,
-          "license": "curl",
-          "locked_url": "https://github.com/flox/nixpkgs?rev=abc123def456",
-          "missing_builds": false,
-          "name": "curl-8.5.0",
-          "outputs": [
-            {
-              "name": "out",
-              "store_path": "/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-curl-8.5.0"
-            },
-            {
-              "name": "man",
-              "store_path": "/nix/store/cccccccccccccccccccccccccccccccc-curl-8.5.0-man"
-            }
-          ],
-          "outputs_to_install": [
-            "out",
-            "man"
-          ],
-          "pkg_path": "curl",
-          "pname": "curl",
-          "rev": "abc123def456",
-          "rev_count": 12345,
-          "rev_date": "2024-01-15T00:00:00Z",
-          "stabilities": [
-            "stable"
-          ],
-          "system": "x86_64-linux",
-          "unfree": false,
-          "version": "8.5.0"
+          "candidate_pages": [],
+          "messages": [],
+          "name": "test",
+          "page": {
+            "complete": true,
+            "messages": [],
+            "packages": [
+              {
+                "attr_path": "curl",
+                "broken": false,
+                "catalog": "nixpkgs",
+                "derivation": "/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-curl-8.5.0.drv",
+                "description": "A command line tool for transferring files with URL syntax",
+                "insecure": false,
+                "install_id": "curl",
+                "license": "curl",
+                "locked_url": "https://github.com/flox/nixpkgs?rev=abc123def456",
+                "missing_builds": false,
+                "name": "curl-8.5.0",
+                "outputs": [
+                  {
+                    "name": "out",
+                    "store_path": "/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-curl-8.5.0"
+                  },
+                  {
+                    "name": "man",
+                    "store_path": "/nix/store/cccccccccccccccccccccccccccccccc-curl-8.5.0-man"
+                  }
+                ],
+                "outputs_to_install": [
+                  "out",
+                  "man"
+                ],
+                "pkg_path": "curl",
+                "pname": "curl",
+                "rev": "abc123def456",
+                "rev_count": 12345,
+                "rev_date": "2024-01-15T00:00:00Z",
+                "scrape_date": "2024-01-15T00:00:00Z",
+                "stabilities": [
+                  "stable"
+                ],
+                "system": "x86_64-linux",
+                "unfree": false,
+                "version": "8.5.0"
+              }
+            ],
+            "page": 1,
+            "url": "https://github.com/flox/nixpkgs?rev=abc123def456"
+          }
         }
       },
       "ResolvedPackageGroups": {
@@ -4175,6 +4497,44 @@
           "items"
         ],
         "title": "StorepathStatusResponse"
+      },
+      "UnresolvableEntry": {
+        "properties": {
+          "reference": {
+            "type": "string",
+            "title": "Reference"
+          },
+          "chain": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Chain"
+          },
+          "leaf": {
+            "$ref": "#/components/schemas/UnresolvableLeaf"
+          }
+        },
+        "type": "object",
+        "required": [
+          "reference",
+          "chain",
+          "leaf"
+        ],
+        "title": "UnresolvableEntry",
+        "description": "A single unresolvable reference within a lookup group."
+      },
+      "UnresolvableLeaf": {
+        "properties": {
+          "unresolvable": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Unresolvable"
+          }
+        },
+        "type": "object",
+        "title": "UnresolvableLeaf",
+        "description": "Uniform shape for an unresolvable dependency.\n\nSerializes as {\"unresolvable\": {}} \u2014 exactly one shape, no cause/reason\nfields at the leaf level. If a future change needs structured error\ndetail, introduce a typed `reason` field here."
       },
       "UserCatalog": {
         "properties": {
