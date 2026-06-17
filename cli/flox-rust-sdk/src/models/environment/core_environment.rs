@@ -1638,6 +1638,90 @@ mod tests {
         assert!(environment.lockfile_if_up_to_date().unwrap().is_none());
     }
 
+    /// Regression test for CLI-41: `flox activate` (and any other operation
+    /// that funnels through `ensure_locked`) must not rewrite the on-disk
+    /// manifest. The user did not request a change, so the manifest bytes
+    /// on disk must be byte-identical before and after.
+    ///
+    /// The bug: when `ensure_locked` falls through to `lock()` against a
+    /// v1 manifest whose migrated form is not backwards-compatible with v1
+    /// (e.g. a multi-output package gains `outputs = "all"` during
+    /// migration), the freshly-locked lockfile's embedded manifest ends up
+    /// at the latest schema. `lock()` then calls
+    /// `ensure_manifest_schemas_match()`, which detects the schema drift
+    /// between the on-disk v1 manifest and the latest-schema locked
+    /// manifest and writes the migrated manifest back to disk. The user
+    /// sees `version = 1` flip to `schema-version = "1.10.0"` and bare
+    /// `pkg-path` entries gain `outputs = "all"`.
+    ///
+    /// See `core_environment.rs::ensure_manifest_schemas_match` (currently
+    /// invoked unconditionally from `lock()` on schema-drift) for the
+    /// write site.
+    ///
+    /// Repro setup:
+    /// - On-disk: a v1 manifest with `bashNonInteractive` (a multi-output
+    ///   package whose `outputs_to_install` differs from its full outputs
+    ///   set, so migration adds `outputs = "all"`). The manifest also
+    ///   carries an extra `[vars]` table so that the on-disk typed form
+    ///   differs from the lockfile's stored `user_manifest` and
+    ///   `lockfile_if_up_to_date()` returns `None` — forcing
+    ///   `ensure_locked` to fall through to `lock()`.
+    /// - On-disk lockfile: the v1 bash migration baseline. Every system
+    ///   is already locked with a derivation, so `lock()` resolves
+    ///   entirely from the seed lockfile and never calls out to the
+    ///   catalog.
+    #[test]
+    fn ensure_locked_does_not_rewrite_v1_manifest_on_disk() {
+        let (flox, _temp_dir_handle) = flox_instance();
+
+        // v1 manifest containing a multi-output package (`bash`) with no
+        // `outputs` field. The `[vars]` table makes the typed form differ
+        // from the lockfile's stored user manifest below.
+        let v1_manifest_contents = indoc! {r#"
+            version = 1
+
+            [install]
+            bash.pkg-path = "bashNonInteractive"
+
+            [vars]
+            FLOX_CLI_41_REPRO = "1"
+        "#};
+        // v1 bash migration baseline lockfile: hand-checked lockfile in
+        // which `bash` is fully locked on all four systems.
+        let lockfile_contents = fs::read_to_string(
+            MANUALLY_GENERATED
+                .join("migration_baselines/v1/bash")
+                .join(LOCKFILE_FILENAME),
+        )
+        .unwrap();
+        let mut environment = new_core_environment_with_lockfile(
+            &flox,
+            v1_manifest_contents,
+            &lockfile_contents,
+        );
+
+        // Sanity check: this scenario actually exercises the lock path
+        // (i.e. `ensure_locked` cannot short-circuit on `Unchanged`).
+        assert!(
+            environment.lockfile_if_up_to_date().unwrap().is_none(),
+            "test setup precondition: lockfile must be out of date with manifest \
+             so that ensure_locked falls through to lock()"
+        );
+
+        let manifest_before = fs::read_to_string(environment.manifest_path())
+            .expect("manifest exists before ensure_locked");
+        let _ = environment
+            .ensure_locked(&flox)
+            .expect("ensure_locked should succeed");
+        let manifest_after = fs::read_to_string(environment.manifest_path())
+            .expect("manifest exists after ensure_locked");
+
+        assert_eq!(
+            manifest_before, manifest_after,
+            "ensure_locked must not rewrite the on-disk manifest"
+        );
+    }
+
     #[test]
     fn lock_does_not_write_lockfile_if_unchanged() {
         let (flox, _temp_dir_handle) = flox_instance();
