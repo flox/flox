@@ -988,7 +988,7 @@ impl GitProvider for GitCommandProvider {
             command.arg("HEAD");
             let ref_output_result = GitCommandProvider::run_command(&mut command);
             match ref_output_result {
-                Ok(ref_) => Some(ref_.to_string_lossy().into_owned()),
+                Ok(ref_) => Some(ref_.to_string_lossy().trim().to_string()),
                 Err(GitCommandError::BadExit(128, _, stderr))
                     if stderr == "fatal: ref HEAD is not a symbolic ref" =>
                 {
@@ -1659,7 +1659,7 @@ pub mod tests {
         let date = repo.rev_date("HEAD").unwrap();
 
         let expected = StatusInfo {
-            ref_: Some("refs/heads/branch_1\n".to_string()),
+            ref_: Some("refs/heads/branch_1".to_string()),
             rev: hash_1,
             rev_count: ct,
             rev_date: date,
