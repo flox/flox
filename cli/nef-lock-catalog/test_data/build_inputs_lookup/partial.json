@@ -1,0 +1,16 @@
+{
+  "groups": {
+    "mypkg": {
+      "lock": {},
+      "matched": {},
+      "unresolvable": [
+        {
+          "chain": ["catalogs.myorg.hello", "catalogs.myorg.missing-dep"],
+          "leaf": { "unresolvable": {} },
+          "reference": "catalogs.myorg.missing-dep"
+        }
+      ]
+    }
+  },
+  "version": 1
+}
