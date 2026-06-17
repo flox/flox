@@ -153,6 +153,19 @@ in a future release:
 - Custom catalogs: `flox run -p mycatalog/vim -- vim …`
 - Executable-to-package lookup and disambiguation
 
+## Binary cache requirement
+
+`flox run` fetches packages by store path using substitution only.
+It does not evaluate Nix expressions or build packages from source.
+A package must have a pre-built binary available in the Nix binary
+cache to work with `flox run`.
+
+Packages that require building from source — including those with
+unfree licenses that are not pre-cached — will fail with a
+"not available in the binary cache" error.
+Use `flox install` to add such packages to an environment instead;
+`flox install` can build packages from source when needed.
+
 # SEE ALSO
 
 [`flox-activate(1)`](./flox-activate.md),

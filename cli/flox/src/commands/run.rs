@@ -132,8 +132,10 @@ pub enum RunError {
 
     /// Substitution returned `false` (nix build reported failure).
     #[error(
-        "Failed to download package '{0}'.\n\
-         Check your network connection and try again."
+        "Package '{0}' is not available in the binary cache.\n\
+         'flox run' requires a pre-built binary. \
+         Use 'flox install {0}' to add it to an environment instead.\n\
+         If you expect this package to be cached, check your network connection and try again."
     )]
     DownloadFailed(String),
 
