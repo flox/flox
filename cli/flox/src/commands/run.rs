@@ -33,10 +33,9 @@ use floxhub_client::{
     ResolutionMessage,
 };
 use thiserror::Error;
-use tracing::debug;
+use tracing::{debug, info_span};
 
 use crate::subcommand_metric;
-use crate::utils::message;
 
 // ---------------------------------------------------------------------------
 // Error types
@@ -435,9 +434,14 @@ async fn exec_run(run_args: RunArgs, flox: &Flox) -> Result<()> {
     // root registered on the first run keeps them from being collected.
     let all_present = store_paths.iter().all(|p| Path::new(p).exists());
     if !all_present {
-        message::plain(format!("Downloading '{pkg_spec}'..."));
+        let _span = info_span!(
+            "run_download",
+            progress = format!("Downloading '{pkg_spec}'...")
+        )
+        .entered();
         let ok = substitute_store_paths(&store_paths, Some(&gc_root_prefix))
             .map_err(|e| RunError::Substitute(pkg_spec.clone(), e))?;
+        drop(_span);
         if !ok {
             return Err(RunError::DownloadFailed(pkg_spec.clone()).into());
         }
