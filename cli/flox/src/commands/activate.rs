@@ -16,6 +16,7 @@ use flox_core::activate::context::{
     InvocationType,
     SandboxMode,
 };
+use flox_core::activate::sandbox_backend::{IntegrationStatus, SandboxBackend};
 use flox_core::activate::vars::{FLOX_ACTIVATIONS_BIN, FLOX_ACTIVATIONS_VERBOSITY_VAR};
 use flox_core::activations::activation_state_dir_path;
 use flox_core::data::System;
@@ -404,6 +405,15 @@ impl ActivateOptions {
         // Otherwise `options.sandbox = "prompt"` piped to `tee` would activate
         // in-place unsandboxed.
         ensure_sandbox_not_in_place(sandbox_mode, &invocation_type)?;
+
+        // Reject an activation whose selected enforcement backend is not yet
+        // wired. The backend is chosen by FLOX_SANDBOX_BACKEND (default
+        // libsandbox); selecting a scaffolded/planned backend must fail loudly
+        // rather than silently apply libsandbox under another name, which would
+        // make a benchmark misattribute its results.
+        if sandbox_mode != SandboxMode::Off {
+            ensure_sandbox_backend_implemented()?;
+        }
 
         // Services run outside the sandbox in this prototype (TH-003
         // deferred), so warn once when the environment defines any.
@@ -984,6 +994,23 @@ pub fn is_allowed(config: &Config, concrete_environment: &ConcreteEnvironment) -
         Some(AutoActivationPreference::Deny) => Ok(false),
         Some(AutoActivationPreference::Allow) | None => Ok(true),
     }
+}
+
+/// Reject an activation whose selected sandbox backend is not yet wired.
+///
+/// The backend is chosen by `FLOX_SANDBOX_BACKEND` (default `libsandbox`).
+/// Only `libsandbox` — the advisory engine that ships today — is wired into
+/// activation; the other roster backends are scaffolded for benchmarking. A
+/// scaffolded or planned selection errors here so a benchmark never measures
+/// libsandbox while believing it measured another backend.
+fn ensure_sandbox_backend_implemented() -> Result<()> {
+    let backend = SandboxBackend::from_env().map_err(|err| anyhow::anyhow!("{err}"))?;
+    if backend.capabilities().status == IntegrationStatus::Implemented {
+        return Ok(());
+    }
+    bail!(
+        "Sandbox backend '{backend}' is not yet wired into activation.\nOnly 'libsandbox' (the default) is implemented. Run 'flox sandbox backends' to see status, or unset FLOX_SANDBOX_BACKEND."
+    );
 }
 
 /// Resolve the effective sandbox mode for an activation.
