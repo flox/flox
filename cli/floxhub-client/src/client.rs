@@ -203,6 +203,13 @@ pub trait CatalogClientTrait {
         catalog_name: impl AsRef<str> + Send + Sync,
     ) -> Result<ResultsPage<LockedSourceItem>, FloxhubClientError>;
 
+    /// Look up and lock build inputs for one or more grouped reference sets in
+    /// a single batched request (POST /build-inputs/lookup).
+    async fn build_inputs_lookup(
+        &self,
+        request: BuildInputsLookupRequest,
+    ) -> Result<BuildInputsLookupResponse, FloxhubClientError>;
+
     /// Create a package within a user catalog.
     async fn create_package(
         &self,
@@ -424,6 +431,27 @@ impl CatalogClientTrait for FloxhubClient {
         let (count, results) = collect_all_results(stream).await?;
 
         Ok(ResultsPage { results, count })
+    }
+
+    async fn build_inputs_lookup(
+        &self,
+        request: BuildInputsLookupRequest,
+    ) -> Result<BuildInputsLookupResponse, FloxhubClientError> {
+        tracing::debug!(n_groups = request.groups.len(), "looking up build inputs");
+
+        // NOTE: unlike sibling catalog endpoints, the generated lookup endpoint
+        // is typed with `HttpValidationError` (the default 422 envelope) rather
+        // than the shared `ErrorResponse`, so the `map_api_error` machinery does
+        // not apply. Map to a string error for now; richer token/4xx handling
+        // lands with the lock binary in ECO-94. (Likely wants a backend schema
+        // fix to declare `ErrorResponse` like the other endpoints.)
+        let response = self
+            .catalog
+            .lookup_api_v1_catalog_build_inputs_lookup_post(&request)
+            .await
+            .map_err(|err| FloxhubClientError::Other(err.to_string()))?;
+
+        Ok(response.into_inner())
     }
 
     async fn publish_info(

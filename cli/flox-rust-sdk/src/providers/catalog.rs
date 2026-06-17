@@ -7,6 +7,8 @@ use floxhub_client::{
     ApiResponseValue,
     BaseCatalogInfo,
     BaseCatalogUrl,
+    BuildInputsLookupRequest,
+    BuildInputsLookupResponse,
     CatalogClientTrait,
     CatalogStoreConfig,
     CheckBuildResponse,
@@ -378,6 +380,16 @@ impl CatalogClientTrait for MockClient {
         _catalog_name: impl AsRef<str> + Send + Sync,
     ) -> Result<ResultsPage<LockedSourceItem>, FloxhubClientError> {
         unimplemented!("get_catalog_locked_sources not implemented for MockClient")
+    }
+
+    async fn build_inputs_lookup(
+        &self,
+        _request: BuildInputsLookupRequest,
+    ) -> Result<BuildInputsLookupResponse, FloxhubClientError> {
+        // Intentionally unsupported: the lockless lookup path is tested via the
+        // record/replay client and pure nef-lock-catalog unit tests, not the
+        // MockClient response queue.
+        unimplemented!("build_inputs_lookup is not supported in MockClient")
     }
 
     async fn check_build_already_recorded(
