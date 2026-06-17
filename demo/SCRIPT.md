@@ -327,7 +327,7 @@ flox sandbox backends
 BACKEND       BOUNDARY     MACOS    LINUX     ENFORCES  LIVE-ASK  STATUS
 libsandbox    advisory     native   native    no        yes       implemented
 nix           host-kernel  native   native    yes       no        scaffolded
-host-native   host-kernel  native   native    yes       no        scaffolded
+host-native   host-kernel  native   native    yes       no        implemented
 srt           host-kernel  native   native    yes       yes       scaffolded
 oci           container    linux-vm  native    yes       no        scaffolded
 libkrun       hypervisor   linux-vm  native    yes       no        planned
@@ -337,31 +337,49 @@ Only 'implemented' backends are wired into activation today.
 ```
 
 The default backend reproduces today's behavior — the whole demo
-above is `FLOX_SANDBOX_BACKEND=libsandbox`:
+above is `FLOX_SANDBOX_BACKEND=libsandbox`. Select a backend with
+the env var or the `--sandbox-backend` flag.
+
+**`host-native` shows why the backend choice matters.** It wraps the
+whole activation in the macOS kernel sandbox (`sandbox-exec`). Unlike
+advisory `libsandbox`, it contains even SIP-protected system binaries —
+the exact gap §4 admitted. Watch the *same* read get blocked where
+`libsandbox` lets it through:
 
 ```bash
+# advisory libsandbox: a system /bin/cat escapes the loader →
 FLOX_SANDBOX_BACKEND=libsandbox flox activate --sandbox enforce -- \
-  bash -c 'cat ~/demo-secrets/.env'      # → blocked, as in §2b
+  /bin/cat ~/.ssh/id_ed25519        # → prints the key (escaped)
+
+# host-native: the kernel denies it →
+flox activate --sandbox enforce --sandbox-backend host-native -- \
+  /bin/cat ~/.ssh/id_ed25519        # → cat: ...: Operation not permitted
 ```
 
-Selecting a backend that is **not yet wired** fails loudly,
-on purpose — it never silently falls back to libsandbox (that
-would make a benchmark lie about which mechanism it measured):
+Selecting a backend that is **not yet wired** fails loudly, on
+purpose — it never silently falls back to libsandbox (that would make
+a benchmark lie about which mechanism it measured):
 
 ```bash
-FLOX_SANDBOX_BACKEND=host-native flox activate --sandbox enforce -- true
+flox activate --sandbox enforce --sandbox-backend oci -- true
 ```
 
 ```
-❌ ERROR: Sandbox backend 'host-native' is not yet wired into activation.
-Only 'libsandbox' (the default) is implemented. Run 'flox sandbox backends'
-to see status, or unset FLOX_SANDBOX_BACKEND.
+❌ ERROR: Sandbox backend 'oci' is not yet wired into activation.
+Wired backends: 'libsandbox' (default) and 'host-native'. Run 'flox sandbox
+backends' to see status, or unset FLOX_SANDBOX_BACKEND.
 ```
+
+> `host-native` is a v1: it denies the sensitive credential set
+> (read + write) on top of an allow-default base, so it contains
+> credential theft and SIP-binary bypass but not arbitrary reads yet.
+> A deny-default allowlist (stronger) is a tracked follow-up. The
+> current lossiness is what `flox sandbox backends` declares.
 
 As each backend lands, the same command starts working with no
-change to the surface above. The benchmark harness that scores
-the three tradeoffs across every backend lives in the Forge
-slice: `slices/2026/06-sandboxed-activation-prototype/artifacts/`
+change to the surface above. The benchmark harness that scores the
+three tradeoffs across every backend lives in the Forge slice:
+`slices/2026/06-sandboxed-activation-prototype/artifacts/`
 (`benchmark-plan.md`, `backend-roster.md`, `backend-contract.md`,
 `red-team-battery.md`, and the runnable `bench/` scripts).
 

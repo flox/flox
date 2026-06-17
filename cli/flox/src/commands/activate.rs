@@ -16,7 +16,7 @@ use flox_core::activate::context::{
     InvocationType,
     SandboxMode,
 };
-use flox_core::activate::sandbox_backend::{IntegrationStatus, SandboxBackend};
+use flox_core::activate::sandbox_backend::SandboxBackend;
 use flox_core::activate::vars::{FLOX_ACTIVATIONS_BIN, FLOX_ACTIVATIONS_VERBOSITY_VAR};
 use flox_core::activations::activation_state_dir_path;
 use flox_core::data::System;
@@ -171,6 +171,13 @@ pub struct ActivateOptions {
     // pick up doc comments.
     #[bpaf(external(sandbox_flag))]
     pub sandbox: Option<SandboxMode>,
+
+    /// Select the sandbox enforcement backend: "libsandbox" (default), "nix",
+    /// "host-native", "srt", "oci", or "libkrun". Overrides
+    /// FLOX_SANDBOX_BACKEND; only takes effect with an active --sandbox mode.
+    /// Experimental prototype.
+    #[bpaf(long("sandbox-backend"), argument("BACKEND"))]
+    pub sandbox_backend: Option<SandboxBackend>,
 
     /// Activate a FloxHub environment at a specific generation.
     #[bpaf(long, short)]
@@ -450,14 +457,34 @@ impl ActivateOptions {
         // in-place unsandboxed.
         ensure_sandbox_not_in_place(sandbox_mode, &invocation_type)?;
 
-        // Reject an activation whose selected enforcement backend is not yet
-        // wired. The backend is chosen by FLOX_SANDBOX_BACKEND (default
-        // libsandbox); selecting a scaffolded/planned backend must fail loudly
-        // rather than silently apply libsandbox under another name, which would
-        // make a benchmark misattribute its results.
-        if sandbox_mode != SandboxMode::Off {
-            ensure_sandbox_backend_implemented()?;
-        }
+        // Apply the selected enforcement backend. `libsandbox` (the default) is
+        // applied later as env-var injection during attach; the native-wrapper
+        // backends instead re-exec this whole `flox activate` under an OS
+        // sandbox and then run a vanilla activation inside it. A
+        // scaffolded/planned backend fails loudly rather than silently applying
+        // libsandbox under another name (which would make a benchmark
+        // misattribute its results). `_FLOX_SANDBOX_WRAPPED` marks the inner
+        // activation so it neither wraps again nor also applies libsandbox.
+        let already_wrapped = std::env::var_os(WRAPPED_MARKER_VAR).is_some();
+        let sandbox_mode = if already_wrapped {
+            // Inside an OS-sandbox wrap: the wrapper enforces, so suppress the
+            // libsandbox injection and run a vanilla activation.
+            SandboxMode::Off
+        } else if sandbox_mode == SandboxMode::Off {
+            sandbox_mode
+        } else {
+            match resolve_sandbox_backend(self.sandbox_backend)? {
+                SandboxBackend::Libsandbox => sandbox_mode,
+                SandboxBackend::HostNative => {
+                    // Re-exec under the OS sandbox; never returns on success.
+                    wrap_activation_host_native()?;
+                    unreachable!("wrap_activation_host_native execs or errors");
+                },
+                other => bail!(
+                    "Sandbox backend '{other}' is not yet wired into activation.\nWired backends: 'libsandbox' (default) and 'host-native'. Run 'flox sandbox backends' to see status, or unset FLOX_SANDBOX_BACKEND."
+                ),
+            }
+        };
 
         // Services run outside the sandbox in this prototype (TH-003
         // deferred), so warn once when the environment defines any.
@@ -1108,21 +1135,99 @@ pub fn write_auto_activation_preference(
     Ok(())
 }
 
-/// Reject an activation whose selected sandbox backend is not yet wired.
-///
-/// The backend is chosen by `FLOX_SANDBOX_BACKEND` (default `libsandbox`).
-/// Only `libsandbox` — the advisory engine that ships today — is wired into
-/// activation; the other roster backends are scaffolded for benchmarking. A
-/// scaffolded or planned selection errors here so a benchmark never measures
-/// libsandbox while believing it measured another backend.
-fn ensure_sandbox_backend_implemented() -> Result<()> {
-    let backend = SandboxBackend::from_env().map_err(|err| anyhow::anyhow!("{err}"))?;
-    if backend.capabilities().status == IntegrationStatus::Implemented {
-        return Ok(());
+/// Environment marker set on the re-exec'd inner activation so it neither wraps
+/// again nor also applies libsandbox while running inside an OS-sandbox wrap.
+const WRAPPED_MARKER_VAR: &str = "_FLOX_SANDBOX_WRAPPED";
+
+/// Resolve the sandbox backend: the `--sandbox-backend` flag wins, else
+/// `FLOX_SANDBOX_BACKEND`, else the default (`libsandbox`).
+fn resolve_sandbox_backend(flag: Option<SandboxBackend>) -> Result<SandboxBackend> {
+    match flag {
+        Some(backend) => Ok(backend),
+        None => SandboxBackend::from_env().map_err(|err| anyhow::anyhow!("{err}")),
     }
-    bail!(
-        "Sandbox backend '{backend}' is not yet wired into activation.\nOnly 'libsandbox' (the default) is implemented. Run 'flox sandbox backends' to see status, or unset FLOX_SANDBOX_BACKEND."
-    );
+}
+
+/// Re-exec the current `flox activate` invocation under the host-native OS
+/// sandbox, then never return (the inner activation runs confined). Returns the
+/// error on a failure to launch, or on an unsupported platform.
+///
+/// macOS uses `sandbox-exec` with a generated SBPL profile. The profile is
+/// permissive at the base (`allow default`) so flox and the user's tools run,
+/// with targeted denials that enforce the policy a benchmark cares about: the
+/// sensitive credential locations are unreadable and unwritable — enforced even
+/// against a SIP-protected system binary that bypasses advisory libsandbox,
+/// which is the containment edge this backend exists to measure. A deny-default
+/// allowlist (stronger) is a follow-up; the current lossiness is declared in
+/// `flox sandbox backends`.
+fn wrap_activation_host_native() -> Result<()> {
+    #[cfg(target_os = "macos")]
+    {
+        use std::os::unix::process::CommandExt;
+
+        let home = std::env::var_os("HOME").map(PathBuf::from).ok_or_else(|| {
+            anyhow::anyhow!("HOME is not set; cannot build the host-native sandbox profile.")
+        })?;
+        // SBPL matches the realpath, so canonicalize (/var -> /private/var).
+        let home = std::fs::canonicalize(&home).unwrap_or(home);
+        let profile = host_native_profile(&home);
+
+        let flox_exe = std::env::current_exe()
+            .map_err(|err| anyhow::anyhow!("Cannot locate the flox binary to re-exec: {err}"))?;
+        let inner_args: Vec<String> = std::env::args().skip(1).collect();
+
+        // `exec` only returns on failure.
+        let err = std::process::Command::new("sandbox-exec")
+            .arg("-p")
+            .arg(&profile)
+            .arg(&flox_exe)
+            .args(&inner_args)
+            .env(WRAPPED_MARKER_VAR, "1")
+            .exec();
+        Err(anyhow::anyhow!(
+            "Failed to launch the host-native sandbox: {err}. 'sandbox-exec' must be available on macOS."
+        ))
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        bail!(
+            "The 'host-native' sandbox backend is only wired on macOS (sandbox-exec).\nThe Linux backend (bubblewrap + Landlock) is not yet implemented. Unset FLOX_SANDBOX_BACKEND or use '--sandbox-backend libsandbox'."
+        );
+    }
+}
+
+/// The macOS `sandbox-exec` (SBPL) profile for a host-native activation. Paths
+/// are canonical because SBPL matches the realpath.
+#[cfg(target_os = "macos")]
+fn host_native_profile(home: &Path) -> String {
+    let h = home.display();
+    format!(
+        r##"(version 1)
+(allow default)
+; Deny reads of sensitive credential locations — enforced even against
+; SIP-protected system binaries that bypass advisory libsandbox.
+(deny file-read*
+  (subpath "{h}/.ssh")
+  (subpath "{h}/.aws")
+  (subpath "{h}/.gnupg")
+  (subpath "{h}/.kube")
+  (subpath "{h}/.config/gh")
+  (literal "{h}/.netrc"))
+(deny file-read* (regex #"/\.env(\.[^/]*)?$"))
+; Deny writes to credential and shell-startup files (tamper / persistence).
+(deny file-write*
+  (subpath "{h}/.ssh")
+  (subpath "{h}/.aws")
+  (subpath "{h}/.gnupg")
+  (subpath "{h}/.kube")
+  (subpath "{h}/.config/gh")
+  (literal "{h}/.netrc")
+  (literal "{h}/.bashrc")
+  (literal "{h}/.zshrc")
+  (literal "{h}/.profile")
+  (literal "{h}/.zprofile"))
+"##
+    )
 }
 
 /// Resolve the effective sandbox mode for an activation.
@@ -1293,6 +1398,7 @@ mod tests {
             no_start_services,
             mode: None,
             sandbox: None,
+            sandbox_backend: None,
             generation: None,
             command: None,
         }
