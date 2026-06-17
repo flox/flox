@@ -525,23 +525,21 @@ pub fn print_help() {
     println!(
         "Run a command from a Flox Catalog package
 
-Usage: flox run -p <PACKAGE> [--] <COMMAND> [ARGS...]
+Usage: flox run -p <PACKAGE> -- <COMMAND> [ARGS...]
 
 Options:
-  -p, --package <PACKAGE>   Package to run the command from (required)
+  -p, --package <PACKAGE>   Package that provides the command (required)
   -h, --help                Print this help
 
-Flags before the command name belong to flox run; flags after the command name
-belong to the command. Use '--' to separate them explicitly, which is required
-for commands whose first argument starts with '-'.
+Always use '--' to separate flox flags from the command and its arguments.
+This matches 'flox activate -- <command>' and ensures flags like '--version'
+reach the command rather than flox.
 
 Examples:
-  flox run -p curl curl http://example.com
-  flox run -p binutils readelf -a /bin/ls
+  flox run -p curl -- curl http://example.com
+  flox run -p binutils -- readelf -a /bin/ls
   flox run -p hello -- hello --help
   flox run -p hello -- hello --version
-
-Note: '--version' is intercepted by flox unless '--' is used first.
 
 Limitations (phase 1):
   Version constraints (@), output selectors (^), and custom catalogs (/) are

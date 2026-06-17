@@ -13,7 +13,7 @@ flox-run - run a command from a Flox Catalog package
 ```
 flox [<general-options>] run
      -p <package>
-     [ -- ] <command> [<arguments>]
+     -- <command> [<arguments>]
 ```
 
 # DESCRIPTION
@@ -32,7 +32,7 @@ The `-p`/`--package` flag is required and names the package explicitly.
 For example:
 
 ```
-$ flox run -p gnugrep grep "pattern" file.txt
+$ flox run -p gnugrep -- grep "pattern" file.txt
 ```
 
 The package name is a plain Flox Catalog attribute path
@@ -41,27 +41,24 @@ The package name is a plain Flox Catalog attribute path
 ## Flags Before and After the Command
 
 `flox run` uses POSIX stop-at-first-positional parsing:
-flags before the command name belong to `flox run`;
-flags after the command name belong to the command.
+flags before `--` belong to `flox run`;
+everything after `--` is passed to the command verbatim.
+
+Always use `--` to separate the flox flags from the command:
 
 ```
-flox run -p curl curl http://example.com  # -p belongs to flox run
-flox run curl -p curl                     # ❌ error: -p is curl's, flox has no package
+flox run -p curl -- curl http://example.com
 ```
 
-Use `--` to pass option-style arguments to the command:
-
-```
-$ flox run -p curl -- curl -sL http://example.com
-```
-
-The `--` separator is required only when the command name or its
-first argument starts with `-`.
-Bare arguments such as URLs, filenames, and strings do not require `--`.
+Without `--`, flags that look like options could be claimed by the
+wrong side of the boundary — for example, `flox run -p curl curl
+-sL http://example.com` passes `-sL` to `curl`, but
+`flox run curl -p curl -- curl ...` would fail because `-p` is
+consumed by `curl`, leaving flox without a package.
 
 **`--version` caveat:**
 Flox intercepts `--version` from the full argument list before parsing.
-To pass `--version` to the invoked command, use `--` first:
+Always use `--` so `--version` reaches the command:
 
 ```
 $ flox run -p hello -- hello --version   # ✅ shows hello's version
@@ -103,9 +100,9 @@ Repeated invocations of the same package skip the download step.
     Version constraints (`@`), output selectors (`^`), and custom
     catalogs (`/`) are not supported in this release.
 
-`[ -- ] <command> [<arguments>]`
+`-- <command> [<arguments>]`
 :   The command to run and any arguments to pass to it.
-    Use `--` when the command name or first argument starts with `-`.
+    Use `--` to separate flox flags from the command and its arguments.
 
 ```{.include}
 ./include/general-options.md
@@ -113,19 +110,19 @@ Repeated invocations of the same package skip the download step.
 
 # EXAMPLES
 
-Run a command with a bare argument (no `--` needed):
+Run a command:
 
 ```
-$ flox run -p cowsay cowsay "Hello, Flox!"
+$ flox run -p cowsay -- cowsay "Hello, Flox!"
 ```
 
 Run a command whose name differs from the package name:
 
 ```
-$ flox run -p binutils readelf -a /bin/ls
+$ flox run -p binutils -- readelf -a /bin/ls
 ```
 
-Use `--` to pass option-style arguments to the command:
+Pass option-style arguments to the command:
 
 ```
 $ flox run -p curl -- curl -sL http://example.com
@@ -134,13 +131,14 @@ $ flox run -p curl -- curl -sL http://example.com
 Pipe input to a command:
 
 ```
-$ echo '{"name":"Flox"}' | flox run -p jq jq '.name'
+$ echo '{"name":"Flox"}' | flox run -p jq -- jq '.name'
 ```
 
-Show the command's own help:
+Show the command's own help or version:
 
 ```
 $ flox run -p hello -- hello --help
+$ flox run -p hello -- hello --version
 ```
 
 # LIMITATIONS
@@ -150,9 +148,9 @@ The following features are not yet supported and will be available
 in a future release:
 
 - Defaulting the package to the command name (`flox run readelf`)
-- Version constraints: `flox run -p curl@8.0 curl …`
+- Version constraints: `flox run -p curl@8.0 -- curl …`
 - Output selectors: `flox run -p foo^dev …`
-- Custom catalogs: `flox run -p mycatalog/vim vim …`
+- Custom catalogs: `flox run -p mycatalog/vim -- vim …`
 - Executable-to-package lookup and disambiguation
 
 # SEE ALSO
