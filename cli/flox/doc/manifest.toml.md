@@ -773,6 +773,7 @@ Options ::= {
 , semver                    = null | Semver
 , cuda-detection            = null | <BOOL>
 , sandbox                   = null | 'off' | 'warn' | 'enforce' | 'prompt'
+, sandbox-backend           = null | 'libsandbox' | 'nix' | 'host-native' | 'srt' | 'oci' | 'libkrun'
 }
 
 Activate ::= {
@@ -852,6 +853,15 @@ Semver ::= {
     (set `FLOX_FEATURES_SANDBOX_ACTIVATE=true`);
     without it the setting is ignored with a warning.
     Ignored for the ephemeral activations used by service startup.
+    This is an experimental prototype and may change or be removed.
+
+`sandbox-backend`
+:   The enforcement backend that applies the sandbox policy when the
+    environment is activated: `libsandbox` (default), `nix`, `host-native`,
+    `srt`, `oci`, or `libkrun`. The `flox activate --sandbox-backend` flag and
+    the `FLOX_SANDBOX_BACKEND` environment variable take precedence over this
+    setting. Only takes effect with an active `sandbox` mode.
+    See [`flox-sandbox(1)`](./flox-sandbox.md) for the available backends.
     This is an experimental prototype and may change or be removed.
 
 # SEE ALSO

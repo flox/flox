@@ -106,6 +106,7 @@ impl ManifestLatest {
 mod tests {
     use std::path::PathBuf;
 
+    use flox_core::activate::sandbox_backend::SandboxBackend;
     use flox_core::activate::sandbox_mode::SandboxMode;
     use flox_core::data::environment_ref::RemoteEnvironmentRef;
     use indoc::{formatdoc, indoc};
@@ -229,6 +230,40 @@ mod tests {
             sandbox: Some(SandboxMode::Warn),
             ..Default::default()
         });
+    }
+
+    #[test]
+    fn options_sandbox_backend_parses_with_latest_schema() {
+        let manifest = with_latest_schema(indoc! {r#"
+            [options]
+            sandbox-backend = "host-native"
+        "#});
+
+        let parsed = toml_edit::de::from_str::<ManifestLatest>(&manifest).unwrap();
+
+        assert_eq!(parsed.options, Options {
+            sandbox_backend: Some(SandboxBackend::HostNative),
+            ..Default::default()
+        });
+    }
+
+    #[test]
+    fn stays_latest_schema_when_sandbox_backend_set() {
+        // A set `options.sandbox-backend` cannot be represented in v1.12.0, so
+        // the manifest must stay on the latest schema rather than downgrade.
+        let manifest = ManifestLatest {
+            options: Options {
+                sandbox_backend: Some(SandboxBackend::HostNative),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let compat = manifest
+            .as_maybe_backwards_compatible(KnownSchemaVersion::V1_12_0, None)
+            .unwrap();
+
+        assert_eq!(compat.get_schema_version(), KnownSchemaVersion::V1_13_0);
     }
 
     #[test]

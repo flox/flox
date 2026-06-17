@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 
+use flox_core::activate::sandbox_backend::SandboxBackend;
 use flox_core::activate::sandbox_mode::SandboxMode;
 use flox_core::data::System;
 #[cfg(test)]
@@ -250,6 +251,12 @@ pub struct Options {
     /// (`off`, `warn`, `enforce`, or `prompt`). An explicit `--sandbox` flag
     /// on `flox activate` takes precedence over this setting.
     pub sandbox: Option<SandboxMode>,
+    /// The sandbox enforcement backend used when the environment is activated
+    /// (`libsandbox`, `nix`, `host-native`, `srt`, `oci`, or `libkrun`). The
+    /// `--sandbox-backend` flag on `flox activate` and the
+    /// `FLOX_SANDBOX_BACKEND` environment variable take precedence over this
+    /// setting.
+    pub sandbox_backend: Option<SandboxBackend>,
     /// Options that control the behavior of activations.
     #[serde(default)]
     #[serde(skip_serializing_if = "ActivateOptions::skip_serializing")]
@@ -274,6 +281,7 @@ impl From<crate::parsed::common::Options> for Options {
             semver,
             cuda_detection,
             sandbox: None,
+            sandbox_backend: None,
             activate,
         }
     }

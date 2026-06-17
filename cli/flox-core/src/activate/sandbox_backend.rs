@@ -27,8 +27,11 @@ use serde::{Deserialize, Serialize};
 pub const FLOX_SANDBOX_BACKEND_VAR: &str = "FLOX_SANDBOX_BACKEND";
 
 /// The enforcement mechanism that applies the sandbox policy for an activation.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, Hash, PartialEq, Eq, Default)]
+#[derive(
+    Debug, Clone, Copy, Serialize, Deserialize, Hash, PartialEq, Eq, Default, schemars::JsonSchema,
+)]
 #[serde(rename_all = "kebab-case")]
+#[cfg_attr(any(test, feature = "tests"), derive(proptest_derive::Arbitrary))]
 pub enum SandboxBackend {
     /// Advisory libc interposition (`LD_PRELOAD` / `DYLD_INSERT_LIBRARIES`).
     /// The engine that ships today, and the default.
