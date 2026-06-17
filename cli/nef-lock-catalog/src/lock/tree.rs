@@ -22,10 +22,14 @@ pub enum PackageTreeNode {
     /// An individual package (leaf node)
     Package {
         build_type: BuildType,
-        /// A validated nix source ref
-        /// Note: validation (parsing) is done during construction using [NixFlakeref::from_value].
-        /// The [NixFlakeref] type is then unwrapped to a [Value] for serialization as
-        /// [NixFlakeref] does not implement [serde::Serialize].
+        /// The package's locked nix source ref, as a raw JSON value.
+        ///
+        /// Stored verbatim. For catalog `/build-inputs/lookup` results
+        /// ([PackageTreeBuilder::add_package_source]) the source is already
+        /// locked server-side and is carried through without a nix call.
+        /// [PackageTreeBuilder::add_package] instead supplies the parsed value
+        /// of a [NixFlakeref] (which is not [serde::Serialize], hence a [Value]
+        /// here rather than the typed ref).
         source: Value,
     },
 }
@@ -48,17 +52,16 @@ impl PackageTreeBuilder {
         self.root
     }
 
-    /// Add a package to the tree using optimized split_last() approach
+    /// Add a package to the tree from a raw, already-locked source value.
     ///
-    /// # Parameters
-    /// - `attr_path`: Path components (e.g., ["pkgs", "hello"])
-    /// - `build_type`: Type of build
-    /// - `source`: Validated source reference
-    pub fn add_package(
+    /// Unlike [Self::add_package], this stores `source` verbatim and performs
+    /// no nix invocation — used for catalog `/build-inputs/lookup` results,
+    /// whose `source` is already locked server-side.
+    pub fn add_package_source(
         &mut self,
         attr_path: Vec<String>,
         build_type: BuildType,
-        source: NixFlakeref,
+        source: Value,
     ) -> Result<()> {
         let Some((final_attribute, parent_attributes)) = attr_path.split_last() else {
             anyhow::bail!("Empty attribute path");
@@ -101,16 +104,9 @@ impl PackageTreeBuilder {
                     });
         }
 
-        // Insert final package using final component as key
-        let package = {
-            // Use the parsed flake reference data directly
-            let source_value = source.as_parsed().clone();
-
-            PackageTreeNode::Package {
-                build_type,
-                source: source_value,
-            }
-        };
+        // Insert final package using final component as key. The source is
+        // stored verbatim — it is already locked server-side.
+        let package = PackageTreeNode::Package { build_type, source };
         match current_node {
             PackageTreeNode::PackageSet { entries } => {
                 // Check if there's already a package set at this location
@@ -142,6 +138,22 @@ impl PackageTreeBuilder {
         }
 
         Ok(())
+    }
+
+    /// Add a package to the tree using optimized split_last() approach
+    ///
+    /// # Parameters
+    /// - `attr_path`: Path components (e.g., ["pkgs", "hello"])
+    /// - `build_type`: Type of build
+    /// - `source`: Validated source reference
+    pub fn add_package(
+        &mut self,
+        attr_path: Vec<String>,
+        build_type: BuildType,
+        source: NixFlakeref,
+    ) -> Result<()> {
+        // The parsed flake reference is the source value stored at the leaf.
+        self.add_package_source(attr_path, build_type, source.as_parsed().clone())
     }
 }
 
