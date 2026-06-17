@@ -431,11 +431,13 @@ async fn exec_run(run_args: RunArgs, flox: &Flox) -> Result<()> {
 
     let gc_root_prefix = gc_root_dir.join(format!("{}.{}", flox.system, attr_path));
 
-    // Skip download if all store paths are already present on disk. Nix store
-    // paths are content-addressed, so existence implies correctness. The GC
-    // root registered on the first run keeps them from being collected.
+    // Skip if store paths are present AND our GC root symlink already exists.
+    // Checking both avoids the case where the store was populated by another
+    // process (e.g., an earlier test): we must still register the GC root so
+    // `nix store gc` cannot collect the paths out from under us.
+    let gc_root_exists = gc_root_prefix.exists();
     let all_present = store_paths.iter().all(|p| Path::new(p).exists());
-    if !all_present {
+    if !all_present || !gc_root_exists {
         let _span = info_span!(
             "run_download",
             progress = format!("Downloading '{pkg_spec}'...")
