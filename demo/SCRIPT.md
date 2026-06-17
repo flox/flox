@@ -314,8 +314,7 @@ interposer that ships today. It is one enforcement mechanism, not
 the only one. The same modes and the same `flox sandbox` UI are
 designed to sit over *pluggable* backends — kernel sandboxes,
 containers, micro-VMs — so we can benchmark performance,
-isolation, and DX and pick a default. The backend is chosen with
-the `FLOX_SANDBOX_BACKEND` environment variable.
+isolation, and DX and pick a default.
 
 List the roster and what each one can (claim to) do:
 
@@ -343,8 +342,16 @@ ways, in precedence order: the `--sandbox-backend` flag, the
 manifest (a project default) — e.g. `[options]` `sandbox-backend =
 "host-native"`.
 
-**`host-native` shows why the backend choice matters.** It wraps the
-whole activation in the macOS kernel sandbox (`sandbox-exec`). Unlike
+The headline tradeoff (macOS-arm64, warm `p50` startup): `libsandbox`
+**52 ms** · `host-native` **72 ms** · `srt` **111 ms** · `oci` (Apple
+Container) **668 ms**. Full three-axis numbers — startup, workload I/O,
+the isolation red-team, and DX parity — are in the Forge slice's
+`results/` (see the closing pointer).
+
+### `host-native` — the macOS kernel sandbox (no setup)
+
+`host-native` needs nothing installed: it wraps the whole activation in
+the macOS kernel sandbox (`sandbox-exec`), built into the OS. Unlike
 advisory `libsandbox`, it contains even SIP-protected system binaries —
 the exact gap §4 admitted. Watch the *same* read get blocked where
 `libsandbox` lets it through:
@@ -359,34 +366,29 @@ flox activate --sandbox enforce --sandbox-backend host-native -- \
   /bin/cat ~/.ssh/id_ed25519        # → cat: ...: Operation not permitted
 ```
 
-Selecting a backend that is **not yet wired** fails loudly, on
-purpose — it never silently falls back to libsandbox (that would make
-a benchmark lie about which mechanism it measured):
-
-```bash
-flox activate --sandbox enforce --sandbox-backend oci -- true
-```
-
-```
-❌ ERROR: Sandbox backend 'oci' is not yet wired into activation.
-Wired backends: 'libsandbox' (default) and 'host-native'. Run 'flox sandbox
-backends' to see status, or unset FLOX_SANDBOX_BACKEND.
-```
-
 > `host-native` is **deny-by-default for your home directory**: on an
 > allow-default base it denies reading the contents of — and writing
 > to — all of `$HOME` except the project and Flox's own state. So an
 > arbitrary file like `~/Documents/notes` is blocked too, not just the
 > known credential paths, and `.env` files stay secret even inside the
 > project. System and Nix reads (outside `$HOME`) stay open so flox
-> runs. A full-filesystem deny-default (also locking `/tmp` and other
-> users' homes) is a further follow-up; the current lossiness is what
-> `flox sandbox backends` declares.
+> runs. The red-team battery confirms it contains every filesystem
+> attack — reads (incl. SIP `/bin/cat`), overwrites, and new-file
+> creation. A full-filesystem deny-default (also locking `/tmp` and
+> other users' homes) is a further follow-up; the current lossiness is
+> what `flox sandbox backends` declares.
 
-**`srt` is the third wired backend** — Anthropic's sandbox-runtime, a
-third-party tool that drives the *same* kernel boundary (Seatbelt /
-bubblewrap) on **both** platforms and adds default-deny TCP egress that
-host-native doesn't. Flox generates an srt policy mirroring the
+### `srt` — Anthropic's sandbox-runtime (setup: install the tool)
+
+**Setup.** `srt` is a third-party tool that must be on PATH:
+
+```bash
+flox install sandbox-runtime    # provides `srt`
+```
+
+It drives the *same* kernel boundary (Seatbelt on macOS / bubblewrap on
+Linux) on **both** platforms and adds default-deny TCP egress that
+`host-native` doesn't. Flox generates an srt policy mirroring the
 deny-`$HOME` shape and re-execs under it:
 
 ```bash
@@ -394,14 +396,95 @@ flox activate --sandbox enforce --sandbox-backend srt -- cat ~/.ssh/id_ed25519
 # → cat: ...: Operation not permitted
 ```
 
-It needs the `srt` tool on PATH (`flox install sandbox-runtime`). Because
-its TCP egress is default-deny, activate a **realized** environment under
-it (network-fetching catalog calls would otherwise be blocked).
+Because its TCP egress is default-deny, activate a **realized**
+environment under it (cold catalog fetches would otherwise be blocked).
+Two known rough edges the red-team surfaced: srt's generated settings
+grant **blanket write to `/tmp`** (a file dropped there is not
+contained — to be tightened), and a dev `flox` binary that lives under
+`$HOME` can't be re-exec'd by the deny-`$HOME` profile (a real
+`/nix/store` install is outside `$HOME` and unaffected).
 
-As each backend lands, the same command starts working with no
-change to the surface above. The benchmark harness that scores the
-three tradeoffs across every backend lives in the Forge slice:
+### `oci` — Apple Container (macOS 26+): a real micro-VM
+
+`oci` is the container/micro-VM tier. It is **not yet wired into the
+`flox activate` seam** (so `flox sandbox backends` lists it
+`scaffolded`, and `--sandbox-backend oci` errors — see below), but the
+tier is real and benchmarkable **today** by driving Apple Container
+directly. It gives the strongest filesystem isolation in the roster:
+the host home is simply *absent* in the guest.
+
+**Setup (macOS 26+ / Apple silicon only).**
+
+```bash
+brew install container
+container system kernel set --recommended
+container system start
+```
+
+Building a Flox image needs a Docker- or Podman-compatible builder plus
+`skopeo` (Apple Container only loads OCI archives, not docker-archive):
+
+```bash
+flox install -D skopeo                       # build-time only
+flox containerize -f img.tar                 # needs Docker/Podman to cross-build on macOS
+skopeo --insecure-policy copy \
+  docker-archive:img.tar oci-archive:oci.tar:octest:latest
+container image load -i oci.tar
+```
+
+**Run it — the env boots in a per-container Linux micro-VM:**
+
+```bash
+container run --rm octest:latest -- sh -c 'echo "shell=$0"; uname -sm'
+# shell=/nix/store/…-bash-interactive-5.3p9/bin/bash
+# uname: Linux aarch64
+```
+
+**Isolation: the host filesystem is invisible** — nothing on the host is
+reachable unless you explicitly mount it, so there is nothing to deny:
+
+```bash
+container run --rm octest:latest -- ls /Users/you/.ssh
+# ls: cannot access '/Users/you/.ssh': No such file or directory
+```
+
+> **Caveats.** Two big ones. (1) **OS swap:** the guest is Linux, so an
+> interactive macOS user is running Linux packages, not their host
+> tools. (2) **Live-mounted projects are broken on macOS today:** the
+> flox activation runtime breaks content reads of host bind-mounts
+> inside the container — tracked as **DEV-130**
+> (https://linear.app/floxdotdev/issue/DEV-130), a general
+> flox-activation × macOS-container defect (reproduces under Docker
+> too). The benchmark bakes the project *into the image* to work around
+> it. And the per-`container run` **VM boot is ~668 ms** — an order of
+> magnitude over the host-process backends — though once booted the
+> guest fs is fast.
+
+### Selecting an unwired backend fails loudly, on purpose
+
+A backend that is not wired into activation never silently falls back to
+`libsandbox` — that would make a benchmark lie about which mechanism it
+measured. `nix` (the Nix build sandbox as an activation backend) is
+scaffolded but not yet wired, so:
+
+```bash
+flox activate --sandbox enforce --sandbox-backend nix -- true
+```
+
+```
+✘ ERROR: Sandbox backend 'nix' is not yet wired into activation.
+Wired backends: 'libsandbox' (default), 'host-native', and 'srt'. Run 'flox sandbox
+backends' to see status, or unset FLOX_SANDBOX_BACKEND.
+```
+
+(`oci` and `libkrun` print the same way — the container/micro-VM tiers
+are driven directly, as shown above, until they land behind the seam.)
+
+As each backend lands, the same `flox activate` command starts working
+with no change to the surface above. The benchmark harness that scores
+the three tradeoffs across every backend lives in the Forge slice:
 `slices/2026/06-sandboxed-activation-prototype/artifacts/`
 (`benchmark-plan.md`, `backend-roster.md`, `backend-contract.md`,
-`red-team-battery.md`, and the runnable `bench/` scripts).
+`red-team-battery.md`, the runnable `bench/` scripts, and the
+`results/` dataset).
 
