@@ -157,11 +157,14 @@ gen-unit-data-no-publish force="":
         export _FLOX_UNIT_TEST_RECORD="missing"
     fi
 
-    # Use remote services for non-publish tests
-    {{cargo_test_invocation}} --filterset 'not (test(providers::build::tests) | test(providers::publish) | test(commands::publish) | test(providers::catalog::tests::creates_new_catalog))'
-
-    # Extract latest package versions from production catalog for test assertions.
-    # These versions must match what's in the recorded mock YAML files.
+    # Extract latest package versions from the production catalog BEFORE
+    # running the tests. Several tests assert the resolved version against
+    # these values (via latest_prod_versions.json), so the file must reflect
+    # current prod before the recording run. If it is written afterward (as it
+    # was previously), a force-regen run after prod has drifted records the new
+    # version but asserts it against the stale file, fails, and aborts before
+    # the file is ever refreshed -- a chicken-and-egg that makes the regen
+    # impossible to complete in a single pass.
     echo "Extracting latest package versions from production catalog..."
     python_version=$(curl -s 'https://api.flox.dev/api/v1/catalog/packages/python3' | jq -r '.items[0].version')
     go_version=$(curl -s 'https://api.flox.dev/api/v1/catalog/packages/go' | jq -r '.items[0].version')
@@ -175,6 +178,9 @@ gen-unit-data-no-publish force="":
         '{python3: $python3, go: $go, poetry: $poetry, nodejs_20: $nodejs_20}' \
         > "{{TEST_DATA}}/unit_test_generated/latest_prod_versions.json"
     echo "Wrote latest_prod_versions.json with python3=$python_version, go=$go_version, poetry=$poetry_version, nodejs_20=$nodejs_20_version"
+
+    # Use remote services for non-publish tests
+    {{cargo_test_invocation}} --filterset 'not (test(providers::build::tests) | test(providers::publish) | test(commands::publish) | test(providers::catalog::tests::creates_new_catalog))'
 
 gen-unit-data-for-publish floxhub_repo_path force="":
     #!/usr/bin/env bash
