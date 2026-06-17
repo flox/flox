@@ -418,6 +418,7 @@ pub async fn start_services_with_new_process_compose(
         mode: Some(activate_mode),
         // Services never run sandboxed in this prototype.
         sandbox: None,
+        sandbox_backend: None,
         generation,
         // this isn't actually used because we pass invocation type below
         command: Some(CommandSelect::ExecCommand {
