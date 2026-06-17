@@ -1460,6 +1460,7 @@ dependencies = [
  "floxhub-client",
  "fslock",
  "futures",
+ "httpmock",
  "indent",
  "indicatif",
  "indoc",

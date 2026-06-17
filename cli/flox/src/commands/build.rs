@@ -1280,21 +1280,28 @@ mod test {
         );
     }
 
-    // --- Test B: base_nixpkgs_url_from_url_select wrapper via seeded MockClient ---
+    // --- Test B: base_nixpkgs_url_from_url_select wrapper via httpmock server ---
 
-    /// `Stability` variant: seeding the mock with `BaseCatalogInfo::new_mock()` and
-    /// calling with `BaseCatalogUrlSelect::Stability("not-default")` returns the URL
-    /// for the first page that carries "not-default" in the fixture.
+    /// `Stability` variant: serving `BaseCatalogInfo::new_mock()` from an
+    /// httpmock server and calling with
+    /// `BaseCatalogUrlSelect::Stability("not-default")` returns the URL for
+    /// the first page that carries "not-default" in the fixture.
     #[tokio::test]
     async fn base_nixpkgs_url_from_url_select_stability_returns_catalog_url() {
-        use flox_rust_sdk::providers::catalog::Response;
-        use flox_rust_sdk::providers::catalog::test_helpers::reset_mocks;
+        use floxhub_client::FloxhubClient;
+        use floxhub_client::client::test_helpers::client_config;
+        use httpmock::MockServer;
 
         let (mut flox, _temp_dir) = flox_instance();
 
-        reset_mocks(&mut flox.catalog_client, vec![Response::GetBaseCatalog(
-            BaseCatalogInfo::new_mock(),
-        )]);
+        let server = MockServer::start_async().await;
+        server.mock(|when, then| {
+            when.path("/api/v1/catalog/info/base-catalog");
+            then.status(200)
+                .json_body(serde_json::to_value(BaseCatalogInfo::new_mock()).unwrap());
+        });
+        flox.floxhub_client =
+            FloxhubClient::new(client_config(server.base_url().as_str())).unwrap();
 
         let result = base_nixpkgs_url_from_url_select(
             &flox,
@@ -1347,14 +1354,20 @@ mod test {
     /// converted to a `git+…?rev=…&shallow=1` flake ref string.
     #[tokio::test]
     async fn resolve_import_flake_ref_stability_flag_bare_attr_path() {
-        use flox_rust_sdk::providers::catalog::Response;
-        use flox_rust_sdk::providers::catalog::test_helpers::reset_mocks;
+        use floxhub_client::FloxhubClient;
+        use floxhub_client::client::test_helpers::client_config;
+        use httpmock::MockServer;
 
         let (mut flox, _temp_dir) = flox_instance();
 
-        reset_mocks(&mut flox.catalog_client, vec![Response::GetBaseCatalog(
-            BaseCatalogInfo::new_mock(),
-        )]);
+        let server = MockServer::start_async().await;
+        server.mock(|when, then| {
+            when.path("/api/v1/catalog/info/base-catalog");
+            then.status(200)
+                .json_body(serde_json::to_value(BaseCatalogInfo::new_mock()).unwrap());
+        });
+        flox.floxhub_client =
+            FloxhubClient::new(client_config(server.base_url().as_str())).unwrap();
 
         let result = Build::resolve_import_flake_ref(
             &flox,
@@ -1388,14 +1401,20 @@ mod test {
     /// (no conflict error), catalog is queried.
     #[tokio::test]
     async fn resolve_import_flake_ref_stability_flag_nixpkgs_prefixed_attr() {
-        use flox_rust_sdk::providers::catalog::Response;
-        use flox_rust_sdk::providers::catalog::test_helpers::reset_mocks;
+        use floxhub_client::FloxhubClient;
+        use floxhub_client::client::test_helpers::client_config;
+        use httpmock::MockServer;
 
         let (mut flox, _temp_dir) = flox_instance();
 
-        reset_mocks(&mut flox.catalog_client, vec![Response::GetBaseCatalog(
-            BaseCatalogInfo::new_mock(),
-        )]);
+        let server = MockServer::start_async().await;
+        server.mock(|when, then| {
+            when.path("/api/v1/catalog/info/base-catalog");
+            then.status(200)
+                .json_body(serde_json::to_value(BaseCatalogInfo::new_mock()).unwrap());
+        });
+        flox.floxhub_client =
+            FloxhubClient::new(client_config(server.base_url().as_str())).unwrap();
 
         let result = Build::resolve_import_flake_ref(
             &flox,
