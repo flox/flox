@@ -236,26 +236,69 @@ pub struct BuildEnvNix<A> {
     auth: A,
 }
 
+/// Build the base `nix build` command shared by all store-path operations.
+///
+/// Enables impure language features, applies the store URL override from
+/// `_FLOX_NIX_STORE_URL`, and requests build logs.
+fn base_command() -> Command {
+    let mut nix_build_command = nix_base_command();
+    // allow impure language features such as `builtins.storePath`,
+    // and use the auto store (which is used by the preceding `realise` command)
+    // TODO: formalize this in a config file,
+    // and potentially disable other user configs (allowing specific overrides)
+    nix_build_command.args(["--option", "pure-eval", "false"]);
+    apply_nix_store_url(&mut nix_build_command);
+    // we generally want to see more logs (we can always filter them out)
+    nix_build_command.arg("--print-build-logs");
+
+    nix_build_command
+}
+
+/// Fetch the given store paths via `nix build`, downloading from configured
+/// substituters or building from source if needed.
+///
+/// When `out_link` is `Some(prefix)`, passes `--out-link <prefix>` so the
+/// downloaded paths are registered as GC roots under that prefix.
+/// When `out_link` is `None`, passes `--no-link` instead.
+///
+/// Returns `true` if all paths were fetched successfully, `false` otherwise.
+pub fn substitute_store_paths(
+    paths: impl IntoIterator<Item = impl AsRef<OsStr>>,
+    out_link: Option<&Path>,
+) -> Result<bool, BuildEnvError> {
+    let paths: Vec<_> = paths.into_iter().collect();
+
+    let mut cmd = base_command();
+    cmd.arg("build");
+    match out_link {
+        Some(prefix) => {
+            cmd.arg("--out-link").arg(prefix);
+        },
+        None => {
+            cmd.arg("--no-link");
+        },
+    }
+    cmd.args(paths);
+
+    debug!(cmd=%cmd.display(), "trying to fetch store paths");
+
+    let output = cmd.output().map_err(BuildEnvError::CallNixBuild)?;
+    let success = output.status.success();
+    if !success {
+        debug!(
+            stderr = %String::from_utf8_lossy(&output.stderr),
+            "store path fetch failed"
+        );
+    }
+    Ok(success)
+}
+
 impl<A> BuildEnvNix<A>
 where
     A: AuthProvider,
 {
     pub fn new(auth: A) -> BuildEnvNix<A> {
         BuildEnvNix { auth }
-    }
-
-    fn base_command() -> Command {
-        let mut nix_build_command = nix_base_command();
-        // allow impure language features such as `builtins.storePath`,
-        // and use the auto store (which is used by the preceding `realise` command)
-        // TODO: formalize this in a config file,
-        // and potentially disable other user configs (allowing specific overrides)
-        nix_build_command.args(["--option", "pure-eval", "false"]);
-        apply_nix_store_url(&mut nix_build_command);
-        // we generally want to see more logs (we can always filter them out)
-        nix_build_command.arg("--print-build-logs");
-
-        nix_build_command
     }
 
     /// Realise all store paths of packages that are installed to the environment,
@@ -582,7 +625,7 @@ where
 
         debug!(count = missing.len(), "substituting store paths in batch");
 
-        let mut cmd = Self::base_command();
+        let mut cmd = base_command();
         cmd.arg("build")
             .arg("--no-link")
             .arg("--keep-going")
@@ -718,7 +761,7 @@ where
         )
         .entered();
 
-        let mut nix_build_command = Self::base_command();
+        let mut nix_build_command = base_command();
 
         nix_build_command.args(["--option", "extra-plugin-files", &*NIX_PLUGINS]);
 
@@ -771,7 +814,7 @@ where
             return Ok(());
         }
 
-        let mut nix_build_command = Self::base_command();
+        let mut nix_build_command = base_command();
 
         // naïve url construction
         let installable = {
@@ -853,24 +896,7 @@ where
     fn try_substitute_store_paths(
         paths: impl IntoIterator<Item = impl AsRef<OsStr>>,
     ) -> Result<bool, BuildEnvError> {
-        let paths: Vec<_> = paths.into_iter().collect();
-
-        let mut cmd = Self::base_command();
-        cmd.arg("build");
-        cmd.arg("--no-link");
-        cmd.args(paths);
-
-        debug!(cmd=%cmd.display(), "trying to fetch store paths");
-
-        let output = cmd.output().map_err(BuildEnvError::CallNixBuild)?;
-        let success = output.status.success();
-        if !success {
-            debug!(
-                stderr = %String::from_utf8_lossy(&output.stderr),
-                "store path fetch failed"
-            );
-        }
-        Ok(success)
+        substitute_store_paths(paths, None)
     }
 
     /// Build the environment by evaluating and building
@@ -892,7 +918,7 @@ where
         service_config_path: Option<PathBuf>,
         out_link_prefix: Option<&Path>,
     ) -> Result<BuildEnvOutputs, BuildEnvError> {
-        let mut nix_build_command = Self::base_command();
+        let mut nix_build_command = base_command();
         nix_build_command.args(["build", "--offline", "--json"]);
         if let Some(prefix) = out_link_prefix {
             nix_build_command.arg("--out-link").arg(prefix);

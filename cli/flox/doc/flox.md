@@ -56,6 +56,9 @@ sharing environments, and administration.
 `deactivate`
 :   Deactivate the current environment.
 
+`run`
+:   Run a command from a Flox Catalog package without installing it.
+
 `search`
 :   Search for system or library packages to install.
 
@@ -127,6 +130,7 @@ sharing environments, and administration.
 
 [`flox-init(1)`](./flox-init.md),
 [`flox-activate(1)`](./flox-activate.md),
+[`flox-run(1)`](./flox-run.md),
 [`flox-install(1)`](./flox-install.md),
 [`flox-uninstall(1)`](./flox-uninstall.md),
 [`flox-upgrade(1)`](./flox-upgrade.md),
