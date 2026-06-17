@@ -41,6 +41,7 @@ pub struct BranchInfo {
     pub description: String,
 }
 
+#[derive(Clone, Debug, PartialEq)]
 pub struct StatusInfo {
     pub ref_: Option<String>,
     pub rev: String,
@@ -987,7 +988,7 @@ impl GitProvider for GitCommandProvider {
             command.arg("HEAD");
             let ref_output_result = GitCommandProvider::run_command(&mut command);
             match ref_output_result {
-                Ok(ref_) => Some(ref_.to_string_lossy().into_owned()),
+                Ok(ref_) => Some(ref_.to_string_lossy().trim().to_string()),
                 Err(GitCommandError::BadExit(128, _, stderr))
                     if stderr == "fatal: ref HEAD is not a symbolic ref" =>
                 {
@@ -1657,18 +1658,26 @@ pub mod tests {
         let ct = repo.rev_count("HEAD").unwrap();
         let date = repo.rev_date("HEAD").unwrap();
 
+        let expected = StatusInfo {
+            ref_: Some("refs/heads/branch_1".to_string()),
+            rev: hash_1,
+            rev_count: ct,
+            rev_date: date,
+            is_dirty: false,
+        };
+
         let status = repo.status().unwrap();
-        assert_eq!(status.rev, hash_1);
-        assert_eq!(status.rev_count, ct);
-        assert_eq!(status.rev_date, date);
-        assert_eq!(status.is_dirty, false);
+        assert_eq!(status, expected);
 
         // touch a file
         let new_file_path = repo.path.join(new_filename);
         fs::write(&new_file_path, "new content").unwrap();
 
         let status = repo.status().unwrap();
-        assert_eq!(status.is_dirty, true);
+        assert_eq!(status, StatusInfo {
+            is_dirty: true,
+            ..expected
+        });
     }
 
     #[test]
