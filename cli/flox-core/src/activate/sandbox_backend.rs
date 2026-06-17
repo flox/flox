@@ -199,9 +199,11 @@ impl SandboxBackend {
                 domain_egress: true,
                 per_op: true,
                 fs_virtualized: false,
+                // Wired on both platforms (srt drives sandbox-exec on macOS,
+                // bubblewrap on Linux); requires the `srt` tool on PATH.
                 macos: Native,
                 linux: Native,
-                status: Scaffolded,
+                status: Implemented,
             },
             SandboxBackend::Oci => BackendCapabilities {
                 backend: self,
@@ -312,7 +314,7 @@ mod tests {
     }
 
     #[test]
-    fn implemented_backends_are_libsandbox_and_host_native() {
+    fn implemented_backends_are_libsandbox_host_native_and_srt() {
         let implemented: Vec<SandboxBackend> = SandboxBackend::ALL
             .into_iter()
             .filter(|b| b.capabilities().status == IntegrationStatus::Implemented)
@@ -320,6 +322,7 @@ mod tests {
         assert_eq!(implemented, vec![
             SandboxBackend::Libsandbox,
             SandboxBackend::HostNative,
+            SandboxBackend::Srt,
         ]);
     }
 

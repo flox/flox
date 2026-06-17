@@ -328,7 +328,7 @@ BACKEND       BOUNDARY     MACOS    LINUX     ENFORCES  LIVE-ASK  STATUS
 libsandbox    advisory     native   native    no        yes       implemented
 nix           host-kernel  native   native    yes       no        scaffolded
 host-native   host-kernel  native   native    yes       no        implemented
-srt           host-kernel  native   native    yes       yes       scaffolded
+srt           host-kernel  native   native    yes       yes       implemented
 oci           container    linux-vm  native    yes       no        scaffolded
 libkrun       hypervisor   linux-vm  native    yes       no        planned
 
@@ -382,6 +382,21 @@ backends' to see status, or unset FLOX_SANDBOX_BACKEND.
 > runs. A full-filesystem deny-default (also locking `/tmp` and other
 > users' homes) is a further follow-up; the current lossiness is what
 > `flox sandbox backends` declares.
+
+**`srt` is the third wired backend** — Anthropic's sandbox-runtime, a
+third-party tool that drives the *same* kernel boundary (Seatbelt /
+bubblewrap) on **both** platforms and adds default-deny TCP egress that
+host-native doesn't. Flox generates an srt policy mirroring the
+deny-`$HOME` shape and re-execs under it:
+
+```bash
+flox activate --sandbox enforce --sandbox-backend srt -- cat ~/.ssh/id_ed25519
+# → cat: ...: Operation not permitted
+```
+
+It needs the `srt` tool on PATH (`flox install sandbox-runtime`). Because
+its TCP egress is default-deny, activate a **realized** environment under
+it (network-fetching catalog calls would otherwise be blocked).
 
 As each backend lands, the same command starts working with no
 change to the surface above. The benchmark harness that scores the
