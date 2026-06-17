@@ -172,19 +172,6 @@ pub struct NixPrefetchResult {
     store_path: PathBuf,
 }
 
-impl NixPrefetchResult {
-    pub fn locked_flakeref(&self) -> NixFlakeref {
-        self.locked
-            .clone()
-            .try_into()
-            .expect("valid flakeref by construction")
-    }
-
-    pub fn store_path(&self) -> &Path {
-        &self.store_path
-    }
-}
-
 /// Lock a flakeref url using `nix flake prefetch`.
 /// This resolves urls, downloads the source and returns
 /// a locked source type as well as source information,
