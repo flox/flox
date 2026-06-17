@@ -1,8 +1,9 @@
 use std::path::PathBuf;
 
-use anyhow::{Context, anyhow};
+use anyhow::Context;
 use clap::Args;
 use flox_core::activations::{read_activations_json, state_json_path, write_activations_json};
+use tracing::debug;
 
 use crate::Error;
 
@@ -36,11 +37,18 @@ impl DetachArgs {
             })?;
 
         let Some(mut state) = activation_state_opt else {
-            return Err(anyhow!(
-                "No activation state found at '{}'; cannot detach PID {}",
-                activations_json_path.display(),
-                self.pid
-            ));
+            // The activation's executive removes the whole state directory as
+            // soon as the last PID detaches. The prompt hook emits this `detach`
+            // unconditionally and races that async cleanup, so a missing state
+            // file means the work is already done — the PID is no longer
+            // attached. Treat it as a no-op rather than surfacing a spurious
+            // error on the user's prompt.
+            debug!(
+                pid = self.pid,
+                path = %activations_json_path.display(),
+                "no activation state to detach from; assuming already cleaned up"
+            );
+            return Ok(());
         };
 
         let empty_start_id = state.detach(self.pid)?;
@@ -108,6 +116,24 @@ mod test {
             updated.attached_pids_is_empty(),
             "PID should be removed from state.json after detach"
         );
+    }
+
+    /// Detaching when the state file is already gone (the executive cleaned it
+    /// up first) is a no-op success, not an error — the prompt hook races that
+    /// async cleanup.
+    #[test]
+    fn detach_with_missing_state_is_ok() {
+        let tmp = TempDir::new().unwrap();
+        let dot_flox_path = tmp.path().join(".flox");
+        let activation_state_dir = activation_state_dir_path(tmp.path(), &dot_flox_path);
+        // No state.json is ever written.
+
+        let args = DetachArgs {
+            activation_state_dir,
+            pid: 12345,
+        };
+        args.handle()
+            .expect("detach should be a no-op when state is missing");
     }
 
     /// When the last PID overall detaches, its start state dir is removed
