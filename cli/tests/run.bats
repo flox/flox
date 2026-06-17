@@ -104,7 +104,7 @@ teardown() {
 # ---------------------------------------------------------------------------- #
 
 @test "'flox run' reports package not found with search hint" {
-  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/failed_resolution.yaml"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/run/failed_resolution.yaml"
   run "$FLOX_BIN" run -p nonexistent-xyz-package nonexistent-xyz-package
   assert_failure
   assert_output --partial "not found"
@@ -125,7 +125,7 @@ teardown() {
 @test "help-passthrough: '--help' after command is NOT shown as flox help (cheap)" {
   # Using a mock that returns not-found: if --help were intercepted by flox,
   # this would exit 0 (flox help) instead of failing with "not found".
-  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/failed_resolution.yaml"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/run/failed_resolution.yaml"
   run "$FLOX_BIN" run -p nonexistent-xyz-package nonexistent-xyz-package --help
   assert_failure
   assert_output --partial "not found"
@@ -142,7 +142,7 @@ teardown() {
 
 # bats test_tags=run:store
 @test "flox run -p hello hello executes and succeeds [run:store]" {
-  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/run/hello.yaml"
   run "$FLOX_BIN" run -p hello hello
   assert_success
   assert_output --partial "Hello"
@@ -150,7 +150,7 @@ teardown() {
 
 # bats test_tags=run:store
 @test "flox run -p hello hello -g 'hi flox' passes args verbatim [run:store]" {
-  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/run/hello.yaml"
   run "$FLOX_BIN" run -p hello hello -g "hi flox"
   assert_success
   assert_output --partial "hi flox"
@@ -158,7 +158,7 @@ teardown() {
 
 # bats test_tags=run:store
 @test "flox run exit code is forwarded: hello --bogus-flag fails [run:store]" {
-  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/run/hello.yaml"
   run "$FLOX_BIN" run -p hello hello --bogus-flag
   assert_failure
 }
@@ -167,7 +167,7 @@ teardown() {
 @test "flox run -- hello --version passes --version to command [run:store]" {
   # Without `--`, flox intercepts --version (Version::check scans all args).
   # With `--`, --version reaches the command.
-  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/run/hello.yaml"
   run "$FLOX_BIN" run -p hello -- hello --version
   assert_success
   # GNU hello prints its version to stdout
@@ -176,7 +176,7 @@ teardown() {
 
 # bats test_tags=run:store
 @test "flox run -p hello -- hello --help shows hello's help [run:store]" {
-  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/run/hello.yaml"
   run "$FLOX_BIN" run -p hello -- hello --help
   assert_success
   # GNU Hello's help mentions its own name
@@ -187,7 +187,7 @@ teardown() {
 
 # bats test_tags=run:store
 @test "stable GC root: second run -p hello hello skips download [run:store]" {
-  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/run/hello.yaml"
   # First run: populates the GC root.
   run "$FLOX_BIN" run -p hello hello
   assert_success
