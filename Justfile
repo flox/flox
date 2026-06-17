@@ -112,6 +112,59 @@ version:
 # Build the binaries
 @build: build-cli
 
+# ---------------------------------------------------------------------------- #
+# Agent-friendly build & warm helpers
+#
+# These exist for AUTOMATED agents (e.g. Forge) building flox in a sandbox.
+# A long cargo build run as a backgrounded command + polled ("is it done
+# yet?", `tail`, `find target`, `sleep && cat`) costs one agent *turn* per
+# poll, and every turn re-processes the whole transcript — a single build can
+# balloon to 100+ turns and blow the session cost cap even when the build is
+# fine. A human in the dev shell never hits this; an agent does.
+
+# Build (or run any build/test target) to completion in ONE blocking call,
+# capturing all output to a log file and printing only a compact pass/fail
+# summary. The full log stays on disk for after-the-fact inspection. A blocking
+# foreground command costs the agent no tokens while it runs — only its small
+# summary output counts — so this replaces dozens of polling turns with one.
+#
+#   just agent-build                 # build the flox binary (build-cli)
+#   just agent-build build-release   # any build target
+#   just agent-build test-cli        # ... or a test target
+#
+# Override the log path with AGENT_BUILD_LOG (default /tmp/agent-build.log).
+# Mirrors CI's invocation (`nix develop -L --no-update-lock-file --command just …`).
+
+# Build/test to completion in one blocking call; log to a file, print pass/fail
+agent-build target="build-cli":
+    #!/usr/bin/env bash
+    set -uo pipefail
+    log="${AGENT_BUILD_LOG:-/tmp/agent-build.log}"
+    : > "$log"
+    echo "agent-build: 'just {{target}}' in the dev shell -> $log (one blocking call)…"
+    start="$(date +%s)"
+    if nix {{nix_options}} develop -L --no-update-lock-file \
+            --command just {{target}} >>"$log" 2>&1; then
+        echo "AGENT_BUILD OK — just {{target}} in $(($(date +%s)-start))s (log: $log)"
+    else
+        rc=$?
+        echo "AGENT_BUILD FAILED (exit $rc) — just {{target}} after $(($(date +%s)-start))s"
+        echo "log: $log  (last 50 lines follow)"
+        echo "------------------------------------------------------------------"
+        tail -n 50 "$log"
+        exit "$rc"
+    fi
+
+# Pre-realize the Rust dev shell and pre-fetch crate deps so the FIRST
+# `just agent-build` / `nix develop` is fast (no cold Nix realization or crate
+# download mid-build). Intended to run once at runner/container startup, before
+# any agent session. Safe to run repeatedly — a no-op once warm.
+
+# Pre-realize the dev shell + pre-fetch crates so the first build is fast
+@agent-warm:
+    nix {{nix_options}} develop -L --no-update-lock-file \
+        --command bash -c 'cargo fetch || true'
+
 # Build flox with release profile
 @build-release: build-nix-plugins build-package-builder build-activation-scripts build-buildenv
     cargo build -p flox -r
