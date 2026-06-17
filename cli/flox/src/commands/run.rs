@@ -363,8 +363,6 @@ async fn exec_run(run_args: RunArgs, flox: &Flox) -> Result<()> {
         descriptors: vec![descriptor],
     };
 
-    message::plain(format!("Resolving '{pkg_spec}'..."));
-
     let mut resolved_groups = flox
         .floxhub_client
         .resolve(vec![package_group])
