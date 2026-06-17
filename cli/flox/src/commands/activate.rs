@@ -16,7 +16,7 @@ use flox_core::activate::context::{
     InvocationType,
     SandboxMode,
 };
-use flox_core::activate::sandbox_backend::SandboxBackend;
+use flox_core::activate::sandbox_backend::{FLOX_SANDBOX_BACKEND_VAR, SandboxBackend};
 use flox_core::activate::vars::{FLOX_ACTIVATIONS_BIN, FLOX_ACTIVATIONS_VERBOSITY_VAR};
 use flox_core::activations::activation_state_dir_path;
 use flox_core::data::System;
@@ -429,7 +429,10 @@ impl ActivateOptions {
         } else if sandbox_mode == SandboxMode::Off {
             sandbox_mode
         } else {
-            match resolve_sandbox_backend(self.sandbox_backend)? {
+            match resolve_sandbox_backend(
+                self.sandbox_backend,
+                manifest.as_latest_schema().options.sandbox_backend,
+            )? {
                 SandboxBackend::Libsandbox => sandbox_mode,
                 SandboxBackend::HostNative => {
                     // Re-exec under the OS sandbox; never returns on success.
@@ -1027,13 +1030,23 @@ pub fn is_allowed(config: &Config, concrete_environment: &ConcreteEnvironment) -
 /// again nor also applies libsandbox while running inside an OS-sandbox wrap.
 const WRAPPED_MARKER_VAR: &str = "_FLOX_SANDBOX_WRAPPED";
 
-/// Resolve the sandbox backend: the `--sandbox-backend` flag wins, else
-/// `FLOX_SANDBOX_BACKEND`, else the default (`libsandbox`).
-fn resolve_sandbox_backend(flag: Option<SandboxBackend>) -> Result<SandboxBackend> {
-    match flag {
-        Some(backend) => Ok(backend),
-        None => SandboxBackend::from_env().map_err(|err| anyhow::anyhow!("{err}")),
+/// Resolve the sandbox backend, in precedence order: the `--sandbox-backend`
+/// flag, the `FLOX_SANDBOX_BACKEND` environment variable, the manifest
+/// `options.sandbox-backend`, then the default (`libsandbox`).
+fn resolve_sandbox_backend(
+    flag: Option<SandboxBackend>,
+    manifest: Option<SandboxBackend>,
+) -> Result<SandboxBackend> {
+    if let Some(backend) = flag {
+        return Ok(backend);
     }
+    if let Some(value) = std::env::var_os(FLOX_SANDBOX_BACKEND_VAR) {
+        let value = value.to_string_lossy();
+        if !value.is_empty() {
+            return value.parse().map_err(|err| anyhow::anyhow!("{err}"));
+        }
+    }
+    Ok(manifest.unwrap_or_default())
 }
 
 /// Re-exec the current `flox activate` invocation under the host-native OS

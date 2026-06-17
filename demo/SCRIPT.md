@@ -337,8 +337,11 @@ Only 'implemented' backends are wired into activation today.
 ```
 
 The default backend reproduces today's behavior — the whole demo
-above is `FLOX_SANDBOX_BACKEND=libsandbox`. Select a backend with
-the env var or the `--sandbox-backend` flag.
+above is `FLOX_SANDBOX_BACKEND=libsandbox`. Select a backend three
+ways, in precedence order: the `--sandbox-backend` flag, the
+`FLOX_SANDBOX_BACKEND` env var, or `options.sandbox-backend` in the
+manifest (a project default) — e.g. `[options]` `sandbox-backend =
+"host-native"`.
 
 **`host-native` shows why the backend choice matters.** It wraps the
 whole activation in the macOS kernel sandbox (`sandbox-exec`). Unlike

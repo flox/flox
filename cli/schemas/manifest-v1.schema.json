@@ -965,6 +965,17 @@
           ],
           "description": "The sandbox mode applied when the environment is activated\n(`off`, `warn`, `enforce`, or `prompt`). An explicit `--sandbox` flag\non `flox activate` takes precedence over this setting."
         },
+        "sandbox-backend": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SandboxBackend"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The sandbox enforcement backend used when the environment is activated\n(`libsandbox`, `nix`, `host-native`, `srt`, `oci`, or `libkrun`). The\n`--sandbox-backend` flag on `flox activate` and the\n`FLOX_SANDBOX_BACKEND` environment variable take precedence over this\nsetting."
+        },
         "semver": {
           "$ref": "#/$defs/SemverOptions",
           "description": "Options that control how semver versions are resolved."
@@ -1376,6 +1387,41 @@
         "Always"
       ],
       "type": "string"
+    },
+    "SandboxBackend": {
+      "description": "The enforcement mechanism that applies the sandbox policy for an activation.",
+      "oneOf": [
+        {
+          "const": "libsandbox",
+          "description": "Advisory libc interposition (`LD_PRELOAD` / `DYLD_INSERT_LIBRARIES`).\nThe engine that ships today, and the default.",
+          "type": "string"
+        },
+        {
+          "const": "nix",
+          "description": "The Nix build sandbox (sandbox-exec on macOS, namespaces + seccomp on\nLinux) adapted as an activation backend.",
+          "type": "string"
+        },
+        {
+          "const": "host-native",
+          "description": "Host-native OS sandbox: Seatbelt / `sandbox-exec` on macOS, bubblewrap +\nLandlock on Linux.",
+          "type": "string"
+        },
+        {
+          "const": "srt",
+          "description": "Anthropic sandbox-runtime (`srt`): a host-native OS sandbox plus a\nbundled egress proxy, driven by a policy close to `grants.toml`.",
+          "type": "string"
+        },
+        {
+          "const": "oci",
+          "description": "OCI container: Apple Container on macOS, Podman on Linux.",
+          "type": "string"
+        },
+        {
+          "const": "libkrun",
+          "description": "Embeddable micro-VM (libkrun): hypervisor isolation with a guest kernel\nvia libkrunfw (Hypervisor.framework on macOS, KVM on Linux).",
+          "type": "string"
+        }
+      ]
     },
     "SandboxMode": {
       "description": "The filesystem-mediation level requested for an activation.\n\n`Off` is the default and matches the historical behavior where no\nsandbox is applied. `Warn`, `Enforce`, and `Prompt` correspond to the\nlibsandbox levels of the same name; this type only carries the\nselection through the CLI and activation context — it does not by\nitself change libsandbox behavior.",

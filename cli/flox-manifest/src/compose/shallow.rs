@@ -228,6 +228,12 @@ impl ShallowMerger {
             high_priority.sandbox,
         );
 
+        let (merged_sandbox_backend, sandbox_backend_warning) = shallow_merge_options(
+            root_key.push("sandbox-backend"),
+            low_priority.sandbox_backend,
+            high_priority.sandbox_backend,
+        );
+
         let merged = Options {
             systems: merged_systems,
             allow: Allows {
@@ -240,6 +246,7 @@ impl ShallowMerger {
             },
             cuda_detection: merged_cuda_detection,
             sandbox: merged_sandbox,
+            sandbox_backend: merged_sandbox_backend,
             activate: ActivateOptions {
                 mode: merged_activate_mode,
             },
@@ -254,6 +261,7 @@ impl ShallowMerger {
                 allow_pre_releases_warning,
                 cuda_detection_warning,
                 sandbox_warning,
+                sandbox_backend_warning,
                 systems_warning,
             ]
             .into_iter()
@@ -554,10 +562,11 @@ mod tests {
             let semver = SemverOptions { allow_pre_releases: options2.semver.allow_pre_releases.or(options1.semver.allow_pre_releases) };
             let cuda_detection = options2.cuda_detection.or(options1.cuda_detection);
             let sandbox = options2.sandbox.or(options1.sandbox);
+            let sandbox_backend = options2.sandbox_backend.or(options1.sandbox_backend);
             let activate = ActivateOptions {
                 mode: options2.activate.mode.or(options1.activate.mode),
             };
-            let expected = Options { systems, allow, semver, cuda_detection, sandbox, activate };
+            let expected = Options { systems, allow, semver, cuda_detection, sandbox, sandbox_backend, activate };
             prop_assert_eq!(merged, expected);
         }
 
