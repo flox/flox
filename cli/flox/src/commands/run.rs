@@ -432,13 +432,17 @@ async fn exec_run(run_args: RunArgs, flox: &Flox) -> Result<()> {
 
     let gc_root_prefix = gc_root_dir.join(format!("{}.{}", flox.system, attr_path));
 
-    message::plain(format!("Downloading '{pkg_spec}'..."));
-
-    let ok = substitute_store_paths(&store_paths, Some(&gc_root_prefix))
-        .map_err(|e| RunError::Substitute(pkg_spec.clone(), e))?;
-
-    if !ok {
-        return Err(RunError::DownloadFailed(pkg_spec.clone()).into());
+    // Skip download if all store paths are already present on disk. Nix store
+    // paths are content-addressed, so existence implies correctness. The GC
+    // root registered on the first run keeps them from being collected.
+    let all_present = store_paths.iter().all(|p| Path::new(p).exists());
+    if !all_present {
+        message::plain(format!("Downloading '{pkg_spec}'..."));
+        let ok = substitute_store_paths(&store_paths, Some(&gc_root_prefix))
+            .map_err(|e| RunError::Substitute(pkg_spec.clone(), e))?;
+        if !ok {
+            return Err(RunError::DownloadFailed(pkg_spec.clone()).into());
+        }
     }
 
     // 7. Locate the executable in bin/ then sbin/ of all outputs.
