@@ -37,7 +37,7 @@ pub(crate) fn build_lock_from_locked_inputs(
         builders
             .entry(CatalogId(catalog))
             .or_insert_with(PackageTreeBuilder::new)
-            .add_package_source(attr_path, build_type, serde_json::to_value(source)?)?;
+            .add_package_source(attr_path, build_type, source.into())?;
     }
 
     let catalogs = builders

@@ -6,10 +6,9 @@ use std::collections::BTreeMap;
 use anyhow::Result;
 use floxhub_client::BuildType;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use tracing::warn;
 
-use super::flakeref::NixFlakeref;
+use super::flakeref::{NixFlakeref, RawNixFlakerefAttrs};
 
 /// Represents a node in the package tree - either a package set or an individual package
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
@@ -22,15 +21,9 @@ pub enum PackageTreeNode {
     /// An individual package (leaf node)
     Package {
         build_type: BuildType,
-        /// The package's locked nix source ref, as a raw JSON value.
-        ///
-        /// Stored verbatim. For catalog `/build-inputs/lookup` results
-        /// ([PackageTreeBuilder::add_package_source]) the source is already
-        /// locked server-side and is carried through without a nix call.
-        /// [PackageTreeBuilder::add_package] instead supplies the parsed value
-        /// of a [NixFlakeref] (which is not [serde::Serialize], hence a [Value]
-        /// here rather than the typed ref).
-        source: Value,
+        /// The package's locked source ref, stored verbatim. See
+        /// [RawNixFlakerefAttrs] for the invariant it carries.
+        source: RawNixFlakerefAttrs,
     },
 }
 
@@ -61,7 +54,7 @@ impl PackageTreeBuilder {
         &mut self,
         attr_path: Vec<String>,
         build_type: BuildType,
-        source: Value,
+        source: RawNixFlakerefAttrs,
     ) -> Result<()> {
         let Some((final_attribute, parent_attributes)) = attr_path.split_last() else {
             anyhow::bail!("Empty attribute path");
@@ -153,7 +146,11 @@ impl PackageTreeBuilder {
         source: NixFlakeref,
     ) -> Result<()> {
         // The parsed flake reference is the source value stored at the leaf.
-        self.add_package_source(attr_path, build_type, source.as_parsed().clone())
+        self.add_package_source(
+            attr_path,
+            build_type,
+            RawNixFlakerefAttrs::new_unchecked(source.as_parsed().clone()),
+        )
     }
 }
 
@@ -161,7 +158,7 @@ impl PackageTreeBuilder {
 mod tests {
 
     use floxhub_client::BuildType;
-    use serde_json::json;
+    use serde_json::{Value, json};
 
     use super::*;
 
@@ -429,28 +426,22 @@ mod tests {
 
         assert_eq!(tree, expected_tree);
 
-        // Verify the source is preserved correctly by checking the expected tree
-        if let PackageTreeNode::PackageSet { entries: children } = &expected_tree {
-            if let Some(PackageTreeNode::Package { source, .. }) = children.get("test") {
-                // Verify the source is a proper Value
-                assert!(source.is_object());
-
-                // Verify it contains expected fields
-                let source_obj = source.as_object().unwrap();
-                assert!(source_obj.contains_key("type"));
-                assert!(source_obj.contains_key("url"));
-                assert!(source_obj.contains_key("rev"));
-                assert_eq!(source_obj.get("url").unwrap(), "https://example.com");
-                assert_eq!(
-                    source_obj.get("rev").unwrap(),
-                    "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
-                );
-            } else {
-                panic!("Expected package node");
-            }
-        } else {
-            panic!("Expected package set node");
-        }
+        // The source is stored verbatim as the locked flakeref attrs.
+        let PackageTreeNode::PackageSet { entries: children } = &tree else {
+            panic!("expected package set node");
+        };
+        let Some(PackageTreeNode::Package { source, .. }) = children.get("test") else {
+            panic!("expected package node");
+        };
+        assert_eq!(
+            source,
+            &RawNixFlakerefAttrs::new_unchecked(json!({
+                "type": "git",
+                "url": "https://example.com",
+                "rev": "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
+                "dir": "foo/bar/.flox"
+            }))
+        );
     }
 
     #[test]
