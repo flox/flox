@@ -370,11 +370,15 @@ Wired backends: 'libsandbox' (default) and 'host-native'. Run 'flox sandbox
 backends' to see status, or unset FLOX_SANDBOX_BACKEND.
 ```
 
-> `host-native` is a v1: it denies the sensitive credential set
-> (read + write) on top of an allow-default base, so it contains
-> credential theft and SIP-binary bypass but not arbitrary reads yet.
-> A deny-default allowlist (stronger) is a tracked follow-up. The
-> current lossiness is what `flox sandbox backends` declares.
+> `host-native` is **deny-by-default for your home directory**: on an
+> allow-default base it denies reading the contents of — and writing
+> to — all of `$HOME` except the project and Flox's own state. So an
+> arbitrary file like `~/Documents/notes` is blocked too, not just the
+> known credential paths, and `.env` files stay secret even inside the
+> project. System and Nix reads (outside `$HOME`) stay open so flox
+> runs. A full-filesystem deny-default (also locking `/tmp` and other
+> users' homes) is a further follow-up; the current lossiness is what
+> `flox sandbox backends` declares.
 
 As each backend lands, the same command starts working with no
 change to the surface above. The benchmark harness that scores the
