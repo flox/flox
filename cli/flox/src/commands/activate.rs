@@ -477,7 +477,7 @@ impl ActivateOptions {
                 SandboxBackend::Libsandbox => sandbox_mode,
                 SandboxBackend::HostNative => {
                     // Re-exec under the OS sandbox; never returns on success.
-                    wrap_activation_host_native()?;
+                    wrap_activation_host_native(&concrete_environment.dot_flox_path())?;
                     unreachable!("wrap_activation_host_native execs or errors");
                 },
                 other => bail!(
@@ -1152,15 +1152,16 @@ fn resolve_sandbox_backend(flag: Option<SandboxBackend>) -> Result<SandboxBacken
 /// sandbox, then never return (the inner activation runs confined). Returns the
 /// error on a failure to launch, or on an unsupported platform.
 ///
-/// macOS uses `sandbox-exec` with a generated SBPL profile. The profile is
-/// permissive at the base (`allow default`) so flox and the user's tools run,
-/// with targeted denials that enforce the policy a benchmark cares about: the
-/// sensitive credential locations are unreadable and unwritable — enforced even
-/// against a SIP-protected system binary that bypasses advisory libsandbox,
-/// which is the containment edge this backend exists to measure. A deny-default
-/// allowlist (stronger) is a follow-up; the current lossiness is declared in
-/// `flox sandbox backends`.
-fn wrap_activation_host_native() -> Result<()> {
+/// macOS uses `sandbox-exec` with a generated SBPL profile that is permissive
+/// at the base (`allow default`, so flox and the user's tools run) but denies
+/// reading the *contents* of, and writing to, the user's entire home directory
+/// — the agent's primary secret/data surface — except the project being
+/// activated and Flox's own state. Metadata (stat/traverse) stays allowed so
+/// paths into the re-allowed subdirs resolve; reads outside `$HOME` (system,
+/// Nix) are untouched. Enforcement holds even against SIP-protected system
+/// binaries that bypass advisory libsandbox. The Linux (bubblewrap + Landlock)
+/// path is not yet wired.
+fn wrap_activation_host_native(dot_flox_path: &Path) -> Result<()> {
     #[cfg(target_os = "macos")]
     {
         use std::os::unix::process::CommandExt;
@@ -1170,7 +1171,12 @@ fn wrap_activation_host_native() -> Result<()> {
         })?;
         // SBPL matches the realpath, so canonicalize (/var -> /private/var).
         let home = std::fs::canonicalize(&home).unwrap_or(home);
-        let profile = host_native_profile(&home);
+        // Re-allow the project root (the parent of its `.flox`) so the agent can
+        // read and write the code it is working on.
+        let dot_flox =
+            std::fs::canonicalize(dot_flox_path).unwrap_or_else(|_| dot_flox_path.to_path_buf());
+        let project = dot_flox.parent().unwrap_or(&dot_flox).to_path_buf();
+        let profile = host_native_profile(&home, &project);
 
         let flox_exe = std::env::current_exe()
             .map_err(|err| anyhow::anyhow!("Cannot locate the flox binary to re-exec: {err}"))?;
@@ -1190,6 +1196,7 @@ fn wrap_activation_host_native() -> Result<()> {
     }
     #[cfg(not(target_os = "macos"))]
     {
+        let _ = dot_flox_path;
         bail!(
             "The 'host-native' sandbox backend is only wired on macOS (sandbox-exec).\nThe Linux backend (bubblewrap + Landlock) is not yet implemented. Unset FLOX_SANDBOX_BACKEND or use '--sandbox-backend libsandbox'."
         );
@@ -1198,34 +1205,33 @@ fn wrap_activation_host_native() -> Result<()> {
 
 /// The macOS `sandbox-exec` (SBPL) profile for a host-native activation. Paths
 /// are canonical because SBPL matches the realpath.
+///
+/// Deny-by-default for the user's home: the contents of every file under
+/// `$HOME` are unreadable and unwritable except the project and Flox's own
+/// state. `file-read-metadata` is left to `allow default` so path resolution
+/// into the allowed subdirs works. `.env` files stay secret even inside the
+/// project (the last matching rule wins).
 #[cfg(target_os = "macos")]
-fn host_native_profile(home: &Path) -> String {
+fn host_native_profile(home: &Path, project: &Path) -> String {
     let h = home.display();
+    let p = project.display();
     format!(
         r##"(version 1)
 (allow default)
-; Deny reads of sensitive credential locations — enforced even against
-; SIP-protected system binaries that bypass advisory libsandbox.
-(deny file-read*
-  (subpath "{h}/.ssh")
-  (subpath "{h}/.aws")
-  (subpath "{h}/.gnupg")
-  (subpath "{h}/.kube")
-  (subpath "{h}/.config/gh")
-  (literal "{h}/.netrc"))
-(deny file-read* (regex #"/\.env(\.[^/]*)?$"))
-; Deny writes to credential and shell-startup files (tamper / persistence).
-(deny file-write*
-  (subpath "{h}/.ssh")
-  (subpath "{h}/.aws")
-  (subpath "{h}/.gnupg")
-  (subpath "{h}/.kube")
-  (subpath "{h}/.config/gh")
-  (literal "{h}/.netrc")
-  (literal "{h}/.bashrc")
-  (literal "{h}/.zshrc")
-  (literal "{h}/.profile")
-  (literal "{h}/.zprofile"))
+; Deny reading the contents of, and writing to, the user's home — the agent's
+; primary secret/data surface. Metadata (stat/traverse) stays allowed via
+; `allow default`, and reads outside $HOME (system, Nix) are untouched, so flox
+; and tools still run.
+(deny file-read-data file-write* (subpath "{h}"))
+(allow file-read-data file-write*
+  (subpath "{p}")
+  (subpath "{h}/.cache")
+  (subpath "{h}/.config")
+  (subpath "{h}/.local")
+  (subpath "{h}/Library/Application Support/flox")
+  (subpath "{h}/Library/Caches/flox"))
+; Keep .env files secret even inside the project.
+(deny file-read-data file-write* (regex #"/\.env(\.[^/]*)?$"))
 "##
     )
 }
