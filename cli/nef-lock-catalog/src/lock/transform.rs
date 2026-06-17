@@ -10,6 +10,7 @@ use serde_json::Value;
 
 use crate::CatalogId;
 use crate::lock::build_lock::{BuildLock, CatalogLock};
+use crate::lock::flakeref::RawNixFlakerefAttrs;
 use crate::lock::tree::PackageTreeBuilder;
 
 /// Build a hierarchical [BuildLock] from the flat locked-input map (the merged
@@ -37,7 +38,11 @@ pub(crate) fn build_lock_from_locked_inputs(
         builders
             .entry(CatalogId(catalog))
             .or_insert_with(PackageTreeBuilder::new)
-            .add_package_source(attr_path, build_type, Value::Object(source))?;
+            .add_package_source(
+                attr_path,
+                build_type,
+                RawNixFlakerefAttrs::new_unchecked(Value::Object(source)),
+            )?;
     }
 
     let catalogs = builders
