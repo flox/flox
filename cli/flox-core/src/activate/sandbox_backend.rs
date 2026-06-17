@@ -184,7 +184,9 @@ impl SandboxBackend {
                 fs_virtualized: false,
                 macos: Native,
                 linux: Native,
-                status: Scaffolded,
+                // Wired via `sandbox-exec` on macOS; the Linux (bubblewrap)
+                // launch path errors with a clear message until wired.
+                status: Implemented,
             },
             SandboxBackend::Srt => BackendCapabilities {
                 backend: self,
@@ -307,12 +309,15 @@ mod tests {
     }
 
     #[test]
-    fn only_libsandbox_is_implemented_today() {
+    fn implemented_backends_are_libsandbox_and_host_native() {
         let implemented: Vec<SandboxBackend> = SandboxBackend::ALL
             .into_iter()
             .filter(|b| b.capabilities().status == IntegrationStatus::Implemented)
             .collect();
-        assert_eq!(implemented, vec![SandboxBackend::Libsandbox]);
+        assert_eq!(implemented, vec![
+            SandboxBackend::Libsandbox,
+            SandboxBackend::HostNative,
+        ]);
     }
 
     #[test]
