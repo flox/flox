@@ -29,6 +29,13 @@ use bpaf::Bpaf;
 use flox_activations::sandbox::grants::{self, Grant, GrantsFile};
 use flox_activations::sandbox::sensitive::SensitiveSet;
 use flox_activations::sandbox::{FLOX_VIRTUAL_SANDBOX_VAR, control_socket_path};
+use flox_core::activate::sandbox_backend::{
+    BackendCapabilities,
+    Enforcement,
+    IntegrationStatus,
+    PlatformSupport,
+    SandboxBackend,
+};
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::Environment;
 use serde::{Deserialize, Serialize};
@@ -64,6 +71,10 @@ pub enum SandboxCommands {
     /// Show recorded sandbox denials and warnings for the environment
     #[bpaf(command)]
     Audit(#[bpaf(external(audit_args))] AuditArgs),
+
+    /// List the available sandbox backends and their capabilities
+    #[bpaf(command)]
+    Backends(#[bpaf(external(backends_args))] BackendsArgs),
 }
 
 #[derive(Debug, Clone, Bpaf)]
@@ -114,6 +125,13 @@ pub struct AuditArgs {
     clear: bool,
 }
 
+#[derive(Debug, Clone, Bpaf)]
+pub struct BackendsArgs {
+    /// Emit the backend capability table as JSON.
+    #[bpaf(long("json"))]
+    json: bool,
+}
+
 impl SandboxCommands {
     pub async fn handle(self, _config: Config, mut flox: Flox) -> Result<()> {
         // Gate behind the same feature flag as `flox activate --sandbox`.
@@ -133,8 +151,67 @@ impl SandboxCommands {
             SandboxCommands::Allow(args) => allow(&mut flox, args).await,
             SandboxCommands::Revoke(args) => revoke(&mut flox, args).await,
             SandboxCommands::Audit(args) => audit(&mut flox, args).await,
+            SandboxCommands::Backends(args) => backends(args),
         }
     }
+}
+
+/// `flox sandbox backends`: list the enforcement backends and their declared
+/// capabilities. The capability rows are the per-provider lossiness
+/// declaration from the backend contract; only `libsandbox` is wired into
+/// activation today, the rest are scaffolded or planned.
+fn backends(args: BackendsArgs) -> Result<()> {
+    let caps: Vec<BackendCapabilities> = SandboxBackend::ALL
+        .iter()
+        .map(|b| b.capabilities())
+        .collect();
+
+    if args.json {
+        println!("{}", serde_json::to_string_pretty(&caps)?);
+        return Ok(());
+    }
+
+    let boundary = |e: Enforcement| match e {
+        Enforcement::Advisory => "advisory",
+        Enforcement::HostKernel => "host-kernel",
+        Enforcement::Container => "container",
+        Enforcement::Hypervisor => "hypervisor",
+    };
+    let platform = |p: PlatformSupport| match p {
+        PlatformSupport::Native => "native",
+        PlatformSupport::ViaLinuxVm => "linux-vm",
+        PlatformSupport::Unsupported => "-",
+    };
+    let status = |s: IntegrationStatus| match s {
+        IntegrationStatus::Implemented => "implemented",
+        IntegrationStatus::Scaffolded => "scaffolded",
+        IntegrationStatus::Planned => "planned",
+    };
+    let yn = |b: bool| if b { "yes" } else { "no" };
+
+    println!(
+        "{:<12}  {:<11}  {:<7}  {:<8}  {:<8}  {:<8}  STATUS",
+        "BACKEND", "BOUNDARY", "MACOS", "LINUX", "ENFORCES", "LIVE-ASK"
+    );
+    for c in &caps {
+        println!(
+            "{:<12}  {:<11}  {:<7}  {:<8}  {:<8}  {:<8}  {}",
+            c.backend.to_string(),
+            boundary(c.enforcement),
+            platform(c.macos),
+            platform(c.linux),
+            yn(c.enforces),
+            yn(c.live_ask),
+            status(c.status),
+        );
+    }
+    println!();
+    println!(
+        "Select a backend with FLOX_SANDBOX_BACKEND=<name>; the default is '{}'.",
+        SandboxBackend::default()
+    );
+    println!("Only 'implemented' backends are wired into activation today.");
+    Ok(())
 }
 
 // --- Control-socket protocol (client half) -------------------------------
