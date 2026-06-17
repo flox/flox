@@ -304,3 +304,64 @@ flox sandbox            # interactive review → approve req 1
 Terminal A — run it again; it now succeeds. (A grant pushed to a
 live session takes effect within a few seconds, so an agent's
 own retry loop just works.)
+
+---
+
+## Backends — same UI, different isolation (experimental seam)
+
+Everything above runs on **`libsandbox`**, the advisory loader
+interposer that ships today. It is one enforcement mechanism, not
+the only one. The same modes and the same `flox sandbox` UI are
+designed to sit over *pluggable* backends — kernel sandboxes,
+containers, micro-VMs — so we can benchmark performance,
+isolation, and DX and pick a default. The backend is chosen with
+the `FLOX_SANDBOX_BACKEND` environment variable.
+
+List the roster and what each one can (claim to) do:
+
+```bash
+flox sandbox backends
+```
+
+```
+BACKEND       BOUNDARY     MACOS    LINUX     ENFORCES  LIVE-ASK  STATUS
+libsandbox    advisory     native   native    no        yes       implemented
+nix           host-kernel  native   native    yes       no        scaffolded
+host-native   host-kernel  native   native    yes       no        scaffolded
+srt           host-kernel  native   native    yes       yes       scaffolded
+oci           container    linux-vm  native    yes       no        scaffolded
+libkrun       hypervisor   linux-vm  native    yes       no        planned
+
+Select a backend with FLOX_SANDBOX_BACKEND=<name>; the default is 'libsandbox'.
+Only 'implemented' backends are wired into activation today.
+```
+
+The default backend reproduces today's behavior — the whole demo
+above is `FLOX_SANDBOX_BACKEND=libsandbox`:
+
+```bash
+FLOX_SANDBOX_BACKEND=libsandbox flox activate --sandbox enforce -- \
+  bash -c 'cat ~/demo-secrets/.env'      # → blocked, as in §2b
+```
+
+Selecting a backend that is **not yet wired** fails loudly,
+on purpose — it never silently falls back to libsandbox (that
+would make a benchmark lie about which mechanism it measured):
+
+```bash
+FLOX_SANDBOX_BACKEND=host-native flox activate --sandbox enforce -- true
+```
+
+```
+❌ ERROR: Sandbox backend 'host-native' is not yet wired into activation.
+Only 'libsandbox' (the default) is implemented. Run 'flox sandbox backends'
+to see status, or unset FLOX_SANDBOX_BACKEND.
+```
+
+As each backend lands, the same command starts working with no
+change to the surface above. The benchmark harness that scores
+the three tradeoffs across every backend lives in the Forge
+slice: `slices/2026/06-sandboxed-activation-prototype/artifacts/`
+(`benchmark-plan.md`, `backend-roster.md`, `backend-contract.md`,
+`red-team-battery.md`, and the runnable `bench/` scripts).
+
