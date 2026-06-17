@@ -178,7 +178,6 @@ pub struct RunArgs {
 
 /// Run a command from a Flox Catalog package.
 #[derive(Bpaf, Clone, Debug)]
-#[bpaf(command)]
 pub struct Run {
     // Unconditional catchall: bpaf dispatches the subcommand but never
     // intercepts any flag, including -h/--help. handle() re-reads argv via
