@@ -85,6 +85,7 @@ Manage environments
 Use environments
     activate       Enter the environment, run 'flox deactivate' to leave
     deactivate     Deactivate the current environment
+    run            Run a command from a Flox Catalog package
     services       Manage services in an environment
 
 Discover packages

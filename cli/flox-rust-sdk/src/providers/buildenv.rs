@@ -1059,7 +1059,7 @@ fn remove_build_output_symlinks_by_scan(out_link_prefix: Option<&Path>) {
 }
 
 /// Apply the `_FLOX_NIX_STORE_URL` store override to `cmd` if set, so that
-/// Nix commands spawned outside of `BuildEnvNix::base_command` (e.g. the
+/// Nix commands spawned outside of `base_command` (e.g. the
 /// daemon-check and force-registration commands) target the same store as the
 /// rest of environment construction.
 fn apply_nix_store_url(cmd: &mut Command) {

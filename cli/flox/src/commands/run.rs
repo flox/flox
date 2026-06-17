@@ -15,6 +15,7 @@
 //! arguments with `std::env::args_os()`.
 
 use std::ffi::OsString;
+use std::os::unix::fs::PermissionsExt;
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -32,6 +33,7 @@ use floxhub_client::{
     PackageSystem,
     ResolutionMessage,
 };
+use indoc::indoc;
 use thiserror::Error;
 use tracing::{debug, info_span};
 
@@ -358,7 +360,7 @@ async fn exec_run(run_args: RunArgs, flox: &Flox) -> Result<()> {
     };
 
     let package_group = PackageGroup {
-        name: "run".to_string(),
+        name: "toplevel".to_string(),
         descriptors: vec![descriptor],
     };
 
@@ -492,7 +494,14 @@ pub fn find_executable(
     executable: &OsString,
     pkg_spec: &str,
 ) -> Result<PathBuf, RunError> {
-    use std::os::unix::fs::PermissionsExt;
+    // Reject names containing path separators to prevent traversal outside
+    // the package's store prefix (e.g. "../../etc/shadow").
+    if executable.to_string_lossy().contains('/') {
+        return Err(RunError::ExecutableNotFound {
+            executable: executable.to_string_lossy().into_owned(),
+            package: pkg_spec.to_string(),
+        });
+    }
 
     for dir in &["bin", "sbin"] {
         for store_path in store_paths {
@@ -522,36 +531,36 @@ pub fn find_executable(
 /// `--help` before bpaf can render it. This function matches bpaf's stdout
 /// convention so callers cannot tell the difference.
 pub fn print_help() {
-    println!(
-        "Run a command from a Flox Catalog package
+    print!(indoc! {"
+        Run a command from a Flox Catalog package
 
-Usage: flox run -p <PACKAGE> -- <COMMAND> [ARGS...]
+        Usage: flox run -p <PACKAGE> -- <COMMAND> [ARGS...]
 
-Options:
-  -p, --package <PACKAGE>   Package that provides the command (required)
-  -h, --help                Print this help
+        Options:
+          -p, --package <PACKAGE>   Package that provides the command (required)
+          -h, --help                Print this help
 
-Always use '--' to separate flox flags from the command and its arguments.
-This matches 'flox activate -- <command>' and ensures flags like '--version'
-reach the command rather than flox.
+        Always use '--' to separate flox flags from the command and its arguments.
+        This matches 'flox activate -- <command>' and ensures flags like '--version'
+        reach the command rather than flox.
 
-Examples:
-  flox run -p curl -- curl http://example.com
-  flox run -p binutils -- readelf -a /bin/ls
-  flox run -p hello -- hello --help
-  flox run -p hello -- hello --version
+        Examples:
+          flox run -p curl -- curl http://example.com
+          flox run -p binutils -- readelf -a /bin/ls
+          flox run -p hello -- hello --help
+          flox run -p hello -- hello --version
 
-Limitations (phase 1):
-  Version constraints (@), output selectors (^), and custom catalogs (/) are
-  not supported. The -p flag is always required.
+        Limitations (phase 1):
+          Version constraints (@), output selectors (^), and custom catalogs (/) are
+          not supported. The -p flag is always required.
 
-Caching:
-  Downloaded store paths are registered as GC roots under
-  $FLOX_CACHE_DIR/run-gc-roots/. Repeated invocations of the same package
-  skip the download step.
+        Caching:
+          Downloaded store paths are registered as GC roots under
+          $FLOX_CACHE_DIR/run-gc-roots/. Repeated invocations of the same package
+          skip the download step.
 
-Run 'man flox-run' for more details."
-    );
+        Run 'man flox-run' for more details.
+    "});
 }
 
 // ---------------------------------------------------------------------------
@@ -562,7 +571,7 @@ Run 'man flox-run' for more details."
 mod tests {
     use std::ffi::OsString;
     #[cfg(unix)]
-    use std::os::unix::fs::PermissionsExt;
+    use std::os::unix::ffi::OsStringExt;
 
     use super::*;
 
@@ -739,7 +748,6 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn non_utf8_package_value() {
-        use std::os::unix::ffi::OsStringExt;
         let bad = OsString::from_vec(vec![0xff]);
         let args = vec![os("-p"), bad, os("cmd")];
         let result = parse_run_args(args);
