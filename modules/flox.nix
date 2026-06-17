@@ -22,7 +22,7 @@ in
       package = lib.mkOption {
         type = lib.types.package;
         description = "Flox CLI package";
-        default = pkgsContext.${pkgs.system}.flox;
+        default = pkgsContext.${pkgs.stdenv.hostPlatform.system}.flox;
         defaultText = lib.literalExpression "pkgs.flox";
         example = lib.literalExpression "pkgs.flox";
       };
