@@ -38,6 +38,7 @@ use flox_rust_sdk::providers::services::process_compose::{PROCESS_COMPOSE_BIN, P
 use flox_rust_sdk::providers::upgrade_checks::UpgradeInformationGuard;
 use flox_rust_sdk::utils::FLOX_INTERPRETER;
 use indoc::{formatdoc, indoc};
+use toml_edit::Key;
 use tracing::{debug, trace, warn};
 
 use super::{
@@ -48,7 +49,7 @@ use super::{
     environment_select,
 };
 use crate::commands::check_for_upgrades::spawn_detached_check_for_upgrades_process;
-use crate::commands::general::update_config;
+use crate::commands::general::update_config_with_query;
 use crate::commands::services::ServicesCommandsError;
 use crate::commands::{
     EnvironmentSelectError,
@@ -111,11 +112,11 @@ pub enum ActivateSubcommandOrOptions {
 #[derive(Bpaf, Debug, Clone, Copy)]
 pub enum AutoActivate {
     /// Allow auto-activation for an environment
-    #[bpaf(command, hide)]
+    #[bpaf(command)]
     Allow,
 
     /// Deny auto-activation for an environment
-    #[bpaf(command, hide)]
+    #[bpaf(command)]
     Deny,
 }
 
@@ -870,47 +871,59 @@ fn notify_environment_upgrades(
 
 /// Allow auto-activation for an environment by updating the config.
 ///
-/// Writes the allow preference to the config file for the environment's parent path.
+/// Writes the allow preference to the config file for the environment's parent
+/// path.
 pub fn allow(config: &Config, concrete_environment: &ConcreteEnvironment) -> Result<()> {
-    let env_path = concrete_environment.parent_path()?;
-    let path_str = env_path.display().to_string();
-    let key = format!("auto_activate_environments.{}", path_str);
-    update_config(
-        &config.flox.config_dir,
-        key,
-        Some(AutoActivationPreference::Allow),
-    )?;
-    Ok(())
+    set_auto_activation_preference(
+        config,
+        concrete_environment,
+        AutoActivationPreference::Allow,
+    )
 }
 
 /// Deny auto-activation for an environment by updating the config.
 ///
-/// Writes the deny preference to the config file for the environment's parent path.
+/// Writes the deny preference to the config file for the environment's parent
+/// path.
 pub fn deny(config: &Config, concrete_environment: &ConcreteEnvironment) -> Result<()> {
-    let env_path = concrete_environment.parent_path()?;
-    let path_str = env_path.display().to_string();
-    let key = format!("auto_activate_environments.{}", path_str);
-    update_config(
-        &config.flox.config_dir,
-        key,
-        Some(AutoActivationPreference::Deny),
-    )?;
-    Ok(())
+    set_auto_activation_preference(config, concrete_environment, AutoActivationPreference::Deny)
 }
 
-/// Check if auto-activation is allowed for an environment.
-///
-/// Returns true if the environment is explicitly allowed or has no preference set.
-/// Returns false if the environment is explicitly denied.
-#[allow(dead_code)]
-pub fn is_allowed(config: &Config, concrete_environment: &ConcreteEnvironment) -> Result<bool> {
+/// Record the user's per-directory auto-activation preference under
+/// `auto_activate_environments` in the config.
+fn set_auto_activation_preference(
+    config: &Config,
+    concrete_environment: &ConcreteEnvironment,
+    preference: AutoActivationPreference,
+) -> Result<()> {
     let env_path = concrete_environment.parent_path()?;
-    let preference = config.flox.auto_activate_environments.get(&env_path);
+    write_auto_activation_preference(&config.flox.config_dir, &env_path, preference)
+}
 
-    match preference {
-        Some(AutoActivationPreference::Deny) => Ok(false),
-        Some(AutoActivationPreference::Allow) | None => Ok(true),
-    }
+/// Write an auto-activation preference for a project directory (the directory
+/// containing `.flox`) to the config under `auto_activate_environments`.
+///
+/// The directory is written as a single literal TOML key rather than spliced
+/// into a dot-separated key string: a path can contain `.` (macOS temp dirs
+/// live under paths like `/var/folders/...`, and project directories may have
+/// names like `my.app`), which dotted-key parsing would shatter into several
+/// nested tables.
+///
+/// `env_path` must be canonical so it matches the directories the prompt hook
+/// discovers. Subcommand callers get this from
+/// [`Environment::parent_path`] (a popped `CanonicalPath`); the prompt hook
+/// passes the already-canonical discovered directory.
+pub fn write_auto_activation_preference(
+    config_dir: &Path,
+    env_path: &Path,
+    preference: AutoActivationPreference,
+) -> Result<()> {
+    let query = [
+        Key::new("auto_activate_environments"),
+        Key::new(env_path.to_string_lossy().into_owned()),
+    ];
+    update_config_with_query(config_dir, &query, Some(preference))?;
+    Ok(())
 }
 
 #[cfg(test)]

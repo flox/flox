@@ -758,6 +758,29 @@ mod tests {
     }
 
     #[test]
+    fn writing_auto_activate_preference_for_path_with_dot() {
+        // Regression: an auto-activation preference is keyed by a filesystem
+        // path, which can contain `.` (macOS temp dirs live under paths like
+        // `/var/folders/...`, and project directories may be named `my.app`).
+        // The path must be written as a single literal TOML key rather than a
+        // dot-separated key string, which would shatter it into nested tables
+        // and fail validation with "unknown variant". `write_to` validates the
+        // result by deserializing it, so a successful call already proves the
+        // path round-trips back into the typed config.
+        let path = "/var/folders/ab/cd.ef/my.project";
+        let query = [
+            Key::new("auto_activate_environments"),
+            Key::new(path.to_string()),
+        ];
+        let rendered =
+            Config::write_to(None, &query, Some(AutoActivationPreference::Deny)).unwrap();
+        assert_eq!(rendered, indoc! {r#"
+            [auto_activate_environments]
+            "/var/folders/ab/cd.ef/my.project" = "deny"
+        "#});
+    }
+
+    #[test]
     fn test_remove() {
         let config_before = indoc! {"
         # my git base url is friendly, see:

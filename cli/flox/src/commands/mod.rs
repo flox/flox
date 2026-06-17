@@ -863,7 +863,7 @@ enum InternalCommands {
 }
 
 impl InternalCommands {
-    async fn handle(self, _config: Config, flox: Flox) -> Result<()> {
+    async fn handle(self, config: Config, flox: Flox) -> Result<()> {
         match self {
             InternalCommands::ResetMetrics(args) => args.handle(flox).await?,
             InternalCommands::Upload(args) => args.handle(flox).await?,
@@ -871,7 +871,7 @@ impl InternalCommands {
             InternalCommands::CheckForUpgrades(args) => args.handle(flox).await?,
             InternalCommands::ActivationState(args) => args.handle(flox).await?,
             InternalCommands::ServicesSocket(args) => args.handle(flox).await?,
-            InternalCommands::HookEnv(args) => args.handle(flox)?,
+            InternalCommands::HookEnv(args) => args.handle(config, flox)?,
         }
         Ok(())
     }

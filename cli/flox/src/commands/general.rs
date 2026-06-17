@@ -150,10 +150,23 @@ pub(super) fn update_config<V: Serialize>(
     value: Option<V>,
 ) -> Result<()> {
     let query = parse_toml_key(key.as_ref()).context("Could not parse key")?;
+    update_config_with_query(config_dir, &query, value)
+}
 
+/// Like [`update_config`], but takes an already-parsed TOML key path instead of
+/// a dot-separated string.
+///
+/// Use this when a key segment can itself contain `.` — e.g. a filesystem path
+/// — which [`parse_toml_key`]'s dot-splitting would otherwise shatter into
+/// several nested-table segments.
+pub(super) fn update_config_with_query<V: Serialize>(
+    config_dir: &Path,
+    query: &[Key],
+    value: Option<V>,
+) -> Result<()> {
     let config_file_path = config_dir.join(FLOX_CONFIG_FILE);
 
-    match Config::write_to_in(config_file_path, &query, value) {
+    match Config::write_to_in(config_file_path, query, value) {
                 err @ Err(ReadWriteError::ReadConfig(_)) => err.context("Could not read current config file.\nPlease verify the format or reset using `flox config --reset`")?,
                 err @ Err(_) => err?,
                 Ok(()) => ()
