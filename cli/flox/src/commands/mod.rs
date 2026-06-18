@@ -9,6 +9,7 @@ mod deactivate;
 mod delete;
 mod edit;
 mod envs;
+mod factory;
 mod gc;
 mod general;
 mod generations;
@@ -341,6 +342,7 @@ impl FloxArgs {
                     }
                     args.handle(flox).await
                 },
+                Commands::Factory(args) => args.handle(flox).await,
             };
 
             // This will print the update notification after output from a successful
@@ -526,6 +528,16 @@ enum Commands {
     Internal(#[bpaf(external(internal_commands))] InternalCommands),
 
     Beta(#[bpaf(external(beta::beta_commands))] beta::BetaCommands),
+
+    /// Flox Factory operator commands (hidden; see operator runbook)
+    #[bpaf(command, hide)]
+    Factory(
+        #[bpaf(
+            external(factory::factory_commands),
+            fallback(factory::FactoryCommands::Help)
+        )]
+        factory::FactoryCommands,
+    ),
 }
 
 #[derive(Debug, Bpaf, Clone)]
