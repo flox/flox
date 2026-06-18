@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::str::FromStr;
 
 use anyhow::{Context, Result};
@@ -6,8 +6,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use url::Url;
 
-use crate::nix::nix_base_command;
-use crate::{LockOptions, nix};
+use crate::nix;
 
 #[derive(Debug, Clone)]
 pub struct NixFlakeref {
@@ -143,87 +142,4 @@ impl From<floxhub_client::LockedGitSource> for RawNixFlakerefAttrs {
     fn from(value: floxhub_client::LockedGitSource) -> Self {
         Self::new_unchecked(serde_json::to_value(value).expect("deserialized from json body"))
     }
-}
-
-/// Lock a flakeref url
-pub fn lock_url_with_options(
-    flakeref: &NixFlakeref,
-    options: &LockOptions,
-) -> Result<NixPrefetchResult> {
-    let mut prefetch = nix_prefetch_url(flakeref.as_url())?;
-
-    // Extract and remove `dir` from the locked ref.
-    // Replaced by explicit pkgsDir/catalogsLock fields.
-    {
-        let locked = prefetch
-            .locked
-            .as_object_mut()
-            .expect("'locked' attribute should be a map");
-
-        if let Some(ref nef_base_dir) = options.nef_base_dir {
-            let prefix = locked.get("dir").and_then(Value::as_str).unwrap_or(".");
-            locked.insert("dir".to_string(), format!("{prefix}/{nef_base_dir}").into());
-        }
-    }
-
-    Ok(prefetch)
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct NixPrefetchResult {
-    hash: String,
-    locked: Value,
-    original: Value,
-    #[serde(rename = "storePath")]
-    store_path: PathBuf,
-}
-
-/// Lock a flakeref url using `nix flake prefetch`.
-/// This resolves urls, downloads the source and returns
-/// a locked source type as well as source information,
-/// such as hash and storePath.
-///
-///
-/// Example:
-///
-/// ```shell
-/// $ nix flake prefetch git+ssh://git@github.com/flox/flox --json
-/// {
-///   "hash": "sha256-LdMMBff1PCXQQl3I5Dvg5U2s4l+7l9lemAncUCjJUY8=",
-///   "locked": {
-///     "lastModified": 1770220825,
-///     "ref": "refs/heads/main",
-///     "rev": "a6250c34313d184c5c5be7ad824ad0bbc7610e38",
-///     "revCount": 4546,
-///     "type": "git",
-///     "url": "ssh://git@github.com/flox/flox"
-///   },
-///   "original": {
-///     "type": "git",
-///     "url": "ssh://git@github.com/flox/flox"
-///   },
-///   "storePath": "/nix/store/pihgq0g5vnrzlx2g5lzdn7dh7aqfbl7g-source"
-/// }
-/// ```
-pub(crate) fn nix_prefetch_url(url: &Url) -> Result<NixPrefetchResult> {
-    let mut command = nix_base_command();
-    command
-        .arg("flake")
-        .arg("prefetch")
-        .arg("--refresh")
-        .arg("--json")
-        .arg(url.as_str());
-
-    let output = command
-        .output()
-        .with_context(|| format!("failed to run '{command:?}')"))?;
-
-    if !output.status.success() {
-        Err(anyhow::anyhow!(
-            String::from_utf8_lossy(&output.stderr).into_owned()
-        ))
-        .with_context(|| format!("failed to lock {url}"))?;
-    }
-
-    serde_json::from_slice(&output.stdout).context("could not parse nix prefetch")
 }

@@ -7,27 +7,15 @@ use flox_core::Version;
 use serde::Serialize;
 use tracing::debug;
 
-use super::flakeref::NixPrefetchResult;
 use super::tree::PackageTreeNode;
 use crate::CatalogId;
 
-/// Locked source information to nix expression catalog.
-/// That is either:
-/// 1. a locked source-type [1], referencing a source with explicit paths
-///    to the packages directory and catalog lock file
-/// 2. a package attribute hierarchy with a locked source per package
-///    at its leaves (phase 3, WIP)
-///
-/// [1]: https://nix.dev/manual/nix/2.31/language/builtins.html#source-types
+/// Locked source information for a catalog: a package attribute hierarchy with
+/// a locked source per package at its leaves, as returned by the catalog
+/// `/build-inputs/lookup` endpoint.
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "type")]
 pub(crate) enum CatalogLock {
-    #[serde(rename = "nix")]
-    Nix {
-        /// Raw nix flake prefetch output (hash, locked, original, storePath)
-        #[serde(flatten)]
-        prefetch: NixPrefetchResult,
-    },
     #[serde(rename = "floxhub")]
     FloxHub {
         /// Tree structure of locked packages from FloxHub
