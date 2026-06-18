@@ -15,7 +15,7 @@ use nix::sys::signal::kill;
 use nix::unistd::{Pid, getpgid, getpid, setsid};
 use reaper::reap_orphaned_children;
 use serde::{Deserialize, Serialize};
-use tracing::{debug, debug_span, error, info, instrument};
+use tracing::{debug, debug_span, error, info, instrument, warn};
 use uuid::Uuid;
 use watcher::LockedActivationState;
 
@@ -456,7 +456,7 @@ fn cleanup_all(
     let socket_path = socket_path.as_ref();
     if socket_path.exists() {
         if let Err(err) = process_compose_down(process_compose_bin, socket_path) {
-            error!(%err, "failed to run process-compose shutdown command");
+            warn!(%err, "failed to run process-compose shutdown command");
         }
         info!("shut down process-compose");
     } else {
