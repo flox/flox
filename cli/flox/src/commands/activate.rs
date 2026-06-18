@@ -479,11 +479,13 @@ impl ActivateOptions {
             )? {
                 SandboxBackend::Libsandbox => sandbox_mode,
                 SandboxBackend::HostNative => {
+                    ensure_advisory_mode_supported(SandboxBackend::HostNative, sandbox_mode)?;
                     // Re-exec under the OS sandbox; never returns on success.
                     wrap_activation_host_native(&concrete_environment.dot_flox_path())?;
                     unreachable!("wrap_activation_host_native execs or errors");
                 },
                 SandboxBackend::Srt => {
+                    ensure_advisory_mode_supported(SandboxBackend::Srt, sandbox_mode)?;
                     // Re-exec under Anthropic's sandbox-runtime; never returns.
                     wrap_activation_srt(&concrete_environment.dot_flox_path())?;
                     unreachable!("wrap_activation_srt execs or errors");
@@ -1163,6 +1165,21 @@ fn resolve_sandbox_backend(
     Ok(manifest.unwrap_or_default())
 }
 
+/// `warn` and `prompt` are advisory semantics that only `libsandbox` implements
+/// — observe-but-allow, and deny-then-live-redeem through the broker. A
+/// kernel/container/hypervisor backend can only allow or deny, so reject those
+/// modes with a clear message rather than silently enforcing a mode the user
+/// did not ask for (the failure mode where `--sandbox warn` locks down the
+/// home directory anyway).
+fn ensure_advisory_mode_supported(backend: SandboxBackend, mode: SandboxMode) -> Result<()> {
+    if backend.capabilities().enforces && matches!(mode, SandboxMode::Warn | SandboxMode::Prompt) {
+        bail!(
+            "Sandbox backend '{backend}' enforces; it has no advisory '{mode}' mode.\nUse '--sandbox enforce' with this backend, or '--sandbox-backend libsandbox' for advisory '{mode}'."
+        );
+    }
+    Ok(())
+}
+
 /// Re-exec the current `flox activate` invocation under the host-native OS
 /// sandbox, then never return (the inner activation runs confined). Returns the
 /// error on a failure to launch, or on an unsupported platform.
@@ -1616,6 +1633,53 @@ mod tests {
     fn resolve_sandbox_mode_ignores_manifest_for_ephemeral_activation() {
         let mode = resolve_sandbox_mode(None, Some(SandboxMode::Enforce), true, true).unwrap();
         assert_eq!(mode, SandboxMode::Off);
+    }
+
+    #[test]
+    fn advisory_modes_rejected_on_enforcing_backends() {
+        // warn/prompt are libsandbox-only; a kernel/container/hypervisor backend
+        // must reject them rather than silently enforce.
+        let enforcing = [
+            SandboxBackend::Nix,
+            SandboxBackend::HostNative,
+            SandboxBackend::Srt,
+            SandboxBackend::Oci,
+            SandboxBackend::Libkrun,
+        ];
+        for backend in enforcing {
+            for mode in [SandboxMode::Warn, SandboxMode::Prompt] {
+                assert!(
+                    ensure_advisory_mode_supported(backend, mode).is_err(),
+                    "{backend} should reject advisory mode '{mode}'",
+                );
+            }
+            // enforce and off are always fine.
+            assert!(ensure_advisory_mode_supported(backend, SandboxMode::Enforce).is_ok());
+            assert!(ensure_advisory_mode_supported(backend, SandboxMode::Off).is_ok());
+        }
+    }
+
+    #[test]
+    fn advisory_modes_allowed_on_libsandbox() {
+        for mode in [
+            SandboxMode::Off,
+            SandboxMode::Warn,
+            SandboxMode::Enforce,
+            SandboxMode::Prompt,
+        ] {
+            assert!(ensure_advisory_mode_supported(SandboxBackend::Libsandbox, mode).is_ok());
+        }
+    }
+
+    #[test]
+    fn advisory_mode_rejection_names_mode_and_points_at_libsandbox() {
+        let err = ensure_advisory_mode_supported(SandboxBackend::HostNative, SandboxMode::Warn)
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("host-native"), "message: {err}");
+        assert!(err.contains("'warn'"), "message: {err}");
+        assert!(err.contains("--sandbox enforce"), "message: {err}");
+        assert!(err.contains("libsandbox"), "message: {err}");
     }
 
     #[test]

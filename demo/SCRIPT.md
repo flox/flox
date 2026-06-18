@@ -311,10 +311,19 @@ own retry loop just works.)
 
 Everything above runs on **`libsandbox`**, the advisory loader
 interposer that ships today. It is one enforcement mechanism, not
-the only one. The same modes and the same `flox sandbox` UI are
-designed to sit over *pluggable* backends — kernel sandboxes,
-containers, micro-VMs — so we can benchmark performance,
-isolation, and DX and pick a default.
+the only one. The same `flox sandbox` UI is designed to sit over
+*pluggable* backends — kernel sandboxes, containers, micro-VMs —
+so we can benchmark performance, isolation, and DX and pick a
+default.
+
+> **`warn` and `prompt` are libsandbox-only.** They are *advisory*
+> semantics — observe-but-allow, and deny-then-live-redeem through the
+> broker — that only the loader interposer can provide. The enforcing
+> backends below (kernel / container / micro-VM) implement **`enforce`
+> only**; asking them for `warn` or `prompt` errors with a clear message
+> rather than silently enforcing (see the host-native note). So the
+> three-mode walkthrough in §1–§3 is a *libsandbox* demo; on the other
+> backends, use `--sandbox enforce`.
 
 List the roster and what each one can (claim to) do:
 
@@ -366,6 +375,20 @@ flox activate --sandbox enforce --sandbox-backend host-native -- \
   /bin/cat ~/.ssh/id_ed25519        # → cat: ...: Operation not permitted
 ```
 
+**`host-native` is `enforce`-only.** A `sandbox-exec` profile can only
+allow or deny — there is no advisory "log-but-allow," and host-native has
+no broker — so `warn` and `prompt` are rejected up front instead of
+silently locking things down:
+
+```bash
+flox activate --sandbox warn --sandbox-backend host-native -- true
+```
+
+```
+✘ ERROR: Sandbox backend 'host-native' enforces; it has no advisory 'warn' mode.
+Use '--sandbox enforce' with this backend, or '--sandbox-backend libsandbox' for advisory 'warn'.
+```
+
 > `host-native` is **deny-by-default for your home directory**: on an
 > allow-default base it denies reading the contents of — and writing
 > to — all of `$HOME` except the project and Flox's own state. So an
@@ -395,6 +418,11 @@ deny-`$HOME` shape and re-execs under it:
 flox activate --sandbox enforce --sandbox-backend srt -- cat ~/.ssh/id_ed25519
 # → cat: ...: Operation not permitted
 ```
+
+Like host-native, `srt` is **`enforce`-only** here: it rejects `warn` and
+`prompt` the same way. (Its `flox sandbox backends` row shows `LIVE-ASK
+yes` — srt *can* adjudicate live in principle, but flox's broker is not
+wired to it in this prototype, so `prompt` is not offered yet.)
 
 Because its TCP egress is default-deny, activate a **realized**
 environment under it (cold catalog fetches would otherwise be blocked).
