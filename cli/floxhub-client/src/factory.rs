@@ -26,6 +26,21 @@ pub type ApiErrorResponseValue = ResponseValue<ApiErrorResponse>;
 /// Common error type for factory API operations.
 #[derive(Debug, thiserror::Error)]
 pub enum FactoryClientError {
+    /// The requested build was not found (HTTP 404).
+    ///
+    /// Deliberately carries no detail: the calling verb knows what it asked
+    /// for and renders the user-facing message.
+    #[error("not found")]
+    NotFound,
+
+    /// The Flox Factory service could not be reached (transport failure).
+    ///
+    /// progenitor renders this case with the request URL in the message; this
+    /// variant lets callers show a product-level message without that detail.
+    #[error("could not reach the Flox Factory")]
+    Transport(#[source] reqwest::Error),
+
+    /// Any other factory API error, rendered from the generated error type.
     #[error("{}", fmt_api_error(.0))]
     APIError(APIError<ErrorResponse>),
 }
@@ -44,11 +59,14 @@ impl<T: Send> MapApiErrorExt<T> for Result<T, APIError<ErrorResponse>> {
             Err(err) => err,
         };
 
-        if let APIError::UnexpectedResponse(resp) = err {
-            return parse_api_error(resp).await;
+        match err {
+            // progenitor renders a transport failure with the request URL in
+            // the message; classify it so the caller can show a product-level
+            // message without that detail.
+            APIError::CommunicationError(source) => Err(FactoryClientError::Transport(source)),
+            APIError::UnexpectedResponse(resp) => parse_api_error(resp).await,
+            other => Err(FactoryClientError::APIError(other)),
         }
-
-        Err(FactoryClientError::APIError(err))
     }
 }
 
@@ -83,6 +101,25 @@ fn fmt_api_error(api_error: &APIError<ErrorResponse>) -> String {
             format!("{status}")
         },
         _ => format!("{api_error}"),
+    }
+}
+
+/// Reclassify a 404 from a resource-specific endpoint as
+/// [`FactoryClientError::NotFound`].
+///
+/// Only callers where a 404 unambiguously means the requested resource does
+/// not exist (such as [`FactoryClientTrait::get_build`]) should apply this. A
+/// 404 from a listing endpoint or from a misconfigured base URL is a route or
+/// configuration error, not a missing resource, and is left as the underlying
+/// API error so the message describes what is actually wrong.
+fn not_found_on_404(err: FactoryClientError) -> FactoryClientError {
+    match err {
+        FactoryClientError::APIError(api)
+            if api.status() == Some(reqwest::StatusCode::NOT_FOUND) =>
+        {
+            FactoryClientError::NotFound
+        },
+        other => other,
     }
 }
 
@@ -143,12 +180,16 @@ impl FactoryClientTrait for crate::FloxhubClient {
     }
 
     async fn get_build(&self, build_id: i64) -> Result<BuildResponse, FactoryClientError> {
+        // A 404 on this resource-specific endpoint means the build ID does not
+        // exist; reclassify it so the caller can say so. Other endpoints leave
+        // a 404 as the underlying API error.
         Ok(self
             .factory
             .get_build_api_v1_factory_builds_build_id_get(build_id)
             .await
             .map_api_error()
-            .await?
+            .await
+            .map_err(not_found_on_404)?
             .into_inner())
     }
 
@@ -226,6 +267,37 @@ pub mod tests {
         };
         let client = crate::FloxhubClient::new(config).unwrap();
         let result = client.list_builds(None).await.unwrap();
+
+        mock.assert();
+        assert_eq!(result, ResultsPage {
+            results: vec![],
+            count: Some(0),
+        });
+    }
+
+    /// Verify `list_builds` forwards the `status` filter as a query param.
+    #[tokio::test]
+    async fn list_builds_forwards_status_filter() {
+        let server = MockServer::start_async().await;
+
+        let mock = server.mock(|when, then| {
+            when.method("GET")
+                .path("/api/v1/factory/builds")
+                .query_param("status", "running");
+            then.status(200).json_body(json!({
+                "builds": [],
+                "page": 0,
+                "page_size": 50,
+                "total": 0
+            }));
+        });
+
+        let config = FloxhubClientConfig {
+            base_url: server.base_url(),
+            ..client_config(&server.base_url())
+        };
+        let client = crate::FloxhubClient::new(config).unwrap();
+        let result = client.list_builds(Some("running")).await.unwrap();
 
         mock.assert();
         assert_eq!(result, ResultsPage {
@@ -339,6 +411,106 @@ pub mod tests {
         let result: Result<(), APIError<ErrorResponse>> = Err(APIError::UnexpectedResponse(resp));
         let err = result.map_api_error().await.unwrap_err();
         assert_eq!(err.to_string(), "403 Forbidden");
+    }
+
+    #[tokio::test]
+    async fn map_api_error_does_not_collapse_404_error_response() {
+        // The shared funnel no longer treats a 404 as a missing resource; only
+        // resource-specific callers (get_build) do that. A 404 here stays an
+        // APIError carrying the server detail.
+        let status = StatusCode::NOT_FOUND;
+        let error_body = ErrorResponse {
+            detail: "Build not found".to_string(),
+        };
+
+        let mut headers = HeaderMap::new();
+        headers.insert("content-type", "application/json".parse().unwrap());
+        let resp_val = ResponseValue::new(error_body, status, headers);
+
+        let result: Result<(), APIError<ErrorResponse>> = Err(APIError::ErrorResponse(resp_val));
+        let err = result.map_api_error().await.unwrap_err();
+        assert_eq!(err.to_string(), "404 Not Found: Build not found");
+    }
+
+    #[tokio::test]
+    async fn map_api_error_does_not_collapse_404_unexpected_response() {
+        let status = StatusCode::NOT_FOUND;
+        let resp = http::Response::builder()
+            .status(status)
+            .body("Build not found".to_string())
+            .unwrap()
+            .into();
+
+        let result: Result<(), APIError<ErrorResponse>> = Err(APIError::UnexpectedResponse(resp));
+        let err = result.map_api_error().await.unwrap_err();
+        assert_eq!(err.to_string(), "404 Not Found");
+    }
+
+    #[tokio::test]
+    async fn map_api_error_communication_error_is_transport() {
+        // A deterministic transport failure: port 0 is never a valid
+        // connection target, so the request always fails at the transport
+        // layer, with no reliance on a particular port being closed.
+        let transport_err = reqwest::get("http://127.0.0.1:0").await.unwrap_err();
+
+        let result: Result<(), APIError<ErrorResponse>> =
+            Err(APIError::CommunicationError(transport_err));
+        let err = result.map_api_error().await.unwrap_err();
+        assert!(
+            matches!(err, FactoryClientError::Transport(_)),
+            "expected Transport, got {err:?}"
+        );
+        // The classification drops progenitor's URL-bearing transport text.
+        assert_eq!(err.to_string(), "could not reach the Flox Factory");
+    }
+
+    #[tokio::test]
+    async fn get_build_maps_404_to_not_found() {
+        // On a resource-specific endpoint a 404 unambiguously means the build
+        // does not exist, so get_build classifies it as NotFound.
+        let server = MockServer::start_async().await;
+        let mock = server.mock(|when, then| {
+            when.method("GET").path("/api/v1/factory/builds/7");
+            then.status(404)
+                .json_body(json!({ "detail": "Build not found" }));
+        });
+
+        let config = FloxhubClientConfig {
+            base_url: server.base_url(),
+            ..client_config(&server.base_url())
+        };
+        let client = crate::FloxhubClient::new(config).unwrap();
+        let err = client.get_build(7).await.unwrap_err();
+
+        mock.assert();
+        assert!(
+            matches!(err, FactoryClientError::NotFound),
+            "expected NotFound, got {err:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn list_builds_404_is_not_collapsed_to_not_found() {
+        // A 404 on the listing endpoint is a route or configuration error, not
+        // a missing resource, so it is left as the underlying API error rather
+        // than reported as NotFound.
+        let server = MockServer::start_async().await;
+        let _mock = server.mock(|when, then| {
+            when.method("GET").path("/api/v1/factory/builds");
+            then.status(404).json_body(json!({ "detail": "Not Found" }));
+        });
+
+        let config = FloxhubClientConfig {
+            base_url: server.base_url(),
+            ..client_config(&server.base_url())
+        };
+        let client = crate::FloxhubClient::new(config).unwrap();
+        let err = client.list_builds(None).await.unwrap_err();
+
+        assert!(
+            matches!(err, FactoryClientError::APIError(_)),
+            "expected APIError, got {err:?}"
+        );
     }
 
     #[tokio::test]
