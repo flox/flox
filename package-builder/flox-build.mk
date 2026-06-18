@@ -39,6 +39,7 @@ __gnugrep := @gnugrep@
 __gnused := @gnused@
 __gnutar := @gnutar@
 __jq := @jq@
+__nefLockCatalog := @nefLockCatalog@
 __nix := @nix@
 __t3 := @t3@
 
@@ -48,6 +49,8 @@ __t3 := @t3@
 # substitution was successful, and if not then it will fall back to finding
 # the required tool from the PATH for use in the developer environment.
 __package_bin = $(if $(filter @%@,$(1)),$(2),$(1)/bin/$(2))
+# As __package_bin, but for binaries installed under libexec rather than bin.
+__package_libexec_bin = $(if $(filter @%@,$(1)),$(2),$(1)/libexec/$(2))
 _bash := $(call __package_bin,$(__bash),bash)
 _cat := $(call __package_bin,$(__coreutils),cat)
 _chmod := $(call __package_bin,$(__coreutils),chmod)
@@ -62,6 +65,7 @@ _git := $(call __package_bin,$(__gitMinimal),git)
 _grep := $(call __package_bin,$(__gnugrep),grep)
 _head := $(call __package_bin,$(__coreutils),head)
 _jq := $(call __package_bin,$(__jq),jq)
+_lock := $(call __package_libexec_bin,$(__nefLockCatalog),lock)
 _mkdir := $(call __package_bin,$(__coreutils),mkdir)
 _mktemp := $(call __package_bin,$(__coreutils),mktemp)
 _mv := $(call __package_bin,$(__coreutils),mv)
