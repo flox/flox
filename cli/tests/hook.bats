@@ -416,6 +416,34 @@ EXPIRED_FLOXHUB_TOKEN="eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3gu
 }
 
 # ---------------------------------------------------------------------------- #
+# Config: 'flox activate deny' suppresses auto-activation for a directory
+# ---------------------------------------------------------------------------- #
+
+# bats test_tags=hook:deny:bash
+@test "bash: hook does not auto-activate an environment denied via 'flox activate deny'" {
+  project_setup
+  project2_setup
+  export FLOX_FEATURES_AUTO_ACTIVATE=true
+
+  # Record the deny preference for the second project before entering it.
+  "$FLOX_BIN" activate deny -d "$PROJECT2_DIR"
+
+  run --separate-stderr bash -c "
+    export FLOX_FEATURES_AUTO_ACTIVATE=true
+    export FLOX_SHELL=\$(which bash)
+    eval \"\$($FLOX_BIN activate -d $PROJECT_DIR)\"
+    cd $PROJECT2_DIR
+    _flox_hook
+    echo \"var2:\${TEST_VAR2:-unset}\"
+    echo \"tracked:\${_FLOX_AUTO_ACTIVATED_ENVIRONMENTS:-unset}\"
+  "
+  assert_success
+  # The denied environment is neither activated nor tracked.
+  assert_output --partial "var2:unset"
+  assert_output --partial "tracked:unset"
+}
+
+# ---------------------------------------------------------------------------- #
 # Hook auto-fires: verify the prompt hook triggers without manual invocation
 # ---------------------------------------------------------------------------- #
 
