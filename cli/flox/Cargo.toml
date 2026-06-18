@@ -62,6 +62,7 @@ nef-lock-catalog.workspace = true
 flox-manifest.workspace = true
 
 [dev-dependencies]
+factory-api-v1.workspace = true
 floxhub-client = { workspace = true, features = ["tests"] }
 pretty_assertions.workspace = true
 proptest.workspace = true
