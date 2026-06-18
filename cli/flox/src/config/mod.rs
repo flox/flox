@@ -5,11 +5,11 @@ use std::{env, fs};
 
 use anyhow::{Context, Result};
 use config::{Config as HierarchicalConfig, Environment};
-use flox_catalog::{AuthnMode, SearchLimit};
 use flox_core::activate::context::AutoActivateFishMode;
 use flox_core::data::environment_ref::RemoteEnvironmentRef;
 use flox_core::{WriteError, write_atomically};
 use flox_rust_sdk::flox::Features;
+use floxhub_client::{AuthnMode, SearchLimit};
 use itertools::{Either, Itertools};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -755,6 +755,29 @@ mod tests {
         let config_content =
             Config::write_to(None, &Key::parse("does_not_exist").unwrap(), Some("true"));
         assert!(matches!(config_content, Err(ReadWriteError::InvalidKey(_))));
+    }
+
+    #[test]
+    fn writing_auto_activate_preference_for_path_with_dot() {
+        // Regression: an auto-activation preference is keyed by a filesystem
+        // path, which can contain `.` (macOS temp dirs live under paths like
+        // `/var/folders/...`, and project directories may be named `my.app`).
+        // The path must be written as a single literal TOML key rather than a
+        // dot-separated key string, which would shatter it into nested tables
+        // and fail validation with "unknown variant". `write_to` validates the
+        // result by deserializing it, so a successful call already proves the
+        // path round-trips back into the typed config.
+        let path = "/var/folders/ab/cd.ef/my.project";
+        let query = [
+            Key::new("auto_activate_environments"),
+            Key::new(path.to_string()),
+        ];
+        let rendered =
+            Config::write_to(None, &query, Some(AutoActivationPreference::Deny)).unwrap();
+        assert_eq!(rendered, indoc! {r#"
+            [auto_activate_environments]
+            "/var/folders/ab/cd.ef/my.project" = "deny"
+        "#});
     }
 
     #[test]

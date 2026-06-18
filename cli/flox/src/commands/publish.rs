@@ -2,7 +2,6 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result, bail};
 use bpaf::Bpaf;
-use flox_catalog::ClientTrait;
 use flox_manifest::{Manifest, MigratedTypedOnly};
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment};
@@ -17,6 +16,7 @@ use flox_rust_sdk::providers::publish::{
     check_environment_metadata,
     check_package_metadata,
 };
+use floxhub_client::CatalogClientTrait;
 use indoc::formatdoc;
 use nef_lock_catalog::lock::NixFlakeref;
 use tracing::{debug, info_span, instrument, warn};
@@ -217,8 +217,9 @@ impl Publish {
         let publish_provider = PublishProvider::new(env_metadata, package_metadata, auth);
 
         // Check that we can publish before building.
+        let catalog = &flox.floxhub_client;
         let package_created = publish_provider
-            .create_package_and_possibly_user_catalog(&flox.catalog_client, &catalog_name)
+            .create_package_and_possibly_user_catalog(catalog, &catalog_name)
             .await?;
 
         subcommand_metric!(
@@ -256,8 +257,8 @@ impl Publish {
                 .parse::<SystemEnum>()
                 .context("invalid system value for dedup pre-check")?
         };
-        let check_result = flox
-            .catalog_client
+        let catalog = &flox.floxhub_client;
+        let check_result = catalog
             .check_build_already_recorded(
                 &catalog_name,
                 publish_provider.package_metadata.package.name().as_ref(),
@@ -318,9 +319,10 @@ impl Publish {
             "publishing package: {}",
             &publish_provider.package_metadata.package
         );
+        let catalog = &flox.floxhub_client;
         let needs_publisher_wait = match publish_provider
             .publish(
-                &flox.catalog_client,
+                catalog,
                 &catalog_name,
                 package_created,
                 &build_metadata,
@@ -345,9 +347,10 @@ impl Publish {
                 // Using a block here instead of `span.in_scope()` because
                 // that's not an async context.
                 let _ = span.enter();
+                let catalog = &flox.floxhub_client;
                 publish_provider
                     .wait_for_publish_completion(
-                        &flox.catalog_client,
+                        catalog,
                         &build_metadata,
                         PUBLISH_COMPLETION_POLL_INTERVAL_MILLIS,
                         PUBLISH_COMPLETION_TIMEOUT_MILLIS,

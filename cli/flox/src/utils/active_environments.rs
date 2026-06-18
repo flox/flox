@@ -118,6 +118,15 @@ impl ActiveEnvironments {
     pub fn iter(&self) -> impl Iterator<Item = &UninitializedEnvironment> {
         self.0.iter().map(|active| &active.environment)
     }
+
+    /// Iterate over the active environments with their activation metadata
+    /// (mode, generation), most recently activated first. Needed when callers
+    /// must know how an env was activated, e.g. to pick the matching
+    /// rendered-env link when deactivating layers below the front of the
+    /// stack.
+    pub fn iter_full(&self) -> impl Iterator<Item = &ActiveEnvironment> {
+        self.0.iter()
+    }
 }
 
 impl Display for ActiveEnvironments {

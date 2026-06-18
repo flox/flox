@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-use flox_catalog::AuthContext;
+use floxhub_client::AuthContext;
 use indoc::formatdoc;
 use tempfile::{NamedTempFile, TempDir, TempPath, tempdir_in};
 

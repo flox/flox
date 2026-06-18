@@ -1,0 +1,47 @@
+# Drive an interactive bash through nested auto-activation: cd into a nested
+# project stack, then to a sibling project. The prompt hook must unwind the
+# whole stack and activate the sibling in a single prompt, with no leftover
+# variables from the popped layers.
+#
+# Verification beyond the expect matches below is the caller's job: the bats
+# test asserts on the captured output (e.g. no abandon warning, no tracer
+# noise from consecutive deactivations).
+
+set dir [lindex $argv 0]
+set child [lindex $argv 1]
+set sibling [lindex $argv 2]
+set flox $env(FLOX_BIN)
+# Auto-activation may lock and build environments on first use.
+set timeout 60
+set env(NO_COLOR) 1
+set env(TERM) xterm-mono
+set stty_init "cols 1000"
+
+spawn $flox activate --dir $dir
+expect_after {
+  timeout { exit 1 }
+  eof { exit 2 }
+  "*\n" { exp_continue }
+  "*\r" { exp_continue }
+}
+
+expect "You are now using the environment"
+expect $env(KNOWN_PROMPT)
+
+# Entering the nested child activates parent then child before this prompt.
+send "cd $child\n"
+expect $env(KNOWN_PROMPT)
+send "echo S1: v2=\${TEST_VAR2:-unset} v3=\${TEST_VAR3:-unset}\n"
+expect "S1: v2=auto2 v3=auto3"
+expect $env(KNOWN_PROMPT)
+
+# Switching to the sibling pops both nested layers and activates the sibling
+# in the same prompt run.
+send "cd $sibling\n"
+expect $env(KNOWN_PROMPT)
+send "echo S2: v2=\${TEST_VAR2:-unset} v3=\${TEST_VAR3:-unset} vz=\${TEST_VARZ:-unset}\n"
+expect "S2: v2=unset v3=unset vz=autoz"
+expect $env(KNOWN_PROMPT)
+
+send "exit\n"
+expect eof

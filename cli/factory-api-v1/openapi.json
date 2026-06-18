@@ -1,0 +1,678 @@
+{
+  "openapi": "3.0.2",
+  "info": {
+    "title": "Flox Factory Service",
+    "summary": "Build scheduling and orchestration",
+    "description": "Flox Factory Service API",
+    "version": "unknown"
+  },
+  "paths": {
+    "/api/v1/factory/health": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "summary": "Health",
+        "operationId": "health_api_v1_factory_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/factory/ready": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "summary": "Ready",
+        "operationId": "ready_api_v1_factory_ready_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/factory/webhooks/github": {
+      "post": {
+        "tags": [
+          "webhooks"
+        ],
+        "summary": "Receive Github Webhook",
+        "description": "Receive a GitHub webhook delivery.\n\nNon-push events are acknowledged and ignored. Push events are\nvalidated, parsed, and stored. Returns a status dict indicating\nwhether the event was accepted, ignored, a duplicate, or caused\na parse error.",
+        "operationId": "receive_github_webhook_api_v1_factory_webhooks_github_post",
+        "parameters": [
+          {
+            "name": "x-github-event",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "X-Github-Event"
+            }
+          },
+          {
+            "name": "x-github-delivery",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "X-Github-Delivery"
+            }
+          },
+          {
+            "name": "x-hub-signature-256",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "title": "X-Hub-Signature-256",
+              "nullable": true,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Receive Github Webhook Api V1 Factory Webhooks Github Post"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        }
+      }
+    },
+    "/api/v1/factory/builds": {
+      "get": {
+        "tags": [
+          "builds"
+        ],
+        "summary": "List Builds",
+        "description": "Return a paginated list of builds.\n\nUse the `status` query parameter to filter:\n- ``undispatched``: builds with no task (task_id IS NULL)\n- Any other value: filters by tasks.status (e.g. ``claimed``)",
+        "operationId": "list_builds_api_v1_factory_builds_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          },
+          {
+            "HTTPBasic": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "title": "Status",
+              "nullable": true,
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Page Size"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BuildListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        }
+      }
+    },
+    "/api/v1/factory/builds/{build_id}": {
+      "get": {
+        "tags": [
+          "builds"
+        ],
+        "summary": "Get Build",
+        "description": "Return a single build by ID with its task sub-object.",
+        "operationId": "get_build_api_v1_factory_builds__build_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          },
+          {
+            "HTTPBasic": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "build_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Build Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BuildResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        }
+      }
+    },
+    "/api/v1/factory/builds/{build_id}/logs": {
+      "get": {
+        "tags": [
+          "builds"
+        ],
+        "summary": "Get Build Logs",
+        "description": "Proxy the log body for a build, source-faithfully.\n\nFetches the log content from Build Coordinator and returns it as\n``text/plain; charset=utf-8`` without modification.  No escape\nstripping, no control-byte filtering, no timestamp injection.\nTerminal-escape handling is the CLI consumer's responsibility.\nThe only hygiene applied is at the coordinator client layer: valid\nUTF-8 output and a size-capped read.  No JSON envelope; the body\n*is* the log.\n\nReturns:\n    200 with the log body.\n    404 if the build does not exist, has no Build Coordinator\n        counterpart (task_id IS NULL), or the coordinator itself\n        returns 404.\n    500 if an unexpected error occurs (e.g. get_build_by_id raises).\n    502 if Build Coordinator is unreachable or returns a 5xx error.",
+        "operationId": "get_build_logs_api_v1_factory_builds__build_id__logs_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          },
+          {
+            "HTTPBasic": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "build_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Build Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Log body",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Build not found or no logs available"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Build Coordinator unreachable or returned an error"
+          }
+        }
+      }
+    },
+    "/api/v1/factory/callbacks/builds/{task_id}": {
+      "post": {
+        "tags": [
+          "callbacks"
+        ],
+        "summary": "Receive Build Callback",
+        "description": "Receive a build coordinator callback for a task.\n\nReturns 200 in all reachable code paths (validation errors are\nauto-converted to 422 by FastAPI); see module docstring for the\nrationale on each branch.",
+        "operationId": "receive_build_callback_api_v1_factory_callbacks_builds__task_id__post",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Task Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BuildCallbackPayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Receive Build Callback Api V1 Factory Callbacks Builds  Task Id  Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        }
+      }
+    },
+    "/api/v1/factory/tasks/{task_id}": {
+      "get": {
+        "tags": [
+          "tasks"
+        ],
+        "summary": "Get Task",
+        "description": "Return a single task by ID.\n\nReturns 404 if no task with the given ID exists.",
+        "operationId": "get_task_api_v1_factory_tasks__task_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          },
+          {
+            "HTTPBasic": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Task Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "BuildCallbackPayload": {
+        "properties": {
+          "build_id": {
+            "type": "string",
+            "title": "Build Id"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "dispatching",
+              "running",
+              "completed",
+              "failed",
+              "timed_out",
+              "cancelled"
+            ],
+            "title": "Status"
+          },
+          "error_message": {
+            "title": "Error Message",
+            "nullable": true,
+            "type": "string"
+          },
+          "exit_code": {
+            "title": "Exit Code",
+            "nullable": true,
+            "type": "integer"
+          }
+        },
+        "type": "object",
+        "required": [
+          "build_id",
+          "status"
+        ],
+        "title": "BuildCallbackPayload",
+        "description": "Payload posted by the build coordinator to\n``POST /api/v1/factory/callbacks/builds/{task_id}``.\n\nFields match ``build_coordinator/reporter.py:51-56`` exactly.\nAll four are required by the coordinator wire contract; the\nOptional[None] defaults on ``error_message`` and ``exit_code``\naccommodate the ``completed`` and ``cancelled`` terminal cases\nwhere neither is meaningful."
+      },
+      "BuildListResponse": {
+        "properties": {
+          "builds": {
+            "items": {
+              "$ref": "#/components/schemas/BuildResponse"
+            },
+            "type": "array",
+            "title": "Builds"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "page_size": {
+            "type": "integer",
+            "title": "Page Size"
+          }
+        },
+        "type": "object",
+        "required": [
+          "builds",
+          "total",
+          "page",
+          "page_size"
+        ],
+        "title": "BuildListResponse",
+        "description": "Paginated list of builds."
+      },
+      "BuildResponse": {
+        "properties": {
+          "build_id": {
+            "type": "integer",
+            "title": "Build Id"
+          },
+          "source_repo_url": {
+            "type": "string",
+            "title": "Source Repo Url"
+          },
+          "source_commit_sha": {
+            "type": "string",
+            "title": "Source Commit Sha"
+          },
+          "nixpkgs_revision": {
+            "type": "string",
+            "title": "Nixpkgs Revision"
+          },
+          "system": {
+            "type": "string",
+            "title": "System"
+          },
+          "attr_path": {
+            "type": "string",
+            "title": "Attr Path"
+          },
+          "build_type": {
+            "type": "string",
+            "title": "Build Type"
+          },
+          "catalog_name": {
+            "type": "string",
+            "title": "Catalog Name"
+          },
+          "exit_code": {
+            "title": "Exit Code",
+            "nullable": true,
+            "type": "integer"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "task": {
+            "nullable": true,
+            "$ref": "#/components/schemas/TaskResponse"
+          }
+        },
+        "type": "object",
+        "required": [
+          "build_id",
+          "source_repo_url",
+          "source_commit_sha",
+          "nixpkgs_revision",
+          "system",
+          "attr_path",
+          "build_type",
+          "catalog_name",
+          "created_at"
+        ],
+        "title": "BuildResponse",
+        "description": "Build-specific details with optional task sub-object.\n\nThe task field is None for undispatched builds (task_id IS NULL\nin factory_builds)."
+      },
+      "ErrorResponse": {
+        "properties": {
+          "detail": {
+            "type": "string",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "detail"
+        ],
+        "title": "ErrorResponse",
+        "description": "JSON body returned for all error responses on the builds endpoints."
+      },
+      "TaskResponse": {
+        "properties": {
+          "task_id": {
+            "type": "integer",
+            "title": "Task Id"
+          },
+          "task_type": {
+            "type": "string",
+            "title": "Task Type"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "error_message": {
+            "title": "Error Message",
+            "nullable": true,
+            "type": "string"
+          },
+          "error_class": {
+            "title": "Error Class",
+            "nullable": true,
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          },
+          "started_at": {
+            "title": "Started At",
+            "nullable": true,
+            "type": "string",
+            "format": "date-time"
+          },
+          "completed_at": {
+            "title": "Completed At",
+            "nullable": true,
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "type": "object",
+        "required": [
+          "task_id",
+          "task_type",
+          "status",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "TaskResponse",
+        "description": "Generic task lifecycle \u2014 same shape for all operation types."
+      }
+    },
+    "securitySchemes": {
+      "HTTPBearer": {
+        "type": "http",
+        "scheme": "bearer"
+      },
+      "HTTPBasic": {
+        "type": "http",
+        "scheme": "basic"
+      }
+    }
+  }
+}

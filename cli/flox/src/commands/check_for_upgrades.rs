@@ -10,7 +10,7 @@ use flox_core::log_file_format_upgrade_check;
 use flox_core::vars::{FLOX_VERSION_STRING, FLOX_VERSION_VAR};
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment, EnvironmentError};
-use flox_rust_sdk::providers::catalog::{self, CatalogQoS};
+use flox_rust_sdk::providers::catalog::CatalogQoS;
 use flox_rust_sdk::providers::upgrade_checks::{UpgradeInformation, UpgradeInformationGuard};
 use flox_rust_sdk::utils::CommandExt;
 use serde::de::DeserializeOwned;
@@ -63,12 +63,11 @@ impl CheckForUpgrades {
         // A possible future improvement was sketched out in the comment above [1].
         //
         // [1]: <https://github.com/flox/flox/pull/2658#discussion_r1932362747>
-        if let catalog::Client::Catalog(ref mut catalog_client) = flox.catalog_client {
-            catalog_client.update_config(|config| {
-                let (qos_key, qos_value) = CatalogQoS::Background.as_header_pair();
-                config.extra_headers.insert(qos_key, qos_value);
-            })?;
-        }
+        // Update the shared client's extra headers to set background QoS.
+        flox.floxhub_client.update_config(|config| {
+            let (qos_key, qos_value) = CatalogQoS::Background.as_header_pair();
+            config.extra_headers.insert(qos_key, qos_value);
+        })?;
 
         let mut environment = self.environment.into_concrete_environment(&flox, None)?;
         let check_exit_branch = check_for_package_upgrades(
@@ -340,7 +339,7 @@ mod tests {
         // provide a mock response from the catalog client
         // in this case an older [sic] version of the hello package,
         // which should trigger an upgrade.
-        flox.catalog_client =
+        flox.floxhub_client =
             catalog_replay_client(GENERATED_DATA.join("resolve/old_hello.yaml")).await;
 
         let exit_branch =

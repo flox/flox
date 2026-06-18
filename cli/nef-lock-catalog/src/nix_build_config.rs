@@ -3,8 +3,8 @@ use std::fs;
 use std::path::Path;
 
 use anyhow::{Context, Result};
-use flox_catalog::ClientTrait;
 use flox_core::Version;
+use floxhub_client::CatalogClientTrait;
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
@@ -113,7 +113,7 @@ pub struct LockOptions {
 #[tracing::instrument(skip_all)]
 pub async fn lock_config(
     config: &BuildConfig,
-    client: &(impl ClientTrait + Send + Sync),
+    client: &(impl CatalogClientTrait + Send + Sync),
 ) -> Result<BuildLock> {
     lock_config_with_options(config, client, &LockOptions {
         nef_base_dir: Some(".flox".to_string()),
@@ -125,7 +125,7 @@ pub async fn lock_config(
 #[tracing::instrument(skip_all)]
 pub async fn lock_config_with_options(
     config: &BuildConfig,
-    client: &(impl ClientTrait + Send + Sync),
+    client: &(impl CatalogClientTrait + Send + Sync),
     options: &LockOptions,
 ) -> Result<BuildLock> {
     let BuildConfig {
@@ -169,7 +169,7 @@ pub async fn lock_config_with_options(
 /// Lock a FloxHub catalog by fetching locked sources and building tree structure
 #[instrument(skip(client))]
 async fn lock_floxhub_catalog(
-    client: &(impl ClientTrait + Send + Sync),
+    client: &(impl CatalogClientTrait + Send + Sync),
     catalog_id: &CatalogId,
 ) -> Result<CatalogLock> {
     // Fetch locked sources from FloxHub

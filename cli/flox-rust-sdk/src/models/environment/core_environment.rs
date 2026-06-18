@@ -292,8 +292,9 @@ impl<State> CoreEnvironment<State> {
 
         let auth = NixAuth::from_flox(flox).map_err(CoreEnvironmentError::Auth)?;
 
+        let catalog = &flox.floxhub_client;
         let outputs = BuildEnvNix::new(auth).build(
-            &flox.catalog_client,
+            catalog,
             &lockfile_path,
             service_config_path,
             out_link_prefix,
@@ -564,8 +565,9 @@ impl CoreEnvironment<ReadOnly> {
             // We are not interested in the store path here, so we ignore the result
             // Neither do we depend on services, so we pass `None`
             let auth = NixAuth::from_flox(flox).map_err(EnvironmentError::Auth)?;
+            let catalog = &flox.floxhub_client;
             let _ = BuildEnvNix::new(auth)
-                .build(&flox.catalog_client, tmp_lockfile.path(), None, None)
+                .build(catalog, tmp_lockfile.path(), None, None)
                 .map_err(|e| EnvironmentError::Core(CoreEnvironmentError::BuildEnv(e)))?;
         }
 
@@ -1357,7 +1359,7 @@ mod tests {
             hello.pkg-path = "hello"
         "#});
 
-        flox.catalog_client =
+        flox.floxhub_client =
             catalog_replay_client(GENERATED_DATA.join("resolve/hello.yaml")).await;
         env_view.edit(&flox, new_env_str.to_string(), None).unwrap();
 
@@ -1469,7 +1471,7 @@ mod tests {
         hello.pkg-path = "hello"
         "#;
 
-        flox.catalog_client =
+        flox.floxhub_client =
             catalog_replay_client(GENERATED_DATA.join("resolve/hello.yaml")).await;
         let result = env_view.edit(&flox, new_env_str.to_string(), None).unwrap();
 
@@ -1499,7 +1501,7 @@ mod tests {
     async fn upgrade_with_empty_list_upgrades_all() {
         let (mut env_view, mut flox, _temp_dir_handle) = empty_core_environment();
 
-        flox.catalog_client =
+        flox.floxhub_client =
             catalog_replay_client(GENERATED_DATA.join("resolve/old_hello.yaml")).await;
         env_view
             .install(
@@ -1511,7 +1513,7 @@ mod tests {
             )
             .unwrap();
 
-        flox.catalog_client =
+        flox.floxhub_client =
             catalog_replay_client(GENERATED_DATA.join("resolve/hello.yaml")).await;
 
         let manifest = env_view.manifest(&flox).unwrap();
@@ -1597,7 +1599,7 @@ mod tests {
             base_directory: None,
         });
 
-        flox.catalog_client =
+        flox.floxhub_client =
             catalog_replay_client(GENERATED_DATA.join("resolve/hello.yaml")).await;
 
         let out_link = env_path.path().with_extension("out-link");

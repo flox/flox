@@ -3,7 +3,6 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result, anyhow, bail};
 use bpaf::Bpaf;
-use flox_catalog::AuthContext;
 use flox_core::data::environment_ref::RemoteEnvironmentRef;
 use flox_manifest::interfaces::{AsLatestSchema, AsWritableManifest, WriteManifest};
 use flox_manifest::raw::SyncTypedToRaw;
@@ -27,6 +26,7 @@ use flox_rust_sdk::models::environment::{
     create_dot_flox_gitignore,
 };
 use flox_rust_sdk::providers::buildenv::BuildEnvError;
+use floxhub_client::AuthContext;
 use indoc::{formatdoc, indoc};
 use tracing::{debug, info_span, instrument};
 

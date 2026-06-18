@@ -9,6 +9,7 @@ mod deactivate;
 mod delete;
 mod edit;
 mod envs;
+mod factory;
 mod gc;
 mod general;
 mod generations;
@@ -84,7 +85,7 @@ use crate::utils::active_environments::{
 };
 use crate::utils::dialog::{Dialog, Select};
 use crate::utils::errors::display_chain;
-use crate::utils::init::init_catalog_client;
+use crate::utils::init::init_floxhub_client;
 use crate::utils::message;
 use crate::utils::metrics::{AWSDatalakeConnection, Client, Hub, read_metrics_uuid};
 use crate::utils::update_notifications::UpdateNotification;
@@ -252,11 +253,13 @@ impl FloxArgs {
 
         let git_url_override = {
             if let Ok(env_set_host) = std::env::var("_FLOX_FLOXHUB_GIT_URL") {
-                message::warning(formatdoc! {"
-                    Using {env_set_host} as FloxHub host
-                    '$_FLOX_FLOXHUB_GIT_URL' is used for testing purposes only,
-                    alternative FloxHub hosts are not yet supported!
-                "});
+                if !self.is_prompt_hook_flow() {
+                    message::warning(formatdoc! {"
+                        Using {env_set_host} as FloxHub host
+                        '$_FLOX_FLOXHUB_GIT_URL' is used for testing purposes only,
+                        alternative FloxHub hosts are not yet supported!
+                    "});
+                }
                 Some(Url::parse(&env_set_host)?)
             } else {
                 None
@@ -281,7 +284,7 @@ impl FloxArgs {
         let credential =
             AuthContext::from_mode(&config.flox.floxhub_authn_mode, floxhub_token.clone());
 
-        let catalog_client = init_catalog_client(&config, metrics_device_uuid)?;
+        let floxhub_client = init_floxhub_client(&config, metrics_device_uuid)?;
 
         // we already make sure $USER corresponds to **euid** earlier on in the process.
         let system_user_name =
@@ -302,7 +305,7 @@ impl FloxArgs {
             argv,
             auth_context: credential,
             floxhub,
-            catalog_client,
+            floxhub_client,
             installable_locker: Default::default(),
             #[allow(deprecated, reason = "This should be the only internal use")]
             features: config.features.unwrap_or_default(),
@@ -339,6 +342,7 @@ impl FloxArgs {
                     }
                     args.handle(flox).await
                 },
+                Commands::Factory(args) => args.handle(flox).await,
             };
 
             // This will print the update notification after output from a successful
@@ -384,6 +388,23 @@ impl FloxArgs {
         result
     }
 
+    /// Whether this invocation is part of the prompt-hook flow:
+    /// `flox hook-env`, which the shell prompt hook runs on every prompt
+    /// inside a command substitution that captures only stdout, or
+    /// `flox deactivate`, which hands the deactivation off to that hook
+    /// (and in `--print-script` mode is itself invoked by the emitted
+    /// script). Anything the preamble prints to stderr appears above every
+    /// prompt for `hook-env` and once more on the way out for `deactivate`,
+    /// so advisory messages are suppressed for these commands and left for
+    /// the next user-invoked command to surface.
+    fn is_prompt_hook_flow(&self) -> bool {
+        matches!(
+            self.command,
+            Some(Commands::Internal(InternalCommands::HookEnv(_)))
+                | Some(Commands::Use(UseCommands::Deactivate(_)))
+        )
+    }
+
     /// Parse and validate the configured `floxhub_token`, returning `None` and
     /// emitting any user-facing warnings as a side effect.
     ///
@@ -391,6 +412,9 @@ impl FloxArgs {
     /// the token (e.g. Kerberos) — in that case the token in `flox.toml` is
     /// not consumed by the auth pipeline, so warning about its state — or
     /// rewriting the user's config — would be misleading.
+    ///
+    /// For `flox hook-env` the token state is reported by the next
+    /// user-invoked command instead; see [Self::is_prompt_hook_flow].
     fn resolve_floxhub_token(&self, config: &Config) -> Option<FloxhubToken> {
         if !matches!(config.flox.floxhub_authn_mode, AuthnMode::Auth0) {
             return None;
@@ -411,6 +435,12 @@ impl FloxArgs {
 
         match parsed {
             Err(FloxhubTokenError::InvalidToken(token_error)) => {
+                // The prompt hook must neither print nor rewrite the user's
+                // config; the next user-invoked command surfaces and removes
+                // the invalid token.
+                if self.is_prompt_hook_flow() {
+                    return None;
+                }
                 message::error(formatdoc! {"
                     Your FloxHub token is invalid: {token_error}
                     You may need to log in again.
@@ -423,10 +453,11 @@ impl FloxArgs {
                 None
             },
             Ok(Some(token)) if token.is_expired() => {
-                if !matches!(
+                let reauthenticating = matches!(
                     self.command,
                     Some(Commands::Admin(AdminCommands::Auth(auth::Auth::Login)))
-                ) {
+                );
+                if !reauthenticating && !self.is_prompt_hook_flow() {
                     message::warning(
                         "Your FloxHub token has expired. Run 'flox auth login' to re-authenticate.",
                     );
@@ -497,6 +528,16 @@ enum Commands {
     Internal(#[bpaf(external(internal_commands))] InternalCommands),
 
     Beta(#[bpaf(external(beta::beta_commands))] beta::BetaCommands),
+
+    /// Flox Factory operator commands (hidden; see operator runbook)
+    #[bpaf(command, hide)]
+    Factory(
+        #[bpaf(
+            external(factory::factory_commands),
+            fallback(factory::FactoryCommands::Help)
+        )]
+        factory::FactoryCommands,
+    ),
 }
 
 #[derive(Debug, Bpaf, Clone)]
@@ -834,7 +875,7 @@ enum InternalCommands {
 }
 
 impl InternalCommands {
-    async fn handle(self, _config: Config, flox: Flox) -> Result<()> {
+    async fn handle(self, config: Config, flox: Flox) -> Result<()> {
         match self {
             InternalCommands::ResetMetrics(args) => args.handle(flox).await?,
             InternalCommands::Upload(args) => args.handle(flox).await?,
@@ -842,7 +883,7 @@ impl InternalCommands {
             InternalCommands::CheckForUpgrades(args) => args.handle(flox).await?,
             InternalCommands::ActivationState(args) => args.handle(flox).await?,
             InternalCommands::ServicesSocket(args) => args.handle(flox).await?,
-            InternalCommands::HookEnv(args) => args.handle(flox)?,
+            InternalCommands::HookEnv(args) => args.handle(config, flox)?,
         }
         Ok(())
     }
@@ -1393,7 +1434,7 @@ pub(super) async fn ensure_environment_trust(
 /// If the credential is expired/missing and we can prompt interactively,
 /// triggers the login flow as a fallback.
 pub(super) async fn ensure_auth(flox: &mut Flox) -> Result<String> {
-    use flox_catalog::AuthFailure;
+    use floxhub_client::AuthFailure;
 
     match flox.auth_context.authenticated_handle() {
         Ok(handle) => Ok(handle.to_string()),

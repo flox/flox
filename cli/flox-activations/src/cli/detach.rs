@@ -1,8 +1,9 @@
 use std::path::PathBuf;
 
-use anyhow::{Context, anyhow};
+use anyhow::Context;
 use clap::Args;
 use flox_core::activations::{read_activations_json, state_json_path, write_activations_json};
+use tracing::debug;
 
 use crate::Error;
 
@@ -36,11 +37,18 @@ impl DetachArgs {
             })?;
 
         let Some(mut state) = activation_state_opt else {
-            return Err(anyhow!(
-                "No activation state found at '{}'; cannot detach PID {}",
-                activations_json_path.display(),
-                self.pid
-            ));
+            // The activation's executive removes the whole state directory as
+            // soon as the last PID detaches. The prompt hook emits this `detach`
+            // unconditionally and races that async cleanup, so a missing state
+            // file means the work is already done — the PID is no longer
+            // attached. Treat it as a no-op rather than surfacing a spurious
+            // error on the user's prompt.
+            debug!(
+                pid = self.pid,
+                path = %activations_json_path.display(),
+                "no activation state to detach from; assuming already cleaned up"
+            );
+            return Ok(());
         };
 
         let empty_start_id = state.detach(self.pid)?;
@@ -67,12 +75,7 @@ impl DetachArgs {
 mod test {
     use flox_core::activate::mode::ActivateMode;
     use flox_core::activations::test_helpers::{read_activation_state, write_activation_state};
-    use flox_core::activations::{
-        ActivationState,
-        StartIdentifier,
-        StartOrAttachResult,
-        activation_state_dir_path,
-    };
+    use flox_core::activations::{ActivationState, StartOrAttachResult, activation_state_dir_path};
     use tempfile::TempDir;
 
     use super::DetachArgs;
@@ -90,14 +93,17 @@ mod test {
             dot_flox_path.join("run/default"),
         );
         state.set_executive_pid(1);
-        let start_id = StartIdentifier::new("/nix/store/test");
-        state.start_or_attach(pid, &start_id.store_path);
+        // Use the identifier minted by start_or_attach: StartIdentifier is
+        // timestamped, so a locally constructed one names a different start
+        // state dir whenever the millisecond ticks in between.
+        let StartOrAttachResult::Start { start_id } = state.start_or_attach(pid, "/nix/store/test")
+        else {
+            panic!("expected Start for pid");
+        };
         write_activation_state(tmp.path(), &dot_flox_path, state);
         let activation_state_dir = activation_state_dir_path(tmp.path(), &dot_flox_path);
         let start_state_dir = start_id.start_state_dir(&activation_state_dir).unwrap();
         std::fs::create_dir_all(&start_state_dir).unwrap();
-
-        let activation_state_dir = activation_state_dir_path(tmp.path(), &dot_flox_path);
 
         let args = DetachArgs {
             activation_state_dir,
@@ -110,6 +116,24 @@ mod test {
             updated.attached_pids_is_empty(),
             "PID should be removed from state.json after detach"
         );
+    }
+
+    /// Detaching when the state file is already gone (the executive cleaned it
+    /// up first) is a no-op success, not an error — the prompt hook races that
+    /// async cleanup.
+    #[test]
+    fn detach_with_missing_state_is_ok() {
+        let tmp = TempDir::new().unwrap();
+        let dot_flox_path = tmp.path().join(".flox");
+        let activation_state_dir = activation_state_dir_path(tmp.path(), &dot_flox_path);
+        // No state.json is ever written.
+
+        let args = DetachArgs {
+            activation_state_dir,
+            pid: 12345,
+        };
+        args.handle()
+            .expect("detach should be a no-op when state is missing");
     }
 
     /// When the last PID overall detaches, its start state dir is removed

@@ -10,9 +10,9 @@ use std::path::PathBuf;
 use httpmock::{MockServer, RecordingID};
 use tracing::debug;
 
-use crate::config::{CatalogClientConfig, CatalogMockMode};
+use crate::config::{FloxhubClientConfig, FloxhubMockMode};
 
-/// Guard to keep a `MockServer` running until the `CatalogClient` is dropped.
+/// Guard to keep a `MockServer` running until the `FloxhubClient` is dropped.
 #[allow(dead_code)] // https://github.com/rust-lang/rust/issues/122833
 pub(crate) enum MockGuard {
     Record(MockRecorder),
@@ -20,12 +20,12 @@ pub(crate) enum MockGuard {
 }
 
 impl MockGuard {
-    pub(crate) fn new(config: &CatalogClientConfig) -> Option<Self> {
+    pub(crate) fn new(config: &FloxhubClientConfig) -> Option<Self> {
         match &config.mock_mode {
-            CatalogMockMode::None => None,
-            CatalogMockMode::Record(path) => {
+            FloxhubMockMode::None => None,
+            FloxhubMockMode::Record(path) => {
                 let server = MockServer::start();
-                server.forward_to(&config.catalog_url, |rule| {
+                server.forward_to(&config.base_url, |rule| {
                     rule.filter(|when| {
                         when.any_request();
                     });
@@ -39,14 +39,14 @@ impl MockGuard {
                 debug!(?path, server = server.base_url(), "mock server recording");
                 let recorder = MockRecorder {
                     path: path.to_path_buf(),
-                    catalog_url: config.catalog_url.clone(),
+                    base_url: config.base_url.clone(),
                     server,
                     recording,
                 };
 
                 Some(MockGuard::Record(recorder))
             },
-            CatalogMockMode::Replay(path) => {
+            FloxhubMockMode::Replay(path) => {
                 let server = MockServer::start();
                 server.playback(path);
                 debug!(?path, server = server.base_url(), "mock server replaying");
@@ -71,13 +71,13 @@ impl MockGuard {
     pub fn reset_recording(&mut self) {
         if let MockGuard::Record(MockRecorder {
             server,
-            catalog_url,
+            base_url,
             recording,
             ..
         }) = self
         {
             server.reset();
-            server.forward_to(catalog_url.as_str(), |rule| {
+            server.forward_to(base_url.as_str(), |rule| {
                 rule.filter(|when| {
                     when.any_request();
                 });
@@ -107,7 +107,7 @@ impl Debug for MockGuard {
 /// requests to a file when dropped.
 pub(crate) struct MockRecorder {
     pub(crate) path: PathBuf,
-    pub(crate) catalog_url: String,
+    pub(crate) base_url: String,
     pub(crate) server: MockServer,
     pub(crate) recording: RecordingID,
 }

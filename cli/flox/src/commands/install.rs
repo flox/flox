@@ -4,7 +4,6 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, anyhow, bail};
 use bpaf::Bpaf;
-use flox_catalog::{MsgAttrPathNotFoundNotFoundForAllSystems, MsgAttrPathNotFoundNotInCatalog};
 use flox_core::data::environment_ref::DEFAULT_NAME;
 use flox_manifest::compose::{
     COMPOSER_MANIFEST_ID,
@@ -42,6 +41,7 @@ use flox_rust_sdk::providers::lock_manifest::{
     ResolutionFailures,
     ResolveError,
 };
+use floxhub_client::{MsgAttrPathNotFoundNotFoundForAllSystems, MsgAttrPathNotFoundNotInCatalog};
 use indoc::formatdoc;
 use itertools::Itertools;
 use shell_gen::ShellWithPath;
@@ -988,7 +988,7 @@ mod tests {
         } else {
             "aarch64-linux, x86_64-linux"
         };
-        flox.catalog_client = catalog_replay_client(response_path).await;
+        flox.floxhub_client = catalog_replay_client(response_path).await;
 
         let _env = new_path_environment_in(&flox, EMPTY_ALL_SYSTEMS, tempdir.path());
         let install_cmd = Install {
