@@ -28,5 +28,6 @@ impl Display for CatalogId {
 pub use lock::build_lock::{BuildLock, write_lock};
 pub use lock::flakeref::NixFlakeref;
 pub use lock::lookup::{LockError, lock_references};
+pub use lock::render::render_unresolvable;
 pub use nix_build_config::{LockOptions, lock_config, lock_config_with_options, read_config};
 pub use scan::{CatalogRef, scan_package, scan_package_with_roots};
