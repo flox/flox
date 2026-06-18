@@ -43,11 +43,7 @@ pub enum BaseCatalogUrlSelect {
         #[bpaf(
             long("stability"),
             argument("stability"),
-            help(
-                "Perform a nix expression build using a base package set of the given stability\n\
-                as tracked by the catalog server.\n\
-                Cannot be used with manifest base builds."
-            )
+            help("Select the nixpkgs revision by stability, as tracked by the catalog server.")
         )]
         String,
     ),
@@ -108,6 +104,9 @@ enum SubcommandOrBuildTargets {
         #[bpaf(long, short)]
         force: bool,
 
+        #[bpaf(external(base_catalog_url_select), optional)]
+        base_catalog_url_select: Option<BaseCatalogUrlSelect>,
+
         /// The package to import (e.g., nixpkgs#hello, github:nixos/nixpkgs#hello)
         #[bpaf(positional("installable"))]
         installable: String,
@@ -146,13 +145,17 @@ impl Build {
 
                 Self::clean(flox, env, targets).await
             },
-            SubcommandOrBuildTargets::ImportNixpkgs { installable, force } => {
+            SubcommandOrBuildTargets::ImportNixpkgs {
+                installable,
+                force,
+                base_catalog_url_select,
+            } => {
                 let env = self
                     .environment
                     .detect_concrete_environment(&mut flox, "Import package definition in")?;
                 environment_subcommand_metric!("build::import-nixpkgs", env);
 
-                Self::import_nixpkgs(flox, env, installable, force).await
+                Self::import_nixpkgs(flox, env, installable, force, base_catalog_url_select).await
             },
             SubcommandOrBuildTargets::UpdateCatalogs {} => {
                 let env = self
@@ -342,12 +345,43 @@ impl Build {
         }
     }
 
+    /// Resolve the flake ref that `import_nixpkgs` passes to `nix eval`.
+    ///
+    /// Rules:
+    /// * No flag → return the parsed flake ref from the installable (e.g.
+    ///   `"nixpkgs"` for a bare attr path).
+    /// * `--stability` or `--nixpkgs-url` flag present → require that the
+    ///   installable does not carry an explicit non-nixpkgs flake ref, then
+    ///   resolve via the catalog and convert to a `git+…?shallow=1` flake ref.
+    /// * Explicit non-nixpkgs ref with a flag → hard error.
+    async fn resolve_import_flake_ref(
+        flox: &Flox,
+        installable: &str,
+        base_catalog_url_select: Option<BaseCatalogUrlSelect>,
+    ) -> Result<String> {
+        let (parsed_flake_ref, _) = Self::parse_installable(installable)?;
+
+        if let Some(sel) = base_catalog_url_select {
+            let is_explicit_non_nixpkgs = parsed_flake_ref != "nixpkgs";
+            if is_explicit_non_nixpkgs {
+                bail!(
+                    "Cannot use --stability or --nixpkgs-url together with an explicit flake reference ('{parsed_flake_ref}'). Remove the flag or use a bare attribute path."
+                );
+            }
+            let base_nixpkgs_url = base_nixpkgs_url_from_url_select(flox, Some(sel), None).await?;
+            Ok(base_nixpkgs_url.as_flake_ref()?.to_string())
+        } else {
+            Ok(parsed_flake_ref)
+        }
+    }
+
     #[instrument(name = "build::import-nixpkgs", skip_all)]
     async fn import_nixpkgs(
-        _flox: Flox,
+        flox: Flox,
         env: ConcreteEnvironment,
         installable: String,
         force: bool,
+        base_catalog_url_select: Option<BaseCatalogUrlSelect>,
     ) -> Result<()> {
         match &env {
             ConcreteEnvironment::Path(_) => (),
@@ -360,7 +394,11 @@ impl Build {
         };
 
         // Parse the installable to get flake reference and attribute path
-        let (flake_ref, attr_path) = Self::parse_installable(&installable)?;
+        let (_, attr_path) = Self::parse_installable(&installable)?;
+
+        // Resolve the flake_ref to use for nix eval.
+        let flake_ref =
+            Self::resolve_import_flake_ref(&flox, &installable, base_catalog_url_select).await?;
 
         // Split package name by dots to create proper directory nesting
         let package_dir = {
@@ -994,6 +1032,7 @@ mod test {
             ConcreteEnvironment::Path(env),
             package_name.to_string(),
             false,
+            None,
         )
         .await;
         assert!(result.is_ok());
@@ -1029,6 +1068,7 @@ mod test {
             ConcreteEnvironment::Path(env),
             "hello".to_string(),
             false,
+            None,
         )
         .await;
         assert!(result.is_ok());
@@ -1065,6 +1105,7 @@ mod test {
             ConcreteEnvironment::Path(env),
             package_name.to_string(),
             false,
+            None,
         )
         .await;
         assert!(result.is_err());
@@ -1105,6 +1146,7 @@ mod test {
             ConcreteEnvironment::Path(env),
             package_name.to_string(),
             true,
+            None,
         )
         .await;
         assert!(result.is_ok());
@@ -1150,6 +1192,7 @@ mod test {
                 ConcreteEnvironment::Path(env),
                 package_name.to_string(),
                 false,
+                None,
             )
             .await;
             assert!(result.is_ok(), "Failed to import package: {}", package_name);
@@ -1174,5 +1217,259 @@ mod test {
                 package_name
             );
         }
+    }
+
+    /// Passing --stability or --nixpkgs-url together with an explicit non-nixpkgs
+    /// flake ref (e.g. github:nixos/nixpkgs#hello) must produce a clear error
+    /// before any nix or catalog calls are made.
+    #[tokio::test]
+    async fn import_nixpkgs_conflict_errors_when_installable_has_explicit_flake_ref() {
+        let (flox, _temp_dir) = flox_instance();
+
+        let manifest = formatdoc! {r#"
+            version = 1
+        "#};
+
+        let env = new_path_environment(&flox, &manifest);
+
+        // github:nixos/nixpkgs#hello carries an explicit non-nixpkgs flake ref
+        let result = Build::import_nixpkgs(
+            flox,
+            ConcreteEnvironment::Path(env),
+            "github:nixos/nixpkgs#hello".to_string(),
+            false,
+            Some(BaseCatalogUrlSelect::NixpkgsUrl(
+                "https://github.com/NixOS/nixpkgs".parse().unwrap(),
+            )),
+        )
+        .await;
+
+        assert!(result.is_err());
+        let error_msg = result.unwrap_err().to_string();
+        assert!(
+            error_msg.contains("Cannot use --stability or --nixpkgs-url"),
+            "Expected conflict error, got: {error_msg}"
+        );
+        assert!(
+            error_msg.contains("github:nixos/nixpkgs"),
+            "Error should mention the conflicting flake ref, got: {error_msg}"
+        );
+    }
+
+    /// Passing --stability with the literal "nixpkgs" flake prefix is allowed —
+    /// the flag overrides which nixpkgs revision is used, which is its purpose.
+    /// This test verifies no conflict error is raised; it stops before the catalog
+    /// network call because the test environment has no live catalog.
+    #[test]
+    fn import_nixpkgs_allows_bare_nixpkgs_prefix_with_flag() {
+        // Verify that parse_installable treats "nixpkgs#hello" as flake_ref="nixpkgs"
+        let (flake_ref, attr_path) = Build::parse_installable("nixpkgs#hello").unwrap();
+        assert_eq!(flake_ref, "nixpkgs");
+        assert_eq!(attr_path, "hello");
+
+        // And a bare attribute path should also produce flake_ref="nixpkgs"
+        let (flake_ref_bare, _) = Build::parse_installable("hello").unwrap();
+        assert_eq!(flake_ref_bare, "nixpkgs");
+
+        // The conflict check should NOT fire for flake_ref == "nixpkgs":
+        // is_explicit_non_nixpkgs = ("nixpkgs" != "nixpkgs") = false
+        let is_explicit_non_nixpkgs = flake_ref != "nixpkgs";
+        assert!(
+            !is_explicit_non_nixpkgs,
+            "nixpkgs# prefix must be treated as no explicit override"
+        );
+    }
+
+    // --- Test B: base_nixpkgs_url_from_url_select wrapper via httpmock server ---
+
+    /// `Stability` variant: serving `BaseCatalogInfo::new_mock()` from an
+    /// httpmock server and calling with
+    /// `BaseCatalogUrlSelect::Stability("not-default")` returns the URL for
+    /// the first page that carries "not-default" in the fixture.
+    #[tokio::test]
+    async fn base_nixpkgs_url_from_url_select_stability_returns_catalog_url() {
+        use floxhub_client::FloxhubClient;
+        use floxhub_client::client::test_helpers::client_config;
+        use httpmock::MockServer;
+
+        let (mut flox, _temp_dir) = flox_instance();
+
+        let server = MockServer::start_async().await;
+        server.mock(|when, then| {
+            when.path("/api/v1/catalog/info/base-catalog");
+            then.status(200)
+                .json_body(serde_json::to_value(BaseCatalogInfo::new_mock()).unwrap());
+        });
+        flox.floxhub_client =
+            FloxhubClient::new(client_config(server.base_url().as_str())).unwrap();
+
+        let result = base_nixpkgs_url_from_url_select(
+            &flox,
+            Some(BaseCatalogUrlSelect::Stability("not-default".to_string())),
+            None,
+        )
+        .await
+        .unwrap();
+
+        // The mock fixture has base_url="https://mock.flox.dev" and page0 rev="",
+        // so the selected URL is "https://mock.flox.dev?rev=".
+        let expected = BaseCatalogInfo::new_mock()
+            .url_for_latest_page_with_stability("not-default")
+            .expect("fixture must have not-default stability");
+
+        assert_eq!(result, expected);
+    }
+
+    /// `NixpkgsUrl` pass-through: passing a raw URL returns it as a
+    /// `BaseCatalogUrl` without any catalog call, and `.as_flake_ref()` adds
+    /// the `git+` prefix and `?shallow=1` query parameter.
+    #[tokio::test]
+    async fn base_nixpkgs_url_from_url_select_nixpkgs_url_passthrough() {
+        let (flox, _temp_dir) = flox_instance();
+
+        // No mock seeded — a catalog call here would panic.
+        let raw_url: url::Url = "https://github.com/NixOS/nixpkgs".parse().unwrap();
+        let result = base_nixpkgs_url_from_url_select(
+            &flox,
+            Some(BaseCatalogUrlSelect::NixpkgsUrl(raw_url.clone())),
+            None,
+        )
+        .await
+        .unwrap();
+
+        let expected = BaseCatalogUrl::from(raw_url.as_str());
+        assert_eq!(result, expected, "URL must be passed through unchanged");
+
+        // Verify that as_flake_ref() produces the expected git+…?shallow=1 form.
+        let flake_ref = result.as_flake_ref().expect("should convert to flake ref");
+        assert_eq!(
+            flake_ref.as_str(),
+            "git+https://github.com/NixOS/nixpkgs?shallow=1"
+        );
+    }
+
+    // --- Test C: resolve_import_flake_ref helper tests ---
+
+    /// Flag + bare attribute path: the catalog is queried, the result is
+    /// converted to a `git+…?rev=…&shallow=1` flake ref string.
+    #[tokio::test]
+    async fn resolve_import_flake_ref_stability_flag_bare_attr_path() {
+        use floxhub_client::FloxhubClient;
+        use floxhub_client::client::test_helpers::client_config;
+        use httpmock::MockServer;
+
+        let (mut flox, _temp_dir) = flox_instance();
+
+        let server = MockServer::start_async().await;
+        server.mock(|when, then| {
+            when.path("/api/v1/catalog/info/base-catalog");
+            then.status(200)
+                .json_body(serde_json::to_value(BaseCatalogInfo::new_mock()).unwrap());
+        });
+        flox.floxhub_client =
+            FloxhubClient::new(client_config(server.base_url().as_str())).unwrap();
+
+        let result = Build::resolve_import_flake_ref(
+            &flox,
+            "hello",
+            Some(BaseCatalogUrlSelect::Stability("not-default".to_string())),
+        )
+        .await
+        .unwrap();
+
+        // Expected: the catalog URL for "not-default" converted to a flake ref.
+        let base_url = BaseCatalogInfo::new_mock()
+            .url_for_latest_page_with_stability("not-default")
+            .expect("fixture must have not-default stability");
+        let expected = base_url
+            .as_flake_ref()
+            .expect("should convert to flake ref")
+            .to_string();
+
+        assert_eq!(result, expected);
+        assert!(
+            result.starts_with("git+"),
+            "flake ref must start with git+, got: {result}"
+        );
+        assert!(
+            result.contains("shallow=1"),
+            "flake ref must contain shallow=1, got: {result}"
+        );
+    }
+
+    /// Flag + `nixpkgs#hello` prefix: treated the same as a bare attr path
+    /// (no conflict error), catalog is queried.
+    #[tokio::test]
+    async fn resolve_import_flake_ref_stability_flag_nixpkgs_prefixed_attr() {
+        use floxhub_client::FloxhubClient;
+        use floxhub_client::client::test_helpers::client_config;
+        use httpmock::MockServer;
+
+        let (mut flox, _temp_dir) = flox_instance();
+
+        let server = MockServer::start_async().await;
+        server.mock(|when, then| {
+            when.path("/api/v1/catalog/info/base-catalog");
+            then.status(200)
+                .json_body(serde_json::to_value(BaseCatalogInfo::new_mock()).unwrap());
+        });
+        flox.floxhub_client =
+            FloxhubClient::new(client_config(server.base_url().as_str())).unwrap();
+
+        let result = Build::resolve_import_flake_ref(
+            &flox,
+            "nixpkgs#hello",
+            Some(BaseCatalogUrlSelect::Stability("not-default".to_string())),
+        )
+        .await
+        .unwrap();
+
+        // Same expected URL as the bare-attr-path case.
+        let base_url = BaseCatalogInfo::new_mock()
+            .url_for_latest_page_with_stability("not-default")
+            .expect("fixture must have not-default stability");
+        let expected = base_url
+            .as_flake_ref()
+            .expect("should convert to flake ref")
+            .to_string();
+
+        assert_eq!(result, expected);
+    }
+
+    /// Flag + an explicit non-nixpkgs flake ref must return the conflict error.
+    #[tokio::test]
+    async fn resolve_import_flake_ref_conflict_error_for_explicit_non_nixpkgs_ref() {
+        let (flox, _temp_dir) = flox_instance();
+
+        // No mock seeded — the conflict bail must fire before any catalog call.
+        let result = Build::resolve_import_flake_ref(
+            &flox,
+            "github:nixos/nixpkgs#hello",
+            Some(BaseCatalogUrlSelect::NixpkgsUrl(
+                "https://github.com/NixOS/nixpkgs".parse().unwrap(),
+            )),
+        )
+        .await;
+
+        assert!(result.is_err());
+        let msg = result.unwrap_err().to_string();
+        assert!(
+            msg.contains("Cannot use --stability or --nixpkgs-url"),
+            "expected conflict error, got: {msg}"
+        );
+    }
+
+    /// No flag + bare attr path: returns the literal string `"nixpkgs"` with
+    /// no catalog call.
+    #[tokio::test]
+    async fn resolve_import_flake_ref_no_flag_returns_nixpkgs_literal() {
+        let (flox, _temp_dir) = flox_instance();
+
+        // No mock seeded — no catalog call should occur.
+        let result = Build::resolve_import_flake_ref(&flox, "hello", None)
+            .await
+            .unwrap();
+
+        assert_eq!(result, "nixpkgs");
     }
 }

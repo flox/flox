@@ -64,6 +64,7 @@ flox-manifest.workspace = true
 [dev-dependencies]
 factory-api-v1.workspace = true
 floxhub-client = { workspace = true, features = ["tests"] }
+httpmock.workspace = true
 pretty_assertions.workspace = true
 proptest.workspace = true
 proptest-derive.workspace = true
