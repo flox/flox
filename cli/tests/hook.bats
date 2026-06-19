@@ -75,6 +75,20 @@ projectz_teardown() {
   unset PROJECTZ_DIR
 }
 
+setup_file() {
+  common_file_setup
+  # Many of these tests drive real, interactive `flox activate` runs through
+  # `expect`, and several build and activate two or three environments in a
+  # single test. Run in parallel within the file, they contend on the shared
+  # Nix store and pile up concurrent executive (activation daemon) processes,
+  # which can starve an activation long enough to blow past the `expect`
+  # timeout — a ~60s window with no terminal output that surfaces as a flaky
+  # timeout on whichever consent/activation test loses the race. Serialize the
+  # file so these interactive tests stay deterministic. Mirrors
+  # containerize.bats, which serializes for the same reason.
+  export BATS_NO_PARALLELIZE_WITHIN_FILE=true
+}
+
 setup() {
   common_test_setup
   setup_isolated_flox
