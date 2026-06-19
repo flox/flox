@@ -7,6 +7,7 @@ use rnix::ast;
 use rnix::ast::HasEntry as _;
 use rowan::ast::AstNode;
 use serde::{Deserialize, Serialize};
+use tracing::{debug, instrument};
 
 /// A single catalog attribute-path reference discovered by the scanner,
 /// e.g. `catalogs.myorg.toolkit.readVersion`. A dynamic component collapses
@@ -89,6 +90,13 @@ pub fn scan_package(
 /// `roots` are the lambda-parameter names treated as catalog namespaces; every
 /// other parameter is a dependency argument followed to a sibling package.
 /// Any iterable of names is accepted; duplicates are harmless.
+#[instrument(
+    skip(roots),
+    fields(
+        base_dir = %base_dir.as_ref().display(),
+        rel_file = %rel_file.as_ref().display(),
+    )
+)]
 pub fn scan_package_with_roots(
     base_dir: impl AsRef<Path>,
     rel_file: impl AsRef<Path>,
@@ -114,10 +122,12 @@ pub fn scan_package_with_roots(
         }
         db
     };
-    collect_transitive(db, base_dir.as_ref(), roots)
+    let references: BTreeSet<CatalogRef> = collect_transitive(db, base_dir.as_ref(), roots)
         .into_iter()
         .map(CatalogRef)
-        .collect()
+        .collect();
+    debug!(references = references.len(), "scanned catalog references");
+    references
 }
 
 /// Analyze one file's content, collecting catalog refs and the dependency

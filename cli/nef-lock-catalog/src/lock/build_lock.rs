@@ -5,7 +5,7 @@ use std::path::Path;
 use anyhow::{Context, Result};
 use flox_core::Version;
 use serde::Serialize;
-use tracing::debug;
+use tracing::{debug, instrument};
 
 use super::tree::PackageTreeNode;
 use crate::CatalogId;
@@ -38,11 +38,11 @@ impl BuildLock {}
 /// Write a `BuildLock` to the specified file.
 /// The file is written in a pretty-printed JSON format
 /// and consumed by the NEF.
+#[instrument(skip(lock), fields(path = %path.as_ref().display()))]
 pub fn write_lock(lock: &BuildLock, path: impl AsRef<Path>) -> Result<()> {
-    debug!(path = %path.as_ref().display(),"writing build lock");
-
     let json = serde_json::to_string_pretty(&lock).context("failed to serialize lockfile")?;
     fs::write(&path, &json)
         .with_context(|| format!("failed to write {path:?}", path = path.as_ref()))?;
+    debug!(bytes = json.len(), "wrote build lock");
     Ok(())
 }

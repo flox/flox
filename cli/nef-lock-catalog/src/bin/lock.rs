@@ -1,4 +1,5 @@
 use std::collections::BTreeSet;
+use std::io::IsTerminal;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
@@ -54,7 +55,10 @@ struct Cli {
 #[tokio::main]
 async fn main() -> ExitCode {
     tracing_subscriber::registry()
-        .with(tracing_subscriber::fmt::layer().with_span_events(FmtSpan::ENTER))
+        // NEW logs each span once at creation with its fields
+        .with(tracing_subscriber::fmt::layer()
+            .with_ansi(std::io::stderr().is_terminal())
+            .with_span_events(FmtSpan::NEW))
         .with(tracing_subscriber::EnvFilter::from_default_env())
         .init();
 
@@ -71,6 +75,15 @@ async fn main() -> ExitCode {
     }
 }
 
+#[tracing::instrument(
+    skip_all,
+    fields(
+        base_dir = %cli.base_dir.display(),
+        rel_paths = cli.rel_paths.len(),
+        out = %cli.out.display(),
+        stability = cli.stability,
+    )
+)]
 async fn run(cli: Cli) -> Result<()> {
     // Read the token once; whether it is present selects the auth-hint wording
     // and needs no second environment read.
