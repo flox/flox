@@ -19,7 +19,7 @@ use floxhub_client::{
     Stability,
     UnresolvableEntry,
 };
-use tracing::debug;
+use tracing::{debug, instrument};
 
 use crate::CatalogRef;
 use crate::lock::build_lock::BuildLock;
@@ -60,6 +60,10 @@ pub enum LockError {
 /// `stability` is the higher-level string input; it is parsed into the typed
 /// [Stability] required by the request contract, failing with
 /// [LockError::InvalidStability] if empty/invalid.
+#[instrument(
+    skip(client, references),
+    fields(references = references.len(), stability = stability)
+)]
 pub async fn lock_references(
     client: &(impl CatalogClientTrait + Send + Sync),
     references: BTreeSet<CatalogRef>,
@@ -106,6 +110,7 @@ fn build_request(
 ///
 /// Boundary: if the group reports any unresolvable references, fail the whole
 /// lock. Otherwise hand the resolved `lock` map off to the A2 transform.
+#[instrument(skip(response))]
 fn lock_from_response(mut response: BuildInputsLookupResponse) -> Result<BuildLock, LockError> {
     let Some(group) = response.groups.remove(LOOKUP_GROUP_KEY) else {
         return Err(LockError::Transform(anyhow::anyhow!(
