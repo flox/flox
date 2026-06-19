@@ -223,6 +223,13 @@ If so, add a `## Release Notes` section to the PR description describing the cha
     identify them as tests. Name tests descriptively for what
     they verify (e.g.,
     `gather_repo_meta_no_upstream_suggests_set_upstream`).
+  - **Test behavior that can break, not plumbing:** Do not test
+    generated code, the argument parser (bpaf is declarative and
+    tested upstream), or serialization round-trips
+    (`serialize(x) == serialize(x)`). Prefer a type that makes an
+    invalid state unrepresentable (`NonZero`, domain types) over a
+    runtime guard plus a test for it. Do not add a client mock to
+    test a thin wrapper; see the provider-trait rule above.
   - **Type safety at function boundaries:** Parse strings
     at entry points (CLI arg parsing, API response
     deserialization), not deep in business logic. Before
@@ -232,6 +239,10 @@ If so, add a `## Release Notes` section to the PR description describing the cha
     `BaseCatalogUrl` for catalog URLs. Check the relevant
     provider module for existing types, e.g. when working with
     catalog information check `cli/floxhub-client/src/types.rs`.
+  - **Verify against the contract:** For generated API clients,
+    confirm behavior (paging base, defaults, error shapes) against
+    the OpenAPI spec or schema before relying on it. Do not write
+    doc comments asserting behavior you have not verified.
   - **User-visible message syntax, structure, and content:**
     - Use complete sentences. Do not use "I", "we", or "flox"
       as the subject — drop it instead
