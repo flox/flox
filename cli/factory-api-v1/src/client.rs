@@ -161,14 +161,38 @@ where neither is meaningful.*/
     /**Build-specific details with optional task sub-object.
 
 The task field is None for undispatched builds (task_id IS NULL
-in factory_builds).*/
+in factory_builds).
+
+The status field is the build's effective current status, computed
+server-side from the freshest authoritative source:
+
+- Pre-dispatch (task_id IS NULL): computed from
+  factory_builds.cancelled_at — ``"cancelled"`` when set, else
+  ``"pending"``. Neither word is stored; the timestamp is the only
+  persisted pre-dispatch state.
+- Dispatched: tasks.status (``"queued"``, ``"running"``,
+  ``"completed"``, ``"failed"``, ``"cancelled"``).
+- On cancel responses: Build Coordinator's returned status, which
+  is fresher than the local row (which lags until BC's callback
+  lands), normalized into the task vocabulary above — BC's
+  ``timed_out`` is reported as ``failed``, exactly as the callback
+  path persists it. The field never carries a word outside the
+  union of the two sets above.
+
+Staleness: after handoff the field tracks tasks.status, which only
+advances when Build Coordinator's terminal callback lands. When
+callbacks are disabled (no callback base URL configured — a
+supported worker configuration), the post-handoff status stays at
+the last persisted value (typically ``"running"``) indefinitely;
+a cancel response is then the only place a fresher
+coordinator-reported status appears.*/
     ///
     /// <details><summary>JSON schema</summary>
     ///
     /// ```json
     ///{
     ///  "title": "BuildResponse",
-    ///  "description": "Build-specific details with optional task sub-object.\n\nThe task field is None for undispatched builds (task_id IS NULL\nin factory_builds).",
+    ///  "description": "Build-specific details with optional task sub-object.\n\nThe task field is None for undispatched builds (task_id IS NULL\nin factory_builds).\n\nThe status field is the build's effective current status, computed\nserver-side from the freshest authoritative source:\n\n- Pre-dispatch (task_id IS NULL): computed from\n  factory_builds.cancelled_at — ``\"cancelled\"`` when set, else\n  ``\"pending\"``. Neither word is stored; the timestamp is the only\n  persisted pre-dispatch state.\n- Dispatched: tasks.status (``\"queued\"``, ``\"running\"``,\n  ``\"completed\"``, ``\"failed\"``, ``\"cancelled\"``).\n- On cancel responses: Build Coordinator's returned status, which\n  is fresher than the local row (which lags until BC's callback\n  lands), normalized into the task vocabulary above — BC's\n  ``timed_out`` is reported as ``failed``, exactly as the callback\n  path persists it. The field never carries a word outside the\n  union of the two sets above.\n\nStaleness: after handoff the field tracks tasks.status, which only\nadvances when Build Coordinator's terminal callback lands. When\ncallbacks are disabled (no callback base URL configured — a\nsupported worker configuration), the post-handoff status stays at\nthe last persisted value (typically ``\"running\"``) indefinitely;\na cancel response is then the only place a fresher\ncoordinator-reported status appears.",
     ///  "type": "object",
     ///  "required": [
     ///    "attr_path",
@@ -179,6 +203,7 @@ in factory_builds).*/
     ///    "nixpkgs_revision",
     ///    "source_commit_sha",
     ///    "source_repo_url",
+    ///    "status",
     ///    "system"
     ///  ],
     ///  "properties": {
@@ -222,6 +247,10 @@ in factory_builds).*/
     ///      "title": "Source Repo Url",
     ///      "type": "string"
     ///    },
+    ///    "status": {
+    ///      "title": "Status",
+    ///      "type": "string"
+    ///    },
     ///    "system": {
     ///      "title": "System",
     ///      "type": "string"
@@ -245,6 +274,7 @@ in factory_builds).*/
         pub nixpkgs_revision: ::std::string::String,
         pub source_commit_sha: ::std::string::String,
         pub source_repo_url: ::std::string::String,
+        pub status: ::std::string::String,
         pub system: ::std::string::String,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
         pub task: ::std::option::Option<TaskResponse>,
@@ -556,7 +586,7 @@ Return a paginated list of builds.
 
 Use the `status` query parameter to filter:
 - ``undispatched``: builds with no task (task_id IS NULL)
-- Any other value: filters by tasks.status (e.g. ``claimed``)
+- Any other value: filters by tasks.status (e.g. ``running``)
 
 Sends a `GET` request to `/api/v1/factory/builds`
 
@@ -646,6 +676,92 @@ Sends a `GET` request to `/api/v1/factory/builds/{build_id}`
                 Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
             }
             422u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            _ => Err(Error::UnexpectedResponse(response)),
+        }
+    }
+    /**Cancel Build
+
+Cancel a build.
+
+Handles both active builds (delegated to Build Coordinator) and
+pre-dispatch builds (cancelled FS-only via an atomic row lock).
+
+The operation is idempotent with respect to terminal state. When
+the build has already reached a terminal state (``cancelled``,
+``completed``, or ``failed``) — whether Build Coordinator reports
+it or the local task row records it — the response is still 200
+and the ``status`` field carries that terminal state. Coordinator
+statuses are normalized into the task vocabulary before they are
+surfaced (BC's ``timed_out`` is reported as ``failed``, exactly as
+the callback path persists it), so the cancel response and a
+subsequent ``GET`` always agree.
+
+Cancelling a pre-dispatch build permanently retires its identity
+tuple: ``uq_factory_build_identity`` dedup treats the cancelled
+row like any other terminal build, so a later event expanding to
+the same identity inserts nothing. Recovery is manual by design —
+a cancel that ambient event traffic could overturn would not be a
+cancel.
+
+Outcomes:
+    200 — Build cancelled, or already terminal. ``BuildResponse.status``
+          reflects the effective state.
+    404 — No build with the given ID.
+    502 — Build Coordinator unreachable or returned an unexpected
+          error; or the coordinator does not know the build yet
+          because its dispatch is in flight (the worker commits
+          its claim before the HTTP submit), or no longer knows it
+          (coordinator restart or purge). In every 502 case the
+          correct client action is retry with backoff.
+
+An audit log line is emitted on every path, including unhandled
+exceptions (``outcome=internal_error``).
+
+Sends a `DELETE` request to `/api/v1/factory/builds/{build_id}`
+
+*/
+    pub async fn cancel_build_api_v1_factory_builds_build_id_delete<'a>(
+        &'a self,
+        build_id: i64,
+    ) -> Result<ResponseValue<types::BuildResponse>, Error<types::ErrorResponse>> {
+        let url = format!(
+            "{}/api/v1/factory/builds/{}", self.baseurl, encode_path(& build_id
+            .to_string()),
+        );
+        let mut header_map = ::reqwest::header::HeaderMap::with_capacity(1usize);
+        header_map
+            .append(
+                ::reqwest::header::HeaderName::from_static("api-version"),
+                ::reqwest::header::HeaderValue::from_static(Self::api_version()),
+            );
+        #[allow(unused_mut)]
+        let mut request = self
+            .client
+            .delete(url)
+            .header(
+                ::reqwest::header::ACCEPT,
+                ::reqwest::header::HeaderValue::from_static("application/json"),
+            )
+            .headers(header_map)
+            .build()?;
+        let info = OperationInfo {
+            operation_id: "cancel_build_api_v1_factory_builds_build_id_delete",
+        };
+        self.pre(&mut request, &info).await?;
+        let result = self.exec(request, &info).await;
+        self.post(&result, &info).await?;
+        let response = result?;
+        match response.status().as_u16() {
+            200u16 => ResponseValue::from_response(response).await,
+            404u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            422u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            502u16 => {
                 Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
             }
             _ => Err(Error::UnexpectedResponse(response)),
