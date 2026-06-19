@@ -122,3 +122,26 @@ Available options:
 Run 'man flox' for more details.
 EOF
 }
+
+@test "f3: '--beta' enables a beta subcommand for a single invocation" {
+  run "$FLOX_BIN" --beta beta-enabled
+  assert_success
+  assert_output --partial "Beta features are enabled."
+}
+
+@test "f4: '--beta' is ephemeral; a later invocation without it is gated" {
+  # Enabling beta for one call must not persist any state.
+  run "$FLOX_BIN" --beta beta-enabled
+  assert_success
+
+  # A plain invocation is gated again, proving the flag left no residue.
+  run "$FLOX_BIN" beta-enabled
+  assert_failure
+  assert_output --partial "Enable beta features to run this command"
+}
+
+@test "f5: '--beta' and beta subcommands stay hidden from 'flox --help'" {
+  run "$FLOX_BIN" --help
+  assert_success
+  refute_output --partial "beta"
+}

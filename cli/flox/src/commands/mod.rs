@@ -173,6 +173,10 @@ pub struct FloxArgs {
     #[bpaf(long, req_flag(()), many, map(vec_not_empty), hide)]
     pub debug: bool,
 
+    /// Enable beta features for this invocation
+    #[bpaf(long, hide)]
+    pub beta: bool,
+
     /// Print the version of the program
     #[allow(dead_code)] // fake arg, `--version` is checked for separately (see [Version])
     #[bpaf(long, short('V'))]
@@ -308,7 +312,13 @@ impl FloxArgs {
             floxhub_client,
             installable_locker: Default::default(),
             #[allow(deprecated, reason = "This should be the only internal use")]
-            features: config.features.unwrap_or_default(),
+            features: {
+                let mut features = config.features.unwrap_or_default();
+                // `--beta` enables beta features for this invocation only; it can
+                // only turn the flag on, never off.
+                features.beta = features.beta || self.beta;
+                features
+            },
             verbosity: self.verbosity.to_i32(),
             metrics_device_uuid,
         };
