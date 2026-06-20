@@ -467,7 +467,16 @@ impl FloxArgs {
                     self.command,
                     Some(Commands::Admin(AdminCommands::Auth(auth::Auth::Login)))
                 );
-                if !reauthenticating && !self.is_prompt_hook_flow() {
+                // The token is account-global, so the reminder only needs to
+                // appear once per shell session. The outermost activation
+                // surfaces it; any `flox` invocation already running inside an
+                // activation — a nested `flox activate`, or a command in an
+                // activated shell whose rc re-activates an environment — stays
+                // quiet. Activations export `_FLOX_ACTIVE_ENVIRONMENTS` into the
+                // shell, including in-place `eval "$(flox activate)"` ones, so
+                // it is a reliable signal even across the parent shell.
+                let nested = activated_environments().last_active().is_some();
+                if !reauthenticating && !self.is_prompt_hook_flow() && !nested {
                     message::warning(
                         "Your FloxHub token has expired. Run 'flox auth login' to re-authenticate.",
                     );
