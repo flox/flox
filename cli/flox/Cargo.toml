@@ -16,6 +16,7 @@ close_fds.workspace = true
 crossterm.workspace = true
 derive_more.workspace = true
 dirs.workspace = true
+enum_dispatch.workspace = true
 floxhub-client.workspace = true
 flox-rust-sdk.workspace = true
 fslock.workspace = true

@@ -11,7 +11,7 @@ mod edit;
 mod envs;
 mod factory;
 mod gc;
-mod general;
+pub(crate) mod general;
 mod generations;
 mod hook_env;
 mod include;

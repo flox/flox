@@ -1452,6 +1452,7 @@ dependencies = [
  "crossterm 0.29.0",
  "derive_more",
  "dirs",
+ "enum_dispatch",
  "factory-api-v1",
  "flox-activations",
  "flox-core",
