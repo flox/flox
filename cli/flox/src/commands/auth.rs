@@ -5,7 +5,7 @@ use anyhow::{Context, Result, bail};
 use bpaf::Bpaf;
 use chrono::offset::Utc;
 use chrono::{DateTime, Duration};
-use flox_config::Config;
+use flox_config::{Config, FLOX_CONFIG_FILE};
 use flox_rust_sdk::flox::{FLOX_VERSION, Flox, FloxhubToken};
 use floxhub_client::{AuthContext, AuthnMode};
 use indoc::formatdoc;
@@ -36,6 +36,13 @@ use tracing::{debug, instrument};
 use url::Url;
 
 use crate::commands::general::update_config;
+use crate::utils::credential_store::{
+    CredentialSource,
+    CredentialStore,
+    CredentialStoreImpl,
+    PlaintextStore,
+    probe_credential_source,
+};
 use crate::utils::dialog::{Checkpoint, Dialog, WaitResult};
 use crate::utils::message;
 use crate::utils::openers::Browser;
@@ -279,7 +286,8 @@ impl Auth {
                     return Ok(());
                 }
 
-                update_config::<String>(&flox.config_dir, "floxhub_token", None)
+                PlaintextStore::new(&flox.config_dir)
+                    .remove()
                     .context("Could not remove token from user config")?;
 
                 message::updated("Logout successful");
@@ -291,6 +299,10 @@ impl Auth {
             Auth::Status => {
                 let span = tracing::info_span!("status");
                 let _guard = span.enter();
+
+                let store = CredentialStoreImpl::Plaintext(PlaintextStore::new(&flox.config_dir));
+                let source = probe_credential_source(&config, &store);
+
                 let AuthContext::Auth0(Some(token)) = flox.auth_context else {
                     message::warning("You are not currently logged in to FloxHub.");
                     return Err(Exit(1.into()).into());
@@ -302,6 +314,21 @@ impl Auth {
                     "You are logged in as {handle} on {}",
                     flox.floxhub.base_url()
                 ));
+
+                match source {
+                    CredentialSource::UserConfigPlaintext => message::warning(format!(
+                        "Credential stored in plain text at '{}'.",
+                        flox.config_dir.join(FLOX_CONFIG_FILE).display()
+                    )),
+                    CredentialSource::Env => message::plain(
+                        "Credential read from the FLOX_FLOXHUB_TOKEN environment variable.",
+                    ),
+                    // Keyring wording is added in Phase 2; SystemConfig and None
+                    // need no extra line here.
+                    CredentialSource::Keyring
+                    | CredentialSource::SystemConfig
+                    | CredentialSource::None => {},
+                }
 
                 Ok(())
             },
@@ -342,8 +369,10 @@ pub async fn login_flox(flox: &mut Flox) -> Result<String> {
     let token = FloxhubToken::new(cred.token)?;
     let handle = token.handle().to_string();
 
-    // write the token to the config file
-    update_config(&flox.config_dir, "floxhub_token", Some(token.clone()))
+    // write the token to the plaintext config file, with an explicit 0600.
+    // Phase 2 routes this through the keyring with a plaintext fallback.
+    PlaintextStore::new(&flox.config_dir)
+        .set(token.secret())
         .context("Could not write token to config")?;
 
     let auth_context = AuthContext::from_mode(&AuthnMode::Auth0, Some(token.clone()));
