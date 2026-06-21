@@ -184,15 +184,6 @@ pub enum BuildEnvError {
     /// A catch-all error variant for rare situations
     #[error("{0}")]
     Other(String),
-
-    /// Store paths were unavailable after all materialisation retry attempts.
-    #[error(
-        "Store paths were unavailable after {attempts} materialisation attempts.\n\
-        This is most likely caused by a concurrent garbage collection run.\n\
-        If a garbage collection is in progress, wait for it to finish and retry.\n\
-        Missing paths: {paths}"
-    )]
-    MaterialisationFailed { attempts: usize, paths: String },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
@@ -1074,206 +1065,149 @@ fn nix_path_info_null_paths(paths: &[String]) -> Result<Vec<String>, std::io::Er
         .collect())
 }
 
-/// Retry loop for materialisation and environment construction.
+/// Materialises store paths for an environment build and calls `buildenv.nix`,
+/// retrying when GC or Nix store DB lag causes transient failures.
 ///
-/// Calls `realise` to materialise store paths, then `missing_paths` to detect
-/// any GC'd paths in the window between materialisation and the `buildenv.nix`
-/// run. Missing paths after a successful `realise` indicate concurrent GC:
-/// retry if attempts remain, or return
-/// [`BuildEnvError::MaterialisationFailed`].
+/// ## Algorithm
 ///
-/// If `build_env` fails, `missing_paths` is called again to determine the
-/// cause:
-/// - Paths now missing: GC occurred between the pre-build stat and the
-///   `buildenv.nix` run — retry if attempts remain, or return
-///   [`BuildEnvError::MaterialisationFailed`].
-/// - All paths still present per stat: `nix path-info --json` is run to
-///   check the Nix daemon's store database.  If the daemon confirms all
-///   paths are registered, retrying is still allowed because there is a
-///   race window: a path can arrive on disk (passing stat()) before the
-///   Nix daemon records it in its SQLite database (causing
-///   `builtins.storePath` to fail), then the DB registration completes
-///   before `nix path-info` runs.  Remaining retries are used to resolve
-///   that window; the error is only propagated once retries are exhausted.
-///   If the daemon returns `null` for any paths they are present on the
-///   filesystem but not registered (e.g. a CI cache that bypassed the
-///   daemon).  Those paths are force-registered with
-///   `nix build --no-link --keep-going` and the attempt is retried.
+/// 1. Call `realise` to fetch any missing store paths.
+/// 2. Stat-check every expected path (`missing_paths`).  If any are gone — GC
+///    raced with `realise` — restart from step 1.
+/// 3. Call `build_env` optimistically (no `nix path-info` overhead on the
+///    happy path).  On success, return.
+/// 4. On failure, run `nix path-info --json` on all expected paths:
+///    - **Unregistered paths** (`null` in the JSON output): the Nix daemon
+///      does not know about paths that are present on the filesystem (e.g. a
+///      CI cache that copies files to `/nix/store` without going through the
+///      daemon), or that have been evicted entirely.  Force-register /
+///      re-materialise with `nix build --no-link --keep-going` and restart
+///      from step 1.
+///    - **All paths confirmed registered**: the clean `nix path-info` result
+///      serves as both the "after" check for this invocation and the "before"
+///      check for the next one.  A failure is only **deterministic** when
+///      `nix path-info` is clean *both* before *and* after a single
+///      `buildenv.nix` invocation.  Until that condition is met, restart from
+///      step 1 — this handles the DB-registration-lag race where a path
+///      arrives on disk before the daemon records it, then the registration
+///      completes before `nix path-info` runs.
+///    - **`nix path-info` itself errors**: treat as deterministic; propagate
+///      the original `build_env` error.
 ///
-/// `realise` errors always propagate immediately; a path that never appeared
-/// in the store is not a GC race.
+/// ## Termination
 ///
-/// `expected_paths` returns the full list of store paths the environment
-/// depends on. It is called once per attempt for diagnostic logging and
-/// for the `nix path-info` store-database check on failure.
+/// The loop terminates when `build_env` succeeds, when a failed invocation
+/// is bracketed by two clean `nix path-info` results — the carried-forward
+/// result from the *previous* iteration's post-failure check plus a fresh
+/// post-failure check on the *current* invocation — or when a hard error
+/// occurs (realise failure, path-info error, failed force-registration).
+/// `realise` errors always propagate immediately.
 fn materialise_with_retry(
     mut realise: impl FnMut() -> Result<(), BuildEnvError>,
     mut missing_paths: impl FnMut() -> Vec<String>,
     expected_paths: impl Fn() -> Vec<String>,
     mut build_env: impl FnMut() -> Result<BuildEnvOutputs, BuildEnvError>,
+    mut path_info: impl FnMut(&[String]) -> Result<Vec<String>, std::io::Error>,
+    mut force_register: impl FnMut(&[String]) -> Result<(), std::io::Error>,
 ) -> Result<BuildEnvOutputs, BuildEnvError> {
-    const MAX_RETRIES: usize = 3;
-    for attempt in 1..=MAX_RETRIES {
+    // Whether the nix path-info check at the END of the previous iteration
+    // came back clean.  A clean result at the end of iteration N is the
+    // "before" confirmation for the buildenv.nix call in iteration N+1.
+    // Only when both "before" and "after" checks are clean for the same
+    // invocation is the failure declared deterministic.
+    let mut path_info_clean_before = false;
+
+    loop {
+        // Only check for pre-realise absences when the flag is set: it is the
+        // only case where a state change would invalidate a prior confirmation.
+        if path_info_clean_before && !missing_paths().is_empty() {
+            path_info_clean_before = false;
+        }
+
         realise()?;
+
         let missing = missing_paths();
         if !missing.is_empty() {
-            if attempt < MAX_RETRIES {
-                debug!(
-                    ?missing,
-                    attempt,
-                    MAX_RETRIES,
-                    "store paths missing after materialisation, GC suspected — retrying"
-                );
-                continue;
-            }
-            const MAX_DISPLAY: usize = 5;
-            let total = missing.len();
-            let display = if total <= MAX_DISPLAY {
-                missing.join("\n  ")
-            } else {
-                format!(
-                    "{}\n  ... and {} more",
-                    missing[..MAX_DISPLAY].join("\n  "),
-                    total - MAX_DISPLAY
-                )
-            };
-            debug!(paths = ?missing, "full list of missing store paths after exhausting retries");
-            return Err(BuildEnvError::MaterialisationFailed {
-                attempts: MAX_RETRIES,
-                paths: display,
-            });
+            warn!(
+                ?missing,
+                "store paths missing after materialisation, GC suspected — retrying"
+            );
+            // Store state changed; any prior path-info "before" confirmation is stale.
+            path_info_clean_before = false;
+            continue;
         }
-        let confirmed = expected_paths();
+
+        let all_paths = expected_paths();
         debug!(
-            attempt,
-            MAX_RETRIES,
-            paths = ?confirmed,
+            paths = ?all_paths,
             "all store paths present per stat(), calling buildenv.nix"
         );
+
         match build_env() {
             Ok(outputs) => return Ok(outputs),
             Err(e) => {
-                // Re-stat to distinguish a GC race from a deterministic
-                // failure. A path that was present before build_env but is
-                // gone afterwards means GC swept it during the run — retry.
-                // If all paths are still present, check nix path-info to
-                // determine whether a DB-registration race or a genuinely
-                // deterministic failure (bad lockfile, spawn error) is the
-                // cause.
-                let missing_after = missing_paths();
-                if missing_after.is_empty() {
-                    // All paths still present per stat() — check whether the
-                    // Nix daemon agrees. CI caches may restore store content
-                    // by copying files directly to /nix/store, bypassing the
-                    // daemon, leaving paths on disk but unregistered.
-                    match nix_path_info_null_paths(&confirmed) {
-                        Ok(null_paths) if null_paths.is_empty() => {
-                            // Daemon confirms all paths are registered. This is
-                            // usually a genuine deterministic failure, but there
-                            // is a race: a path can arrive on disk (passing
-                            // stat()) before the Nix daemon records it in its DB
-                            // (causing builtins.storePath to fail), then the DB
-                            // registration completes before nix path-info runs.
-                            // Allow remaining retries to resolve that window;
-                            // only treat it as deterministic once retries are
-                            // exhausted.
-                            if attempt < MAX_RETRIES {
-                                warn!(
-                                    error = %e,
-                                    attempt,
-                                    MAX_RETRIES,
-                                    "buildenv.nix failed with all paths confirmed in Nix store — possible DB-registration race, retrying"
-                                );
-                                continue;
-                            }
+                if all_paths.is_empty() {
+                    // No store paths to check — DB-registration lag cannot apply.
+                    return Err(e);
+                }
+                match path_info(&all_paths) {
+                    Err(path_info_err) => {
+                        warn!(
+                            error = %e,
+                            path_info_error = %path_info_err,
+                            "buildenv.nix failed and nix path-info check errored — treating as deterministic"
+                        );
+                        return Err(e);
+                    },
+                    Ok(null_paths) if null_paths.is_empty() => {
+                        // Daemon confirms all paths are registered after this
+                        // failure.  This clean result is both the "after" check
+                        // for this invocation and the "before" check for the next.
+                        if path_info_clean_before {
+                            // path-info was clean both before and after this
+                            // invocation: the failure is deterministic.
                             warn!(
                                 error = %e,
-                                attempt,
-                                MAX_RETRIES,
-                                "buildenv.nix failed with all paths confirmed in Nix store after all retries — treating as deterministic"
+                                "buildenv.nix failed with all paths confirmed in Nix store both before and after the invocation — treating as deterministic"
                             );
                             return Err(e);
-                        },
-                        Ok(null_paths) => {
-                            // Some paths are on disk but not registered with
-                            // the daemon. Force-register them, then retry.
-                            warn!(
-                                ?null_paths,
-                                attempt,
-                                MAX_RETRIES,
-                                "buildenv.nix failed: paths present on filesystem but \
-                                not registered in Nix store — force-registering and retrying"
-                            );
-                            let mut reg_cmd = nix_base_command();
-                            apply_nix_store_url(&mut reg_cmd);
-                            let reg = reg_cmd
-                                .arg("build")
-                                .arg("--no-link")
-                                .arg("--keep-going")
-                                .args(&null_paths)
-                                .output()
-                                .map_err(BuildEnvError::CallNixBuild)?;
-                            if !reg.status.success() {
-                                warn!(
-                                    error = %e,
-                                    status = %reg.status,
-                                    stderr = %String::from_utf8_lossy(&reg.stderr),
-                                    "failed to register unregistered paths — \
-                                    propagating original error"
-                                );
-                                return Err(e);
-                            }
-                            if attempt < MAX_RETRIES {
-                                continue;
-                            }
-                            // Last attempt: paths are now registered, try
-                            // build_env once more without burning another
-                            // loop iteration.
-                            return build_env();
-                        },
-                        Err(path_info_err) => {
+                        }
+                        // path-info is clean only "after" so far.  This covers
+                        // the DB-registration-lag race (#4327): a path can arrive
+                        // on disk (passing stat()) before the daemon records it in
+                        // its DB (causing builtins.storePath to fail), then the DB
+                        // registration completes before nix path-info runs.
+                        // Retry with this clean result as the "before" confirmation.
+                        warn!(
+                            error = %e,
+                            "buildenv.nix failed with all paths confirmed in Nix store — possible DB-registration race, retrying"
+                        );
+                        path_info_clean_before = true;
+                    },
+                    Ok(null_paths) => {
+                        // Some paths are not registered in the Nix daemon's DB —
+                        // either present on disk but bypassing the daemon (e.g. a
+                        // CI cache that copies directly to /nix/store), or evicted
+                        // entirely.  Force-register / re-materialise and retry.
+                        warn!(
+                            ?null_paths,
+                            "buildenv.nix failed: paths not registered in Nix store — force-registering and retrying"
+                        );
+                        if let Err(reg_err) = force_register(&null_paths) {
                             warn!(
                                 error = %e,
-                                path_info_error = %path_info_err,
-                                attempt,
-                                MAX_RETRIES,
-                                "buildenv.nix failed and nix path-info check errored \
-                                — treating as deterministic"
+                                reg_error = %reg_err,
+                                "failed to register unregistered paths — propagating original error"
                             );
                             return Err(e);
-                        },
-                    }
+                        }
+                        // Store state changed; reset the "before" flag so the
+                        // next invocation starts without a stale confirmation.
+                        path_info_clean_before = false;
+                    },
                 }
-                if attempt < MAX_RETRIES {
-                    debug!(
-                        ?missing_after,
-                        error = %e,
-                        attempt,
-                        MAX_RETRIES,
-                        "store paths went missing during buildenv.nix, GC suspected — retrying"
-                    );
-                    continue;
-                }
-                const MAX_DISPLAY: usize = 5;
-                let total = missing_after.len();
-                let display = if total <= MAX_DISPLAY {
-                    missing_after.join("\n  ")
-                } else {
-                    format!(
-                        "{}\n  ... and {} more",
-                        missing_after[..MAX_DISPLAY].join("\n  "),
-                        total - MAX_DISPLAY
-                    )
-                };
-                debug!(paths = ?missing_after, "full list of missing store paths after exhausting retries");
-                return Err(BuildEnvError::MaterialisationFailed {
-                    attempts: MAX_RETRIES,
-                    paths: display,
-                });
             },
         }
     }
-    unreachable!("retry loop always returns")
 }
 
 impl<A> BuildEnv for BuildEnvNix<A>
@@ -1326,13 +1260,11 @@ where
         // and to avoid the performance degradation of building
         // from within an impurely evaluated nix expression.
         //
-        // After each materialisation pass, stat() all paths to verify none were
-        // GC'd in the narrow window between fetching and buildenv.nix running.
-        // If call_buildenv_nix fails and paths are subsequently missing, GC is
-        // suspected and the whole pass is retried. If all paths are still
-        // present after a call_buildenv_nix failure the error is treated as
-        // deterministic (spawn failure, bad lockfile, JSON parse error) and
-        // propagated immediately without retrying.
+        // The first buildenv.nix call is optimistic: stat() all paths and
+        // proceed immediately.  If it fails, nix path-info is used to check
+        // DB registration.  The loop retries until nix path-info is clean
+        // both before and after a failed invocation — the only condition that
+        // confirms the failure is deterministic.  See materialise_with_retry.
         let system = env!("NIX_TARGET_SYSTEM").to_string();
         let all_env_paths: Vec<String> = lockfile
             .packages
@@ -1362,6 +1294,26 @@ where
             },
             || all_env_paths.clone(),
             || self.call_buildenv_nix(lockfile_path, service_config_path.clone(), out_link_prefix),
+            nix_path_info_null_paths,
+            |paths| {
+                let mut reg_cmd = nix_base_command();
+                apply_nix_store_url(&mut reg_cmd);
+                let reg = reg_cmd
+                    .arg("build")
+                    .arg("--no-link")
+                    .arg("--keep-going")
+                    .args(paths)
+                    .output()?;
+                if reg.status.success() {
+                    Ok(())
+                } else {
+                    Err(std::io::Error::other(format!(
+                        "{}: {}",
+                        reg.status,
+                        String::from_utf8_lossy(&reg.stderr).trim()
+                    )))
+                }
+            },
         )
     }
 }
@@ -2777,9 +2729,16 @@ mod materialise_retry_tests {
     }
 
     #[test]
-    fn succeeds_on_first_attempt_when_paths_present() {
+    fn succeeds_on_first_iteration_when_paths_present() {
         init_tracing();
-        let result = materialise_with_retry(|| Ok(()), Vec::new, Vec::new, || Ok(fake_outputs()));
+        let result = materialise_with_retry(
+            || Ok(()),
+            Vec::new,
+            Vec::new,
+            || Ok(fake_outputs()),
+            |_| Ok(vec![]),
+            |_| Ok(()),
+        );
         assert_eq!(result.unwrap(), fake_outputs());
     }
 
@@ -2788,9 +2747,11 @@ mod materialise_retry_tests {
     #[test]
     fn retries_when_paths_missing_before_build_env_then_succeeds() {
         init_tracing();
-        // missing_paths call count:
-        //   attempt 1: pre-build → missing (GC detected, retry)
-        //   attempt 2: pre-build → present
+        // The pre-realise missing_paths check is only done when path_info_clean_before
+        // is true, so here (flag always false) only the post-realise check fires.
+        // call 1 (post-realise iter 1): missing → continue
+        // call 2 (post-realise iter 2): present → proceed to build_env → Ok
+        // realise is called twice.
         let call = Cell::new(0usize);
         let realise_calls = Cell::new(0usize);
         let result = materialise_with_retry(
@@ -2808,62 +2769,128 @@ mod materialise_retry_tests {
             },
             Vec::new,
             || Ok(fake_outputs()),
+            |_| Ok(vec![]),
+            |_| Ok(()),
         );
         assert_eq!(result.unwrap(), fake_outputs());
-        assert_eq!(
-            realise_calls.get(),
-            2,
-            "realise must be called on each attempt"
-        );
+        assert_eq!(realise_calls.get(), 2, "realise called on each iteration");
     }
 
     #[test]
-    fn materialisation_failed_when_paths_always_missing_before_build_env() {
+    fn retries_until_gc_stops_before_build_env() {
         init_tracing();
-        let missing = vec![
-            "/nix/store/aaaa-missing".to_string(),
-            "/nix/store/bbbb-missing".to_string(),
-        ];
-        let result = materialise_with_retry(
-            || Ok(()),
-            || missing.clone(),
-            Vec::new,
-            || Ok(fake_outputs()),
-        );
-        match result.unwrap_err() {
-            BuildEnvError::MaterialisationFailed { attempts, paths } => {
-                assert_eq!(attempts, 3);
-                assert_eq!(paths, "/nix/store/aaaa-missing\n  /nix/store/bbbb-missing");
-            },
-            e => panic!("expected MaterialisationFailed, got {e:?}"),
-        }
-    }
-
-    // --- post-build GC detection (missing paths discovered after build_env fails) ---
-
-    #[test]
-    fn retries_when_gc_detected_after_build_env_failure() {
-        init_tracing();
-        // Sequence:
-        //   attempt 1: pre-build → present; build_env → Err; post-build → missing (GC, retry)
-        //   attempt 2: pre-build → present; build_env → Ok
-        let missing_call = Cell::new(0usize);
+        // The pre-realise check is skipped (path_info_clean_before always false here),
+        // so only the post-realise check fires.  Returns non-empty for the first 3 calls
+        // (iterations 1–3 → continue), then empty (iteration 4 → proceed to build_env).
+        // realise is called 4 times total.
+        let call = Cell::new(0usize);
         let realise_calls = Cell::new(0usize);
-        let build_calls = Cell::new(0usize);
         let result = materialise_with_retry(
             || {
                 realise_calls.set(realise_calls.get() + 1);
                 Ok(())
             },
             || {
-                missing_call.set(missing_call.get() + 1);
-                match missing_call.get() {
-                    1 => vec![],                                      // pre-build attempt 1: present
-                    2 => vec!["/nix/store/aaaa-missing".to_string()], // post-build attempt 1: GC!
-                    _ => vec![], // pre-build attempt 2: present
+                call.set(call.get() + 1);
+                if call.get() <= 3 {
+                    vec!["/nix/store/aaaa-missing".to_string()]
+                } else {
+                    vec![]
                 }
             },
             Vec::new,
+            || Ok(fake_outputs()),
+            |_| Ok(vec![]),
+            |_| Ok(()),
+        );
+        assert_eq!(result.unwrap(), fake_outputs());
+        assert_eq!(
+            realise_calls.get(),
+            4,
+            "realise called on each loop iteration"
+        );
+    }
+
+    // --- two-sided invalidation: pre-realise stat reset prevents stale "before" flag ---
+
+    #[test]
+    fn path_info_clean_before_reset_when_paths_absent_before_realise() {
+        init_tracing();
+        // Validates lines 1118-1122: the pre-realise missing_paths() check resets
+        // path_info_clean_before when the flag is true and paths are absent, preventing
+        // a carried-forward "before" confirmation from being used across a GC event.
+        //
+        // missing_paths call sequence (pre-realise checks only fire when flag=true):
+        //   call 1  post-realise iter 1: empty → proceed
+        //   call 2  pre-realise  iter 2: non-empty → flag reset to false   ← the branch under test
+        //   call 3  post-realise iter 2: empty → proceed
+        //   call 4  pre-realise  iter 3: non-empty → flag reset to false
+        //   call 5  post-realise iter 3: empty → proceed
+        //
+        // build_env: fails on calls 1 and 2, succeeds on call 3.
+        // path_info: always Ok([]) (clean).
+        //
+        // Without the pre-realise reset, path_info_clean_before would stay true
+        // from iteration 1 into iteration 2, and the second clean path-info result
+        // would declare the failure deterministic — a false positive returning Err
+        // after only two build_env calls.  With the reset, the loop correctly
+        // retries and succeeds on the third call.
+        let missing_calls = Cell::new(0usize);
+        let build_calls = Cell::new(0usize);
+        let realise_calls = Cell::new(0usize);
+        let result = materialise_with_retry(
+            || {
+                realise_calls.set(realise_calls.get() + 1);
+                Ok(())
+            },
+            || {
+                missing_calls.set(missing_calls.get() + 1);
+                // Odd calls (post-realise): empty — paths present on disk.
+                // Even calls (pre-realise, only when flag=true): non-empty — simulates
+                // GC removing paths between iterations, triggering the flag reset.
+                if missing_calls.get().is_multiple_of(2) {
+                    vec!["/nix/store/aaaa-missing".to_string()]
+                } else {
+                    vec![]
+                }
+            },
+            || vec!["test-path".to_string()],
+            || {
+                build_calls.set(build_calls.get() + 1);
+                if build_calls.get() < 3 {
+                    Err(BuildEnvError::Build("build failed".to_string()))
+                } else {
+                    Ok(fake_outputs())
+                }
+            },
+            |_| Ok(vec![]), // path-info: always clean
+            |_| Ok(()),
+        );
+        assert_eq!(result.unwrap(), fake_outputs());
+        assert_eq!(build_calls.get(), 3, "three build attempts before success");
+        assert_eq!(realise_calls.get(), 3);
+    }
+
+    // --- DB-registration-lag retry (build_env fails once, path-info clean, second attempt succeeds) ---
+
+    #[test]
+    fn retries_on_db_registration_lag_after_build_env_failure() {
+        init_tracing();
+        // Sequence:
+        //   iteration 1: stat() ok; build_env → Err;
+        //                path-info → Ok([]) (all paths registered — DB-registration lag
+        //                already resolved by the time path-info runs);
+        //                path_info_clean_before set to true → retry
+        //   iteration 2: stat() ok; build_env → Ok
+        let build_calls = Cell::new(0usize);
+        let realise_calls = Cell::new(0usize);
+        let result = materialise_with_retry(
+            || {
+                realise_calls.set(realise_calls.get() + 1);
+                Ok(())
+            },
+            Vec::new,
+            || vec!["test-path".to_string()],
             || {
                 build_calls.set(build_calls.get() + 1);
                 if build_calls.get() == 1 {
@@ -2872,52 +2899,22 @@ mod materialise_retry_tests {
                     Ok(fake_outputs())
                 }
             },
+            |_| Ok(vec![]), // path-info: all paths registered (DB lag resolved)
+            |_| Ok(()),
         );
         assert_eq!(result.unwrap(), fake_outputs());
-        assert_eq!(
-            realise_calls.get(),
-            2,
-            "realise must be called on each attempt"
-        );
         assert_eq!(build_calls.get(), 2);
+        assert_eq!(realise_calls.get(), 2, "realise called on each iteration");
     }
 
     #[test]
-    fn materialisation_failed_when_gc_detected_after_build_env_on_final_attempt() {
+    fn build_env_error_declared_deterministic_after_two_clean_path_info_checks() {
         init_tracing();
-        // Paths always disappear after build_env fails — exhausts all retries.
-        let missing_call = Cell::new(0usize);
-        let result = materialise_with_retry(
-            || Ok(()),
-            || {
-                missing_call.set(missing_call.get() + 1);
-                // pre-build checks always show paths present; post-build always missing
-                if missing_call.get().is_multiple_of(2) {
-                    vec!["/nix/store/aaaa-missing".to_string()]
-                } else {
-                    vec![]
-                }
-            },
-            Vec::new,
-            || Err(BuildEnvError::Build("nix build failed".to_string())),
-        );
-        match result.unwrap_err() {
-            BuildEnvError::MaterialisationFailed { attempts, paths } => {
-                assert_eq!(attempts, 3);
-                assert_eq!(paths, "/nix/store/aaaa-missing");
-            },
-            e => panic!("expected MaterialisationFailed, got {e:?}"),
-        }
-    }
-
-    #[test]
-    fn build_env_error_exhausts_retries_when_paths_confirmed_present() {
-        init_tracing();
-        // build_env always fails and re-stat always shows nothing missing.
-        // nix path-info (called with an empty expected_paths list) returns no
-        // null paths, so we cannot distinguish a genuine deterministic failure
-        // from the DB-registration race window.  The loop must use all retries
-        // before propagating the error.
+        // build_env always fails; stat always shows paths present; path-info
+        // (injected closure returns Ok([])) is always clean.
+        // First failure: path_info_clean_before=false → sets it to true, retries.
+        // Second failure: path_info_clean_before=true → declares deterministic.
+        // Exactly two build_env calls and two realise calls.
         let realise_calls = Cell::new(0usize);
         let build_calls = Cell::new(0usize);
         let result = materialise_with_retry(
@@ -2925,23 +2922,86 @@ mod materialise_retry_tests {
                 realise_calls.set(realise_calls.get() + 1);
                 Ok(())
             },
-            Vec::new, // paths always present
             Vec::new,
+            || vec!["test-path".to_string()],
             || {
                 build_calls.set(build_calls.get() + 1);
                 Err(BuildEnvError::Build("deterministic failure".to_string()))
             },
+            |_| Ok(vec![]), // path-info: always clean
+            |_| Ok(()),
         );
         match result.unwrap_err() {
             BuildEnvError::Build(msg) => assert_eq!(msg, "deterministic failure"),
             e => panic!("expected Build, got {e:?}"),
         }
         assert_eq!(
-            realise_calls.get(),
-            3,
-            "must exhaust all retries before propagating"
+            build_calls.get(),
+            2,
+            "exactly two buildenv.nix calls before declaring deterministic"
         );
-        assert_eq!(build_calls.get(), 3, "build_env must be retried");
+        assert_eq!(realise_calls.get(), 2);
+    }
+
+    // --- path-info errors and force-registration ---
+
+    #[test]
+    fn path_info_error_propagates_original_build_env_error() {
+        init_tracing();
+        // build_env fails; path-info itself errors → original error propagated.
+        let result = materialise_with_retry(
+            || Ok(()),
+            Vec::new,
+            || vec!["test-path".to_string()],
+            || Err(BuildEnvError::Build("build failed".to_string())),
+            |_| Err(std::io::Error::other("nix path-info failed")),
+            |_| Ok(()),
+        );
+        assert!(matches!(result.unwrap_err(), BuildEnvError::Build(_)));
+    }
+
+    #[test]
+    fn retries_after_force_registration_succeeds() {
+        init_tracing();
+        // path-info returns a null path → force-register succeeds → loop restarts → second attempt Ok.
+        let build_calls = Cell::new(0usize);
+        let realise_calls = Cell::new(0usize);
+        let result = materialise_with_retry(
+            || {
+                realise_calls.set(realise_calls.get() + 1);
+                Ok(())
+            },
+            Vec::new,
+            || vec!["test-path".to_string()],
+            || {
+                build_calls.set(build_calls.get() + 1);
+                if build_calls.get() == 1 {
+                    Err(BuildEnvError::Build("build failed".to_string()))
+                } else {
+                    Ok(fake_outputs())
+                }
+            },
+            |_| Ok(vec!["test-path".to_string()]), // null path detected
+            |_| Ok(()),                            // force-register succeeds
+        );
+        assert_eq!(result.unwrap(), fake_outputs());
+        assert_eq!(build_calls.get(), 2);
+        assert_eq!(realise_calls.get(), 2, "realise called on each iteration");
+    }
+
+    #[test]
+    fn force_registration_failure_propagates_original_build_env_error() {
+        init_tracing();
+        // path-info returns a null path; force-register fails → original error propagated.
+        let result = materialise_with_retry(
+            || Ok(()),
+            Vec::new,
+            || vec!["test-path".to_string()],
+            || Err(BuildEnvError::Build("build failed".to_string())),
+            |_| Ok(vec!["test-path".to_string()]),
+            |_| Err(std::io::Error::other("nix build --no-link failed")),
+        );
+        assert!(matches!(result.unwrap_err(), BuildEnvError::Build(_)));
     }
 
     // --- realise errors ---
@@ -2958,6 +3018,8 @@ mod materialise_retry_tests {
                 build_called.set(true);
                 Ok(fake_outputs())
             },
+            |_| Ok(vec![]),
+            |_| Ok(()),
         );
         assert!(matches!(result.unwrap_err(), BuildEnvError::Build(_)));
         assert!(
