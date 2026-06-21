@@ -12,18 +12,24 @@
 //! credential-redaction concern lives in the error type rather than at call
 //! sites.
 //!
-//! Phase 1 ships the plaintext and mock backends only. The keyring backend
-//! (and the `CredentialSource::Keyring` probe branch) is added in Phase 2.
+//! Phase 2 adds the [KeyringStore] backend (OS-native encrypted credential
+//! store) and the [CredentialSource::Keyring] probe branch.
 
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, Once};
 
 use enum_dispatch::enum_dispatch;
 use flox_rust_sdk::models::floxmeta::FLOXHUB_TOKEN_ENV_VAR;
 use thiserror::Error;
+use url::Url;
 
 use crate::commands::general::update_config;
 use crate::config::{Config, FLOX_CONFIG_FILE};
+
+/// `service` value for the FloxHub credential in the OS keyring. The token is
+/// keyed by this constant plus the FloxHub base URL as the `account`, mirroring
+/// `gh`'s per-host keying so distinct FloxHub instances stay separate.
+const KEYRING_SERVICE: &str = "dev.flox.flox";
 
 /// Errors returned by a [CredentialStore].
 ///
@@ -49,6 +55,18 @@ pub enum CredentialStoreError {
     #[error("could not parse the plaintext credential file")]
     ParsePlaintext(#[source] toml_edit::TomlError),
 
+    /// No usable OS keyring backend is available (no default store, platform
+    /// failure, or the store could not be accessed). Callers treat this as the
+    /// signal to fall back to plaintext storage. The underlying keyring error
+    /// never carries the secret.
+    #[error("no OS keyring backend is available")]
+    NoBackend(#[source] keyring_core::Error),
+
+    /// An unclassified OS keyring failure that is neither "no entry" nor a
+    /// known no-backend condition.
+    #[error("the OS keyring operation failed")]
+    Keyring(#[source] keyring_core::Error),
+
     /// An error injected by [MockStore] for testing.
     #[error("{0}")]
     Mock(String),
@@ -67,9 +85,7 @@ pub enum CredentialSource {
     SystemConfig,
     /// The token is stored in plain text in the user's `flox.toml`.
     UserConfigPlaintext,
-    /// The token is stored in the OS keyring. Constructed in Phase 2 once the
-    /// keyring backend exists; kept here so the `status` match is forward-ready.
-    #[allow(dead_code)]
+    /// The token is stored in the OS keyring.
     Keyring,
     /// No credential is available from any source.
     None,
@@ -87,11 +103,12 @@ pub trait CredentialStore {
 }
 
 /// The concrete credential backends.
-///
-/// `Keyring(KeyringStore)` is added in Phase 2.
 #[enum_dispatch(CredentialStore)]
 #[derive(Debug, Clone)]
 pub enum CredentialStoreImpl {
+    /// OS-native encrypted credential store (macOS Keychain / Linux Secret
+    /// Service), keyed by the FloxHub base URL.
+    Keyring(KeyringStore),
     /// `<config_dir>/flox.toml`, with an explicit `0600` on write.
     Plaintext(PlaintextStore),
     /// In-memory backend for tests; supports injected errors.
@@ -188,6 +205,103 @@ impl CredentialStore for PlaintextStore {
     }
 }
 
+/// Register the platform-native keyring as `keyring_core`'s default store.
+///
+/// Mirrors the `keyring` v4 `v1` module: try the per-target backend once, and
+/// swallow construction errors — when no backend registers, [keyring_core::Entry::new]
+/// returns [keyring_core::Error::NoDefaultStore], which [KeyringStore] maps to
+/// [CredentialStoreError::NoBackend] so the caller falls back to plaintext.
+fn register_default_store() {
+    static SET_CREDENTIAL_STORE: Once = Once::new();
+    SET_CREDENTIAL_STORE.call_once(|| {
+        #[cfg(target_os = "macos")]
+        {
+            if let Ok(store) = apple_native_keyring_store::keychain::Store::new() {
+                keyring_core::set_default_store(store);
+            }
+        }
+        #[cfg(target_os = "linux")]
+        {
+            if let Ok(store) = zbus_secret_service_keyring_store::Store::new() {
+                keyring_core::set_default_store(store);
+            }
+        }
+    });
+}
+
+/// Map a [keyring_core::Error] from a `get`/`set`/`remove` into our typed error.
+///
+/// [keyring_core::Error::NoEntry] is handled by callers (it is not a failure);
+/// the no-backend conditions become [CredentialStoreError::NoBackend] so the
+/// caller can branch on the type rather than a string.
+fn classify_keyring_error(error: keyring_core::Error) -> CredentialStoreError {
+    match error {
+        keyring_core::Error::NoDefaultStore
+        | keyring_core::Error::PlatformFailure(_)
+        | keyring_core::Error::NoStorageAccess(_) => CredentialStoreError::NoBackend(error),
+        other => CredentialStoreError::Keyring(other),
+    }
+}
+
+/// OS-native encrypted credential storage (macOS Keychain / Linux Secret
+/// Service) via the `keyring` v4 crates.
+///
+/// The entry is keyed by [KEYRING_SERVICE] plus the FloxHub base URL as the
+/// account, so distinct FloxHub instances do not collide.
+#[derive(Debug, Clone)]
+pub struct KeyringStore {
+    account: String,
+}
+
+impl KeyringStore {
+    pub fn new(floxhub_url: &Url) -> Self {
+        Self {
+            account: floxhub_url.as_str().to_string(),
+        }
+    }
+
+    fn entry(&self) -> Result<keyring_core::Entry, CredentialStoreError> {
+        register_default_store();
+        keyring_core::Entry::new(KEYRING_SERVICE, &self.account).map_err(classify_keyring_error)
+    }
+}
+
+impl CredentialStore for KeyringStore {
+    fn get(&self) -> Result<Option<String>, CredentialStoreError> {
+        match self.entry()?.get_password() {
+            Ok(password) => Ok(Some(password)),
+            Err(keyring_core::Error::NoEntry) => Ok(None),
+            Err(e) => Err(classify_keyring_error(e)),
+        }
+    }
+
+    fn set(&self, token: &str) -> Result<(), CredentialStoreError> {
+        // Try-then-confirm: attempt the write directly. Any failure (including
+        // a missing backend) surfaces as an error so the caller falls back to
+        // plaintext, rather than probing availability up front.
+        self.entry()?
+            .set_password(token)
+            .map_err(classify_keyring_error)
+    }
+
+    fn remove(&self) -> Result<(), CredentialStoreError> {
+        // Best-effort across machines with no keyring: when no backend is
+        // available there is nothing of ours stored there, so logout still
+        // succeeds. A backend that *is* present but rejects the delete (locked,
+        // platform error) is surfaced so logout does not falsely claim success.
+        let entry = match self.entry() {
+            Ok(entry) => entry,
+            Err(CredentialStoreError::NoBackend(_)) => return Ok(()),
+            Err(e) => return Err(e),
+        };
+        match entry.delete_credential() {
+            // Idempotent: a missing entry is not a failure.
+            Ok(()) | Err(keyring_core::Error::NoEntry) => Ok(()),
+            Err(e) => Err(classify_keyring_error(e)),
+        }
+    }
+}
+
 /// In-memory credential store for tests, with optional error injection.
 #[derive(Debug, Clone, Default)]
 pub struct MockStore {
@@ -255,20 +369,38 @@ impl CredentialStore for MockStore {
 /// Pure: no migration or other side effects. Shared by the startup resolver
 /// (Phase 2/3) and `flox auth status`.
 ///
-/// Precedence (Phase 1): `FLOX_FLOXHUB_TOKEN` env > user-file plaintext >
-/// system config > none. The `Keyring` branch is added in Phase 2.
-pub fn probe_credential_source(config: &Config, store: &CredentialStoreImpl) -> CredentialSource {
+/// Precedence: `FLOX_FLOXHUB_TOKEN` env > user-file plaintext > keyring >
+/// system config > none.
+///
+/// The keyring is probed before the system-config inference because the
+/// resolver (`resolve_credential_into`) has, by the time `status` runs,
+/// populated `config.flox.floxhub_token` from the keyring when the merged config
+/// was empty. The `SystemConfig` inference rests on that field being `Some` for
+/// reasons *other* than env/user-file, so it must come last — otherwise a
+/// keyring-sourced token would misreport as `SystemConfig`. The only case this
+/// reorders is "both `/etc` and the keyring hold a token", which reports
+/// `Keyring` though `/etc` shadows it under the read precedence — a cosmetic
+/// `status`-only difference.
+pub fn probe_credential_source(
+    config: &Config,
+    plaintext: &CredentialStoreImpl,
+    keyring: &CredentialStoreImpl,
+) -> CredentialSource {
     let env_token = std::env::var(FLOXHUB_TOKEN_ENV_VAR).ok();
     if env_token.is_some_and(|t| !t.is_empty()) {
         return CredentialSource::Env;
     }
 
-    if store.get().ok().flatten().is_some() {
+    if plaintext.get().ok().flatten().is_some() {
         return CredentialSource::UserConfigPlaintext;
     }
 
-    // The merged config still has a token, but it is neither from the
-    // environment nor the user file — so it came from `/etc/flox.toml`.
+    if keyring.get().ok().flatten().is_some() {
+        return CredentialSource::Keyring;
+    }
+
+    // The merged config still has a token, but it is not from the environment,
+    // the user file, or the keyring — so it came from `/etc/flox.toml`.
     if config
         .flox
         .floxhub_token
@@ -279,6 +411,67 @@ pub fn probe_credential_source(config: &Config, store: &CredentialStoreImpl) -> 
     }
 
     CredentialSource::None
+}
+
+/// Where a freshly-logged-in token was written.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TokenStorage {
+    /// Stored in the OS keyring.
+    Keyring,
+    /// Stored in the plaintext `flox.toml` file (the fallback).
+    Plaintext,
+}
+
+/// Persist a logged-in token to the most secure available store.
+///
+/// Unless `insecure_storage` forces plaintext, attempt the keyring first
+/// (try-then-confirm): on success store there and remove any lingering
+/// plaintext token so it cannot shadow the keyring entry. On any keyring
+/// failure — or when plaintext is forced — write the plaintext file (`0600`).
+/// The returned [TokenStorage] tells the caller whether to warn the user.
+pub fn persist_login_token(
+    token: &str,
+    insecure_storage: bool,
+    keyring: &CredentialStoreImpl,
+    plaintext: &CredentialStoreImpl,
+) -> Result<TokenStorage, CredentialStoreError> {
+    if !insecure_storage && keyring.set(token).is_ok() {
+        plaintext.remove()?;
+        return Ok(TokenStorage::Keyring);
+    }
+
+    plaintext.set(token)?;
+    Ok(TokenStorage::Plaintext)
+}
+
+/// Populate `config.flox.floxhub_token` from the keyring when the merged config
+/// supplied no token.
+///
+/// This is the single upstream resolution step (Q8, Option C): both the loud
+/// `resolve_floxhub_token` and the silent `init_floxhub_client` read the same
+/// field, so populating it once here lets both see the keyring value with no
+/// change to their internals.
+///
+/// Precedence is preserved by only consulting the keyring when the merged value
+/// (env > system > plaintext file) is empty. No keyring I/O happens in the
+/// prompt/hook flow.
+pub fn resolve_credential_into(config: &mut Config, keyring: &CredentialStoreImpl, is_hook: bool) {
+    if is_hook {
+        return;
+    }
+
+    if config
+        .flox
+        .floxhub_token
+        .as_deref()
+        .is_some_and(|t| !t.is_empty())
+    {
+        return;
+    }
+
+    if let Ok(Some(token)) = keyring.get() {
+        config.flox.floxhub_token = Some(token);
+    }
 }
 
 #[cfg(test)]
@@ -431,9 +624,11 @@ mod tests {
             probe_vars(home.path(), user_dir.path(), system_dir.path(), None),
             || {
                 let config = Config::parse().unwrap();
-                let store = CredentialStoreImpl::Plaintext(PlaintextStore::new(user_dir.path()));
+                let plaintext =
+                    CredentialStoreImpl::Plaintext(PlaintextStore::new(user_dir.path()));
+                let keyring = CredentialStoreImpl::Mock(MockStore::new());
                 assert_eq!(
-                    probe_credential_source(&config, &store),
+                    probe_credential_source(&config, &plaintext, &keyring),
                     CredentialSource::None
                 );
                 unsafe { env::remove_var("FLOX_CONFIG_DIR") };
@@ -459,9 +654,11 @@ mod tests {
             ),
             || {
                 let config = Config::parse().unwrap();
-                let store = CredentialStoreImpl::Plaintext(PlaintextStore::new(user_dir.path()));
+                let plaintext =
+                    CredentialStoreImpl::Plaintext(PlaintextStore::new(user_dir.path()));
+                let keyring = CredentialStoreImpl::Mock(MockStore::new());
                 assert_eq!(
-                    probe_credential_source(&config, &store),
+                    probe_credential_source(&config, &plaintext, &keyring),
                     CredentialSource::Env
                 );
                 unsafe { env::remove_var("FLOX_CONFIG_DIR") };
@@ -481,9 +678,11 @@ mod tests {
             probe_vars(home.path(), user_dir.path(), system_dir.path(), None),
             || {
                 let config = Config::parse().unwrap();
-                let store = CredentialStoreImpl::Plaintext(PlaintextStore::new(user_dir.path()));
+                let plaintext =
+                    CredentialStoreImpl::Plaintext(PlaintextStore::new(user_dir.path()));
+                let keyring = CredentialStoreImpl::Mock(MockStore::new());
                 assert_eq!(
-                    probe_credential_source(&config, &store),
+                    probe_credential_source(&config, &plaintext, &keyring),
                     CredentialSource::UserConfigPlaintext
                 );
                 unsafe { env::remove_var("FLOX_CONFIG_DIR") };
@@ -509,14 +708,164 @@ mod tests {
                 // Sanity: the token reached the merged config from /etc only.
                 assert_eq!(config.flox.floxhub_token.as_deref(), Some(TOKEN));
 
-                let store = CredentialStoreImpl::Plaintext(PlaintextStore::new(user_dir.path()));
-                assert_eq!(store.get().unwrap(), None);
+                let plaintext =
+                    CredentialStoreImpl::Plaintext(PlaintextStore::new(user_dir.path()));
+                assert_eq!(plaintext.get().unwrap(), None);
+                let keyring = CredentialStoreImpl::Mock(MockStore::new());
                 assert_eq!(
-                    probe_credential_source(&config, &store),
+                    probe_credential_source(&config, &plaintext, &keyring),
                     CredentialSource::SystemConfig
                 );
                 unsafe { env::remove_var("FLOX_CONFIG_DIR") };
             },
         );
+    }
+
+    /// The keyring is consulted last: with env and both config files empty, a
+    /// token in the (mocked) keyring resolves to `Keyring`. Models the
+    /// `status reports keyring source` validation item.
+    #[test]
+    fn probe_returns_keyring_when_only_keyring_has_token() {
+        let home = tempfile::tempdir().unwrap();
+        let user_dir = tempfile::tempdir().unwrap();
+        let system_dir = tempfile::tempdir().unwrap();
+        write_flox_toml(user_dir.path(), "");
+        write_flox_toml(system_dir.path(), "");
+
+        temp_env::with_vars(
+            probe_vars(home.path(), user_dir.path(), system_dir.path(), None),
+            || {
+                let config = Config::parse().unwrap();
+                let plaintext =
+                    CredentialStoreImpl::Plaintext(PlaintextStore::new(user_dir.path()));
+                let keyring = CredentialStoreImpl::Mock(MockStore::new());
+                keyring.set(TOKEN).unwrap();
+                assert_eq!(
+                    probe_credential_source(&config, &plaintext, &keyring),
+                    CredentialSource::Keyring
+                );
+                unsafe { env::remove_var("FLOX_CONFIG_DIR") };
+            },
+        );
+    }
+
+    /// Reproduce the real `status` call order: the resolver populates
+    /// `config.flox.floxhub_token` from the keyring, then `probe` runs on that
+    /// mutated config. The keyring branch must win over the `SystemConfig`
+    /// inference — otherwise a keyring-sourced token misreports as system
+    /// config. (`Config::parse()` is unnecessary here: the resolver works on
+    /// the merged field directly, which is what the bug hinges on.)
+    #[test]
+    fn probe_after_resolver_reports_keyring_not_system_config() {
+        let keyring = CredentialStoreImpl::Mock(MockStore::new());
+        keyring.set(TOKEN).unwrap();
+        let plaintext = CredentialStoreImpl::Mock(MockStore::new());
+
+        let mut config = config_with_token(None);
+        resolve_credential_into(&mut config, &keyring, false);
+
+        assert_eq!(
+            probe_credential_source(&config, &plaintext, &keyring),
+            CredentialSource::Keyring
+        );
+    }
+
+    // --- persist_login_token: the login storage decision ---
+
+    /// Default login: the token goes to the keyring and no plaintext token is
+    /// left behind.
+    #[test]
+    fn login_stores_in_keyring_and_clears_plaintext() {
+        let dir = tempfile::tempdir().unwrap();
+        // A pre-existing plaintext token must be removed once the keyring write
+        // confirms, so it cannot shadow the keyring entry on the next read.
+        write_flox_toml(dir.path(), &format!("floxhub_token = \"{TOKEN}\"\n"));
+
+        let keyring = CredentialStoreImpl::Mock(MockStore::new());
+        let plaintext = CredentialStoreImpl::Plaintext(PlaintextStore::new(dir.path()));
+
+        let storage = persist_login_token(TOKEN, false, &keyring, &plaintext).unwrap();
+
+        assert_eq!(storage, TokenStorage::Keyring);
+        assert_eq!(keyring.get().unwrap(), Some(TOKEN.to_string()));
+        assert_eq!(plaintext.get().unwrap(), None);
+    }
+
+    /// On any keyring failure, login falls back to plaintext and signals it so
+    /// the caller can warn.
+    #[test]
+    fn login_falls_back_to_plaintext_on_keyring_error() {
+        let dir = tempfile::tempdir().unwrap();
+        let keyring_mock = MockStore::new();
+        keyring_mock.set_error("no backend");
+        let keyring = CredentialStoreImpl::Mock(keyring_mock);
+        let plaintext = CredentialStoreImpl::Plaintext(PlaintextStore::new(dir.path()));
+
+        let storage = persist_login_token(TOKEN, false, &keyring, &plaintext).unwrap();
+
+        assert_eq!(storage, TokenStorage::Plaintext);
+        assert_eq!(keyring.get().unwrap(), None);
+        assert_eq!(plaintext.get().unwrap(), Some(TOKEN.to_string()));
+    }
+
+    /// `--insecure-storage` forces plaintext even when the keyring write would
+    /// have succeeded; the keyring is never touched.
+    #[test]
+    fn login_insecure_storage_forces_plaintext() {
+        let dir = tempfile::tempdir().unwrap();
+        let keyring = CredentialStoreImpl::Mock(MockStore::new());
+        let plaintext = CredentialStoreImpl::Plaintext(PlaintextStore::new(dir.path()));
+
+        let storage = persist_login_token(TOKEN, true, &keyring, &plaintext).unwrap();
+
+        assert_eq!(storage, TokenStorage::Plaintext);
+        assert_eq!(keyring.get().unwrap(), None);
+        assert_eq!(plaintext.get().unwrap(), Some(TOKEN.to_string()));
+    }
+
+    // --- resolve_credential_into: the upstream read resolver ---
+
+    fn config_with_token(token: Option<&str>) -> Config {
+        let mut config = Config::default();
+        config.flox.floxhub_token = token.map(str::to_string);
+        config
+    }
+
+    /// When the merged config supplied no token, the keyring value populates it.
+    #[test]
+    fn resolve_populates_token_from_keyring_when_config_empty() {
+        let keyring = CredentialStoreImpl::Mock(MockStore::new());
+        keyring.set(TOKEN).unwrap();
+
+        let mut config = config_with_token(None);
+        resolve_credential_into(&mut config, &keyring, false);
+
+        assert_eq!(config.flox.floxhub_token.as_deref(), Some(TOKEN));
+    }
+
+    /// A non-empty merged token wins: env > system > file all flow through this
+    /// field, so the keyring is not consulted and the value is untouched.
+    #[test]
+    fn resolve_leaves_existing_token_untouched() {
+        let keyring = CredentialStoreImpl::Mock(MockStore::new());
+        keyring.set("keyring-token").unwrap();
+
+        let mut config = config_with_token(Some("config-token"));
+        resolve_credential_into(&mut config, &keyring, false);
+
+        assert_eq!(config.flox.floxhub_token.as_deref(), Some("config-token"));
+    }
+
+    /// The prompt/hook flow performs no keyring I/O: an empty config stays
+    /// empty even when the keyring holds a token.
+    #[test]
+    fn resolve_skips_keyring_in_hook_flow() {
+        let keyring = CredentialStoreImpl::Mock(MockStore::new());
+        keyring.set(TOKEN).unwrap();
+
+        let mut config = config_with_token(None);
+        resolve_credential_into(&mut config, &keyring, true);
+
+        assert_eq!(config.flox.floxhub_token, None);
     }
 }

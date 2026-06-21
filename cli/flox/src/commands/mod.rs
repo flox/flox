@@ -83,6 +83,7 @@ use crate::utils::active_environments::{
     activated_environments,
     last_activated_environment,
 };
+use crate::utils::credential_store::{CredentialStoreImpl, KeyringStore, resolve_credential_into};
 use crate::utils::dialog::{Dialog, Select};
 use crate::utils::errors::display_chain;
 use crate::utils::init::init_floxhub_client;
@@ -194,7 +195,7 @@ impl fmt::Debug for Commands {
 
 impl FloxArgs {
     /// Initialize the command line by creating an initial FloxBuilder
-    pub async fn handle(self, config: crate::config::Config) -> Result<()> {
+    pub async fn handle(self, mut config: crate::config::Config) -> Result<()> {
         // ensure xdg dirs exist
         tokio::fs::create_dir_all(&config.flox.config_dir).await?;
         tokio::fs::create_dir_all(&config.flox.data_dir).await?;
@@ -278,6 +279,14 @@ impl FloxArgs {
                 .unwrap_or_else(|| DEFAULT_FLOXHUB_URL.clone()),
             git_url_override,
         )?;
+
+        // Resolve the token string once, upstream: when the merged config
+        // supplied no token, populate it from the OS keyring so both the loud
+        // `resolve_floxhub_token` and the silent `init_floxhub_client` see the
+        // keyring value. Gated out of the prompt/hook flow — that path must do
+        // no keyring I/O.
+        let keyring = CredentialStoreImpl::Keyring(KeyringStore::new(floxhub.base_url()));
+        resolve_credential_into(&mut config, &keyring, self.is_prompt_hook_flow());
 
         let floxhub_token = self.resolve_floxhub_token(&config);
 
@@ -465,7 +474,9 @@ impl FloxArgs {
             Ok(Some(token)) if token.is_expired() => {
                 let reauthenticating = matches!(
                     self.command,
-                    Some(Commands::Admin(AdminCommands::Auth(auth::Auth::Login)))
+                    Some(Commands::Admin(AdminCommands::Auth(
+                        auth::Auth::Login { .. }
+                    )))
                 );
                 if !reauthenticating && !self.is_prompt_hook_flow() {
                     message::warning(
@@ -1456,7 +1467,8 @@ pub(super) async fn ensure_auth(flox: &mut Flox) -> Result<String> {
                 AuthFailure::NotLoggedIn => "You are not logged in to FloxHub.",
                 _ => unreachable!(),
             }));
-            auth::login_flox(flox).await
+            // Implicit re-authentication uses the secure default store.
+            auth::login_flox(flox, false).await
         },
         Err(failure) => {
             let message = match failure {
