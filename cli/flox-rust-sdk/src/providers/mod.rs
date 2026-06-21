@@ -10,5 +10,6 @@ pub mod manifest_init;
 pub mod nix;
 pub mod nix_auth;
 pub mod publish;
+pub mod sandbox_prompt;
 pub mod services;
 pub mod upgrade_checks;

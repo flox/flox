@@ -52,9 +52,14 @@ tests/threadtest: tests/threadtest.c closure.c closure.h
 tests/sandbox_probe: tests/sandbox_probe.c
 	$(CC) -pthread -O2 -Wall -o $@ $<
 
+# mock_prompt_broker is a fixed-reply AF_UNIX server standing in for the Phase 2
+# prompt broker, so run-tests.sh can exercise libsandbox's prompt client.
+tests/mock_prompt_broker: tests/mock_prompt_broker.c
+	$(CC) -O2 -Wall -o $@ $<
+
 # Run the full sandbox test suite (thread-safety oracle + interception
 # semantics + threaded interception storm). Depends on the injected library and
-# both test binaries.
+# the test binaries.
 .PHONY: tests
-tests: $(SANDBOX_LIB) tests/threadtest tests/sandbox_probe
+tests: $(SANDBOX_LIB) tests/threadtest tests/sandbox_probe tests/mock_prompt_broker
 	bash tests/run-tests.sh
