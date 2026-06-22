@@ -511,10 +511,11 @@ async fn exec_run(run_args: RunArgs, flox: &Flox) -> Result<()> {
                 .env("PATH", &new_path)
                 .exec();
 
-            return Err(
-                RunError::ExecFailed(run_args.executable.to_string_lossy().into_owned(), err)
-                    .into(),
-            );
+            return Err(RunError::ExecFailed(
+                run_args.executable.to_string_lossy().into_owned(),
+                err,
+            )
+            .into());
         }
     }
 
@@ -623,9 +624,9 @@ pub fn collect_bin_dirs_from_gc_root(prefix: &Path) -> Vec<PathBuf> {
             continue;
         }
         // Follow the symlink (nix build creates symlinks into the store).
-        let target = match std::fs::read_link(entry.path()).or_else(|_| {
-            std::fs::canonicalize(entry.path())
-        }) {
+        let target = match std::fs::read_link(entry.path())
+            .or_else(|_| std::fs::canonicalize(entry.path()))
+        {
             Ok(t) => t,
             Err(_) => continue,
         };
