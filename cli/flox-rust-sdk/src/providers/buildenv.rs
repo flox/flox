@@ -293,6 +293,84 @@ pub fn substitute_store_paths(
     Ok(success)
 }
 
+/// Build a catalog package from source when the binary cache does not have it.
+///
+/// Constructs the `flox-nixpkgs` flake installable from `locked_url` and
+/// `attr_path`, then invokes `nix build` with the Nix plugins that allow
+/// unfree and broken packages.
+///
+/// When `gc_root_prefix` is `Some(p)`, passes `--out-link <p>` so the build
+/// output is registered as a GC root. When `None`, passes `--no-link`.
+///
+/// Returns `Err(BuildEnvError::Realise2)` if the build fails.
+pub fn build_catalog_pkg_from_source(
+    locked_url: &str,
+    attr_path: &str,
+    system: &str,
+    unfree: Option<bool>,
+    broken: Option<bool>,
+    gc_root_prefix: Option<&Path>,
+) -> Result<(), BuildEnvError> {
+    // Transform the locked URL: strip the nixpkgs GitHub prefix and replace
+    // it with the flox-nixpkgs fetcher reference so that evaluation checks
+    // (allowUnfree, allowBroken) are controlled by manifest options rather
+    // than Nix's built-in guards.
+    let flake_ref = if let Some(rev) = locked_url.strip_prefix(NIXPKGS_CATALOG_URL_PREFIX) {
+        format!("{FLOX_NIXPKGS_PROXY_FLAKE_REF_BASE}/{rev}")
+    } else {
+        return Err(BuildEnvError::Realise2 {
+            install_id: attr_path.to_string(),
+            message: format!(
+                "Locked package '{}' does not use the expected nixpkgs URL prefix '{}'",
+                attr_path, NIXPKGS_CATALOG_URL_PREFIX
+            ),
+        });
+    };
+
+    // Build all outputs (^*) from legacyPackages.<system>.<attr_path>.
+    let installable = format!("{flake_ref}#legacyPackages.{system}.{attr_path}^*");
+
+    let reason = match (unfree, broken) {
+        (Some(true), _) => " (unfree license)",
+        (_, Some(true)) => " (upstream build marked as broken)",
+        _ => "",
+    };
+
+    let _span = info_span!(
+        "build_catalog_pkg_from_source",
+        progress = format!("Building '{attr_path}' from source{reason}")
+    )
+    .entered();
+
+    let mut cmd = base_command();
+    cmd.args(["--option", "extra-plugin-files", &*NIX_PLUGINS]);
+    cmd.arg("build");
+    cmd.arg("--no-write-lock-file");
+    cmd.arg("--no-update-lock-file");
+    cmd.args(["--option", "pure-eval", "true"]);
+    match gc_root_prefix {
+        Some(prefix) => {
+            cmd.arg("--out-link").arg(prefix);
+        },
+        None => {
+            cmd.arg("--no-link");
+        },
+    }
+    cmd.arg(&installable);
+
+    debug!(%installable, cmd=%cmd.display(), "building catalog package from source");
+
+    let output = cmd.output().map_err(BuildEnvError::CallNixBuild)?;
+    if !output.status.success() {
+        return Err(BuildEnvError::Realise2 {
+            install_id: attr_path.to_string(),
+            message: String::from_utf8_lossy(&output.stderr).to_string(),
+        });
+    }
+
+    Ok(())
+}
+
 impl<A> BuildEnvNix<A>
 where
     A: AuthProvider,

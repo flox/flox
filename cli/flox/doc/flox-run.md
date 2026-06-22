@@ -156,15 +156,19 @@ in a future release:
 ## Binary cache requirement
 
 `flox run` fetches packages by store path using substitution only.
-It does not evaluate Nix expressions or build packages from source.
+It does not evaluate Nix expressions or build packages from source
+unless the binary cache does not have the package.
 A package must have a pre-built binary available in the Nix binary
-cache to work with `flox run`.
+cache, or be buildable from source.
 
 Packages that require building from source — including those with
-unfree licenses that are not pre-cached — will fail with a
-"not available in the binary cache" error.
-Use `flox install` to add such packages to an environment instead;
-`flox install` can build packages from source when needed.
+unfree licenses that are not pre-cached — cannot be substituted
+directly. `flox run` will offer to build such packages from source.
+When running interactively you will be prompted to confirm;
+non-interactive invocations (e.g. in scripts) proceed automatically.
+Built packages are stored in a temporary GC root that is removed when
+the command exits.
+Use `flox install` to add a package to a persistent environment instead.
 
 # SEE ALSO
 

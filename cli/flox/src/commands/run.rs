@@ -14,7 +14,8 @@
 //! flags that belong to the invoked command. `handle()` re-reads raw process
 //! arguments with `std::env::args_os()`.
 
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
+use std::io::{BufRead as _, IsTerminal as _};
 use std::os::unix::fs::PermissionsExt;
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
@@ -24,7 +25,11 @@ use anyhow::Result;
 use bpaf::Bpaf;
 use flox_manifest::raw::{CatalogPackage, RawManifestError};
 use flox_rust_sdk::flox::Flox;
-use flox_rust_sdk::providers::buildenv::{BuildEnvError, substitute_store_paths};
+use flox_rust_sdk::providers::buildenv::{
+    BuildEnvError,
+    build_catalog_pkg_from_source,
+    substitute_store_paths,
+};
 use floxhub_client::{
     CatalogClientTrait,
     MessageLevel,
@@ -130,14 +135,13 @@ pub enum RunError {
     #[error("Failed to run nix while downloading package '{0}'.")]
     Substitute(String, #[source] BuildEnvError),
 
-    /// Substitution returned `false` (nix build reported failure).
-    #[error(
-        "Package '{0}' is not available in the binary cache.\n\
-         'flox run' requires a pre-built binary. \
-         Use 'flox install {0}' to add it to an environment instead.\n\
-         If you expect this package to be cached, check your network connection and try again."
-    )]
-    DownloadFailed(String),
+    /// User declined the offer to build the package from source.
+    #[error("Cancelled building '{0}' from source.")]
+    BuildDeclined(String),
+
+    /// The `nix build` invocation for building from source failed.
+    #[error("Failed to build '{0}' from source.\n{1}")]
+    BuildFailed(String, #[source] BuildEnvError),
 
     /// The requested executable was not found in `bin/` or `sbin/` of any output.
     #[error(
@@ -449,7 +453,68 @@ async fn exec_run(run_args: RunArgs, flox: &Flox) -> Result<()> {
             .map_err(|e| RunError::Substitute(pkg_spec.clone(), e))?;
         drop(_span);
         if !ok {
-            return Err(RunError::DownloadFailed(pkg_spec.clone()).into());
+            // Package is not in the binary cache. Offer to build from source.
+            //
+            // Interactive sessions prompt the user; non-interactive sessions
+            // (scripts, CI) proceed automatically to avoid blocking.
+            if std::io::stderr().is_terminal() {
+                eprint!(
+                    "⚠️  Package '{pkg_spec}' is not in the binary cache and must be built \
+                     from source. This may take a while. Continue? [Y/n] "
+                );
+                let stdin = std::io::stdin();
+                let mut input = String::new();
+                stdin.lock().read_line(&mut input)?;
+                let trimmed = input.trim().to_lowercase();
+                if trimmed == "n" || trimmed == "no" {
+                    return Err(RunError::BuildDeclined(pkg_spec.clone()).into());
+                }
+            }
+
+            // Use a per-run GC root keyed on system + attr_path + PID so
+            // concurrent runs don't clobber each other's build outputs.
+            let pid = std::process::id();
+            let build_gc_root =
+                gc_root_dir.join(format!("build-{}.{}-{}", flox.system, attr_path, pid));
+
+            {
+                let _span = info_span!(
+                    "run_build",
+                    progress = format!("Building '{pkg_spec}' from source...")
+                )
+                .entered();
+                build_catalog_pkg_from_source(
+                    &resolved_pkg.locked_url,
+                    &attr_path,
+                    &flox.system,
+                    resolved_pkg.unfree,
+                    resolved_pkg.broken,
+                    Some(&build_gc_root),
+                )
+                .map_err(|e| RunError::BuildFailed(pkg_spec.clone(), e))?;
+                drop(_span);
+            }
+
+            // Fork a background watcher that removes the temporary GC root
+            // symlinks when the exec'd command exits.
+            fork_gc_root_watcher(&build_gc_root)
+                .map_err(|e| RunError::ExecFailed("fork gc watcher".into(), e))?;
+
+            // Locate the executable from the build output symlinks.
+            let bin_dirs = collect_bin_dirs_from_gc_root(&build_gc_root);
+            let new_path = prepend_path_dirs(&bin_dirs);
+
+            debug!(path = ?new_path, "exec via build output PATH");
+
+            let err = std::process::Command::new(&run_args.executable)
+                .args(&run_args.args)
+                .env("PATH", &new_path)
+                .exec();
+
+            return Err(
+                RunError::ExecFailed(run_args.executable.to_string_lossy().into_owned(), err)
+                    .into(),
+            );
         }
     }
 
@@ -523,6 +588,151 @@ pub fn find_executable(
         executable: executable.to_string_lossy().into_owned(),
         package: pkg_spec.to_string(),
     })
+}
+
+// ---------------------------------------------------------------------------
+// Build-from-source helpers
+// ---------------------------------------------------------------------------
+
+/// Collect `bin/` directories from build output symlinks rooted at `prefix`.
+///
+/// `nix build --out-link <prefix>` creates `<prefix>`, `<prefix>-doc`,
+/// `<prefix>-dev`, etc. This function scans the parent directory for any
+/// entry whose name starts with the file_name component of `prefix`, follows
+/// each symlink to its store-path target, and collects any `bin/` subdirs
+/// that exist there.
+pub fn collect_bin_dirs_from_gc_root(prefix: &Path) -> Vec<PathBuf> {
+    let parent = match prefix.parent() {
+        Some(p) => p,
+        None => return vec![],
+    };
+    let file_name = match prefix.file_name().and_then(OsStr::to_str) {
+        Some(n) => n.to_string(),
+        None => return vec![],
+    };
+
+    let Ok(entries) = std::fs::read_dir(parent) else {
+        return vec![];
+    };
+
+    let mut bin_dirs = Vec::new();
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        let name_str = name.to_string_lossy();
+        if !name_str.starts_with(&file_name) {
+            continue;
+        }
+        // Follow the symlink (nix build creates symlinks into the store).
+        let target = match std::fs::read_link(entry.path()).or_else(|_| {
+            std::fs::canonicalize(entry.path())
+        }) {
+            Ok(t) => t,
+            Err(_) => continue,
+        };
+        let bin = target.join("bin");
+        if bin.is_dir() {
+            bin_dirs.push(bin);
+        }
+    }
+    bin_dirs
+}
+
+/// Prepend `dirs` to the current `PATH`, returning the combined value.
+///
+/// Each directory is joined with `:` and the current `PATH` is appended.
+pub fn prepend_path_dirs(dirs: &[PathBuf]) -> OsString {
+    use std::os::unix::ffi::OsStringExt as _;
+
+    let current_path = std::env::var_os("PATH").unwrap_or_default();
+    let mut parts: Vec<u8> = Vec::new();
+    for dir in dirs {
+        if !parts.is_empty() {
+            parts.push(b':');
+        }
+        parts.extend_from_slice(dir.as_os_str().as_encoded_bytes());
+    }
+    if !parts.is_empty() && !current_path.is_empty() {
+        parts.push(b':');
+    }
+    parts.extend_from_slice(current_path.as_encoded_bytes());
+    OsString::from_vec(parts)
+}
+
+/// Fork a background watcher child that removes `prefix`* symlinks when the
+/// parent (exec'd command) exits.
+///
+/// The parent holds the write end of a pipe open across the `exec` call.
+/// When the exec'd command exits, the write end is closed, causing the child's
+/// blocking read to return EOF. On EOF the child removes all symlinks whose
+/// name starts with `prefix.file_name()` in the same directory, then exits.
+///
+/// This ensures temporary GC-root symlinks created by `nix build --out-link`
+/// are cleaned up even though we `exec` into the target command and can no
+/// longer run cleanup code ourselves.
+pub fn fork_gc_root_watcher(gc_root_prefix: &Path) -> Result<(), std::io::Error> {
+    use std::os::unix::io::IntoRawFd as _;
+
+    use nix::unistd::{ForkResult, fork};
+
+    // Obtain raw file descriptors before fork so both parent and child can
+    // operate on them independently without Rust ownership conflicts.
+    let (read_owned, write_owned) = nix::unistd::pipe()?;
+
+    // Clear FD_CLOEXEC on the write end so it survives the exec() call and
+    // stays open until the exec'd command exits.
+    let flags =
+        nix::fcntl::fcntl(&write_owned, nix::fcntl::FcntlArg::F_GETFD).map_err(|e| {
+            std::io::Error::other(format!("fcntl F_GETFD: {e}"))
+        })?;
+    let new_flags =
+        nix::fcntl::FdFlag::from_bits_retain(flags) & !nix::fcntl::FdFlag::FD_CLOEXEC;
+    nix::fcntl::fcntl(&write_owned, nix::fcntl::FcntlArg::F_SETFD(new_flags)).map_err(|e| {
+        std::io::Error::other(format!("fcntl F_SETFD: {e}"))
+    })?;
+
+    // Convert to raw fds before fork; each process is responsible for closing
+    // its own copies. After fork, Rust's drop semantics do not apply — both
+    // processes hold identical fd numbers that are independent OS handles.
+    let read_fd = read_owned.into_raw_fd();
+    let write_fd = write_owned.into_raw_fd();
+
+    match unsafe { fork() }.map_err(std::io::Error::from)? {
+        ForkResult::Child => {
+            // Child: close write end, then block until parent (exec'd command) closes it.
+            // SAFETY: raw fd is valid in this process; we own it after fork.
+            unsafe { nix::libc::close(write_fd) };
+            let mut buf = [0u8; 1];
+            // Blocking read — returns 0 (EOF) when the last write-end holder exits.
+            unsafe { nix::libc::read(read_fd, buf.as_mut_ptr().cast(), 1) };
+            unsafe { nix::libc::close(read_fd) };
+
+            // EOF means the exec'd process exited. Remove GC root symlinks.
+            if let (Some(parent), Some(file_name)) =
+                (gc_root_prefix.parent(), gc_root_prefix.file_name())
+            {
+                let scan_prefix = file_name.to_string_lossy().into_owned();
+                if let Ok(entries) = std::fs::read_dir(parent) {
+                    for entry in entries.flatten() {
+                        let name = entry.file_name();
+                        let name_str = name.to_string_lossy();
+                        if name_str.starts_with(&scan_prefix) && entry.path().is_symlink() {
+                            let _ = std::fs::remove_file(entry.path());
+                        }
+                    }
+                }
+            }
+
+            std::process::exit(0);
+        },
+        ForkResult::Parent { .. } => {
+            // Parent: close read end. Write end stays open — it will be inherited
+            // by the exec'd command and closed when that process exits.
+            // SAFETY: raw fd is valid in this process.
+            unsafe { nix::libc::close(read_fd) };
+            // write_fd intentionally left open for exec() inheritance.
+            Ok(())
+        },
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -902,5 +1112,83 @@ mod tests {
 
         let result = find_executable(&[sp1, sp2], &os("readelf"), "binutils").unwrap();
         assert_eq!(result, exe_path);
+    }
+
+    // -----------------------------------------------------------------------
+    // collect_bin_dirs_from_gc_root tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn collect_bin_dirs_finds_bin_under_symlink() {
+        let tmp = tempfile::TempDir::new().unwrap();
+
+        // Simulate a nix store output: a real directory with a bin/ subdir.
+        let store_out = tmp.path().join("store-out");
+        let bin_dir = store_out.join("bin");
+        std::fs::create_dir_all(&bin_dir).unwrap();
+
+        // Create a symlink that looks like nix build --out-link output.
+        let prefix = tmp.path().join("build-aarch64-darwin.hello-42");
+        std::os::unix::fs::symlink(&store_out, &prefix).unwrap();
+
+        let result = collect_bin_dirs_from_gc_root(&prefix);
+        assert_eq!(result, vec![bin_dir]);
+    }
+
+    #[test]
+    fn collect_bin_dirs_collects_suffix_symlinks() {
+        let tmp = tempfile::TempDir::new().unwrap();
+
+        // Simulate nix build creating multiple output symlinks with the same
+        // prefix: <prefix>, <prefix>-doc, <prefix>-dev.
+        let prefix = tmp.path().join("build-aarch64-darwin.pkg-99");
+
+        for suffix in &["", "-doc", "-dev"] {
+            let store_out = tmp.path().join(format!("store-out{suffix}"));
+            let bin = store_out.join("bin");
+            std::fs::create_dir_all(&bin).unwrap();
+            let link = tmp.path().join(format!("build-aarch64-darwin.pkg-99{suffix}"));
+            std::os::unix::fs::symlink(&store_out, &link).unwrap();
+        }
+
+        let mut result = collect_bin_dirs_from_gc_root(&prefix);
+        result.sort();
+        assert_eq!(result.len(), 3);
+    }
+
+    #[test]
+    fn collect_bin_dirs_skips_outputs_without_bin() {
+        let tmp = tempfile::TempDir::new().unwrap();
+
+        let store_out = tmp.path().join("store-out-no-bin");
+        // No bin/ subdir.
+        std::fs::create_dir_all(&store_out).unwrap();
+
+        let prefix = tmp.path().join("build-aarch64-darwin.no-bin-42");
+        std::os::unix::fs::symlink(&store_out, &prefix).unwrap();
+
+        let result = collect_bin_dirs_from_gc_root(&prefix);
+        assert!(result.is_empty());
+    }
+
+    // -----------------------------------------------------------------------
+    // prepend_path_dirs tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn prepend_path_dirs_prepends_to_existing_path() {
+        // We cannot rely on the process-level PATH in tests; check structure.
+        let dirs = vec![PathBuf::from("/my/bin"), PathBuf::from("/other/bin")];
+        let result = prepend_path_dirs(&dirs);
+        let result_str = result.to_string_lossy();
+        assert!(result_str.starts_with("/my/bin:/other/bin"));
+    }
+
+    #[test]
+    fn prepend_path_dirs_empty_dirs_returns_existing_path() {
+        let result = prepend_path_dirs(&[]);
+        // When no dirs are passed, the result should equal the current PATH.
+        let current = std::env::var_os("PATH").unwrap_or_default();
+        assert_eq!(result, current);
     }
 }

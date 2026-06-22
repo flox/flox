@@ -185,6 +185,22 @@ teardown() {
   refute_output --partial "flox run -p"
 }
 
+# ---------------------------------------------------------------------------- #
+# Source-build fallback (require Nix access to attempt the build)
+# ---------------------------------------------------------------------------- #
+
+# bats test_tags=run:store
+@test "flox run falls back to source build when binary not in cache [run:store]" {
+  # terraform is unfree; the mock returns a store path that won't exist in
+  # the local Nix store, so substitution fails and the source-build path is
+  # taken. Since stderr is not a TTY in bats, no prompt is shown and the
+  # build proceeds automatically.
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/run/terraform.yaml"
+  run "$FLOX_BIN" run -p terraform -- terraform --version
+  assert_success
+  assert_output --partial "Terraform"
+}
+
 # bats test_tags=run:store
 @test "stable GC root: second run -p hello hello skips download [run:store]" {
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/run/hello.yaml"
