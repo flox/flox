@@ -88,6 +88,7 @@ use crate::utils::credential_store::{
     PlaintextStore,
     ResolveOutcome,
     clear_invalid_credential,
+    probe_credential_source,
     resolve_credential_into,
 };
 use crate::utils::dialog::{Dialog, Select};
@@ -347,11 +348,13 @@ impl FloxArgs {
         let keyring = CredentialStoreImpl::Keyring(KeyringStore::new(floxhub.base_url()));
         let plaintext =
             CredentialStoreImpl::Plaintext(PlaintextStore::new(config.flox.config_dir.clone()));
+        let is_auth0 = matches!(authn_mode, AuthnMode::Auth0);
         let outcome = resolve_credential_into(
             &mut config,
             &keyring,
             &plaintext,
             self.is_prompt_hook_flow(),
+            is_auth0,
         );
         if outcome == ResolveOutcome::Migrated {
             message::info(
@@ -565,9 +568,12 @@ impl FloxArgs {
                     Your FloxHub token is invalid: {token_error}
                     You may need to log in again.
                 "});
-                // Route the removal through both stores so an invalid token
-                // sourced from the keyring is cleared too, not just the file.
-                clear_invalid_credential(keyring, plaintext);
+                // Clear the invalid token only from the store that supplied it
+                // (probed here). An invalid `FLOX_FLOXHUB_TOKEN` or system-config
+                // token must not delete the user's saved keyring/plaintext
+                // credential.
+                let source = probe_credential_source(config, plaintext, keyring);
+                clear_invalid_credential(source, keyring, plaintext);
                 None
             },
             Ok(Some(token)) if token.is_expired() => {
