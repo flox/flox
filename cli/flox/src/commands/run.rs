@@ -681,15 +681,11 @@ pub fn fork_gc_root_watcher(gc_root_prefix: &Path) -> Result<(), std::io::Error>
 
     // Clear FD_CLOEXEC on the write end so it survives the exec() call and
     // stays open until the exec'd command exits.
-    let flags =
-        nix::fcntl::fcntl(&write_owned, nix::fcntl::FcntlArg::F_GETFD).map_err(|e| {
-            std::io::Error::other(format!("fcntl F_GETFD: {e}"))
-        })?;
-    let new_flags =
-        nix::fcntl::FdFlag::from_bits_retain(flags) & !nix::fcntl::FdFlag::FD_CLOEXEC;
-    nix::fcntl::fcntl(&write_owned, nix::fcntl::FcntlArg::F_SETFD(new_flags)).map_err(|e| {
-        std::io::Error::other(format!("fcntl F_SETFD: {e}"))
-    })?;
+    let flags = nix::fcntl::fcntl(&write_owned, nix::fcntl::FcntlArg::F_GETFD)
+        .map_err(|e| std::io::Error::other(format!("fcntl F_GETFD: {e}")))?;
+    let new_flags = nix::fcntl::FdFlag::from_bits_retain(flags) & !nix::fcntl::FdFlag::FD_CLOEXEC;
+    nix::fcntl::fcntl(&write_owned, nix::fcntl::FcntlArg::F_SETFD(new_flags))
+        .map_err(|e| std::io::Error::other(format!("fcntl F_SETFD: {e}")))?;
 
     // Convert to raw fds before fork; each process is responsible for closing
     // its own copies. After fork, Rust's drop semantics do not apply — both
@@ -1148,7 +1144,9 @@ mod tests {
             let store_out = tmp.path().join(format!("store-out{suffix}"));
             let bin = store_out.join("bin");
             std::fs::create_dir_all(&bin).unwrap();
-            let link = tmp.path().join(format!("build-aarch64-darwin.pkg-99{suffix}"));
+            let link = tmp
+                .path()
+                .join(format!("build-aarch64-darwin.pkg-99{suffix}"));
             std::os::unix::fs::symlink(&store_out, &link).unwrap();
         }
 
