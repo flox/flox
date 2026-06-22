@@ -77,7 +77,7 @@ use xdg::BaseDirectories;
 
 use self::envs::DisplayEnvironments;
 use crate::commands::general::update_config;
-use crate::config::{Config, EnvironmentTrust, FLOX_DIR_NAME};
+use crate::config::{Config, EnvironmentTrust, FLOX_DIR_NAME, TokenStorageMode};
 use crate::utils::active_environments::{
     ActiveEnvironments,
     activated_environments,
@@ -299,12 +299,14 @@ impl FloxArgs {
         let plaintext =
             CredentialStoreImpl::Plaintext(PlaintextStore::new(config.flox.config_dir.clone()));
         let is_auth0 = matches!(config.flox.floxhub_authn_mode, AuthnMode::Auth0);
+        let storage = config.flox.floxhub_token_storage;
         let outcome = resolve_credential_into(
             &mut config,
             &keyring,
             &plaintext,
             self.is_prompt_hook_flow(),
             is_auth0,
+            storage,
         );
         match outcome {
             ResolveOutcome::Migrated => message::info(
@@ -1501,8 +1503,11 @@ pub(super) async fn ensure_auth(flox: &mut Flox) -> Result<String> {
                 AuthFailure::NotLoggedIn => "You are not logged in to FloxHub.",
                 _ => unreachable!(),
             }));
-            // Implicit re-authentication uses the secure default store.
-            auth::login_flox(flox, false).await
+            // Implicit re-authentication stores to the secure default (keyring).
+            // The standing storage preference is not threaded through the many
+            // `ensure_auth` call sites, so an implicit re-login does not honor a
+            // `plaintext` preference; an explicit `flox auth login` does.
+            auth::login_flox(flox, false, false, TokenStorageMode::Keyring).await
         },
         Err(failure) => {
             let message = match failure {
