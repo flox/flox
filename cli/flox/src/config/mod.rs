@@ -88,6 +88,13 @@ pub struct FloxConfig {
     #[serde(default)]
     pub floxhub_authn_mode: AuthnMode,
 
+    /// Where new FloxHub tokens are stored: the OS keyring (default) or plain
+    /// text in flox.toml. Set to `plaintext` by
+    /// `flox auth login --insecure-storage`; cleared with
+    /// `flox config --delete floxhub_token_storage`.
+    #[serde(default)]
+    pub floxhub_token_storage: TokenStorageMode,
+
     /// Rule whether to change the shell prompt in activated environments.
     /// Deprecated in favor of set_prompt and hide_default_prompt.
     pub shell_prompt: Option<EnvironmentPromptConfig>,
@@ -195,6 +202,17 @@ pub enum AutoActivate {
 pub enum AutoActivationPreference {
     Allow,
     Deny,
+}
+
+/// Where `flox auth login` stores the FloxHub token.
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum TokenStorageMode {
+    /// Store the token in the OS-native keyring (default).
+    #[default]
+    Keyring,
+    /// Store the token in plain text in flox.toml.
+    Plaintext,
 }
 
 impl Display for InstallerChannel {
@@ -610,6 +628,42 @@ mod tests {
         assert_eq!(config.flox.floxhub_url, Some(floxhub_url.parse().unwrap()));
         assert!(config.flox.disable_metrics);
         assert_eq!(config.flox.search_limit, Some(search_limit));
+    }
+
+    #[test]
+    fn floxhub_token_storage_parses_and_defaults() {
+        let user_config_dir = tempfile::tempdir().unwrap();
+        let system_config_dir = tempfile::tempdir().unwrap();
+        fs::write(system_config_dir.path().join(FLOX_CONFIG_FILE), "").unwrap();
+
+        // Absent → defaults to keyring.
+        fs::write(user_config_dir.path().join(FLOX_CONFIG_FILE), "").unwrap();
+        let config = Config::parse_with(
+            &mock_flox_dirs(),
+            user_config_dir.path(),
+            Some(system_config_dir.path()),
+            [],
+        )
+        .unwrap();
+        assert_eq!(config.flox.floxhub_token_storage, TokenStorageMode::Keyring);
+
+        // Explicit plaintext → parsed.
+        fs::write(
+            user_config_dir.path().join(FLOX_CONFIG_FILE),
+            "floxhub_token_storage = \"plaintext\"\n",
+        )
+        .unwrap();
+        let config = Config::parse_with(
+            &mock_flox_dirs(),
+            user_config_dir.path(),
+            Some(system_config_dir.path()),
+            [],
+        )
+        .unwrap();
+        assert_eq!(
+            config.flox.floxhub_token_storage,
+            TokenStorageMode::Plaintext
+        );
     }
 
     #[test]
