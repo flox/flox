@@ -360,15 +360,26 @@ pub fn build_catalog_pkg_from_source(
 
     debug!(%installable, cmd=%cmd.display(), "building catalog package from source");
 
-    let output = cmd.output().map_err(BuildEnvError::CallNixBuild)?;
-    if !output.status.success() {
-        return Err(BuildEnvError::Realise2 {
-            install_id: attr_path.to_string(),
-            message: String::from_utf8_lossy(&output.stderr).to_string(),
-        });
+    // Retry up to MAX_RETRIES times. Transient failures (GC pressure during
+    // evaluation, network hiccups fetching source tarballs) can cause spurious
+    // non-zero exits; retrying mirrors the discipline in materialise_with_retry.
+    // Spawn errors (CallNixBuild) are not transient — propagate immediately.
+    const MAX_RETRIES: usize = 3;
+    let mut last_stderr = String::new();
+    for attempt in 1..=MAX_RETRIES {
+        let output = cmd.output().map_err(BuildEnvError::CallNixBuild)?;
+        if output.status.success() {
+            return Ok(());
+        }
+        last_stderr = String::from_utf8_lossy(&output.stderr).to_string();
+        if attempt < MAX_RETRIES {
+            debug!(attempt, MAX_RETRIES, stderr=%last_stderr, "nix build failed, retrying");
+        }
     }
-
-    Ok(())
+    Err(BuildEnvError::Realise2 {
+        install_id: attr_path.to_string(),
+        message: last_stderr,
+    })
 }
 
 impl<A> BuildEnvNix<A>
