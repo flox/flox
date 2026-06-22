@@ -37,6 +37,17 @@ pub enum AuthnMode {
     Kerberos,
 }
 
+/// Where `flox auth login` stores the FloxHub token.
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum TokenStorageMode {
+    /// Store the token in the OS-native keyring (default).
+    #[default]
+    Keyring,
+    /// Store the token in plain text in flox.toml.
+    Plaintext,
+}
+
 #[derive(Clone, Debug, Deserialize, Default, Serialize)]
 pub struct Config {
     /// flox configuration options
@@ -100,6 +111,13 @@ pub struct FloxConfig {
     /// Authentication mode for FloxHub.
     /// Unset means the consumer's compiled-in default.
     pub floxhub_authn_mode: Option<AuthnMode>,
+
+    /// Where new FloxHub tokens are stored: the OS keyring (default) or plain
+    /// text in flox.toml. Set to `plaintext` by
+    /// `flox auth login --insecure-storage`; cleared with
+    /// `flox config --delete floxhub_token_storage`.
+    #[serde(default)]
+    pub floxhub_token_storage: TokenStorageMode,
 
     /// Rule whether to change the shell prompt in activated environments.
     ///
