@@ -25,6 +25,7 @@ use url::Url;
 
 use crate::commands::general::update_config;
 use crate::config::{Config, FLOX_CONFIG_FILE};
+use crate::utils::message;
 
 /// `service` value for the FloxHub credential in the OS keyring. The token is
 /// keyed by this constant plus the FloxHub base URL as the `account`, mirroring
@@ -480,7 +481,16 @@ pub fn persist_login_token(
     plaintext: &CredentialStoreImpl,
 ) -> Result<TokenStorage, CredentialStoreError> {
     if !insecure_storage && keyring.set(token).is_ok() {
-        plaintext.remove()?;
+        // The keyring already holds the token, so a failure to remove the old
+        // plaintext copy must not fail the login. Warn instead: a lingering
+        // plaintext token both leaves a secret on disk and shadows the keyring
+        // on the next read (user file > keyring).
+        if let Err(e) = plaintext.remove() {
+            tracing::warn!("could not remove the plaintext credential after a keyring write: {e}");
+            message::warning(
+                "Stored your credential in the system keyring, but could not remove the existing plain-text credential from flox.toml.\nRemove the 'floxhub_token' line from flox.toml so it does not shadow the keyring.",
+            );
+        }
         return Ok(TokenStorage::Keyring);
     }
 
@@ -517,6 +527,9 @@ pub enum ResolveOutcome {
 /// - the *user file* (`PlaintextStore::get`) holds a token — the system
 ///   `/etc/flox.toml` token never appears here, so it is never migrated.
 /// - this is not the prompt/hook flow — that path does no keyring I/O.
+/// - the configured auth mode is Auth0 (`is_auth0`) — in other modes (e.g.
+///   Kerberos) the token is not used for authentication, so a legacy
+///   `floxhub_token` left in `flox.toml` must not be silently moved or read.
 ///
 /// The migration moves the token store-to-store only; it never writes
 /// `config.flox.floxhub_token`. The merge already populated that field with the
@@ -527,15 +540,19 @@ pub enum ResolveOutcome {
 ///
 /// On any keyring failure the plaintext file is left untouched: no data loss,
 /// no migration. Precedence is otherwise preserved by only consulting the
-/// keyring for a *read* when the merged value (env > system > plaintext file)
-/// is empty.
+/// keyring for a *read* when the merged value (env > user file > system) is
+/// empty.
 pub fn resolve_credential_into(
     config: &mut Config,
     keyring: &CredentialStoreImpl,
     plaintext: &CredentialStoreImpl,
     is_hook: bool,
+    is_auth0: bool,
 ) -> ResolveOutcome {
-    if is_hook {
+    // The prompt/hook flow does no keyring I/O. Outside Auth0 mode the token is
+    // not used for authentication, so it is neither migrated nor read — matching
+    // the early return in `resolve_floxhub_token`.
+    if is_hook || !is_auth0 {
         return ResolveOutcome::Unchanged;
     }
 
@@ -572,19 +589,40 @@ pub fn resolve_credential_into(
     ResolveOutcome::Unchanged
 }
 
-/// Remove an invalid FloxHub credential from both stores.
+/// Remove an invalid FloxHub credential from the store that actually supplied
+/// it, identified by `source`.
 ///
 /// The startup resolver discovers an invalid token only after it has been
-/// merged into the config — by which point the active token may live in the
-/// keyring (populated by [resolve_credential_into]) rather than the plaintext
-/// file. Routing the removal through both stores clears whichever one held it.
-/// Both removals are idempotent, so this is safe regardless of provenance.
-pub fn clear_invalid_credential(keyring: &CredentialStoreImpl, plaintext: &CredentialStoreImpl) {
-    if let Err(e) = keyring.remove() {
-        tracing::debug!("could not remove invalid token from the keyring: {e}");
-    }
-    if let Err(e) = plaintext.remove() {
-        tracing::debug!("could not remove invalid token from the plaintext file: {e}");
+/// merged into the config, so the bad token may come from any source. Only
+/// clear a store we own and that actually provided the token:
+/// - [CredentialSource::Keyring] → clear the keyring.
+/// - [CredentialSource::UserConfigPlaintext] → clear the plaintext file.
+/// - [CredentialSource::Env] / [CredentialSource::SystemConfig] /
+///   [CredentialSource::None] → clear nothing. The invalid value came from
+///   `FLOX_FLOXHUB_TOKEN` or `/etc/flox.toml` (or nowhere), so deleting a
+///   valid saved keyring/plaintext credential would force a needless re-login
+///   once the env/system value is corrected.
+///
+/// Removals are idempotent, so this is safe regardless of provenance.
+pub fn clear_invalid_credential(
+    source: CredentialSource,
+    keyring: &CredentialStoreImpl,
+    plaintext: &CredentialStoreImpl,
+) {
+    match source {
+        CredentialSource::Keyring => {
+            if let Err(e) = keyring.remove() {
+                tracing::debug!("could not remove invalid token from the keyring: {e}");
+            }
+        },
+        CredentialSource::UserConfigPlaintext => {
+            if let Err(e) = plaintext.remove() {
+                tracing::debug!("could not remove invalid token from the plaintext file: {e}");
+            }
+        },
+        // The invalid value came from `FLOX_FLOXHUB_TOKEN`, `/etc/flox.toml`, or
+        // nowhere — none of which we own. Leave any saved credential intact.
+        CredentialSource::Env | CredentialSource::SystemConfig | CredentialSource::None => {},
     }
 }
 
@@ -895,7 +933,7 @@ mod tests {
         let plaintext = CredentialStoreImpl::Mock(MockStore::new());
 
         let mut config = config_with_token(None);
-        resolve_credential_into(&mut config, &keyring, &plaintext, false);
+        resolve_credential_into(&mut config, &keyring, &plaintext, false, true);
 
         assert_eq!(
             probe_credential_source(&config, &plaintext, &keyring),
@@ -941,6 +979,23 @@ mod tests {
         assert_eq!(plaintext.get().unwrap(), Some(TOKEN.to_string()));
     }
 
+    /// A keyring write succeeds but the plaintext cleanup fails (e.g. the
+    /// config file is unreadable). Login must still succeed — the token is
+    /// already safely stored in the keyring — rather than turning a best-effort
+    /// cleanup step into a hard login failure.
+    #[test]
+    fn login_succeeds_when_keyring_stored_but_plaintext_cleanup_fails() {
+        let keyring = CredentialStoreImpl::Mock(MockStore::new());
+        let plaintext_mock = MockStore::new();
+        plaintext_mock.set_error("config file is unreadable");
+        let plaintext = CredentialStoreImpl::Mock(plaintext_mock);
+
+        let storage = persist_login_token(TOKEN, false, &keyring, &plaintext).unwrap();
+
+        assert_eq!(storage, TokenStorage::Keyring);
+        assert_eq!(keyring.get().unwrap(), Some(TOKEN.to_string()));
+    }
+
     /// `--insecure-storage` forces plaintext even when the keyring write would
     /// have succeeded; the keyring is never touched.
     #[test]
@@ -974,14 +1029,14 @@ mod tests {
             let plaintext = CredentialStoreImpl::Mock(MockStore::new());
 
             let mut config = config_with_token(None);
-            let outcome = resolve_credential_into(&mut config, &keyring, &plaintext, false);
+            let outcome = resolve_credential_into(&mut config, &keyring, &plaintext, false, true);
 
             assert_eq!(outcome, ResolveOutcome::PopulatedFromKeyring);
             assert_eq!(config.flox.floxhub_token.as_deref(), Some(TOKEN));
         });
     }
 
-    /// A non-empty merged token wins: env > system > file all flow through this
+    /// A non-empty merged token wins: env > user file > system all flow through this
     /// field, so the keyring is not consulted and the value is untouched.
     #[test]
     fn resolve_leaves_existing_token_untouched() {
@@ -993,7 +1048,7 @@ mod tests {
             let plaintext = CredentialStoreImpl::Mock(MockStore::new());
 
             let mut config = config_with_token(Some("config-token"));
-            let outcome = resolve_credential_into(&mut config, &keyring, &plaintext, false);
+            let outcome = resolve_credential_into(&mut config, &keyring, &plaintext, false, true);
 
             assert_eq!(outcome, ResolveOutcome::Unchanged);
             assert_eq!(config.flox.floxhub_token.as_deref(), Some("config-token"));
@@ -1009,7 +1064,7 @@ mod tests {
         let plaintext = CredentialStoreImpl::Mock(MockStore::new());
 
         let mut config = config_with_token(None);
-        let outcome = resolve_credential_into(&mut config, &keyring, &plaintext, true);
+        let outcome = resolve_credential_into(&mut config, &keyring, &plaintext, true, true);
 
         assert_eq!(outcome, ResolveOutcome::Unchanged);
         assert_eq!(config.flox.floxhub_token, None);
@@ -1029,7 +1084,7 @@ mod tests {
 
             // Mirror the merge: the user-file token is already in the config.
             let mut config = config_with_token(Some(TOKEN));
-            let outcome = resolve_credential_into(&mut config, &keyring, &plaintext, false);
+            let outcome = resolve_credential_into(&mut config, &keyring, &plaintext, false, true);
 
             assert_eq!(outcome, ResolveOutcome::Migrated);
             assert_eq!(keyring.get().unwrap(), Some(TOKEN.to_string()));
@@ -1051,9 +1106,34 @@ mod tests {
             let keyring = CredentialStoreImpl::Mock(MockStore::new());
 
             let mut config = config_with_token(Some("env-token"));
-            let outcome = resolve_credential_into(&mut config, &keyring, &plaintext, false);
+            let outcome = resolve_credential_into(&mut config, &keyring, &plaintext, false, true);
 
             assert_eq!(outcome, ResolveOutcome::Unchanged);
+            assert_eq!(keyring.get().unwrap(), None);
+            assert_eq!(plaintext.get().unwrap(), Some(TOKEN.to_string()));
+        });
+    }
+
+    /// Outside Auth0 mode (e.g. a Kerberos build) a legacy plaintext token is
+    /// neither migrated into the keyring nor removed from the file: the token is
+    /// not used for authentication, so moving it would be a surprising side
+    /// effect. Mirrors the early return in `resolve_floxhub_token`.
+    #[test]
+    fn resolve_does_not_migrate_outside_auth0_mode() {
+        temp_env::with_var(FLOXHUB_TOKEN_ENV_VAR, None::<&str>, || {
+            let dir = tempfile::tempdir().unwrap();
+            write_flox_toml(dir.path(), &format!("floxhub_token = \"{TOKEN}\"\n"));
+            let plaintext = CredentialStoreImpl::Plaintext(PlaintextStore::new(dir.path()));
+            let keyring = CredentialStoreImpl::Mock(MockStore::new());
+
+            let mut config = config_with_token(Some(TOKEN));
+            // is_auth0 = false models a non-Auth0 config; the Kerberos variant
+            // is feature-gated, so it cannot be constructed here directly.
+            let outcome = resolve_credential_into(&mut config, &keyring, &plaintext, false, false);
+
+            assert_eq!(outcome, ResolveOutcome::Unchanged);
+            // The keyring was never written and the plaintext token still
+            // exists on disk.
             assert_eq!(keyring.get().unwrap(), None);
             assert_eq!(plaintext.get().unwrap(), Some(TOKEN.to_string()));
         });
@@ -1074,7 +1154,7 @@ mod tests {
             let keyring = CredentialStoreImpl::Mock(keyring_mock);
 
             let mut config = config_with_token(Some(TOKEN));
-            let outcome = resolve_credential_into(&mut config, &keyring, &plaintext, false);
+            let outcome = resolve_credential_into(&mut config, &keyring, &plaintext, false, true);
 
             assert_eq!(outcome, ResolveOutcome::Unchanged);
             assert_eq!(keyring.get().unwrap(), None);
@@ -1091,7 +1171,7 @@ mod tests {
         let keyring = CredentialStoreImpl::Mock(MockStore::new());
 
         let mut config = config_with_token(Some(TOKEN));
-        let outcome = resolve_credential_into(&mut config, &keyring, &plaintext, true);
+        let outcome = resolve_credential_into(&mut config, &keyring, &plaintext, true, true);
 
         assert_eq!(outcome, ResolveOutcome::Unchanged);
         assert_eq!(keyring.get().unwrap(), None);
@@ -1100,33 +1180,53 @@ mod tests {
 
     // --- clear_invalid_credential: invalid-token cleanup routing ---
 
-    /// An invalid token sourced from the keyring is cleared from the keyring
-    /// (not just the file). The plaintext removal is idempotent.
+    /// A keyring-sourced invalid token is cleared from the keyring only; a
+    /// plaintext credential that did not supply it is left intact.
     #[test]
-    fn clear_invalid_credential_removes_keyring_token() {
+    fn clear_invalid_credential_removes_only_keyring_for_keyring_source() {
         let keyring = CredentialStoreImpl::Mock(MockStore::new());
         keyring.set(TOKEN).unwrap();
         let dir = tempfile::tempdir().unwrap();
+        write_flox_toml(dir.path(), "floxhub_token = \"other-token\"\n");
         let plaintext = CredentialStoreImpl::Plaintext(PlaintextStore::new(dir.path()));
 
-        clear_invalid_credential(&keyring, &plaintext);
+        clear_invalid_credential(CredentialSource::Keyring, &keyring, &plaintext);
 
         assert_eq!(keyring.get().unwrap(), None);
-        assert_eq!(plaintext.get().unwrap(), None);
+        assert_eq!(plaintext.get().unwrap(), Some("other-token".to_string()));
     }
 
-    /// An invalid token sourced from the plaintext file is cleared from the
-    /// file. The keyring removal is idempotent.
+    /// A plaintext-file-sourced invalid token is cleared from the file only; a
+    /// keyring credential that did not supply it is left intact.
     #[test]
-    fn clear_invalid_credential_removes_plaintext_token() {
+    fn clear_invalid_credential_removes_only_plaintext_for_user_file_source() {
         let keyring = CredentialStoreImpl::Mock(MockStore::new());
+        keyring.set("other-token").unwrap();
         let dir = tempfile::tempdir().unwrap();
         write_flox_toml(dir.path(), &format!("floxhub_token = \"{TOKEN}\"\n"));
         let plaintext = CredentialStoreImpl::Plaintext(PlaintextStore::new(dir.path()));
 
-        clear_invalid_credential(&keyring, &plaintext);
+        clear_invalid_credential(CredentialSource::UserConfigPlaintext, &keyring, &plaintext);
 
-        assert_eq!(keyring.get().unwrap(), None);
         assert_eq!(plaintext.get().unwrap(), None);
+        assert_eq!(keyring.get().unwrap(), Some("other-token".to_string()));
+    }
+
+    /// An invalid token from `FLOX_FLOXHUB_TOKEN` (or system config) must not
+    /// delete the user's saved keyring/plaintext credential — those did not
+    /// supply the bad token, and clearing them would force a needless re-login
+    /// once the env/system value is corrected.
+    #[test]
+    fn clear_invalid_credential_preserves_saved_stores_for_env_source() {
+        let keyring = CredentialStoreImpl::Mock(MockStore::new());
+        keyring.set(TOKEN).unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        write_flox_toml(dir.path(), &format!("floxhub_token = \"{TOKEN}\"\n"));
+        let plaintext = CredentialStoreImpl::Plaintext(PlaintextStore::new(dir.path()));
+
+        clear_invalid_credential(CredentialSource::Env, &keyring, &plaintext);
+
+        assert_eq!(keyring.get().unwrap(), Some(TOKEN.to_string()));
+        assert_eq!(plaintext.get().unwrap(), Some(TOKEN.to_string()));
     }
 }

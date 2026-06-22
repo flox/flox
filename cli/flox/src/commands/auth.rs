@@ -298,9 +298,10 @@ impl Auth {
                 let span = tracing::info_span!("status");
                 let _guard = span.enter();
 
-                // Check login state before probing the credential source: a
-                // not-logged-in user must not trigger a keyring read (and a
-                // possible unlock prompt).
+                // Check login state before probing the credential source. The
+                // startup resolver may already have read the keyring; this guard
+                // avoids an *additional* keyring read (and a possible unlock
+                // prompt) during source probing when the user is not logged in.
                 let AuthContext::Auth0(Some(token)) = flox.auth_context else {
                     message::warning("You are not currently logged in to FloxHub.");
                     return Err(Exit(1.into()).into());
