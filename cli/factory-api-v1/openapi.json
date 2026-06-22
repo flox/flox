@@ -135,7 +135,7 @@
           "builds"
         ],
         "summary": "List Builds",
-        "description": "Return a paginated list of builds.\n\nUse the `status` query parameter to filter:\n- ``undispatched``: builds with no task (task_id IS NULL)\n- Any other value: filters by tasks.status (e.g. ``claimed``)",
+        "description": "Return a paginated list of builds.\n\nUse the `status` query parameter to filter:\n- ``undispatched``: builds with no task (task_id IS NULL)\n- Any other value: filters by tasks.status (e.g. ``running``)",
         "operationId": "list_builds_api_v1_factory_builds_get",
         "security": [
           {
@@ -261,6 +261,75 @@
               }
             },
             "description": "Unprocessable Entity"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "builds"
+        ],
+        "summary": "Cancel Build",
+        "description": "Cancel a build.\n\nHandles both active builds (delegated to Build Coordinator) and\npre-dispatch builds (cancelled FS-only via an atomic row lock).\n\nThe operation is idempotent with respect to terminal state. When\nthe build has already reached a terminal state (``cancelled``,\n``completed``, or ``failed``) \u2014 whether Build Coordinator reports\nit or the local task row records it \u2014 the response is still 200\nand the ``status`` field carries that terminal state. Coordinator\nstatuses are normalized into the task vocabulary before they are\nsurfaced (BC's ``timed_out`` is reported as ``failed``, exactly as\nthe callback path persists it), so the cancel response and a\nsubsequent ``GET`` always agree.\n\nCancelling a pre-dispatch build permanently retires its identity\ntuple: ``uq_factory_build_identity`` dedup treats the cancelled\nrow like any other terminal build, so a later event expanding to\nthe same identity inserts nothing. Recovery is manual by design \u2014\na cancel that ambient event traffic could overturn would not be a\ncancel.\n\nOutcomes:\n    200 \u2014 Build cancelled, or already terminal. ``BuildResponse.status``\n          reflects the effective state.\n    404 \u2014 No build with the given ID.\n    502 \u2014 Build Coordinator unreachable or returned an unexpected\n          error; or the coordinator does not know the build yet\n          because its dispatch is in flight (the worker commits\n          its claim before the HTTP submit), or no longer knows it\n          (coordinator restart or purge). In every 502 case the\n          correct client action is retry with backoff.\n\nAn audit log line is emitted on every path, including unhandled\nexceptions (``outcome=internal_error``).",
+        "operationId": "cancel_build_api_v1_factory_builds__build_id__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          },
+          {
+            "HTTPBasic": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "build_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Build Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Build cancelled or already terminal; status field carries the outcome",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BuildResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "502": {
+            "description": "Build Coordinator unreachable or returned an error, or the build's registration with the coordinator is still in flight; retry with backoff",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         }
       }
@@ -533,6 +602,10 @@
             "type": "integer",
             "title": "Build Id"
           },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
           "source_repo_url": {
             "type": "string",
             "title": "Source Repo Url"
@@ -579,6 +652,7 @@
         "type": "object",
         "required": [
           "build_id",
+          "status",
           "source_repo_url",
           "source_commit_sha",
           "nixpkgs_revision",
@@ -589,7 +663,7 @@
           "created_at"
         ],
         "title": "BuildResponse",
-        "description": "Build-specific details with optional task sub-object.\n\nThe task field is None for undispatched builds (task_id IS NULL\nin factory_builds)."
+        "description": "Build-specific details with optional task sub-object.\n\nThe task field is None for undispatched builds (task_id IS NULL\nin factory_builds).\n\nThe status field is the build's effective current status, computed\nserver-side from the freshest authoritative source:\n\n- Pre-dispatch (task_id IS NULL): computed from\n  factory_builds.cancelled_at \u2014 ``\"cancelled\"`` when set, else\n  ``\"pending\"``. Neither word is stored; the timestamp is the only\n  persisted pre-dispatch state.\n- Dispatched: tasks.status (``\"queued\"``, ``\"running\"``,\n  ``\"completed\"``, ``\"failed\"``, ``\"cancelled\"``).\n- On cancel responses: Build Coordinator's returned status, which\n  is fresher than the local row (which lags until BC's callback\n  lands), normalized into the task vocabulary above \u2014 BC's\n  ``timed_out`` is reported as ``failed``, exactly as the callback\n  path persists it. The field never carries a word outside the\n  union of the two sets above.\n\nStaleness: after handoff the field tracks tasks.status, which only\nadvances when Build Coordinator's terminal callback lands. When\ncallbacks are disabled (no callback base URL configured \u2014 a\nsupported worker configuration), the post-handoff status stays at\nthe last persisted value (typically ``\"running\"``) indefinitely;\na cancel response is then the only place a fresher\ncoordinator-reported status appears."
       },
       "ErrorResponse": {
         "properties": {
