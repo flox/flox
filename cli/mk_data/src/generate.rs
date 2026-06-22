@@ -440,6 +440,8 @@ pub fn run_cmd(
 
     // Don't leak custom catalogs from the current user.
     cmd.env("FLOX_FLOXHUB_TOKEN", "");
+    // Keep mock generation off the developer's global OS keyring.
+    cmd.env("_FLOX_DISABLE_KEYRING", "true");
     cmd.env("_FLOX_CATALOG_DUMP_RESPONSE_FILE", output_file);
     debug!("cmd: {:?}", cmd);
     let output = cmd.output().context("couldn't call command")?;

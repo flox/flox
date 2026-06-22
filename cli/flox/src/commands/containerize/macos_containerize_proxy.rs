@@ -7,7 +7,8 @@ use std::sync::LazyLock;
 use flox_config::FLOX_CONFIG_FILE;
 use flox_core::activate::context::ActivateMode;
 use flox_core::vars::FLOX_DISABLE_METRICS_VAR;
-use flox_rust_sdk::flox::{FLOX_VERSION, Flox};
+use flox_rust_sdk::flox::{AuthContext, FLOX_VERSION, Flox};
+use flox_rust_sdk::models::floxmeta::FLOXHUB_TOKEN_ENV_VAR;
 use flox_rust_sdk::providers::container_builder::{ContainerBuilder, ContainerSource};
 use flox_rust_sdk::providers::nix::{NIX_VERSION, NixSubstituterConfig};
 use flox_rust_sdk::utils::ReaderExt;
@@ -177,6 +178,20 @@ impl ContainerizeProxy {
             ));
             command.arg("--mount");
             command.arg(flox_toml_mount);
+        }
+
+        // Pass the resolved FloxHub token into the container. The token now
+        // lives in the host OS keyring (removed from flox.toml), which the
+        // container cannot reach, so the bind-mounted flox.toml no longer
+        // carries it. In-container flox honours FLOX_FLOXHUB_TOKEN at the
+        // highest precedence (bypassing both stores), restoring prior behaviour
+        // regardless of where the host stores the token. Only set when a token
+        // is present (skipped in Kerberos mode / logged out).
+        if let AuthContext::Auth0(Some(token)) = &flox.auth_context {
+            command.args([
+                "--env",
+                &format!("{FLOXHUB_TOKEN_ENV_VAR}={}", token.secret()),
+            ]);
         }
 
         // If metrics are disabled (no device UUID), propagate that into the
