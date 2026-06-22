@@ -1443,6 +1443,7 @@ dependencies = [
 name = "flox"
 version = "0.0.0"
 dependencies = [
+ "anstream",
  "anyhow",
  "beta",
  "bpaf",
