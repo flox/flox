@@ -20,6 +20,7 @@ use std::sync::{Arc, Mutex, Once};
 
 use enum_dispatch::enum_dispatch;
 use flox_rust_sdk::models::floxmeta::FLOXHUB_TOKEN_ENV_VAR;
+use indoc::indoc;
 use thiserror::Error;
 use url::Url;
 
@@ -357,6 +358,7 @@ pub struct MockStore {
 struct MockState {
     token: Option<String>,
     error: Option<String>,
+    remove_error: Option<String>,
 }
 
 impl MockStore {
@@ -372,6 +374,15 @@ impl MockStore {
     #[allow(dead_code)]
     pub fn set_error(&self, message: impl Into<String>) {
         self.inner.lock().unwrap().error = Some(message.into());
+    }
+
+    /// Make every `remove` call fail. Unlike [Self::set_error] (one-shot, on the
+    /// next call) this persists, so a test can have `get` succeed while `remove`
+    /// fails — the shape of a plaintext file that is readable but cannot be
+    /// rewritten.
+    #[allow(dead_code)]
+    pub fn set_remove_error(&self, message: impl Into<String>) {
+        self.inner.lock().unwrap().remove_error = Some(message.into());
     }
 
     fn take_error(&self) -> Option<CredentialStoreError> {
@@ -404,7 +415,11 @@ impl CredentialStore for MockStore {
         if let Some(e) = self.take_error() {
             return Err(e);
         }
-        self.inner.lock().unwrap().token = None;
+        let mut state = self.inner.lock().unwrap();
+        if let Some(message) = &state.remove_error {
+            return Err(CredentialStoreError::Mock(message.clone()));
+        }
+        state.token = None;
         Ok(())
     }
 }
@@ -487,9 +502,9 @@ pub fn persist_login_token(
         // on the next read (user file > keyring).
         if let Err(e) = plaintext.remove() {
             tracing::warn!("could not remove the plaintext credential after a keyring write: {e}");
-            message::warning(
-                "Stored your credential in the system keyring, but could not remove the existing plain-text credential from flox.toml.\nRemove the 'floxhub_token' line from flox.toml so it does not shadow the keyring.",
-            );
+            message::warning(indoc! {"
+                Stored your credential in the system keyring, but could not remove the existing plain-text credential from flox.toml.
+                Remove the 'floxhub_token' line from flox.toml so it does not shadow the keyring."});
         }
         return Ok(TokenStorage::Keyring);
     }
@@ -504,6 +519,11 @@ pub enum ResolveOutcome {
     /// An existing plaintext token was moved into the keyring and removed from
     /// the plaintext file. The caller emits the one-time migration note.
     Migrated,
+    /// The token was written to the keyring, but the plaintext copy could not be
+    /// removed (e.g. an unwritable `flox.toml`). The keyring now holds the token,
+    /// but the plaintext secret lingers and shadows it (user file > keyring), so
+    /// the caller warns the user rather than letting this fail silently.
+    MigratedButPlaintextRemains,
     /// `config.flox.floxhub_token` was empty and was populated from the keyring.
     PopulatedFromKeyring,
     /// Nothing changed (env/system token present, no plaintext to migrate, the
@@ -566,8 +586,20 @@ pub fn resolve_credential_into(
         // Try-then-confirm: only after the keyring write succeeds do we remove
         // the plaintext token. On any keyring failure the plaintext file is
         // left exactly as it was.
-        if keyring.set(&token).is_ok() && plaintext.remove().is_ok() {
-            return ResolveOutcome::Migrated;
+        if keyring.set(&token).is_ok() {
+            return match plaintext.remove() {
+                Ok(()) => ResolveOutcome::Migrated,
+                // The keyring now holds the token, so this is not a no-op: do not
+                // return `Unchanged` (which would be silent and re-attempt every
+                // command). Report the partial migration so the caller warns; the
+                // lingering plaintext token still shadows the keyring.
+                Err(e) => {
+                    tracing::warn!(
+                        "could not remove the plaintext credential after migrating it to the keyring: {e}"
+                    );
+                    ResolveOutcome::MigratedButPlaintextRemains
+                },
+            };
         }
         return ResolveOutcome::Unchanged;
     }
@@ -1158,6 +1190,29 @@ mod tests {
 
             assert_eq!(outcome, ResolveOutcome::Unchanged);
             assert_eq!(keyring.get().unwrap(), None);
+            assert_eq!(plaintext.get().unwrap(), Some(TOKEN.to_string()));
+        });
+    }
+
+    /// Keyring write succeeds but the plaintext removal fails (e.g. an unwritable
+    /// `flox.toml`). The token is now in the keyring, but the plaintext copy
+    /// lingers, so the resolver reports `MigratedButPlaintextRemains` (not a
+    /// silent `Unchanged`) and the caller warns instead of looping silently.
+    #[test]
+    fn resolve_reports_plaintext_remains_when_remove_fails_after_keyring_write() {
+        temp_env::with_var(FLOXHUB_TOKEN_ENV_VAR, None::<&str>, || {
+            let plaintext_mock = MockStore::new();
+            plaintext_mock.set(TOKEN).unwrap();
+            plaintext_mock.set_remove_error("flox.toml is not writable");
+            let plaintext = CredentialStoreImpl::Mock(plaintext_mock);
+            let keyring = CredentialStoreImpl::Mock(MockStore::new());
+
+            let mut config = config_with_token(Some(TOKEN));
+            let outcome = resolve_credential_into(&mut config, &keyring, &plaintext, false, true);
+
+            assert_eq!(outcome, ResolveOutcome::MigratedButPlaintextRemains);
+            // The keyring received the token; the plaintext copy still lingers.
+            assert_eq!(keyring.get().unwrap(), Some(TOKEN.to_string()));
             assert_eq!(plaintext.get().unwrap(), Some(TOKEN.to_string()));
         });
     }
