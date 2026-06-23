@@ -132,7 +132,10 @@ pub enum RunError {
     CreateGcRootDir(String, #[source] std::io::Error),
 
     /// The `nix build` invocation for building from source failed.
-    #[error("Failed to build '{0}' from source.\n{1}")]
+    #[error(
+        "Failed to build '{0}' from source.\n\
+         Use 'flox install {0}' to add it to a persistent environment."
+    )]
     BuildFailed(String, #[source] BuildEnvError),
 
     /// The requested executable was not found in `bin/` or `sbin/` of any output.
@@ -490,7 +493,11 @@ async fn exec_run(run_args: RunArgs, flox: &Flox) -> Result<()> {
             },
             || {
                 let gc_paths = collect_store_paths_from_gc_root(&build_gc_root);
-                if gc_paths.is_empty() { store_paths.clone() } else { gc_paths }
+                if gc_paths.is_empty() {
+                    store_paths.clone()
+                } else {
+                    gc_paths
+                }
             },
             || Ok::<(), BuildEnvError>(()),
         )
@@ -755,7 +762,9 @@ pub fn fork_gc_root_watcher(gc_root_prefix: &Path) -> Result<(), std::io::Error>
                 }
             }
 
-            std::process::exit(0);
+            // Use _exit, not exit: after fork() the child must not run
+            // atexit handlers or flush stdio buffers shared with the parent.
+            unsafe { nix::libc::_exit(0) };
         },
         ForkResult::Parent { .. } => {
             // Parent: close read end. Write end stays open — it will be inherited
