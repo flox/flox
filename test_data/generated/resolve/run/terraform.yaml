@@ -1,0 +1,59 @@
+when:
+  path: /api/v1/catalog/resolve
+  method: POST
+  body: '{"items":[{"descriptors":[{"allow_broken":null,"allow_insecure":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"terraform","install_id":"terraform","systems":["aarch64-darwin"]}],"name":"toplevel"}]}'
+then:
+  status: 200
+  header:
+  - name: content-type
+    value: application/json
+  - name: content-length
+    value: '976'
+  - name: server
+    value: uvicorn
+  body: '{"items":[{"name":"toplevel","page":{"page":982522,"url":"","packages":[{"catalog":"nixpkgs","attr_path":"terraform","pkg_path":"terraform","derivation":"/nix/store/placeholder-terraform-1.9.8-aarch64-darwin.drv","name":"terraform-1.9.8","pname":"terraform","version":"1.9.8","system":"aarch64-darwin","outputs":[{"name":"out","store_path":"/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa0-terraform-1.9.8"}],"outputs_to_install":["out"],"description":"Tool for building, changing, and versioning infrastructure","license":"BSL-1.1","locked_url":"https://github.com/flox/nixpkgs?rev=b12141ef619e0a9c1c84dc8c684040326f27cdcc","rev":"b12141ef619e0a9c1c84dc8c684040326f27cdcc","rev_count":982522,"rev_date":"2026-04-18T21:33:21Z","broken":false,"insecure":false,"unfree":true,"missing_builds":false,"stabilities":["unstable"],"scrape_date":"2026-04-21T06:03:34.910020Z","cache_uri":null,"install_id":"terraform"}],"messages":[],"complete":true},"candidate_pages":null,"messages":[]}]}'
+---
+when:
+  path: /api/v1/catalog/resolve
+  method: POST
+  body: '{"items":[{"descriptors":[{"allow_broken":null,"allow_insecure":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"terraform","install_id":"terraform","systems":["aarch64-linux"]}],"name":"toplevel"}]}'
+then:
+  status: 200
+  header:
+  - name: content-type
+    value: application/json
+  - name: content-length
+    value: '973'
+  - name: server
+    value: uvicorn
+  body: '{"items":[{"name":"toplevel","page":{"page":982522,"url":"","packages":[{"catalog":"nixpkgs","attr_path":"terraform","pkg_path":"terraform","derivation":"/nix/store/placeholder-terraform-1.9.8-aarch64-linux.drv","name":"terraform-1.9.8","pname":"terraform","version":"1.9.8","system":"aarch64-linux","outputs":[{"name":"out","store_path":"/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbb0-terraform-1.9.8"}],"outputs_to_install":["out"],"description":"Tool for building, changing, and versioning infrastructure","license":"BSL-1.1","locked_url":"https://github.com/flox/nixpkgs?rev=b12141ef619e0a9c1c84dc8c684040326f27cdcc","rev":"b12141ef619e0a9c1c84dc8c684040326f27cdcc","rev_count":982522,"rev_date":"2026-04-18T21:33:21Z","broken":false,"insecure":false,"unfree":true,"missing_builds":false,"stabilities":["unstable"],"scrape_date":"2026-04-21T06:03:34.910020Z","cache_uri":null,"install_id":"terraform"}],"messages":[],"complete":true},"candidate_pages":null,"messages":[]}]}'
+---
+when:
+  path: /api/v1/catalog/resolve
+  method: POST
+  body: '{"items":[{"descriptors":[{"allow_broken":null,"allow_insecure":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"terraform","install_id":"terraform","systems":["x86_64-darwin"]}],"name":"toplevel"}]}'
+then:
+  status: 200
+  header:
+  - name: content-type
+    value: application/json
+  - name: content-length
+    value: '973'
+  - name: server
+    value: uvicorn
+  body: '{"items":[{"name":"toplevel","page":{"page":982522,"url":"","packages":[{"catalog":"nixpkgs","attr_path":"terraform","pkg_path":"terraform","derivation":"/nix/store/placeholder-terraform-1.9.8-x86_64-darwin.drv","name":"terraform-1.9.8","pname":"terraform","version":"1.9.8","system":"x86_64-darwin","outputs":[{"name":"out","store_path":"/nix/store/cccccccccccccccccccccccccccccc0-terraform-1.9.8"}],"outputs_to_install":["out"],"description":"Tool for building, changing, and versioning infrastructure","license":"BSL-1.1","locked_url":"https://github.com/flox/nixpkgs?rev=b12141ef619e0a9c1c84dc8c684040326f27cdcc","rev":"b12141ef619e0a9c1c84dc8c684040326f27cdcc","rev_count":982522,"rev_date":"2026-04-18T21:33:21Z","broken":false,"insecure":false,"unfree":true,"missing_builds":false,"stabilities":["unstable"],"scrape_date":"2026-04-21T07:08:27.302720Z","cache_uri":null,"install_id":"terraform"}],"messages":[],"complete":true},"candidate_pages":null,"messages":[]}]}'
+---
+when:
+  path: /api/v1/catalog/resolve
+  method: POST
+  body: '{"items":[{"descriptors":[{"allow_broken":null,"allow_insecure":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"terraform","install_id":"terraform","systems":["x86_64-linux"]}],"name":"toplevel"}]}'
+then:
+  status: 200
+  header:
+  - name: content-type
+    value: application/json
+  - name: content-length
+    value: '971'
+  - name: server
+    value: uvicorn
+  body: '{"items":[{"name":"toplevel","page":{"page":982522,"url":"","packages":[{"catalog":"nixpkgs","attr_path":"terraform","pkg_path":"terraform","derivation":"/nix/store/placeholder-terraform-1.9.8-x86_64-linux.drv","name":"terraform-1.9.8","pname":"terraform","version":"1.9.8","system":"x86_64-linux","outputs":[{"name":"out","store_path":"/nix/store/dddddddddddddddddddddddddddddd0-terraform-1.9.8"}],"outputs_to_install":["out"],"description":"Tool for building, changing, and versioning infrastructure","license":"BSL-1.1","locked_url":"https://github.com/flox/nixpkgs?rev=b12141ef619e0a9c1c84dc8c684040326f27cdcc","rev":"b12141ef619e0a9c1c84dc8c684040326f27cdcc","rev_count":982522,"rev_date":"2026-04-18T21:33:21Z","broken":false,"insecure":false,"unfree":true,"missing_builds":false,"stabilities":["unstable"],"scrape_date":"2026-04-21T07:44:59.797392Z","cache_uri":null,"install_id":"terraform"}],"messages":[],"complete":true},"candidate_pages":null,"messages":[]}]}'
