@@ -39,7 +39,7 @@ use flox_events::{EnvDetail, EventsClient, EventsGuard, EventsHub, SharedMetadat
 use flox_rust_sdk::flox::FLOX_VERSION;
 use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment};
 use flox_rust_sdk::utils::INVOCATION_SOURCES;
-use tracing::debug;
+use tracing::{debug, warn};
 use uuid::Uuid;
 
 use crate::config::Config;
@@ -140,7 +140,7 @@ fn read_metrics_stack_from_env() -> MetricsStack {
             "" | "new" => MetricsStack::New,
             "legacy" => MetricsStack::Legacy,
             other => {
-                tracing::warn!(
+                warn!(
                     value = %other,
                     "{FLOX_METRICS_STACK_VAR} has an unrecognized value; defaulting to `new`"
                 );
