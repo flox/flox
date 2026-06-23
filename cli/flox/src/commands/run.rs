@@ -131,10 +131,6 @@ pub enum RunError {
     #[error("Failed to prepare the cache directory for '{0}'.")]
     CreateGcRootDir(String, #[source] std::io::Error),
 
-    /// The `nix build` invocation to download store paths failed at the process level.
-    #[error("Failed to run nix while downloading package '{0}'.")]
-    Substitute(String, #[source] BuildEnvError),
-
     /// The `nix build` invocation for building from source failed.
     #[error("Failed to build '{0}' from source.\n{1}")]
     BuildFailed(String, #[source] BuildEnvError),
@@ -440,61 +436,59 @@ async fn exec_run(run_args: RunArgs, flox: &Flox) -> Result<()> {
     let gc_root_exists = gc_root_prefix.exists();
     let all_present = store_paths.iter().all(|p| Path::new(p).exists());
     if !all_present || !gc_root_exists {
-        let _span = info_span!(
-            "run_download",
-            progress = format!("Downloading '{pkg_spec}'...")
+        // Per-run GC root for source builds; keyed on PID so concurrent
+        // runs don't clobber each other's outputs.
+        let pid = std::process::id();
+        let build_gc_root =
+            gc_root_dir.join(format!("build-{}.{}-{}", flox.system, attr_path, pid));
+
+        // Substitution and source-build are both inside the realise closure so
+        // materialise_with_retry can retry the whole sequence on a GC race.
+        materialise_with_retry(
+            || {
+                let ok = {
+                    let _dl = info_span!(
+                        "run_download",
+                        progress = format!("Downloading '{pkg_spec}'...")
+                    )
+                    .entered();
+                    substitute_store_paths(&store_paths, Some(&gc_root_prefix))?
+                };
+                if !ok {
+                    // Cache miss; build from source.
+                    build_catalog_pkg_from_source(
+                        &resolved_pkg.locked_url,
+                        &attr_path,
+                        &flox.system,
+                        resolved_pkg.unfree,
+                        resolved_pkg.broken,
+                        Some(&build_gc_root),
+                    )
+                } else {
+                    Ok(())
+                }
+            },
+            || {
+                store_paths
+                    .iter()
+                    .filter(|p| std::fs::metadata(p).is_err())
+                    .cloned()
+                    .collect()
+            },
+            || store_paths.clone(),
+            || Ok::<(), BuildEnvError>(()),
         )
-        .entered();
-        let ok = substitute_store_paths(&store_paths, Some(&gc_root_prefix))
-            .map_err(|e| RunError::Substitute(pkg_spec.clone(), e))?;
-        drop(_span);
-        if !ok {
-            // Package is not in the binary cache; build from source.
-            // The progress spinner from info_span is sufficient feedback —
-            // no prompt needed; users can Ctrl-C if they don't want to wait.
+        .map_err(|e| RunError::BuildFailed(pkg_spec.clone(), e))?;
 
-            // Use a per-run GC root keyed on system + attr_path + PID so
-            // concurrent runs don't clobber each other's build outputs.
-            let pid = std::process::id();
-            let build_gc_root =
-                gc_root_dir.join(format!("build-{}.{}-{}", flox.system, attr_path, pid));
-
-            {
-                let _span = info_span!(
-                    "run_build",
-                    progress = format!("Building '{pkg_spec}' from source...")
-                )
-                .entered();
-                materialise_with_retry(
-                    || {
-                        build_catalog_pkg_from_source(
-                            &resolved_pkg.locked_url,
-                            &attr_path,
-                            &flox.system,
-                            resolved_pkg.unfree,
-                            resolved_pkg.broken,
-                            Some(&build_gc_root),
-                        )
-                    },
-                    || {
-                        collect_store_paths_from_gc_root(&build_gc_root)
-                            .into_iter()
-                            .filter(|p| std::fs::metadata(p).is_err())
-                            .collect()
-                    },
-                    || collect_store_paths_from_gc_root(&build_gc_root),
-                    || Ok::<(), BuildEnvError>(()),
-                )
-                .map_err(|e| RunError::BuildFailed(pkg_spec.clone(), e))?;
-                drop(_span);
-            }
-
-            // Fork a background watcher that removes the temporary GC root
-            // symlinks when the exec'd command exits.
+        // Source build was used if the GC root has symlinks; exec via its PATH.
+        // Substitution leaves build_gc_root empty — fall through to store_paths exec.
+        let build_paths = collect_store_paths_from_gc_root(&build_gc_root);
+        if !build_paths.is_empty() {
+            // Fork a background watcher that removes the GC root when the
+            // exec'd command exits.
             fork_gc_root_watcher(&build_gc_root)
                 .map_err(|e| RunError::ExecFailed("fork gc watcher".into(), e))?;
 
-            // Locate the executable from the build output symlinks.
             let bin_dirs = collect_bin_dirs_from_gc_root(&build_gc_root);
             let new_path = prepend_path_dirs(&bin_dirs);
 
