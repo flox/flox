@@ -444,11 +444,11 @@ EOF
   # Verify that the `activate` entrypoint is still used when an ad-hoc command
   # is used and that (since it's quicker than executing a separate test)
   # `FLOX_ENV_*` are set correctly.
-  run podman run --rm "test:$TAG" echo '$FLOX_ENV_CACHE'
+  run --separate-stderr podman run --rm "test:$TAG" echo '$FLOX_ENV_CACHE'
   assert_success
   assert_output "/tmp"
 
-  run podman run --rm "test:$TAG" echo '$FLOX_ENV_DESCRIPTION'
+  run --separate-stderr podman run --rm "test:$TAG" echo '$FLOX_ENV_DESCRIPTION'
   assert_success
   assert_output "test"
 }

@@ -4,11 +4,21 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
+anyhow.workspace = true
 derive_more.workspace = true
+fslock.workspace = true
+reqwest = { workspace = true, features = ["blocking"] }
 serde.workspace = true
+serde_json.workspace = true
 serde_with.workspace = true
 time.workspace = true
+tracing.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]
-serde_json.workspace = true
+pretty_assertions.workspace = true
+serial_test.workspace = true
+tempfile.workspace = true
+
+[features]
+tests = []

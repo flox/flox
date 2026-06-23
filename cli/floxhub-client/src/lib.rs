@@ -66,7 +66,11 @@ pub use factory::{
     FactoryClientTrait,
     MapApiErrorExt as FactoryMapApiErrorExt,
 };
-pub use factory_api_v1::types::{BuildResponse, ErrorResponse as FactoryErrorResponse};
+pub use factory_api_v1::types::{
+    BuildResponse,
+    ErrorResponse as FactoryErrorResponse,
+    Status as FactoryStatus,
+};
 // Re-export factory-api-v1 types for consumers.
 pub use factory_api_v1::{
     ByteStream as FactoryByteStream,

@@ -9,6 +9,7 @@ mod deactivate;
 mod delete;
 mod edit;
 mod envs;
+mod factory;
 mod gc;
 mod general;
 mod generations;
@@ -173,6 +174,10 @@ pub struct FloxArgs {
     #[bpaf(long, req_flag(()), many, map(vec_not_empty), hide)]
     pub debug: bool,
 
+    /// Enable beta features for this invocation
+    #[bpaf(long, hide)]
+    pub beta: bool,
+
     /// Print the version of the program
     #[allow(dead_code)] // fake arg, `--version` is checked for separately (see [Version])
     #[bpaf(long, short('V'))]
@@ -308,7 +313,13 @@ impl FloxArgs {
             floxhub_client,
             installable_locker: Default::default(),
             #[allow(deprecated, reason = "This should be the only internal use")]
-            features: config.features.unwrap_or_default(),
+            features: {
+                let mut features = config.features.unwrap_or_default();
+                // `--beta` enables beta features for this invocation only; it can
+                // only turn the flag on, never off.
+                features.beta = features.beta || self.beta;
+                features
+            },
             verbosity: self.verbosity.to_i32(),
             metrics_device_uuid,
         };
@@ -342,6 +353,7 @@ impl FloxArgs {
                     }
                     args.handle(flox).await
                 },
+                Commands::Factory(args) => args.handle(flox).await,
             };
 
             // This will print the update notification after output from a successful
@@ -527,6 +539,16 @@ enum Commands {
     Internal(#[bpaf(external(internal_commands))] InternalCommands),
 
     Beta(#[bpaf(external(beta::beta_commands))] beta::BetaCommands),
+
+    /// Flox Factory operator commands (hidden; see operator runbook)
+    #[bpaf(command, hide)]
+    Factory(
+        #[bpaf(
+            external(factory::factory_commands),
+            fallback(factory::FactoryCommands::Help)
+        )]
+        factory::FactoryCommands,
+    ),
 }
 
 #[derive(Debug, Bpaf, Clone)]
@@ -878,7 +900,7 @@ enum InternalCommands {
 }
 
 impl InternalCommands {
-    async fn handle(self, _config: Config, flox: Flox) -> Result<()> {
+    async fn handle(self, config: Config, flox: Flox) -> Result<()> {
         match self {
             InternalCommands::ResetMetrics(args) => args.handle(flox).await?,
             InternalCommands::Upload(args) => args.handle(flox).await?,
@@ -886,7 +908,7 @@ impl InternalCommands {
             InternalCommands::CheckForUpgrades(args) => args.handle(flox).await?,
             InternalCommands::ActivationState(args) => args.handle(flox).await?,
             InternalCommands::ServicesSocket(args) => args.handle(flox).await?,
-            InternalCommands::HookEnv(args) => args.handle(flox)?,
+            InternalCommands::HookEnv(args) => args.handle(config, flox)?,
         }
         Ok(())
     }

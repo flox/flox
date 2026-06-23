@@ -1452,6 +1452,7 @@ dependencies = [
  "crossterm 0.29.0",
  "derive_more",
  "dirs",
+ "factory-api-v1",
  "flox-activations",
  "flox-core",
  "flox-manifest",
@@ -1460,6 +1461,7 @@ dependencies = [
  "floxhub-client",
  "fslock",
  "futures",
+ "httpmock",
  "indent",
  "indicatif",
  "indoc",
@@ -1576,11 +1578,18 @@ dependencies = [
 name = "flox-events"
 version = "0.0.0"
 dependencies = [
+ "anyhow",
  "derive_more",
+ "fslock",
+ "pretty_assertions",
+ "reqwest",
  "serde",
  "serde_json",
  "serde_with",
+ "serial_test",
+ "tempfile",
  "time",
+ "tracing",
  "uuid",
 ]
 
