@@ -318,13 +318,10 @@ pub fn build_catalog_pkg_from_source(
     let flake_ref = if let Some(rev) = locked_url.strip_prefix(NIXPKGS_CATALOG_URL_PREFIX) {
         format!("{FLOX_NIXPKGS_PROXY_FLAKE_REF_BASE}/{rev}")
     } else {
-        return Err(BuildEnvError::Realise2 {
-            install_id: attr_path.to_string(),
-            message: format!(
-                "Locked package '{}' does not use the expected nixpkgs URL prefix '{}'",
-                attr_path, NIXPKGS_CATALOG_URL_PREFIX
-            ),
-        });
+        return Err(BuildEnvError::LockfileContents(format!(
+            "Locked package '{}' is a base catalog package, but the locked url '{}' does not start with the expected prefix '{}'",
+            attr_path, locked_url, NIXPKGS_CATALOG_URL_PREFIX
+        )));
     };
 
     // Build all outputs (^*) from legacyPackages.<system>.<attr_path>.
