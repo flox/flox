@@ -24,11 +24,7 @@ use crate::utils::errors::{
     format_managed_error,
     format_remote_error,
 };
-use crate::utils::events::{
-    emit_early_exit_command_pair,
-    install_events_client_for_main,
-    resolve_invocation_id,
-};
+use crate::utils::events::{install_events_client_for_main, resolve_invocation_id};
 use crate::utils::init::init_telemetry_uuid;
 use crate::utils::metrics::{Hub, read_metrics_uuid};
 
@@ -65,28 +61,20 @@ fn main() -> ExitCode {
     // This must run before any bpaf parser call (Prefix::check, etc.)
     // because bpaf's ArgScanner intercepts this flag and calls
     // process::exit(0) directly.
-    // Resolve the v2 invocation_id once per process so the early-exit
-    // branches below can stamp it onto their emissions and the parent flox
-    // process can propagate it to detached subprocesses.
-    let invocation_id = resolve_invocation_id();
-
     if env::args_os().any(|a| a == "--bpaf-complete-style-bash") {
         print!("{}", BASH_COMPLETION_SCRIPT);
-        emit_early_exit_command_pair("complete", invocation_id);
         return ExitCode::from(0);
     }
 
     // Quit early if `--prefix` is present
     if Prefix::check() {
         println!(env!("out"));
-        emit_early_exit_command_pair("prefix", invocation_id);
         return ExitCode::from(0);
     }
 
     // Quit early if `--version` is present
     if Version::check() {
         println!("{}", *FLOX_VERSION);
-        emit_early_exit_command_pair("version", invocation_id);
         return ExitCode::from(0);
     }
 
@@ -124,6 +112,11 @@ fn main() -> ExitCode {
     // https://docs.sentry.io/platforms/rust/#async-main-function
     let _sentry_guard = metrics_uuid.map(|uuid| init_sentry("flox-cli", uuid));
     let _metrics_guard = Hub::global().try_guard().ok();
+    // Resolve the v2 invocation_id for this process so it is stamped onto the
+    // events emitted on the normal command path and can be propagated to the
+    // detached upgrade-check subprocess. (Not resolved on the early-exit paths
+    // above — those emit nothing, matching the legacy pipeline.)
+    let invocation_id = resolve_invocation_id();
     let _v2_events_guard = install_events_client_for_main(&config, invocation_id);
 
     // Pass down the verbosity level to all sub-processes

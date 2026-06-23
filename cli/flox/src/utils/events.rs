@@ -178,42 +178,6 @@ pub fn install_events_client_for_main(config: &Config, invocation_id: Uuid) -> E
     EventsGuard::new()
 }
 
-/// Best-effort emission of a `command_run` + `command_completed` pair for an
-/// early-exit branch in `main.rs` (e.g. `--version`, `--prefix`,
-/// `--bpaf-complete-style-bash`).
-///
-/// These branches return their `ExitCode` *before* the normal chokepoint
-/// runs in `cli/flox/src/commands/mod.rs`, so they install the client and
-/// emit the pair themselves. Every step is fallible-and-silent: a missing
-/// or unparseable config, a missing `metrics-uuid` file, or an unset
-/// `_FLOX_METRICS_URL_OVERRIDE` simply skips the emission — the user-facing
-/// command completes regardless. After emission the global hub's client is
-/// cleared so a subsequent test-mode invocation does not see leaked state.
-/// No previous client is restored here because the early-exit branches
-/// always run *before* [`install_events_client_for_main`] — the hub holds
-/// no client at this point.
-pub fn emit_early_exit_command_pair(subcommand: &str, invocation_id: Uuid) {
-    let Ok(config) = Config::parse() else {
-        debug!("v2 events early-exit: could not parse config; skipping emit");
-        return;
-    };
-    let Some(client) = build_events_client(&config, invocation_id) else {
-        return;
-    };
-    let hub = EventsHub::global();
-    hub.set_client(client);
-    if let Err(err) = hub.record_command_run(subcommand.to_string()) {
-        debug!(error = %err, "v2 events early-exit: command_run record failed");
-    }
-    if let Err(err) = hub.record_command_completed(subcommand.to_string()) {
-        debug!(error = %err, "v2 events early-exit: command_completed record failed");
-    }
-    if let Err(err) = hub.flush(true) {
-        debug!(error = %err, "v2 events early-exit: flush failed");
-    }
-    hub.clear_client();
-}
-
 /// Resolve the endpoint URL for the v2 events client.
 ///
 /// Until the cutover PR repoints the production endpoint, this only returns
