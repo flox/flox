@@ -397,6 +397,14 @@ pub async fn login_flox(
     once: bool,
     storage_pref: TokenStorageMode,
 ) -> Result<String> {
+    // `--once` only modulates whether `--insecure-storage` persists the plain-text
+    // preference, so it is meaningless on its own. Reject the combination rather
+    // than silently ignoring it (mirrors '--generation' requiring '--copy' in
+    // 'flox pull').
+    if once && !insecure_storage {
+        bail!("'--once' has no effect without '--insecure-storage'.");
+    }
+
     let client = create_oauth_client()?;
     let cred = authorize(client, flox.floxhub.base_url())
         .await
@@ -459,11 +467,18 @@ fn complete_login(
     print_login_success(&handle);
 
     if storage == TokenStorage::Plaintext {
-        message::warning(formatdoc! {"
-            {notice}
-            No OS keyring is available, or plain-text storage was requested.",
-            notice = CredentialSource::plaintext_notice(&stores.plaintext_path())
-        });
+        let notice = CredentialSource::plaintext_notice(&stores.plaintext_path());
+        // Distinguish a chosen plain-text store (point at how to switch back)
+        // from a keyring-unavailable fallback (no actionable next step).
+        if target == TokenStorageMode::Plaintext {
+            message::warning(formatdoc! {"
+                {notice}
+                To store credentials in the system keyring instead, run 'flox config --delete floxhub_token_storage'."});
+        } else {
+            message::warning(formatdoc! {"
+                {notice}
+                No OS keyring is available."});
+        }
     }
 
     Ok(handle)

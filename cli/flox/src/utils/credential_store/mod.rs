@@ -309,8 +309,10 @@ impl CredentialStores {
 
         self.plaintext.set(token)?;
         // An explicit plain-text choice supersedes any keyring entry: drop a
-        // lingering keyring token (best effort) so a later read cannot surface
-        // it and shadow the plain-text file the user just chose. Scoped to the
+        // lingering keyring token (best effort) so it is not left behind as a
+        // stale secret, and is not surfaced on a later read if the plain-text
+        // file is removed. (The plain-text file already takes read precedence
+        // over the keyring, so this is cleanup, not shadowing.) Scoped to the
         // explicit `Plaintext` target — on a keyring-write fallback there is
         // nothing of ours in the keyring to remove.
         if target == TokenStorageMode::Plaintext
@@ -792,8 +794,9 @@ mod tests {
         assert_eq!(plaintext.get().unwrap(), Some(TOKEN.to_string()));
     }
 
-    /// Storing plain text drops any pre-existing keyring entry so it cannot
-    /// resurface on the next read and shadow the user's plain-text choice.
+    /// Storing plain text drops any pre-existing keyring entry so it is not left
+    /// behind as a stale secret (e.g. to resurface on a later read if the
+    /// plain-text file is removed).
     #[test]
     fn login_plaintext_target_removes_stale_keyring_entry() {
         let dir = tempfile::tempdir().unwrap();
