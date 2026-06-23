@@ -1679,7 +1679,9 @@ pub(super) async fn ensure_auth(flox: &mut Flox) -> Result<String> {
             // Implicit re-authentication stores to the secure default (keyring).
             // The standing storage preference is not threaded through the many
             // `ensure_auth` call sites, so an implicit re-login does not honor a
-            // `plaintext` preference; an explicit `flox auth login` does.
+            // `plaintext` preference; an explicit `flox auth login` does. This is
+            // an accepted limitation; see
+            // docs/superpowers/specs/2026-06-22-implicit-reauth-token-storage-followup.md.
             auth::login_flox(flox, false, false, TokenStorageMode::Keyring).await
         },
         Err(failure) => {
