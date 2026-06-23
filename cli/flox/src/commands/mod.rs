@@ -492,6 +492,16 @@ impl FloxArgs {
             .run_until(async {
                 tokio::select! {
                     _ = tokio::task::spawn_local(signal_handler) => {
+                        // On Ctrl-C the `cli_worker` task is dropped before it
+                        // reaches its `record_command_completed`, so record it
+                        // here too — an interrupted invocation still ends, and
+                        // the hub's idempotent flag means at most one completion
+                        // is recorded per invocation.
+                        if let Err(err) = flox_events::EventsHub::global()
+                            .record_command_completed(v2_subcommand.to_string())
+                        {
+                            debug!(error = %err, "Failed to record v2 cli.command_completed event (interrupted)");
+                        }
                         // TODO:
                         // For now we rely on subprocesses to inherit `flox` process group
                         // and thus being sent ctrl_c signals in sync with flox itself.
