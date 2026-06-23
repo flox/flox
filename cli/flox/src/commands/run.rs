@@ -469,13 +469,29 @@ async fn exec_run(run_args: RunArgs, flox: &Flox) -> Result<()> {
                 }
             },
             || {
-                store_paths
-                    .iter()
-                    .filter(|p| std::fs::metadata(p).is_err())
-                    .cloned()
-                    .collect()
+                // Source-built paths (different hash from catalog) are tracked
+                // via GC root symlinks, not store_paths. If build_gc_root has
+                // symlinks, the source-build path was taken — check those real
+                // output paths. Otherwise, substitution was used — check the
+                // catalog store_paths directly.
+                let gc_paths = collect_store_paths_from_gc_root(&build_gc_root);
+                if gc_paths.is_empty() {
+                    store_paths
+                        .iter()
+                        .filter(|p| std::fs::metadata(p).is_err())
+                        .cloned()
+                        .collect()
+                } else {
+                    gc_paths
+                        .into_iter()
+                        .filter(|p| std::fs::metadata(p).is_err())
+                        .collect()
+                }
             },
-            || store_paths.clone(),
+            || {
+                let gc_paths = collect_store_paths_from_gc_root(&build_gc_root);
+                if gc_paths.is_empty() { store_paths.clone() } else { gc_paths }
+            },
             || Ok::<(), BuildEnvError>(()),
         )
         .map_err(|e| RunError::BuildFailed(pkg_spec.clone(), e))?;
