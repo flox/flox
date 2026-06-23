@@ -1578,11 +1578,18 @@ dependencies = [
 name = "flox-events"
 version = "0.0.0"
 dependencies = [
+ "anyhow",
  "derive_more",
+ "fslock",
+ "pretty_assertions",
+ "reqwest",
  "serde",
  "serde_json",
  "serde_with",
+ "serial_test",
+ "tempfile",
  "time",
+ "tracing",
  "uuid",
 ]
 
