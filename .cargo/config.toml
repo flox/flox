@@ -1,5 +1,8 @@
 [net]
 git-fetch-with-cli = true
+# Retry transient crates.io/registry network failures (e.g. a single
+# `curl failed` mid-fetch) instead of failing the build outright.
+retries = 10
 
 [alias]
 xtask = "run --package xtask --"
