@@ -322,7 +322,7 @@ impl FloxArgs {
             LegacyChokepointAction::SkipInstall => {
                 debug!(
                     "Metrics collection enabled; legacy stack inert this process \
-                     (FLOX_METRICS_STACK=new — canonical events client installed in main.rs)"
+                     (FLOX_METRICS_STACK=new — v2 events client installed in main.rs)"
                 );
             },
             LegacyChokepointAction::DisableMetricsAndSkipInstall => {
@@ -1911,7 +1911,7 @@ mod legacy_chokepoint_tests {
     /// chokepoint installs nothing on either stack and propagates the
     /// disable flag via the env var.
     #[test]
-    #[serial(canonical_events_wrapper_env)]
+    #[serial(v2_events_wrapper_env)]
     fn disable_metrics_short_circuits_install_regardless_of_stack_flag() {
         let (_tempdir, config) = config_with(true);
         temp_env::with_var(FLOX_METRICS_STACK_VAR, Some("legacy"), || {
@@ -1931,7 +1931,7 @@ mod legacy_chokepoint_tests {
     /// `FLOX_METRICS_STACK=legacy` installs the legacy `Client` —
     /// the in-field rollback handle.
     #[test]
-    #[serial(canonical_events_wrapper_env)]
+    #[serial(v2_events_wrapper_env)]
     fn stack_legacy_routes_chokepoint_to_install_legacy_client() {
         let (_tempdir, config) = config_with(false);
         temp_env::with_var(FLOX_METRICS_STACK_VAR, Some("legacy"), || {
@@ -1947,7 +1947,7 @@ mod legacy_chokepoint_tests {
     /// symmetric assertion, a future refactor that inverted the
     /// match arms would still pass the existing rollback-side test.
     #[test]
-    #[serial(canonical_events_wrapper_env)]
+    #[serial(v2_events_wrapper_env)]
     fn stack_new_routes_chokepoint_to_skip_install() {
         let (_tempdir, config) = config_with(false);
         temp_env::with_var(FLOX_METRICS_STACK_VAR, Some("new"), || {
@@ -1960,7 +1960,7 @@ mod legacy_chokepoint_tests {
 
     /// Unset flag defaults to `new` — verify the chokepoint follows.
     #[test]
-    #[serial(canonical_events_wrapper_env)]
+    #[serial(v2_events_wrapper_env)]
     fn unset_stack_flag_routes_chokepoint_to_skip_install() {
         let (_tempdir, config) = config_with(false);
         temp_env::with_var(FLOX_METRICS_STACK_VAR, None::<&str>, || {

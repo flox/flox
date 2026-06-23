@@ -11,14 +11,14 @@
 //!
 //! The CLI ships two telemetry stacks side-by-side: the legacy
 //! `subcommand_metric!` pipeline (`cli/flox/src/utils/metrics.rs`) and the
-//! new canonical-events pipeline (this module + the `flox-events` crate).
+//! new v2-events pipeline (this module + the `flox-events` crate).
 //! Exactly one stack installs its `Client` per process; the other stack's
 //! `Client` is left `None` and its `record_*` calls short-circuit.
 //!
 //! [`selected_metrics_stack`] reads the [`FLOX_METRICS_STACK_VAR`] env var
 //! once during startup and returns which stack to install:
 //!
-//! - unset / `new` (default) → [`MetricsStack::New`] — canonical envelopes
+//! - unset / `new` (default) → [`MetricsStack::New`] — v2 envelopes
 //!   to the new ingest endpoint; the legacy stack's `Client` is not
 //!   installed.
 //! - `legacy` → [`MetricsStack::Legacy`] — PostHog-shape payloads to the
@@ -71,12 +71,12 @@ pub const FLOX_INVOCATION_ID_VAR: &str = "FLOX_INVOCATION_ID";
 /// module rustdoc for the "Runtime stack selection" overview.
 pub(crate) const FLOX_METRICS_STACK_VAR: &str = "FLOX_METRICS_STACK";
 
-/// Build-time URL for the new canonical-events ingest endpoint. Injected
+/// Build-time URL for the new v2-events ingest endpoint. Injected
 /// by the Nix wrapper (`pkgs/flox-cli/default.nix`) at the same site as
 /// the legacy `METRICS_EVENTS_URL`.
 const METRICS_EVENTS_URL_V2: &str = env!("METRICS_EVENTS_URL_V2");
 
-/// Build-time API key for the new canonical-events ingest endpoint.
+/// Build-time API key for the new v2-events ingest endpoint.
 /// The new endpoint uses its own key (the original D1 assumption that
 /// both stacks could share the legacy `METRICS_EVENTS_API_KEY` was
 /// superseded once the new endpoint was stood up). The legacy stack
@@ -88,7 +88,7 @@ const METRICS_EVENTS_API_KEY_V2: &str = env!("METRICS_EVENTS_API_KEY_V2");
 /// process — see [`selected_metrics_stack`] and the module rustdoc.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum MetricsStack {
-    /// New canonical-events pipeline (default). Installs an
+    /// New v2-events pipeline (default). Installs an
     /// [`EventsClient`] pointing at the new ingest endpoint; the legacy
     /// stack's `Client` is left uninstalled and its `record_metric`
     /// short-circuits.
@@ -249,9 +249,7 @@ pub fn build_events_client(config: &Config, invocation_id: Uuid) -> Option<Event
     }
 
     if selected_metrics_stack() == MetricsStack::Legacy {
-        debug!(
-            "Canonical events: {FLOX_METRICS_STACK_VAR}=legacy; new pipeline inert this process"
-        );
+        debug!("v2 events: {FLOX_METRICS_STACK_VAR}=legacy; new pipeline inert this process");
         return None;
     }
 
@@ -562,7 +560,7 @@ mod tests {
     /// set and the metrics uuid is readable. The legacy `Client` is
     /// installed instead at the `commands/mod.rs` chokepoint.
     #[test]
-    #[serial(canonical_events_wrapper_env)]
+    #[serial(v2_events_wrapper_env)]
     fn build_events_client_returns_none_on_stack_legacy_even_with_override() {
         let tempdir = tempfile::tempdir().expect("tempdir");
         let uuid = Uuid::new_v4();
@@ -584,7 +582,7 @@ mod tests {
     }
 
     #[test]
-    #[serial(canonical_events_wrapper_env)]
+    #[serial(v2_events_wrapper_env)]
     fn selected_metrics_stack_defaults_to_new_when_unset() {
         with_var(FLOX_METRICS_STACK_VAR, None::<&str>, || {
             assert_eq!(selected_metrics_stack(), MetricsStack::New);
@@ -592,7 +590,7 @@ mod tests {
     }
 
     #[test]
-    #[serial(canonical_events_wrapper_env)]
+    #[serial(v2_events_wrapper_env)]
     fn selected_metrics_stack_defaults_to_new_when_empty() {
         with_var(FLOX_METRICS_STACK_VAR, Some(""), || {
             assert_eq!(selected_metrics_stack(), MetricsStack::New);
@@ -600,7 +598,7 @@ mod tests {
     }
 
     #[test]
-    #[serial(canonical_events_wrapper_env)]
+    #[serial(v2_events_wrapper_env)]
     fn selected_metrics_stack_returns_new_for_explicit_new() {
         with_var(FLOX_METRICS_STACK_VAR, Some("new"), || {
             assert_eq!(selected_metrics_stack(), MetricsStack::New);
@@ -608,7 +606,7 @@ mod tests {
     }
 
     #[test]
-    #[serial(canonical_events_wrapper_env)]
+    #[serial(v2_events_wrapper_env)]
     fn selected_metrics_stack_returns_legacy_for_legacy() {
         with_var(FLOX_METRICS_STACK_VAR, Some("legacy"), || {
             assert_eq!(selected_metrics_stack(), MetricsStack::Legacy);
@@ -620,7 +618,7 @@ mod tests {
     /// silently disable telemetry. The single `warn!` makes the misconfig
     /// visible under any tracing subscriber.
     #[test]
-    #[serial(canonical_events_wrapper_env)]
+    #[serial(v2_events_wrapper_env)]
     fn selected_metrics_stack_falls_back_to_new_for_unknown_value() {
         with_var(FLOX_METRICS_STACK_VAR, Some("banana"), || {
             assert_eq!(selected_metrics_stack(), MetricsStack::New);

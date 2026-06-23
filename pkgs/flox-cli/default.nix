@@ -62,14 +62,13 @@ let
       # superseded once the new endpoint was stood up.
       METRICS_EVENTS_URL_V2 =
         let
-          value = "https://tvdlgwb8b9.execute-api.us-west-2.amazonaws.com/dev/events";
+          value = "https://REPLACE-BEFORE-MERGE.example.invalid/events";
         in
         lib.warnIf (
-          lib.hasInfix "example.invalid" value
-          || lib.hasInfix "REPLACE-BEFORE-MERGE" value
+          lib.hasInfix "example.invalid" value || lib.hasInfix "REPLACE-BEFORE-MERGE" value
         ) "METRICS_EVENTS_URL_V2 still contains a placeholder; replace before deployment." value;
       METRICS_EVENTS_API_KEY = "5pAQnBqz5Q7dpqVD9BEXQ4Kdc3D2fGTd3ZgP0XXK";
-      METRICS_EVENTS_API_KEY_V2 = "MZO4U4gnjO2o68yVq6j24aygq7Q5HUhQ8RfUwmkq";
+      METRICS_EVENTS_API_KEY_V2 = "REPLACE-BEFORE-MERGE";
 
       # oauth client id
       OAUTH_CLIENT_ID = "fGrotHBfQr9X1PHGbFoifEWaDPyWZDmc";
