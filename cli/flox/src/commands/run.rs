@@ -15,7 +15,6 @@
 //! arguments with `std::env::args_os()`.
 
 use std::ffi::{OsStr, OsString};
-use std::io::{BufRead as _, IsTerminal as _};
 use std::os::unix::fs::PermissionsExt;
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
@@ -135,10 +134,6 @@ pub enum RunError {
     /// The `nix build` invocation to download store paths failed at the process level.
     #[error("Failed to run nix while downloading package '{0}'.")]
     Substitute(String, #[source] BuildEnvError),
-
-    /// User declined the offer to build the package from source.
-    #[error("Cancelled building '{0}' from source.")]
-    BuildDeclined(String),
 
     /// The `nix build` invocation for building from source failed.
     #[error("Failed to build '{0}' from source.\n{1}")]
@@ -454,23 +449,9 @@ async fn exec_run(run_args: RunArgs, flox: &Flox) -> Result<()> {
             .map_err(|e| RunError::Substitute(pkg_spec.clone(), e))?;
         drop(_span);
         if !ok {
-            // Package is not in the binary cache. Offer to build from source.
-            //
-            // Interactive sessions prompt the user; non-interactive sessions
-            // (scripts, CI) proceed automatically to avoid blocking.
-            if std::io::stderr().is_terminal() {
-                eprint!(
-                    "⚠️  Package '{pkg_spec}' is not in the binary cache and must be built \
-                     from source. This may take a while. Continue? [Y/n] "
-                );
-                let stdin = std::io::stdin();
-                let mut input = String::new();
-                stdin.lock().read_line(&mut input)?;
-                let trimmed = input.trim().to_lowercase();
-                if trimmed == "n" || trimmed == "no" {
-                    return Err(RunError::BuildDeclined(pkg_spec.clone()).into());
-                }
-            }
+            // Package is not in the binary cache; build from source.
+            // The progress spinner from info_span is sufficient feedback —
+            // no prompt needed; users can Ctrl-C if they don't want to wait.
 
             // Use a per-run GC root keyed on system + attr_path + PID so
             // concurrent runs don't clobber each other's build outputs.

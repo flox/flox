@@ -163,9 +163,9 @@ cache, or be buildable from source.
 
 Packages that require building from source — including those with
 unfree licenses that are not pre-cached — cannot be substituted
-directly. `flox run` will offer to build such packages from source.
-When running interactively you will be prompted to confirm;
-non-interactive invocations (e.g. in scripts) proceed automatically.
+directly. `flox run` will build such packages from source automatically,
+displaying a progress indicator while the build runs.
+Press Ctrl-C to cancel if you do not want to wait.
 Built packages are stored in a temporary GC root that is removed when
 the command exits.
 Use `flox install` to add a package to a persistent environment instead.
