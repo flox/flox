@@ -136,14 +136,10 @@ _EXPECTED_LEAKS_BASH='_flox_hook PROMPT_COMMAND'
 #   _comp_assocs / chpwd_functions / precmd_functions
 #                  — compinit / zsh hook plumbing pulled in by
 #                    activate.d/zsh's compinit call.
-#   new_fpath / old_fpath / profile_script_dirs
-#                  — activate.d/zsh declares these without `local`, so they
-#                    leak into the user's shell. Fix belongs in
-#                    activate.d/zsh; tracked in DEV-86.
 #   nohashdirs     — compinit toggles nohashdirs; deactivate over-restores
 #                    to the zsh default (`setopt hashdirs`) rather than the
 #                    pre-activate state.
-_EXPECTED_LEAKS_ZSH='_flox_hook _comp_assocs chpwd_functions precmd_functions new_fpath old_fpath profile_script_dirs nohashdirs'
+_EXPECTED_LEAKS_ZSH='_flox_hook _comp_assocs chpwd_functions precmd_functions nohashdirs'
 
 # fish: no intentional leaks beyond the shared set.
 _EXPECTED_LEAKS_FISH=''
