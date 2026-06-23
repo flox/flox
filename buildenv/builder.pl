@@ -161,6 +161,29 @@ sub parseStorePath($) {
     return ($name, $version, $basename);
 }
 
+# Given a parsed version string (the 2nd element of parseStorePath's
+# return tuple), return the Nix output name encoded as a trailing
+# "-<output>" suffix, or "out" if no such suffix is present.
+#
+# parseStorePath splits the package-name-version on /-(?=\d)/, so for
+# a multi-output store path like ".../<hash>-kitty-0.47.4-kitten" the
+# returned version is "0.47.4-kitten". Nix output names by convention
+# are lowercase alphabetic identifiers (out, dev, lib, man, doc, bin,
+# info, plus user-defined like "kitten"). The detection rule below
+# treats a trailing /-([a-z]+)$/ on the version as the output name
+# and otherwise returns the implicit default "out".
+sub parseOutputFromVersion {
+    my $version = shift;
+    return "out" unless defined $version && $version =~ /-/;
+    my @parts = split /-/, $version;
+    my $last = $parts[-1];
+    # Require purely lowercase alphabetic to avoid mistaking version
+    # qualifiers (rc1, alpha2, 1.0.0-final's "final" is allowed but
+    # "rc1" is not because of the digit) for outputs.
+    return "out" unless $last =~ /^[a-z]+$/;
+    return $last;
+}
+
 sub findFiles {
     my ($relName, $target, $baseName, $ignoreCollisions, $checkCollisionContents, $priority) = @_;
 
@@ -234,7 +257,19 @@ sub findFiles {
             # Improve upon the default collision message from upstream.
             my ($targetName, $targetVersion, $targetBasename) = parseStorePath($target);
             my ($oldTargetName, $oldTargetVersion, $oldTargetBasename) = parseStorePath($oldTarget);
-            my $errmsg = "'$oldTargetName' conflicts with '$targetName'. ";
+            my $errmsg;
+            if ($targetName eq $oldTargetName) {
+                my $oldOutput = parseOutputFromVersion($oldTargetVersion);
+                my $newOutput = parseOutputFromVersion($targetVersion);
+                if ($oldOutput ne $newOutput) {
+                    $errmsg = "'$oldTargetName ($oldOutput)' conflicts with "
+                            . "'$targetName ($newOutput)'. ";
+                } else {
+                    $errmsg = "'$oldTargetName' conflicts with '$targetName'. ";
+                }
+            } else {
+                $errmsg = "'$oldTargetName' conflicts with '$targetName'. ";
+            }
             if ($targetBasename eq $oldTargetBasename) {
                 $errmsg .= "Both packages provide the file '$targetBasename'";
             } else {
