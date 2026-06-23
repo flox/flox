@@ -2944,7 +2944,7 @@ mod materialise_retry_tests {
         init_tracing();
         // Paths always disappear after build_env fails — exhausts all retries.
         let missing_call = Cell::new(0usize);
-        let result = materialise_with_retry(
+        let result: Result<BuildEnvOutputs, _> = materialise_with_retry(
             || Ok(()),
             || {
                 missing_call.set(missing_call.get() + 1);
@@ -2977,7 +2977,7 @@ mod materialise_retry_tests {
         // before propagating the error.
         let realise_calls = Cell::new(0usize);
         let build_calls = Cell::new(0usize);
-        let result = materialise_with_retry(
+        let result: Result<BuildEnvOutputs, _> = materialise_with_retry(
             || {
                 realise_calls.set(realise_calls.get() + 1);
                 Ok(())
