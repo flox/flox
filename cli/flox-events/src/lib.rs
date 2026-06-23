@@ -132,7 +132,7 @@ pub enum EventKind {
 /// in later PRs).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CommandPayload {
-    /// Subcommand name derived from the parsed clap command (e.g. `install`,
+    /// Subcommand name derived from the parsed bpaf command (e.g. `install`,
     /// `activate`, or nested `services::start` under PR 5's encoding).
     pub subcommand: String,
     /// Flox CLI version string.
