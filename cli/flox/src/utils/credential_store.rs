@@ -25,7 +25,7 @@ use thiserror::Error;
 use url::Url;
 
 use crate::commands::general::update_config;
-use crate::config::{Config, FLOX_CONFIG_FILE};
+use crate::config::{Config, FLOX_CONFIG_FILE, TokenStorageMode};
 use crate::utils::message;
 
 /// `service` value for the FloxHub credential in the OS keyring. The token is
@@ -482,20 +482,21 @@ pub enum TokenStorage {
     Plaintext,
 }
 
-/// Persist a logged-in token to the most secure available store.
+/// Persist a logged-in token according to `target`.
 ///
-/// Unless `insecure_storage` forces plaintext, attempt the keyring first
-/// (try-then-confirm): on success store there and remove any lingering
-/// plaintext token so it cannot shadow the keyring entry. On any keyring
-/// failure — or when plaintext is forced — write the plaintext file (`0600`).
-/// The returned [TokenStorage] tells the caller whether to warn the user.
+/// `Keyring`: attempt the keyring first (try-then-confirm); on success store
+/// there and remove any lingering plaintext token so it cannot shadow the
+/// keyring entry, and on any keyring failure fall back to the plaintext file
+/// (`0600`). `Plaintext`: write the plaintext file and drop any existing keyring
+/// entry (best effort). The returned [TokenStorage] tells the caller whether to
+/// warn the user.
 pub fn persist_login_token(
     token: &str,
-    insecure_storage: bool,
+    target: TokenStorageMode,
     keyring: &CredentialStoreImpl,
     plaintext: &CredentialStoreImpl,
 ) -> Result<TokenStorage, CredentialStoreError> {
-    if !insecure_storage && keyring.set(token).is_ok() {
+    if target == TokenStorageMode::Keyring && keyring.set(token).is_ok() {
         // The keyring already holds the token, so a failure to remove the old
         // plaintext copy must not fail the login. Warn instead: a lingering
         // plaintext token both leaves a secret on disk and shadows the keyring
@@ -510,6 +511,18 @@ pub fn persist_login_token(
     }
 
     plaintext.set(token)?;
+    // An explicit plain-text choice supersedes any keyring entry: drop a
+    // lingering keyring token (best effort) so it is not left behind as a stale
+    // secret, and is not surfaced on a later read if the plain-text file is
+    // removed. (The plain-text file already takes read precedence over the
+    // keyring, so this is cleanup, not shadowing.) Scoped to the explicit
+    // `Plaintext` target — on a keyring-write fallback there is nothing of ours
+    // in the keyring to remove.
+    if target == TokenStorageMode::Plaintext
+        && let Err(e) = keyring.remove()
+    {
+        tracing::debug!("could not remove the keyring credential after storing plain text: {e}");
+    }
     Ok(TokenStorage::Plaintext)
 }
 
@@ -550,6 +563,8 @@ pub enum ResolveOutcome {
 /// - the configured auth mode is Auth0 (`is_auth0`) — in other modes (e.g.
 ///   Kerberos) the token is not used for authentication, so a legacy
 ///   `floxhub_token` left in `flox.toml` must not be silently moved or read.
+/// - the storage preference is `Keyring` (`storage`) — when the user has chosen
+///   plain-text storage, a plaintext token is left in place rather than moved.
 ///
 /// The migration moves the token store-to-store only; it never writes
 /// `config.flox.floxhub_token`. The merge already populated that field with the
@@ -568,6 +583,7 @@ pub fn resolve_credential_into(
     plaintext: &CredentialStoreImpl,
     is_hook: bool,
     is_auth0: bool,
+    storage: TokenStorageMode,
 ) -> ResolveOutcome {
     // The prompt/hook flow does no keyring I/O. Outside Auth0 mode the token is
     // not used for authentication, so it is neither migrated nor read — matching
@@ -582,7 +598,10 @@ pub fn resolve_credential_into(
     // when the environment is not overriding it. Probe the plaintext file
     // directly (provenance-aware) rather than trusting the merged config field,
     // which may hold a system token instead.
-    if !env_set && let Ok(Some(token)) = plaintext.get() {
+    if storage == TokenStorageMode::Keyring
+        && !env_set
+        && let Ok(Some(token)) = plaintext.get()
+    {
         // Try-then-confirm: only after the keyring write succeeds do we remove
         // the plaintext token. On any keyring failure the plaintext file is
         // left exactly as it was.
@@ -965,7 +984,14 @@ mod tests {
         let plaintext = CredentialStoreImpl::Mock(MockStore::new());
 
         let mut config = config_with_token(None);
-        resolve_credential_into(&mut config, &keyring, &plaintext, false, true);
+        resolve_credential_into(
+            &mut config,
+            &keyring,
+            &plaintext,
+            false,
+            true,
+            TokenStorageMode::Keyring,
+        );
 
         assert_eq!(
             probe_credential_source(&config, &plaintext, &keyring),
@@ -987,7 +1013,8 @@ mod tests {
         let keyring = CredentialStoreImpl::Mock(MockStore::new());
         let plaintext = CredentialStoreImpl::Plaintext(PlaintextStore::new(dir.path()));
 
-        let storage = persist_login_token(TOKEN, false, &keyring, &plaintext).unwrap();
+        let storage =
+            persist_login_token(TOKEN, TokenStorageMode::Keyring, &keyring, &plaintext).unwrap();
 
         assert_eq!(storage, TokenStorage::Keyring);
         assert_eq!(keyring.get().unwrap(), Some(TOKEN.to_string()));
@@ -1004,7 +1031,8 @@ mod tests {
         let keyring = CredentialStoreImpl::Mock(keyring_mock);
         let plaintext = CredentialStoreImpl::Plaintext(PlaintextStore::new(dir.path()));
 
-        let storage = persist_login_token(TOKEN, false, &keyring, &plaintext).unwrap();
+        let storage =
+            persist_login_token(TOKEN, TokenStorageMode::Keyring, &keyring, &plaintext).unwrap();
 
         assert_eq!(storage, TokenStorage::Plaintext);
         assert_eq!(keyring.get().unwrap(), None);
@@ -1022,21 +1050,41 @@ mod tests {
         plaintext_mock.set_error("config file is unreadable");
         let plaintext = CredentialStoreImpl::Mock(plaintext_mock);
 
-        let storage = persist_login_token(TOKEN, false, &keyring, &plaintext).unwrap();
+        let storage =
+            persist_login_token(TOKEN, TokenStorageMode::Keyring, &keyring, &plaintext).unwrap();
 
         assert_eq!(storage, TokenStorage::Keyring);
         assert_eq!(keyring.get().unwrap(), Some(TOKEN.to_string()));
     }
 
-    /// `--insecure-storage` forces plaintext even when the keyring write would
-    /// have succeeded; the keyring is never touched.
+    /// A `Plaintext` target forces the plaintext file even when the keyring
+    /// write would have succeeded; the keyring is never written.
     #[test]
-    fn login_insecure_storage_forces_plaintext() {
+    fn login_plaintext_target_forces_plaintext() {
         let dir = tempfile::tempdir().unwrap();
         let keyring = CredentialStoreImpl::Mock(MockStore::new());
         let plaintext = CredentialStoreImpl::Plaintext(PlaintextStore::new(dir.path()));
 
-        let storage = persist_login_token(TOKEN, true, &keyring, &plaintext).unwrap();
+        let storage =
+            persist_login_token(TOKEN, TokenStorageMode::Plaintext, &keyring, &plaintext).unwrap();
+
+        assert_eq!(storage, TokenStorage::Plaintext);
+        assert_eq!(keyring.get().unwrap(), None);
+        assert_eq!(plaintext.get().unwrap(), Some(TOKEN.to_string()));
+    }
+
+    /// Storing plain text drops any pre-existing keyring entry so it is not left
+    /// behind as a stale secret (e.g. to resurface on a later read if the
+    /// plain-text file is removed).
+    #[test]
+    fn login_plaintext_target_removes_stale_keyring_entry() {
+        let dir = tempfile::tempdir().unwrap();
+        let keyring = CredentialStoreImpl::Mock(MockStore::new());
+        keyring.set("stale-keyring-token").unwrap();
+        let plaintext = CredentialStoreImpl::Plaintext(PlaintextStore::new(dir.path()));
+
+        let storage =
+            persist_login_token(TOKEN, TokenStorageMode::Plaintext, &keyring, &plaintext).unwrap();
 
         assert_eq!(storage, TokenStorage::Plaintext);
         assert_eq!(keyring.get().unwrap(), None);
@@ -1061,7 +1109,14 @@ mod tests {
             let plaintext = CredentialStoreImpl::Mock(MockStore::new());
 
             let mut config = config_with_token(None);
-            let outcome = resolve_credential_into(&mut config, &keyring, &plaintext, false, true);
+            let outcome = resolve_credential_into(
+                &mut config,
+                &keyring,
+                &plaintext,
+                false,
+                true,
+                TokenStorageMode::Keyring,
+            );
 
             assert_eq!(outcome, ResolveOutcome::PopulatedFromKeyring);
             assert_eq!(config.flox.floxhub_token.as_deref(), Some(TOKEN));
@@ -1080,7 +1135,14 @@ mod tests {
             let plaintext = CredentialStoreImpl::Mock(MockStore::new());
 
             let mut config = config_with_token(Some("config-token"));
-            let outcome = resolve_credential_into(&mut config, &keyring, &plaintext, false, true);
+            let outcome = resolve_credential_into(
+                &mut config,
+                &keyring,
+                &plaintext,
+                false,
+                true,
+                TokenStorageMode::Keyring,
+            );
 
             assert_eq!(outcome, ResolveOutcome::Unchanged);
             assert_eq!(config.flox.floxhub_token.as_deref(), Some("config-token"));
@@ -1096,7 +1158,14 @@ mod tests {
         let plaintext = CredentialStoreImpl::Mock(MockStore::new());
 
         let mut config = config_with_token(None);
-        let outcome = resolve_credential_into(&mut config, &keyring, &plaintext, true, true);
+        let outcome = resolve_credential_into(
+            &mut config,
+            &keyring,
+            &plaintext,
+            true,
+            true,
+            TokenStorageMode::Keyring,
+        );
 
         assert_eq!(outcome, ResolveOutcome::Unchanged);
         assert_eq!(config.flox.floxhub_token, None);
@@ -1116,7 +1185,14 @@ mod tests {
 
             // Mirror the merge: the user-file token is already in the config.
             let mut config = config_with_token(Some(TOKEN));
-            let outcome = resolve_credential_into(&mut config, &keyring, &plaintext, false, true);
+            let outcome = resolve_credential_into(
+                &mut config,
+                &keyring,
+                &plaintext,
+                false,
+                true,
+                TokenStorageMode::Keyring,
+            );
 
             assert_eq!(outcome, ResolveOutcome::Migrated);
             assert_eq!(keyring.get().unwrap(), Some(TOKEN.to_string()));
@@ -1138,7 +1214,14 @@ mod tests {
             let keyring = CredentialStoreImpl::Mock(MockStore::new());
 
             let mut config = config_with_token(Some("env-token"));
-            let outcome = resolve_credential_into(&mut config, &keyring, &plaintext, false, true);
+            let outcome = resolve_credential_into(
+                &mut config,
+                &keyring,
+                &plaintext,
+                false,
+                true,
+                TokenStorageMode::Keyring,
+            );
 
             assert_eq!(outcome, ResolveOutcome::Unchanged);
             assert_eq!(keyring.get().unwrap(), None);
@@ -1161,11 +1244,45 @@ mod tests {
             let mut config = config_with_token(Some(TOKEN));
             // is_auth0 = false models a non-Auth0 config; the Kerberos variant
             // is feature-gated, so it cannot be constructed here directly.
-            let outcome = resolve_credential_into(&mut config, &keyring, &plaintext, false, false);
+            let outcome = resolve_credential_into(
+                &mut config,
+                &keyring,
+                &plaintext,
+                false,
+                false,
+                TokenStorageMode::Keyring,
+            );
 
             assert_eq!(outcome, ResolveOutcome::Unchanged);
             // The keyring was never written and the plaintext token still
             // exists on disk.
+            assert_eq!(keyring.get().unwrap(), None);
+            assert_eq!(plaintext.get().unwrap(), Some(TOKEN.to_string()));
+        });
+    }
+
+    /// When the standing storage preference is plain text, a user-file token is
+    /// not migrated into the keyring: the keyring is never written and the
+    /// plain-text token stays on disk.
+    #[test]
+    fn resolve_skips_migration_when_storage_is_plaintext() {
+        temp_env::with_var(FLOXHUB_TOKEN_ENV_VAR, None::<&str>, || {
+            let dir = tempfile::tempdir().unwrap();
+            write_flox_toml(dir.path(), &format!("floxhub_token = \"{TOKEN}\"\n"));
+            let plaintext = CredentialStoreImpl::Plaintext(PlaintextStore::new(dir.path()));
+            let keyring = CredentialStoreImpl::Mock(MockStore::new());
+
+            let mut config = config_with_token(Some(TOKEN));
+            let outcome = resolve_credential_into(
+                &mut config,
+                &keyring,
+                &plaintext,
+                false,
+                true,
+                TokenStorageMode::Plaintext,
+            );
+
+            assert_eq!(outcome, ResolveOutcome::Unchanged);
             assert_eq!(keyring.get().unwrap(), None);
             assert_eq!(plaintext.get().unwrap(), Some(TOKEN.to_string()));
         });
@@ -1186,7 +1303,14 @@ mod tests {
             let keyring = CredentialStoreImpl::Mock(keyring_mock);
 
             let mut config = config_with_token(Some(TOKEN));
-            let outcome = resolve_credential_into(&mut config, &keyring, &plaintext, false, true);
+            let outcome = resolve_credential_into(
+                &mut config,
+                &keyring,
+                &plaintext,
+                false,
+                true,
+                TokenStorageMode::Keyring,
+            );
 
             assert_eq!(outcome, ResolveOutcome::Unchanged);
             assert_eq!(keyring.get().unwrap(), None);
@@ -1208,7 +1332,14 @@ mod tests {
             let keyring = CredentialStoreImpl::Mock(MockStore::new());
 
             let mut config = config_with_token(Some(TOKEN));
-            let outcome = resolve_credential_into(&mut config, &keyring, &plaintext, false, true);
+            let outcome = resolve_credential_into(
+                &mut config,
+                &keyring,
+                &plaintext,
+                false,
+                true,
+                TokenStorageMode::Keyring,
+            );
 
             assert_eq!(outcome, ResolveOutcome::MigratedButPlaintextRemains);
             // The keyring received the token; the plaintext copy still lingers.
@@ -1226,7 +1357,14 @@ mod tests {
         let keyring = CredentialStoreImpl::Mock(MockStore::new());
 
         let mut config = config_with_token(Some(TOKEN));
-        let outcome = resolve_credential_into(&mut config, &keyring, &plaintext, true, true);
+        let outcome = resolve_credential_into(
+            &mut config,
+            &keyring,
+            &plaintext,
+            true,
+            true,
+            TokenStorageMode::Keyring,
+        );
 
         assert_eq!(outcome, ResolveOutcome::Unchanged);
         assert_eq!(keyring.get().unwrap(), None);
