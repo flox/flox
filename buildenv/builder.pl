@@ -167,20 +167,25 @@ sub parseStorePath($) {
 #
 # parseStorePath splits the package-name-version on /-(?=\d)/, so for
 # a multi-output store path like ".../<hash>-kitty-0.47.4-kitten" the
-# returned version is "0.47.4-kitten". Nix output names by convention
-# are lowercase alphabetic identifiers (out, dev, lib, man, doc, bin,
-# info, plus user-defined like "kitten"). The detection rule below
-# treats a trailing /-([a-z]+)$/ on the version as the output name
-# and otherwise returns the implicit default "out".
+# returned version is "0.47.4-kitten" — the output suffix lands
+# inside the version field. An output name in Nixpkgs convention
+# starts with a lowercase letter and contains only alphanumeric or
+# underscore characters (e.g. "out", "dev", "lib", "kitten",
+# "shell_integration", "lib32"). It never contains a "." or "-",
+# which is how we distinguish it from a trailing version qualifier
+# such as "rc1" or "1.0.0-final".
+#
+# Common version qualifiers that would otherwise satisfy the shape
+# rule (rc, alpha, beta, pre, final, nightly, stable) are denied
+# explicitly to avoid rendering "1.0.0-alpha" as output "alpha".
 sub parseOutputFromVersion {
     my $version = shift;
     return "out" unless defined $version && $version =~ /-/;
     my @parts = split /-/, $version;
     my $last = $parts[-1];
-    # Require purely lowercase alphabetic to avoid mistaking version
-    # qualifiers (rc1, alpha2, 1.0.0-final's "final" is allowed but
-    # "rc1" is not because of the digit) for outputs.
-    return "out" unless $last =~ /^[a-z]+$/;
+    return "out" unless $last =~ /^[a-z][a-zA-Z0-9_]*$/;
+    return "out" if $last =~
+        /^(rc|alpha|beta|pre|final|nightly|stable|snapshot|dirty)\d*$/i;
     return $last;
 }
 
