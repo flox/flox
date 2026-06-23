@@ -68,7 +68,18 @@ let
           lib.hasInfix "example.invalid" value || lib.hasInfix "REPLACE-BEFORE-MERGE" value
         ) "METRICS_EVENTS_URL_V2 still contains a placeholder; replace before deployment." value;
       METRICS_EVENTS_API_KEY = "5pAQnBqz5Q7dpqVD9BEXQ4Kdc3D2fGTd3ZgP0XXK";
-      METRICS_EVENTS_API_KEY_V2 = "REPLACE-BEFORE-MERGE";
+      # Guarded like METRICS_EVENTS_URL_V2 above: a release built with a
+      # real URL but a placeholder key would pass the URL gate and then
+      # be rejected at ingest, silently dropping every event. The
+      # companion sentinel test `metrics_events_api_key_v2_is_not_placeholder`
+      # in `cli/flox/src/utils/events.rs` enforces the same at `cargo test`.
+      METRICS_EVENTS_API_KEY_V2 =
+        let
+          value = "REPLACE-BEFORE-MERGE";
+        in
+        lib.warnIf (lib.hasInfix "REPLACE-BEFORE-MERGE" value)
+          "METRICS_EVENTS_API_KEY_V2 still contains a placeholder; replace before deployment."
+          value;
 
       # oauth client id
       OAUTH_CLIENT_ID = "fGrotHBfQr9X1PHGbFoifEWaDPyWZDmc";
