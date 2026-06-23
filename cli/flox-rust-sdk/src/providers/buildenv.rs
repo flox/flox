@@ -808,73 +808,15 @@ where
         }
 
         // If we get here it means we need to build a package from source.
-
-        let installable = {
-            // We swap out the locked URL of the package (which points at our nixpkgs
-            // fork) for a flake reference that uses our custom `flox-nixpkgs` URL
-            // scheme. This disables certain built-in evaluation checks (allowUnfree, etc).
-            // That's important because we move those checks into manifest options, and
-            // don't want conflicts or duplicates.
-            let mut locked_url = locked_pkg.locked_url.to_string();
-            if let Some(revision_suffix) = locked_url.strip_prefix(NIXPKGS_CATALOG_URL_PREFIX) {
-                locked_url = format!("{FLOX_NIXPKGS_PROXY_FLAKE_REF_BASE}/{revision_suffix}");
-            } else {
-                return Err(BuildEnvError::LockfileContents(format!(
-                    "Locked package '{}' is a base catalog package, but the locked url '{}' does not start with the expected prefix '{}'",
-                    locked_pkg.install_id, locked_pkg.locked_url, NIXPKGS_CATALOG_URL_PREFIX
-                )));
-            }
-
-            // For the attribute path we construct a real installable's attribute path
-            // by prepending `legacyPackages.<system>` to the `pkg-path`/`attr_path`.
-            //
-            // The `^*` bit builds all outputs.
-            let attrpath = format!(
-                "legacyPackages.{}.{}^*",
-                locked_pkg.system, locked_pkg.attr_path
-            );
-
-            format!("{}#{}", locked_url, attrpath)
-        };
-
-        let reason = match (locked_pkg.unfree, locked_pkg.broken) {
-            (Some(true), _) => " (unfree license)",
-            (_, Some(true)) => " (upstream build marked as broken)",
-            _ => "",
-        };
-
-        let _span = info_span!(
-            parent: span.clone(),
-            "build from catalog",
-            progress = format!("Building '{}' from source{reason}", locked_pkg.attr_path)
+        // Delegate to the shared function so buildenv and `flox run` stay in sync.
+        build_catalog_pkg_from_source(
+            &locked_pkg.locked_url,
+            &locked_pkg.attr_path,
+            &locked_pkg.system,
+            locked_pkg.unfree,
+            locked_pkg.broken,
+            None, // buildenv manages its own GC roots; use --no-link here
         )
-        .entered();
-
-        let mut nix_build_command = base_command();
-
-        nix_build_command.args(["--option", "extra-plugin-files", &*NIX_PLUGINS]);
-
-        nix_build_command.arg("build");
-        nix_build_command.arg("--no-write-lock-file");
-        nix_build_command.arg("--no-update-lock-file");
-        nix_build_command.args(["--option", "pure-eval", "true"]);
-        nix_build_command.arg("--no-link");
-        nix_build_command.arg(&installable);
-
-        debug!(%installable, cmd=%nix_build_command.display(), "building catalog package");
-
-        let output = nix_build_command
-            .output()
-            .map_err(BuildEnvError::CallNixBuild)?;
-
-        if !output.status.success() {
-            return Err(BuildEnvError::Realise2 {
-                install_id: locked_pkg.install_id.clone(),
-                message: String::from_utf8_lossy(&output.stderr).to_string(),
-            });
-        }
-
-        Ok(())
     }
 
     /// Realise a package from a flake.
@@ -1221,12 +1163,12 @@ fn nix_path_info_null_paths(paths: &[String]) -> Result<Vec<String>, std::io::Er
 /// `expected_paths` returns the full list of store paths the environment
 /// depends on. It is called once per attempt for diagnostic logging and
 /// for the `nix path-info` store-database check on failure.
-fn materialise_with_retry(
+pub fn materialise_with_retry<T>(
     mut realise: impl FnMut() -> Result<(), BuildEnvError>,
     mut missing_paths: impl FnMut() -> Vec<String>,
     expected_paths: impl Fn() -> Vec<String>,
-    mut build_env: impl FnMut() -> Result<BuildEnvOutputs, BuildEnvError>,
-) -> Result<BuildEnvOutputs, BuildEnvError> {
+    mut build_env: impl FnMut() -> Result<T, BuildEnvError>,
+) -> Result<T, BuildEnvError> {
     const MAX_RETRIES: usize = 3;
     for attempt in 1..=MAX_RETRIES {
         realise()?;

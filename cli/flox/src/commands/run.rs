@@ -28,6 +28,7 @@ use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::providers::buildenv::{
     BuildEnvError,
     build_catalog_pkg_from_source,
+    materialise_with_retry,
     substitute_store_paths,
 };
 use floxhub_client::{
@@ -483,13 +484,25 @@ async fn exec_run(run_args: RunArgs, flox: &Flox) -> Result<()> {
                     progress = format!("Building '{pkg_spec}' from source...")
                 )
                 .entered();
-                build_catalog_pkg_from_source(
-                    &resolved_pkg.locked_url,
-                    &attr_path,
-                    &flox.system,
-                    resolved_pkg.unfree,
-                    resolved_pkg.broken,
-                    Some(&build_gc_root),
+                materialise_with_retry(
+                    || {
+                        build_catalog_pkg_from_source(
+                            &resolved_pkg.locked_url,
+                            &attr_path,
+                            &flox.system,
+                            resolved_pkg.unfree,
+                            resolved_pkg.broken,
+                            Some(&build_gc_root),
+                        )
+                    },
+                    || {
+                        collect_store_paths_from_gc_root(&build_gc_root)
+                            .into_iter()
+                            .filter(|p| std::fs::metadata(p).is_err())
+                            .collect()
+                    },
+                    || collect_store_paths_from_gc_root(&build_gc_root),
+                    || Ok::<(), BuildEnvError>(()),
                 )
                 .map_err(|e| RunError::BuildFailed(pkg_spec.clone(), e))?;
                 drop(_span);
@@ -636,6 +649,38 @@ pub fn collect_bin_dirs_from_gc_root(prefix: &Path) -> Vec<PathBuf> {
         }
     }
     bin_dirs
+}
+
+/// Collect the Nix store-path targets of build output symlinks rooted at `prefix`.
+///
+/// After `nix build --out-link <prefix>`, symlinks like `<prefix>`,
+/// `<prefix>-doc`, `<prefix>-dev` point into the Nix store.  This function
+/// returns those store-path strings so callers can check whether they are
+/// present on disk (used as the `missing_paths` / `expected_paths` closures
+/// passed to `materialise_with_retry`).
+pub fn collect_store_paths_from_gc_root(prefix: &Path) -> Vec<String> {
+    let parent = match prefix.parent() {
+        Some(p) => p,
+        None => return vec![],
+    };
+    let file_name = match prefix.file_name().and_then(OsStr::to_str) {
+        Some(n) => n.to_string(),
+        None => return vec![],
+    };
+    let Ok(entries) = std::fs::read_dir(parent) else {
+        return vec![];
+    };
+    entries
+        .flatten()
+        .filter(|e| {
+            let n = e.file_name();
+            let s = n.to_string_lossy();
+            s == file_name || s.starts_with(&format!("{file_name}-"))
+        })
+        .filter(|e| e.path().is_symlink())
+        .filter_map(|e| std::fs::read_link(e.path()).ok())
+        .filter_map(|t| t.to_str().map(|s| s.to_string()))
+        .collect()
 }
 
 /// Prepend `dirs` to the current `PATH`, returning the combined value.
