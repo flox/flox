@@ -1074,6 +1074,29 @@ fn nix_path_info_null_paths(paths: &[String]) -> Result<Vec<String>, std::io::Er
         .collect())
 }
 
+/// Returns true if `err` reports a buildenv package-output conflict from
+/// `buildenv/builder.pl`. These errors are deterministic — the same lockfile
+/// will always produce the same conflict — and must not be retried.
+///
+/// Matches on the conflict-specific resolution hint emitted at
+/// `buildenv/builder.pl:245` (`Resolve by uninstalling one of the conflicting
+/// packages`) rather than the broader `❌ ERROR:` sentinel installed by the
+/// `$SIG{__DIE__}` handler at `buildenv/builder.pl:13`. The broader sentinel
+/// covers builder.pl's filesystem `die` paths (EMFILE, ENOSPC, etc. during
+/// mkpath/symlink), which are genuinely transient and must remain retryable.
+///
+/// If `buildenv/builder.pl`'s conflict message changes, the unit test
+/// `materialise_retry_tests::deterministic_buildenv_conflict_short_circuits`
+/// will break and signal a contract update is needed.
+fn is_deterministic_buildenv_conflict(err: &BuildEnvError) -> bool {
+    match err {
+        BuildEnvError::Build(stderr) => {
+            stderr.contains("Resolve by uninstalling one of the conflicting packages")
+        },
+        _ => false,
+    }
+}
+
 /// Retry loop for materialisation and environment construction.
 ///
 /// Calls `realise` to materialise store paths, then `missing_paths` to detect
@@ -1099,6 +1122,10 @@ fn nix_path_info_null_paths(paths: &[String]) -> Result<Vec<String>, std::io::Er
 ///   filesystem but not registered (e.g. a CI cache that bypassed the
 ///   daemon).  Those paths are force-registered with
 ///   `nix build --no-link --keep-going` and the attempt is retried.
+///
+/// Package-output conflicts detected by [`is_deterministic_buildenv_conflict`]
+/// are short-circuited immediately without retrying; the same lockfile always
+/// produces the same conflict.
 ///
 /// `realise` errors always propagate immediately; a path that never appeared
 /// in the store is not a GC race.
@@ -1168,6 +1195,18 @@ fn materialise_with_retry(
                     // daemon, leaving paths on disk but unregistered.
                     match nix_path_info_null_paths(&confirmed) {
                         Ok(null_paths) if null_paths.is_empty() => {
+                            // Short-circuit deterministic package-output conflicts
+                            // before spending retries. The same lockfile always
+                            // produces the same conflict, so retrying cannot help.
+                            if is_deterministic_buildenv_conflict(&e) {
+                                debug!(
+                                    error = %e,
+                                    attempt,
+                                    "buildenv.nix reported a deterministic \
+                                    package-output conflict — not retrying"
+                                );
+                                return Err(e);
+                            }
                             // Daemon confirms all paths are registered. This is
                             // usually a genuine deterministic failure, but there
                             // is a race: a path can arrive on disk (passing
@@ -1178,7 +1217,7 @@ fn materialise_with_retry(
                             // only treat it as deterministic once retries are
                             // exhausted.
                             if attempt < MAX_RETRIES {
-                                warn!(
+                                debug!(
                                     error = %e,
                                     attempt,
                                     MAX_RETRIES,
@@ -2942,6 +2981,52 @@ mod materialise_retry_tests {
             "must exhaust all retries before propagating"
         );
         assert_eq!(build_calls.get(), 3, "build_env must be retried");
+    }
+
+    // --- deterministic conflict short-circuit ---
+
+    #[test]
+    fn deterministic_buildenv_conflict_short_circuits() {
+        init_tracing();
+        // build_env always returns a conflict error containing the
+        // builder.pl resolution hint. realise and missing_paths are
+        // wired to never block progress so the conflict is the only
+        // reason for failure.
+        let realise_calls = Cell::new(0usize);
+        let build_calls = Cell::new(0usize);
+        let conflict_stderr = "environment> ❌ ERROR: 'vim' conflicts with \
+                               'vim-full'. Both packages provide the file \
+                               'bin/ex'\nenvironment> \nenvironment> Resolve \
+                               by uninstalling one of the conflicting \
+                               packages or setting the priority of the \
+                               preferred package to a value lower than '5'"
+            .to_string();
+        let result = materialise_with_retry(
+            || {
+                realise_calls.set(realise_calls.get() + 1);
+                Ok(())
+            },
+            Vec::new, // paths always present
+            Vec::new,
+            || {
+                build_calls.set(build_calls.get() + 1);
+                Err(BuildEnvError::Build(conflict_stderr.clone()))
+            },
+        );
+        match result.unwrap_err() {
+            BuildEnvError::Build(msg) => assert_eq!(msg, conflict_stderr),
+            e => panic!("expected Build, got {e:?}"),
+        }
+        assert_eq!(
+            build_calls.get(),
+            1,
+            "must not retry a deterministic package-output conflict"
+        );
+        assert_eq!(
+            realise_calls.get(),
+            1,
+            "realise called once before short-circuit"
+        );
     }
 
     // --- realise errors ---
