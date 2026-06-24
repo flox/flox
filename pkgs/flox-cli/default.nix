@@ -1,5 +1,5 @@
 {
-  bashInteractive,
+  bash,
   cacert,
   coreutils,
   darwin,
@@ -41,10 +41,10 @@ let
 
       # [sic] nix handles `BASH_` variables specially,
       # so we need to use a different name.
-      INTERACTIVE_BASH_BIN = "${bashInteractive}/bin/bash";
+      INTERACTIVE_BASH_BIN = "${bash}/bin/bash";
 
       # Required by flox-activations crate
-      X_BASH_BIN = "${bashInteractive}/bin/bash";
+      X_BASH_BIN = "${bash}/bin/bash";
       COREUTILS = "${coreutils}";
 
       # Metrics subsystem configuration
@@ -101,7 +101,7 @@ craneLib.buildPackage (
     #
     # See: <https://github.com/flox/flox/issues/1820>
     propagatedBuildInputs = rust-internal-deps.propagatedBuildInputs ++ [
-      bashInteractive
+      bash
       nix.out
       flox-interpreter
     ];

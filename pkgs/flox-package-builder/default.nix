@@ -1,5 +1,5 @@
 {
-  bashInteractive,
+  bash,
   coreutils,
   cpio,
   daemonize,
@@ -27,7 +27,7 @@ stdenv.mkDerivation {
   postPatch = ''
     # Need to perform substitutions within derivation for access to $out.
     for i in build-manifest.nix flox-build.mk validate-build.bash; do
-      bashInteractive=${bashInteractive} \
+      bash=${bash} \
       coreutils=${coreutils} \
       cpio=${cpio} \
       daemonize=${daemonize} \
