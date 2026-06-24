@@ -1,4 +1,23 @@
+experimental = ["setup-scripts"]
+
 [profile.ci.junit]
 path = "junit.xml"
 store-success-output = true
 store-failure-output = true
+
+# Isolate git config for unit tests.
+#
+# Unit-test git operations otherwise inherit the developer's real system and
+# global git config. If that config enables commit signing with a hardware key
+# (commit.gpgsign + user.signingkey), test-driven commits hang waiting for a
+# touch. Point GIT_CONFIG_SYSTEM and GIT_CONFIG_GLOBAL at /dev/null so commits
+# never read it, mirroring how the bats suite pins these in
+# cli/tests/setup_suite.bash. Writing to $NEXTEST_ENV sets the variables for
+# every test process, regardless of how the repo under test is constructed.
+# Attached to the default profile; the ci profile inherits it.
+[scripts.setup.git-config-isolation]
+command = 'bash -c "echo GIT_CONFIG_SYSTEM=/dev/null >> $NEXTEST_ENV; echo GIT_CONFIG_GLOBAL=/dev/null >> $NEXTEST_ENV"'
+
+[[profile.default.scripts]]
+filter = 'all()'
+setup = 'git-config-isolation'
