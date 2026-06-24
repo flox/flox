@@ -691,7 +691,6 @@ where
                 .rel_expression_build_base_dir
                 .to_string_lossy()
                 .into_owned(),
-            locked_inputs: None,
         };
 
         tracing::debug!(?build_info, "Publishing build in catalog...");

@@ -40,6 +40,7 @@ pub use api_types::{
     BuildInputsLookupRequest,
     BuildInputsLookupResponse,
     GroupResult,
+    LockedGitSource,
     LockedInputEntry,
     LookupGroup,
     ReferencePoint,

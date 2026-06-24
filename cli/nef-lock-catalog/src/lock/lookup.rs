@@ -17,7 +17,6 @@ use floxhub_client::{
     FloxhubClientError,
     LockedInputEntry,
     LookupGroup,
-    PackageSystem,
     Stability,
     UnresolvableEntry,
 };
@@ -78,8 +77,9 @@ pub async fn lock_references(
 /// Convert the reference list into the generated wire request.
 ///
 /// Wraps all references in a single [`floxhub_client::LookupGroup`].
-/// `reference_point` is defaulted to `None` for now; `system` is filled with a
-/// placeholder to satisfy the (soon-to-be-removed) required wire field.
+/// `reference_point` is defaulted to `None` for now. The endpoint is
+/// system-independent: the response carries source revs + DAG edges, which
+/// carry no system, so the request has no system field.
 fn build_request(
     references: BTreeSet<CatalogRef>,
     stability: Stability,
@@ -94,10 +94,6 @@ fn build_request(
         groups: vec![group],
         reference_point: None,
         stability,
-        // `system` is required by the current generated schema but is being
-        // removed from this endpoint upstream; send a placeholder until the
-        // regenerated schema drops the field.
-        system: PackageSystem::Invalid,
     }
 }
 
@@ -174,7 +170,13 @@ mod tests {
         );
         assert_eq!(
             value["catalogs"]["myorg"]["packages"]["entries"]["hello"]["source"],
-            json!({ "type": "git", "url": "https://example.com/repo", "rev": "abc123" })
+            json!({
+                "type": "git",
+                "url": "https://example.com/repo",
+                "rev": "abc123",
+                "ref": "refs/heads/main",
+                "dir": "."
+            })
         );
     }
 
