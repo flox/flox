@@ -210,6 +210,13 @@ impl Activate {
         // Both telemetry stacks emit in parallel through the dormant
         // phase; the new-pipeline mirrors below are no-ops in production
         // until the cutover PR installs an `EventsHub` client.
+        //
+        // This v2 emit sits at the same dispatch point as the legacy
+        // `environment_subcommand_metric!` above — before the remote-trust
+        // check below — to mirror it 1:1 (parity contract). The activation
+        // *outcome* is carried on `cli.command_completed` (exit_code), not by
+        // the presence of this dispatch-time event, so emitting before a
+        // possible trust decline is intentional, not a logged false success.
         let v2_env_detail = env_detail_from_concrete(&concrete_environment);
         let v2_mode = options
             .mode

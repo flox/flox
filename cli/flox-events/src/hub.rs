@@ -95,10 +95,10 @@ impl EventsHub {
         })
     }
 
-    /// Record a `cli.environment.activate` event. The caller builds the
-    /// payload via [`EventsClient::build_environment_activate_payload`]
-    /// (typically through [`EventsHub::build_environment_activate_payload`])
-    /// so the call site can populate only the activate extras it knows.
+    /// Record a `cli.environment.activate` event from an already-built
+    /// payload. Most call sites should prefer
+    /// [`EventsHub::record_environment_activate_with`], which builds the
+    /// payload and applies the activate extras in a single call.
     /// No-op when no client is installed.
     pub fn record_environment_activate(
         &self,
@@ -110,20 +110,6 @@ impl EventsHub {
                 return Ok(());
             };
             client.record_environment_activate(payload)
-        })
-    }
-
-    /// Build an empty-extras `cli.environment.activate` payload using the
-    /// installed client's shared metadata. Returns `None` when no client is
-    /// installed (production-dormant branch).
-    pub fn build_environment_activate_payload(
-        &self,
-        env_detail: EnvDetail,
-    ) -> Option<CliEnvironmentActivatePayload> {
-        self.with_client(|client| {
-            client
-                .as_ref()
-                .map(|c| c.build_environment_activate_payload(env_detail))
         })
     }
 

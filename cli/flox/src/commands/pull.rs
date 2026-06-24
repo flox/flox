@@ -152,6 +152,11 @@ impl Pull {
                     .await?;
                 environment_subcommand_metric!("pull", environment);
 
+                // Dispatch-time emit at the same point as the legacy
+                // `environment_subcommand_metric!` above — before the
+                // path-environment bail below — mirroring it 1:1 (parity
+                // contract). Outcome rides on `cli.command_completed`
+                // (exit_code), so emitting before the bail is intentional.
                 if let Err(err) = EventsHub::global()
                     .record_environment_pull(env_detail_from_concrete(&environment))
                 {
