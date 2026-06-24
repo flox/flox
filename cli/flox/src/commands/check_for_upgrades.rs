@@ -208,6 +208,23 @@ pub fn spawn_detached_check_for_upgrades_process(
     // then gets unset when the CLI starts.
     command.env(FLOX_VERSION_VAR, &*FLOX_VERSION_STRING);
 
+    // Propagate the parent's v2 invocation_id so the detached
+    // upgrade-check process emits its `cli.command_run` /
+    // `cli.command_completed` events under the same invocation as the
+    // parent flox command that triggered it (rather than appearing as a
+    // separate top-level user invocation downstream). The child reads
+    // this variable in `crate::utils::events::resolve_invocation_id`. We
+    // explicitly do *not* set this variable into the parent's process
+    // environment, only on this `Command`'s child env, so that the
+    // user-shell `command.exec()` path in `activate.rs` does not leak the
+    // id forward into the user's shell.
+    if let Some(parent_invocation_id) = crate::utils::events::current_invocation_id() {
+        command.env(
+            crate::utils::events::FLOX_INVOCATION_ID_VAR,
+            parent_invocation_id.to_string(),
+        );
+    }
+
     command.arg("check-for-upgrades");
     command.arg(environment_json);
 

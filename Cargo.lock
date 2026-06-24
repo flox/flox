@@ -1455,6 +1455,7 @@ dependencies = [
  "factory-api-v1",
  "flox-activations",
  "flox-core",
+ "flox-events",
  "flox-manifest",
  "flox-rust-sdk",
  "flox-test-utils",

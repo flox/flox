@@ -192,6 +192,95 @@ impl fmt::Debug for Commands {
     }
 }
 
+impl Commands {
+    /// Centrally-derived subcommand name stamped onto v2
+    /// `cli.command_run` / `cli.command_completed` events.
+    ///
+    /// Nested commands use the `parent::child` join convention (see
+    /// `services::start`, `generations::switch`, etc.) — PR 5 pins this
+    /// convention against the consumer-side classifiers. The `auth`
+    /// command's downstream classifier needs the literal `auth2` —
+    /// the special-case rewrite is deferred to PR 5 per spec.
+    ///
+    /// The `Help` arm of each nested family (e.g. `flox services
+    /// --help`) uses the `parent::help` form rather than the bare
+    /// parent name, so the wire shape distinguishes "the user
+    /// explicitly asked for help on `services`" from any future
+    /// emission that uses the bare parent name.
+    pub fn subcommand_name(&self) -> &'static str {
+        match self {
+            Commands::Help(_) => "help",
+            Commands::Manage(c) => match c {
+                ManageCommands::Init(_) => "init",
+                ManageCommands::Envs(_) => "envs",
+                ManageCommands::Delete(_) => "delete",
+            },
+            Commands::Use(c) => match c {
+                UseCommands::Activate(_) => "activate",
+                UseCommands::Deactivate(_) => "deactivate",
+                UseCommands::Services(sub) => match sub {
+                    services::ServicesCommands::Help => "services::help",
+                    services::ServicesCommands::Restart(_) => "services::restart",
+                    services::ServicesCommands::Start(_) => "services::start",
+                    services::ServicesCommands::Status(_) => "services::status",
+                    services::ServicesCommands::Stop(_) => "services::stop",
+                    services::ServicesCommands::Logs(_) => "services::logs",
+                    services::ServicesCommands::Persist(_) => "services::persist",
+                },
+            },
+            Commands::Discover(c) => match c {
+                DiscoverCommands::Search(_) => "search",
+                DiscoverCommands::Show(_) => "show",
+            },
+            Commands::Modify(c) => match c {
+                ModifyCommands::Install(_) => "install",
+                ModifyCommands::List(_) => "list",
+                ModifyCommands::Edit(_) => "edit",
+                ModifyCommands::Include(sub) => match sub {
+                    include::IncludeCommands::Help => "include::help",
+                    include::IncludeCommands::Upgrade(_) => "include::upgrade",
+                },
+                ModifyCommands::Upgrade(_) => "upgrade",
+                ModifyCommands::Uninstall(_) => "uninstall",
+                ModifyCommands::Generations(sub) => match sub {
+                    generations::GenerationsCommands::Help => "generations::help",
+                    generations::GenerationsCommands::List(_) => "generations::list",
+                    generations::GenerationsCommands::History(_) => "generations::history",
+                    generations::GenerationsCommands::Rollback(_) => "generations::rollback",
+                    generations::GenerationsCommands::Switch(_) => "generations::switch",
+                },
+            },
+            Commands::Share(c) => match c {
+                ShareCommands::Build(_) => "build",
+                ShareCommands::Publish(_) => "publish",
+                ShareCommands::Push(_) => "push",
+                ShareCommands::Pull(_) => "pull",
+                ShareCommands::Containerize(_) => "containerize",
+            },
+            Commands::Admin(c) => match c {
+                AdminCommands::Auth(_) => "auth",
+                AdminCommands::Config(_) => "config",
+                AdminCommands::Gc(_) => "gc",
+            },
+            Commands::Internal(c) => match c {
+                InternalCommands::ResetMetrics(_) => "reset-metrics",
+                InternalCommands::Upload(_) => "upload",
+                InternalCommands::LockManifest(_) => "lock-manifest",
+                InternalCommands::CheckForUpgrades(_) => "check-for-upgrades",
+                InternalCommands::ActivationState(_) => "activation-state",
+                InternalCommands::ServicesSocket(_) => "services-socket",
+                InternalCommands::HookEnv(_) => "hook-env",
+            },
+            Commands::Beta(c) => match c {
+                beta::BetaCommands::BetaEnabled(_) => "beta-enabled",
+            },
+            // Hidden operator command group; the legacy pipeline emitted no
+            // metric for it, so the bare parent name is sufficient here.
+            Commands::Factory(_) => "factory",
+        }
+    }
+}
+
 impl FloxArgs {
     /// Initialize the command line by creating an initial FloxBuilder
     pub async fn handle(self, config: crate::config::Config) -> Result<()> {
@@ -253,6 +342,25 @@ impl FloxArgs {
             unsafe {
                 env::set_var(FLOX_DISABLE_METRICS_VAR, "true");
             }
+        }
+
+        // Emit the v2 `cli.command_run` exactly once at dispatch
+        // start. The flox-events `EventsHub` was installed in `main.rs`
+        // and short-circuits in production until the cutover PR. The
+        // matching `cli.command_completed` is emitted at the end of
+        // `cli_worker` below (or immediately before `activate.rs`'s
+        // `command.exec()` call when activate replaces the parent
+        // process) — the hub's idempotent flag ensures only one of the
+        // two paths actually records the completed event.
+        let v2_subcommand: &'static str = self
+            .command
+            .as_ref()
+            .map(Commands::subcommand_name)
+            .unwrap_or("help");
+        if let Err(err) =
+            flox_events::EventsHub::global().record_command_run(v2_subcommand.to_string())
+        {
+            debug!(error = %err, "Failed to record v2 cli.command_run event");
         }
 
         let git_url_override = {
@@ -366,6 +474,16 @@ impl FloxArgs {
                 Err(e) => debug!("Failed to check for CLI update: {}", display_chain(&e)),
             }
 
+            // Emit the v2 `cli.command_completed`. When `activate.rs`
+            // has already recorded its own completion before `command.exec()`
+            // replaces the parent process, the hub's idempotent flag silently
+            // turns this call into a no-op.
+            if let Err(err) =
+                flox_events::EventsHub::global().record_command_completed(v2_subcommand.to_string())
+            {
+                debug!(error = %err, "Failed to record v2 cli.command_completed event");
+            }
+
             result
         };
 
@@ -374,6 +492,16 @@ impl FloxArgs {
             .run_until(async {
                 tokio::select! {
                     _ = tokio::task::spawn_local(signal_handler) => {
+                        // On Ctrl-C the `cli_worker` task is dropped before it
+                        // reaches its `record_command_completed`, so record it
+                        // here too — an interrupted invocation still ends, and
+                        // the hub's idempotent flag means at most one completion
+                        // is recorded per invocation.
+                        if let Err(err) = flox_events::EventsHub::global()
+                            .record_command_completed(v2_subcommand.to_string())
+                        {
+                            debug!(error = %err, "Failed to record v2 cli.command_completed event (interrupted)");
+                        }
                         // TODO:
                         // For now we rely on subprocesses to inherit `flox` process group
                         // and thus being sent ctrl_c signals in sync with flox itself.

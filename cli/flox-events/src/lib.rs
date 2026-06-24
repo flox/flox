@@ -123,13 +123,96 @@ pub enum EventKind {
     CliCommandCompleted(CliCommandCompletedPayload),
 }
 
-/// Payload for [`EventKind::CliCommandRun`]. Serializes to `{}`.
+/// Shared metadata fields stamped onto every `cli.*` command event payload.
+///
+/// These fields drive existing `cli.telemetry` reporting downstream, so the
+/// new pipeline carries them on its payloads to preserve continuity once the
+/// cutover flips production traffic. The shape mirrors the columns the legacy
+/// `MetricEntry` carries today (with `extras` deferred to per-domain payloads
+/// in later PRs).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct CliCommandRunPayload {}
+pub struct CommandPayload {
+    /// Subcommand name derived from the parsed bpaf command (e.g. `install`,
+    /// `activate`, or nested `services::start` under PR 5's encoding).
+    pub subcommand: String,
+    /// Flox CLI version string.
+    pub flox_version: String,
+    /// Coarse operating system family (e.g. `Mac OS`, `Linux`).
+    pub os_family: Option<String>,
+    /// OS family release version.
+    pub os_family_release: Option<String>,
+    /// Linux distribution id (e.g. `ubuntu`); `None` outside Linux.
+    pub os: Option<String>,
+    /// Linux distribution version (e.g. `22.04`); `None` outside Linux.
+    pub os_version: Option<String>,
+    /// CLI flags that were observed empty on this invocation. Reserved for
+    /// the per-command instrumentation PRs.
+    pub empty_flags: Vec<String>,
+    /// Tokens describing how this CLI invocation was launched (shell, prompt,
+    /// service runner, etc.). Mirrors the legacy `INVOCATION_SOURCES`.
+    pub invocation_sources: Vec<String>,
+}
 
-/// Payload for [`EventKind::CliCommandCompleted`]. Serializes to `{}`.
+/// Static slice of [`CommandPayload`] that is constant for the duration of
+/// one CLI invocation.
+///
+/// Pass into [`EventsClient::new`] so the client can stamp every command
+/// event it emits without the call site rebuilding the same fields each
+/// time. The `subcommand` field is supplied per-emission and merged in by
+/// [`SharedMetadataTemplate::into_payload`].
+#[derive(Debug, Clone)]
+pub struct SharedMetadataTemplate {
+    pub flox_version: String,
+    pub os_family: Option<String>,
+    pub os_family_release: Option<String>,
+    pub os: Option<String>,
+    pub os_version: Option<String>,
+    pub empty_flags: Vec<String>,
+    pub invocation_sources: Vec<String>,
+}
+
+impl SharedMetadataTemplate {
+    /// Merge the stored static fields with the supplied subcommand to produce
+    /// a complete [`CommandPayload`] ready for serialization.
+    pub fn into_payload(&self, subcommand: String) -> CommandPayload {
+        CommandPayload {
+            subcommand,
+            flox_version: self.flox_version.clone(),
+            os_family: self.os_family.clone(),
+            os_family_release: self.os_family_release.clone(),
+            os: self.os.clone(),
+            os_version: self.os_version.clone(),
+            empty_flags: self.empty_flags.clone(),
+            invocation_sources: self.invocation_sources.clone(),
+        }
+    }
+}
+
+/// Payload for [`EventKind::CliCommandRun`].
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct CliCommandCompletedPayload {}
+pub struct CliCommandRunPayload {
+    #[serde(flatten)]
+    pub command: CommandPayload,
+}
+
+impl CliCommandRunPayload {
+    pub fn new(command: CommandPayload) -> Self {
+        Self { command }
+    }
+}
+
+/// Payload for [`EventKind::CliCommandCompleted`].
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CliCommandCompletedPayload {
+    #[serde(flatten)]
+    pub command: CommandPayload,
+}
+
+impl CliCommandCompletedPayload {
+    pub fn new(command: CommandPayload) -> Self {
+        Self { command }
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -155,10 +238,36 @@ mod tests {
         }
     }
 
+    fn command_payload(subcommand: &str) -> CommandPayload {
+        CommandPayload {
+            subcommand: subcommand.to_string(),
+            flox_version: "0.0.0-test".to_string(),
+            os_family: Some("Linux".to_string()),
+            os_family_release: Some("6.10.0".to_string()),
+            os: Some("ubuntu".to_string()),
+            os_version: Some("24.04".to_string()),
+            empty_flags: vec![],
+            invocation_sources: vec!["shell".to_string()],
+        }
+    }
+
+    fn expected_payload_json(subcommand: &str) -> serde_json::Value {
+        json!({
+            "subcommand": subcommand,
+            "flox_version": "0.0.0-test",
+            "os_family": "Linux",
+            "os_family_release": "6.10.0",
+            "os": "ubuntu",
+            "os_version": "24.04",
+            "empty_flags": [],
+            "invocation_sources": ["shell"],
+        })
+    }
+
     #[test]
     fn command_run_serializes_to_v2_envelope() {
         let value = serde_json::to_value(fixed_event(EventKind::CliCommandRun(
-            CliCommandRunPayload {},
+            CliCommandRunPayload::new(command_payload("install")),
         )))
         .expect("event serializes");
         let expected = json!({
@@ -168,7 +277,7 @@ mod tests {
             "invocation_id": "00000000-0000-0000-0000-000000000000",
             "device_id": "00000000-0000-0000-0000-000000000000",
             "event_type": "cli.command_run",
-            "payload": {},
+            "payload": expected_payload_json("install"),
         });
         assert_eq!(value, expected);
     }
@@ -176,7 +285,7 @@ mod tests {
     #[test]
     fn command_completed_serializes_to_v2_envelope() {
         let value = serde_json::to_value(fixed_event(EventKind::CliCommandCompleted(
-            CliCommandCompletedPayload {},
+            CliCommandCompletedPayload::new(command_payload("install")),
         )))
         .expect("event serializes");
         let expected = json!({
@@ -186,14 +295,16 @@ mod tests {
             "invocation_id": "00000000-0000-0000-0000-000000000000",
             "device_id": "00000000-0000-0000-0000-000000000000",
             "event_type": "cli.command_completed",
-            "payload": {},
+            "payload": expected_payload_json("install"),
         });
         assert_eq!(value, expected);
     }
 
     #[test]
     fn auth_subject_serializes_when_present() {
-        let mut event = fixed_event(EventKind::CliCommandRun(CliCommandRunPayload {}));
+        let mut event = fixed_event(EventKind::CliCommandRun(CliCommandRunPayload::new(
+            command_payload("install"),
+        )));
         event.auth_subject = Some("test-subject-7f3a".to_string());
         let value = serde_json::to_value(event).expect("event serializes");
         let expected = json!({
@@ -204,9 +315,24 @@ mod tests {
             "device_id": "00000000-0000-0000-0000-000000000000",
             "auth_subject": "test-subject-7f3a",
             "event_type": "cli.command_run",
-            "payload": {},
+            "payload": expected_payload_json("install"),
         });
         assert_eq!(value, expected);
+    }
+
+    #[test]
+    fn shared_metadata_template_merges_subcommand_into_payload() {
+        let template = SharedMetadataTemplate {
+            flox_version: "0.0.0-test".to_string(),
+            os_family: Some("Linux".to_string()),
+            os_family_release: Some("6.10.0".to_string()),
+            os: Some("ubuntu".to_string()),
+            os_version: Some("24.04".to_string()),
+            empty_flags: vec![],
+            invocation_sources: vec!["shell".to_string()],
+        };
+        let payload = template.into_payload("activate".to_string());
+        assert_eq!(payload, command_payload("activate"));
     }
 }
 
@@ -235,12 +361,28 @@ mod pipeline_tests {
         }
     }
 
+    fn shared_metadata() -> SharedMetadataTemplate {
+        SharedMetadataTemplate {
+            flox_version: "0.0.0-test".to_string(),
+            os_family: Some("Linux".to_string()),
+            os_family_release: Some("6.10.0".to_string()),
+            os: Some("ubuntu".to_string()),
+            os_version: Some("24.04".to_string()),
+            empty_flags: vec![],
+            invocation_sources: vec!["shell".to_string()],
+        }
+    }
+
     fn command_run_kind() -> EventKind {
-        EventKind::CliCommandRun(CliCommandRunPayload {})
+        EventKind::CliCommandRun(CliCommandRunPayload::new(
+            shared_metadata().into_payload("install".to_string()),
+        ))
     }
 
     fn command_completed_kind() -> EventKind {
-        EventKind::CliCommandCompleted(CliCommandCompletedPayload {})
+        EventKind::CliCommandCompleted(CliCommandCompletedPayload::new(
+            shared_metadata().into_payload("install".to_string()),
+        ))
     }
 
     fn unix_timestamp_millis(time: OffsetDateTime) -> i128 {
@@ -248,7 +390,13 @@ mod pipeline_tests {
     }
 
     fn client_with_connection(tempdir: &TempDir, connection: MockEventsConnection) -> EventsClient {
-        EventsClient::new_with_connection(DEVICE_ID, tempdir.path(), INVOCATION_ID, connection)
+        EventsClient::new_with_connection(
+            DEVICE_ID,
+            tempdir.path(),
+            INVOCATION_ID,
+            shared_metadata(),
+            connection,
+        )
     }
 
     #[test]
@@ -446,5 +594,91 @@ mod pipeline_tests {
         let sent_batches = sent_batches.lock().expect("sent batches lock").clone();
         assert_eq!(sent_batches.len(), 1);
         assert_eq!(sent_batches[0].len(), 1);
+    }
+
+    #[test]
+    fn events_hub_record_command_run_stamps_subcommand_and_shared_metadata() {
+        let tempdir = tempfile::tempdir().expect("tempdir");
+        let connection = MockEventsConnection::default();
+        let sent_batches = connection.sent_batches();
+        let hub = EventsHub::new();
+        hub.set_client(client_with_connection(&tempdir, connection));
+
+        hub.record_command_run("activate".to_string())
+            .expect("record command_run");
+        hub.flush(true).expect("flush events");
+
+        let sent_batches = sent_batches.lock().expect("sent batches lock").clone();
+        assert_eq!(sent_batches.len(), 1);
+        assert_eq!(sent_batches[0].len(), 1);
+        match &sent_batches[0][0].kind {
+            EventKind::CliCommandRun(payload) => {
+                assert_eq!(
+                    payload.command,
+                    shared_metadata().into_payload("activate".to_string())
+                );
+            },
+            other => panic!("expected CliCommandRun, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn events_hub_record_command_completed_is_idempotent_per_install() {
+        let tempdir = tempfile::tempdir().expect("tempdir");
+        let connection = MockEventsConnection::default();
+        let sent_batches = connection.sent_batches();
+        let hub = EventsHub::new();
+        hub.set_client(client_with_connection(&tempdir, connection));
+
+        hub.record_command_completed("install".to_string())
+            .expect("first completed record succeeds");
+        hub.record_command_completed("install".to_string())
+            .expect("second completed record is a silent no-op");
+        hub.flush(true).expect("flush events");
+
+        let sent_batches = sent_batches.lock().expect("sent batches lock").clone();
+        let total_events: usize = sent_batches.iter().map(Vec::len).sum();
+        assert_eq!(
+            total_events, 1,
+            "second record_command_completed must be a no-op"
+        );
+    }
+
+    #[test]
+    fn events_hub_set_client_resets_completed_recorded_flag() {
+        let first_dir = tempfile::tempdir().expect("first tempdir");
+        let second_dir = tempfile::tempdir().expect("second tempdir");
+        let first_conn = MockEventsConnection::default();
+        let second_conn = MockEventsConnection::default();
+        let first_batches = first_conn.sent_batches();
+        let second_batches = second_conn.sent_batches();
+
+        let hub = EventsHub::new();
+        hub.set_client(client_with_connection(&first_dir, first_conn));
+        hub.record_command_completed("install".to_string()).unwrap();
+        hub.flush(true).unwrap();
+        hub.set_client(client_with_connection(&second_dir, second_conn));
+        hub.record_command_completed("upgrade".to_string())
+            .expect("new install's completed record is allowed");
+        hub.flush(true).unwrap();
+
+        assert_eq!(
+            first_batches
+                .lock()
+                .unwrap()
+                .iter()
+                .map(Vec::len)
+                .sum::<usize>(),
+            1
+        );
+        assert_eq!(
+            second_batches
+                .lock()
+                .unwrap()
+                .iter()
+                .map(Vec::len)
+                .sum::<usize>(),
+            1
+        );
     }
 }

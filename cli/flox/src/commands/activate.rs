@@ -593,6 +593,26 @@ impl ActivateOptions {
             Ok(())
         } else {
             debug!("running activation command: {:?}", command);
+            // `command.exec()` replaces this process, so the dispatcher's
+            // end-of-`cli_worker` `command_completed` emit will never run.
+            // Record + flush the v2 event synchronously here so the
+            // invocation is closed out before control passes to the user's
+            // shell. The hub's idempotent flag turns the dispatcher's emit
+            // into a no-op if `exec` returns an error and the failure
+            // propagates back to `cli_worker`.
+            let hub = flox_events::EventsHub::global();
+            if let Err(err) = hub.record_command_completed("activate".to_string()) {
+                debug!(
+                    error = %err,
+                    "Failed to record v2 cli.command_completed event before exec"
+                );
+            }
+            if let Err(err) = hub.flush(true) {
+                debug!(
+                    error = %err,
+                    "Failed to flush v2 events before exec"
+                );
+            }
             // exec should never return
             // TODO: did this break in-place metrics?
             Err(command.exec().into())
