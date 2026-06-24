@@ -794,9 +794,12 @@ impl CliEnvironmentGenerationsSwitchPayload {
 // `EventKind` and same `invocation_id`, each populating only what it
 // knows. The consumer `COALESCE`s Optional fields across the rows.
 
-/// Payload for [`EventKind::CliEnvironmentEdit`]. Emitted twice per
-/// `flox edit` invocation: once eagerly with env detail, once after
-/// the edit result is known with `edited_includes`.
+/// Payload for [`EventKind::CliEnvironmentEdit`]. Emitted once eagerly
+/// with env detail; a manifest edit that changes the manifest emits a
+/// second row carrying `edited_includes`. The other edit actions
+/// (rename/sync/reset, or an unchanged manifest edit) emit only the
+/// eager row — per the sparse-merge contract above, `edited_includes`
+/// is simply absent for those.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CliEnvironmentEditPayload {
     #[serde(flatten)]
