@@ -16,4 +16,10 @@ impl BetaCommands {
             BetaCommands::BetaEnabled(args) => args.handle(flox).await,
         }
     }
+
+    pub fn subcommand_name(&self) -> &'static str {
+        match self {
+            BetaCommands::BetaEnabled(_) => "beta-enabled",
+        }
+    }
 }

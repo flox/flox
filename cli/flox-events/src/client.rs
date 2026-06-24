@@ -7,14 +7,35 @@ use uuid::Uuid;
 use crate::buffer::EventsBuffer;
 use crate::connection::{EventsConnection, EventsConnectionV2};
 use crate::{
+    CliBuildPayload,
     CliCommandCompletedPayload,
     CliCommandRunPayload,
     CliEnvironmentActivatePayload,
+    CliEnvironmentContainerizePayload,
+    CliEnvironmentDeletePayload,
+    CliEnvironmentEditPayload,
+    CliEnvironmentGenerationsHistoryPayload,
+    CliEnvironmentGenerationsListPayload,
+    CliEnvironmentGenerationsRollbackPayload,
+    CliEnvironmentGenerationsSwitchPayload,
+    CliEnvironmentIncludeUpgradePayload,
+    CliEnvironmentInstallPayload,
+    CliEnvironmentListPayload,
+    CliEnvironmentPublishPayload,
     CliEnvironmentPullPayload,
     CliEnvironmentPushPayload,
+    CliEnvironmentServicesLogsPayload,
+    CliEnvironmentServicesPersistPayload,
+    CliEnvironmentServicesRestartPayload,
+    CliEnvironmentServicesStartPayload,
+    CliEnvironmentServicesStatusPayload,
+    CliEnvironmentServicesStopPayload,
+    CliEnvironmentUninstallPayload,
+    CliEnvironmentUpgradePayload,
     CliPackageInstallPayload,
     CliPackageUninstallPayload,
     CliPackageUpgradePayload,
+    CliSearchPayload,
     EnvDetail,
     Event,
     EventKind,
@@ -176,6 +197,253 @@ impl EventsClient {
             outcome,
         );
         self.record_event(EventKind::CliPackageUninstall(payload))
+    }
+
+    /// Record a `cli.environment.containerize` event with env detail.
+    pub fn record_environment_containerize(&self, env_detail: EnvDetail) -> Result<()> {
+        let payload = CliEnvironmentContainerizePayload::new(
+            self.shared_metadata
+                .into_payload("containerize".to_string()),
+            env_detail,
+        );
+        self.record_event(EventKind::CliEnvironmentContainerize(payload))
+    }
+
+    /// Record a `cli.environment.delete` event with env detail.
+    pub fn record_environment_delete(&self, env_detail: EnvDetail) -> Result<()> {
+        let payload = CliEnvironmentDeletePayload::new(
+            self.shared_metadata.into_payload("delete".to_string()),
+            env_detail,
+        );
+        self.record_event(EventKind::CliEnvironmentDelete(payload))
+    }
+
+    /// Record a `cli.environment.include.upgrade` event with env
+    /// detail.
+    pub fn record_environment_include_upgrade(&self, env_detail: EnvDetail) -> Result<()> {
+        let payload = CliEnvironmentIncludeUpgradePayload::new(
+            self.shared_metadata
+                .into_payload("include::upgrade".to_string()),
+            env_detail,
+        );
+        self.record_event(EventKind::CliEnvironmentIncludeUpgrade(payload))
+    }
+
+    /// Record a `cli.environment.install` event with env detail.
+    /// The per-package detail rides on `cli.package.install`.
+    pub fn record_environment_install(&self, env_detail: EnvDetail) -> Result<()> {
+        let payload = CliEnvironmentInstallPayload::new(
+            self.shared_metadata.into_payload("install".to_string()),
+            env_detail,
+        );
+        self.record_event(EventKind::CliEnvironmentInstall(payload))
+    }
+
+    /// Record a `cli.environment.list` event with env detail.
+    pub fn record_environment_list(&self, env_detail: EnvDetail) -> Result<()> {
+        let payload = CliEnvironmentListPayload::new(
+            self.shared_metadata.into_payload("list".to_string()),
+            env_detail,
+        );
+        self.record_event(EventKind::CliEnvironmentList(payload))
+    }
+
+    /// Record a `cli.environment.uninstall` event with env detail.
+    /// The per-package detail rides on `cli.package.uninstall`.
+    pub fn record_environment_uninstall(&self, env_detail: EnvDetail) -> Result<()> {
+        let payload = CliEnvironmentUninstallPayload::new(
+            self.shared_metadata.into_payload("uninstall".to_string()),
+            env_detail,
+        );
+        self.record_event(EventKind::CliEnvironmentUninstall(payload))
+    }
+
+    /// Record a `cli.environment.upgrade` event with env detail.
+    /// The per-package detail rides on `cli.package.upgrade`.
+    pub fn record_environment_upgrade(&self, env_detail: EnvDetail) -> Result<()> {
+        let payload = CliEnvironmentUpgradePayload::new(
+            self.shared_metadata.into_payload("upgrade".to_string()),
+            env_detail,
+        );
+        self.record_event(EventKind::CliEnvironmentUpgrade(payload))
+    }
+
+    /// Record a `cli.environment.services.start` event with env detail.
+    pub fn record_environment_services_start(&self, env_detail: EnvDetail) -> Result<()> {
+        let payload = CliEnvironmentServicesStartPayload::new(
+            self.shared_metadata
+                .into_payload("services::start".to_string()),
+            env_detail,
+        );
+        self.record_event(EventKind::CliEnvironmentServicesStart(payload))
+    }
+
+    /// Record a `cli.environment.services.stop` event with env detail.
+    pub fn record_environment_services_stop(&self, env_detail: EnvDetail) -> Result<()> {
+        let payload = CliEnvironmentServicesStopPayload::new(
+            self.shared_metadata
+                .into_payload("services::stop".to_string()),
+            env_detail,
+        );
+        self.record_event(EventKind::CliEnvironmentServicesStop(payload))
+    }
+
+    /// Record a `cli.environment.services.restart` event with env detail.
+    pub fn record_environment_services_restart(&self, env_detail: EnvDetail) -> Result<()> {
+        let payload = CliEnvironmentServicesRestartPayload::new(
+            self.shared_metadata
+                .into_payload("services::restart".to_string()),
+            env_detail,
+        );
+        self.record_event(EventKind::CliEnvironmentServicesRestart(payload))
+    }
+
+    /// Record a `cli.environment.services.status` event with env detail.
+    pub fn record_environment_services_status(&self, env_detail: EnvDetail) -> Result<()> {
+        let payload = CliEnvironmentServicesStatusPayload::new(
+            self.shared_metadata
+                .into_payload("services::status".to_string()),
+            env_detail,
+        );
+        self.record_event(EventKind::CliEnvironmentServicesStatus(payload))
+    }
+
+    /// Record a `cli.environment.services.logs` event with env detail.
+    pub fn record_environment_services_logs(&self, env_detail: EnvDetail) -> Result<()> {
+        let payload = CliEnvironmentServicesLogsPayload::new(
+            self.shared_metadata
+                .into_payload("services::logs".to_string()),
+            env_detail,
+        );
+        self.record_event(EventKind::CliEnvironmentServicesLogs(payload))
+    }
+
+    /// Record a `cli.environment.services.persist` event with env detail.
+    pub fn record_environment_services_persist(&self, env_detail: EnvDetail) -> Result<()> {
+        let payload = CliEnvironmentServicesPersistPayload::new(
+            self.shared_metadata
+                .into_payload("services::persist".to_string()),
+            env_detail,
+        );
+        self.record_event(EventKind::CliEnvironmentServicesPersist(payload))
+    }
+
+    /// Record a `cli.environment.generations.history` event with env detail.
+    pub fn record_environment_generations_history(&self, env_detail: EnvDetail) -> Result<()> {
+        let payload = CliEnvironmentGenerationsHistoryPayload::new(
+            self.shared_metadata
+                .into_payload("generations::history".to_string()),
+            env_detail,
+        );
+        self.record_event(EventKind::CliEnvironmentGenerationsHistory(payload))
+    }
+
+    /// Record a `cli.environment.generations.rollback` event with env detail.
+    pub fn record_environment_generations_rollback(&self, env_detail: EnvDetail) -> Result<()> {
+        let payload = CliEnvironmentGenerationsRollbackPayload::new(
+            self.shared_metadata
+                .into_payload("generations::rollback".to_string()),
+            env_detail,
+        );
+        self.record_event(EventKind::CliEnvironmentGenerationsRollback(payload))
+    }
+
+    /// Record a `cli.environment.generations.switch` event with env detail.
+    pub fn record_environment_generations_switch(&self, env_detail: EnvDetail) -> Result<()> {
+        let payload = CliEnvironmentGenerationsSwitchPayload::new(
+            self.shared_metadata
+                .into_payload("generations::switch".to_string()),
+            env_detail,
+        );
+        self.record_event(EventKind::CliEnvironmentGenerationsSwitch(payload))
+    }
+
+    /// Record a `cli.environment.edit` event with just env detail.
+    /// Used at the eager call site (before the edit operation runs);
+    /// the `edited_includes` field is left unpopulated and the
+    /// result-known site emits a second event via
+    /// [`Self::record_environment_edit_with`].
+    pub fn record_environment_edit(&self, env_detail: EnvDetail) -> Result<()> {
+        let payload = CliEnvironmentEditPayload::new(
+            self.shared_metadata.into_payload("edit".to_string()),
+            env_detail,
+        );
+        self.record_event(EventKind::CliEnvironmentEdit(payload))
+    }
+
+    /// Record a `cli.environment.edit` event populated by `extras`.
+    /// Builds the payload from the installed shared metadata + env
+    /// detail and lets the call site set `edited_includes` via the
+    /// builder closure.
+    pub fn record_environment_edit_with(
+        &self,
+        env_detail: EnvDetail,
+        extras: impl FnOnce(CliEnvironmentEditPayload) -> CliEnvironmentEditPayload,
+    ) -> Result<()> {
+        let payload = CliEnvironmentEditPayload::new(
+            self.shared_metadata.into_payload("edit".to_string()),
+            env_detail,
+        );
+        self.record_event(EventKind::CliEnvironmentEdit(extras(payload)))
+    }
+
+    /// Record a `cli.environment.publish` event with just env detail.
+    pub fn record_environment_publish(&self, env_detail: EnvDetail) -> Result<()> {
+        let payload = CliEnvironmentPublishPayload::new(
+            self.shared_metadata.into_payload("publish".to_string()),
+            env_detail,
+        );
+        self.record_event(EventKind::CliEnvironmentPublish(payload))
+    }
+
+    /// Record a `cli.environment.publish` event populated by `extras`.
+    pub fn record_environment_publish_with(
+        &self,
+        env_detail: EnvDetail,
+        extras: impl FnOnce(CliEnvironmentPublishPayload) -> CliEnvironmentPublishPayload,
+    ) -> Result<()> {
+        let payload = CliEnvironmentPublishPayload::new(
+            self.shared_metadata.into_payload("publish".to_string()),
+            env_detail,
+        );
+        self.record_event(EventKind::CliEnvironmentPublish(extras(payload)))
+    }
+
+    /// Record a `cli.environment.generations.list` event populated by
+    /// `extras`. Single call site (no separate eager-emit form).
+    pub fn record_environment_generations_list_with(
+        &self,
+        env_detail: EnvDetail,
+        extras: impl FnOnce(
+            CliEnvironmentGenerationsListPayload,
+        ) -> CliEnvironmentGenerationsListPayload,
+    ) -> Result<()> {
+        let payload = CliEnvironmentGenerationsListPayload::new(
+            self.shared_metadata
+                .into_payload("generations::list".to_string()),
+            env_detail,
+        );
+        self.record_event(EventKind::CliEnvironmentGenerationsList(extras(payload)))
+    }
+
+    /// Record a `cli.build` event carrying build-kind detection flags.
+    pub fn record_build(&self, has_expression_build: bool, has_manifest_build: bool) -> Result<()> {
+        let payload = CliBuildPayload::new(
+            self.shared_metadata.into_payload("build".to_string()),
+            has_expression_build,
+            has_manifest_build,
+        );
+        self.record_event(EventKind::CliBuild(payload))
+    }
+
+    /// Record a `cli.search` event carrying the user-supplied search
+    /// term verbatim (D3, 2026-05-30).
+    pub fn record_search(&self, search_term: String) -> Result<()> {
+        let payload = CliSearchPayload::new(
+            self.shared_metadata.into_payload("search".to_string()),
+            search_term,
+        );
+        self.record_event(EventKind::CliSearch(payload))
     }
 
     pub fn record_event(&self, kind: impl Into<EventKind>) -> Result<()> {

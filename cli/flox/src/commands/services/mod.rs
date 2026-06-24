@@ -131,6 +131,18 @@ impl ServicesCommands {
 
         Ok(())
     }
+
+    pub fn subcommand_name(&self) -> &'static str {
+        match self {
+            ServicesCommands::Help => "services::help",
+            ServicesCommands::Restart(_) => "services::restart",
+            ServicesCommands::Start(_) => "services::start",
+            ServicesCommands::Status(_) => "services::status",
+            ServicesCommands::Stop(_) => "services::stop",
+            ServicesCommands::Logs(_) => "services::logs",
+            ServicesCommands::Persist(_) => "services::persist",
+        }
+    }
 }
 
 /// An augmented [ConcreteEnvironment] that has been checked for services support.

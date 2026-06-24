@@ -5,6 +5,7 @@ use std::process::Stdio;
 use anyhow::{Context, Result, bail};
 use bpaf::Bpaf;
 use flox_core::data::CanonicalPath;
+use flox_events::EventsHub;
 use flox_manifest::lockfile::Lockfile;
 use flox_manifest::{Manifest, MigratedTypedOnly};
 use flox_rust_sdk::flox::Flox;
@@ -135,6 +136,21 @@ enum SubcommandOrBuildTargets {
 }
 
 impl Build {
+    /// Centrally-derived subcommand string for this invocation.
+    /// Returns the `build::clean` / `build::import-nixpkgs` /
+    /// `build::update-catalogs` form for the build pseudo-subcommands,
+    /// preserving the join-key continuity the legacy
+    /// `environment_subcommand_metric!` stream already used at
+    /// `cli/flox/src/commands/build.rs:146,154,162`.
+    pub fn subcommand_name(&self) -> &'static str {
+        match &self.subcommand_or_targets {
+            SubcommandOrBuildTargets::Clean { .. } => "build::clean",
+            SubcommandOrBuildTargets::ImportNixpkgs { .. } => "build::import-nixpkgs",
+            SubcommandOrBuildTargets::UpdateCatalogs {} => "build::update-catalogs",
+            SubcommandOrBuildTargets::BuildTargets { .. } => "build",
+        }
+    }
+
     pub async fn handle(self, mut flox: Flox) -> Result<()> {
         match self.subcommand_or_targets {
             SubcommandOrBuildTargets::Clean { targets } => {
@@ -293,6 +309,10 @@ impl Build {
             "has_expression_build" = has_expression_build,
             "has_manifest_build" = has_manifest_build
         );
+        if let Err(err) = EventsHub::global().record_build(has_expression_build, has_manifest_build)
+        {
+            debug!(error = %err, "Failed to record v2 event");
+        }
 
         let builder = FloxBuildMk::new(&flox, &base_dir, &expression_ref, &built_environments);
         let results = builder.build(

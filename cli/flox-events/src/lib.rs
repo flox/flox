@@ -133,6 +133,48 @@ pub enum EventKind {
     CliPackageUpgrade(CliPackageUpgradePayload),
     #[serde(rename = "cli.package.uninstall")]
     CliPackageUninstall(CliPackageUninstallPayload),
+    #[serde(rename = "cli.environment.containerize")]
+    CliEnvironmentContainerize(CliEnvironmentContainerizePayload),
+    #[serde(rename = "cli.environment.delete")]
+    CliEnvironmentDelete(CliEnvironmentDeletePayload),
+    #[serde(rename = "cli.environment.edit")]
+    CliEnvironmentEdit(CliEnvironmentEditPayload),
+    #[serde(rename = "cli.environment.include.upgrade")]
+    CliEnvironmentIncludeUpgrade(CliEnvironmentIncludeUpgradePayload),
+    #[serde(rename = "cli.environment.install")]
+    CliEnvironmentInstall(CliEnvironmentInstallPayload),
+    #[serde(rename = "cli.environment.list")]
+    CliEnvironmentList(CliEnvironmentListPayload),
+    #[serde(rename = "cli.environment.publish")]
+    CliEnvironmentPublish(CliEnvironmentPublishPayload),
+    #[serde(rename = "cli.environment.uninstall")]
+    CliEnvironmentUninstall(CliEnvironmentUninstallPayload),
+    #[serde(rename = "cli.environment.upgrade")]
+    CliEnvironmentUpgrade(CliEnvironmentUpgradePayload),
+    #[serde(rename = "cli.environment.services.start")]
+    CliEnvironmentServicesStart(CliEnvironmentServicesStartPayload),
+    #[serde(rename = "cli.environment.services.stop")]
+    CliEnvironmentServicesStop(CliEnvironmentServicesStopPayload),
+    #[serde(rename = "cli.environment.services.restart")]
+    CliEnvironmentServicesRestart(CliEnvironmentServicesRestartPayload),
+    #[serde(rename = "cli.environment.services.status")]
+    CliEnvironmentServicesStatus(CliEnvironmentServicesStatusPayload),
+    #[serde(rename = "cli.environment.services.logs")]
+    CliEnvironmentServicesLogs(CliEnvironmentServicesLogsPayload),
+    #[serde(rename = "cli.environment.services.persist")]
+    CliEnvironmentServicesPersist(CliEnvironmentServicesPersistPayload),
+    #[serde(rename = "cli.environment.generations.history")]
+    CliEnvironmentGenerationsHistory(CliEnvironmentGenerationsHistoryPayload),
+    #[serde(rename = "cli.environment.generations.list")]
+    CliEnvironmentGenerationsList(CliEnvironmentGenerationsListPayload),
+    #[serde(rename = "cli.environment.generations.rollback")]
+    CliEnvironmentGenerationsRollback(CliEnvironmentGenerationsRollbackPayload),
+    #[serde(rename = "cli.environment.generations.switch")]
+    CliEnvironmentGenerationsSwitch(CliEnvironmentGenerationsSwitchPayload),
+    #[serde(rename = "cli.build")]
+    CliBuild(CliBuildPayload),
+    #[serde(rename = "cli.search")]
+    CliSearch(CliSearchPayload),
 }
 
 /// Shared metadata fields stamped onto every `cli.*` command event payload.
@@ -145,7 +187,8 @@ pub enum EventKind {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CommandPayload {
     /// Subcommand name derived from the parsed bpaf command (e.g. `install`,
-    /// `activate`, or nested `services::start` under PR 5's encoding).
+    /// `activate`, or nested `services::start` using the `parent::child`
+    /// join encoding).
     pub subcommand: String,
     /// Flox CLI version string.
     pub flox_version: String,
@@ -439,6 +482,465 @@ impl CliPackageUninstallPayload {
             command,
             package,
             outcome,
+        }
+    }
+}
+
+// The env-detail-only payloads below carry `CommandPayload` +
+// `EnvDetail` and nothing more. The structs are byte-identical to
+// `CliEnvironmentPushPayload`; they exist as separate types so each
+// `EventKind` variant owns a distinct payload type. A future cleanup
+// may collapse them into a shared `EnvCommandPayload`.
+
+/// Payload for [`EventKind::CliEnvironmentContainerize`].
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CliEnvironmentContainerizePayload {
+    #[serde(flatten)]
+    pub command: CommandPayload,
+    #[serde(flatten)]
+    pub env_detail: EnvDetail,
+}
+
+impl CliEnvironmentContainerizePayload {
+    pub fn new(command: CommandPayload, env_detail: EnvDetail) -> Self {
+        Self {
+            command,
+            env_detail,
+        }
+    }
+}
+
+/// Payload for [`EventKind::CliEnvironmentDelete`].
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CliEnvironmentDeletePayload {
+    #[serde(flatten)]
+    pub command: CommandPayload,
+    #[serde(flatten)]
+    pub env_detail: EnvDetail,
+}
+
+impl CliEnvironmentDeletePayload {
+    pub fn new(command: CommandPayload, env_detail: EnvDetail) -> Self {
+        Self {
+            command,
+            env_detail,
+        }
+    }
+}
+
+/// Payload for [`EventKind::CliEnvironmentIncludeUpgrade`].
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CliEnvironmentIncludeUpgradePayload {
+    #[serde(flatten)]
+    pub command: CommandPayload,
+    #[serde(flatten)]
+    pub env_detail: EnvDetail,
+}
+
+impl CliEnvironmentIncludeUpgradePayload {
+    pub fn new(command: CommandPayload, env_detail: EnvDetail) -> Self {
+        Self {
+            command,
+            env_detail,
+        }
+    }
+}
+
+/// Payload for [`EventKind::CliEnvironmentInstall`]. Carries the
+/// env-detail row of a `flox install` invocation; the per-package
+/// detail rides on [`EventKind::CliPackageInstall`].
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CliEnvironmentInstallPayload {
+    #[serde(flatten)]
+    pub command: CommandPayload,
+    #[serde(flatten)]
+    pub env_detail: EnvDetail,
+}
+
+impl CliEnvironmentInstallPayload {
+    pub fn new(command: CommandPayload, env_detail: EnvDetail) -> Self {
+        Self {
+            command,
+            env_detail,
+        }
+    }
+}
+
+/// Payload for [`EventKind::CliEnvironmentList`].
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CliEnvironmentListPayload {
+    #[serde(flatten)]
+    pub command: CommandPayload,
+    #[serde(flatten)]
+    pub env_detail: EnvDetail,
+}
+
+impl CliEnvironmentListPayload {
+    pub fn new(command: CommandPayload, env_detail: EnvDetail) -> Self {
+        Self {
+            command,
+            env_detail,
+        }
+    }
+}
+
+/// Payload for [`EventKind::CliEnvironmentUninstall`]. Carries the
+/// env-detail row of a `flox uninstall` invocation; the per-package
+/// detail rides on [`EventKind::CliPackageUninstall`].
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CliEnvironmentUninstallPayload {
+    #[serde(flatten)]
+    pub command: CommandPayload,
+    #[serde(flatten)]
+    pub env_detail: EnvDetail,
+}
+
+impl CliEnvironmentUninstallPayload {
+    pub fn new(command: CommandPayload, env_detail: EnvDetail) -> Self {
+        Self {
+            command,
+            env_detail,
+        }
+    }
+}
+
+/// Payload for [`EventKind::CliEnvironmentUpgrade`]. Carries the
+/// env-detail row of a `flox upgrade` invocation; the per-package
+/// detail rides on [`EventKind::CliPackageUpgrade`].
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CliEnvironmentUpgradePayload {
+    #[serde(flatten)]
+    pub command: CommandPayload,
+    #[serde(flatten)]
+    pub env_detail: EnvDetail,
+}
+
+impl CliEnvironmentUpgradePayload {
+    pub fn new(command: CommandPayload, env_detail: EnvDetail) -> Self {
+        Self {
+            command,
+            env_detail,
+        }
+    }
+}
+
+/// Payload for [`EventKind::CliEnvironmentServicesStart`].
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CliEnvironmentServicesStartPayload {
+    #[serde(flatten)]
+    pub command: CommandPayload,
+    #[serde(flatten)]
+    pub env_detail: EnvDetail,
+}
+
+impl CliEnvironmentServicesStartPayload {
+    pub fn new(command: CommandPayload, env_detail: EnvDetail) -> Self {
+        Self {
+            command,
+            env_detail,
+        }
+    }
+}
+
+/// Payload for [`EventKind::CliEnvironmentServicesStop`].
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CliEnvironmentServicesStopPayload {
+    #[serde(flatten)]
+    pub command: CommandPayload,
+    #[serde(flatten)]
+    pub env_detail: EnvDetail,
+}
+
+impl CliEnvironmentServicesStopPayload {
+    pub fn new(command: CommandPayload, env_detail: EnvDetail) -> Self {
+        Self {
+            command,
+            env_detail,
+        }
+    }
+}
+
+/// Payload for [`EventKind::CliEnvironmentServicesRestart`].
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CliEnvironmentServicesRestartPayload {
+    #[serde(flatten)]
+    pub command: CommandPayload,
+    #[serde(flatten)]
+    pub env_detail: EnvDetail,
+}
+
+impl CliEnvironmentServicesRestartPayload {
+    pub fn new(command: CommandPayload, env_detail: EnvDetail) -> Self {
+        Self {
+            command,
+            env_detail,
+        }
+    }
+}
+
+/// Payload for [`EventKind::CliEnvironmentServicesStatus`].
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CliEnvironmentServicesStatusPayload {
+    #[serde(flatten)]
+    pub command: CommandPayload,
+    #[serde(flatten)]
+    pub env_detail: EnvDetail,
+}
+
+impl CliEnvironmentServicesStatusPayload {
+    pub fn new(command: CommandPayload, env_detail: EnvDetail) -> Self {
+        Self {
+            command,
+            env_detail,
+        }
+    }
+}
+
+/// Payload for [`EventKind::CliEnvironmentServicesLogs`].
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CliEnvironmentServicesLogsPayload {
+    #[serde(flatten)]
+    pub command: CommandPayload,
+    #[serde(flatten)]
+    pub env_detail: EnvDetail,
+}
+
+impl CliEnvironmentServicesLogsPayload {
+    pub fn new(command: CommandPayload, env_detail: EnvDetail) -> Self {
+        Self {
+            command,
+            env_detail,
+        }
+    }
+}
+
+/// Payload for [`EventKind::CliEnvironmentServicesPersist`].
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CliEnvironmentServicesPersistPayload {
+    #[serde(flatten)]
+    pub command: CommandPayload,
+    #[serde(flatten)]
+    pub env_detail: EnvDetail,
+}
+
+impl CliEnvironmentServicesPersistPayload {
+    pub fn new(command: CommandPayload, env_detail: EnvDetail) -> Self {
+        Self {
+            command,
+            env_detail,
+        }
+    }
+}
+
+/// Payload for [`EventKind::CliEnvironmentGenerationsHistory`].
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CliEnvironmentGenerationsHistoryPayload {
+    #[serde(flatten)]
+    pub command: CommandPayload,
+    #[serde(flatten)]
+    pub env_detail: EnvDetail,
+}
+
+impl CliEnvironmentGenerationsHistoryPayload {
+    pub fn new(command: CommandPayload, env_detail: EnvDetail) -> Self {
+        Self {
+            command,
+            env_detail,
+        }
+    }
+}
+
+/// Payload for [`EventKind::CliEnvironmentGenerationsRollback`].
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CliEnvironmentGenerationsRollbackPayload {
+    #[serde(flatten)]
+    pub command: CommandPayload,
+    #[serde(flatten)]
+    pub env_detail: EnvDetail,
+}
+
+impl CliEnvironmentGenerationsRollbackPayload {
+    pub fn new(command: CommandPayload, env_detail: EnvDetail) -> Self {
+        Self {
+            command,
+            env_detail,
+        }
+    }
+}
+
+/// Payload for [`EventKind::CliEnvironmentGenerationsSwitch`].
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CliEnvironmentGenerationsSwitchPayload {
+    #[serde(flatten)]
+    pub command: CommandPayload,
+    #[serde(flatten)]
+    pub env_detail: EnvDetail,
+}
+
+impl CliEnvironmentGenerationsSwitchPayload {
+    pub fn new(command: CommandPayload, env_detail: EnvDetail) -> Self {
+        Self {
+            command,
+            env_detail,
+        }
+    }
+}
+
+// The payloads below carry both env-detail and per-command extras,
+// and have two distinct legacy emission sites in the same handler
+// (an eager env-detail emit before the operation runs + an extras
+// emit after the operation result is known). The new path follows a
+// sparse-merge contract: both sites emit a payload with the same
+// `EventKind` and same `invocation_id`, each populating only what it
+// knows. The consumer `COALESCE`s Optional fields across the rows.
+
+/// Payload for [`EventKind::CliEnvironmentEdit`]. Emitted once eagerly
+/// with env detail; a manifest edit that changes the manifest emits a
+/// second row carrying `edited_includes`. The other edit actions
+/// (rename/sync/reset, or an unchanged manifest edit) emit only the
+/// eager row — per the sparse-merge contract above, `edited_includes`
+/// is simply absent for those.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CliEnvironmentEditPayload {
+    #[serde(flatten)]
+    pub command: CommandPayload,
+    #[serde(flatten)]
+    pub env_detail: EnvDetail,
+    /// `true` when the edit produced a change to one of the included
+    /// environments referenced by the manifest. `None` on the eager
+    /// env-detail emit (before the edit runs); `Some(bool)` on the
+    /// result-known emit.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub edited_includes: Option<bool>,
+}
+
+impl CliEnvironmentEditPayload {
+    pub fn new(command: CommandPayload, env_detail: EnvDetail) -> Self {
+        Self {
+            command,
+            env_detail,
+            edited_includes: None,
+        }
+    }
+
+    pub fn with_edited_includes(mut self, value: bool) -> Self {
+        self.edited_includes = Some(value);
+        self
+    }
+}
+
+/// Payload for [`EventKind::CliEnvironmentPublish`]. Emitted twice
+/// per `flox publish` invocation per sparse-merge.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CliEnvironmentPublishPayload {
+    #[serde(flatten)]
+    pub command: CommandPayload,
+    #[serde(flatten)]
+    pub env_detail: EnvDetail,
+    /// `true` when the manifest uses an `expression` build kind for
+    /// the published package; `None` on the eager env-detail emit.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub has_expression_build: Option<bool>,
+    /// `true` when the manifest uses a `manifest` build kind for the
+    /// published package; `None` on the eager env-detail emit.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub has_manifest_build: Option<bool>,
+}
+
+impl CliEnvironmentPublishPayload {
+    pub fn new(command: CommandPayload, env_detail: EnvDetail) -> Self {
+        Self {
+            command,
+            env_detail,
+            has_expression_build: None,
+            has_manifest_build: None,
+        }
+    }
+
+    pub fn with_build_kinds(
+        mut self,
+        has_expression_build: bool,
+        has_manifest_build: bool,
+    ) -> Self {
+        self.has_expression_build = Some(has_expression_build);
+        self.has_manifest_build = Some(has_manifest_build);
+        self
+    }
+}
+
+/// Payload for [`EventKind::CliEnvironmentGenerationsList`].
+/// Carries env detail + `request_tree` (`true` when the user passed
+/// `--tree`).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CliEnvironmentGenerationsListPayload {
+    #[serde(flatten)]
+    pub command: CommandPayload,
+    #[serde(flatten)]
+    pub env_detail: EnvDetail,
+    /// `true` when invoked with `--tree`; `None` is unused (single
+    /// call site populates this on the eager env-detail emit).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub request_tree: Option<bool>,
+}
+
+impl CliEnvironmentGenerationsListPayload {
+    pub fn new(command: CommandPayload, env_detail: EnvDetail) -> Self {
+        Self {
+            command,
+            env_detail,
+            request_tree: None,
+        }
+    }
+
+    pub fn with_request_tree(mut self, value: bool) -> Self {
+        self.request_tree = Some(value);
+        self
+    }
+}
+
+// `flox build` and `flox search` carry per-command extras but no
+// environment context (build operates on the manifest's `build`
+// table; search hits the catalog without a resolved environment).
+
+/// Payload for [`EventKind::CliBuild`]. Carries `flox build`'s
+/// per-invocation build-kind detection flags.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CliBuildPayload {
+    #[serde(flatten)]
+    pub command: CommandPayload,
+    pub has_expression_build: bool,
+    pub has_manifest_build: bool,
+}
+
+impl CliBuildPayload {
+    pub fn new(
+        command: CommandPayload,
+        has_expression_build: bool,
+        has_manifest_build: bool,
+    ) -> Self {
+        Self {
+            command,
+            has_expression_build,
+            has_manifest_build,
+        }
+    }
+}
+
+/// Payload for [`EventKind::CliSearch`]. Carries the user-supplied
+/// search term verbatim, matching the legacy `subcommand_metric!(
+/// "search", "search_term" = …)` extras.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CliSearchPayload {
+    #[serde(flatten)]
+    pub command: CommandPayload,
+    pub search_term: String,
+}
+
+impl CliSearchPayload {
+    pub fn new(command: CommandPayload, search_term: String) -> Self {
+        Self {
+            command,
+            search_term,
         }
     }
 }
@@ -783,6 +1285,237 @@ mod tests {
             .expect("event serializes");
         let expected =
             package_envelope_json("cli.package.uninstall", "uninstall", "hello", "success");
+        assert_eq!(value, expected);
+    }
+
+    /// Common helper for the env-detail-only envelope goldens.
+    /// Builds an `Event` from `subcommand` + v2 env-detail
+    /// fields and the expected JSON shape it should serialize to.
+    fn env_envelope_json(event_type: &str, subcommand: &str) -> serde_json::Value {
+        let mut payload_json = expected_payload_json(subcommand);
+        let payload_obj = payload_json.as_object_mut().expect("payload object");
+        payload_obj.insert("env_kind".to_string(), json!("managed"));
+        payload_obj.insert("env_ref_or_name".to_string(), json!("alice/myenv"));
+        json!({
+            "event_id": "00000000-0000-0000-0000-000000000000",
+            "event_timestamp": EPOCH_UNIX_MS,
+            "source": "cli",
+            "invocation_id": "00000000-0000-0000-0000-000000000000",
+            "device_id": "00000000-0000-0000-0000-000000000000",
+            "event_type": event_type,
+            "payload": payload_json,
+        })
+    }
+
+    fn managed_env_detail() -> EnvDetail {
+        env_detail("managed", "alice/myenv")
+    }
+
+    #[test]
+    fn cli_environment_delete_envelope_golden() {
+        let payload =
+            CliEnvironmentDeletePayload::new(command_payload("delete"), managed_env_detail());
+        let value = serde_json::to_value(fixed_event(EventKind::CliEnvironmentDelete(payload)))
+            .expect("event serializes");
+        let expected = env_envelope_json("cli.environment.delete", "delete");
+        assert_eq!(value, expected);
+    }
+
+    #[test]
+    fn cli_environment_containerize_envelope_golden() {
+        let payload = CliEnvironmentContainerizePayload::new(
+            command_payload("containerize"),
+            managed_env_detail(),
+        );
+        let value =
+            serde_json::to_value(fixed_event(EventKind::CliEnvironmentContainerize(payload)))
+                .expect("event serializes");
+        let expected = env_envelope_json("cli.environment.containerize", "containerize");
+        assert_eq!(value, expected);
+    }
+
+    /// `cli.environment.include.upgrade` — the only `flox include`
+    /// sub-command currently wiring a per-command event. The `.upgrade`
+    /// suffix on `event_type` matches the `parent.child` shape used by
+    /// every other nested-command event_type so a consumer
+    /// `s/::/./g` between `subcommand` and `event_type` lines up
+    /// element-for-element.
+    #[test]
+    fn cli_environment_include_upgrade_envelope_golden() {
+        let payload = CliEnvironmentIncludeUpgradePayload::new(
+            command_payload("include::upgrade"),
+            managed_env_detail(),
+        );
+        let value = serde_json::to_value(fixed_event(EventKind::CliEnvironmentIncludeUpgrade(
+            payload,
+        )))
+        .expect("event serializes");
+        let expected = env_envelope_json("cli.environment.include.upgrade", "include::upgrade");
+        assert_eq!(value, expected);
+    }
+
+    /// Representative for the six `services::*` env-detail-only
+    /// commands. The remaining five (`stop`/`restart`/`status`/`logs`/
+    /// `persist`) share this exact shape — discriminating only on the
+    /// `event_type` and `subcommand` fields.
+    #[test]
+    fn cli_environment_services_start_envelope_golden() {
+        let payload = CliEnvironmentServicesStartPayload::new(
+            command_payload("services::start"),
+            managed_env_detail(),
+        );
+        let value =
+            serde_json::to_value(fixed_event(EventKind::CliEnvironmentServicesStart(payload)))
+                .expect("event serializes");
+        let expected = env_envelope_json("cli.environment.services.start", "services::start");
+        assert_eq!(value, expected);
+    }
+
+    /// Representative for the three env-detail-only `generations::*`
+    /// commands (`history`/`rollback`/`switch`). The fourth member —
+    /// `generations::list` — carries `request_tree` extras and has
+    /// its own envelope test below.
+    #[test]
+    fn cli_environment_generations_history_envelope_golden() {
+        let payload = CliEnvironmentGenerationsHistoryPayload::new(
+            command_payload("generations::history"),
+            managed_env_detail(),
+        );
+        let value = serde_json::to_value(fixed_event(EventKind::CliEnvironmentGenerationsHistory(
+            payload,
+        )))
+        .expect("event serializes");
+        let expected = env_envelope_json(
+            "cli.environment.generations.history",
+            "generations::history",
+        );
+        assert_eq!(value, expected);
+    }
+
+    /// `cli.environment.edit` on the eager call site: env-detail is
+    /// populated, `edited_includes` defaults to `None` and is omitted
+    /// from the wire shape via `skip_serializing_if`.
+    #[test]
+    fn cli_environment_edit_eager_envelope_golden() {
+        let payload = CliEnvironmentEditPayload::new(command_payload("edit"), managed_env_detail());
+        let value = serde_json::to_value(fixed_event(EventKind::CliEnvironmentEdit(payload)))
+            .expect("event serializes");
+        let expected = env_envelope_json("cli.environment.edit", "edit");
+        assert_eq!(value, expected);
+    }
+
+    /// `cli.environment.edit` on the result-known call site:
+    /// `edited_includes` is populated and serializes as a top-level
+    /// payload field. Sparse-merge with the eager event on the
+    /// consumer side recovers the full row.
+    #[test]
+    fn cli_environment_edit_result_envelope_golden() {
+        let payload = CliEnvironmentEditPayload::new(command_payload("edit"), managed_env_detail())
+            .with_edited_includes(true);
+        let value = serde_json::to_value(fixed_event(EventKind::CliEnvironmentEdit(payload)))
+            .expect("event serializes");
+        let mut expected = env_envelope_json("cli.environment.edit", "edit");
+        expected
+            .get_mut("payload")
+            .and_then(|p| p.as_object_mut())
+            .expect("payload object")
+            .insert("edited_includes".to_string(), json!(true));
+        assert_eq!(value, expected);
+    }
+
+    /// `cli.environment.publish` result-known emit carries both
+    /// build-kind flags. The eager emit shape (extras omitted) is
+    /// covered by [`cli_environment_edit_eager_envelope_golden`]'s
+    /// pattern — they share the same `skip_serializing_if` behavior.
+    #[test]
+    fn cli_environment_publish_with_build_kinds_envelope_golden() {
+        let payload =
+            CliEnvironmentPublishPayload::new(command_payload("publish"), managed_env_detail())
+                .with_build_kinds(true, false);
+        let value = serde_json::to_value(fixed_event(EventKind::CliEnvironmentPublish(payload)))
+            .expect("event serializes");
+        let mut expected = env_envelope_json("cli.environment.publish", "publish");
+        let obj = expected
+            .get_mut("payload")
+            .and_then(|p| p.as_object_mut())
+            .expect("payload object");
+        obj.insert("has_expression_build".to_string(), json!(true));
+        obj.insert("has_manifest_build".to_string(), json!(false));
+        assert_eq!(value, expected);
+    }
+
+    /// `cli.environment.generations.list` carries `request_tree`
+    /// reflecting the user-supplied `--tree` flag.
+    #[test]
+    fn cli_environment_generations_list_envelope_golden() {
+        let payload = CliEnvironmentGenerationsListPayload::new(
+            command_payload("generations::list"),
+            managed_env_detail(),
+        )
+        .with_request_tree(true);
+        let value = serde_json::to_value(fixed_event(EventKind::CliEnvironmentGenerationsList(
+            payload,
+        )))
+        .expect("event serializes");
+        let mut expected =
+            env_envelope_json("cli.environment.generations.list", "generations::list");
+        expected
+            .get_mut("payload")
+            .and_then(|p| p.as_object_mut())
+            .expect("payload object")
+            .insert("request_tree".to_string(), json!(true));
+        assert_eq!(value, expected);
+    }
+
+    /// `cli.build` carries no env detail; both build-kind flags are
+    /// non-Optional (required on the wire).
+    #[test]
+    fn cli_build_envelope_golden() {
+        let payload = CliBuildPayload::new(command_payload("build"), true, false);
+        let value = serde_json::to_value(fixed_event(EventKind::CliBuild(payload)))
+            .expect("event serializes");
+        let mut payload_json = expected_payload_json("build");
+        payload_json
+            .as_object_mut()
+            .expect("payload object")
+            .insert("has_expression_build".to_string(), json!(true));
+        payload_json
+            .as_object_mut()
+            .expect("payload object")
+            .insert("has_manifest_build".to_string(), json!(false));
+        let expected = json!({
+            "event_id": "00000000-0000-0000-0000-000000000000",
+            "event_timestamp": EPOCH_UNIX_MS,
+            "source": "cli",
+            "invocation_id": "00000000-0000-0000-0000-000000000000",
+            "device_id": "00000000-0000-0000-0000-000000000000",
+            "event_type": "cli.build",
+            "payload": payload_json,
+        });
+        assert_eq!(value, expected);
+    }
+
+    /// `cli.search` carries the user-supplied search term verbatim
+    /// and no env detail.
+    #[test]
+    fn cli_search_envelope_golden() {
+        let payload = CliSearchPayload::new(command_payload("search"), "ripgrep".to_string());
+        let value = serde_json::to_value(fixed_event(EventKind::CliSearch(payload)))
+            .expect("event serializes");
+        let mut payload_json = expected_payload_json("search");
+        payload_json
+            .as_object_mut()
+            .expect("payload object")
+            .insert("search_term".to_string(), json!("ripgrep"));
+        let expected = json!({
+            "event_id": "00000000-0000-0000-0000-000000000000",
+            "event_timestamp": EPOCH_UNIX_MS,
+            "source": "cli",
+            "invocation_id": "00000000-0000-0000-0000-000000000000",
+            "device_id": "00000000-0000-0000-0000-000000000000",
+            "event_type": "cli.search",
+            "payload": payload_json,
+        });
         assert_eq!(value, expected);
     }
 }
@@ -1210,5 +1943,61 @@ mod pipeline_tests {
                 other => panic!("expected CliPackageInstall, got {other:?}"),
             }
         }
+    }
+
+    /// `cli.environment.edit` follows the sparse-merge contract:
+    /// the eager call site emits with env-detail only; the result-
+    /// known site emits with `edited_includes` populated. Both events
+    /// share `invocation_id` and `event_type` so the consumer's
+    /// `GROUP BY invocation_id, event_type` + `COALESCE` recovers a
+    /// single `cli.telemetry` row.
+    #[test]
+    fn environment_edit_sparse_merge_emits_two_events_per_invocation() {
+        let tempdir = tempfile::tempdir().expect("tempdir");
+        let connection = MockEventsConnection::default();
+        let sent_batches = connection.sent_batches();
+        let hub = EventsHub::new();
+        hub.set_client(client_with_connection(&tempdir, connection));
+
+        let env_detail = EnvDetail {
+            env_kind: "path".to_string(),
+            env_ref_or_name: "myenv".to_string(),
+        };
+
+        hub.record_environment_edit(env_detail.clone())
+            .expect("eager emit");
+        hub.record_environment_edit_with(env_detail, |p| p.with_edited_includes(true))
+            .expect("result-known emit");
+        hub.flush(true).expect("flush events");
+
+        let events: Vec<_> = sent_batches
+            .lock()
+            .unwrap()
+            .clone()
+            .into_iter()
+            .flatten()
+            .collect();
+        assert_eq!(events.len(), 2);
+        let mut eager_seen = false;
+        let mut result_seen = false;
+        for event in &events {
+            assert_eq!(event.invocation_id, INVOCATION_ID);
+            match &event.kind {
+                EventKind::CliEnvironmentEdit(p) => {
+                    assert_eq!(p.env_detail.env_kind, "path");
+                    match p.edited_includes {
+                        None => eager_seen = true,
+                        Some(true) => result_seen = true,
+                        Some(false) => panic!("unexpected edited_includes=false"),
+                    }
+                },
+                other => panic!("expected CliEnvironmentEdit, got {other:?}"),
+            }
+        }
+        assert!(eager_seen, "missing eager env-detail-only event");
+        assert!(
+            result_seen,
+            "missing result-known event with edited_includes"
+        );
     }
 }
