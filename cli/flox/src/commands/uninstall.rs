@@ -1,5 +1,6 @@
 use anyhow::{Result, bail};
 use bpaf::Bpaf;
+use flox_events::{EventsHub, PackageOutcome};
 use flox_manifest::parsed::latest::SelectedOutputs;
 use flox_manifest::raw::PackageModification;
 use flox_rust_sdk::flox::Flox;
@@ -123,6 +124,22 @@ impl Uninstall {
         }
 
         warn_manifest_changes_for_services(&flox, &concrete_environment);
+
+        let hub = EventsHub::global();
+        for modification in attempt.modifications.iter() {
+            // Only a genuine removal is an uninstall. `UpdateOutputs` trims
+            // some of a package's outputs without removing the package (the
+            // display layer above shows it as "Updated outputs", not
+            // "uninstalled"), so it must not emit a `cli.package.uninstall`.
+            if !matches!(modification.modification, PackageModification::Remove) {
+                continue;
+            }
+            if let Err(err) = hub
+                .record_package_uninstall(modification.install_id.clone(), PackageOutcome::Success)
+            {
+                debug!(error = %err, "Failed to record v2 event");
+            }
+        }
 
         Ok(())
     }

@@ -1,12 +1,13 @@
 use anyhow::Result;
 use bpaf::Bpaf;
 use crossterm::style::Stylize;
+use flox_events::{EventsHub, PackageOutcome};
 use flox_manifest::lockfile::LockedPackage;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::{Environment, SingleSystemUpgradeDiff};
 use indoc::formatdoc;
 use itertools::Itertools;
-use tracing::{info_span, instrument};
+use tracing::{debug, info_span, instrument};
 
 use super::services::warn_manifest_changes_for_services;
 use super::{EnvironmentSelect, environment_select};
@@ -148,6 +149,15 @@ impl Upgrade {
         }
 
         warn_manifest_changes_for_services(&flox, &concrete_environment);
+
+        let hub = EventsHub::global();
+        for (_, (before, _)) in diff_for_system.iter() {
+            if let Err(err) =
+                hub.record_package_upgrade(before.install_id().to_string(), PackageOutcome::Success)
+            {
+                debug!(error = %err, "Failed to record v2 event");
+            }
+        }
 
         Ok(())
     }
