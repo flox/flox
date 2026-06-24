@@ -127,6 +127,13 @@ impl Uninstall {
 
         let hub = EventsHub::global();
         for modification in attempt.modifications.iter() {
+            // Only a genuine removal is an uninstall. `UpdateOutputs` trims
+            // some of a package's outputs without removing the package (the
+            // display layer above shows it as "Updated outputs", not
+            // "uninstalled"), so it must not emit a `cli.package.uninstall`.
+            if !matches!(modification.modification, PackageModification::Remove) {
+                continue;
+            }
             if let Err(err) = hub
                 .record_package_uninstall(modification.install_id.clone(), PackageOutcome::Success)
             {
