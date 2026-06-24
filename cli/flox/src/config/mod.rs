@@ -47,6 +47,12 @@ pub struct FloxConfig {
     /// Prefer `Flox.metrics_device_uuid.is_some()` if both are available.
     #[serde(default)]
     pub disable_metrics: bool,
+
+    /// Disable Flox CLI version and environment upgrade checks.
+    ///
+    /// (default: false)
+    pub disable_update_checks: Option<bool>,
+
     /// Directory where flox should store ephemeral data (default:
     /// `$XDG_CACHE_HOME/flox` e.g. `~/.cache/flox`)
     pub cache_dir: PathBuf,
@@ -195,6 +201,13 @@ pub enum AutoActivate {
 pub enum AutoActivationPreference {
     Allow,
     Deny,
+}
+
+impl FloxConfig {
+    /// Whether Flox CLI version and environment upgrade checks are disabled.
+    pub fn disable_update_checks(&self) -> bool {
+        self.disable_update_checks.unwrap_or(false)
+    }
 }
 
 impl Display for InstallerChannel {
@@ -694,6 +707,21 @@ mod tests {
         assert_eq!(config.flox.floxhub_url, Some(floxhub_url.parse().unwrap()));
         assert!(config.flox.disable_metrics);
         assert_eq!(config.flox.search_limit, Some(search_limit));
+    }
+
+    #[test]
+    fn disable_update_checks_env_override_is_parsed() {
+        let user_config_dir = tempfile::tempdir().unwrap();
+
+        fs::write(user_config_dir.path().join(FLOX_CONFIG_FILE), "").unwrap();
+
+        let config = Config::parse_with(&mock_flox_dirs(), user_config_dir.path(), None, [(
+            "FLOX_DISABLE_UPDATE_CHECKS".into(),
+            "true".into(),
+        )])
+        .unwrap();
+
+        assert!(config.flox.disable_update_checks());
     }
 
     #[test]
