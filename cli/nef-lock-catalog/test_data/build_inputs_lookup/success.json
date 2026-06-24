@@ -1,0 +1,26 @@
+{
+  "groups": {
+    "mypkg": {
+      "lock": {
+        "myorg.hello": {
+          "attr_path": ["hello"],
+          "build_type": "nef",
+          "catalog": "myorg",
+          "locked_inputs_hash": "sha256-success-fixture",
+          "source": {
+            "type": "git",
+            "url": "https://example.com/repo",
+            "rev": "abc123",
+            "ref": "refs/heads/main",
+            "dir": "."
+          }
+        }
+      },
+      "matched": {
+        "myorg.hello": ["catalogs.myorg.hello"]
+      },
+      "unresolvable": []
+    }
+  },
+  "version": 1
+}

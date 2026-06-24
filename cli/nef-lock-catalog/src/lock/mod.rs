@@ -8,4 +8,6 @@
 
 pub(crate) mod build_lock;
 pub(crate) mod flakeref;
+pub(crate) mod lookup;
+pub(crate) mod transform;
 pub(crate) mod tree;

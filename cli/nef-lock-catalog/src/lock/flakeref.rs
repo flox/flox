@@ -116,6 +116,29 @@ impl NixFlakeref {
     }
 }
 
+/// The raw attribute-set form of a locked nix flakeref (a "source ref"),
+/// carried verbatim as JSON.
+///
+/// Unlike [NixFlakeref], this performs no nix-based parsing or validation: the
+/// catalog `/build-inputs/lookup` endpoint returns sources already locked
+/// server-side, and this type carries that JSON through unchanged into the
+/// build lock, where the NEF feeds it to `builtins.fetchTree`. It is a marker
+/// for the "assumed-locked, stored-verbatim" invariant — the source is not
+/// re-validated client-side.
+///
+/// Serialized transparently, so the lockfile shape is just the inner object.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct RawNixFlakerefAttrs(Value);
+
+impl RawNixFlakerefAttrs {
+    /// Wrap an already-locked source value (e.g. a catalog lookup result)
+    /// without validating it — the caller asserts it is a locked flakeref.
+    pub fn new_unchecked(value: Value) -> Self {
+        Self(value)
+    }
+}
+
 /// Lock a flakeref url
 pub fn lock_url_with_options(
     flakeref: &NixFlakeref,
@@ -147,19 +170,6 @@ pub struct NixPrefetchResult {
     original: Value,
     #[serde(rename = "storePath")]
     store_path: PathBuf,
-}
-
-impl NixPrefetchResult {
-    pub fn locked_flakeref(&self) -> NixFlakeref {
-        self.locked
-            .clone()
-            .try_into()
-            .expect("valid flakeref by construction")
-    }
-
-    pub fn store_path(&self) -> &Path {
-        &self.store_path
-    }
 }
 
 /// Lock a flakeref url using `nix flake prefetch`.

@@ -28,7 +28,6 @@ use floxhub_client::{BaseCatalogUrl, CatalogClientTrait};
 use indoc::formatdoc;
 use itertools::Itertools;
 use nef_lock_catalog::NixFlakeref;
-use nef_lock_catalog::{lock_config, read_config, write_lock};
 use thiserror::Error;
 use tracing::{debug, instrument, trace};
 use url::Url;
@@ -483,43 +482,19 @@ impl Build {
         Ok(())
     }
 
-    async fn update_catalogs(flox: &Flox, env: ConcreteEnvironment) -> Result<()> {
-        match &env {
-            ConcreteEnvironment::Path(_) => (),
-            ConcreteEnvironment::Managed(_) => {
-                bail!("Cannot update catalogs in a managed environment on FloxHub.")
-            },
-            ConcreteEnvironment::Remote(_) => {
-                unreachable!("Cannot update catalogs in a remote environment")
-            },
-        };
+    async fn update_catalogs(_flox: &Flox, _env: ConcreteEnvironment) -> Result<()> {
+        // The standalone `nix-builds.toml` catalog-declaration + nix-prefetch
+        // locking path has been retired (ECO-93/D4). Catalog inputs are now
+        // resolved and locked through the lockless lookup flow as part of the
+        // build itself, so there is no separate lockfile to update here.
+        // Full removal of this subcommand follows in ECO-94/95.
+        bail!(formatdoc! {"
+            `flox build update-catalogs` is no longer supported.
 
-        let config_path = env.dot_flox_path().join("nix-builds.toml");
-
-        if !config_path.exists() {
-            message::warning(formatdoc! {"
-                No catalog inputs defined in this project.
-
-                Create and edit catalog inputs in your .flox/nix-builds.toml:
-
-                    {}
-            ", config_path.display()});
-            return Ok(());
-        };
-
-        let config = read_config(&config_path)?;
-        let catalog = &flox.floxhub_client;
-        let lockfile = lock_config(&config, catalog).await?;
-
-        let lockfile_path = config_path.with_extension("lock");
-        write_lock(&lockfile, &lockfile_path)?;
-
-        message::updated(format!(
-            "Updated catalog lockfile at {}",
-            lockfile_path.display()
-        ));
-
-        Ok(())
+            Catalog inputs are now locked automatically during the build via the
+            lockless resolution flow; the standalone nix-builds.toml locking step
+            has been retired.
+        "});
     }
 
     /// If so, shorten symlink for a package it if in the current directory.
