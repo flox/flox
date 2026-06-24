@@ -57,33 +57,46 @@ pub(crate) fn build_lock_from_locked_inputs(
 
 #[cfg(test)]
 mod tests {
-    use floxhub_client::BuildType;
+    use floxhub_client::{BuildType, LockedGitSource};
     use serde_json::json;
 
     use super::*;
+
+    /// A locked git source. Locked inputs are only ever tracked as git
+    /// flakerefs, so the typed wire model carries exactly these fields.
+    fn git_source(url: &str, rev: &str) -> LockedGitSource {
+        LockedGitSource {
+            dir: ".".to_string(),
+            ref_: "refs/heads/main".to_string(),
+            rev: rev.to_string(),
+            type_: "git".to_string(),
+            url: url.to_string(),
+        }
+    }
 
     fn entry(
         catalog: &str,
         attr_path: &[&str],
         build_type: BuildType,
-        source: serde_json::Value,
+        source: LockedGitSource,
     ) -> LockedInputEntry {
         LockedInputEntry {
             attr_path: attr_path.iter().map(|s| s.to_string()).collect(),
             build_type,
             catalog: catalog.to_string(),
             inputs: None,
-            source: serde_json::from_value(source).expect("mocked values is not a valid source"),
             locked_inputs_hash: "sha256-test".to_string(),
+            source,
         }
     }
 
     #[test]
     fn single_package_single_catalog() {
-        let source = json!({ "type": "git", "url": "https://example.com/repo", "rev": "abc" });
+        let source = git_source("https://example.com/repo", "abc");
+        let expected_source = serde_json::to_value(&source).unwrap();
         let locked = HashMap::from([(
             "myorg.hello".to_string(),
-            entry("myorg", &["hello"], BuildType::Nef, source.clone()),
+            entry("myorg", &["hello"], BuildType::Nef, source),
         )]);
 
         let lock = build_lock_from_locked_inputs(locked).expect("transform succeeds");
@@ -101,7 +114,7 @@ mod tests {
                                 "hello": {
                                     "type": "package",
                                     "build_type": "nef",
-                                    "source": source,
+                                    "source": expected_source,
                                 }
                             }
                         }
@@ -113,14 +126,15 @@ mod tests {
 
     #[test]
     fn nested_attr_path_builds_package_set() {
-        let source = json!({ "type": "git", "url": "https://example.com/repo" });
+        let source = git_source("https://example.com/repo", "abc");
+        let expected_source = serde_json::to_value(&source).unwrap();
         let locked = HashMap::from([(
             "myorg.python3Packages.boolex".to_string(),
             entry(
                 "myorg",
                 &["python3Packages", "boolex"],
                 BuildType::Manifest,
-                source.clone(),
+                source,
             ),
         )]);
 
@@ -142,7 +156,7 @@ mod tests {
                                         "boolex": {
                                             "type": "package",
                                             "build_type": "manifest",
-                                            "source": source,
+                                            "source": expected_source,
                                         }
                                     }
                                 }
@@ -156,21 +170,18 @@ mod tests {
 
     #[test]
     fn groups_by_catalog_and_preserves_source_verbatim() {
-        let src_a = json!({
-            "type": "git",
-            "url": "https://a.example/x",
-            "rev": "deadbeef",
-            "extra": { "nested": [1, 2, 3] },
-        });
-        let src_b = json!({ "type": "path", "path": "/store/b" });
+        let src_a = git_source("https://a.example/x", "deadbeef");
+        let src_b = git_source("https://b.example/y", "cafebabe");
+        let expected_a = serde_json::to_value(&src_a).unwrap();
+        let expected_b = serde_json::to_value(&src_b).unwrap();
         let locked = HashMap::from([
             (
                 "a.foo".to_string(),
-                entry("alpha", &["foo"], BuildType::Nef, src_a.clone()),
+                entry("alpha", &["foo"], BuildType::Nef, src_a),
             ),
             (
                 "b.bar".to_string(),
-                entry("beta", &["bar"], BuildType::Nef, src_b.clone()),
+                entry("beta", &["bar"], BuildType::Nef, src_b),
             ),
         ]);
 
@@ -180,14 +191,14 @@ mod tests {
         .unwrap();
 
         // Each catalog gets its own tree, and the locked source is stored
-        // byte-for-byte (no nix normalization).
+        // verbatim (no nix normalization).
         assert_eq!(
             value["catalogs"]["alpha"]["packages"]["entries"]["foo"]["source"],
-            src_a
+            expected_a
         );
         assert_eq!(
             value["catalogs"]["beta"]["packages"]["entries"]["bar"]["source"],
-            src_b
+            expected_b
         );
     }
 }

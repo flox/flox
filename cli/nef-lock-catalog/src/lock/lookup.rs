@@ -77,8 +77,9 @@ pub async fn lock_references(
 /// Convert the reference list into the generated wire request.
 ///
 /// Wraps all references in a single [`floxhub_client::LookupGroup`].
-/// `reference_point` is defaulted to `None` for now; `system` is filled with a
-/// placeholder to satisfy the (soon-to-be-removed) required wire field.
+/// `reference_point` is defaulted to `None` for now. The endpoint is
+/// system-independent: the response carries source revs + DAG edges, which
+/// carry no system, so the request has no system field.
 fn build_request(
     references: BTreeSet<CatalogRef>,
     stability: Stability,
@@ -169,7 +170,13 @@ mod tests {
         );
         assert_eq!(
             value["catalogs"]["myorg"]["packages"]["entries"]["hello"]["source"],
-            json!({ "type": "git", "url": "https://example.com/repo", "rev": "abc123" })
+            json!({
+                "type": "git",
+                "url": "https://example.com/repo",
+                "rev": "abc123",
+                "ref": "refs/heads/main",
+                "dir": "."
+            })
         );
     }
 
