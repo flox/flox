@@ -102,7 +102,7 @@ let
   activateCtx = {
     mode = "${activationMode}";
     shell = {
-      bash = "${containerPkgs.bashInteractive}/bin/bash";
+      bash = "${containerPkgs.bash}/bin/bash";
     };
     invocation_type = null;
     remove_after_reading = false;
@@ -173,7 +173,7 @@ let
         paths = [
           fakeNss
           environment
-          (lowPrio containerPkgs.bashInteractive) # for a usable shell
+          (lowPrio containerPkgs.bash) # for a usable shell
           (lowPrio containerPkgs.coreutils) # for just the basic utils
         ];
       };
