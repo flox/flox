@@ -1090,8 +1090,9 @@ fn nix_path_info_null_paths(paths: &[String]) -> Result<Vec<String>, std::io::Er
 /// will break and signal a contract update is needed.
 fn is_deterministic_buildenv_conflict(err: &BuildEnvError) -> bool {
     match err {
-        BuildEnvError::Build(stderr) => stderr
-            .contains("Resolve by uninstalling one of the conflicting packages"),
+        BuildEnvError::Build(stderr) => {
+            stderr.contains("Resolve by uninstalling one of the conflicting packages")
+        },
         _ => false,
     }
 }
@@ -3021,7 +3022,11 @@ mod materialise_retry_tests {
             1,
             "must not retry a deterministic package-output conflict"
         );
-        assert_eq!(realise_calls.get(), 1, "realise called once before short-circuit");
+        assert_eq!(
+            realise_calls.get(),
+            1,
+            "realise called once before short-circuit"
+        );
     }
 
     // --- realise errors ---
