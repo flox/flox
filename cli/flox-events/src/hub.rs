@@ -4,8 +4,8 @@ use std::sync::{Arc, LazyLock, Mutex};
 use anyhow::Result;
 use tracing::debug;
 
-use crate::EventKind;
 use crate::client::EventsClient;
+use crate::{CliEnvironmentActivatePayload, EnvDetail, EventKind};
 
 static EVENTS_HUB: LazyLock<EventsHub> = LazyLock::new(EventsHub::new);
 
@@ -92,6 +92,68 @@ impl EventsHub {
                 return Ok(());
             };
             client.record_command_completed(subcommand)
+        })
+    }
+
+    /// Record a `cli.environment.activate` event from an already-built
+    /// payload. Most call sites should prefer
+    /// [`EventsHub::record_environment_activate_with`], which builds the
+    /// payload and applies the activate extras in a single call.
+    /// No-op when no client is installed.
+    pub fn record_environment_activate(
+        &self,
+        payload: CliEnvironmentActivatePayload,
+    ) -> Result<()> {
+        self.with_client(|client| {
+            let Some(client) = client else {
+                debug!("No v2 events client configured, skipping environment.activate record");
+                return Ok(());
+            };
+            client.record_environment_activate(payload)
+        })
+    }
+
+    /// Record a `cli.environment.activate` event in one call: builds the
+    /// payload from the installed client's shared metadata, applies
+    /// `extras` to populate the activate-specific Optional fields, and
+    /// records it. When no client is installed the call short-circuits
+    /// without invoking `extras` — call sites do not need to write
+    /// `if let Some(payload) = …`.
+    pub fn record_environment_activate_with(
+        &self,
+        env_detail: EnvDetail,
+        extras: impl FnOnce(CliEnvironmentActivatePayload) -> CliEnvironmentActivatePayload,
+    ) -> Result<()> {
+        self.with_client(|client| {
+            let Some(client) = client else {
+                debug!("No v2 events client configured, skipping environment.activate record");
+                return Ok(());
+            };
+            client.record_environment_activate_with(env_detail, extras)
+        })
+    }
+
+    /// Record a `cli.environment.push` event with the supplied env detail.
+    /// No-op when no client is installed.
+    pub fn record_environment_push(&self, env_detail: EnvDetail) -> Result<()> {
+        self.with_client(|client| {
+            let Some(client) = client else {
+                debug!("No v2 events client configured, skipping environment.push record");
+                return Ok(());
+            };
+            client.record_environment_push(env_detail)
+        })
+    }
+
+    /// Record a `cli.environment.pull` event with the supplied env detail.
+    /// No-op when no client is installed.
+    pub fn record_environment_pull(&self, env_detail: EnvDetail) -> Result<()> {
+        self.with_client(|client| {
+            let Some(client) = client else {
+                debug!("No v2 events client configured, skipping environment.pull record");
+                return Ok(());
+            };
+            client.record_environment_pull(env_detail)
         })
     }
 

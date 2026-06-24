@@ -19,6 +19,7 @@ use flox_core::activations::activation_state_dir_path;
 use flox_core::data::System;
 use flox_core::data::environment_ref::DEFAULT_NAME;
 use flox_core::traceable_path;
+use flox_events::EventsHub;
 use flox_manifest::interfaces::{AsLatestSchema, AsWritableManifest, WriteManifest};
 use flox_manifest::parsed::Inner;
 use flox_manifest::parsed::common::IncludeDescriptor;
@@ -62,6 +63,7 @@ use crate::commands::{
 use crate::config::{AutoActivationPreference, Config, EnvironmentPromptConfig};
 use crate::utils::detect_shell::{detect_shell_for_in_place, detect_shell_for_subshell};
 use crate::utils::errors::format_diverged_metadata;
+use crate::utils::events::env_detail_from_concrete;
 use crate::utils::message;
 use crate::utils::upgrade_output::{count_upgrade_categories, format_upgrade_summary};
 use crate::{Exit, environment_subcommand_metric, subcommand_metric, utils};
@@ -204,6 +206,29 @@ impl Activate {
                 .unwrap_or(ActivateMode::Dev)
                 .to_string()
         );
+
+        // Both telemetry stacks emit in parallel through the dormant
+        // phase; the new-pipeline mirrors below are no-ops in production
+        // until the cutover PR installs an `EventsHub` client.
+        //
+        // This v2 emit sits at the same dispatch point as the legacy
+        // `environment_subcommand_metric!` above — before the remote-trust
+        // check below — to mirror it 1:1 (parity contract). The activation
+        // *outcome* is carried on `cli.command_completed` (exit_code), not by
+        // the presence of this dispatch-time event, so emitting before a
+        // possible trust decline is intentional, not a logged false success.
+        let v2_env_detail = env_detail_from_concrete(&concrete_environment);
+        let v2_mode = options
+            .mode
+            .clone()
+            .unwrap_or(ActivateMode::Dev)
+            .to_string();
+        if let Err(err) = EventsHub::global().record_environment_activate_with(v2_env_detail, |p| {
+            p.with_start_services(options.start_services)
+                .with_mode(v2_mode)
+        }) {
+            debug!(error = %err, "Failed to record v2 event");
+        }
 
         if let ConcreteEnvironment::Remote(ref env) = concrete_environment
             && !options.trust
@@ -372,6 +397,13 @@ impl ActivateOptions {
         let has_includes = lockfile.compose.is_some();
         subcommand_metric!("activate", "has_includes" = has_includes);
 
+        if let Err(err) = EventsHub::global().record_environment_activate_with(
+            env_detail_from_concrete(&concrete_environment),
+            |p| p.with_has_includes(has_includes),
+        ) {
+            debug!(error = %err, "Failed to record v2 event");
+        }
+
         let rendered_env_path_result = concrete_environment.rendered_env_links(&flox);
         let rendered_env_path = match rendered_env_path_result {
             Err(EnvironmentError::Core(err)) if err.is_incompatible_system_error() => {
@@ -397,6 +429,16 @@ impl ActivateOptions {
         // for reasons unknown.
         let lockfile_version = lockfile.version();
         subcommand_metric!("activate#version", lockfile_version = lockfile_version);
+
+        // The new pipeline drops the legacy `activate#version` pseudo-
+        // subcommand (per spec AC #4) and rides `lockfile_version` on a
+        // real `cli.environment.activate` event instead.
+        if let Err(err) = EventsHub::global().record_environment_activate_with(
+            env_detail_from_concrete(&concrete_environment),
+            |p| p.with_lockfile_version(lockfile_version.to_string()),
+        ) {
+            debug!(error = %err, "Failed to record v2 event");
+        }
 
         let mode = self.mode.clone().unwrap_or(
             manifest
@@ -509,6 +551,16 @@ impl ActivateOptions {
             detect_shell_for_subshell()
         };
         subcommand_metric!("activate", "shell" = shell.to_string());
+
+        // Runs before `command.exec()`, so the buffered event is flushed
+        // synchronously by the pre-exec emit + flush block below
+        // (spec AC #5).
+        if let Err(err) = EventsHub::global().record_environment_activate_with(
+            env_detail_from_concrete(&concrete_environment),
+            |p| p.with_shell(shell.to_string()),
+        ) {
+            debug!(error = %err, "Failed to record v2 event");
+        }
 
         let core = AttachCtx {
             // Don't rely on FLOX_ENV in the environment when we explicitly know

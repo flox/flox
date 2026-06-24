@@ -3,6 +3,7 @@ use std::str::FromStr;
 use anyhow::{Context, Result, bail};
 use bpaf::Bpaf;
 use flox_core::data::environment_ref::EnvironmentOwner;
+use flox_events::EventsHub;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::managed_environment::{
     ManagedEnvironment,
@@ -23,6 +24,7 @@ use tracing::{debug, instrument};
 use crate::commands::{EnvironmentSelect, ensure_auth, environment_select};
 use crate::environment_subcommand_metric;
 use crate::utils::errors::format_core_error;
+use crate::utils::events::env_detail_from_concrete;
 use crate::utils::message;
 
 // Send environment to FloxHub
@@ -82,6 +84,12 @@ impl Push {
             .await?;
 
         environment_subcommand_metric!("push", env);
+
+        if let Err(err) =
+            EventsHub::global().record_environment_push(env_detail_from_concrete(&env))
+        {
+            debug!(error = %err, "Failed to record v2 event");
+        }
 
         match (env, self.owner) {
             (ConcreteEnvironment::Managed(managed_environment), Some(owner)) => {

@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use anyhow::{Context, Result, anyhow, bail};
 use bpaf::Bpaf;
 use flox_core::data::environment_ref::RemoteEnvironmentRef;
+use flox_events::{EnvDetail, EventsHub};
 use flox_manifest::interfaces::{AsLatestSchema, AsWritableManifest, WriteManifest};
 use flox_manifest::raw::SyncTypedToRaw;
 use flox_manifest::{Manifest, Migrated};
@@ -35,6 +36,7 @@ use super::{ConcreteEnvironment, open_path};
 use crate::commands::{EnvironmentSelect, environment_description, environment_select};
 use crate::utils::dialog::{Dialog, Select};
 use crate::utils::errors::{display_chain, format_core_error};
+use crate::utils::events::env_detail_from_concrete;
 use crate::utils::message;
 use crate::{environment_subcommand_metric, subcommand_metric};
 
@@ -102,6 +104,19 @@ impl Pull {
                 // `ManagedEnvironment`, but we want to keep the remote name.
                 subcommand_metric!("pull", managed_environment = remote.to_string());
 
+                // No `ConcreteEnvironment` is materialized here yet, so
+                // the shared helper does not apply — construct the env
+                // detail directly from the `RemoteRef` to match the
+                // legacy `managed_environment = remote.to_string()`
+                // extra above (spec AC #2).
+                let env_detail = EnvDetail {
+                    env_kind: "managed".to_string(),
+                    env_ref_or_name: remote.to_string(),
+                };
+                if let Err(err) = EventsHub::global().record_environment_pull(env_detail) {
+                    debug!(error = %err, "Failed to record v2 event");
+                }
+
                 let (dir_message, dir) = match dir {
                     Some(dir) => (format!("{}", dir.display()), dir),
                     None => (
@@ -136,6 +151,17 @@ impl Pull {
                     .detect_concrete_environment(&mut flox, "Pull")
                     .await?;
                 environment_subcommand_metric!("pull", environment);
+
+                // Dispatch-time emit at the same point as the legacy
+                // `environment_subcommand_metric!` above — before the
+                // path-environment bail below — mirroring it 1:1 (parity
+                // contract). Outcome rides on `cli.command_completed`
+                // (exit_code), so emitting before the bail is intentional.
+                if let Err(err) = EventsHub::global()
+                    .record_environment_pull(env_detail_from_concrete(&environment))
+                {
+                    debug!(error = %err, "Failed to record v2 event");
+                }
 
                 if let ConcreteEnvironment::Path(environment) = environment {
                     bail!(
