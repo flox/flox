@@ -57,11 +57,19 @@ pub trait ManifestBuilder {
     /// The build process will start in the background.
     /// To process the output, the caller should iterate over the returned [BuildOutput].
     /// Once the process is complete, the [BuildOutput] will yield an [Output::Exit] message.
+    ///
+    /// `nef_targets` is the complete set of Nix expression build target names
+    /// present in the environment.
+    /// The builder passes this list to the underlying Makefile so that NEF
+    /// prerequisites of manifest builds (e.g. `${foo}` references) are known
+    /// at Makefile parse time without requiring a second `nix eval` discovery
+    /// call.
     fn build(
         self,
         expression_build_nixpkgs: &Url,
         flox_interpreter: &Path,
-        package: &[PackageTargetName],
+        packages: &[PackageTargetName],
+        nef_targets: &[PackageTargetName],
         build_cache: Option<bool>,
         system_override: Option<String>,
     ) -> Result<BuildResults, ManifestBuilderError>;
@@ -301,6 +309,7 @@ impl ManifestBuilder for FloxBuildMk<'_> {
         expression_build_nixpkgs_url: &Url,
         flox_interpreter: &Path,
         packages: &[PackageTargetName],
+        nef_targets: &[PackageTargetName],
         build_cache: Option<bool>,
         system_override: Option<String>,
     ) -> Result<BuildResults, ManifestBuilderError> {
@@ -347,6 +356,34 @@ impl ManifestBuilder for FloxBuildMk<'_> {
             .expect("failed to keep build result fifo");
 
         command.arg(format!("BUILD_RESULT_FILE={}", build_result_path.display()));
+
+        let empty_catalog_lock = NamedTempFile::new_in(self.temp_dir)
+            .map_err(ManifestBuilderError::CreateBuildResultFile)?
+            .into_temp_path();
+        // SAFETY: according to the docs, this is only fallible on _Windows_
+        let empty_catalog_lock = empty_catalog_lock
+            .keep()
+            .expect("failed to keep empty catalog lock file");
+        nef_lock_catalog::write_lock(&nef_lock_catalog::BuildLock::default(), &empty_catalog_lock)
+            .map_err(|e| ManifestBuilderError::CreateBuildResultFile(std::io::Error::other(e)))?;
+
+        // TODO(SL-002): point each `catalogLockfile_<pname>` at the
+        // per-package in-tree lockfile (follow-up) or the resolved
+        // BuildLock from CLI dispatch (SL-003 follow-up). For now,
+        // every NEF target gets the same empty-default lock.
+        //
+        // Only NEF (expression) builds use `catalogLockfile_<pname>`;
+        // manifest builds don't.  `nef_targets` is the complete set of
+        // expression build targets, covering both directly-requested
+        // expression builds and any NEF prerequisites of manifest builds
+        // (referenced via `${pname}` in their build scripts).
+        for name in nef_targets {
+            command.arg(format!(
+                "catalogLockfile_{}={}",
+                name.as_ref(),
+                empty_catalog_lock.display()
+            ));
+        }
 
         let build_cache = build_cache.unwrap_or(true);
         if !build_cache {
@@ -565,7 +602,7 @@ pub fn find_toplevel_group_nixpkgs(lockfile: &Lockfile) -> Option<BaseCatalogUrl
 /// only needs to resolve to a directory containing `pkgs` dir,
 /// and it _does not_ have to use a git fetcher
 /// or give access to the entire project.
-fn get_nix_expression_targets(
+pub(crate) fn get_nix_expression_targets(
     expression_ref: &NixFlakeref,
 ) -> Result<Vec<(String, ExpressionBuildMetadata)>, ManifestBuilderError> {
     #[derive(Debug, Deserialize)]
@@ -794,6 +831,18 @@ impl PackageTargets {
             })
             .collect()
     }
+
+    /// Returns the names of all Nix expression (NEF) build targets.
+    ///
+    /// The returned names are borrowed from the internal target map,
+    /// so they are valid for the lifetime of this [PackageTargets].
+    pub fn nef_target_names(&self) -> Vec<PackageTargetName<'_>> {
+        self.targets
+            .iter()
+            .filter(|(_, kind)| kind.is_expression_build())
+            .map(|(name, _)| PackageTargetName(name.as_str()))
+            .collect()
+    }
 }
 
 #[cfg(any(test, feature = "tests"))]
@@ -840,6 +889,19 @@ pub mod test_helpers {
                 .map(|toplevel_nixpkgs| toplevel_nixpkgs.as_flake_ref().unwrap())
                 .unwrap_or_else(|| COMMON_NIXPKGS_URL.clone());
 
+        // Discover all NEF targets so every expression build gets a
+        // `catalogLockfile_<pname>` argument, including any that serve
+        // as prerequisites for manifest builds.
+        let nef_target_names: Vec<String> = get_nix_expression_targets(expression_ref)
+            .unwrap_or_default()
+            .into_iter()
+            .map(|(name, _)| name)
+            .collect();
+        let nef_targets: Vec<PackageTargetName<'_>> = nef_target_names
+            .iter()
+            .map(|n| PackageTargetName::new_unchecked(n))
+            .collect();
+
         let mut output_stdout = String::new();
         let mut output_stderr = String::new();
 
@@ -855,6 +917,7 @@ pub mod test_helpers {
             &toplevel_or_common_nixpkgs,
             &env.rendered_env_links(flox).unwrap().dev,
             &[PackageTargetName::new_unchecked(&package)],
+            &nef_targets,
             build_cache,
             None,
         );

@@ -10,36 +10,6 @@ let
     in
     sourceInfo // lib.optionalAttrs (source ? dir) { inherit (source) dir; };
 
-  # {
-  #   hash = "sha256-/UmRJVt7XpE27LGxS2hgGKWsErTx1oe65jhwWNPsnYs=";
-  #   locked = {
-  #     lastModified = 1769623709;
-  #     ref = "refs/heads/main";
-  #     rev = "b59e1a5750b5714c88fb6a7f3232398107704f7b";
-  #     revCount = 4504;
-  #     type = "git";
-  #     url = "https://github.com/flox/flox";
-  #   };
-  #   original = {
-  #     type = "git";
-  #     url = "https://github.com/flox/flox";
-  #   };
-  #   storePath = "/nix/store/df0qd3gnkix513br8az06yrnspg28530-source";
-  #   type = "nix";
-  # }
-  fetchNixCatalog =
-    nixpkgs: lockedCatalogSpec:
-    let
-      sourceInfo = fetchSource lockedCatalogSpec.locked;
-    in
-    lib.nef.instantiate.instantiateFromSourceInfo {
-      inherit nixpkgs sourceInfo;
-
-    }
-    // {
-      inherit (lockedCatalogSpec) type;
-    };
-
   # Fetch a floxhub based catalog
   #
   # {
@@ -58,7 +28,7 @@ let
   #  type = "floxhub";
   # };
   fetchFloxHubCatalog =
-    nixpkgs: lockedCatalogSpec:
+    nixpkgs: instantiatedCatalogsClosure: lockedCatalogSpec:
     let
       # process a package node
       processPackageNode =
@@ -168,10 +138,10 @@ in
     : the catalog spec to instantiate
   */
   instantiateCatalog =
-    nixpkgs: lockedCatalogSpec:
+    nixpkgs: instantiatedCatalogsClosure: lockedCatalogSpec:
     {
-      "nix" = fetchNixCatalog nixpkgs lockedCatalogSpec;
-      "floxhub" = fetchFloxHubCatalog nixpkgs lockedCatalogSpec;
+      "nix" = throw "source inputs not currently supported";
+      "floxhub" = fetchFloxHubCatalog nixpkgs instantiatedCatalogsClosure lockedCatalogSpec;
     }
     .${lockedCatalogSpec.type};
 
@@ -180,15 +150,16 @@ in
     Each attribute is mapped to a catalog instance using `instantiateCatalog`.
   */
   instantiateCatalogs =
-    { nixpkgs, catalogs }:
+    { nixpkgs, catalogSpecClosure }:
     let
       instantiateCatalog' =
         name: catalogSpec:
         builtins.addErrorContext "while instantiating catalog '${name}'" (
-          lib.nef.instantiate.instantiateCatalog nixpkgs catalogSpec
+          lib.nef.instantiate.instantiateCatalog nixpkgs instantiatedCatalogsClosure catalogSpec
         );
+      instantiatedCatalogsClosure = lib.mapAttrs instantiateCatalog' catalogSpecClosure;
     in
-    lib.mapAttrs instantiateCatalog' catalogs;
+    instantiatedCatalogsClosure;
 
   /**
     Instantiate a NEF project from a given sourceInfo.
@@ -205,34 +176,12 @@ in
     {
       nixpkgs,
       sourceInfo,
+      instantiatedCatalogsClosure,
     }:
 
     let
       configRoot = "${sourceInfo.outPath}/${sourceInfo.dir or ""}";
-
       pkgsDir = configRoot + "/pkgs";
-      catalogsLock = configRoot + "/nix-builds.lock";
-
-      catalogs =
-        if builtins.pathExists catalogsLock then
-          let
-            lockfile = (lib.importJSON catalogsLock);
-          in
-          # We have _internally_ published a few builds without a lockfile version.
-          # TODO: require a version before GA?
-          if !(lockfile ? version) || lockfile.version == 1 then
-            lockfile.catalogs
-          else
-            builtins.throw "unsupported catalog lockfile version"
-        else
-          builtins.throw ''
-            `nix-builds.lock` not found, run `flox build update-catalogs` to generate it
-            and add it to version control.
-          '';
-
-      catalogInstances = lib.nef.instantiate.instantiateCatalogs {
-        inherit nixpkgs catalogs;
-      };
 
       catalogOverlay = final: prev: {
         catalogs = lib.mapAttrs (
@@ -242,7 +191,7 @@ in
             "floxhub" = catalogInstance.packages;
           }
           .${catalogInstance.type}
-        ) catalogInstances;
+        ) instantiatedCatalogsClosure;
       };
 
       nixpkgsWithCatalogs = nixpkgs.extend catalogOverlay;
@@ -266,10 +215,6 @@ in
 
     in
     {
-      # debug
-      inherit catalogInstances catalogs;
-
-      #/debug
       inherit reflect;
       pkgs = extendedNixpkgs;
     };
