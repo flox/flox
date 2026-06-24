@@ -151,6 +151,9 @@ pub(crate) mod test_helpers {
 
         BuildResponse {
             build_id: id,
+            // Mirrors the server's effective status: the task lifecycle status
+            // when dispatched, else the pre-dispatch default of "pending".
+            status: task_status.unwrap_or("pending").to_string(),
             system: system.to_string(),
             attr_path: attr_path.to_string(),
             catalog_name: "my-catalog".to_string(),

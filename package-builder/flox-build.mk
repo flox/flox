@@ -29,7 +29,7 @@ space := $(subst x,,x x)
 comma := ,
 
 # Substitute Nix store paths for packages required by this Makefile.
-__bashInteractive := @bashInteractive@
+__bash := @bash@
 __coreutils := @coreutils@
 __cpio := @cpio@
 __daemonize := @daemonize@
@@ -48,7 +48,7 @@ __t3 := @t3@
 # substitution was successful, and if not then it will fall back to finding
 # the required tool from the PATH for use in the developer environment.
 __package_bin = $(if $(filter @%@,$(1)),$(2),$(1)/bin/$(2))
-_bash := $(call __package_bin,$(__bashInteractive),bash)
+_bash := $(call __package_bin,$(__bash),bash)
 _cat := $(call __package_bin,$(__coreutils),cat)
 _chmod := $(call __package_bin,$(__coreutils),chmod)
 _comm := $(call __package_bin,$(__coreutils),comm)
@@ -431,7 +431,7 @@ define BUILD_local_template =
 	@#
 	@# FLOX_SANDBOX_ALLOW_DIRS lists paths that are legitimate but not part of
 	@# the develop environment's recorded closure (requisites.txt), namely:
-	@#   - $(__bashInteractive): the build interpreter itself, a pinned, fixed
+	@#   - $(__bash): the build interpreter itself, a pinned, fixed
 	@#     store path whose own startup self-accesses would otherwise be
 	@#     flagged.
 	@#   - $($(_pvarname)_buildDeps): the output store paths of other manifest
@@ -454,7 +454,7 @@ define BUILD_local_template =
 	  $(FLOX_INTERPRETER)/activate --env $$($(_pvarname)_develop_copy_env) \
 	    --mode build --skip-hook-on-activate --env-project $(PWD) -- \
 	    $(_t3) $($(_pvarname)_logfile) -- \
-	    $(if $(_virtualSandbox),$(_env) $(PRELOAD_VARS) FLOX_SRC_DIR=$(PWD) FLOX_SANDBOX_ALLOW_DIRS="$(__bashInteractive) $$($(_pvarname)_buildDeps)" FLOX_SANDBOX_ALLOW=$(_sandbox_allow) FLOX_VIRTUAL_SANDBOX=$(_sandbox)) \
+	    $(if $(_virtualSandbox),$(_env) $(PRELOAD_VARS) FLOX_SRC_DIR=$(PWD) FLOX_SANDBOX_ALLOW_DIRS="$(__bash) $$($(_pvarname)_buildDeps)" FLOX_SANDBOX_ALLOW=$(_sandbox_allow) FLOX_VIRTUAL_SANDBOX=$(_sandbox)) \
 	    $(_bash) -e $$<
 	@#
 	@# Finally, rewrite references to temporary build wrapper in "out",

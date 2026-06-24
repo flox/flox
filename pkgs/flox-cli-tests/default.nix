@@ -3,7 +3,7 @@
   runCommandCC,
   stdenv,
   lib,
-  bashInteractive,
+  bash,
   fish,
   tcsh,
   zsh,
@@ -53,7 +53,7 @@ let
   ]);
 
   paths = [
-    bashInteractive
+    bash
     fish
     tcsh
     zsh

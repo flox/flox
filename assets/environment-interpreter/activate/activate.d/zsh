@@ -122,6 +122,12 @@ if [ "$old_fpath" != "$new_fpath" ]; then
   fi
 fi
 
+# `old_fpath`/`new_fpath` were working variables for the fpath-change check
+# above (their last use is the `_FLOX_HOOK_SAVE_FPATH` snapshot). This script
+# is sourced into the user's shell, so leaving them set would leak them as
+# globals that persist past deactivate; unset them now.
+unset old_fpath new_fpath
+
 # Our ZDOTDIR startup files source user RC files that may modify FLOX_ENV_DIRS,
 # and then _flox_env_helper may fix it up.
 # If this happens, we want to respect those modifications,
@@ -136,6 +142,10 @@ else
 fi
 # shellcheck disable=SC1090
 source <("$_flox_activations" profile-scripts --shell zsh --already-sourced-env-dirs "${_FLOX_SOURCED_PROFILE_SCRIPTS:-}" --env-dirs "$profile_script_dirs")
+
+# Working variable for the profile-scripts call above; unset it so it doesn't
+# leak into the user's shell (this script is sourced).
+unset profile_script_dirs
 
 # Disable command hashing to allow for newly installed flox packages
 # to be found immediately. We do this as the very last thing because
