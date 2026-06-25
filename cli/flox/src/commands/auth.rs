@@ -2,7 +2,7 @@ use anyhow::{Context, Result, bail};
 use bpaf::Bpaf;
 use chrono::offset::Utc;
 use chrono::{DateTime, Duration};
-use flox_rust_sdk::flox::{FLOX_VERSION, Flox, FloxhubToken};
+use flox_rust_sdk::flox::{FLOX_VERSION, Flox, Floxhub, FloxhubToken};
 use floxhub_client::{AuthContext, AuthnMode};
 use indoc::formatdoc;
 use oauth2::basic::{
@@ -103,14 +103,18 @@ pub async fn authorize(client: ConfiguredClient, floxhub_url: &Url) -> Result<Cr
         .build()
         .expect("Failed to build OAuth HTTP client");
 
+    // The OAuth audience is the FloxHub API for the configured instance —
+    // `<floxhub_url>/api` — not a hard-coded host (hosted realm still resolves
+    // to `https://hub.flox.dev/api`).
+    let audience = Floxhub::route_url(floxhub_url, "api")
+        .context("invalid FloxHub URL for OAuth audience")?
+        .to_string();
+
     let details: StandardDeviceAuthorizationResponse = client
         .exchange_device_code()
         .add_scope(Scope::new("openid".to_string()))
         .add_scope(Scope::new("profile".to_string()))
-        .add_extra_param(
-            "audience".to_string(),
-            "https://hub.flox.dev/api".to_string(),
-        )
+        .add_extra_param("audience".to_string(), audience)
         .request_async(&http_client)
         .await
         .context("Could not request device code")?;

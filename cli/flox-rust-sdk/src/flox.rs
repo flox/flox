@@ -202,7 +202,7 @@ impl Floxhub {
     ///
     /// Errors only for a cannot-be-a-base URL (e.g. `mailto:`); valid http(s)
     /// bases always succeed.
-    pub(crate) fn route_url(base_url: &Url, route: &str) -> Result<Url, FloxhubError> {
+    pub fn route_url(base_url: &Url, route: &str) -> Result<Url, FloxhubError> {
         let mut url = base_url.clone();
         url.path_segments_mut()
             .map_err(|()| FloxhubError::CannotBeABase(base_url.to_string()))?
@@ -516,6 +516,18 @@ pub mod tests {
         // itself; the generated client appends `/api/v1/catalog`.
         let base = Url::from_str("https://onprem.example.internal").unwrap();
         assert_eq!(Floxhub::catalog_url(&base), base);
+    }
+
+    #[test]
+    fn route_url_api_audience_hosted_preserves_legacy_value() {
+        // The OAuth audience is `<base>/api`. For the hosted realm it must stay
+        // the historical hard-coded value so production auth is unchanged.
+        assert_eq!(
+            Floxhub::route_url(&PUBLIC_FLOXHUB_URL, "api")
+                .unwrap()
+                .as_str(),
+            "https://hub.flox.dev/api",
+        );
     }
 
     #[test]
