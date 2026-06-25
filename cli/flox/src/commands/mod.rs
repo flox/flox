@@ -1961,12 +1961,12 @@ mod legacy_chokepoint_tests {
     /// Unset flag defaults to `new` — verify the chokepoint follows.
     #[test]
     #[serial(v2_events_wrapper_env)]
-    fn unset_stack_flag_routes_chokepoint_to_skip_install() {
+    fn unset_stack_flag_routes_chokepoint_to_install_legacy_client() {
         let (_tempdir, config) = config_with(false);
         temp_env::with_var(FLOX_METRICS_STACK_VAR, None::<&str>, || {
             assert_eq!(
                 legacy_chokepoint_action(&config),
-                LegacyChokepointAction::SkipInstall
+                LegacyChokepointAction::InstallLegacyClient
             );
         });
     }
