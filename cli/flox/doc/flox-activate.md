@@ -74,6 +74,80 @@ run [`flox-deactivate(1)`](./flox-deactivate.md).
 Inside a `flox activate` subshell,
 `flox deactivate` is equivalent to `exit`.
 
+# AUTO-ACTIVATION
+
+```{.include}
+./include/auto-activate-experimental.md
+```
+
+Auto-activation activates an environment automatically when you enter a
+directory that contains it,
+and deactivates it when you leave,
+so you do not have to run `flox activate` or `flox deactivate` by hand.
+
+## Enabling auto-activation
+
+Two things are required:
+
+1. The Flox prompt hook must be installed in your shell.
+   The hook is installed by any in-place activation,
+   so add a line such as `eval "$(flox activate -D)"` to your shell's startup
+   file (for example `~/.bashrc`, `~/.zshrc`, `~/.config/fish/config.fish`, or
+   `~/.tcshrc`).
+   If you already activate a default or other environment in-place at startup,
+   the hook is already installed.
+   The hook ships with Flox and stays dormant until the feature flag below is
+   set.
+   Run `flox config --set disable_hook true` to opt out of the hook entirely.
+2. The `auto_activate` feature flag must be enabled,
+   either with `FLOX_FEATURES_AUTO_ACTIVATE=true` in your environment
+   or with `flox config --set features.auto_activate true`.
+
+## How it works
+
+On each prompt the hook looks for `.flox` environments at or above the current
+directory.
+An environment is auto-activated only if you have allowed it.
+Allowed environments are activated outermost-first;
+when you leave their directory they are deactivated again.
+Services are not started unless `auto-start = true` is set in the manifest's
+`[services]` section.
+
+## Allowing and denying environments
+
+The first time you enter a directory with an environment that you have neither
+allowed nor denied,
+and `auto_activate` is set to `prompt` (the default),
+Flox asks before activating it:
+
+```text
+Auto-activate the environment in '/path/to/project'? [y/N]
+```
+
+Answering `y` allows the environment and activates it immediately,
+and records the choice so you are not asked again.
+Answering `N` (or pressing Enter) skips the environment for the current shell
+session only;
+you are asked again in a new shell or when you re-enter the directory.
+To stop being asked for this directory, run
+[`flox-activate-deny(1)`](./flox-activate-deny.md):
+
+```bash
+flox activate deny
+```
+
+Set the `auto_activate` config option to `allowed` to skip the prompt entirely
+and auto-activate only environments you have already allowed.
+
+Manage these decisions ahead of time with the
+[`flox-activate-allow(1)`](./flox-activate-allow.md) and
+[`flox-activate-deny(1)`](./flox-activate-deny.md) subcommands.
+Decisions are stored in the user config file under `auto_activate_environments`.
+
+See [`flox-config(1)`](./flox-config.md) for the `auto_activate`,
+`auto_activate_environments`, `auto_activate_fish_mode`, and `disable_hook`
+options.
+
 # OPTIONS
 
 ## Activate Options
@@ -237,6 +311,9 @@ eval "$(flox activate)"
 
 # SEE ALSO
 [`flox-deactivate(1)`](./flox-deactivate.md),
+[`flox-activate-allow(1)`](./flox-activate-allow.md),
+[`flox-activate-deny(1)`](./flox-activate-deny.md),
+[`flox-config(1)`](./flox-config.md),
 [`flox-push(1)`](./flox-push.md),
 [`flox-pull(1)`](./flox-pull.md),
 [`flox-edit(1)`](./flox-edit.md),
