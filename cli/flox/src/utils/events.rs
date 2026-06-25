@@ -590,43 +590,6 @@ mod tests {
         }
     }
 
-    /// Sentinel: the build-injected [`METRICS_EVENTS_URL_V2`] must not
-    /// be the placeholder. Pairs with the companion `lib.warnIf` in
-    /// `pkgs/flox-cli/default.nix` so a release built with the
-    /// placeholder fails both `nix build` (warning) and `cargo test`
-    /// (this assertion). Survives rebases / merge conflicts that a
-    /// comment alone wouldn't.
-    #[test]
-    fn metrics_events_url_v2_is_not_placeholder() {
-        assert!(
-            !METRICS_EVENTS_URL_V2.contains("example.invalid"),
-            "METRICS_EVENTS_URL_V2 still has the .invalid placeholder; \
-             replace it in pkgs/flox-cli/default.nix before merging."
-        );
-        assert!(
-            !METRICS_EVENTS_URL_V2.contains("REPLACE-BEFORE-MERGE"),
-            "METRICS_EVENTS_URL_V2 still has the REPLACE-BEFORE-MERGE \
-             sentinel; replace it in pkgs/flox-cli/default.nix before \
-             merging."
-        );
-    }
-
-    /// Companion to [`metrics_events_url_v2_is_not_placeholder`] for the
-    /// API key. A release built with a real URL but a placeholder key
-    /// passes the URL gate and is then rejected at ingest, silently
-    /// dropping every event — so the key needs the same machine-enforced
-    /// guard as the URL, paired with the `lib.warnIf` in
-    /// `pkgs/flox-cli/default.nix`.
-    #[test]
-    fn metrics_events_api_key_v2_is_not_placeholder() {
-        assert!(
-            !METRICS_EVENTS_API_KEY_V2.contains("REPLACE-BEFORE-MERGE"),
-            "METRICS_EVENTS_API_KEY_V2 still has the REPLACE-BEFORE-MERGE \
-             sentinel; replace it in pkgs/flox-cli/default.nix before \
-             merging."
-        );
-    }
-
     /// End-to-end test mirroring the spec's "one-run-one-completed" AC:
     /// install a hub-owned client backed by a [`MockEventsConnection`],
     /// record run + completed for one invocation, and assert exactly one

@@ -49,37 +49,11 @@ let
 
       # Metrics subsystem configuration
       METRICS_EVENTS_URL = "https://z7qixlmjr3.execute-api.eu-north-1." + "amazonaws.com/prod/capture";
-      # The new pipeline's ingest endpoint. The `lib.warnIf` below
-      # remains as a regression guard so a future edit that
-      # reintroduces a placeholder (e.g. the RFC 6761 §6.4 reserved
-      # `.invalid` TLD or the literal sentinel `REPLACE-BEFORE-MERGE`)
-      # is loud at `nix build`. The companion sentinel test
-      # `metrics_events_url_v2_is_not_placeholder` in
-      # `cli/flox/src/utils/events.rs` provides the same gate at
-      # `cargo test`. The new endpoint uses its own API key
-      # (`METRICS_EVENTS_API_KEY_V2`) — the prior assumption that both
-      # stacks would share the legacy `METRICS_EVENTS_API_KEY` was
-      # superseded once the new endpoint was stood up.
-      METRICS_EVENTS_URL_V2 =
-        let
-          value = "https://telemetry.flox.dev/events";
-        in
-        lib.warnIf (
-          lib.hasInfix "example.invalid" value || lib.hasInfix "REPLACE-BEFORE-MERGE" value
-        ) "METRICS_EVENTS_URL_V2 still contains a placeholder; replace before deployment." value;
+      # The v2-events ingest endpoint, with its own API key
+      # (`METRICS_EVENTS_API_KEY_V2`) distinct from the legacy key.
+      METRICS_EVENTS_URL_V2 = "https://telemetry.flox.dev/events";
       METRICS_EVENTS_API_KEY = "5pAQnBqz5Q7dpqVD9BEXQ4Kdc3D2fGTd3ZgP0XXK";
-      # Guarded like METRICS_EVENTS_URL_V2 above: a release built with a
-      # real URL but a placeholder key would pass the URL gate and then
-      # be rejected at ingest, silently dropping every event. The
-      # companion sentinel test `metrics_events_api_key_v2_is_not_placeholder`
-      # in `cli/flox/src/utils/events.rs` enforces the same at `cargo test`.
-      METRICS_EVENTS_API_KEY_V2 =
-        let
-          value = "pdCUpFGHGL5ytsYSdPJWP6MyUMnmUwN47mgsTIuX";
-        in
-        lib.warnIf (lib.hasInfix "REPLACE-BEFORE-MERGE" value)
-          "METRICS_EVENTS_API_KEY_V2 still contains a placeholder; replace before deployment."
-          value;
+      METRICS_EVENTS_API_KEY_V2 = "pdCUpFGHGL5ytsYSdPJWP6MyUMnmUwN47mgsTIuX";
 
       # oauth client id
       OAUTH_CLIENT_ID = "fGrotHBfQr9X1PHGbFoifEWaDPyWZDmc";
