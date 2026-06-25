@@ -4,6 +4,7 @@
 //! (ECO-99) and `Cancel` (ECO-100) are future verbs.
 
 mod list;
+mod logs;
 mod status;
 
 use anyhow::{Result, anyhow};
@@ -94,7 +95,10 @@ pub enum FactoryCommands {
     /// List Flox Factory builds
     #[bpaf(command)]
     List(#[bpaf(external(list::list))] list::List),
-    // ECO-99 will add: Logs(#[bpaf(external(logs::logs))] logs::Logs),
+
+    /// Print the logs for a single Flox Factory build
+    #[bpaf(command)]
+    Logs(#[bpaf(external(logs::logs))] logs::Logs),
     // ECO-100 will add: Cancel(#[bpaf(external(cancel::cancel))] cancel::Cancel),
 }
 
@@ -111,13 +115,14 @@ impl FactoryCommands {
             },
             FactoryCommands::Status(args) => args.handle(&flox.floxhub_client).await,
             FactoryCommands::List(args) => args.handle(&flox.floxhub_client).await,
+            FactoryCommands::Logs(args) => args.handle(&flox.floxhub_client).await,
         }
     }
 }
 
 #[cfg(test)]
 pub(crate) mod test_helpers {
-    //! Shared test fixtures for the `status` and `list` verb handler tests.
+    //! Shared test fixtures for the factory verb handler tests.
 
     use chrono::TimeZone;
     use factory_api_v1::types::TaskResponse;
@@ -204,7 +209,16 @@ pub(crate) mod test_helpers {
             &self,
             _build_id: i64,
         ) -> Result<FactoryByteStream, FactoryClientError> {
-            unimplemented!("StubFactoryClient does not implement get_build_logs")
+            if self.not_found {
+                return Err(FactoryClientError::NotFound);
+            }
+            let lines: [&[u8]; 2] = [b"Building hello...\n", b"Build completed.\n"];
+            let chunks = lines
+                .into_iter()
+                .map(|line| Ok::<_, reqwest::Error>(line.into()));
+            Ok(FactoryByteStream::new(Box::pin(futures::stream::iter(
+                chunks,
+            ))))
         }
     }
 }

@@ -194,12 +194,17 @@ impl FactoryClientTrait for crate::FloxhubClient {
     }
 
     async fn get_build_logs(&self, build_id: i64) -> Result<ByteStream, FactoryClientError> {
+        // A 404 on this resource-specific endpoint means there are no logs to
+        // serve — the build does not exist, was never dispatched, or its
+        // coordinator counterpart is gone. Reclassify it so the caller can say
+        // so. Other endpoints leave a 404 as the underlying API error.
         Ok(self
             .factory
             .get_build_logs_api_v1_factory_builds_build_id_logs_get(build_id)
             .await
             .map_api_error()
-            .await?
+            .await
+            .map_err(not_found_on_404)?
             .into_inner())
     }
 }
@@ -481,6 +486,36 @@ pub mod tests {
         };
         let client = crate::FloxhubClient::new(config).unwrap();
         let err = client.get_build(7).await.unwrap_err();
+
+        mock.assert();
+        assert!(
+            matches!(err, FactoryClientError::NotFound),
+            "expected NotFound, got {err:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn get_build_logs_maps_404_to_not_found() {
+        // The logs endpoint returns 404 when the build does not exist, was
+        // never dispatched (no task), or the coordinator itself 404s. All three
+        // mean "no logs available", so get_build_logs classifies the 404 as
+        // NotFound and lets the verb render a cause-agnostic message.
+        let server = MockServer::start_async().await;
+        let mock = server.mock(|when, then| {
+            when.method("GET").path("/api/v1/factory/builds/7/logs");
+            then.status(404)
+                .json_body(json!({ "detail": "Build not found" }));
+        });
+
+        let config = FloxhubClientConfig {
+            base_url: server.base_url(),
+            ..client_config(&server.base_url())
+        };
+        let client = crate::FloxhubClient::new(config).unwrap();
+        // `ByteStream` is not `Debug`, so destructure rather than `unwrap_err`.
+        let Err(err) = client.get_build_logs(7).await else {
+            panic!("expected an error, got an Ok stream");
+        };
 
         mock.assert();
         assert!(
