@@ -182,7 +182,7 @@ EXPIRED_FLOXHUB_TOKEN="eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3gu
     FLOX_FLOXHUB_TOKEN="$EXPIRED_FLOXHUB_TOKEN" \
     run --separate-stderr "$FLOX_BIN" deactivate
   assert_success
-  refute_regex "$stderr" "as FloxHub host"
+  refute_regex "$stderr" "as the FloxHub git endpoint"
   refute_regex "$stderr" "token has expired"
 }
 
@@ -194,7 +194,7 @@ EXPIRED_FLOXHUB_TOKEN="eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3gu
     FLOX_FLOXHUB_TOKEN="$EXPIRED_FLOXHUB_TOKEN" \
     run --separate-stderr "$FLOX_BIN" config
   assert_success
-  assert_regex "$stderr" "Using https://git.example.invalid/ as FloxHub host"
+  assert_regex "$stderr" "Using https://git.example.invalid/ as the FloxHub git endpoint"
   assert_regex "$stderr" "Your FloxHub token has expired"
 }
 
