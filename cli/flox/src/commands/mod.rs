@@ -177,6 +177,10 @@ pub struct FloxArgs {
     #[bpaf(long, hide)]
     pub beta: bool,
 
+    /// Base URL of the FloxHub instance to target for this invocation
+    #[bpaf(long, argument("URL"), optional)]
+    pub floxhub_url: Option<Url>,
+
     /// Print the version of the program
     #[allow(dead_code)] // fake arg, `--version` is checked for separately (see [Version])
     #[bpaf(long, short('V'))]
@@ -306,29 +310,28 @@ impl FloxArgs {
             debug!(error = %err, "Failed to record v2 cli.command_run event");
         }
 
-        let git_url_override = {
-            if let Ok(env_set_host) = std::env::var("_FLOX_FLOXHUB_GIT_URL") {
-                if !self.is_prompt_hook_flow() {
-                    message::warning(formatdoc! {"
-                        Using {env_set_host} as FloxHub host
-                        '$_FLOX_FLOXHUB_GIT_URL' is used for testing purposes only,
-                        alternative FloxHub hosts are not yet supported!
-                    "});
-                }
-                Some(Url::parse(&env_set_host)?)
-            } else {
-                None
+        // Explicit floxhub_url override via CLI flag, on top of config.
+        let floxhub_url = self
+            .floxhub_url
+            .as_ref()
+            .or(config.flox.floxhub_url.as_ref())
+            .unwrap_or_else(|| &DEFAULT_FLOXHUB_URL)
+            .clone();
+
+        // Explicit git-endpoint override, for testing against a local FloxHub.
+        let git_url_override = if let Ok(env_set_host) = std::env::var("_FLOX_FLOXHUB_GIT_URL") {
+            if !self.is_prompt_hook_flow() {
+                message::warning(formatdoc! {"
+                    Using {env_set_host} as the FloxHub git endpoint.
+                    '$_FLOX_FLOXHUB_GIT_URL' overrides the git endpoint and is intended for testing only.
+                "});
             }
+            Some(Url::parse(&env_set_host)?)
+        } else {
+            None
         };
 
-        let floxhub = Floxhub::new(
-            config
-                .flox
-                .floxhub_url
-                .clone()
-                .unwrap_or_else(|| DEFAULT_FLOXHUB_URL.clone()),
-            git_url_override,
-        )?;
+        let floxhub = Floxhub::new(floxhub_url, git_url_override)?;
 
         let floxhub_token = self.resolve_floxhub_token(&config);
 
