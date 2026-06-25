@@ -40,7 +40,28 @@ pub enum FactoryClientError {
     #[error("could not reach the Flox Factory")]
     Transport(#[source] reqwest::Error),
 
+    /// Authentication or authorization was rejected (HTTP 401/403).
+    ///
+    /// Distinct from a generic API error because it is never retryable: the
+    /// caller must re-authenticate, not back off. Wraps the underlying error so
+    /// the server's `detail` still renders, matching the `APIError` variant.
+    #[error("{}", fmt_api_error(.0))]
+    AuthRejected(APIError<ErrorResponse>),
+
+    /// The Flox Factory reported a server-side error (HTTP 5xx, or 422).
+    ///
+    /// Distinct from [`FactoryClientError::Transport`] because the host did
+    /// respond: the failure is the service's, and the same request may succeed
+    /// on retry. Wraps the underlying error so the server's `detail` still
+    /// renders, matching the `APIError` variant.
+    #[error("{}", fmt_api_error(.0))]
+    Server(APIError<ErrorResponse>),
+
     /// Any other factory API error, rendered from the generated error type.
+    ///
+    /// This includes an unrecognised response (a non-auth 4xx, or a 200 whose
+    /// body did not parse as a `BuildResponse`): it degrades to this generic
+    /// case rather than escalating to a bespoke variant.
     #[error("{}", fmt_api_error(.0))]
     APIError(APIError<ErrorResponse>),
 }
@@ -123,6 +144,34 @@ fn not_found_on_404(err: FactoryClientError) -> FactoryClientError {
     }
 }
 
+/// Classify a single-build resource error into the typed variants that the
+/// cancel verb's exit-code space distinguishes.
+///
+/// Applied by [`FactoryClientTrait::cancel_build`], whose caller must tell apart
+/// a missing build, an auth rejection, a server-side fault, and a 200 whose body
+/// did not come from Factory Service. Builds on [`not_found_on_404`] for the 404
+/// case. Endpoints without that need (`get_build`, the listing endpoint) keep
+/// the underlying API error.
+fn classify_build_error(err: FactoryClientError) -> FactoryClientError {
+    let api = match not_found_on_404(err) {
+        FactoryClientError::APIError(api) => api,
+        // NotFound, Transport, and the typed variants are already classified.
+        other => return other,
+    };
+
+    match api.status().map(|status| status.as_u16()) {
+        // Auth failures are never retryable; keep them distinct from 5xx.
+        Some(401 | 403) => FactoryClientError::AuthRejected(api),
+        // 5xx is a service fault. 422 only arises from a non-integer path
+        // (FastAPI request validation), which an `i64` never produces, so it is
+        // mapped here defensively rather than left as a generic API error.
+        Some(422 | 500..=599) => FactoryClientError::Server(api),
+        // Everything else (a non-auth 4xx, or a 200 whose body did not parse as
+        // a `BuildResponse`) degrades to the generic API error.
+        _ => FactoryClientError::APIError(api),
+    }
+}
+
 // ---------------------------------------------------------------------------
 // FactoryClientTrait
 // ---------------------------------------------------------------------------
@@ -142,6 +191,13 @@ pub trait FactoryClientTrait {
 
     /// Fetch a single build by its numeric ID.
     async fn get_build(&self, build_id: i64) -> Result<BuildResponse, FactoryClientError>;
+
+    /// Cancel a single build by its numeric ID (DELETE).
+    ///
+    /// Idempotent: a satisfied-intent cancel returns the build with its
+    /// effective `status`; the caller reads that field to distinguish a
+    /// just-initiated cancellation from an already-terminal build.
+    async fn cancel_build(&self, build_id: i64) -> Result<BuildResponse, FactoryClientError>;
 
     /// Proxy the raw log stream for a build.
     async fn get_build_logs(&self, build_id: i64) -> Result<ByteStream, FactoryClientError>;
@@ -181,8 +237,8 @@ impl FactoryClientTrait for crate::FloxhubClient {
 
     async fn get_build(&self, build_id: i64) -> Result<BuildResponse, FactoryClientError> {
         // A 404 on this resource-specific endpoint means the build ID does not
-        // exist; reclassify it so the caller can say so. Other endpoints leave
-        // a 404 as the underlying API error.
+        // exist; reclassify it so the `status` verb can report it as such. Other
+        // endpoints leave a 404 as the underlying API error.
         Ok(self
             .factory
             .get_build_api_v1_factory_builds_build_id_get(build_id)
@@ -190,6 +246,20 @@ impl FactoryClientTrait for crate::FloxhubClient {
             .map_api_error()
             .await
             .map_err(not_found_on_404)?
+            .into_inner())
+    }
+
+    async fn cancel_build(&self, build_id: i64) -> Result<BuildResponse, FactoryClientError> {
+        // The slice's one destructive call. Every HTTP and transport outcome is
+        // classified here so the verb can map each to a distinct exit code
+        // without re-inspecting raw responses at the call site.
+        Ok(self
+            .factory
+            .cancel_build_api_v1_factory_builds_build_id_delete(build_id)
+            .await
+            .map_api_error()
+            .await
+            .map_err(classify_build_error)?
             .into_inner())
     }
 
@@ -475,7 +545,8 @@ pub mod tests {
         // does not exist, so get_build classifies it as NotFound.
         let server = MockServer::start_async().await;
         let mock = server.mock(|when, then| {
-            when.method("GET").path("/api/v1/factory/builds/7");
+            when.method("GET")
+                .path(format!("/api/v1/factory/builds/{BUILD_ID}"));
             then.status(404)
                 .json_body(json!({ "detail": "Build not found" }));
         });
@@ -485,12 +556,185 @@ pub mod tests {
             ..client_config(&server.base_url())
         };
         let client = crate::FloxhubClient::new(config).unwrap();
-        let err = client.get_build(7).await.unwrap_err();
+        let err = client.get_build(BUILD_ID).await.unwrap_err();
 
         mock.assert();
         assert!(
             matches!(err, FactoryClientError::NotFound),
             "expected NotFound, got {err:?}"
+        );
+    }
+
+    // -------------------------------------------------------------------------
+    // cancel_build / classify_build_error
+    //
+    // Each test drives `cancel_build` against a mock and asserts the DELETE
+    // outcome maps to the right `FactoryClientError` variant — the exhaustive
+    // coverage of the classification the verb's exit-code space depends on.
+    // -------------------------------------------------------------------------
+
+    /// The build ID every single-build mock in this module serves.
+    const BUILD_ID: i64 = 7;
+
+    /// A complete `BuildResponse` body with the given effective `status`, built
+    /// from the typed `BuildResponse` and serialized so the wire fixture fails
+    /// loudly if a required field is added or changed, rather than silently
+    /// omitting it and parsing a degenerate body.
+    fn valid_build_json(status: &str) -> serde_json::Value {
+        serde_json::to_value(BuildResponse {
+            attr_path: "hello".to_string(),
+            build_id: BUILD_ID,
+            build_type: "nixpkgs".to_string(),
+            catalog_name: "my-catalog".to_string(),
+            created_at: "2025-01-01T00:00:00Z".parse().unwrap(),
+            exit_code: None,
+            nixpkgs_revision: "deadbeef1234567890deadbeef1234567890dead".to_string(),
+            source_commit_sha: "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2".to_string(),
+            source_repo_url: "https://github.com/example/repo".to_string(),
+            status: status.to_string(),
+            system: "x86_64-linux".to_string(),
+            task: None,
+        })
+        .expect("BuildResponse serializes")
+    }
+
+    /// Start a mock server returning `status`/`body` for the single-build DELETE,
+    /// then call `cancel_build` and return its result.
+    async fn cancel_build_against_mock(
+        status: u16,
+        body: serde_json::Value,
+    ) -> Result<BuildResponse, FactoryClientError> {
+        let server = MockServer::start_async().await;
+        let mock = server.mock(|when, then| {
+            when.method("DELETE")
+                .path(format!("/api/v1/factory/builds/{BUILD_ID}"));
+            then.status(status).json_body(body);
+        });
+
+        let config = FloxhubClientConfig {
+            base_url: server.base_url(),
+            ..client_config(&server.base_url())
+        };
+        let client = crate::FloxhubClient::new(config).unwrap();
+        let result = client.cancel_build(BUILD_ID).await;
+
+        mock.assert();
+        result
+    }
+
+    #[tokio::test]
+    async fn cancel_build_returns_build_on_200() {
+        // A satisfied cancel returns the build; the caller reads the effective
+        // `status` to tell a fresh cancellation from an already-terminal build.
+        let build = cancel_build_against_mock(200, valid_build_json("cancelled"))
+            .await
+            .unwrap();
+        let expected = BuildResponse {
+            attr_path: "hello".to_string(),
+            build_id: BUILD_ID,
+            build_type: "nixpkgs".to_string(),
+            catalog_name: "my-catalog".to_string(),
+            created_at: "2025-01-01T00:00:00Z".parse().unwrap(),
+            exit_code: None,
+            nixpkgs_revision: "deadbeef1234567890deadbeef1234567890dead".to_string(),
+            source_commit_sha: "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2".to_string(),
+            source_repo_url: "https://github.com/example/repo".to_string(),
+            status: "cancelled".to_string(),
+            system: "x86_64-linux".to_string(),
+            task: None,
+        };
+        assert_eq!(build, expected);
+    }
+
+    #[tokio::test]
+    async fn cancel_build_maps_404_to_not_found() {
+        let err = cancel_build_against_mock(404, json!({ "detail": "Build not found" }))
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(err, FactoryClientError::NotFound),
+            "expected NotFound, got {err:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn cancel_build_maps_401_to_auth_rejected() {
+        let err = cancel_build_against_mock(401, json!({ "detail": "Unauthorized" }))
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(err, FactoryClientError::AuthRejected(_)),
+            "expected AuthRejected, got {err:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn cancel_build_maps_403_to_auth_rejected() {
+        let err = cancel_build_against_mock(403, json!({ "detail": "Forbidden" }))
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(err, FactoryClientError::AuthRejected(_)),
+            "expected AuthRejected, got {err:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn cancel_build_maps_502_to_server() {
+        let err =
+            cancel_build_against_mock(502, json!({ "detail": "Build Coordinator unreachable" }))
+                .await
+                .unwrap_err();
+        assert!(
+            matches!(err, FactoryClientError::Server(_)),
+            "expected Server, got {err:?}"
+        );
+        // The typed variant still renders the server's own `detail`, so callers
+        // like `flox factory status` keep the diagnostic context.
+        assert!(
+            err.to_string().contains("Build Coordinator unreachable"),
+            "expected the server detail to survive, got {err}"
+        );
+    }
+
+    #[tokio::test]
+    async fn cancel_build_maps_422_to_server() {
+        let err = cancel_build_against_mock(422, json!({ "detail": "Unprocessable" }))
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(err, FactoryClientError::Server(_)),
+            "expected Server, got {err:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn cancel_build_maps_200_wrong_shape_to_api_error() {
+        // A 200 whose body is not a `BuildResponse` degrades to the generic API
+        // error rather than escalating to a bespoke variant; the verb reports it
+        // as a retryable service error.
+        let err = cancel_build_against_mock(200, json!({ "unexpected": "shape" }))
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(err, FactoryClientError::APIError(_)),
+            "expected APIError, got {err:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn cancel_build_maps_connection_failure_to_transport() {
+        // Port 0 is never a valid connection target, so the DELETE always fails
+        // at the transport layer regardless of which ports are closed.
+        let config = FloxhubClientConfig {
+            base_url: "http://127.0.0.1:0".to_string(),
+            ..client_config("http://127.0.0.1:0")
+        };
+        let client = crate::FloxhubClient::new(config).unwrap();
+        let err = client.cancel_build(7).await.unwrap_err();
+        assert!(
+            matches!(err, FactoryClientError::Transport(_)),
+            "expected Transport, got {err:?}"
         );
     }
 
