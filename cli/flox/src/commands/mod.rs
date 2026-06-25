@@ -177,6 +177,13 @@ pub struct FloxArgs {
     #[bpaf(long, hide)]
     pub beta: bool,
 
+    /// Address of the FloxHub instance to target for this invocation
+    ///
+    /// On-premise deployments serve all services from this one base URL;
+    /// per-service URLs default to routes appended to it.
+    #[bpaf(long, argument("URL"), optional, hide)]
+    pub floxhub_url: Option<Url>,
+
     /// Print the version of the program
     #[allow(dead_code)] // fake arg, `--version` is checked for separately (see [Version])
     #[bpaf(long, short('V'))]
@@ -306,27 +313,46 @@ impl FloxArgs {
             debug!(error = %err, "Failed to record v2 cli.command_run event");
         }
 
-        let git_url_override = {
-            if let Ok(env_set_host) = std::env::var("_FLOX_FLOXHUB_GIT_URL") {
-                if !self.is_prompt_hook_flow() {
-                    message::warning(formatdoc! {"
-                        Using {env_set_host} as FloxHub host
-                        '$_FLOX_FLOXHUB_GIT_URL' is used for testing purposes only,
-                        alternative FloxHub hosts are not yet supported!
-                    "});
-                }
-                Some(Url::parse(&env_set_host)?)
-            } else {
-                None
-            }
+        // The single authoritative FloxHub base URL. When defined, every other
+        // service URL is a route off it; when undefined, the compiled-in
+        // public-realm defaults apply. Precedence (high to low):
+        //   --floxhub-url flag > FLOXHUB_URL env > FLOX_FLOXHUB_URL env /
+        //   user flox.toml > /etc/flox.toml > default (public realm).
+        // `FLOXHUB_URL` is a FloxHub attribute, not a flox-CLI one, so it is
+        // wired explicitly rather than via the `FLOX_` config prefix. The
+        // `FLOX_FLOXHUB_URL` env and the config file both land in
+        // `config.flox.floxhub_url`.
+        let floxhub_url = match self.floxhub_url.clone() {
+            Some(url) => Some(url),
+            None => match std::env::var("FLOXHUB_URL") {
+                Ok(value) if !value.is_empty() => Some(Url::parse(&value)?),
+                _ => config.flox.floxhub_url.clone(),
+            },
         };
 
+        // `FLOX_FLOXHUB_URL` still feeds `config.flox.floxhub_url`, but its name
+        // is superseded by `FLOXHUB_URL`.
+        if std::env::var_os("FLOX_FLOXHUB_URL").is_some() && !self.is_prompt_hook_flow() {
+            message::warning("'FLOX_FLOXHUB_URL' is deprecated. Use 'FLOXHUB_URL' instead.");
+        }
+
+        // Explicit git-endpoint override, for testing against a local FloxHub.
+        let git_url_override = if let Ok(env_set_host) = std::env::var("_FLOX_FLOXHUB_GIT_URL") {
+            if !self.is_prompt_hook_flow() {
+                message::warning(formatdoc! {"
+                    Using {env_set_host} as the FloxHub git endpoint.
+                    '$_FLOX_FLOXHUB_GIT_URL' overrides the git endpoint and is intended for testing only.
+                "});
+            }
+            Some(Url::parse(&env_set_host)?)
+        } else {
+            None
+        };
+
+        // Floxhub derives the git URL from the base (and persists/reconstructs
+        // it via the managed-environment pointer), so it is the single seam.
         let floxhub = Floxhub::new(
-            config
-                .flox
-                .floxhub_url
-                .clone()
-                .unwrap_or_else(|| DEFAULT_FLOXHUB_URL.clone()),
+            floxhub_url.unwrap_or_else(|| DEFAULT_FLOXHUB_URL.clone()),
             git_url_override,
         )?;
 
