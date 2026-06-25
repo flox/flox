@@ -7,29 +7,26 @@
 //! `env!` macros, no `Config` access — and this wrapper holds all of the
 //! integration concerns that would otherwise have to live in the crate.
 //!
-//! # Runtime stack selection
+//! # Dual-emit
 //!
-//! The CLI ships two telemetry stacks side-by-side: the legacy
-//! `subcommand_metric!` pipeline (`cli/flox/src/utils/metrics.rs`) and the
-//! new v2-events pipeline (this module + the `flox-events` crate).
-//! Exactly one stack installs its `Client` per process; the other stack's
-//! `Client` is left `None` and its `record_*` calls short-circuit.
+//! The CLI ships two telemetry stacks side-by-side and emits on **both**
+//! every run: the legacy `subcommand_metric!` pipeline
+//! (`cli/flox/src/utils/metrics.rs`) sends PostHog-shape payloads to the
+//! legacy ingest endpoint exactly as the prior release did, and the v2-events
+//! pipeline (this module + the `flox-events` crate) sends the corrected v2
+//! envelopes to the new ingest endpoint. The two stacks share no code and
+//! write to separate on-disk buffers, so the v2 stream's fixes (single-emit
+//! dedup, NDJSON, semantic corrections) never touch the legacy stream — the
+//! legacy stream keeps its exact prior behavior.
 //!
-//! [`selected_metrics_stack`] reads the [`FLOX_METRICS_STACK_VAR`] env var
-//! once during startup and returns which stack to install:
+//! Both install by default. Two gates can suppress an install:
 //!
-//! - unset / `legacy` (default) → [`MetricsStack::Legacy`] — PostHog-shape
-//!   payloads to the legacy ingest endpoint exactly as the prior release
-//!   did; the new pipeline's `Client` is not installed. This is the
-//!   default, so an unflagged build behaves identically to before.
-//! - `new` → [`MetricsStack::New`] — opt in to the v2 envelopes sent to
-//!   the new ingest endpoint; the legacy stack's `Client` is not installed.
-//! - any other value → [`MetricsStack::Legacy`] with a single
-//!   `tracing::warn!` so the misconfiguration surfaces.
-//!
-//! Net result: exactly one emission stream per process, picked by the flag,
-//! defaulting to the legacy stream. v2 is strictly opt-in here; flipping the
-//! default to `new` (the actual cutover) is a separate one-line follow-up.
+//! - `config.flox.disable_metrics` — the whole-telemetry opt-out; silences
+//!   **both** stacks.
+//! - [`FLOX_DISABLE_V2_METRICS_VAR`] — an in-field kill-switch for the **v2**
+//!   stack only (see [`v2_metrics_disabled`]); the legacy stream is never
+//!   affected by it. There is no runtime switch for the legacy stream — it is
+//!   the trusted stream, retired later by a deliberate release, not a flag.
 
 use std::env;
 use std::str::FromStr;
@@ -39,7 +36,7 @@ use flox_events::{EnvDetail, EventsClient, EventsGuard, EventsHub, SharedMetadat
 use flox_rust_sdk::flox::FLOX_VERSION;
 use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment};
 use flox_rust_sdk::utils::INVOCATION_SOURCES;
-use tracing::{debug, warn};
+use tracing::debug;
 use uuid::Uuid;
 
 use crate::config::Config;
@@ -62,14 +59,17 @@ static RESOLVED_INVOCATION_ID: OnceLock<Uuid> = OnceLock::new();
 /// user-facing knob.
 pub const FLOX_INVOCATION_ID_VAR: &str = "FLOX_INVOCATION_ID";
 
-/// User-facing env var that selects which telemetry stack the CLI's
-/// startup chokepoint installs a `Client` on. Accepted values are
-/// `legacy` (also the default, also unset) and `new`; any other value
-/// behaves as `legacy` and logs a single `warn!`.
+/// User-facing kill-switch for the v2-events stack. When set to a truthy
+/// value (`1` / `true`), the CLI does not install the v2 `EventsClient` for
+/// this process — only the legacy `subcommand_metric!` stream emits. Unset
+/// (the default) means both stacks emit in parallel.
 ///
-/// See [`selected_metrics_stack`] for the resolution rules and the
-/// module rustdoc for the "Runtime stack selection" overview.
-pub(crate) const FLOX_METRICS_STACK_VAR: &str = "FLOX_METRICS_STACK";
+/// This exists as an in-field off-switch: the v2 stack sends to a separate
+/// new endpoint, and a released binary has no other way to stop emitting v2
+/// without a rebuild. It gates only the v2 stack; the legacy stream is never
+/// affected. The whole-telemetry opt-out remains `config.flox.disable_metrics`,
+/// which silences both. See [`v2_metrics_disabled`] for the resolution.
+pub(crate) const FLOX_DISABLE_V2_METRICS_VAR: &str = "FLOX_DISABLE_V2_METRICS";
 
 /// Build-time URL for the new v2-events ingest endpoint. Injected
 /// by the Nix wrapper (`pkgs/flox-cli/default.nix`) at the same site as
@@ -84,70 +84,33 @@ const METRICS_EVENTS_URL_V2: &str = env!("METRICS_EVENTS_URL_V2");
 /// `cli/flox/src/utils/metrics.rs`.
 const METRICS_EVENTS_API_KEY_V2: &str = env!("METRICS_EVENTS_API_KEY_V2");
 
-/// Which telemetry stack the CLI installs a `Client` on for this
-/// process — see [`selected_metrics_stack`] and the module rustdoc.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum MetricsStack {
-    /// New v2-events pipeline (opt-in via `FLOX_METRICS_STACK=new`).
-    /// Installs an [`EventsClient`] pointing at the new ingest endpoint;
-    /// the legacy stack's `Client` is left uninstalled and its
-    /// `record_metric` short-circuits.
-    New,
-    /// Legacy `subcommand_metric!` pipeline (the default). Installs the
-    /// legacy `Client` pointing at the legacy ingest endpoint; the new
-    /// pipeline's `Client` is left uninstalled and its `record_event`
-    /// short-circuits. Because this is the default, a deployed binary
-    /// behaves exactly as the prior release did unless
-    /// `FLOX_METRICS_STACK=new` opts it into the v2 stack.
-    Legacy,
-}
-
-/// Read the [`FLOX_METRICS_STACK_VAR`] env var and return which stack
-/// to install a `Client` on for this process.
+/// Whether the v2-events stack is disabled for this process via
+/// [`FLOX_DISABLE_V2_METRICS_VAR`]. `true` when the env var is set to `1` or
+/// `true` (case-insensitive, trimmed); `false` otherwise — including unset,
+/// so the default is dual-emit. A non-truthy value (e.g. a typo) fails open
+/// to "v2 enabled" rather than silently disabling the new stream.
 ///
-/// Resolution rules:
-///
-/// - unset, empty, or `legacy` → [`MetricsStack::Legacy`]
-/// - `new` → [`MetricsStack::New`]
-/// - any other value → [`MetricsStack::Legacy`] with a single
-///   `tracing::warn!` so the misconfiguration is loud. Fail-closed to
-///   the legacy default — a misspelled flag falls back to the unchanged
-///   prior-release behavior, never to nothing and never silently to v2.
-///
-/// The resolution is cached process-wide in a `OnceLock` so both
-/// `Client` install sites (the legacy install at
-/// `cli/flox/src/commands/mod.rs` and the new install via
-/// [`build_events_client`]) see the same value with exactly **one**
-/// warning per process — calling this function N times from a
-/// process that set `FLOX_METRICS_STACK=banana` produces exactly one
-/// warn, not N. Tests bypass the cache via a `#[cfg(test)]`
-/// alternate definition so each test can exercise a different env
-/// value via `temp_env::with_var`.
+/// Read once and cached process-wide so the decision is stable for the whole
+/// process. Tests bypass the cache via a `#[cfg(test)]` alternate so each test
+/// can exercise a different env value via `temp_env::with_var`.
 #[cfg(not(test))]
-pub(crate) fn selected_metrics_stack() -> MetricsStack {
-    static CACHED: OnceLock<MetricsStack> = OnceLock::new();
-    *CACHED.get_or_init(read_metrics_stack_from_env)
+pub(crate) fn v2_metrics_disabled() -> bool {
+    static CACHED: OnceLock<bool> = OnceLock::new();
+    *CACHED.get_or_init(read_v2_disabled_from_env)
 }
 
 #[cfg(test)]
-pub(crate) fn selected_metrics_stack() -> MetricsStack {
-    read_metrics_stack_from_env()
+pub(crate) fn v2_metrics_disabled() -> bool {
+    read_v2_disabled_from_env()
 }
 
-fn read_metrics_stack_from_env() -> MetricsStack {
-    match env::var(FLOX_METRICS_STACK_VAR) {
-        Ok(raw) => match raw.as_str() {
-            "new" => MetricsStack::New,
-            "" | "legacy" => MetricsStack::Legacy,
-            other => {
-                warn!(
-                    value = %other,
-                    "{FLOX_METRICS_STACK_VAR} has an unrecognized value; defaulting to `legacy`"
-                );
-                MetricsStack::Legacy
-            },
+fn read_v2_disabled_from_env() -> bool {
+    match env::var(FLOX_DISABLE_V2_METRICS_VAR) {
+        Ok(raw) => {
+            let value = raw.trim().to_ascii_lowercase();
+            value == "1" || value == "true"
         },
-        Err(_) => MetricsStack::Legacy,
+        Err(_) => false,
     }
 }
 
@@ -224,10 +187,11 @@ fn shared_metadata_template() -> SharedMetadataTemplate {
 ///   `cli/flox/src/commands/mod.rs`). Honoring the gate is consent-affecting:
 ///   silent telemetry-after-opt-out would be a privacy violation in a
 ///   public OSS repo.
-/// - [`selected_metrics_stack`] returns [`MetricsStack::Legacy`] — the
-///   default. The v2 stack is opt-in (`FLOX_METRICS_STACK=new`), so an
-///   unflagged process installs the legacy `Client` instead at the
-///   `cli/flox/src/commands/mod.rs` chokepoint.
+/// - [`v2_metrics_disabled`] is `true` — the in-field kill-switch
+///   (`FLOX_DISABLE_V2_METRICS`) is set, so the v2 `Client` is not
+///   installed. The legacy stack still emits at the
+///   `cli/flox/src/commands/mod.rs` chokepoint (dual-emit is unaffected
+///   on the legacy side).
 /// - [`read_metrics_uuid`] returns `Err` (missing or unparseable
 ///   per-installation uuid file). The CLI runs to completion normally;
 ///   only the v2 event stream is silenced for the run.
@@ -248,8 +212,8 @@ pub fn build_events_client(config: &Config, invocation_id: Uuid) -> Option<Event
         return None;
     }
 
-    if selected_metrics_stack() == MetricsStack::Legacy {
-        debug!("v2 events: legacy stack selected (default); new pipeline inert this process");
+    if v2_metrics_disabled() {
+        debug!("v2 events: {FLOX_DISABLE_V2_METRICS_VAR} is set; not installing the v2 client");
         return None;
     }
 
@@ -292,11 +256,11 @@ pub fn build_events_client(config: &Config, invocation_id: Uuid) -> Option<Event
 /// `command_completed` emitted by the dispatcher or by `activate.rs` are
 /// all delivered before the process exits.
 ///
-/// When [`build_events_client`] returns `None` (disable_metrics, the
-/// legacy stack is selected via `FLOX_METRICS_STACK=legacy`, or one
-/// of the other short-circuit cases), the guard is still returned
-/// but its flush is a no-op — `EventsHub::global()` has no client
-/// installed and `record_event` short-circuits.
+/// When [`build_events_client`] returns `None` (disable_metrics, the v2
+/// kill-switch `FLOX_DISABLE_V2_METRICS` is set, or one of the other
+/// short-circuit cases), the guard is still returned but its flush is a
+/// no-op — `EventsHub::global()` has no client installed and
+/// `record_event` short-circuits.
 pub fn install_events_client_for_main(config: &Config, invocation_id: Uuid) -> EventsGuard {
     if let Some(client) = build_events_client(config, invocation_id) {
         EventsHub::global().set_client(client);
@@ -442,15 +406,12 @@ mod tests {
         });
     }
 
-    /// Pin the parent process's `FLOX_METRICS_STACK` to `new` for tests
-    /// that exercise the v2 client-builder path. The v2 stack is opt-in,
-    /// so `build_events_client` only proceeds past its legacy-default gate
-    /// when `new` is selected; without pinning, these tests would
-    /// short-circuit at that gate and never reach the logic they assert.
-    /// Pinning also stops a CI runner that pre-set the var from silently
-    /// flipping the test's stack and inverting the assertions.
-    fn with_new_stack<F: FnOnce() -> R, R>(f: F) -> R {
-        with_var(FLOX_METRICS_STACK_VAR, Some("new"), f)
+    /// Pin `FLOX_DISABLE_V2_METRICS` to unset for tests that exercise the v2
+    /// client-builder path, so a CI runner that pre-set the kill-switch can't
+    /// disable v2 and invert the assertions. (Dual-emit installs v2 by
+    /// default; this just guarantees that default in-test.)
+    fn with_v2_enabled<F: FnOnce() -> R, R>(f: F) -> R {
+        with_var(FLOX_DISABLE_V2_METRICS_VAR, None::<&str>, f)
     }
 
     #[test]
@@ -463,7 +424,7 @@ mod tests {
             /* disable_metrics */ true,
         );
 
-        with_new_stack(|| {
+        with_v2_enabled(|| {
             with_var(
                 "_FLOX_METRICS_URL_OVERRIDE",
                 Some("http://127.0.0.1:9999"),
@@ -484,7 +445,7 @@ mod tests {
         // No metrics-uuid file written: read_metrics_uuid errors.
         let config = test_config(&tempdir, data_dir, /* disable_metrics */ false);
 
-        with_new_stack(|| {
+        with_v2_enabled(|| {
             with_var(
                 "_FLOX_METRICS_URL_OVERRIDE",
                 Some("http://127.0.0.1:9999"),
@@ -496,49 +457,27 @@ mod tests {
         });
     }
 
-    /// With `FLOX_METRICS_STACK=new` (opt-in) and
+    /// By default (dual-emit, v2 enabled) and with
     /// `_FLOX_METRICS_URL_OVERRIDE` unset, the fallback to
     /// `METRICS_EVENTS_URL_V2` installs a real client. Pin both the
-    /// success of the opt-in install and the use of the build-injected
-    /// URL — without this assertion a future refactor that re-introduced
-    /// the no-override `None` branch would silently disable the v2 path.
+    /// success of the install and the use of the build-injected URL —
+    /// without this assertion a future refactor that re-introduced the
+    /// no-override `None` branch would silently disable the v2 path.
     #[test]
     #[serial(v2_events_wrapper_env)]
-    fn build_events_client_returns_some_on_new_stack_with_v2_url_fallback() {
+    fn build_events_client_returns_some_by_default_with_v2_url_fallback() {
         let tempdir = tempfile::tempdir().expect("tempdir");
         let uuid = Uuid::new_v4();
         let config = test_config_with_uuid(&tempdir, uuid);
 
-        with_new_stack(|| {
+        with_v2_enabled(|| {
             with_var("_FLOX_METRICS_URL_OVERRIDE", None::<&str>, || {
                 let client = build_events_client(&config, Uuid::new_v4());
                 assert!(
                     client.is_some(),
-                    "the new (opt-in) stack must install a client using the build-injected URL"
+                    "v2 (enabled by default) must install a client using the build-injected URL"
                 );
                 assert_eq!(client.unwrap().device_id, uuid);
-            });
-        });
-    }
-
-    /// The v2 stack is opt-in: with `FLOX_METRICS_STACK` unset (the
-    /// legacy default), `build_events_client` installs nothing even with
-    /// a readable uuid and the build-injected URL available. Pins that an
-    /// unflagged build emits only the legacy stack, never v2.
-    #[test]
-    #[serial(v2_events_wrapper_env)]
-    fn build_events_client_returns_none_on_default_legacy_stack() {
-        let tempdir = tempfile::tempdir().expect("tempdir");
-        let uuid = Uuid::new_v4();
-        let config = test_config_with_uuid(&tempdir, uuid);
-
-        with_var(FLOX_METRICS_STACK_VAR, None::<&str>, || {
-            with_var("_FLOX_METRICS_URL_OVERRIDE", None::<&str>, || {
-                let client = build_events_client(&config, Uuid::new_v4());
-                assert!(
-                    client.is_none(),
-                    "v2 is opt-in; the default (legacy) stack must not install a v2 client"
-                );
             });
         });
     }
@@ -550,7 +489,7 @@ mod tests {
         let uuid = Uuid::new_v4();
         let config = test_config_with_uuid(&tempdir, uuid);
 
-        with_new_stack(|| {
+        with_v2_enabled(|| {
             with_var("_FLOX_METRICS_URL_OVERRIDE", Some("not a url"), || {
                 let client = build_events_client(&config, Uuid::new_v4());
                 assert!(client.is_none(), "unparseable override must short-circuit");
@@ -565,7 +504,7 @@ mod tests {
         let uuid = Uuid::new_v4();
         let config = test_config_with_uuid(&tempdir, uuid);
 
-        with_new_stack(|| {
+        with_v2_enabled(|| {
             with_var(
                 "_FLOX_METRICS_URL_OVERRIDE",
                 Some("http://127.0.0.1:9999/"),
@@ -579,18 +518,18 @@ mod tests {
         });
     }
 
-    /// `FLOX_METRICS_STACK=legacy` is the rollback handle: the new
-    /// pipeline's `Client` must NOT install, even when the override is
-    /// set and the metrics uuid is readable. The legacy `Client` is
-    /// installed instead at the `commands/mod.rs` chokepoint.
+    /// `FLOX_DISABLE_V2_METRICS` is the in-field kill-switch: the v2
+    /// `Client` must NOT install when it is set, even when the override is
+    /// set and the metrics uuid is readable. The legacy stack is unaffected
+    /// (it installs at the `commands/mod.rs` chokepoint regardless).
     #[test]
     #[serial(v2_events_wrapper_env)]
-    fn build_events_client_returns_none_on_stack_legacy_even_with_override() {
+    fn build_events_client_returns_none_when_v2_disabled() {
         let tempdir = tempfile::tempdir().expect("tempdir");
         let uuid = Uuid::new_v4();
         let config = test_config_with_uuid(&tempdir, uuid);
 
-        with_var(FLOX_METRICS_STACK_VAR, Some("legacy"), || {
+        with_var(FLOX_DISABLE_V2_METRICS_VAR, Some("1"), || {
             with_var(
                 "_FLOX_METRICS_URL_OVERRIDE",
                 Some("http://127.0.0.1:9999/"),
@@ -598,7 +537,7 @@ mod tests {
                     let client = build_events_client(&config, Uuid::new_v4());
                     assert!(
                         client.is_none(),
-                        "stack=legacy must leave the new pipeline's Client uninstalled"
+                        "FLOX_DISABLE_V2_METRICS must leave the v2 Client uninstalled"
                     );
                 },
             );
@@ -607,47 +546,36 @@ mod tests {
 
     #[test]
     #[serial(v2_events_wrapper_env)]
-    fn selected_metrics_stack_defaults_to_legacy_when_unset() {
-        with_var(FLOX_METRICS_STACK_VAR, None::<&str>, || {
-            assert_eq!(selected_metrics_stack(), MetricsStack::Legacy);
+    fn v2_metrics_disabled_is_false_when_unset() {
+        with_var(FLOX_DISABLE_V2_METRICS_VAR, None::<&str>, || {
+            assert!(!v2_metrics_disabled(), "default is dual-emit (v2 enabled)");
         });
     }
 
     #[test]
     #[serial(v2_events_wrapper_env)]
-    fn selected_metrics_stack_defaults_to_legacy_when_empty() {
-        with_var(FLOX_METRICS_STACK_VAR, Some(""), || {
-            assert_eq!(selected_metrics_stack(), MetricsStack::Legacy);
-        });
+    fn v2_metrics_disabled_is_true_for_truthy_values() {
+        for raw in ["1", "true", "TRUE", " True "] {
+            with_var(FLOX_DISABLE_V2_METRICS_VAR, Some(raw), || {
+                assert!(v2_metrics_disabled(), "{raw:?} must disable the v2 stack");
+            });
+        }
     }
 
+    /// A non-truthy value (typo, `0`, `false`, etc.) fails open to "v2
+    /// enabled" — a misspelled kill-switch must not silently disable the new
+    /// stream. Only the explicit truthy set turns v2 off.
     #[test]
     #[serial(v2_events_wrapper_env)]
-    fn selected_metrics_stack_returns_new_for_explicit_new() {
-        with_var(FLOX_METRICS_STACK_VAR, Some("new"), || {
-            assert_eq!(selected_metrics_stack(), MetricsStack::New);
-        });
-    }
-
-    #[test]
-    #[serial(v2_events_wrapper_env)]
-    fn selected_metrics_stack_returns_legacy_for_legacy() {
-        with_var(FLOX_METRICS_STACK_VAR, Some("legacy"), || {
-            assert_eq!(selected_metrics_stack(), MetricsStack::Legacy);
-        });
-    }
-
-    /// Unknown values fail-closed to the legacy default rather than
-    /// emitting nothing — a misspelled flag value must neither silently
-    /// disable telemetry nor silently opt a user into the v2 stack. The
-    /// single `warn!` makes the misconfig visible under any tracing
-    /// subscriber.
-    #[test]
-    #[serial(v2_events_wrapper_env)]
-    fn selected_metrics_stack_falls_back_to_legacy_for_unknown_value() {
-        with_var(FLOX_METRICS_STACK_VAR, Some("banana"), || {
-            assert_eq!(selected_metrics_stack(), MetricsStack::Legacy);
-        });
+    fn v2_metrics_disabled_fails_open_for_other_values() {
+        for raw in ["0", "false", "no", "yes", "banana", ""] {
+            with_var(FLOX_DISABLE_V2_METRICS_VAR, Some(raw), || {
+                assert!(
+                    !v2_metrics_disabled(),
+                    "{raw:?} must NOT disable v2 (fail-open)"
+                );
+            });
+        }
     }
 
     /// Sentinel: the build-injected [`METRICS_EVENTS_URL_V2`] must not
