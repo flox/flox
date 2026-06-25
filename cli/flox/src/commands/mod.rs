@@ -225,11 +225,10 @@ impl Commands {
 }
 
 /// The action taken by the dispatch chokepoint with respect to
-/// installing the legacy `Hub`'s `Client`. Three states are
-/// mutually exclusive so the match in [`FloxArgs::handle`] cannot
-/// silently drop one — extracting the decision into a returned
-/// enum makes the symmetry testable without invoking the install
-/// itself.
+/// installing the legacy `Hub`'s `Client`. The two states are
+/// mutually exclusive; extracting the decision into a returned enum
+/// (rather than an inline `if`) keeps it pure, so `legacy_chokepoint_tests`
+/// can assert the decision without invoking the install itself.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum LegacyChokepointAction {
     /// `disable_metrics=false` — install the legacy

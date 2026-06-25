@@ -107,8 +107,20 @@ pub(crate) fn v2_metrics_disabled() -> bool {
 fn read_v2_disabled_from_env() -> bool {
     match env::var(FLOX_DISABLE_V2_METRICS_VAR) {
         Ok(raw) => {
+            // Intentionally wider than the repo's usual `parse::<bool>()`
+            // env-bool idiom: a kill-switch should be lenient, so `1` and
+            // any case of `true` all disable v2. Anything else fails open
+            // (v2 stays enabled) — but log it, so a typo (`ture`, `yes`) is
+            // diagnosable at incident time instead of silently ignored.
             let value = raw.trim().to_ascii_lowercase();
-            value == "1" || value == "true"
+            let disabled = value == "1" || value == "true";
+            if !disabled {
+                debug!(
+                    value = %raw,
+                    "{FLOX_DISABLE_V2_METRICS_VAR} set to an unrecognized value; v2 stays enabled"
+                );
+            }
+            disabled
         },
         Err(_) => false,
     }
