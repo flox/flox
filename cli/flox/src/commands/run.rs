@@ -705,48 +705,42 @@ pub fn prepend_path_dirs(dirs: &[PathBuf]) -> OsString {
 /// Fork a background watcher child that removes `prefix`* symlinks when the
 /// parent (exec'd command) exits.
 ///
-/// The parent holds the write end of a pipe open across the `exec` call.
-/// When the exec'd command exits, the write end is closed, causing the child's
-/// blocking read to return EOF. On EOF the child removes all symlinks whose
-/// name starts with `prefix.file_name()` in the same directory, then exits.
+/// `exec` preserves the PID, so the command the user invoked keeps this
+/// process's PID. The watcher polls `getppid()`: while it still reports that
+/// PID the parent is alive, and once the parent exits the watcher is reparented
+/// (to init or a subreaper) and `getppid()` changes. The watcher then removes
+/// all symlinks whose name starts with `prefix.file_name()` in the same
+/// directory, and exits.
+///
+/// Polling `getppid()` is a cheap syscall and, unlike a recorded PID compared
+/// with `kill(pid, 0)`, cannot be fooled by PID reuse: the reparent is what is
+/// observed, not the liveness of an arbitrary PID.
 ///
 /// This ensures temporary GC-root symlinks created by `nix build --out-link`
 /// are cleaned up even though we `exec` into the target command and can no
 /// longer run cleanup code ourselves.
 pub fn fork_gc_root_watcher(gc_root_prefix: &Path) -> Result<(), std::io::Error> {
-    use std::os::unix::io::IntoRawFd as _;
+    use std::thread::sleep;
+    use std::time::Duration;
 
-    use nix::unistd::{ForkResult, fork};
+    use nix::unistd::{ForkResult, fork, getppid};
 
-    // Obtain raw file descriptors before fork so both parent and child can
-    // operate on them independently without Rust ownership conflicts.
-    let (read_owned, write_owned) = nix::unistd::pipe()?;
-
-    // Clear FD_CLOEXEC on the write end so it survives the exec() call and
-    // stays open until the exec'd command exits.
-    let flags = nix::fcntl::fcntl(&write_owned, nix::fcntl::FcntlArg::F_GETFD)
-        .map_err(|e| std::io::Error::other(format!("fcntl F_GETFD: {e}")))?;
-    let new_flags = nix::fcntl::FdFlag::from_bits_retain(flags) & !nix::fcntl::FdFlag::FD_CLOEXEC;
-    nix::fcntl::fcntl(&write_owned, nix::fcntl::FcntlArg::F_SETFD(new_flags))
-        .map_err(|e| std::io::Error::other(format!("fcntl F_SETFD: {e}")))?;
-
-    // Convert to raw fds before fork; each process is responsible for closing
-    // its own copies. After fork, Rust's drop semantics do not apply — both
-    // processes hold identical fd numbers that are independent OS handles.
-    let read_fd = read_owned.into_raw_fd();
-    let write_fd = write_owned.into_raw_fd();
+    // The exec'd command keeps this process's PID, so capture it before the
+    // fork as the parent the watcher should wait on.
+    let expected_parent = std::process::id() as i32;
 
     match unsafe { fork() }.map_err(std::io::Error::from)? {
         ForkResult::Child => {
-            // Child: close write end, then block until parent (exec'd command) closes it.
-            // SAFETY: raw fd is valid in this process; we own it after fork.
-            unsafe { nix::libc::close(write_fd) };
-            let mut buf = [0u8; 1];
-            // Blocking read — returns 0 (EOF) when the last write-end holder exits.
-            unsafe { nix::libc::read(read_fd, buf.as_mut_ptr().cast(), 1) };
-            unsafe { nix::libc::close(read_fd) };
+            // Poll until the parent (exec'd command) exits. `getppid()` stops
+            // reporting `expected_parent` once the parent dies and the watcher
+            // is reparented. If the parent already exited (e.g. exec failed),
+            // the condition is false on the first check and cleanup runs
+            // immediately.
+            while getppid().as_raw() == expected_parent {
+                sleep(Duration::from_millis(500));
+            }
 
-            // EOF means the exec'd process exited. Remove GC root symlinks.
+            // Parent exited. Remove GC root symlinks.
             if let (Some(parent), Some(file_name)) =
                 (gc_root_prefix.parent(), gc_root_prefix.file_name())
             {
@@ -766,14 +760,7 @@ pub fn fork_gc_root_watcher(gc_root_prefix: &Path) -> Result<(), std::io::Error>
             // atexit handlers or flush stdio buffers shared with the parent.
             unsafe { nix::libc::_exit(0) };
         },
-        ForkResult::Parent { .. } => {
-            // Parent: close read end. Write end stays open — it will be inherited
-            // by the exec'd command and closed when that process exits.
-            // SAFETY: raw fd is valid in this process.
-            unsafe { nix::libc::close(read_fd) };
-            // write_fd intentionally left open for exec() inheritance.
-            Ok(())
-        },
+        ForkResult::Parent { .. } => Ok(()),
     }
 }
 

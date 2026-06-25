@@ -219,3 +219,35 @@ teardown() {
   run "$FLOX_BIN" run -p hello hello
   assert_success
 }
+
+# bats test_tags=run:store
+@test "source-build GC root is removed after the command exits [run:store]" {
+  # terraform is unfree and not in the local cache, so 'flox run' builds it
+  # from source and forks a watcher that removes the per-PID 'build-*' GC root
+  # once the exec'd command exits. The "Terraform" output confirms the
+  # source-built binary actually ran, so the cleanup assertion below applies
+  # to a real source build rather than passing vacuously.
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/run/terraform.yaml"
+  run "$FLOX_BIN" run -p terraform -- terraform --version
+  assert_success
+  assert_output --partial "Terraform"
+
+  local gc_dir="${FLOX_CACHE_DIR:-$HOME/.cache/flox}/run-gc-roots"
+
+  # The watcher polls getppid() every 500ms, so the build GC root may linger
+  # briefly after the command exits. Poll for its removal (up to ~10s).
+  local tries=0
+  while true; do
+    shopt -s nullglob
+    local leftovers=("$gc_dir"/build-*)
+    shopt -u nullglob
+    [[ ${#leftovers[@]} -eq 0 ]] && break
+
+    tries=$((tries + 1))
+    if [[ $tries -gt 100 ]]; then
+      echo "ERROR: build GC root not cleaned up after ~10s: ${leftovers[*]}" >&3
+      return 1
+    fi
+    sleep 0.1
+  done
+}
