@@ -26,6 +26,7 @@ edition = "2024"
 version = "0.0.0"
 
 [workspace.dependencies]
+anstream = "0.6"
 anyhow = "1"
 async-stream = "0.3.6"
 blake3 = "1.8.2"
