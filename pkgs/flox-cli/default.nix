@@ -62,7 +62,7 @@ let
       # superseded once the new endpoint was stood up.
       METRICS_EVENTS_URL_V2 =
         let
-          value = "https://REPLACE-BEFORE-MERGE.example.invalid/events";
+          value = "https://telemetry.flox.dev/events";
         in
         lib.warnIf (
           lib.hasInfix "example.invalid" value || lib.hasInfix "REPLACE-BEFORE-MERGE" value
@@ -75,7 +75,7 @@ let
       # in `cli/flox/src/utils/events.rs` enforces the same at `cargo test`.
       METRICS_EVENTS_API_KEY_V2 =
         let
-          value = "REPLACE-BEFORE-MERGE";
+          value = "pdCUpFGHGL5ytsYSdPJWP6MyUMnmUwN47mgsTIuX";
         in
         lib.warnIf (lib.hasInfix "REPLACE-BEFORE-MERGE" value)
           "METRICS_EVENTS_API_KEY_V2 still contains a placeholder; replace before deployment."
