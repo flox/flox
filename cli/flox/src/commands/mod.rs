@@ -180,8 +180,8 @@ pub struct FloxArgs {
     /// Address of the FloxHub instance to target for this invocation
     ///
     /// On-premise deployments serve all services from this one base URL;
-    /// per-service URLs default to routes appended to it.
-    #[bpaf(long, argument("URL"), optional, hide)]
+    /// per-service URLs (git, catalog) default to routes appended to it.
+    #[bpaf(long, argument("URL"), optional)]
     pub floxhub_url: Option<Url>,
 
     /// Print the version of the program
@@ -365,7 +365,7 @@ impl FloxArgs {
         let credential =
             AuthContext::from_mode(&config.flox.floxhub_authn_mode, floxhub_token.clone());
 
-        let floxhub_client = init_floxhub_client(&config, metrics_device_uuid)?;
+        let floxhub_client = init_floxhub_client(&config, &floxhub, metrics_device_uuid)?;
 
         // we already make sure $USER corresponds to **euid** earlier on in the process.
         let system_user_name =
