@@ -69,13 +69,17 @@ pub fn wait_for_socket_ready(
 
 /// Start process-compose with only the flox_never_exit service.
 /// This allows services to be started later via the socket API.
+/// Returns `Ok(true)` if process-compose was started, or `Ok(false)` if the
+/// activation was torn down before services could start (its state directory
+/// was removed by cleanup). The caller should treat `false` as "nothing to
+/// do" rather than an error.
 pub fn start_process_compose_no_services(
     subsystem_verbosity: u32,
     attach_ctx: &AttachCtx,
     project: &AttachProjectCtx,
     start_id: &StartIdentifier,
     activation_state_dir: &Path,
-) -> Result<(), Error> {
+) -> Result<bool, Error> {
     let start_state_dir = start_id.start_state_dir(activation_state_dir)?;
     let config_file = start_id.store_path.join("service-config.yaml");
     let socket_path = project.flox_services_socket.as_path();
@@ -96,7 +100,17 @@ pub fn start_process_compose_no_services(
     // so these values are the same as what the initial activation captured.
     let vars_from_env = VarsFromEnvironment::get()?;
     // Load the environment diff for the activation that we're attaching to.
-    let start_diff = StartDiff::from_files(&start_state_dir)?;
+    // If the activation was torn down (state dir removed by cleanup) between
+    // the start-services signal and now, there is nothing to start — skip
+    // rather than crash the executive.
+    let Some(start_diff) = StartDiff::from_files_if_present(&start_state_dir)? else {
+        info!(
+            reason = "activation torn down before services could start",
+            ?start_state_dir,
+            "skipping process-compose start"
+        );
+        return Ok(false);
+    };
     let attach_diff = AttachDiff::new(
         attach_ctx,
         Some(project),
@@ -136,7 +150,7 @@ pub fn start_process_compose_no_services(
     );
     command.spawn().context("Failed to spawn process-compose")?;
 
-    Ok(())
+    Ok(true)
 }
 
 /// Start specific services via the process-compose socket API.
