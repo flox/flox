@@ -212,8 +212,8 @@ fn shared_metadata_template() -> SharedMetadataTemplate {
 ///   existing `debug!` log so the typo is visible under `RUST_LOG=debug`.
 ///
 /// Otherwise — the production path — returns `Some(EventsClient)` pointing
-/// at [`_FLOX_METRICS_URL_OVERRIDE`] when set to a parseable URL, falling
-/// back to the build-injected [`METRICS_EVENTS_URL_V2`]. The client
+/// at [`_FLOX_METRICS_URL_OVERRIDE`] when set to a parseable URL, otherwise
+/// the build-injected [`METRICS_EVENTS_URL_V2`]. The client
 /// authenticates with the build-injected
 /// [`METRICS_EVENTS_API_KEY_V2`] — the new endpoint's own API key,
 /// distinct from the legacy stack's
@@ -470,14 +470,14 @@ mod tests {
     }
 
     /// By default (dual-emit, v2 enabled) and with
-    /// `_FLOX_METRICS_URL_OVERRIDE` unset, the fallback to
-    /// `METRICS_EVENTS_URL_V2` installs a real client. Pin both the
-    /// success of the install and the use of the build-injected URL —
-    /// without this assertion a future refactor that re-introduced the
-    /// no-override `None` branch would silently disable the v2 path.
+    /// `_FLOX_METRICS_URL_OVERRIDE` unset, the client installs and posts to
+    /// the build-injected `METRICS_EVENTS_URL_V2`. Pin both the success of
+    /// the install and the use of that URL — without this assertion a
+    /// future refactor that re-introduced the no-override `None` branch
+    /// would silently disable the v2 path.
     #[test]
     #[serial(v2_events_wrapper_env)]
-    fn build_events_client_returns_some_by_default_with_v2_url_fallback() {
+    fn build_events_client_returns_some_by_default() {
         let tempdir = tempfile::tempdir().expect("tempdir");
         let uuid = Uuid::new_v4();
         let config = test_config_with_uuid(&tempdir, uuid);
