@@ -149,7 +149,7 @@ version:
 gen-unit-data-no-publish force="":
     #!/usr/bin/env bash
 
-    set -e
+    set -euo pipefail
 
     if [ "{{force}}" = "true" ]; then
         export _FLOX_UNIT_TEST_RECORD="force"
@@ -165,13 +165,23 @@ gen-unit-data-no-publish force="":
         go_version=$(curl -s 'https://api.flox.dev/api/v1/catalog/packages/go' | jq -r '.items[0].version')
         poetry_version=$(curl -s 'https://api.flox.dev/api/v1/catalog/packages/poetry' | jq -r '.items[0].version')
         nodejs_20_version=$(curl -s 'https://api.flox.dev/api/v1/catalog/packages/nodejs_20' | jq -r '.items[0].version')
+
+        versions_file="{{TEST_DATA}}/unit_test_generated/latest_prod_versions.json"
         jq -n \
             --arg python3 "$python_version" \
             --arg go "$go_version" \
             --arg poetry "$poetry_version" \
             --arg nodejs_20 "$nodejs_20_version" \
             '{python3: $python3, go: $go, poetry: $poetry, nodejs_20: $nodejs_20}' \
-            > "{{TEST_DATA}}/unit_test_generated/latest_prod_versions.json"
+            > "$versions_file"
+
+        # A failed fetch leaves an empty or "null" string. Reject a baseline
+        # with any unresolved version by checking the written file, which
+        # covers every package it contains.
+        if jq -e 'any(.[]; . == "" or . == "null")' "$versions_file" >/dev/null; then
+            echo "failed to resolve a package version from the production catalog" >&2
+            exit 1
+        fi
         echo "Wrote latest_prod_versions.json with python3=$python_version, go=$go_version, poetry=$poetry_version, nodejs_20=$nodejs_20_version"
     else
         export _FLOX_UNIT_TEST_RECORD="missing"
