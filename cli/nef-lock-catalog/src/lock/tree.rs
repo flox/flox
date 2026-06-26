@@ -8,7 +8,7 @@ use floxhub_client::BuildType;
 use serde::{Deserialize, Serialize};
 use tracing::warn;
 
-use super::flakeref::{NixFlakeref, RawNixFlakerefAttrs};
+use super::flakeref::RawNixFlakerefAttrs;
 
 /// Represents a node in the package tree - either a package set or an individual package
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
@@ -132,26 +132,6 @@ impl PackageTreeBuilder {
 
         Ok(())
     }
-
-    /// Add a package to the tree using optimized split_last() approach
-    ///
-    /// # Parameters
-    /// - `attr_path`: Path components (e.g., ["pkgs", "hello"])
-    /// - `build_type`: Type of build
-    /// - `source`: Validated source reference
-    pub fn add_package(
-        &mut self,
-        attr_path: Vec<String>,
-        build_type: BuildType,
-        source: NixFlakeref,
-    ) -> Result<()> {
-        // The parsed flake reference is the source value stored at the leaf.
-        self.add_package_source(
-            attr_path,
-            build_type,
-            RawNixFlakerefAttrs::new_unchecked(source.as_parsed().clone()),
-        )
-    }
 }
 
 #[cfg(test)]
@@ -162,43 +142,42 @@ mod tests {
 
     use super::*;
 
-    /// Helper function to create a package node JSON value from a NixFlakeref
-    fn make_package_json(flakeref: &NixFlakeref) -> Value {
-        serde_json::json!({
-            "type": "package",
-            "build_type": "manifest",
-            "source": flakeref.as_parsed()
-        })
-    }
-
-    /// Helper function to create test NixFlakeref
-    fn create_test_flakeref() -> NixFlakeref {
-        NixFlakeref::try_from(serde_json::json!({
+    /// A locked source value used across the tree tests.
+    fn test_source() -> Value {
+        json!({
             "type": "git",
             "url": "https://example.com",
             "rev": "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
             "dir": "foo/bar/.flox"
-        }))
-        .unwrap()
+        })
+    }
+
+    /// The expected serialized package node for a given source value.
+    fn make_package_json(source: &Value) -> Value {
+        json!({
+            "type": "package",
+            "build_type": "manifest",
+            "source": source,
+        })
     }
 
     #[test]
     fn build_simple_tree() {
-        let flakeref = create_test_flakeref();
+        let source = test_source();
 
         let mut builder = PackageTreeBuilder::new();
         builder
-            .add_package(
+            .add_package_source(
                 vec!["pkgs".to_string(), "hello".to_string()],
                 BuildType::Manifest,
-                flakeref.clone(),
+                RawNixFlakerefAttrs::new_unchecked(source.clone()),
             )
             .unwrap();
         builder
-            .add_package(
+            .add_package_source(
                 vec!["pkgs".to_string(), "grep".to_string()],
                 BuildType::Manifest,
-                flakeref.clone(),
+                RawNixFlakerefAttrs::new_unchecked(source.clone()),
             )
             .unwrap();
 
@@ -211,8 +190,8 @@ mod tests {
                 "pkgs": {
                     "type": "package_set",
                     "entries": {
-                        "hello": make_package_json(&flakeref),
-                        "grep": make_package_json(&flakeref)
+                        "hello": make_package_json(&source),
+                        "grep": make_package_json(&source)
                     }
                 }
             }
@@ -225,13 +204,13 @@ mod tests {
     #[test]
     fn single_package() {
         let mut builder = PackageTreeBuilder::new();
-        let flakeref = create_test_flakeref();
+        let source = test_source();
 
         builder
-            .add_package(
+            .add_package_source(
                 vec!["standalone".to_string()],
                 BuildType::Manifest,
-                flakeref.clone(),
+                RawNixFlakerefAttrs::new_unchecked(source.clone()),
             )
             .unwrap();
 
@@ -241,7 +220,7 @@ mod tests {
         let expected_tree: PackageTreeNode = serde_json::from_value(json!({
             "type": "package_set",
             "entries": {
-                "standalone": make_package_json(&flakeref)
+                "standalone": make_package_json(&source)
             }
         }))
         .unwrap();
@@ -255,22 +234,22 @@ mod tests {
         // "conflict.child" which forces "conflict" to become
         // a package set.
         let mut builder = PackageTreeBuilder::new();
-        let flakeref = create_test_flakeref();
+        let source = test_source();
 
         builder
-            .add_package(
+            .add_package_source(
                 vec!["conflict".to_string()],
                 BuildType::Manifest,
-                flakeref.clone(),
+                RawNixFlakerefAttrs::new_unchecked(source.clone()),
             )
             .unwrap();
 
         // Then create package set that should replace it
         builder
-            .add_package(
+            .add_package_source(
                 vec!["conflict".to_string(), "child".to_string()],
                 BuildType::Manifest,
-                flakeref.clone(),
+                RawNixFlakerefAttrs::new_unchecked(source.clone()),
             )
             .unwrap();
 
@@ -284,7 +263,7 @@ mod tests {
                 "conflict": {
                     "type": "package_set",
                     "entries": {
-                        "child": make_package_json(&flakeref)
+                        "child": make_package_json(&source)
                     }
                 }
             }
@@ -298,22 +277,22 @@ mod tests {
     fn package_ignored_on_conflict() {
         // Create package set first
         let mut builder = PackageTreeBuilder::new();
-        let flakeref = create_test_flakeref();
+        let source = test_source();
 
         builder
-            .add_package(
+            .add_package_source(
                 vec!["conflict".to_string(), "child".to_string()],
                 BuildType::Manifest,
-                flakeref.clone(),
+                RawNixFlakerefAttrs::new_unchecked(source.clone()),
             )
             .unwrap();
 
         // Then create package that should be replaced
         builder
-            .add_package(
+            .add_package_source(
                 vec!["conflict".to_string()],
                 BuildType::Manifest,
-                flakeref.clone(),
+                RawNixFlakerefAttrs::new_unchecked(source.clone()),
             )
             .unwrap();
 
@@ -327,7 +306,7 @@ mod tests {
                 "conflict": {
                     "type": "package_set",
                     "entries": {
-                        "child": make_package_json(&flakeref)
+                        "child": make_package_json(&source)
                     }
                 }
             }
@@ -340,10 +319,14 @@ mod tests {
     #[test]
     fn empty_path_components() {
         let mut builder = PackageTreeBuilder::new();
-        let flakeref = create_test_flakeref();
+        let source = test_source();
 
         // Try to add package with empty path
-        let result = builder.add_package(vec![], BuildType::Manifest, flakeref);
+        let result = builder.add_package_source(
+            vec![],
+            BuildType::Manifest,
+            RawNixFlakerefAttrs::new_unchecked(source),
+        );
         assert!(result.is_err());
         assert!(
             result
@@ -356,10 +339,10 @@ mod tests {
     #[test]
     fn deep_nesting() {
         let mut builder = PackageTreeBuilder::new();
-        let flakeref = create_test_flakeref();
+        let source = test_source();
 
         builder
-            .add_package(
+            .add_package_source(
                 vec![
                     "a".to_string(),
                     "b".to_string(),
@@ -367,7 +350,7 @@ mod tests {
                     "leaf".to_string(),
                 ],
                 BuildType::Manifest,
-                flakeref.clone(),
+                RawNixFlakerefAttrs::new_unchecked(source.clone()),
             )
             .unwrap();
 
@@ -386,7 +369,7 @@ mod tests {
                                 "c": {
                                     "type": "package_set",
                                     "entries": {
-                                        "leaf": make_package_json(&flakeref)
+                                        "leaf": make_package_json(&source)
                                     }
                                 }
                             }
@@ -403,13 +386,13 @@ mod tests {
     #[test]
     fn serialization_preserved() {
         let mut builder = PackageTreeBuilder::new();
-        let flakeref = create_test_flakeref();
+        let source = test_source();
 
         builder
-            .add_package(
+            .add_package_source(
                 vec!["test".to_string()],
                 BuildType::Manifest,
-                flakeref.clone(),
+                RawNixFlakerefAttrs::new_unchecked(source.clone()),
             )
             .unwrap();
 
@@ -419,7 +402,7 @@ mod tests {
         let expected_tree: PackageTreeNode = serde_json::from_value(json!({
             "type": "package_set",
             "entries": {
-                "test": make_package_json(&flakeref)
+                "test": make_package_json(&source)
             }
         }))
         .unwrap();
@@ -447,27 +430,27 @@ mod tests {
     #[test]
     fn multiple_root_packages() {
         let mut builder = PackageTreeBuilder::new();
-        let flakeref = create_test_flakeref();
+        let source = test_source();
 
         builder
-            .add_package(
+            .add_package_source(
                 vec!["pkg1".to_string()],
                 BuildType::Manifest,
-                flakeref.clone(),
+                RawNixFlakerefAttrs::new_unchecked(source.clone()),
             )
             .unwrap();
         builder
-            .add_package(
+            .add_package_source(
                 vec!["pkg2".to_string()],
                 BuildType::Manifest,
-                flakeref.clone(),
+                RawNixFlakerefAttrs::new_unchecked(source.clone()),
             )
             .unwrap();
         builder
-            .add_package(
+            .add_package_source(
                 vec!["pkg3".to_string()],
                 BuildType::Manifest,
-                flakeref.clone(),
+                RawNixFlakerefAttrs::new_unchecked(source.clone()),
             )
             .unwrap();
 
@@ -477,9 +460,9 @@ mod tests {
         let expected_tree: PackageTreeNode = serde_json::from_value(json!({
             "type": "package_set",
             "entries": {
-                "pkg1": make_package_json(&flakeref),
-                "pkg2": make_package_json(&flakeref),
-                "pkg3": make_package_json(&flakeref)
+                "pkg1": make_package_json(&source),
+                "pkg2": make_package_json(&source),
+                "pkg3": make_package_json(&source)
             }
         }))
         .unwrap();
@@ -490,24 +473,28 @@ mod tests {
     #[test]
     fn mixed_nesting_levels() {
         let mut builder = PackageTreeBuilder::new();
-        let flakeref = create_test_flakeref();
+        let source = test_source();
 
         builder
-            .add_package(
+            .add_package_source(
                 vec!["a".to_string(), "b".to_string(), "c".to_string()],
                 BuildType::Manifest,
-                flakeref.clone(),
+                RawNixFlakerefAttrs::new_unchecked(source.clone()),
             )
             .unwrap();
         builder
-            .add_package(
+            .add_package_source(
                 vec!["a".to_string(), "d".to_string()],
                 BuildType::Manifest,
-                flakeref.clone(),
+                RawNixFlakerefAttrs::new_unchecked(source.clone()),
             )
             .unwrap();
         builder
-            .add_package(vec!["e".to_string()], BuildType::Manifest, flakeref.clone())
+            .add_package_source(
+                vec!["e".to_string()],
+                BuildType::Manifest,
+                RawNixFlakerefAttrs::new_unchecked(source.clone()),
+            )
             .unwrap();
 
         let tree = builder.into_root();
@@ -522,13 +509,13 @@ mod tests {
                         "b": {
                             "type": "package_set",
                             "entries": {
-                                "c": make_package_json(&flakeref)
+                                "c": make_package_json(&source)
                             }
                         },
-                        "d": make_package_json(&flakeref)
+                        "d": make_package_json(&source)
                     }
                 },
-                "e": make_package_json(&flakeref)
+                "e": make_package_json(&source)
             }
         }))
         .unwrap();

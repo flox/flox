@@ -4,11 +4,9 @@ use serde::{Deserialize, Serialize};
 
 mod lock;
 mod nix;
-mod nix_build_config;
 mod scan;
 
-/// Common identifier for a `CatalogSpec` and its `CatalogLock`
-/// within a build config and lock respectively.
+/// Common identifier for a catalog and its `CatalogLock` in a build lock.
 /// Also exposed to nix expressions in the NEF as the `<catalog>` in
 /// ```nix
 /// {catalogs}:
@@ -28,5 +26,5 @@ impl Display for CatalogId {
 pub use lock::build_lock::{BuildLock, write_lock};
 pub use lock::flakeref::NixFlakeref;
 pub use lock::lookup::{LockError, lock_references};
-pub use nix_build_config::{LockOptions, lock_config, lock_config_with_options, read_config};
+pub use lock::render::render_unresolvable;
 pub use scan::{CatalogRef, scan_package, scan_package_with_roots};

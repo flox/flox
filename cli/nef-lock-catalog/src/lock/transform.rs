@@ -6,6 +6,7 @@ use std::collections::{BTreeMap, HashMap};
 
 use anyhow::Result;
 use floxhub_client::LockedInputEntry;
+use tracing::instrument;
 
 use crate::CatalogId;
 use crate::lock::build_lock::{BuildLock, CatalogLock};
@@ -20,6 +21,7 @@ use crate::lock::tree::PackageTreeBuilder;
 /// [`crate::lock::tree::PackageTreeBuilder`], keyed by
 /// [`LockedInputEntry::attr_path`]. The wire `source` is stored **verbatim** —
 /// no nix invocation.
+#[instrument(skip(locked), fields(packages = locked.len()))]
 pub(crate) fn build_lock_from_locked_inputs(
     locked: HashMap<String, LockedInputEntry>,
 ) -> Result<BuildLock> {
