@@ -1,4 +1,8 @@
 {
+  "enabledPlugins": {
+    "flox-rust-lsp@skills-dir": true,
+    "rust-analyzer-lsp@claude-plugins-official": false
+  },
   "hooks": {
     "PostToolUse": [
       {

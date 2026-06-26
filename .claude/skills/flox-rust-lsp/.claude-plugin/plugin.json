@@ -1,0 +1,31 @@
+{
+  "name": "flox-rust-lsp",
+  "description": "Rust LSP for Claude Code, launched inside the Flox/Nix dev shell with the extra-tests cargo feature enabled.",
+  "version": "0.1.0",
+  "author": {
+    "name": "Flox"
+  },
+  "lspServers": {
+    "rust-analyzer": {
+      "command": "bash",
+      "args": [
+        "-lc",
+        "cd \"$CLAUDE_PROJECT_DIR\" && exec nix develop -c rust-analyzer"
+      ],
+      "extensionToLanguage": {
+        ".rs": "rust"
+      },
+      "settings": {
+        "rust-analyzer": {
+          "cargo": {
+            "features": ["extra-tests"]
+          },
+          "check": {
+            "command": "clippy"
+          }
+        }
+      },
+      "startupTimeout": 180000
+    }
+  }
+}

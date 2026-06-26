@@ -218,6 +218,24 @@ section refers to settings from that plugin.
    "shellformat.useEditorConfig": true,
   ```
 
+#### Claude Code Rust LSP
+
+The repository ships an in-tree Claude Code LSP plugin at
+`.claude/skills/flox-rust-lsp` that launches `rust-analyzer` inside the dev
+shell (`nix develop -c rust-analyzer`) with the `extra-tests` cargo feature and
+`clippy` checks enabled. Because the server is launched through `nix develop`,
+it always uses the workspace's pinned `fenix.stable` toolchain regardless of how
+Claude Code itself was started. To use it:
+
+- Launch Claude Code from the repository root so the project-scope plugin is
+  discovered, and accept the workspace trust dialog (LSP servers only start
+  after the workspace is trusted).
+- The first launch is slow while `nix develop` evaluates; the configured
+  `startupTimeout` accounts for this.
+
+This plugin replaces the official `rust-analyzer-lsp` plugin, which is disabled
+at project scope in `.claude/settings.json` to avoid running two servers.
+
 ### Activation scripts
 
 Flox activations invoke a series of scripts
