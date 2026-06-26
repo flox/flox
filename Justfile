@@ -130,15 +130,24 @@ version:
 @gen-data floxhub_path +mk_data_args="": (mk-data mk_data_args)
     #!/usr/bin/env bash
 
-    # We do this because `mk_data` has a `-f` flag whereas the
-    # gen-unit-data recipe has a positional argument that can take the value
-    # `force`. As far as I can tell, there's not a way to conditionally run
-    # recipes within `just`, so we just run the correct recipe via a script.
-    if [ "{{mk_data_args}}" = "-f" ]; then
-        just gen-unit-data "{{floxhub_path}}" true
-    else
-        just gen-unit-data "{{floxhub_path}}"
-    fi
+    # `mk_data` (run via the mk-data dependency above) and the unit-cassette
+    # recorder below must agree on whether this is a force run. `mk_data`
+    # treats `-f`/`--force` as force, so mirror exactly that set here. Reject
+    # any other argument loudly: silently falling back to a replay run records
+    # nothing and yields an empty mocks patch that masquerades as success.
+    case "{{mk_data_args}}" in
+        -f | --force)
+            just gen-unit-data "{{floxhub_path}}" true
+            ;;
+        "")
+            just gen-unit-data "{{floxhub_path}}"
+            ;;
+        *)
+            echo "gen-data: cannot thread '{{mk_data_args}}' through to the unit-cassette recorder." >&2
+            echo "Only '-f'/'--force' (force-record all mocks) or no argument (record only missing mocks) are understood here." >&2
+            exit 1
+            ;;
+    esac
 
 @mk-data +mk_data_args="": build-data-gen build-cli (md mk_data_args)
 
