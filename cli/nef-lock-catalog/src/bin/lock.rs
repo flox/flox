@@ -126,12 +126,11 @@ async fn run(cli: Cli) -> Result<()> {
 
 /// Build the catalog client from the environment and the already-read token.
 ///
-/// The catalog URL is resolved once (`FLOX_CATALOG_URL`, else the default) and
-/// used for the request base; mock mode is environment-driven. The token is
-/// read once by the caller (see [ENV_FLOXHUB_TOKEN]) and passed in.
+/// The catalog URL is resolved via [`resolve_catalog_url`]; mock mode is
+/// environment-driven. The token is read once by the caller (see
+/// [ENV_FLOXHUB_TOKEN]) and passed in.
 fn build_client(floxhub_token: Option<String>) -> Result<FloxhubClient> {
-    let catalog_url =
-        std::env::var("FLOX_CATALOG_URL").unwrap_or_else(|_| DEFAULT_CATALOG_URL.to_string());
+    let catalog_url = resolve_catalog_url();
 
     let floxhub_token = floxhub_token.map(|token| token.parse()).transpose()?;
     let auth_context = AuthContext::from_mode(&AuthnMode::Auth0, floxhub_token);
@@ -145,6 +144,38 @@ fn build_client(floxhub_token: Option<String>) -> Result<FloxhubClient> {
     };
 
     Ok(FloxhubClient::new(config)?)
+}
+
+/// Resolve the catalog API base URL, mirroring the CLI so a single FloxHub base
+/// (`FLOXHUB_URL`) drives the catalog here too:
+///
+/// 1. `FLOX_CATALOG_URL` — explicit override, used verbatim.
+/// 2. `FLOXHUB_URL` base — the hosted realm (`hub.flox.dev`) maps to the hosted
+///    catalog constant; any other base IS the catalog base (the generated
+///    client appends `/api/v1/catalog`). A trailing slash is trimmed to avoid
+///    `//api/v1/catalog`.
+/// 3. Otherwise the compiled-in public default.
+///
+/// NOTE: the hosted-realm constants are duplicated from `flox-rust-sdk`
+/// (`Floxhub::catalog_url` / `PUBLIC_FLOXHUB_URL`), and this honors only the
+/// `FLOXHUB_URL` env — not the layered flox config (`/etc/flox.toml`, etc.).
+/// Both are addressed by factoring out a shared config crate: flox/flox#4442.
+fn resolve_catalog_url() -> String {
+    // Duplicated from flox-rust-sdk's PUBLIC_FLOXHUB_URL pending #4442.
+    const PUBLIC_FLOXHUB_URL: &str = "https://hub.flox.dev";
+
+    if let Ok(catalog_url) = std::env::var("FLOX_CATALOG_URL")
+        && !catalog_url.is_empty()
+    {
+        return catalog_url;
+    }
+    if let Ok(base) = std::env::var("FLOXHUB_URL") {
+        let base = base.trim_end_matches('/');
+        if !base.is_empty() && base != PUBLIC_FLOXHUB_URL {
+            return base.to_string();
+        }
+    }
+    DEFAULT_CATALOG_URL.to_string()
 }
 
 /// Render an authentication-related catalog failure with a token-aware hint.
