@@ -144,7 +144,7 @@ version:
 
 # The same as mk-data, but faster to type, and doesn't rebuild stuff
 @md +mk_data_args="":
-    mkdata="$PWD/target/debug/mk_data"; pushd test_data; "$mkdata" {{mk_data_args}} config.toml; popd
+    mkdata="$PWD/target/debug/mk_data"; (cd test_data && "$mkdata" {{mk_data_args}} config.toml)
 
 gen-unit-data-no-publish force="":
     #!/usr/bin/env bash
