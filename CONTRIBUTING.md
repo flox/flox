@@ -218,6 +218,24 @@ section refers to settings from that plugin.
    "shellformat.useEditorConfig": true,
   ```
 
+#### Claude Code Rust LSP
+
+The dev shell now provides `rust-analyzer` pinned to the same `fenix.stable`
+toolchain as `rustc`, and the repository enables the official
+`rust-analyzer-lsp` Claude Code plugin at project scope (see
+`.claude/settings.json`). To get Rust code intelligence in Claude Code:
+
+- Start Claude Code with the dev environment loaded, either by running
+  `direnv allow` (the repo's `.envrc` runs `use flake`) or by launching from
+  inside `nix develop`. This puts the pinned `rust-analyzer` first on `PATH`.
+- Accept the workspace trust dialog. Project-scope plugins, including LSP
+  servers, only start after the workspace is trusted.
+
+The plugin invokes whatever `rust-analyzer` is first on `PATH`; loading the dev
+environment at launch is what keeps it matched to the workspace toolchain. The
+`extra-tests` cargo feature is not enabled through this plugin, so code behind
+`#[cfg(feature = "extra-tests")]` may show as inactive.
+
 ### Activation scripts
 
 Flox activations invoke a series of scripts

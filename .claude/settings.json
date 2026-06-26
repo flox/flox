@@ -1,4 +1,7 @@
 {
+  "enabledPlugins": {
+    "rust-analyzer-lsp@claude-plugins-official": true
+  },
   "hooks": {
     "PostToolUse": [
       {
