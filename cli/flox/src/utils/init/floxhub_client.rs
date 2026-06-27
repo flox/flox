@@ -1,11 +1,10 @@
 use std::collections::BTreeMap;
 use std::str::FromStr;
 
-use flox_rust_sdk::flox::FLOX_VERSION;
+use flox_rust_sdk::flox::{FLOX_VERSION, Floxhub};
 use flox_rust_sdk::utils::{HEADER_DEVICE_UUID, INVOCATION_SOURCES};
 use floxhub_client::{
     AuthContext,
-    DEFAULT_CATALOG_URL,
     FloxhubClient,
     FloxhubClientConfig,
     FloxhubMockMode,
@@ -18,11 +17,15 @@ use crate::config::Config;
 
 /// Initialize the FloxHub API client.
 ///
-/// - Reads the catalog URL from config (defaults to the production catalog URL)
+/// - The catalog URL is an explicit `catalog_url`/`FLOX_CATALOG_URL` override
+///   if set, otherwise derived from the FloxHub base via
+///   [`Floxhub::catalog_url`] (hosted realm → `api.flox.dev`; any other base →
+///   the base, with the client appending `/api/v1/catalog`).
 /// - Configures mock replay mode if `_FLOX_USE_CATALOG_MOCK` is set
 /// - Includes device UUID and invocation-source headers when available
 pub fn init_floxhub_client(
     config: &Config,
+    floxhub: &Floxhub,
     metrics_device_uuid: Option<Uuid>,
 ) -> Result<FloxhubClient, anyhow::Error> {
     let mut extra_headers = BTreeMap::new();
@@ -40,12 +43,18 @@ pub fn init_floxhub_client(
 
     let mock_mode = FloxhubMockMode::default_from_env();
 
+    // The generated client joins request paths onto `base_url`, so a trailing
+    // slash would yield `//api/v1/catalog`. `Url` serializes a bare host with a
+    // trailing slash, and a user-supplied `FLOX_CATALOG_URL` override may carry
+    // one too, so trim it in both cases.
+    let catalog_url = config
+        .flox
+        .catalog_url
+        .clone()
+        .unwrap_or_else(|| Floxhub::catalog_url(floxhub.base_url()).to_string());
+
     let client_config = FloxhubClientConfig {
-        base_url: config
-            .flox
-            .catalog_url
-            .clone()
-            .unwrap_or_else(|| DEFAULT_CATALOG_URL.to_string()),
+        base_url: catalog_url.trim_end_matches('/').to_string(),
         extra_headers,
         mock_mode,
         auth_context: AuthContext::from_mode(

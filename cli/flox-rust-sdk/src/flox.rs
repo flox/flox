@@ -117,6 +117,15 @@ pub static PUBLIC_FLOXHUB_URL: LazyLock<Url> =
 pub static PUBLIC_GIT_URL: LazyLock<Url> =
     LazyLock::new(|| Url::parse("https://api.flox.dev/git").unwrap());
 
+/// The hosted (SaaS) catalog API endpoint paired with [`PUBLIC_FLOXHUB_URL`].
+///
+/// Hardcoded (like [`PUBLIC_GIT_URL`]) rather than sourced from the recompilable
+/// [`DEFAULT_CATALOG_URL`]: this constant is the *hosted* realm's identity used
+/// by [`Floxhub::catalog_url`], and must not shift when an on-premise build
+/// recompiles its own default catalog host.
+pub static PUBLIC_CATALOG_URL: LazyLock<Url> =
+    LazyLock::new(|| Url::parse("https://api.flox.dev").unwrap());
+
 /// Compiled-in default FloxHub base, used when no `floxhub_url` is configured.
 ///
 /// Defaults to the hosted realm ([`PUBLIC_FLOXHUB_URL`]); an on-premise build
@@ -201,6 +210,25 @@ impl Floxhub {
             .pop_if_empty()
             .push(route);
         Ok(url)
+    }
+
+    /// Resolve the catalog API base URL from a FloxHub base URL.
+    ///
+    /// Mirrors [`Floxhub::resolve_git_url`]: the hosted (SaaS) realm base
+    /// ([`PUBLIC_FLOXHUB_URL`]) maps to the fixed hosted catalog constant
+    /// [`PUBLIC_CATALOG_URL`] (`api.flox.dev`); any other base IS the catalog
+    /// base (the generated client appends `/api/v1/catalog`). Keyed on
+    /// [`PUBLIC_FLOXHUB_URL`], not [`DEFAULT_FLOXHUB_URL`], so a recompiled
+    /// on-premise default still routes the catalog off its own base.
+    ///
+    /// An explicit `catalog_url`/`FLOX_CATALOG_URL` override is applied by the
+    /// caller and takes precedence over this derivation.
+    pub fn catalog_url(base_url: &Url) -> Url {
+        if base_url == &*PUBLIC_FLOXHUB_URL {
+            PUBLIC_CATALOG_URL.clone()
+        } else {
+            base_url.clone()
+        }
     }
 }
 
@@ -475,6 +503,22 @@ pub mod tests {
             floxhub.git_url().as_str(),
             "https://onprem.example.internal/git",
         );
+    }
+
+    #[test]
+    fn catalog_url_hosted_base_uses_hosted_catalog_constant() {
+        assert_eq!(
+            Floxhub::catalog_url(&PUBLIC_FLOXHUB_URL),
+            *PUBLIC_CATALOG_URL
+        );
+    }
+
+    #[test]
+    fn catalog_url_other_base_is_the_base() {
+        // On-prem (and a recompiled default) base: the catalog is the base
+        // itself; the generated client appends `/api/v1/catalog`.
+        let base = Url::from_str("https://onprem.example.internal").unwrap();
+        assert_eq!(Floxhub::catalog_url(&base), base);
     }
 
     #[test]
