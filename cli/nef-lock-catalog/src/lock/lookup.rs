@@ -91,8 +91,7 @@ fn build_request(
 ) -> BuildInputsLookupRequest {
     let group = LookupGroup {
         key: LOOKUP_GROUP_KEY.to_string(),
-        // Move each reference's inner string out — no per-string reallocation.
-        references: references.into_iter().map(String::from).collect(),
+        references: references.iter().map(wire_reference).collect(),
     };
 
     BuildInputsLookupRequest {
@@ -100,6 +99,20 @@ fn build_request(
         reference_point: None,
         stability,
     }
+}
+
+/// Render a scanned reference for the wire.
+///
+/// The scanner records references rooted at the NEF `catalogs` lambda parameter
+/// (`catalogs.<catalog>.<package>`), but the catalog server's reference
+/// namespace is catalog-relative (`<catalog>.<package>`). Drop the leading root
+/// segment so the request matches what the server expects.
+fn wire_reference(reference: &CatalogRef) -> String {
+    let reference = reference.as_str();
+    reference
+        .split_once('.')
+        .map(|(_root, rest)| rest.to_string())
+        .unwrap_or_else(|| reference.to_string())
 }
 
 /// Map a lookup response into a [BuildLock], or fail with the unresolvable
@@ -151,11 +164,13 @@ mod tests {
 
         let wire = build_request(references, "stable".parse().unwrap());
 
-        // All references collapse into a single wire group.
+        // All references collapse into a single wire group, and the leading
+        // `catalogs` root segment is dropped — the server's reference namespace
+        // is catalog-relative (`<catalog>.<package>`).
         assert_eq!(wire.groups.len(), 1);
         assert_eq!(
             serde_json::to_value(&wire.groups[0].references).unwrap(),
-            json!(["catalogs.myorg.hello", "catalogs.myorg.world"])
+            json!(["myorg.hello", "myorg.world"])
         );
         assert_eq!(
             serde_json::to_value(&wire.stability).unwrap(),
