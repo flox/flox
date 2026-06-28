@@ -11,6 +11,19 @@ use floxhub_client::UnresolvableEntry;
 use indent::indent_all_by;
 use indoc::formatdoc;
 
+/// The NEF catalog root the scanner strips before sending references to the
+/// server (see `lock::lookup::wire_reference`). The server echoes back
+/// catalog-relative references (`<catalog>.<package>`); restore the root so the
+/// developer sees the attribute exactly as written in their expression
+/// (`catalogs.<catalog>.<package>`).
+const CATALOG_ROOT: &str = "catalogs";
+
+/// Prefix a server-returned, catalog-relative reference with the NEF
+/// [`CATALOG_ROOT`] for display.
+fn display_reference(reference: &str) -> String {
+    format!("{CATALOG_ROOT}.{reference}")
+}
+
 /// Render the unresolvable references from a failed lock into a developer-facing
 /// error body per REQ-013:
 /// - a `→`-arrow dependency path per reference, ending in `(unresolvable)`,
@@ -40,7 +53,10 @@ fn render_path(chain: &[String]) -> String {
         .map(|(i, reference)| {
             let arrow = if i == 0 { "" } else { "→ " };
             let leaf = if i == last { " (unresolvable)" } else { "" };
-            format!("{arrow}{reference}{leaf}")
+            format!(
+                "{arrow}{reference}{leaf}",
+                reference = display_reference(reference)
+            )
         })
         .collect::<Vec<_>>()
         .join("\n")
@@ -56,7 +72,7 @@ fn render_single(entry: &UnresolvableEntry) -> String {
           Possible causes: the input may not be visible to you, may have no
           published revision, or may have aged out of retention. Verify
           availability with the owner of the relevant catalog.",
-        reference = entry.reference,
+        reference = display_reference(&entry.reference),
         path = indent_all_by(4, render_path(&entry.chain)),
     }
 }
@@ -71,7 +87,7 @@ fn render_many(entries: &[UnresolvableEntry]) -> String {
                      Dependency path:
                 {path}",
                 n = i + 1,
-                reference = entry.reference,
+                reference = display_reference(&entry.reference),
                 path = indent_all_by(7, render_path(&entry.chain)),
             }
         })
@@ -106,10 +122,9 @@ mod tests {
 
     #[test]
     fn single_unresolvable() {
-        let entries = [entry("catalogs.acme.tool", &[
-            "catalogs.acme.app",
-            "catalogs.acme.tool",
-        ])];
+        // The server returns catalog-relative references; rendering restores
+        // the `catalogs.` root for the developer.
+        let entries = [entry("acme.tool", &["acme.app", "acme.tool"])];
 
         let expected = "\
 'catalogs.acme.tool' is unresolvable in this context.
@@ -128,11 +143,8 @@ mod tests {
     #[test]
     fn multiple_unresolvable_numbered() {
         let entries = [
-            entry("catalogs.acme.tool", &[
-                "catalogs.acme.app",
-                "catalogs.acme.tool",
-            ]),
-            entry("catalogs.other.lib", &["catalogs.other.lib"]),
+            entry("acme.tool", &["acme.app", "acme.tool"]),
+            entry("other.lib", &["other.lib"]),
         ];
 
         let expected = "\
