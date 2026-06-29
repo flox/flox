@@ -1,8 +1,9 @@
-//! `flox factory` command namespace: read-only build inspection for operators.
+//! `flox factory` command namespace: read-only build inspection for operators,
+//! plus the destructive `cancel` verb.
 //!
-//! Hidden from `flox --help`; discoverable via the operator runbook. `Logs`
-//! (ECO-99) and `Cancel` (ECO-100) are future verbs.
+//! Hidden from `flox --help`; discoverable via the operator runbook.
 
+mod cancel;
 mod list;
 mod logs;
 mod status;
@@ -99,7 +100,10 @@ pub enum FactoryCommands {
     /// Print the logs for a single Flox Factory build
     #[bpaf(command)]
     Logs(#[bpaf(external(logs::logs))] logs::Logs),
-    // ECO-100 will add: Cancel(#[bpaf(external(cancel::cancel))] cancel::Cancel),
+
+    /// Cancel a single Flox Factory build
+    #[bpaf(command)]
+    Cancel(#[bpaf(external(cancel::cancel))] cancel::Cancel),
 }
 
 impl FactoryCommands {
@@ -116,6 +120,7 @@ impl FactoryCommands {
             FactoryCommands::Status(args) => args.handle(&flox.floxhub_client).await,
             FactoryCommands::List(args) => args.handle(&flox.floxhub_client).await,
             FactoryCommands::Logs(args) => args.handle(&flox.floxhub_client).await,
+            FactoryCommands::Cancel(args) => args.handle(&flox.floxhub_client).await,
         }
     }
 }
@@ -124,13 +129,17 @@ impl FactoryCommands {
 pub(crate) mod test_helpers {
     //! Shared test fixtures for the factory verb handler tests.
 
+    use std::sync::atomic::{AtomicBool, Ordering};
+
     use chrono::TimeZone;
     use factory_api_v1::types::TaskResponse;
     use floxhub_client::{
         BuildResponse,
+        FactoryApiError,
         FactoryByteStream,
         FactoryClientError,
         FactoryClientTrait,
+        FactoryErrorResponse,
     };
 
     /// Construct a `BuildResponse` fixture. A `Some(task_status)` attaches a
@@ -172,15 +181,87 @@ pub(crate) mod test_helpers {
         }
     }
 
-    /// In-test stub implementing [`FactoryClientTrait`], used to drive the
-    /// `status` handler down its not-found path without a live service.
+    /// The outcome a [`StubFactoryClient`] method yields.
+    ///
+    /// [`FactoryClientError`] is not `Clone` (its `Transport` case wraps a
+    /// `reqwest::Error`), so the error cases are named here and the variant is
+    /// built on demand rather than stored. `Transport` is omitted because it
+    /// cannot be constructed without a live failed request; the cancel verb's
+    /// transport path is covered by the pure classifier tests instead.
+    #[derive(Clone)]
+    pub enum StubResult {
+        /// Return a build whose top-level `status` is this string.
+        Build(String),
+        /// Return [`FactoryClientError::NotFound`].
+        NotFound,
+        /// Return [`FactoryClientError::AuthRejected`].
+        AuthRejected,
+        /// Return [`FactoryClientError::Server`].
+        Server,
+    }
+
+    impl StubResult {
+        fn realize(&self) -> Result<BuildResponse, FactoryClientError> {
+            match self {
+                // Build the fixture coherently: `Some(status)` sets both the
+                // task lifecycle status and the top-level status, preserving
+                // `make_build`'s invariant rather than mutating after the fact.
+                StubResult::Build(status) => {
+                    Ok(make_build(1, "x86_64-linux", "hello", Some(status)))
+                },
+                StubResult::NotFound => Err(FactoryClientError::NotFound),
+                StubResult::AuthRejected => Err(FactoryClientError::AuthRejected(stub_api_error())),
+                StubResult::Server => Err(FactoryClientError::Server(stub_api_error())),
+            }
+        }
+    }
+
+    /// A placeholder API error for the stub's typed-error outcomes. The cancel
+    /// handler renders its own curated message for `AuthRejected`/`Server`, so
+    /// the handler tests never inspect this payload (the client-layer detail
+    /// assertion uses a mock, not the stub); it exists only to satisfy the
+    /// variant shape now that those variants wrap the underlying error.
+    fn stub_api_error() -> FactoryApiError<FactoryErrorResponse> {
+        FactoryApiError::<FactoryErrorResponse>::InvalidRequest("stubbed factory error".to_string())
+    }
+
+    /// In-test stub implementing [`FactoryClientTrait`].
+    ///
+    /// Drives `get_build` (the `status` lookup) and `cancel_build` (the DELETE)
+    /// to independent [`StubResult`] outcomes, and records whether the DELETE was
+    /// issued so a cancel test can assert the range guard short-circuits before
+    /// it.
     pub struct StubFactoryClient {
-        not_found: bool,
+        get_build: StubResult,
+        cancel_build: StubResult,
+        cancel_called: AtomicBool,
     }
 
     impl StubFactoryClient {
+        /// A stub whose every lookup reports the build as missing.
         pub fn with_not_found() -> Self {
-            Self { not_found: true }
+            Self::with_outcomes(StubResult::NotFound, StubResult::NotFound)
+        }
+
+        /// A stub whose `get_build` (the `status` lookup) yields `get_build` and
+        /// whose DELETE (`cancel_build`) yields `cancel_build`.
+        pub fn with_outcomes(get_build: StubResult, cancel_build: StubResult) -> Self {
+            Self {
+                get_build,
+                cancel_build,
+                cancel_called: AtomicBool::new(false),
+            }
+        }
+
+        /// A stub exercising only the DELETE (`cancel_build`). The `cancel` verb
+        /// issues no `get_build`, so that slot is an inert `NotFound` placeholder.
+        pub fn with_cancel(cancel_build: StubResult) -> Self {
+            Self::with_outcomes(StubResult::NotFound, cancel_build)
+        }
+
+        /// Whether `cancel_build` (the DELETE) was ever invoked.
+        pub fn cancel_was_called(&self) -> bool {
+            self.cancel_called.load(Ordering::SeqCst)
         }
     }
 
@@ -189,9 +270,9 @@ pub(crate) mod test_helpers {
             &self,
             _status: Option<&str>,
         ) -> Result<floxhub_client::ResultsPage<BuildResponse>, FactoryClientError> {
-            if self.not_found {
-                return Err(FactoryClientError::NotFound);
-            }
+            // Mirror the get_build outcome's error, if any, so a not-found stub
+            // stays not-found across endpoints; otherwise an empty page.
+            self.get_build.realize()?;
             Ok(floxhub_client::ResultsPage {
                 results: vec![],
                 count: Some(0),
@@ -199,19 +280,21 @@ pub(crate) mod test_helpers {
         }
 
         async fn get_build(&self, _build_id: i64) -> Result<BuildResponse, FactoryClientError> {
-            if self.not_found {
-                return Err(FactoryClientError::NotFound);
-            }
-            Ok(make_build(1, "x86_64-linux", "hello", Some("running")))
+            self.get_build.realize()
+        }
+
+        async fn cancel_build(&self, _build_id: i64) -> Result<BuildResponse, FactoryClientError> {
+            self.cancel_called.store(true, Ordering::SeqCst);
+            self.cancel_build.realize()
         }
 
         async fn get_build_logs(
             &self,
             _build_id: i64,
         ) -> Result<FactoryByteStream, FactoryClientError> {
-            if self.not_found {
-                return Err(FactoryClientError::NotFound);
-            }
+            // Mirror the get_build outcome's error, if any, so a not-found stub
+            // stays not-found across endpoints; otherwise serve the canned stream.
+            self.get_build.realize()?;
             let lines: [&[u8]; 2] = [b"Building hello...\n", b"Build completed.\n"];
             let chunks = lines
                 .into_iter()

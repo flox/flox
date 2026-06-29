@@ -22,6 +22,7 @@ mod lock_manifest;
 mod publish;
 mod pull;
 mod push;
+mod run;
 mod search;
 mod services;
 mod services_socket;
@@ -665,6 +666,15 @@ struct Help {
 
 /// Force `--help` output for `flox` with a given command
 pub fn display_help(cmd: Option<String>) {
+    // `flox run` uses an unconditional catchall that consumes `--help`, so
+    // running `flox_cli().run_inner(["run", "--help"])` would parse OK and
+    // hit the `unreachable!()` arm below — a panic. Route to the hand-written
+    // synopsis instead.
+    if cmd.as_deref() == Some("run") {
+        run::print_help();
+        return;
+    }
+
     let mut args = Vec::from_iter(cmd.as_deref());
     args.push("--help");
 
@@ -745,6 +755,10 @@ enum UseCommands {
     #[bpaf(command, long("exit"))]
     Deactivate(#[bpaf(external(deactivate::deactivate))] deactivate::Deactivate),
 
+    /// Run a command from a Flox Catalog package
+    #[bpaf(command, footer("Run 'man flox-run' for more details."))]
+    Run(#[bpaf(external(run::run))] run::Run),
+
     /// Manage services in an environment
     #[bpaf(command)]
     Services(
@@ -761,6 +775,7 @@ impl UseCommands {
         match self {
             UseCommands::Activate(args) => args.handle(config, flox).await,
             UseCommands::Deactivate(args) => args.handle(config, flox),
+            UseCommands::Run(args) => args.handle(flox).await,
             UseCommands::Services(args) => args.handle(config, flox).await,
         }
     }
@@ -769,6 +784,7 @@ impl UseCommands {
         match self {
             UseCommands::Activate(args) => args.subcommand_name(),
             UseCommands::Deactivate(_) => "deactivate",
+            UseCommands::Run(_) => "run",
             UseCommands::Services(sub) => sub.subcommand_name(),
         }
     }
