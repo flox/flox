@@ -250,14 +250,18 @@ fn run_event_loop(
                 // on the state-file change instead.
                 if activations.attached_pids_is_empty() {
                     info!("all PIDs gone after state.json change, running cleanup");
-                    cleanup_all(
+                    if cleanup_all(
                         (activations, lock),
                         &process_compose_bin,
                         &socket_path,
                         &activation_state_dir,
                     )
-                    .context("cleanup failed after StateFileChanged with empty PIDs")?;
-                    return Ok(());
+                    .context("cleanup failed after StateFileChanged with empty PIDs")?
+                    {
+                        return Ok(());
+                    }
+                    // A PID raced in between the empty check and cleanup_all;
+                    // continue the event loop so the new PID stays monitored.
                 }
                 // lock drops here when PIDs remain
             },
@@ -369,14 +373,14 @@ fn handle_process_exited(
         },
         Ok(Some(locked_activations)) => {
             info!("running cleanup after all PIDs terminated");
-            cleanup_all(
+            let cleaned_up = cleanup_all(
                 locked_activations,
                 process_compose_bin,
                 socket_path,
                 activation_state_dir,
             )
             .context("cleanup failed")?;
-            Ok(true)
+            Ok(cleaned_up)
         },
         Err(err) => {
             info!("running cleanup after error");
@@ -442,18 +446,20 @@ fn handle_start_services_signal(
 
 /// Shutdown `process-compose` if running and remove all activation state.
 /// To be called when there are no longer any PIDs attached.
+/// Returns `true` if cleanup ran, `false` if PIDs were found and cleanup was skipped.
 fn cleanup_all(
     locked_activations: LockedActivationState,
     process_compose_bin: &Path,
     socket_path: impl AsRef<Path>,
     activation_state_dir_path: impl AsRef<Path>,
-) -> Result<()> {
+) -> Result<bool> {
     info!("running cleanup");
 
     let (activations_json, _hold_the_lock) = locked_activations;
 
     if !activations_json.attached_pids_is_empty() {
-        unreachable!("cleanup should only be called when there are no more attached PIDs");
+        warn!("cleanup called with PIDs still attached, skipping");
+        return Ok(false);
     }
     let socket_path = socket_path.as_ref();
     if socket_path.exists() {
@@ -479,7 +485,7 @@ fn cleanup_all(
 
     info!("finished cleanup");
 
-    Ok(())
+    Ok(true)
 }
 
 #[cfg(test)]
