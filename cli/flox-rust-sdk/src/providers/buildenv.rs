@@ -236,26 +236,143 @@ pub struct BuildEnvNix<A> {
     auth: A,
 }
 
+/// Build the base `nix build` command shared by all store-path operations.
+///
+/// Enables impure language features, applies the store URL override from
+/// `_FLOX_NIX_STORE_URL`, and requests build logs.
+fn base_command() -> Command {
+    let mut nix_build_command = nix_base_command();
+    // allow impure language features such as `builtins.storePath`,
+    // and use the auto store (which is used by the preceding `realise` command)
+    // TODO: formalize this in a config file,
+    // and potentially disable other user configs (allowing specific overrides)
+    nix_build_command.args(["--option", "pure-eval", "false"]);
+    apply_nix_store_url(&mut nix_build_command);
+    // we generally want to see more logs (we can always filter them out)
+    nix_build_command.arg("--print-build-logs");
+
+    nix_build_command
+}
+
+/// Fetch the given store paths via `nix build`, downloading from configured
+/// substituters or building from source if needed.
+///
+/// When `out_link` is `Some(prefix)`, passes `--out-link <prefix>` so the
+/// downloaded paths are registered as GC roots under that prefix.
+/// When `out_link` is `None`, passes `--no-link` instead.
+///
+/// Returns `true` if all paths were fetched successfully, `false` otherwise.
+pub fn substitute_store_paths(
+    paths: impl IntoIterator<Item = impl AsRef<OsStr>>,
+    out_link: Option<&Path>,
+) -> Result<bool, BuildEnvError> {
+    let paths: Vec<_> = paths.into_iter().collect();
+
+    let mut cmd = base_command();
+    cmd.arg("build");
+    match out_link {
+        Some(prefix) => {
+            cmd.arg("--out-link").arg(prefix);
+        },
+        None => {
+            cmd.arg("--no-link");
+        },
+    }
+    cmd.args(paths);
+
+    debug!(cmd=%cmd.display(), "trying to fetch store paths");
+
+    let output = cmd.output().map_err(BuildEnvError::CallNixBuild)?;
+    let success = output.status.success();
+    if !success {
+        debug!(
+            stderr = %String::from_utf8_lossy(&output.stderr),
+            "store path fetch failed"
+        );
+    }
+    Ok(success)
+}
+
+/// Build a catalog package from source when the binary cache does not have it.
+///
+/// Constructs the `flox-nixpkgs` flake installable from `locked_url` and
+/// `attr_path`, then invokes `nix build` with the Nix plugins that allow
+/// unfree and broken packages.
+///
+/// When `gc_root_prefix` is `Some(p)`, passes `--out-link <p>` so the build
+/// output is registered as a GC root. When `None`, passes `--no-link`.
+///
+/// Returns `Err(BuildEnvError::Realise2)` if the build fails.
+pub fn build_catalog_pkg_from_source(
+    locked_url: &str,
+    attr_path: &str,
+    system: &str,
+    unfree: Option<bool>,
+    broken: Option<bool>,
+    gc_root_prefix: Option<&Path>,
+) -> Result<(), BuildEnvError> {
+    // Transform the locked URL: strip the nixpkgs GitHub prefix and replace
+    // it with the flox-nixpkgs fetcher reference so that evaluation checks
+    // (allowUnfree, allowBroken) are controlled by manifest options rather
+    // than Nix's built-in guards.
+    let flake_ref = if let Some(rev) = locked_url.strip_prefix(NIXPKGS_CATALOG_URL_PREFIX) {
+        format!("{FLOX_NIXPKGS_PROXY_FLAKE_REF_BASE}/{rev}")
+    } else {
+        return Err(BuildEnvError::LockfileContents(format!(
+            "Locked package '{}' is a base catalog package, but the locked url '{}' does not start with the expected prefix '{}'",
+            attr_path, locked_url, NIXPKGS_CATALOG_URL_PREFIX
+        )));
+    };
+
+    // Build all outputs (^*) from legacyPackages.<system>.<attr_path>.
+    let installable = format!("{flake_ref}#legacyPackages.{system}.{attr_path}^*");
+
+    let reason = match (unfree, broken) {
+        (Some(true), _) => " (unfree license)",
+        (_, Some(true)) => " (upstream build marked as broken)",
+        _ => "",
+    };
+
+    let _span = info_span!(
+        "build_catalog_pkg_from_source",
+        progress = format!("Building '{attr_path}' from source{reason}")
+    )
+    .entered();
+
+    let mut cmd = base_command();
+    cmd.args(["--option", "extra-plugin-files", &*NIX_PLUGINS]);
+    cmd.arg("build");
+    cmd.arg("--no-write-lock-file");
+    cmd.arg("--no-update-lock-file");
+    cmd.args(["--option", "pure-eval", "true"]);
+    match gc_root_prefix {
+        Some(prefix) => {
+            cmd.arg("--out-link").arg(prefix);
+        },
+        None => {
+            cmd.arg("--no-link");
+        },
+    }
+    cmd.arg(&installable);
+
+    debug!(%installable, cmd=%cmd.display(), "building catalog package from source");
+
+    let output = cmd.output().map_err(BuildEnvError::CallNixBuild)?;
+    if output.status.success() {
+        return Ok(());
+    }
+    Err(BuildEnvError::Realise2 {
+        install_id: attr_path.to_string(),
+        message: String::from_utf8_lossy(&output.stderr).to_string(),
+    })
+}
+
 impl<A> BuildEnvNix<A>
 where
     A: AuthProvider,
 {
     pub fn new(auth: A) -> BuildEnvNix<A> {
         BuildEnvNix { auth }
-    }
-
-    fn base_command() -> Command {
-        let mut nix_build_command = nix_base_command();
-        // allow impure language features such as `builtins.storePath`,
-        // and use the auto store (which is used by the preceding `realise` command)
-        // TODO: formalize this in a config file,
-        // and potentially disable other user configs (allowing specific overrides)
-        nix_build_command.args(["--option", "pure-eval", "false"]);
-        apply_nix_store_url(&mut nix_build_command);
-        // we generally want to see more logs (we can always filter them out)
-        nix_build_command.arg("--print-build-logs");
-
-        nix_build_command
     }
 
     /// Realise all store paths of packages that are installed to the environment,
@@ -582,7 +699,7 @@ where
 
         debug!(count = missing.len(), "substituting store paths in batch");
 
-        let mut cmd = Self::base_command();
+        let mut cmd = base_command();
         cmd.arg("build")
             .arg("--no-link")
             .arg("--keep-going")
@@ -676,73 +793,15 @@ where
         }
 
         // If we get here it means we need to build a package from source.
-
-        let installable = {
-            // We swap out the locked URL of the package (which points at our nixpkgs
-            // fork) for a flake reference that uses our custom `flox-nixpkgs` URL
-            // scheme. This disables certain built-in evaluation checks (allowUnfree, etc).
-            // That's important because we move those checks into manifest options, and
-            // don't want conflicts or duplicates.
-            let mut locked_url = locked_pkg.locked_url.to_string();
-            if let Some(revision_suffix) = locked_url.strip_prefix(NIXPKGS_CATALOG_URL_PREFIX) {
-                locked_url = format!("{FLOX_NIXPKGS_PROXY_FLAKE_REF_BASE}/{revision_suffix}");
-            } else {
-                return Err(BuildEnvError::LockfileContents(format!(
-                    "Locked package '{}' is a base catalog package, but the locked url '{}' does not start with the expected prefix '{}'",
-                    locked_pkg.install_id, locked_pkg.locked_url, NIXPKGS_CATALOG_URL_PREFIX
-                )));
-            }
-
-            // For the attribute path we construct a real installable's attribute path
-            // by prepending `legacyPackages.<system>` to the `pkg-path`/`attr_path`.
-            //
-            // The `^*` bit builds all outputs.
-            let attrpath = format!(
-                "legacyPackages.{}.{}^*",
-                locked_pkg.system, locked_pkg.attr_path
-            );
-
-            format!("{}#{}", locked_url, attrpath)
-        };
-
-        let reason = match (locked_pkg.unfree, locked_pkg.broken) {
-            (Some(true), _) => " (unfree license)",
-            (_, Some(true)) => " (upstream build marked as broken)",
-            _ => "",
-        };
-
-        let _span = info_span!(
-            parent: span.clone(),
-            "build from catalog",
-            progress = format!("Building '{}' from source{reason}", locked_pkg.attr_path)
+        // Delegate to the shared function so buildenv and `flox run` stay in sync.
+        build_catalog_pkg_from_source(
+            &locked_pkg.locked_url,
+            &locked_pkg.attr_path,
+            &locked_pkg.system,
+            locked_pkg.unfree,
+            locked_pkg.broken,
+            None, // buildenv manages its own GC roots; use --no-link here
         )
-        .entered();
-
-        let mut nix_build_command = Self::base_command();
-
-        nix_build_command.args(["--option", "extra-plugin-files", &*NIX_PLUGINS]);
-
-        nix_build_command.arg("build");
-        nix_build_command.arg("--no-write-lock-file");
-        nix_build_command.arg("--no-update-lock-file");
-        nix_build_command.args(["--option", "pure-eval", "true"]);
-        nix_build_command.arg("--no-link");
-        nix_build_command.arg(&installable);
-
-        debug!(%installable, cmd=%nix_build_command.display(), "building catalog package");
-
-        let output = nix_build_command
-            .output()
-            .map_err(BuildEnvError::CallNixBuild)?;
-
-        if !output.status.success() {
-            return Err(BuildEnvError::Realise2 {
-                install_id: locked_pkg.install_id.clone(),
-                message: String::from_utf8_lossy(&output.stderr).to_string(),
-            });
-        }
-
-        Ok(())
     }
 
     /// Realise a package from a flake.
@@ -771,7 +830,7 @@ where
             return Ok(());
         }
 
-        let mut nix_build_command = Self::base_command();
+        let mut nix_build_command = base_command();
 
         // naïve url construction
         let installable = {
@@ -853,24 +912,7 @@ where
     fn try_substitute_store_paths(
         paths: impl IntoIterator<Item = impl AsRef<OsStr>>,
     ) -> Result<bool, BuildEnvError> {
-        let paths: Vec<_> = paths.into_iter().collect();
-
-        let mut cmd = Self::base_command();
-        cmd.arg("build");
-        cmd.arg("--no-link");
-        cmd.args(paths);
-
-        debug!(cmd=%cmd.display(), "trying to fetch store paths");
-
-        let output = cmd.output().map_err(BuildEnvError::CallNixBuild)?;
-        let success = output.status.success();
-        if !success {
-            debug!(
-                stderr = %String::from_utf8_lossy(&output.stderr),
-                "store path fetch failed"
-            );
-        }
-        Ok(success)
+        substitute_store_paths(paths, None)
     }
 
     /// Build the environment by evaluating and building
@@ -892,7 +934,7 @@ where
         service_config_path: Option<PathBuf>,
         out_link_prefix: Option<&Path>,
     ) -> Result<BuildEnvOutputs, BuildEnvError> {
-        let mut nix_build_command = Self::base_command();
+        let mut nix_build_command = base_command();
         nix_build_command.args(["build", "--offline", "--json"]);
         if let Some(prefix) = out_link_prefix {
             nix_build_command.arg("--out-link").arg(prefix);
@@ -1033,7 +1075,7 @@ fn remove_build_output_symlinks_by_scan(out_link_prefix: Option<&Path>) {
 }
 
 /// Apply the `_FLOX_NIX_STORE_URL` store override to `cmd` if set, so that
-/// Nix commands spawned outside of `BuildEnvNix::base_command` (e.g. the
+/// Nix commands spawned outside of `base_command` (e.g. the
 /// daemon-check and force-registration commands) target the same store as the
 /// rest of environment construction.
 fn apply_nix_store_url(cmd: &mut Command) {
@@ -1074,6 +1116,29 @@ fn nix_path_info_null_paths(paths: &[String]) -> Result<Vec<String>, std::io::Er
         .collect())
 }
 
+/// Returns true if `err` reports a buildenv package-output conflict from
+/// `buildenv/builder.pl`. These errors are deterministic — the same lockfile
+/// will always produce the same conflict — and must not be retried.
+///
+/// Matches on the conflict-specific resolution hint emitted at
+/// `buildenv/builder.pl:245` (`Resolve by uninstalling one of the conflicting
+/// packages`) rather than the broader `❌ ERROR:` sentinel installed by the
+/// `$SIG{__DIE__}` handler at `buildenv/builder.pl:13`. The broader sentinel
+/// covers builder.pl's filesystem `die` paths (EMFILE, ENOSPC, etc. during
+/// mkpath/symlink), which are genuinely transient and must remain retryable.
+///
+/// If `buildenv/builder.pl`'s conflict message changes, the unit test
+/// `materialise_retry_tests::deterministic_buildenv_conflict_short_circuits`
+/// will break and signal a contract update is needed.
+fn is_deterministic_buildenv_conflict(err: &BuildEnvError) -> bool {
+    match err {
+        BuildEnvError::Build(stderr) => {
+            stderr.contains("Resolve by uninstalling one of the conflicting packages")
+        },
+        _ => false,
+    }
+}
+
 /// Retry loop for materialisation and environment construction.
 ///
 /// Calls `realise` to materialise store paths, then `missing_paths` to detect
@@ -1100,18 +1165,22 @@ fn nix_path_info_null_paths(paths: &[String]) -> Result<Vec<String>, std::io::Er
 ///   daemon).  Those paths are force-registered with
 ///   `nix build --no-link --keep-going` and the attempt is retried.
 ///
+/// Package-output conflicts detected by [`is_deterministic_buildenv_conflict`]
+/// are short-circuited immediately without retrying; the same lockfile always
+/// produces the same conflict.
+///
 /// `realise` errors always propagate immediately; a path that never appeared
 /// in the store is not a GC race.
 ///
 /// `expected_paths` returns the full list of store paths the environment
 /// depends on. It is called once per attempt for diagnostic logging and
 /// for the `nix path-info` store-database check on failure.
-fn materialise_with_retry(
+pub fn materialise_with_retry<T>(
     mut realise: impl FnMut() -> Result<(), BuildEnvError>,
     mut missing_paths: impl FnMut() -> Vec<String>,
     expected_paths: impl Fn() -> Vec<String>,
-    mut build_env: impl FnMut() -> Result<BuildEnvOutputs, BuildEnvError>,
-) -> Result<BuildEnvOutputs, BuildEnvError> {
+    mut build_env: impl FnMut() -> Result<T, BuildEnvError>,
+) -> Result<T, BuildEnvError> {
     const MAX_RETRIES: usize = 3;
     for attempt in 1..=MAX_RETRIES {
         realise()?;
@@ -1168,6 +1237,18 @@ fn materialise_with_retry(
                     // daemon, leaving paths on disk but unregistered.
                     match nix_path_info_null_paths(&confirmed) {
                         Ok(null_paths) if null_paths.is_empty() => {
+                            // Short-circuit deterministic package-output conflicts
+                            // before spending retries. The same lockfile always
+                            // produces the same conflict, so retrying cannot help.
+                            if is_deterministic_buildenv_conflict(&e) {
+                                debug!(
+                                    error = %e,
+                                    attempt,
+                                    "buildenv.nix reported a deterministic \
+                                    package-output conflict — not retrying"
+                                );
+                                return Err(e);
+                            }
                             // Daemon confirms all paths are registered. This is
                             // usually a genuine deterministic failure, but there
                             // is a race: a path can arrive on disk (passing
@@ -1178,7 +1259,7 @@ fn materialise_with_retry(
                             // only treat it as deterministic once retries are
                             // exhausted.
                             if attempt < MAX_RETRIES {
-                                warn!(
+                                debug!(
                                     error = %e,
                                     attempt,
                                     MAX_RETRIES,
@@ -2887,7 +2968,7 @@ mod materialise_retry_tests {
         init_tracing();
         // Paths always disappear after build_env fails — exhausts all retries.
         let missing_call = Cell::new(0usize);
-        let result = materialise_with_retry(
+        let result: Result<BuildEnvOutputs, _> = materialise_with_retry(
             || Ok(()),
             || {
                 missing_call.set(missing_call.get() + 1);
@@ -2920,7 +3001,7 @@ mod materialise_retry_tests {
         // before propagating the error.
         let realise_calls = Cell::new(0usize);
         let build_calls = Cell::new(0usize);
-        let result = materialise_with_retry(
+        let result: Result<BuildEnvOutputs, _> = materialise_with_retry(
             || {
                 realise_calls.set(realise_calls.get() + 1);
                 Ok(())
@@ -2942,6 +3023,52 @@ mod materialise_retry_tests {
             "must exhaust all retries before propagating"
         );
         assert_eq!(build_calls.get(), 3, "build_env must be retried");
+    }
+
+    // --- deterministic conflict short-circuit ---
+
+    #[test]
+    fn deterministic_buildenv_conflict_short_circuits() {
+        init_tracing();
+        // build_env always returns a conflict error containing the
+        // builder.pl resolution hint. realise and missing_paths are
+        // wired to never block progress so the conflict is the only
+        // reason for failure.
+        let realise_calls = Cell::new(0usize);
+        let build_calls = Cell::new(0usize);
+        let conflict_stderr = "environment> ❌ ERROR: 'vim' conflicts with \
+                               'vim-full'. Both packages provide the file \
+                               'bin/ex'\nenvironment> \nenvironment> Resolve \
+                               by uninstalling one of the conflicting \
+                               packages or setting the priority of the \
+                               preferred package to a value lower than '5'"
+            .to_string();
+        let result: Result<(), _> = materialise_with_retry(
+            || {
+                realise_calls.set(realise_calls.get() + 1);
+                Ok(())
+            },
+            Vec::new, // paths always present
+            Vec::new,
+            || {
+                build_calls.set(build_calls.get() + 1);
+                Err(BuildEnvError::Build(conflict_stderr.clone()))
+            },
+        );
+        match result.unwrap_err() {
+            BuildEnvError::Build(msg) => assert_eq!(msg, conflict_stderr),
+            e => panic!("expected Build, got {e:?}"),
+        }
+        assert_eq!(
+            build_calls.get(),
+            1,
+            "must not retry a deterministic package-output conflict"
+        );
+        assert_eq!(
+            realise_calls.get(),
+            1,
+            "realise called once before short-circuit"
+        );
     }
 
     // --- realise errors ---

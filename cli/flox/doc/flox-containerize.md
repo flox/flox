@@ -16,6 +16,7 @@ flox [<general-options>] containerize
      [-f=<file>] [--runtime=<runtime>]
      [--tag=<tag>]
      [--label=<key=value>]
+     [-m=(dev|run)]
 ```
 
 # DESCRIPTION
@@ -59,6 +60,12 @@ similar to `flox activate --`.
     Specify as `key=value` pairs.
     Can be specified multiple times.
     Works alongside labels defined in the manifest's `[containerize.config]` section.
+
+`-m (dev|run)`, `--mode (dev|run)`
+:   Containerize the environment in either "dev" or "run" mode.
+    Overrides the `options.activate.mode` setting in the manifest.
+    See [`manifest.toml(5)`](./manifest.toml.md) for more details on activation
+    modes.
 
 ```{.include}
 ./include/environment-options.md

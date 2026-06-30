@@ -19,6 +19,7 @@ use flox_core::activations::activation_state_dir_path;
 use flox_core::data::System;
 use flox_core::data::environment_ref::DEFAULT_NAME;
 use flox_core::traceable_path;
+use flox_events::EventsHub;
 use flox_manifest::interfaces::{AsLatestSchema, AsWritableManifest, WriteManifest};
 use flox_manifest::parsed::Inner;
 use flox_manifest::parsed::common::IncludeDescriptor;
@@ -38,6 +39,7 @@ use flox_rust_sdk::providers::services::process_compose::{PROCESS_COMPOSE_BIN, P
 use flox_rust_sdk::providers::upgrade_checks::UpgradeInformationGuard;
 use flox_rust_sdk::utils::FLOX_INTERPRETER;
 use indoc::{formatdoc, indoc};
+use toml_edit::Key;
 use tracing::{debug, trace, warn};
 
 use super::{
@@ -48,7 +50,7 @@ use super::{
     environment_select,
 };
 use crate::commands::check_for_upgrades::spawn_detached_check_for_upgrades_process;
-use crate::commands::general::update_config;
+use crate::commands::general::update_config_with_query;
 use crate::commands::services::ServicesCommandsError;
 use crate::commands::{
     EnvironmentSelectError,
@@ -61,6 +63,7 @@ use crate::commands::{
 use crate::config::{AutoActivationPreference, Config, EnvironmentPromptConfig};
 use crate::utils::detect_shell::{detect_shell_for_in_place, detect_shell_for_subshell};
 use crate::utils::errors::format_diverged_metadata;
+use crate::utils::events::env_detail_from_concrete;
 use crate::utils::message;
 use crate::utils::upgrade_output::{count_upgrade_categories, format_upgrade_summary};
 use crate::{Exit, environment_subcommand_metric, subcommand_metric, utils};
@@ -95,6 +98,23 @@ pub struct Activate {
     pub subcommand_or_options: ActivateSubcommandOrOptions,
 }
 
+impl Activate {
+    /// Centrally-derived subcommand string for this invocation. Returns
+    /// the `activate::allow` / `activate::deny` form for the auto-activate
+    /// permission-management sub-commands, preserving the join-key
+    /// continuity the legacy `environment_subcommand_metric!` stream
+    /// already used.
+    pub fn subcommand_name(&self) -> &'static str {
+        match &self.subcommand_or_options {
+            ActivateSubcommandOrOptions::AutoActivate { auto_activate } => match auto_activate {
+                AutoActivate::Allow => "activate::allow",
+                AutoActivate::Deny => "activate::deny",
+            },
+            ActivateSubcommandOrOptions::ActivateOptions { .. } => "activate",
+        }
+    }
+}
+
 #[derive(Bpaf, Clone)]
 pub enum ActivateSubcommandOrOptions {
     AutoActivate {
@@ -111,11 +131,11 @@ pub enum ActivateSubcommandOrOptions {
 #[derive(Bpaf, Debug, Clone, Copy)]
 pub enum AutoActivate {
     /// Allow auto-activation for an environment
-    #[bpaf(command, hide)]
+    #[bpaf(command)]
     Allow,
 
     /// Deny auto-activation for an environment
-    #[bpaf(command, hide)]
+    #[bpaf(command)]
     Deny,
 }
 
@@ -203,6 +223,29 @@ impl Activate {
                 .unwrap_or(ActivateMode::Dev)
                 .to_string()
         );
+
+        // Both telemetry stacks emit in parallel through the dormant
+        // phase; the new-pipeline mirrors below are no-ops in production
+        // until the cutover PR installs an `EventsHub` client.
+        //
+        // This v2 emit sits at the same dispatch point as the legacy
+        // `environment_subcommand_metric!` above — before the remote-trust
+        // check below — to mirror it 1:1 (parity contract). The activation
+        // *outcome* is carried on `cli.command_completed` (exit_code), not by
+        // the presence of this dispatch-time event, so emitting before a
+        // possible trust decline is intentional, not a logged false success.
+        let v2_env_detail = env_detail_from_concrete(&concrete_environment);
+        let v2_mode = options
+            .mode
+            .clone()
+            .unwrap_or(ActivateMode::Dev)
+            .to_string();
+        if let Err(err) = EventsHub::global().record_environment_activate_with(v2_env_detail, |p| {
+            p.with_start_services(options.start_services)
+                .with_mode(v2_mode)
+        }) {
+            debug!(error = %err, "Failed to record v2 event");
+        }
 
         if let ConcreteEnvironment::Remote(ref env) = concrete_environment
             && !options.trust
@@ -371,6 +414,13 @@ impl ActivateOptions {
         let has_includes = lockfile.compose.is_some();
         subcommand_metric!("activate", "has_includes" = has_includes);
 
+        if let Err(err) = EventsHub::global().record_environment_activate_with(
+            env_detail_from_concrete(&concrete_environment),
+            |p| p.with_has_includes(has_includes),
+        ) {
+            debug!(error = %err, "Failed to record v2 event");
+        }
+
         let rendered_env_path_result = concrete_environment.rendered_env_links(&flox);
         let rendered_env_path = match rendered_env_path_result {
             Err(EnvironmentError::Core(err)) if err.is_incompatible_system_error() => {
@@ -396,6 +446,16 @@ impl ActivateOptions {
         // for reasons unknown.
         let lockfile_version = lockfile.version();
         subcommand_metric!("activate#version", lockfile_version = lockfile_version);
+
+        // The new pipeline drops the legacy `activate#version` pseudo-
+        // subcommand (per spec AC #4) and rides `lockfile_version` on a
+        // real `cli.environment.activate` event instead.
+        if let Err(err) = EventsHub::global().record_environment_activate_with(
+            env_detail_from_concrete(&concrete_environment),
+            |p| p.with_lockfile_version(lockfile_version.to_string()),
+        ) {
+            debug!(error = %err, "Failed to record v2 event");
+        }
 
         let mode = self.mode.clone().unwrap_or(
             manifest
@@ -509,6 +569,16 @@ impl ActivateOptions {
         };
         subcommand_metric!("activate", "shell" = shell.to_string());
 
+        // Runs before `command.exec()`, so the buffered event is flushed
+        // synchronously by the pre-exec emit + flush block below
+        // (spec AC #5).
+        if let Err(err) = EventsHub::global().record_environment_activate_with(
+            env_detail_from_concrete(&concrete_environment),
+            |p| p.with_shell(shell.to_string()),
+        ) {
+            debug!(error = %err, "Failed to record v2 event");
+        }
+
         let core = AttachCtx {
             // Don't rely on FLOX_ENV in the environment when we explicitly know
             // what it should be. This is necessary for nested activations where an
@@ -592,6 +662,26 @@ impl ActivateOptions {
             Ok(())
         } else {
             debug!("running activation command: {:?}", command);
+            // `command.exec()` replaces this process, so the dispatcher's
+            // end-of-`cli_worker` `command_completed` emit will never run.
+            // Record + flush the v2 event synchronously here so the
+            // invocation is closed out before control passes to the user's
+            // shell. The hub's idempotent flag turns the dispatcher's emit
+            // into a no-op if `exec` returns an error and the failure
+            // propagates back to `cli_worker`.
+            let hub = flox_events::EventsHub::global();
+            if let Err(err) = hub.record_command_completed("activate".to_string()) {
+                debug!(
+                    error = %err,
+                    "Failed to record v2 cli.command_completed event before exec"
+                );
+            }
+            if let Err(err) = hub.flush(true) {
+                debug!(
+                    error = %err,
+                    "Failed to flush v2 events before exec"
+                );
+            }
             // exec should never return
             // TODO: did this break in-place metrics?
             Err(command.exec().into())
@@ -870,47 +960,59 @@ fn notify_environment_upgrades(
 
 /// Allow auto-activation for an environment by updating the config.
 ///
-/// Writes the allow preference to the config file for the environment's parent path.
+/// Writes the allow preference to the config file for the environment's parent
+/// path.
 pub fn allow(config: &Config, concrete_environment: &ConcreteEnvironment) -> Result<()> {
-    let env_path = concrete_environment.parent_path()?;
-    let path_str = env_path.display().to_string();
-    let key = format!("auto_activate_environments.{}", path_str);
-    update_config(
-        &config.flox.config_dir,
-        key,
-        Some(AutoActivationPreference::Allow),
-    )?;
-    Ok(())
+    set_auto_activation_preference(
+        config,
+        concrete_environment,
+        AutoActivationPreference::Allow,
+    )
 }
 
 /// Deny auto-activation for an environment by updating the config.
 ///
-/// Writes the deny preference to the config file for the environment's parent path.
+/// Writes the deny preference to the config file for the environment's parent
+/// path.
 pub fn deny(config: &Config, concrete_environment: &ConcreteEnvironment) -> Result<()> {
-    let env_path = concrete_environment.parent_path()?;
-    let path_str = env_path.display().to_string();
-    let key = format!("auto_activate_environments.{}", path_str);
-    update_config(
-        &config.flox.config_dir,
-        key,
-        Some(AutoActivationPreference::Deny),
-    )?;
-    Ok(())
+    set_auto_activation_preference(config, concrete_environment, AutoActivationPreference::Deny)
 }
 
-/// Check if auto-activation is allowed for an environment.
-///
-/// Returns true if the environment is explicitly allowed or has no preference set.
-/// Returns false if the environment is explicitly denied.
-#[allow(dead_code)]
-pub fn is_allowed(config: &Config, concrete_environment: &ConcreteEnvironment) -> Result<bool> {
+/// Record the user's per-directory auto-activation preference under
+/// `auto_activate_environments` in the config.
+fn set_auto_activation_preference(
+    config: &Config,
+    concrete_environment: &ConcreteEnvironment,
+    preference: AutoActivationPreference,
+) -> Result<()> {
     let env_path = concrete_environment.parent_path()?;
-    let preference = config.flox.auto_activate_environments.get(&env_path);
+    write_auto_activation_preference(&config.flox.config_dir, &env_path, preference)
+}
 
-    match preference {
-        Some(AutoActivationPreference::Deny) => Ok(false),
-        Some(AutoActivationPreference::Allow) | None => Ok(true),
-    }
+/// Write an auto-activation preference for a project directory (the directory
+/// containing `.flox`) to the config under `auto_activate_environments`.
+///
+/// The directory is written as a single literal TOML key rather than spliced
+/// into a dot-separated key string: a path can contain `.` (macOS temp dirs
+/// live under paths like `/var/folders/...`, and project directories may have
+/// names like `my.app`), which dotted-key parsing would shatter into several
+/// nested tables.
+///
+/// `env_path` must be canonical so it matches the directories the prompt hook
+/// discovers. Subcommand callers get this from
+/// [`Environment::parent_path`] (a popped `CanonicalPath`); the prompt hook
+/// passes the already-canonical discovered directory.
+pub fn write_auto_activation_preference(
+    config_dir: &Path,
+    env_path: &Path,
+    preference: AutoActivationPreference,
+) -> Result<()> {
+    let query = [
+        Key::new("auto_activate_environments"),
+        Key::new(env_path.to_string_lossy().into_owned()),
+    ];
+    update_config_with_query(config_dir, &query, Some(preference))?;
+    Ok(())
 }
 
 #[cfg(test)]

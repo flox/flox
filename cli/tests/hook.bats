@@ -75,6 +75,20 @@ projectz_teardown() {
   unset PROJECTZ_DIR
 }
 
+setup_file() {
+  common_file_setup
+  # Many of these tests drive real, interactive `flox activate` runs through
+  # `expect`, and several build and activate two or three environments in a
+  # single test. Run in parallel within the file, they contend on the shared
+  # Nix store and pile up concurrent executive (activation daemon) processes,
+  # which can starve an activation long enough to blow past the `expect`
+  # timeout — a ~60s window with no terminal output that surfaces as a flaky
+  # timeout on whichever consent/activation test loses the race. Serialize the
+  # file so these interactive tests stay deterministic. Mirrors
+  # containerize.bats, which serializes for the same reason.
+  export BATS_NO_PARALLELIZE_WITHIN_FILE=true
+}
+
 setup() {
   common_test_setup
   setup_isolated_flox
@@ -200,6 +214,8 @@ EXPIRED_FLOXHUB_TOKEN="eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3gu
   project_setup
   project2_setup
   export FLOX_FEATURES_AUTO_ACTIVATE=true
+  # Auto-activation is opt-in; allow the target before entering it.
+  "$FLOX_BIN" activate allow -d "$PROJECT2_DIR"
 
   run --separate-stderr bash -c "
     export FLOX_FEATURES_AUTO_ACTIVATE=true
@@ -220,6 +236,8 @@ EXPIRED_FLOXHUB_TOKEN="eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3gu
   project_setup
   project2_setup
   export FLOX_FEATURES_AUTO_ACTIVATE=true
+  # Auto-activation is opt-in; allow the target before entering it.
+  "$FLOX_BIN" activate allow -d "$PROJECT2_DIR"
 
   run --separate-stderr zsh -c "
     export FLOX_FEATURES_AUTO_ACTIVATE=true
@@ -240,6 +258,8 @@ EXPIRED_FLOXHUB_TOKEN="eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3gu
   project_setup
   project2_setup
   export FLOX_FEATURES_AUTO_ACTIVATE=true
+  # Auto-activation is opt-in; allow the target before entering it.
+  "$FLOX_BIN" activate allow -d "$PROJECT2_DIR"
 
   run --separate-stderr fish -c "
     set -gx FLOX_FEATURES_AUTO_ACTIVATE true
@@ -259,6 +279,8 @@ EXPIRED_FLOXHUB_TOKEN="eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3gu
   project_setup
   project2_setup
   export FLOX_FEATURES_AUTO_ACTIVATE=true
+  # Auto-activation is opt-in; allow the target before entering it.
+  "$FLOX_BIN" activate allow -d "$PROJECT2_DIR"
 
   run --separate-stderr tcsh -c "
     setenv FLOX_FEATURES_AUTO_ACTIVATE true
@@ -282,6 +304,8 @@ EXPIRED_FLOXHUB_TOKEN="eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3gu
   project_setup
   project2_setup
   export FLOX_FEATURES_AUTO_ACTIVATE=true
+  # Auto-activation is opt-in; allow the target before entering it.
+  "$FLOX_BIN" activate allow -d "$PROJECT2_DIR"
 
   run --separate-stderr bash -c "
     export FLOX_FEATURES_AUTO_ACTIVATE=true
@@ -324,6 +348,8 @@ EXPIRED_FLOXHUB_TOKEN="eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3gu
   project_setup
   project2_setup
   export FLOX_FEATURES_AUTO_ACTIVATE=true
+  # Auto-activation is opt-in; allow the target before entering it.
+  "$FLOX_BIN" activate allow -d "$PROJECT2_DIR"
 
   run --separate-stderr bash -c "
     export FLOX_FEATURES_AUTO_ACTIVATE=true
@@ -354,6 +380,9 @@ EXPIRED_FLOXHUB_TOKEN="eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3gu
   project2_setup
   project3_setup
   export FLOX_FEATURES_AUTO_ACTIVATE=true
+  # Auto-activation is opt-in; allow both layers of the nested stack.
+  "$FLOX_BIN" activate allow -d "$PROJECT2_DIR"
+  "$FLOX_BIN" activate allow -d "$PROJECT3_DIR"
 
   run --separate-stderr bash -c "
     export FLOX_FEATURES_AUTO_ACTIVATE=true
@@ -384,6 +413,8 @@ EXPIRED_FLOXHUB_TOKEN="eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3gu
   project_setup
   project2_setup
   export FLOX_FEATURES_AUTO_ACTIVATE=true
+  # Auto-activation is opt-in; allow the target before entering it.
+  "$FLOX_BIN" activate allow -d "$PROJECT2_DIR"
 
   run --separate-stderr bash -c "
     export FLOX_FEATURES_AUTO_ACTIVATE=true
@@ -416,6 +447,148 @@ EXPIRED_FLOXHUB_TOKEN="eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3gu
 }
 
 # ---------------------------------------------------------------------------- #
+# Config: 'flox activate deny' suppresses auto-activation for a directory
+# ---------------------------------------------------------------------------- #
+
+# bats test_tags=hook:deny:bash
+@test "bash: hook does not auto-activate an environment denied via 'flox activate deny'" {
+  project_setup
+  project2_setup
+  export FLOX_FEATURES_AUTO_ACTIVATE=true
+
+  # Record the deny preference for the second project before entering it.
+  "$FLOX_BIN" activate deny -d "$PROJECT2_DIR"
+
+  run --separate-stderr bash -c "
+    export FLOX_FEATURES_AUTO_ACTIVATE=true
+    export FLOX_SHELL=\$(which bash)
+    eval \"\$($FLOX_BIN activate -d $PROJECT_DIR)\"
+    cd $PROJECT2_DIR
+    _flox_hook
+    echo \"var2:\${TEST_VAR2:-unset}\"
+    echo \"tracked:\${_FLOX_AUTO_ACTIVATED_ENVIRONMENTS:-unset}\"
+  "
+  assert_success
+  # The denied environment is neither activated nor tracked.
+  assert_output --partial "var2:unset"
+  assert_output --partial "tracked:unset"
+}
+
+# ---------------------------------------------------------------------------- #
+# Config: 'prompt' mode (the default) asks for consent before auto-activating
+# ---------------------------------------------------------------------------- #
+
+# bats test_tags=hook:prompt:default
+@test "bash: unregistered environment is not auto-activated without consent" {
+  project_setup
+  project2_setup
+  export FLOX_FEATURES_AUTO_ACTIVATE=true
+  # No allow/deny recorded, so the default 'prompt' mode applies. This run is
+  # non-interactive (no controlling terminal), so the hook cannot prompt and
+  # must leave the environment unregistered rather than auto-activating it.
+
+  run --separate-stderr bash -c "
+    export FLOX_FEATURES_AUTO_ACTIVATE=true
+    export FLOX_SHELL=\$(which bash)
+    eval \"\$($FLOX_BIN activate -d $PROJECT_DIR)\"
+    cd $PROJECT2_DIR
+    _flox_hook
+    echo \"var2:\${TEST_VAR2:-unset}\"
+    echo \"tracked:\${_FLOX_AUTO_ACTIVATED_ENVIRONMENTS:-unset}\"
+  "
+  assert_success
+  assert_output --partial "var2:unset"
+  assert_output --partial "tracked:unset"
+}
+
+# bats test_tags=hook:prompt:yes
+@test "bash: answering the consent prompt with 'y' auto-activates the environment" {
+  project_setup
+  project2_setup
+  export FLOX_FEATURES_AUTO_ACTIVATE=true
+
+  # Set up a .bashrc so the interactive shell has a known prompt
+  export KNOWN_PROMPT="hooktest> "
+  cat >"$HOME/.bashrc" <<EOF
+export PS1="$KNOWN_PROMPT"
+EOF
+  cat >"$HOME/.inputrc" <<EOF
+set enable-bracketed-paste off
+EOF
+
+  FLOX_SHELL="bash" run -0 expect "$TESTS_DIR/activate/hook-consent.exp" "$PROJECT_DIR" "$PROJECT2_DIR" "y" 'echo TEST_VAR2="$TEST_VAR2"'
+  assert_output --partial 'TEST_VAR2=auto2'
+}
+
+# bats test_tags=hook:prompt:no
+@test "bash: declining the consent prompt does not auto-activate the environment" {
+  project_setup
+  project2_setup
+  export FLOX_FEATURES_AUTO_ACTIVATE=true
+
+  # Set up a .bashrc so the interactive shell has a known prompt
+  export KNOWN_PROMPT="hooktest> "
+  cat >"$HOME/.bashrc" <<EOF
+export PS1="$KNOWN_PROMPT"
+EOF
+  cat >"$HOME/.inputrc" <<EOF
+set enable-bracketed-paste off
+EOF
+
+  FLOX_SHELL="bash" run -0 expect "$TESTS_DIR/activate/hook-consent.exp" "$PROJECT_DIR" "$PROJECT2_DIR" "n" 'echo TEST_VAR2="$TEST_VAR2"'
+  refute_output --partial 'TEST_VAR2=auto2'
+}
+
+# bats test_tags=hook:prompt:batched
+@test "bash: a single consent prompt activates a whole nested hierarchy" {
+  project_setup
+  project2_setup
+  project3_setup
+  export FLOX_FEATURES_AUTO_ACTIVATE=true
+
+  # Set up a .bashrc so the interactive shell has a known prompt
+  export KNOWN_PROMPT="hooktest> "
+  cat >"$HOME/.bashrc" <<EOF
+export PS1="$KNOWN_PROMPT"
+EOF
+  cat >"$HOME/.inputrc" <<EOF
+set enable-bracketed-paste off
+EOF
+
+  # Entering the nested project discovers two unregistered environments
+  # (PROJECT2 and the nested PROJECT3). A single 'y' must activate both.
+  FLOX_SHELL="bash" run -0 expect "$TESTS_DIR/activate/hook-consent.exp" "$PROJECT_DIR" "$PROJECT3_DIR" "y" 'echo "v2:$TEST_VAR2 v3:$TEST_VAR3"'
+  assert_output --partial 'v2:auto2 v3:auto3'
+  # A single batched prompt covered both environments.
+  assert_output --partial 'Auto-activate these 2 environments'
+}
+
+# bats test_tags=hook:prompt:batched:no
+@test "bash: declining a batched consent prompt shows a single note" {
+  project_setup
+  project2_setup
+  project3_setup
+  export FLOX_FEATURES_AUTO_ACTIVATE=true
+
+  # Set up a .bashrc so the interactive shell has a known prompt
+  export KNOWN_PROMPT="hooktest> "
+  cat >"$HOME/.bashrc" <<EOF
+export PS1="$KNOWN_PROMPT"
+EOF
+  cat >"$HOME/.inputrc" <<EOF
+set enable-bracketed-paste off
+EOF
+
+  # Declining the batched prompt activates neither environment and prints a
+  # single consolidated note, not one per environment.
+  FLOX_SHELL="bash" run -0 expect "$TESTS_DIR/activate/hook-consent.exp" "$PROJECT_DIR" "$PROJECT3_DIR" "n" 'echo "v2:$TEST_VAR2 v3:$TEST_VAR3"'
+  refute_output --partial 'v2:auto2'
+  refute_output --partial 'v3:auto3'
+  assert_output --partial 'Did not auto-activate these environments'
+  assert_equal "$(grep -c 'Did not auto-activate' <<< "$output")" 1
+}
+
+# ---------------------------------------------------------------------------- #
 # Hook auto-fires: verify the prompt hook triggers without manual invocation
 # ---------------------------------------------------------------------------- #
 
@@ -424,6 +597,9 @@ EXPIRED_FLOXHUB_TOKEN="eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3gu
   project_setup
   project2_setup
   export FLOX_FEATURES_AUTO_ACTIVATE=true
+  # Auto-activation is opt-in; allow the target so the hook activates it
+  # without prompting.
+  "$FLOX_BIN" activate allow -d "$PROJECT2_DIR"
 
   # Set up a .bashrc so the interactive shell has a known prompt
   export KNOWN_PROMPT="hooktest> "
@@ -445,6 +621,11 @@ EOF
   project3_setup
   projectz_setup
   export FLOX_FEATURES_AUTO_ACTIVATE=true
+  # Auto-activation is opt-in; allow every environment the run activates so the
+  # hook does not prompt.
+  "$FLOX_BIN" activate allow -d "$PROJECT2_DIR"
+  "$FLOX_BIN" activate allow -d "$PROJECT3_DIR"
+  "$FLOX_BIN" activate allow -d "$PROJECTZ_DIR"
 
   # Set up a .bashrc so the interactive shell has a known prompt
   export KNOWN_PROMPT="hooktest> "

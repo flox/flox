@@ -9,6 +9,7 @@ mod deactivate;
 mod delete;
 mod edit;
 mod envs;
+mod factory;
 mod gc;
 mod general;
 mod generations;
@@ -21,6 +22,7 @@ mod lock_manifest;
 mod publish;
 mod pull;
 mod push;
+mod run;
 mod search;
 mod services;
 mod services_socket;
@@ -172,6 +174,10 @@ pub struct FloxArgs {
     #[bpaf(long, req_flag(()), many, map(vec_not_empty), hide)]
     pub debug: bool,
 
+    /// Enable beta features for this invocation
+    #[bpaf(long, hide)]
+    pub beta: bool,
+
     /// Print the version of the program
     #[allow(dead_code)] // fake arg, `--version` is checked for separately (see [Version])
     #[bpaf(long, short('V'))]
@@ -184,6 +190,38 @@ pub struct FloxArgs {
 impl fmt::Debug for Commands {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Command")
+    }
+}
+
+impl Commands {
+    /// Centrally-derived subcommand name stamped onto v2
+    /// `cli.command_run` / `cli.command_completed` events.
+    ///
+    /// Each sub-enum owns its own [`Self::subcommand_name`] returning
+    /// the full wire string (including any `parent::child` prefix);
+    /// this top-level method just dispatches.
+    ///
+    /// Nested commands use the `parent::child` join convention (see
+    /// `services::start`, `generations::switch`, etc.) — pinned
+    /// against the consumer-side classifiers in PR 5. The `auth`
+    /// command's downstream classifier needs the literal `auth2`;
+    /// that special-case lives on [`AdminCommands::subcommand_name`]
+    /// so the carve-out is co-located with the `Auth` variant.
+    pub fn subcommand_name(&self) -> &'static str {
+        match self {
+            Commands::Help(_) => "help",
+            Commands::Manage(c) => c.subcommand_name(),
+            Commands::Use(c) => c.subcommand_name(),
+            Commands::Discover(c) => c.subcommand_name(),
+            Commands::Modify(c) => c.subcommand_name(),
+            Commands::Share(c) => c.subcommand_name(),
+            Commands::Admin(c) => c.subcommand_name(),
+            Commands::Internal(c) => c.subcommand_name(),
+            Commands::Beta(c) => c.subcommand_name(),
+            // Hidden operator command group; the legacy pipeline emitted no
+            // metric for it, so the bare parent name is sufficient here.
+            Commands::Factory(_) => "factory",
+        }
     }
 }
 
@@ -250,6 +288,25 @@ impl FloxArgs {
             }
         }
 
+        // Emit the v2 `cli.command_run` exactly once at dispatch
+        // start. The flox-events `EventsHub` was installed in `main.rs`
+        // and short-circuits in production until the cutover PR. The
+        // matching `cli.command_completed` is emitted at the end of
+        // `cli_worker` below (or immediately before `activate.rs`'s
+        // `command.exec()` call when activate replaces the parent
+        // process) — the hub's idempotent flag ensures only one of the
+        // two paths actually records the completed event.
+        let v2_subcommand: &'static str = self
+            .command
+            .as_ref()
+            .map(Commands::subcommand_name)
+            .unwrap_or("help");
+        if let Err(err) =
+            flox_events::EventsHub::global().record_command_run(v2_subcommand.to_string())
+        {
+            debug!(error = %err, "Failed to record v2 cli.command_run event");
+        }
+
         let git_url_override = {
             if let Ok(env_set_host) = std::env::var("_FLOX_FLOXHUB_GIT_URL") {
                 if !self.is_prompt_hook_flow() {
@@ -307,7 +364,13 @@ impl FloxArgs {
             floxhub_client,
             installable_locker: Default::default(),
             #[allow(deprecated, reason = "This should be the only internal use")]
-            features: config.features.unwrap_or_default(),
+            features: {
+                let mut features = config.features.unwrap_or_default();
+                // `--beta` enables beta features for this invocation only; it can
+                // only turn the flag on, never off.
+                features.beta = features.beta || self.beta;
+                features
+            },
             verbosity: self.verbosity.to_i32(),
             metrics_device_uuid,
         };
@@ -341,6 +404,7 @@ impl FloxArgs {
                     }
                     args.handle(flox).await
                 },
+                Commands::Factory(args) => args.handle(flox).await,
             };
 
             // This will print the update notification after output from a successful
@@ -354,6 +418,16 @@ impl FloxArgs {
                 Err(e) => debug!("Failed to check for CLI update: {}", display_chain(&e)),
             }
 
+            // Emit the v2 `cli.command_completed`. When `activate.rs`
+            // has already recorded its own completion before `command.exec()`
+            // replaces the parent process, the hub's idempotent flag silently
+            // turns this call into a no-op.
+            if let Err(err) =
+                flox_events::EventsHub::global().record_command_completed(v2_subcommand.to_string())
+            {
+                debug!(error = %err, "Failed to record v2 cli.command_completed event");
+            }
+
             result
         };
 
@@ -362,6 +436,16 @@ impl FloxArgs {
             .run_until(async {
                 tokio::select! {
                     _ = tokio::task::spawn_local(signal_handler) => {
+                        // On Ctrl-C the `cli_worker` task is dropped before it
+                        // reaches its `record_command_completed`, so record it
+                        // here too — an interrupted invocation still ends, and
+                        // the hub's idempotent flag means at most one completion
+                        // is recorded per invocation.
+                        if let Err(err) = flox_events::EventsHub::global()
+                            .record_command_completed(v2_subcommand.to_string())
+                        {
+                            debug!(error = %err, "Failed to record v2 cli.command_completed event (interrupted)");
+                        }
                         // TODO:
                         // For now we rely on subprocesses to inherit `flox` process group
                         // and thus being sent ctrl_c signals in sync with flox itself.
@@ -526,6 +610,16 @@ enum Commands {
     Internal(#[bpaf(external(internal_commands))] InternalCommands),
 
     Beta(#[bpaf(external(beta::beta_commands))] beta::BetaCommands),
+
+    /// Flox Factory operator commands (hidden; see operator runbook)
+    #[bpaf(command, hide)]
+    Factory(
+        #[bpaf(
+            external(factory::factory_commands),
+            fallback(factory::FactoryCommands::Help)
+        )]
+        factory::FactoryCommands,
+    ),
 }
 
 #[derive(Debug, Bpaf, Clone)]
@@ -537,6 +631,15 @@ struct Help {
 
 /// Force `--help` output for `flox` with a given command
 pub fn display_help(cmd: Option<String>) {
+    // `flox run` uses an unconditional catchall that consumes `--help`, so
+    // running `flox_cli().run_inner(["run", "--help"])` would parse OK and
+    // hit the `unreachable!()` arm below — a panic. Route to the hand-written
+    // synopsis instead.
+    if cmd.as_deref() == Some("run") {
+        run::print_help();
+        return;
+    }
+
     let mut args = Vec::from_iter(cmd.as_deref());
     args.push("--help");
 
@@ -586,6 +689,14 @@ impl ManageCommands {
         }
         Ok(())
     }
+
+    fn subcommand_name(&self) -> &'static str {
+        match self {
+            ManageCommands::Init(_) => "init",
+            ManageCommands::Envs(_) => "envs",
+            ManageCommands::Delete(_) => "delete",
+        }
+    }
 }
 
 /// Use environments
@@ -609,6 +720,10 @@ enum UseCommands {
     #[bpaf(command, long("exit"))]
     Deactivate(#[bpaf(external(deactivate::deactivate))] deactivate::Deactivate),
 
+    /// Run a command from a Flox Catalog package
+    #[bpaf(command, footer("Run 'man flox-run' for more details."))]
+    Run(#[bpaf(external(run::run))] run::Run),
+
     /// Manage services in an environment
     #[bpaf(command)]
     Services(
@@ -625,7 +740,17 @@ impl UseCommands {
         match self {
             UseCommands::Activate(args) => args.handle(config, flox).await,
             UseCommands::Deactivate(args) => args.handle(config, flox),
+            UseCommands::Run(args) => args.handle(flox).await,
             UseCommands::Services(args) => args.handle(config, flox).await,
+        }
+    }
+
+    fn subcommand_name(&self) -> &'static str {
+        match self {
+            UseCommands::Activate(args) => args.subcommand_name(),
+            UseCommands::Deactivate(_) => "deactivate",
+            UseCommands::Run(_) => "run",
+            UseCommands::Services(sub) => sub.subcommand_name(),
         }
     }
 }
@@ -649,6 +774,13 @@ impl DiscoverCommands {
             DiscoverCommands::Show(args) => args.handle(flox).await?,
         }
         Ok(())
+    }
+
+    fn subcommand_name(&self) -> &'static str {
+        match self {
+            DiscoverCommands::Search(_) => "search",
+            DiscoverCommands::Show(_) => "show",
+        }
     }
 }
 
@@ -737,6 +869,18 @@ impl ModifyCommands {
         }
         Ok(())
     }
+
+    fn subcommand_name(&self) -> &'static str {
+        match self {
+            ModifyCommands::Install(_) => "install",
+            ModifyCommands::List(_) => "list",
+            ModifyCommands::Edit(_) => "edit",
+            ModifyCommands::Include(sub) => sub.subcommand_name(),
+            ModifyCommands::Upgrade(_) => "upgrade",
+            ModifyCommands::Uninstall(_) => "uninstall",
+            ModifyCommands::Generations(sub) => sub.subcommand_name(),
+        }
+    }
 }
 
 /// Share with others
@@ -786,6 +930,16 @@ impl ShareCommands {
         }
         Ok(())
     }
+
+    fn subcommand_name(&self) -> &'static str {
+        match self {
+            ShareCommands::Build(args) => args.subcommand_name(),
+            ShareCommands::Publish(_) => "publish",
+            ShareCommands::Push(_) => "push",
+            ShareCommands::Pull(_) => "pull",
+            ShareCommands::Containerize(_) => "containerize",
+        }
+    }
 }
 
 /// Administration
@@ -818,6 +972,19 @@ impl AdminCommands {
             AdminCommands::Gc(args) => args.handle(flox)?,
         }
         Ok(())
+    }
+
+    /// The `Auth` arm emits `"auth2"` (not `"auth"`) to preserve the
+    /// downstream classifier that keys off `subcommand == "auth2"`
+    /// with `exit_code == 0`. The legacy `auth.rs:251` already wrote
+    /// `"auth2"` on the wire; mirroring it here keeps the consumer
+    /// contract intact post-cutover.
+    fn subcommand_name(&self) -> &'static str {
+        match self {
+            AdminCommands::Auth(_) => "auth2",
+            AdminCommands::Config(_) => "config",
+            AdminCommands::Gc(_) => "gc",
+        }
     }
 }
 
@@ -863,7 +1030,7 @@ enum InternalCommands {
 }
 
 impl InternalCommands {
-    async fn handle(self, _config: Config, flox: Flox) -> Result<()> {
+    async fn handle(self, config: Config, flox: Flox) -> Result<()> {
         match self {
             InternalCommands::ResetMetrics(args) => args.handle(flox).await?,
             InternalCommands::Upload(args) => args.handle(flox).await?,
@@ -871,9 +1038,31 @@ impl InternalCommands {
             InternalCommands::CheckForUpgrades(args) => args.handle(flox).await?,
             InternalCommands::ActivationState(args) => args.handle(flox).await?,
             InternalCommands::ServicesSocket(args) => args.handle(flox).await?,
-            InternalCommands::HookEnv(args) => args.handle(flox)?,
+            InternalCommands::HookEnv(args) => args.handle(config, flox)?,
         }
         Ok(())
+    }
+
+    /// `Deactivate(_)` always maps to `"deactivate"`. The legacy
+    /// `deactivate.rs::old_exit` emits `subcommand_metric!("exit")` —
+    /// that `"exit"` pseudo-subcommand is dropped on the new path; the
+    /// centrally-derived name is always the parsed clap command's
+    /// name, never the handler method's name.
+    ///
+    /// `LockManifest(_)` maps to `"lock"` (not `"lock-manifest"`) to
+    /// preserve parity with the legacy `lock_manifest.rs:34`
+    /// `subcommand_metric!("lock")` wire string. Same shape as the
+    /// `Auth → "auth2"` carve-out on [`AdminCommands::subcommand_name`].
+    fn subcommand_name(&self) -> &'static str {
+        match self {
+            InternalCommands::ResetMetrics(_) => "reset-metrics",
+            InternalCommands::Upload(_) => "upload",
+            InternalCommands::LockManifest(_) => "lock",
+            InternalCommands::CheckForUpgrades(_) => "check-for-upgrades",
+            InternalCommands::ActivationState(_) => "activation-state",
+            InternalCommands::ServicesSocket(_) => "services-socket",
+            InternalCommands::HookEnv(_) => "hook-env",
+        }
     }
 }
 
@@ -1532,4 +1721,127 @@ fn render_composition_manifest(manifest: &Manifest<TypedOnly>) -> Result<String>
     toml_edit::visit_mut::visit_document_mut(&mut Visitor::new_for_document(), &mut document);
 
     Ok(document.to_string())
+}
+
+#[cfg(test)]
+mod subcommand_name_tests {
+    use super::*;
+
+    /// Run the top-level `flox_args` parser against `argv` and return
+    /// the resulting [`Commands`] for assertion. Treats any parser
+    /// failure as a test failure so the assertion site stays terse.
+    fn parse_command(argv: &[&str]) -> Commands {
+        let parsed = flox_args()
+            .to_options()
+            .run_inner(argv)
+            .unwrap_or_else(|err| panic!("failed to parse {argv:?}: {err:?}"));
+        parsed
+            .command
+            .expect("expected an inner subcommand after parsing")
+    }
+
+    /// `auth` must derive to the literal `"auth2"` on the wire so
+    /// the downstream classifier that keys off `subcommand == "auth2"`
+    /// keeps firing post-cutover. Removing this carve-out silently
+    /// changes the wire string without surfacing a producer-side
+    /// error; the test pins the parity contract.
+    #[test]
+    fn auth_command_derives_to_auth2_subcommand_name() {
+        let command = parse_command(&["auth", "status"]);
+        assert_eq!(command.subcommand_name(), "auth2");
+    }
+
+    /// `deactivate` must derive to the literal `"deactivate"`, not the
+    /// legacy `"exit"` pseudo-subcommand that `deactivate.rs::old_exit`
+    /// emits via the legacy macro. The new path is keyed off the
+    /// parsed clap command's name, not the handler method's name.
+    #[test]
+    fn deactivate_command_derives_to_deactivate_not_exit() {
+        let command = parse_command(&["deactivate"]);
+        assert_eq!(command.subcommand_name(), "deactivate");
+    }
+
+    /// `lock-manifest` must derive to the literal `"lock"` to preserve
+    /// parity with the legacy `lock_manifest.rs:34`
+    /// `subcommand_metric!("lock")` wire string. Removing the
+    /// carve-out changes the wire string silently and breaks any
+    /// downstream classifier keyed off `subcommand == "lock"`. Same
+    /// shape as the `auth → "auth2"` test above.
+    #[test]
+    fn lock_manifest_command_derives_to_lock_for_parity() {
+        let command = parse_command(&["lock-manifest", "/dev/null"]);
+        assert_eq!(command.subcommand_name(), "lock");
+    }
+
+    /// Nested `services <sub>` commands must use the `parent::child`
+    /// join convention so the wire string matches the legacy
+    /// `environment_subcommand_metric!("services::start", …)` value
+    /// — the consumer's join-key continuity on `cli.telemetry`
+    /// depends on it.
+    #[test]
+    fn services_start_uses_parent_child_join_encoding() {
+        let command = parse_command(&["services", "start"]);
+        assert_eq!(command.subcommand_name(), "services::start");
+    }
+
+    /// `generations list` must use the same `parent::child` encoding.
+    #[test]
+    fn generations_list_uses_parent_child_join_encoding() {
+        let command = parse_command(&["generations", "list"]);
+        assert_eq!(command.subcommand_name(), "generations::list");
+    }
+
+    /// `include upgrade` must use the same `parent::child` encoding —
+    /// covers the third nested-command family alongside services and
+    /// generations.
+    #[test]
+    fn include_upgrade_uses_parent_child_join_encoding() {
+        let command = parse_command(&["include", "upgrade"]);
+        assert_eq!(command.subcommand_name(), "include::upgrade");
+    }
+
+    /// `activate allow` / `activate deny` are bpaf-parsed sub-commands
+    /// of `flox activate` (auto-activation permission management). The
+    /// legacy stream stamps `activate::allow` / `activate::deny` at
+    /// `cli/flox/src/commands/activate.rs:323,328`; without the
+    /// `Activate::subcommand_name` carve-out the central derivation
+    /// collapses both to bare `"activate"` and silently drops two
+    /// downstream join keys.
+    #[test]
+    fn activate_allow_uses_parent_child_join_encoding() {
+        let command = parse_command(&["activate", "allow"]);
+        assert_eq!(command.subcommand_name(), "activate::allow");
+    }
+
+    #[test]
+    fn activate_deny_uses_parent_child_join_encoding() {
+        let command = parse_command(&["activate", "deny"]);
+        assert_eq!(command.subcommand_name(), "activate::deny");
+    }
+
+    /// `flox build` has three pseudo-subcommands — `clean`,
+    /// `import-nixpkgs`, and `update-catalogs` — that the legacy
+    /// stream stamps as `build::clean` / `build::import-nixpkgs` /
+    /// `build::update-catalogs` at
+    /// `cli/flox/src/commands/build.rs:146,154,162`. Without the
+    /// `Build::subcommand_name` carve-out the central derivation
+    /// collapses all three to bare `"build"`, silently dropping
+    /// three downstream join keys.
+    #[test]
+    fn build_clean_uses_parent_child_join_encoding() {
+        let command = parse_command(&["build", "clean"]);
+        assert_eq!(command.subcommand_name(), "build::clean");
+    }
+
+    #[test]
+    fn build_import_nixpkgs_uses_parent_child_join_encoding() {
+        let command = parse_command(&["build", "import-nixpkgs", "nixpkgs#hello"]);
+        assert_eq!(command.subcommand_name(), "build::import-nixpkgs");
+    }
+
+    #[test]
+    fn build_update_catalogs_uses_parent_child_join_encoding() {
+        let command = parse_command(&["build", "update-catalogs"]);
+        assert_eq!(command.subcommand_name(), "build::update-catalogs");
+    }
 }

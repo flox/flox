@@ -3,6 +3,7 @@ use std::fmt::Display;
 use anyhow::Result;
 use bpaf::Bpaf;
 use crossterm::style::Stylize;
+use flox_events::EventsHub;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::generations::{
     AllGenerationsMetadata,
@@ -13,10 +14,11 @@ use flox_rust_sdk::models::environment::generations::{
 };
 use indoc::formatdoc;
 use renderdag::{Ancestor, GraphRowRenderer, Renderer as _};
-use tracing::instrument;
+use tracing::{debug, instrument};
 
 use crate::commands::{EnvironmentSelect, environment_select};
 use crate::environment_subcommand_metric;
+use crate::utils::events::env_detail_from_concrete;
 use crate::utils::message::{page_output, stdout_supports_color};
 
 /// Arguments for the `flox generations list` command
@@ -56,11 +58,15 @@ impl List {
             .environment
             .detect_concrete_environment(&mut flox, "List using")
             .await?;
-        environment_subcommand_metric!(
-            "generations::list",
-            env,
-            request_tree = self.output_mode == OutputMode::Tree
-        );
+        let request_tree = self.output_mode == OutputMode::Tree;
+        environment_subcommand_metric!("generations::list", env, request_tree = request_tree);
+        if let Err(err) = EventsHub::global()
+            .record_environment_generations_list_with(env_detail_from_concrete(&env), |p| {
+                p.with_request_tree(request_tree)
+            })
+        {
+            debug!(error = %err, "Failed to record v2 event");
+        }
 
         let env: GenerationsEnvironment = env.try_into()?;
         let metadata = if self.upstream {

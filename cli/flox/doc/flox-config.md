@@ -70,6 +70,34 @@ flox config --set 'trusted_environments."owner/name"' trust
 
 # SUPPORTED CONFIGURATION OPTIONS
 
+`auto_activate`
+:   How auto-activation treats environments you have not yet allowed or denied,
+    when the `auto_activate` feature flag is enabled.
+    Possible values are `prompt` (default) and `allowed`.
+    `prompt` asks before auto-activating an environment the first time you enter
+    its directory.
+    `allowed` skips the prompt and auto-activates only environments you have
+    already allowed with `flox activate allow`.
+    See the *AUTO-ACTIVATION* section of [`flox-activate(1)`](./flox-activate.md).
+
+`auto_activate_environments`
+:   Per-directory auto-activation decisions.
+    Keys are absolute paths to directories containing a `.flox` directory,
+    each mapping to `allow` or `deny`.
+    These are normally written for you by `flox activate allow` and
+    `flox activate deny` rather than edited by hand.
+
+`auto_activate_fish_mode`
+:   Controls how the `fish` shell hook responds to directory changes during
+    auto-activation, mirroring direnv's `direnv_fish_mode`.
+    Possible values are `eval_on_arrow` (default), `eval_after_arrow`, and
+    `disable_arrow`.
+    `eval_on_arrow` evaluates on prompt and immediately when the working
+    directory changes.
+    `eval_after_arrow` evaluates on prompt and defers directory-change
+    evaluation until just before the next command runs.
+    `disable_arrow` evaluates on prompt only, ignoring directory changes.
+
 `config_dir`
 :   Directory where Flox should load its configuration file
     (default: `$XDG_CONFIG_HOME/flox`).
@@ -86,11 +114,17 @@ flox config --set 'trusted_environments."owner/name"' trust
 
 `disable_hook`
 :   Don't set up the Flox prompt hook as part of activation.
-    The prompt hook is required for `flox deactivate` to take effect
-    (default: false).
+    The prompt hook is required for auto-activation and for `flox deactivate` to
+    take effect (default: false).
 
 `disable_metrics`
 :   Disable collecting and sending usage metrics.
+
+`features.auto_activate`
+:   Feature flag to enable auto-activation, which is experimental
+    (default: false).
+    May also be set with `FLOX_FEATURES_AUTO_ACTIVATE=true`.
+    See the *AUTO-ACTIVATION* section of [`flox-activate(1)`](./flox-activate.md).
 
 `floxhub_token`
 :   Token to authenticate on FloxHub.
@@ -152,3 +186,8 @@ flox config --set 'trusted_environments."owner/name"' trust
 :   Variable for disabling the collection/sending of metrics data.
     If set to `true`, prevents Flox from submitting basic metrics information
     such as a unique token and the subcommand issued.
+
+`$FLOX_FEATURES_AUTO_ACTIVATE`
+:   Set to `true` to enable auto-activation, which is experimental.
+    Equivalent to setting `features.auto_activate = true`.
+    See the *AUTO-ACTIVATION* section of [`flox-activate(1)`](./flox-activate.md).

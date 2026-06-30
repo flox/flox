@@ -8,6 +8,8 @@ use std::{fs, io};
 
 use anyhow::{Context, Result, anyhow, bail};
 use bpaf::Bpaf;
+use flox_core::activate::context::ActivateMode;
+use flox_events::EventsHub;
 use flox_manifest::interfaces::AsLatestSchema;
 use flox_manifest::lockfile::Lockfile;
 use flox_manifest::parsed::common::ContainerizeConfig;
@@ -22,6 +24,7 @@ use tracing::{debug, info, instrument};
 use super::{EnvironmentSelect, environment_select};
 use crate::commands::SHELL_COMPLETION_FILE;
 use crate::environment_subcommand_metric;
+use crate::utils::events::env_detail_from_concrete;
 use crate::utils::message;
 use crate::utils::openers::first_in_path;
 
@@ -53,6 +56,11 @@ pub struct Containerize {
     /// Set metadata for an image
     #[bpaf(long("label"), argument("key=value"))]
     labels: Vec<String>,
+
+    /// Containerize the environment in either "dev" or "run" mode.
+    /// Overrides the "options.activate.mode" setting in the manifest.
+    #[bpaf(short, long)]
+    mode: Option<ActivateMode>,
 }
 impl Containerize {
     #[instrument(name = "containerize", skip_all)]
@@ -62,6 +70,11 @@ impl Containerize {
             .detect_concrete_environment(&mut flox, "Containerize")
             .await?;
         environment_subcommand_metric!("containerize", env);
+        if let Err(err) =
+            EventsHub::global().record_environment_containerize(env_detail_from_concrete(&env))
+        {
+            debug!(error = %err, "Failed to record v2 event");
+        }
 
         // Check that a specified runtime exists.
         if let Some(runtime) = &self.runtime {
@@ -92,8 +105,10 @@ impl Containerize {
         let lockfile: Lockfile = env.lockfile(&flox)?.into();
         let manifest = lockfile.migrated_manifest()?;
         let manifest = manifest.as_latest_schema();
-        let mode = manifest.options.activate.mode.clone().unwrap_or_default();
         let source = if std::env::consts::OS == "linux" {
+            let mode = self
+                .mode
+                .unwrap_or(manifest.options.activate.mode.clone().unwrap_or_default());
             let container_config = manifest
                 .containerize
                 .as_ref()
@@ -118,7 +133,7 @@ impl Containerize {
                     Exporting a container on macOS requires Docker or Podman to be installed.
                 "#});
             };
-            let builder = ContainerizeProxy::new(env_path, proxy_runtime, self.labels);
+            let builder = ContainerizeProxy::new(env_path, proxy_runtime, self.labels, self.mode);
             builder.create_container_source(&flox, env_name.as_ref(), output_tag)?
         };
 

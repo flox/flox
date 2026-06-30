@@ -24,6 +24,7 @@ use crate::utils::errors::{
     format_managed_error,
     format_remote_error,
 };
+use crate::utils::events::{install_events_client_for_main, resolve_invocation_id};
 use crate::utils::init::init_telemetry_uuid;
 use crate::utils::metrics::{Hub, read_metrics_uuid};
 
@@ -111,6 +112,12 @@ fn main() -> ExitCode {
     // https://docs.sentry.io/platforms/rust/#async-main-function
     let _sentry_guard = metrics_uuid.map(|uuid| init_sentry("flox-cli", uuid));
     let _metrics_guard = Hub::global().try_guard().ok();
+    // Resolve the v2 invocation_id for this process so it is stamped onto the
+    // events emitted on the normal command path and can be propagated to the
+    // detached upgrade-check subprocess. (Not resolved on the early-exit paths
+    // above — those emit nothing, matching the legacy pipeline.)
+    let invocation_id = resolve_invocation_id();
+    let _v2_events_guard = install_events_client_for_main(&config, invocation_id);
 
     // Pass down the verbosity level to all sub-processes
     unsafe {
@@ -206,6 +213,7 @@ fn main() -> ExitCode {
         },
     };
 
+    drop(_v2_events_guard);
     drop(_metrics_guard);
     drop(_sentry_guard);
 

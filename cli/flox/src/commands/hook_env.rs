@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::io::{BufWriter, Write, stdout};
+use std::io::{BufRead, BufReader, BufWriter, Write, stdout};
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
@@ -18,12 +18,14 @@ use indoc::formatdoc;
 use shell_gen::{GenerateShell, SetVar, Shell, ShellWithPath, UnsetVar};
 use tracing::debug;
 
+use super::activate::write_auto_activation_preference;
 use super::activated_environments;
 use super::deactivate::{
     emit_deactivate_script,
     flox_activate_tracelevel,
     open_deactivation_target,
 };
+use crate::config::{AutoActivate, AutoActivationPreference, Config};
 use crate::subcommand_metric;
 use crate::utils::message;
 
@@ -53,7 +55,7 @@ pub struct HookEnv {
 }
 
 impl HookEnv {
-    pub fn handle(self, flox: Flox) -> Result<()> {
+    pub fn handle(self, config: Config, flox: Flox) -> Result<()> {
         let mut writer = BufWriter::new(stdout());
 
         // Consume any actions another flox command (e.g. `flox deactivate`) left
@@ -99,19 +101,8 @@ impl HookEnv {
             return Ok(());
         }
 
-        let ctx = gather_auto_activate_context(!actions.is_empty())?;
+        let ctx = gather_auto_activate_context(&config, !actions.is_empty())?;
         let plan = plan_auto_activation(&ctx);
-
-        // Only record a metric when this run actually does something;
-        // `hook-env` runs on every shell prompt, and recording the common
-        // nothing-to-do case would be noise.
-        if !actions.is_empty()
-            || !plan.deactivate.is_empty()
-            || !plan.activate.is_empty()
-            || !plan.abandoned.is_empty()
-        {
-            subcommand_metric!("hook-env");
-        }
 
         if !plan.deactivate.is_empty() {
             // Auto-activations are always in-place, so each layer recorded
@@ -182,22 +173,105 @@ impl HookEnv {
             });
         }
 
-        for path in &plan.activate {
-            write_activate_command(self.shell, path, &mut writer)?;
+        // Ask for consent once for all unregistered environments discovered
+        // this run, rather than once per environment: walking into a deep tree
+        // can surface several at once, and a prompt per layer is tedious. The
+        // single answer applies to the whole batch (`plan.prompt`).
+        let consent = if plan.prompt.is_empty() {
+            AutoActivateConsent::NoTerminal
+        } else {
+            prompt_for_auto_activation(&plan.prompt)?
+        };
+
+        // Only record a metric when this run actually does something;
+        // `hook-env` runs on every shell prompt, and recording the common
+        // nothing-to-do case would be noise. Gate the prompt case on the
+        // consent answer, not `plan.prompt`: a non-interactive shell has no
+        // controlling terminal, so it yields `NoTerminal` and does nothing —
+        // counting it would fire the metric on every prompt.
+        if !actions.is_empty()
+            || !plan.deactivate.is_empty()
+            || !plan.activate.is_empty()
+            || matches!(
+                consent,
+                AutoActivateConsent::Allow | AutoActivateConsent::Decline
+            )
+            || !plan.abandoned.is_empty()
+        {
+            subcommand_metric!("hook-env");
+        }
+
+        // Walk discovered directories outermost-first so activations stack in
+        // the right order. Allowed environments activate directly; unregistered
+        // ones (only present in `prompt` mode) activate or are suppressed
+        // according to the consent answer. Prompt outcomes adjust the
+        // tracked-state lists the planner produced.
+        let mut auto_activated = plan.auto_activated.clone();
+        let mut suppressed = plan.suppressed.clone();
+        for path in &ctx.discovered {
+            if plan.activate.contains(path) {
+                write_activate_command(self.shell, path, &mut writer)?;
+            } else if plan.prompt.contains(path) {
+                match consent {
+                    AutoActivateConsent::Allow => {
+                        write_auto_activation_preference(
+                            &config.flox.config_dir,
+                            path,
+                            AutoActivationPreference::Allow,
+                        )?;
+                        write_activate_command(self.shell, path, &mut writer)?;
+                        if !auto_activated.contains(path) {
+                            auto_activated.push(path.clone());
+                        }
+                    },
+                    // Decline: suppress for this shell so the hook stops asking
+                    // while the shell stays within the directory. Leaving clears
+                    // the suppression (re-entering asks again); `flox activate
+                    // deny` makes the refusal permanent. The user-facing note is
+                    // emitted once after the loop, not per environment.
+                    AutoActivateConsent::Decline => {
+                        if !suppressed.contains(path) {
+                            suppressed.push(path.clone());
+                        }
+                    },
+                    // No terminal to prompt on (non-interactive shell): leave
+                    // the environment unregistered so a later interactive prompt
+                    // can still ask. Take no action and record nothing.
+                    AutoActivateConsent::NoTerminal => {},
+                }
+            }
+        }
+
+        // One note for the whole batch: the prompt already listed the
+        // environments, so declining repeats neither the list nor a per
+        // environment explanation. Reached only on the first decline;
+        // afterwards the planner drops the suppressed environments from the
+        // prompt, so `plan.prompt` is empty.
+        if matches!(consent, AutoActivateConsent::Decline) && !plan.prompt.is_empty() {
+            let environments = if plan.prompt.len() == 1 {
+                "the environment"
+            } else {
+                "these environments"
+            };
+            message::info(formatdoc! {"
+                Did not auto-activate {environments}.
+                You will be asked again in a new shell or when you re-enter the directory.
+                Run 'flox activate deny --dir <PATH>' to stop being asked."
+            });
         }
 
         write_path_list_update(
             self.shell,
             FLOX_AUTO_ACTIVATED_ENVIRONMENTS_VAR,
             &ctx.auto_activated,
-            &plan.auto_activated,
+            &auto_activated,
             &mut writer,
         )?;
         write_path_list_update(
             self.shell,
             FLOX_SUPPRESSED_ENVIRONMENTS_VAR,
             &ctx.suppressed,
-            &plan.suppressed,
+            &suppressed,
             &mut writer,
         )?;
 
@@ -223,6 +297,18 @@ struct AutoActivateContext {
     auto_activated: Vec<PathBuf>,
     /// Project directories suppressed from auto-activation in this shell.
     suppressed: Vec<PathBuf>,
+    /// Project directories the user has allowed auto-activation for via the
+    /// consent prompt or `flox activate allow` (config
+    /// `auto_activate_environments`).
+    allowed: Vec<PathBuf>,
+    /// Project directories the user has denied auto-activation for via
+    /// `flox activate deny` (config `auto_activate_environments`).
+    denied: Vec<PathBuf>,
+    /// Whether to prompt before auto-activating an environment that is neither
+    /// allowed nor denied (config `auto_activate = "prompt"`). When false
+    /// (`auto_activate = "allowed"`), unregistered environments are skipped
+    /// silently.
+    prompt_unregistered: bool,
     /// Whether this run consumed pending prompt-hook deactivation actions.
     pending_deactivations: bool,
 }
@@ -231,8 +317,12 @@ struct AutoActivateContext {
 /// auto-activation state variables.
 #[derive(Clone, Debug, PartialEq)]
 struct AutoActivatePlan {
-    /// Project directories to activate, outermost-first.
+    /// Project directories to activate, outermost-first. These are environments
+    /// the user has already allowed.
     activate: Vec<PathBuf>,
+    /// Unregistered project directories to prompt the user about before
+    /// activating, outermost-first. Empty unless `auto_activate = "prompt"`.
+    prompt: Vec<PathBuf>,
     /// Project directories to deactivate, front of stack first.
     deactivate: Vec<PathBuf>,
     /// Auto-activated environments that should be deactivated but are buried
@@ -258,9 +348,23 @@ struct AutoActivatePlan {
 /// can pop. While any tracked layer the shell has left remains active, newly
 /// discovered environments are not activated yet — they would bury the
 /// still-unwinding layers.
+///
+/// Auto-activation is opt-in. A discovered environment activates only if the
+/// user has allowed it (via the consent prompt or `flox activate allow`).
+/// An environment that is neither allowed nor denied is "unregistered": in
+/// `prompt` mode it is added to the plan's `prompt` list so the hook can ask
+/// for consent; in `allowed` mode it is skipped silently. Denied environments
+/// are never activated and never prompted.
+///
+/// Allow/deny govern future auto-activation only: an environment that is
+/// already active (whether activated manually or before being denied) is left
+/// running, and is auto-deactivated as usual once the shell leaves its
+/// directory.
 fn plan_auto_activation(ctx: &AutoActivateContext) -> AutoActivatePlan {
     let inside = |path: &Path| ctx.cwd.starts_with(path);
     let is_active = |path: &PathBuf| ctx.active.iter().flatten().any(|active| active == path);
+    let is_allowed = |path: &PathBuf| ctx.allowed.contains(path);
+    let is_denied = |path: &PathBuf| ctx.denied.contains(path);
 
     // Reconcile tracked state with the actual activation stack. A suppressed
     // environment stays suppressed only while the shell remains inside its
@@ -301,6 +405,7 @@ fn plan_auto_activation(ctx: &AutoActivateContext) -> AutoActivatePlan {
         }
         return AutoActivatePlan {
             activate: Vec::new(),
+            prompt: Vec::new(),
             deactivate: Vec::new(),
             abandoned: Vec::new(),
             auto_activated,
@@ -336,25 +441,45 @@ fn plan_auto_activation(ctx: &AutoActivateContext) -> AutoActivatePlan {
         }
     }
 
-    // Activate discovered environments that aren't already active or
-    // suppressed, outermost-first so the innermost ends up on top. Defer
-    // while tracked environments the shell has left are still unwinding:
-    // activating now would stack the new environment on top of them, and a
-    // buried environment can't be popped (it would be abandoned instead).
+    // Walk discovered environments outermost-first so the innermost ends up on
+    // top. Auto-activation is opt-in: only allowed environments activate.
+    // Unregistered ones (neither allowed nor denied) are queued for a consent
+    // prompt in `prompt` mode, or skipped in `allowed` mode; denied ones are
+    // always skipped. A registered preference is per-directory, so a denied or
+    // unregistered directory in the middle of a stack does not block its
+    // allowed ancestors or descendants.
+    //
+    // Defer all of this while tracked environments the shell has left are still
+    // unwinding: activating now would stack the new environment on top of them,
+    // and a buried environment can't be popped (it would be abandoned instead).
     let unwinding = auto_activated.iter().any(|path| !inside(path));
     let mut activate = Vec::new();
+    let mut prompt = Vec::new();
     if !unwinding {
         for path in &ctx.discovered {
-            if is_active(path) || suppressed.contains(path) || activate.contains(path) {
+            if is_active(path)
+                || suppressed.contains(path)
+                || is_denied(path)
+                || activate.contains(path)
+                || prompt.contains(path)
+            {
                 continue;
             }
-            activate.push(path.clone());
-            auto_activated.push(path.clone());
+            if is_allowed(path) {
+                activate.push(path.clone());
+                auto_activated.push(path.clone());
+            } else if ctx.prompt_unregistered {
+                // Unregistered: ask before activating. Not tracked as
+                // auto-activated yet — the hook adds it only if the user
+                // consents.
+                prompt.push(path.clone());
+            }
         }
     }
 
     AutoActivatePlan {
         activate,
+        prompt,
         deactivate,
         abandoned,
         auto_activated,
@@ -364,8 +489,12 @@ fn plan_auto_activation(ctx: &AutoActivateContext) -> AutoActivatePlan {
 
 /// Gather the runtime inputs for [`plan_auto_activation`]: the shell's
 /// working directory, the environments discoverable from it, the activation
-/// stack, and the hook's tracked state variables.
-fn gather_auto_activate_context(pending_deactivations: bool) -> Result<AutoActivateContext> {
+/// stack, the hook's tracked state variables, and the user's per-directory
+/// auto-activation preferences.
+fn gather_auto_activate_context(
+    config: &Config,
+    pending_deactivations: bool,
+) -> Result<AutoActivateContext> {
     let cwd = std::env::current_dir().context("failed to read current directory")?;
     let discovered = find_all_dot_flox(&cwd)
         .context("failed to discover environments for auto-activation")?
@@ -386,12 +515,34 @@ fn gather_auto_activate_context(pending_deactivations: bool) -> Result<AutoActiv
         .iter()
         .map(|env| env.path().and_then(Path::parent).map(Path::to_path_buf))
         .collect();
+    // `flox activate allow`/`deny` key the config by the environment's parent
+    // path, which they derive by popping `.flox` off a `CanonicalPath`. Those
+    // keys are therefore already canonical and comparable to `discovered`
+    // without re-canonicalizing here.
+    let preference = |want: AutoActivationPreference| {
+        config
+            .flox
+            .auto_activate_environments
+            .iter()
+            .filter(move |(_, pref)| **pref == want)
+            .map(|(path, _)| path.clone())
+            .collect::<Vec<_>>()
+    };
+    let allowed = preference(AutoActivationPreference::Allow);
+    let denied = preference(AutoActivationPreference::Deny);
+    let prompt_unregistered = matches!(
+        config.flox.auto_activate.clone().unwrap_or_default(),
+        AutoActivate::Prompt
+    );
     Ok(AutoActivateContext {
         cwd,
         discovered,
         active,
         auto_activated: read_path_list_var(FLOX_AUTO_ACTIVATED_ENVIRONMENTS_VAR),
         suppressed: read_path_list_var(FLOX_SUPPRESSED_ENVIRONMENTS_VAR),
+        allowed,
+        denied,
+        prompt_unregistered,
         pending_deactivations,
     })
 }
@@ -412,6 +563,76 @@ fn read_path_list_var(var: &str) -> Vec<PathBuf> {
             debug!(%err, var, "ignoring unparseable auto-activation state variable");
             Vec::new()
         },
+    }
+}
+
+/// The user's answer to the auto-activation consent prompt.
+#[derive(Clone, Copy)]
+enum AutoActivateConsent {
+    /// Activate the environments and remember the choice (persist `Allow`).
+    Allow,
+    /// Don't activate; suppress re-prompting for this shell session.
+    Decline,
+    /// No controlling terminal to prompt on; make no decision this run.
+    NoTerminal,
+}
+
+/// Ask the user, on the controlling terminal, whether to auto-activate the
+/// unregistered environments discovered this run.
+///
+/// One prompt covers the whole batch: a single `cd` into a deep tree can
+/// surface several environments at once, and asking per environment is tedious.
+/// The answer applies to all of `project_dirs`.
+///
+/// The prompt hook's stdout is captured and evaluated by the shell, so the
+/// question and the answer go through `/dev/tty` directly rather than
+/// stdout/stdin. When there is no controlling terminal (a non-interactive
+/// shell), returns [`AutoActivateConsent::NoTerminal`] so the caller leaves the
+/// environments unregistered instead of blocking. A bare Enter (or EOF)
+/// defaults to declining.
+fn prompt_for_auto_activation(project_dirs: &[PathBuf]) -> Result<AutoActivateConsent> {
+    let Ok(tty) = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open("/dev/tty")
+    else {
+        return Ok(AutoActivateConsent::NoTerminal);
+    };
+
+    let question = match project_dirs {
+        [dir] => format!(
+            "Auto-activate the environment in '{}'? [y/N] ",
+            dir.display()
+        ),
+        dirs => {
+            let mut question = format!("Auto-activate these {} environments?\n", dirs.len());
+            for dir in dirs {
+                question.push_str(&format!("  {}\n", dir.display()));
+            }
+            question.push_str("[y/N] ");
+            question
+        },
+    };
+
+    // `File` implements `Read`/`Write` through shared references, so one open
+    // handle drives both the question and the answer.
+    let mut tty_writer = &tty;
+    tty_writer
+        .write_all(question.as_bytes())
+        .context("failed to write the auto-activation prompt")?;
+    tty_writer
+        .flush()
+        .context("failed to flush the auto-activation prompt")?;
+
+    let mut answer = String::new();
+    BufReader::new(&tty)
+        .read_line(&mut answer)
+        .context("failed to read the auto-activation response")?;
+    let answer = answer.trim();
+    if answer.eq_ignore_ascii_case("y") || answer.eq_ignore_ascii_case("yes") {
+        Ok(AutoActivateConsent::Allow)
+    } else {
+        Ok(AutoActivateConsent::Decline)
     }
 }
 
@@ -477,6 +698,9 @@ mod tests {
     use super::*;
 
     /// A context with nothing discovered, nothing active, and no state.
+    ///
+    /// Defaults to `allowed` mode (`prompt_unregistered: false`); tests that
+    /// exercise the consent prompt set it to true explicitly.
     fn empty_ctx(cwd: &str) -> AutoActivateContext {
         AutoActivateContext {
             cwd: PathBuf::from(cwd),
@@ -484,6 +708,9 @@ mod tests {
             active: Vec::new(),
             auto_activated: Vec::new(),
             suppressed: Vec::new(),
+            allowed: Vec::new(),
+            denied: Vec::new(),
+            prompt_unregistered: false,
             pending_deactivations: false,
         }
     }
@@ -495,6 +722,7 @@ mod tests {
     fn noop_plan() -> AutoActivatePlan {
         AutoActivatePlan {
             activate: Vec::new(),
+            prompt: Vec::new(),
             deactivate: Vec::new(),
             abandoned: Vec::new(),
             auto_activated: Vec::new(),
@@ -512,6 +740,7 @@ mod tests {
     fn activates_discovered_env() {
         let ctx = AutoActivateContext {
             discovered: paths(&["/home/user/proj"]),
+            allowed: paths(&["/home/user/proj"]),
             ..empty_ctx("/home/user/proj")
         };
         assert_eq!(plan_auto_activation(&ctx), AutoActivatePlan {
@@ -525,6 +754,7 @@ mod tests {
     fn activates_stack_outermost_first() {
         let ctx = AutoActivateContext {
             discovered: paths(&["/home/user/outer", "/home/user/outer/inner"]),
+            allowed: paths(&["/home/user/outer", "/home/user/outer/inner"]),
             ..empty_ctx("/home/user/outer/inner")
         };
         assert_eq!(plan_auto_activation(&ctx), AutoActivatePlan {
@@ -554,6 +784,7 @@ mod tests {
             discovered: paths(&["/home/user/outer", "/home/user/outer/inner"]),
             active: vec![Some(PathBuf::from("/home/user/outer"))],
             auto_activated: paths(&["/home/user/outer"]),
+            allowed: paths(&["/home/user/outer", "/home/user/outer/inner"]),
             ..empty_ctx("/home/user/outer/inner")
         };
         assert_eq!(plan_auto_activation(&ctx), AutoActivatePlan {
@@ -600,6 +831,7 @@ mod tests {
             discovered: paths(&["/home/user/proj_b"]),
             active: vec![Some(PathBuf::from("/home/user/proj_a"))],
             auto_activated: paths(&["/home/user/proj_a"]),
+            allowed: paths(&["/home/user/proj_b"]),
             ..empty_ctx("/home/user/proj_b")
         };
         assert_eq!(plan_auto_activation(&ctx), AutoActivatePlan {
@@ -622,6 +854,7 @@ mod tests {
                 Some(PathBuf::from("/tmp/a")),
             ],
             auto_activated: paths(&["/tmp/a", "/tmp/a/b"]),
+            allowed: paths(&["/tmp/z"]),
             ..empty_ctx("/tmp/z")
         };
         assert_eq!(plan_auto_activation(&ctx), AutoActivatePlan {
@@ -668,6 +901,7 @@ mod tests {
                 Some(PathBuf::from("/tmp/a")),
             ],
             auto_activated: paths(&["/tmp/a"]),
+            allowed: paths(&["/tmp/z"]),
             ..empty_ctx("/tmp/z")
         };
         assert_eq!(plan_auto_activation(&ctx), AutoActivatePlan {
@@ -824,11 +1058,92 @@ mod tests {
         // directory); coming back in looks like a fresh discovery.
         let ctx = AutoActivateContext {
             discovered: paths(&["/home/user/proj"]),
+            allowed: paths(&["/home/user/proj"]),
             ..empty_ctx("/home/user/proj")
         };
         assert_eq!(plan_auto_activation(&ctx), AutoActivatePlan {
             activate: paths(&["/home/user/proj"]),
             auto_activated: paths(&["/home/user/proj"]),
+            ..noop_plan()
+        });
+    }
+
+    #[test]
+    fn does_not_activate_denied_env() {
+        // The user denied auto-activation for this directory, so discovering
+        // it must not activate it.
+        let ctx = AutoActivateContext {
+            discovered: paths(&["/home/user/proj"]),
+            denied: paths(&["/home/user/proj"]),
+            ..empty_ctx("/home/user/proj")
+        };
+        assert_eq!(plan_auto_activation(&ctx), noop_plan());
+    }
+
+    #[test]
+    fn denied_inner_env_does_not_block_allowed_outer() {
+        // Denying the innermost environment leaves its allowed ancestor free
+        // to auto-activate.
+        let ctx = AutoActivateContext {
+            discovered: paths(&["/home/user/outer", "/home/user/outer/inner"]),
+            allowed: paths(&["/home/user/outer"]),
+            denied: paths(&["/home/user/outer/inner"]),
+            ..empty_ctx("/home/user/outer/inner")
+        };
+        assert_eq!(plan_auto_activation(&ctx), AutoActivatePlan {
+            activate: paths(&["/home/user/outer"]),
+            auto_activated: paths(&["/home/user/outer"]),
+            ..noop_plan()
+        });
+    }
+
+    #[test]
+    fn denied_outer_env_does_not_block_allowed_inner() {
+        // Denying an ancestor leaves an allowed descendant free to
+        // auto-activate; the deny applies per-directory, not to the subtree.
+        let ctx = AutoActivateContext {
+            discovered: paths(&["/home/user/outer", "/home/user/outer/inner"]),
+            allowed: paths(&["/home/user/outer/inner"]),
+            denied: paths(&["/home/user/outer"]),
+            ..empty_ctx("/home/user/outer/inner")
+        };
+        assert_eq!(plan_auto_activation(&ctx), AutoActivatePlan {
+            activate: paths(&["/home/user/outer/inner"]),
+            auto_activated: paths(&["/home/user/outer/inner"]),
+            ..noop_plan()
+        });
+    }
+
+    #[test]
+    fn deny_while_inside_does_not_deactivate_active_env() {
+        // Denying an environment that was already auto-activated does not tear
+        // it down; deny only governs future auto-activation. It stays tracked
+        // and active until the shell leaves its directory.
+        let ctx = AutoActivateContext {
+            discovered: paths(&["/home/user/proj"]),
+            active: vec![Some(PathBuf::from("/home/user/proj"))],
+            auto_activated: paths(&["/home/user/proj"]),
+            denied: paths(&["/home/user/proj"]),
+            ..empty_ctx("/home/user/proj")
+        };
+        assert_eq!(plan_auto_activation(&ctx), AutoActivatePlan {
+            auto_activated: paths(&["/home/user/proj"]),
+            ..noop_plan()
+        });
+    }
+
+    #[test]
+    fn denied_env_still_pops_after_leaving() {
+        // An environment denied while it was active is auto-deactivated as
+        // usual once the shell leaves its directory.
+        let ctx = AutoActivateContext {
+            active: vec![Some(PathBuf::from("/home/user/proj"))],
+            auto_activated: paths(&["/home/user/proj"]),
+            denied: paths(&["/home/user/proj"]),
+            ..empty_ctx("/home/user/elsewhere")
+        };
+        assert_eq!(plan_auto_activation(&ctx), AutoActivatePlan {
+            deactivate: paths(&["/home/user/proj"]),
             ..noop_plan()
         });
     }
@@ -842,6 +1157,65 @@ mod tests {
             ..empty_ctx("/home/user/elsewhere")
         };
         assert_eq!(plan_auto_activation(&ctx), noop_plan());
+    }
+
+    #[test]
+    fn unregistered_env_is_prompted_in_prompt_mode() {
+        // Auto-activation is opt-in: an environment with no recorded preference
+        // is queued for a consent prompt rather than activated, and is not
+        // tracked until the user consents.
+        let ctx = AutoActivateContext {
+            discovered: paths(&["/home/user/proj"]),
+            prompt_unregistered: true,
+            ..empty_ctx("/home/user/proj")
+        };
+        assert_eq!(plan_auto_activation(&ctx), AutoActivatePlan {
+            prompt: paths(&["/home/user/proj"]),
+            ..noop_plan()
+        });
+    }
+
+    #[test]
+    fn unregistered_env_is_skipped_in_allowed_mode() {
+        // In `allowed` mode an unregistered environment is skipped silently —
+        // no activation, no prompt.
+        let ctx = AutoActivateContext {
+            discovered: paths(&["/home/user/proj"]),
+            prompt_unregistered: false,
+            ..empty_ctx("/home/user/proj")
+        };
+        assert_eq!(plan_auto_activation(&ctx), noop_plan());
+    }
+
+    #[test]
+    fn denied_env_is_never_prompted() {
+        // A denied environment is skipped even in prompt mode.
+        let ctx = AutoActivateContext {
+            discovered: paths(&["/home/user/proj"]),
+            denied: paths(&["/home/user/proj"]),
+            prompt_unregistered: true,
+            ..empty_ctx("/home/user/proj")
+        };
+        assert_eq!(plan_auto_activation(&ctx), noop_plan());
+    }
+
+    #[test]
+    fn allowed_activates_while_unregistered_prompts_in_one_stack() {
+        // In a stack, an allowed ancestor activates directly while an
+        // unregistered descendant is queued for a prompt — both in
+        // outermost-first order.
+        let ctx = AutoActivateContext {
+            discovered: paths(&["/home/user/outer", "/home/user/outer/inner"]),
+            allowed: paths(&["/home/user/outer"]),
+            prompt_unregistered: true,
+            ..empty_ctx("/home/user/outer/inner")
+        };
+        assert_eq!(plan_auto_activation(&ctx), AutoActivatePlan {
+            activate: paths(&["/home/user/outer"]),
+            prompt: paths(&["/home/user/outer/inner"]),
+            auto_activated: paths(&["/home/user/outer"]),
+            ..noop_plan()
+        });
     }
 
     #[test]

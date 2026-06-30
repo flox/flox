@@ -131,12 +131,15 @@ pub(crate) fn packages_successfully_installed(
 /// the requested systems.
 pub(crate) fn packages_installed_with_system_subsets(pkgs: &[PackageToInstall]) {
     for pkg in pkgs.iter() {
+        // Sort for deterministic output: `systems()` order follows the catalog
+        // response, so without sorting the message order is unstable.
+        // Only `None` for flakes, which can't reach this code path anyway.
+        let mut systems = pkg.systems().unwrap_or_default();
+        systems.sort();
         warning(format!(
             "'{}' installed only for the following systems: {}",
             pkg.id(),
-            // Only `None` for flakes, which can't reach this code
-            // path anyway.
-            pkg.systems().unwrap_or_default().join(", ")
+            systems.join(", ")
         ))
     }
 }

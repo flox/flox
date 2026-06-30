@@ -15,7 +15,7 @@ use nix::sys::signal::kill;
 use nix::unistd::{Pid, getpgid, getpid, setsid};
 use reaper::reap_orphaned_children;
 use serde::{Deserialize, Serialize};
-use tracing::{debug, debug_span, error, info, instrument};
+use tracing::{debug, debug_span, error, info, instrument, warn};
 use uuid::Uuid;
 use watcher::LockedActivationState;
 
@@ -265,10 +265,12 @@ fn run_event_loop(
                 reap_orphaned_children();
             },
             Ok(ExecutiveEvent::TerminationSignal) => {
-                // If we get a SIGINT/SIGTERM/SIGQUIT we leave behind the activation in the registry,
-                // but there's not much we can do about that because we don't know who sent us one of those
-                // signals or why.
-                bail!("received stop signal, exiting without cleanup");
+                // A termination signal (SIGINT/SIGTERM/SIGQUIT) is a normal exit for this
+                // long-lived background process, not an error. We intentionally leave the
+                // activation in the registry: we don't know who sent the signal or why, so
+                // we can't safely run cleanup.
+                info!(reason = "termination signal", "exiting without cleanup");
+                return Ok(());
             },
             Err(_) => {
                 bail!("event channel disconnected unexpectedly");
@@ -456,7 +458,7 @@ fn cleanup_all(
     let socket_path = socket_path.as_ref();
     if socket_path.exists() {
         if let Err(err) = process_compose_down(process_compose_bin, socket_path) {
-            error!(%err, "failed to run process-compose shutdown command");
+            warn!(%err, "failed to run process-compose shutdown command");
         }
         info!("shut down process-compose");
     } else {
@@ -575,7 +577,7 @@ mod test {
     }
 
     #[test]
-    fn monitoring_loop_bails_on_termination_signal() {
+    fn monitoring_loop_exits_without_cleanup_on_termination_signal() {
         let temp_dir = tempfile::tempdir().unwrap();
         let runtime_dir = temp_dir.path();
         let dot_flox_path = PathBuf::from(".flox");
@@ -621,12 +623,8 @@ mod test {
             0,
         );
 
-        // Verify the loop exited with the expected error
-        let err = result.expect_err("should return error on termination signal");
-        assert!(
-            err.to_string().contains("received stop signal"),
-            "error should indicate stop signal was received: {err}"
-        );
+        // Verify the loop exited normally (a termination signal is not an error)
+        result.expect("termination signal should exit cleanly without error");
 
         // Verify cleanup did NOT occur - state directory should still exist
         assert!(

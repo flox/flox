@@ -1,5 +1,6 @@
 use anyhow::{Result, bail};
 use bpaf::Bpaf;
+use flox_events::{EventsHub, PackageOutcome};
 use flox_manifest::parsed::latest::SelectedOutputs;
 use flox_manifest::raw::PackageModification;
 use flox_rust_sdk::flox::Flox;
@@ -12,6 +13,7 @@ use tracing::{debug, info_span, instrument};
 use super::services::warn_manifest_changes_for_services;
 use super::{EnvironmentSelect, environment_select};
 use crate::commands::{EnvironmentSelectError, ensure_auth, environment_description};
+use crate::utils::events::env_detail_from_concrete;
 use crate::utils::message;
 use crate::utils::tracing::sentry_set_tag;
 use crate::{environment_subcommand_metric, subcommand_metric};
@@ -73,6 +75,11 @@ impl Uninstall {
             Err(e) => Err(e)?,
         };
         environment_subcommand_metric!("uninstall", concrete_environment);
+        if let Err(err) = EventsHub::global()
+            .record_environment_uninstall(env_detail_from_concrete(&concrete_environment))
+        {
+            debug!(error = %err, "Failed to record v2 event");
+        }
 
         let description = environment_description(&concrete_environment)?;
 
@@ -123,6 +130,22 @@ impl Uninstall {
         }
 
         warn_manifest_changes_for_services(&flox, &concrete_environment);
+
+        let hub = EventsHub::global();
+        for modification in attempt.modifications.iter() {
+            // Only a genuine removal is an uninstall. `UpdateOutputs` trims
+            // some of a package's outputs without removing the package (the
+            // display layer above shows it as "Updated outputs", not
+            // "uninstalled"), so it must not emit a `cli.package.uninstall`.
+            if !matches!(modification.modification, PackageModification::Remove) {
+                continue;
+            }
+            if let Err(err) = hub
+                .record_package_uninstall(modification.install_id.clone(), PackageOutcome::Success)
+            {
+                debug!(error = %err, "Failed to record v2 event");
+            }
+        }
 
         Ok(())
     }

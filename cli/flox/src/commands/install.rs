@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, anyhow, bail};
 use bpaf::Bpaf;
 use flox_core::data::environment_ref::DEFAULT_NAME;
+use flox_events::{EventsHub, PackageOutcome};
 use flox_manifest::compose::{
     COMPOSER_MANIFEST_ID,
     new_package_overrides,
@@ -59,6 +60,7 @@ use crate::utils::detect_shell::detect_shell_for_in_place;
 use crate::utils::dialog::{Dialog, Select};
 use crate::utils::didyoumean::{DidYouMean, InstallSuggestion};
 use crate::utils::errors::format_error;
+use crate::utils::events::env_detail_from_concrete;
 use crate::utils::message::{self};
 use crate::utils::tracing::sentry_set_tag;
 use crate::{Exit, environment_subcommand_metric, subcommand_metric};
@@ -185,6 +187,11 @@ impl Install {
             Err(e) => Err(e)?,
         };
         environment_subcommand_metric!("install", concrete_environment);
+        if let Err(err) = EventsHub::global()
+            .record_environment_install(env_detail_from_concrete(&concrete_environment))
+        {
+            debug!(error = %err, "Failed to record v2 event");
+        }
 
         let description = environment_description(&concrete_environment)?;
 
@@ -292,18 +299,37 @@ impl Install {
             warn_manifest_changes_for_services(&flox, &concrete_environment);
         }
 
+        // Both telemetry stacks emit in parallel through the dormant
+        // phase; the new-pipeline per-package mirrors in this PR are
+        // no-ops in production until the cutover installs an
+        // `EventsHub` client. Net-new on this branch: legacy emits
+        // nothing per-package on success.
+        let hub = EventsHub::global();
+        for package in &packages_to_install {
+            if let Err(err) = hub.record_package_install(
+                Install::package_identifier(package),
+                PackageOutcome::Success,
+            ) {
+                debug!(error = %err, "Failed to record v2 event");
+            }
+        }
+
         Ok(())
     }
 
     fn format_packages_for_tracing(packages: &[PackageToInstall]) -> String {
-        packages
-            .iter()
-            .map(|p| match p {
-                PackageToInstall::Catalog(pkg) => pkg.pkg_path.clone(),
-                PackageToInstall::Flake(pkg) => pkg.url.to_string(),
-                PackageToInstall::StorePath(pkg) => pkg.store_path.display().to_string(),
-            })
-            .join(",")
+        packages.iter().map(Install::package_identifier).join(",")
+    }
+
+    /// Per-package identifier emitted on `cli.package.install` events.
+    /// Same source values as [`Install::format_packages_for_tracing`]
+    /// joins into the legacy `failed_packages` string.
+    fn package_identifier(p: &PackageToInstall) -> String {
+        match p {
+            PackageToInstall::Catalog(pkg) => pkg.pkg_path.clone(),
+            PackageToInstall::Flake(pkg) => pkg.url.to_string(),
+            PackageToInstall::StorePath(pkg) => pkg.store_path.display().to_string(),
+        }
     }
 
     fn partition_installed_packages(
@@ -470,6 +496,16 @@ impl Install {
             "install",
             "failed_packages" = Install::format_packages_for_tracing(packages)
         );
+
+        let hub = EventsHub::global();
+        for package in packages {
+            if let Err(err) = hub.record_package_install(
+                Install::package_identifier(package),
+                PackageOutcome::Failure,
+            ) {
+                debug!(error = %err, "Failed to record v2 event");
+            }
+        }
 
         match err {
             // Try to make suggestions when a package isn't found
@@ -984,7 +1020,7 @@ mod tests {
         let pkg_path = if is_linux { "darwin.ps" } else { "bpftrace" };
         let install_id = if is_linux { "ps" } else { "bpftrace" };
         let installed_systems = if is_linux {
-            "x86_64-darwin, aarch64-darwin"
+            "aarch64-darwin, x86_64-darwin"
         } else {
             "aarch64-linux, x86_64-linux"
         };
