@@ -1,0 +1,1092 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>AGENTS.md Gap Report</title>
+<style>
+:root {
+  --fg: #1c1f24; --fg-mute: #5a6270; --bg: #fbfbfa; --bg-card: #ffffff;
+  --border: #e4e6eb; --accent: #3b6bd6; --good: #2f8a52; --warn: #c98a17;
+  --bad: #c44545; --neutral: #6c757d; --code-bg: #f3f4f6;
+  --shadow: 0 1px 2px rgba(0,0,0,.04), 0 4px 12px rgba(0,0,0,.04);
+}
+* { box-sizing: border-box; }
+body {
+  font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  color: var(--fg); background: var(--bg); margin: 0; padding: 32px 24px 80px;
+}
+.container { max-width: 1080px; margin: 0 auto; }
+header.page-header {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 8px; padding: 24px 28px; box-shadow: var(--shadow);
+  margin-bottom: 22px;
+}
+header.page-header h1 { margin: 0 0 4px; font-size: 26px; font-weight: 600; letter-spacing: -.01em; }
+header.page-header .subtitle { color: var(--fg-mute); font-size: 14px; margin: 0; }
+header.page-header .back { margin-top: 14px; font-size: 13px; }
+header.page-header .back a { color: var(--accent); text-decoration: none; }
+header.page-header .back a:hover { text-decoration: underline; }
+section.body {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 8px; padding: 24px 32px; box-shadow: var(--shadow);
+}
+section.body h1 { font-size: 22px; font-weight: 600; margin: 22px 0 10px; letter-spacing: -.005em; border-bottom: 1px solid var(--border); padding-bottom: 4px; }
+section.body h2 { font-size: 19px; font-weight: 600; margin: 26px 0 10px; letter-spacing: -.005em; border-bottom: 1px solid var(--border); padding-bottom: 4px; }
+section.body h2:first-child, section.body h1:first-child { margin-top: 0; }
+section.body h3 { font-size: 16px; font-weight: 600; margin: 20px 0 8px; }
+section.body h4 { font-size: 14px; font-weight: 600; margin: 16px 0 6px; color: var(--fg-mute); text-transform: uppercase; letter-spacing: .03em; }
+section.body h5, section.body h6 { font-size: 13px; font-weight: 600; margin: 14px 0 4px; }
+section.body p { margin: 0 0 12px; }
+section.body ul, section.body ol { margin: 6px 0 12px; padding-left: 26px; }
+section.body li { margin: 3px 0; }
+section.body li > p { margin: 0 0 6px; }
+section.body code {
+  font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 13px;
+  background: var(--code-bg); padding: 1px 5px; border-radius: 3px;
+}
+section.body pre {
+  font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 12.5px;
+  background: var(--code-bg); border-radius: 6px; padding: 14px 16px;
+  overflow-x: auto; line-height: 1.45; margin: 8px 0 14px;
+}
+section.body pre code { background: transparent; padding: 0; font-size: 12.5px; }
+section.body blockquote {
+  border-left: 3px solid var(--border); padding: 6px 14px; margin: 10px 0;
+  background: var(--code-bg); color: var(--fg-mute); border-radius: 0 6px 6px 0;
+}
+section.body blockquote p { margin: 4px 0; }
+section.body a { color: var(--accent); text-decoration: none; }
+section.body a:hover { text-decoration: underline; }
+section.body hr { border: none; border-top: 1px solid var(--border); margin: 22px 0; }
+section.body table {
+  width: 100%; border-collapse: collapse; margin: 8px 0 16px; font-size: 13.5px;
+}
+section.body th, section.body td {
+  border: 1px solid var(--border); padding: 7px 10px; text-align: left; vertical-align: top;
+}
+section.body th { background: var(--code-bg); font-weight: 600; color: var(--fg-mute); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+section.body tbody tr:hover { background: #fafbfc; }
+section.body strong { font-weight: 600; }
+
+nav.toc {
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px;
+  padding: 18px 24px; margin-bottom: 22px; box-shadow: var(--shadow);
+  max-height: 480px; overflow-y: auto;
+}
+nav.toc h2 { font-size: 14px; text-transform: uppercase; letter-spacing: .04em; color: var(--fg-mute); margin: 0 0 10px; font-weight: 600; }
+nav.toc ul { list-style: none; padding-left: 0; margin: 0 0 6px; font-size: 13px; }
+nav.toc ul ul { padding-left: 16px; margin: 2px 0 4px; }
+nav.toc li { margin: 2px 0; }
+nav.toc a { color: var(--accent); text-decoration: none; }
+nav.toc a:hover { text-decoration: underline; }
+nav.toc details { margin: 4px 0; }
+nav.toc summary { font-weight: 600; cursor: pointer; color: var(--fg); font-size: 13px; }
+nav.toc summary:hover { color: var(--accent); }
+
+footer.page-footer { color: var(--fg-mute); font-size: 12px; text-align: center; margin-top: 22px; }
+footer.page-footer a { color: var(--accent); text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header class="page-header">
+  <h1>AGENTS.md Gap Report</h1>
+  <div class="subtitle">30 proposed amendments + 2 new-section proposals derived from 944 review comments across 216 PRs.</div>
+  <div class="subtitle" style="margin-top:6px;">Source: <code>scripts/pr-analysis/findings/gap-report.md</code></div>
+  <div class="back"><a href="../../../rust-pr-analysis-index-01.html">&larr; Back to index</a></div>
+</header>
+
+<nav class="toc">
+<h2>Contents</h2>
+<ul>
+<li><a href="#proposed-amendments-based-on-pr-review-evidence">Proposed Amendments Based on PR Review Evidence</a></li>
+<li><a href="#method">Method</a></li>
+<li><a href="#section-1-proposed-amendments">Section 1: Proposed Amendments</a><ul>
+<li><a href="#group-a-rust-code-clarity-constants-comments-and-labelled-blocks">Group A: Rust Code Clarity — Constants, Comments, and Labelled Blocks</a></li>
+<li><a href="#group-b-rust-code-clarity-enum-naming">Group B: Rust Code Clarity — Enum Naming</a></li>
+<li><a href="#group-c-rust-code-clarity-use-statements-and-cargo-dependencies">Group C: Rust Code Clarity — Use Statements and Cargo Dependencies</a></li>
+<li><a href="#group-d-error-handling-expired-tokens-and-graceful-degradation">Group D: Error Handling — Expired Tokens and Graceful Degradation</a></li>
+<li><a href="#group-e-user-facing-messages-documentation-and-man-pages">Group E: User-Facing Messages — Documentation and Man Pages</a></li>
+<li><a href="#group-f-code-comments-documenting-edge-cases-and-deferred-work">Group F: Code Comments — Documenting Edge Cases and Deferred Work</a></li>
+<li><a href="#group-g-shell-script-clarity">Group G: Shell Script Clarity</a></li>
+<li><a href="#group-h-testing-conventions">Group H: Testing Conventions</a></li>
+<li><a href="#group-i-pr-scope-discipline">Group I: PR Scope Discipline</a></li>
+<li><a href="#group-j-async-and-threading-discipline">Group J: Async and Threading Discipline</a></li>
+<li><a href="#group-k-manifest-and-toml-editing">Group K: Manifest and TOML Editing</a></li>
+<li><a href="#group-l-nix-flake-configuration">Group L: Nix/Flake Configuration</a></li>
+</ul></li>
+<li><a href="#section-2-reviewer-voice-notes">Section 2: Reviewer Voice Notes</a><ul>
+<li><a href="#ysndr-tier-1">ysndr (Tier 1)</a></li>
+<li><a href="#mkenigs-tier-1">mkenigs (Tier 1)</a></li>
+<li><a href="#dcarley-tier-1">dcarley (Tier 1)</a></li>
+</ul></li>
+<li><a href="#section-3-recommended-new-agents-md-sections">Section 3: Recommended New AGENTS.md Sections</a><ul>
+<li><a href="#recommended-add-a-testing-conventions-subsection-under-conventions">Recommended: Add a "Testing conventions" subsection under Conventions</a></li>
+<li><a href="#recommended-add-a-pr-scope-subsection-under-conventions">Recommended: Add a "PR scope" subsection under Conventions</a></li>
+</ul></li>
+<li><a href="#section-4-summary-table">Section 4: Summary Table</a></li>
+<li><a href="#findings-declined-and-why">Findings Declined and Why</a></li>
+</ul></nav>
+
+<section class="body">
+<h1 id="agents-md-gap-report">AGENTS.md Gap Report</h1>
+<h2 id="proposed-amendments-based-on-pr-review-evidence">Proposed Amendments Based on PR Review Evidence</h2>
+<hr>
+<h2 id="method">Method</h2>
+<p>This report proposes amendments to AGENTS.md based on patterns found in 944 review comments across 216 pull requests spanning approximately 8 months. The analysis extracted 67 findings where <code>in_agents_md=0</code> and <code>confidence_score &gt;= 0.5</code>. All findings are reported here.</p>
+<p><strong>Critical structural caveat: every single finding in this dataset has <code>total_evidence_count=1</code>.</strong> No rule is backed by more than one comment. This means none of the proposed amendments are based on repeated, independently confirmed patterns. The signal must therefore be treated as "a reviewer raised this at least once" rather than "reviewers consistently enforce this." Two tiers of confidence are used throughout:</p>
+<ul>
+<li><strong>T1-accepted</strong> (<code>tier1_reviewer_count=1</code> AND <code>acceptance_rate=1.0</code>): A Tier-1 reviewer raised the issue and the author accepted it. Stronger signal. Still single-evidence.</li>
+<li><strong>T1-raised</strong> (<code>tier1_reviewer_count=1</code> AND <code>acceptance_rate=null</code> or <code>acceptance_rate=0.0</code>): A Tier-1 reviewer raised it; outcome is unknown or the suggestion was not adopted. Weaker signal — flag for more evidence before adopting.</li>
+<li><strong>T2-only</strong> (<code>tier1_reviewer_count=0</code>): Only Tier-2 reviewers raised the issue. Lowest signal.</li>
+</ul>
+<p>Findings were grouped thematically. Where a proposed rule is a sharper or more specific version of an existing AGENTS.md guideline, the amendment is marked <strong>EXPANSION</strong>. New entries are marked <strong>NEW</strong>.</p>
+<p>Tier-1 reviewers: <strong>ysndr</strong>, <strong>mkenigs</strong>, <strong>dcarley</strong>. Tier-2 reviewers: gilmishal, billlevine, djsauble.</p>
+<hr>
+<h2 id="section-1-proposed-amendments">Section 1: Proposed Amendments</h2>
+<p>Amendments are grouped by theme and ranked within each group. The most actionable (T1-accepted) rules lead each group.</p>
+<hr>
+<h3 id="group-a-rust-code-clarity-constants-comments-and-labelled-blocks">Group A: Rust Code Clarity — Constants, Comments, and Labelled Blocks</h3>
+<p><strong>A1. [NEW] Use named constants instead of magic numbers</strong> (confidence: T1-accepted, PR #3801)</p>
+<p>Reviewers flagged bare integer literals where named constants exist in the same scope or a well-known dependency.</p>
+<p>Suggested AGENTS.md text to add under "Rust style":</p>
+<pre><code>  - **No magic numbers:** Use named constants rather than bare integer literals.
+    For POSIX file descriptors use `nix::libc::STDERR_FILENO`, `STDOUT_FILENO`,
+    `STDIN_FILENO` rather than `2`, `1`, `0`.</code></pre>
+<p>Evidence: PR #3801 — mkenigs: "nit: we could use nix::libc::STDERR_FILENO"</p>
+<hr>
+<p><strong>A2. [EXPANSION] Place comments adjacent to the code they document</strong> (confidence: T1-accepted, PR #3770)</p>
+<p>AGENTS.md already says to use structured fields in tracing. This extends guidance to ordinary code comments.</p>
+<p>Suggested addition under "Rust style":</p>
+<pre><code>  - Place comments immediately above the line or block they explain.
+    Don't separate a comment from its target by blank lines or unrelated code.</code></pre>
+<p>Evidence: PR #3770 — mkenigs: "this comment got relocated in the wrong spot and would be more helpful on the generate functions"</p>
+<hr>
+<p><strong>A3. [NEW] Avoid labelled blocks when a simple <code>if</code> suffices</strong> (confidence: T1-raised, PR #4045)</p>
+<p>Reviewers noted that labelled blocks (<code>'label: { ... }</code>) require the reader to mentally jump backwards through control flow.</p>
+<p>Suggested AGENTS.md text:</p>
+<pre><code>  - Prefer `if condition { body }` over labelled blocks (`'label: { ... break 'label; }`)
+    when the only purpose of the label is to exit the block early. The label requires
+    the reader to reverse-trace flow; a direct conditional is clearer.</code></pre>
+<p>Evidence: PR #4045 — dcarley: "The labelled block seems odd and requires you to mentally jump backwards through the logic"</p>
+<p>NOTE: acceptance_rate=null; needs more evidence before adopting.</p>
+<hr>
+<p><strong>A4. [NEW] Avoid unnecessary clone allocations</strong> (confidence: T2-only, PR #4172)</p>
+<p>When a function signature allows using a reference, avoid cloning the value. This was noted in the context of authentication token handling.</p>
+<p>Suggested AGENTS.md text:</p>
+<pre><code>  - Avoid unnecessary clones: before cloning a value to pass to a function,
+    check whether the function signature can accept a reference instead.</code></pre>
+<p>Evidence: PR #4172 — gilmishal (T2)</p>
+<p>NOTE: T2-only, acceptance_rate=1.0. Reasonable general guidance but lowest confidence in this dataset.</p>
+<hr>
+<h3 id="group-b-rust-code-clarity-enum-naming">Group B: Rust Code Clarity — Enum Naming</h3>
+<p><strong>B1. [NEW] Use singular form for enum variants</strong> (confidence: T1-accepted, PR #3870)</p>
+<p>AGENTS.md has naming guidance for helpers (<code>str_to_x</code>, <code>with_x</code>) but does not address enum variant naming conventions.</p>
+<p>Suggested AGENTS.md text to add under "Rust style":</p>
+<pre><code>  - **Enum variants:** Use singular form for variant names (e.g., `Auth0` not `Auth0s`,
+    `AuthStrategy::Auth0` not `AuthStrategy::Auth0s`). This is consistent with Rust
+    standard library conventions.</code></pre>
+<p>Evidence: PR #3870 — mkenigs: "nit: I think we use singular for most of our enums"</p>
+<hr>
+<p><strong>B2. [NEW] Distinguish config-level types from runtime-material types in naming</strong> (confidence: T2-only, PR #4172)</p>
+<p>The rename from <code>AuthMethod</code> to <code>AuthnMode</code> (config) vs <code>AuthContext</code> (runtime) reflects a semantic distinction: mode describes configuration intent; context describes what is available at runtime.</p>
+<p>Suggested AGENTS.md text:</p>
+<pre><code>  - When a concept has both a configuration-time and runtime-material form, choose
+    names that reflect the lifecycle: use `Mode` or `Config` for the configuration
+    type and `Context` or `State` for the runtime type. Document this distinction
+    in the module's `//!` doc comment.</code></pre>
+<p>Evidence: PR #4172 — gilmishal (T2)</p>
+<p>NOTE: T2-only; useful design-level guidance but needs more evidence.</p>
+<hr>
+<h3 id="group-c-rust-code-clarity-use-statements-and-cargo-dependencies">Group C: Rust Code Clarity — Use Statements and Cargo Dependencies</h3>
+<p><strong>C1. [EXPANSION] Always use workspace dependency versions in Cargo.toml</strong> (confidence: T1-accepted, PR #3939)</p>
+<p>AGENTS.md already has <code>use</code> import guidance but does not cover Cargo.toml dependency management.</p>
+<p>Suggested addition under "Rust style":</p>
+<pre><code>  - **Cargo dependencies:** Always declare crate dependencies in `Cargo.toml` using
+    `dep.workspace = true` rather than inline version strings. Adding a version inline
+    (e.g., `temp-env = "0.3"`) when a workspace entry already exists produces a noisier
+    `Cargo.lock` diff and can introduce version divergence.</code></pre>
+<p>Evidence: PR #3939 — dcarley: "We already have a version of this in the workspace, which is possibly why the Cargo.lock change is more noisy than I'd expected."</p>
+<hr>
+<h3 id="group-d-error-handling-expired-tokens-and-graceful-degradation">Group D: Error Handling — Expired Tokens and Graceful Degradation</h3>
+<p><strong>D1. [NEW] Send expired tokens for identification rather than an empty string</strong> (confidence: T1-accepted, PR #3921)</p>
+<p>When a token is expired, using the expired token (rather than <code>""</code> or omitting it) still lets the server log <em>who</em> attempted authentication, which aids debugging.</p>
+<p>Suggested AGENTS.md text to add under "Error handling architecture":</p>
+<pre><code>  - **Expired credentials:** Pass expired tokens to downstream services rather than
+    replacing them with empty strings. An expired token still conveys the identity
+    of the requester, which helps with server-side logging. Document the expired state
+    with a debug log entry before using the token.</code></pre>
+<p>Evidence: PR #3921 — ysndr: "I think its better to have something in the shape of a token than a sentinel <code>""</code> even if the token is expired. If only because it will tell FloxHub who tries to authenticate"</p>
+<hr>
+<p><strong>D2. [NEW] Add diagnostic messages for unsupported auth modes on incompatible builds</strong> (confidence: T1-accepted, PR #4172)</p>
+<p>When a runtime configuration requests a feature (e.g., Kerberos) that is not compiled into the current binary, surface a user-visible error or warning rather than silently falling through.</p>
+<p>Suggested AGENTS.md text:</p>
+<pre><code>  - **Unsupported build features:** When a user-configured mode or feature is not
+    compiled into the current binary (e.g., Kerberos auth without the
+    `floxhub-authn-kerberos` feature flag), emit a diagnostic message rather than
+    silently using a fallback or doing nothing. Track missing implementations with
+    a `// TODO(&lt;issue&gt;):` comment.</code></pre>
+<p>Evidence: PR #4172 — ysndr: "nit: i think we should have a warning/error case for use of the kerberos mode on non kerberos-enabled installations"</p>
+<hr>
+<h3 id="group-e-user-facing-messages-documentation-and-man-pages">Group E: User-Facing Messages — Documentation and Man Pages</h3>
+<p><strong>E1. [NEW] Mark unstable JSON outputs explicitly in man pages</strong> (confidence: T1-raised, PR #3651)</p>
+<p>When a <code>--json</code> flag is added to a command, the man page should explicitly state that the output schema is not guaranteed to be stable across releases.</p>
+<p>Suggested AGENTS.md text to add under "User-visible message syntax, structure, and content":</p>
+<pre><code>  - **Unstable output formats:** When documenting `--json` or other machine-readable
+    output flags in man pages, explicitly state stability: "Attention: the output
+    format is not guaranteed to be stable and may change across releases of Flox."</code></pre>
+<p>Evidence: PR #3651 — ysndr: "How should we mark this more explicitly as potentially unstable?"</p>
+<p>NOTE: acceptance_rate=0.0 (suggestion was not adopted in that PR); flag for more evidence.</p>
+<hr>
+<p><strong>E2. [NEW] Use mutually exclusive notation in man page SYNOPSIS for conflicting flags</strong> (confidence: T1-raised, PR #3651)</p>
+<p>When two flags are mutually exclusive, use <code>--flag1 | --flag2</code> notation in the SYNOPSIS section, not adjacent short options that look like aliases.</p>
+<p>Suggested AGENTS.md text:</p>
+<pre><code>  - **Man page SYNOPSIS notation:** When two options are mutually exclusive, write
+    `[-t | --json]` in the SYNOPSIS rather than listing them adjacently. The pipe
+    operator signals that only one may be chosen.</code></pre>
+<p>Evidence: PR #3651 — mkenigs: "Might be better to have <code>--tree | --json</code> in the man page"</p>
+<p>NOTE: acceptance_rate=0.0; this was adopted in the final_code_snippet but not flagged as accepted at review time. Treat as weak signal.</p>
+<hr>
+<p><strong>E3. [NEW] Add man page reference or TODO when a feature-flagged subcommand is added</strong> (confidence: T1-accepted, PR #3969)</p>
+<p>When a subcommand is added behind a feature flag (e.g., <code>#[bpaf(hide)]</code>), include either a man page or a <code>// TODO: add man-pages when un-hiding this</code> comment.</p>
+<p>Suggested AGENTS.md text:</p>
+<pre><code>  - **Hidden subcommands and man pages:** When adding a subcommand behind a feature
+    flag with `#[bpaf(hide)]`, either include the man page immediately or add a
+    `// TODO: add man-pages when we un-hide this` comment. The `footer(...)` attribute
+    should reference an existing man page only.</code></pre>
+<p>Evidence: PR #3969 — mkenigs: "looks like we need to actually add the man page? Or add a <code>// TODO</code> for when we flip the feature flag?"</p>
+<hr>
+<p><strong>E4. [EXPANSION] Use precise domain terminology in user-facing messages</strong> (confidence: T1-accepted, PR #4232)</p>
+<p>AGENTS.md already has guidance on brand naming but not on distinguishing Nix-specific terminology ("targets" vs "artifacts").</p>
+<p>Suggested AGENTS.md text to add under "User-visible message syntax":</p>
+<pre><code>  - Use precise Nix terminology in output: "targets" refers to named build outputs
+    identified in the manifest; "artifacts" implies built file paths that the user
+    can examine. Use "targets" when paths are not available, "outputs" or "artifacts"
+    when reporting concrete file paths.</code></pre>
+<p>Evidence: PR #4232 — dcarley: '"artifacts" sounds like they should be paths... but we don't have the paths available so we could just say that these are targets'</p>
+<hr>
+<p><strong>E5. [NEW] Frame breaking changes as user benefits in release communication</strong> (confidence: T1-raised, PR #3803)</p>
+<p>When a command's behavior changes in a breaking way, the PR description or release notes should articulate what the user gains, not just what they lose.</p>
+<p>Suggested AGENTS.md text:</p>
+<pre><code>  - **Breaking changes:** When changing the behavior of an existing command, explain
+    in the PR description what the user benefits from the new behavior — don't only
+    describe what no longer works. This guides changelog authors and release communication.</code></pre>
+<p>Evidence: PR #3803 — dcarley: "Is there anything we can say to sell this as a benefit to users?"</p>
+<p>NOTE: This is a PR-process guideline, not a code guideline. acceptance_rate=1.0 but the scope is PR authorship. Needs more evidence before adding to AGENTS.md.</p>
+<hr>
+<h3 id="group-f-code-comments-documenting-edge-cases-and-deferred-work">Group F: Code Comments — Documenting Edge Cases and Deferred Work</h3>
+<p><strong>F1. [EXPANSION] Document edge cases in inline comments with supporting evidence</strong> (confidence: T1-accepted, PR #4215)</p>
+<p>AGENTS.md mentions understanding semantics before rewriting error messages. This extends the principle to documenting <em>why</em> an edge case is handled (or deliberately not handled) in code.</p>
+<p>Suggested AGENTS.md text to add under "Rust style":</p>
+<pre><code>  - **Documenting edge cases:** When code deliberately handles (or skips) an edge case
+    because it is rare, document the reasoning inline. If the rarity depends on
+    upstream behavior (e.g., how nixpkgs stdenv populates `meta.outputsToInstall`),
+    include a brief citation or Nix snippet so future readers can verify the assumption
+    without reading external sources.</code></pre>
+<p>Evidence: PR #4215 — dcarley: "worth clarifying in the comment, which would help us in the future and would likely have guided the code review"</p>
+<hr>
+<p><strong>F2. [NEW] Document deferred work with tracking issues, not just TODO comments</strong> (confidence: T1-accepted, PR #3801)</p>
+<p>When a reviewer asks about a missing feature (e.g., a warning for Kerberos on non-Kerberos builds), and the decision is to defer, record the deferral in a tracking issue and reference it in a <code>// TODO(&lt;issue&gt;):</code> comment.</p>
+<p>Suggested AGENTS.md text:</p>
+<pre><code>  - **Deferred work:** When deferring an improvement to a follow-up, create a
+    tracking issue and annotate the code with `// TODO(&lt;issue&gt;): description`.
+    A bare `// TODO` without a ticket is harder to prioritize and may be forgotten.</code></pre>
+<p>Evidence: PR #3801 — dcarley: "I'll add it to the tracking issue and follow-up" Evidence: PR #4172 — gilmishal: "Added TODO(ENT-105) and created a follow-up issue"</p>
+<hr>
+<p><strong>F3. [EXPANSION] Preserve documentation comments when refactoring</strong> (confidence: T1-accepted, PR #3785)</p>
+<p>AGENTS.md has guidance on understanding semantics before rewriting. This adds an explicit rule about not silently deleting useful doc comments during refactors.</p>
+<p>Suggested AGENTS.md text:</p>
+<pre><code>  - **Preserving doc comments:** When refactoring or reorganizing code, do not silently
+    remove `///` or `//` comments that explain non-obvious behavior. Either move them
+    to the new home, rewrite them to match the new structure, or add a replacement
+    that captures the same intent.</code></pre>
+<p>Evidence: PR #3785 — ysndr: "i think we're losing useful documentation by removing these kind of doc comments with no replacement"</p>
+<hr>
+<p><strong>F4. [NEW] Document race conditions and constraint assumptions in comments</strong> (confidence: T1-accepted, PR #3920)</p>
+<p>When code is known to have a race condition or a constraint that is accepted as a deliberate trade-off, document it inline.</p>
+<p>Suggested AGENTS.md text:</p>
+<pre><code>  - **Known races and accepted limitations:** When code has a known race condition
+    or constraint that is accepted without a fix (e.g., "there is a window where
+    process-compose could restart with a different store path"), document it with
+    an inline comment explaining the constraint and why it is acceptable.</code></pre>
+<p>Evidence: PR #3920 — dcarley: "I suspect there's room for more race conditions here... there doesn't seem much that we can do about it."</p>
+<hr>
+<p><strong>F5. [NEW] Document upstream issues with references rather than forking the fix</strong> (confidence: T1-accepted, PR #3988)</p>
+<p>When a workaround exists for an upstream library bug, cite the upstream issue in the doc comment and prefer filing an upstream PR over maintaining a local patch.</p>
+<p>Suggested AGENTS.md text:</p>
+<pre><code>  - **Upstream workarounds:** When working around an upstream library bug, cite the
+    upstream issue URL in the doc comment (e.g., `/// Workaround for &lt;url&gt;`). Prefer
+    filing an upstream PR or issue rather than maintaining the fix locally, and note
+    this intent in the comment.</code></pre>
+<p>Evidence: PR #3988 — dcarley: "I'd be inclined to not fix it as part of this PR and instead file an upstream PR or issue" Final code: the accepted snippet added <code>/// Workaround for &lt;https://github.com/pacak/bpaf/issues/440&gt;</code>.</p>
+<hr>
+<h3 id="group-g-shell-script-clarity">Group G: Shell Script Clarity</h3>
+<p><strong>G1. [NEW] Avoid double negatives in shell scripts; use positive assertions</strong> (confidence: T1-accepted, PR #3932)</p>
+<p>Shell scripts in <code>assets/</code> use condition flags. When a flag represents a "skip" or "no-X" concept, the resulting condition <code>[ "$_no_hook_on_activate" != "true" ]</code> is a double negative. Rename to a positive form or invert the comparison.</p>
+<p>Suggested AGENTS.md text (add under Conventions or a new "Shell script conventions" subsection):</p>
+<pre><code>  - **Shell script boolean variables:** Prefer positive-assertion variable names over
+    negations (e.g., `_run_hook_on_activate="true"` rather than
+    `_skip_hook_on_activate="false"`). When reading a negative-named variable, prefer
+    the positive comparison (`[ "$_skip_hook_on_activate" = "false" ]`) over double-
+    negation (`[ "$_no_hook_on_activate" != "true" ]`).</code></pre>
+<p>Evidence: PR #3932 — dcarley: "The double negative had me re-read this a few times."</p>
+<hr>
+<h3 id="group-h-testing-conventions">Group H: Testing Conventions</h3>
+<p><strong>H1. [NEW] Write unit tests for bug fixes and cross-component interactions</strong> (confidence: T1-raised, PR #3869)</p>
+<p>Reviewers repeatedly asked for test coverage when PRs fixed bugs without accompanying tests. AGENTS.md has no guidance on when tests are expected.</p>
+<p>Suggested AGENTS.md text (new subsection under Testing):</p>
+<pre><code>### Test expectations
+
+- **Bug fixes:** Every bug fix should be accompanied by a unit test that reproduces
+  the bug and verifies the fix, unless the setup cost is prohibitive. If a test is
+  not added, note the gap in the PR description.
+- **Cross-component interactions:** When a change affects the interaction between two
+  subsystems (e.g., `push` invalidating an upgrade notification for a different
+  environment type), prefer a unit test over relying solely on integration tests.</code></pre>
+<p>Evidence: PR #3869 — mkenigs: "I think we probably want some test coverage for some of the bugs this is fixing"; acceptance_rate=0.0. Evidence: PR #3869 — ysndr (same PR, upgrade notification TODO).</p>
+<p>NOTE: Both supporting comments are from PRs where the suggestion was not adopted. Needs more evidence.</p>
+<hr>
+<p><strong>H2. [NEW] Document manual testing steps for tty-dependent behavior</strong> (confidence: T1-raised, PR #3672)</p>
+<p>When tty-dependent behavior cannot be automatically tested (color output, pager detection), note in the PR what manual testing was done.</p>
+<p>Suggested AGENTS.md text:</p>
+<pre><code>  - **TTY-dependent behavior:** When adding or modifying behavior that depends on
+    whether stdout is a terminal (color output, pager, interactive prompts), document
+    in the PR description what manual testing was performed, since automated tests
+    cannot easily simulate tty detection.</code></pre>
+<p>Evidence: PR #3672 — mkenigs: "I tried to test things this will change manually since it's hard to test tty dependent stuff"; acceptance_rate=null.</p>
+<hr>
+<p><strong>H3. [NEW] Keep unit tests focused; split oversized functionality to reduce side-effect coverage burden</strong> (confidence: T1-raised, PR #3903)</p>
+<p>When a function has too many side-effects to unit-test, that is a signal to refactor the function, not to skip tests.</p>
+<p>Suggested AGENTS.md text:</p>
+<pre><code>  - **Testability as a design signal:** When a function is difficult to unit-test
+    because of excessive side-effects, treat this as a design signal: the function
+    may be doing too much. Consider extracting pure logic before adding tests, rather
+    than relying on integration tests for all coverage.</code></pre>
+<p>Evidence: PR #3903 — dcarley: "There are a bunch of side-effects to observe, like whether it started an executive, which might hint that it's doing too much"; acceptance_rate=0.0.</p>
+<hr>
+<h3 id="group-i-pr-scope-discipline">Group I: PR Scope Discipline</h3>
+<p><strong>I1. [NEW] Keep PR scope minimal; defer unrelated refactors to follow-up PRs</strong> (confidence: T1-accepted, PR #4202)</p>
+<p>Reviewers asked authors to revert unrelated changes in several PRs and create follow-ups. AGENTS.md has no explicit guidance on PR scope.</p>
+<p>Suggested AGENTS.md text (new subsection under Conventions):</p>
+<pre><code>### PR scope
+
+- Keep each PR focused on a single logical change. If you encounter an unrelated bug
+  or improvement while working on a PR, prefer one of:
+  - Fixing it in a separate PR opened before or after this one.
+  - Noting it in a `// TODO` comment with a follow-up issue.
+  Avoid mixing refactors with behavioral changes in the same PR; reviewers have
+  difficulty distinguishing intentional changes from side effects.</code></pre>
+<p>Evidence: PR #4202 — mkenigs: "Let's leave <code>render_legacy_exports</code> as is... we'll take that as followup"; acceptance_rate=1.0.</p>
+<hr>
+<p><strong>I2. [EXPANSION] Clarify whether changes in a PR are related to the primary goal</strong> (confidence: T1-accepted, PR #3869)</p>
+<p>This complements I1. When a PR includes a fix that appears unrelated to the stated goal, explicitly state in the PR description or inline comment whether the fix is related or opportunistic.</p>
+<p>Suggested AGENTS.md text:</p>
+<pre><code>  - When a PR touches code that is not central to the stated goal (e.g., fixing a
+    pre-existing bug while refactoring), note in the PR description or an inline
+    comment whether the change is related. This helps reviewers distinguish intentional
+    scope from opportunistic fixes.</code></pre>
+<p>Evidence: PR #3869 — mkenigs: "question nonblocking: is this an unrelated bug fix?"; acceptance_rate=1.0.</p>
+<hr>
+<h3 id="group-j-async-and-threading-discipline">Group J: Async and Threading Discipline</h3>
+<p><strong>J1. [NEW] Filter filesystem watcher events early to prevent redundant state reads</strong> (confidence: T1-accepted, PR #3968)</p>
+<p>When using <code>notify</code> or similar filesystem watchers, filter events to write events only before reacting. Do not spin on every file system event.</p>
+<p>Suggested AGENTS.md text:</p>
+<pre><code>  - **Filesystem watchers:** When watching a file for changes with `notify`, filter
+    events immediately inside the watcher callback to `Create(File|Any)` and
+    `Modify(Data(_)|Any)` events only. Reacting to Close, Access, or Remove events
+    causes redundant reads and can produce busy loops.</code></pre>
+<p>Evidence: PR #3968 — dcarley: "We shouldn't spin on state changes every time the file is read"</p>
+<hr>
+<p><strong>J2. [NEW] Add timeouts to blocking wait operations</strong> (confidence: T1-raised, PR #3794)</p>
+<p>When a function blocks indefinitely waiting for a signal (e.g., SIGUSR1 from a child process), consider whether a timeout is warranted to avoid hangs if the child process gets stuck.</p>
+<p>Suggested AGENTS.md text:</p>
+<pre><code>  - **Blocking waits:** When blocking indefinitely on an inter-process signal or
+    resource, document whether a timeout was considered and why it was or was not
+    added. Add a timeout if the process being waited on could plausibly hang
+    (e.g., due to resource exhaustion or a bug).</code></pre>
+<p>Evidence: PR #3794 — dcarley: "Should we ever timeout here in case the executive gets stuck?"; acceptance_rate=null.</p>
+<hr>
+<p><strong>J3. [NEW] Document when to use async sandwich vs coloring functions as async</strong> (confidence: T1-raised, PR #4122)</p>
+<p>When a sync function needs to call async code (e.g., reqwest), document in a comment why the async-sandwich pattern was preferred over making the function async.</p>
+<p>Suggested AGENTS.md text:</p>
+<pre><code>  - **Async sandwich pattern:** When a synchronous function must call async code,
+    document why you chose the async-sandwich approach (wrapping in a blocking
+    executor) rather than making the function `async`. This choice has implications
+    for callers. If the function is only called from async contexts, prefer coloring
+    it `async` directly.</code></pre>
+<p>Evidence: PR #4122 — mkenigs: "I don't love the sandwich pattern, but I think it makes it more confusing to have another async pattern. When should I follow the sandwich pattern, and when should I not?"; acceptance_rate=null.</p>
+<hr>
+<h3 id="group-k-manifest-and-toml-editing">Group K: Manifest and TOML Editing</h3>
+<p><strong>K1. [EXPANSION] Preserve formatting context when patching TOML arrays in-place</strong> (confidence: T1-accepted, PR #4106)</p>
+<p>AGENTS.md already says "never serialize manifests by hand." This adds detail for the raw TOML editing case: when modifying an array element in-place using <code>toml_edit</code>, copy the surrounding <code>decor</code> (whitespace and comments) from the element being replaced, not from an element being added elsewhere.</p>
+<p>Suggested AGENTS.md text (add under Manifest usage):</p>
+<pre><code>  - **TOML array in-place editing:** When replacing an element in a `toml_edit::Array`,
+    copy the existing element's `decor` (whitespace and leading comments) to the
+    replacement value. Do not copy decor from a neighboring element; this duplicates
+    comments. Use `new_val.decor_mut().clone_from(old_val.decor())`.</code></pre>
+<p>Evidence: PR #4106 — mkenigs: "suggestion blocking: don't copy comments"</p>
+<hr>
+<h3 id="group-l-nix-flake-configuration">Group L: Nix/Flake Configuration</h3>
+<p><strong>L1. [NEW] Add explanatory comments when using manual symlinking in Nix derivations</strong> (confidence: T1-raised, PR #3960)</p>
+<p>In <code>flake.nix</code> or package definitions, when manually creating symlinks (rather than using <code>makeWrapper</code> or similar), add a comment explaining why manual symlinking is required.</p>
+<p>Suggested AGENTS.md text:</p>
+<pre><code>  - **Manual symlinking in Nix:** When using `ln -s` manually in a derivation rather
+    than a higher-level helper (e.g., `makeWrapper`), add a comment explaining why the
+    manual approach is needed and what would break if replaced with the helper.</code></pre>
+<p>Evidence: PR #3960 — mkenigs: "Slight preference to add a comment if you stick with manual symlinking"; acceptance_rate=0.0.</p>
+<hr>
+<h2 id="section-2-reviewer-voice-notes">Section 2: Reviewer Voice Notes</h2>
+<h3 id="ysndr-tier-1">ysndr (Tier 1)</h3>
+<p>ysndr's comments in this dataset cluster around two concerns: <strong>architecture and lifecycle correctness</strong>, and <strong>design documentation</strong>. When reviewing authentication code (PRs #3921, #4172), ysndr pushed back on sentinel values and missing variants, preferring that code carry richer semantic signal even in degraded states (an expired token is more informative than <code>""</code>; a <code>Credential::NoToken</code> variant may be less clear than <code>Option&lt;Credential&gt;</code>). In activation code (PR #3600), ysndr's review introduced the async <code>select!</code>-based signal handling pattern, reflecting a preference for explicit shutdown sequences that correctly release resources. In provider code (PR #3785), ysndr flagged removed doc comments as a loss — documentation is a first-class deliverable, not a by-product of implementation. The throughline is: <strong>write code that carries its own context</strong>, whether through richer types, richer comments, or richer error states.</p>
+<h3 id="mkenigs-tier-1">mkenigs (Tier 1)</h3>
+<p>mkenigs's comments throughout this dataset reflect concern for <strong>reviewer and future-author usability</strong>. Several comments ask whether a change is related to the PR's stated goal (PR #3869, PR #4202) — a signal that mkenigs expects PRs to be narrowly scoped and that surprises in the diff require explanation. mkenigs also raised testing coverage repeatedly (PRs #3715, #3869, #3968), asking for tests when bug fixes landed without them. In user-facing output, mkenigs flagged counterintuitive terminology (PR #3750) and unclear man page structure (PR #3651). In Cargo management (PR #3939), mkenigs noted workspace version drift from an uncoordinated inline version. The throughline is: <strong>make every change easy for the next reviewer to evaluate</strong> — tight scope, documented intent, tests where warranted, and consistent infrastructure conventions.</p>
+<h3 id="dcarley-tier-1">dcarley (Tier 1)</h3>
+<p>dcarley's comments in this dataset reflect <strong>operational and resource-pressure awareness</strong>. When reviewing the filesystem watcher (PR #3968), dcarley flagged unnecessary spinning on every file event as a resource concern. When reviewing blocking waits (PR #3794), dcarley raised the question of timeouts for stuck processes. When reviewing breaking changes (PR #3803), dcarley asked whether the disruption could be framed as a user benefit. In code style, dcarley flagged double negatives in shell scripts (PR #3932), labelled blocks (PR #4045), and long lines that would fail the linter (PR #4093). The throughline is: <strong>think about what happens in production at scale</strong> — resource pressure, broken flows, and user-visible disruption are first-order concerns, not afterthoughts.</p>
+<hr>
+<h2 id="section-3-recommended-new-agents-md-sections">Section 3: Recommended New AGENTS.md Sections</h2>
+<h3 id="recommended-add-a-testing-conventions-subsection-under-conventions">Recommended: Add a "Testing conventions" subsection under Conventions</h3>
+<p>Currently AGENTS.md contains only <code>just test-all</code> style command documentation and a note about <code>assert_eq!</code> on structs. The gap-report findings suggest reviewers consistently expect:</p>
+<ol>
+<li>Bug fixes to include unit tests.</li>
+<li>TTY-dependent changes to document manual test steps.</li>
+<li>Unit tests to be kept focused rather than serving as integration tests for side-heavy functions.</li>
+</ol>
+<p>Proposed location: under <code>## Conventions</code>, add <code>### Testing conventions</code> before the existing <code>- **Test naming:**</code> bullet. Consolidate the <code>- **Test naming:**</code> bullet into this subsection.</p>
+<p>Suggested text:</p>
+<pre><code class="lang-markdown">### Testing conventions
+
+- **Bug fixes require tests:** Every bug fix should include a unit test that
+  reproduces the defect. If adding a test is impractical, note the gap in the
+  PR description.
+- **Focused unit tests:** Unit tests should test one function or concept.
+  If a function is hard to unit-test due to side-effects, treat this as a
+  design signal: consider extracting pure logic first.
+- **TTY-dependent behavior:** When output behavior depends on terminal detection
+  (color, pager, interactive prompts), document manual test steps in the PR
+  description; automated tests cannot easily simulate tty contexts.
+- **Test naming:** Do not prefix test functions with `test_`. [existing text]
+- **Assert on entire structs:** [existing text]</code></pre>
+<hr>
+<h3 id="recommended-add-a-pr-scope-subsection-under-conventions">Recommended: Add a "PR scope" subsection under Conventions</h3>
+<p>No existing AGENTS.md guidance covers PR discipline. Multiple reviewers asked authors to defer unrelated changes to follow-up PRs. This is appropriate to codify.</p>
+<p>Proposed location: under <code>## Conventions</code>, add <code>### PR scope</code> as a new subsection.</p>
+<p>Suggested text:</p>
+<pre><code class="lang-markdown">### PR scope
+
+- Keep each PR focused on a single logical change. If you encounter an unrelated
+  bug or improvement while implementing a PR, prefer one of:
+  - Opening a separate PR for the fix.
+  - Adding a `// TODO(&lt;issue&gt;):` comment and a follow-up issue.
+- When a PR includes a change that appears unrelated to its stated goal, explain
+  in the PR description whether the change is related or opportunistic. Reviewers
+  cannot distinguish intentional scope expansion from accidental changes without
+  this context.
+- When deferring an improvement to a follow-up, record the intent in a tracking
+  issue and reference it as `// TODO(&lt;issue&gt;): &lt;description&gt;` in the code.</code></pre>
+<hr>
+<h2 id="section-4-summary-table">Section 4: Summary Table</h2>
+<table>
+<thead><tr>
+<th>#</th>
+<th>Amendment</th>
+<th>Group</th>
+<th>Tier</th>
+<th>PR Evidence</th>
+<th>Acceptance</th>
+<th>Recommended</th>
+</tr></thead>
+<tbody>
+<tr>
+<td>A1</td>
+<td>Use named constants (no magic numbers)</td>
+<td>Code clarity</td>
+<td>T1-accepted</td>
+<td>#3801</td>
+<td>1.0</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td>A2</td>
+<td>Place comments adjacent to code</td>
+<td>Code clarity</td>
+<td>T1-accepted</td>
+<td>#3770</td>
+<td>1.0</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td>A3</td>
+<td>Avoid labelled blocks</td>
+<td>Code clarity</td>
+<td>T1-raised</td>
+<td>#4045</td>
+<td>null</td>
+<td>Needs evidence</td>
+</tr>
+<tr>
+<td>A4</td>
+<td>Avoid unnecessary clones</td>
+<td>Code clarity</td>
+<td>T2-only</td>
+<td>#4172</td>
+<td>1.0</td>
+<td>Weak</td>
+</tr>
+<tr>
+<td>B1</td>
+<td>Singular enum variants</td>
+<td>Naming</td>
+<td>T1-accepted</td>
+<td>#3870</td>
+<td>1.0</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td>B2</td>
+<td>Distinguish config vs runtime type names</td>
+<td>Naming</td>
+<td>T2-only</td>
+<td>#4172</td>
+<td>1.0</td>
+<td>Weak</td>
+</tr>
+<tr>
+<td>C1</td>
+<td>Use workspace deps in Cargo.toml</td>
+<td>Dependencies</td>
+<td>T1-accepted</td>
+<td>#3939</td>
+<td>1.0</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td>D1</td>
+<td>Send expired tokens for identification</td>
+<td>Error handling</td>
+<td>T1-accepted</td>
+<td>#3921</td>
+<td>1.0</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td>D2</td>
+<td>Diagnostic for unsupported build features</td>
+<td>Error handling</td>
+<td>T1-accepted</td>
+<td>#4172</td>
+<td>1.0</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td>E1</td>
+<td>Mark unstable JSON output in man pages</td>
+<td>Docs</td>
+<td>T1-raised</td>
+<td>#3651</td>
+<td>0.0</td>
+<td>Needs evidence</td>
+</tr>
+<tr>
+<td>E2</td>
+<td>Mutually exclusive notation in man SYNOPSIS</td>
+<td>Docs</td>
+<td>T1-raised</td>
+<td>#3651</td>
+<td>0.0</td>
+<td>Needs evidence</td>
+</tr>
+<tr>
+<td>E3</td>
+<td>Man page or TODO for hidden subcommands</td>
+<td>Docs</td>
+<td>T1-accepted</td>
+<td>#3969</td>
+<td>1.0</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td>E4</td>
+<td>Precise Nix terminology (targets vs artifacts)</td>
+<td>Messaging</td>
+<td>T1-accepted</td>
+<td>#4232</td>
+<td>1.0</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td>E5</td>
+<td>Frame breaking changes as benefits</td>
+<td>PR process</td>
+<td>T1-raised</td>
+<td>#3803</td>
+<td>1.0</td>
+<td>Needs evidence</td>
+</tr>
+<tr>
+<td>F1</td>
+<td>Document edge cases with evidence inline</td>
+<td>Comments</td>
+<td>T1-accepted</td>
+<td>#4215</td>
+<td>1.0</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td>F2</td>
+<td>Deferred work: use TODO(&lt;issue&gt;)</td>
+<td>Comments</td>
+<td>T1-accepted</td>
+<td>#3801, #4172</td>
+<td>1.0</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td>F3</td>
+<td>Preserve doc comments during refactors</td>
+<td>Comments</td>
+<td>T1-accepted</td>
+<td>#3785</td>
+<td>1.0</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td>F4</td>
+<td>Document known races and accepted limits</td>
+<td>Comments</td>
+<td>T1-accepted</td>
+<td>#3920</td>
+<td>1.0</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td>F5</td>
+<td>Upstream workarounds: cite issue URL</td>
+<td>Comments</td>
+<td>T1-accepted</td>
+<td>#3988</td>
+<td>1.0</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td>G1</td>
+<td>Avoid double negatives in shell scripts</td>
+<td>Shell</td>
+<td>T1-accepted</td>
+<td>#3932</td>
+<td>1.0</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td>H1</td>
+<td>Tests for bug fixes and cross-component</td>
+<td>Testing</td>
+<td>T1-raised</td>
+<td>#3869</td>
+<td>0.0</td>
+<td>Needs evidence</td>
+</tr>
+<tr>
+<td>H2</td>
+<td>Document manual testing for TTY behavior</td>
+<td>Testing</td>
+<td>T1-raised</td>
+<td>#3672</td>
+<td>null</td>
+<td>Needs evidence</td>
+</tr>
+<tr>
+<td>H3</td>
+<td>Testability as design signal</td>
+<td>Testing</td>
+<td>T1-raised</td>
+<td>#3903</td>
+<td>0.0</td>
+<td>Needs evidence</td>
+</tr>
+<tr>
+<td>I1</td>
+<td>PR scope: defer unrelated refactors</td>
+<td>PR scope</td>
+<td>T1-accepted</td>
+<td>#4202</td>
+<td>1.0</td>
+<td>Yes (new section)</td>
+</tr>
+<tr>
+<td>I2</td>
+<td>Explain whether changes are related</td>
+<td>PR scope</td>
+<td>T1-accepted</td>
+<td>#3869</td>
+<td>1.0</td>
+<td>Yes (new section)</td>
+</tr>
+<tr>
+<td>J1</td>
+<td>Filter filesystem watcher events early</td>
+<td>Async</td>
+<td>T1-accepted</td>
+<td>#3968</td>
+<td>1.0</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td>J2</td>
+<td>Add timeouts to blocking waits</td>
+<td>Async</td>
+<td>T1-raised</td>
+<td>#3794</td>
+<td>null</td>
+<td>Needs evidence</td>
+</tr>
+<tr>
+<td>J3</td>
+<td>Document async sandwich vs coloring</td>
+<td>Async</td>
+<td>T1-raised</td>
+<td>#4122</td>
+<td>null</td>
+<td>Needs evidence</td>
+</tr>
+<tr>
+<td>K1</td>
+<td>Preserve TOML array decor when patching</td>
+<td>Manifest</td>
+<td>T1-accepted</td>
+<td>#4106</td>
+<td>1.0</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td>L1</td>
+<td>Comment manual symlinking in Nix</td>
+<td>Nix</td>
+<td>T1-raised</td>
+<td>#3960</td>
+<td>0.0</td>
+<td>Needs evidence</td>
+</tr>
+</tbody></table>
+<hr>
+<h2 id="findings-declined-and-why">Findings Declined and Why</h2>
+<p>The following findings from the 67-item dataset were <strong>not proposed as AGENTS.md amendments</strong>. Reasons are given for each.</p>
+<table>
+<thead><tr>
+<th>Finding ID</th>
+<th>Rule statement (abbreviated)</th>
+<th>Reason declined</th>
+</tr></thead>
+<tbody>
+<tr>
+<td>1015</td>
+<td>Use <code>select!</code> for signal handler + CLI completion</td>
+<td>Too implementation-specific; describes one PR's architectural pattern for the <code>FloxArgs::run</code> method. Not a general rule.</td>
+</tr>
+<tr>
+<td>1051</td>
+<td>Clarify "environment's build context" in docs</td>
+<td>Reviewer question ("I don't know what this means"), not a rule. The fix is to rewrite the specific phrase, not add a general guideline.</td>
+</tr>
+<tr>
+<td>1133</td>
+<td>Preserve force-flag behavior when branches are ahead</td>
+<td>Describes a specific <code>flox pull --force</code> semantic decision. Not a generalizable rule.</td>
+</tr>
+<tr>
+<td>1186</td>
+<td>Align CLI and flox-activations verbosity behavior</td>
+<td>Implementation-specific discussion about verbosity level mapping. Not a generalizable rule.</td>
+</tr>
+<tr>
+<td>1250</td>
+<td>Consider timeouts for blocking operations</td>
+<td>Superseded by J2 (which captures the more actionable framing). The raw finding is a non-blocking observation without an accepted fix.</td>
+</tr>
+<tr>
+<td>1255</td>
+<td>Document async vs sync signal handling tradeoffs</td>
+<td>Too implementation-specific to a single monitoring loop design. Subsumed by J3.</td>
+</tr>
+<tr>
+<td>1266</td>
+<td>Document intent behind fish hook output formatting</td>
+<td>The comment explains a specific direnv compatibility decision. Not a rule; it is a one-time documentation need.</td>
+</tr>
+<tr>
+<td>1282</td>
+<td>Ensure logging covers all subsystems</td>
+<td>Specific to <code>flox_activations</code> + <code>flox_watchdog</code> verbosity coupling. Not generalizable without more evidence.</td>
+</tr>
+<tr>
+<td>1286</td>
+<td>Hierarchical deduplication for dotted notation</td>
+<td>Describes a specific design decision for invocation source tags. Not a general code rule.</td>
+</tr>
+<tr>
+<td>1290</td>
+<td>Document upstream issues in comments</td>
+<td>Superseded by F5. The raw finding text is narrower.</td>
+</tr>
+<tr>
+<td>1302</td>
+<td>Preserve docs when refactoring</td>
+<td>Superseded by F3. The raw finding is a weaker framing.</td>
+</tr>
+<tr>
+<td>1313</td>
+<td>Document downstream semantic purpose of design choices</td>
+<td>Very general; too vague to be actionable. Subsumed by F1/F4.</td>
+</tr>
+<tr>
+<td>1328</td>
+<td>Consider async futures for parallel nix invocations</td>
+<td>A specific architectural concern about thread count and Nix daemon connections. Not a general rule; flagged as a concern, not a finding.</td>
+</tr>
+<tr>
+<td>1332</td>
+<td>Rename <code>git_auth</code> to clarify Kerberos vs Auth0</td>
+<td>Single naming suggestion for a specific module. Not a general naming rule.</td>
+</tr>
+<tr>
+<td>1342</td>
+<td>version and outputs cannot be used together</td>
+<td>Describes a resolved design constraint. Not a rule.</td>
+</tr>
+<tr>
+<td>1344</td>
+<td>Extract flag logic into named enum</td>
+<td>Implementation-specific refactor suggestion. The extracted <code>AutoSetupBehavior</code> enum is already in the codebase.</td>
+</tr>
+<tr>
+<td>1349</td>
+<td>Avoid labelled blocks</td>
+<td>Superseded by A3 (which is the clearer framing from PR #4045).</td>
+</tr>
+<tr>
+<td>1352</td>
+<td>Handle all error cases; don't panic in library code</td>
+<td>Panic discipline is already partially covered. The raw finding describes a specific question about cleanup semantics, not a new general rule.</td>
+</tr>
+<tr>
+<td>1357</td>
+<td>Use expired tokens for identification</td>
+<td>Superseded by D1.</td>
+</tr>
+<tr>
+<td>1368</td>
+<td>Use <code>Option&lt;T&gt;</code> to distinguish absence from presence</td>
+<td>Superseded by B2 (config vs runtime type naming). The raw finding overlaps but is narrower.</td>
+</tr>
+<tr>
+<td>1373</td>
+<td>Document race conditions</td>
+<td>Superseded by F4.</td>
+</tr>
+<tr>
+<td>1375</td>
+<td>Document when ephemeral activation is preferred</td>
+<td>Describes a specific design question in services/restart. Not a general rule.</td>
+</tr>
+<tr>
+<td>1386</td>
+<td>Comment manual symlinking in Nix</td>
+<td>Captured by L1.</td>
+</tr>
+<tr>
+<td>1396</td>
+<td>Document async sandwich vs coloring</td>
+<td>Captured by J3.</td>
+</tr>
+<tr>
+<td>1398</td>
+<td>Record metrics for catalog build operations</td>
+<td>Product-specific telemetry suggestion. Not an AGENTS.md rule.</td>
+</tr>
+<tr>
+<td>1403</td>
+<td>Point users to signing key documentation</td>
+<td>Error message content suggestion for a specific error variant. Not a general rule.</td>
+</tr>
+<tr>
+<td>1419</td>
+<td>Prefer deterministic merge behavior to max-version logic</td>
+<td>Manifest-specific design trade-off discussion. Not a general rule.</td>
+</tr>
+<tr>
+<td>1427</td>
+<td>Did you mean to remove all comments?</td>
+<td>Single-question reviewer comment. Not a rule.</td>
+</tr>
+<tr>
+<td>1456</td>
+<td>Break long chains to satisfy line length</td>
+<td>rustfmt enforces this. Not a rule for AGENTS.md.</td>
+</tr>
+<tr>
+<td>1463</td>
+<td>Use <code>peekable()</code> instead of collecting to Vec</td>
+<td>Performance micro-optimization suggestion. Not a general rule; acceptance_rate=0.0.</td>
+</tr>
+<tr>
+<td>1000</td>
+<td>Rate-limit upgrade notification fetches</td>
+<td>Specific optimization suggestion for <code>check_for_upgrades</code>; acceptance_rate=0.0 (suggestion not adopted).</td>
+</tr>
+<tr>
+<td>1002</td>
+<td>Rate-limit or cache expensive operations</td>
+<td>Broader version of #1000; acceptance_rate=0.0.</td>
+</tr>
+<tr>
+<td>1021</td>
+<td>Avoid unnecessary clones</td>
+<td>Superseded by A4.</td>
+</tr>
+<tr>
+<td>1035</td>
+<td>Test coverage for generation switching</td>
+<td>Superseded by H1.</td>
+</tr>
+<tr>
+<td>1036</td>
+<td>Unit test coverage for bug fixes</td>
+<td>Superseded by H1.</td>
+</tr>
+<tr>
+<td>1045</td>
+<td>Warn on upgrade with force pushes / pinned envs</td>
+<td>Specific unimplemented product behavior. Not a coding rule.</td>
+</tr>
+<tr>
+<td>1053</td>
+<td>Mark unstable API outputs</td>
+<td>Superseded by E1.</td>
+</tr>
+<tr>
+<td>1057</td>
+<td>Flag counterintuitive terminology for review</td>
+<td>Reviewer meta-comment, not a rule.</td>
+</tr>
+<tr>
+<td>1059</td>
+<td>Link Nix expression builds to documentation</td>
+<td>Specific to a new man page. Not a general rule.</td>
+</tr>
+<tr>
+<td>1066</td>
+<td>Frame breaking changes as benefits</td>
+<td>Superseded by E5.</td>
+</tr>
+<tr>
+<td>1069</td>
+<td>Man page or TODO for feature-flagged subcommands</td>
+<td>Superseded by E3.</td>
+</tr>
+<tr>
+<td>1084</td>
+<td>Precise terminology: targets vs artifacts</td>
+<td>Superseded by E4.</td>
+</tr>
+<tr>
+<td>1101</td>
+<td>Document proptest field-count constraints</td>
+<td>Niche testing-framework-specific guidance. Needs more evidence.</td>
+</tr>
+<tr>
+<td>1107</td>
+<td>Sync test data files with JWT token claims</td>
+<td>Test fixture maintenance note. Not a general rule.</td>
+</tr>
+<tr>
+<td>1111</td>
+<td>Add comprehensive tests for edge cases</td>
+<td>Too vague. Subsumed by H1.</td>
+</tr>
+<tr>
+<td>1130</td>
+<td>Clarify lock scope in build operations</td>
+<td>Reviewer question about a specific lock; not a rule.</td>
+</tr>
+<tr>
+<td>1149</td>
+<td>Mutually exclusive option notation in man pages</td>
+<td>Superseded by E2.</td>
+</tr>
+<tr>
+<td>1152</td>
+<td>Extract larger subsystems into dedicated modules</td>
+<td>Reasonable general refactoring guidance, but T2-only and too vague without more context.</td>
+</tr>
+<tr>
+<td>1161</td>
+<td>Distinguish AuthnMode from AuthContext</td>
+<td>Superseded by B2.</td>
+</tr>
+<tr>
+<td>1164</td>
+<td>Document manual testing for TTY behavior</td>
+<td>Superseded by H2.</td>
+</tr>
+<tr>
+<td>1176</td>
+<td>Diagnostic for unsupported auth modes</td>
+<td>Superseded by D2.</td>
+</tr>
+<tr>
+<td>1209</td>
+<td>Use named constants (STDERR_FILENO)</td>
+<td>Superseded by A1.</td>
+</tr>
+<tr>
+<td>1216</td>
+<td>Avoid double negatives in shell</td>
+<td>Superseded by G1.</td>
+</tr>
+<tr>
+<td>1222</td>
+<td>Set env var defaults across CLI versions</td>
+<td>Specific to a compatibility regression with <code>_FLOX_ENV_CUDA_DETECTION</code>; acceptance_rate=0.0. Not a general rule.</td>
+</tr>
+<tr>
+<td>1234</td>
+<td>Test cleanup_pid as a no-op</td>
+<td>Specific test-case suggestion for a single function. Not a general rule.</td>
+</tr>
+<tr>
+<td>1241</td>
+<td>Preserve temp files for debugging</td>
+<td>Reviewer asked for this; acceptance_rate=0.0 (not adopted). Specific to startup scripts.</td>
+</tr>
+<tr>
+<td>1244</td>
+<td>Place comments adjacent to code</td>
+<td>Superseded by A2.</td>
+</tr>
+<tr>
+<td>1250</td>
+<td>Timeout for blocking operations</td>
+<td>Superseded by J2.</td>
+</tr>
+<tr>
+<td>1262</td>
+<td>Minimize refactoring scope in PRs</td>
+<td>Superseded by I1.</td>
+</tr>
+<tr>
+<td>1329</td>
+<td>Singular enum variant names</td>
+<td>Superseded by B1.</td>
+</tr>
+</tbody></table>
+<hr>
+<p><em>Report generated from 67 findings (in_agents_md=0, confidence_score≥0.5) extracted from 944 review comments across 216 PRs. All findings have total_evidence_count=1.</em></p>
+</section>
+
+<footer class="page-footer">
+  Generated 2026-05-17 18:25 UTC &middot; <a href="../../../rust-pr-analysis-index-01.html">Back to index</a>
+</footer>
+
+</div>
+</body>
+</html>
