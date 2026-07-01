@@ -5404,8 +5404,8 @@ success"
 
 # bats test_tags=activate,activate:idempotent
 @test "activate is idempotent for an already-locked already-built environment" {
-  # AI-159: ensure flox activate does not re-lock or re-build when the
-  # lockfile is already current and the rendered link is already valid.
+  # Ensure flox activate does not re-lock or re-build when the lockfile is
+  # already current and the rendered link is already valid.
   project_setup_common
   "$FLOX_BIN" init
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
@@ -5433,4 +5433,44 @@ success"
   assert_equal "$LOCK_HASH_1"    "$LOCK_HASH_2"
   assert_equal "$LOCK_MTIME_1"   "$LOCK_MTIME_2"
   assert_equal "$LINK_TARGET_1"  "$LINK_TARGET_2"
+}
+
+# bats test_tags=activate,activate:idempotent,activate:prior-release
+@test "activate does not rewrite a prior-release lockfile" {
+  # A lockfile produced by an earlier Flox release must be accepted as-is by
+  # the current release's activate, without rewriting it.
+  BASELINES="$MANUALLY_GENERATED/prior_release_baselines"
+
+  project_setup_common
+
+  # Copy prior-release manifest.toml and manifest.lock into the environment
+  # directory that project_setup_common created under $PROJECT_DIR.
+  mkdir -p "$PROJECT_DIR/.flox/env"
+  cp "$BASELINES/plain/manifest.toml" \
+     "$PROJECT_DIR/.flox/env/manifest.toml"
+  cp "$BASELINES/plain/manifest.lock" \
+     "$PROJECT_DIR/.flox/env/manifest.lock"
+
+  # Write the environment pointer file that flox requires.
+  printf '{"name":"%s","version":1}\n' "$PROJECT_NAME" \
+    > "$PROJECT_DIR/.flox/env.json"
+
+  LOCK_HASH_1=$(sha256sum "$PROJECT_DIR/.flox/env/manifest.lock" \
+    | awk '{print $1}')
+  LOCK_MTIME_1=$(stat -c %Y "$PROJECT_DIR/.flox/env/manifest.lock")
+
+  # Activate against the prior-release lockfile.
+  # No catalog mock needed: the lockfile is already up-to-date so lock()
+  # is skipped entirely; no catalog call is made.
+  run "$FLOX_BIN" activate -d "$PROJECT_DIR" -c true
+  assert_success
+
+  LOCK_HASH_2=$(sha256sum "$PROJECT_DIR/.flox/env/manifest.lock" \
+    | awk '{print $1}')
+  LOCK_MTIME_2=$(stat -c %Y "$PROJECT_DIR/.flox/env/manifest.lock")
+
+  assert_equal "$LOCK_HASH_1"  "$LOCK_HASH_2"  \
+    "lockfile hash changed: prior-release lockfile was rewritten by activate"
+  assert_equal "$LOCK_MTIME_1" "$LOCK_MTIME_2" \
+    "lockfile mtime changed: prior-release lockfile was rewritten by activate"
 }

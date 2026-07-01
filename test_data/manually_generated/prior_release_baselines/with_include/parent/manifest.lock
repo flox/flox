@@ -1,0 +1,40 @@
+{
+  "lockfile-version": 1,
+  "manifest": {
+    "version": 1,
+    "vars": {
+      "included_var": "value"
+    },
+    "options": {}
+  },
+  "packages": [],
+  "compose": {
+    "composer": {
+      "version": 1,
+      "options": {},
+      "include": {
+        "environments": [
+          {
+            "dir": "../included"
+          }
+        ]
+      }
+    },
+    "include": [
+      {
+        "manifest": {
+          "version": 1,
+          "vars": {
+            "included_var": "value"
+          },
+          "options": {}
+        },
+        "name": "included",
+        "descriptor": {
+          "dir": "../included"
+        }
+      }
+    ],
+    "warnings": []
+  }
+}

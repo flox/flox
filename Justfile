@@ -301,6 +301,167 @@ test-all: test-nix-plugins impure-tests integ-tests nix-integ-tests
 
 # ---------------------------------------------------------------------------- #
 
+# Refresh the prior-release lockfile fixtures under
+#   test_data/manually_generated/prior_release_baselines/
+# used by the cross-release tests: a current Flox release must still honor
+# lockfiles produced by an earlier release (accept them without a re-lock, and
+# re-lock them byte-for-byte).
+#
+# Usage:
+#   just regen-prior-release-fixtures           # default pin (see below)
+#   just regen-prior-release-fixtures 1.12.0    # explicit version
+#
+# Pin choice: the default is the EARLIEST release whose lockfiles the current
+# release still reproduces byte-for-byte, NOT the previous minor. Pinning to
+# this floor exercises the longest migration path (every schema migration from
+# that release up to the current one must be a no-op), which is the widest
+# scope we can test. Do not advance the pin as new releases ship.
+#
+# That floor is v1.12.0: the first release with the compose.composer
+# schema-version drift fix (#4180). Earlier releases (1.10.x, 1.11.x) wrote a
+# drifted composer the current release cannot accept as up-to-date or reproduce
+# byte-for-byte, so composed (with_include) fixtures captured there would fail.
+# Only raise the floor if a new, similarly incompatible boundary appears below
+# the current floor.
+#
+# When to run:
+#   - A test reports the current release no longer honors the floor fixtures
+#     (investigate: likely a real serialization or predicate regression); or
+#   - You are intentionally raising the floor.
+#
+# Requirements (so it cannot run in CI; a maintainer runs it):
+#   1. Network access to fetch the release flake.
+#   2. A local Nix store to build the rendered environment during activate.
+#
+# It deliberately uses 'nix build' rather than 'nix profile install': the
+# former only populates the content-addressed store plus a temporary gcroot
+# symlink, leaving your profile and PATH untouched. All prior-Flox state
+# (HOME, XDG dirs, config) is redirected into a tempdir so the host is not
+# touched either. The fixtures install no packages, so locking makes no catalog
+# requests and needs no network beyond the release flake.
+regen-prior-release-fixtures version="auto":
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    BASELINES="test_data/manually_generated/prior_release_baselines"
+
+    # --- Resolve the version pin to a release tag --------------------------
+    # The default pin is the floor: the earliest release whose lockfiles the
+    # current release still reproduces byte-for-byte (see the header comment).
+    FLOOR_VERSION="1.12.0"
+    VERSION="{{version}}"
+    if [ "$VERSION" = "auto" ]; then
+      VERSION="$FLOOR_VERSION"
+    fi
+    TAG="v${VERSION#v}"
+    echo "==> Capturing prior-release fixtures with Flox $TAG"
+
+    # Capture provenance now, before HOME is redirected away from ~/.gitconfig.
+    CAPTURED_BY="$(git config user.email 2>/dev/null || echo unknown)"
+
+    # --- Workspace (cleaned on exit), isolated from the host ---------------
+    WORKROOT=$(mktemp -d)
+    trap 'rm -rf "$WORKROOT"' EXIT
+
+    # The 'nix develop' shell exports FLOX_* / NIX_PLUGINS / BUILDENV_BIN
+    # overrides pointing at the in-tree (current-release) subsystems.  The
+    # prior binary would pick these up and build with the new buildenv, then
+    # fail to parse the result (e.g. "missing field `develop`").  Scrub them
+    # so the prior binary uses its own compile-time-baked subsystems.
+    while IFS='=' read -r name _; do
+      case "$name" in
+        FLOX_*|_FLOX_*|_flox_*) unset "$name" 2>/dev/null || true ;;
+      esac
+    done < <(env)
+    unset NIX_PLUGINS BUILDENV_BIN _activate_d 2>/dev/null || true
+
+    export HOME="$WORKROOT/home"
+    export XDG_CACHE_HOME="$WORKROOT/cache"
+    export XDG_DATA_HOME="$WORKROOT/data"
+    export XDG_STATE_HOME="$WORKROOT/state"
+    export XDG_CONFIG_HOME="$WORKROOT/config"
+    export FLOX_CONFIG_DIR="$WORKROOT/config/flox"
+    export FLOX_DISABLE_METRICS=true
+    mkdir -p "$HOME" "$XDG_CACHE_HOME" "$XDG_DATA_HOME" \
+             "$XDG_STATE_HOME" "$FLOX_CONFIG_DIR"
+
+    # --- Build the prior release into the store (no profile/PATH changes) --
+    nix build "github:flox/flox/$TAG" \
+      --accept-flake-config \
+      --out-link "$WORKROOT/flox-result"
+    PRIOR_FLOX="$WORKROOT/flox-result/bin/flox"
+    echo "==> Using $("$PRIOR_FLOX" --version)"
+
+    # --- Lock one env dir with the prior release and copy the lockfile out --
+    # $1 = throwaway env dir (already contains .flox), $2 = fixture out dir
+    #
+    # The fixtures install no packages, so locking makes zero catalog requests
+    # and there is nothing to record. A package-bearing fixture would need its
+    # catalog responses captured, which a Nix-store-built binary cannot do
+    # (httpmock records to a read-only compile-time path); use a source-built
+    # (cargo) binary then.
+    capture() {
+      local envdir="$1" outdir="$2"
+      "$PRIOR_FLOX" activate --dir "$envdir" -c true
+      cp "$envdir/.flox/env/manifest.lock" "$outdir/manifest.lock"
+    }
+
+    # --- plain shape -------------------------------------------------------
+    PLAIN="$WORKROOT/plain"
+    mkdir -p "$PLAIN"
+    "$PRIOR_FLOX" init --dir "$PLAIN"
+    cp "$BASELINES/plain/manifest.toml" "$PLAIN/.flox/env/manifest.toml"
+    capture "$PLAIN" "$BASELINES/plain"
+
+    # --- with_include shape (parent includes ../included) ------------------
+    INC="$WORKROOT/with_include"
+    mkdir -p "$INC/parent" "$INC/included"
+    "$PRIOR_FLOX" init --dir "$INC/included"
+    cp "$BASELINES/with_include/included/manifest.toml" \
+       "$INC/included/.flox/env/manifest.toml"
+    # Lock the included env so its manifest and lockfile are in sync;
+    # otherwise the parent refuses to include it.
+    "$PRIOR_FLOX" activate --dir "$INC/included" -c true
+    "$PRIOR_FLOX" init --dir "$INC/parent"
+    cp "$BASELINES/with_include/parent/manifest.toml" \
+       "$INC/parent/.flox/env/manifest.toml"
+    capture "$INC/parent" "$BASELINES/with_include/parent"
+
+    # --- Record provenance in MANIFEST.json --------------------------------
+    sha() { sha256sum "$1" | cut -d' ' -f1; }
+    jq -n \
+      --arg ver "${TAG#v}" \
+      --arg on  "$(date -u +%Y-%m-%d)" \
+      --arg by  "$CAPTURED_BY" \
+      --arg pl  "$(sha "$BASELINES/plain/manifest.lock")" \
+      --arg ql  "$(sha "$BASELINES/with_include/parent/manifest.lock")" \
+      '{
+        captured_with_flox_version: $ver,
+        captured_on: $on,
+        captured_by: $by,
+        note: "Captured via '\''just regen-prior-release-fixtures'\''.",
+        fixtures: {
+          plain: { manifest_lock_sha256: $pl },
+          with_include: {
+            parent: { manifest_lock_sha256: $ql },
+            included: { manifest_lock_sha256: null }
+          }
+        }
+      }' > "$BASELINES/MANIFEST.json"
+
+    # --- Clear the pending marker ------------------------------------------
+    rm -f "$BASELINES/CAPTURE_PENDING"
+
+    echo ""
+    echo "==> Captured prior-release fixtures with $TAG."
+    echo "    Next steps:"
+    echo "      1. Inspect the diff under $BASELINES/"
+    echo "      2. just unit-tests   &&   just integ-tests -- --filter prior-release"
+    echo "      3. Commit the refreshed fixtures."
+
+
+# ---------------------------------------------------------------------------- #
+
 # Enters the Rust development environment
 @work:
     # Note that this command is only really useful if you have
