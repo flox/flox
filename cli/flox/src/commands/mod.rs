@@ -29,7 +29,6 @@ mod services_socket;
 mod show;
 mod uninstall;
 mod upgrade;
-mod upload;
 
 use std::fmt::Display;
 use std::path::PathBuf;
@@ -989,16 +988,13 @@ impl AdminCommands {
 }
 
 /// Internal commands that aren't documented or supported for public use.
+#[allow(clippy::large_enum_variant)]
 #[derive(Bpaf, Clone)]
 #[bpaf(hide)]
 enum InternalCommands {
     /// Reset the metrics queue (if any), reset metrics ID, and re-prompt for consent
     #[bpaf(command("reset-metrics"), hide)]
     ResetMetrics(#[bpaf(external(general::reset_metrics))] general::ResetMetrics),
-
-    /// Upload packages
-    #[bpaf(command, hide, footer("Run 'man flox-upload' for more details."))]
-    Upload(#[bpaf(external(upload::upload))] upload::Upload),
 
     /// Lock a manifest file
     #[bpaf(command, hide)]
@@ -1033,7 +1029,6 @@ impl InternalCommands {
     async fn handle(self, config: Config, flox: Flox) -> Result<()> {
         match self {
             InternalCommands::ResetMetrics(args) => args.handle(flox).await?,
-            InternalCommands::Upload(args) => args.handle(flox).await?,
             InternalCommands::LockManifest(args) => args.handle(flox).await?,
             InternalCommands::CheckForUpgrades(args) => args.handle(flox).await?,
             InternalCommands::ActivationState(args) => args.handle(flox).await?,
@@ -1056,7 +1051,6 @@ impl InternalCommands {
     fn subcommand_name(&self) -> &'static str {
         match self {
             InternalCommands::ResetMetrics(_) => "reset-metrics",
-            InternalCommands::Upload(_) => "upload",
             InternalCommands::LockManifest(_) => "lock",
             InternalCommands::CheckForUpgrades(_) => "check-for-upgrades",
             InternalCommands::ActivationState(_) => "activation-state",
