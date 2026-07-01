@@ -92,8 +92,6 @@ impl Flox {
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, Default)]
 pub struct Features {
     #[serde(default)]
-    pub upload: bool,
-    #[serde(default)]
     pub qa: bool,
     #[serde(default)]
     pub beta: bool,
