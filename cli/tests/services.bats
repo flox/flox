@@ -1735,17 +1735,16 @@ EOF
     '$FLOX_BIN' services start
     '${TESTS_DIR}'/services/wait_for_service_status.sh one:Running
 
-    # Capture the executive log path before leaving.
-    executive_log=\"\$(ls '${PROJECT_DIR}/.flox/log/executive.'*.log.* 2>/dev/null | head -1)\"
-
     # CD away; _flox_hook auto-deactivates the services project.
     cd '$BATS_TEST_TMPDIR'
     _flox_hook
-
-    # Wait for cleanup_all (executive logs 'finished cleanup' after stopping process-compose).
-    wait_for_partial_file_content \"\$executive_log\" 'finished cleanup'
   "
   assert_success
+
+  # wait_for_partial_file_content is a bats helper not available inside bash -c,
+  # so we poll the executive log here in the test body after the subshell exits.
+  executive_log="$(ls "$PROJECT_DIR/.flox/log/executive."*.log.* 2>/dev/null | head -1)"
+  wait_for_partial_file_content "$executive_log" "finished cleanup"
 }
 
 @test "vars: service-level variables are set" {
