@@ -12,6 +12,60 @@ use tracing::debug;
 
 use crate::models::environment::InstallOrUninstallError;
 
+/// Check that each string in `requested` appears in `all_outputs`.
+///
+/// Returns `Err(InvalidOutputForPackage(output, install_id))` for the first
+/// output that is not present.  Used by both the merge-path check inside
+/// `compute_install_modification` and the add-path check in
+/// `validate_outputs_against_lockfile` so the error message is identical in
+/// both cases.
+fn check_outputs_are_valid(
+    requested: &[String],
+    all_outputs: &[String],
+    install_id: &str,
+) -> Result<(), InstallOrUninstallError> {
+    for output in requested {
+        if !all_outputs.contains(output) {
+            return Err(InstallOrUninstallError::InvalidOutputForPackage(
+                output.clone(),
+                install_id.to_string(),
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// Validate that every `RawSelectedOutputs::Specific` output requested by
+/// each package actually exists in the package's resolved `all_outputs`.
+///
+/// Called on the **add path** after the manifest has been modified and
+/// re-locked, using the fresh lockfile that contains `all_outputs` for
+/// newly-added packages.  Packages with `outputs = None` or
+/// `RawSelectedOutputs::All` are skipped — they cannot be invalid.
+///
+/// Returns `Err(InvalidOutputForPackage(output, install_id))` for the first
+/// invalid output found, matching the error produced by the merge-path check
+/// inside `compute_install_modification`.
+pub(super) fn validate_outputs_against_lockfile(
+    packages: &[PackageToInstall],
+    lockfile: &Lockfile,
+) -> Result<(), InstallOrUninstallError> {
+    for pkg in packages {
+        // Skip packages with no output selection or All-outputs — only
+        // Specific outputs can be invalid.
+        let Some(RawSelectedOutputs::Specific(requested)) = pkg.outputs() else {
+            continue;
+        };
+        let install_id = pkg.id();
+        let Some(locked_pkg) = lockfile.locked_package_with_id(install_id) else {
+            // Package not resolved (e.g. store-path or unsupported type) — skip.
+            continue;
+        };
+        check_outputs_are_valid(requested, &locked_pkg.all_outputs(), install_id)?;
+    }
+    Ok(())
+}
+
 /// Compute all modifications needed to install the given packages.
 ///
 /// Errors for invalid requests and filters out no-ops,
@@ -114,14 +168,11 @@ pub(super) fn compute_install_modification(
             let mut merged = effective_current.clone();
             let mut added_output = false;
             let all_outputs = locked_pkg.all_outputs();
+            // Validate all requested outputs before modifying `merged` so the
+            // error message is consistent with the add-path check.
+            check_outputs_are_valid(requested, &all_outputs, install_id)?;
             for output in requested {
                 if !merged.contains(output) {
-                    if !all_outputs.contains(output) {
-                        return Err(InstallOrUninstallError::InvalidOutputForPackage(
-                            output.to_string(),
-                            install_id.to_string(),
-                        ));
-                    }
                     merged.push(output.clone());
                     added_output = true;
                 }
@@ -243,5 +294,50 @@ mod tests {
         let result = compute_install_modifications(&[pkg], &manifest, &lockfile).unwrap();
 
         assert_eq!(result, Vec::new());
+    }
+
+    // For a package on the add path (not yet in the manifest), requesting an
+    // output that doesn't exist in the resolved package should return
+    // `InvalidOutputForPackage`.
+    //
+    // This mirrors the merge-path test for invalid outputs, but uses an empty
+    // manifest so the package goes through the Add branch rather than the
+    // merge (UpdateOutputs) branch.
+    #[test]
+    fn invalid_output_on_add_path_returns_error() {
+        // Use a lockfile that already has bash resolved (with known outputs) so
+        // we can validate against `all_outputs` without a real catalog round-trip.
+        let (_, lockfile) = load_manifest_and_lockfile("bash_v1_10_0_out");
+
+        // Empty manifest — bash is NOT installed yet, so this is an add-path install.
+        let manifest = flox_manifest::raw::test_helpers::empty_test_migrated_manifest();
+
+        let pkg = package_to_install(
+            "bash",
+            "bashNonInteractive",
+            Some(RawSelectedOutputs::Specific(vec!["bad".to_string()])),
+        );
+
+        let err =
+            validate_outputs_against_lockfile(std::slice::from_ref(&pkg), &lockfile).unwrap_err();
+        assert!(
+            matches!(
+                err,
+                InstallOrUninstallError::InvalidOutputForPackage(ref output, ref id)
+                    if output == "bad" && id == "bash"
+            ),
+            "expected InvalidOutputForPackage(\"bad\", \"bash\"), got: {err:?}"
+        );
+
+        // The compute_install_modifications call itself does NOT yet catch this
+        // (it just produces an Add modification); the error surfaces via the
+        // post-lock validate_outputs_against_lockfile call in core_environment.
+        let result =
+            compute_install_modifications(std::slice::from_ref(&pkg), &manifest, &lockfile)
+                .unwrap();
+        assert_eq!(result, vec![flox_manifest::raw::PackageToModify {
+            install_id: "bash".to_string(),
+            modification: flox_manifest::raw::PackageModification::Add(pkg),
+        }]);
     }
 }
