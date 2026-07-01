@@ -25,18 +25,21 @@ let
         attrPath = ["foo"];
         attrPathStr = "foo";
         relFilePath = "foo";
+        absDirPath = "<expression_dir>";
         absFilePath = "<expression_dir>/foo.nix";
       }
       {
         attrPath = ["bar" "baz"];
         attrPathStr = "bar.baz";
         relFilePath = "bar/baz.nix";
+        absDirPath = "<expression_dir>";
         absFilePath = "<expression_dir>/bar/baz.nix";
       }
       {
         attrPath = ["bar" "bam"];
         attrPathStr = "bar.bam";
         relFilePath = "bar/bam/default.nix";
+        absDirPath = "<expression_dir>";
         absFilePath = "<expression_dir>/bar/bam/default.nix";
       }
     ]
@@ -50,6 +53,7 @@ let
     TargetMetadata :: {
       attrPath :: [ String ],
       attrPathStr :: String,
+      absDirPath :: Path,
       absFilePath :: Path,
       relFilePath :: Path,
     }
@@ -73,6 +77,7 @@ let
           "nix" = {
             inherit attrPath;
             attrPathStr = lib.showAttrPath attrPath;
+	    absDirPath = attrsFromDirTop.path;
             absFilePath = attrsFromDir.path;
             relFilePath = lib.removePrefix "${attrsFromDirTop.path}/" attrsFromDir.path;
           };

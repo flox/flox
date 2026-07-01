@@ -28,6 +28,12 @@ endif
 space := $(subst x,,x x)
 comma := ,
 
+# Define macro for sanitizing build targets to be represented within
+# a Makefile variable name.
+define mkVarname =
+  $(subst -,_,$(1))
+endef
+
 # Substitute Nix store paths for packages required by this Makefile.
 __bash := @bash@
 __coreutils := @coreutils@
@@ -131,32 +137,46 @@ PROJECT_TMPDIR := $(TMPDIR)/$(shell echo $(PWD) | $(_sha256sum) | $(_head) -c8)
 # Use the wildcard operator to identify builds in the provided $FLOX_ENV.
 MANIFEST_BUILDS := $(wildcard $(FLOX_ENV)/package-builds.d/*)
 
-# TODO NIX_EXPRESSION_REF may be absent
+# If NIX_EXPRESSION_REF provided then use it to take inventory of NEF builds.
 ifneq (,$(NIX_EXPRESSION_REF))
-  NIX_EXPRESSION_REF_ARGS := \
-  --argstr source-ref '$(NIX_EXPRESSION_REF)'
+  # Unique separator string that is unlikely to appear in a filename or path.
+  __split = :/:/:
 
-  NIX_EXPRESSION_BUILDS := \
-  $(shell $(_nix) eval \
-  --argstr nixpkgs-url '$(BUILDTIME_NIXPKGS_URL)' \
-  --argstr system $(NIX_SYSTEM) \
-  $(NIX_EXPRESSION_REF_ARGS) \
-  --file $(_nef) \
-  reflect.targets --raw)
+  # Construct list of "<attrPath>:<absDirPath>:<relFilePath>" tuples for known
+  # NEF builds, e.g. "my.package:/path/to/.flox/pkgs:my/package.nix" or
+  # "my.package:/path/to/.flox/pkgs:my/package/default.nix".
+  __nix_expression_build_tuples := $(shell \
+    $(_nix) eval \
+      --argstr source-ref '$(NIX_EXPRESSION_REF)' \
+      --argstr nixpkgs-url '$(BUILDTIME_NIXPKGS_URL)' \
+      --argstr system '$(NIX_SYSTEM)' \
+      --file $(_nef) \
+      reflect.attrPaths --json | \
+    $(_jq) -r --arg x '$(__split)' \
+      '.[] | .attrPathStr + $$x + .relFilePath + $$x + .absDirPath')
+
+  # Iterate through __nix_expression_build_tuples building NIX_EXPRESSION_BUILDS
+  # as we define NIX_EXPRESSION_RELFILEPATH_<attrPath> for each build.
+  $(foreach _build_and_path,$(__nix_expression_build_tuples),\
+    $(eval _attrPath := $(firstword $(subst $(__split), ,$(_build_and_path)))) \
+    $(eval NIX_EXPRESSION_BUILDS += $(_attrPath)) \
+    $(eval __remain := $(subst $(_attrPath)$(__split),,$(_build_and_path))) \
+    $(eval _relFilePath := $(firstword $(subst $(__split), ,$(__remain)))) \
+    $(eval _absDirPath := $(subst $(_relFilePath)$(__split),,$(__remain))) \
+    $(eval _pvarname = $(call mkVarname,$(_attrPath))) \
+    $(eval NIX_EXPRESSION_ABSDIRPATH_$(_pvarname) := $(_absDirPath)) \
+    $(eval NIX_EXPRESSION_RELFILEPATH_$(_pvarname) := $(_relFilePath)) \
+  )
+
+  # Cleanup temporary variables scoped to above block.
+  undefine _attrPath
+  undefine _relFilePath
+  undefine _absDirPath
+  undefine _pvarname
+  undefine __remain
+  undefine __nix_expression_build_tuples
+  undefine __split
 endif
-
-
-
-# Construct three orthogonal arguments for nef:
-#   source-ref: flakeref to the source root (for fetching/tracking)
-#   pkgs-dir:   relative path to packages directory within the source
-#   catalogs-lock: relative path to catalog lock file within the source (if present)
-
-
-
-
-
-
 
 # Quick sanity check; if no MANIFEST_BUILDS then what are we doing?
 $(if $(MANIFEST_BUILDS),,\
@@ -204,7 +224,7 @@ $(PROJECT_TMPDIR)/check-build-prerequisites:
 BUILDGOALS = $(if $(MAKECMDGOALS),$(MAKECMDGOALS),$(notdir $(MANIFEST_BUILDS)))
 $(foreach _build,$(BUILDGOALS),\
   $(eval _pname = $(notdir $(_build)))\
-  $(eval _pvarname = $(subst -,_,$(_pname)))\
+  $(eval _pvarname = $(call mkVarname,$(_pname))) \
   $(foreach _buildtype,local sandbox,\
     $(eval $(_pvarname)_$(_buildtype)_build: $(PROJECT_TMPDIR)/check-build-prerequisites)))
 
@@ -219,7 +239,7 @@ define COMMON_BUILD_VARS_template =
   # We want to create build-specific variables, and variable names cannot
   # have "-" in them so we create a version of the build "pname" replacing
   # this with "_" for use in variable names.
-  $(eval _pvarname = $(subst -,_,$(_pname)))
+  $(eval _pvarname = $(call mkVarname,$(_pname)))
   # Define build-specific result symlink basename.
   $(eval $(_pvarname)_result = result-$(_pname))
   # Compute 32-character stable string for use in stable path generation
@@ -245,6 +265,7 @@ define COMMON_BUILD_VARS_template =
   $(eval $(_pvarname)_evalJSON = $($(_pvarname)_tmpBasename)/eval.json)
   $(eval $(_pvarname)_buildJSON = $($(_pvarname)_tmpBasename)/build.json)
   $(eval $(_pvarname)_buildMetaJSON = $($(_pvarname)_tmpBasename)/build-meta.json)
+  $(eval $(_pvarname)_catalogLockfile = $($(_pvarname)_tmpBasename)/catalog.lock)
 
   # Create a temporary file for collecting log output from the build.
   $(eval $(_pvarname)_logfile = $($(_pvarname)_tmpBasename)/build.log)
@@ -289,7 +310,7 @@ $(foreach _pname,$(NIX_EXPRESSION_BUILDS) $(notdir $(MANIFEST_BUILDS)), \
 # target prerequisites for any inter-package prerequisites, letting make
 # flag any circular dependencies encountered along the way.
 define MANIFEST_BUILD_DEPENDS_template =
-  $(eval _pvarname = $(subst -,_,$(notdir $(build))))
+  $(eval _pvarname = $(call mkVarname,$(notdir $(build))))
 
   # Iterate over each possible {build,package} pair looking for references to
   # ${package} in the build script, being careful to avoid looking for references
@@ -509,7 +530,7 @@ define BUILD_local_template =
 	  --slurpfile manifest "$(MANIFEST_LOCK)" \
 	  --arg log "$(shell $(_readlink) $($(_pvarname)_result)-log)" \
 	  --argjson resultLinks '$$($(_pvarname)_resultLinks_json)' \
-	  '($$$$manifest[0].manifest.build."$(_pname)" | with_entries(select(.key == "description" or .key == "license"))) * { "outputsToInstall":["out"] } as $$$$meta | .[0] * { name:$$$$name, pname:$$$$pname, system: $$$$system, version:$$$$version, log:$$$$log, resultLinks: $$$$resultLinks, meta: $$$$meta }' $$< > $$@
+	  '($$$$manifest[0].manifest.build."$(_pname)" | with_entries(select(.key == "description" or .key == "license"))) * { "outputsToInstall":["out"] } as $$$$meta | .[0] * { name:$$$$name, pname:$$$$pname, system:$$$$system, version:$$$$version, log:$$$$log, resultLinks:$$$$resultLinks, meta:$$$$meta }' $$< > $$@
 	@echo "Completed build of $(_name) in local mode" && echo ""
 
 endef
@@ -596,7 +617,7 @@ define BUILD_nix_sandbox_template =
 	  --arg system "$(NIX_SYSTEM)" \
 	  --slurpfile manifest "$(MANIFEST_LOCK)" \
 	  --argjson resultLinks '$$($(_pvarname)_resultLinks_json)' \
-	  '($$$$manifest[0].manifest.build."$(_pname)" | with_entries(select(.key == "description" or .key == "license"))) * { "outputsToInstall":["out"] } as $$$$meta | .[0] * { name:$$$$name, pname:$$$$pname, system: $$$$system, version:$$$$version, log:.[0].outputs.log, resultLinks:$$$$resultLinks, meta: $$$$meta }' $$< > $$@
+	  '($$$$manifest[0].manifest.build."$(_pname)" | with_entries(select(.key == "description" or .key == "license"))) * { "outputsToInstall":["out"] } as $$$$meta | .[0] * { name:$$$$name, pname:$$$$pname, system:$$$$system, version:$$$$version, log:.[0].outputs.log, resultLinks:$$$$resultLinks, meta:$$$$meta }' $$< > $$@
 	@echo "Completed build of $(_name) in Nix sandbox mode" && echo ""
 	@# Check to see if a new buildCache has been created, and if so then go
 	@# ahead and run 'nix store delete' on the previous cache, keeping in
@@ -637,7 +658,7 @@ define MANIFEST_BUILD_template =
   # We want to create build-specific variables, and variable names cannot
   # have "-" in them so we create a version of the build "pname" replacing
   # this with "_" for use in variable names.
-  $(eval _pvarname = $(subst -,_,$(_pname)))
+  $(eval _pvarname = $(call mkVarname,$(_pname)))
   # Calculate name.
   $(eval _name = $(_pname)-$(_version))
 
@@ -789,21 +810,26 @@ define NIX_EXPRESSION_BUILD_template =
   # We want to create build-specific variables, and variable names cannot
   # have "-" in them so we create a version of the build "pname" replacing
   # this with "_" for use in variable names.
-  $(eval _pvarname = $(subst -,_,$(_pname)))
+  $(eval _pvarname = $(call mkVarname,$(_pname)))
 
-  # Start by evaluating the build
+  # Start by calculating the catalog inputs lock.
+  # TODO: pass stability from build.rs to Makefile
+  $($(_pvarname)_catalogLockfile): $(PROJECT_TMPDIR)/check-build-prerequisites
+	$(_V_) $(_mkdir) -p $$(@D)
+	$(_V_) $(_lock) \
+	  --base-dir '$$(NIX_EXPRESSION_ABSDIRPATH_$(_pvarname))' \
+	  --rel-path '$$(NIX_EXPRESSION_RELFILEPATH_$(_pvarname))' \
+	  --stability unstable \
+	  --out $$@
 
-  # TODO(SL-002): point at the per-package in-tree lockfile (follow-up) or
-  # the resolved BuildLock from CLI dispatch (SL-003 follow-up). For now,
-  # `catalogLockfile_<pname>` is supplied by the caller and points at an
-  # empty default lock.
-  $($(_pvarname)_evalJSON): $(PROJECT_TMPDIR)/check-build-prerequisites
+  # Continue by evaluating the build
+  $($(_pvarname)_evalJSON): $($(_pvarname)_catalogLockfile)
 	$(_V_) $(_mkdir) -p $$(@D)
 	$(_V_) $(_nix) eval -L --file $(_nef) \
 	  --argstr nixpkgs-url '$(EXPRESSION_BUILD_NIXPKGS_URL)' \
-	  --argstr system $(NIX_SYSTEM) \
-	  $(NIX_EXPRESSION_REF_ARGS) \
-	  --argstr catalog-lockfile $(catalogLockfile_$(_pname)) \
+	  --argstr system '$(NIX_SYSTEM)' \
+	  --argstr source-ref '$(NIX_EXPRESSION_REF)' \
+	  --argstr catalog-lockfile $$< \
 	  --json \
 	  --apply 'pkg: { \
 	    drvPath = pkg.drvPath; \
@@ -850,12 +876,13 @@ define NIX_EXPRESSION_BUILD_template =
   # Following a successful build, merge in the eval json.
   $($(_pvarname)_buildMetaJSON): $($(_pvarname)_evalJSON) $($(_pvarname)_buildJSON) $($(_pvarname)_result)-log
 	$(_V_) $(_jq) -n \
-	  --arg logfile $$(shell $(_readlink) $($(_pvarname)_result)-log) \
 	  --arg system $(NIX_SYSTEM) \
+	  --arg catalogLockfile '$$($(_pvarname)_catalogLockfile)' \
+	  --arg logfile $$(shell $(_readlink) $($(_pvarname)_result)-log) \
 	  --argjson resultLinks '$$($(_pvarname)_resultLinks_json)' \
 	  --slurpfile eval $($(_pvarname)_evalJSON) \
 	  --slurpfile build $($(_pvarname)_buildJSON) \
-	  '$$$$build[0][0] * $$$$eval[0] * { system: $$$$system, log: $$$$logfile, resultLinks: $$$$resultLinks }' > $$@
+	  '$$$$build[0][0] * $$$$eval[0] * { system:$$$$system, catalogLockfile:$$$$catalogLockfile, log:$$$$logfile, resultLinks:$$$$resultLinks }' > $$@
 	@echo -e "Completed build of $$(_name) in Nix expression mode\n"
 
   # Create targets for cleaning up the result and log symlinks.
