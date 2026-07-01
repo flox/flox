@@ -23,6 +23,7 @@ use nef_lock_catalog::{
     scan_package,
     write_lock,
 };
+use tracing::debug;
 use tracing_subscriber::fmt::format::FmtSpan;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
@@ -50,19 +51,36 @@ struct Cli {
     /// Catalog stability channel.
     #[arg(long, default_value = "stable")]
     stability: String,
+
+    /// Explain each step: files read, catalog references found (with source
+    /// locations), the resolved catalog endpoint, and the full lookup request
+    /// body. All diagnostics go to stderr; the lock is still written to `--out`.
+    #[arg(short, long)]
+    verbose: bool,
 }
 
 #[tokio::main]
 async fn main() -> ExitCode {
+    let cli = Cli::parse();
+
+    // `--verbose` raises this crate's log level to `debug` on top of any
+    // `RUST_LOG` setting; the file/reference/request diagnostics are emitted at
+    // that level. Diagnostics go to stderr so `--out /dev/stdout` stays clean.
+    let mut filter = tracing_subscriber::EnvFilter::from_default_env();
+    if cli.verbose {
+        filter = filter
+            .add_directive("nef_lock_catalog=debug".parse().expect("valid directive"))
+            .add_directive("lock=debug".parse().expect("valid directive"));
+    }
+
     tracing_subscriber::registry()
         // NEW logs each span once at creation with its fields
         .with(tracing_subscriber::fmt::layer()
+            .with_writer(std::io::stderr)
             .with_ansi(std::io::stderr().is_terminal())
             .with_span_events(FmtSpan::NEW))
-        .with(tracing_subscriber::EnvFilter::from_default_env())
+        .with(filter)
         .init();
-
-    let cli = Cli::parse();
 
     match run(cli).await {
         Ok(()) => ExitCode::SUCCESS,
@@ -131,6 +149,18 @@ async fn run(cli: Cli) -> Result<()> {
 /// [ENV_FLOXHUB_TOKEN]) and passed in.
 fn build_client(floxhub_token: Option<String>) -> Result<FloxhubClient> {
     let catalog_url = resolve_catalog_url();
+    let mock_mode = FloxhubMockMode::default_from_env();
+
+    // Connection details for `--verbose`: the resolved base, the path the
+    // generated client appends, whether a token is attached, and whether a mock
+    // is intercepting the request.
+    debug!(
+        catalog_base_url = %catalog_url,
+        lookup_path = "/api/v1/catalog/build-inputs/lookup",
+        has_token = floxhub_token.is_some(),
+        mock = ?mock_mode,
+        "configured catalog client",
+    );
 
     let floxhub_token = floxhub_token.map(|token| token.parse()).transpose()?;
     let auth_context = AuthContext::from_mode(&AuthnMode::Auth0, floxhub_token);
@@ -138,7 +168,7 @@ fn build_client(floxhub_token: Option<String>) -> Result<FloxhubClient> {
     let config = FloxhubClientConfig {
         base_url: catalog_url,
         extra_headers: Default::default(),
-        mock_mode: FloxhubMockMode::default_from_env(),
+        mock_mode,
         auth_context,
         user_agent: None,
     };

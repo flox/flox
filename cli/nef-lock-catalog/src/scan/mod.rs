@@ -123,7 +123,10 @@ pub fn scan_package_with_roots(
                 .into_owned();
             let dir = path.parent();
             let mut visited = HashSet::new();
-            db.insert(stem, analyze_file_at(&content, roots, dir, &mut visited));
+            db.insert(
+                stem,
+                analyze_file_at(&content, roots, dir, &mut visited, Some(path)),
+            );
         }
         db
     };
@@ -135,18 +138,65 @@ pub fn scan_package_with_roots(
     references
 }
 
+/// Source context for verbose reference reporting: the file a reference was
+/// found in (when known) plus its text, used to turn a byte offset into a
+/// 1-based `line:column`.
+#[derive(Clone, Debug)]
+struct ScanCtx<'a> {
+    path: Option<&'a Path>,
+    content: &'a str,
+}
+
+impl ScanCtx<'_> {
+    /// Emit a `debug` event locating one discovered reference at `offset` (a
+    /// byte offset into the file). Surfaced by `lock --verbose`.
+    fn report(&self, offset: usize, reference: &str) {
+        let (line, column) = line_col(self.content, offset);
+        match self.path {
+            Some(path) => {
+                debug!(reference, file = %path.display(), line, column, "catalog reference")
+            },
+            None => debug!(reference, line, column, "catalog reference"),
+        }
+    }
+}
+
+/// Resolve a byte `offset` into `content` to a 1-based `(line, column)`.
+fn line_col(content: &str, offset: usize) -> (usize, usize) {
+    let mut line = 1;
+    let mut column = 1;
+    for (idx, ch) in content.char_indices() {
+        if idx >= offset {
+            break;
+        }
+        if ch == '\n' {
+            line += 1;
+            column = 1;
+        } else {
+            column += 1;
+        }
+    }
+    (line, column)
+}
+
 /// Analyze one file's content, collecting catalog refs and the dependency
 /// arguments it pulls in.
 ///
 /// `roots` are the lambda parameters treated as catalog roots (e.g. `catalogs`).
 /// When `file_dir` is `Some`, `import` calls forwarding a root are followed into
-/// the imported file; `visited` guards against import cycles.
+/// the imported file; `visited` guards against import cycles. `path` is the
+/// file's location, used only for verbose reference reporting.
 fn analyze_file_at(
     content: &str,
     roots: &HashSet<String>,
     file_dir: Option<&Path>,
     visited: &mut HashSet<PathBuf>,
+    path: Option<&Path>,
 ) -> FileInfo {
+    if let Some(path) = path {
+        debug!(file = %path.display(), "reading NEF expression");
+    }
+
     let parse = rnix::Root::parse(content);
     let root = parse.tree();
 
@@ -173,7 +223,8 @@ fn analyze_file_at(
     collect_dep_member_paths(root.syntax(), &dep_names, &mut deps);
 
     let aliases = collect_aliases(root.syntax(), roots);
-    collect_refs(root.syntax(), &mut refs, roots, &aliases);
+    let ctx = ScanCtx { path, content };
+    collect_refs(root.syntax(), &mut refs, roots, &aliases, &ctx);
 
     if let Some(dir) = file_dir {
         follow_imports(root.syntax(), roots, &aliases, dir, visited, &mut refs);
@@ -330,8 +381,13 @@ fn follow_imports(
             visited.insert(target.clone());
             if let Ok(content) = fs::read_to_string(&target) {
                 let import_dir = target.parent().map(Path::to_path_buf);
-                let imported =
-                    analyze_file_at(&content, &import_roots, import_dir.as_deref(), visited);
+                let imported = analyze_file_at(
+                    &content,
+                    &import_roots,
+                    import_dir.as_deref(),
+                    visited,
+                    Some(&target),
+                );
                 refs.extend(imported.refs);
             }
         }
@@ -427,9 +483,10 @@ fn collect_refs(
     refs: &mut BTreeSet<String>,
     roots: &HashSet<String>,
     aliases: &HashMap<String, String>,
+    ctx: &ScanCtx,
 ) {
     if let Some(inherit) = ast::Inherit::cast(node.clone())
-        && try_handle_inherit(&inherit, refs, roots, aliases)
+        && try_handle_inherit(&inherit, refs, roots, aliases, ctx)
     {
         return;
     }
@@ -438,9 +495,11 @@ fn collect_refs(
         && let Some(ns) = with_expr.namespace()
         && let Some(path) = namespace_path(&ns, roots, aliases)
     {
-        refs.insert(format!("{}.*", path));
+        let reference = format!("{}.*", path);
+        ctx.report(offset_of(with_expr.syntax()), &reference);
+        refs.insert(reference);
         if let Some(body) = with_expr.body() {
-            collect_refs(body.syntax(), refs, roots, aliases);
+            collect_refs(body.syntax(), refs, roots, aliases, ctx);
         }
         return;
     }
@@ -448,6 +507,7 @@ fn collect_refs(
     if let Some(apply) = ast::Apply::cast(node.clone())
         && let Some(path) = try_handle_get_attr(&apply, roots, aliases)
     {
+        ctx.report(offset_of(apply.syntax()), &path);
         refs.insert(path);
         return;
     }
@@ -455,13 +515,19 @@ fn collect_refs(
     if let Some(select) = ast::Select::cast(node.clone())
         && let Some(path) = extract_ref_path(&select, roots, aliases)
     {
+        ctx.report(offset_of(select.syntax()), &path);
         refs.insert(path);
         return;
     }
 
     for child in node.children() {
-        collect_refs(&child, refs, roots, aliases);
+        collect_refs(&child, refs, roots, aliases, ctx);
     }
+}
+
+/// Byte offset of a syntax node's start, for [`ScanCtx::report`].
+fn offset_of(node: &rnix::SyntaxNode) -> usize {
+    u32::from(node.text_range().start()) as usize
 }
 
 /// Resolve an expression used as a namespace (in `with` or `getAttr`) to its
@@ -553,6 +619,7 @@ fn try_handle_inherit(
     refs: &mut BTreeSet<String>,
     roots: &HashSet<String>,
     aliases: &HashMap<String, String>,
+    ctx: &ScanCtx,
 ) -> bool {
     let Some(from) = inherit.from() else {
         return false;
@@ -571,7 +638,9 @@ fn try_handle_inherit(
         if let ast::Attr::Ident(id) = attr
             && let Some(token) = id.ident_token()
         {
-            refs.insert(format!("{}.{}", base_path, token.text()));
+            let reference = format!("{}.{}", base_path, token.text());
+            ctx.report(u32::from(token.text_range().start()) as usize, &reference);
+            refs.insert(reference);
         }
     }
     true
@@ -655,6 +724,7 @@ fn read_and_analyze(path: &Path, roots: &HashSet<String>) -> Option<FileInfo> {
         roots,
         path.parent(),
         &mut HashSet::new(),
+        Some(path),
     ))
 }
 
@@ -667,7 +737,7 @@ mod tests {
     }
 
     fn analyze_file(content: &str, roots: &HashSet<String>) -> FileInfo {
-        analyze_file_at(content, roots, None, &mut HashSet::new())
+        analyze_file_at(content, roots, None, &mut HashSet::new(), None)
     }
 
     fn refs(content: &str, roots: &HashSet<String>) -> BTreeSet<String> {
@@ -679,7 +749,7 @@ mod tests {
         let content = fs::read_to_string(path).expect("test fixture missing");
         let dir = path.parent();
         let mut visited = HashSet::new();
-        analyze_file_at(&content, roots, dir, &mut visited).refs
+        analyze_file_at(&content, roots, dir, &mut visited, Some(path)).refs
     }
 
     fn set(items: &[&str]) -> BTreeSet<String> {
@@ -688,6 +758,16 @@ mod tests {
 
     fn refset(items: &[&str]) -> BTreeSet<CatalogRef> {
         items.iter().map(|s| CatalogRef::from(*s)).collect()
+    }
+
+    #[test]
+    fn line_col_maps_byte_offsets_to_1_based_positions() {
+        // indices: a0 b1 c2 \n3 d4 e5 \n6 f7
+        let content = "abc\nde\nf";
+        assert_eq!(line_col(content, 0), (1, 1));
+        assert_eq!(line_col(content, 2), (1, 3));
+        assert_eq!(line_col(content, 4), (2, 1));
+        assert_eq!(line_col(content, 7), (3, 1));
     }
 
     #[test]

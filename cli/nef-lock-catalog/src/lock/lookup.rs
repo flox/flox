@@ -72,9 +72,19 @@ pub async fn lock_references(
     let stability: Stability = stability
         .parse()
         .map_err(|_| LockError::InvalidStability(stability.to_string()))?;
-    let response = client
-        .build_inputs_lookup(build_request(references, stability))
-        .await?;
+
+    let request = build_request(references, stability);
+    // The exact JSON POSTed to `/build-inputs/lookup`, for `--verbose`. Guarded
+    // so the request is only serialized when the level is enabled.
+    if tracing::enabled!(tracing::Level::DEBUG) {
+        debug!(
+            body = %serde_json::to_string(&request)
+                .unwrap_or_else(|err| format!("<unserializable request: {err}>")),
+            "catalog lookup request",
+        );
+    }
+
+    let response = client.build_inputs_lookup(request).await?;
     lock_from_response(response)
 }
 
