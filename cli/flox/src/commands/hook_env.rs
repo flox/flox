@@ -104,6 +104,13 @@ impl HookEnv {
         let ctx = gather_auto_activate_context(&config, !actions.is_empty())?;
         let plan = plan_auto_activation(&ctx);
 
+        // Whether the deactivate sweep popped every planned layer. A re-insertion
+        // or buried-leaver teardown plans survivors in `plan.reactivate` that are
+        // only safe to replay once all the layers above them have actually been
+        // popped; if the chain runs dry mid-sweep (an activation predates the
+        // hook), the replay is suppressed below to avoid double-activating layers
+        // that are still on the stack.
+        let mut popped_all = true;
         if !plan.deactivate.is_empty() {
             // Auto-activations are always in-place, so each layer recorded
             // the previous value of `_FLOX_HOOK_DIFF` in its own diff. The
@@ -147,6 +154,7 @@ impl HookEnv {
                             buried.display()
                         ));
                     }
+                    popped_all = false;
                     break;
                 };
                 let target = open_deactivation_target(&flox, layer.clone())?;
@@ -192,6 +200,8 @@ impl HookEnv {
         if !actions.is_empty()
             || !plan.deactivate.is_empty()
             || !plan.activate.is_empty()
+            || !plan.reactivate.is_empty()
+            || plan.reinsert.is_some()
             || matches!(
                 consent,
                 AutoActivateConsent::Allow | AutoActivateConsent::Decline
@@ -239,6 +249,44 @@ impl HookEnv {
                     // can still ask. Take no action and record nothing.
                     AutoActivateConsent::NoTerminal => {},
                 }
+            }
+        }
+
+        // Commit the re-insertion target, if any, between the deactivations and
+        // the reactivate replay so the diff chain rebuilds in ancestor order:
+        // deactivate(descendants) -> activate(target) -> reactivate(descendants).
+        //
+        // Only when the deactivate sweep popped every descendant. If the chain
+        // ran dry mid-sweep the descendants are still on the stack, so
+        // activating the target now would stack it on top (out of order) and,
+        // once recorded in `auto_activated`, `is_active(target)` would block
+        // re-insertion forever. Defer instead: emit and record nothing this run;
+        // the next prompt retries cleanly (descendants still present, target
+        // still allowed/inside/inactive).
+        if let Some(target) = &plan.reinsert
+            && popped_all
+        {
+            write_activate_command(self.shell, target, &mut writer)?;
+            if !auto_activated.contains(target) {
+                auto_activated.push(target.clone());
+            }
+        }
+
+        // Replay the survivors torn down to rebuild the stack in ancestor order
+        // (re-insertion or buried-leaver teardown). They are emitted bottom-up,
+        // after the deactivations and the inserted layer, so each re-activation
+        // re-reads the now-unwound environment and chains onto it correctly.
+        //
+        // Only replay when the deactivate sweep actually popped every planned
+        // layer. If the chain ran dry, the survivors are still on the stack, so
+        // replaying them would activate a second copy. No warning is needed
+        // here: the deactivate sweep already warned per layer for every
+        // un-replayed survivor (they are among the buried layers it listed), and
+        // a deferred re-insertion (`plan.reinsert` set but not committed) retries
+        // silently on the next prompt.
+        if !plan.reactivate.is_empty() && popped_all {
+            for path in &plan.reactivate {
+                write_activate_command(self.shell, path, &mut writer)?;
             }
         }
 
@@ -323,11 +371,30 @@ struct AutoActivatePlan {
     /// Unregistered project directories to prompt the user about before
     /// activating, outermost-first. Empty unless `auto_activate = "prompt"`.
     prompt: Vec<PathBuf>,
-    /// Project directories to deactivate, front of stack first.
+    /// Project directories to deactivate, front of stack first. Includes both
+    /// true leavers (gone for good) and survivors that are torn down only to
+    /// insert or remove a layer beneath them; the survivors are listed in
+    /// `reactivate`.
     deactivate: Vec<PathBuf>,
+    /// Active layers to re-push in ancestor order after the deactivations,
+    /// outermost-first (bottom-up). These were torn down only to rebuild the
+    /// stack around a layer inserted or removed beneath them, so they remain
+    /// tracked in `auto_activated`.
+    reactivate: Vec<PathBuf>,
+    /// The single environment to re-insert beneath its tracked descendants this
+    /// run, if any. Held separately from `activate` because its activation must
+    /// be deferred when the deactivate sweep can't pop every descendant: in that
+    /// case the descendants are still on the stack, so activating the target now
+    /// would stack it on top (out of order) and, once tracked, block any retry.
+    /// `handle()` emits it — and records it in `auto_activated` — only after the
+    /// sweep confirms every descendant was popped. Emitted between the
+    /// deactivations and the `reactivate` replay so the `_FLOX_HOOK_DIFF` chain
+    /// rebuilds as deactivate(descendants) -> activate(target) -> reactivate.
+    reinsert: Option<PathBuf>,
     /// Auto-activated environments that should be deactivated but are buried
-    /// under other activations. Tearing down the middle of the stack is
-    /// not yet supported, so these are dropped from tracking with a warning.
+    /// under a layer that cannot be popped (manually activated, remote, or an
+    /// activation predating the prompt hook). Tearing down across such a layer
+    /// is not supported, so these are dropped from tracking with a warning.
     abandoned: Vec<PathBuf>,
     /// New value for [`FLOX_AUTO_ACTIVATED_ENVIRONMENTS_VAR`].
     auto_activated: Vec<PathBuf>,
@@ -338,16 +405,30 @@ struct AutoActivatePlan {
 /// Decide what the prompt hook should do given the shell's current location
 /// and activation state.
 ///
-/// All tracked leaver layers at the front of the activation stack pop in a
-/// single run: each in-place activation's diff embeds the previous value of
-/// `_FLOX_HOOK_DIFF`, so one run can emit a deactivation script per
-/// layer and they restore state correctly when evaluated in order. The walk
-/// stops at the first layer that is not a tracked leaver, because tearing
-/// down the middle of the stack is deferred; leavers buried beneath
-/// such a layer are abandoned with a warning once nothing in front of them
-/// can pop. While any tracked layer the shell has left remains active, newly
-/// discovered environments are not activated yet — they would bury the
-/// still-unwinding layers.
+/// The stack is rebuilt by tearing down a contiguous prefix from the front and
+/// replaying the survivors in ancestor order. Each in-place activation's diff
+/// embeds the previous value of `_FLOX_HOOK_DIFF`, so one run can emit a
+/// deactivation script per layer and they restore state correctly when
+/// evaluated in order; the replays are emitted afterwards and chain back on
+/// top. Two operations use this:
+///
+/// - **Leaver teardown.** Layers whose directory the shell has left are torn
+///   down. The prefix popped runs from the front to the deepest leaver; tracked
+///   survivors caught above a leaver are replayed in ancestor order. A
+///   non-poppable layer (manually activated, remote, or predating the hook) in
+///   that prefix blocks the teardown, and the buried leavers are abandoned with
+///   a warning.
+/// - **Re-insertion.** An allowed environment the shell is inside but that is
+///   stacked below tracked descendants (e.g. it was denied, the shell entered a
+///   child, then it was re-allowed) is re-inserted in ancestor order: its
+///   descendants are popped, it activates on top of its ancestor, and the
+///   descendants replay on top. If a descendant above it cannot be popped, it
+///   falls back to activating on top (out of ancestor order but still correct).
+///
+/// Only one such rebuild happens per run; the next prompt settles any further
+/// reordering. While a rebuild's survivors are queued to replay, or while a
+/// tracked layer the shell has left is still unwinding, newly discovered
+/// environments are not activated yet — they would bury the unsettled layers.
 ///
 /// Auto-activation is opt-in. A discovered environment activates only if the
 /// user has allowed it (via the consent prompt or `flox activate allow`).
@@ -407,16 +488,29 @@ fn plan_auto_activation(ctx: &AutoActivateContext) -> AutoActivatePlan {
             activate: Vec::new(),
             prompt: Vec::new(),
             deactivate: Vec::new(),
+            reactivate: Vec::new(),
+            reinsert: None,
             abandoned: Vec::new(),
             auto_activated,
             suppressed,
         };
     }
 
-    // Auto-deactivate environments whose directory the shell has left,
-    // popping every tracked leaver at the front of the stack in one run
-    // (see the function docs).
+    // A layer can be popped only if it is a tracked auto-activation: manually
+    // activated layers (active but not in the tracked set) and remote layers
+    // (`None`, no local directory) cannot be torn down by the hook. Takes the
+    // tracked set explicitly so it captures nothing and never conflicts with
+    // the mutations to `auto_activated` below.
+    let poppable = |layer: &Option<PathBuf>, tracked: &[PathBuf]| matches!(layer, Some(path) if tracked.contains(path));
+
+    // Auto-deactivate environments whose directory the shell has left. Pop the
+    // contiguous front prefix down to the deepest leaver: leavers are torn down
+    // for good, while tracked layers above them are torn down only to rebuild
+    // the stack without the leavers and are replayed afterwards (see the
+    // function docs). A non-poppable layer (manual or remote) in that prefix
+    // blocks the teardown: the buried leavers are abandoned with a warning.
     let mut deactivate = Vec::new();
+    let mut reactivate = Vec::new();
     let mut abandoned = Vec::new();
     let leavers: Vec<PathBuf> = auto_activated
         .iter()
@@ -424,20 +518,32 @@ fn plan_auto_activation(ctx: &AutoActivateContext) -> AutoActivatePlan {
         .cloned()
         .collect();
     if !leavers.is_empty() {
-        for layer in &ctx.active {
-            match layer {
-                Some(path) if leavers.contains(path) => deactivate.push(path.clone()),
-                _ => break,
+        // The prefix to tear down ends at the deepest leaver in the stack.
+        let deepest_leaver = ctx
+            .active
+            .iter()
+            .rposition(|layer| matches!(layer, Some(path) if leavers.contains(path)));
+        if let Some(end) = deepest_leaver {
+            let prefix = &ctx.active[..=end];
+            if prefix.iter().all(|layer| poppable(layer, &auto_activated)) {
+                // Every layer down to the deepest leaver can be popped. Tear
+                // them down front-first; replay the survivors (non-leavers)
+                // bottom-up so the stack settles in ancestor order.
+                for layer in prefix.iter().flatten() {
+                    deactivate.push(layer.clone());
+                    if !leavers.contains(layer) {
+                        reactivate.push(layer.clone());
+                    }
+                }
+                reactivate.reverse();
+                auto_activated.retain(|path| !leavers.contains(path));
+            } else {
+                // A non-poppable layer is buried among the leavers: drop the
+                // leavers from tracking with a warning. They stay active and
+                // can be unwound with 'flox deactivate'.
+                abandoned = leavers;
+                auto_activated.retain(|path| inside(path));
             }
-        }
-        auto_activated.retain(|path| !deactivate.contains(path));
-        if deactivate.is_empty() {
-            // Every leaver is buried under a layer that can't pop: drop them
-            // from tracking with a warning. (When something did pop, buried
-            // leavers stay tracked; they are abandoned on a later run once
-            // the front of the stack settles.)
-            abandoned = leavers;
-            auto_activated.retain(|path| inside(path));
         }
     }
 
@@ -449,12 +555,73 @@ fn plan_auto_activation(ctx: &AutoActivateContext) -> AutoActivatePlan {
     // unregistered directory in the middle of a stack does not block its
     // allowed ancestors or descendants.
     //
-    // Defer all of this while tracked environments the shell has left are still
-    // unwinding: activating now would stack the new environment on top of them,
-    // and a buried environment can't be popped (it would be abandoned instead).
-    let unwinding = auto_activated.iter().any(|path| !inside(path));
+    // Defer all of this while survivors are queued to replay on top of a
+    // teardown (re-insertion or buried-leaver teardown), or while a tracked
+    // environment the shell has left is still unwinding: activating now would
+    // bury layers that still need to settle. A plain pop-and-replace (leavers
+    // torn down, no survivors to replay) does not defer — the replacement
+    // activates on top in the same run, after the deactivations.
+    let unwinding = !reactivate.is_empty() || auto_activated.iter().any(|path| !inside(path));
     let mut activate = Vec::new();
     let mut prompt = Vec::new();
+    let mut reinsert: Option<PathBuf> = None;
+
+    // Whether `path` can be re-inserted in ancestor order this run, and the
+    // descendants that would have to be popped to do so.
+    enum Reinsertion {
+        /// Every layer above the insertion floor is a poppable tracked
+        /// descendant of `path` (front-first, always non-empty): re-insertion
+        /// can run cleanly.
+        Clean(Vec<PathBuf>),
+        /// `path` has active descendants but re-insertion can't run cleanly this
+        /// run — a descendant is manual/remote, or an unrelated layer is
+        /// interleaved above the floor. `has_descendant` distinguishes the
+        /// "defer because a planned teardown will clear the obstruction" case
+        /// from the genuine on-top fallback.
+        Blocked { has_descendant: bool },
+        /// Nothing is stacked above the insertion point: a plain top activation.
+        NoDescendant,
+    }
+
+    // Classify `path` for re-insertion: the active descendants stacked above
+    // where it belongs, i.e. the layers that would have to be popped to insert
+    // it in ancestor order.
+    let descendants_above = |path: &Path, tracked: &[PathBuf]| -> Reinsertion {
+        // Compute "has any descendant" with a full independent scan rather than
+        // reusing the prefix walk below: a well-formed stack keeps descendants
+        // in front of their ancestor, but the walk can break early on an
+        // interleaved layer, and the defer decision must stay correct either way.
+        let has_descendant = ctx
+            .active
+            .iter()
+            .flatten()
+            .any(|active| active.starts_with(path) && active != path);
+        let mut pop = Vec::new();
+        for layer in &ctx.active {
+            match layer {
+                Some(active) if active.starts_with(path) && active != path => {
+                    if poppable(layer, tracked) {
+                        pop.push(active.clone());
+                    } else {
+                        return Reinsertion::Blocked { has_descendant };
+                    }
+                },
+                // The insertion floor (an ancestor of `path`): a clean
+                // contiguous descendant prefix ends here.
+                Some(ancestor) if path.starts_with(ancestor) => break,
+                // Any other layer above the floor (an unrelated env or a
+                // remote layer) interrupts the contiguous prefix: re-insertion
+                // can't run cleanly this run.
+                _ => return Reinsertion::Blocked { has_descendant },
+            }
+        }
+        if pop.is_empty() {
+            Reinsertion::NoDescendant
+        } else {
+            Reinsertion::Clean(pop)
+        }
+    };
+
     if !unwinding {
         for path in &ctx.discovered {
             if is_active(path)
@@ -465,9 +632,42 @@ fn plan_auto_activation(ctx: &AutoActivateContext) -> AutoActivatePlan {
             {
                 continue;
             }
+            // An allowed environment with tracked descendants stacked above it
+            // (e.g. it was denied, the shell entered a child, then it was
+            // re-allowed) must be re-inserted in ancestor order, not activated
+            // on top. Defer it unless it can be re-inserted this run: only one
+            // re-insertion happens per run (it reuses the deactivate/reactivate
+            // slots), and a teardown already planned this run takes precedence.
+            // A descendant that can't be popped (manual or remote) makes
+            // re-insertion impossible, so fall through and activate on top.
             if is_allowed(path) {
-                activate.push(path.clone());
-                auto_activated.push(path.clone());
+                match descendants_above(path, &auto_activated) {
+                    // Clean re-insertion and no teardown already planned this
+                    // run: pop the descendants, defer the target's activation to
+                    // `reinsert` (committed by `handle()` only once the pops
+                    // succeed), and replay the descendants bottom-up.
+                    Reinsertion::Clean(pop) if deactivate.is_empty() => {
+                        reactivate = pop.iter().rev().cloned().collect();
+                        deactivate = pop;
+                        reinsert = Some(path.clone());
+                    },
+                    // Has active descendants but re-insertion can't run cleanly
+                    // this run, and a teardown is already planned: the teardown
+                    // will clear the obstruction, so defer to the next prompt
+                    // rather than stack `path` out of order. Do nothing.
+                    Reinsertion::Clean(_)
+                    | Reinsertion::Blocked {
+                        has_descendant: true,
+                    } if !deactivate.is_empty() => {},
+                    // Re-insertion is impossible (a descendant is manual or
+                    // remote) with no teardown to clear it, or there are no
+                    // descendants at all: activating on top is out of order but
+                    // still correct — fall back to that.
+                    _ => {
+                        activate.push(path.clone());
+                        auto_activated.push(path.clone());
+                    },
+                }
             } else if ctx.prompt_unregistered {
                 // Unregistered: ask before activating. Not tracked as
                 // auto-activated yet — the hook adds it only if the user
@@ -481,6 +681,8 @@ fn plan_auto_activation(ctx: &AutoActivateContext) -> AutoActivatePlan {
         activate,
         prompt,
         deactivate,
+        reactivate,
+        reinsert,
         abandoned,
         auto_activated,
         suppressed,
@@ -724,6 +926,8 @@ mod tests {
             activate: Vec::new(),
             prompt: Vec::new(),
             deactivate: Vec::new(),
+            reactivate: Vec::new(),
+            reinsert: None,
             abandoned: Vec::new(),
             auto_activated: Vec::new(),
             suppressed: Vec::new(),
@@ -866,11 +1070,12 @@ mod tests {
     }
 
     #[test]
-    fn defers_activation_while_buried_leaver_unwinds() {
-        // Leaving /tmp/a/b for /tmp/z with a manual activation between the
-        // tracked layers: the front pops this run, but /tmp/a is buried and
-        // still unwinding, so /tmp/z is not activated yet — activating it
-        // now would bury /tmp/a even deeper.
+    fn abandons_buried_leavers_split_by_manual_activation() {
+        // Leaving /tmp/a/b for /tmp/z with a manual activation between the two
+        // tracked layers: the prefix down to the deepest leaver (/tmp/a)
+        // contains a non-poppable manual layer, so neither leaver can be torn
+        // down in ancestor order. Both are abandoned with a warning, and the
+        // new environment activates in the same run (nothing is left unwinding).
         let ctx = AutoActivateContext {
             discovered: paths(&["/tmp/z"]),
             active: vec![
@@ -879,21 +1084,22 @@ mod tests {
                 Some(PathBuf::from("/tmp/a")),
             ],
             auto_activated: paths(&["/tmp/a", "/tmp/a/b"]),
+            allowed: paths(&["/tmp/z"]),
             ..empty_ctx("/tmp/z")
         };
         assert_eq!(plan_auto_activation(&ctx), AutoActivatePlan {
-            deactivate: paths(&["/tmp/a/b"]),
-            auto_activated: paths(&["/tmp/a"]),
+            activate: paths(&["/tmp/z"]),
+            abandoned: paths(&["/tmp/a", "/tmp/a/b"]),
+            auto_activated: paths(&["/tmp/z"]),
             ..noop_plan()
         });
     }
 
     #[test]
-    fn abandons_buried_leaver_then_activates_in_next_run() {
-        // Continuation of defers_activation_while_buried_leaver_unwinds, with
-        // the previous plan applied by the shell: nothing in front of /tmp/a
-        // can pop, so it is abandoned with a warning and the new environment
-        // activates in the same run.
+    fn abandons_leaver_buried_under_manual_activation() {
+        // A single tracked leaver buried under a manual (non-poppable) layer is
+        // abandoned with a warning, and the new environment activates in the
+        // same run.
         let ctx = AutoActivateContext {
             discovered: paths(&["/tmp/z"]),
             active: vec![
@@ -958,6 +1164,208 @@ mod tests {
         };
         assert_eq!(plan_auto_activation(&ctx), AutoActivatePlan {
             abandoned: paths(&["/home/user/proj"]),
+            ..noop_plan()
+        });
+    }
+
+    #[test]
+    fn tears_down_buried_leaver_under_poppable_layer() {
+        // Leaving /tmp/a/b for /tmp/a/c: the inner /tmp/a/b is a leaver buried
+        // under nothing, but /tmp/a (its parent, still inside) sits below it.
+        // Here the buryer is a poppable tracked layer, so the whole prefix down
+        // to the deepest leaver is torn down and the survivor /tmp/a replayed in
+        // ancestor order rather than abandoned.
+        let ctx = AutoActivateContext {
+            // Front is the inner leaver; /tmp/x is a tracked survivor above it.
+            active: vec![
+                Some(PathBuf::from("/tmp/x")),
+                Some(PathBuf::from("/tmp/a/b")),
+            ],
+            auto_activated: paths(&["/tmp/a/b", "/tmp/x"]),
+            ..empty_ctx("/tmp/x")
+        };
+        assert_eq!(plan_auto_activation(&ctx), AutoActivatePlan {
+            // Pop both front-first; replay only the survivor /tmp/x bottom-up.
+            deactivate: paths(&["/tmp/x", "/tmp/a/b"]),
+            reactivate: paths(&["/tmp/x"]),
+            auto_activated: paths(&["/tmp/x"]),
+            ..noop_plan()
+        });
+    }
+
+    #[test]
+    fn reallows_mid_stack_env_reinserts_in_ancestor_order() {
+        // The repro: /a/b/c/d/e with c denied, then re-allowed while the shell
+        // is in e. c was never activated (front-first active is [e, d, b, a]).
+        // Re-allowing c re-inserts it in ancestor order: pop e and d, then the
+        // target c goes to `reinsert` (committed by handle() after the pops,
+        // above b), then replay d and e. c is not yet in `activate` or
+        // `auto_activated` — handle() records it only once the pops succeed.
+        let ctx = AutoActivateContext {
+            discovered: paths(&["/a", "/a/b", "/a/b/c", "/a/b/c/d", "/a/b/c/d/e"]),
+            active: vec![
+                Some(PathBuf::from("/a/b/c/d/e")),
+                Some(PathBuf::from("/a/b/c/d")),
+                Some(PathBuf::from("/a/b")),
+                Some(PathBuf::from("/a")),
+            ],
+            auto_activated: paths(&["/a", "/a/b", "/a/b/c/d", "/a/b/c/d/e"]),
+            allowed: paths(&["/a", "/a/b", "/a/b/c", "/a/b/c/d", "/a/b/c/d/e"]),
+            ..empty_ctx("/a/b/c/d/e")
+        };
+        assert_eq!(plan_auto_activation(&ctx), AutoActivatePlan {
+            reinsert: Some(PathBuf::from("/a/b/c")),
+            deactivate: paths(&["/a/b/c/d/e", "/a/b/c/d"]),
+            reactivate: paths(&["/a/b/c/d", "/a/b/c/d/e"]),
+            auto_activated: paths(&["/a", "/a/b", "/a/b/c/d", "/a/b/c/d/e"]),
+            ..noop_plan()
+        });
+    }
+
+    #[test]
+    fn reallows_mid_stack_env_with_single_descendant_above() {
+        // Minimal re-insertion: target /a/b with one tracked descendant /a/b/c
+        // above it. Pop /a/b/c, defer /a/b to `reinsert`, replay /a/b/c. The
+        // target is not in `activate`/`auto_activated`; handle() records it once
+        // the pop succeeds.
+        let ctx = AutoActivateContext {
+            discovered: paths(&["/a", "/a/b", "/a/b/c"]),
+            active: vec![Some(PathBuf::from("/a/b/c")), Some(PathBuf::from("/a"))],
+            auto_activated: paths(&["/a", "/a/b/c"]),
+            allowed: paths(&["/a", "/a/b", "/a/b/c"]),
+            ..empty_ctx("/a/b/c")
+        };
+        assert_eq!(plan_auto_activation(&ctx), AutoActivatePlan {
+            reinsert: Some(PathBuf::from("/a/b")),
+            deactivate: paths(&["/a/b/c"]),
+            reactivate: paths(&["/a/b/c"]),
+            auto_activated: paths(&["/a", "/a/b/c"]),
+            ..noop_plan()
+        });
+    }
+
+    #[test]
+    fn reinsertion_aborts_when_manual_layer_above_target() {
+        // A descendant of the target above it is manually activated (not
+        // tracked), so the stack can't be rebuilt in ancestor order. The target
+        // activates on top instead (no deactivate/reactivate).
+        let ctx = AutoActivateContext {
+            discovered: paths(&["/a", "/a/b", "/a/b/c"]),
+            active: vec![
+                // /a/b/c is active but not auto-activated => manual.
+                Some(PathBuf::from("/a/b/c")),
+                Some(PathBuf::from("/a")),
+            ],
+            auto_activated: paths(&["/a"]),
+            allowed: paths(&["/a", "/a/b", "/a/b/c"]),
+            ..empty_ctx("/a/b/c")
+        };
+        assert_eq!(plan_auto_activation(&ctx), AutoActivatePlan {
+            activate: paths(&["/a/b"]),
+            auto_activated: paths(&["/a", "/a/b"]),
+            ..noop_plan()
+        });
+    }
+
+    #[test]
+    fn reinsertion_aborts_when_remote_layer_above_target() {
+        // A remote env (`None`, no local dir) sits above the target, so the
+        // stack can't be rebuilt in ancestor order. The target activates on top.
+        let ctx = AutoActivateContext {
+            discovered: paths(&["/a", "/a/b"]),
+            active: vec![None, Some(PathBuf::from("/a"))],
+            auto_activated: paths(&["/a"]),
+            allowed: paths(&["/a", "/a/b"]),
+            ..empty_ctx("/a/b")
+        };
+        assert_eq!(plan_auto_activation(&ctx), AutoActivatePlan {
+            activate: paths(&["/a/b"]),
+            auto_activated: paths(&["/a", "/a/b"]),
+            ..noop_plan()
+        });
+    }
+
+    #[test]
+    fn reinsertion_skipped_when_target_suppressed() {
+        // A suppressed target is not re-inserted even after being allowed: a
+        // per-shell decline stands until the shell leaves and re-enters.
+        let ctx = AutoActivateContext {
+            discovered: paths(&["/a", "/a/b", "/a/b/c"]),
+            active: vec![Some(PathBuf::from("/a/b/c")), Some(PathBuf::from("/a"))],
+            auto_activated: paths(&["/a", "/a/b/c"]),
+            allowed: paths(&["/a", "/a/b", "/a/b/c"]),
+            suppressed: paths(&["/a/b"]),
+            ..empty_ctx("/a/b/c")
+        };
+        assert_eq!(plan_auto_activation(&ctx), AutoActivatePlan {
+            auto_activated: paths(&["/a", "/a/b/c"]),
+            suppressed: paths(&["/a/b"]),
+            ..noop_plan()
+        });
+    }
+
+    #[test]
+    fn reinsertion_does_not_fire_when_no_descendant_above() {
+        // The target is allowed and inside but nothing is stacked above where it
+        // belongs, so it activates on top as usual (no reorder needed).
+        let ctx = AutoActivateContext {
+            discovered: paths(&["/a", "/a/b"]),
+            active: vec![Some(PathBuf::from("/a"))],
+            auto_activated: paths(&["/a"]),
+            allowed: paths(&["/a", "/a/b"]),
+            ..empty_ctx("/a/b")
+        };
+        assert_eq!(plan_auto_activation(&ctx), AutoActivatePlan {
+            activate: paths(&["/a/b"]),
+            auto_activated: paths(&["/a", "/a/b"]),
+            ..noop_plan()
+        });
+    }
+
+    #[test]
+    fn settled_after_reinsertion_is_a_noop() {
+        // After the repro's rebuild is applied by the shell, the stack is
+        // [e, d, c, b, a] and c is active and allowed: the next prompt plans
+        // nothing further.
+        let ctx = AutoActivateContext {
+            discovered: paths(&["/a", "/a/b", "/a/b/c", "/a/b/c/d", "/a/b/c/d/e"]),
+            active: vec![
+                Some(PathBuf::from("/a/b/c/d/e")),
+                Some(PathBuf::from("/a/b/c/d")),
+                Some(PathBuf::from("/a/b/c")),
+                Some(PathBuf::from("/a/b")),
+                Some(PathBuf::from("/a")),
+            ],
+            auto_activated: paths(&["/a", "/a/b", "/a/b/c", "/a/b/c/d", "/a/b/c/d/e"]),
+            allowed: paths(&["/a", "/a/b", "/a/b/c", "/a/b/c/d", "/a/b/c/d/e"]),
+            ..empty_ctx("/a/b/c/d/e")
+        };
+        assert_eq!(plan_auto_activation(&ctx), AutoActivatePlan {
+            auto_activated: paths(&["/a", "/a/b", "/a/b/c", "/a/b/c/d", "/a/b/c/d/e"]),
+            ..noop_plan()
+        });
+    }
+
+    #[test]
+    fn reinsertion_not_combined_with_leaver_teardown() {
+        // A front leaver and a re-insertable target both present: only the
+        // leaver teardown fires this run. The next prompt settles the
+        // re-insertion. /tmp/gone is a leaver (shell left it); /a/b is allowed,
+        // inside, with /a/b/c stacked above it.
+        let ctx = AutoActivateContext {
+            discovered: paths(&["/a", "/a/b", "/a/b/c"]),
+            active: vec![
+                Some(PathBuf::from("/tmp/gone")),
+                Some(PathBuf::from("/a/b/c")),
+                Some(PathBuf::from("/a")),
+            ],
+            auto_activated: paths(&["/a", "/a/b/c", "/tmp/gone"]),
+            allowed: paths(&["/a", "/a/b", "/a/b/c"]),
+            ..empty_ctx("/a/b/c")
+        };
+        assert_eq!(plan_auto_activation(&ctx), AutoActivatePlan {
+            deactivate: paths(&["/tmp/gone"]),
+            auto_activated: paths(&["/a", "/a/b/c"]),
             ..noop_plan()
         });
     }

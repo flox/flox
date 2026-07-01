@@ -75,6 +75,31 @@ projectz_teardown() {
   unset PROJECTZ_DIR
 }
 
+# A three-level nested chain outer ⊃ mid ⊃ inner, each with a distinct env
+# name (so `FLOX_PROMPT_ENVIRONMENTS` order is observable) and an observable
+# var. Used to exercise mid-stack re-insertion. Cleaned up by nested_chain_teardown.
+nested_chain_setup() {
+  # Use a fixed basename for each level (inside the per-test tmpdir) so the env
+  # names — and thus FLOX_PROMPT_ENVIRONMENTS — are stable and assertable.
+  export NEST_ROOT_DIR="${BATS_TEST_TMPDIR?}/nest-${BATS_TEST_NUMBER?}"
+  export NEST_OUTER_DIR="${NEST_ROOT_DIR?}/outer"
+  export NEST_MID_DIR="${NEST_OUTER_DIR?}/mid"
+  export NEST_INNER_DIR="${NEST_MID_DIR?}/inner"
+  rm -rf "$NEST_ROOT_DIR"
+  mkdir -p "$NEST_INNER_DIR"
+  "$FLOX_BIN" init -d "$NEST_OUTER_DIR"
+  "$FLOX_BIN" init -d "$NEST_MID_DIR"
+  "$FLOX_BIN" init -d "$NEST_INNER_DIR"
+  set_vars_manifest "$NEST_OUTER_DIR" TEST_OUTER outer
+  set_vars_manifest "$NEST_MID_DIR" TEST_MID mid
+  set_vars_manifest "$NEST_INNER_DIR" TEST_INNER inner
+}
+
+nested_chain_teardown() {
+  rm -rf "${NEST_ROOT_DIR?}"
+  unset NEST_ROOT_DIR NEST_OUTER_DIR NEST_MID_DIR NEST_INNER_DIR
+}
+
 setup_file() {
   common_file_setup
   # Many of these tests drive real, interactive `flox activate` runs through
@@ -96,6 +121,9 @@ setup() {
 }
 
 teardown() {
+  if [ -n "${NEST_ROOT_DIR:-}" ]; then
+    nested_chain_teardown
+  fi
   if [ -n "${PROJECTZ_DIR:-}" ]; then
     projectz_teardown
   fi
@@ -874,4 +902,95 @@ EOF
   "
   assert_failure
   assert_output --partial "prompt hook is disabled"
+}
+
+# ---------------------------------------------------------------------------- #
+# Mid-stack re-insertion: re-allowing a denied middle environment re-activates
+# it in ancestor order, not on top of the stack.
+# ---------------------------------------------------------------------------- #
+
+# bats test_tags=hook:reinsert:bash
+@test "bash: re-allowing a denied mid-stack env re-inserts it in ancestor order" {
+  nested_chain_setup
+  export FLOX_FEATURES_AUTO_ACTIVATE=true
+  # Allow outer and inner; deny the middle so the initial stack skips it.
+  "$FLOX_BIN" activate allow -d "$NEST_OUTER_DIR"
+  "$FLOX_BIN" activate allow -d "$NEST_INNER_DIR"
+  "$FLOX_BIN" activate deny -d "$NEST_MID_DIR"
+
+  run --separate-stderr bash -c "
+    export FLOX_FEATURES_AUTO_ACTIVATE=true
+    export FLOX_SHELL=\$(which bash)
+    cd $NEST_INNER_DIR
+    eval \"\$($FLOX_BIN activate -d $NEST_OUTER_DIR)\"
+    _flox_hook
+    echo \"denied:[\$FLOX_PROMPT_ENVIRONMENTS] mid:\${TEST_MID:-unset}\"
+    # Re-allow the middle environment; the next prompt re-inserts it.
+    $FLOX_BIN activate allow -d $NEST_MID_DIR
+    _flox_hook
+    echo \"reallowed:[\$FLOX_PROMPT_ENVIRONMENTS] mid:\${TEST_MID:-unset}\"
+    # The following prompt must be settled (a noop).
+    _flox_hook
+    echo \"settled:[\$FLOX_PROMPT_ENVIRONMENTS]\"
+  "
+  assert_success
+  # Initial stack skips the denied middle: inner on top, then outer.
+  assert_output --partial "denied:[inner outer] mid:unset"
+  # Re-allow re-inserts mid between inner and outer (newest-first prompt order).
+  assert_output --partial "reallowed:[inner mid outer] mid:mid"
+  # Settled: no further reordering on the next prompt.
+  assert_output --partial "settled:[inner mid outer]"
+}
+
+# bats test_tags=hook:reinsert:fish
+@test "fish: re-allowing a denied mid-stack env re-inserts it in ancestor order" {
+  nested_chain_setup
+  export FLOX_FEATURES_AUTO_ACTIVATE=true
+  "$FLOX_BIN" activate allow -d "$NEST_OUTER_DIR"
+  "$FLOX_BIN" activate allow -d "$NEST_INNER_DIR"
+  "$FLOX_BIN" activate deny -d "$NEST_MID_DIR"
+
+  run --separate-stderr fish -c "
+    set -gx FLOX_FEATURES_AUTO_ACTIVATE true
+    set -gx FLOX_SHELL (which fish)
+    cd $NEST_INNER_DIR
+    eval \"\$($FLOX_BIN activate -d $NEST_OUTER_DIR)\"
+    _flox_hook
+    echo \"denied:[\$FLOX_PROMPT_ENVIRONMENTS] mid:\$TEST_MID\"
+    $FLOX_BIN activate allow -d $NEST_MID_DIR
+    _flox_hook
+    echo \"reallowed:[\$FLOX_PROMPT_ENVIRONMENTS] mid:\$TEST_MID\"
+  "
+  assert_success
+  assert_output --partial "denied:[inner outer]"
+  assert_output --partial "reallowed:[inner mid outer] mid:mid"
+}
+
+# bats test_tags=hook:reinsert:manual-fallback
+@test "bash: re-allow activates on top when a manual env is layered above the target" {
+  nested_chain_setup
+  export FLOX_FEATURES_AUTO_ACTIVATE=true
+  # Allow only outer; deny the middle. Inner is manually activated (never
+  # allowed), so it sits above the middle as a non-poppable layer.
+  "$FLOX_BIN" activate allow -d "$NEST_OUTER_DIR"
+  "$FLOX_BIN" activate deny -d "$NEST_MID_DIR"
+
+  run --separate-stderr bash -c "
+    export FLOX_FEATURES_AUTO_ACTIVATE=true
+    export FLOX_SHELL=\$(which bash)
+    cd $NEST_INNER_DIR
+    eval \"\$($FLOX_BIN activate -d $NEST_OUTER_DIR)\"
+    # Manually activate the inner env on top (auto-activation never tracks it).
+    eval \"\$($FLOX_BIN activate -d $NEST_INNER_DIR)\"
+    _flox_hook
+    echo \"before:[\$FLOX_PROMPT_ENVIRONMENTS]\"
+    $FLOX_BIN activate allow -d $NEST_MID_DIR
+    _flox_hook
+    echo \"after:[\$FLOX_PROMPT_ENVIRONMENTS] mid:\${TEST_MID:-unset}\"
+  "
+  assert_success
+  assert_output --partial "before:[inner outer]"
+  # Re-insertion is impossible across the manual inner layer, so mid activates
+  # on top (out of ancestor order, but active and correct).
+  assert_output --partial "after:[mid inner outer] mid:mid"
 }
