@@ -5,8 +5,10 @@ use std::sync::LazyLock;
 use flox_core::vars::FLOX_VERSION_STRING;
 pub use floxhub_client::{AuthContext, AuthnMode, FloxhubToken, FloxhubTokenError};
 use floxhub_client::{FloxhubClient, FloxhubClientError};
+use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use tracing::debug;
 use url::Url;
 use uuid::Uuid;
 
@@ -99,27 +101,12 @@ pub struct Features {
     pub auto_activate: bool,
 }
 
-/// The hosted (SaaS) FloxHub realm — fixed constants.
-///
-/// The hosted service splits its components across separate hosts
-/// (`hub.flox.dev` for FloxHub, `api.flox.dev/git` for git), so the realm is
-/// described by fixed constants rather than routed off one base. This identity
-/// is deliberately independent of [`DEFAULT_FLOXHUB_URL`]: an on-premise build
-/// may recompile the default base, but the hosted-realm mapping in
-/// [`Floxhub::resolve_git_url`] must always identify the *hosted* service —
-/// never whatever the local build's default happens to be.
-pub static PUBLIC_FLOXHUB_URL: LazyLock<Url> =
-    LazyLock::new(|| Url::parse("https://hub.flox.dev").unwrap());
-
-/// The hosted (SaaS) git endpoint paired with [`PUBLIC_FLOXHUB_URL`].
-pub static PUBLIC_GIT_URL: LazyLock<Url> =
-    LazyLock::new(|| Url::parse("https://api.flox.dev/git").unwrap());
-
 /// Compiled-in default FloxHub base, used when no `floxhub_url` is configured.
 ///
-/// Defaults to the hosted realm ([`PUBLIC_FLOXHUB_URL`]); an on-premise build
-/// may recompile this to its own base without disturbing the hosted-realm
-/// mapping (which keys on [`PUBLIC_FLOXHUB_URL`], not this default).
+/// Defaults to the hosted base `https://hub.flox.dev`. An on-premise build may
+/// recompile this to its own base; [`Floxhub`] derives the git and API URLs
+/// from whichever base is in effect, so changing the default does not affect
+/// hosted-realm detection, which keys on host shape.
 pub static DEFAULT_FLOXHUB_URL: LazyLock<Url> =
     LazyLock::new(|| Url::parse("https://hub.flox.dev").unwrap());
 
@@ -130,10 +117,48 @@ pub struct Floxhub {
     git_url_overridden: bool,
 }
 
+/// How to derive one FloxHub component URL (git, API, ...) from the base URL.
+///
+/// FloxHub runs in two topologies, and every component URL is derived from the
+/// single configured base URL according to which one applies:
+///
+/// - Hosted (SaaS): components live on sibling subdomains of the same
+///   `*.flox.dev` zone. The web app is `hub.flox.dev`; git and the API are on
+///   `api.flox.dev`. Staging and preview deployments keep the shape with an
+///   extra label (`hub.preview.flox.dev` pairs with `api.preview.flox.dev`).
+///   A component is reached by replacing the `hub` label with `saas_prefix`
+///   and setting the path to `saas_path`.
+/// - Enterprise / on-premise: one host serves everything, so a component is
+///   reached by appending `path` to the base URL.
+///
+/// One `Transform` describes these knobs for a single component; see
+/// [`Transform::GIT`]. `Floxhub::resolve_effective_url` selects the topology
+/// from the base URL's host shape and applies the matching rule.
+struct Transform<'a> {
+    /// Subdomain label substituted for `hub` on the hosted service.
+    saas_prefix: &'a str,
+    /// Path set on the hosted service URL.
+    saas_path: &'a str,
+    /// Path segment appended to the base URL for enterprise / on-premise.
+    path: &'a str,
+}
+
+impl Transform<'static> {
+    /// The FloxHub git endpoint. Hosted resolves to `api.<...>.flox.dev/git`,
+    /// enterprise / on-premise to `<base>/git`.
+    const GIT: Self = Transform {
+        saas_prefix: "api",
+        saas_path: "git",
+        path: "git",
+    };
+}
+
 impl Floxhub {
     pub fn new(base_url: Url, git_url_override: Option<Url>) -> Result<Self, FloxhubError> {
         let git_url_overridden = git_url_override.is_some();
-        let git_url = Self::resolve_git_url(&base_url, git_url_override)?;
+        let git_url = Self::resolve_effective_url(&base_url, Transform::GIT, git_url_override)?;
+        debug!(%git_url, "Resolved git url");
+
         Ok(Floxhub {
             base_url,
             git_url,
@@ -141,30 +166,59 @@ impl Floxhub {
         })
     }
 
-    /// Resolve the FloxHub git URL from the base URL and an optional override.
+    /// Derive a component URL from `base_url`, applying `transform` for the
+    /// topology `base_url` belongs to.
     ///
     /// Precedence:
-    /// 1. An explicit override (e.g. `_FLOX_FLOXHUB_GIT_URL`) — used verbatim.
-    /// 2. The hosted (SaaS) realm base ([`PUBLIC_FLOXHUB_URL`]) — the paired
-    ///    hosted git constant [`PUBLIC_GIT_URL`] (`api.flox.dev/git`), since the
-    ///    hosted service's components live on separate hosts. This also covers
-    ///    existing managed-environment pointers, which persist the hosted base.
-    /// 3. Any other base — `<base>/git` on the same host (single-host,
-    ///    on-premise deployments, **including a recompiled default base**).
+    /// 1. An explicit `url_override` (e.g. `_FLOX_FLOXHUB_GIT_URL`) — used verbatim.
+    /// 2. A hosted base, recognised by the host shape `hub.<...>.flox.dev`: the
+    ///    `hub` label is replaced with `transform.saas_prefix` and any
+    ///    intermediate labels are preserved (so staging and preview bases
+    ///    resolve to their paired host), then the path is set to
+    ///    `transform.saas_path`. This also covers existing managed-environment
+    ///    pointers, which persist the hosted base.
+    /// 3. Any other base: `transform.path` appended to the base on the same
+    ///    host (enterprise / on-premise).
     ///
-    /// Keyed on [`PUBLIC_FLOXHUB_URL`], not [`DEFAULT_FLOXHUB_URL`]: an
-    /// on-premise build that recompiles the default base must still route its
-    /// own git off that base, not fall back to the hosted git constant. No
-    /// host-name inference is performed. See the Enterprise On-Premise SL-003
-    /// design.
-    fn resolve_git_url(base_url: &Url, git_url_override: Option<Url>) -> Result<Url, FloxhubError> {
-        if let Some(git_url_override) = git_url_override {
-            return Ok(git_url_override);
+    /// Detection keys on the host shape, not an exact URL. A recompiled
+    /// [`DEFAULT_FLOXHUB_URL`] outside `flox.dev` therefore routes off its own
+    /// base instead of being rewritten to the hosted host, and hosted staging
+    /// and preview subdomains resolve correctly. See the Enterprise On-Premise
+    /// SL-003 design.
+    fn resolve_effective_url(
+        base_url: &Url,
+        transform: Transform,
+        url_override: Option<Url>,
+    ) -> Result<Url, FloxhubError> {
+        if let Some(url_override) = url_override {
+            return Ok(url_override);
         }
-        if base_url == &*PUBLIC_FLOXHUB_URL {
-            return Ok(PUBLIC_GIT_URL.clone());
+
+        let host_components = base_url
+            .host_str()
+            .ok_or(FloxhubError::CannotBeABase(base_url.to_string()))?
+            .split(".")
+            .collect::<Vec<_>>();
+        match host_components.as_slice() {
+            ["hub", intermediate @ .., "flox", "dev"] => {
+                let host: String = [&[transform.saas_prefix], intermediate, &["flox", "dev"]]
+                    .into_iter()
+                    .flatten()
+                    .join(".");
+
+                let mut url = base_url.clone();
+                url.set_host(Some(&host)).unwrap();
+                url.set_path(transform.saas_path);
+
+                debug!(%base_url, transformed=%url, "Transformed Flox SaaS url");
+                Ok(url)
+            },
+            _ => {
+                let url = Self::route_url(base_url, transform.path)?;
+                debug!(%base_url, transformed=%url, "Transformed Flox Enterprise url");
+                Ok(url)
+            },
         }
-        Self::route_url(base_url, "git")
     }
 
     /// Return the base url of the FloxHub instance
@@ -415,30 +469,65 @@ pub mod tests {
     }
 
     #[test]
-    fn resolve_git_url_uses_override_verbatim() {
+    fn resolve_effective_url_uses_override_verbatim() {
         let base = Url::from_str("https://flox.example.internal").unwrap();
-        let override_url = Url::from_str("https://git.example.internal/git").unwrap();
+        let override_url = Url::from_str("https://git.is.cool.example.internal/git").unwrap();
         assert_eq!(
-            Floxhub::resolve_git_url(&base, Some(override_url.clone())).unwrap(),
+            Floxhub::resolve_effective_url(&base, Transform::GIT, Some(override_url.clone()))
+                .unwrap(),
             override_url,
         );
     }
 
     #[test]
-    fn resolve_git_url_hosted_base_uses_hosted_git_constant() {
-        // The hosted realm's components live on separate hosts; the hosted base
-        // maps to the fixed hosted git URL (also covers existing pointers).
+    fn resolve_effective_url_hosted_base_rewrites_hub_to_saas_host() {
+        // The hosted realm splits its components across sibling subdomains, so
+        // the `hub` label is rewritten to the transform's SaaS prefix and the
+        // path is replaced.
+        let base = Url::from_str("https://hub.flox.dev").unwrap();
         assert_eq!(
-            Floxhub::resolve_git_url(&PUBLIC_FLOXHUB_URL, None).unwrap(),
-            *PUBLIC_GIT_URL,
+            Floxhub::resolve_effective_url(&base, Transform::GIT, None)
+                .unwrap()
+                .as_str(),
+            "https://api.flox.dev/git",
         );
     }
 
     #[test]
-    fn resolve_git_url_other_base_routes_off_base() {
+    fn resolve_effective_url_hosted_base_preserves_intermediate_labels() {
+        // A staging or preview base keeps its intermediate labels; only the
+        // `hub` prefix is swapped for the SaaS prefix.
+        let base = Url::from_str("https://hub.staging.flox.dev").unwrap();
         assert_eq!(
-            Floxhub::resolve_git_url(
+            Floxhub::resolve_effective_url(&base, Transform::GIT, None)
+                .unwrap()
+                .as_str(),
+            "https://api.staging.flox.dev/git",
+        );
+    }
+
+    #[test]
+    fn resolve_effective_url_saas_pattern_is_anchored() {
+        // SaaS detection is anchored on both ends: the host must start with
+        // `hub` and end with `flox.dev`. A near-miss on either anchor is
+        // treated as on-prem and routes off its own base.
+        for host in ["nothub.flox.dev", "hub.flox.example.com"] {
+            let base = Url::from_str(&format!("https://{host}")).unwrap();
+            assert_eq!(
+                Floxhub::resolve_effective_url(&base, Transform::GIT, None)
+                    .unwrap()
+                    .as_str(),
+                format!("https://{host}/git"),
+            );
+        }
+    }
+
+    #[test]
+    fn resolve_effective_url_other_base_routes_off_base() {
+        assert_eq!(
+            Floxhub::resolve_effective_url(
                 &Url::from_str("https://flox.example.internal").unwrap(),
+                Transform::GIT,
                 None,
             )
             .unwrap(),
@@ -447,15 +536,14 @@ pub mod tests {
     }
 
     #[test]
-    fn resolve_git_url_routes_off_base_even_when_it_is_the_default() {
+    fn resolve_effective_url_routes_off_base_even_when_it_is_the_default() {
         // An on-premise build may recompile DEFAULT_FLOXHUB_URL to its own
-        // base. The hosted-realm mapping is keyed on PUBLIC_FLOXHUB_URL, so a
-        // non-hosted base still routes off itself — it must NOT fall back to
-        // the hosted git constant just because it equals the compiled default.
+        // base. SaaS detection matches the `hub.*.flox.dev` host shape, so a
+        // base outside that shape routes off itself — it must NOT be rewritten
+        // to the hosted SaaS host just because it equals the compiled default.
         let recompiled_default = Url::from_str("https://onprem.example.internal").unwrap();
-        assert_ne!(recompiled_default, *PUBLIC_FLOXHUB_URL);
         assert_eq!(
-            Floxhub::resolve_git_url(&recompiled_default, None)
+            Floxhub::resolve_effective_url(&recompiled_default, Transform::GIT, None)
                 .unwrap()
                 .as_str(),
             "https://onprem.example.internal/git",
