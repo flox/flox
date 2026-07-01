@@ -68,6 +68,7 @@ impl FloxMeta {
     ) -> Result<Self, FloxMetaError> {
         let floxhub = Floxhub::new(
             pointer.floxhub_base_url.to_owned(),
+            None,
             pointer.floxhub_git_url_override.clone(),
         )
         .map_err(FloxMetaError::FloxhubError)?;
@@ -126,6 +127,7 @@ impl FloxMeta {
     ) -> Result<Self, FloxMetaError> {
         let floxhub = Floxhub::new(
             pointer.floxhub_base_url.to_owned(),
+            None,
             pointer.floxhub_git_url_override.clone(),
         )
         .map_err(FloxMetaError::FloxhubError)?;
@@ -173,6 +175,7 @@ impl FloxMeta {
     ) -> Result<Self, FloxMetaError> {
         let floxhub = Floxhub::new(
             pointer.floxhub_base_url.to_owned(),
+            None,
             pointer.floxhub_git_url_override.clone(),
         )
         .map_err(FloxMetaError::FloxhubError)?;
@@ -361,6 +364,7 @@ mod tests {
 
         let floxhub = Floxhub::new(
             DEFAULT_FLOXHUB_URL.clone(),
+            None,
             Some(Url::from_directory_path(&source_path).unwrap()),
         )
         .unwrap();

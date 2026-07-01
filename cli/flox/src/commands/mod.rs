@@ -318,6 +318,8 @@ impl FloxArgs {
             .unwrap_or_else(|| &DEFAULT_FLOXHUB_URL)
             .clone();
 
+        let api_url_override = config.flox.catalog_url.clone();
+
         // Explicit git-endpoint override, for testing against a local FloxHub.
         let git_url_override = if let Ok(env_set_host) = std::env::var("_FLOX_FLOXHUB_GIT_URL") {
             if !self.is_prompt_hook_flow() {
@@ -331,7 +333,7 @@ impl FloxArgs {
             None
         };
 
-        let floxhub = Floxhub::new(floxhub_url, git_url_override)?;
+        let floxhub = Floxhub::new(floxhub_url, api_url_override, git_url_override)?;
 
         let floxhub_token = self.resolve_floxhub_token(&config);
 
@@ -342,7 +344,11 @@ impl FloxArgs {
         let credential =
             AuthContext::from_mode(&config.flox.floxhub_authn_mode, floxhub_token.clone());
 
-        let floxhub_client = init_floxhub_client(&config, metrics_device_uuid)?;
+        let floxhub_client = init_floxhub_client(
+            floxhub.api_url_str(),
+            credential.clone(),
+            metrics_device_uuid,
+        )?;
 
         // we already make sure $USER corresponds to **euid** earlier on in the process.
         let system_user_name =

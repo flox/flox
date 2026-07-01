@@ -113,6 +113,7 @@ pub static DEFAULT_FLOXHUB_URL: LazyLock<Url> =
 #[derive(Debug, Clone)]
 pub struct Floxhub {
     base_url: Url,
+    api_url: Url,
     git_url: Url,
     git_url_overridden: bool,
 }
@@ -144,6 +145,13 @@ struct Transform<'a> {
 }
 
 impl Transform<'static> {
+    /// The FloxHub api endpoint. Hosted resolves to `api.<...>.flox.dev/`,
+    /// enterprise / on-premise to `<base>/git`.
+    const API: Self = Transform {
+        saas_prefix: "api",
+        saas_path: "",
+        path: "api",
+    };
     /// The FloxHub git endpoint. Hosted resolves to `api.<...>.flox.dev/git`,
     /// enterprise / on-premise to `<base>/git`.
     const GIT: Self = Transform {
@@ -154,16 +162,25 @@ impl Transform<'static> {
 }
 
 impl Floxhub {
-    pub fn new(base_url: Url, git_url_override: Option<Url>) -> Result<Self, FloxhubError> {
+    pub fn new(
+        base_url: Url,
+        api_url_override: Option<Url>,
+        git_url_override: Option<Url>,
+    ) -> Result<Self, FloxhubError> {
         let git_url_overridden = git_url_override.is_some();
         let git_url = Self::resolve_effective_url(&base_url, Transform::GIT, git_url_override)?;
-        debug!(%git_url, "Resolved git url");
+        let api_url = Self::resolve_effective_url(&base_url, Transform::API, api_url_override)?;
 
-        Ok(Floxhub {
+        let hub = Floxhub {
             base_url,
+            api_url,
             git_url,
             git_url_overridden,
-        })
+        };
+
+        debug!(?hub, "Determined FloxHub urls");
+
+        Ok(hub)
     }
 
     /// Derive a component URL from `base_url`, applying `transform` for the
@@ -225,6 +242,15 @@ impl Floxhub {
     /// might change to a more specific url in the future
     pub fn base_url(&self) -> &Url {
         &self.base_url
+    }
+
+    /// Return the url of the FloxHub api endpoint
+    ///
+    /// If the environment variable `FLOX_CATALOG_URL` is set,
+    /// it will be used instead of the derived FloxHub host.
+    /// This is useful for testing FloxHub locally.
+    pub fn api_url(&self) -> &Url {
+        &self.api_url
     }
 
     pub fn git_url_override(&self) -> Option<&Url> {
@@ -399,6 +425,7 @@ pub mod test_helpers {
             runtime_dir,
             floxhub: Floxhub::new(
                 Url::from_str("https://hub.flox.dev").unwrap(),
+                None,
                 git_url_override,
             )
             .unwrap(),
@@ -556,7 +583,7 @@ pub mod tests {
         // environment pointer whose base is an on-prem host (with the trailing
         // slash the pointer persists) and no git override.
         let base = Url::from_str("https://onprem.example.internal/").unwrap();
-        let floxhub = Floxhub::new(base, None).unwrap();
+        let floxhub = Floxhub::new(base, None, None).unwrap();
         assert_eq!(
             floxhub.git_url().as_str(),
             "https://onprem.example.internal/git",

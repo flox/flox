@@ -254,7 +254,7 @@ mod tests {
 
     #[test]
     fn display_environments() {
-        let floxhub = Floxhub::new("https://hub.example.com".parse().unwrap(), None).unwrap();
+        let floxhub = Floxhub::new("https://hub.example.com".parse().unwrap(), None, None).unwrap();
         let owner = EnvironmentOwner::from_str("owner").unwrap();
 
         let path_env = UninitializedEnvironment::DotFlox(DotFlox {

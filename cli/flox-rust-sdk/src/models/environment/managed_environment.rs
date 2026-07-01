@@ -1655,7 +1655,7 @@ pub mod test_helpers {
     /// For a [ManagedEnvironment] with methods that can be called use
     /// [mock_managed_environment].
     pub fn unusable_mock_managed_environment() -> ManagedEnvironment {
-        let floxhub = Floxhub::new(DEFAULT_FLOXHUB_URL.clone(), None).unwrap();
+        let floxhub = Floxhub::new(DEFAULT_FLOXHUB_URL.clone(), None, None).unwrap();
         let floxmeta_branch = unusable_mock_floxmeta_branch();
         ManagedEnvironment {
             path: CanonicalPath::new(PathBuf::from("/")).unwrap(),
