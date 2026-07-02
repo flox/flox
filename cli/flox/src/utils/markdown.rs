@@ -5,7 +5,7 @@
 //! pull in a heavyweight rendering dependency, this module handles the subset of
 //! Markdown that README files typically use: headings, paragraphs, fenced and
 //! inline code, bold/italic emphasis, links, blockquotes, bullet and numbered
-//! lists, and horizontal rules.
+//! lists, horizontal rules, and pipe tables.
 //!
 //! Styling is applied with `crossterm` and degrades to plain (but still
 //! structured) text when the output stream does not support color, e.g. when
@@ -46,6 +46,8 @@ static RULE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"^\s*(?:-[ \t]*){3,}$|^\s*(?:\*[ \t]*){3,}$|^\s*(?:_[ \t]*){3,}$")
         .expect("rule regex is valid")
 });
+static TABLE_ROW: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^\s*\|.*\|\s*$").expect("table row regex is valid"));
 
 /// Render `markdown` into styled, wrapped text fit for a terminal `width`.
 ///
@@ -58,6 +60,7 @@ pub fn render(markdown: &str, width: usize, color: bool) -> String {
     let width = width.clamp(20, 100);
     let mut out: Vec<String> = Vec::new();
     let mut paragraph: Vec<String> = Vec::new();
+    let mut table_rows: Vec<String> = Vec::new();
     let mut in_code_block = false;
 
     let flush_paragraph = |paragraph: &mut Vec<String>, out: &mut Vec<String>| {
@@ -69,10 +72,18 @@ pub fn render(markdown: &str, width: usize, color: bool) -> String {
         out.push(fill(&styled, wrap_options(width)));
         paragraph.clear();
     };
+    let flush_table = |table_rows: &mut Vec<String>, out: &mut Vec<String>| {
+        if table_rows.is_empty() {
+            return;
+        }
+        out.extend(render_table(table_rows, &pen));
+        table_rows.clear();
+    };
 
     for line in markdown.lines() {
         if FENCE.is_match(line) {
             flush_paragraph(&mut paragraph, &mut out);
+            flush_table(&mut table_rows, &mut out);
             in_code_block = !in_code_block;
             continue;
         }
@@ -81,6 +92,13 @@ pub fn render(markdown: &str, width: usize, color: bool) -> String {
             out.push(format!("    {}", pen.code_block(line)));
             continue;
         }
+
+        if TABLE_ROW.is_match(line) {
+            flush_paragraph(&mut paragraph, &mut out);
+            table_rows.push(line.to_string());
+            continue;
+        }
+        flush_table(&mut table_rows, &mut out);
 
         let trimmed = line.trim();
 
@@ -131,6 +149,7 @@ pub fn render(markdown: &str, width: usize, color: bool) -> String {
         paragraph.push(trimmed.to_string());
     }
     flush_paragraph(&mut paragraph, &mut out);
+    flush_table(&mut table_rows, &mut out);
 
     // Collapse runs of blank lines and trim leading/trailing blanks.
     let mut rendered = String::new();
@@ -162,11 +181,81 @@ fn render_list_item(indent: usize, marker: &str, text: &str, width: usize) -> St
 }
 
 fn initial_visible_len(indent: usize, marker: &str) -> usize {
-    // Strip ANSI escapes to measure the on-screen marker width.
+    indent + visible_len(marker) + 1
+}
+
+/// The on-screen width of `text`, ignoring ANSI escapes.
+fn visible_len(text: &str) -> usize {
     static ANSI: LazyLock<Regex> =
         LazyLock::new(|| Regex::new(r"\x1b\[[0-9;]*m").expect("ansi regex is valid"));
-    let plain = ANSI.replace_all(marker, "");
-    indent + plain.chars().count() + 1
+    ANSI.replace_all(text, "").chars().count()
+}
+
+/// Render a pipe table as columns padded to their widest cell. The alignment
+/// separator row (`| --- | :-: |`) marks the row above it as a header, which is
+/// emphasized and underlined; alignment itself is not honored.
+fn render_table(rows: &[String], pen: &Pen) -> Vec<String> {
+    let mut header: Option<Vec<String>> = None;
+    let mut body: Vec<Vec<String>> = Vec::new();
+    for (i, row) in rows.iter().enumerate() {
+        let cells: Vec<&str> = row
+            .trim()
+            .trim_start_matches('|')
+            .trim_end_matches('|')
+            .split('|')
+            .map(str::trim)
+            .collect();
+        let is_separator = cells
+            .iter()
+            .all(|c| c.contains('-') && c.chars().all(|ch| matches!(ch, '-' | ':')));
+        if is_separator {
+            if i == 1 && body.len() == 1 {
+                header = body.pop();
+            }
+            continue;
+        }
+        body.push(cells.iter().map(|c| format_inline(c, pen)).collect());
+    }
+
+    let columns = header
+        .iter()
+        .chain(body.iter())
+        .map(Vec::len)
+        .max()
+        .unwrap_or(0);
+    let mut widths = vec![0usize; columns];
+    for row in header.iter().chain(body.iter()) {
+        for (i, cell) in row.iter().enumerate() {
+            widths[i] = widths[i].max(visible_len(cell));
+        }
+    }
+
+    let pad_row = |row: &[String]| -> String {
+        let mut line = String::new();
+        for (i, width) in widths.iter().enumerate() {
+            let cell = row.get(i).map(String::as_str).unwrap_or("");
+            line.push_str(cell);
+            if i + 1 < columns {
+                line.push_str(&" ".repeat(width - visible_len(cell) + 2));
+            }
+        }
+        line.trim_end().to_string()
+    };
+
+    let mut out = Vec::new();
+    if let Some(header) = header {
+        let emphasized: Vec<String> = header.iter().map(|c| pen.bold(c)).collect();
+        out.push(pad_row(&emphasized));
+        out.push(
+            widths
+                .iter()
+                .map(|w| pen.table_rule(*w))
+                .collect::<Vec<_>>()
+                .join("  "),
+        );
+    }
+    out.extend(body.iter().map(|row| pad_row(row)));
+    out
 }
 
 fn wrap_options(width: usize) -> Options<'static> {
@@ -315,6 +404,14 @@ impl Pen {
             "-".repeat(width)
         }
     }
+
+    fn table_rule(&self, width: usize) -> String {
+        if self.color {
+            "─".repeat(width).dark_grey().to_string()
+        } else {
+            "-".repeat(width)
+        }
+    }
 }
 
 #[cfg(test)]
@@ -358,5 +455,29 @@ mod tests {
         let out = render(md, 80, false);
         assert!(out.contains("1. first"));
         assert!(out.contains("2. second"));
+    }
+
+    #[test]
+    fn tables_align_columns_and_underline_header() {
+        let md = indoc::indoc! {"
+            | Command | What it does |
+            | ------- | ------------ |
+            | `flox info` | Show the README |
+            | `flox activate` | Enter the environment |
+        "};
+        let out = render(md, 80, false);
+        assert_eq!(out, indoc::indoc! {"
+            COMMAND          WHAT IT DOES
+            ---------------  ---------------------
+            `flox info`      Show the README
+            `flox activate`  Enter the environment"
+        });
+    }
+
+    #[test]
+    fn table_without_separator_has_no_header() {
+        let md = "| a | b |\n| c | d |\n";
+        let out = render(md, 80, false);
+        assert_eq!(out, "a  b\nc  d");
     }
 }
