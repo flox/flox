@@ -35,12 +35,19 @@ pub struct BuildLock {
 
 impl BuildLock {}
 
+/// Serialize a `BuildLock` to the pretty-printed JSON format consumed by the
+/// NEF. Shared by [write_lock] and callers that stream the lock elsewhere
+/// (e.g. stdout).
+pub fn render_lock(lock: &BuildLock) -> Result<String> {
+    serde_json::to_string_pretty(lock).context("failed to serialize lockfile")
+}
+
 /// Write a `BuildLock` to the specified file.
 /// The file is written in a pretty-printed JSON format
 /// and consumed by the NEF.
 #[instrument(skip(lock), fields(path = %path.as_ref().display()))]
 pub fn write_lock(lock: &BuildLock, path: impl AsRef<Path>) -> Result<()> {
-    let json = serde_json::to_string_pretty(&lock).context("failed to serialize lockfile")?;
+    let json = format!("{}\n", render_lock(lock)?);
     fs::write(&path, &json)
         .with_context(|| format!("failed to write {path:?}", path = path.as_ref()))?;
     debug!(bytes = json.len(), "wrote build lock");
