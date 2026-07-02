@@ -19,6 +19,7 @@ use nef_lock_catalog::{
     CatalogRef,
     LockError,
     lock_references,
+    render_lock,
     render_unresolvable,
     scan_package,
     write_lock,
@@ -43,9 +44,10 @@ struct Cli {
     #[arg(long = "rel-path", required = true)]
     rel_paths: Vec<PathBuf>,
 
-    /// Path to write the resulting build lock to.
+    /// Path to write the resulting build lock to. When omitted, the lock is
+    /// printed to stdout.
     #[arg(long)]
-    out: PathBuf,
+    out: Option<PathBuf>,
 
     /// Catalog stability channel.
     #[arg(long, default_value = "stable")]
@@ -80,7 +82,7 @@ async fn main() -> ExitCode {
     fields(
         base_dir = %cli.base_dir.display(),
         rel_paths = cli.rel_paths.len(),
-        out = %cli.out.display(),
+        out = cli.out.as_deref().map(|out| out.display().to_string()).unwrap_or_else(|| "<stdout>".to_string()),
         stability = cli.stability,
     )
 )]
@@ -120,7 +122,12 @@ async fn run(cli: Cli) -> Result<()> {
         Err(other) => return Err(other.into()),
     };
 
-    write_lock(&lock, &cli.out)?;
+    // Write to the requested file, or print to stdout when `--out` is omitted
+    // (convenient for firing the helper off by hand on the command line).
+    match cli.out {
+        Some(out) => write_lock(&lock, &out)?,
+        None => println!("{}", render_lock(&lock)?),
+    }
     Ok(())
 }
 
