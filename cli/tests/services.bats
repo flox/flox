@@ -1721,6 +1721,7 @@ EOF
   "$FLOX_BIN" init -d "$OUTER_DIR"
 
   run --separate-stderr bash -c "
+    set -euo pipefail
     export FLOX_FEATURES_AUTO_ACTIVATE=true
     export FLOX_SHELL=\$(which bash)
 
@@ -1743,7 +1744,8 @@ EOF
 
   # wait_for_partial_file_content is a bats helper not available inside bash -c,
   # so we poll the executive log here in the test body after the subshell exits.
-  executive_log="$(ls "$PROJECT_DIR/.flox/log/executive."*.log.* 2>/dev/null | head -1)"
+  executive_log="$(echo "$PROJECT_DIR/.flox/log/executive."*.log.*)"
+  wait_for_partial_file_content "$executive_log" "woof"
   wait_for_partial_file_content "$executive_log" "finished cleanup"
 }
 
