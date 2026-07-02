@@ -285,6 +285,13 @@ impl Build {
             nixpkgs_url_select.is_some(),
         )?;
 
+        // The `--stability` selection also determines the stability used to
+        // resolve the catalog build inputs of NEF (expression) builds.
+        let nef_stability = match &nixpkgs_url_select {
+            Some(BaseCatalogUrlSelect::Stability(stability)) => Some(stability.clone()),
+            _ => None,
+        };
+
         let base_nixpkgs_url =
             base_nixpkgs_url_from_url_select(&flox, nixpkgs_url_select, Some(&lockfile))
                 .await?
@@ -321,6 +328,7 @@ impl Build {
             &FLOX_INTERPRETER,
             &target_names,
             &nef_target_names,
+            nef_stability,
             None,
             system_override,
         )?;
