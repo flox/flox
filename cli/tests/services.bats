@@ -1708,6 +1708,47 @@ EOF
   '
 }
 
+# bats test_tags=services:auto-deactivate
+@test "services stop after auto-activated environment is deactivated" {
+  setup_sleeping_services
+
+  export FLOX_FEATURES_AUTO_ACTIVATE=true
+  "$FLOX_BIN" activate allow -d "$PROJECT_DIR"
+
+  # Minimal outer project to register _flox_hook without services.
+  local OUTER_DIR="$BATS_TEST_TMPDIR/outer-$BATS_TEST_NUMBER"
+  mkdir -p "$OUTER_DIR"
+  "$FLOX_BIN" init -d "$OUTER_DIR"
+
+  run --separate-stderr bash -c "
+    set -euo pipefail
+    export FLOX_FEATURES_AUTO_ACTIVATE=true
+    export FLOX_SHELL=\$(which bash)
+
+    # Manually activate the outer project to get _flox_hook defined.
+    eval \"\$('$FLOX_BIN' activate -d '$OUTER_DIR')\"
+
+    # CD into the services project; _flox_hook auto-activates it.
+    cd '$PROJECT_DIR'
+    _flox_hook
+
+    # Start services after auto-activation.
+    '$FLOX_BIN' services start
+    '${TESTS_DIR}'/services/wait_for_service_status.sh one:Running
+
+    # CD away; _flox_hook auto-deactivates the services project.
+    cd '$BATS_TEST_TMPDIR'
+    _flox_hook
+  "
+  assert_success
+
+  # wait_for_partial_file_content is a bats helper not available inside bash -c,
+  # so we poll the executive log here in the test body after the subshell exits.
+  executive_log="$(echo "$PROJECT_DIR/.flox/log/executive."*.log.*)"
+  wait_for_partial_file_content "$executive_log" "woof"
+  wait_for_partial_file_content "$executive_log" "finished cleanup"
+}
+
 @test "vars: service-level variables are set" {
 
   MANIFEST_CONTENTS="$(cat << "EOF"
