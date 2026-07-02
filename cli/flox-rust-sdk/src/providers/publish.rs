@@ -916,6 +916,9 @@ pub fn check_build_metadata(
         &built_environments.dev,
         &[pkg.name()],
         nef_targets,
+        // The base nixpkgs url is resolved for the publish flow ahead of time,
+        // so the NEF catalog inputs use the Makefile's default stability.
+        None,
         Some(false),
         system_override,
     )?;

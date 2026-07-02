@@ -38,7 +38,7 @@ let
             let
               sourceInfo = fetchSource lockedPackageSpec.source;
               instantiatedCatalog = lib.nef.instantiate.instantiateFromSourceInfo {
-                inherit nixpkgs sourceInfo;
+                inherit nixpkgs sourceInfo instantiatedCatalogsClosure;
               };
               instantiatedPackage = lib.getAttrFromPath path instantiatedCatalog.reflect.packages;
             in

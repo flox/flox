@@ -64,12 +64,18 @@ pub trait ManifestBuilder {
     /// prerequisites of manifest builds (e.g. `${foo}` references) are known
     /// at Makefile parse time without requiring a second `nix eval` discovery
     /// call.
+    ///
+    /// `nef_stability` is the stability used to resolve the catalog build
+    /// inputs of NEF (expression) builds, as selected by the `--stability`
+    /// flag. When [None] the Makefile falls back to its default stability.
+    #[allow(clippy::too_many_arguments)]
     fn build(
         self,
         expression_build_nixpkgs: &Url,
         flox_interpreter: &Path,
         packages: &[PackageTargetName],
         nef_targets: &[PackageTargetName],
+        nef_stability: Option<String>,
         build_cache: Option<bool>,
         system_override: Option<String>,
     ) -> Result<BuildResults, ManifestBuilderError>;
@@ -304,12 +310,14 @@ impl ManifestBuilder for FloxBuildMk<'_> {
     /// of manifest and expression build if `expression_build_nixpkgs_url`
     /// is different from the environments toplevel group,
     /// i.e. manifest builds and expression builds would use incompatible nixpkgs.
+    #[allow(clippy::too_many_arguments)]
     fn build(
         self,
         expression_build_nixpkgs_url: &Url,
         flox_interpreter: &Path,
         packages: &[PackageTargetName],
         nef_targets: &[PackageTargetName],
+        nef_stability: Option<String>,
         build_cache: Option<bool>,
         system_override: Option<String>,
     ) -> Result<BuildResults, ManifestBuilderError> {
@@ -319,6 +327,13 @@ impl ManifestBuilder for FloxBuildMk<'_> {
         command.arg(format!(
             "EXPRESSION_BUILD_NIXPKGS_URL={expression_build_nixpkgs_url}"
         ));
+
+        // The stability used to resolve NEF catalog build inputs. Only passed
+        // when the caller selected one via `--stability`; otherwise the
+        // Makefile applies its own default.
+        if let Some(nef_stability) = nef_stability {
+            command.arg(format!("EXPRESSION_BUILD_STABILITY={nef_stability}"));
+        }
 
         if let Some(system_override) = system_override {
             command.arg(format!("NIX_SYSTEM={system_override}"));
@@ -918,6 +933,7 @@ pub mod test_helpers {
             &env.rendered_env_links(flox).unwrap().dev,
             &[PackageTargetName::new_unchecked(&package)],
             &nef_targets,
+            None,
             build_cache,
             None,
         );

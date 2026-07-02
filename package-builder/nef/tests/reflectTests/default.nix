@@ -43,6 +43,7 @@ in
           "nestedPkg"
         ];
         attrPathStr = "nestedPkgs.nestedPkg";
+        absDirPath = "${baseDir}";
         absFilePath = "${baseDir}/nested/nestedPkgs/nestedPkg.nix";
         relFilePath = "nestedPkgs/nestedPkg.nix";
       }
@@ -52,12 +53,14 @@ in
           "otherNestedPkg"
         ];
         attrPathStr = "nestedPkgs.otherNestedPkg";
+        absDirPath = "${baseDir}";
         absFilePath = "${baseDir}/nested/nestedPkgs/otherNestedPkg/default.nix";
         relFilePath = "nestedPkgs/otherNestedPkg/default.nix";
       }
       {
         attrPath = [ "toplevelPkg" ];
         attrPathStr = "toplevelPkg";
+        absDirPath = "${baseDir}";
         absFilePath = "${baseDir}/nested/toplevelPkg.nix";
         relFilePath = "toplevelPkg.nix";
       }
