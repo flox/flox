@@ -219,7 +219,10 @@ impl ContainerSource {
 
     /// Run the container builder script
     /// and write the container tarball to the given sink
-    #[instrument(skip_all, fields(command = ?self.source_command, progress = "Writing container"))]
+    // `%...display()`, not `?self.source_command`: the redacting `DisplayCommand`
+    // masks SENSITIVE_ENV_VARS (e.g. FLOX_FLOXHUB_TOKEN), whereas `Command`'s
+    // Debug prints `.env()`-set values verbatim and would leak the token.
+    #[instrument(skip_all, fields(command = %self.source_command.display(), progress = "Writing container"))]
     pub fn stream_container(self, sink: &mut impl Write) -> Result<(), ContainerSourceError> {
         let mut container_source_command = self.source_command;
 

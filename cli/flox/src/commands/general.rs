@@ -144,7 +144,7 @@ pub struct ConfigDelete {
 }
 
 /// wrapper around [Config::write_to]
-pub(super) fn update_config<V: Serialize>(
+pub(crate) fn update_config<V: Serialize>(
     config_dir: &Path,
     key: impl AsRef<str>,
     value: Option<V>,

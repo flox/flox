@@ -11,7 +11,7 @@ mod edit;
 mod envs;
 mod factory;
 mod gc;
-mod general;
+pub(crate) mod general;
 mod generations;
 mod hook_env;
 mod include;
@@ -82,6 +82,15 @@ use crate::utils::active_environments::{
     ActiveEnvironments,
     activated_environments,
     last_activated_environment,
+};
+use crate::utils::credential_store::{
+    CredentialStoreImpl,
+    KeyringStore,
+    PlaintextStore,
+    ResolveOutcome,
+    clear_invalid_credential,
+    probe_credential_source,
+    resolve_credential_into,
 };
 use crate::utils::dialog::{Dialog, Select};
 use crate::utils::errors::display_chain;
@@ -226,7 +235,7 @@ impl Commands {
 
 impl FloxArgs {
     /// Initialize the command line by creating an initial FloxBuilder
-    pub async fn handle(self, config: crate::config::Config) -> Result<()> {
+    pub async fn handle(self, mut config: crate::config::Config) -> Result<()> {
         // ensure xdg dirs exist
         tokio::fs::create_dir_all(&config.flox.config_dir).await?;
         tokio::fs::create_dir_all(&config.flox.data_dir).await?;
@@ -330,7 +339,35 @@ impl FloxArgs {
             git_url_override,
         )?;
 
-        let floxhub_token = self.resolve_floxhub_token(&config);
+        // Resolve the token string once, upstream: opportunistically migrate an
+        // existing plaintext token into the OS keyring, then — when the merged
+        // config supplied no token — populate it from the keyring so both the
+        // loud `resolve_floxhub_token` and the silent `init_floxhub_client` see
+        // the keyring value. Gated out of the prompt/hook flow — that path must
+        // do no keyring I/O. The plaintext store path is cloned so it does not
+        // alias the `&mut config` passed to the resolver.
+        let keyring = CredentialStoreImpl::Keyring(KeyringStore::new(floxhub.base_url()));
+        let plaintext =
+            CredentialStoreImpl::Plaintext(PlaintextStore::new(config.flox.config_dir.clone()));
+        let is_auth0 = matches!(config.flox.floxhub_authn_mode, AuthnMode::Auth0);
+        let outcome = resolve_credential_into(
+            &mut config,
+            &keyring,
+            &plaintext,
+            self.is_prompt_hook_flow(),
+            is_auth0,
+        );
+        match outcome {
+            ResolveOutcome::Migrated => message::info(
+                "Moved your FloxHub credential from plain text into your system keyring.",
+            ),
+            ResolveOutcome::MigratedButPlaintextRemains => message::warning(indoc! {"
+                Stored your credential in the system keyring, but could not remove the plain-text copy from flox.toml.
+                Remove the 'floxhub_token' line from flox.toml so it does not shadow the keyring."}),
+            ResolveOutcome::PopulatedFromKeyring | ResolveOutcome::Unchanged => {},
+        }
+
+        let floxhub_token = self.resolve_floxhub_token(&config, &keyring, &plaintext);
 
         let metrics_device_uuid = (!config.flox.disable_metrics)
             .then(|| read_metrics_uuid(&config).ok())
@@ -496,7 +533,12 @@ impl FloxArgs {
     ///
     /// For `flox hook-env` the token state is reported by the next
     /// user-invoked command instead; see [Self::is_prompt_hook_flow].
-    fn resolve_floxhub_token(&self, config: &Config) -> Option<FloxhubToken> {
+    fn resolve_floxhub_token(
+        &self,
+        config: &Config,
+        keyring: &CredentialStoreImpl,
+        plaintext: &CredentialStoreImpl,
+    ) -> Option<FloxhubToken> {
         if !matches!(config.flox.floxhub_authn_mode, AuthnMode::Auth0) {
             return None;
         }
@@ -526,17 +568,20 @@ impl FloxArgs {
                     Your FloxHub token is invalid: {token_error}
                     You may need to log in again.
                 "});
-                if let Err(e) =
-                    update_config(&config.flox.config_dir, "floxhub_token", None::<String>)
-                {
-                    debug!("Could not remove token from user config: {e}");
-                }
+                // Clear the invalid token only from the store that supplied it
+                // (probed here). An invalid `FLOX_FLOXHUB_TOKEN` or system-config
+                // token must not delete the user's saved keyring/plaintext
+                // credential.
+                let source = probe_credential_source(config, plaintext, keyring);
+                clear_invalid_credential(source, keyring, plaintext);
                 None
             },
             Ok(Some(token)) if token.is_expired() => {
                 let reauthenticating = matches!(
                     self.command,
-                    Some(Commands::Admin(AdminCommands::Auth(auth::Auth::Login)))
+                    Some(Commands::Admin(AdminCommands::Auth(
+                        auth::Auth::Login { .. }
+                    )))
                 );
                 // The token is account-global, so the reminder only needs to
                 // appear once per shell session. The outermost activation
@@ -1626,7 +1671,8 @@ pub(super) async fn ensure_auth(flox: &mut Flox) -> Result<String> {
                 AuthFailure::NotLoggedIn => "You are not logged in to FloxHub.",
                 _ => unreachable!(),
             }));
-            auth::login_flox(flox).await
+            // Implicit re-authentication uses the secure default store.
+            auth::login_flox(flox, false).await
         },
         Err(failure) => {
             let message = match failure {

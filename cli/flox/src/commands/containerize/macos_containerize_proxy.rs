@@ -6,7 +6,8 @@ use std::sync::LazyLock;
 
 use flox_core::activate::context::ActivateMode;
 use flox_core::vars::FLOX_DISABLE_METRICS_VAR;
-use flox_rust_sdk::flox::{FLOX_VERSION, Flox};
+use flox_rust_sdk::flox::{AuthContext, FLOX_VERSION, Flox};
+use flox_rust_sdk::models::floxmeta::FLOXHUB_TOKEN_ENV_VAR;
 use flox_rust_sdk::providers::container_builder::{ContainerBuilder, ContainerSource};
 use flox_rust_sdk::providers::nix::{NIX_VERSION, NixSubstituterConfig};
 use flox_rust_sdk::utils::ReaderExt;
@@ -179,6 +180,17 @@ impl ContainerizeProxy {
             command.arg(flox_toml_mount);
         }
 
+        // Pass the resolved FloxHub token into the container. The token now
+        // lives in the host OS keyring (removed from flox.toml), which the
+        // container cannot reach, so the bind-mounted flox.toml no longer
+        // carries it. In-container flox honours FLOX_FLOXHUB_TOKEN at the
+        // highest precedence (bypassing both stores), restoring prior behaviour
+        // regardless of where the host stores the token. Only set when a token
+        // is present (skipped in Kerberos mode / logged out).
+        if let AuthContext::Auth0(Some(token)) = &flox.auth_context {
+            add_floxhub_token_env(command, token.secret());
+        }
+
         // If metrics are disabled (no device UUID), propagate that into the
         // proxy container. This covers both the env var and config file paths
         // (e.g. /etc/flox.toml) that may not be mounted into the container.
@@ -272,5 +284,65 @@ impl ContainerBuilder for ContainerizeProxy {
 
         let container_source = ContainerSource::new(command);
         Ok(container_source)
+    }
+}
+
+/// Forward the FloxHub token into the proxy container via the child process
+/// environment — never as a command-line argument.
+///
+/// A value placed in argv (`--env VAR=secret`) is visible in process listings
+/// and in the command logged by `stream_container` / `command.display()`.
+/// Setting it on the child environment and passing `--env VAR` (no `=value`)
+/// keeps it out of argv; the container runtime forwards the inherited value,
+/// and `DisplayCommand` redacts it because `FLOX_FLOXHUB_TOKEN` is in
+/// `SENSITIVE_ENV_VARS`.
+fn add_floxhub_token_env(command: &mut Command, token_secret: &str) {
+    command.env(FLOXHUB_TOKEN_ENV_VAR, token_secret);
+    command.args(["--env", FLOXHUB_TOKEN_ENV_VAR]);
+}
+
+#[cfg(test)]
+mod tests {
+    use flox_rust_sdk::utils::CommandExt;
+
+    use super::*;
+
+    /// The FloxHub token must never appear in the proxy command's argv or in the
+    /// command logged via `command.display()`/`stream_container` — both are
+    /// visible in process listings and traces. It belongs only in the child
+    /// environment, where `DisplayCommand` redacts it (FLOX_FLOXHUB_TOKEN is in
+    /// SENSITIVE_ENV_VARS).
+    #[test]
+    fn floxhub_token_passed_via_env_not_argv_or_logs() {
+        const SECRET: &str = "super-secret-floxhub-jwt";
+        let mut command = Command::new("docker");
+        add_floxhub_token_env(&mut command, SECRET);
+
+        let args: Vec<String> = command
+            .get_args()
+            .map(|a| a.to_string_lossy().into_owned())
+            .collect();
+        assert!(
+            args.iter().all(|a| !a.contains(SECRET)),
+            "token leaked into argv (visible in process listings): {args:?}"
+        );
+
+        let logged = command.display().to_string();
+        assert!(
+            !logged.contains(SECRET),
+            "token leaked into the logged command: {logged}"
+        );
+
+        // The runtime is still told to forward the variable, and the value
+        // rides in the child environment.
+        assert!(
+            args.iter().any(|a| a == FLOXHUB_TOKEN_ENV_VAR),
+            "expected '--env {FLOXHUB_TOKEN_ENV_VAR}' to forward the variable: {args:?}"
+        );
+        let in_env = command.get_envs().any(|(k, v)| {
+            k == std::ffi::OsStr::new(FLOXHUB_TOKEN_ENV_VAR)
+                && v == Some(std::ffi::OsStr::new(SECRET))
+        });
+        assert!(in_env, "token not carried in the child environment");
     }
 }

@@ -70,6 +70,16 @@ indicatif = "0.18"
 is_executable = "1.0.5"
 itertools = "0.14.0"
 jsonwebtoken = { version = "10.3", features = ["rust_crypto"] }
+# Pure-Rust OS keyring access (keyring v4). The umbrella `keyring` crate forces
+# the `v1`/`cli` feature, which unconditionally references the Windows store and
+# drags Windows crates into the resolution; per the crate's own docs, apps that
+# pick their own backends depend on `keyring-core` plus the specific store
+# crates directly. The OS backends are target-gated in `cli/flox/Cargo.toml`
+# (apple-native Keychain on macOS, zbus Secret Service on Linux) so no new native
+# library is linked.
+keyring-core = "1"
+apple-native-keyring-store = { version = "1", default-features = false, features = ["keychain"] }
+zbus-secret-service-keyring-store = { version = "1", default-features = false, features = ["crypto-rust"] }
 log = { version = "0.4.29", features = ["kv"] }
 nef-lock-catalog = { path = "cli/nef-lock-catalog" }
 nix = { version = "0.31", features = ["signal", "process", "user", "fs"] }

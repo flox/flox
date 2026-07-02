@@ -31,8 +31,17 @@ use serde::Serialize;
 use tracing::{debug, instrument};
 use url::Url;
 
-use crate::commands::general::update_config;
-use crate::config::Config;
+use crate::config::{Config, FLOX_CONFIG_FILE};
+use crate::utils::credential_store::{
+    CredentialSource,
+    CredentialStore,
+    CredentialStoreImpl,
+    KeyringStore,
+    PlaintextStore,
+    TokenStorage,
+    persist_login_token,
+    probe_credential_source,
+};
 use crate::utils::dialog::{Checkpoint, Dialog, WaitResult};
 use crate::utils::message;
 use crate::utils::openers::Browser;
@@ -230,7 +239,11 @@ fn calculate_expiry(expires_in: i64) -> String {
 pub enum Auth {
     /// Login to FloxHub
     #[bpaf(command)]
-    Login,
+    Login {
+        /// Store the token in plain text in flox.toml instead of the OS keyring
+        #[bpaf(long("insecure-storage"))]
+        insecure_storage: bool,
+    },
 
     /// Logout from FloxHub
     #[bpaf(command)]
@@ -251,10 +264,10 @@ impl Auth {
         subcommand_metric!("auth2");
 
         match self {
-            Auth::Login => {
+            Auth::Login { insecure_storage } => {
                 let span = tracing::info_span!("login");
                 let _guard = span.enter();
-                login_flox(&mut flox).await?;
+                login_flox(&mut flox, insecure_storage).await?;
                 Ok(())
             },
             Auth::Logout => {
@@ -265,7 +278,14 @@ impl Auth {
                     return Ok(());
                 }
 
-                update_config::<String>(&flox.config_dir, "floxhub_token", None)
+                // Remove from both stores: the resolver may have populated the
+                // token from the keyring, and a plaintext token may also linger
+                // from before migration. Both removals are idempotent.
+                KeyringStore::new(flox.floxhub.base_url())
+                    .remove()
+                    .context("Could not remove token from the OS keyring")?;
+                PlaintextStore::new(&flox.config_dir)
+                    .remove()
                     .context("Could not remove token from user config")?;
 
                 message::updated("Logout successful");
@@ -277,6 +297,11 @@ impl Auth {
             Auth::Status => {
                 let span = tracing::info_span!("status");
                 let _guard = span.enter();
+
+                // Check login state before probing the credential source. The
+                // startup resolver may already have read the keyring; this guard
+                // avoids an *additional* keyring read (and a possible unlock
+                // prompt) during source probing when the user is not logged in.
                 let AuthContext::Auth0(Some(token)) = flox.auth_context else {
                     message::warning("You are not currently logged in to FloxHub.");
                     return Err(Exit(1.into()).into());
@@ -288,6 +313,27 @@ impl Auth {
                     "You are logged in as {handle} on {}",
                     flox.floxhub.base_url()
                 ));
+
+                let plaintext =
+                    CredentialStoreImpl::Plaintext(PlaintextStore::new(&flox.config_dir));
+                let keyring =
+                    CredentialStoreImpl::Keyring(KeyringStore::new(flox.floxhub.base_url()));
+                let source = probe_credential_source(&config, &plaintext, &keyring);
+
+                match source {
+                    CredentialSource::UserConfigPlaintext => message::warning(format!(
+                        "Credential stored in plain text at '{}'.",
+                        flox.config_dir.join(FLOX_CONFIG_FILE).display()
+                    )),
+                    CredentialSource::Keyring => {
+                        message::plain("Credential stored in your system keyring.")
+                    },
+                    CredentialSource::Env => message::plain(
+                        "Credential read from the FLOX_FLOXHUB_TOKEN environment variable.",
+                    ),
+                    // SystemConfig and None need no extra line here.
+                    CredentialSource::SystemConfig | CredentialSource::None => {},
+                }
 
                 Ok(())
             },
@@ -315,7 +361,7 @@ impl Auth {
 // to handle different auth methods — for Kerberos, it should print a warning
 // that login is not needed (Kerberos authentication is handled externally via
 // `kinit`).
-pub async fn login_flox(flox: &mut Flox) -> Result<String> {
+pub async fn login_flox(flox: &mut Flox, insecure_storage: bool) -> Result<String> {
     let client = create_oauth_client()?;
     let cred = authorize(client, flox.floxhub.base_url())
         .await
@@ -328,15 +374,27 @@ pub async fn login_flox(flox: &mut Flox) -> Result<String> {
     let token = FloxhubToken::new(cred.token)?;
     let handle = token.handle().to_string();
 
-    // write the token to the config file
-    update_config(&flox.config_dir, "floxhub_token", Some(token.clone()))
-        .context("Could not write token to config")?;
+    // Store the token in the OS keyring by default, falling back to the
+    // plaintext config file (explicit 0600) with a warning on any keyring
+    // failure — or when --insecure-storage forces plaintext.
+    let keyring = CredentialStoreImpl::Keyring(KeyringStore::new(flox.floxhub.base_url()));
+    let plaintext = CredentialStoreImpl::Plaintext(PlaintextStore::new(&flox.config_dir));
+    let storage = persist_login_token(token.secret(), insecure_storage, &keyring, &plaintext)
+        .context("Could not store token")?;
 
     let auth_context = AuthContext::from_mode(&AuthnMode::Auth0, Some(token.clone()));
     let _ = flox.set_auth_context(auth_context);
 
     message::updated("Authentication complete");
     message::updated(format!("Logged in as {handle}"));
+
+    if storage == TokenStorage::Plaintext {
+        message::warning(formatdoc! {"
+            Credential stored in plain text at '{}'.
+            No OS keyring is available, or '--insecure-storage' was passed.",
+            flox.config_dir.join(FLOX_CONFIG_FILE).display()
+        });
+    }
 
     Ok(handle)
 }
