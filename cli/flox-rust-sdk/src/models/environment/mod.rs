@@ -343,19 +343,6 @@ impl RenderedEnvironmentLinks {
         Self::new_unchecked(prefix)
     }
 
-    pub fn new_in_base_dir_with_name_system_and_generation(
-        base_dir: &CanonicalPath,
-        name: impl AsRef<str>,
-        system: &System,
-        generation: GenerationId,
-    ) -> Self {
-        let prefix = base_dir.join(format!(
-            "{system}.{name}.gen{generation}",
-            name = name.as_ref()
-        ));
-        Self::new_unchecked(prefix)
-    }
-
     /// Returns the `--out-link` prefix for `nix build`.
     ///
     /// With outputs named `"dev"` and `"run"`, nix creates `<prefix>-dev` and
@@ -376,6 +363,13 @@ impl RenderedEnvironmentLinks {
     ///
     /// Errors are logged at debug level and do not propagate; this is a
     /// best-effort compatibility shim and must not fail the build.
+    ///
+    /// Under the two-level GC-root model (flox#4332) this still operates only on
+    /// the current activation pointer (`self.dev` / `self.run`), whose names are
+    /// unchanged — the pointer is now itself a redirect to a `-N-link`
+    /// generation link, so the legacy `.dev` / `.run` redirect resolves through
+    /// it. It is never called on a generation GC-root link, so the
+    /// `-{dev,run}`-suffix matching cannot misfire on the `-N-link` layer.
     pub fn replace_legacy_links(&self) {
         for (new_link, suffix) in [(self.dev.as_path(), "dev"), (self.run.as_path(), "run")] {
             let Some(parent) = new_link.parent() else {
@@ -419,12 +413,109 @@ impl RenderedEnvironmentLinks {
         }
     }
 
+    /// The GC-root link for `generation`, derived from this activation
+    /// pointer's prefix as `<pointer-prefix>-<generation>-link-{dev,run}`.
+    ///
+    /// Managed environments build a new generation to this link, then
+    /// [`Self::flip_to`] it; the two-level indirection keeps prior generations'
+    /// store paths live for instant rollback (flox#4332).
+    pub fn generation_link(&self, generation: GenerationId) -> GenerationLink {
+        let prefix = append_output_suffix(&self.out_link_prefix, &format!("-{generation}-link"));
+        GenerationLink::from_prefix(prefix)
+    }
+
+    /// Atomically repoint the current activation links at `generation`'s
+    /// GC-root links.
+    ///
+    /// Each pointer (`dev`, `run`) becomes a relative symlink to the matching
+    /// generation link in the same directory, installed via `rename()` so a
+    /// concurrent `flox activate` observes either the old or the new target,
+    /// never a missing or half-written link.
+    ///
+    /// This is the only user-visible step of a managed-environment mutation and
+    /// must run **only after** the new generation has been committed to
+    /// floxmeta (flox#4332).
+    pub fn flip_to(&self, generation: &GenerationLink) -> Result<(), std::io::Error> {
+        flip_pointer(self.dev.as_path(), generation.dev.as_path())?;
+        flip_pointer(self.run.as_path(), generation.run.as_path())?;
+        Ok(())
+    }
+
     /// Returns the built environment path for an activation mode.
     pub fn for_mode(self, mode: &ActivateMode) -> RenderedEnvironmentLink {
         match mode {
             ActivateMode::Dev => self.dev,
             ActivateMode::Run => self.run,
         }
+    }
+}
+
+/// Atomically replace the symlink at `pointer` with a relative symlink to
+/// `target`, which must live in the same directory.
+///
+/// Writes a temporary symlink alongside `pointer` and `rename()`s it into
+/// place; the rename is atomic within a directory on POSIX, so readers never
+/// see `pointer` missing.
+fn flip_pointer(pointer: &Path, target: &Path) -> Result<(), std::io::Error> {
+    let target_name = target.file_name().ok_or_else(|| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "generation link has no file name",
+        )
+    })?;
+    let tmp = append_output_suffix(pointer, ".flip-tmp");
+    // A leftover temp from an interrupted flip would block symlink creation.
+    let _ = std::fs::remove_file(&tmp);
+    std::os::unix::fs::symlink(target_name, &tmp)?;
+    std::fs::rename(&tmp, pointer)
+}
+
+/// The immutable nix GC-root link for a single managed-environment generation.
+///
+/// Created once at build time as a `nix build --out-link` target named
+/// `<system>.<name>-<N>-link-{dev,run}` and never modified afterward. It keeps
+/// that generation's store paths live and is the target the current activation
+/// pointer ([RenderedEnvironmentLinks]) is flipped to as the final step of a
+/// mutation. Generation links persist until aged out by the cleanup policy.
+///
+/// Only managed environments use this two-level model; path and remote
+/// environments build directly to their single activation link.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GenerationLink {
+    out_link_prefix: PathBuf,
+    dev: RenderedEnvironmentLink,
+    run: RenderedEnvironmentLink,
+}
+
+impl GenerationLink {
+    /// Construct from a `--out-link` prefix, deriving the `-dev` / `-run` links
+    /// the same way `nix build` names outputs. Construct via
+    /// [`RenderedEnvironmentLinks::generation_link`] rather than directly, so the
+    /// prefix is always derived from the activation pointer.
+    fn from_prefix(out_link_prefix: PathBuf) -> Self {
+        let dev = append_output_suffix(&out_link_prefix, "-dev");
+        let run = append_output_suffix(&out_link_prefix, "-run");
+        Self {
+            out_link_prefix,
+            dev: RenderedEnvironmentLink(dev),
+            run: RenderedEnvironmentLink(run),
+        }
+    }
+
+    /// The `--out-link` prefix `nix build` uses to write this generation's
+    /// links.
+    pub fn out_link_prefix(&self) -> &Path {
+        &self.out_link_prefix
+    }
+
+    /// Activation links that resolve directly to this generation's GC-root
+    /// links (its own `dev`/`run`).
+    ///
+    /// Used to activate a *specific* generation without flipping the current
+    /// pointer — e.g. `flox activate --generation N`, which must not change
+    /// which generation is current.
+    pub fn activation_links(&self) -> RenderedEnvironmentLinks {
+        RenderedEnvironmentLinks::new_unchecked(self.out_link_prefix.clone())
     }
 }
 
@@ -1587,6 +1678,78 @@ mod test {
             links.run.as_path(),
             Path::new("/base/x86_64-linux.name-run")
         );
+    }
+
+    /// A generation GC-root link is named `<system>.<name>-<N>-link`, with nix
+    /// deriving `-dev` / `-run` from that prefix.
+    #[test]
+    fn generation_link_names_match_nix_output_layout() {
+        let dir = tempfile::tempdir().unwrap();
+        let base = CanonicalPath::new(dir.path()).unwrap();
+        let system: System = "x86_64-linux".to_string();
+
+        let pointer = RenderedEnvironmentLinks::new_in_base_dir_with_name_and_system(
+            &base, "default", &system,
+        );
+        let link = pointer.generation_link(GenerationId::from(33usize));
+
+        assert_eq!(
+            link.out_link_prefix(),
+            base.join("x86_64-linux.default-33-link").as_path()
+        );
+        assert_eq!(
+            link.dev.as_path(),
+            base.join("x86_64-linux.default-33-link-dev").as_path()
+        );
+        assert_eq!(
+            link.run.as_path(),
+            base.join("x86_64-linux.default-33-link-run").as_path()
+        );
+    }
+
+    /// `flip_to` repoints the activation links at a generation's GC-root links
+    /// as relative symlinks, and is idempotent (atomically replaces existing
+    /// pointers).
+    #[test]
+    fn flip_to_points_activation_links_at_generation() {
+        let dir = tempfile::tempdir().unwrap();
+        let base = CanonicalPath::new(dir.path()).unwrap();
+        let system: System = "x86_64-linux".to_string();
+
+        let pointer = RenderedEnvironmentLinks::new_in_base_dir_with_name_and_system(
+            &base, "default", &system,
+        );
+        let generation = pointer.generation_link(GenerationId::from(1usize));
+
+        // Materialize the generation links as a build would, pointing at
+        // (stand-in) store paths.
+        let store_dev = dir.path().join("store-dev");
+        let store_run = dir.path().join("store-run");
+        std::fs::write(&store_dev, "").unwrap();
+        std::fs::write(&store_run, "").unwrap();
+        std::os::unix::fs::symlink(&store_dev, generation.dev.as_path()).unwrap();
+        std::os::unix::fs::symlink(&store_run, generation.run.as_path()).unwrap();
+
+        pointer.flip_to(&generation).unwrap();
+
+        // Pointers are relative symlinks to the generation link file names ...
+        assert_eq!(
+            std::fs::read_link(pointer.dev.as_path()).unwrap(),
+            Path::new("x86_64-linux.default-1-link-dev")
+        );
+        assert_eq!(
+            std::fs::read_link(pointer.run.as_path()).unwrap(),
+            Path::new("x86_64-linux.default-1-link-run")
+        );
+        // ... and resolve through the generation link to the store path.
+        assert_eq!(
+            std::fs::canonicalize(pointer.dev.as_path()).unwrap(),
+            std::fs::canonicalize(&store_dev).unwrap()
+        );
+
+        // Flipping again over existing pointers succeeds (atomic replace).
+        pointer.flip_to(&generation).unwrap();
+        assert!(pointer.dev.as_path().is_symlink());
     }
 }
 
