@@ -130,54 +130,71 @@ version:
 @gen-data floxhub_path +mk_data_args="": (mk-data mk_data_args)
     #!/usr/bin/env bash
 
-    # We do this because `mk_data` has a `-f` flag whereas the
-    # gen-unit-data recipe has a positional argument that can take the value
-    # `force`. As far as I can tell, there's not a way to conditionally run
-    # recipes within `just`, so we just run the correct recipe via a script.
-    if [ "{{mk_data_args}}" = "-f" ]; then
-        just gen-unit-data "{{floxhub_path}}" true
-    else
-        just gen-unit-data "{{floxhub_path}}"
-    fi
+    # `mk_data` (run via the mk-data dependency above) and the unit-cassette
+    # recorder below must agree on whether this is a force run. `mk_data`
+    # treats `-f`/`--force` as force, so mirror exactly that set here. Reject
+    # any other argument loudly: silently falling back to a replay run records
+    # nothing and yields an empty mocks patch that masquerades as success.
+    case "{{mk_data_args}}" in
+        -f | --force)
+            just gen-unit-data "{{floxhub_path}}" true
+            ;;
+        "")
+            just gen-unit-data "{{floxhub_path}}"
+            ;;
+        *)
+            echo "gen-data: cannot thread '{{mk_data_args}}' through to the unit-cassette recorder." >&2
+            echo "Only '-f'/'--force' (force-record all mocks) or no argument (record only missing mocks) are understood here." >&2
+            exit 1
+            ;;
+    esac
 
 @mk-data +mk_data_args="": build-data-gen build-cli (md mk_data_args)
 
 # The same as mk-data, but faster to type, and doesn't rebuild stuff
 @md +mk_data_args="":
-    mkdata="$PWD/target/debug/mk_data"; pushd test_data; "$mkdata" {{mk_data_args}} config.toml; popd
+    mkdata="$PWD/target/debug/mk_data"; (cd test_data && "$mkdata" {{mk_data_args}} config.toml)
 
 gen-unit-data-no-publish force="":
     #!/usr/bin/env bash
 
-    set -e
+    set -euo pipefail
 
     if [ "{{force}}" = "true" ]; then
         export _FLOX_UNIT_TEST_RECORD="force"
+
+        # Refresh the version baseline from the production catalog so it stays
+        # in lockstep with the mocks being recorded in this run. Several init
+        # tests assert the resolved version against these values
+        # (via latest_prod_versions.json). Replay mode leaves the committed
+        # baseline untouched so that replayed mocks and the committed baseline
+        # remain consistent.
+        echo "Extracting latest package versions from production catalog..."
+        python_version=$(curl -s 'https://api.flox.dev/api/v1/catalog/packages/python3' | jq -r '.items[0].version')
+        go_version=$(curl -s 'https://api.flox.dev/api/v1/catalog/packages/go' | jq -r '.items[0].version')
+        poetry_version=$(curl -s 'https://api.flox.dev/api/v1/catalog/packages/poetry' | jq -r '.items[0].version')
+        nodejs_20_version=$(curl -s 'https://api.flox.dev/api/v1/catalog/packages/nodejs_20' | jq -r '.items[0].version')
+
+        versions_file="{{TEST_DATA}}/unit_test_generated/latest_prod_versions.json"
+        jq -n \
+            --arg python3 "$python_version" \
+            --arg go "$go_version" \
+            --arg poetry "$poetry_version" \
+            --arg nodejs_20 "$nodejs_20_version" \
+            '{python3: $python3, go: $go, poetry: $poetry, nodejs_20: $nodejs_20}' \
+            > "$versions_file"
+
+        # A failed fetch leaves an empty or "null" string. Reject a baseline
+        # with any unresolved version by checking the written file, which
+        # covers every package it contains.
+        if jq -e 'any(.[]; . == "" or . == "null")' "$versions_file" >/dev/null; then
+            echo "failed to resolve a package version from the production catalog" >&2
+            exit 1
+        fi
+        echo "Wrote latest_prod_versions.json with python3=$python_version, go=$go_version, poetry=$poetry_version, nodejs_20=$nodejs_20_version"
     else
         export _FLOX_UNIT_TEST_RECORD="missing"
     fi
-
-    # Extract latest package versions from the production catalog BEFORE
-    # running the tests. Several tests assert the resolved version against
-    # these values (via latest_prod_versions.json), so the file must reflect
-    # current prod before the recording run. If it is written afterward (as it
-    # was previously), a force-regen run after prod has drifted records the new
-    # version but asserts it against the stale file, fails, and aborts before
-    # the file is ever refreshed -- a chicken-and-egg that makes the regen
-    # impossible to complete in a single pass.
-    echo "Extracting latest package versions from production catalog..."
-    python_version=$(curl -s 'https://api.flox.dev/api/v1/catalog/packages/python3' | jq -r '.items[0].version')
-    go_version=$(curl -s 'https://api.flox.dev/api/v1/catalog/packages/go' | jq -r '.items[0].version')
-    poetry_version=$(curl -s 'https://api.flox.dev/api/v1/catalog/packages/poetry' | jq -r '.items[0].version')
-    nodejs_20_version=$(curl -s 'https://api.flox.dev/api/v1/catalog/packages/nodejs_20' | jq -r '.items[0].version')
-    jq -n \
-        --arg python3 "$python_version" \
-        --arg go "$go_version" \
-        --arg poetry "$poetry_version" \
-        --arg nodejs_20 "$nodejs_20_version" \
-        '{python3: $python3, go: $go, poetry: $poetry, nodejs_20: $nodejs_20}' \
-        > "{{TEST_DATA}}/unit_test_generated/latest_prod_versions.json"
-    echo "Wrote latest_prod_versions.json with python3=$python_version, go=$go_version, poetry=$poetry_version, nodejs_20=$nodejs_20_version"
 
     # Use remote services for non-publish tests
     {{cargo_test_invocation}} --filterset 'not (test(providers::build::tests) | test(providers::publish) | test(commands::publish) | test(providers::catalog::tests::creates_new_catalog))'
@@ -191,16 +208,22 @@ gen-unit-data-for-publish floxhub_repo_path force="":
 
     set -euo pipefail
 
-    # Get the catalog server URL from the FloxHub environment
-    catalog_server_url="$(flox activate -d "{{floxhub_repo_path}}" -- bash -c 'echo $FLOXHUB_CATALOG_SERVER_URL')"
+    # Refresh the dev catalog baseline only when force-recording so the
+    # committed latest_dev_catalog_rev.txt stays in lockstep with the mocks
+    # recorded in this run. Replay leaves it untouched, mirroring the prod
+    # version baseline in gen-unit-data-no-publish.
+    if [ "{{force}}" = "true" ]; then
+        # Get the catalog server URL from the FloxHub environment
+        catalog_server_url="$(flox activate -d "{{floxhub_repo_path}}" -- bash -c 'echo $FLOXHUB_CATALOG_SERVER_URL')"
 
-    # Get the latest Nixpkgs revision that exists in the catalog
-    nixpkgs_rev="$(curl -X 'GET' --silent "${catalog_server_url}/info/base-catalog" -H 'accept: application/json' | jq .scraped_pages[0].rev | tr -d "'\"")"
-    if [ -z "$nixpkgs_rev" ]; then
-        echo "failed to communicate with floxhub services"
-        exit 1
+        # Get the latest Nixpkgs revision that exists in the catalog
+        nixpkgs_rev="$(curl -X 'GET' --silent "${catalog_server_url}/info/base-catalog" -H 'accept: application/json' | jq .scraped_pages[0].rev | tr -d "'\"")"
+        if [ -z "$nixpkgs_rev" ]; then
+            echo "failed to communicate with floxhub services"
+            exit 1
+        fi
+        echo "$nixpkgs_rev" > "{{TEST_DATA}}/unit_test_generated/latest_dev_catalog_rev.txt"
     fi
-    echo "$nixpkgs_rev" > "{{TEST_DATA}}/unit_test_generated/latest_dev_catalog_rev.txt"
 
     # Grab configuration variables from the FloxHub repo's environment
     # (Only needed if you want to use Auth0 instead of the test users)
