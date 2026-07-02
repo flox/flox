@@ -904,6 +904,9 @@ pub fn check_build_metadata(
         &base_nixpkgs_url.as_flake_ref()?,
         &built_environments.dev,
         &[pkg.name()],
+        // The base nixpkgs url is resolved for the publish flow ahead of time,
+        // so the NEF catalog inputs use the Makefile's default stability.
+        None,
         Some(false),
         system_override,
     )?;

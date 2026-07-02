@@ -121,6 +121,13 @@ ifeq (,$(NIX_SYSTEM))
   NIX_SYSTEM = $(NIX_SYSTEM_CURRENT)
 endif
 
+# Stability used to resolve the catalog build inputs of NEF builds. The flox
+# CLI passes this through from the --stability flag; default to "unstable"
+# when it is not provided.
+ifeq (,$(EXPRESSION_BUILD_STABILITY))
+  EXPRESSION_BUILD_STABILITY = unstable
+endif
+
 # Set the default goal to be all builds if one is not specified.
 .DEFAULT_GOAL := usage
 
@@ -813,13 +820,12 @@ define NIX_EXPRESSION_BUILD_template =
   $(eval _pvarname = $(call mkVarname,$(_pname)))
 
   # Start by calculating the catalog inputs lock.
-  # TODO: pass stability from build.rs to Makefile
   $($(_pvarname)_catalogLockfile): $(PROJECT_TMPDIR)/check-build-prerequisites
 	$(_V_) $(_mkdir) -p $$(@D)
 	$(_V_) $(_lock) \
 	  --base-dir '$$(NIX_EXPRESSION_ABSDIRPATH_$(_pvarname))' \
 	  --rel-path '$$(NIX_EXPRESSION_RELFILEPATH_$(_pvarname))' \
-	  --stability unstable \
+	  --stability '$(EXPRESSION_BUILD_STABILITY)' \
 	  --out $$@
 
   # Continue by evaluating the build
