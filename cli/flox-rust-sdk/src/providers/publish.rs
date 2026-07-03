@@ -666,9 +666,8 @@ where
                 version: build_metadata.version.clone(),
             },
             locked_base_catalog_url: Some(self.package_metadata.base_catalog_ref.to_string()),
-            // The server reconstructs the locked-inputs DAG from the recorded
-            // build; the CLI does not populate it on the publish request.
-            locked_inputs: None,
+            // Record the build's direct catalog inputs.
+            locked_inputs: Some(build_metadata.direct_catalog_inputs.clone()),
             base_catalog_rev_count: None,
             base_catalog_rev_date: None,
             url: self.env_metadata.build_repo_meta.url.to_string(),
