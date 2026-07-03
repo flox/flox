@@ -14,6 +14,7 @@ use floxhub_client::{
     CatalogStoreConfig,
     CatalogStoreConfigNixCopy,
     FloxhubClientError,
+    LockedInputEntry,
     NarInfos,
     PackageOutput,
     PackageOutputs,
@@ -200,6 +201,10 @@ pub struct CheckedBuildMetadata {
     pub unfree: Option<bool>,
 
     pub version: Option<String>,
+
+    /// The direct catalog inputs the build locked, keyed by locked-input
+    /// reference. Empty for build modes that resolve no catalog inputs.
+    pub direct_catalog_inputs: HashMap<String, LockedInputEntry>,
 
     // This field isn't "pub", so no one outside this module can construct this struct. That helps
     // ensure that we can only make this struct as a result of doing the "right thing."
@@ -860,6 +865,7 @@ fn convert_build_result_to_build_metadata(
             PublishError::UnsupportedEnvironmentState("Invalid system".to_string())
         })?,
         version: Some(build_result.version.clone()),
+        direct_catalog_inputs: build_result.catalog_lockfile.clone(),
         _private: (),
     })
 }
@@ -1890,6 +1896,7 @@ pub mod tests {
             broken: Some(false),
             insecure: None,
             unfree: None,
+            direct_catalog_inputs: HashMap::new(),
             _private: (),
         };
 
