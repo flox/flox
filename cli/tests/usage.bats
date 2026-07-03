@@ -75,50 +75,52 @@ Flox is a virtual environment and package manager all in one.
 With Flox you create environments that layer and replace dependencies just where
 it matters, making them portable across the full software lifecycle.
 
-Usage: flox [[-v]... | -q] [-V] [COMMAND ...]
+Usage: flox [[-v]... | -q] [--floxhub-url=URL] [-V] [COMMAND ...]
 
 Manage environments
-    init           Create an environment in the current directory
-    envs           Show active and available environments
-    delete         Delete an environment
+    init                   Create an environment in the current directory
+    envs                   Show active and available environments
+    delete                 Delete an environment
 
 Use environments
-    activate       Enter the environment, run 'flox deactivate' to leave
-    deactivate     Deactivate the current environment
-    run            Run a command from a Flox Catalog package
-    services       Manage services in an environment
+    activate               Enter the environment, run 'flox deactivate' to leave
+    deactivate             Deactivate the current environment
+    run                    Run a command from a Flox Catalog package
+    services               Manage services in an environment
 
 Discover packages
-    search         Search for system or library packages to install
-    show           Show details about a single package
+    search                 Search for system or library packages to install
+    show                   Show details about a single package
 
 Modify environments
-    install, i     Install packages into an environment
-    list, l        List packages installed in an environment
-    edit           Edit declarative environment configuration file
-    include        Compose environments together
-    upgrade        Upgrade packages in an environment
-    uninstall      Uninstall installed packages from an environment
-    generations    Version control for environments pushed to FloxHub
+    install, i             Install packages into an environment
+    list, l                List packages installed in an environment
+    edit                   Edit declarative environment configuration file
+    include                Compose environments together
+    upgrade                Upgrade packages in an environment
+    uninstall              Uninstall installed packages from an environment
+    generations            Version control for environments pushed to FloxHub
 
 Share with others
-    build          Build packages for Flox
-    publish        Publish packages for Flox
-    push           Send an environment to FloxHub
-    pull           Pull an environment from FloxHub
-    containerize   Containerize an environment
+    build                  Build packages for Flox
+    publish                Publish packages for Flox
+    push                   Send an environment to FloxHub
+    pull                   Pull an environment from FloxHub
+    containerize           Containerize an environment
 
 Administration
-    auth           FloxHub authentication commands
-    config         View and set configuration options
-    gc             Garbage collects any data for deleted environments.
+    auth                   FloxHub authentication commands
+    config                 View and set configuration options
+    gc                     Garbage collects any data for deleted environments.
 
 Available options:
-    -v, --verbose  Increase logging verbosity
-                   Invoke multiple times for increasing detail.
-    -q, --quiet    Silence logs except for errors
-    -V, --version  Print the version of the program
-    -h, --help     Prints help information
+    -v, --verbose          Increase logging verbosity
+                           Invoke multiple times for increasing detail.
+    -q, --quiet            Silence logs except for errors
+        --floxhub-url=URL  Base URL of the FloxHub instance to target for this
+                           invocation
+    -V, --version          Print the version of the program
+    -h, --help             Prints help information
 
 Run 'man flox' for more details.
 EOF

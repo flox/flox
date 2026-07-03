@@ -1,13 +1,14 @@
 use std::path::{Path, PathBuf};
 
 use flox_core::data::environment_ref::EnvironmentOwner;
+use flox_core::floxhub::{Floxhub, FloxhubError};
 use thiserror::Error;
 use tracing::instrument;
 use url::Url;
 use uuid::Uuid;
 
 use super::environment::ManagedPointer;
-use crate::flox::{AuthContext, Flox, Floxhub, FloxhubError};
+use crate::flox::{AuthContext, Flox};
 use crate::models::environment::floxmeta_branch::remote_branch_name;
 use crate::providers::git::{
     GitCommandBranchHashError,
@@ -68,6 +69,7 @@ impl FloxMeta {
     ) -> Result<Self, FloxMetaError> {
         let floxhub = Floxhub::new(
             pointer.floxhub_base_url.to_owned(),
+            None,
             pointer.floxhub_git_url_override.clone(),
         )
         .map_err(FloxMetaError::FloxhubError)?;
@@ -126,6 +128,7 @@ impl FloxMeta {
     ) -> Result<Self, FloxMetaError> {
         let floxhub = Floxhub::new(
             pointer.floxhub_base_url.to_owned(),
+            None,
             pointer.floxhub_git_url_override.clone(),
         )
         .map_err(FloxMetaError::FloxhubError)?;
@@ -173,6 +176,7 @@ impl FloxMeta {
     ) -> Result<Self, FloxMetaError> {
         let floxhub = Floxhub::new(
             pointer.floxhub_base_url.to_owned(),
+            None,
             pointer.floxhub_git_url_override.clone(),
         )
         .map_err(FloxMetaError::FloxhubError)?;
@@ -330,8 +334,9 @@ mod header_tests {
 mod tests {
     use std::fs;
 
+    use flox_core::floxhub::DEFAULT_FLOXHUB_URL;
+
     use super::*;
-    use crate::flox::DEFAULT_FLOXHUB_URL;
     use crate::flox::test_helpers::flox_instance;
     use crate::providers::git::GitProvider;
 
@@ -361,6 +366,7 @@ mod tests {
 
         let floxhub = Floxhub::new(
             DEFAULT_FLOXHUB_URL.clone(),
+            None,
             Some(Url::from_directory_path(&source_path).unwrap()),
         )
         .unwrap();

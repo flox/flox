@@ -126,9 +126,8 @@ EOF
   RUST_BACKTRACE=0 run "$FLOX_BIN" push --owner "$NEW_OWNER"
   assert_failure
   assert_output - << EOF
-! Using file://${FLOX_FLOXHUB_PATH} as FloxHub host
-'\$_FLOX_FLOXHUB_GIT_URL' is used for testing purposes only,
-alternative FloxHub hosts are not yet supported!
+! Using file://${FLOX_FLOXHUB_PATH} as the FloxHub git endpoint.
+'\$_FLOX_FLOXHUB_GIT_URL' overrides the git endpoint and is intended for testing only.
 
 ✘ ERROR: Cannot change the owner of an environment already pushed to FloxHub.
 
