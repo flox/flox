@@ -108,7 +108,8 @@ no system — so the request body has no system field.*/
     ///      "type": "array",
     ///      "items": {
     ///        "$ref": "#/components/schemas/LookupGroup"
-    ///      }
+    ///      },
+    ///      "maxItems": 256
     ///    },
     ///    "reference_point": {
     ///      "$ref": "#/components/schemas/ReferencePoint"
@@ -1410,8 +1411,8 @@ attr_path is a list of components, e.g. ["python3Packages", "boolex"].
 A flat catalog entry collapses what the CLI lockfile represents as a
 hierarchy of single-component package-set / package nodes.  Giving the
 CLI the components lets it re-expand that hierarchy.  A list is also
-unambiguous where a dot-joined string is not — Nix attr paths may
-contain quoted dotted components, e.g. python3Packages."foo.bar".
+unambiguous: if nested-dot component support is ever added (AI-267),
+the list form remains the unambiguous carrier.
 
 locked_inputs_hash is REQUIRED on every entry: the closure identity hash is
 the round-trip disambiguator that pins which recorded build a locked input
@@ -1431,7 +1432,7 @@ Use key() to build the canonical flat-map key for this entry.*/
     /// ```json
     ///{
     ///  "title": "LockedInputEntry",
-    ///  "description": "A single entry in the flat locked-inputs map.\n\nOne type, two directions (intentionally NOT split into two models — the\npublish entry is the same entity with its edges not yet stated):\n\n- Publish request: the CLI sends {catalog, attr_path, build_type, source,\n  locked_inputs_hash} and leaves inputs null.  Null here means \"not stated\n  — the server is authoritative for the DAG\": the CLI knows its direct\n  inputs but is not the source of truth, and the server reconstructs the\n  DAG from package_inputs (keyed by locked_inputs_hash).\n- Lookup response: all fields are present and inputs is populated with the\n  full transitive-closure DAG.\n\ninputs uses the tri-state SBOM convention in both directions:\n  inputs: [k, ...]  — known direct inputs (by key)\n  inputs: []        — explicitly no dependencies\n  inputs null       — not stated (server is authoritative for the DAG)\n\nattr_path is a list of components, e.g. [\"python3Packages\", \"boolex\"].\nA flat catalog entry collapses what the CLI lockfile represents as a\nhierarchy of single-component package-set / package nodes.  Giving the\nCLI the components lets it re-expand that hierarchy.  A list is also\nunambiguous where a dot-joined string is not — Nix attr paths may\ncontain quoted dotted components, e.g. python3Packages.\"foo.bar\".\n\nlocked_inputs_hash is REQUIRED on every entry: the closure identity hash is\nthe round-trip disambiguator that pins which recorded build a locked input\nrefers to (lookup response → CLI → publish request).  A publish request\nmissing it fails validation (422) at this contract boundary — there is no\nhash-free / old-client fallback.  It always serializes as a string.\n\nWire behavior: a null `inputs` (the tri-state \"not stated\") is emitted as\nan explicit null — deliberately, NOT dropped; do not add exclude_none here.\nThe source sub-model never emits nulls at all: its named attributes are\nall required, and unknown ones pass through verbatim (see LockedGitSource).\n\nUse key() to build the canonical flat-map key for this entry.",
+    ///  "description": "A single entry in the flat locked-inputs map.\n\nOne type, two directions (intentionally NOT split into two models — the\npublish entry is the same entity with its edges not yet stated):\n\n- Publish request: the CLI sends {catalog, attr_path, build_type, source,\n  locked_inputs_hash} and leaves inputs null.  Null here means \"not stated\n  — the server is authoritative for the DAG\": the CLI knows its direct\n  inputs but is not the source of truth, and the server reconstructs the\n  DAG from package_inputs (keyed by locked_inputs_hash).\n- Lookup response: all fields are present and inputs is populated with the\n  full transitive-closure DAG.\n\ninputs uses the tri-state SBOM convention in both directions:\n  inputs: [k, ...]  — known direct inputs (by key)\n  inputs: []        — explicitly no dependencies\n  inputs null       — not stated (server is authoritative for the DAG)\n\nattr_path is a list of components, e.g. [\"python3Packages\", \"boolex\"].\nA flat catalog entry collapses what the CLI lockfile represents as a\nhierarchy of single-component package-set / package nodes.  Giving the\nCLI the components lets it re-expand that hierarchy.  A list is also\nunambiguous: if nested-dot component support is ever added (AI-267),\nthe list form remains the unambiguous carrier.\n\nlocked_inputs_hash is REQUIRED on every entry: the closure identity hash is\nthe round-trip disambiguator that pins which recorded build a locked input\nrefers to (lookup response → CLI → publish request).  A publish request\nmissing it fails validation (422) at this contract boundary — there is no\nhash-free / old-client fallback.  It always serializes as a string.\n\nWire behavior: a null `inputs` (the tri-state \"not stated\") is emitted as\nan explicit null — deliberately, NOT dropped; do not add exclude_none here.\nThe source sub-model never emits nulls at all: its named attributes are\nall required, and unknown ones pass through verbatim (see LockedGitSource).\n\nUse key() to build the canonical flat-map key for this entry.",
     ///  "type": "object",
     ///  "required": [
     ///    "attr_path",
@@ -1604,8 +1605,10 @@ accepted without validation — the server handles expansion.*/
     ///      "title": "References",
     ///      "type": "array",
     ///      "items": {
-    ///        "type": "string"
-    ///      }
+    ///        "type": "string",
+    ///        "maxLength": 1024
+    ///      },
+    ///      "maxItems": 1024
     ///    }
     ///  }
     ///}
@@ -1614,7 +1617,7 @@ accepted without validation — the server handles expansion.*/
     #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
     pub struct LookupGroup {
         pub key: ::std::string::String,
-        pub references: ::std::vec::Vec<::std::string::String>,
+        pub references: ::std::vec::Vec<ReferencesItem>,
     }
     impl ::std::convert::From<&LookupGroup> for LookupGroup {
         fn from(value: &LookupGroup) -> Self {
@@ -3072,7 +3075,7 @@ accepted without validation — the server handles expansion.*/
     ///    "curl"
     ///  ],
     ///  "type": "string",
-    ///  "pattern": "[a-zA-Z0-9.\\-_]{1,128}"
+    ///  "pattern": "^[a-zA-Z0-9.\\-_]{1,128}$"
     ///}
     /// ```
     /// </details>
@@ -3101,9 +3104,9 @@ accepted without validation — the server handles expansion.*/
             value: &str,
         ) -> ::std::result::Result<Self, self::error::ConversionError> {
             static PATTERN: ::std::sync::LazyLock<::regress::Regex> = ::std::sync::LazyLock::new(||
-            { ::regress::Regex::new("[a-zA-Z0-9.\\-_]{1,128}").unwrap() });
+            { ::regress::Regex::new("^[a-zA-Z0-9.\\-_]{1,128}$").unwrap() });
             if PATTERN.find(value).is_none() {
-                return Err("doesn't match pattern \"[a-zA-Z0-9.\\-_]{1,128}\"".into());
+                return Err("doesn't match pattern \"^[a-zA-Z0-9.\\-_]{1,128}$\"".into());
             }
             Ok(Self(value.to_string()))
         }
@@ -4101,6 +4104,83 @@ because the two anchors carry different value types.*/
                 as_of_build: Default::default(),
                 as_of_date: Default::default(),
             }
+        }
+    }
+    ///`ReferencesItem`
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "type": "string",
+    ///  "maxLength": 1024
+    ///}
+    /// ```
+    /// </details>
+    #[derive(::serde::Serialize, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+    #[serde(transparent)]
+    pub struct ReferencesItem(::std::string::String);
+    impl ::std::ops::Deref for ReferencesItem {
+        type Target = ::std::string::String;
+        fn deref(&self) -> &::std::string::String {
+            &self.0
+        }
+    }
+    impl ::std::convert::From<ReferencesItem> for ::std::string::String {
+        fn from(value: ReferencesItem) -> Self {
+            value.0
+        }
+    }
+    impl ::std::convert::From<&ReferencesItem> for ReferencesItem {
+        fn from(value: &ReferencesItem) -> Self {
+            value.clone()
+        }
+    }
+    impl ::std::str::FromStr for ReferencesItem {
+        type Err = self::error::ConversionError;
+        fn from_str(
+            value: &str,
+        ) -> ::std::result::Result<Self, self::error::ConversionError> {
+            if value.chars().count() > 1024usize {
+                return Err("longer than 1024 characters".into());
+            }
+            Ok(Self(value.to_string()))
+        }
+    }
+    impl ::std::convert::TryFrom<&str> for ReferencesItem {
+        type Error = self::error::ConversionError;
+        fn try_from(
+            value: &str,
+        ) -> ::std::result::Result<Self, self::error::ConversionError> {
+            value.parse()
+        }
+    }
+    impl ::std::convert::TryFrom<&::std::string::String> for ReferencesItem {
+        type Error = self::error::ConversionError;
+        fn try_from(
+            value: &::std::string::String,
+        ) -> ::std::result::Result<Self, self::error::ConversionError> {
+            value.parse()
+        }
+    }
+    impl ::std::convert::TryFrom<::std::string::String> for ReferencesItem {
+        type Error = self::error::ConversionError;
+        fn try_from(
+            value: ::std::string::String,
+        ) -> ::std::result::Result<Self, self::error::ConversionError> {
+            value.parse()
+        }
+    }
+    impl<'de> ::serde::Deserialize<'de> for ReferencesItem {
+        fn deserialize<D>(deserializer: D) -> ::std::result::Result<Self, D::Error>
+        where
+            D: ::serde::Deserializer<'de>,
+        {
+            ::std::string::String::deserialize(deserializer)?
+                .parse()
+                .map_err(|e: self::error::ConversionError| {
+                    <D::Error as ::serde::de::Error>::custom(e.to_string())
+                })
         }
     }
     ///`ResolutionMessageGeneral`
