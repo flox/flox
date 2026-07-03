@@ -10,7 +10,7 @@ use flox_manifest::parsed::Inner;
 use flox_manifest::parsed::common::DEFAULT_GROUP_NAME;
 use flox_manifest::parsed::latest::BuildSandbox;
 use flox_manifest::{Manifest, MigratedTypedOnly};
-use floxhub_client::BaseCatalogUrl;
+use floxhub_client::{BaseCatalogUrl, LockedInputEntry};
 use indoc::formatdoc;
 use itertools::Itertools;
 use nef_lock_catalog::NixFlakeref;
@@ -126,6 +126,11 @@ pub struct BuildResult {
     pub version: String,
     pub system: String,
     pub log: BuiltStorePath,
+    /// The direct catalog inputs the build locked, keyed by locked-input
+    /// reference. Emitted by NEF builds; absent (and so empty) for build modes
+    /// that resolve no catalog inputs.
+    #[serde(rename = "catalogLockfile", default)]
+    pub catalog_lockfile: HashMap<String, LockedInputEntry>,
     // TODO: factor out and use buildenv::BuiltStorePath (?)
     #[serde(rename = "resultLinks")]
     pub result_links: BTreeMap<PathBuf, PathBuf>,

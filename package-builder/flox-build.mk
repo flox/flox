@@ -883,12 +883,12 @@ define NIX_EXPRESSION_BUILD_template =
   $($(_pvarname)_buildMetaJSON): $($(_pvarname)_evalJSON) $($(_pvarname)_buildJSON) $($(_pvarname)_result)-log
 	$(_V_) $(_jq) -n \
 	  --arg system $(NIX_SYSTEM) \
-	  --arg catalogLockfile '$$($(_pvarname)_catalogLockfile)' \
+	  --slurpfile catalogLock '$$($(_pvarname)_catalogLockfile)' \
 	  --arg logfile $$(shell $(_readlink) $($(_pvarname)_result)-log) \
 	  --argjson resultLinks '$$($(_pvarname)_resultLinks_json)' \
 	  --slurpfile eval $($(_pvarname)_evalJSON) \
 	  --slurpfile build $($(_pvarname)_buildJSON) \
-	  '$$$$build[0][0] * $$$$eval[0] * { system:$$$$system, catalogLockfile:$$$$catalogLockfile, log:$$$$logfile, resultLinks:$$$$resultLinks }' > $$@
+	  '$$$$build[0][0] * $$$$eval[0] * { system:$$$$system, catalogLockfile:$$$$catalogLock[0].direct_catalog_inputs, log:$$$$logfile, resultLinks:$$$$resultLinks }' > $$@
 	@echo -e "Completed build of $$(_name) in Nix expression mode\n"
 
   # Create targets for cleaning up the result and log symlinks.
