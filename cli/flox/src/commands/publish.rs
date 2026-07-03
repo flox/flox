@@ -203,6 +203,13 @@ impl Publish {
         // Check the environment for appropriate state to build and publish
         let env_metadata = check_environment_metadata(&flox, &path_env)?;
 
+        // The `--stability` selection also determines the stability used to
+        // resolve the catalog build inputs of NEF (expression) builds.
+        let nef_stability = match &publish_config.base_catalog_url_select {
+            Some(BaseCatalogUrlSelect::Stability(stability)) => Some(stability.clone()),
+            _ => None,
+        };
+
         let selected_base_nixpkgs_url = base_nixpkgs_url_from_url_select(
             &flox,
             publish_config.base_catalog_url_select,
@@ -321,6 +328,7 @@ impl Publish {
             system_override_inner,
             &publish_provider.env_metadata,
             &publish_provider.package_metadata.package,
+            nef_stability,
         )?;
 
         // CLI args take precedence over config

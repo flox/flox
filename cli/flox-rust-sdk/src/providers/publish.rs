@@ -895,6 +895,7 @@ pub fn check_build_metadata(
     system_override: Option<String>,
     env_metadata: &CheckedEnvironmentMetadata,
     pkg: &PackageTarget,
+    nef_stability: Option<String>,
 ) -> Result<CheckedBuildMetadata, PublishError> {
     let workdir = if sandbox_is_local(pkg) {
         BuildWorkdir::SharedClone
@@ -909,9 +910,9 @@ pub fn check_build_metadata(
         &base_nixpkgs_url.as_flake_ref()?,
         &built_environments.dev,
         &[pkg.name()],
-        // The base nixpkgs url is resolved for the publish flow ahead of time,
-        // so the NEF catalog inputs use the Makefile's default stability.
-        None,
+        // Lock the NEF catalog inputs at the stability selected for publish, so
+        // the recorded inputs match the build the user intends to publish.
+        nef_stability,
         Some(false),
         system_override,
     )?;
@@ -1568,6 +1569,7 @@ pub mod tests {
             None,
             &env_metadata,
             &EXAMPLE_MANIFEST_PACKAGE_TARGET,
+            None,
         )
         .unwrap();
 
@@ -1614,6 +1616,7 @@ pub mod tests {
             None,
             &env_metadata,
             &EXAMPLE_MANIFEST_PACKAGE_TARGET_MISSING_FIELDS,
+            None,
         )
         .unwrap();
 
@@ -1670,6 +1673,7 @@ pub mod tests {
             None,
             &env_metadata,
             &pure_pkg,
+            None,
         )
         .unwrap();
 
@@ -1709,6 +1713,7 @@ pub mod tests {
             None,
             &env_metadata,
             &package_metadata.package,
+            None,
         )
         .unwrap();
 
@@ -1770,6 +1775,7 @@ pub mod tests {
             None,
             &env_metadata,
             &package_metadata.package,
+            None,
         )
         .unwrap();
 
@@ -2076,6 +2082,7 @@ pub mod tests {
             None,
             &env_metadata,
             &package_metadata.package,
+            None,
         )
         .unwrap();
 
