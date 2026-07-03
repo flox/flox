@@ -1,9 +1,10 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fs;
 use std::path::Path;
 
 use anyhow::{Context, Result};
 use flox_core::Version;
+use floxhub_client::LockedInputEntry;
 use serde::Serialize;
 use tracing::{debug, instrument};
 
@@ -30,6 +31,16 @@ pub(crate) enum CatalogLock {
 pub struct BuildLock {
     #[serde(rename = "version")]
     pub(crate) _version: Version<1>,
+    /// The direct (first-order) catalog inputs, keyed by their locked-input
+    /// reference. Publish records this subset on the build.
+    ///
+    /// Note: `LockedInputEntry` is generated from the catalog OpenAPI spec.
+    /// Serializing it verbatim into this on-disk lock couples the persisted
+    /// format to the generated schema, so regenerating the client can change
+    /// the lock format. A later increment should insulate this with a
+    /// hand-owned domain type (cf. the `BaseCatalogInfo` newtype and `From`
+    /// impls in `floxhub-client`).
+    pub(crate) direct_catalog_inputs: HashMap<String, LockedInputEntry>,
     pub(crate) catalogs: BTreeMap<CatalogId, CatalogLock>,
 }
 

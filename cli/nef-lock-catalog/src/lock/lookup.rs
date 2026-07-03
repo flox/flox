@@ -150,9 +150,11 @@ fn lock_from_response(mut response: BuildInputsLookupResponse) -> Result<BuildLo
         return Err(LockError::Unresolvable(group.unresolvable));
     }
 
+    let direct = group.matched.keys();
+
     debug!(resolved = group.lock.len(), "all references resolved");
 
-    Ok(build_lock_from_locked_inputs(group.lock)?)
+    Ok(build_lock_from_locked_inputs(group.lock, direct)?)
 }
 
 #[cfg(test)]
