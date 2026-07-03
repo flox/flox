@@ -38,16 +38,15 @@ use std::{env, fmt, mem};
 use anyhow::{Context, Result, anyhow, bail};
 use bpaf::{Args, Bpaf, ParseFailure, Parser, ShellComp};
 use flox_core::data::environment_ref::{self, DEFAULT_NAME, RemoteEnvironmentRef};
+use flox_core::floxhub::{DEFAULT_FLOXHUB_URL, Floxhub};
 use flox_core::vars::FLOX_DISABLE_METRICS_VAR;
 use flox_manifest::interfaces::AsLatestSchema;
 use flox_manifest::{Manifest, TypedOnly};
 use flox_rust_sdk::flox::{
     AuthContext,
     AuthnMode,
-    DEFAULT_FLOXHUB_URL,
     FLOX_VERSION,
     Flox,
-    Floxhub,
     FloxhubToken,
     FloxhubTokenError,
 };

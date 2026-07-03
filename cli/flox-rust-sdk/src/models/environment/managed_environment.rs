@@ -1637,10 +1637,10 @@ impl ManagedEnvironment {
 #[cfg(any(test, feature = "tests"))]
 pub mod test_helpers {
 
+    use flox_core::floxhub::{DEFAULT_FLOXHUB_URL, Floxhub};
     use tempfile::tempdir_in;
 
     use super::*;
-    use crate::flox::{DEFAULT_FLOXHUB_URL, Floxhub};
     use crate::models::environment::fetcher::test_helpers::mock_include_fetcher;
     use crate::models::environment::floxmeta_branch::test_helpers::unusable_mock_floxmeta_branch;
     use crate::models::environment::path_environment::test_helpers::{

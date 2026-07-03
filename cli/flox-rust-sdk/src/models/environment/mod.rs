@@ -10,6 +10,7 @@ use flox_core::data::environment_ref::{
     EnvironmentOwner,
     RemoteEnvironmentRef,
 };
+use flox_core::floxhub::Floxhub;
 use flox_core::traceable_path;
 pub use flox_core::{Version, path_hash};
 use flox_manifest::lockfile::{LockedInclude, Lockfile, LockfileError};
@@ -32,7 +33,7 @@ use self::managed_environment::ManagedEnvironmentError;
 use self::remote_environment::RemoteEnvironmentError;
 use super::env_registry::EnvRegistryError;
 use crate::data::{CanonicalPath, CanonicalizeError, System};
-use crate::flox::{Flox, Floxhub};
+use crate::flox::Flox;
 use crate::models::environment::generations::GenerationsEnvironment;
 use crate::providers::buildenv::BuildEnvOutputs;
 use crate::providers::git::{
@@ -473,7 +474,10 @@ pub struct ManagedPointer {
     pub owner: EnvironmentOwner,
     pub name: EnvironmentName,
     #[serde(rename = "floxhub_url")]
-    #[cfg_attr(test, proptest(value = "crate::flox::DEFAULT_FLOXHUB_URL.clone()"))]
+    #[cfg_attr(
+        test,
+        proptest(value = "flox_core::floxhub::DEFAULT_FLOXHUB_URL.clone()")
+    )]
     pub floxhub_base_url: Url,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[cfg_attr(test, proptest(value = "None"))]
@@ -1136,10 +1140,10 @@ mod test {
     use std::sync::LazyLock;
     use std::time::Duration;
 
+    use flox_core::floxhub::DEFAULT_FLOXHUB_URL;
     use pretty_assertions::assert_eq;
 
     use super::*;
-    use crate::flox::DEFAULT_FLOXHUB_URL;
     use crate::flox::test_helpers::flox_instance;
     use crate::providers::git::GitProvider;
 

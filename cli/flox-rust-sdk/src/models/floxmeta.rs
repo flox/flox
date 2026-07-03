@@ -1,13 +1,14 @@
 use std::path::{Path, PathBuf};
 
 use flox_core::data::environment_ref::EnvironmentOwner;
+use flox_core::floxhub::{Floxhub, FloxhubError};
 use thiserror::Error;
 use tracing::instrument;
 use url::Url;
 use uuid::Uuid;
 
 use super::environment::ManagedPointer;
-use crate::flox::{AuthContext, Flox, Floxhub, FloxhubError};
+use crate::flox::{AuthContext, Flox};
 use crate::models::environment::floxmeta_branch::remote_branch_name;
 use crate::providers::git::{
     GitCommandBranchHashError,
@@ -333,8 +334,9 @@ mod header_tests {
 mod tests {
     use std::fs;
 
+    use flox_core::floxhub::DEFAULT_FLOXHUB_URL;
+
     use super::*;
-    use crate::flox::DEFAULT_FLOXHUB_URL;
     use crate::flox::test_helpers::flox_instance;
     use crate::providers::git::GitProvider;
 
