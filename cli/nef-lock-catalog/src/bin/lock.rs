@@ -5,11 +5,11 @@ use std::process::ExitCode;
 
 use anyhow::{Result, bail};
 use clap::Parser;
+use flox_core::floxhub::{DEFAULT_FLOXHUB_URL, Floxhub};
 use flox_core::util::message::format_error;
 use floxhub_client::{
     AuthContext,
     AuthnMode,
-    DEFAULT_CATALOG_URL,
     FloxhubClient,
     FloxhubClientConfig,
     FloxhubClientError,
@@ -28,6 +28,7 @@ use tracing::debug;
 use tracing_subscriber::fmt::format::FmtSpan;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
+use url::Url;
 
 /// Environment variable holding the FloxHub auth token.
 const ENV_FLOXHUB_TOKEN: &str = "FLOX_FLOXHUB_TOKEN";
@@ -155,7 +156,7 @@ async fn run(cli: Cli) -> Result<()> {
 /// environment-driven. The token is read once by the caller (see
 /// [ENV_FLOXHUB_TOKEN]) and passed in.
 fn build_client(floxhub_token: Option<String>) -> Result<FloxhubClient> {
-    let catalog_url = resolve_catalog_url();
+    let catalog_url = resolve_catalog_url()?;
     let mock_mode = FloxhubMockMode::default_from_env();
 
     // Connection details for `--verbose`: the resolved base, the path the
@@ -183,36 +184,34 @@ fn build_client(floxhub_token: Option<String>) -> Result<FloxhubClient> {
     Ok(FloxhubClient::new(config)?)
 }
 
-/// Resolve the catalog API base URL, mirroring the CLI so a single FloxHub base
-/// (`FLOXHUB_URL`) drives the catalog here too:
+/// Resolve the catalog API base URL using the *same* derivation as the CLI:
+/// [`flox_core::floxhub::Floxhub`] turns the one FloxHub base into the API base
+/// (`api_url_str`), sharing the CLI's host-shape transform and the recompilable
+/// [`DEFAULT_FLOXHUB_URL`] default. The generated client then joins
+/// `/api/v1/catalog/...` onto it.
 ///
-/// 1. `FLOX_CATALOG_URL` — explicit override, used verbatim.
-/// 2. `FLOXHUB_URL` base — the hosted realm (`hub.flox.dev`) maps to the hosted
-///    catalog constant; any other base IS the catalog base (the generated
-///    client appends `/api/v1/catalog`). A trailing slash is trimmed to avoid
-///    `//api/v1/catalog`.
-/// 3. Otherwise the compiled-in public default.
+/// - Base: `FLOXHUB_URL` if set, else the compiled-in [`DEFAULT_FLOXHUB_URL`]
+///   (so an on-premise build that recompiles the default redirects this binary
+///   just like it redirects the CLI).
+/// - `FLOX_CATALOG_URL`: the API/catalog override, mirroring the CLI's
+///   `config.flox.catalog_url` (passed as the `api_url_override`).
 ///
-/// NOTE: the hosted-realm constants are duplicated from `flox-rust-sdk`
-/// (`Floxhub::catalog_url` / `PUBLIC_FLOXHUB_URL`), and this honors only the
-/// `FLOXHUB_URL` env — not the layered flox config (`/etc/flox.toml`, etc.).
-/// Both are addressed by factoring out a shared config crate: flox/flox#4442.
-fn resolve_catalog_url() -> String {
-    // Duplicated from flox-rust-sdk's PUBLIC_FLOXHUB_URL pending #4442.
-    const PUBLIC_FLOXHUB_URL: &str = "https://hub.flox.dev";
+/// Unlike the CLI, the layered flox config (`/etc/flox.toml`, user `flox.toml`,
+/// the `--floxhub-url` flag) is not consulted — the lock libexec sees only the
+/// environment and the compiled default. Full layered-config parity is tracked
+/// in flox/flox#4442.
+fn resolve_catalog_url() -> Result<String> {
+    let base = match std::env::var("FLOX_FLOXHUB_URL") {
+        Ok(url) if !url.is_empty() => Url::parse(&url)?,
+        _ => DEFAULT_FLOXHUB_URL.clone(),
+    };
+    let api_url_override = match std::env::var("FLOX_CATALOG_URL") {
+        Ok(url) if !url.is_empty() => Some(Url::parse(&url)?),
+        _ => None,
+    };
 
-    if let Ok(catalog_url) = std::env::var("FLOX_CATALOG_URL")
-        && !catalog_url.is_empty()
-    {
-        return catalog_url;
-    }
-    if let Ok(base) = std::env::var("FLOXHUB_URL") {
-        let base = base.trim_end_matches('/');
-        if !base.is_empty() && base != PUBLIC_FLOXHUB_URL {
-            return base.to_string();
-        }
-    }
-    DEFAULT_CATALOG_URL.to_string()
+    let floxhub = Floxhub::new(base, api_url_override, None)?;
+    Ok(floxhub.api_url_str())
 }
 
 /// Render an authentication-related catalog failure with a token-aware hint.
