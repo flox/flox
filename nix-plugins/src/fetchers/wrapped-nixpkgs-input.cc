@@ -145,25 +145,37 @@ createWrappedFlakeDir( nix::EvalState &      state,
 
 
 /**
- * @brief Helper used to convert a `flox-nixpkgs` attribute set representation,
- *        to a `github` attribute set representation.
+ * @brief Convert a `flox-nixpkgs` attribute set to the underlying fetcher's
+ *        attribute set — `github` for github.com, `git` for any other host.
+ *
+ * github.com keeps the fast GitHub tarball fetcher. A non-github.com host
+ * (an on-premise GitHub Enterprise realm) is fetched over `git+https` instead:
+ * the GitHub REST tarball API authenticates only with access tokens, whereas
+ * git-over-https negotiates Kerberos/SPNEGO — which is how an enterprise host
+ * behind Kerberos is reached. This also matches the CLI's resolve prefetch,
+ * which already fetches the same rev over git, so it reuses Nix's git cache.
  */
 static nix::fetchers::Attrs
-floxNixpkgsAttrsToGithubAttrs( const nix::fetchers::Attrs & attrs )
+floxNixpkgsAttrsToFetcherAttrs( const nix::fetchers::Attrs & attrs )
 {
+  auto owner = nix::fetchers::getStrAttr( attrs, "owner" );
+  auto host  = nix::fetchers::maybeGetStrAttr( attrs, "host" );
+
   nix::fetchers::Attrs _attrs;
-  _attrs["type"] = "github";
-  _attrs["repo"] = "nixpkgs";
 
-  /* Inherit owner field (could be NixOS or flox) */
-  _attrs["owner"] = nix::fetchers::getStrAttr( attrs, "owner" );
-
-  /* Carry an enterprise `host' through to the github fetcher (it defaults to
-   * github.com when absent), so a realm's on-premise nixpkgs is fetched from
-   * the host the catalog server mastered rather than github.com. */
-  if ( auto host = nix::fetchers::maybeGetStrAttr( attrs, "host" ) )
+  if ( host.has_value() && ( *host != "github.com" ) )
     {
-      _attrs["host"] = *host;
+      /* Enterprise host: fetch over git so the transport can do Kerberos. */
+      _attrs["type"]    = "git";
+      _attrs["url"]     = "https://" + *host + "/" + owner + "/nixpkgs";
+      _attrs["shallow"] = nix::Explicit<bool> { true };
+    }
+  else
+    {
+      /* Public github.com: keep the faster GitHub tarball fetcher. */
+      _attrs["type"]  = "github";
+      _attrs["repo"]  = "nixpkgs";
+      _attrs["owner"] = owner;
     }
 
   /* Inherit `rev' and `ref' fields */
@@ -189,7 +201,7 @@ floxNixpkgsAttrsToGithubAttrs( const nix::fetchers::Attrs & attrs )
 /**
  * @brief Helper used to convert a `github` attribute set representation,
  *        to a `flox-nixpkgs` attribute set representation.
- * @note This is the inverse of `floxNixpkgsAttrsToGithubAttrs`.
+ * @note Inverse of the github branch of `floxNixpkgsAttrsToFetcherAttrs`.
  * @param attrs The attribute set representation of an (assumed) `github` input.
  * @return The attribute set representation of a `flox-nixpkgs` input.
  * @throws nix::Error If the input type is not `github`.
@@ -514,7 +526,7 @@ WrappedNixpkgsInputScheme::clone( const nix::fetchers::Input & input,
 {
   auto githubInput = nix::fetchers::Input::fromAttrs(
     *input.settings,
-    floxNixpkgsAttrsToGithubAttrs( input.attrs ) );
+    floxNixpkgsAttrsToFetcherAttrs( input.attrs ) );
   githubInput.clone( destDir );
 }
 
@@ -548,7 +560,7 @@ WrappedNixpkgsInputScheme::getAccessor(
       /* Use existing GitHub fetcher in `nix' to lookup `rev'. */
       auto githubInput = nix::fetchers::Input::fromAttrs(
         *input.settings,
-        floxNixpkgsAttrsToGithubAttrs( input.attrs ) );
+        floxNixpkgsAttrsToFetcherAttrs( input.attrs ) );
       rev = githubInput.getAccessor( store ).second.getRev();
     }
   /* Now that we have a `rev' we can drop the `ref' field. */
@@ -589,7 +601,7 @@ WrappedNixpkgsInputScheme::getAccessor(
   auto flakeDir = createWrappedFlakeDir(
     state,
     nix::FlakeRef::fromAttrs( *input.settings,
-                              floxNixpkgsAttrsToGithubAttrs( input.attrs ) ),
+                              floxNixpkgsAttrsToFetcherAttrs( input.attrs ) ),
     nix::fetchers::getIntAttr( input.attrs, "version" ) );
 
 
