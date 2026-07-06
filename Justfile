@@ -10,7 +10,7 @@
 #
 # ---------------------------------------------------------------------------- #
 
-set positional-arguments
+set positional-arguments := true
 
 nix_options := "--extra-experimental-features nix-command \
                 --extra-experimental-features flakes"
@@ -25,6 +25,7 @@ cargo_test_invocation := "cargo nextest --profile ci run --workspace"
 # working directory is dirty, we omit this here because in practice
 # it causes tests to fail that expect a FLAKE_VERSION to be "clean",
 # and doesn't add practical information.
+
 export FLOX_VERSION := shell('cat ./VERSION') + "-g" + shell('git rev-parse --short HEAD')
 
 # ---------------------------------------------------------------------------- #
@@ -43,7 +44,6 @@ version:
 @bins:
     echo "$FLOX_BIN"
 
-
 # ---------------------------------------------------------------------------- #
 # Build Nix plugins
 
@@ -54,37 +54,38 @@ version:
 
 # Clean the nix-plugins build cache
 @clean-nix-plugins:
-   meson compile -C nix-plugins/builddir --clean; \
-   rm -rf build/nix-plugins
-
+    meson compile -C nix-plugins/builddir --clean; \
+    rm -rf build/nix-plugins
 
 # ---------------------------------------------------------------------------- #
 # Nix built subsystems
 
 # Build the flox manpages
 @build-manpages:
-    nix {{nix_options}} build .#flox-manpages -o build/flox-manpages
+    nix {{ nix_options }} build .#flox-manpages -o build/flox-manpages
 
 # Build the activation scripts
 # `pure-eval` is disabled because `FLOX_ACTIVATIONS_BIN`
+
 # is read from the environment.
 @build-activation-scripts: build-activations
-    nix {{nix_options}} build \
+    nix {{ nix_options }} build \
         --option pure-eval false \
         '.#floxDevelopmentPackages.flox-interpreter^*' \
         -o $FLOX_INTERPRETER
 
 # Build the flox package builder
 @build-package-builder:
-    nix {{nix_options}} build \
+    nix {{ nix_options }} build \
         ".#floxDevelopmentPackages.flox-package-builder" \
         -o "$FLOX_PACKAGE_BUILDER"
 
 # Build the flox buildenv
 # `pure-eval` is disabled because `FLOX_INTERPRETER` and `FLOX_ACTIVATIONS_BIN`
+
 # are read from the environment.
 @build-buildenv:
-    nix {{nix_options}} build \
+    nix {{ nix_options }} build \
         --option pure-eval false \
         ".#floxDevelopmentPackages.flox-buildenv" \
         -o "$FLOX_BUILDENV"
@@ -96,12 +97,9 @@ version:
 @build-activations:
     cargo build -p flox-activations
 
-
 # Build the flox activations binary
 @build-activations-release:
     cargo build -p flox-activations -r
-
-
 
 # ---------------------------------------------------------------------------- #
 # Build the flox binary
@@ -135,15 +133,15 @@ version:
     # treats `-f`/`--force` as force, so mirror exactly that set here. Reject
     # any other argument loudly: silently falling back to a replay run records
     # nothing and yields an empty mocks patch that masquerades as success.
-    case "{{mk_data_args}}" in
+    case "{{ mk_data_args }}" in
         -f | --force)
-            just gen-unit-data "{{floxhub_path}}" true
+            just gen-unit-data "{{ floxhub_path }}" true
             ;;
         "")
-            just gen-unit-data "{{floxhub_path}}"
+            just gen-unit-data "{{ floxhub_path }}"
             ;;
         *)
-            echo "gen-data: cannot thread '{{mk_data_args}}' through to the unit-cassette recorder." >&2
+            echo "gen-data: cannot thread '{{ mk_data_args }}' through to the unit-cassette recorder." >&2
             echo "Only '-f'/'--force' (force-record all mocks) or no argument (record only missing mocks) are understood here." >&2
             exit 1
             ;;
@@ -153,14 +151,14 @@ version:
 
 # The same as mk-data, but faster to type, and doesn't rebuild stuff
 @md +mk_data_args="":
-    mkdata="$PWD/target/debug/mk_data"; (cd test_data && "$mkdata" {{mk_data_args}} config.toml)
+    mkdata="$PWD/target/debug/mk_data"; (cd test_data && "$mkdata" {{ mk_data_args }} config.toml)
 
 gen-unit-data-no-publish force="":
     #!/usr/bin/env bash
 
     set -euo pipefail
 
-    if [ "{{force}}" = "true" ]; then
+    if [ "{{ force }}" = "true" ]; then
         export _FLOX_UNIT_TEST_RECORD="force"
 
         # Refresh the version baseline from the production catalog so it stays
@@ -175,7 +173,7 @@ gen-unit-data-no-publish force="":
         poetry_version=$(curl -s 'https://api.flox.dev/api/v1/catalog/packages/poetry' | jq -r '.items[0].version')
         nodejs_20_version=$(curl -s 'https://api.flox.dev/api/v1/catalog/packages/nodejs_20' | jq -r '.items[0].version')
 
-        versions_file="{{TEST_DATA}}/unit_test_generated/latest_prod_versions.json"
+        versions_file="{{ TEST_DATA }}/unit_test_generated/latest_prod_versions.json"
         jq -n \
             --arg python3 "$python_version" \
             --arg go "$go_version" \
@@ -197,7 +195,7 @@ gen-unit-data-no-publish force="":
     fi
 
     # Use remote services for non-publish tests
-    {{cargo_test_invocation}} --filterset 'not (test(providers::build::tests) | test(providers::publish) | test(commands::publish) | test(providers::catalog::tests::creates_new_catalog))'
+    {{ cargo_test_invocation }} --filterset 'not (test(providers::build::tests) | test(providers::publish) | test(commands::publish) | test(providers::catalog::tests::creates_new_catalog))'
 
 gen-unit-data-for-publish floxhub_repo_path force="":
     #!/usr/bin/env bash
@@ -212,9 +210,9 @@ gen-unit-data-for-publish floxhub_repo_path force="":
     # committed latest_dev_catalog_rev.txt stays in lockstep with the mocks
     # recorded in this run. Replay leaves it untouched, mirroring the prod
     # version baseline in gen-unit-data-no-publish.
-    if [ "{{force}}" = "true" ]; then
+    if [ "{{ force }}" = "true" ]; then
         # Get the catalog server URL from the FloxHub environment
-        catalog_server_url="$(flox activate -d "{{floxhub_repo_path}}" -- bash -c 'echo $FLOXHUB_CATALOG_SERVER_URL')"
+        catalog_server_url="$(flox activate -d "{{ floxhub_repo_path }}" -- bash -c 'echo $FLOXHUB_CATALOG_SERVER_URL')"
 
         # Get the latest Nixpkgs revision that exists in the catalog
         nixpkgs_rev="$(curl -X 'GET' --silent "${catalog_server_url}/info/base-catalog" -H 'accept: application/json' | jq .scraped_pages[0].rev | tr -d "'\"")"
@@ -222,30 +220,30 @@ gen-unit-data-for-publish floxhub_repo_path force="":
             echo "failed to communicate with floxhub services"
             exit 1
         fi
-        echo "$nixpkgs_rev" > "{{TEST_DATA}}/unit_test_generated/latest_dev_catalog_rev.txt"
+        echo "$nixpkgs_rev" > "{{ TEST_DATA }}/unit_test_generated/latest_dev_catalog_rev.txt"
     fi
 
     # Grab configuration variables from the FloxHub repo's environment
     # (Only needed if you want to use Auth0 instead of the test users)
-    # export _FLOX_OAUTH_AUTH_URL="$(flox activate -d "{{floxhub_repo_path}}" -- bash -c 'echo $_FLOX_OAUTH_AUTH_URL')"
-    # export _FLOX_OAUTH_TOKEN_URL="$(flox activate -d "{{floxhub_repo_path}}" -- bash -c 'echo $_FLOX_OAUTH_TOKEN_URL')"
-    # export _FLOX_OAUTH_DEVICE_AUTH_URL="$(flox activate -d "{{floxhub_repo_path}}" -- bash -c 'echo $_FLOX_OAUTH_DEVICE_AUTH_URL')"
-    # export _FLOX_OAUTH_CLIENT_ID="$(flox activate -d "{{floxhub_repo_path}}" -- bash -c 'echo $_FLOX_OAUTH_CLIENT_ID')"
-    export FLOX_CONFIG_DIR="$(flox activate -d "{{floxhub_repo_path}}" -- bash -c 'echo $FLOX_CONFIG_DIR')"
-    export _FLOXHUB_TEST_USER_ROLES="$(flox activate -d "{{floxhub_repo_path}}" -- bash -c 'echo $_FLOXHUB_TEST_USER_ROLES')"
+    # export _FLOX_OAUTH_AUTH_URL="$(flox activate -d "{{ floxhub_repo_path }}" -- bash -c 'echo $_FLOX_OAUTH_AUTH_URL')"
+    # export _FLOX_OAUTH_TOKEN_URL="$(flox activate -d "{{ floxhub_repo_path }}" -- bash -c 'echo $_FLOX_OAUTH_TOKEN_URL')"
+    # export _FLOX_OAUTH_DEVICE_AUTH_URL="$(flox activate -d "{{ floxhub_repo_path }}" -- bash -c 'echo $_FLOX_OAUTH_DEVICE_AUTH_URL')"
+    # export _FLOX_OAUTH_CLIENT_ID="$(flox activate -d "{{ floxhub_repo_path }}" -- bash -c 'echo $_FLOX_OAUTH_CLIENT_ID')"
+    export FLOX_CONFIG_DIR="$(flox activate -d "{{ floxhub_repo_path }}" -- bash -c 'echo $FLOX_CONFIG_DIR')"
+    export _FLOXHUB_TEST_USER_ROLES="$(flox activate -d "{{ floxhub_repo_path }}" -- bash -c 'echo $_FLOXHUB_TEST_USER_ROLES')"
     # We need this test user info persistent when we run the tests.
-    cp $_FLOXHUB_TEST_USER_ROLES "{{TEST_DATA}}/floxhub_test_users.json"
+    cp $_FLOXHUB_TEST_USER_ROLES "{{ TEST_DATA }}/floxhub_test_users.json"
 
     # Set the recording variable based on Justfile arguments
     export _FLOX_UNIT_TEST_RECORD=true
-    if [ "{{force}}" = "true" ]; then
+    if [ "{{ force }}" = "true" ]; then
         export _FLOX_UNIT_TEST_RECORD="force"
     else
         export _FLOX_UNIT_TEST_RECORD="missing"
     fi
 
     # Run the tests that will regenerate the mocks
-    {{cargo_test_invocation}} --no-fail-fast --filterset 'test(providers::publish) | test(commands::publish) | test(providers::catalog::tests::creates_new_catalog)'
+    {{ cargo_test_invocation }} --no-fail-fast --filterset 'test(providers::publish) | test(commands::publish) | test(providers::catalog::tests::creates_new_catalog)'
 
 @gen-unit-data floxhub_path force="false": (gen-unit-data-no-publish force) (gen-unit-data-for-publish floxhub_path force)
 
@@ -253,7 +251,7 @@ gen-unit-data-for-publish floxhub_repo_path force="":
 
 # Generate JSON schemas for Flox data structures
 @gen-schemas:
-  cargo xtask generate-schemas
+    cargo xtask generate-schemas
 
 # ---------------------------------------------------------------------------- #
 
@@ -262,11 +260,13 @@ gen-unit-data-for-publish floxhub_repo_path force="":
     meson test -C nix-plugins/builddir
 
 # Run the CLI integration test suite using locally built binaries
+
 # This is equivalent to the "local" jobs in CI.
 @integ-tests *bats_args: build
     flox-cli-tests "$@"
 
 # Run the CLI integration test suite using Nix-built binaries
+
 # This is equivalent to the "remote" jobs in CI.
 @nix-integ-tests *bats_args:
     nix run \
@@ -275,7 +275,7 @@ gen-unit-data-for-publish floxhub_repo_path force="":
         .#flox-cli-tests -- "$@"
 
 @ut regex="" record="false":
-    _FLOX_UNIT_TEST_RECORD={{record}} {{cargo_test_invocation}} {{regex}}
+    _FLOX_UNIT_TEST_RECORD={{ record }} {{ cargo_test_invocation }} {{ regex }}
 
 # Run the CLI unit tests
 @unit-tests regex="" record="false": build (ut regex record)
@@ -300,17 +300,15 @@ build-nef-test-fixtures:
 test-nef:
     #!/usr/bin/env bash
     set -euo pipefail
-    fixtures="$(just build-nef-test-fixtures)"
     nix-unit package-builder/nef/tests \
         --arg nixpkgs-url "$COMMON_NIXPKGS_URL" \
-        --argstr test-fixtures "$fixtures"
 
 test-buildenvLib:
     nix-unit buildenv/buildenvLib/tests
 
 # Run the CLI unit tests, including impure tests
 @impure-tests regex="": build
-     {{cargo_test_invocation}} {{regex}} --features "extra-tests"
+    {{ cargo_test_invocation }} {{ regex }} --features "extra-tests"
 
 # Run the entire CLI test suite
 test-cli: impure-tests integ-tests
@@ -321,49 +319,44 @@ test-cli: impure-tests integ-tests
 # Run the entire test suite, including impure unit tests
 test-all: test-nix-plugins impure-tests integ-tests nix-integ-tests
 
-
 # ---------------------------------------------------------------------------- #
 
 # Enters the Rust development environment
 @work:
     # Note that this command is only really useful if you have
     # `just` installed outside of the `flox` environment already
-    nix {{nix_options}} develop
-
+    nix {{ nix_options }} develop
 
 # ---------------------------------------------------------------------------- #
 
 # Bump all flake dependencies and commit with a descriptive message
 @bump-all:
-    nix {{nix_options}} flake update --commit-lock-file  \
+    nix {{ nix_options }} flake update --commit-lock-file  \
          --commit-lockfile-summary "chore: flake bump";
 
 # Bump a specific flake input and commit with a descriptive message
 @bump input:
-    nix {{nix_options}} flake lock --update-input {{input}}  \
+    nix {{ nix_options }} flake lock --update-input {{ input }}  \
          --commit-lock-file --commit-lockfile-summary         \
-         "chore: bump '{{input}}' flake input";
-
+         "chore: bump '{{ input }}' flake input";
 
 # ---------------------------------------------------------------------------- #
 
 # Output licenses of all dependency crates
 @license:
-     cargo metadata --format-version 1              \
-       |jq -r '.packages[]|[.name,.license]|@csv';
-
+    cargo metadata --format-version 1              \
+      |jq -r '.packages[]|[.name,.license]|@csv';
 
 # ---------------------------------------------------------------------------- #
 
 # Run a `flox` command
 @flox +args="": build
-    target/debug/flox {{args}}
+    target/debug/flox {{ args }}
 
 # Run a `flox` command using the catalog
 @catalog-flox +args="": build
     echo "just: DEPRECATED TARGET: Use 'flox' instead" >&2;
-    target/debug/flox {{args}}
-
+    target/debug/flox {{ args }}
 
 # ---------------------------------------------------------------------------- #
 
@@ -389,6 +382,7 @@ test-all: test-nix-plugins impure-tests integ-tests nix-integ-tests
 
 # Format all the code
 format: format-cli format-nix-plugins format-nix format-yaml
+
 # ---------------------------------------------------------------------------- #
 #
 #
