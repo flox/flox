@@ -75,6 +75,9 @@ fn flox_nixpkgs_flake_ref(locked_url: &str, attr_path: &str) -> Result<String, B
     let url =
         Url::parse(locked_url).map_err(|err| malformed(&format!("is not a valid URL: {err}")))?;
     let host = url.host_str().ok_or_else(|| malformed("has no host"))?;
+    // The owner is passed through verbatim. The flox-nixpkgs proxy still
+    // constrains it to `flox`/`NixOS`; relaxing that allowlist to arbitrary
+    // realm orgs is out of scope for this effort (tracked with SL-007).
     let owner = url
         .path_segments()
         .and_then(|mut segments| segments.find(|segment| !segment.is_empty()))
@@ -1593,13 +1596,19 @@ mod flox_nixpkgs_ref_tests {
     #[test]
     fn errors_without_a_rev() {
         let err = flox_nixpkgs_flake_ref("https://github.com/flox/nixpkgs", "hello").unwrap_err();
-        assert!(err.to_string().contains("has no 'rev' query parameter"));
+        assert!(matches!(
+            err,
+            BuildEnvError::LockfileContents(ref msg) if msg.contains("has no 'rev' query parameter")
+        ));
     }
 
     #[test]
     fn errors_without_a_host() {
         let err = flox_nixpkgs_flake_ref("github:flox/nixpkgs/abc", "hello").unwrap_err();
-        assert!(err.to_string().contains("has no host"));
+        assert!(matches!(
+            err,
+            BuildEnvError::LockfileContents(ref msg) if msg.contains("has no host")
+        ));
     }
 }
 
