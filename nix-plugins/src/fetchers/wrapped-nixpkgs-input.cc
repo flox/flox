@@ -158,6 +158,14 @@ floxNixpkgsAttrsToGithubAttrs( const nix::fetchers::Attrs & attrs )
   /* Inherit owner field (could be NixOS or flox) */
   _attrs["owner"] = nix::fetchers::getStrAttr( attrs, "owner" );
 
+  /* Carry an enterprise `host' through to the github fetcher (it defaults to
+   * github.com when absent), so a realm's on-premise nixpkgs is fetched from
+   * the host the catalog server mastered rather than github.com. */
+  if ( auto host = nix::fetchers::maybeGetStrAttr( attrs, "host" ) )
+    {
+      _attrs["host"] = *host;
+    }
+
   /* Inherit `rev' and `ref' fields */
   if ( auto rev = nix::fetchers::maybeGetStrAttr( attrs, "rev" ) )
     {
@@ -225,6 +233,12 @@ githubAttrsToFloxNixpkgsAttrs( const nix::fetchers::Attrs & attrs )
   /* Inherit `owner' field */
   _attrs["owner"] = owner;
 
+  /* Inherit an enterprise `host' if present (github.com when absent). */
+  if ( auto host = nix::fetchers::maybeGetStrAttr( attrs, "host" ) )
+    {
+      _attrs["host"] = *host;
+    }
+
   /* Inherit `rev' and `ref' fields */
   if ( auto rev = nix::fetchers::maybeGetStrAttr( attrs, "rev" ) )
     {
@@ -260,7 +274,7 @@ WrappedNixpkgsInputScheme::inputFromAttrs(
     {
       if ( ( name != "owner" ) && ( name != "type" ) && ( name != "ref" )
            && ( name != "rev" ) && ( name != "narHash" )
-           && ( name != "version" ) )
+           && ( name != "version" ) && ( name != "host" ) )
         {
           throw nix::Error( "unsupported flox-nixpkgs input attribute '%s'",
                             name );
@@ -384,6 +398,13 @@ WrappedNixpkgsInputScheme::inputFromURL(
         path[1] );
     }
 
+  /* Optional enterprise `host' (e.g. `?host=github.company.com'); defaults to
+   * github.com in the github fetcher when absent. */
+  if ( auto it = url.query.find( "host" ); it != url.query.end() )
+    {
+      input.attrs.insert_or_assign( "host", it->second );
+    }
+
   return input;
 }
 
@@ -423,6 +444,12 @@ WrappedNixpkgsInputScheme::toURL( const nix::fetchers::Input & input ) const
   else
     {
       throw nix::Error( "missing 'rev' or 'ref' attribute in input" );
+    }
+
+  /* Round-trip an enterprise `host' as a query attribute. */
+  if ( auto host = nix::fetchers::maybeGetStrAttr( input.attrs, "host" ) )
+    {
+      url.query.insert_or_assign( "host", *host );
     }
 
   return url;
@@ -534,6 +561,13 @@ WrappedNixpkgsInputScheme::getAccessor(
       { "version", nix::fetchers::getIntAttr( input.attrs, "version" ) },
       { "owner", nix::fetchers::getStrAttr( input.attrs, "owner" ) },
       { "rev", rev->gitRev() } } );
+
+  /* Key the cache on the host too, so realms with distinct nixpkgs hosts do not
+   * collide (github.com is the implicit key when absent). */
+  if ( auto host = nix::fetchers::maybeGetStrAttr( input.attrs, "host" ) )
+    {
+      lockedAttrs.insert_or_assign( "host", *host );
+    }
 
   /* If we're already cached then we're done. */
   nix::fetchers::Cache::Key storeKey( "flox-nixpkgs", lockedAttrs );
