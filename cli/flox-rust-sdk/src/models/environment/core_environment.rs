@@ -25,6 +25,7 @@ use thiserror::Error;
 use tracing::debug;
 
 use super::fetcher::IncludeFetcher;
+use super::install::validate_outputs_against_lockfile;
 use super::uninstall::{UninstallSpec, resolve_specs_to_modifications};
 use super::{
     CanonicalizeError,
@@ -349,8 +350,20 @@ impl CoreEnvironment<ReadOnly> {
             None
         } else {
             let new_manifest = manifest.modify_packages(&modifications)?;
-            let (built_environments, _) =
-                self.transact_with_manifest(&new_manifest, flox, out_link_prefix)?;
+            // Lock the modified manifest so we can validate requested outputs
+            // for packages on the add path (not yet in the old lockfile), then
+            // hand the same lockfile to the transaction so it doesn't re-lock.
+            let existing_lockfile = self.existing_lockfile()?;
+            let new_lockfile: Lockfile = self
+                .lock_without_writing(flox, &new_manifest, existing_lockfile.as_ref())?
+                .into();
+            validate_outputs_against_lockfile(packages, &new_lockfile)?;
+            let (built_environments, _) = self.transact_with_manifest(
+                &new_manifest,
+                flox,
+                out_link_prefix,
+                Some(new_lockfile),
+            )?;
             Some(built_environments)
         };
 
@@ -383,7 +396,8 @@ impl CoreEnvironment<ReadOnly> {
         let modifications = resolve_specs_to_modifications(&uninstall_specs, &manifest, &lockfile)?;
 
         let new_manifest = manifest.modify_packages(&modifications)?;
-        let (store_path, _) = self.transact_with_manifest(&new_manifest, flox, out_link_prefix)?;
+        let (store_path, _) =
+            self.transact_with_manifest(&new_manifest, flox, out_link_prefix, None)?;
 
         // Collect the modified install ids that are still installed through includes
         let still_included = if let Some(compose) = &lockfile.compose {
@@ -436,7 +450,7 @@ impl CoreEnvironment<ReadOnly> {
             };
 
         let (store_path, new_lockfile) =
-            self.transact_with_manifest(&migrated_manifest, flox, out_link_prefix)?;
+            self.transact_with_manifest(&migrated_manifest, flox, out_link_prefix, None)?;
 
         Ok(EditResult::Changed {
             old_lockfile: Box::new(old_lockfile),
@@ -820,12 +834,18 @@ impl CoreEnvironment<ReadOnly> {
     /// symlinks will have been updated to point at the new store path.  A
     /// follow-up (#4339) replaces the directory-swap model with a file-level
     /// transaction that eliminates this window.
+    ///
+    /// Pass `precomputed_lockfile` when the caller has already locked
+    /// `manifest` (e.g. to validate it before committing) to avoid locking it a
+    /// second time here. The caller is responsible for ensuring the lockfile
+    /// was produced from `manifest`. Pass `None` to lock within the transaction.
     #[must_use = "don't discard the store path of built environments"]
     fn transact_with_manifest(
         &mut self,
         manifest: &Manifest<Migrated>,
         flox: &Flox,
         out_link_prefix: Option<&Path>,
+        precomputed_lockfile: Option<Lockfile>,
     ) -> Result<(BuildEnvOutputs, Lockfile), EnvironmentError> {
         debug!("transaction: validating services block");
         manifest.as_latest_schema().services.validate()?;
@@ -840,11 +860,19 @@ impl CoreEnvironment<ReadOnly> {
         );
         let mut temp_env = self.writable(&tempdir)?;
 
-        debug!("transaction: locking environment");
-        let existing_lockfile = temp_env.existing_lockfile()?;
-        let mut lockfile: Lockfile = temp_env
-            .lock_without_writing(flox, manifest, existing_lockfile.as_ref())?
-            .into();
+        let mut lockfile: Lockfile = match precomputed_lockfile {
+            Some(lockfile) => {
+                debug!("transaction: reusing precomputed lockfile");
+                lockfile
+            },
+            None => {
+                debug!("transaction: locking environment");
+                let existing_lockfile = temp_env.existing_lockfile()?;
+                temp_env
+                    .lock_without_writing(flox, manifest, existing_lockfile.as_ref())?
+                    .into()
+            },
+        };
 
         debug!("transaction: ensuring manifest schemas match");
         if lockfile.manifest.get_schema_version() != manifest.original_schema()
@@ -1765,7 +1793,7 @@ mod tests {
             .get_mut("bad")
             .unwrap()
             .shutdown = None;
-        let res = env.transact_with_manifest(&manifest, &flox, None);
+        let res = env.transact_with_manifest(&manifest, &flox, None, None);
         assert!(matches!(
             res,
             Err(EnvironmentError::ManifestError(
