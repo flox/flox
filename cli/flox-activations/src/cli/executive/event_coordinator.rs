@@ -221,10 +221,13 @@ impl EventCoordinator {
             debug!(pid, "stopped monitoring PID, joining watcher thread");
             if handle.is_finished() {
                 if let Err(err) = handle.join() {
-                    error!(pid, ?err, "couldn't join watcher thread");
+                    warn!(pid, ?err, "couldn't join watcher thread");
                 }
             } else {
-                error!(pid, "expected watcher thread for PID to be finished");
+                // Common case: thread sent ProcessExited as its last action and
+                // is finishing its stack unwind. Release the handle; the thread
+                // completes independently in microseconds.
+                debug!(pid, "watcher thread not yet finished, releasing handle");
             }
         } else {
             error!(pid, "stop_monitoring called for PID not in known set");

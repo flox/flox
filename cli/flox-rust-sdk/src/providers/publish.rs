@@ -407,11 +407,8 @@ impl ClientSideCatalogStoreConfig {
     }
 
     /// Upload a single store path to a Catalog Store.
-    ///
-    /// Note: this is only public because it's used in the private `flox upload`
-    ///       command.
     #[instrument(skip_all, fields(progress = format!("Uploading '{store_path}'")))]
-    pub fn upload_store_path(
+    fn upload_store_path(
         destination_url: &Url,
         signing_key_path: Option<&Path>,
         nix_copy_auth: &Option<NixCopyAuth>,

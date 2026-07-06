@@ -82,7 +82,7 @@ pub struct FloxConfig {
     /// The URL of the catalog instance to use
     // Using a URL here adds an extra trailing slash,
     // so just use a String.
-    pub catalog_url: Option<String>,
+    pub catalog_url: Option<Url>,
 
     /// Authentication mode for FloxHub
     #[serde(default)]

@@ -245,7 +245,7 @@ mod tests {
     use std::str::FromStr;
 
     use flox_core::data::environment_ref::{EnvironmentName, EnvironmentOwner};
-    use flox_rust_sdk::flox::Floxhub;
+    use flox_core::floxhub::Floxhub;
     use flox_rust_sdk::models::environment::PathPointer;
     use indoc::formatdoc;
     use pretty_assertions::assert_eq;
@@ -254,7 +254,7 @@ mod tests {
 
     #[test]
     fn display_environments() {
-        let floxhub = Floxhub::new("https://hub.example.com".parse().unwrap(), None).unwrap();
+        let floxhub = Floxhub::new("https://hub.example.com".parse().unwrap(), None, None).unwrap();
         let owner = EnvironmentOwner::from_str("owner").unwrap();
 
         let path_env = UninitializedEnvironment::DotFlox(DotFlox {

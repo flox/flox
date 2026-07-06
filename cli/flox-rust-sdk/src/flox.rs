@@ -2,11 +2,11 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::LazyLock;
 
+use flox_core::floxhub::Floxhub;
 use flox_core::vars::FLOX_VERSION_STRING;
 pub use floxhub_client::{AuthContext, AuthnMode, FloxhubToken, FloxhubTokenError};
 use floxhub_client::{FloxhubClient, FloxhubClientError};
 use serde::{Deserialize, Serialize};
-use thiserror::Error;
 use url::Url;
 use uuid::Uuid;
 
@@ -92,97 +92,11 @@ impl Flox {
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, Default)]
 pub struct Features {
     #[serde(default)]
-    pub upload: bool,
-    #[serde(default)]
     pub qa: bool,
     #[serde(default)]
     pub beta: bool,
     #[serde(default)]
     pub auto_activate: bool,
-}
-
-pub static DEFAULT_FLOXHUB_URL: LazyLock<Url> =
-    LazyLock::new(|| Url::parse("https://hub.flox.dev").unwrap());
-
-#[derive(Debug, Clone)]
-pub struct Floxhub {
-    base_url: Url,
-    git_url: Url,
-    git_url_overridden: bool,
-}
-
-impl Floxhub {
-    pub fn new(base_url: Url, git_url_override: Option<Url>) -> Result<Self, FloxhubError> {
-        let git_url_overridden = git_url_override.is_some();
-        let git_url = Self::resolve_git_url(&base_url, git_url_override)?;
-        Ok(Floxhub {
-            base_url,
-            git_url,
-            git_url_overridden,
-        })
-    }
-
-    /// Resolve the FloxHub git URL from the base URL and an optional override.
-    ///
-    /// Precedence:
-    /// 1. An explicit override (e.g. `_FLOX_FLOXHUB_GIT_URL`) — used verbatim.
-    /// 2. Derived from the base URL — see [`Floxhub::derive_git_url`].
-    ///
-    /// This is the single seam through which the git URL is resolved. A future
-    /// authoritative base URL (`FLOXHUB_URL`) will add a tier between these two
-    /// (derive `<base>/git` on the same host) without changing this contract;
-    /// see the Enterprise On-Premise SL-003 design.
-    fn resolve_git_url(base_url: &Url, git_url_override: Option<Url>) -> Result<Url, FloxhubError> {
-        match git_url_override {
-            Some(git_url_override) => Ok(git_url_override),
-            None => Self::derive_git_url(base_url),
-        }
-    }
-
-    /// Return the base url of the FloxHub instance
-    /// might change to a more specific url in the future
-    pub fn base_url(&self) -> &Url {
-        &self.base_url
-    }
-
-    pub fn git_url_override(&self) -> Option<&Url> {
-        self.git_url_overridden.then_some(&self.git_url)
-    }
-
-    /// Return the url of the FloxHub git interface
-    ///
-    /// If the environment variable `_FLOX_FLOXHUB_GIT_URL` is set,
-    /// it will be used instead of the derived FloxHub host.
-    /// This is useful for testing FloxHub locally.
-    pub fn git_url(&self) -> &Url {
-        &self.git_url
-    }
-
-    fn derive_git_url(base_url: &Url) -> Result<Url, FloxhubError> {
-        let mut git_url = base_url.clone();
-        let host = git_url
-            .host_str()
-            .ok_or(FloxhubError::NoHost(base_url.to_string()))?;
-        let without_hub = host
-            .strip_prefix("hub.")
-            .ok_or(FloxhubError::NoHubPrefix(base_url.to_string()))?;
-        let with_api_prefix = format!("api.{}", without_hub);
-        git_url
-            .set_host(Some(&with_api_prefix))
-            .map_err(|e| FloxhubError::InvalidFloxhubBaseUrl(with_api_prefix, e))?;
-        git_url.set_path("git");
-        Ok(git_url)
-    }
-}
-
-#[derive(Error, Debug)]
-pub enum FloxhubError {
-    #[error("Invalid FloxHub URL: '{0}'. URL must contain a host.")]
-    NoHost(String),
-    #[error("Invalid FloxHub URL: '{0}'. URL must begin with 'hub.'")]
-    NoHubPrefix(String),
-    #[error("Couldn't set git URL host to '{0}'")]
-    InvalidFloxhubBaseUrl(String, #[source] url::ParseError),
 }
 
 pub mod test_helpers {
@@ -320,6 +234,7 @@ pub mod test_helpers {
             runtime_dir,
             floxhub: Floxhub::new(
                 Url::from_str("https://hub.flox.dev").unwrap(),
+                None,
                 git_url_override,
             )
             .unwrap(),
@@ -337,8 +252,6 @@ pub mod test_helpers {
 
 #[cfg(test)]
 pub mod tests {
-    use std::str::FromStr;
-
     use super::*;
 
     /// A fake FloxHub token
@@ -387,48 +300,5 @@ pub mod tests {
             !token.secret().is_empty(),
             "secret() should still return the token string for expired tokens"
         );
-    }
-
-    #[test]
-    fn test_derive_git_url() {
-        assert_eq!(
-            Floxhub::derive_git_url(&Url::from_str("https://hub.flox.dev").unwrap()).unwrap(),
-            Url::from_str("https://api.flox.dev/git").unwrap()
-        );
-    }
-
-    #[test]
-    fn test_derive_git_url_dev() {
-        assert_eq!(
-            Floxhub::derive_git_url(&Url::from_str("https://hub.preview.flox.dev").unwrap())
-                .unwrap(),
-            Url::from_str("https://api.preview.flox.dev/git").unwrap()
-        );
-    }
-
-    #[test]
-    fn resolve_git_url_uses_override_verbatim() {
-        let base = Url::from_str("https://hub.flox.dev").unwrap();
-        let override_url = Url::from_str("https://git.example.internal/git").unwrap();
-        assert_eq!(
-            Floxhub::resolve_git_url(&base, Some(override_url.clone())).unwrap(),
-            override_url,
-        );
-    }
-
-    #[test]
-    fn resolve_git_url_derives_when_no_override() {
-        let base = Url::from_str("https://hub.flox.dev").unwrap();
-        assert_eq!(
-            Floxhub::resolve_git_url(&base, None).unwrap(),
-            Url::from_str("https://api.flox.dev/git").unwrap(),
-        );
-    }
-
-    #[test]
-    fn derive_git_url_rejects_non_hub_host() {
-        let err = Floxhub::derive_git_url(&Url::from_str("https://flox.example.internal").unwrap())
-            .unwrap_err();
-        assert!(matches!(err, FloxhubError::NoHubPrefix(_)));
     }
 }

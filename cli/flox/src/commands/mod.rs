@@ -29,7 +29,6 @@ mod services_socket;
 mod show;
 mod uninstall;
 mod upgrade;
-mod upload;
 
 use std::fmt::Display;
 use std::path::PathBuf;
@@ -39,16 +38,15 @@ use std::{env, fmt, mem};
 use anyhow::{Context, Result, anyhow, bail};
 use bpaf::{Args, Bpaf, ParseFailure, Parser, ShellComp};
 use flox_core::data::environment_ref::{self, DEFAULT_NAME, RemoteEnvironmentRef};
+use flox_core::floxhub::{DEFAULT_FLOXHUB_URL, Floxhub};
 use flox_core::vars::FLOX_DISABLE_METRICS_VAR;
 use flox_manifest::interfaces::AsLatestSchema;
 use flox_manifest::{Manifest, TypedOnly};
 use flox_rust_sdk::flox::{
     AuthContext,
     AuthnMode,
-    DEFAULT_FLOXHUB_URL,
     FLOX_VERSION,
     Flox,
-    Floxhub,
     FloxhubToken,
     FloxhubTokenError,
 };
@@ -177,6 +175,10 @@ pub struct FloxArgs {
     /// Enable beta features for this invocation
     #[bpaf(long, hide)]
     pub beta: bool,
+
+    /// Base URL of the FloxHub instance to target for this invocation
+    #[bpaf(long, argument("URL"), optional)]
+    pub floxhub_url: Option<Url>,
 
     /// Print the version of the program
     #[allow(dead_code)] // fake arg, `--version` is checked for separately (see [Version])
@@ -342,29 +344,30 @@ impl FloxArgs {
             debug!(error = %err, "Failed to record v2 cli.command_run event");
         }
 
-        let git_url_override = {
-            if let Ok(env_set_host) = std::env::var("_FLOX_FLOXHUB_GIT_URL") {
-                if !self.is_prompt_hook_flow() {
-                    message::warning(formatdoc! {"
-                        Using {env_set_host} as FloxHub host
-                        '$_FLOX_FLOXHUB_GIT_URL' is used for testing purposes only,
-                        alternative FloxHub hosts are not yet supported!
-                    "});
-                }
-                Some(Url::parse(&env_set_host)?)
-            } else {
-                None
+        // Explicit floxhub_url override via CLI flag, on top of config.
+        let floxhub_url = self
+            .floxhub_url
+            .as_ref()
+            .or(config.flox.floxhub_url.as_ref())
+            .unwrap_or_else(|| &DEFAULT_FLOXHUB_URL)
+            .clone();
+
+        let api_url_override = config.flox.catalog_url.clone();
+
+        // Explicit git-endpoint override, for testing against a local FloxHub.
+        let git_url_override = if let Ok(env_set_host) = std::env::var("_FLOX_FLOXHUB_GIT_URL") {
+            if !self.is_prompt_hook_flow() {
+                message::warning(formatdoc! {"
+                    Using {env_set_host} as the FloxHub git endpoint.
+                    '$_FLOX_FLOXHUB_GIT_URL' overrides the git endpoint and is intended for testing only.
+                "});
             }
+            Some(Url::parse(&env_set_host)?)
+        } else {
+            None
         };
 
-        let floxhub = Floxhub::new(
-            config
-                .flox
-                .floxhub_url
-                .clone()
-                .unwrap_or_else(|| DEFAULT_FLOXHUB_URL.clone()),
-            git_url_override,
-        )?;
+        let floxhub = Floxhub::new(floxhub_url, api_url_override, git_url_override)?;
 
         let floxhub_token = self.resolve_floxhub_token(&config);
 
@@ -375,7 +378,11 @@ impl FloxArgs {
         let credential =
             AuthContext::from_mode(&config.flox.floxhub_authn_mode, floxhub_token.clone());
 
-        let floxhub_client = init_floxhub_client(&config, metrics_device_uuid)?;
+        let floxhub_client = init_floxhub_client(
+            floxhub.api_url_str(),
+            credential.clone(),
+            metrics_device_uuid,
+        )?;
 
         // we already make sure $USER corresponds to **euid** earlier on in the process.
         let system_user_name =
@@ -574,7 +581,16 @@ impl FloxArgs {
                     self.command,
                     Some(Commands::Admin(AdminCommands::Auth(auth::Auth::Login)))
                 );
-                if !reauthenticating && !self.is_prompt_hook_flow() {
+                // The token is account-global, so the reminder only needs to
+                // appear once per shell session. The outermost activation
+                // surfaces it; any `flox` invocation already running inside an
+                // activation — a nested `flox activate`, or a command in an
+                // activated shell whose rc re-activates an environment — stays
+                // quiet. Activations export `_FLOX_ACTIVE_ENVIRONMENTS` into the
+                // shell, including in-place `eval "$(flox activate)"` ones, so
+                // it is a reliable signal even across the parent shell.
+                let nested = activated_environments().last_active().is_some();
+                if !reauthenticating && !self.is_prompt_hook_flow() && !nested {
                     message::warning(
                         "Your FloxHub token has expired. Run 'flox auth login' to re-authenticate.",
                     );
@@ -1024,16 +1040,13 @@ impl AdminCommands {
 }
 
 /// Internal commands that aren't documented or supported for public use.
+#[allow(clippy::large_enum_variant)]
 #[derive(Bpaf, Clone)]
 #[bpaf(hide)]
 enum InternalCommands {
     /// Reset the metrics queue (if any), reset metrics ID, and re-prompt for consent
     #[bpaf(command("reset-metrics"), hide)]
     ResetMetrics(#[bpaf(external(general::reset_metrics))] general::ResetMetrics),
-
-    /// Upload packages
-    #[bpaf(command, hide, footer("Run 'man flox-upload' for more details."))]
-    Upload(#[bpaf(external(upload::upload))] upload::Upload),
 
     /// Lock a manifest file
     #[bpaf(command, hide)]
@@ -1068,7 +1081,6 @@ impl InternalCommands {
     async fn handle(self, config: Config, flox: Flox) -> Result<()> {
         match self {
             InternalCommands::ResetMetrics(args) => args.handle(flox).await?,
-            InternalCommands::Upload(args) => args.handle(flox).await?,
             InternalCommands::LockManifest(args) => args.handle(flox).await?,
             InternalCommands::CheckForUpgrades(args) => args.handle(flox).await?,
             InternalCommands::ActivationState(args) => args.handle(flox).await?,
@@ -1091,7 +1103,6 @@ impl InternalCommands {
     fn subcommand_name(&self) -> &'static str {
         match self {
             InternalCommands::ResetMetrics(_) => "reset-metrics",
-            InternalCommands::Upload(_) => "upload",
             InternalCommands::LockManifest(_) => "lock",
             InternalCommands::CheckForUpgrades(_) => "check-for-upgrades",
             InternalCommands::ActivationState(_) => "activation-state",

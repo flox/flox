@@ -182,7 +182,7 @@ EXPIRED_FLOXHUB_TOKEN="eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3gu
     FLOX_FLOXHUB_TOKEN="$EXPIRED_FLOXHUB_TOKEN" \
     run --separate-stderr "$FLOX_BIN" deactivate
   assert_success
-  refute_regex "$stderr" "as FloxHub host"
+  refute_regex "$stderr" "as the FloxHub git endpoint"
   refute_regex "$stderr" "token has expired"
 }
 
@@ -194,8 +194,45 @@ EXPIRED_FLOXHUB_TOKEN="eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3gu
     FLOX_FLOXHUB_TOKEN="$EXPIRED_FLOXHUB_TOKEN" \
     run --separate-stderr "$FLOX_BIN" config
   assert_success
-  assert_regex "$stderr" "Using https://git.example.invalid/ as FloxHub host"
+  assert_regex "$stderr" "Using https://git.example.invalid/ as the FloxHub git endpoint"
   assert_regex "$stderr" "Your FloxHub token has expired"
+}
+
+# The expired-token reminder is account-global, so a single user action that
+# nests `flox` invocations — e.g. `flox activate` whose shell rc runs
+# `flox activate` again — should surface it only once. The outermost activation
+# warns; anything already inside an activation stays quiet.
+# bats test_tags=hook:hook-env
+@test "expired-token advisory is shown once across nested 'flox' invocations" {
+  project_setup
+
+  FLOX_FLOXHUB_TOKEN="$EXPIRED_FLOXHUB_TOKEN" \
+    run "$FLOX_BIN" activate -d "$PROJECT_DIR" -- \
+    "$FLOX_BIN" activate -d "$PROJECT_DIR" -- true
+  assert_success
+  # Once for the outer activation, and not again for the nested one.
+  run grep -c "Your FloxHub token has expired" <<< "$output"
+  assert_output "1"
+
+  project_teardown
+}
+
+# Mirrors the real-world trigger: a shell rc activates an environment in place
+# (`eval "$(flox activate)"`), then the user runs another `flox` command in the
+# same shell. The in-place activation exports `_FLOX_ACTIVE_ENVIRONMENTS`, so the
+# second command sees it is nested and does not repeat the reminder.
+# bats test_tags=hook:hook-env
+@test "expired-token advisory is not repeated after an in-place activation" {
+  project_setup
+
+  FLOX_FLOXHUB_TOKEN="$EXPIRED_FLOXHUB_TOKEN" \
+    run bash -c "eval \"\$('$FLOX_BIN' activate -d '$PROJECT_DIR')\"; '$FLOX_BIN' config"
+  assert_success
+  # Once for the in-place activation, and not again for the later command.
+  run grep -c "Your FloxHub token has expired" <<< "$output"
+  assert_output "1"
+
+  project_teardown
 }
 
 # ---------------------------------------------------------------------------- #

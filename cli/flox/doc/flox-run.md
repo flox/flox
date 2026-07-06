@@ -10,7 +10,7 @@ flox-run - run a command from a Flox Catalog package
 
 # SYNOPSIS
 
-```
+```text
 flox [<general-options>] run
      -p <package>
      -- <command> [<arguments>]
@@ -31,7 +31,7 @@ no `flox init`, `flox install`, or environment cleanup needed.
 The `-p`/`--package` flag is required and names the package explicitly.
 For example:
 
-```
+```bash
 $ flox run -p gnugrep -- grep "pattern" file.txt
 ```
 
@@ -46,7 +46,7 @@ everything after `--` is passed to the command verbatim.
 
 Always use `--` to separate the flox flags from the command:
 
-```
+```bash
 flox run -p curl -- curl http://example.com
 ```
 
@@ -60,7 +60,7 @@ consumed by `curl`, leaving flox without a package.
 Flox intercepts `--version` from the full argument list before parsing.
 Always use `--` so `--version` reaches the command:
 
-```
+```bash
 $ flox run -p hello -- hello --version   # ✅ shows hello's version
 $ flox run -p hello hello --version      # ❌ shows flox's version instead
 ```
@@ -112,31 +112,31 @@ Repeated invocations of the same package skip the download step.
 
 Run a command:
 
-```
+```bash
 $ flox run -p cowsay -- cowsay "Hello, Flox!"
 ```
 
 Run a command whose name differs from the package name:
 
-```
+```bash
 $ flox run -p binutils -- readelf -a /bin/ls
 ```
 
 Pass option-style arguments to the command:
 
-```
+```bash
 $ flox run -p curl -- curl -sL http://example.com
 ```
 
 Pipe input to a command:
 
-```
+```bash
 $ echo '{"name":"Flox"}' | flox run -p jq -- jq '.name'
 ```
 
 Show the command's own help or version:
 
-```
+```bash
 $ flox run -p hello -- hello --help
 $ flox run -p hello -- hello --version
 ```

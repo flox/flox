@@ -1,28 +1,23 @@
 use std::collections::BTreeMap;
-use std::str::FromStr;
 
 use flox_rust_sdk::flox::FLOX_VERSION;
 use flox_rust_sdk::utils::{HEADER_DEVICE_UUID, INVOCATION_SOURCES};
-use floxhub_client::{
-    AuthContext,
-    DEFAULT_CATALOG_URL,
-    FloxhubClient,
-    FloxhubClientConfig,
-    FloxhubMockMode,
-    FloxhubToken,
-};
+use floxhub_client::{AuthContext, FloxhubClient, FloxhubClientConfig, FloxhubMockMode};
 use tracing::debug;
 use uuid::Uuid;
-
-use crate::config::Config;
 
 /// Initialize the FloxHub API client.
 ///
 /// - Reads the catalog URL from config (defaults to the production catalog URL)
 /// - Configures mock replay mode if `_FLOX_USE_CATALOG_MOCK` is set
 /// - Includes device UUID and invocation-source headers when available
+///
+/// `base_url` is the API base the generated client joins request paths onto
+/// (e.g. `<base>/api/v1/catalog/...`); pass [`flox_core::floxhub::Floxhub::api_url_str`]
+/// so any trailing slash is already trimmed.
 pub fn init_floxhub_client(
-    config: &Config,
+    base_url: String,
+    auth_context: AuthContext,
     metrics_device_uuid: Option<Uuid>,
 ) -> Result<FloxhubClient, anyhow::Error> {
     let mut extra_headers = BTreeMap::new();
@@ -41,23 +36,10 @@ pub fn init_floxhub_client(
     let mock_mode = FloxhubMockMode::default_from_env();
 
     let client_config = FloxhubClientConfig {
-        base_url: config
-            .flox
-            .catalog_url
-            .clone()
-            .unwrap_or_else(|| DEFAULT_CATALOG_URL.to_string()),
+        base_url,
         extra_headers,
         mock_mode,
-        auth_context: AuthContext::from_mode(
-            &config.flox.floxhub_authn_mode,
-            config.flox.floxhub_token.as_deref().and_then(|s| {
-                if s.is_empty() {
-                    None
-                } else {
-                    FloxhubToken::from_str(s).ok()
-                }
-            }),
-        ),
+        auth_context,
         user_agent: Some(format!("flox-cli/{}", &*FLOX_VERSION)),
     };
 
