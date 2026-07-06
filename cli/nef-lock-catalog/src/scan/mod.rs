@@ -6,15 +6,18 @@ use rnix::ast;
 use rnix::ast::HasEntry as _;
 use rowan::ast::AstNode;
 
-/// Catalog references and dependency-argument names extracted from one file.
+/// Catalog references and dependency attr-paths extracted from one file.
 #[derive(Debug)]
 struct FileInfo {
     /// Fully-qualified catalog attr-paths referenced by the file
     /// (e.g. `catalogs.myorg.toolkit.readVersion`).
     refs: BTreeSet<String>,
-    /// Non-root function arguments the file depends on, resolved by
-    /// [collect_transitive].
-    dep_args: Vec<String>,
+    /// Attr-paths of the packages this file depends on, resolved by
+    /// [collect_transitive]. The first component is the dependency argument;
+    /// any further components are members selected on it (a sibling attribute
+    /// set), e.g. `["python3Packages", "isdr-zk-client"]` for
+    /// `python3Packages.isdr-zk-client`. A bare argument is a single component.
+    deps: Vec<Vec<String>>,
 }
 
 /// Catalog root parameter names assumed by [scan_package].
@@ -31,8 +34,10 @@ const DEFAULT_ROOTS: &[&str] = &["catalogs"];
 /// target expression relative to it. The returned set contains every catalog
 /// attr-path the target transitively depends on: references in the target
 /// itself (including those reached through `import`), plus references reached
-/// through its dependency arguments, resolved as sibling packages
-/// (`<name>.nix` or `<name>/default.nix`) under `base_dir`.
+/// through its dependency arguments. A dependency argument is resolved as a
+/// sibling package (`<name>.nix` or `<name>/default.nix`); a member selected on
+/// it (`<name>.<member>`) is resolved as a member of a sibling attribute set,
+/// descending namespace directories under `base_dir`.
 ///
 /// Uses the default `catalogs` root; see [scan_package_with_roots] to override.
 pub fn scan_package(base_dir: impl AsRef<Path>, rel_file: impl AsRef<Path>) -> BTreeSet<String> {
@@ -88,8 +93,8 @@ fn analyze_file_at(
     let root = parse.tree();
 
     let mut refs = BTreeSet::new();
-    let mut dep_args = Vec::new();
 
+    let mut dep_names = HashSet::new();
     if let Some(rnix::ast::Expr::Lambda(lambda)) = root.expr()
         && let Some(rnix::ast::Param::Pattern(pat)) = lambda.param()
     {
@@ -98,10 +103,16 @@ fn analyze_file_at(
                 && let Some(name) = ident.ident_token().map(|t| t.text().to_string())
                 && !roots.contains(name.as_str())
             {
-                dep_args.push(name);
+                dep_names.insert(name);
             }
         }
     }
+
+    // Each dependency argument resolves as a whole sibling package (single
+    // component). Members selected on an argument add longer attr-paths, e.g.
+    // `python3Packages.isdr-zk-client`, resolved as sibling attribute sets.
+    let mut deps: Vec<Vec<String>> = dep_names.iter().map(|name| vec![name.clone()]).collect();
+    collect_dep_member_paths(root.syntax(), &dep_names, &mut deps);
 
     let aliases = collect_aliases(root.syntax(), roots);
     collect_refs(root.syntax(), &mut refs, roots, &aliases);
@@ -110,14 +121,49 @@ fn analyze_file_at(
         follow_imports(root.syntax(), roots, &aliases, dir, visited, &mut refs);
     }
 
-    FileInfo { refs, dep_args }
+    FileInfo { refs, deps }
+}
+
+/// Collect the static attr-paths selected on dependency arguments.
+///
+/// For every `select` whose base identifier is a dependency argument in
+/// `dep_names`, record `[arg, member…]` up to the first dynamic component.
+/// These become sibling-attribute-set lookups in [resolve_dep].
+fn collect_dep_member_paths(
+    node: &rnix::SyntaxNode,
+    dep_names: &HashSet<String>,
+    out: &mut Vec<Vec<String>>,
+) {
+    if let Some(select) = ast::Select::cast(node.clone())
+        && let Some(ast::Expr::Ident(base)) = select.expr()
+        && let Some(base_name) = base.ident_token().map(|t| t.text().to_string())
+        && dep_names.contains(&base_name)
+    {
+        let mut path = vec![base_name];
+        if let Some(attrpath) = select.attrpath() {
+            for attr in attrpath.attrs() {
+                let ast::Attr::Ident(id) = attr else { break };
+                let Some(token) = id.ident_token() else { break };
+                path.push(token.text().to_string());
+            }
+        }
+        if path.len() > 1 {
+            out.push(path);
+        }
+    }
+
+    for child in node.children() {
+        collect_dep_member_paths(&child, dep_names, out);
+    }
 }
 
 /// Resolve the transitive closure of catalog refs across a set of files.
 ///
-/// Starting from the files in `db`, follow each file's `dep_args` to sibling
-/// files (loaded on demand from `dir` via [load_dep]) and union their refs.
-/// Cycles are handled by tracking visited names.
+/// Starting from the files in `db`, follow each file's `deps` to sibling
+/// packages (loaded on demand from `dir` via [resolve_dep]) and union their
+/// refs. A dep is an attr-path: a bare argument resolves as a sibling file, a
+/// longer path as a member of a sibling attribute set. Cycles are handled by
+/// tracking visited attr-paths.
 fn collect_transitive(
     mut db: HashMap<String, FileInfo>,
     dir: &Path,
@@ -125,22 +171,26 @@ fn collect_transitive(
 ) -> BTreeSet<String> {
     let mut visited: HashSet<String> = HashSet::new();
     let mut result: BTreeSet<String> = BTreeSet::new();
-    let mut queue: Vec<String> = db.keys().cloned().collect();
+    let mut queue: Vec<Vec<String>> = db
+        .keys()
+        .map(|key| key.split('/').map(str::to_string).collect())
+        .collect();
 
-    while let Some(name) = queue.pop() {
-        if !visited.insert(name.clone()) {
+    while let Some(path) = queue.pop() {
+        let key = path.join("/");
+        if !visited.insert(key.clone()) {
             continue;
         }
-        if !db.contains_key(&name)
-            && let Some(info) = load_dep(dir, &name, roots)
+        if !db.contains_key(&key)
+            && let Some(info) = resolve_dep(dir, &path, roots)
         {
-            db.insert(name.clone(), info);
+            db.insert(key.clone(), info);
         }
-        let Some(info) = db.get(&name) else { continue };
+        let Some(info) = db.get(&key) else { continue };
         result.extend(info.refs.iter().cloned());
-        let dep_args: Vec<String> = info.dep_args.clone();
-        for dep in dep_args {
-            if !visited.contains(&dep) {
+        let deps: Vec<Vec<String>> = info.deps.clone();
+        for dep in deps {
+            if !visited.contains(&dep.join("/")) {
                 queue.push(dep);
             }
         }
@@ -506,29 +556,48 @@ fn extract_ref_path(
     Some(parts.join("."))
 }
 
-/// Load a sibling dependency file by argument name, trying `<name>.nix` then
-/// `<name>/default.nix` under `dir`.
-fn load_dep(dir: &Path, name: &str, roots: &HashSet<String>) -> Option<FileInfo> {
-    let candidates = [
-        dir.join(format!("{}.nix", name)),
-        dir.join(name).join("default.nix"),
-    ];
-    for path in &candidates {
-        if path.is_file()
-            && let Ok(content) = fs::read_to_string(path)
-        {
-            // Relative imports in the dependency resolve against its own
-            // directory, which is the file's parent, not `dir`. For the
-            // `<name>/default.nix` candidate the parent is `dir/<name>/`.
-            return Some(analyze_file_at(
-                &content,
-                roots,
-                path.parent(),
-                &mut HashSet::new(),
-            ));
+/// Resolve a dependency attr-path to the package file it names and analyze it.
+///
+/// `components` is the dependency's attr-path: the first element is the
+/// dependency argument, the rest are members selected on it. Following the
+/// `dirToAttrs` convention, each component is resolved against `dir` in turn:
+/// a regular `<comp>.nix` is a package file (and shadows a same-named
+/// directory); a `<comp>/default.nix` is a package directory; a directory with
+/// no `default.nix` is an attribute set that is descended into. Components past
+/// the package file are attributes within it and are ignored.
+fn resolve_dep(dir: &Path, components: &[String], roots: &HashSet<String>) -> Option<FileInfo> {
+    let mut cur = dir.to_path_buf();
+    for comp in components {
+        let file = cur.join(format!("{comp}.nix"));
+        if file.is_file() {
+            return read_and_analyze(&file, roots);
         }
+        let sub = cur.join(comp);
+        let default = sub.join("default.nix");
+        if default.is_file() {
+            return read_and_analyze(&default, roots);
+        }
+        if sub.is_dir() {
+            cur = sub;
+            continue;
+        }
+        return None;
     }
     None
+}
+
+/// Read and analyze a resolved package file.
+///
+/// Relative imports in the file resolve against its own directory, so the
+/// file's parent is passed as the import base.
+fn read_and_analyze(path: &Path, roots: &HashSet<String>) -> Option<FileInfo> {
+    let content = fs::read_to_string(path).ok()?;
+    Some(analyze_file_at(
+        &content,
+        roots,
+        path.parent(),
+        &mut HashSet::new(),
+    ))
 }
 
 #[cfg(test)]
@@ -853,6 +922,52 @@ mod tests {
         assert_eq!(
             got,
             set(&["catalogs.myorg.direct", "catalogs.myorg.helper-ref"]),
+        );
+    }
+
+    /// Same-repo package-set aliases.
+    ///
+    /// A top-level package can be a thin alias that re-exports a member of an
+    /// in-repo package set, written in the deep-overlay form
+    /// `{ python3Packages }: python3Packages.isdr-zk-client`.
+    /// The catalog inputs of that package live in the member file
+    /// `python3Packages/isdr-zk-client/default.nix`, so the alias's closure must
+    /// include the member's refs.
+    #[test]
+    fn scan_package_follows_alias_to_pkgset_member() {
+        let base_dir = Path::new("test_data/catalog_refs/pkgset-member-alias");
+        let got = scan_package(base_dir, Path::new("isdr-zk-client.nix"));
+        assert_eq!(got, set(&["catalogs.myorg.toolkit.readVersion"]));
+    }
+
+    /// A nested file as the scan target resolves deps against the root.
+    ///
+    /// Scanning `foo/bar.nix` directly must resolve its dependency arguments
+    /// against the package-set root, not `foo/`, so a root-level package like
+    /// `top` is reachable and its refs join the closure.
+    #[test]
+    fn scan_package_nested_target_resolves_deps_at_root() {
+        let base_dir = Path::new("test_data/catalog_refs/nested-target-access");
+        let got = scan_package(base_dir, Path::new("foo/bar.nix"));
+        assert_eq!(
+            got,
+            set(&["catalogs.myorg.bar-own", "catalogs.myorg.top-src"]),
+        );
+    }
+
+    /// A package-set member's own dependencies are followed transitively.
+    ///
+    /// `top.nix` selects the `widget` member of the `python3Packages` namespace;
+    /// the member references a catalog input and depends on a sibling package
+    /// `helper-lib` (resolved at the package-set root). The closure unions the
+    /// member's ref and the sibling's ref.
+    #[test]
+    fn scan_package_follows_pkgset_member_transitive_deps() {
+        let base_dir = Path::new("test_data/catalog_refs/pkgset-member-transitive");
+        let got = scan_package(base_dir, Path::new("top.nix"));
+        assert_eq!(
+            got,
+            set(&["catalogs.myorg.widget-src", "catalogs.myorg.helper-lib-src"]),
         );
     }
 
