@@ -26,6 +26,7 @@ use rsevents_extra::Semaphore;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::{Span, debug, info_span, instrument, warn};
+use url::Url;
 
 use super::nix::nix_base_command;
 use super::nix_auth::{AuthError, AuthProvider};
@@ -40,12 +41,6 @@ static BUILDENV_NIX: LazyLock<PathBuf> = LazyLock::new(|| {
         .into()
 });
 
-/// Prefix of locked_url of catalog packages that are from the nixpkgs base-catalog.
-/// This url was meant to serve as a flake reference to the Flox hosted mirror of nixpkgs,
-/// but is both ill formatted and does not provide the necessary overrides
-/// to allow evaluating packages without common evaluation checks, such as unfree and broken.
-const NIXPKGS_CATALOG_URL_PREFIX: &str = "https://github.com/flox/nixpkgs?rev=";
-
 /// Returns `true` if `path` is accessible on the local filesystem.
 ///
 /// Uses `metadata()` rather than `Path::exists()` so callers can distinguish
@@ -55,11 +50,43 @@ fn path_is_present(path: &str) -> bool {
     std::fs::metadata(path).is_ok()
 }
 
-/// The base flake reference invoking the `flox-nixpkgs` fetcher.
-/// This is a bridge to the Flox hosted mirror of nixpkgs flake,
-/// which enables building packages without common evaluation checks,
-/// such as unfree and broken.
-const FLOX_NIXPKGS_PROXY_FLAKE_REF_BASE: &str = "flox-nixpkgs:v0/flox";
+/// Scheme and rules-version of the `flox-nixpkgs` proxy fetcher. The proxy wraps
+/// the realm's nixpkgs base catalog so evaluation checks (allowUnfree,
+/// allowBroken) are controlled by manifest options rather than Nix's built-in
+/// guards.
+const FLOX_NIXPKGS_SCHEME: &str = "flox-nixpkgs:v0";
+
+/// Build the `flox-nixpkgs` proxy flake ref for a base catalog package's
+/// fully-qualified `locked_url`
+/// (`https://<host>/<owner>/nixpkgs?rev=<rev>`, as mastered by the realm's
+/// catalog server).
+///
+/// The realm host is carried through as the proxy's `?host=` attribute so the
+/// fetch targets the nixpkgs the catalog server actually mastered (e.g. an
+/// on-premise fork) rather than defaulting to github.com. Only the host, owner,
+/// and rev are needed — the proxy always wraps `<owner>/nixpkgs`.
+fn flox_nixpkgs_flake_ref(locked_url: &str, attr_path: &str) -> Result<String, BuildEnvError> {
+    let malformed = |detail: &str| {
+        BuildEnvError::LockfileContents(format!(
+            "Locked package '{attr_path}' is a base catalog package, but its locked url '{locked_url}' {detail}."
+        ))
+    };
+
+    let url =
+        Url::parse(locked_url).map_err(|err| malformed(&format!("is not a valid URL: {err}")))?;
+    let host = url.host_str().ok_or_else(|| malformed("has no host"))?;
+    let owner = url
+        .path_segments()
+        .and_then(|mut segments| segments.find(|segment| !segment.is_empty()))
+        .ok_or_else(|| malformed("has no owner path segment"))?;
+    let rev = url
+        .query_pairs()
+        .find(|(key, _)| key == "rev")
+        .map(|(_, value)| value.into_owned())
+        .ok_or_else(|| malformed("has no 'rev' query parameter"))?;
+
+    Ok(format!("{FLOX_NIXPKGS_SCHEME}/{owner}/{rev}?host={host}"))
+}
 
 /// Name to use in error messages when a package can't be downloaded from
 /// `cache.nixos.org` as a fallback for other locations.
@@ -311,18 +338,12 @@ pub fn build_catalog_pkg_from_source(
     broken: Option<bool>,
     gc_root_prefix: Option<&Path>,
 ) -> Result<(), BuildEnvError> {
-    // Transform the locked URL: strip the nixpkgs GitHub prefix and replace
-    // it with the flox-nixpkgs fetcher reference so that evaluation checks
-    // (allowUnfree, allowBroken) are controlled by manifest options rather
-    // than Nix's built-in guards.
-    let flake_ref = if let Some(rev) = locked_url.strip_prefix(NIXPKGS_CATALOG_URL_PREFIX) {
-        format!("{FLOX_NIXPKGS_PROXY_FLAKE_REF_BASE}/{rev}")
-    } else {
-        return Err(BuildEnvError::LockfileContents(format!(
-            "Locked package '{}' is a base catalog package, but the locked url '{}' does not start with the expected prefix '{}'",
-            attr_path, locked_url, NIXPKGS_CATALOG_URL_PREFIX
-        )));
-    };
+    // Route the base catalog package through the flox-nixpkgs proxy fetcher so
+    // evaluation checks (allowUnfree, allowBroken) are controlled by manifest
+    // options rather than Nix's built-in guards. The realm host from the locked
+    // URL is carried through so the fetch targets the nixpkgs the catalog server
+    // mastered, not a hardcoded github.com.
+    let flake_ref = flox_nixpkgs_flake_ref(locked_url, attr_path)?;
 
     // Build all outputs (^*) from legacyPackages.<system>.<attr_path>.
     let installable = format!("{flake_ref}#legacyPackages.{system}.{attr_path}^*");
@@ -1545,6 +1566,44 @@ mod test_helpers {
 }
 
 #[cfg(test)]
+mod flox_nixpkgs_ref_tests {
+    use super::*;
+
+    #[test]
+    fn carries_the_realm_host_from_the_locked_url() {
+        assert_eq!(
+            flox_nixpkgs_flake_ref(
+                "https://github.company.com/flox/nixpkgs?rev=abc123",
+                "hello"
+            )
+            .unwrap(),
+            "flox-nixpkgs:v0/flox/abc123?host=github.company.com",
+        );
+    }
+
+    #[test]
+    fn public_host_round_trips_too() {
+        assert_eq!(
+            flox_nixpkgs_flake_ref("https://github.com/flox/nixpkgs?rev=deadbeef", "hello")
+                .unwrap(),
+            "flox-nixpkgs:v0/flox/deadbeef?host=github.com",
+        );
+    }
+
+    #[test]
+    fn errors_without_a_rev() {
+        let err = flox_nixpkgs_flake_ref("https://github.com/flox/nixpkgs", "hello").unwrap_err();
+        assert!(err.to_string().contains("has no 'rev' query parameter"));
+    }
+
+    #[test]
+    fn errors_without_a_host() {
+        let err = flox_nixpkgs_flake_ref("github:flox/nixpkgs/abc", "hello").unwrap_err();
+        assert!(err.to_string().contains("has no host"));
+    }
+}
+
+#[cfg(test)]
 mod realise_nixpkgs_tests {
 
     use flox_manifest::lockfile::test_helpers::{
@@ -1843,7 +1902,7 @@ mod realise_nixpkgs_tests {
               error: path '/nix/store/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx-invalid' is required, but there is no substituter that can build it
 
             base catalog:
-              encountered an error interpreting the lockfile: Locked package 'hello' is a base catalog package, but the locked url 'github:super/custom/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx' does not start with the expected prefix 'https://github.com/flox/nixpkgs?rev='"#});
+              encountered an error interpreting the lockfile: Locked package 'hello' is a base catalog package, but its locked url 'github:super/custom/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx' has no host."#});
     }
 
     /// Ensure that we can build, or (attempt to build) a package from the catalog,
