@@ -5,7 +5,6 @@ use bpaf::Bpaf;
 use crossterm::style::Stylize;
 use crossterm::terminal;
 use flox_manifest::interfaces::AsLatestSchema;
-use flox_manifest::parsed::Inner;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment};
 use serde::Serialize;
@@ -41,8 +40,6 @@ struct EnvironmentInfo {
     description: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     readme: Option<String>,
-    systems: Vec<String>,
-    packages: Vec<String>,
 }
 
 impl Info {
@@ -66,9 +63,6 @@ impl Info {
         let manifest = env.manifest(&flox)?;
         let latest = manifest.as_latest_schema();
         let description = latest.description.clone();
-        let systems = latest.options.systems.clone().unwrap_or_default();
-        let mut packages: Vec<String> = latest.install.inner().keys().cloned().collect();
-        packages.sort();
 
         if self.json {
             let info = EnvironmentInfo {
@@ -76,8 +70,6 @@ impl Info {
                 owner,
                 description,
                 readme,
-                systems,
-                packages,
             };
             let mut stdout = stdout();
             serde_json::to_writer_pretty(&mut stdout, &info)?;
@@ -90,8 +82,6 @@ impl Info {
             owner,
             description,
             readme,
-            systems,
-            packages,
         });
         let mut stdout = stdout();
         write!(stdout, "{rendered}")?;
@@ -104,8 +94,6 @@ struct RenderInput {
     owner: Option<String>,
     description: Option<String>,
     readme: Option<String>,
-    systems: Vec<String>,
-    packages: Vec<String>,
 }
 
 fn render_human(input: RenderInput) -> String {
@@ -145,7 +133,7 @@ fn render_human(input: RenderInput) -> String {
     match &input.readme {
         Some(readme) if !readme.trim().is_empty() => {
             out.push_str(&markdown::render(readme, content_width, color));
-            out.push_str("\n\n");
+            out.push('\n');
         },
         _ => {
             let hint = match &input.owner {
@@ -154,14 +142,12 @@ fn render_human(input: RenderInput) -> String {
                 Some(_) => "This environment has no README yet.",
             };
             out.push_str(&dim(hint, color));
-            out.push_str("\n\n");
+            out.push('\n');
         },
     }
 
-    out.push_str(&summary_line(&input, color));
-    out.push('\n');
-
     if let Some(owner) = &input.owner {
+        out.push('\n');
         let next = format!(
             "Activate it with 'flox activate -r {owner}/{}'.",
             input.name
@@ -171,24 +157,6 @@ fn render_human(input: RenderInput) -> String {
     }
 
     out
-}
-
-fn summary_line(input: &RenderInput, color: bool) -> String {
-    let packages = match input.packages.len() {
-        1 => "1 package".to_string(),
-        n => format!("{n} packages"),
-    };
-    let systems = match input.systems.len() {
-        0 => "all systems".to_string(),
-        1 => "1 system".to_string(),
-        n => format!("{n} systems"),
-    };
-    let text = format!("{packages} · {systems}");
-    if color {
-        format!("{}  {}", "ℹ️", text.clone().dark_grey())
-    } else {
-        text
-    }
 }
 
 fn dim(text: &str, color: bool) -> String {
