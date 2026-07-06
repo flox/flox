@@ -517,10 +517,13 @@ fn load_dep(dir: &Path, name: &str, roots: &HashSet<String>) -> Option<FileInfo>
         if path.is_file()
             && let Ok(content) = fs::read_to_string(path)
         {
+            // Relative imports in the dependency resolve against its own
+            // directory, which is the file's parent, not `dir`. For the
+            // `<name>/default.nix` candidate the parent is `dir/<name>/`.
             return Some(analyze_file_at(
                 &content,
                 roots,
-                Some(dir),
+                path.parent(),
                 &mut HashSet::new(),
             ));
         }
@@ -834,6 +837,22 @@ mod tests {
                 "catalogs.myorg.toolkit.readVersion",
                 "catalogs.myorg.python3Packages.alpha-lib",
             ])
+        );
+    }
+
+    /// Relative imports inside a `<name>/default.nix` dependency.
+    ///
+    /// A dependency argument resolved as `foo/default.nix` may import a helper
+    /// with a path relative to its own directory (`./helper.nix` ->
+    /// `foo/helper.nix`). Following that import must resolve the path against
+    /// `foo/`, not the package-set root, so the helper's refs are collected.
+    #[test]
+    fn scan_package_dep_subdir_default_follows_relative_import() {
+        let base_dir = Path::new("test_data/catalog_refs/depdir-import");
+        let got = scan_package(base_dir, Path::new("entry.nix"));
+        assert_eq!(
+            got,
+            set(&["catalogs.myorg.direct", "catalogs.myorg.helper-ref"]),
         );
     }
 
