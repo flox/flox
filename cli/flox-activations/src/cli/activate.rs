@@ -403,11 +403,6 @@ mod tests {
             );
         }
     }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
 
     /// Container argv containing shell-special characters must survive
     /// to the InvocationType verbatim. OCI CMD semantics are exec, not

@@ -1,4 +1,4 @@
-use std::io::{BufWriter, stdout};
+use std::io::{BufWriter, IsTerminal, stdout};
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
@@ -490,8 +490,25 @@ impl ActivateOptions {
                     wrap_activation_srt(&concrete_environment.dot_flox_path())?;
                     unreachable!("wrap_activation_srt execs or errors");
                 },
+                SandboxBackend::Oci => {
+                    ensure_advisory_mode_supported(SandboxBackend::Oci, sandbox_mode)?;
+                    // Run the containerized environment image directly; never
+                    // returns on success. Unlike host-native/srt, the oci
+                    // backend does not re-exec the host flox binary — on macOS
+                    // the guest is a Linux VM and the Darwin flox binary cannot
+                    // run in the Linux container. Instead the containerized
+                    // image's own entrypoint (produced by `flox containerize`)
+                    // runs the activation, with the project live-mounted.
+                    let env_name = now_active.name().to_string();
+                    wrap_activation_oci(
+                        &concrete_environment.dot_flox_path(),
+                        &env_name,
+                        &invocation_type,
+                    )?;
+                    unreachable!("wrap_activation_oci execs or errors");
+                },
                 other => bail!(
-                    "Sandbox backend '{other}' is not yet wired into activation.\nWired backends: 'libsandbox' (default), 'host-native', and 'srt'. Run 'flox sandbox backends' to see status, or unset FLOX_SANDBOX_BACKEND."
+                    "Sandbox backend '{other}' is not yet wired into activation.\nWired backends: 'libsandbox' (default), 'host-native', 'srt', and 'oci'. Run 'flox sandbox backends' to see status, or unset FLOX_SANDBOX_BACKEND."
                 ),
             }
         };
@@ -1360,6 +1377,204 @@ fn srt_settings_json(home: &Path, project: &Path) -> String {
     serde_json::to_string_pretty(&settings).expect("serializing a literal JSON value cannot fail")
 }
 
+/// Environment variable that overrides the OCI image reference used by the
+/// `oci` sandbox backend. When set, its value is used as-is as the image ref
+/// (e.g. `myimage:v2`). When unset, the backend derives the ref from the
+/// environment name as `<env-name>:latest`.
+const FLOX_SANDBOX_OCI_IMAGE_VAR: &str = "FLOX_SANDBOX_OCI_IMAGE";
+
+/// Resolve the OCI image reference for the sandbox backend.
+///
+/// Precedence: `FLOX_SANDBOX_OCI_IMAGE` env var > `<env_name>:latest`.
+fn oci_image_ref(env_name: &str) -> String {
+    std::env::var(FLOX_SANDBOX_OCI_IMAGE_VAR)
+        .ok()
+        .filter(|v| !v.is_empty())
+        .unwrap_or_else(|| format!("{env_name}:latest"))
+}
+
+/// Build the container run argv for the `oci` sandbox backend.
+///
+/// macOS uses Apple Container (`container run`); Linux uses Podman
+/// (`podman run`). The project directory is mounted at its identical
+/// absolute path so the guest sees the same paths as the host. The
+/// workdir is set to the host cwd when it is under the project, otherwise
+/// the project root itself.
+///
+/// Returns `(runtime_cmd, argv)` where `runtime_cmd` is `"container"` or
+/// `"podman"` and `argv` is the full argument list (excluding the binary
+/// itself) to pass to `.exec()`.
+fn oci_run_argv(
+    image_ref: &str,
+    project: &Path,
+    cwd: &Path,
+    invocation: &InvocationType,
+) -> (String, Vec<String>) {
+    #[cfg(target_os = "macos")]
+    let (runtime, vol_flag, workdir_flag) = ("container", "--volume", "--workdir");
+    #[cfg(not(target_os = "macos"))]
+    let (runtime, vol_flag, workdir_flag) = ("podman", "-v", "-w");
+
+    let mount = format!("{}:{}", project.display(), project.display());
+    let effective_cwd = if cwd.starts_with(project) {
+        cwd
+    } else {
+        project
+    };
+
+    let mut argv: Vec<String> = vec!["run".to_string(), "--rm".to_string()];
+
+    argv.push(vol_flag.to_string());
+    argv.push(mount);
+    argv.push(workdir_flag.to_string());
+    argv.push(effective_cwd.display().to_string());
+
+    match invocation {
+        InvocationType::Interactive => {
+            // Gate -t on stdin being a tty so the backend also works in
+            // non-interactive pipelines (e.g. `flox activate --sandbox enforce
+            // --sandbox-backend oci` piped through a test harness).
+            if std::io::stdin().is_terminal() {
+                argv.push("-it".to_string());
+            } else {
+                argv.push("-i".to_string());
+            }
+            argv.push(image_ref.to_string());
+            // No trailing command: the image entrypoint starts an activated
+            // shell.
+        },
+        InvocationType::ExecCommand(cmd) => {
+            argv.push(image_ref.to_string());
+            // `--` separates the image ref from the command on Apple Container.
+            // Podman ignores a bare `--` before the command too, so the same
+            // form works on both runtimes.
+            argv.push("--".to_string());
+            argv.extend(cmd.iter().cloned());
+        },
+        InvocationType::ShellCommand(shell_cmd) => {
+            // Shell-command form: wrap in `sh -c` so that shell builtins,
+            // pipelines, and redirects work as the user expects.
+            argv.push(image_ref.to_string());
+            argv.push("--".to_string());
+            argv.push("sh".to_string());
+            argv.push("-c".to_string());
+            argv.push(shell_cmd.clone());
+        },
+        InvocationType::InPlace => {
+            // In-place activations are rejected before dispatch reaches this
+            // function (ensure_sandbox_not_in_place). This arm is unreachable
+            // in practice but required for exhaustive match.
+            unreachable!(
+                "in-place invocation cannot reach the oci backend (blocked by \
+                 ensure_sandbox_not_in_place)"
+            );
+        },
+    }
+
+    (runtime.to_string(), argv)
+}
+
+/// Run the activation inside an OCI container, then never return.
+///
+/// Unlike the `host-native` and `srt` backends — which re-exec the host
+/// `flox` binary inside an OS-level sandbox boundary — the `oci` backend
+/// runs the **containerized environment image** directly. On macOS the
+/// guest is a Linux VM, so the host Darwin `flox` binary cannot be
+/// exec'd inside the container; instead the image's own baked entrypoint
+/// (produced by `flox containerize`) handles activation, and the project
+/// directory is bind-mounted at its identical absolute path so the agent's
+/// working tree is visible inside the container.
+///
+/// Runtime selection: Apple Container (`container`) on macOS, Podman
+/// (`podman`) on Linux.
+fn wrap_activation_oci(
+    dot_flox_path: &Path,
+    env_name: &str,
+    invocation: &InvocationType,
+) -> Result<()> {
+    // Probe the runtime for this platform.
+    #[cfg(target_os = "macos")]
+    let runtime = "container";
+    #[cfg(not(target_os = "macos"))]
+    let runtime = "podman";
+
+    if !binary_on_path(runtime) {
+        #[cfg(target_os = "macos")]
+        bail!(
+            "The 'oci' sandbox backend requires Apple Container, which was not found on PATH.\n\
+             Install it with 'brew install --cask container', then re-run."
+        );
+        #[cfg(not(target_os = "macos"))]
+        bail!(
+            "The 'oci' sandbox backend requires Podman, which was not found on PATH.\n\
+             Install it (e.g. 'nix profile install nixpkgs#podman'), then re-run."
+        );
+    }
+
+    let dot_flox =
+        std::fs::canonicalize(dot_flox_path).unwrap_or_else(|_| dot_flox_path.to_path_buf());
+    let project = dot_flox.parent().unwrap_or(&dot_flox).to_path_buf();
+
+    let image_ref = oci_image_ref(env_name);
+
+    // Verify the image exists before attempting to run it, so the error
+    // message can name the refs tried and explain the build pipeline.
+    let image_present = {
+        #[cfg(target_os = "macos")]
+        {
+            // Apple Container requires the fully-qualified `name:tag` form;
+            // a bare name (e.g. `octest`) returns a non-zero exit code.
+            std::process::Command::new(runtime)
+                .args(["image", "inspect", &image_ref])
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .status()
+                .map(|s| s.success())
+                .unwrap_or(false)
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            std::process::Command::new(runtime)
+                .args(["image", "exists", &image_ref])
+                .status()
+                .map(|s| s.success())
+                .unwrap_or(false)
+        }
+    };
+
+    if !image_present {
+        let override_note = match std::env::var(FLOX_SANDBOX_OCI_IMAGE_VAR) {
+            Ok(v) if !v.is_empty() => {
+                format!(
+                    "\n  (override active: {FLOX_SANDBOX_OCI_IMAGE_VAR}={v}; tried '{image_ref}')"
+                )
+            },
+            _ => format!(
+                "\n  (derived from environment name '{env_name}'; \
+                 override with {FLOX_SANDBOX_OCI_IMAGE_VAR}=<ref>)"
+            ),
+        };
+        bail!(
+            "OCI image '{image_ref}' not found in the local {runtime} image store.{override_note}\n\
+             To build and load the image:\n  \
+             flox containerize -f img.tar\n  \
+             skopeo --insecure-policy copy \\\n    \
+               docker-archive:img.tar \\\n    \
+               oci-archive:oci.tar:{env_name}:latest\n  \
+             {runtime} image load -i oci.tar"
+        );
+    }
+
+    let cwd = std::env::current_dir().unwrap_or_else(|_| project.clone());
+    let (_, argv) = oci_run_argv(&image_ref, &project, &cwd, invocation);
+
+    // `.exec()` replaces the current process; only returns on failure.
+    let err = std::process::Command::new(runtime).args(&argv).exec();
+    Err(anyhow::anyhow!(
+        "Failed to launch the oci sandbox with '{runtime}': {err}."
+    ))
+}
+
 /// Resolve the effective sandbox mode for an activation.
 ///
 /// Precedence: CLI flag > manifest `options.sandbox` > off.
@@ -1733,6 +1948,119 @@ mod tests {
                 &InvocationType::ExecCommand(vec!["true".to_string()])
             )
             .is_ok()
+        );
+    }
+
+    // ── OCI backend unit tests ────────────────────────────────────────────────
+
+    #[test]
+    fn oci_image_ref_derives_from_env_name_when_var_unset() {
+        // Ensure the variable is not set for this test.
+        // SAFETY: single-threaded test; no concurrent readers.
+        unsafe { std::env::remove_var(FLOX_SANDBOX_OCI_IMAGE_VAR) };
+        assert_eq!(oci_image_ref("myenv"), "myenv:latest");
+    }
+
+    #[test]
+    fn oci_image_ref_derives_default_env_name() {
+        // SAFETY: single-threaded test; no concurrent readers.
+        unsafe { std::env::remove_var(FLOX_SANDBOX_OCI_IMAGE_VAR) };
+        assert_eq!(oci_image_ref("default"), "default:latest");
+    }
+
+    #[test]
+    fn oci_image_ref_uses_env_override_when_set() {
+        // SAFETY: single-threaded test; no concurrent readers.
+        unsafe { std::env::set_var(FLOX_SANDBOX_OCI_IMAGE_VAR, "custom-image:v3") };
+        let result = oci_image_ref("myenv");
+        unsafe { std::env::remove_var(FLOX_SANDBOX_OCI_IMAGE_VAR) };
+        assert_eq!(result, "custom-image:v3");
+    }
+
+    #[test]
+    fn oci_image_ref_falls_back_to_default_when_var_is_empty() {
+        // SAFETY: single-threaded test; no concurrent readers.
+        unsafe { std::env::set_var(FLOX_SANDBOX_OCI_IMAGE_VAR, "") };
+        let result = oci_image_ref("myenv");
+        unsafe { std::env::remove_var(FLOX_SANDBOX_OCI_IMAGE_VAR) };
+        assert_eq!(result, "myenv:latest");
+    }
+
+    #[test]
+    fn oci_run_argv_exec_command_passes_argv_verbatim() {
+        let project = Path::new("/home/user/myproject");
+        let cwd = Path::new("/home/user/myproject/subdir");
+        let invocation = InvocationType::ExecCommand(vec![
+            "bash".to_string(),
+            "-c".to_string(),
+            "echo hello".to_string(),
+        ]);
+        let (_runtime, argv) = oci_run_argv("myenv:latest", project, cwd, &invocation);
+        // The command must appear verbatim after the image ref and `--`
+        // separator. No shell joining, quoting, or re-expansion.
+        let ref_pos = argv.iter().position(|a| a == "myenv:latest").unwrap();
+        let sep_pos = argv.iter().position(|a| a == "--").unwrap();
+        assert!(sep_pos > ref_pos, "-- must follow the image ref");
+        let cmd_start = sep_pos + 1;
+        assert_eq!(&argv[cmd_start..], &["bash", "-c", "echo hello"]);
+    }
+
+    #[test]
+    fn oci_run_argv_interactive_has_no_trailing_command() {
+        let project = Path::new("/tmp/project");
+        let cwd = Path::new("/tmp/project");
+        let invocation = InvocationType::Interactive;
+        let (_runtime, argv) = oci_run_argv("env:latest", project, cwd, &invocation);
+        // Image ref is the last meaningful element; no `--` or command follows.
+        let ref_pos = argv.iter().rposition(|a| a == "env:latest").unwrap();
+        assert_eq!(
+            ref_pos,
+            argv.len() - 1,
+            "image ref must be the last argv element for interactive"
+        );
+    }
+
+    #[test]
+    fn oci_run_argv_mounts_project_at_identical_path() {
+        let project = Path::new("/home/user/myproject");
+        let cwd = project;
+        let invocation = InvocationType::ExecCommand(vec!["true".to_string()]);
+        let (_runtime, argv) = oci_run_argv("img:latest", project, cwd, &invocation);
+        // The mount flag value must be <project>:<project>
+        let expected_mount = format!("{}:{}", project.display(), project.display());
+        assert!(
+            argv.contains(&expected_mount),
+            "argv must contain mount '{expected_mount}', got: {argv:?}",
+        );
+    }
+
+    #[test]
+    fn oci_run_argv_workdir_is_cwd_when_under_project() {
+        let project = Path::new("/home/user/proj");
+        let cwd = Path::new("/home/user/proj/src");
+        let invocation = InvocationType::ExecCommand(vec!["ls".to_string()]);
+        let (_runtime, argv) = oci_run_argv("img:latest", project, cwd, &invocation);
+        // workdir should be the cwd since it's under the project
+        assert!(
+            argv.contains(&cwd.display().to_string()),
+            "argv must contain workdir '{cwd:?}', got: {argv:?}",
+        );
+    }
+
+    #[test]
+    fn oci_run_argv_workdir_falls_back_to_project_when_cwd_outside() {
+        let project = Path::new("/home/user/proj");
+        let cwd = Path::new("/tmp/other");
+        let invocation = InvocationType::ExecCommand(vec!["ls".to_string()]);
+        let (_runtime, argv) = oci_run_argv("img:latest", project, cwd, &invocation);
+        // workdir should be the project root, not the external cwd
+        assert!(
+            argv.contains(&project.display().to_string()),
+            "argv must contain project as workdir '{project:?}', got: {argv:?}",
+        );
+        assert!(
+            !argv.contains(&cwd.display().to_string()),
+            "argv must not contain external cwd '{cwd:?}', got: {argv:?}",
         );
     }
 }
