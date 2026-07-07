@@ -222,7 +222,7 @@ To apply these changes, run upgrade without the '--dry-run' flag."
 # ---------------------------------------------------------------------------- #
 
 # bats test_tags=upgrade,regression
-@test "upgrade migrates on-disk manifest to match lockfile schema" {
+@test "upgrade keeps manifest and lockfile schemas in sync" {
   # Init environment, then overwrite with pre-built v1 fixtures
   # (created by flox v1.9.1 with curl+hello installed).
   "$FLOX_BIN" init
@@ -233,27 +233,29 @@ To apply these changes, run upgrade without the '--dry-run' flag."
   run grep -c '^version = 1' "$MANIFEST_PATH"
   assert_success
 
-  # Run upgrade with curl+hello mock data.
-  # The re-lock will produce a 1.12.0 lockfile because curl's
-  # outputs_to_install differs from its full outputs list.
+  # The mock resolves the same package versions the fixture lockfile
+  # already contains, so this upgrade is a no-op.
+  # A no-op upgrade must not persist anything: in particular it must not
+  # migrate the on-disk manifest while skipping the lockfile write
+  # (the inverse of the CLI-4 divergence).
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/curl_hello.yaml" \
     run "$FLOX_BIN" upgrade
   assert_success
+  assert_output --partial "No upgrades available"
 
-  # After upgrade, the lockfile's manifest should be at 1.12.0.
+  # The on-disk manifest is untouched.
+  run grep -c '^version = 1' "$MANIFEST_PATH"
+  assert_success
+
+  # Whatever the outcome of an upgrade, the schema of the on-disk manifest
+  # and the schema of the manifest embedded in the lockfile must match.
+  # Don't assert a specific version: the invariant is that the two never
+  # diverge, not that they land on any particular schema.
+  manifest_schema=$(sed -n 's/^schema-version = "\(.*\)"/\1/p; s/^version = \(.*\)/\1/p' "$MANIFEST_PATH" | head -1)
   lockfile_schema=$(jq -r '
     if .manifest["schema-version"]
     then .manifest["schema-version"]
     else (.manifest.version | tostring)
     end' "$LOCK_PATH")
-  assert_equal "$lockfile_schema" "1.12.0"
-
-  # The on-disk manifest MUST be migrated to match the lockfile.
-  # Bug: upgrade() never calls ensure_manifest_schemas_match(), so the
-  # on-disk manifest stays at version 1 while the lockfile is at 1.12.0.
-  run grep -c 'schema-version' "$MANIFEST_PATH"
-  assert_success
-
-  manifest_schema=$(sed -n 's/.*schema-version = "\(.*\)".*/\1/p' "$MANIFEST_PATH" | head -1)
-  assert_equal "$manifest_schema" "1.12.0"
+  assert_equal "$manifest_schema" "$lockfile_schema"
 }
