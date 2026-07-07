@@ -215,7 +215,7 @@ impl SandboxBackend {
                 fs_virtualized: true,
                 macos: ViaLinuxVm,
                 linux: Native,
-                status: Scaffolded,
+                status: Implemented,
             },
             SandboxBackend::Libkrun => BackendCapabilities {
                 backend: self,
@@ -314,7 +314,7 @@ mod tests {
     }
 
     #[test]
-    fn implemented_backends_are_libsandbox_host_native_and_srt() {
+    fn implemented_backends_are_libsandbox_host_native_srt_and_oci() {
         let implemented: Vec<SandboxBackend> = SandboxBackend::ALL
             .into_iter()
             .filter(|b| b.capabilities().status == IntegrationStatus::Implemented)
@@ -323,6 +323,7 @@ mod tests {
             SandboxBackend::Libsandbox,
             SandboxBackend::HostNative,
             SandboxBackend::Srt,
+            SandboxBackend::Oci,
         ]);
     }
 
