@@ -788,6 +788,7 @@ impl UseCommands {
             UseCommands::Deactivate(_) => "deactivate",
             UseCommands::Run(_) => "run",
             UseCommands::Services(sub) => sub.subcommand_name(),
+            UseCommands::Sandbox(_) => "sandbox",
         }
     }
 }
