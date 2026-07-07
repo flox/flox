@@ -84,6 +84,10 @@ impl ContainerizeProxy {
     }
 
     /// Add a cache volume mount to the container runtime command.
+    ///
+    /// Docker and Podman support named volumes (`type=volume`), which persist
+    /// the Nix store across builds and speed up subsequent runs. Apple Container
+    /// also supports named volumes via the same `--mount type=volume` syntax.
     fn add_cache_mount(&self, command: &mut Command, path: &str) {
         command.args([
             "--mount",
@@ -92,8 +96,22 @@ impl ContainerizeProxy {
     }
 
     /// Copy the Nix store from the container image to the cache volume.
+    ///
+    /// Skipped for Apple Container because the cache volume population step
+    /// uses a shell pipeline (`bash -c '...'`) that is not available in the
+    /// NixOS container on Apple's Virtualization.framework without additional
+    /// setup. The main build still works; it just won't benefit from the
+    /// pre-populated cache on first run.
     #[instrument(skip_all, fields(progress = "Populating proxy container cache volume"))]
     fn populate_cache_volume(&self) -> Result<(), ContainerizeProxyError> {
+        if self.container_runtime == Runtime::AppleContainer {
+            // The cache-volume population shell pipeline is not compatible with
+            // Apple Container's runtime environment. Skip it; the build will
+            // proceed without the warm cache.
+            debug!("Skipping cache volume population for Apple Container runtime");
+            return Ok(());
+        }
+
         let mut command = self.runtime_base_command();
 
         // The cache volume has to be mounted in parallel to the container's own
@@ -144,12 +162,20 @@ impl ContainerizeProxy {
     }
 
     /// Inception L1: Container runtime args.
+    ///
+    /// Builds the `docker run` / `podman run` / `container run` invocation
+    /// that launches the nixos/nix proxy container. Adapts CLI flags for each
+    /// runtime:
+    ///
+    /// - Docker / Podman: `--mount type=bind,...` for all mounts; Podman also
+    ///   needs `--userns ""` to map the host user to root inside the container.
+    /// - Apple Container: uses the same `--mount type=bind,...` syntax;
+    ///   no `--userns` flag needed (Apple Container runs as the host user by
+    ///   default in its VM).
     fn add_runtime_args(&self, command: &mut Command, flox: &Flox) {
-        // The `--userns` flag creates a mapping of users in the container,
-        // which we need. However, in order to work we also need the user
-        // in the container to be `root` otherwise you run into multi-user
-        // issues. The empty string `""` argument to `--userns` maps the
-        // current user to `root` inside the container.
+        // Podman needs --userns to map the current user to root inside the
+        // container; otherwise multi-user Nix operations fail. Docker and Apple
+        // Container do not need this flag.
         if self.container_runtime == Runtime::Podman {
             command.args(["--userns", ""]);
         }
@@ -250,12 +276,94 @@ impl ContainerizeProxy {
             command.args(["--mode", &mode.to_string()]);
         }
     }
+
+    /// Build the full container run command for the OCI-conversion path.
+    ///
+    /// When the target runtime is Apple Container, `container image load` only
+    /// accepts OCI archives, but nixpkgs `dockerTools.streamLayeredImage`
+    /// emits docker-archive format. This method builds a shell pipeline that:
+    ///
+    /// 1. Runs `nix run github:flox/flox -- flox containerize --file -` to
+    ///    emit a docker-archive on stdout.
+    /// 2. Pipes it through nixpkgs `skopeo copy` to convert to OCI archive on
+    ///    stdout.
+    ///
+    /// The conversion runs entirely inside the nixos/nix builder container
+    /// using nixpkgs' skopeo, so no additional host-side tooling is required.
+    ///
+    /// Apple Container image refs require an explicit tag (`name:latest` works
+    /// where bare `name` fails), so the tag is embedded in the skopeo
+    /// destination reference.
+    fn build_oci_conversion_command(&self, flox: &Flox, tag: impl AsRef<str>) -> Command {
+        let tag_str = tag.as_ref();
+
+        // Derive the image name from the environment directory name, matching
+        // what the inner `flox containerize` would use.
+        let env_name = self
+            .environment_path
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_else(|| "flox-env".to_string());
+
+        // Apple Container requires an explicit tag in the image reference;
+        // bare `name` (without `:tag`) causes `image load` to fail.
+        let image_ref = format!("{env_name}:{tag_str}");
+
+        let flox_version = &*FLOX_VERSION;
+        let flox_version_tag = format!("v{}", flox_version.base_semver());
+        let flox_flake = format!(
+            "{}/{}",
+            FLOX_FLAKE,
+            (*FLOX_CONTAINERIZE_FLAKE_REF_OR_REV)
+                .clone()
+                .unwrap_or(flox_version.commit_sha().unwrap_or(flox_version_tag))
+        );
+
+        let verbosity_arg = match flox.verbosity {
+            -1 => " --quiet".to_string(),
+            v if v > 0 => format!(" -{}", "v".repeat(v.try_into().unwrap())),
+            _ => String::new(),
+        };
+
+        let label_args: String = self
+            .labels
+            .iter()
+            .map(|l| format!(" --label '{}'", l.replace('\'', "'\\''")))
+            .collect();
+
+        let mode_arg = self
+            .mode
+            .as_ref()
+            .map(|m| format!(" --mode {}", m))
+            .unwrap_or_default();
+
+        // Single bash -c pipeline: flox containerize | skopeo copy
+        // Both tools are fetched from nixpkgs inside the builder container.
+        let shell_cmd = format!(
+            "set -euo pipefail\n\
+            nix --extra-experimental-features 'nix-command flakes' --accept-flake-config \
+            run '{flox_flake}' -- \
+            flox{verbosity_arg} containerize --dir {MOUNT_ENV} --tag {tag_str} --file -{label_args}{mode_arg} | \
+            nix --extra-experimental-features 'nix-command flakes' \
+            run 'nixpkgs#skopeo' -- copy \
+            docker-archive:/dev/stdin 'oci-archive:/dev/stdout:{image_ref}'"
+        );
+
+        let mut command = self.runtime_base_command();
+        self.add_runtime_args(&mut command, flox);
+        command.args(["bash", "-c", &shell_cmd]);
+        command
+    }
 }
 
 impl ContainerBuilder for ContainerizeProxy {
     type Error = ContainerizeProxyError;
 
     /// Create a [ContainerSource] for macOS that streams the output via a proxy container.
+    ///
+    /// When the target runtime is Apple Container, the output stream is an OCI
+    /// archive (converted inside the builder container using nixpkgs skopeo).
+    /// For Docker and Podman, the output remains docker-archive format.
     fn create_container_source(
         &self,
         flox: &Flox,
@@ -265,12 +373,139 @@ impl ContainerBuilder for ContainerizeProxy {
     ) -> Result<ContainerSource, Self::Error> {
         self.populate_cache_volume()?;
 
-        let mut command = self.runtime_base_command();
-        self.add_runtime_args(&mut command, flox);
-        self.add_nix_args(&mut command);
-        self.add_flox_args(&mut command, flox, tag);
+        let command = if self.container_runtime.requires_oci_format() {
+            // Apple Container: emit OCI archive via an in-container skopeo pipe.
+            self.build_oci_conversion_command(flox, tag)
+        } else {
+            // Docker / Podman: standard docker-archive path.
+            let mut command = self.runtime_base_command();
+            self.add_runtime_args(&mut command, flox);
+            self.add_nix_args(&mut command);
+            self.add_flox_args(&mut command, flox, tag);
+            command
+        };
 
         let container_source = ContainerSource::new(command);
         Ok(container_source)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use flox_rust_sdk::flox::test_helpers::flox_instance;
+
+    use super::*;
+
+    /// Collect the argv of a Command as strings for inspection.
+    fn argv(cmd: &Command) -> Vec<String> {
+        std::iter::once(cmd.get_program())
+            .chain(cmd.get_args())
+            .map(|a| a.to_string_lossy().into_owned())
+            .collect()
+    }
+
+    #[test]
+    fn docker_proxy_uses_docker_run() {
+        let (flox, _tempdir) = flox_instance();
+        let proxy = ContainerizeProxy::new("/some/env".into(), Runtime::Docker, vec![], None);
+        let mut cmd = proxy.runtime_base_command();
+        proxy.add_runtime_args(&mut cmd, &flox);
+        let args = argv(&cmd);
+        assert_eq!(args[0], "docker");
+        assert!(args.contains(&"run".to_string()));
+        assert!(!args.iter().any(|a| a.contains("--userns")));
+    }
+
+    #[test]
+    fn podman_proxy_adds_userns_flag() {
+        let (flox, _tempdir) = flox_instance();
+        let proxy = ContainerizeProxy::new("/some/env".into(), Runtime::Podman, vec![], None);
+        let mut cmd = proxy.runtime_base_command();
+        proxy.add_runtime_args(&mut cmd, &flox);
+        let args = argv(&cmd);
+        assert_eq!(args[0], "podman");
+        // --userns must appear for Podman to map the host user to root inside the container.
+        let userns_pos = args
+            .iter()
+            .position(|a| a == "--userns")
+            .expect("--userns should be present for Podman");
+        assert_eq!(args[userns_pos + 1], "");
+    }
+
+    #[test]
+    fn apple_container_proxy_omits_userns_flag() {
+        let (flox, _tempdir) = flox_instance();
+        let proxy =
+            ContainerizeProxy::new("/some/env".into(), Runtime::AppleContainer, vec![], None);
+        let mut cmd = proxy.runtime_base_command();
+        proxy.add_runtime_args(&mut cmd, &flox);
+        let args = argv(&cmd);
+        assert_eq!(args[0], "container");
+        // Apple Container does not need --userns
+        assert!(
+            !args.iter().any(|a| a == "--userns"),
+            "Apple Container should not have --userns"
+        );
+    }
+
+    #[test]
+    fn oci_conversion_command_uses_bash_pipeline() {
+        let (flox, _tempdir) = flox_instance();
+        let proxy = ContainerizeProxy::new(
+            "/some/env/.flox/env".into(),
+            Runtime::AppleContainer,
+            vec![],
+            None,
+        );
+        let cmd = proxy.build_oci_conversion_command(&flox, "latest");
+        let args = argv(&cmd);
+
+        // Command is `container run ...`
+        assert_eq!(args[0], "container");
+        // Should invoke bash -c with the pipeline
+        let bash_pos = args
+            .iter()
+            .position(|a| a == "bash")
+            .expect("bash should be in argv");
+        assert_eq!(args[bash_pos + 1], "-c");
+        let shell_script = &args[bash_pos + 2];
+        // Pipeline should include flox containerize piped to skopeo
+        assert!(shell_script.contains("flox"), "pipeline should run flox");
+        assert!(
+            shell_script.contains("containerize"),
+            "pipeline should invoke containerize"
+        );
+        assert!(
+            shell_script.contains("skopeo"),
+            "pipeline should use skopeo for OCI conversion"
+        );
+        assert!(
+            shell_script.contains("oci-archive"),
+            "output should be OCI archive format"
+        );
+        assert!(
+            shell_script.contains("docker-archive"),
+            "input should be docker-archive format"
+        );
+        // Image ref must include explicit tag for Apple Container compatibility.
+        // Bare `name` (without `:tag`) causes `container image load` to fail.
+        assert!(
+            shell_script.contains(":latest"),
+            "OCI image ref must include explicit tag"
+        );
+    }
+
+    #[test]
+    fn oci_conversion_embeds_custom_tag() {
+        let (flox, _tempdir) = flox_instance();
+        let proxy =
+            ContainerizeProxy::new("/env/myapp".into(), Runtime::AppleContainer, vec![], None);
+        let cmd = proxy.build_oci_conversion_command(&flox, "v1.2.3");
+        let args = argv(&cmd);
+        // Custom tag must appear in the OCI destination reference
+        assert!(
+            args.iter().any(|a| a.contains("v1.2.3")),
+            "custom tag 'v1.2.3' should appear in the OCI conversion command"
+        );
     }
 }
