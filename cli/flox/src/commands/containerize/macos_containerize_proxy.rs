@@ -16,6 +16,7 @@ use tracing::{debug, info, instrument};
 
 use super::Runtime;
 use crate::config::FLOX_CONFIG_FILE;
+use crate::utils::events::FLOX_DISABLE_V2_METRICS_VAR;
 
 const NIX_PROXY_IMAGE: &str = "nixos/nix";
 static NIX_PROXY_IMAGE_REF: LazyLock<Option<String>> =
@@ -184,6 +185,12 @@ impl ContainerizeProxy {
         // (e.g. /etc/flox.toml) that may not be mounted into the container.
         if flox.metrics_device_uuid.is_none() {
             command.args(["--env", &format!("{}=true", FLOX_DISABLE_METRICS_VAR)]);
+        }
+
+        // Propagate the v2 kill-switch so that a host-side `FLOX_DISABLE_V2_METRICS=1`
+        // is honoured inside the proxy container, which constructs its own sanitized env.
+        if let Ok(val) = env::var(FLOX_DISABLE_V2_METRICS_VAR) {
+            command.args(["--env", &format!("{}={}", FLOX_DISABLE_V2_METRICS_VAR, val)]);
         }
 
         // Propagate the host's nix substituters and trusted public keys into
