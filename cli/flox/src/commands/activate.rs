@@ -1472,31 +1472,44 @@ fn oci_image_present(runtime: &str, image_ref: &str) -> bool {
     }
 }
 
-/// List all `<env_name>:*` tags in the local container store.
-///
-/// Returns the tag strings (the `<hash>` portion, not the full ref).
-fn oci_list_env_tags(runtime: &str, env_name: &str) -> Vec<String> {
+/// A `<env_name>:*` image entry in the local container store.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct OciImageEntry {
+    /// The exact stored reference (usable with `image rm`). May be
+    /// registry-normalized (`docker.io/library/<name>:<tag>`) or plain
+    /// (`<name>:<tag>`, seen on images loaded by older runtime versions).
+    reference: String,
+    /// The tag portion of the reference.
+    tag: String,
+    /// The content digest / image id, shared by all references to the
+    /// same underlying image.
+    digest: String,
+}
+
+/// List all `<env_name>:*` entries in the local container store.
+fn oci_list_env_entries(runtime: &str, env_name: &str) -> Vec<OciImageEntry> {
     #[cfg(target_os = "macos")]
     {
         let _ = runtime;
         // `container image ls` has no name filter; list everything as JSON
-        // and filter here. Each entry's `configuration.name` is a full
-        // reference like `oci-e2e:58a9360c4448`.
+        // and filter here. Each entry's `configuration.name` is the exact
+        // stored reference; `id` is the content digest.
         let Ok(out) = std::process::Command::new("container")
             .args(["image", "ls", "--format", "json"])
             .output()
         else {
             return Vec::new();
         };
-        let Ok(entries) = serde_json::from_slice::<serde_json::Value>(&out.stdout) else {
+        let Ok(parsed) = serde_json::from_slice::<serde_json::Value>(&out.stdout) else {
             return Vec::new();
         };
-        entries
+        parsed
             .as_array()
             .map(|arr| {
                 arr.iter()
-                    .filter_map(|e| e.pointer("/configuration/name")?.as_str())
-                    .filter_map(|reference| {
+                    .filter_map(|e| {
+                        let reference = e.pointer("/configuration/name")?.as_str()?;
+                        let digest = e.get("id")?.as_str()?;
                         let (name, tag) = reference.rsplit_once(':')?;
                         // Apple Container normalizes alias refs with the
                         // default registry prefix (`docker.io/library/<name>`);
@@ -1505,7 +1518,11 @@ fn oci_list_env_tags(runtime: &str, env_name: &str) -> Vec<String> {
                             || name
                                 .rsplit_once('/')
                                 .is_some_and(|(_, last)| last == env_name);
-                        matches.then(|| tag.to_string())
+                        matches.then(|| OciImageEntry {
+                            reference: reference.to_string(),
+                            tag: tag.to_string(),
+                            digest: digest.to_string(),
+                        })
                     })
                     .collect()
             })
@@ -1513,12 +1530,13 @@ fn oci_list_env_tags(runtime: &str, env_name: &str) -> Vec<String> {
     }
     #[cfg(not(target_os = "macos"))]
     {
-        // `podman images --format "{{.Tag}}" --filter reference=<env_name>`
+        // `podman images --format json` entries carry `Id` and `Names`
+        // (full references). Filter to this environment's name.
         let Ok(out) = std::process::Command::new(runtime)
             .args([
                 "images",
                 "--format",
-                "{{.Tag}}",
+                "json",
                 "--filter",
                 &format!("reference={env_name}"),
             ])
@@ -1526,14 +1544,49 @@ fn oci_list_env_tags(runtime: &str, env_name: &str) -> Vec<String> {
         else {
             return Vec::new();
         };
-        String::from_utf8_lossy(&out.stdout)
-            .lines()
-            .map(str::to_string)
-            .collect()
+        let Ok(parsed) = serde_json::from_slice::<serde_json::Value>(&out.stdout) else {
+            return Vec::new();
+        };
+        let mut entries = Vec::new();
+        for e in parsed.as_array().into_iter().flatten() {
+            let digest = e.get("Id").and_then(|v| v.as_str()).unwrap_or_default();
+            for name in e
+                .get("Names")
+                .and_then(|v| v.as_array())
+                .into_iter()
+                .flatten()
+                .filter_map(|v| v.as_str())
+            {
+                if let Some((refname, tag)) = name.rsplit_once(':') {
+                    let matches = refname == env_name
+                        || refname
+                            .rsplit_once('/')
+                            .is_some_and(|(_, last)| last == env_name);
+                    if matches {
+                        entries.push(OciImageEntry {
+                            reference: name.to_string(),
+                            tag: tag.to_string(),
+                            digest: digest.to_string(),
+                        });
+                    }
+                }
+            }
+        }
+        entries
     }
 }
 
-/// Resolve the OCI image state for the oci sandbox backend.
+/// List all `<env_name>:*` tags in the local container store.
+///
+/// Returns the tag strings (the `<hash>` portion, not the full ref).
+fn oci_list_env_tags(runtime: &str, env_name: &str) -> Vec<String> {
+    oci_list_env_entries(runtime, env_name)
+        .into_iter()
+        .map(|e| e.tag)
+        .collect()
+}
+
+/// Resolve the OCI image state for the oci sandbox backend./// Resolve the OCI image state for the oci sandbox backend.
 ///
 /// Thin I/O wrapper around [`classify_oci_image_state`]: reads the
 /// override env var and probes the local container store, then delegates
@@ -1752,6 +1805,94 @@ fn oci_prune_set(env_name: &str, existing_tags: &[String], hash12: &str) -> Vec<
         .collect()
 }
 
+/// Latest-alias repair actions for an environment, given the store state.
+///
+/// Returns `(refs_to_remove, need_retag)`:
+/// - `refs_to_remove`: exact stored references of `latest` bearers whose
+///   digest differs from the expected image. A legacy `<env>:latest`
+///   (loaded before hash-tagging existed) is stored under the plain name,
+///   while the alias created by `image tag` is registry-normalized -- the
+///   two coexist as separate rows, so moving the alias alone leaves the
+///   legacy bearer behind.
+/// - `need_retag`: true when no `latest` bearer with the expected digest
+///   remains, i.e. `<env>:<hash12>` must be re-tagged as `<env>:latest`.
+///
+/// No action is taken when the expected `<env>:<hash12>` image is absent.
+/// Hash-tag bearers are never removal candidates; superseded hash tags
+/// are handled by [`oci_prune_set`].
+fn latest_alias_actions(entries: &[OciImageEntry], hash12: &str) -> (Vec<String>, bool) {
+    let Some(expected_digest) = entries
+        .iter()
+        .find(|e| e.tag == hash12)
+        .map(|e| e.digest.clone())
+    else {
+        return (Vec::new(), false);
+    };
+
+    let to_remove = entries
+        .iter()
+        .filter(|e| e.tag == "latest" && e.digest != expected_digest)
+        .map(|e| e.reference.clone())
+        .collect();
+    let has_good_latest = entries
+        .iter()
+        .any(|e| e.tag == "latest" && e.digest == expected_digest);
+
+    (to_remove, !has_good_latest)
+}
+
+/// Converge the `<env>:latest` alias onto the expected `<env>:<hash12>`
+/// image: remove conflicting `latest` bearers, then (re)create the alias
+/// if needed. Non-fatal throughout; the alias is a convenience.
+///
+/// Removal peels one bearer at a time: `image rm <name>:latest` resolves
+/// through name normalization, so with both a registry-normalized alias
+/// and a plain-stored legacy bearer present, a single removal reaches
+/// only the bearer the resolver finds first. Repeat (bounded) until no
+/// conflicting bearer remains, then restore the alias from the expected
+/// hash tag. Conflicting bearers never share a digest with the expected
+/// image, and hash tags are never removal candidates, so the expected
+/// image itself cannot be affected.
+fn ensure_latest_alias(runtime: &str, env_name: &str, hash12: &str) {
+    let entries = oci_list_env_entries(runtime, env_name);
+    let (mut to_remove, need_retag) = latest_alias_actions(&entries, hash12);
+    if to_remove.is_empty() && !need_retag {
+        // Converged already -- the common cache-hit case.
+        return;
+    }
+
+    const MAX_REMOVAL_PASSES: usize = 4;
+    for _ in 0..MAX_REMOVAL_PASSES {
+        if to_remove.is_empty() {
+            break;
+        }
+        for reference in &to_remove {
+            oci_remove_tag(runtime, reference);
+        }
+        let entries = oci_list_env_entries(runtime, env_name);
+        (to_remove, _) = latest_alias_actions(&entries, hash12);
+    }
+    if !to_remove.is_empty() {
+        debug!(
+            survivors = ?to_remove,
+            "conflicting latest bearer(s) survived removal passes (ignored)"
+        );
+    }
+
+    // (Re)create the alias if no bearer with the expected digest remains
+    // (removal passes may have peeled the correct alias on the way to a
+    // legacy bearer).
+    let entries = oci_list_env_entries(runtime, env_name);
+    let (_, need_retag) = latest_alias_actions(&entries, hash12);
+    if need_retag {
+        let hash_tag = format!("{env_name}:{hash12}");
+        let latest_tag = format!("{env_name}:latest");
+        if let Err(e) = oci_tag_image(runtime, &hash_tag, &latest_tag) {
+            debug!(err = %e, "could not tag {hash_tag} as {latest_tag} (non-fatal)");
+        }
+    }
+}
+
 /// Bake an OCI image for the given environment and load it into the local
 /// container store, then tag it with the content-hash tag and `<env>:latest`,
 /// and prune superseded `<env>:*` tags.
@@ -1782,7 +1923,6 @@ fn bake_oci_image(
 
     let hash12 = lockfile_hash12(lockfile);
     let hash_tag = format!("{env_name}:{hash12}");
-    let latest_tag = format!("{env_name}:latest");
 
     // Resolve the builder flake ref (may fail on schema mismatch).
     let flake_ref = oci_builder_flake_ref(lockfile, FROZEN_FALLBACK_REV)?;
@@ -1843,10 +1983,10 @@ fn bake_oci_image(
 
     eprintln!("✅  Image '{hash_tag}' loaded into {runtime} store.");
 
-    // Move/create the `<env>:latest` alias.
-    if let Err(e) = oci_tag_image(runtime, &hash_tag, &latest_tag) {
-        debug!(err = %e, "could not tag {hash_tag} as {latest_tag} (non-fatal)");
-    }
+    // Move the `<env>:latest` alias, removing any conflicting bearer
+    // first (a legacy `<env>:latest` from before hash-tagging survives
+    // `image tag` as a second row under its plain stored name).
+    ensure_latest_alias(runtime, env_name, &hash12);
 
     // Prune superseded `<env>:*` tags (keep current hash tag and latest alias).
     let existing_tags = oci_list_env_tags(runtime, env_name);
@@ -2062,6 +2202,12 @@ fn wrap_activation_oci(
         },
         OciImageState::Present { ref image_ref } => {
             debug!(image_ref, "cache hit: content-hash tag present");
+            // Self-heal the `<env>:latest` alias on cache hits: a legacy
+            // image loaded before hash-tagging existed survives as a
+            // second `latest` bearer under a different stored reference
+            // (plain vs registry-normalized). Converging here cleans the
+            // store without requiring a rebake.
+            ensure_latest_alias(runtime, env_name, &lockfile_hash12(lockfile));
             image_ref.clone()
         },
         OciImageState::Stale {
@@ -3101,6 +3247,104 @@ mod upgrade_notification_tests {
         #[test]
         fn prune_set_empty_when_no_tags() {
             let pruned = oci_prune_set("env", &[], "abc123def456");
+            assert!(pruned.is_empty());
+        }
+    }
+
+    /// Latest-alias repair decisions: legacy plain-named bearers, the
+    /// registry-normalized alias form, and prune-set interaction.
+    mod latest_alias {
+        use super::*;
+
+        const HASH: &str = "a7f880489710";
+        const GOOD_DIGEST: &str = "2f2d460d82cd";
+        const OLD_DIGEST: &str = "e7daad51f6d2";
+
+        fn entry(reference: &str, digest: &str) -> OciImageEntry {
+            let tag = reference
+                .rsplit_once(':')
+                .map(|(_, t)| t)
+                .unwrap_or("")
+                .to_string();
+            OciImageEntry {
+                reference: reference.to_string(),
+                tag,
+                digest: digest.to_string(),
+            }
+        }
+
+        #[test]
+        fn removes_legacy_plain_latest_with_different_digest() {
+            let entries = vec![
+                entry("env:a7f880489710", GOOD_DIGEST),
+                entry("env:latest", OLD_DIGEST),
+            ];
+            let (to_remove, need_retag) = latest_alias_actions(&entries, HASH);
+            assert_eq!(to_remove, vec!["env:latest".to_string()]);
+            assert!(need_retag, "no good latest remains; must retag");
+        }
+
+        #[test]
+        fn keeps_normalized_good_latest() {
+            let entries = vec![
+                entry("env:a7f880489710", GOOD_DIGEST),
+                entry("docker.io/library/env:latest", GOOD_DIGEST),
+            ];
+            let (to_remove, need_retag) = latest_alias_actions(&entries, HASH);
+            assert!(to_remove.is_empty());
+            assert!(!need_retag);
+        }
+
+        #[test]
+        fn removes_stray_and_keeps_good_when_both_present() {
+            // The live repro: good normalized alias + good hash tag +
+            // legacy plain latest with a different digest.
+            let entries = vec![
+                entry("docker.io/library/env:latest", GOOD_DIGEST),
+                entry("env:a7f880489710", GOOD_DIGEST),
+                entry("env:latest", OLD_DIGEST),
+            ];
+            let (to_remove, need_retag) = latest_alias_actions(&entries, HASH);
+            assert_eq!(to_remove, vec!["env:latest".to_string()]);
+            assert!(!need_retag, "good alias already present");
+        }
+
+        #[test]
+        fn retags_when_no_latest_exists() {
+            let entries = vec![entry("env:a7f880489710", GOOD_DIGEST)];
+            let (to_remove, need_retag) = latest_alias_actions(&entries, HASH);
+            assert!(to_remove.is_empty());
+            assert!(need_retag);
+        }
+
+        #[test]
+        fn noop_when_expected_hash_absent() {
+            // Legacy latest-only store: without the expected image there
+            // is nothing safe to converge on.
+            let entries = vec![entry("env:latest", OLD_DIGEST)];
+            let (to_remove, need_retag) = latest_alias_actions(&entries, HASH);
+            assert!(to_remove.is_empty());
+            assert!(!need_retag);
+        }
+
+        #[test]
+        fn never_removes_hash_tag_bearers() {
+            // Superseded hash tags belong to oci_prune_set, not the alias
+            // repair; only `latest` bearers are removal candidates here.
+            let entries = vec![
+                entry("env:a7f880489710", GOOD_DIGEST),
+                entry("env:0834718d65c2", OLD_DIGEST),
+            ];
+            let (to_remove, _) = latest_alias_actions(&entries, HASH);
+            assert!(to_remove.is_empty());
+        }
+
+        #[test]
+        fn prune_set_ignores_legacy_latest_only_store() {
+            // A legacy latest-only image must not be pruned as a
+            // superseded hash tag; the alias repair owns `latest`.
+            let tags = vec!["latest".to_string()];
+            let pruned = oci_prune_set("env", &tags, "a7f880489710");
             assert!(pruned.is_empty());
         }
     }
