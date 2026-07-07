@@ -2309,9 +2309,6 @@ EOF
   # Inner interactive activation.
   assert_output --partial - <<EOF
 nested hook.on-activate
-✔ You are now using the environment 'nested'
-To stop using this environment, run 'flox deactivate'
-
 sourcing profile.common for first time
 sourcing profile.zsh for first time
 nested profile.common
@@ -4139,8 +4136,6 @@ EOF
         expected_message="$(cat << EOF
 spawn ${FLOX_BIN} activate --dir ${PROJECT_DIR}
 ✔ Attached to existing activation of environment '${PROJECT_NAME}'
-To stop using this environment, run 'flox deactivate'
-
 ${output_from_rc_files}
 flox [${PROJECT_NAME}] myprompt> true && exit
 exit

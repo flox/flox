@@ -14,7 +14,6 @@ use flox_core::activations::{
     state_json_path,
     write_activations_json,
 };
-use indoc::formatdoc;
 use tracing::debug;
 
 use crate::attach::{attach, quote_run_args};
@@ -132,31 +131,18 @@ impl ActivateArgs {
         let warning_interval = Duration::from_secs(5);
         let mut last_warning: Option<Instant> = None;
 
-        let deactivate_hint = "To stop using this environment, run 'flox deactivate'";
-
         loop {
             match self.try_start_or_attach(context, subsystem_verbosity, vars_from_env)? {
-                StartOrAttachResult::Start { start_id, .. } => {
-                    if *invocation_type == InvocationType::Interactive {
-                        updated(
-                            formatdoc! {"You are now using the environment '{env_description}'
-                                     {deactivate_hint}
-                                     ",
-                            env_description = context.attach_ctx.env_description,
-                            },
-                        );
-                    }
-                    return Ok(start_id);
-                },
+                // A fresh activation is deliberately silent: the shell prompt
+                // names the environment, and the summary printed by `flox
+                // activate` covers the rest.
+                StartOrAttachResult::Start { start_id, .. } => return Ok(start_id),
                 StartOrAttachResult::Attach { start_id, .. } => {
                     if *invocation_type == InvocationType::Interactive {
-                        updated(
-                            formatdoc! {"Attached to existing activation of environment '{env_description}'
-                                     {deactivate_hint}
-                                     ",
-                            env_description = context.attach_ctx.env_description,
-                            },
-                        );
+                        updated(format!(
+                            "Attached to existing activation of environment '{}'",
+                            context.attach_ctx.env_description,
+                        ));
                     }
                     return Ok(start_id);
                 },

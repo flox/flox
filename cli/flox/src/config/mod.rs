@@ -101,8 +101,7 @@ pub struct FloxConfig {
     /// Print notification if upgrades are available on `flox activate`.
     /// The notification message is:
     /// ```
-    /// Upgrades are available for packages in 'environment-name'.
-    /// Use 'flox upgrade --dry-run' for details.
+    /// 2 version changes available. Use 'flox upgrade --dry-run' for details.
     /// ```
     ///
     /// (default: true)

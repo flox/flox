@@ -13,7 +13,6 @@ expect_after {
   "*\n" { exp_continue }
   "*\r" { exp_continue }
 }
-expect "You are now using the environment"
 expect $env(KNOWN_PROMPT)
 
 send "$inner_activate_command\r"

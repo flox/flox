@@ -41,7 +41,6 @@ Mid-term updating the client library and proposing it as a PR will be done by au
 
         % flox activate -r dcarley/mitmproxy
         ✔ Attached to existing activation of environment 'dcarley/mitmproxy (local)'
-        To stop using this environment, type 'exit'
 
         Start the proxy in one terminal:
           mitmproxy    (TUI)

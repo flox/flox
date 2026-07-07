@@ -370,7 +370,7 @@ fn processes_by_name_or_default_to_all<'a>(
 pub async fn start_services_with_new_process_compose(
     config: Config,
     flox: Flox,
-    _environment_select: EnvironmentSelect,
+    environment_select: EnvironmentSelect,
     mut concrete_environment: ConcreteEnvironment,
     activate_mode: ActivateMode,
     names: &[String],
@@ -428,6 +428,7 @@ pub async fn start_services_with_new_process_compose(
         flox,
         concrete_environment,
         InvocationType::ExecCommand(vec!["true".to_string()]),
+        environment_select,
         names.to_vec(),
     )
     .await?;

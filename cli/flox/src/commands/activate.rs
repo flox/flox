@@ -6,6 +6,7 @@ use std::{env, fs};
 
 use anyhow::{Context, Result, anyhow, bail};
 use bpaf::Bpaf;
+use crossterm::style::Stylize;
 use crossterm::tty::IsTty;
 use flox_core::activate::context::{
     ActivateCtx,
@@ -196,7 +197,7 @@ impl Activate {
             },
         };
 
-        let mut concrete_environment = match self
+        let concrete_environment = match self
             .environment
             .to_concrete_environment(&mut flox, options.generation)
             .await
@@ -287,17 +288,6 @@ impl Activate {
             },
         };
 
-        if (invocation_type == InvocationType::Interactive
-            || invocation_type == InvocationType::InPlace)
-            && config.flox.upgrade_notifications.unwrap_or(true)
-        {
-            // Read the results of a previous upgrade check
-            // and print a message if an upgrade is available.
-            notify_upgrades_if_available(&flox, &mut concrete_environment, &self.environment)?;
-        } else {
-            debug!("Upgrade notification disabled");
-        }
-
         // Spawn a detached process to check for upgrades in the background.
         let environment =
             UninitializedEnvironment::from_concrete_environment(&concrete_environment);
@@ -314,6 +304,7 @@ impl Activate {
                 flox,
                 concrete_environment,
                 invocation_type,
+                self.environment,
                 Vec::new(),
             )
             .await
@@ -380,6 +371,7 @@ impl ActivateOptions {
         flox: Flox,
         mut concrete_environment: ConcreteEnvironment,
         invocation_type: InvocationType,
+        environment_select: EnvironmentSelect,
         services_for_ephemeral_activation: Vec<String>,
     ) -> Result<()> {
         let now_active = UninitializedEnvironment::from_concrete_environment(&concrete_environment);
@@ -508,17 +500,32 @@ impl ActivateOptions {
                 mode.clone(),
             );
 
-            // On a fresh interactive activation, surface the environment's
-            // description and a pointer to its README so users see what it
-            // provides and how to learn more.
-            if invocation_type == InvocationType::Interactive {
-                print_readme_summary(
-                    &concrete_environment,
-                    manifest.as_latest_schema().description.clone(),
-                    &flox,
-                );
-            }
+            // On a fresh activation, surface the environment's description
+            // and a pointer to its README so users see what it provides and
+            // how to learn more. This prints for every invocation type —
+            // including in-place activations, which is how the auto-activate
+            // prompt hook activates — so manual and automatic activation
+            // announce the environment the same way. Messages go to stderr,
+            // so an eval'd in-place script or a command's stdout is unaffected.
+            print_readme_summary(
+                &concrete_environment,
+                manifest.as_latest_schema().description.clone(),
+                &flox,
+            );
         };
+
+        // Notify about available upgrades after the environment summary so the
+        // description is the first thing users read on activation.
+        if (invocation_type == InvocationType::Interactive
+            || invocation_type == InvocationType::InPlace)
+            && config.flox.upgrade_notifications.unwrap_or(true)
+        {
+            // Read the results of a previous upgrade check
+            // and print a message if an upgrade is available.
+            notify_upgrades_if_available(&flox, &mut concrete_environment, &environment_select)?;
+        } else {
+            debug!("Upgrade notification disabled");
+        }
 
         // Determine values for `set_prompt` and `hide_default_prompt`, taking
         // deprecated `shell_prompt` into account
@@ -779,15 +786,10 @@ impl ActivateOptions {
     }
 }
 
-/// Notify the user of available upgrades
-///
-/// Upon activation flox will start a detached process to check for upgrades.
-/// Future activations will be able to read the upgrade information from a file
-/// and notify the user if there are any upgrades available using this function.
-/// Print a short summary of the environment on an interactive activation:
-/// its one-line description (from the manifest) and a hint to view the full
-/// README with `flox info`. Skipped when the environment has neither, or when
-/// `FLOX_NO_README_SUMMARY` is set.
+/// Print a short summary of the environment on a fresh activation:
+/// its one-line description (from the manifest), with a pointer to the full
+/// README appended when one exists. Skipped when the environment has neither,
+/// or when `FLOX_NO_README_SUMMARY` is set.
 fn print_readme_summary(env: &ConcreteEnvironment, description: Option<String>, flox: &Flox) {
     if std::env::var_os("FLOX_NO_README_SUMMARY").is_some() {
         return;
@@ -804,15 +806,18 @@ fn print_readme_summary(env: &ConcreteEnvironment, description: Option<String>, 
         _ => false,
     };
 
-    if description.is_none() && !has_meaningful_readme {
-        return;
-    }
-
-    if let Some(description) = description {
-        message::plain(description);
-    }
-    if has_meaningful_readme {
-        message::info("Run 'flox info' to view this environment's README.");
+    match (description, has_meaningful_readme) {
+        (Some(description), true) => {
+            let readme_hint = if message::stderr_supports_color() {
+                "(README: 'flox info')".dim().to_string()
+            } else {
+                "(README: 'flox info')".to_string()
+            };
+            message::plain(format!("{description} {readme_hint}"));
+        },
+        (Some(description), false) => message::plain(description),
+        (None, true) => message::info("Run 'flox info' to view this environment's README."),
+        (None, false) => {},
     }
 }
 
@@ -878,9 +883,9 @@ fn notify_package_upgrades(
         debug!("Not notifying user of upgrade, no changes in lockfile");
         return Ok(());
     }
-    let description = environment_description(environment)?;
     let diff_for_system = upgrade_result.diff_for_system(&flox.system);
     if diff_for_system.is_empty() {
+        let description = environment_description(environment)?;
         message::verbose(formatdoc! {"
             Upgrades available for {description} on other systems.
             Use 'flox upgrade --dry-run' for details."});
@@ -893,11 +898,11 @@ fn notify_package_upgrades(
         .unwrap_or("".to_string());
     let (version_changes, rebuilds) = count_upgrade_categories(&diff_for_system);
     let summary = format_upgrade_summary(version_changes, rebuilds);
-    let message = formatdoc! {"
-        {summary} available in {description}.
-        Use 'flox upgrade --dry-run{flags}' for details.
-    "};
-    message::info(message);
+    // The environment name is deliberately omitted: the notification refers to
+    // the environment being activated, and the shell prompt names it already.
+    message::info(format!(
+        "{summary} available. Use 'flox upgrade --dry-run{flags}' for details."
+    ));
     Ok(())
 }
 
@@ -1269,11 +1274,10 @@ mod upgrade_notification_tests {
 
         let printed = writer.to_string();
 
-        assert_eq!(printed, formatdoc! {"
-            ℹ 1 rebuild available in 'name'.
-            Use 'flox upgrade --dry-run' for details.
-
-        "});
+        assert_eq!(
+            printed,
+            "ℹ 1 rebuild available. Use 'flox upgrade --dry-run' for details.\n"
+        );
     }
 
     /// When the user specifies an environment via flags (e.g. `-d <path>` or

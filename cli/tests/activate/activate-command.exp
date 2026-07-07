@@ -16,7 +16,6 @@ expect_after {
   "*\r" { exp_continue }
 }
 
-expect "You are now using the environment"
 expect $env(KNOWN_PROMPT)
 
 send "$command && exit\n"
