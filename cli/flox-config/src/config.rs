@@ -152,6 +152,14 @@ pub struct FloxConfig {
     /// This disables auto-activation as well as features like `flox deactivate`
     /// without `--print-script` (default: false)
     pub disable_hook: Option<bool>,
+
+    /// Automatically bake OCI sandbox images when the expected content-hash
+    /// tag is absent (non-interactive equivalent of the tty prompt).
+    /// Also settable as FLOX_SANDBOX_OCI_AUTOBAKE=true via the config
+    /// env layer (the value must be a boolean; `1` fails parsing).
+    ///
+    /// (default: false)
+    pub sandbox_oci_autobake: Option<bool>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
