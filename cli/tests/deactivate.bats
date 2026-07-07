@@ -558,9 +558,6 @@ FLOX_COLD_START_UNSET=(
   # exported, but scrub both defensively.
   -u _FLOX_INVOCATION_TYPE
   -u _FLOX_INVOCATION_TYPES
-  # A leaked auto-activate flag makes the prompt hook auto-activate inside
-  # interactive test sessions, which also surfaces in the env diff.
-  -u FLOX_FEATURES_AUTO_ACTIVATE
   # State vars maintained by the prompt hook in any outer shell that
   # activated with auto-activate enabled (e.g. a developer's own terminal).
   # _FLOX_HOOK_FIRED is only set by older flox versions but can still leak

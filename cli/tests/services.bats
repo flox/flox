@@ -1712,7 +1712,6 @@ EOF
 @test "services stop after auto-activated environment is deactivated" {
   setup_sleeping_services
 
-  export FLOX_FEATURES_AUTO_ACTIVATE=true
   "$FLOX_BIN" activate allow -d "$PROJECT_DIR"
 
   # Minimal outer project to register _flox_hook without services.
@@ -1722,7 +1721,6 @@ EOF
 
   run --separate-stderr bash -c "
     set -euo pipefail
-    export FLOX_FEATURES_AUTO_ACTIVATE=true
     export FLOX_SHELL=\$(which bash)
 
     # Manually activate the outer project to get _flox_hook defined.

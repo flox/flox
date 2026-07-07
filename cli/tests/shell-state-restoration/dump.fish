@@ -17,7 +17,6 @@
 #   dump.fish <pre.txt> <post.txt>
 
 set --export LC_ALL C
-set --export FLOX_FEATURES_AUTO_ACTIVATE true
 set --export FLOX_SHELL (command -v fish)
 
 # fish-internal volatile names plus our own dump helpers, filtered
