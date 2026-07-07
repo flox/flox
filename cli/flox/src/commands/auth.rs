@@ -8,7 +8,7 @@ use chrono::{DateTime, Duration};
 use flox_config::Config;
 use flox_rust_sdk::flox::{FLOX_VERSION, Flox, FloxhubToken};
 use floxhub_client::{AuthContext, AuthnMode};
-use indoc::formatdoc;
+use indoc::{formatdoc, indoc};
 use oauth2::basic::{
     BasicClient,
     BasicErrorResponse,
@@ -286,11 +286,25 @@ impl Auth {
                     return Ok(());
                 }
 
-                CredentialStores::from_flox(&flox)
+                let stores = CredentialStores::from_flox(&flox);
+                // Probe before removal: this identifies which source supplies
+                // the active token, so logout can say when clearing the stores
+                // is not enough to end the session.
+                let source = stores.probe_source(&config);
+
+                stores
                     .remove_all()
                     .context("Could not remove the stored token")?;
 
-                message::updated("Logout successful");
+                match source {
+                    CredentialSource::Env => message::warning(indoc! {"
+                        Removed stored credentials, but 'FLOX_FLOXHUB_TOKEN' still supplies a token.
+                        Unset 'FLOX_FLOXHUB_TOKEN' to complete the logout."}),
+                    CredentialSource::SystemConfig => message::warning(indoc! {"
+                        Removed stored credentials, but the system config still supplies a token.
+                        Remove 'floxhub_token' from the system 'flox.toml' to complete the logout."}),
+                    _ => message::updated("Logout successful"),
+                }
 
                 Ok(())
             },

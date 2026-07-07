@@ -236,15 +236,14 @@ impl CredentialStores {
     /// Precedence: `FLOX_FLOXHUB_TOKEN` env > user-file plaintext > keyring >
     /// system config > none.
     ///
-    /// The keyring is probed before the system-config inference because
-    /// [Self::resolve_into] has, by the time `status` runs, populated
-    /// `config.flox.floxhub_token` from the keyring when the merged config was
-    /// empty. The `SystemConfig` inference rests on that field being `Some` for
-    /// reasons *other* than env/user-file, so it must come last — otherwise a
-    /// keyring-sourced token would misreport as `SystemConfig`. The only case
-    /// this reorders is "both `/etc` and the keyring hold a token", which reports
-    /// `Keyring` though `/etc` shadows it under the read precedence — a cosmetic
-    /// `status`-only difference.
+    /// The keyring branch is value-aware: the keyring is the source only when
+    /// the merged `config.flox.floxhub_token` is empty (the resolver would
+    /// populate it from the keyring) or equals the keyring entry (the resolver
+    /// already did). A non-empty merged token that differs from the keyring
+    /// entry is not being read from the keyring at all — it came from
+    /// `/etc/flox.toml` — and must report `SystemConfig` even when the keyring
+    /// also holds an unrelated entry, so an invalid system token never routes
+    /// [Self::clear_invalid] to the user's saved keyring credential.
     pub fn probe_source(&self, config: &Config) -> CredentialSource {
         let env_token = std::env::var(FLOXHUB_TOKEN_ENV_VAR).ok();
         if env_token.is_some_and(|t| !t.is_empty()) {
@@ -255,19 +254,22 @@ impl CredentialStores {
             return CredentialSource::UserConfigPlaintext;
         }
 
-        if self.keyring.get().ok().flatten().is_some() {
+        let merged_token = config
+            .flox
+            .floxhub_token
+            .as_deref()
+            .filter(|t| !t.is_empty());
+
+        if let Ok(Some(keyring_token)) = self.keyring.get()
+            && merged_token.is_none_or(|t| t == keyring_token)
+        {
             return CredentialSource::Keyring;
         }
 
         // The merged config still has a token, but it is not from the
         // environment, the user file, or the keyring — so it came from
         // `/etc/flox.toml`.
-        if config
-            .flox
-            .floxhub_token
-            .as_deref()
-            .is_some_and(|t| !t.is_empty())
-        {
+        if merged_token.is_some() {
             return CredentialSource::SystemConfig;
         }
 
@@ -325,7 +327,9 @@ impl CredentialStores {
     ///
     /// Migration (additive over Phase 2) runs only when both of these hold, so it
     /// is correct rather than merely convenient:
-    /// - `FLOX_FLOXHUB_TOKEN` is unset — a transient CI token is never persisted.
+    /// - `FLOX_FLOXHUB_TOKEN` is not present in the environment — a transient
+    ///   CI token is never persisted, and an explicit *empty* export (used to
+    ///   mask saved credentials for one invocation) blocks the stores entirely.
     /// - the *user file* (`PlaintextStore::get`) holds a token — the system
     ///   `/etc/flox.toml` token never appears here, so it is never migrated.
     ///
@@ -341,13 +345,19 @@ impl CredentialStores {
     /// keyring for a *read* when the merged value (env > user file > system) is
     /// empty.
     pub fn resolve_into(&self, config: &mut Config) -> ResolveOutcome {
-        let env_set = std::env::var(FLOXHUB_TOKEN_ENV_VAR).is_ok_and(|t| !t.is_empty());
+        // Any explicit `FLOX_FLOXHUB_TOKEN` — including an *empty* export used
+        // to mask saved credentials for one invocation — takes precedence over
+        // both stores: never migrate the plaintext token, and never populate
+        // the config from the keyring. Presence is what matters here; whether
+        // the value is a usable token is validated downstream.
+        if std::env::var(FLOXHUB_TOKEN_ENV_VAR).is_ok() {
+            return ResolveOutcome::Unchanged;
+        }
 
-        // Opportunistic migration: only the user-file token is eligible, and
-        // only when the environment is not overriding it. Probe the plaintext
-        // file directly (provenance-aware) rather than trusting the merged
-        // config field, which may hold a system token instead.
-        if !env_set && let Ok(Some(token)) = self.plaintext.get() {
+        // Opportunistic migration: only the user-file token is eligible. Probe
+        // the plaintext file directly (provenance-aware) rather than trusting
+        // the merged config field, which may hold a system token instead.
+        if let Ok(Some(token)) = self.plaintext.get() {
             // Try-then-confirm: only after the keyring write succeeds do we
             // remove the plaintext token. On any keyring failure the plaintext
             // file is left exactly as it was.
@@ -427,10 +437,15 @@ impl CredentialStores {
     /// plaintext token may also linger from before migration, so both are
     /// cleared. Both removals are idempotent, so this succeeds when nothing is
     /// stored.
+    ///
+    /// Both removals are always attempted: a keyring platform error (e.g. a
+    /// locked Secret Service session) must not short-circuit logout and leave
+    /// the plaintext secret on disk. A plaintext failure is reported first —
+    /// that is the copy sitting in a file.
     pub fn remove_all(&self) -> Result<(), CredentialStoreError> {
-        self.keyring.remove()?;
+        let keyring_result = self.keyring.remove();
         self.plaintext.remove()?;
-        Ok(())
+        keyring_result
     }
 }
 
@@ -646,6 +661,33 @@ mod tests {
         assert_eq!(stores.probe_source(&config), CredentialSource::Keyring);
     }
 
+    /// `/etc/flox.toml` supplies the merged token while the keyring holds a
+    /// *different* credential: the probe must report `SystemConfig`, not
+    /// `Keyring`, so an invalid system token never routes `clear_invalid` to
+    /// the user's unrelated saved keyring credential.
+    #[test]
+    fn probe_reports_system_config_when_keyring_holds_different_token() {
+        temp_env::with_var(FLOXHUB_TOKEN_ENV_VAR, None::<&str>, || {
+            let keyring = CredentialStoreImpl::Mock(MockStore::new());
+            keyring.set("keyring-token").unwrap();
+            let plaintext = CredentialStoreImpl::Mock(MockStore::new());
+            let stores = CredentialStores::from_stores(keyring.clone(), plaintext);
+
+            // Mirror the merge: the system config supplied the (invalid) token,
+            // and the resolver leaves a non-empty merged token untouched.
+            let mut config = config_with_token(Some("invalid-system-token"));
+            assert_eq!(stores.resolve_into(&mut config), ResolveOutcome::Unchanged);
+
+            let source = stores.probe_source(&config);
+            assert_eq!(source, CredentialSource::SystemConfig);
+
+            // The invalid-token cleanup routed by this source must preserve
+            // the keyring credential.
+            stores.clear_invalid(source);
+            assert_eq!(keyring.get().unwrap(), Some("keyring-token".to_string()));
+        });
+    }
+
     // --- CredentialStores::persist_login_token: the login storage decision ---
 
     /// Default login: the token goes to the keyring and no plaintext token is
@@ -814,6 +856,33 @@ mod tests {
         });
     }
 
+    /// An explicit *empty* `FLOX_FLOXHUB_TOKEN` export masks saved credentials
+    /// for one invocation: the resolver must neither migrate the plaintext
+    /// token nor populate the config from the keyring, so the invocation stays
+    /// logged out.
+    #[test]
+    fn resolve_is_inert_when_env_token_is_empty() {
+        temp_env::with_var(FLOXHUB_TOKEN_ENV_VAR, Some(""), || {
+            let keyring = CredentialStoreImpl::Mock(MockStore::new());
+            keyring.set("keyring-token").unwrap();
+            let plaintext = CredentialStoreImpl::Mock(MockStore::new());
+            plaintext.set(TOKEN).unwrap();
+            let stores = CredentialStores::from_stores(keyring.clone(), plaintext.clone());
+
+            // Mirror the merge: the empty env override yields an empty merged
+            // token.
+            let mut config = config_with_token(Some(""));
+            let outcome = stores.resolve_into(&mut config);
+
+            assert_eq!(outcome, ResolveOutcome::Unchanged);
+            // No migration: both stores are exactly as they were.
+            assert_eq!(keyring.get().unwrap(), Some("keyring-token".to_string()));
+            assert_eq!(plaintext.get().unwrap(), Some(TOKEN.to_string()));
+            // No populate: the masked (empty) token is left in place.
+            assert_eq!(config.flox.floxhub_token.as_deref(), Some(""));
+        });
+    }
+
     /// Keyring write fails → the plaintext file is left untouched (no data
     /// loss, no migration).
     #[test]
@@ -915,5 +984,25 @@ mod tests {
 
         assert_eq!(keyring.get().unwrap(), Some(TOKEN.to_string()));
         assert_eq!(plaintext.get().unwrap(), Some(TOKEN.to_string()));
+    }
+
+    // --- CredentialStores::remove_all: logout removal ---
+
+    /// A keyring platform failure (e.g. a locked Secret Service session) must
+    /// not short-circuit logout: the plaintext token is still removed, and the
+    /// keyring error is still surfaced to the caller.
+    #[test]
+    fn remove_all_clears_plaintext_even_when_keyring_remove_fails() {
+        let keyring_mock = MockStore::new();
+        keyring_mock.set_error("keyring is locked");
+        let keyring = CredentialStoreImpl::Mock(keyring_mock);
+        let plaintext = CredentialStoreImpl::Mock(MockStore::new());
+        plaintext.set(TOKEN).unwrap();
+        let stores = CredentialStores::from_stores(keyring, plaintext.clone());
+
+        let result = stores.remove_all();
+
+        assert!(result.is_err());
+        assert_eq!(plaintext.get().unwrap(), None);
     }
 }
