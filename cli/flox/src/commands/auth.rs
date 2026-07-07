@@ -5,7 +5,7 @@ use anyhow::{Context, Result, bail};
 use bpaf::Bpaf;
 use chrono::offset::Utc;
 use chrono::{DateTime, Duration};
-use flox_config::{Config, FLOX_CONFIG_FILE};
+use flox_config::Config;
 use flox_rust_sdk::flox::{FLOX_VERSION, Flox, FloxhubToken};
 use floxhub_client::{AuthContext, AuthnMode};
 use indoc::formatdoc;
@@ -36,16 +36,7 @@ use tracing::{debug, instrument};
 use url::Url;
 
 use crate::commands::general::update_config;
-use crate::utils::credential_store::{
-    CredentialSource,
-    CredentialStore,
-    CredentialStoreImpl,
-    KeyringStore,
-    PlaintextStore,
-    TokenStorage,
-    persist_login_token,
-    probe_credential_source,
-};
+use crate::utils::credential_store::{CredentialSource, CredentialStores, TokenStorage};
 use crate::utils::dialog::{Checkpoint, Dialog, WaitResult};
 use crate::utils::message;
 use crate::utils::openers::Browser;
@@ -295,15 +286,9 @@ impl Auth {
                     return Ok(());
                 }
 
-                // Remove from both stores: the resolver may have populated the
-                // token from the keyring, and a plaintext token may also linger
-                // from before migration. Both removals are idempotent.
-                KeyringStore::new(flox.floxhub.base_url())
-                    .remove()
-                    .context("Could not remove token from the OS keyring")?;
-                PlaintextStore::new(&flox.config_dir)
-                    .remove()
-                    .context("Could not remove token from user config")?;
+                CredentialStores::from_flox(&flox)
+                    .remove_all()
+                    .context("Could not remove the stored token")?;
 
                 message::updated("Logout successful");
 
@@ -319,7 +304,7 @@ impl Auth {
                 // startup resolver may already have read the keyring; this guard
                 // avoids an *additional* keyring read (and a possible unlock
                 // prompt) during source probing when the user is not logged in.
-                let AuthContext::Auth0(Some(token)) = flox.auth_context else {
+                let AuthContext::Auth0(Some(token)) = &flox.auth_context else {
                     message::warning("You are not currently logged in to FloxHub.");
                     return Err(Exit(1.into()).into());
                 };
@@ -331,25 +316,16 @@ impl Auth {
                     flox.floxhub.base_url()
                 ));
 
-                let plaintext =
-                    CredentialStoreImpl::Plaintext(PlaintextStore::new(&flox.config_dir));
-                let keyring =
-                    CredentialStoreImpl::Keyring(KeyringStore::new(flox.floxhub.base_url()));
-                let source = probe_credential_source(&config, &plaintext, &keyring);
+                let stores = CredentialStores::from_flox(&flox);
+                let source = stores.probe_source(&config);
 
-                match source {
-                    CredentialSource::UserConfigPlaintext => message::warning(format!(
-                        "Credential stored in plain text at '{}'.",
-                        flox.config_dir.join(FLOX_CONFIG_FILE).display()
-                    )),
-                    CredentialSource::Keyring => {
-                        message::plain("Credential stored in your system keyring.")
+                match source.describe_storage(&stores.plaintext_path()) {
+                    // Plain text is the one storage worth warning about.
+                    Some(line) if source == CredentialSource::UserConfigPlaintext => {
+                        message::warning(line)
                     },
-                    CredentialSource::Env => message::plain(
-                        "Credential read from the FLOX_FLOXHUB_TOKEN environment variable.",
-                    ),
-                    // SystemConfig and None need no extra line here.
-                    CredentialSource::SystemConfig | CredentialSource::None => {},
+                    Some(line) => message::plain(line),
+                    None => {},
                 }
 
                 Ok(())
@@ -394,9 +370,9 @@ pub async fn login_flox(flox: &mut Flox, insecure_storage: bool) -> Result<Strin
     // Store the token in the OS keyring by default, falling back to the
     // plaintext config file (explicit 0600) with a warning on any keyring
     // failure — or when --insecure-storage forces plaintext.
-    let keyring = CredentialStoreImpl::Keyring(KeyringStore::new(flox.floxhub.base_url()));
-    let plaintext = CredentialStoreImpl::Plaintext(PlaintextStore::new(&flox.config_dir));
-    let storage = persist_login_token(token.secret(), insecure_storage, &keyring, &plaintext)
+    let stores = CredentialStores::from_flox(flox);
+    let storage = stores
+        .persist_login_token(token.secret(), insecure_storage)
         .context("Could not store token")?;
 
     let auth_context = AuthContext::from_mode(&AuthnMode::Auth0, Some(token.clone()));
@@ -406,9 +382,9 @@ pub async fn login_flox(flox: &mut Flox, insecure_storage: bool) -> Result<Strin
 
     if storage == TokenStorage::Plaintext {
         message::warning(formatdoc! {"
-            Credential stored in plain text at '{}'.
+            {notice}
             No OS keyring is available, or '--insecure-storage' was passed.",
-            flox.config_dir.join(FLOX_CONFIG_FILE).display()
+            notice = CredentialSource::plaintext_notice(&stores.plaintext_path())
         });
     }
 

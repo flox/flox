@@ -82,15 +82,7 @@ use crate::utils::active_environments::{
     activated_environments,
     last_activated_environment,
 };
-use crate::utils::credential_store::{
-    CredentialStoreImpl,
-    KeyringStore,
-    PlaintextStore,
-    ResolveOutcome,
-    clear_invalid_credential,
-    probe_credential_source,
-    resolve_credential_into,
-};
+use crate::utils::credential_store::{CredentialStores, ResolveOutcome};
 use crate::utils::dialog::{Dialog, Select};
 use crate::utils::errors::display_chain;
 use crate::utils::events::{build_events_client, resolve_invocation_id};
@@ -342,32 +334,31 @@ impl FloxArgs {
         // existing plaintext token into the OS keyring, then — when the merged
         // config supplied no token — populate it from the keyring so both the
         // loud `resolve_floxhub_token` and the silent `init_floxhub_client` see
-        // the keyring value. Gated out of the prompt/hook flow — that path must
-        // do no keyring I/O. The plaintext store path is cloned so it does not
-        // alias the `&mut config` passed to the resolver.
-        let keyring = CredentialStoreImpl::Keyring(KeyringStore::new(floxhub.base_url()));
-        let plaintext =
-            CredentialStoreImpl::Plaintext(PlaintextStore::new(config.flox.config_dir.clone()));
+        // the keyring value.
+        //
+        // Store credentials only in Auth0 mode and outside the prompt/hook
+        // flow: in other modes (e.g. Kerberos) the token is not used for
+        // authentication, so a legacy `floxhub_token` must not be silently
+        // moved or read, and the prompt/hook flow must do no keyring I/O.
+        // `resolve_floxhub_token` is deliberately not behind this gate — it
+        // still runs in the hook flow (returning the token, suppressing
+        // messages) and gates on the auth mode alone.
+        let stores = CredentialStores::new(floxhub.base_url(), &config.flox.config_dir);
         let is_auth0 = matches!(authn_mode, AuthnMode::Auth0);
-        let outcome = resolve_credential_into(
-            &mut config,
-            &keyring,
-            &plaintext,
-            self.is_prompt_hook_flow(),
-            is_auth0,
-        );
-        match outcome {
-            ResolveOutcome::Migrated => message::info(
-                "Moved your FloxHub credential from plain text into your system keyring.",
-            ),
-            ResolveOutcome::MigratedButPlaintextRemains => message::warning(indoc! {"
-                Stored your credential in the system keyring, but could not remove the plain-text copy from flox.toml.
-                Remove the 'floxhub_token' line from flox.toml so it does not shadow the keyring."}),
-            ResolveOutcome::PopulatedFromKeyring | ResolveOutcome::Unchanged => {},
+        let should_store_credentials = is_auth0 && !self.is_prompt_hook_flow();
+        if should_store_credentials {
+            match stores.resolve_into(&mut config) {
+                ResolveOutcome::Migrated => message::info(
+                    "Moved your FloxHub credential from plain text into your system keyring.",
+                ),
+                ResolveOutcome::MigratedButPlaintextRemains => message::warning(indoc! {"
+                    Stored your credential in the system keyring, but could not remove the plain-text copy from flox.toml.
+                    Remove the 'floxhub_token' line from flox.toml so it does not shadow the keyring."}),
+                ResolveOutcome::PopulatedFromKeyring | ResolveOutcome::Unchanged => {},
+            }
         }
 
-        let floxhub_token =
-            self.resolve_floxhub_token(&config, &authn_mode, &keyring, &plaintext);
+        let floxhub_token = self.resolve_floxhub_token(&config, &authn_mode, &stores);
 
         let metrics_device_uuid = (!config.flox.disable_metrics)
             .then(|| read_metrics_uuid(&config).ok())
@@ -540,8 +531,7 @@ impl FloxArgs {
         &self,
         config: &Config,
         authn_mode: &AuthnMode,
-        keyring: &CredentialStoreImpl,
-        plaintext: &CredentialStoreImpl,
+        stores: &CredentialStores,
     ) -> Option<FloxhubToken> {
         if !matches!(authn_mode, AuthnMode::Auth0) {
             return None;
@@ -576,8 +566,8 @@ impl FloxArgs {
                 // (probed here). An invalid `FLOX_FLOXHUB_TOKEN` or system-config
                 // token must not delete the user's saved keyring/plaintext
                 // credential.
-                let source = probe_credential_source(config, plaintext, keyring);
-                clear_invalid_credential(source, keyring, plaintext);
+                let source = stores.probe_source(config);
+                stores.clear_invalid(source);
                 None
             },
             Ok(Some(token)) if token.is_expired() => {
