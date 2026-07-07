@@ -1965,7 +1965,7 @@ fn bake_oci_image(
         }
     };
 
-    let proxy = ContainerizeProxy::new(env_path, container_runtime.clone(), vec![]);
+    let proxy = ContainerizeProxy::new(env_path, container_runtime.clone(), vec![], None);
     // Tag used during bake: we use the hash tag directly so the image lands
     // under the right content-addressed name. The proxy uses this tag when
     // invoking `container image load`.
