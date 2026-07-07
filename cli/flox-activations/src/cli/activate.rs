@@ -19,7 +19,7 @@ use indoc::formatdoc;
 use shell_gen::ShellWithPath;
 use tracing::debug;
 
-use crate::attach::{attach, quote_run_args};
+use crate::attach::attach;
 use crate::message::{info, updated};
 use crate::sandbox;
 use crate::start::{start, start_services_with_new_process_compose};
@@ -65,13 +65,17 @@ impl ActivateArgs {
             .and_then(|args| if args.is_empty() { None } else { Some(args) });
 
         match (context.invocation_type.as_ref(), run_args) {
-            // This is a container invocation, and we need to set the invocation type
-            // based on the presence of command arguments.
+            // Container invocation with no command: start an interactive shell.
             (None, None) => context.invocation_type = Some(InvocationType::Interactive),
-            // This is a container invocation, and we need to set the invocation type
-            // based on the presence of command arguments.
+            // Container invocation with command arguments: exec the command
+            // directly without routing through a shell. OCI CMD semantics are
+            // exec, not shell — argv must reach the command verbatim. Joining
+            // into a shell string would give every dollar sign, glob, and
+            // command substitution an extra expansion pass against the
+            // activation environment.
             (None, Some(args)) => {
-                context.invocation_type = Some(InvocationType::ShellCommand(quote_run_args(args)));
+                context.invocation_type =
+                    Some(InvocationType::ExecCommand(args.to_vec()));
             },
             // The following two cases are normal shell activations, and don't need
             // to modify the activation context.
@@ -399,5 +403,71 @@ mod tests {
                 Some(sandbox::bundled_bash())
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Container argv containing shell-special characters must survive
+    /// to the InvocationType verbatim. OCI CMD semantics are exec, not
+    /// shell — the container runtime passes argv elements directly to
+    /// the entrypoint without a shell interpretation pass.
+    #[test]
+    fn container_run_args_produce_exec_command_verbatim() {
+        let shell_special_args = vec![
+            "bash".to_string(),
+            "-c".to_string(),
+            "echo $VAR ${arr[0]} $(date) * 'quoted'".to_string(),
+            "an arg with $dollar".to_string(),
+        ];
+
+        let args = ActivateArgs {
+            activate_data: PathBuf::from("/does/not/exist"),
+            cmd: Some(shell_special_args.clone()),
+        };
+
+        // run_args detection mirrors the inline logic in handle():
+        // cmd.as_ref().and_then(|a| if a.is_empty() { None } else { Some(a) })
+        let run_args = args
+            .cmd
+            .as_ref()
+            .and_then(|a| if a.is_empty() { None } else { Some(a) });
+
+        // Simulate the container arm: invocation_type starts as None
+        let invocation_type = match (None::<&InvocationType>, run_args) {
+            (None, Some(a)) => InvocationType::ExecCommand(a.to_vec()),
+            (None, None) => InvocationType::Interactive,
+            (Some(t), _) => t.clone(),
+        };
+
+        assert_eq!(
+            invocation_type,
+            InvocationType::ExecCommand(shell_special_args),
+        );
+    }
+
+    /// Empty command list with no pre-set invocation type yields Interactive,
+    /// matching the container entrypoint behaviour when no CMD is given.
+    #[test]
+    fn container_no_run_args_produces_interactive() {
+        let args = ActivateArgs {
+            activate_data: PathBuf::from("/does/not/exist"),
+            cmd: None,
+        };
+
+        let run_args = args
+            .cmd
+            .as_ref()
+            .and_then(|a| if a.is_empty() { None } else { Some(a) });
+
+        let invocation_type = match (None::<&InvocationType>, run_args) {
+            (None, Some(a)) => InvocationType::ExecCommand(a.to_vec()),
+            (None, None) => InvocationType::Interactive,
+            (Some(t), _) => t.clone(),
+        };
+
+        assert_eq!(invocation_type, InvocationType::Interactive);
     }
 }

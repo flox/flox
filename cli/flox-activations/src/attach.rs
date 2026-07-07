@@ -9,7 +9,6 @@ use flox_core::activate::context::{ActivateCtx, InvocationType};
 use flox_core::activate::vars::FLOX_ACTIVATIONS_BIN;
 use flox_core::activations::StartIdentifier;
 use indoc::formatdoc;
-use itertools::Itertools;
 use nix::unistd::{close, dup2_stdin, pipe, write};
 use shell_gen::{Shell, ShellWithPath};
 use tracing::debug;
@@ -541,34 +540,3 @@ fn activate_in_place(startup_ctx: StartupCtx, start_id: StartIdentifier) -> Resu
     Ok(())
 }
 
-/// Quote run args so that words don't get split,
-/// but don't escape all characters.
-///
-/// To do this we escape '"' and '`',
-/// but we don't escape anything else.
-/// We want '$' for example to be expanded by the shell.
-pub fn quote_run_args(run_args: &[String]) -> String {
-    run_args
-        .iter()
-        .map(|arg| {
-            if arg.contains(' ') || arg.contains('"') || arg.contains('`') {
-                format!(r#""{}""#, arg.replace('"', r#"\""#).replace('`', r#"\`"#))
-            } else {
-                arg.to_string()
-            }
-        })
-        .join(" ")
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_quote_run_args() {
-        assert_eq!(
-            quote_run_args(&["a b".to_string(), '"'.to_string()]),
-            r#""a b" "\"""#
-        )
-    }
-}
