@@ -7,14 +7,17 @@ use bpaf::Bpaf;
 use flox_activations::attach_diff::diff_serializer::FLOX_HOOK_DIFF_VAR;
 use flox_activations::deactivate::embedded_hook_diff;
 use flox_config::{AutoActivate, AutoActivationPreference, Config};
-use flox_core::activate::context::InvocationKind;
+use flox_core::activate::context::{InvocationKind, SandboxMode};
+use flox_core::activate::sandbox_backend::SandboxBackend;
 use flox_core::activate::vars::{
     FLOX_AUTO_ACTIVATED_ENVIRONMENTS_VAR,
     FLOX_SUPPRESSED_ENVIRONMENTS_VAR,
 };
 use flox_core::hook_actions::{HookAction, take_hook_actions};
+use flox_manifest::interfaces::AsLatestSchema;
+use flox_manifest::{MANIFEST_FILENAME, Manifest};
 use flox_rust_sdk::flox::Flox;
-use flox_rust_sdk::models::environment::find_all_dot_flox;
+use flox_rust_sdk::models::environment::{ENV_DIR_NAME, find_all_dot_flox};
 use indoc::formatdoc;
 use shell_gen::{GenerateShell, SetVar, Shell, ShellWithPath, UnsetVar};
 use tracing::debug;
@@ -102,7 +105,7 @@ impl HookEnv {
             return Ok(());
         }
 
-        let ctx = gather_auto_activate_context(&config, !actions.is_empty())?;
+        let ctx = gather_auto_activate_context(&config, &flox, !actions.is_empty())?;
         let plan = plan_auto_activation(&ctx);
 
         // Whether the deactivate sweep popped every planned layer. A re-insertion
@@ -192,6 +195,59 @@ impl HookEnv {
             prompt_for_auto_activation(&plan.prompt).await?
         };
 
+        // For each environment declaring a wrapping sandbox backend, prompt
+        // for session-replacement consent individually. The exec path replaces
+        // the interactive shell, so each entry needs its own answer; unlike
+        // plain auto-activation, multiple pending sessions cannot share a
+        // single prompt because accepting one would immediately exec into it
+        // and the remaining entries would never be reached.
+        let mut sandbox_entries_entered: Vec<PathBuf> = Vec::new();
+        for (path, backend) in &plan.prompt_sandbox {
+            // Emit libsandbox notice for in-place envs while we have tty.
+            // (These are emitted again below for clarity — see the dedicated
+            // notice loop.)
+            _ = backend; // used below in prompt
+            match prompt_for_sandbox_activation(path, *backend, self.shell)? {
+                SandboxConsent::Accept => {
+                    sandbox_entries_entered.push(path.clone());
+                    // exec replaces the shell; no subsequent code runs.
+                    write_exec_activate_command(self.shell, path, &mut writer)?;
+                    writer.flush()?;
+                    // Only one exec can ever run; stop processing further
+                    // sandbox entries.
+                    break;
+                },
+                SandboxConsent::Decline => {
+                    // Suppress for this shell session; the next shell or
+                    // re-entry will ask again. Follow the same debounce
+                    // semantics as the plain consent flow.
+                    if !plan.suppressed.contains(path) {
+                        // We'll add it to suppressed after the loop.
+                    }
+                },
+                SandboxConsent::NoTerminal | SandboxConsent::UnsupportedShell => {
+                    // Cannot exec into a sandboxed session without an
+                    // interactive tty, or the shell cannot exec. Emit a
+                    // notice pointing at `flox activate`.
+                    message::info(formatdoc! {"
+                        ℹ️  Run 'flox activate --dir {dir}' to enter this environment sandboxed via {backend}.",
+                        dir = path.display(),
+                    });
+                },
+            }
+        }
+
+        // Print a notice for each environment that declares a libsandbox
+        // sandbox so the user knows in-place auto-activation is not mediated.
+        for path in &plan.libsandbox_notice {
+            message::info(formatdoc! {"
+                ℹ️  This environment declares a libsandbox sandbox; \
+                in-place auto-activation is not mediated — \
+                run 'flox activate --sandbox <MODE> --dir {dir}' for a sandboxed session.",
+                dir = path.display(),
+            });
+        }
+
         // Only record a metric when this run actually does something;
         // `hook-env` runs on every shell prompt, and recording the common
         // nothing-to-do case would be noise. Gate the prompt case on the
@@ -210,6 +266,8 @@ impl HookEnv {
                     | AutoActivateConsent::Suppress
             )
             || !plan.abandoned.is_empty()
+            || !sandbox_entries_entered.is_empty()
+            || !plan.prompt_sandbox.is_empty()
         {
             subcommand_metric!("hook-env");
         }
@@ -221,6 +279,15 @@ impl HookEnv {
         // tracked-state lists the planner produced.
         let mut auto_activated = plan.auto_activated.clone();
         let mut suppressed = plan.suppressed.clone();
+
+        // Record declined sandbox environments as suppressed so the hook
+        // stops asking while the shell stays inside the directory.
+        for (path, _backend) in &plan.prompt_sandbox {
+            if !sandbox_entries_entered.contains(path) && !suppressed.contains(path) {
+                suppressed.push(path.clone());
+            }
+        }
+
         for path in &ctx.discovered {
             if plan.activate.contains(path) {
                 write_activate_command(self.shell, path, &mut writer)?;
@@ -350,6 +417,25 @@ impl HookEnv {
     }
 }
 
+/// The sandbox class of a discovered environment's manifest declaration.
+///
+/// Used to route the auto-activation decision: wrapping backends require
+/// explicit session-replacement consent; libsandbox is in-place advisory and
+/// handled with a notice; absent/off means today's plain in-place flow.
+#[derive(Clone, Debug, PartialEq)]
+enum SandboxClass {
+    /// No sandbox declared (`options.sandbox` absent or `off`).
+    None,
+    /// Advisory libsandbox declared. In-place activation proceeds, but the
+    /// user sees a one-line info note explaining that the sandbox is not
+    /// mediated under auto-activation.
+    Libsandbox,
+    /// A wrapping backend (host-native, srt, oci, libkrun, nix). In-place
+    /// activation is never permitted; the hook must obtain explicit consent
+    /// before exec-ing into the sandboxed session.
+    Wrapping(SandboxBackend),
+}
+
 /// Inputs to [`plan_auto_activation`].
 ///
 /// Gathered from the runtime environment by [`gather_auto_activate_context`]
@@ -360,6 +446,12 @@ struct AutoActivateContext {
     cwd: PathBuf,
     /// Project directories with a discoverable `.flox`, outermost-first.
     discovered: Vec<PathBuf>,
+    /// Sandbox class for each discovered directory, parallel to `discovered`.
+    ///
+    /// When the manifest cannot be read (I/O error, parse error), the entry
+    /// defaults to `SandboxClass::None` so the failure is non-fatal and
+    /// degrades to today's behaviour.
+    discovered_sandbox: Vec<SandboxClass>,
     /// Project directories of active environments, most recently activated
     /// first. `None` for environments without a local directory (remote).
     active: Vec<Option<PathBuf>>,
@@ -381,6 +473,8 @@ struct AutoActivateContext {
     prompt_unregistered: bool,
     /// Whether this run consumed pending prompt-hook deactivation actions.
     pending_deactivations: bool,
+    /// Whether the `sandbox_activate` feature flag is on.
+    sandbox_activate_enabled: bool,
 }
 
 /// What the prompt hook should do this run, plus the new values of the
@@ -393,6 +487,15 @@ struct AutoActivatePlan {
     /// Unregistered project directories to prompt the user about before
     /// activating, outermost-first. Empty unless `auto_activate = "prompt"`.
     prompt: Vec<PathBuf>,
+    /// Project directories with a wrapping sandbox backend that require
+    /// explicit session-replacement consent before entering. Each entry pairs
+    /// the project directory with the backend that would enforce it, so the
+    /// consent prompt can name the backend. These are never in-place activated.
+    prompt_sandbox: Vec<(PathBuf, SandboxBackend)>,
+    /// Project directories that declare a libsandbox sandbox. Auto-activation
+    /// proceeds in-place, but the hook prints a one-line info note per
+    /// directory explaining that advisory mediation is not applied.
+    libsandbox_notice: Vec<PathBuf>,
     /// Project directories to deactivate, front of stack first. Includes both
     /// true leavers (gone for good) and survivors that are torn down only to
     /// insert or remove a layer beneath them; the survivors are listed in
@@ -509,6 +612,8 @@ fn plan_auto_activation(ctx: &AutoActivateContext) -> AutoActivatePlan {
         return AutoActivatePlan {
             activate: Vec::new(),
             prompt: Vec::new(),
+            prompt_sandbox: Vec::new(),
+            libsandbox_notice: Vec::new(),
             deactivate: Vec::new(),
             reactivate: Vec::new(),
             reinsert: None,
@@ -586,7 +691,20 @@ fn plan_auto_activation(ctx: &AutoActivateContext) -> AutoActivatePlan {
     let unwinding = !reactivate.is_empty() || auto_activated.iter().any(|path| !inside(path));
     let mut activate = Vec::new();
     let mut prompt = Vec::new();
+    let mut prompt_sandbox: Vec<(PathBuf, SandboxBackend)> = Vec::new();
+    let mut libsandbox_notice = Vec::new();
     let mut reinsert: Option<PathBuf> = None;
+
+    // Look up the sandbox class for a discovered path by index in
+    // `ctx.discovered`.  Returns `SandboxClass::None` when the index is
+    // out-of-range (defensive: lengths always match in practice).
+    let sandbox_class_for = |path: &Path| -> &SandboxClass {
+        ctx.discovered
+            .iter()
+            .position(|p| p == path)
+            .and_then(|i| ctx.discovered_sandbox.get(i))
+            .unwrap_or(&SandboxClass::None)
+    };
 
     // Whether `path` can be re-inserted in ancestor order this run, and the
     // descendants that would have to be popped to do so.
@@ -651,50 +769,114 @@ fn plan_auto_activation(ctx: &AutoActivateContext) -> AutoActivatePlan {
                 || is_denied(path)
                 || activate.contains(path)
                 || prompt.contains(path)
+                || prompt_sandbox.iter().any(|(p, _)| p == path)
             {
                 continue;
             }
-            // An allowed environment with tracked descendants stacked above it
-            // (e.g. it was denied, the shell entered a child, then it was
-            // re-allowed) must be re-inserted in ancestor order, not activated
-            // on top. Defer it unless it can be re-inserted this run: only one
-            // re-insertion happens per run (it reuses the deactivate/reactivate
-            // slots), and a teardown already planned this run takes precedence.
-            // A descendant that can't be popped (manual or remote) makes
-            // re-insertion impossible, so fall through and activate on top.
-            if is_allowed(path) {
-                match descendants_above(path, &auto_activated) {
-                    // Clean re-insertion and no teardown already planned this
-                    // run: pop the descendants, defer the target's activation to
-                    // `reinsert` (committed by `handle()` only once the pops
-                    // succeed), and replay the descendants bottom-up.
-                    Reinsertion::Clean(pop) if deactivate.is_empty() => {
-                        reactivate = pop.iter().rev().cloned().collect();
-                        deactivate = pop;
-                        reinsert = Some(path.clone());
-                    },
-                    // Has active descendants but re-insertion can't run cleanly
-                    // this run, and a teardown is already planned: the teardown
-                    // will clear the obstruction, so defer to the next prompt
-                    // rather than stack `path` out of order. Do nothing.
-                    Reinsertion::Clean(_)
-                    | Reinsertion::Blocked {
-                        has_descendant: true,
-                    } if !deactivate.is_empty() => {},
-                    // Re-insertion is impossible (a descendant is manual or
-                    // remote) with no teardown to clear it, or there are no
-                    // descendants at all: activating on top is out of order but
-                    // still correct — fall back to that.
-                    _ => {
-                        activate.push(path.clone());
-                        auto_activated.push(path.clone());
-                    },
-                }
-            } else if ctx.prompt_unregistered {
-                // Unregistered: ask before activating. Not tracked as
-                // auto-activated yet — the hook adds it only if the user
-                // consents.
-                prompt.push(path.clone());
+
+            // Classify the manifest sandbox declaration for this environment
+            // and decide whether it requires session-replacement consent,
+            // an advisory notice, or the plain in-place activation path.
+            //
+            // When the sandbox_activate flag is off, wrapping-backend
+            // declarations are treated as absent — the manifest warns once on
+            // a regular `flox activate`, and the auto-activation path follows
+            // the same "warn once, treat as off" rule (ADR-002 item 5).
+            let sandbox = sandbox_class_for(path);
+            let sandbox = if !ctx.sandbox_activate_enabled {
+                // Degrade: ignore manifest sandbox when the feature is off,
+                // mirroring resolve_sandbox_mode's warn-and-downgrade path.
+                &SandboxClass::None
+            } else {
+                sandbox
+            };
+
+            match sandbox {
+                // Wrapping backends require an explicit session-replacement
+                // consent prompt, even when the directory is on the allow
+                // list. A previous allow may predate the sandbox declaration,
+                // and replacing the shell session is a bigger step than
+                // in-place env mutation.
+                SandboxClass::Wrapping(backend) => {
+                    prompt_sandbox.push((path.clone(), *backend));
+                },
+                // Libsandbox is advisory and in-place activation still
+                // proceeds, but the user sees a notice explaining that
+                // auto-activation does not mediate the advisory sandbox.
+                SandboxClass::Libsandbox => {
+                    libsandbox_notice.push(path.clone());
+                    // Fall through to the normal allowed/prompt logic so the
+                    // environment still activates in-place.
+                    if is_allowed(path) {
+                        match descendants_above(path, &auto_activated) {
+                            Reinsertion::Clean(pop) if deactivate.is_empty() => {
+                                reactivate = pop.iter().rev().cloned().collect();
+                                deactivate = pop;
+                                reinsert = Some(path.clone());
+                            },
+                            Reinsertion::Clean(_)
+                            | Reinsertion::Blocked {
+                                has_descendant: true,
+                            } if !deactivate.is_empty() => {},
+                            _ => {
+                                activate.push(path.clone());
+                                auto_activated.push(path.clone());
+                            },
+                        }
+                    } else if ctx.prompt_unregistered {
+                        prompt.push(path.clone());
+                    }
+                },
+                // No sandbox declared: today's plain in-place flow.
+                SandboxClass::None => {
+                    // An allowed environment with tracked descendants stacked
+                    // above it (e.g. it was denied, the shell entered a child,
+                    // then it was re-allowed) must be re-inserted in ancestor
+                    // order, not activated on top. Defer it unless it can be
+                    // re-inserted this run: only one re-insertion happens per
+                    // run (it reuses the deactivate/reactivate slots), and a
+                    // teardown already planned this run takes precedence.
+                    // A descendant that can't be popped (manual or remote)
+                    // makes re-insertion impossible, so fall through and
+                    // activate on top.
+                    if is_allowed(path) {
+                        match descendants_above(path, &auto_activated) {
+                            // Clean re-insertion and no teardown already
+                            // planned this run: pop the descendants, defer
+                            // the target's activation to `reinsert`
+                            // (committed by `handle()` only once the pops
+                            // succeed), and replay the descendants bottom-up.
+                            Reinsertion::Clean(pop) if deactivate.is_empty() => {
+                                reactivate = pop.iter().rev().cloned().collect();
+                                deactivate = pop;
+                                reinsert = Some(path.clone());
+                            },
+                            // Has active descendants but re-insertion can't
+                            // run cleanly this run, and a teardown is already
+                            // planned: the teardown will clear the
+                            // obstruction, so defer to the next prompt rather
+                            // than stack `path` out of order. Do nothing.
+                            Reinsertion::Clean(_)
+                            | Reinsertion::Blocked {
+                                has_descendant: true,
+                            } if !deactivate.is_empty() => {},
+                            // Re-insertion is impossible (a descendant is
+                            // manual or remote) with no teardown to clear it,
+                            // or there are no descendants at all: activating
+                            // on top is out of order but still correct — fall
+                            // back to that.
+                            _ => {
+                                activate.push(path.clone());
+                                auto_activated.push(path.clone());
+                            },
+                        }
+                    } else if ctx.prompt_unregistered {
+                        // Unregistered: ask before activating. Not tracked as
+                        // auto-activated yet — the hook adds it only if the
+                        // user consents.
+                        prompt.push(path.clone());
+                    }
+                },
             }
         }
     }
@@ -702,6 +884,8 @@ fn plan_auto_activation(ctx: &AutoActivateContext) -> AutoActivatePlan {
     AutoActivatePlan {
         activate,
         prompt,
+        prompt_sandbox,
+        libsandbox_notice,
         deactivate,
         reactivate,
         reinsert,
@@ -717,14 +901,25 @@ fn plan_auto_activation(ctx: &AutoActivateContext) -> AutoActivatePlan {
 /// auto-activation preferences.
 fn gather_auto_activate_context(
     config: &Config,
+    flox: &Flox,
     pending_deactivations: bool,
 ) -> Result<AutoActivateContext> {
     let cwd = std::env::current_dir().context("failed to read current directory")?;
-    let discovered = find_all_dot_flox(&cwd)
-        .context("failed to discover environments for auto-activation")?
-        .into_iter()
+    let discovered_dot_flox =
+        find_all_dot_flox(&cwd).context("failed to discover environments for auto-activation")?;
+    let discovered: Vec<PathBuf> = discovered_dot_flox
+        .iter()
         .filter_map(|dot_flox| dot_flox.path.parent().map(Path::to_path_buf))
         .collect();
+
+    // Read the manifest sandbox declaration for each discovered environment.
+    // Errors (missing manifest, parse failure) fall back to `SandboxClass::None`
+    // so a corrupt or unconventional environment does not break every prompt.
+    let discovered_sandbox: Vec<SandboxClass> = discovered
+        .iter()
+        .map(|project_dir| read_sandbox_class(project_dir))
+        .collect();
+
     // `find_all_dot_flox` canonicalized the same starting path, so reuse its
     // canonicalization rules for the containment checks.
     let cwd = cwd
@@ -761,6 +956,7 @@ fn gather_auto_activate_context(
     Ok(AutoActivateContext {
         cwd,
         discovered,
+        discovered_sandbox,
         active,
         auto_activated: read_path_list_var(FLOX_AUTO_ACTIVATED_ENVIRONMENTS_VAR),
         suppressed: read_path_list_var(FLOX_SUPPRESSED_ENVIRONMENTS_VAR),
@@ -768,7 +964,44 @@ fn gather_auto_activate_context(
         denied,
         prompt_unregistered,
         pending_deactivations,
+        sandbox_activate_enabled: flox.features.sandbox_activate,
     })
+}
+
+/// Read a manifest from `<project_dir>/.flox/env/manifest.toml` and classify
+/// the declared sandbox option as a [`SandboxClass`].
+///
+/// Only the manifest file is consulted — no lockfile migration — because
+/// the hook has no lockfile at hand and the sandbox declaration lives in the
+/// user-authored manifest rather than being generated. Falls back to
+/// [`SandboxClass::None`] on any I/O or parse error so a broken manifest
+/// does not make every prompt fail.
+fn read_sandbox_class(project_dir: &Path) -> SandboxClass {
+    let manifest_path = project_dir
+        .join(".flox")
+        .join(ENV_DIR_NAME)
+        .join(MANIFEST_FILENAME);
+
+    let contents = match std::fs::read_to_string(&manifest_path) {
+        Ok(s) => s,
+        Err(_) => return SandboxClass::None,
+    };
+
+    let manifest = match Manifest::parse_and_migrate(&contents, None) {
+        Ok(m) => m,
+        Err(_) => return SandboxClass::None,
+    };
+
+    let opts = &manifest.as_latest_schema().options;
+    let mode = opts.sandbox;
+    let backend = opts.sandbox_backend.unwrap_or_default();
+
+    // Absent mode or explicit `off` → no sandbox.
+    match mode {
+        None | Some(SandboxMode::Off) => SandboxClass::None,
+        Some(_) if backend.capabilities().enforces => SandboxClass::Wrapping(backend),
+        Some(_) => SandboxClass::Libsandbox,
+    }
 }
 
 /// Read a JSON array of paths from an environment variable, treating an
@@ -892,6 +1125,113 @@ fn write_activate_command(shell: Shell, project_dir: &Path, writer: &mut impl Wr
     Ok(())
 }
 
+/// The user's answer to the sandbox session-entry consent prompt.
+#[derive(Clone, Copy)]
+enum SandboxConsent {
+    /// Enter the sandboxed session (exec into it).
+    Accept,
+    /// Decline; suppress re-prompting for this shell session.
+    Decline,
+    /// No controlling terminal to prompt on.
+    NoTerminal,
+    /// Shell does not support exec from the prompt hook (fish, tcsh).
+    UnsupportedShell,
+}
+
+/// Ask the user, on the controlling terminal, whether to enter an environment
+/// as a sandboxed session (exec-replacing the current shell).
+///
+/// This is a stronger action than plain auto-activation because it replaces the
+/// interactive shell with a new process tree confined by the sandbox backend.
+/// The consent prompt is therefore shown even when the directory is already on
+/// the auto-activate allow list: a prior allow may predate the sandbox
+/// declaration, and session replacement needs explicit intent on every entry.
+///
+/// Returns [`SandboxConsent::NoTerminal`] when `/dev/tty` is unavailable
+/// (non-interactive shell) and [`SandboxConsent::UnsupportedShell`] for fish
+/// and tcsh, where exec from the eval context is not portable.
+fn prompt_for_sandbox_activation(
+    project_dir: &Path,
+    backend: SandboxBackend,
+    shell: Shell,
+) -> Result<SandboxConsent> {
+    // Fish and tcsh cannot cleanly exec from inside an eval context in a way
+    // that is guaranteed to replace the shell. Report the gap and fall back to
+    // the non-tty notice path.
+    if matches!(shell, Shell::Fish | Shell::Tcsh) {
+        return Ok(SandboxConsent::UnsupportedShell);
+    }
+
+    let Ok(tty) = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open("/dev/tty")
+    else {
+        return Ok(SandboxConsent::NoTerminal);
+    };
+
+    let question = format!(
+        "Enter '{}' (sandboxed via {backend})? [Y/n] ",
+        project_dir.display(),
+    );
+
+    let mut tty_writer = &tty;
+    tty_writer
+        .write_all(question.as_bytes())
+        .context("failed to write the sandbox consent prompt")?;
+    tty_writer
+        .flush()
+        .context("failed to flush the sandbox consent prompt")?;
+
+    let mut answer = String::new();
+    BufReader::new(&tty)
+        .read_line(&mut answer)
+        .context("failed to read the sandbox consent response")?;
+    let answer = answer.trim();
+
+    // Default is yes (bare Enter confirms, only explicit "n"/"no" declines).
+    if answer.is_empty() || answer.eq_ignore_ascii_case("y") || answer.eq_ignore_ascii_case("yes") {
+        Ok(SandboxConsent::Accept)
+    } else {
+        Ok(SandboxConsent::Decline)
+    }
+}
+
+/// Emit a command that exec-replaces the current shell with a sandboxed
+/// activation of the environment in `project_dir`.
+///
+/// Unlike [`write_activate_command`] (which emits `eval "$(flox activate)"`
+/// for in-place activation), this emits `exec flox activate --dir <path>` so
+/// the sandboxed session entirely replaces the interactive shell process. The
+/// manifest supplies the sandbox mode and backend through normal resolution.
+///
+/// Only bash and zsh are supported. Fish and tcsh callers should check
+/// [`prompt_for_sandbox_activation`]'s `UnsupportedShell` result and emit a
+/// notice instead.
+fn write_exec_activate_command(
+    shell: Shell,
+    project_dir: &Path,
+    writer: &mut impl Write,
+) -> Result<()> {
+    let flox_bin = std::env::current_exe().context("failed to determine flox executable path")?;
+    let flox_bin = flox_bin.to_string_lossy().to_string();
+    let escaped_bin = shell_escape::escape(Cow::Borrowed(&*flox_bin));
+    let dir = project_dir.to_string_lossy().to_string();
+    let escaped_dir = shell_escape::escape(Cow::Borrowed(&*dir));
+    match shell {
+        Shell::Bash | Shell::Zsh => {
+            writeln!(writer, "exec {escaped_bin} activate --dir {escaped_dir};")?;
+        },
+        // Fish and tcsh: callers should not reach this path; if they do,
+        // fall back to the regular in-place command rather than silently
+        // doing the wrong thing.
+        Shell::Fish | Shell::Tcsh => {
+            write_activate_command(shell, project_dir, writer)?;
+        },
+    }
+    Ok(())
+}
+
 /// Emit a state-variable update when `new` differs from `old`: an export of
 /// the JSON-encoded list, or an unset when the list becomes empty.
 fn write_path_list_update(
@@ -926,6 +1266,7 @@ mod tests {
         AutoActivateContext {
             cwd: PathBuf::from(cwd),
             discovered: Vec::new(),
+            discovered_sandbox: Vec::new(),
             active: Vec::new(),
             auto_activated: Vec::new(),
             suppressed: Vec::new(),
@@ -933,6 +1274,7 @@ mod tests {
             denied: Vec::new(),
             prompt_unregistered: false,
             pending_deactivations: false,
+            sandbox_activate_enabled: false,
         }
     }
 
@@ -944,6 +1286,8 @@ mod tests {
         AutoActivatePlan {
             activate: Vec::new(),
             prompt: Vec::new(),
+            prompt_sandbox: Vec::new(),
+            libsandbox_notice: Vec::new(),
             deactivate: Vec::new(),
             reactivate: Vec::new(),
             reinsert: None,
@@ -1658,6 +2002,190 @@ mod tests {
             deactivate: paths(&["/home/user/proj"]),
             ..noop_plan()
         });
+    }
+
+    // ── Sandbox decision table ────────────────────────────────────────────────
+    //
+    // Rows: sandbox option × backend class × tty × allow-state × flags → plan
+    //
+    // The planner never reads tty state (tty drives HookEnv::handle), but the
+    // tests below cover the plan outputs that tty-dependent code relies on.
+
+    fn discovered_with_sandbox(cwd: &str, path: &str, class: SandboxClass) -> AutoActivateContext {
+        AutoActivateContext {
+            discovered: paths(&[path]),
+            discovered_sandbox: vec![class],
+            ..empty_ctx(cwd)
+        }
+    }
+
+    #[test]
+    fn no_sandbox_allowed_env_activates_in_place() {
+        // When `options.sandbox` is absent the planner takes the normal
+        // in-place activation path.
+        let ctx = AutoActivateContext {
+            allowed: paths(&["/tmp/proj"]),
+            ..discovered_with_sandbox("/tmp/proj", "/tmp/proj", SandboxClass::None)
+        };
+        assert_eq!(plan_auto_activation(&ctx), AutoActivatePlan {
+            activate: paths(&["/tmp/proj"]),
+            auto_activated: paths(&["/tmp/proj"]),
+            ..noop_plan()
+        });
+    }
+
+    #[test]
+    fn wrapping_backend_allowed_env_goes_to_prompt_sandbox() {
+        // An allowed environment with a wrapping backend is never in-place
+        // activated; it is queued in `prompt_sandbox` for session-replacement
+        // consent even though the directory is already on the allow list.
+        let ctx = AutoActivateContext {
+            allowed: paths(&["/tmp/proj"]),
+            sandbox_activate_enabled: true,
+            ..discovered_with_sandbox(
+                "/tmp/proj",
+                "/tmp/proj",
+                SandboxClass::Wrapping(SandboxBackend::Oci),
+            )
+        };
+        assert_eq!(plan_auto_activation(&ctx), AutoActivatePlan {
+            prompt_sandbox: vec![(PathBuf::from("/tmp/proj"), SandboxBackend::Oci)],
+            ..noop_plan()
+        });
+    }
+
+    #[test]
+    fn wrapping_backend_unregistered_env_goes_to_prompt_sandbox_in_prompt_mode() {
+        // An unregistered environment with a wrapping backend is queued for
+        // sandbox consent regardless of the plain `prompt_unregistered` mode.
+        let ctx = AutoActivateContext {
+            prompt_unregistered: true,
+            sandbox_activate_enabled: true,
+            ..discovered_with_sandbox(
+                "/tmp/proj",
+                "/tmp/proj",
+                SandboxClass::Wrapping(SandboxBackend::HostNative),
+            )
+        };
+        assert_eq!(plan_auto_activation(&ctx), AutoActivatePlan {
+            prompt_sandbox: vec![(PathBuf::from("/tmp/proj"), SandboxBackend::HostNative)],
+            ..noop_plan()
+        });
+    }
+
+    #[test]
+    fn wrapping_backend_flag_off_degrades_to_none() {
+        // When the sandbox_activate feature flag is off, a manifest-declared
+        // wrapping backend is treated as absent — the env falls through to
+        // the normal allow/prompt flow.
+        let ctx = AutoActivateContext {
+            allowed: paths(&["/tmp/proj"]),
+            sandbox_activate_enabled: false, // flag off
+            ..discovered_with_sandbox(
+                "/tmp/proj",
+                "/tmp/proj",
+                SandboxClass::Wrapping(SandboxBackend::Oci),
+            )
+        };
+        // With the flag off the env activates in-place as if no sandbox.
+        assert_eq!(plan_auto_activation(&ctx), AutoActivatePlan {
+            activate: paths(&["/tmp/proj"]),
+            auto_activated: paths(&["/tmp/proj"]),
+            ..noop_plan()
+        });
+    }
+
+    #[test]
+    fn libsandbox_env_activates_in_place_with_notice() {
+        // A libsandbox-declared env activates in-place (allowed path) and
+        // is added to `libsandbox_notice` so the hook emits an info line.
+        let ctx = AutoActivateContext {
+            allowed: paths(&["/tmp/proj"]),
+            sandbox_activate_enabled: true,
+            ..discovered_with_sandbox("/tmp/proj", "/tmp/proj", SandboxClass::Libsandbox)
+        };
+        assert_eq!(plan_auto_activation(&ctx), AutoActivatePlan {
+            activate: paths(&["/tmp/proj"]),
+            auto_activated: paths(&["/tmp/proj"]),
+            libsandbox_notice: paths(&["/tmp/proj"]),
+            ..noop_plan()
+        });
+    }
+
+    #[test]
+    fn libsandbox_env_prompts_when_unregistered() {
+        // An unregistered libsandbox env in prompt mode is queued for the
+        // plain consent prompt (not for sandbox consent) and listed in
+        // `libsandbox_notice`.
+        let ctx = AutoActivateContext {
+            prompt_unregistered: true,
+            sandbox_activate_enabled: true,
+            ..discovered_with_sandbox("/tmp/proj", "/tmp/proj", SandboxClass::Libsandbox)
+        };
+        assert_eq!(plan_auto_activation(&ctx), AutoActivatePlan {
+            prompt: paths(&["/tmp/proj"]),
+            libsandbox_notice: paths(&["/tmp/proj"]),
+            ..noop_plan()
+        });
+    }
+
+    #[test]
+    fn wrapping_backend_denied_env_is_skipped() {
+        // A denied environment with a wrapping backend is never queued for
+        // sandbox consent — the deny takes precedence.
+        let ctx = AutoActivateContext {
+            denied: paths(&["/tmp/proj"]),
+            sandbox_activate_enabled: true,
+            ..discovered_with_sandbox(
+                "/tmp/proj",
+                "/tmp/proj",
+                SandboxClass::Wrapping(SandboxBackend::Oci),
+            )
+        };
+        assert_eq!(plan_auto_activation(&ctx), noop_plan());
+    }
+
+    #[test]
+    fn wrapping_backend_already_active_is_skipped() {
+        // An already-active environment with a wrapping backend is not
+        // re-queued; `is_active` takes precedence.
+        let ctx = AutoActivateContext {
+            active: vec![Some(PathBuf::from("/tmp/proj"))],
+            auto_activated: paths(&["/tmp/proj"]),
+            allowed: paths(&["/tmp/proj"]),
+            sandbox_activate_enabled: true,
+            ..discovered_with_sandbox(
+                "/tmp/proj",
+                "/tmp/proj",
+                SandboxClass::Wrapping(SandboxBackend::Oci),
+            )
+        };
+        assert_eq!(plan_auto_activation(&ctx), AutoActivatePlan {
+            auto_activated: paths(&["/tmp/proj"]),
+            ..noop_plan()
+        });
+    }
+
+    #[test]
+    fn exec_activate_bash_emits_exec_form() {
+        let mut buf = Vec::new();
+        write_exec_activate_command(Shell::Bash, Path::new("/tmp/proj"), &mut buf).unwrap();
+        let script = String::from_utf8(buf).unwrap();
+        assert!(
+            script.starts_with("exec ") && script.contains("activate --dir /tmp/proj"),
+            "expected exec form, got: {script}"
+        );
+    }
+
+    #[test]
+    fn exec_activate_zsh_emits_exec_form() {
+        let mut buf = Vec::new();
+        write_exec_activate_command(Shell::Zsh, Path::new("/tmp/proj"), &mut buf).unwrap();
+        let script = String::from_utf8(buf).unwrap();
+        assert!(
+            script.starts_with("exec ") && script.contains("activate --dir /tmp/proj"),
+            "expected exec form, got: {script}"
+        );
     }
 
     #[test]
