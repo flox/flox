@@ -187,7 +187,7 @@ impl HookEnv {
         // can surface several at once, and a prompt per layer is tedious. The
         // single answer applies to the whole batch (`plan.prompt`).
         let consent = if plan.prompt.is_empty() {
-            AutoActivateConsent::NoResponse
+            AutoActivateConsent::NoTerminal
         } else {
             prompt_for_auto_activation(&plan.prompt).await?
         };
@@ -205,7 +205,9 @@ impl HookEnv {
             || plan.reinsert.is_some()
             || matches!(
                 consent,
-                AutoActivateConsent::Allow | AutoActivateConsent::Decline
+                AutoActivateConsent::Allow
+                    | AutoActivateConsent::Deny
+                    | AutoActivateConsent::Suppress
             )
             || !plan.abandoned.is_empty()
         {
@@ -235,12 +237,24 @@ impl HookEnv {
                             auto_activated.push(path.clone());
                         }
                     },
-                    // Decline: suppress for this shell so the hook stops asking
+                    // Deny: remember the refusal by persisting `Deny` to config,
+                    // exactly as `flox activate deny` does.
+                    // The user-facing note is emitted once after the
+                    // loop, not per environment.
+                    AutoActivateConsent::Deny => {
+                        write_auto_activation_preference(
+                            &config.flox.config_dir,
+                            path,
+                            AutoActivationPreference::Deny,
+                        )?;
+                    },
+                    // Skip: suppress for this shell so the hook stops asking
                     // while the shell stays within the directory. Leaving clears
-                    // the suppression (re-entering asks again); `flox activate
-                    // deny` makes the refusal permanent. The user-facing note is
+                    // the suppression (re-entering asks again); answering `N`
+                    // makes the refusal permanent. Reached when the user bails
+                    // out of the prompt (Esc or Ctrl-C). The user-facing note is
                     // emitted once after the loop, not per environment.
-                    AutoActivateConsent::Decline => {
+                    AutoActivateConsent::Suppress => {
                         if !suppressed.contains(path) {
                             suppressed.push(path.clone());
                         }
@@ -248,7 +262,7 @@ impl HookEnv {
                     // No terminal to prompt on (non-interactive shell): leave
                     // the environment unregistered so a later interactive prompt
                     // can still ask. Take no action and record nothing.
-                    AutoActivateConsent::NoResponse => {},
+                    AutoActivateConsent::NoTerminal => {},
                 }
             }
         }
@@ -292,21 +306,28 @@ impl HookEnv {
         }
 
         // One note for the whole batch: the prompt already listed the
-        // environments, so declining repeats neither the list nor a per
-        // environment explanation. Reached only on the first decline;
-        // afterwards the planner drops the suppressed environments from the
-        // prompt, so `plan.prompt` is empty.
-        if matches!(consent, AutoActivateConsent::Decline) && !plan.prompt.is_empty() {
+        // environments, so the note repeats neither the list nor a per
+        // environment explanation. Reached only on the run the user answers;
+        // afterwards the planner drops the suppressed (Skip) or denied
+        // (Deny) environments from the prompt, so `plan.prompt` is empty.
+        if !plan.prompt.is_empty() {
             let environments = if plan.prompt.len() == 1 {
                 "the environment"
             } else {
                 "these environments"
             };
-            message::info(formatdoc! {"
-                Did not auto-activate {environments}.
-                You will be asked again in a new shell or when you re-enter the directory.
-                Run 'flox activate deny --dir <PATH>' to stop being asked."
-            });
+            match consent {
+                AutoActivateConsent::Suppress => message::info(formatdoc! {"
+                    Did not auto-activate {environments}.
+                    You will be asked again in a new shell or when you re-enter the directory.
+                    Run 'flox activate deny --dir <PATH>' to stop being asked."
+                }),
+                AutoActivateConsent::Deny => message::info(formatdoc! {"
+                    Disabled auto-activation for {environments}.
+                    Run 'flox activate allow --dir <PATH>' to re-enable."
+                }),
+                AutoActivateConsent::Allow | AutoActivateConsent::NoTerminal => {},
+            }
         }
 
         write_path_list_update(
@@ -770,16 +791,18 @@ fn read_path_list_var(var: &str) -> Vec<PathBuf> {
 }
 
 /// The user's answer to the auto-activation consent prompt.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum AutoActivateConsent {
     /// Activate the environments and remember the choice (persist `Allow`).
     Allow,
-    /// Don't activate; suppress re-prompting for this shell session.
-    Decline,
-    /// Couldn't get user response
-    /// This is a catchall for things like the user Ctrl-C'ing the prompt or
-    /// times when we can't prompt because we don't have a tty
-    NoResponse,
+    /// Don't activate and remember the refusal (persist `Deny`)
+    Deny,
+    /// Don't activate and suppress re-prompting for this shell session only.
+    /// Leaving and re-entering the directory (or a new shell) asks again.
+    Suppress,
+    /// No response was possible: there was no tty to prompt on. Make no
+    /// decision this run so a later interactive prompt can still ask.
+    NoTerminal,
 }
 
 /// Ask the user, on the controlling terminal, whether to auto-activate the
@@ -796,7 +819,7 @@ async fn prompt_for_auto_activation(project_dirs: &[PathBuf]) -> Result<AutoActi
     // Instead of using `Dialog::can_prompt`, only check if stderr is a terminal.
     // We know stdout is not a terminal, which would cause `Dialog::can_prompt` to return false.
     if !std::io::stderr().is_terminal() {
-        return Ok(AutoActivateConsent::NoResponse);
+        return Ok(AutoActivateConsent::NoTerminal);
     }
 
     let message = match project_dirs {
@@ -822,11 +845,14 @@ async fn prompt_for_auto_activation(project_dirs: &[PathBuf]) -> Result<AutoActi
 
     match consent {
         Ok(true) => Ok(AutoActivateConsent::Allow),
-        Ok(false) => Ok(AutoActivateConsent::Decline),
-        Err(inquire::InquireError::NotTTY) => Ok(AutoActivateConsent::NoResponse),
+        Ok(false) => Ok(AutoActivateConsent::Deny),
+        // Bailing out of the prompt (Esc or Ctrl-C) makes no lasting decision:
+        // suppress for this shell session so the hook stops asking, but ask
+        // again in a new shell or on re-entering the directory.
         Err(
             inquire::InquireError::OperationCanceled | inquire::InquireError::OperationInterrupted,
-        ) => Ok(AutoActivateConsent::NoResponse),
+        ) => Ok(AutoActivateConsent::Suppress),
+        Err(inquire::InquireError::NotTTY) => Ok(AutoActivateConsent::NoTerminal),
         Err(err) => Err(err).context("failed to prompt for auto-activation"),
     }
 }

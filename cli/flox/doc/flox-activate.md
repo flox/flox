@@ -124,17 +124,8 @@ Flox asks before activating it:
 Auto-activate the environment in '/path/to/project'? [y/N]
 ```
 
-Answering `y` allows the environment and activates it immediately,
-and records the choice so you are not asked again.
-Answering `N` (or pressing Enter) skips the environment for the current shell
-session only;
-you are asked again in a new shell or when you re-enter the directory.
-To stop being asked for this directory, run
-[`flox-activate-deny(1)`](./flox-activate-deny.md):
-
-```bash
-flox activate deny
-```
+The decision is persisted, but to change it run either [`flox-activate-allow(1)`](./flox-activate-allow.md) or
+[`flox-activate-deny(1)`](./flox-activate-deny.md).
 
 Set the `auto_activate` config option to `allowed` to skip the prompt entirely
 and auto-activate only environments you have already allowed.
