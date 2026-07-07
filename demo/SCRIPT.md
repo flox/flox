@@ -337,7 +337,7 @@ libsandbox    advisory     native   native    no        yes       implemented
 nix           host-kernel  native   native    yes       no        scaffolded
 host-native   host-kernel  native   native    yes       no        implemented
 srt           host-kernel  native   native    yes       yes       implemented
-oci           container    linux-vm  native    yes       no        scaffolded
+oci           container    linux-vm  native    yes       no        implemented
 libkrun       hypervisor   linux-vm  native    yes       no        planned
 
 Select a backend with FLOX_SANDBOX_BACKEND=<name>; the default is 'libsandbox'.
@@ -434,12 +434,13 @@ contained — to be tightened), and a dev `flox` binary that lives under
 
 ### `oci` — Apple Container (macOS 26+): a real micro-VM
 
-`oci` is the container/micro-VM tier. It is **not yet wired into the
-`flox activate` seam** (so `flox sandbox backends` lists it
-`scaffolded`, and `--sandbox-backend oci` errors — see below), but the
-tier is real and benchmarkable **today** by driving Apple Container
-directly. It gives the strongest filesystem isolation in the roster:
-the host home is simply *absent* in the guest.
+`oci` is the container/micro-VM tier, now **wired into the seam** —
+`flox activate --sandbox enforce --sandbox-backend oci -- CMD` works
+like any other backend. It gives the strongest filesystem isolation
+in the roster: the host home is simply *absent* in the guest. The
+runtime dependency is Apple Container alone — Apple's open-source
+tool on the OS's own Virtualization framework, no Docker, no Podman,
+no daemon.
 
 **Setup (macOS 26+ / Apple silicon only).**
 
@@ -449,64 +450,83 @@ container system kernel set --recommended
 container system start
 ```
 
-Building a Flox image needs a Docker- or Podman-compatible builder plus
-`skopeo` (Apple Container only loads OCI archives, not docker-archive):
+**Bake the environment image (one-time, per lockfile change).** In
+this model *the image is the environment*: the backend runs your
+containerized env with the project live-mounted. The backend looks
+for `<env-name>:latest` (here `sandbox-demo:latest`); override with
+`FLOX_SANDBOX_OCI_IMAGE=<ref>`. Building currently needs a Docker-
+or Podman-compatible builder plus `skopeo` (build-time only — the
+runtime never touches them; making the build itself Apple-native is
+a tracked follow-up, CF-3b in the Forge slice):
 
 ```bash
 flox install -D skopeo                       # build-time only
 flox containerize -f img.tar                 # needs Docker/Podman to cross-build on macOS
 skopeo --insecure-policy copy \
-  docker-archive:img.tar oci-archive:oci.tar:octest:latest
+  docker-archive:img.tar oci-archive:oci.tar:sandbox-demo:latest
 container image load -i oci.tar
 ```
 
-**Run it — the env boots in a per-container Linux micro-VM:**
+If the image is missing, the backend tells you exactly this — the
+error names the ref it derived, the override, and the pipeline
+above. Nothing falls back silently.
+
+**Run it — same surface, micro-VM boundary:**
 
 ```bash
-container run --rm octest:latest -- sh -c 'echo "shell=$0"; uname -sm'
-# shell=/nix/store/…-bash-interactive-5.3p9/bin/bash
-# uname: Linux aarch64
+flox activate --sandbox enforce --sandbox-backend oci -- uname -sm
+# Linux aarch64
 ```
 
-> The `shell=` line is an artifact of DEV-130 (below): the current
-> image's entrypoint gives argv an extra shell expansion pass, so
-> `$0` expands against the *activation* shell instead of reaching
-> `sh`. Once this branch rebases onto the fixed `main`
-> (flox/flox#4464) and the image is rebuilt, this prints `shell=sh`
-> — refresh the capture then.
-
-**Isolation: the host filesystem is invisible** — nothing on the host is
-reachable unless you explicitly mount it, so there is nothing to deny:
+Warm latency is ~0.7–1.0 s per run — the VM-boot tax (vs ~72 ms
+host-native). Command argv reaches the guest **verbatim** (the
+image entrypoint carries the flox/flox#4464 exec-semantics fix):
 
 ```bash
-container run --rm octest:latest -- ls /Users/you/.ssh
+flox activate --sandbox enforce --sandbox-backend oci -- \
+  sh -c 'for x in 1 2 3; do echo "x=$x"; done; echo "shell=$0"'
+# x=1
+# x=2
+# x=3
+# shell=sh
+```
+
+**Isolation: the host filesystem is invisible** — only the project
+directory is mounted (live, at its real path); everything else on
+the host simply does not exist in the guest:
+
+```bash
+flox activate --sandbox enforce --sandbox-backend oci -- ls /Users/you/.ssh
 # ls: cannot access '/Users/you/.ssh': No such file or directory
+flox activate --sandbox enforce --sandbox-backend oci -- cat /Users/you/demo-secrets/.env
+# cat: /Users/you/demo-secrets/.env: No such file or directory
 ```
 
-**Live-mount a project — reads and writes round-trip.** Nothing is
-shared until you mount it; once you do, the activation works against
-the live host directory:
+**The project is live-mounted — reads and writes round-trip:**
 
 ```bash
-mkdir -p /tmp/demo-live-proj
-printf 'print("hello from host project")\n' > /tmp/demo-live-proj/app.py
-container run --rm --volume /tmp/demo-live-proj:/work --workdir /work \
-  octest:latest -- cat app.py
-# print("hello from host project")
-container run --rm --volume /tmp/demo-live-proj:/work --workdir /work \
-  octest:latest -- cp app.py app_edited.py
-ls /tmp/demo-live-proj
-# app.py  app_edited.py        ← the edit landed on the host
+flox activate --sandbox enforce --sandbox-backend oci -- cat app.py
+# def greet():
+#     return 1
+flox activate --sandbox enforce --sandbox-backend oci -- \
+  sh -c 'echo "# edited in guest" >> app.py'
+tail -1 app.py
+# # edited in guest                 ← the edit landed on the host
 ```
 
-> An earlier version of this demo claimed live-mounted projects were
-> broken on macOS (**DEV-130**,
+Like the other enforcing backends, `oci` is **`enforce`-only** —
+`warn` and `prompt` are rejected with the same message shape as
+host-native.
+
+> Historical note: an earlier version of this demo claimed
+> live-mounted projects were broken on macOS (**DEV-130**,
 > https://linear.app/floxdotdev/issue/DEV-130). That was a
-> misdiagnosis: the reads always worked, and the "empty read"
-> symptom was the argv re-expansion bug above — since reframed in
-> DEV-130 and fixed on `main` (flox/flox#4464, exec semantics for
-> container argv). Keep `$`-bearing commands base64-opaque or in a
-> mounted script file until this branch picks up the fix.
+> misdiagnosis — the reads always worked; the "empty read" symptom
+> was the container-entrypoint argv re-expansion bug, since
+> reframed in DEV-130 and fixed (flox/flox#4464, cherry-picked
+> onto this branch). Images baked before the fix (e.g. the old
+> `octest:latest`) still carry the old entrypoint and its extra
+> expansion pass — rebake to clear it.
 
 > **Caveats.** Two big ones. (1) **OS swap:** the guest is Linux, so
 > an interactive macOS user is running Linux packages, not their host
@@ -517,9 +537,9 @@ ls /tmp/demo-live-proj
 > (64 MB write+read in ~55 ms). Posture: live-mount project *source*,
 > keep dependency trees guest-local (volume or image layer). Numbers:
 > the Forge slice's `results/bindmount-io-macos-arm64-2026-07-07.md`.
-> And the per-`container run` **VM boot is ~668 ms** — an order of
-> magnitude over the host-process backends — though once booted the
-> guest fs is fast.
+> Plus the smaller ones: the ~0.7–1.0 s per-run VM boot above, and
+> the image is a *snapshot* — `flox install` on the host does not
+> appear in the guest until you rebake (auto-bake is CF-3b).
 
 ### Selecting an unwired backend fails loudly, on purpose
 
@@ -534,12 +554,11 @@ flox activate --sandbox enforce --sandbox-backend nix -- true
 
 ```
 ✘ ERROR: Sandbox backend 'nix' is not yet wired into activation.
-Wired backends: 'libsandbox' (default), 'host-native', and 'srt'. Run 'flox sandbox
-backends' to see status, or unset FLOX_SANDBOX_BACKEND.
+Wired backends: 'libsandbox' (default), 'host-native', 'srt', and 'oci'. Run 'flox sandbox backends' to see status, or unset FLOX_SANDBOX_BACKEND.
 ```
 
-(`oci` and `libkrun` print the same way — the container/micro-VM tiers
-are driven directly, as shown above, until they land behind the seam.)
+(`libkrun` prints the same way — the remaining micro-VM tier lands
+behind the seam the same way `oci` did.)
 
 As each backend lands, the same `flox activate` command starts working
 with no change to the surface above. The benchmark harness that scores
