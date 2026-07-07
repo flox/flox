@@ -325,14 +325,15 @@ Exporting a container on macOS requires Docker or Podman to be installed."
 
 function assert_container_output() {
   # check:
-  # (1) if the variable `foo = bar` is set in the container
-  #   - printed to STDOUT by the container invocation
+  # (1) The literal string '$foo' reaches `echo` without shell expansion.
+  #     OCI CMD semantics are exec — argv passes through the entrypoint
+  #     verbatim, so `$foo` must not be expanded by the activation shell.
   # (2) if the binary `hello` is present in the container
   # (3) if the binary `hello` operates as expected
   #   - printed to STDOUT by the on-activate hook, but then
   #     redirected to STDERR by the flox activate script
   assert_equal "${#lines[@]}" 1 # 1 result
-  assert_equal "${lines[0]}" "bar"
+  assert_equal "${lines[0]}" '$foo'
 
   # Podman generates some errors/warnings about UIDs/GIDs due to how the rootless
   # setup works: https://github.com/containers/podman/issues/15611
@@ -355,14 +356,32 @@ function assert_container_output() {
   # Also tests writing to STDOUT with `-f -`
   CONTAINER_ID="$("$FLOX_BIN" containerize -f - | podman load | sed -nr 's/^Loaded image: (.*)$/\1/p')"
 
+  # Pass literal '$foo' as a command argument. With exec semantics the dollar
+  # sign is not expanded — the activation entrypoint execs the command
+  # directly without routing through a shell.
   run --separate-stderr podman run -q -i "$CONTAINER_ID" echo '$foo'
   assert_success
   assert_container_output
 
-  # Next, test without "-i'
+  # Next, test without "-i"
   run --separate-stderr podman run "$CONTAINER_ID" echo '$foo'
   assert_success
   assert_container_output
+}
+
+# bats test_tags=containerize:env-var-accessible-via-shell
+@test "container env var is accessible when command explicitly invokes a shell" {
+  env_setup_catalog
+
+  CONTAINER_ID="$("$FLOX_BIN" containerize -f - | podman load | sed -nr 's/^Loaded image: (.*)$/\1/p')"
+
+  # When the command itself is a shell, variables set by the manifest are
+  # still accessible: exec semantics only stop the entrypoint from doing an
+  # extra shell pass on the argv.
+  run --separate-stderr podman run -q -i "$CONTAINER_ID" bash -c 'echo $foo'
+  assert_success
+  assert_equal "${#lines[@]}" 1
+  assert_equal "${lines[0]}" "bar"
 }
 
 @test "config set on image" {
