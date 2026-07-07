@@ -82,6 +82,7 @@ impl Containerize {
             runtime.validate_in_path()?
         }
         let runtime = self.runtime.or_else(Runtime::detect_from_path);
+        let uses_apple_container = matches!(&runtime, Some(Runtime::AppleContainer));
         let output = match (&runtime, self.file) {
             // Specified file.
             (_, Some(dest)) => OutputTarget::File(dest),
@@ -134,12 +135,26 @@ impl Containerize {
                     Exporting a container on macOS requires Docker, Podman, or Apple Container ('container') to be installed.
                 "#});
             };
+            if uses_apple_container {
+                // No Nix store cache volume is mounted for Apple Container,
+                // so every build starts from a cold store.
+                message::info(
+                    "Apple Container builds run without a Nix store cache and fetch dependencies on every run; expect longer build times.",
+                );
+            }
             let builder = ContainerizeProxy::new(env_path, proxy_runtime, self.labels, self.mode);
             builder.create_container_source(&flox, env_name.as_ref(), output_tag)?
         };
 
         let mut writer = output.to_writer()?;
-        source.stream_container(&mut writer)?;
+        let stream_result = source.stream_container(&mut writer);
+        if uses_apple_container {
+            // `container run` failures most often mean the Apple Container
+            // system service is not running; point the user at the fix.
+            stream_result.context(APPLE_CONTAINER_SERVICE_HINT)?;
+        } else {
+            stream_result?;
+        }
         writer.wait()?;
 
         message::created(format!("'{env_name}:{output_tag}' written to {output}"));
@@ -295,6 +310,12 @@ impl ContainerSink for RuntimeSink {
     }
 }
 
+/// Actionable hint appended to Apple Container subprocess failures.
+/// The most common cause of `container run` / `container image load`
+/// errors is that the runtime's system service has not been started.
+const APPLE_CONTAINER_SERVICE_HINT: &str =
+    "Apple Container's system service may not be running. Try: 'container system start'";
+
 /// Sink for Apple Container (`container image load`).
 ///
 /// Apple Container's `image load` does not read from stdin; it requires a
@@ -343,6 +364,7 @@ impl ContainerSink for AppleContainerSink {
 
         let mut child = load_cmd
             .spawn()
+            .context(APPLE_CONTAINER_SERVICE_HINT)
             .context("Failed to spawn 'container image load'")?;
 
         let stderr_tap = child
@@ -361,7 +383,9 @@ impl ContainerSink for AppleContainerSink {
         let stderr = stderr_tap.wait();
 
         if !status.success() {
-            return Err(anyhow!("'container image load' was unsuccessful").context(stderr));
+            return Err(anyhow!("'container image load' was unsuccessful")
+                .context(stderr)
+                .context(APPLE_CONTAINER_SERVICE_HINT));
         }
 
         Ok(())

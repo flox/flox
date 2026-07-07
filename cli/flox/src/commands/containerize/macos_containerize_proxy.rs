@@ -29,6 +29,13 @@ const CONTAINER_NIX_CACHE_VOLUME: &str = "flox-nix";
 
 const MOUNT_ENV: &str = "/flox_env";
 
+/// Escape a string for safe interpolation into a `bash -c` script as a
+/// single-quoted word. Internal single quotes become `'\''` (close quote,
+/// escaped literal quote, reopen quote).
+fn shell_single_quote(s: &str) -> String {
+    format!("'{}'", s.replace('\'', "'\\''"))
+}
+
 #[derive(Debug, Error)]
 pub enum ContainerizeProxyError {
     #[error("failed to populate proxy container cache volume")]
@@ -99,17 +106,13 @@ impl ContainerizeProxy {
 
     /// Copy the Nix store from the container image to the cache volume.
     ///
-    /// Skipped for Apple Container because the cache volume population step
-    /// uses a shell pipeline (`bash -c '...'`) that is not available in the
-    /// NixOS container on Apple's Virtualization.framework without additional
-    /// setup. The main build still works; it just won't benefit from the
-    /// pre-populated cache on first run.
+    /// Skipped for Apple Container because no cache volume is mounted there
+    /// (see `add_runtime_args`). As a result, Apple Container builds start
+    /// from a cold Nix store on every run — not just the first — and fetch
+    /// all dependencies from substituters each time.
     #[instrument(skip_all, fields(progress = "Populating proxy container cache volume"))]
     fn populate_cache_volume(&self) -> Result<(), ContainerizeProxyError> {
         if self.container_runtime == Runtime::AppleContainer {
-            // The cache-volume population shell pipeline is not compatible with
-            // Apple Container's runtime environment. Skip it; the build will
-            // proceed without the warm cache.
             debug!("Skipping cache volume population for Apple Container runtime");
             return Ok(());
         }
@@ -195,13 +198,11 @@ impl ContainerizeProxy {
         //
         // For Apple Container, mounting a volume over /nix shadows the nixos/nix
         // image's own Nix store, removing bash and nix from PATH before the
-        // container starts. The populate_cache_volume step (which copies image
-        // store content into the volume) uses a shell pipeline that also fails
-        // for the same reason.
-        //
-        // Skip the cache mount for Apple Container: the build works without it,
-        // relying on the substituter cache configured via NIX_CONFIG. This is
-        // slower on first run but avoids the bootstrap problem.
+        // container starts. Skip the cache mount there: builds rely on the
+        // substituter cache configured via NIX_CONFIG and start from a cold
+        // Nix store on EVERY run (not just the first), which makes each build
+        // noticeably slower. Real cache population for Apple Container is a
+        // follow-up (see flox/flox#4466).
         if self.container_runtime != Runtime::AppleContainer {
             self.add_cache_mount(command, "/nix");
         }
@@ -310,21 +311,20 @@ impl ContainerizeProxy {
 
     /// Build the full container run command for the OCI-conversion path.
     ///
-    /// When the target runtime is Apple Container, `container image load` only
-    /// accepts OCI archives, but nixpkgs `dockerTools.streamLayeredImage`
-    /// emits docker-archive format. This method builds a shell pipeline that:
+    /// Apple Container's `image load` only accepts OCI archives, but nixpkgs
+    /// `dockerTools.streamLayeredImage` emits docker-archive format. This
+    /// command runs a two-phase conversion inside the nixos/nix builder
+    /// container:
     ///
-    /// 1. Runs `nix run github:flox/flox -- flox containerize --file -` to
-    ///    emit a docker-archive on stdout.
-    /// 2. Pipes it through nixpkgs `skopeo copy` to convert to OCI archive on
-    ///    stdout.
+    /// 1. `nix run github:flox/flox -- containerize` writes a docker-archive
+    ///    to a temp file.
+    /// 2. nixpkgs `skopeo copy` converts it to an OCI archive in a second
+    ///    temp file, which `cat` then streams to stdout.
     ///
-    /// The conversion runs entirely inside the nixos/nix builder container
-    /// using nixpkgs' skopeo, so no additional host-side tooling is required.
-    ///
-    /// Apple Container image refs require an explicit tag (`name:latest` works
-    /// where bare `name` fails), so the tag is embedded in the skopeo
-    /// destination reference.
+    /// skopeo comes from nixpkgs inside the builder container, so no
+    /// host-side tooling is required. Apple Container image refs require an
+    /// explicit tag (`name:latest` works where bare `name` fails), so the
+    /// tag is embedded in the skopeo destination reference.
     fn build_oci_conversion_command(&self, flox: &Flox, tag: impl AsRef<str>) -> Command {
         let tag_str = tag.as_ref();
 
@@ -356,35 +356,38 @@ impl ContainerizeProxy {
             _ => String::new(),
         };
 
+        // User-controlled values (tag, image name, labels) are single-quote
+        // escaped so they cannot break out of the bash -c script.
+        let tag_quoted = shell_single_quote(tag_str);
+        let image_ref_quoted = shell_single_quote(&image_ref);
         let label_args: String = self
             .labels
             .iter()
-            .map(|l| format!(" --label '{}'", l.replace('\'', "'\\''")))
+            .map(|l| format!(" --label {}", shell_single_quote(l)))
             .collect();
 
-        // Two-phase OCI conversion:
+        // Sequential phases (not a pipe): running flox containerize and
+        // skopeo concurrently can exceed the Apple Container VM's memory
+        // and trigger the kernel OOM killer.
         //
-        // Phase 1: Build the docker-archive to a temp file using flox containerize.
-        // Phase 2: Convert with skopeo (sequential, not a simultaneous pipeline).
+        // `>&2` on both nix invocations: only `cat "$oci_tmp"` may write to
+        // stdout — anything else corrupts the OCI archive stream read by
+        // the host-side sink.
         //
-        // We avoid the pipe approach because Apple Container VMs have limited
-        // memory; running flox containerize (which builds container layers) and
-        // skopeo (which reads and converts the archive) simultaneously can trigger
-        // the kernel OOM killer, causing one process to be killed with SIGKILL.
+        // skopeo runs with --insecure-policy because the nixos/nix image
+        // ships no /etc/containers/policy.json.
         //
-        // `nix run github:flox/flox -- containerize` (not `flox containerize`):
-        // `nix run` makes the flox binary the process; `containerize` is the
-        // subcommand passed as the first argument. Setup stdout is redirected to
-        // stderr; only `cat "$oci_tmp"` writes the OCI archive to stdout.
+        // The skopeo destination concatenates a double-quoted shell variable
+        // with the single-quoted image ref: "oci-archive:$oci_tmp:"'name:tag'.
         let shell_cmd = format!(
             "set -euo pipefail\n\
             docker_tmp=$(mktemp /tmp/flox-docker-XXXXXX.tar)\n\
             oci_tmp=$(mktemp /tmp/flox-oci-XXXXXX.tar)\n\
             nix --extra-experimental-features 'nix-command flakes' --accept-flake-config \
-            run '{flox_flake}' --{verbosity_arg} containerize --dir {MOUNT_ENV} --tag {tag_str} --file \"$docker_tmp\"{label_args} >&2\n\
+            run '{flox_flake}' --{verbosity_arg} containerize --dir {MOUNT_ENV} --tag {tag_quoted} --file \"$docker_tmp\"{label_args} >&2\n\
             nix --extra-experimental-features 'nix-command flakes' \
             run 'nixpkgs#skopeo' -- --insecure-policy copy \
-            \"docker-archive:$docker_tmp\" \"oci-archive:$oci_tmp:{image_ref}\" >&2\n\
+            \"docker-archive:$docker_tmp\" \"oci-archive:$oci_tmp:\"{image_ref_quoted} >&2\n\
             rm -f \"$docker_tmp\"\n\
             cat \"$oci_tmp\"\n\
             rm -f \"$oci_tmp\""
@@ -392,7 +395,9 @@ impl ContainerizeProxy {
 
         let mut command = self.runtime_base_command();
         self.add_runtime_args(&mut command, flox);
-        // `bash` is found by Apple Container using the image's PATH env var.
+        // `bash` (unqualified): Apple Container resolves the entrypoint via
+        // the image's PATH env var and does not follow absolute Nix profile
+        // symlink paths.
         command.args(["bash", "-c", &shell_cmd]);
         command
     }
@@ -533,6 +538,31 @@ mod tests {
             shell_script.contains(":latest"),
             "OCI image ref must include explicit tag"
         );
+
+        // Load-bearing pipeline structure:
+        // skopeo needs --insecure-policy (no policy.json in nixos/nix image).
+        assert!(
+            shell_script.contains("--insecure-policy"),
+            "skopeo must run with --insecure-policy"
+        );
+        // Both nix invocations redirect stdout to stderr so only `cat`
+        // writes the OCI archive to stdout.
+        assert_eq!(
+            shell_script.matches(">&2").count(),
+            2,
+            "both nix invocations must redirect stdout to stderr"
+        );
+        // Two-phase conversion: two temp files, no pipe between
+        // containerize and skopeo (concurrent execution can OOM the VM).
+        assert_eq!(
+            shell_script.matches("mktemp").count(),
+            2,
+            "two temp files: one docker-archive, one OCI archive"
+        );
+        assert!(
+            !shell_script.contains(" | "),
+            "containerize and skopeo must run sequentially, not piped"
+        );
     }
 
     #[test]
@@ -546,5 +576,51 @@ mod tests {
             args.iter().any(|a| a.contains("v1.2.3")),
             "custom tag 'v1.2.3' should appear in the OCI conversion command"
         );
+    }
+
+    #[test]
+    fn oci_conversion_escapes_hostile_tags() {
+        let (flox, _tempdir) = flox_instance();
+        let proxy = ContainerizeProxy::new("/env/myapp".into(), Runtime::AppleContainer, vec![]);
+
+        // A tag containing a space must be single-quoted so it stays one word.
+        let cmd = proxy.build_oci_conversion_command(&flox, "my tag");
+        let args = argv(&cmd);
+        let script = args.last().expect("script is last arg");
+        assert!(
+            script.contains("--tag 'my tag'"),
+            "tag with space must be single-quoted: {script}"
+        );
+        assert!(
+            script.contains("'myapp:my tag'"),
+            "image ref with space must be single-quoted: {script}"
+        );
+
+        // A tag containing a single quote must not be able to close the
+        // quoting and inject shell syntax. `a'b` becomes `'a'\''b'`.
+        let cmd = proxy.build_oci_conversion_command(&flox, "a'b");
+        let args = argv(&cmd);
+        let script = args.last().expect("script is last arg");
+        assert!(
+            script.contains("--tag 'a'\\''b'"),
+            "tag with single quote must be escaped: {script}"
+        );
+        assert!(
+            script.contains("'myapp:a'\\''b'"),
+            "image ref with single quote must be escaped: {script}"
+        );
+        // The raw unescaped tag must not appear as a bare word.
+        assert!(
+            !script.contains("--tag a'b"),
+            "unescaped tag must not reach the shell: {script}"
+        );
+    }
+
+    #[test]
+    fn shell_single_quote_escapes() {
+        assert_eq!(shell_single_quote("plain"), "'plain'");
+        assert_eq!(shell_single_quote("has space"), "'has space'");
+        assert_eq!(shell_single_quote("a'b"), "'a'\\''b'");
+        assert_eq!(shell_single_quote("$(rm -rf /)"), "'$(rm -rf /)'");
     }
 }
