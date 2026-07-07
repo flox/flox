@@ -71,8 +71,7 @@ impl ActivateArgs {
             // command substitution an extra expansion pass against the
             // activation environment.
             (None, Some(args)) => {
-                context.invocation_type =
-                    Some(InvocationType::ExecCommand(args.to_vec()));
+                context.invocation_type = Some(InvocationType::ExecCommand(args.to_vec()));
             },
             // The following two cases are normal shell activations, and don't need
             // to modify the activation context.
