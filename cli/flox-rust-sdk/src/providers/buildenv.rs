@@ -88,6 +88,14 @@ fn flox_nixpkgs_flake_ref(locked_url: &str, attr_path: &str) -> Result<String, B
         .map(|(_, value)| value.into_owned())
         .ok_or_else(|| malformed("has no 'rev' query parameter"))?;
 
+    // Omit `?host=` for github.com so a public ref stays byte-identical to the
+    // pre-host form (`flox-nixpkgs:v0/<owner>/<rev>`). The proxy treats absent
+    // and `github.com` hosts identically, but the fetcher cache keys on the
+    // `host` attr — so adding `?host=github.com` would miss every existing
+    // cache entry and needlessly re-fetch public nixpkgs after an upgrade.
+    if host == "github.com" {
+        return Ok(format!("{FLOX_NIXPKGS_SCHEME}/{owner}/{rev}"));
+    }
     Ok(format!("{FLOX_NIXPKGS_SCHEME}/{owner}/{rev}?host={host}"))
 }
 
@@ -1585,11 +1593,14 @@ mod flox_nixpkgs_ref_tests {
     }
 
     #[test]
-    fn public_host_round_trips_too() {
+    fn github_com_omits_host_for_cache_compatibility() {
+        // github.com must stay byte-identical to the pre-host ref so the
+        // fetcher cache (which keys on the `host` attr) still hits existing
+        // entries — no `?host=github.com`.
         assert_eq!(
             flox_nixpkgs_flake_ref("https://github.com/flox/nixpkgs?rev=deadbeef", "hello")
                 .unwrap(),
-            "flox-nixpkgs:v0/flox/deadbeef?host=github.com",
+            "flox-nixpkgs:v0/flox/deadbeef",
         );
     }
 
