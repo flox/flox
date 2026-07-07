@@ -1446,6 +1446,7 @@ dependencies = [
  "anstream",
  "anyhow",
  "beta",
+ "blake3",
  "bpaf",
  "chrono",
  "close_fds",

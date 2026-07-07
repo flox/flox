@@ -54,6 +54,7 @@ tracing-subscriber.workspace = true
 url.workspace = true
 uuid.workspace = true
 xdg.workspace = true
+blake3.workspace = true
 flox-core.workspace = true
 flox-activations.workspace = true
 flox-events.workspace = true

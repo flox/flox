@@ -29,7 +29,7 @@ use crate::utils::events::env_detail_from_concrete;
 use crate::utils::message;
 use crate::utils::openers::first_in_path;
 
-mod macos_containerize_proxy;
+pub(crate) mod macos_containerize_proxy;
 
 // Containerize an environment
 #[derive(Bpaf, Clone, Debug)]
@@ -239,7 +239,7 @@ impl Display for OutputTarget {
 /// In case of sinks that are subprocesses,
 /// the `wait` method should also wait for the subprocess to exit,
 /// in order not to orphan the process.
-trait ContainerSink: Write + Send {
+pub(crate) trait ContainerSink: Write + Send {
     fn wait(&mut self) -> Result<()>;
 }
 
@@ -374,7 +374,7 @@ impl ContainerSink for AppleContainerSink {
 /// with Docker or Podman installed see no behavior change; Apple Container
 /// is used only when it is the only runtime present (or explicitly selected).
 #[derive(Debug, Clone, PartialEq, Eq)]
-enum Runtime {
+pub(crate) enum Runtime {
     Docker,
     Podman,
     /// Apple Container (the `container` CLI, macOS-only).
@@ -448,7 +448,7 @@ impl Runtime {
     /// it requires a file path via `--input`. The returned sink writes to a
     /// temporary OCI archive on disk and invokes `container image load` when
     /// flushed.
-    fn to_writer(&self) -> Result<Box<dyn ContainerSink>> {
+    pub(crate) fn to_writer(&self) -> Result<Box<dyn ContainerSink>> {
         match self {
             Runtime::Docker | Runtime::Podman => {
                 let cmd = self.to_cmd();
