@@ -454,7 +454,7 @@ mod tests {
     #[test]
     fn docker_proxy_uses_docker_run() {
         let (flox, _tempdir) = flox_instance();
-        let proxy = ContainerizeProxy::new("/some/env".into(), Runtime::Docker, vec![]);
+        let proxy = ContainerizeProxy::new("/some/env".into(), Runtime::Docker, vec![], None);
         let mut cmd = proxy.runtime_base_command();
         proxy.add_runtime_args(&mut cmd, &flox);
         let args = argv(&cmd);
@@ -466,7 +466,7 @@ mod tests {
     #[test]
     fn podman_proxy_adds_userns_flag() {
         let (flox, _tempdir) = flox_instance();
-        let proxy = ContainerizeProxy::new("/some/env".into(), Runtime::Podman, vec![]);
+        let proxy = ContainerizeProxy::new("/some/env".into(), Runtime::Podman, vec![], None);
         let mut cmd = proxy.runtime_base_command();
         proxy.add_runtime_args(&mut cmd, &flox);
         let args = argv(&cmd);
@@ -482,7 +482,8 @@ mod tests {
     #[test]
     fn apple_container_proxy_omits_userns_flag() {
         let (flox, _tempdir) = flox_instance();
-        let proxy = ContainerizeProxy::new("/some/env".into(), Runtime::AppleContainer, vec![]);
+        let proxy =
+            ContainerizeProxy::new("/some/env".into(), Runtime::AppleContainer, vec![], None);
         let mut cmd = proxy.runtime_base_command();
         proxy.add_runtime_args(&mut cmd, &flox);
         let args = argv(&cmd);
@@ -501,6 +502,7 @@ mod tests {
             "/some/env/.flox/env".into(),
             Runtime::AppleContainer,
             vec![],
+            None,
         );
         let cmd = proxy.build_oci_conversion_command(&flox, "latest");
         let args = argv(&cmd);
@@ -568,7 +570,8 @@ mod tests {
     #[test]
     fn oci_conversion_embeds_custom_tag() {
         let (flox, _tempdir) = flox_instance();
-        let proxy = ContainerizeProxy::new("/env/myapp".into(), Runtime::AppleContainer, vec![]);
+        let proxy =
+            ContainerizeProxy::new("/env/myapp".into(), Runtime::AppleContainer, vec![], None);
         let cmd = proxy.build_oci_conversion_command(&flox, "v1.2.3");
         let args = argv(&cmd);
         // Custom tag must appear in the OCI destination reference
@@ -581,7 +584,8 @@ mod tests {
     #[test]
     fn oci_conversion_escapes_hostile_tags() {
         let (flox, _tempdir) = flox_instance();
-        let proxy = ContainerizeProxy::new("/env/myapp".into(), Runtime::AppleContainer, vec![]);
+        let proxy =
+            ContainerizeProxy::new("/env/myapp".into(), Runtime::AppleContainer, vec![], None);
 
         // A tag containing a space must be single-quoted so it stays one word.
         let cmd = proxy.build_oci_conversion_command(&flox, "my tag");
