@@ -86,8 +86,10 @@ impl ContainerizeProxy {
     /// Add a cache volume mount to the container runtime command.
     ///
     /// Docker and Podman support named volumes (`type=volume`), which persist
-    /// the Nix store across builds and speed up subsequent runs. Apple Container
-    /// also supports named volumes via the same `--mount type=volume` syntax.
+    /// the Nix store across builds and speed up subsequent runs.
+    ///
+    /// Not used for Apple Container: see the comment in `add_runtime_args` for
+    /// the reason it is skipped.
     fn add_cache_mount(&self, command: &mut Command, path: &str) {
         command.args([
             "--mount",
@@ -188,21 +190,50 @@ impl ContainerizeProxy {
             ),
         ]);
 
-        self.add_cache_mount(command, "/nix");
+        // The Nix store cache volume is mounted over /nix so that store paths
+        // built in one run are reused in subsequent runs.
+        //
+        // For Apple Container, mounting a volume over /nix shadows the nixos/nix
+        // image's own Nix store, removing bash and nix from PATH before the
+        // container starts. The populate_cache_volume step (which copies image
+        // store content into the volume) uses a shell pipeline that also fails
+        // for the same reason.
+        //
+        // Skip the cache mount for Apple Container: the build works without it,
+        // relying on the substituter cache configured via NIX_CONFIG. This is
+        // slower on first run but avoids the bootstrap problem.
+        if self.container_runtime != Runtime::AppleContainer {
+            self.add_cache_mount(command, "/nix");
+        }
 
         // Honour config from the user's flox.toml
-        // This could include things like floxhub_token and floxhub_url
+        // This could include things like floxhub_token and floxhub_url.
+        //
+        // Docker and Podman support binding individual files; Apple Container
+        // requires the bind-mount source to be a directory. When the runtime
+        // is Apple Container we mount the entire config directory
+        // (~/.config/flox) to avoid the "path is not a directory" error.
         let flox_toml = flox.config_dir.join(FLOX_CONFIG_FILE);
         if flox_toml.exists() {
-            let mut flox_toml_mount = OsString::new();
-            flox_toml_mount.push("type=bind,source=");
-            flox_toml_mount.push(flox_toml);
-            flox_toml_mount.push(format!(
-                ",target={}/{}",
-                FLOX_PROXY_IMAGE_FLOX_CONFIG_DIR, FLOX_CONFIG_FILE
-            ));
-            command.arg("--mount");
-            command.arg(flox_toml_mount);
+            if self.container_runtime == Runtime::AppleContainer {
+                // Mount the whole config directory; `flox.toml` lives inside.
+                let mut config_dir_mount = OsString::new();
+                config_dir_mount.push("type=bind,source=");
+                config_dir_mount.push(&flox.config_dir);
+                config_dir_mount.push(format!(",target={}", FLOX_PROXY_IMAGE_FLOX_CONFIG_DIR));
+                command.arg("--mount");
+                command.arg(config_dir_mount);
+            } else {
+                let mut flox_toml_mount = OsString::new();
+                flox_toml_mount.push("type=bind,source=");
+                flox_toml_mount.push(flox_toml);
+                flox_toml_mount.push(format!(
+                    ",target={}/{}",
+                    FLOX_PROXY_IMAGE_FLOX_CONFIG_DIR, FLOX_CONFIG_FILE
+                ));
+                command.arg("--mount");
+                command.arg(flox_toml_mount);
+            }
         }
 
         // If metrics are disabled (no device UUID), propagate that into the
@@ -337,20 +368,64 @@ impl ContainerizeProxy {
             .map(|m| format!(" --mode {}", m))
             .unwrap_or_default();
 
-        // Single bash -c pipeline: flox containerize | skopeo copy
-        // Both tools are fetched from nixpkgs inside the builder container.
+        // OCI conversion pipeline: flox containerize | skopeo copy
+        //
+        // Apple Container resolves unqualified binary names (e.g. `bash`)
+        // using the image's OCI `Env` PATH, but does NOT follow absolute
+        // symlink paths like `/nix/var/nix/profiles/default/bin/bash` at
+        // container startup. We therefore pass `bash` as the executable name
+        // and let Apple Container find it via the nixos/nix image's PATH.
+        //
+        // The shell pipeline:
+        // 1. Runs `nix run github:flox/flox -- flox containerize --file -`
+        //    to emit a docker-archive on stdout.
+        // 2. Pipes it through `nix run nixpkgs#skopeo -- copy` to convert
+        //    to OCI archive on stdout.
+        //
+        // Both tools are fetched from nixpkgs inside the builder container,
+        // so no new host-side dependencies are introduced.
+        // `nix` is on PATH via `/root/.nix-profile/bin` (set in the OCI image
+        // Env config) once the shell starts.
+        // Two-phase OCI conversion:
+        //
+        // Phase 1: Build the docker-archive to a temp file using flox containerize.
+        // Phase 2: Convert with skopeo (sequential, not a simultaneous pipeline).
+        //
+        // We avoid the pipe approach because Apple Container VMs have limited
+        // memory; running flox containerize (which builds container layers) and
+        // skopeo (which reads and converts the archive) simultaneously can trigger
+        // the kernel OOM killer, causing one process to be killed with SIGKILL.
+        // Sequential execution keeps peak memory use lower.
+        //
+        // We write the OCI archive to a second temp file and cat it to the
+        // container's stdout (which `ContainerSource::stream_container` pipes to
+        // the host-side sink). Apple Container streams container stdout back to
+        // the host via virtio-serial, which handles sequential reads fine.
+        //
+        // `nix run github:flox/flox -- containerize` (not `flox containerize`):
+        // `nix run` makes the flox binary the process; `containerize` is the
+        // subcommand passed as the first argument.
+        // The nix run and skopeo commands write progress to stderr.
+        // We redirect stdout of the nix/skopeo setup to stderr (>&2) to
+        // prevent any nix evaluation output from leaking into the OCI archive
+        // stream. Only `cat "$oci_tmp"` writes the archive to stdout.
         let shell_cmd = format!(
             "set -euo pipefail\n\
+            docker_tmp=$(mktemp /tmp/flox-docker-XXXXXX.tar)\n\
+            oci_tmp=$(mktemp /tmp/flox-oci-XXXXXX.tar)\n\
             nix --extra-experimental-features 'nix-command flakes' --accept-flake-config \
-            run '{flox_flake}' -- \
-            flox{verbosity_arg} containerize --dir {MOUNT_ENV} --tag {tag_str} --file -{label_args}{mode_arg} | \
+            run '{flox_flake}' --{verbosity_arg} containerize --dir {MOUNT_ENV} --tag {tag_str} --file \"$docker_tmp\"{label_args}{mode_arg} >&2\n\
             nix --extra-experimental-features 'nix-command flakes' \
-            run 'nixpkgs#skopeo' -- copy \
-            docker-archive:/dev/stdin 'oci-archive:/dev/stdout:{image_ref}'"
+            run 'nixpkgs#skopeo' -- --insecure-policy copy \
+            \"docker-archive:$docker_tmp\" \"oci-archive:$oci_tmp:{image_ref}\" >&2\n\
+            rm -f \"$docker_tmp\"\n\
+            cat \"$oci_tmp\"\n\
+            rm -f \"$oci_tmp\""
         );
 
         let mut command = self.runtime_base_command();
         self.add_runtime_args(&mut command, flox);
+        // `bash` is found by Apple Container using the image's PATH env var.
         command.args(["bash", "-c", &shell_cmd]);
         command
     }
@@ -462,7 +537,7 @@ mod tests {
 
         // Command is `container run ...`
         assert_eq!(args[0], "container");
-        // Should invoke bash -c with the pipeline
+        // Apple Container resolves `bash` via the image's PATH env var.
         let bash_pos = args
             .iter()
             .position(|a| a == "bash")
