@@ -539,4 +539,3 @@ fn activate_in_place(startup_ctx: StartupCtx, start_id: StartIdentifier) -> Resu
 
     Ok(())
 }
-
