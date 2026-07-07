@@ -362,30 +362,6 @@ impl ContainerizeProxy {
             .map(|l| format!(" --label '{}'", l.replace('\'', "'\\''")))
             .collect();
 
-        let mode_arg = self
-            .mode
-            .as_ref()
-            .map(|m| format!(" --mode {}", m))
-            .unwrap_or_default();
-
-        // OCI conversion pipeline: flox containerize | skopeo copy
-        //
-        // Apple Container resolves unqualified binary names (e.g. `bash`)
-        // using the image's OCI `Env` PATH, but does NOT follow absolute
-        // symlink paths like `/nix/var/nix/profiles/default/bin/bash` at
-        // container startup. We therefore pass `bash` as the executable name
-        // and let Apple Container find it via the nixos/nix image's PATH.
-        //
-        // The shell pipeline:
-        // 1. Runs `nix run github:flox/flox -- flox containerize --file -`
-        //    to emit a docker-archive on stdout.
-        // 2. Pipes it through `nix run nixpkgs#skopeo -- copy` to convert
-        //    to OCI archive on stdout.
-        //
-        // Both tools are fetched from nixpkgs inside the builder container,
-        // so no new host-side dependencies are introduced.
-        // `nix` is on PATH via `/root/.nix-profile/bin` (set in the OCI image
-        // Env config) once the shell starts.
         // Two-phase OCI conversion:
         //
         // Phase 1: Build the docker-archive to a temp file using flox containerize.
@@ -395,26 +371,17 @@ impl ContainerizeProxy {
         // memory; running flox containerize (which builds container layers) and
         // skopeo (which reads and converts the archive) simultaneously can trigger
         // the kernel OOM killer, causing one process to be killed with SIGKILL.
-        // Sequential execution keeps peak memory use lower.
-        //
-        // We write the OCI archive to a second temp file and cat it to the
-        // container's stdout (which `ContainerSource::stream_container` pipes to
-        // the host-side sink). Apple Container streams container stdout back to
-        // the host via virtio-serial, which handles sequential reads fine.
         //
         // `nix run github:flox/flox -- containerize` (not `flox containerize`):
         // `nix run` makes the flox binary the process; `containerize` is the
-        // subcommand passed as the first argument.
-        // The nix run and skopeo commands write progress to stderr.
-        // We redirect stdout of the nix/skopeo setup to stderr (>&2) to
-        // prevent any nix evaluation output from leaking into the OCI archive
-        // stream. Only `cat "$oci_tmp"` writes the archive to stdout.
+        // subcommand passed as the first argument. Setup stdout is redirected to
+        // stderr; only `cat "$oci_tmp"` writes the OCI archive to stdout.
         let shell_cmd = format!(
             "set -euo pipefail\n\
             docker_tmp=$(mktemp /tmp/flox-docker-XXXXXX.tar)\n\
             oci_tmp=$(mktemp /tmp/flox-oci-XXXXXX.tar)\n\
             nix --extra-experimental-features 'nix-command flakes' --accept-flake-config \
-            run '{flox_flake}' --{verbosity_arg} containerize --dir {MOUNT_ENV} --tag {tag_str} --file \"$docker_tmp\"{label_args}{mode_arg} >&2\n\
+            run '{flox_flake}' --{verbosity_arg} containerize --dir {MOUNT_ENV} --tag {tag_str} --file \"$docker_tmp\"{label_args} >&2\n\
             nix --extra-experimental-features 'nix-command flakes' \
             run 'nixpkgs#skopeo' -- --insecure-policy copy \
             \"docker-archive:$docker_tmp\" \"oci-archive:$oci_tmp:{image_ref}\" >&2\n\
