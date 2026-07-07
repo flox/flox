@@ -468,6 +468,13 @@ container run --rm octest:latest -- sh -c 'echo "shell=$0"; uname -sm'
 # uname: Linux aarch64
 ```
 
+> The `shell=` line is an artifact of DEV-130 (below): the current
+> image's entrypoint gives argv an extra shell expansion pass, so
+> `$0` expands against the *activation* shell instead of reaching
+> `sh`. Once this branch rebases onto the fixed `main`
+> (flox/flox#4464) and the image is rebuilt, this prints `shell=sh`
+> — refresh the capture then.
+
 **Isolation: the host filesystem is invisible** — nothing on the host is
 reachable unless you explicitly mount it, so there is nothing to deny:
 
@@ -476,15 +483,41 @@ container run --rm octest:latest -- ls /Users/you/.ssh
 # ls: cannot access '/Users/you/.ssh': No such file or directory
 ```
 
-> **Caveats.** Two big ones. (1) **OS swap:** the guest is Linux, so an
-> interactive macOS user is running Linux packages, not their host
-> tools. (2) **Live-mounted projects are broken on macOS today:** the
-> flox activation runtime breaks content reads of host bind-mounts
-> inside the container — tracked as **DEV-130**
-> (https://linear.app/floxdotdev/issue/DEV-130), a general
-> flox-activation × macOS-container defect (reproduces under Docker
-> too). The benchmark bakes the project *into the image* to work around
-> it. And the per-`container run` **VM boot is ~668 ms** — an order of
+**Live-mount a project — reads and writes round-trip.** Nothing is
+shared until you mount it; once you do, the activation works against
+the live host directory:
+
+```bash
+mkdir -p /tmp/demo-live-proj
+printf 'print("hello from host project")\n' > /tmp/demo-live-proj/app.py
+container run --rm --volume /tmp/demo-live-proj:/work --workdir /work \
+  octest:latest -- cat app.py
+# print("hello from host project")
+container run --rm --volume /tmp/demo-live-proj:/work --workdir /work \
+  octest:latest -- cp app.py app_edited.py
+ls /tmp/demo-live-proj
+# app.py  app_edited.py        ← the edit landed on the host
+```
+
+> An earlier version of this demo claimed live-mounted projects were
+> broken on macOS (**DEV-130**,
+> https://linear.app/floxdotdev/issue/DEV-130). That was a
+> misdiagnosis: the reads always worked, and the "empty read"
+> symptom was the argv re-expansion bug above — since reframed in
+> DEV-130 and fixed on `main` (flox/flox#4464, exec semantics for
+> container argv). Keep `$`-bearing commands base64-opaque or in a
+> mounted script file until this branch picks up the fix.
+
+> **Caveats.** Two big ones. (1) **OS swap:** the guest is Linux, so
+> an interactive macOS user is running Linux packages, not their host
+> tools. (2) **Bind-mount I/O has a measured shape:** the per-file
+> open round-trip over virtio-fs is ~0.15 ms, so small-file traversal
+> (`node_modules`-class) runs ~6× native and ~60× guest-local — and
+> warm ≈ cold, caching doesn't rescue it — while streaming is fine
+> (64 MB write+read in ~55 ms). Posture: live-mount project *source*,
+> keep dependency trees guest-local (volume or image layer). Numbers:
+> the Forge slice's `results/bindmount-io-macos-arm64-2026-07-07.md`.
+> And the per-`container run` **VM boot is ~668 ms** — an order of
 > magnitude over the host-process backends — though once booted the
 > guest fs is fast.
 
