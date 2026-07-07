@@ -450,26 +450,56 @@ container system kernel set --recommended
 container system start
 ```
 
-**Bake the environment image (one-time, per lockfile change).** In
-this model *the image is the environment*: the backend runs your
-containerized env with the project live-mounted. The backend looks
-for `<env-name>:latest` (here `sandbox-demo:latest`); override with
-`FLOX_SANDBOX_OCI_IMAGE=<ref>`. Building currently needs a Docker-
-or Podman-compatible builder plus `skopeo` (build-time only — the
-runtime never touches them; making the build itself Apple-native is
-a tracked follow-up, CF-3b in the Forge slice):
+**The image bakes itself.** In this model *the image is the
+environment*: the backend runs your containerized env with the
+project live-mounted. Images are content-addressed to the lockfile
+(`<env>:<hash12>`, with a `latest` convenience alias): the first
+activation offers to bake, and after a `flox install` the hash
+moves, so the next activation detects the drift and offers a
+rebake. The whole build runs on Apple Container — no Docker, no
+Podman, no skopeo, at build time or run time:
 
 ```bash
-flox install -D skopeo                       # build-time only
-flox containerize -f img.tar                 # needs Docker/Podman to cross-build on macOS
-skopeo --insecure-policy copy \
-  docker-archive:img.tar oci-archive:oci.tar:sandbox-demo:latest
-container image load -i oci.tar
+flox activate --sandbox enforce --sandbox-backend oci -- true
 ```
 
-If the image is missing, the backend tells you exactly this — the
-error names the ref it derived, the override, and the pipeline
-above. Nothing falls back silently.
+```
+? OCI image 'sandbox-demo:a7f880489710' is stale (environment has
+  changed since last bake).
+  Existing image: sandbox-demo:latest
+  Bake now? (~2–5 min on first bake; later bakes reuse layers) (Y/n)
+```
+
+Non-interactive contexts (CI, agents) never stall on a prompt —
+they fail fast with guidance unless explicitly opted in:
+
+```bash
+FLOX_SANDBOX_OCI_AUTOBAKE=true \
+  flox activate --sandbox enforce --sandbox-backend oci -- uname -sm
+```
+
+```
+⚙️  Baking OCI image 'sandbox-demo:a7f880489710' …
+   First bake downloads the builder image and cross-compiles the
+   environment closure (~2–5 min).
+✅  Image 'sandbox-demo:a7f880489710' loaded into container store.
+Linux aarch64
+```
+
+Escape hatches, all loud: `FLOX_SANDBOX_OCI_ALLOW_STALE=1` runs the
+newest existing image with a warning naming the expected tag
+(offline / mid-iteration); `FLOX_SANDBOX_OCI_IMAGE=<ref>` pins an
+explicit image and bypasses staleness entirely; and the manual
+pipeline is now two commands
+(`flox containerize --runtime container -f img.tar` +
+`container image load --input img.tar`).
+
+> Until flox/flox#4464 merges, bake with
+> `_FLOX_CONTAINERIZE_FLAKE_REF_OR_REV=3b4774070ce0a804acf7da299940725454b19d64`
+> exported so the image entrypoint carries the argv exec-semantics
+> fix — images baked from the default builder pin re-introduce the
+> extra expansion pass. Drop this note once the fix is on `main`
+> and the pin advances.
 
 **Run it — same surface, micro-VM boundary:**
 
@@ -537,9 +567,12 @@ host-native.
 > (64 MB write+read in ~55 ms). Posture: live-mount project *source*,
 > keep dependency trees guest-local (volume or image layer). Numbers:
 > the Forge slice's `results/bindmount-io-macos-arm64-2026-07-07.md`.
-> Plus the smaller ones: the ~0.7–1.0 s per-run VM boot above, and
-> the image is a *snapshot* — `flox install` on the host does not
-> appear in the guest until you rebake (auto-bake is CF-3b).
+> Plus the smaller ones: the ~0.7–1.0 s per-run VM boot above
+> (measured 0.708 s wall on a cache-hit activation), and bakes run
+> against a cold Nix store every time (no cache volume yet — a
+> tracked follow-up on flox/flox#4466), so a rebake costs minutes,
+> not seconds. Drift itself is no longer a caveat: the lockfile
+> hash catches it and the backend offers the rebake.
 
 ### Selecting an unwired backend fails loudly, on purpose
 
