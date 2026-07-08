@@ -2757,14 +2757,14 @@ mod tests {
     #[test]
     fn resolve_sandbox_mode_cli_flag_wins_over_manifest() {
         let manifest = sandbox_opts_with_mode(SandboxMode::Enforce);
-        let mode = resolve_sandbox_mode(Some(SandboxMode::Warn), Some(&manifest), true, false)
-            .unwrap();
+        let mode =
+            resolve_sandbox_mode(Some(SandboxMode::Warn), Some(&manifest), true, false).unwrap();
         assert_eq!(mode, SandboxMode::Warn);
 
         // An explicit `--sandbox off` overrides a manifest-set mode.
         let manifest = sandbox_opts_with_mode(SandboxMode::Prompt);
-        let mode = resolve_sandbox_mode(Some(SandboxMode::Off), Some(&manifest), true, false)
-            .unwrap();
+        let mode =
+            resolve_sandbox_mode(Some(SandboxMode::Off), Some(&manifest), true, false).unwrap();
         assert_eq!(mode, SandboxMode::Off);
     }
 
@@ -3671,10 +3671,7 @@ mode = "warn"
                 .expect("fixture has manifest.options");
             // The sandbox value is now an object (the table) rather than two
             // flat keys.
-            options.insert(
-                "sandbox".into(),
-                serde_json::json!({"backend": "oci"}),
-            );
+            options.insert("sandbox".into(), serde_json::json!({"backend": "oci"}));
             serde_json::to_string_pretty(&value).unwrap()
         }
 
