@@ -319,7 +319,8 @@ impl CredentialStores {
             && let Err(e) = self.keyring.remove()
         {
             tracing::debug!(
-                "could not remove the keyring credential after storing plain text: {e}"
+                error = %e,
+                "could not remove the keyring credential after storing plain text"
             );
         }
         Ok(TokenStorage::Plaintext)
