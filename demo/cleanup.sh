@@ -8,8 +8,13 @@ FLOX_BIN="${FLOX_BIN:-$(command -v flox)}"
 # Removing the env dir also removes its grants and provenance journal —
 # they live at $DEMO_DIR/.flox/cache/sandbox/{grants.toml,journal.ndjson}.
 # The sandbox consent prompt has no persistent state of its own (it
-# is answered per-session via the hook; only the auto_activate_environments
-# config persists, which setup does not touch).
+# is answered per-session via the hook).
+
+# setup.sh pre-allowed auto-activation, which wrote an
+# auto_activate_environments entry to the GLOBAL flox config —
+# remove it before deleting the directory it points at.
+"$FLOX_BIN" activate deny --dir "$DEMO_DIR" 2>/dev/null || true
+
 rm -rf "$DEMO_DIR"
 rm -rf "$HOME/demo-secrets" "$HOME/demo-data"
 rm -f  "$HOME/sbx-pwned.txt"   # only exists if a warn-mode experiment wrote it
