@@ -39,4 +39,4 @@ jobs:
           plugin_marketplaces: https://github.com/anthropics/claude-plugins-official.git
           claude_args: '--dangerously-skip-permissions'
           plugins: 'code-review@claude-plugins-official'
-          prompt: '/code-review:code-review'
+          prompt: '/code-review:code-review PR #${{ github.event.pull_request.number }} in ${{ github.repository }}'
