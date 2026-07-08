@@ -132,38 +132,76 @@ impl ContainerizeProxy {
         )
     }
 
-    /// Add a cache volume mount to the container runtime command.
+    /// Add a named-volume mount to the container runtime command.
     ///
-    /// Docker and Podman support named volumes (`type=volume`), which persist
-    /// the Nix store across builds and speed up subsequent runs.
+    /// All three runtimes (Docker, Podman, Apple Container) support named
+    /// volumes, but with different syntax:
     ///
-    /// Not used for Apple Container: see the comment in `add_runtime_args` for
-    /// the reason it is skipped.
+    /// - Docker / Podman: `--mount type=volume,src=<name>,dst=<path>` — the
+    ///   `type=volume` selector distinguishes named volumes from bind mounts.
+    /// - Apple Container: `--volume <name>:<path>` — the CLI uses the same
+    ///   short `-v` flag family; the source is interpreted as a named volume
+    ///   when it does not begin with `/` or `.`.
     fn add_cache_mount(&self, command: &mut Command, path: &str) {
-        command.args([
-            "--mount",
-            &format!("type=volume,src={CONTAINER_NIX_CACHE_VOLUME},dst={path}"),
-        ]);
+        if self.container_runtime == Runtime::AppleContainer {
+            command.args(["--volume", &format!("{CONTAINER_NIX_CACHE_VOLUME}:{path}")]);
+        } else {
+            command.args([
+                "--mount",
+                &format!("type=volume,src={CONTAINER_NIX_CACHE_VOLUME},dst={path}"),
+            ]);
+        }
     }
 
-    /// Copy the Nix store from the container image to the cache volume.
+    /// Create the named cache volume for Apple Container if it does not exist.
     ///
-    /// Skipped for Apple Container because no cache volume is mounted there
-    /// (see `add_runtime_args`). As a result, Apple Container builds start
-    /// from a cold Nix store on every run — not just the first — and fetch
-    /// all dependencies from substituters each time.
+    /// Apple Container volumes are VM-attached disk images. `container volume
+    /// create` is idempotent — if the volume already exists the command exits
+    /// non-zero but that is expected and ignored here.
+    fn ensure_apple_container_cache_volume(&self) -> Result<(), ContainerizeProxyError> {
+        debug!(
+            volume = CONTAINER_NIX_CACHE_VOLUME,
+            "ensuring Apple Container cache volume exists"
+        );
+        let status = self
+            .container_runtime
+            .to_command()
+            .args(["volume", "create", CONTAINER_NIX_CACHE_VOLUME])
+            .status()
+            .map_err(ContainerizeProxyError::PopulateCacheVolume)?;
+        if !status.success() {
+            // A non-zero exit is expected when the volume already exists;
+            // treat it as success so repeated builds are idempotent.
+            debug!(
+                volume = CONTAINER_NIX_CACHE_VOLUME,
+                "volume create returned non-zero (likely already exists)"
+            );
+        }
+        Ok(())
+    }
+
+    /// Copy the Nix store from the container image into the named cache volume.
+    ///
+    /// The volume is mounted at `/cache/nix` alongside the image's own `/nix`
+    /// so that `nix copy --all` can treat it as a local store root:
+    /// https://nix.dev/manual/nix/2.24/command-ref/new-cli/nix3-help-stores#local-store
+    ///
+    /// This is idempotent: `nix copy` skips store paths that already exist in
+    /// the destination, so repeated runs are fast after the first cold fill.
+    ///
+    /// For Apple Container the named volume is created (if absent) before
+    /// mounting, because Apple Container does not auto-create volumes on first
+    /// use the way Docker does.
     #[instrument(skip_all, fields(progress = "Populating proxy container cache volume"))]
     fn populate_cache_volume(&self) -> Result<(), ContainerizeProxyError> {
         if self.container_runtime == Runtime::AppleContainer {
-            debug!("Skipping cache volume population for Apple Container runtime");
-            return Ok(());
+            self.ensure_apple_container_cache_volume()?;
         }
 
         let mut command = self.runtime_base_command();
 
-        // The cache volume has to be mounted in parallel to the container's own
-        // `/nix` and at a prefix where it can be treated as a new local root:
-        // https://nix.dev/manual/nix/2.24/command-ref/new-cli/nix3-help-stores#local-store
+        // Mount alongside /nix at a cache root so nix copy can treat it as a
+        // local store. The real /nix is not touched during populate.
         let cache_root = "/cache";
         self.add_cache_mount(&mut command, &format!("{cache_root}/nix"));
 
@@ -214,11 +252,12 @@ impl ContainerizeProxy {
     /// that launches the nixos/nix proxy container. Adapts CLI flags for each
     /// runtime:
     ///
-    /// - Docker / Podman: `--mount type=bind,...` for all mounts; Podman also
-    ///   needs `--userns ""` to map the host user to root inside the container.
-    /// - Apple Container: uses the same `--mount type=bind,...` syntax;
-    ///   no `--userns` flag needed (Apple Container runs as the host user by
-    ///   default in its VM).
+    /// - Docker / Podman: `--mount type=bind,...` for bind mounts, `--mount
+    ///   type=volume,...` for named volumes; Podman also needs `--userns ""`
+    ///   to map the host user to root inside the container.
+    /// - Apple Container: `--mount type=bind,...` for bind mounts, `--volume
+    ///   name:dst` for named volumes; no `--userns` flag (runs as the host
+    ///   user by default in its VM).
     fn add_runtime_args(&self, command: &mut Command, flox: &Flox) {
         // Podman needs --userns to map the current user to root inside the
         // container; otherwise multi-user Nix operations fail. Docker and Apple
@@ -235,19 +274,15 @@ impl ContainerizeProxy {
             ),
         ]);
 
-        // The Nix store cache volume is mounted over /nix so that store paths
-        // built in one run are reused in subsequent runs.
+        // Mount the populated cache volume over /nix so that store paths built
+        // in one run are reused in subsequent runs. The populate step runs
+        // before this and fills the volume from the image's own /nix; mounting
+        // the volume here then shadows that path, but by that point all
+        // required store content is already in the volume.
         //
-        // For Apple Container, mounting a volume over /nix shadows the nixos/nix
-        // image's own Nix store, removing bash and nix from PATH before the
-        // container starts. Skip the cache mount there: builds rely on the
-        // substituter cache configured via NIX_CONFIG and start from a cold
-        // Nix store on EVERY run (not just the first), which makes each build
-        // noticeably slower. Real cache population for Apple Container is a
-        // follow-up (see flox/flox#4466).
-        if self.container_runtime != Runtime::AppleContainer {
-            self.add_cache_mount(command, "/nix");
-        }
+        // For Apple Container the volume is mounted via --volume name:/nix
+        // (see add_cache_mount); for Docker and Podman via --mount type=volume.
+        self.add_cache_mount(command, "/nix");
 
         // Honour config from the user's flox.toml
         // This could include things like floxhub_token and floxhub_url.
@@ -534,6 +569,80 @@ mod tests {
         assert!(
             !args.iter().any(|a| a == "--userns"),
             "Apple Container should not have --userns"
+        );
+    }
+
+    #[test]
+    fn apple_container_uses_volume_flag_for_cache() {
+        let (flox, _tempdir) = flox_instance();
+        let proxy =
+            ContainerizeProxy::new("/some/env".into(), Runtime::AppleContainer, vec![], None);
+        let mut cmd = proxy.runtime_base_command();
+        proxy.add_runtime_args(&mut cmd, &flox);
+        let args = argv(&cmd);
+        // Apple Container uses --volume name:dst, not --mount type=volume,...
+        let vol_pos = args
+            .iter()
+            .position(|a| a == "--volume")
+            .expect("Apple Container should have --volume for the Nix store cache");
+        assert_eq!(
+            args[vol_pos + 1],
+            format!("{CONTAINER_NIX_CACHE_VOLUME}:/nix"),
+            "cache mount must be named-volume syntax for Apple Container"
+        );
+        // The --mount type=volume form must not appear on Apple Container.
+        assert!(
+            !args
+                .iter()
+                .any(|a| a.contains("type=volume") && a.contains("dst=/nix")),
+            "Apple Container must not use --mount type=volume for /nix"
+        );
+    }
+
+    #[test]
+    fn docker_uses_mount_flag_for_cache() {
+        let (flox, _tempdir) = flox_instance();
+        let proxy = ContainerizeProxy::new("/some/env".into(), Runtime::Docker, vec![], None);
+        let mut cmd = proxy.runtime_base_command();
+        proxy.add_runtime_args(&mut cmd, &flox);
+        let args = argv(&cmd);
+        // Docker uses --mount type=volume,...
+        let mount_pos = args
+            .iter()
+            .position(|a| a.contains("type=volume") && a.contains("dst=/nix"))
+            .expect("Docker should have --mount type=volume for the Nix store cache");
+        assert!(
+            args[mount_pos].contains(CONTAINER_NIX_CACHE_VOLUME),
+            "Docker cache mount must reference the named volume"
+        );
+        // --volume flag must not appear for the cache on Docker.
+        assert!(
+            !args.iter().any(|a| a == "--volume"),
+            "Docker must not use --volume for the cache mount"
+        );
+    }
+
+    #[test]
+    fn oci_conversion_command_includes_cache_volume_mount() {
+        let (flox, _tempdir) = flox_instance();
+        let proxy = ContainerizeProxy::new(
+            "/some/env/.flox/env".into(),
+            Runtime::AppleContainer,
+            vec![],
+            None,
+        );
+        let cmd = proxy.build_oci_conversion_command(&flox, "latest");
+        let args = argv(&cmd);
+        // The OCI conversion command also mounts the cache so the builder VM
+        // can reuse stored paths during the conversion phase.
+        let vol_pos = args
+            .iter()
+            .position(|a| a == "--volume")
+            .expect("OCI conversion command should include --volume for Apple Container cache");
+        assert_eq!(
+            args[vol_pos + 1],
+            format!("{CONTAINER_NIX_CACHE_VOLUME}:/nix"),
+            "OCI conversion cache mount must be named-volume syntax"
         );
     }
 
