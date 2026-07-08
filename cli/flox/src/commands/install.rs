@@ -277,9 +277,8 @@ impl Install {
         let partitioned = Self::partition_installed_packages(&installed, &installation);
 
         // Print status messages for the installation attempt
-        let successes_ref: Vec<&PackageToInstall> = partitioned.successes.iter().collect();
         message::packages_successfully_installed(&partitioned.successes, &description);
-        message::packages_with_additional_outputs(&successes_ref, &lockfile, &flox.system);
+        message::packages_with_additional_outputs(&partitioned.successes, &lockfile, &flox.system);
         message::packages_installed_with_system_subsets(&partitioned.system_subsets);
         message::packages_already_installed(&partitioned.already_installed, &description);
         message::packages_outputs_updated(&partitioned.outputs_updated, &description);
@@ -1056,10 +1055,9 @@ mod tests {
             systems: None,
             outputs: None,
         })];
-        let pkgs_ref: Vec<&PackageToInstall> = pkgs.iter().collect();
         let (subscriber, writer) = test_subscriber_message_only();
         async {
-            message::packages_with_additional_outputs(&pkgs_ref, &lockfile, &system);
+            message::packages_with_additional_outputs(&pkgs, &lockfile, &system);
         }
         .with_subscriber(subscriber)
         .await;
@@ -1087,10 +1085,9 @@ mod tests {
             systems: None,
             outputs: None,
         })];
-        let pkgs_ref: Vec<&PackageToInstall> = pkgs.iter().collect();
         let (subscriber, writer) = test_subscriber_message_only();
         async {
-            message::packages_with_additional_outputs(&pkgs_ref, &lockfile, &system);
+            message::packages_with_additional_outputs(&pkgs, &lockfile, &system);
         }
         .with_subscriber(subscriber)
         .await;
@@ -1126,10 +1123,9 @@ mod tests {
             systems: None,
             outputs: None,
         })];
-        let pkgs_ref: Vec<&PackageToInstall> = pkgs.iter().collect();
         let (subscriber, writer) = test_subscriber_message_only();
         async {
-            message::packages_with_additional_outputs(&pkgs_ref, &lockfile, &system);
+            message::packages_with_additional_outputs(&pkgs, &lockfile, &system);
         }
         .with_subscriber(subscriber)
         .await;
@@ -1160,10 +1156,9 @@ mod tests {
             systems: None,
             outputs: Some(RawSelectedOutputs::All),
         })];
-        let pkgs_ref: Vec<&PackageToInstall> = pkgs.iter().collect();
         let (subscriber, writer) = test_subscriber_message_only();
         async {
-            message::packages_with_additional_outputs(&pkgs_ref, &lockfile, &system);
+            message::packages_with_additional_outputs(&pkgs, &lockfile, &system);
         }
         .with_subscriber(subscriber)
         .await;

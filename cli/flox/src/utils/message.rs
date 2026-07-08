@@ -182,7 +182,7 @@ pub(crate) fn packages_already_installed(pkgs: &[PackageToInstall], environment_
 }
 
 pub(crate) fn packages_with_additional_outputs(
-    new_pkgs: &[&PackageToInstall],
+    new_pkgs: &[PackageToInstall],
     lockfile: &Lockfile,
     current_system: &System,
 ) {
