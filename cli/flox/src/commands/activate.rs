@@ -1890,6 +1890,144 @@ fn ensure_latest_alias(runtime: &str, env_name: &str, hash12: &str) {
     }
 }
 
+/// Prototype-only `[options]` manifest keys that mainline flox does not
+/// know about. They configure the host-side activation sandbox; the baked
+/// image is the *inside* of that boundary, so they must not propagate
+/// into the builder's view of the environment. Mainline flox parses
+/// manifest options with `deny_unknown_fields` and hard-fails on them --
+/// both the in-container builder and any mainline flox inside the guest.
+const PROTOTYPE_ONLY_OPTION_KEYS: [&str; 2] = ["sandbox", "sandbox-backend"];
+
+/// Strip prototype-only keys from `[options]` in manifest TOML text.
+///
+/// Returns `Some(sanitized)` when at least one key was removed, `None`
+/// when the manifest declares none of them (callers can skip building a
+/// temp view entirely). Formatting of untouched content is preserved via
+/// `toml_edit`, though only parsed values matter: the builder's
+/// freshness check is a typed equality between the parsed manifest and
+/// the lockfile's embedded manifest (see
+/// `flox-manifest/src/lockfile/mod.rs::is_up_to_date_with_serialized_manifest`).
+fn sanitize_manifest_toml(toml_text: &str) -> Result<Option<String>> {
+    let mut doc = toml_text
+        .parse::<toml_edit::DocumentMut>()
+        .context("failed to parse manifest for builder sanitization")?;
+    let mut changed = false;
+    if let Some(options) = doc.get_mut("options").and_then(|i| i.as_table_like_mut()) {
+        for key in PROTOTYPE_ONLY_OPTION_KEYS {
+            if options.remove(key).is_some() {
+                changed = true;
+            }
+        }
+    }
+    Ok(changed.then(|| doc.to_string()))
+}
+
+/// Strip prototype-only keys from the embedded manifest(s) in lockfile
+/// JSON text: `manifest.options` and, for composed environments,
+/// `compose.composer.options` (the freshness check compares against
+/// `compose.composer` when present). Everything else is preserved
+/// verbatim at the JSON value level.
+///
+/// Returns `Some(sanitized)` when at least one key was removed, `None`
+/// otherwise.
+fn sanitize_lockfile_json(json_text: &str) -> Result<Option<String>> {
+    let mut value: serde_json::Value = serde_json::from_str(json_text)
+        .context("failed to parse lockfile for builder sanitization")?;
+    let mut changed = false;
+    for pointer in ["/manifest/options", "/compose/composer/options"] {
+        if let Some(options) = value.pointer_mut(pointer).and_then(|v| v.as_object_mut()) {
+            for key in PROTOTYPE_ONLY_OPTION_KEYS {
+                if options.remove(key).is_some() {
+                    changed = true;
+                }
+            }
+        }
+    }
+    if changed {
+        let mut out = serde_json::to_string_pretty(&value)
+            .context("failed to serialize sanitized lockfile")?;
+        out.push('\n');
+        Ok(Some(out))
+    } else {
+        Ok(None)
+    }
+}
+
+/// Minimal recursive copy for the sanitized builder view (`.flox/env`:
+/// manifest, lockfile, hook scripts, include files). Follows symlinks.
+fn copy_dir_recursive(src: &Path, dst: &Path) -> std::io::Result<()> {
+    std::fs::create_dir_all(dst)?;
+    for entry in std::fs::read_dir(src)? {
+        let entry = entry?;
+        let to = dst.join(entry.file_name());
+        if entry.file_type()?.is_dir() {
+            copy_dir_recursive(&entry.path(), &to)?;
+        } else {
+            std::fs::copy(entry.path(), &to)?;
+        }
+    }
+    Ok(())
+}
+
+/// Build a sanitized temp view of the project for the in-container
+/// builder, with prototype-only `[options]` keys stripped from the
+/// manifest and from the lockfile's embedded manifest so the pair stays
+/// internally consistent for a mainline flox.
+///
+/// Returns `None` when the manifest declares none of the keys (mount the
+/// real project directory; zero behavior change). Otherwise returns the
+/// temp dir (keep it alive for the duration of the bake) and the path to
+/// mount: an inner directory named after the real project directory,
+/// because the proxy derives the OCI image ref from the mounted
+/// directory's file name.
+fn sanitized_project_view(
+    project_dir: &Path,
+) -> Result<Option<(tempfile::TempDir, std::path::PathBuf)>> {
+    let manifest_path = project_dir.join(".flox/env/manifest.toml");
+    let manifest_text = std::fs::read_to_string(&manifest_path)
+        .with_context(|| format!("failed to read {}", manifest_path.display()))?;
+    let Some(sanitized_manifest) = sanitize_manifest_toml(&manifest_text)? else {
+        return Ok(None);
+    };
+
+    let lockfile_path = project_dir.join(".flox/env/manifest.lock");
+    let lockfile_text = std::fs::read_to_string(&lockfile_path)
+        .with_context(|| format!("failed to read {}", lockfile_path.display()))?;
+    // The lockfile is freshly written by the host before a bake, so its
+    // embedded manifest carries the same keys; `unwrap_or` is
+    // belt-and-braces for an out-of-sync pair.
+    let sanitized_lockfile = sanitize_lockfile_json(&lockfile_text)?.unwrap_or(lockfile_text);
+
+    let project_name = project_dir
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "flox-env".to_string());
+
+    // /tmp rather than $TMPDIR: the container runtime bind-mounts the
+    // view, and /tmp is shared with the VM while /var/folders is not.
+    let view = tempfile::Builder::new()
+        .prefix("flox-bake-view-")
+        .tempdir_in("/tmp")
+        .context("failed to create sanitized builder view")?;
+    let mount_path = view.path().join(&project_name);
+    let dot_flox_dst = mount_path.join(".flox");
+    let env_dst = dot_flox_dst.join("env");
+
+    copy_dir_recursive(&project_dir.join(".flox/env"), &env_dst)
+        .context("failed to copy environment into sanitized builder view")?;
+    std::fs::copy(
+        project_dir.join(".flox/env.json"),
+        dot_flox_dst.join("env.json"),
+    )
+    .context("failed to copy env.json into sanitized builder view")?;
+    std::fs::write(env_dst.join("manifest.toml"), sanitized_manifest)
+        .context("failed to write sanitized manifest")?;
+    std::fs::write(env_dst.join("manifest.lock"), sanitized_lockfile)
+        .context("failed to write sanitized lockfile")?;
+
+    Ok(Some((view, mount_path)))
+}
+
 /// Bake an OCI image for the given environment and load it into the local
 /// container store, then tag it with the content-hash tag and `<env>:latest`,
 /// and prune superseded `<env>:*` tags.
@@ -1962,7 +2100,28 @@ fn bake_oci_image(
         }
     };
 
-    let proxy = ContainerizeProxy::new(env_path, container_runtime.clone(), vec![], None);
+    // Builder view: when the manifest declares prototype-only sandbox
+    // options, mount a sanitized temp copy instead of the real project --
+    // the mainline builder cannot parse those keys, and they must not be
+    // embedded in the image either (a mainline flox inside the guest
+    // would hit the same parse failure at activation time). The tag was
+    // derived above from the ORIGINAL lockfile: the image identity is
+    // the environment as declared, sanitization only shapes the
+    // builder's view. Hold the temp dir until the bake completes.
+    let sanitized_view =
+        sanitized_project_view(&env_path).context("failed to prepare sanitized builder view")?;
+    let builder_project = match &sanitized_view {
+        Some((_, mount_path)) => {
+            debug!(
+                view = %mount_path.display(),
+                "mounting sanitized builder view (prototype-only options stripped)"
+            );
+            mount_path.clone()
+        },
+        None => env_path,
+    };
+
+    let proxy = ContainerizeProxy::new(builder_project, container_runtime.clone(), vec![], None);
     // Tag used during bake: we use the hash tag directly so the image lands
     // under the right content-addressed name. The proxy uses this tag when
     // invoking `container image load`.
@@ -3343,6 +3502,163 @@ mod upgrade_notification_tests {
             let tags = vec!["latest".to_string()];
             let pruned = oci_prune_set("env", &tags, "a7f880489710");
             assert!(pruned.is_empty());
+        }
+    }
+
+    /// Builder-view sanitization: prototype-only `[options]` keys are
+    /// stripped from the manifest and the lockfile's embedded manifest;
+    /// everything else (and the image tag derivation) is untouched.
+    mod bake_sanitization {
+        use flox_test_utils::GENERATED_DATA;
+
+        use super::*;
+
+        const MANIFEST_WITH_SANDBOX: &str = r#"version = 1
+
+[install]
+hello.pkg-path = "hello"
+
+[options]
+systems = ["aarch64-darwin"]
+sandbox = "enforce"
+sandbox-backend = "oci"
+"#;
+
+        const MANIFEST_WITHOUT_SANDBOX: &str = r#"version = 1
+
+[install]
+hello.pkg-path = "hello"
+
+[options]
+systems = ["aarch64-darwin"]
+"#;
+
+        #[test]
+        fn toml_removes_exactly_the_prototype_keys() {
+            let sanitized = sanitize_manifest_toml(MANIFEST_WITH_SANDBOX)
+                .unwrap()
+                .expect("sandbox keys present; must sanitize");
+            assert!(
+                !sanitized.contains("sandbox"),
+                "no sandbox key may survive: {sanitized}"
+            );
+            assert!(sanitized.contains("systems"), "other options survive");
+            assert!(sanitized.contains("hello"), "install table survives");
+            // The sanitized text must itself be a no-op on re-sanitization.
+            assert!(sanitize_manifest_toml(&sanitized).unwrap().is_none());
+        }
+
+        #[test]
+        fn toml_noop_without_prototype_keys() {
+            assert!(
+                sanitize_manifest_toml(MANIFEST_WITHOUT_SANDBOX)
+                    .unwrap()
+                    .is_none()
+            );
+        }
+
+        #[test]
+        fn toml_removes_a_single_prototype_key() {
+            let manifest = r#"version = 1
+
+[options]
+sandbox = "warn"
+"#;
+            let sanitized = sanitize_manifest_toml(manifest).unwrap().unwrap();
+            assert!(!sanitized.contains("sandbox"));
+        }
+
+        fn lockfile_json_with_sandbox() -> String {
+            let fixture = GENERATED_DATA.join("envs/hello/manifest.lock");
+            let text = std::fs::read_to_string(&fixture).unwrap();
+            let mut value: serde_json::Value = serde_json::from_str(&text).unwrap();
+            // The prototype sandbox fields exist only in schema 1.13.0;
+            // bump the fixture's embedded manifest to match, as a real
+            // sandbox-declaring environment would be.
+            if let Some(v) = value.pointer_mut("/manifest/schema-version") {
+                *v = "1.13.0".into();
+            }
+            let options = value
+                .pointer_mut("/manifest/options")
+                .and_then(|v| v.as_object_mut())
+                .expect("fixture has manifest.options");
+            options.insert("sandbox".into(), "enforce".into());
+            options.insert("sandbox-backend".into(), "oci".into());
+            serde_json::to_string_pretty(&value).unwrap()
+        }
+
+        #[test]
+        fn lockfile_removes_exactly_the_prototype_keys() {
+            let with_sandbox = lockfile_json_with_sandbox();
+            let sanitized = sanitize_lockfile_json(&with_sandbox)
+                .unwrap()
+                .expect("sandbox keys present; must sanitize");
+            let value: serde_json::Value = serde_json::from_str(&sanitized).unwrap();
+            let options = value.pointer("/manifest/options").unwrap();
+            assert!(options.get("sandbox").is_none());
+            assert!(options.get("sandbox-backend").is_none());
+            // Untouched structure survives: compare against the original
+            // fixture value with only the two keys absent.
+            let original: serde_json::Value = serde_json::from_str(&with_sandbox).unwrap();
+            let mut expected = original.clone();
+            if let Some(o) = expected
+                .pointer_mut("/manifest/options")
+                .and_then(|v| v.as_object_mut())
+            {
+                o.remove("sandbox");
+                o.remove("sandbox-backend");
+            }
+            assert_eq!(value, expected);
+        }
+
+        #[test]
+        fn lockfile_noop_without_prototype_keys() {
+            let fixture = GENERATED_DATA.join("envs/hello/manifest.lock");
+            let text = std::fs::read_to_string(&fixture).unwrap();
+            assert!(sanitize_lockfile_json(&text).unwrap().is_none());
+        }
+
+        #[test]
+        fn lockfile_strips_composer_options_when_composed() {
+            let json = r#"{
+                "lockfile-version": 1,
+                "manifest": {"version": 1, "options": {"sandbox": "enforce"}},
+                "packages": [],
+                "compose": {"composer": {"version": 1, "options": {"sandbox": "enforce", "sandbox-backend": "oci"}}}
+            }"#;
+            let sanitized = sanitize_lockfile_json(json).unwrap().unwrap();
+            let value: serde_json::Value = serde_json::from_str(&sanitized).unwrap();
+            assert!(value.pointer("/compose/composer/options/sandbox").is_none());
+            assert!(
+                value
+                    .pointer("/compose/composer/options/sandbox-backend")
+                    .is_none()
+            );
+            assert!(value.pointer("/manifest/options/sandbox").is_none());
+        }
+
+        #[test]
+        fn tag_derivation_is_unchanged_by_sanitization() {
+            // The image tag is derived from the ORIGINAL lockfile before
+            // any sanitization: the identity is the env as declared. A
+            // sanitized lockfile hashes differently precisely because the
+            // declaration is part of the identity -- which is why the
+            // bake computes hash12 first and the sanitizers take &str
+            // (they cannot mutate the Lockfile the tag came from).
+            let with_sandbox = lockfile_json_with_sandbox();
+            let original: flox_manifest::lockfile::Lockfile = with_sandbox.parse().unwrap();
+            let hash_before = lockfile_hash12(&original);
+
+            let sanitized_text = sanitize_lockfile_json(&with_sandbox).unwrap().unwrap();
+            let sanitized: flox_manifest::lockfile::Lockfile = sanitized_text.parse().unwrap();
+
+            // Original lockfile still hashes identically after the
+            // sanitizer ran on its serialized text.
+            assert_eq!(lockfile_hash12(&original), hash_before);
+            // The sanitized view has a different identity; if the tag
+            // were derived from it, declaring sandbox options would
+            // silently change which cache entry an env maps to.
+            assert_ne!(lockfile_hash12(&sanitized), hash_before);
         }
     }
 }
