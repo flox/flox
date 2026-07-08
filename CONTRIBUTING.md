@@ -489,8 +489,14 @@ You can also generate subsets of mocks.
 See the `Justfile` for the list of commands, in particular `gen-unit-data-for-publish`.
 
 Publish tests interact with the local services in ways that are stateful, so it's very important that the mocks are generated from a clean database.
-The database is clean after starting up, which means you can clear it by simply restarting it.
-A Justfile command is provided to make this convenient: `just catalog-server::restart-and-watch` (run from within the `floxhub` repo environment).
+Two recipes in the `floxhub` repo perform a destructive reset of the catalog DB — they drop and restore it from the full test dump while postgres and other services stay up:
+
+- `just catalog-server::serve-for-mocks` — starts all services and resets the catalog DB, then follows logs to hold the activation open.
+  Run this once at the start of a mock-gen session.
+- `just catalog-updater::db-reset` — resets the catalog DB without restarting services.
+  Run this between mock-gen runs to clear accumulated state.
+
+Both recipes print progress and abort loudly on failure. Anyone wanting a non-destructive start should use `just serve-all` instead.
 
 If this process of keeping services from one repo running and clean while generating mocks in another looks brittle and manual, that's because it is.
 
