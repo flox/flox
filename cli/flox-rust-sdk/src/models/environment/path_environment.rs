@@ -761,6 +761,7 @@ pub mod tests {
     use crate::models::env_registry::{env_registry_path, read_environment_registry};
     use crate::models::environment::path_environment::test_helpers::{
         new_path_environment,
+        new_path_environment_from_env_files,
         new_path_environment_in,
     };
     use crate::providers::lock_manifest::RecoverableMergeError;
@@ -1037,7 +1038,7 @@ pub mod tests {
     // -------------------------------------------------------------------------
     // Regression tests: PathEnvironment::build must not rewrite a current lock
     //
-    // Before AI-159, `build` called `lock()` unconditionally.  Even when the
+    // Previously, `build` called `lock()` unconditionally.  Even when the
     // lockfile was already up-to-date, `lock()` could rewrite it (e.g. due to
     // formatting normalisation), updating the mtime and triggering a spurious
     // needs_rebuild() on the next activate.
@@ -1141,5 +1142,54 @@ pub mod tests {
 
         assert_eq!(bytes_before, bytes_after, "lockfile bytes changed");
         assert_eq!(mtime_before, mtime_after, "lockfile mtime changed");
+    }
+
+    // -------------------------------------------------------------------------
+    // Cross-release coverage: a current-release activate must accept the build
+    // stamp left by an earlier release without triggering a needless rebuild.
+    //
+    // Fixtures live in test_data/manually_generated/prior_release_baselines/
+    // and are captured by the `regen-prior-release-fixtures` Justfile recipe.
+    // -------------------------------------------------------------------------
+
+    /// Building a prior-release manifest + lockfile with the current release
+    /// and then checking `needs_rebuild()` must return false: the current
+    /// release accepts the prior-release build state without rebuilding.
+    #[test]
+    fn needs_rebuild_accepts_prior_release_stamp_plain() {
+        use flox_test_utils::MANUALLY_GENERATED;
+
+        let (flox, _temp_dir) = flox_instance();
+
+        let base = MANUALLY_GENERATED
+            .join("prior_release_baselines")
+            .join("plain");
+
+        // new_path_environment_from_env_files reads manifest.toml and
+        // manifest.lock from the given directory and writes them into a
+        // fresh .flox/env/ directory, giving us a PathEnvironment with the
+        // prior-release lockfile already in place.
+        let mut env = new_path_environment_from_env_files(&flox, &base);
+
+        // Before the first build, the rendered-env link does not exist, so
+        // needs_rebuild() returns true — the env needs to be built once.
+        assert!(
+            env.needs_rebuild().unwrap(),
+            "needs_rebuild() should return true before first build"
+        );
+
+        // Lock (no-op if the prior-release lockfile is up-to-date) and
+        // build, creating the rendered-env stamp.
+        env.build(&flox)
+            .expect("build should succeed with the prior-release lockfile");
+
+        // After the build, needs_rebuild() must return false: the
+        // rendered-env stamp's lockfile matches the env's lockfile.
+        assert!(
+            !env.needs_rebuild().unwrap(),
+            "needs_rebuild() returned true after building from a prior-release \
+             lockfile: the rendered-env stamp's lockfile diverged from the \
+             env's lockfile across releases",
+        );
     }
 }
