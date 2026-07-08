@@ -4,8 +4,7 @@
 //! `subcommand_metric!` pipeline (`cli/flox/src/utils/metrics.rs`) and the
 //! v2-events pipeline (this module + the [`flox_events`] crate). The two
 //! stacks share no code and write separate on-disk buffers.
-//! `config.flox.disable_metrics` silences both; [`FLOX_DISABLE_V2_METRICS_VAR`]
-//! silences only the v2 stream.
+//! `config.flox.disable_metrics` silences both.
 
 use std::env;
 use std::str::FromStr;
@@ -33,22 +32,10 @@ static RESOLVED_INVOCATION_ID: OnceLock<Uuid> = OnceLock::new();
 /// detached subprocess boundary.
 pub const FLOX_INVOCATION_ID_VAR: &str = "FLOX_INVOCATION_ID";
 
-/// Kill-switch for the v2-events stream: when set to `true`, the v2
-/// [`EventsClient`] is not installed and only the legacy stream emits.
-/// `config.flox.disable_metrics` remains the opt-out for both streams.
-pub(crate) const FLOX_DISABLE_V2_METRICS_VAR: &str = "FLOX_DISABLE_V2_METRICS";
-
 static METRICS_EVENTS_URL_V2: LazyLock<String> = LazyLock::new(|| {
     std::env::var("_FLOX_METRICS_URL_OVERRIDE").unwrap_or(env!("METRICS_EVENTS_URL_V2").to_string())
 });
 const METRICS_EVENTS_API_KEY_V2: &str = env!("METRICS_EVENTS_API_KEY_V2");
-
-/// Whether [`FLOX_DISABLE_V2_METRICS_VAR`] disables the v2-events stream for
-/// this process. Only a literal `true` disables; anything else keeps v2
-/// enabled.
-fn v2_metrics_disabled() -> bool {
-    env::var(FLOX_DISABLE_V2_METRICS_VAR).is_ok_and(|value| value.parse().unwrap_or(false))
-}
 
 /// Resolve the invocation id for the current process.
 ///
@@ -107,16 +94,11 @@ fn shared_metadata_template() -> SharedMetadataTemplate {
 /// [`read_metrics_uuid`].
 ///
 /// Returns `None` if
-/// a) metrics are disabled by config or [`FLOX_DISABLE_V2_METRICS_VAR`], or
+/// a) metrics are disabled by config, or
 /// b) reading the metrics uuid fails.
 pub fn build_events_client(config: &Config, invocation_id: Uuid) -> Option<EventsClient> {
     if config.flox.disable_metrics {
         debug!("v2 events: disable_metrics is true; not installing client");
-        return None;
-    }
-
-    if v2_metrics_disabled() {
-        debug!("v2 events: {FLOX_DISABLE_V2_METRICS_VAR} is set; not installing client");
         return None;
     }
 
@@ -198,12 +180,6 @@ mod tests {
         }
     }
 
-    /// Pin `FLOX_DISABLE_V2_METRICS` to unset so a runner that pre-set the
-    /// kill-switch can't invert the assertions.
-    fn with_v2_enabled<F: FnOnce() -> R, R>(f: F) -> R {
-        with_var(FLOX_DISABLE_V2_METRICS_VAR, None::<&str>, f)
-    }
-
     #[test]
     #[serial(v2_events_wrapper_env)]
     fn resolve_invocation_id_returns_parent_id_when_env_set() {
@@ -243,10 +219,8 @@ mod tests {
             /* disable_metrics */ true,
         );
 
-        with_v2_enabled(|| {
-            let client = build_events_client(&config, Uuid::new_v4());
-            assert!(client.is_none(), "disable_metrics must take priority");
-        });
+        let client = build_events_client(&config, Uuid::new_v4());
+        assert!(client.is_none(), "disable_metrics must take priority");
     }
 
     #[test]
@@ -258,10 +232,8 @@ mod tests {
         // No metrics-uuid file written: read_metrics_uuid errors.
         let config = test_config(&tempdir, data_dir, /* disable_metrics */ false);
 
-        with_v2_enabled(|| {
-            let client = build_events_client(&config, Uuid::new_v4());
-            assert!(client.is_none(), "missing uuid must short-circuit");
-        });
+        let client = build_events_client(&config, Uuid::new_v4());
+        assert!(client.is_none(), "missing uuid must short-circuit");
     }
 
     #[test]
@@ -271,27 +243,9 @@ mod tests {
         let uuid = Uuid::new_v4();
         let config = test_config_with_uuid(&tempdir, uuid);
 
-        with_v2_enabled(|| {
-            let client = build_events_client(&config, Uuid::new_v4());
-            assert!(client.is_some(), "v2 is enabled by default");
-            assert_eq!(client.unwrap().device_id, uuid);
-        });
-    }
-
-    #[test]
-    #[serial(v2_events_wrapper_env)]
-    fn build_events_client_returns_none_when_v2_disabled() {
-        let tempdir = tempfile::tempdir().expect("tempdir");
-        let uuid = Uuid::new_v4();
-        let config = test_config_with_uuid(&tempdir, uuid);
-
-        with_var(FLOX_DISABLE_V2_METRICS_VAR, Some("true"), || {
-            let client = build_events_client(&config, Uuid::new_v4());
-            assert!(
-                client.is_none(),
-                "FLOX_DISABLE_V2_METRICS must leave the v2 client uninstalled"
-            );
-        });
+        let client = build_events_client(&config, Uuid::new_v4());
+        assert!(client.is_some(), "v2 is enabled by default");
+        assert_eq!(client.unwrap().device_id, uuid);
     }
 
     /// End-to-end: install a hub-owned client backed by a
