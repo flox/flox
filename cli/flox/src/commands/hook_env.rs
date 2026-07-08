@@ -195,25 +195,24 @@ impl HookEnv {
         };
 
         // For each environment declaring a wrapping sandbox backend, prompt
-        // for session-replacement consent individually. The exec path replaces
-        // the interactive shell, so each entry needs its own answer; unlike
+        // for session-entry consent individually. Accepting starts a blocking
+        // foreground session, so each entry needs its own answer; unlike
         // plain auto-activation, multiple pending sessions cannot share a
-        // single prompt because accepting one would immediately exec into it
-        // and the remaining entries would never be reached.
+        // single prompt, and at most one session is entered per hook run.
         let mut sandbox_entries_entered: Vec<PathBuf> = Vec::new();
         for (path, backend) in &plan.prompt_sandbox {
-            // Emit libsandbox notice for in-place envs while we have tty.
-            // (These are emitted again below for clarity — see the dedicated
-            // notice loop.)
-            _ = backend; // used below in prompt
             match prompt_for_sandbox_activation(path, *backend, self.shell)? {
                 SandboxConsent::Accept => {
                     sandbox_entries_entered.push(path.clone());
-                    // exec replaces the shell; no subsequent code runs.
-                    write_exec_activate_command(self.shell, path, &mut writer)?;
-                    writer.flush()?;
-                    // Only one exec can ever run; stop processing further
-                    // sandbox entries.
+                    // The session runs as a foreground child of the shell.
+                    // The state exports emitted further below are evaluated
+                    // only after the session ends, so the suppression
+                    // recorded for this path lands once the user is back in
+                    // their original shell.
+                    write_sandbox_session_command(self.shell, path, &mut writer)?;
+                    // Enter at most one sandboxed session per hook run.
+                    // Remaining entries are suppressed below and re-prompt
+                    // after the directory is left and re-entered.
                     break;
                 },
                 SandboxConsent::Decline => {
@@ -225,9 +224,9 @@ impl HookEnv {
                     }
                 },
                 SandboxConsent::NoTerminal | SandboxConsent::UnsupportedShell => {
-                    // Cannot exec into a sandboxed session without an
-                    // interactive tty, or the shell cannot exec. Emit a
-                    // notice pointing at `flox activate`.
+                    // Cannot start a sandboxed session without an interactive
+                    // tty, or from this shell's prompt hook. Emit a notice
+                    // pointing at `flox activate`.
                     message::info(formatdoc! {"
                         ℹ️  Run 'flox activate --dir {dir}' to enter this environment sandboxed via {backend}.",
                         dir = path.display(),
@@ -277,13 +276,13 @@ impl HookEnv {
         let mut auto_activated = plan.auto_activated.clone();
         let mut suppressed = plan.suppressed.clone();
 
-        // Record declined sandbox environments as suppressed so the hook
-        // stops asking while the shell stays inside the directory.
-        for (path, _backend) in &plan.prompt_sandbox {
-            if !sandbox_entries_entered.contains(path) && !suppressed.contains(path) {
-                suppressed.push(path.clone());
-            }
-        }
+        // Record every sandbox-consent candidate as suppressed so the hook
+        // stops asking while the shell stays inside the directory. Entered
+        // paths are suppressed too: the sandboxed session runs as a
+        // foreground child, so the shell survives the session and would
+        // otherwise re-prompt at the very next prompt draw. Leaving the
+        // directory clears the suppression, so re-entering asks again.
+        suppress_sandbox_candidates(&plan.prompt_sandbox, &mut suppressed);
 
         for path in &ctx.discovered {
             if plan.activate.contains(path) {
@@ -410,7 +409,7 @@ enum SandboxClass {
     Libsandbox,
     /// A wrapping backend (host-native, srt, oci, libkrun, nix). In-place
     /// activation is never permitted; the hook must obtain explicit consent
-    /// before exec-ing into the sandboxed session.
+    /// before starting the sandboxed session.
     Wrapping(SandboxBackend),
 }
 
@@ -466,7 +465,7 @@ struct AutoActivatePlan {
     /// activating, outermost-first. Empty unless `auto_activate = "prompt"`.
     prompt: Vec<PathBuf>,
     /// Project directories with a wrapping sandbox backend that require
-    /// explicit session-replacement consent before entering. Each entry pairs
+    /// explicit session-entry consent before entering. Each entry pairs
     /// the project directory with the backend that would enforce it, so the
     /// consent prompt can name the backend. These are never in-place activated.
     prompt_sandbox: Vec<(PathBuf, SandboxBackend)>,
@@ -770,11 +769,11 @@ fn plan_auto_activation(ctx: &AutoActivateContext) -> AutoActivatePlan {
             };
 
             match sandbox {
-                // Wrapping backends require an explicit session-replacement
+                // Wrapping backends require an explicit session-entry
                 // consent prompt, even when the directory is on the allow
                 // list. A previous allow may predate the sandbox declaration,
-                // and replacing the shell session is a bigger step than
-                // in-place env mutation.
+                // and handing the terminal to a sandboxed session is a bigger
+                // step than in-place env mutation.
                 SandboxClass::Wrapping(backend) => {
                     prompt_sandbox.push((path.clone(), *backend));
                 },
@@ -1109,36 +1108,39 @@ fn write_activate_command(shell: Shell, project_dir: &Path, writer: &mut impl Wr
 /// The user's answer to the sandbox session-entry consent prompt.
 #[derive(Clone, Copy)]
 enum SandboxConsent {
-    /// Enter the sandboxed session (exec into it).
+    /// Enter the sandboxed session (run it as a foreground child).
     Accept,
     /// Decline; suppress re-prompting for this shell session.
     Decline,
     /// No controlling terminal to prompt on.
     NoTerminal,
-    /// Shell does not support exec from the prompt hook (fish, tcsh).
+    /// Shell does not support starting the session from the prompt hook
+    /// (fish, tcsh).
     UnsupportedShell,
 }
 
 /// Ask the user, on the controlling terminal, whether to enter an environment
-/// as a sandboxed session (exec-replacing the current shell).
+/// as a sandboxed session run as a foreground child of the current shell.
 ///
-/// This is a stronger action than plain auto-activation because it replaces the
-/// interactive shell with a new process tree confined by the sandbox backend.
-/// The consent prompt is therefore shown even when the directory is already on
-/// the auto-activate allow list: a prior allow may predate the sandbox
-/// declaration, and session replacement needs explicit intent on every entry.
+/// This is a stronger action than plain auto-activation because it hands the
+/// terminal to a new process tree confined by the sandbox backend for the
+/// duration of the session. The consent prompt is therefore shown even when
+/// the directory is already on the auto-activate allow list: a prior allow may
+/// predate the sandbox declaration, and entering a session needs explicit
+/// intent on every entry.
 ///
 /// Returns [`SandboxConsent::NoTerminal`] when `/dev/tty` is unavailable
 /// (non-interactive shell) and [`SandboxConsent::UnsupportedShell`] for fish
-/// and tcsh, where exec from the eval context is not portable.
+/// and tcsh, where starting an interactive session from the prompt-hook eval
+/// context is not supported.
 fn prompt_for_sandbox_activation(
     project_dir: &Path,
     backend: SandboxBackend,
     shell: Shell,
 ) -> Result<SandboxConsent> {
-    // Fish and tcsh cannot cleanly exec from inside an eval context in a way
-    // that is guaranteed to replace the shell. Report the gap and fall back to
-    // the non-tty notice path.
+    // Starting an interactive sandboxed session from the fish and tcsh
+    // prompt-hook eval contexts is not supported. Report the gap and fall
+    // back to the non-tty notice path.
     if matches!(shell, Shell::Fish | Shell::Tcsh) {
         return Ok(SandboxConsent::UnsupportedShell);
     }
@@ -1178,18 +1180,22 @@ fn prompt_for_sandbox_activation(
     }
 }
 
-/// Emit a command that exec-replaces the current shell with a sandboxed
-/// activation of the environment in `project_dir`.
+/// Emit a command that runs a sandboxed activation of the environment in
+/// `project_dir` as a foreground child of the current shell.
 ///
 /// Unlike [`write_activate_command`] (which emits `eval "$(flox activate)"`
-/// for in-place activation), this emits `exec flox activate --dir <path>` so
-/// the sandboxed session entirely replaces the interactive shell process. The
-/// manifest supplies the sandbox mode and backend through normal resolution.
+/// for in-place activation), this emits a plain `flox activate --dir <path>`
+/// invocation: the sandboxed session takes over the terminal for its
+/// duration, and when it exits the user returns to their original shell. The
+/// environment is never activated unsandboxed in the host shell — once the
+/// session ends the host shell has nothing activated, the same posture as
+/// declining. The manifest supplies the sandbox mode and backend through
+/// normal resolution.
 ///
 /// Only bash and zsh are supported. Fish and tcsh callers should check
 /// [`prompt_for_sandbox_activation`]'s `UnsupportedShell` result and emit a
 /// notice instead.
-fn write_exec_activate_command(
+fn write_sandbox_session_command(
     shell: Shell,
     project_dir: &Path,
     writer: &mut impl Write,
@@ -1201,7 +1207,7 @@ fn write_exec_activate_command(
     let escaped_dir = shell_escape::escape(Cow::Borrowed(&*dir));
     match shell {
         Shell::Bash | Shell::Zsh => {
-            writeln!(writer, "exec {escaped_bin} activate --dir {escaped_dir};")?;
+            writeln!(writer, "{escaped_bin} activate --dir {escaped_dir};")?;
         },
         // Fish and tcsh: callers should not reach this path; if they do,
         // fall back to the regular in-place command rather than silently
@@ -1211,6 +1217,25 @@ fn write_exec_activate_command(
         },
     }
     Ok(())
+}
+
+/// Mark every sandbox-consent candidate as suppressed for this shell session.
+///
+/// Applies to entered paths as well as declined ones: the sandboxed session
+/// runs as a foreground child of the interactive shell, so the shell survives
+/// the session and its prompt hook would immediately re-prompt for the same
+/// directory without the suppression. The suppression is per-shell state;
+/// leaving the directory clears it (see [`plan_auto_activation`]), so
+/// re-entering the directory prompts again.
+fn suppress_sandbox_candidates(
+    candidates: &[(PathBuf, SandboxBackend)],
+    suppressed: &mut Vec<PathBuf>,
+) {
+    for (path, _backend) in candidates {
+        if !suppressed.contains(path) {
+            suppressed.push(path.clone());
+        }
+    }
 }
 
 /// Emit a state-variable update when `new` differs from `old`: an export of
@@ -2018,7 +2043,7 @@ mod tests {
     #[test]
     fn wrapping_backend_allowed_env_goes_to_prompt_sandbox() {
         // An allowed environment with a wrapping backend is never in-place
-        // activated; it is queued in `prompt_sandbox` for session-replacement
+        // activated; it is queued in `prompt_sandbox` for session-entry
         // consent even though the directory is already on the allow list.
         let ctx = AutoActivateContext {
             allowed: paths(&["/tmp/proj"]),
@@ -2148,25 +2173,39 @@ mod tests {
     }
 
     #[test]
-    fn exec_activate_bash_emits_exec_form() {
+    fn sandbox_session_bash_runs_foreground_child() {
         let mut buf = Vec::new();
-        write_exec_activate_command(Shell::Bash, Path::new("/tmp/proj"), &mut buf).unwrap();
+        write_sandbox_session_command(Shell::Bash, Path::new("/tmp/proj"), &mut buf).unwrap();
         let script = String::from_utf8(buf).unwrap();
         assert!(
-            script.starts_with("exec ") && script.contains("activate --dir /tmp/proj"),
-            "expected exec form, got: {script}"
+            !script.contains("exec ") && script.contains("activate --dir /tmp/proj;"),
+            "expected foreground child form, got: {script}"
         );
     }
 
     #[test]
-    fn exec_activate_zsh_emits_exec_form() {
+    fn sandbox_session_zsh_runs_foreground_child() {
         let mut buf = Vec::new();
-        write_exec_activate_command(Shell::Zsh, Path::new("/tmp/proj"), &mut buf).unwrap();
+        write_sandbox_session_command(Shell::Zsh, Path::new("/tmp/proj"), &mut buf).unwrap();
         let script = String::from_utf8(buf).unwrap();
         assert!(
-            script.starts_with("exec ") && script.contains("activate --dir /tmp/proj"),
-            "expected exec form, got: {script}"
+            !script.contains("exec ") && script.contains("activate --dir /tmp/proj;"),
+            "expected foreground child form, got: {script}"
         );
+    }
+
+    #[test]
+    fn sandbox_candidates_are_suppressed_including_entered() {
+        // The sandboxed session runs as a foreground child, so the entered
+        // path must land in the suppressed list alongside declined ones —
+        // otherwise the surviving shell re-prompts at the next prompt draw.
+        let candidates = vec![
+            (PathBuf::from("/tmp/entered"), SandboxBackend::Oci),
+            (PathBuf::from("/tmp/declined"), SandboxBackend::Oci),
+        ];
+        let mut suppressed = paths(&["/tmp/declined"]);
+        suppress_sandbox_candidates(&candidates, &mut suppressed);
+        assert_eq!(suppressed, paths(&["/tmp/declined", "/tmp/entered"]));
     }
 
     #[test]
