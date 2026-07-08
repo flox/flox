@@ -222,7 +222,7 @@ pub struct ProfileDeactivate {
 /// Options for V1_13_0.
 ///
 /// This is a version-specific copy of `common::Options` because V1_13_0 adds
-/// the `sandbox` field; the other fields (and their leaf types) are identical
+/// the `sandbox` table; the other fields (and their leaf types) are identical
 /// and continue to live in `parsed::common`.
 #[skip_serializing_none]
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash, JsonSchema)]
@@ -247,25 +247,54 @@ pub struct Options {
     /// Whether to detect CUDA devices and libs during activation.
     // TODO: Migrate to `ActivateOptions`.
     pub cuda_detection: Option<bool>,
-    /// The sandbox mode applied when the environment is activated
-    /// (`off`, `warn`, `enforce`, or `prompt`). An explicit `--sandbox` flag
-    /// on `flox activate` takes precedence over this setting.
-    pub sandbox: Option<SandboxMode>,
-    /// The sandbox enforcement backend used when the environment is activated
-    /// (`libsandbox`, `nix`, `host-native`, `srt`, `oci`, or `libkrun`). The
-    /// `--sandbox-backend` flag on `flox activate` and the
-    /// `FLOX_SANDBOX_BACKEND` environment variable take precedence over this
-    /// setting.
-    pub sandbox_backend: Option<SandboxBackend>,
+    /// The sandbox table. When present, selects the sandbox backend and/or
+    /// mode for activations. An explicit `--sandbox` flag on `flox activate`
+    /// takes precedence over the table's `mode` field; `--sandbox-backend`,
+    /// `FLOX_SANDBOX_BACKEND`, and the table's `backend` field follow the
+    /// same flag > env > manifest precedence.
+    ///
+    /// ```toml
+    /// [options.sandbox]
+    /// backend = "oci"          # enforce-only backend; mode defaults to enforce
+    ///
+    /// [options.sandbox]
+    /// mode = "off"             # master switch: disables sandbox regardless
+    ///
+    /// [options.sandbox]
+    /// backend = "libsandbox"
+    /// mode    = "warn"
+    /// ```
+    pub sandbox: Option<SandboxOptions>,
     /// Options that control the behavior of activations.
     #[serde(default)]
     #[serde(skip_serializing_if = "ActivateOptions::skip_serializing")]
     pub activate: ActivateOptions,
 }
 
+/// The `[options.sandbox]` table.
+///
+/// Both fields are optional: an empty table (or a table with just `backend`)
+/// enables the sandbox with backend-appropriate defaults. `mode = "off"` is
+/// the master switch and disables the sandbox regardless of `backend`.
+#[skip_serializing_none]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash, JsonSchema)]
+#[cfg_attr(any(test, feature = "tests"), derive(proptest_derive::Arbitrary))]
+#[serde(rename_all = "kebab-case")]
+#[serde(deny_unknown_fields)]
+pub struct SandboxOptions {
+    /// The enforcement backend. Defaults per backend when omitted: `enforce`
+    /// for enforcing backends (`capabilities().enforces == true`), `prompt`
+    /// for `libsandbox` (matching the bare `--sandbox` flag default).
+    pub backend: Option<SandboxBackend>,
+    /// The sandbox mode. When omitted the default is derived from the
+    /// backend's capabilities (see above). `mode = "off"` is the master
+    /// switch: it disables the sandbox regardless of `backend`.
+    pub mode: Option<SandboxMode>,
+}
+
 // Conversion from the common Options, used by the V1_12_0 -> V1_13_0
-// migration. The new `sandbox` field defaults to None, which is what makes
-// the migration lossless.
+// migration. The new `sandbox` table defaults to None, preserving
+// all pre-V1_13_0 manifests as-is.
 impl From<crate::parsed::common::Options> for Options {
     fn from(options: crate::parsed::common::Options) -> Self {
         let crate::parsed::common::Options {
@@ -281,7 +310,6 @@ impl From<crate::parsed::common::Options> for Options {
             semver,
             cuda_detection,
             sandbox: None,
-            sandbox_backend: None,
             activate,
         }
     }

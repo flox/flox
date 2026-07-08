@@ -43,19 +43,18 @@ eval "$(flox hook-env --shell bash --shell-pid $$)"
 > requiring PATH manipulation.
 
 **Pre-bake off-camera.** The first bake takes ~2–5 min. Do it before
-the demo: add the two `[options]` lines from §0 to the manifest,
+the demo: add the `[options.sandbox]` table from §0 to the manifest,
 then:
 
 ```bash
 FLOX_SANDBOX_OCI_AUTOBAKE=true flox activate -- true
 ```
 
-Then remove the two lines again (`flox edit`) so §0 can add them
-live — the re-add produces the identical lockfile, so the cached
-image stays fresh and §0's `cd` drops into the sandbox in about a
-second. Also complete §2's one-time agent login off-camera unless
-you want to show it (it is a good beat, but it costs ~40s of
-URL-and-paste).
+Then remove the table again (`flox edit`) so §0 can add it live —
+the re-add produces the identical lockfile, so the cached image stays
+fresh and §0's `cd` drops into the sandbox in about a second. Also
+complete §2's one-time agent login off-camera unless you want to show
+it (it is a good beat, but it costs ~40s of URL-and-paste).
 
 ---
 
@@ -83,13 +82,11 @@ cd ~/sandbox-demo
 flox edit
 ```
 
-In the editor, add these two lines to the `[options]` section and
-save:
+In the editor, add the `[options.sandbox]` table and save:
 
 ```toml
-[options]
-sandbox = "enforce"
-sandbox-backend = "oci"
+[options.sandbox]
+backend = "oci"
 ```
 
 **"Now, just `cd` away and back."**

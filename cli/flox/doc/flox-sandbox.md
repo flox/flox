@@ -50,9 +50,9 @@ Sandboxing is requested per environment in the manifest, or per
 invocation on the command line:
 
 ```toml
-[options]
-sandbox = "enforce"
-sandbox-backend = "oci"
+[options.sandbox]
+backend = "oci"
+# mode defaults to "enforce" for enforcing backends
 ```
 
 ```console
@@ -61,8 +61,9 @@ $ flox activate --sandbox enforce --sandbox-backend oci -- <command>
 
 The command-line flags take precedence over the manifest; the
 `FLOX_SANDBOX_BACKEND` environment variable sits between them (flag,
-then environment variable, then manifest, then the default
-`libsandbox`).
+then environment variable, then manifest `backend`, then the default
+`libsandbox`). The manifest's `mode` field follows the same
+precedence relative to the `--sandbox` flag.
 
 When a manifest declares a sandbox, interactive auto-activation shows
 a consent prompt before entering a sandboxed session
@@ -160,8 +161,8 @@ current image and the `latest` alias only.
   manifest (`[vars]`), the project directory, or an in-session login.
 * Nothing credential-bearing is baked into the image: it carries the
   environment closure and activation context only, and the
-  prototype-only `options.sandbox*` keys are stripped from the view
-  the builder sees.
+  the prototype-only `[options.sandbox]` table is stripped from the
+  view the builder sees.
 
 **Network is not restricted.** The guest has the container runtime's
 default outbound network access. The isolation story for this

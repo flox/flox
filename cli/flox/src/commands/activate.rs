@@ -27,6 +27,7 @@ use flox_events::EventsHub;
 use flox_manifest::interfaces::{AsLatestSchema, AsWritableManifest, WriteManifest};
 use flox_manifest::parsed::Inner;
 use flox_manifest::parsed::common::IncludeDescriptor;
+use flox_manifest::parsed::v1_13_0::SandboxOptions;
 use flox_manifest::{Manifest, MigratedTypedOnly};
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::floxmeta_branch::BranchOrd;
@@ -443,9 +444,10 @@ impl ActivateOptions {
 
         let is_ephemeral = !services_for_ephemeral_activation.is_empty();
 
+        let manifest_sandbox = manifest.as_latest_schema().options.sandbox.as_ref();
         let sandbox_mode = resolve_sandbox_mode(
             self.sandbox,
-            manifest.as_latest_schema().options.sandbox,
+            manifest_sandbox,
             flox.features.sandbox_activate,
             is_ephemeral,
         )?;
@@ -453,8 +455,8 @@ impl ActivateOptions {
         // A manifest-sourced mode first becomes visible here, after the
         // handle-level in-place guard (which only sees the CLI flag) has
         // already run, so re-check the rejection with the resolved mode.
-        // Otherwise `options.sandbox = "prompt"` piped to `tee` would activate
-        // in-place unsandboxed.
+        // Otherwise `[options.sandbox]\nmode = "prompt"` piped to `tee` would
+        // activate in-place unsandboxed.
         ensure_sandbox_not_in_place(sandbox_mode, &invocation_type)?;
 
         // Apply the selected enforcement backend. `libsandbox` (the default) is
@@ -475,7 +477,7 @@ impl ActivateOptions {
         } else {
             match resolve_sandbox_backend(
                 self.sandbox_backend,
-                manifest.as_latest_schema().options.sandbox_backend,
+                manifest_sandbox.and_then(|s| s.backend),
             )? {
                 SandboxBackend::Libsandbox => sandbox_mode,
                 SandboxBackend::HostNative => {
@@ -1168,7 +1170,7 @@ const WRAPPED_MARKER_VAR: &str = "_FLOX_SANDBOX_WRAPPED";
 
 /// Resolve the sandbox backend, in precedence order: the `--sandbox-backend`
 /// flag, the `FLOX_SANDBOX_BACKEND` environment variable, the manifest
-/// `options.sandbox-backend`, then the default (`libsandbox`).
+/// `[options.sandbox].backend`, then the default (`libsandbox`).
 fn resolve_sandbox_backend(
     flag: Option<SandboxBackend>,
     manifest: Option<SandboxBackend>,
@@ -1890,22 +1892,22 @@ fn ensure_latest_alias(runtime: &str, env_name: &str, hash12: &str) {
     }
 }
 
-/// Prototype-only `[options]` manifest keys that mainline flox does not
-/// know about. They configure the host-side activation sandbox; the baked
-/// image is the *inside* of that boundary, so they must not propagate
+/// Prototype-only `[options]` manifest key that mainline flox does not
+/// know about. It configures the host-side activation sandbox; the baked
+/// image is the *inside* of that boundary, so it must not propagate
 /// into the builder's view of the environment. Mainline flox parses
-/// manifest options with `deny_unknown_fields` and hard-fails on them --
+/// manifest options with `deny_unknown_fields` and hard-fails on it --
 /// both the in-container builder and any mainline flox inside the guest.
-const PROTOTYPE_ONLY_OPTION_KEYS: [&str; 2] = ["sandbox", "sandbox-backend"];
+const PROTOTYPE_ONLY_OPTION_KEYS: [&str; 1] = ["sandbox"];
 
-/// Strip prototype-only keys from `[options]` in manifest TOML text.
+/// Strip the prototype-only `sandbox` key from `[options]` in manifest TOML text.
 ///
-/// Returns `Some(sanitized)` when at least one key was removed, `None`
-/// when the manifest declares none of them (callers can skip building a
-/// temp view entirely). Formatting of untouched content is preserved via
-/// `toml_edit`, though only parsed values matter: the builder's
-/// freshness check is a typed equality between the parsed manifest and
-/// the lockfile's embedded manifest (see
+/// Returns `Some(sanitized)` when the key was removed, `None` when the
+/// manifest declares none of them (callers can skip building a temp view
+/// entirely). Formatting of untouched content is preserved via `toml_edit`,
+/// though only parsed values matter: the builder's freshness check is a
+/// typed equality between the parsed manifest and the lockfile's embedded
+/// manifest (see
 /// `flox-manifest/src/lockfile/mod.rs::is_up_to_date_with_serialized_manifest`).
 fn sanitize_manifest_toml(toml_text: &str) -> Result<Option<String>> {
     let mut doc = toml_text
@@ -1922,8 +1924,8 @@ fn sanitize_manifest_toml(toml_text: &str) -> Result<Option<String>> {
     Ok(changed.then(|| doc.to_string()))
 }
 
-/// Strip prototype-only keys from the embedded manifest(s) in lockfile
-/// JSON text: `manifest.options` and, for composed environments,
+/// Strip the prototype-only `sandbox` key from the embedded manifest(s) in
+/// lockfile JSON text: `manifest.options` and, for composed environments,
 /// `compose.composer.options` (the freshness check compares against
 /// `compose.composer` when present). Everything else is preserved
 /// verbatim at the JSON value level.
@@ -2481,7 +2483,13 @@ fn stale_ref_for_state(state: &OciImageState) -> &str {
 
 /// Resolve the effective sandbox mode for an activation.
 ///
-/// Precedence: CLI flag > manifest `options.sandbox` > off.
+/// Precedence: CLI flag > manifest `[options.sandbox].mode` > backend
+/// default > off.
+///
+/// When the `[options.sandbox]` table is present but `mode` is omitted,
+/// the backend's capabilities drive the default: `enforce` for enforcing
+/// backends, `prompt` for `libsandbox` (matching the bare `--sandbox`
+/// flag default). When the table is absent entirely, the default is `off`.
 ///
 /// An explicit CLI flag without the sandbox_activate feature flag is a hard
 /// error so the user knows the flag did not take effect. A manifest-sourced
@@ -2490,7 +2498,7 @@ fn stale_ref_for_state(state: &OciImageState) -> &str {
 /// downgraded to off with a warning when the feature flag is absent.
 fn resolve_sandbox_mode(
     cli_mode: Option<SandboxMode>,
-    manifest_mode: Option<SandboxMode>,
+    manifest_sandbox: Option<&SandboxOptions>,
     sandbox_feature_enabled: bool,
     is_ephemeral: bool,
 ) -> Result<SandboxMode> {
@@ -2506,23 +2514,43 @@ fn resolve_sandbox_mode(
         return Ok(mode);
     }
 
-    let Some(mode) = manifest_mode else {
+    // No `[options.sandbox]` table → no manifest-declared sandbox.
+    let Some(sandbox_opts) = manifest_sandbox else {
         return Ok(SandboxMode::Off);
     };
 
+    // `mode = "off"` is the master switch regardless of backend.
+    if sandbox_opts.mode == Some(SandboxMode::Off) {
+        return Ok(SandboxMode::Off);
+    }
+
     if is_ephemeral {
-        debug!("ignoring manifest 'options.sandbox' for an ephemeral (service) activation");
+        debug!("ignoring manifest '[options.sandbox]' for an ephemeral (service) activation");
         return Ok(SandboxMode::Off);
     }
 
     if !sandbox_feature_enabled {
         message::warning(
-            "Ignoring 'options.sandbox' from the manifest; sandboxing requires the sandbox_activate feature flag. Set FLOX_FEATURES_SANDBOX_ACTIVATE=true.",
+            "Ignoring '[options.sandbox]' from the manifest; sandboxing requires the sandbox_activate feature flag. Set FLOX_FEATURES_SANDBOX_ACTIVATE=true.",
         );
         return Ok(SandboxMode::Off);
     }
 
-    Ok(mode)
+    // When mode is explicit, use it; otherwise derive from backend capabilities.
+    if let Some(mode) = sandbox_opts.mode {
+        return Ok(mode);
+    }
+
+    // Mode omitted: default per backend. We resolve the backend here purely
+    // for the mode default — `resolve_sandbox_backend` is called again later
+    // to select the enforcement mechanism; both reads are cheap.
+    let backend = sandbox_opts.backend.unwrap_or_default();
+    if backend.capabilities().enforces {
+        Ok(SandboxMode::Enforce)
+    } else {
+        // libsandbox (the advisory default): mirror the bare `--sandbox` default.
+        Ok(SandboxMode::Prompt)
+    }
 }
 
 /// Reject a sandboxed in-place activation.
@@ -2714,36 +2742,39 @@ mod tests {
         assert!(parse_activate_options(&["--sandbox", "bogus"]).is_err());
     }
 
+    /// Build a `SandboxOptions` with an explicit mode for tests that
+    /// mirror the old flat-key API (mode only, no backend).
+    fn sandbox_opts_with_mode(mode: SandboxMode) -> SandboxOptions {
+        SandboxOptions {
+            mode: Some(mode),
+            backend: None,
+        }
+    }
+
     #[test]
     fn resolve_sandbox_mode_cli_flag_wins_over_manifest() {
-        let mode = resolve_sandbox_mode(
-            Some(SandboxMode::Warn),
-            Some(SandboxMode::Enforce),
-            true,
-            false,
-        )
-        .unwrap();
+        let manifest = sandbox_opts_with_mode(SandboxMode::Enforce);
+        let mode = resolve_sandbox_mode(Some(SandboxMode::Warn), Some(&manifest), true, false)
+            .unwrap();
         assert_eq!(mode, SandboxMode::Warn);
 
         // An explicit `--sandbox off` overrides a manifest-set mode.
-        let mode = resolve_sandbox_mode(
-            Some(SandboxMode::Off),
-            Some(SandboxMode::Prompt),
-            true,
-            false,
-        )
-        .unwrap();
+        let manifest = sandbox_opts_with_mode(SandboxMode::Prompt);
+        let mode = resolve_sandbox_mode(Some(SandboxMode::Off), Some(&manifest), true, false)
+            .unwrap();
         assert_eq!(mode, SandboxMode::Off);
     }
 
     #[test]
     fn resolve_sandbox_mode_manifest_applies_without_cli_flag() {
-        let mode = resolve_sandbox_mode(None, Some(SandboxMode::Warn), true, false).unwrap();
+        let manifest = sandbox_opts_with_mode(SandboxMode::Warn);
+        let mode = resolve_sandbox_mode(None, Some(&manifest), true, false).unwrap();
         assert_eq!(mode, SandboxMode::Warn);
     }
 
     #[test]
     fn resolve_sandbox_mode_defaults_to_off() {
+        // No table → off.
         let mode = resolve_sandbox_mode(None, None, true, false).unwrap();
         assert_eq!(mode, SandboxMode::Off);
 
@@ -2753,8 +2784,53 @@ mod tests {
 
     #[test]
     fn resolve_sandbox_mode_ignores_manifest_for_ephemeral_activation() {
-        let mode = resolve_sandbox_mode(None, Some(SandboxMode::Enforce), true, true).unwrap();
+        let manifest = sandbox_opts_with_mode(SandboxMode::Enforce);
+        let mode = resolve_sandbox_mode(None, Some(&manifest), true, true).unwrap();
         assert_eq!(mode, SandboxMode::Off);
+    }
+
+    #[test]
+    fn resolve_sandbox_mode_off_in_table_is_master_switch() {
+        // `mode = "off"` in the table disables the sandbox regardless of backend.
+        let manifest = SandboxOptions {
+            mode: Some(SandboxMode::Off),
+            backend: Some(SandboxBackend::Oci),
+        };
+        let mode = resolve_sandbox_mode(None, Some(&manifest), true, false).unwrap();
+        assert_eq!(mode, SandboxMode::Off);
+    }
+
+    #[test]
+    fn resolve_sandbox_mode_enforcing_backend_defaults_to_enforce() {
+        // Backend present, mode absent: enforcing backend → enforce.
+        let manifest = SandboxOptions {
+            mode: None,
+            backend: Some(SandboxBackend::Oci),
+        };
+        let mode = resolve_sandbox_mode(None, Some(&manifest), true, false).unwrap();
+        assert_eq!(mode, SandboxMode::Enforce);
+    }
+
+    #[test]
+    fn resolve_sandbox_mode_libsandbox_backend_defaults_to_prompt() {
+        // Backend present, mode absent: libsandbox → prompt (matches bare --sandbox).
+        let manifest = SandboxOptions {
+            mode: None,
+            backend: Some(SandboxBackend::Libsandbox),
+        };
+        let mode = resolve_sandbox_mode(None, Some(&manifest), true, false).unwrap();
+        assert_eq!(mode, SandboxMode::Prompt);
+    }
+
+    #[test]
+    fn resolve_sandbox_mode_empty_table_defaults_to_prompt() {
+        // Table present but both fields absent: default backend (libsandbox) → prompt.
+        let manifest = SandboxOptions {
+            mode: None,
+            backend: None,
+        };
+        let mode = resolve_sandbox_mode(None, Some(&manifest), true, false).unwrap();
+        assert_eq!(mode, SandboxMode::Prompt);
     }
 
     #[test]
@@ -2807,15 +2883,16 @@ mod tests {
     #[test]
     fn resolve_sandbox_mode_manifest_downgraded_without_feature_flag() {
         let (subscriber, writer) = test_subscriber_message_only();
+        let manifest = sandbox_opts_with_mode(SandboxMode::Prompt);
 
         let mode = tracing::subscriber::with_default(subscriber, || {
-            resolve_sandbox_mode(None, Some(SandboxMode::Prompt), false, false).unwrap()
+            resolve_sandbox_mode(None, Some(&manifest), false, false).unwrap()
         });
 
         assert_eq!(mode, SandboxMode::Off);
         let printed = writer.to_string();
         assert!(
-            printed.contains("Ignoring 'options.sandbox' from the manifest"),
+            printed.contains("Ignoring '[options.sandbox]' from the manifest"),
             "printed: {printed}"
         );
     }
@@ -3517,6 +3594,8 @@ mod upgrade_notification_tests {
 
         use super::*;
 
+        // New `[options.sandbox]` table syntax: a single `sandbox` key whose
+        // value is an object rather than two flat keys.
         const MANIFEST_WITH_SANDBOX: &str = r#"version = 1
 
 [install]
@@ -3524,8 +3603,9 @@ hello.pkg-path = "hello"
 
 [options]
 systems = ["aarch64-darwin"]
-sandbox = "enforce"
-sandbox-backend = "oci"
+
+[options.sandbox]
+backend = "oci"
 "#;
 
         const MANIFEST_WITHOUT_SANDBOX: &str = r#"version = 1
@@ -3541,7 +3621,7 @@ systems = ["aarch64-darwin"]
         fn toml_removes_exactly_the_prototype_keys() {
             let sanitized = sanitize_manifest_toml(MANIFEST_WITH_SANDBOX)
                 .unwrap()
-                .expect("sandbox keys present; must sanitize");
+                .expect("sandbox table present; must sanitize");
             assert!(
                 !sanitized.contains("sandbox"),
                 "no sandbox key may survive: {sanitized}"
@@ -3562,11 +3642,11 @@ systems = ["aarch64-darwin"]
         }
 
         #[test]
-        fn toml_removes_a_single_prototype_key() {
+        fn toml_removes_sandbox_table() {
             let manifest = r#"version = 1
 
-[options]
-sandbox = "warn"
+[options.sandbox]
+mode = "warn"
 "#;
             let sanitized = sanitize_manifest_toml(manifest).unwrap().unwrap();
             assert!(!sanitized.contains("sandbox"));
@@ -3576,7 +3656,7 @@ sandbox = "warn"
             let fixture = GENERATED_DATA.join("envs/hello/manifest.lock");
             let text = std::fs::read_to_string(&fixture).unwrap();
             let mut value: serde_json::Value = serde_json::from_str(&text).unwrap();
-            // The prototype sandbox fields exist only in schema 1.13.0;
+            // The prototype sandbox table exists only in schema 1.13.0;
             // bump the fixture's embedded manifest to match, as a real
             // sandbox-declaring environment would be.
             if let Some(v) = value.pointer_mut("/manifest/schema-version") {
@@ -3586,8 +3666,12 @@ sandbox = "warn"
                 .pointer_mut("/manifest/options")
                 .and_then(|v| v.as_object_mut())
                 .expect("fixture has manifest.options");
-            options.insert("sandbox".into(), "enforce".into());
-            options.insert("sandbox-backend".into(), "oci".into());
+            // The sandbox value is now an object (the table) rather than two
+            // flat keys.
+            options.insert(
+                "sandbox".into(),
+                serde_json::json!({"backend": "oci"}),
+            );
             serde_json::to_string_pretty(&value).unwrap()
         }
 
@@ -3596,13 +3680,12 @@ sandbox = "warn"
             let with_sandbox = lockfile_json_with_sandbox();
             let sanitized = sanitize_lockfile_json(&with_sandbox)
                 .unwrap()
-                .expect("sandbox keys present; must sanitize");
+                .expect("sandbox table present; must sanitize");
             let value: serde_json::Value = serde_json::from_str(&sanitized).unwrap();
             let options = value.pointer("/manifest/options").unwrap();
-            assert!(options.get("sandbox").is_none());
-            assert!(options.get("sandbox-backend").is_none());
+            assert!(options.get("sandbox").is_none(), "sandbox key must be gone");
             // Untouched structure survives: compare against the original
-            // fixture value with only the two keys absent.
+            // fixture value with only the sandbox key absent.
             let original: serde_json::Value = serde_json::from_str(&with_sandbox).unwrap();
             let mut expected = original.clone();
             if let Some(o) = expected
@@ -3610,7 +3693,6 @@ sandbox = "warn"
                 .and_then(|v| v.as_object_mut())
             {
                 o.remove("sandbox");
-                o.remove("sandbox-backend");
             }
             assert_eq!(value, expected);
         }
@@ -3626,18 +3708,13 @@ sandbox = "warn"
         fn lockfile_strips_composer_options_when_composed() {
             let json = r#"{
                 "lockfile-version": 1,
-                "manifest": {"version": 1, "options": {"sandbox": "enforce"}},
+                "manifest": {"version": 1, "options": {"sandbox": {"mode": "enforce"}}},
                 "packages": [],
-                "compose": {"composer": {"version": 1, "options": {"sandbox": "enforce", "sandbox-backend": "oci"}}}
+                "compose": {"composer": {"version": 1, "options": {"sandbox": {"backend": "oci"}}}}
             }"#;
             let sanitized = sanitize_lockfile_json(json).unwrap().unwrap();
             let value: serde_json::Value = serde_json::from_str(&sanitized).unwrap();
             assert!(value.pointer("/compose/composer/options/sandbox").is_none());
-            assert!(
-                value
-                    .pointer("/compose/composer/options/sandbox-backend")
-                    .is_none()
-            );
             assert!(value.pointer("/manifest/options/sandbox").is_none());
         }
 

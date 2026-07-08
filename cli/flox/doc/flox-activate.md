@@ -202,9 +202,10 @@ options.
    enforcing backends selected with `--sandbox-backend` isolate
    differently — see [`flox-sandbox(1)`](./flox-sandbox.md).
    A bare `--sandbox` with no value is shorthand for `--sandbox prompt`.
-   Environments can request a mode with the `options.sandbox` manifest
-   setting (see [`manifest.toml(5)`](./manifest.toml.md)); the
-   command-line flag takes precedence over the manifest.
+   Environments can declare a sandbox in the manifest via
+   `[options.sandbox]` (see [`manifest.toml(5)`](./manifest.toml.md));
+   the command-line flag takes precedence over the manifest's `mode`
+   field.
    `warn` reports out-of-policy access without blocking it,
    `enforce` denies it, and `prompt` denies it and queues it for approval.
    File reads outside the environment closure and TCP connections to hosts
@@ -282,8 +283,8 @@ options.
    backends (`host-native`, `srt`, `oci`) support `enforce` only and
    reject `warn`/`prompt`. `nix` and `libkrun` are not yet wired into
    activation and error if selected. Precedence: this flag, then the
-   `FLOX_SANDBOX_BACKEND` environment variable, then the
-   `options.sandbox-backend` manifest setting.
+   `FLOX_SANDBOX_BACKEND` environment variable, then the manifest's
+   `[options.sandbox].backend` field.
    See [`flox-sandbox(1)`](./flox-sandbox.md) for the full backend
    documentation, including OCI image baking and its operational valves.
 
