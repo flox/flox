@@ -65,6 +65,28 @@ test_inputFromAttrs( nix::ref<nix::EvalState> & state )
 
 /* -------------------------------------------------------------------------- */
 
+/**
+ * @brief Test an enterprise `host' round-trips through parse and serialize, so
+ *        a realm's on-premise nixpkgs host is carried through the proxy.
+ */
+bool
+test_URLRoundtripWithHost( nix::ref<nix::EvalState> & state )
+{
+  WrappedNixpkgsInputScheme inputScheme;
+  auto url = "flox-nixpkgs:v0/flox/" + nixpkgsRev + "?host=github.company.com";
+  auto input = inputScheme.inputFromURL( state->fetchSettings,
+                                         nix::parseURL( url ),
+                                         true );
+  EXPECT( input.has_value() );
+  EXPECT_EQ( nix::fetchers::getStrAttr( input->attrs, "host" ),
+             "github.company.com" );
+  EXPECT_EQ( inputScheme.toURL( *input ).to_string(), url );
+  return true;
+}
+
+
+/* -------------------------------------------------------------------------- */
+
 bool
 test_lockedFromUrl( nix::ref<nix::EvalState> & state )
 {
@@ -129,6 +151,7 @@ main()
                                               nix::evalSettings );
 
   RUN_TEST( URLRoundtrip, state );
+  RUN_TEST( URLRoundtripWithHost, state );
   RUN_TEST( inputFromAttrs, state );
   RUN_TEST( lockedFromUrl, state );
   RUN_TEST( lockedRepresentation, state );
