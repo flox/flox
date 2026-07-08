@@ -675,6 +675,9 @@ where
     /// package that exists in nixpkgs. To cover that case there is a fallback
     /// that will attempt to substitute from cache.nixos.org if substituting
     /// from the provided store info locations fails.
+    ///
+    /// Delegates to `copy_from_custom_catalog_locations`; adds the semaphore
+    /// guard and parent-span context needed for concurrent environment builds.
     fn realise_single_custom_catalog_pkg(
         locked_pkg: &LockedPackageCatalog,
         store_locations: &HashMap<String, Vec<StoreInfo>>,
@@ -684,139 +687,18 @@ where
         semaphore: &Semaphore,
     ) -> Result<(), BuildEnvError> {
         let _sem_guard = semaphore.wait();
-
-        let mut auth_error = None;
-        // The way the data structures are written it's possible to have
-        // different package outputs come from different store locations. That's
-        // not *really* possible though, so we're going to grab the store
-        // locations for an arbitrary output and ASSUME that they're
-        // representative for all outputs.
-        let locations = store_locations
-            .get(locked_pkg.outputs.values().next().unwrap())
-            .ok_or(BuildEnvError::NoPackageStoreLocation(
-                locked_pkg.install_id.to_string(),
-            ))?;
-        let span = info_span!(
-            parent: parent_span.clone(),
-            "substitute custom catalog package",
-            progress = format!("Downloading '{}'", locked_pkg.attr_path)
-        );
-        let _span_guard = span.enter();
-        let mut download_attempts = DownloadAttempts(vec![]);
-        let mut any_location_succeeded = false;
-        for location in locations {
-            // nix copy
-            let mut copy_command = nix_base_command();
-            let location_url = match &location.url {
-                Some(url) => url,
-                None => {
-                    return Err(BuildEnvError::NixCopyError(format!(
-                        "Missing store location URL for package '{}'",
-                        locked_pkg.install_id
-                    )));
-                },
-            };
-            copy_command.arg("copy");
-            // auth.is_some() corresponds to Publisher store type
-            // auth.is_none() corresponds to NixCopy
-            // TODO: this is turning into spaghetti and would be good to refactor,
-            // but this code isn't very stable so hold off for now.
-            if let Some(auth) = &location.auth {
-                copy_command.envs(catalog_auth_to_envs(auth).map_err(BuildEnvError::Auth)?);
-            } else {
-                // We don't need a floxhub token for the NixOS public cache
-                if store_needs_auth(location_url) {
-                    if let Some(ref netrc_path) = maybe_netrc_path {
-                        copy_command.arg("--netrc-file").arg(netrc_path);
-                    } else if no_netrc_is_error {
-                        return Err(BuildEnvError::Auth(AuthError::NoToken));
-                    }
-                }
-            }
-            copy_command.arg("--from").arg(location_url);
-            for store_path in locked_pkg.outputs.values() {
-                copy_command.arg(store_path);
-            }
-            debug!(cmd=%copy_command.display(), "trying to copy published package");
-            let output = copy_command
-                .output()
-                .map_err(|e| BuildEnvError::CacheError(e.to_string()))?;
-
-            // Only used for logging purposes
-            let attr_path = locked_pkg.attr_path.clone();
-            let drv = locked_pkg.derivation.clone();
-
-            if !output.status.success() {
-                let stderr = String::from_utf8_lossy(&output.stderr);
-                if stderr.contains("because it lacks a signature by a trusted key") {
-                    return Err(BuildEnvError::UntrustedPackage(
-                        locked_pkg.install_id.to_string(),
-                    ));
-                }
-                // We're expecting errors for netrc type auth, but not for
-                // catalog provided auth.
-                if location.auth.is_some() {
-                    auth_error = Some(BuildEnvError::NixCopyError(stderr.to_string()));
-                }
-
-                download_attempts.0.push(DownloadAttempt {
-                    location: location_url.clone(),
-                    error: stderr.to_string(),
-                });
-
-                // If we failed, log the error and try the next location.
-                debug!(%attr_path, %drv, %location_url, %stderr, "Failed to copy custom package from store");
-            } else {
-                debug!(%attr_path, %drv, %location_url, "Successfully copied custom package from store");
-
-                any_location_succeeded = true;
-
-                break;
-            }
-        }
-
-        // Consider the package not found if (1) we never had any locations to
-        // download from in the first place, or (2) we did have locations to
-        // download from and we failed to find the package in any of them.
-        let not_found_in_custom_catalogs = locations.is_empty() || !any_location_succeeded;
-
-        // Some custom packages are just re-uploads of stuff in nixpkgs with
-        // no modifications, so the package may be found in `cache.nixos.org`.
-        // Fall back to attempting to download from the NixOS cache.
-        if not_found_in_custom_catalogs {
-            drop(_sem_guard);
-            drop(_span_guard);
-            let res = Self::realise_single_base_catalog_pkg(locked_pkg, span, semaphore);
-            match res {
-                Ok(()) => return Ok(()),
-                Err(fallback_err) => {
-                    // We want to differentiate between these two cases:
-                    // - Catalog server knows where we *should* be able to find
-                    //   this package, and we failed to download it for some reason.
-                    // - Catalog server didn't know where to download this from
-                    //   and our fallback to `cache.nixos.org` failed.
-                    if locations.is_empty() {
-                        return Err(BuildEnvError::NoPackageStoreLocation(
-                            locked_pkg.install_id.clone(),
-                        ));
-                    }
-                    download_attempts.0.push(DownloadAttempt {
-                        location: LOCATION_FALLBACK_NAME.to_string(),
-                        error: fallback_err.to_string(),
-                    });
-                    return Err(BuildEnvError::BuildPublishedPackage {
-                        install_id: locked_pkg.install_id.clone(),
-                        attempts: download_attempts,
-                    });
-                },
-            }
-        }
-
-        if let Some(err) = auth_error {
-            Err(err)
-        } else {
-            Ok(())
-        }
+        // Enter parent span so the child span in copy_from_custom_catalog_locations
+        // inherits the correct tracing hierarchy.
+        let _parent_guard = parent_span.enter();
+        let store_paths: Vec<String> = locked_pkg.outputs.values().cloned().collect();
+        copy_from_custom_catalog_locations(
+            &store_paths,
+            &locked_pkg.install_id,
+            &locked_pkg.attr_path,
+            store_locations,
+            no_netrc_is_error,
+            maybe_netrc_path,
+        )
     }
 
     /// Substitute all base catalog and store path packages in a single
@@ -1982,6 +1864,9 @@ mod realise_nixpkgs_tests {
         );
         let err = result.unwrap_err();
         assert!(matches!(err, BuildEnvError::BuildPublishedPackage { .. }));
+        // The fallback no longer attempts a source build from locked_url (custom
+        // catalog packages have no valid nixpkgs locked_url), so the base catalog
+        // entry reflects a public substituter miss rather than a build error.
         assert_eq!(err.to_string(), indoc! {r#"
             Couldn't download package 'hello' from the following locations
 
@@ -1991,7 +1876,7 @@ mod realise_nixpkgs_tests {
               error: path '/nix/store/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx-invalid' is required, but there is no substituter that can build it
 
             base catalog:
-              encountered an error interpreting the lockfile: Locked package 'hello' is a base catalog package, but the locked url 'github:super/custom/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx' does not start with the expected prefix 'https://github.com/flox/nixpkgs?rev='"#});
+              substitution from base catalog failed"#});
     }
 
     /// Ensure that we can build, or (attempt to build) a package from the catalog,
