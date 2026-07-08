@@ -106,6 +106,12 @@ let
     };
     invocation_type = null;
     remove_after_reading = false;
+    # The auto-activation hook (which calls back into the flox binary) is not
+    # meaningful inside a container guest — no flox binary is present in the
+    # image. Setting disable_hook prevents the generated rcfile from
+    # registering the hook and avoids the "bash: : command not found" error
+    # that occurs when the hook tries to invoke an empty flox_bin path.
+    disable_hook = true;
     flox_activate_store_path = "${environment}";
     activation_state_dir = "/run/flox/container-activations/${baseNameOf environment}";
     attach_ctx = {
@@ -115,7 +121,7 @@ let
       prompt_color_1 = "99";
       prompt_color_2 = "141";
       interpreter_path = "${interpreterPath}";
-      flox_prompt_environments = "floxenv";
+      flox_prompt_environments = "${containerName}";
       set_prompt = true;
       flox_env_cuda_detection = "0";
       flox_active_environments = "[]";
