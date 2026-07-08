@@ -548,7 +548,9 @@ impl FloxArgs {
             Ok(Some(token)) if token.is_expired() => {
                 let reauthenticating = matches!(
                     self.command,
-                    Some(Commands::Admin(AdminCommands::Auth(auth::Auth::Login)))
+                    Some(Commands::Admin(AdminCommands::Auth(
+                        auth::Auth::Login { .. }
+                    )))
                 );
                 // The token is account-global, so the reminder only needs to
                 // appear once per shell session. The outermost activation

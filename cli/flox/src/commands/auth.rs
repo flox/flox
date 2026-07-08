@@ -1,3 +1,6 @@
+use std::io::Read;
+use std::path::{Path, PathBuf};
+
 use anyhow::{Context, Result, bail};
 use bpaf::Bpaf;
 use chrono::offset::Utc;
@@ -230,7 +233,11 @@ fn calculate_expiry(expires_in: i64) -> String {
 pub enum Auth {
     /// Login to FloxHub
     #[bpaf(command)]
-    Login,
+    Login {
+        /// Read a FloxHub token from PATH instead of logging in interactively (use '-' for stdin)
+        #[bpaf(long("token-file"), argument("PATH"))]
+        token_file: Option<PathBuf>,
+    },
 
     /// Logout from FloxHub
     #[bpaf(command)]
@@ -251,10 +258,17 @@ impl Auth {
         subcommand_metric!("auth2");
 
         match self {
-            Auth::Login => {
+            Auth::Login { token_file } => {
                 let span = tracing::info_span!("login");
                 let _guard = span.enter();
-                login_flox(&mut flox).await?;
+                match token_file {
+                    Some(path) => {
+                        login_with_token_file(&mut flox, &path)?;
+                    },
+                    None => {
+                        login_flox(&mut flox).await?;
+                    },
+                }
                 Ok(())
             },
             Auth::Logout => {
@@ -339,4 +353,125 @@ pub async fn login_flox(flox: &mut Flox) -> Result<String> {
     message::updated(format!("Logged in as {handle}"));
 
     Ok(handle)
+}
+
+/// Log in non-interactively with a token read from a file, or from stdin if
+/// the path is `-`.
+///
+/// * validates the token and rejects expired tokens
+/// * updates the config file with the token
+/// * updates the auth context of the [Flox] instance
+pub fn login_with_token_file(flox: &mut Flox, token_file: &Path) -> Result<String> {
+    let contents = if token_file == Path::new("-") {
+        let mut contents = String::new();
+        std::io::stdin()
+            .read_to_string(&mut contents)
+            .context("Could not read token from stdin.")?;
+        contents
+    } else {
+        std::fs::read_to_string(token_file)
+            .with_context(|| format!("Could not read token file {}.", token_file.display()))?
+    };
+
+    let token = FloxhubToken::new(contents.trim().to_string())
+        .context("The provided token is not a valid FloxHub token.")?;
+
+    if token.is_expired() {
+        bail!("The provided token is expired.\nObtain a fresh token from FloxHub and try again.");
+    }
+
+    let handle = token.handle().to_string();
+
+    update_config(&flox.config_dir, "floxhub_token", Some(token.clone()))
+        .context("Could not write token to config")?;
+
+    let auth_context = AuthContext::from_mode(&AuthnMode::Auth0, Some(token));
+    let _ = flox.set_auth_context(auth_context);
+
+    message::updated(format!("Logged in as {handle}"));
+
+    Ok(handle)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fs;
+
+    use flox_rust_sdk::flox::test_helpers::{create_test_token, flox_instance};
+
+    use super::*;
+    use crate::config::FLOX_CONFIG_FILE;
+
+    /// A fake expired FloxHub token
+    ///
+    /// {
+    ///   "https://flox.dev/handle": "test",
+    ///   "exp": 1704063600                 // 2024-01-01T00:00:00+00:00
+    /// }
+    const EXPIRED_TOKEN: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3guZGV2L2hhbmRsZSI6InRlc3QiLCJleHAiOjE3MDQwNjM2MDB9.-5VCofPtmYQuvh21EV1nEJhTFV_URkRP0WFu4QDPFxY";
+
+    #[test]
+    fn login_with_token_file_stores_valid_token() {
+        let (mut flox, _temp_dir) = flox_instance();
+        let token = create_test_token("test-user");
+        let token_file = flox.temp_dir.join("token");
+        fs::write(&token_file, format!("{}\n", token.secret())).unwrap();
+
+        let handle = login_with_token_file(&mut flox, &token_file).unwrap();
+
+        assert_eq!(handle, "test-user");
+        let config_contents = fs::read_to_string(flox.config_dir.join(FLOX_CONFIG_FILE)).unwrap();
+        assert_eq!(
+            config_contents,
+            format!("floxhub_token = \"{}\"\n", token.secret())
+        );
+        let AuthContext::Auth0(Some(stored)) = &flox.auth_context else {
+            panic!("expected an Auth0 auth context with a token");
+        };
+        assert_eq!(stored.secret(), token.secret());
+    }
+
+    #[test]
+    fn login_with_token_file_rejects_missing_file() {
+        let (mut flox, _temp_dir) = flox_instance();
+        let missing = flox.temp_dir.join("nonexistent");
+
+        let err = login_with_token_file(&mut flox, &missing).unwrap_err();
+
+        assert_eq!(
+            err.to_string(),
+            format!("Could not read token file {}.", missing.display())
+        );
+        assert!(!flox.config_dir.join(FLOX_CONFIG_FILE).exists());
+    }
+
+    #[test]
+    fn login_with_token_file_rejects_malformed_token() {
+        let (mut flox, _temp_dir) = flox_instance();
+        let token_file = flox.temp_dir.join("token");
+        fs::write(&token_file, "not-a-jwt").unwrap();
+
+        let err = login_with_token_file(&mut flox, &token_file).unwrap_err();
+
+        assert_eq!(
+            err.to_string(),
+            "The provided token is not a valid FloxHub token."
+        );
+        assert!(!flox.config_dir.join(FLOX_CONFIG_FILE).exists());
+    }
+
+    #[test]
+    fn login_with_token_file_rejects_expired_token() {
+        let (mut flox, _temp_dir) = flox_instance();
+        let token_file = flox.temp_dir.join("token");
+        fs::write(&token_file, EXPIRED_TOKEN).unwrap();
+
+        let err = login_with_token_file(&mut flox, &token_file).unwrap_err();
+
+        assert_eq!(
+            err.to_string(),
+            "The provided token is expired.\nObtain a fresh token from FloxHub and try again."
+        );
+        assert!(!flox.config_dir.join(FLOX_CONFIG_FILE).exists());
+    }
 }
