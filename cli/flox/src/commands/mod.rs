@@ -196,19 +196,12 @@ impl fmt::Debug for Commands {
 }
 
 impl Commands {
-    /// Centrally-derived subcommand name stamped onto v2
-    /// `cli.command_run` / `cli.command_completed` events.
+    /// Subcommand name stamped onto v2 `cli.command_run` /
+    /// `cli.command_completed` events.
     ///
-    /// Each sub-enum owns its own [`Self::subcommand_name`] returning
-    /// the full wire string (including any `parent::child` prefix);
-    /// this top-level method just dispatches.
-    ///
-    /// Nested commands use the `parent::child` join convention (see
-    /// `services::start`, `generations::switch`, etc.) — pinned
-    /// against the consumer-side classifiers in PR 5. The `auth`
-    /// command's downstream classifier needs the literal `auth2`;
-    /// that special-case lives on [`AdminCommands::subcommand_name`]
-    /// so the carve-out is co-located with the `Auth` variant.
+    /// Each sub-enum owns its own [`Self::subcommand_name`] returning the
+    /// full wire string; nested commands join as `parent::child` (see
+    /// `services::start`, `generations::switch`, etc.).
     pub fn subcommand_name(&self) -> &'static str {
         match self {
             Commands::Help(_) => "help",
@@ -225,37 +218,6 @@ impl Commands {
             Commands::Factory(_) => "factory",
         }
     }
-}
-
-/// The action taken by the dispatch chokepoint with respect to
-/// installing the legacy `Hub`'s `Client`. The two states are
-/// mutually exclusive; extracting the decision into a returned enum
-/// (rather than an inline `if`) keeps it pure, so `legacy_chokepoint_tests`
-/// can assert the decision without invoking the install itself.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum LegacyChokepointAction {
-    /// `disable_metrics=false` — install the legacy
-    /// `AWSDatalakeConnection`-backed `Client` on the legacy `Hub`.
-    /// The legacy stack installs on every run (dual-emit); the v2
-    /// client is installed independently at the main.rs site unless
-    /// its own kill-switch (`FLOX_DISABLE_V2_METRICS`) suppresses it.
-    InstallLegacyClient,
-    /// `disable_metrics=true` — install nothing on either stack
-    /// and propagate the disable flag to subprocesses via
-    /// [`FLOX_DISABLE_METRICS_VAR`].
-    DisableMetricsAndSkipInstall,
-}
-
-/// Resolve the chokepoint's install decision from config. Pure (no side
-/// effects); the caller in [`FloxArgs::handle`] dispatches the returned
-/// action. The legacy stack installs on every run (dual-emit) unless
-/// telemetry is disabled entirely; the v2 stack is gated separately at the
-/// main.rs install site.
-fn legacy_chokepoint_action(config: &Config) -> LegacyChokepointAction {
-    if config.flox.disable_metrics {
-        return LegacyChokepointAction::DisableMetricsAndSkipInstall;
-    }
-    LegacyChokepointAction::InstallLegacyClient
 }
 
 impl FloxArgs {
@@ -308,31 +270,22 @@ impl FloxArgs {
             })
         };
 
-        match legacy_chokepoint_action(&config) {
-            LegacyChokepointAction::InstallLegacyClient => {
-                debug!("Metrics collection enabled");
-                let connection = AWSDatalakeConnection::default();
-                let client = Client::new_with_config(&config, connection)?;
-                Hub::global().set_client(client);
-            },
-            LegacyChokepointAction::DisableMetricsAndSkipInstall => {
-                debug!("Metrics collection disabled");
-                unsafe {
-                    env::set_var(FLOX_DISABLE_METRICS_VAR, "true");
-                }
-            },
+        if !config.flox.disable_metrics {
+            debug!("Metrics collection enabled");
+
+            let connection = AWSDatalakeConnection::default();
+            let client = Client::new_with_config(&config, connection)?;
+            Hub::global().set_client(client);
+        } else {
+            debug!("Metrics collection disabled");
+            unsafe {
+                env::set_var(FLOX_DISABLE_METRICS_VAR, "true");
+            }
         }
 
-        // Emit the v2 `cli.command_run` exactly once at dispatch
-        // start. The flox-events `EventsHub` was installed in `main.rs`
-        // unless the v2 kill-switch `FLOX_DISABLE_V2_METRICS` is set, in
-        // which case no `EventsClient` is installed and this call
-        // short-circuits (the legacy stream is unaffected). The matching
-        // `cli.command_completed` is emitted at the end of `cli_worker`
-        // below (or immediately before `activate.rs`'s `command.exec()`
-        // call when activate replaces the parent process) — the hub's
-        // idempotent flag ensures only one of the two paths actually
-        // records the completed event.
+        // Emit the v2 `cli.command_run` once at dispatch start. The matching
+        // `cli.command_completed` is emitted when the dispatch finishes (or by
+        // `activate` before it replaces the process); the hub deduplicates.
         let v2_subcommand: &'static str = self
             .command
             .as_ref()
@@ -1889,57 +1842,5 @@ mod subcommand_name_tests {
     fn build_update_catalogs_uses_parent_child_join_encoding() {
         let command = parse_command(&["build", "update-catalogs"]);
         assert_eq!(command.subcommand_name(), "build::update-catalogs");
-    }
-}
-
-#[cfg(test)]
-mod legacy_chokepoint_tests {
-    use tempfile::TempDir;
-
-    use super::*;
-    use crate::config::FloxConfig;
-
-    /// Build a minimal `Config` for the chokepoint decision. Only
-    /// `disable_metrics` matters here — the helper does not touch
-    /// disk.
-    #[allow(deprecated)]
-    fn config_with(disable_metrics: bool) -> (TempDir, Config) {
-        let tempdir = tempfile::tempdir().expect("tempdir");
-        let config = Config {
-            flox: FloxConfig {
-                cache_dir: tempdir.path().join("cache"),
-                data_dir: tempdir.path().join("data"),
-                state_dir: tempdir.path().join("state"),
-                config_dir: tempdir.path().join("config"),
-                disable_metrics,
-                ..FloxConfig::default()
-            },
-            features: None,
-        };
-        (tempdir, config)
-    }
-
-    /// `disable_metrics=true` short-circuits the legacy install and
-    /// propagates the disable flag via the env var. Independent of the v2
-    /// kill-switch, which only gates the v2 stack.
-    #[test]
-    fn disable_metrics_short_circuits_legacy_install() {
-        let (_tempdir, config) = config_with(true);
-        assert_eq!(
-            legacy_chokepoint_action(&config),
-            LegacyChokepointAction::DisableMetricsAndSkipInstall
-        );
-    }
-
-    /// With metrics enabled, the legacy stack always installs — dual-emit
-    /// keeps the legacy stream on every run; the chokepoint decision does
-    /// not depend on the v2 kill-switch.
-    #[test]
-    fn metrics_enabled_installs_legacy_client() {
-        let (_tempdir, config) = config_with(false);
-        assert_eq!(
-            legacy_chokepoint_action(&config),
-            LegacyChokepointAction::InstallLegacyClient
-        );
     }
 }
