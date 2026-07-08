@@ -197,30 +197,31 @@ gen-unit-data-no-publish force="":
     # Use remote services for non-publish tests
     {{ cargo_test_invocation }} --filterset 'not (test(providers::build::tests) | test(providers::publish) | test(commands::publish) | test(providers::catalog::tests::creates_new_catalog))'
 
-gen-unit-data-for-publish floxhub_repo_path force="":
+# Reset the local FloxHub catalog DB to clean dump state (drop + restore +
+# readiness probe) via floxhub's catalog-updater db-reset recipe. Requires
+# the floxhub stack to be running. Also useful standalone before ad-hoc
+# recording sessions, e.g.:
+#   just reset-floxhub-db ../floxhub && just ut 'providers::publish' true
+# Note: flox activate -d sets the environment but does not change
+# directory; the explicit cd is what makes just resolve floxhub's
+# Justfile rather than this one.
+@reset-floxhub-db floxhub_repo_path:
+    echo "Resetting catalog DB to clean dump state..."
+    flox activate -d "{{ floxhub_repo_path }}" -- bash -c \
+        'cd "{{ floxhub_repo_path }}" && just catalog-updater db-reset'
+
+gen-unit-data-for-publish floxhub_repo_path force="": (reset-floxhub-db floxhub_repo_path)
     #!/usr/bin/env bash
 
     # Use local services for publish tests, must already be running.
     # In the FloxHub repo, run:
     # flox activate -- just catalog-server::serve-for-mocks
     #
-    # The catalog DB is reset to a clean dump state by this recipe on every
-    # run, so any running stack works — no manual DB teardown required.
+    # The catalog DB is reset to a clean dump state on every run (via the
+    # reset-floxhub-db dependency), so any running stack works — no manual
+    # DB teardown required.
 
     set -euo pipefail
-
-    # Reset the catalog DB to a clean dump state before anything reads
-    # from it, so each run starts from a known baseline rather than
-    # accumulated state from prior runs or a previous stack start. The
-    # reset must run before the rev fetch below: a running DB may be
-    # stale relative to the current dump file, and fetching the rev
-    # pre-reset could record the old dump's rev while mocks are recorded
-    # against the new one. db-reset also waits for catalog-server to
-    # confirm DB connectivity, so the fetch below reads the freshly
-    # restored dump. A down stack fails loudly here.
-    echo "Resetting catalog DB to clean dump state..."
-    flox activate -d "{{ floxhub_repo_path }}" -- bash -c \
-        'cd "{{ floxhub_repo_path }}" && just catalog-updater db-reset'
 
     # Refresh the dev catalog baseline only when force-recording so the
     # committed latest_dev_catalog_rev.txt stays in lockstep with the mocks
@@ -230,7 +231,13 @@ gen-unit-data-for-publish floxhub_repo_path force="":
         # Get the catalog server URL from the FloxHub environment
         catalog_server_url="$(flox activate -d "{{ floxhub_repo_path }}" -- bash -c 'echo $FLOXHUB_CATALOG_SERVER_URL')"
 
-        # Get the latest Nixpkgs revision that exists in the catalog.
+        # Get the latest Nixpkgs revision that exists in the catalog. The
+        # reset-floxhub-db dependency has already run by this point, so the
+        # rev read here comes from the freshly restored dump — never from a
+        # stale pre-reset DB — and db-reset's readiness probe guarantees
+        # catalog-server is DB-ready. Keep the reset ahead of this fetch;
+        # reordering them can commit the rev and the recorded mocks out of
+        # lockstep.
         # Tolerate a connection-level curl failure (|| true) so the
         # diagnostic below is reachable; under set -e a failed pipeline
         # in the assignment would abort before the message prints.
