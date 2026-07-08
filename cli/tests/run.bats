@@ -78,7 +78,7 @@ teardown() {
 }
 
 # ---------------------------------------------------------------------------- #
-# Unsupported package spec rejection (no network required)
+# Package spec syntax — validation and routing (no network required)
 # ---------------------------------------------------------------------------- #
 
 @test "'flox run' rejects version constraint (@) in package spec" {
@@ -101,6 +101,8 @@ teardown() {
   assert_failure
   refute_output --partial "Unsupported package"
 }
+# TODO: add a happy-path run:store test for custom catalog download once
+# test infrastructure exists to mock get_store_info and nix copy --from.
 
 # ---------------------------------------------------------------------------- #
 # Resolution errors (mock catalog, no store required)

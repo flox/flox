@@ -246,7 +246,7 @@ pub fn parse_run_args(args: Vec<OsString>) -> Result<ParsedArgs, RunError> {
 
     let mut iter = args.into_iter();
 
-    // Phase 1: scan flags until we see `--` or the first positional.
+    // Step 1: scan flags until we see `--` or the first positional.
     'flags: loop {
         let Some(arg) = iter.next() else {
             break 'flags;
@@ -347,7 +347,10 @@ async fn download_custom_catalog_package(
         .floxhub_client
         .get_store_info(store_paths.to_vec())
         .await
-        .map_err(|_| RunError::CatalogError(pkg_spec.to_string()))?;
+        .map_err(|e| {
+            debug!(error = ?e, "get_store_info failed");
+            RunError::CatalogError(pkg_spec.to_string())
+        })?;
 
     {
         let _dl = info_span!(
