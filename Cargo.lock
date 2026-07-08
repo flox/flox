@@ -1706,6 +1706,7 @@ dependencies = [
  "toml",
  "toml_edit",
  "tracing",
+ "tracing-indicatif",
  "tracing-subscriber",
  "url",
  "url-escape",

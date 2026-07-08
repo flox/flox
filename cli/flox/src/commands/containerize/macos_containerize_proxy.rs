@@ -196,7 +196,10 @@ impl ContainerizeProxy {
     /// For Apple Container the named volume is created (if absent) before
     /// mounting, because Apple Container does not auto-create volumes on first
     /// use the way Docker does.
-    #[instrument(skip_all, fields(progress = "Populating proxy container cache volume"))]
+    #[instrument(
+        skip_all,
+        fields(progress = "[1/3] Filling build cache (downloads + cross-compile on first bake)")
+    )]
     fn populate_cache_volume(&self) -> Result<(), ContainerizeProxyError> {
         if self.container_runtime == Runtime::AppleContainer {
             self.ensure_apple_container_cache_volume()?;

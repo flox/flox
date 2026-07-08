@@ -315,9 +315,7 @@ FLOX_SANDBOX_OCI_AUTOBAKE=true flox activate -- uname -sm
 
 ```
 ⚙️  Baking OCI image 'sandbox-demo:<hash12>' (builder pin: <rev>)…
-   First bake downloads the builder image and cross-compiles the
-   environment closure (~2–5 min).
-   Subsequent bakes reuse layers and are faster.
+   First bake: ~2–5 min (downloads builder + cross-compiles). Later bakes reuse layers.
 ✅  Image 'sandbox-demo:<hash12>' loaded into container store.
 Linux aarch64
 ```

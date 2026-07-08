@@ -2,14 +2,16 @@ use std::collections::BTreeMap;
 use std::io::{self, Write};
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
-use std::sync::LazyLock;
+use std::sync::{LazyLock, Mutex};
+use std::time::{Duration, Instant};
 
 use flox_core::activate::mode::ActivateMode;
 use flox_manifest::parsed::common::ContainerizeConfig;
 use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
 use thiserror::Error;
-use tracing::{debug, info, instrument};
+use tracing::{Span, debug, info, instrument};
+use tracing_indicatif::span_ext::IndicatifSpanExt;
 
 use super::buildenv::BuiltStorePath;
 use crate::flox::Flox;
@@ -204,6 +206,51 @@ impl ContainerBuilder for MkContainerNix {
     }
 }
 
+/// Minimum interval between spinner label updates driven by builder stderr.
+/// Nix build output can be very chatty; throttling prevents flicker.
+const SPINNER_UPDATE_INTERVAL: Duration = Duration::from_millis(500);
+
+/// Maximum length of a spinner label snippet taken from a builder line.
+const SPINNER_SNIPPET_MAX_CHARS: usize = 60;
+
+/// Rate-limits spinner label updates derived from subprocess output lines.
+///
+/// Blank lines never produce an update. Non-blank lines produce a truncated
+/// snippet at most once per interval; suppressed lines do not reset the
+/// interval timer.
+#[derive(Debug)]
+struct SpinnerThrottle {
+    interval: Duration,
+    last_update: Option<Instant>,
+}
+
+impl SpinnerThrottle {
+    fn new(interval: Duration) -> Self {
+        Self {
+            interval,
+            last_update: None,
+        }
+    }
+
+    /// Returns a spinner-ready snippet (trimmed, truncated to
+    /// [`SPINNER_SNIPPET_MAX_CHARS`]) when `line` should update the label,
+    /// or `None` when the line is blank or arrives before the interval has
+    /// elapsed since the last accepted line.
+    fn accept(&mut self, line: &str, now: Instant) -> Option<String> {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            return None;
+        }
+        if let Some(last) = self.last_update
+            && now.duration_since(last) < self.interval
+        {
+            return None;
+        }
+        self.last_update = Some(now);
+        Some(trimmed.chars().take(SPINNER_SNIPPET_MAX_CHARS).collect())
+    }
+}
+
 /// Type representing a container source,
 /// i.e. a command that writes a container tarball to stdout.
 /// This is typically created by [ContainerBuilder::create_container_source].
@@ -218,8 +265,16 @@ impl ContainerSource {
     }
 
     /// Run the container builder script
-    /// and write the container tarball to the given sink
-    #[instrument(skip_all, fields(command = ?self.source_command, progress = "Writing container"))]
+    /// and write the container tarball to the given sink.
+    ///
+    /// Stderr from the builder process is forwarded via `info!` for verbose
+    /// output (`-v`). Concurrently, the latest interesting builder line is
+    /// surfaced (throttled) as the progress bar message of this function's
+    /// span via [`IndicatifSpanExt::pb_set_message`], so the user sees motion
+    /// during the long compile stage without needing `-v`. The logger's
+    /// progress template renders the message after the static stage label
+    /// carried by the `progress` field.
+    #[instrument(skip_all, fields(command = ?self.source_command, progress = "[2/3] Writing container layers"))]
     pub fn stream_container(self, sink: &mut impl Write) -> Result<(), ContainerSourceError> {
         let mut container_source_command = self.source_command;
 
@@ -236,11 +291,28 @@ impl ContainerSource {
             .spawn()
             .map_err(ContainerSourceError::CallContainerSourceCommand)?;
 
+        // The span handle carries its own subscriber reference, so
+        // pb_set_message works from the tap thread below (and gracefully
+        // no-ops when no indicatif layer is registered, e.g. in tests).
+        let span = Span::current();
+        let throttle = Mutex::new(SpinnerThrottle::new(SPINNER_UPDATE_INTERVAL));
+
         let tap = handle
             .stderr
             .take()
             .expect("stderr set to piped")
-            .tap_lines(|line| info!("{line}"));
+            .tap_lines(move |line| {
+                // Forward to info! so -v users still see the raw output.
+                info!("{line}");
+
+                let accepted = throttle
+                    .lock()
+                    .expect("spinner throttle mutex poisoned")
+                    .accept(line, Instant::now());
+                if let Some(snippet) = accepted {
+                    span.pb_set_message(&snippet);
+                }
+            });
 
         let mut stdout = handle.stdout.take().expect("stdout set to piped");
 
@@ -271,6 +343,68 @@ pub enum ContainerSourceError {
         {0}"
     )]
     CommandUnsuccessful(String),
+}
+
+#[cfg(test)]
+mod spinner_throttle_tests {
+    use std::io::Cursor;
+    use std::sync::Arc;
+
+    use super::*;
+
+    #[test]
+    fn accepts_after_interval_elapses() {
+        let mut throttle = SpinnerThrottle::new(Duration::from_millis(100));
+        let t0 = Instant::now();
+        assert_eq!(throttle.accept("first", t0), Some("first".to_string()));
+        assert_eq!(
+            throttle.accept("too soon", t0 + Duration::from_millis(50)),
+            None
+        );
+        assert_eq!(
+            throttle.accept("later", t0 + Duration::from_millis(150)),
+            Some("later".to_string())
+        );
+    }
+
+    #[test]
+    fn skips_blank_lines_without_consuming_interval() {
+        let mut throttle = SpinnerThrottle::new(Duration::from_millis(100));
+        let t0 = Instant::now();
+        assert_eq!(throttle.accept("   ", t0), None);
+        assert_eq!(throttle.accept("", t0), None);
+        // Blank lines do not start the interval; the first real line is
+        // accepted immediately.
+        assert_eq!(throttle.accept("real", t0), Some("real".to_string()));
+    }
+
+    #[test]
+    fn truncates_long_lines_to_snippet_length() {
+        let mut throttle = SpinnerThrottle::new(Duration::ZERO);
+        let long = "x".repeat(SPINNER_SNIPPET_MAX_CHARS + 20);
+        let snippet = throttle.accept(&long, Instant::now()).unwrap();
+        assert_eq!(snippet.chars().count(), SPINNER_SNIPPET_MAX_CHARS);
+    }
+
+    #[test]
+    fn gates_tap_lines_updates_to_one_per_interval() {
+        // All lines from an in-memory reader arrive well within one
+        // interval, so only the first non-blank line may produce an update.
+        let input = "unpacking sources\n\nbuilding\ninstalling\n";
+        let throttle = Mutex::new(SpinnerThrottle::new(Duration::from_secs(60)));
+        let updates = Arc::new(Mutex::new(Vec::new()));
+        let updates_in_tap = Arc::clone(&updates);
+        let tap = Cursor::new(input.as_bytes().to_vec()).tap_lines(move |line| {
+            let accepted = throttle.lock().unwrap().accept(line, Instant::now());
+            if let Some(snippet) = accepted {
+                updates_in_tap.lock().unwrap().push(snippet);
+            }
+        });
+        tap.wait();
+        assert_eq!(*updates.lock().unwrap(), vec![
+            "unpacking sources".to_string()
+        ]);
+    }
 }
 
 #[cfg(test)]
