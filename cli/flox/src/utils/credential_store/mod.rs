@@ -296,11 +296,13 @@ impl CredentialStores {
             // the keyring on the next read (user file > keyring).
             if let Err(e) = self.plaintext.remove() {
                 tracing::warn!(
-                    "could not remove the plaintext credential after a keyring write: {e}"
+                    error = %e,
+                    "could not remove the plaintext credential after a keyring write"
                 );
                 message::warning(indoc! {"
-                    Stored your credential in the system keyring, but could not remove the existing plain-text credential from flox.toml.
-                    Remove the 'floxhub_token' line from flox.toml so it does not shadow the keyring."});
+                    Stored your credential in the system keyring.
+                    The existing plain-text credential in flox.toml could not be removed.
+                    Remove 'floxhub_token' from flox.toml so it does not shadow the keyring."});
             }
             return Ok(TokenStorage::Keyring);
         }
@@ -371,7 +373,8 @@ impl CredentialStores {
                     // keyring.
                     Err(e) => {
                         tracing::warn!(
-                            "could not remove the plaintext credential after migrating it to the keyring: {e}"
+                            error = %e,
+                            "could not remove the plaintext credential after migrating it to the keyring"
                         );
                         ResolveOutcome::MigratedButPlaintextRemains
                     },
@@ -416,12 +419,12 @@ impl CredentialStores {
         match source {
             CredentialSource::Keyring => {
                 if let Err(e) = self.keyring.remove() {
-                    tracing::debug!("could not remove invalid token from the keyring: {e}");
+                    tracing::debug!(error = %e, "could not remove invalid token from the keyring");
                 }
             },
             CredentialSource::UserConfigPlaintext => {
                 if let Err(e) = self.plaintext.remove() {
-                    tracing::debug!("could not remove invalid token from the plaintext file: {e}");
+                    tracing::debug!(error = %e, "could not remove invalid token from the plaintext file");
                 }
             },
             // The invalid value came from `FLOX_FLOXHUB_TOKEN`, `/etc/flox.toml`,

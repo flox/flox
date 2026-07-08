@@ -352,8 +352,9 @@ impl FloxArgs {
                     "Moved your FloxHub credential from plain text into your system keyring.",
                 ),
                 ResolveOutcome::MigratedButPlaintextRemains => message::warning(indoc! {"
-                    Stored your credential in the system keyring, but could not remove the plain-text copy from flox.toml.
-                    Remove the 'floxhub_token' line from flox.toml so it does not shadow the keyring."}),
+                    Stored your credential in the system keyring.
+                    The plain-text copy in flox.toml could not be removed.
+                    Remove 'floxhub_token' from flox.toml so it does not shadow the keyring."}),
                 ResolveOutcome::PopulatedFromKeyring | ResolveOutcome::Unchanged => {},
             }
         }
