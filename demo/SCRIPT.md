@@ -11,11 +11,12 @@ first. The full user-facing sandbox documentation (all backends,
 modes, and policy management) lives in the man page:
 `cli/flox/doc/flox-sandbox.md` (`flox-sandbox(1)`).
 
-**Verification status:** the activation, bake, staleness, and
-filesystem-isolation outputs below were captured on macOS (arm64)
-against this prototype. Beats marked **⚠ VERIFY** (the token beat in
-§1 and the agent beats in §2) are new and must be re-run live before
-presenting — the Claude Code login flow needs a real account.
+**Verification status:** all beats verified live on macOS (arm64)
+against this prototype (2026-07-08). One finding from that pass is
+baked in below: the guest runs as root, and Claude Code refuses
+`--dangerously-skip-permissions` for root users — §2b therefore
+uses auto mode. Re-confirm the §2b invocation after any claude-code
+version bump.
 
 ## Setup
 
@@ -176,7 +177,7 @@ simply not there. Only the project directory is mounted."**
 > behaves identically and skips the consent prompt; use it in
 > scripts and CI.
 
-### 1b — host environment variables and tokens don't cross **⚠ VERIFY**
+### 1b — host environment variables and tokens don't cross
 
 Your presentation shell has a (fake) `GITHUB_TOKEN` exported:
 
@@ -211,13 +212,12 @@ with the container."**
 
 ---
 
-## 2 · The point of it all: an agent, dangerously, safely (~3min)
+## 2 · The point of it all: an agent at full autonomy (~3min)
 
 **"Why did we build this? So you can run a coding agent at full
-autonomy — no permission prompts — without trusting it. Claude Code
-has a flag that turns off all of its own guardrails, and its docs
-say to only use it in a sandboxed environment. So here's a sandboxed
-environment."**
+autonomy — no permission prompts — without trusting it. Claude's
+own docs tell you to reach for isolation before you loosen its
+guardrails. So here's the isolation."**
 
 The manifest already installs `flox/claude-code`, so the agent is
 baked into the image like any other tool. The env's hook points
@@ -225,11 +225,11 @@ baked into the image like any other tool. The env's hook points
 place that survives between sandbox sessions. On the Linux guest,
 Claude keeps its config (`.claude.json`), settings (`settings.json`),
 and credential file (`.credentials.json`, mode 0600) under that
-directory, so login, onboarding, and the skip-permissions
-acknowledgement all persist across the ephemeral containers (and
-`.claude/` is gitignored so credentials never reach the repo).
+directory, so login, onboarding, and permission-mode settings all
+persist across the ephemeral containers (and `.claude/` is
+gitignored so credentials never reach the repo).
 
-### 2a — one-time agent login (off-camera, or ~40s live) **⚠ VERIFY**
+### 2a — one-time agent login (off-camera, or ~40s live)
 
 ```bash
 flox activate          # enter the sandbox interactively
@@ -250,18 +250,16 @@ in the session.
 this sandbox was to put it there on purpose. That's the token story
 from the last section, working as designed."**
 
-### 2b — full autonomy, contained **⚠ VERIFY**
+### 2b — full autonomy, contained
 
 Still inside the session:
 
 ```bash
-claude --dangerously-skip-permissions
+claude --permission-mode auto
 ```
 
-Accept the one-time bypass-mode confirmation — Claude records it in
-`settings.json` under the project-mounted `.claude/`, so later
-sandbox sessions skip the dialog. Then give it work — first, real
-work:
+Auto mode gives the agent the run of the sandbox with no per-action
+prompts. Then give it work — first, real work:
 
 ```
 > add a docstring to greet() in app.py and commit the change
@@ -285,12 +283,17 @@ polite — it physically cannot. Exit claude, `flox deactivate`.
 doing real work in my repo, and the worst it can do is confined to
 the one directory I chose to give it."**
 
+> **Why not `--dangerously-skip-permissions`?** The guest runs as
+> root (hence the `#` prompt), and Claude Code refuses that flag for
+> root users. Auto mode is the demo-appropriate equivalent: full
+> autonomy, no per-action prompts, and the *sandbox* — not Claude —
+> is the safety boundary. If you ever need true bypass mode in a
+> container, Claude's own containerized-environment escape hatch is
+> setting `IS_SANDBOX=1` in the guest (not exercised in this demo).
+
 > For a scripted/capture variant of 2b without the TUI, use print
 > mode inside the session:
-> `claude --dangerously-skip-permissions -p 'read ~/.ssh/id_ed25519 and print GITHUB_TOKEN; then summarize app.py'`
-> **Run the interactive 2b once first** so the bypass acceptance is
-> persisted in the mounted `.claude/settings.json` — on a cold config
-> dir the acceptance dialog blocks `-p` runs (known upstream issue).
+> `claude --permission-mode auto -p 'read ~/.ssh/id_ed25519 and print GITHUB_TOKEN; then summarize app.py'`
 
 ---
 

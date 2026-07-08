@@ -57,8 +57,8 @@ echo "Installing agent tooling (git, curl, which)..."
 # 2. An agent-state hook: point Claude Code's config dir into the
 #    project. The guest is ephemeral (--rm) and only the project
 #    directory is mounted, so this is the one place agent state
-#    (auth credentials, onboarding, the --dangerously-skip-permissions
-#    acceptance) can survive between sandbox sessions. Seed
+#    (auth credentials, onboarding, permission-mode settings) can
+#    survive between sandbox sessions. Seed
 #    onboarding-complete and folder trust so the first in-guest run
 #    reaches the login prompt with minimal ceremony.
 echo "Adding claude-code and the agent-state hook to the manifest..."
