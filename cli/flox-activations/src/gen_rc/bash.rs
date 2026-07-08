@@ -28,6 +28,12 @@ pub struct BashStartupArgs {
     pub register_hook: bool,
     pub flox_bin: String,
     pub set_prompt: bool,
+    /// Emit a `flox()` shell-function shim that maps `flox deactivate` to
+    /// `exit`. Set when the activation has no project context (container
+    /// guests), where no real flox binary is present. Bash-only because
+    /// mkContainer.nix always bakes `shell = bash`; other shells do not
+    /// receive this flag.
+    pub container_shim: bool,
 }
 
 // N.B. the output of these scripts may be eval'd with backticks which have
@@ -288,6 +294,25 @@ pub fn generate_bash_profile_commands(
         },
     }
 
+    // Container guest shim: define a `flox` shell function so that
+    // `flox deactivate` does the right thing (exits the shell) even
+    // though no real flox binary is present in the image.
+    if let Action::Activate { args, .. } = action
+        && args.container_shim
+    {
+        // The shim maps `flox deactivate` to `exit 0`; all other
+        // subcommands emit a "not available" message and return 127.
+        let shim = indoc::indoc! {r#"
+            flox() {
+              case "$1" in
+                deactivate) exit 0 ;;
+                *) echo "flox: not available inside this sandboxed session; run 'flox deactivate' or 'exit' to leave" >&2; return 127 ;;
+              esac
+            };
+        "#};
+        writer.write_all(shim.as_bytes())?;
+    }
+
     Ok(())
 }
 
@@ -302,6 +327,7 @@ mod tests {
         strip_volatile_deactivate,
         test_deactivate_ctx,
         test_startup_ctx,
+        test_startup_ctx_container,
         test_startup_ctx_disable_hook,
     };
 
@@ -346,6 +372,37 @@ mod tests {
         assert!(
             !without_hook.contains("_flox_hook"),
             "expected no prompt hook when disable_hook is set:\n{without_hook}"
+        );
+    }
+
+    /// Container guest rcfile must include the `flox()` shim so that
+    /// `flox deactivate` exits the shell even when no real flox binary
+    /// is present in the image.
+    #[test]
+    fn container_shim_present_in_container_context() {
+        let shell = ShellWithPath::Bash(PathBuf::from("/bin/bash"));
+        let ctx = test_startup_ctx_container(shell, false);
+        let output = render_normalized(&ctx);
+        assert!(
+            output.contains("flox()"),
+            "expected the flox() shim in container rcfile:\n{output}"
+        );
+        assert!(
+            output.contains("deactivate) exit 0"),
+            "expected deactivate arm in container shim:\n{output}"
+        );
+    }
+
+    /// Non-container (project) activations must NOT include the `flox()`
+    /// shim — the real flox binary is present and must not be shadowed.
+    #[test]
+    fn container_shim_absent_in_project_context() {
+        let shell = ShellWithPath::Bash(PathBuf::from("/bin/bash"));
+        let ctx = test_startup_ctx(shell, false);
+        let output = render_normalized(&ctx);
+        assert!(
+            !output.contains("flox()"),
+            "expected no flox() shim in project rcfile:\n{output}"
         );
     }
 

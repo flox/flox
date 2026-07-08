@@ -138,6 +138,12 @@ pub(crate) fn startup_ctx(
     // Respect the disable_hook config option
     let register_hook = !ctx.disable_hook;
 
+    // Container activations have no project context. Emit a `flox()` shim
+    // in the rcfile so `flox deactivate` maps to `exit` even when the flox
+    // binary is absent from the image. Bash-only: mkContainer.nix always
+    // bakes `shell = bash`.
+    let container_shim = ctx.project_ctx.is_none();
+
     let args = match ctx.shell {
         ShellWithPath::Bash(_) => ShellStartupArgs::Bash(BashStartupArgs {
             flox_activate_tracelevel: subsystem_verbosity,
@@ -152,6 +158,7 @@ pub(crate) fn startup_ctx(
             register_hook,
             flox_bin: ctx.flox_bin.clone(),
             set_prompt,
+            container_shim,
         }),
         ShellWithPath::Fish(_) => ShellStartupArgs::Fish(FishStartupArgs {
             flox_activate_tracelevel: subsystem_verbosity,
