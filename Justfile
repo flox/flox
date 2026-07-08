@@ -202,7 +202,10 @@ gen-unit-data-for-publish floxhub_repo_path force="":
 
     # Use local services for publish tests, must already be running.
     # In the FloxHub repo, run:
-    # flox activate -- just catalog-server::serve-all
+    # flox activate -- just catalog-server::serve-for-mocks
+    #
+    # The catalog DB is reset to a clean dump state by this recipe on every
+    # run, so any running stack works — no manual DB teardown required.
 
     set -euo pipefail
 
@@ -222,6 +225,13 @@ gen-unit-data-for-publish floxhub_repo_path force="":
         fi
         echo "$nixpkgs_rev" > "{{ TEST_DATA }}/unit_test_generated/latest_dev_catalog_rev.txt"
     fi
+
+    # Reset the catalog DB to a clean dump state before recording so each
+    # run starts from a known baseline rather than accumulated state from
+    # prior runs or a previous stack start.
+    echo "Resetting catalog DB to clean dump state..."
+    flox activate -d "{{ floxhub_repo_path }}" -- bash -c \
+        'cd "{{ floxhub_repo_path }}" && just catalog-updater db-reset'
 
     # Grab configuration variables from the FloxHub repo's environment
     # (Only needed if you want to use Auth0 instead of the test users)
