@@ -28,9 +28,11 @@ use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::providers::buildenv::{
     BuildEnvError,
     build_catalog_pkg_from_source,
+    copy_from_custom_catalog_locations,
     materialise_with_retry,
     substitute_store_paths,
 };
+use flox_rust_sdk::providers::nix_auth::{AuthProvider, NixAuth};
 use floxhub_client::{
     CatalogClientTrait,
     MessageLevel,
@@ -84,11 +86,11 @@ pub enum RunError {
     )]
     InvalidPackageSpec(String, #[source] RawManifestError),
 
-    /// Package spec uses syntax not supported in phase 1 (`@`, `^`, `/`).
+    /// Package spec uses unsupported syntax (`@`, `^`).
     #[error(
         "Unsupported package '{0}'.\n\
-         'flox run' accepts a plain package name; version constraints ('@'), \
-         output selectors ('^'), and custom catalogs ('/') are not supported."
+         'flox run' accepts a plain package name or custom catalog package; \
+         version constraints ('@') and output selectors ('^') are not supported."
     )]
     UnsupportedPackageSpec(String),
 
@@ -300,17 +302,13 @@ pub fn parse_run_args(args: Vec<OsString>) -> Result<ParsedArgs, RunError> {
 // Package spec validation
 // ---------------------------------------------------------------------------
 
-/// Reject package specs that use syntax unsupported in phase 1.
+/// Reject package specs that use unsupported syntax.
 ///
-/// Accepts only a plain attr-path (e.g. `cowsay`, `python3Packages.requests`).
-/// Version constraints (`@`), output selectors (`^`), and custom catalogs
-/// (`/`) are not supported and cause `UnsupportedPackageSpec`.
-///
-/// Custom catalog rejection also makes the substituter-only download path
-/// below sufficient: private catalogs require the buildenv realise path
-/// (`nix copy --from` + catalog auth) rather than the substituter path.
+/// Accepts a plain attr-path (`cowsay`, `python3Packages.requests`) or a
+/// custom catalog package (`mycatalog/vim`). Version constraints (`@`) and
+/// output selectors (`^`) are not supported.
 pub fn validate_plain_package(pkg: &CatalogPackage, raw: &str) -> Result<(), RunError> {
-    if pkg.version.is_some() || pkg.outputs.is_some() || pkg.is_custom_catalog() {
+    if pkg.version.is_some() || pkg.outputs.is_some() {
         return Err(RunError::UnsupportedPackageSpec(raw.to_string()));
     }
     Ok(())
@@ -319,6 +317,60 @@ pub fn validate_plain_package(pkg: &CatalogPackage, raw: &str) -> Result<(), Run
 // ---------------------------------------------------------------------------
 // Core pipeline
 // ---------------------------------------------------------------------------
+
+/// Download a custom catalog package and register a GC root for it.
+///
+/// Encapsulates the three-step sequence for custom catalog packages:
+/// FloxHub auth setup → authenticated `nix copy` → GC root registration.
+///
+/// # GC root timing
+/// The GC root is registered immediately after the `nix copy` completes.
+/// There is a brief window between the two calls where a concurrent `nix gc`
+/// could evict the just-downloaded paths. In practice `nix gc` must be
+/// invoked explicitly and the window is milliseconds, so this is acceptable.
+/// A full retry loop (like `materialise_with_retry`) would close it entirely.
+async fn download_custom_catalog_package(
+    flox: &Flox,
+    store_paths: &[String],
+    catalog_pkg: &CatalogPackage,
+    attr_path: &str,
+    pkg_spec: &str,
+    gc_root_prefix: &Path,
+) -> Result<(), RunError> {
+    let auth = NixAuth::from_flox(flox)
+        .map_err(|e| RunError::BuildFailed(pkg_spec.to_string(), BuildEnvError::Auth(e)))?;
+    let no_netrc_is_error = auth.token().is_none();
+    let netrc_guard = auth.try_create_netrc();
+    let netrc_path: Option<&Path> = netrc_guard.as_deref();
+
+    let store_locations = flox
+        .floxhub_client
+        .get_store_info(store_paths.to_vec())
+        .await
+        .map_err(|_| RunError::CatalogError(pkg_spec.to_string()))?;
+
+    {
+        let _dl = info_span!(
+            "run_download",
+            progress = format!("Downloading '{pkg_spec}'...")
+        )
+        .entered();
+        copy_from_custom_catalog_locations(
+            store_paths,
+            &catalog_pkg.id,
+            attr_path,
+            &store_locations,
+            no_netrc_is_error,
+            netrc_path,
+        )
+        .map_err(|e| RunError::BuildFailed(pkg_spec.to_string(), e))?;
+    }
+
+    substitute_store_paths(store_paths, Some(gc_root_prefix))
+        .map_err(|e| RunError::BuildFailed(pkg_spec.to_string(), e))?;
+
+    Ok(())
+}
 
 /// Resolve, download, and exec the requested command.
 async fn exec_run(run_args: RunArgs, flox: &Flox) -> Result<()> {
@@ -422,7 +474,7 @@ async fn exec_run(run_args: RunArgs, flox: &Flox) -> Result<()> {
 
     debug!(store_paths = ?store_paths, "store paths to download");
 
-    // 6. Download via the SDK's substitution path with a stable GC root.
+    // 6. Download the package store paths with a stable GC root.
     //
     // The GC root is keyed on system + attr_path so repeated invocations of
     // the same package skip the download. `flox.cache_dir/run` is already
@@ -440,94 +492,108 @@ async fn exec_run(run_args: RunArgs, flox: &Flox) -> Result<()> {
     let gc_root_exists = gc_root_prefix.exists();
     let all_present = store_paths.iter().all(|p| Path::new(p).exists());
     if !all_present || !gc_root_exists {
-        // Per-run GC root for source builds; keyed on PID so concurrent
-        // runs don't clobber each other's outputs.
-        let pid = std::process::id();
-        let build_gc_root =
-            gc_root_dir.join(format!("build-{}.{}-{}", flox.system, attr_path, pid));
-
-        // Substitution and source-build are both inside the realise closure so
-        // materialise_with_retry can retry the whole sequence on a GC race.
-        materialise_with_retry(
-            || {
-                let ok = {
-                    let _dl = info_span!(
-                        "run_download",
-                        progress = format!("Downloading '{pkg_spec}'...")
-                    )
-                    .entered();
-                    substitute_store_paths(&store_paths, Some(&gc_root_prefix))?
-                };
-                if !ok {
-                    // Cache miss; build from source.
-                    build_catalog_pkg_from_source(
-                        &resolved_pkg.locked_url,
-                        &attr_path,
-                        &flox.system,
-                        resolved_pkg.unfree,
-                        resolved_pkg.broken,
-                        Some(&build_gc_root),
-                    )
-                } else {
-                    Ok(())
-                }
-            },
-            || {
-                // Source-built paths (different hash from catalog) are tracked
-                // via GC root symlinks, not store_paths. If build_gc_root has
-                // symlinks, the source-build path was taken — check those real
-                // output paths. Otherwise, substitution was used — check the
-                // catalog store_paths directly.
-                let gc_paths = collect_store_paths_from_gc_root(&build_gc_root);
-                if gc_paths.is_empty() {
-                    store_paths
-                        .iter()
-                        .filter(|p| std::fs::metadata(p).is_err())
-                        .cloned()
-                        .collect()
-                } else {
-                    gc_paths
-                        .into_iter()
-                        .filter(|p| std::fs::metadata(p).is_err())
-                        .collect()
-                }
-            },
-            || {
-                let gc_paths = collect_store_paths_from_gc_root(&build_gc_root);
-                if gc_paths.is_empty() {
-                    store_paths.clone()
-                } else {
-                    gc_paths
-                }
-            },
-            || Ok::<(), BuildEnvError>(()),
-        )
-        .map_err(|e| RunError::BuildFailed(pkg_spec.clone(), e))?;
-
-        // Source build was used if the GC root has symlinks; exec via its PATH.
-        // Substitution leaves build_gc_root empty — fall through to store_paths exec.
-        let build_paths = collect_store_paths_from_gc_root(&build_gc_root);
-        if !build_paths.is_empty() {
-            // Fork a background watcher that removes the GC root when the
-            // exec'd command exits.
-            fork_gc_root_watcher(&build_gc_root)
-                .map_err(|e| RunError::ExecFailed("fork gc watcher".into(), e))?;
-
-            let bin_dirs = collect_bin_dirs_from_gc_root(&build_gc_root);
-            let new_path = prepend_path_dirs(&bin_dirs);
-
-            debug!(path = ?new_path, "exec via build output PATH");
-
-            let err = std::process::Command::new(&run_args.executable)
-                .args(&run_args.args)
-                .env("PATH", &new_path)
-                .exec();
-
-            return Err(RunError::ExecFailed(
-                run_args.executable.to_string_lossy().into_owned(),
-                err,
+        if catalog_pkg.is_custom_catalog() {
+            download_custom_catalog_package(
+                flox,
+                &store_paths,
+                &catalog_pkg,
+                &attr_path,
+                &pkg_spec,
+                &gc_root_prefix,
             )
-            .into());
+            .await?;
+        } else {
+            // Base catalog: try public substituters, fall back to source build.
+            //
+            // Per-run GC root for source builds; keyed on PID so concurrent
+            // runs don't clobber each other's outputs.
+            let pid = std::process::id();
+            let build_gc_root =
+                gc_root_dir.join(format!("build-{}.{}-{}", flox.system, attr_path, pid));
+
+            // Substitution and source-build are both inside the realise closure so
+            // materialise_with_retry can retry the whole sequence on a GC race.
+            materialise_with_retry(
+                || {
+                    let ok = {
+                        let _dl = info_span!(
+                            "run_download",
+                            progress = format!("Downloading '{pkg_spec}'...")
+                        )
+                        .entered();
+                        substitute_store_paths(&store_paths, Some(&gc_root_prefix))?
+                    };
+                    if !ok {
+                        // Cache miss; build from source.
+                        build_catalog_pkg_from_source(
+                            &resolved_pkg.locked_url,
+                            &attr_path,
+                            &flox.system,
+                            resolved_pkg.unfree,
+                            resolved_pkg.broken,
+                            Some(&build_gc_root),
+                        )
+                    } else {
+                        Ok(())
+                    }
+                },
+                || {
+                    // Source-built paths (different hash from catalog) are tracked
+                    // via GC root symlinks, not store_paths. If build_gc_root has
+                    // symlinks, the source-build path was taken — check those real
+                    // output paths. Otherwise, substitution was used — check the
+                    // catalog store_paths directly.
+                    let gc_paths = collect_store_paths_from_gc_root(&build_gc_root);
+                    if gc_paths.is_empty() {
+                        store_paths
+                            .iter()
+                            .filter(|p| std::fs::metadata(p).is_err())
+                            .cloned()
+                            .collect()
+                    } else {
+                        gc_paths
+                            .into_iter()
+                            .filter(|p| std::fs::metadata(p).is_err())
+                            .collect()
+                    }
+                },
+                || {
+                    let gc_paths = collect_store_paths_from_gc_root(&build_gc_root);
+                    if gc_paths.is_empty() {
+                        store_paths.clone()
+                    } else {
+                        gc_paths
+                    }
+                },
+                || Ok::<(), BuildEnvError>(()),
+            )
+            .map_err(|e| RunError::BuildFailed(pkg_spec.clone(), e))?;
+
+            // Source build was used if the GC root has symlinks; exec via its PATH.
+            // Substitution leaves build_gc_root empty — fall through to store_paths exec.
+            let build_paths = collect_store_paths_from_gc_root(&build_gc_root);
+            if !build_paths.is_empty() {
+                // Fork a background watcher that removes the GC root when the
+                // exec'd command exits.
+                fork_gc_root_watcher(&build_gc_root)
+                    .map_err(|e| RunError::ExecFailed("fork gc watcher".into(), e))?;
+
+                let bin_dirs = collect_bin_dirs_from_gc_root(&build_gc_root);
+                let new_path = prepend_path_dirs(&bin_dirs);
+
+                debug!(path = ?new_path, "exec via build output PATH");
+
+                let err = std::process::Command::new(&run_args.executable)
+                    .args(&run_args.args)
+                    .env("PATH", &new_path)
+                    .exec();
+
+                return Err(RunError::ExecFailed(
+                    run_args.executable.to_string_lossy().into_owned(),
+                    err,
+                )
+                .into());
+            }
         }
     }
 
@@ -792,9 +858,9 @@ pub fn print_help() {
           flox run -p hello -- hello --help
           flox run -p hello -- hello --version
 
-        Limitations (phase 1):
-          Version constraints (@), output selectors (^), and custom catalogs (/) are
-          not supported. The -p flag is always required.
+        Limitations:
+          Version constraints (@) and output selectors (^) are not supported.
+          The -p flag is always required.
 
         Caching:
           Downloaded store paths are registered as GC roots under
@@ -1031,12 +1097,9 @@ mod tests {
     }
 
     #[test]
-    fn validate_plain_package_rejects_custom_catalog() {
+    fn validate_plain_package_accepts_custom_catalog() {
         let pkg: CatalogPackage = "mycatalog/vim".parse().unwrap();
-        assert!(matches!(
-            validate_plain_package(&pkg, "mycatalog/vim"),
-            Err(RunError::UnsupportedPackageSpec(_))
-        ));
+        assert!(validate_plain_package(&pkg, "mycatalog/vim").is_ok());
     }
 
     // -----------------------------------------------------------------------

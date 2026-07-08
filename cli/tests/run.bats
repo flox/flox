@@ -93,10 +93,13 @@ teardown() {
   assert_output --partial "Unsupported package"
 }
 
-@test "'flox run' rejects custom catalog (/) in package spec" {
+@test "'flox run' accepts custom catalog (/) in package spec" {
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/run/failed_resolution.yaml"
   run "$FLOX_BIN" run -p "mycat/vim" vi
+  # Custom catalog packages pass validation; failure here is a resolution or
+  # download error, not UnsupportedPackageSpec.
   assert_failure
-  assert_output --partial "Unsupported package"
+  refute_output --partial "Unsupported package"
 }
 
 # ---------------------------------------------------------------------------- #
