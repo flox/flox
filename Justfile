@@ -209,6 +209,19 @@ gen-unit-data-for-publish floxhub_repo_path force="":
 
     set -euo pipefail
 
+    # Reset the catalog DB to a clean dump state before anything reads
+    # from it, so each run starts from a known baseline rather than
+    # accumulated state from prior runs or a previous stack start. The
+    # reset must run before the rev fetch below: a running DB may be
+    # stale relative to the current dump file, and fetching the rev
+    # pre-reset could record the old dump's rev while mocks are recorded
+    # against the new one. db-reset also waits for catalog-server to
+    # confirm DB connectivity, so the fetch below reads the freshly
+    # restored dump. A down stack fails loudly here.
+    echo "Resetting catalog DB to clean dump state..."
+    flox activate -d "{{ floxhub_repo_path }}" -- bash -c \
+        'cd "{{ floxhub_repo_path }}" && just catalog-updater db-reset'
+
     # Refresh the dev catalog baseline only when force-recording so the
     # committed latest_dev_catalog_rev.txt stays in lockstep with the mocks
     # recorded in this run. Replay leaves it untouched, mirroring the prod
@@ -217,21 +230,18 @@ gen-unit-data-for-publish floxhub_repo_path force="":
         # Get the catalog server URL from the FloxHub environment
         catalog_server_url="$(flox activate -d "{{ floxhub_repo_path }}" -- bash -c 'echo $FLOXHUB_CATALOG_SERVER_URL')"
 
-        # Get the latest Nixpkgs revision that exists in the catalog
-        nixpkgs_rev="$(curl -X 'GET' --silent "${catalog_server_url}/info/base-catalog" -H 'accept: application/json' | jq .scraped_pages[0].rev | tr -d "'\"")"
+        # Get the latest Nixpkgs revision that exists in the catalog.
+        # Tolerate a connection-level curl failure (|| true) so the
+        # diagnostic below is reachable; under set -e a failed pipeline
+        # in the assignment would abort before the message prints.
+        base_catalog_info="$(curl -X 'GET' --silent "${catalog_server_url}/info/base-catalog" -H 'accept: application/json' || true)"
+        nixpkgs_rev="$(jq .scraped_pages[0].rev <<< "$base_catalog_info" | tr -d "'\"" || true)"
         if [ -z "$nixpkgs_rev" ]; then
             echo "failed to communicate with floxhub services"
             exit 1
         fi
         echo "$nixpkgs_rev" > "{{ TEST_DATA }}/unit_test_generated/latest_dev_catalog_rev.txt"
     fi
-
-    # Reset the catalog DB to a clean dump state before recording so each
-    # run starts from a known baseline rather than accumulated state from
-    # prior runs or a previous stack start.
-    echo "Resetting catalog DB to clean dump state..."
-    flox activate -d "{{ floxhub_repo_path }}" -- bash -c \
-        'cd "{{ floxhub_repo_path }}" && just catalog-updater db-reset'
 
     # Grab configuration variables from the FloxHub repo's environment
     # (Only needed if you want to use Auth0 instead of the test users)
