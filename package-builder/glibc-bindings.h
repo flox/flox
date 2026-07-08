@@ -14,6 +14,15 @@
 //   vi ld-floxlib/glibc-bindings.h
 //     /* remove previous bindings section, leaving newly-appended one */
 //
+// IMPORTANT: do NOT add .symver directives here for symbols that sandbox.c
+// *defines* as LD_PRELOAD interposers (opendir, fdopendir, connect,
+// getaddrinfo, fopen, ...). A .symver on a defined symbol makes the assembler
+// emit a versioned alias that requires the version node to be present at link
+// time — which fails without a version script. The real libc versions of
+// interposed symbols are reached via dlsym(RTLD_NEXT), not a versioned PLT
+// call, so no binding is needed. See closure.c:39 where fopen's binding is
+// kept out of this shared header for the same reason.
+//
 #if defined(__aarch64__)
 // aarch64 Linux only goes back to 2.17.
 #define GLIBC_MIN_VERSION "GLIBC_2.17"
@@ -42,11 +51,10 @@ __asm__(".symver __errno_location,__errno_location@" GLIBC_MIN_VERSION);
 __asm__(".symver exit,exit@" GLIBC_MIN_VERSION);
 __asm__(".symver fclose,fclose@" GLIBC_MIN_VERSION);
 // fdopendir backs the directory-enumeration interceptor. It arrived in glibc
-// 2.4 on x86_64 (and is at the 2.17 baseline on aarch64), so like
-// __realpath_chk it pins at ALT_ALT — a version the library already
-// references, so this adds no new floor. opendir/closedir are pinned at the
-// baseline below, unchanged.
-__asm__(".symver fdopendir,fdopendir@" ALT_ALT_GLIBC_MIN_VERSION);
+// 2.4 on x86_64 (and is at the 2.17 baseline on aarch64). sandbox.c defines
+// fdopendir as an interposer, so this binding is intentionally absent —
+// see the note at the top of this file. The real fdopendir is reached via
+// dlsym(RTLD_NEXT) inside sandbox_init().
 __asm__(".symver fflush,fflush@" GLIBC_MIN_VERSION);
 __asm__(".symver fgets,fgets@" GLIBC_MIN_VERSION);
 __asm__(".symver fnmatch,fnmatch@" GLIBC_MIN_VERSION);
@@ -63,7 +71,9 @@ __asm__(".symver inet_pton,inet_pton@" GLIBC_MIN_VERSION);
 __asm__(".symver memcmp,memcmp@" GLIBC_MIN_VERSION);
 __asm__(".symver memcpy,memcpy@" GLIBC_MIN_VERSION);
 __asm__(".symver memset,memset@" GLIBC_MIN_VERSION);
-__asm__(".symver opendir,opendir@" GLIBC_MIN_VERSION);
+// opendir is defined as an interposer in sandbox.c, so its binding is absent
+// here — see the note at the top of this file. closedir is only called (not
+// defined) so its binding above is correct.
 __asm__(".symver perror,perror@" GLIBC_MIN_VERSION);
 // pthread_once is the core of the thread-safety fix. On glibc < 2.34 it lives
 // in libpthread.so.0 (versioned at the baseline GLIBC for each arch); on 2.34+
@@ -77,24 +87,22 @@ __asm__(".symver pthread_once,pthread_once@" GLIBC_MIN_VERSION);
 // minimum so the library does not silently require GLIBC_2.34.
 __asm__(".symver pthread_mutex_lock,pthread_mutex_lock@" GLIBC_MIN_VERSION);
 __asm__(".symver pthread_mutex_unlock,pthread_mutex_unlock@" GLIBC_MIN_VERSION);
-// Sockets API for the prompt broker client. All have existed since the
-// baseline GLIBC for each arch (2.17 on aarch64, 2.2.5 on x86_64), so binding
-// them to GLIBC_MIN_VERSION matches the rest. read/write carry the client's
-// line-protocol I/O; poll bounds the activation-side wait on a reply.
-__asm__(".symver connect,connect@" GLIBC_MIN_VERSION);
+// Sockets API for the prompt broker client. poll/read/socket/write are only
+// referenced (not defined) in sandbox.c, so their bindings are correct here.
+// connect and getaddrinfo are defined as interposers in sandbox.c, so their
+// bindings are absent — see the note at the top of this file.
 __asm__(".symver poll,poll@" GLIBC_MIN_VERSION);
 __asm__(".symver read,read@" GLIBC_MIN_VERSION);
 __asm__(".symver socket,socket@" GLIBC_MIN_VERSION);
-// Network-egress mediation. The connect() interceptor formats the destination
-// address for policy matching and messages: getaddrinfo()/freeaddrinfo()
-// populate the IP->hostname attribution cache, and inet_ntop() stringifies the
-// IPv4/IPv6 address for the warn/error lines and policy compare. inet_ntop is
-// preferred over newer helpers because it has existed since the baseline GLIBC
-// and does not raise the floor. The destination port is byte-swapped inline
-// (a literal >> 8 / & 0xff on the network-order u16) rather than via ntohs(),
-// which glibc resolves to an inline byte swap with no external symbol — so it
-// needs no binding and pinning it would reference a symbol that may not exist.
-__asm__(".symver getaddrinfo,getaddrinfo@" GLIBC_MIN_VERSION);
+// Network-egress mediation. getaddrinfo() is defined as an interposer in
+// sandbox.c (binding absent per the note above); freeaddrinfo() is only
+// referenced, so its binding is correct here. inet_ntop() stringifies
+// IPv4/IPv6 addresses for warn/error lines and policy compare; it has existed
+// since the baseline GLIBC and does not raise the floor. The destination port
+// is byte-swapped inline (a literal >> 8 / & 0xff on the network-order u16)
+// rather than via ntohs(), which glibc resolves to an inline byte swap with
+// no external symbol — so it needs no binding and pinning it would reference
+// a symbol that may not exist.
 __asm__(".symver freeaddrinfo,freeaddrinfo@" GLIBC_MIN_VERSION);
 __asm__(".symver inet_ntop,inet_ntop@" GLIBC_MIN_VERSION);
 __asm__(".symver __realpath_chk,__realpath_chk@" ALT_ALT_GLIBC_MIN_VERSION);
