@@ -1334,7 +1334,7 @@
         },
         "Options2": {
           "additionalProperties": false,
-          "description": "Options for V1_13_0.\n\nThis is a version-specific copy of `common::Options` because V1_13_0 adds\nthe `sandbox` field; the other fields (and their leaf types) are identical\nand continue to live in `parsed::common`.",
+          "description": "Options for V1_13_0.\n\nThis is a version-specific copy of `common::Options` because V1_13_0 adds\nthe `sandbox` table; the other fields (and their leaf types) are identical\nand continue to live in `parsed::common`.",
           "properties": {
             "activate": {
               "$ref": "#/$defs/ActivateOptions",
@@ -1354,24 +1354,13 @@
             "sandbox": {
               "anyOf": [
                 {
-                  "$ref": "#/$defs/SandboxMode"
+                  "$ref": "#/$defs/SandboxOptions"
                 },
                 {
                   "type": "null"
                 }
               ],
-              "description": "The sandbox mode applied when the environment is activated\n(`off`, `warn`, `enforce`, or `prompt`). An explicit `--sandbox` flag\non `flox activate` takes precedence over this setting."
-            },
-            "sandbox-backend": {
-              "anyOf": [
-                {
-                  "$ref": "#/$defs/SandboxBackend"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "The sandbox enforcement backend used when the environment is activated\n(`libsandbox`, `nix`, `host-native`, `srt`, `oci`, or `libkrun`). The\n`--sandbox-backend` flag on `flox activate` and the\n`FLOX_SANDBOX_BACKEND` environment variable take precedence over this\nsetting."
+              "description": "The sandbox table. When present, selects the sandbox backend and/or\nmode for activations. An explicit `--sandbox` flag on `flox activate`\ntakes precedence over the table's `mode` field; `--sandbox-backend`,\n`FLOX_SANDBOX_BACKEND`, and the table's `backend` field follow the\nsame flag > env > manifest precedence.\n\n```toml\n[options.sandbox]\nbackend = \"oci\"          # enforce-only backend; mode defaults to enforce\n\n[options.sandbox]\nmode = \"off\"             # master switch: disables sandbox regardless\n\n[options.sandbox]\nbackend = \"libsandbox\"\nmode    = \"warn\"\n```"
             },
             "semver": {
               "$ref": "#/$defs/SemverOptions",
@@ -1844,6 +1833,35 @@
               "type": "string"
             }
           ]
+        },
+        "SandboxOptions": {
+          "additionalProperties": false,
+          "description": "The `[options.sandbox]` table.\n\nBoth fields are optional: an empty table (or a table with just `backend`)\nenables the sandbox with backend-appropriate defaults. `mode = \"off\"` is\nthe master switch and disables the sandbox regardless of `backend`.",
+          "properties": {
+            "backend": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/SandboxBackend"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The enforcement backend. Defaults per backend when omitted: `enforce`\nfor enforcing backends (`capabilities().enforces == true`), `prompt`\nfor `libsandbox` (matching the bare `--sandbox` flag default)."
+            },
+            "mode": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/SandboxMode"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The sandbox mode. When omitted the default is derived from the\nbackend's capabilities (see above). `mode = \"off\"` is the master\nswitch: it disables the sandbox regardless of `backend`."
+            }
+          },
+          "type": "object"
         },
         "SelectedOutputs": {
           "anyOf": [

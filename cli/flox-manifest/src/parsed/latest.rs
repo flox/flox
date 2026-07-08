@@ -125,9 +125,16 @@ mod tests {
         PackageDescriptorStorePath,
     };
     // ManifestLatest's build and options sections are the version-specific
-    // types (with `sandbox-allow` and `sandbox`), so assertions on them use
-    // the latest schema's types.
-    use crate::parsed::v1_13_0::{Build, BuildDescriptor, Options, Profile, ProfileDeactivate};
+    // types (with `sandbox-allow` and `[options.sandbox]` table), so assertions
+    // on them use the latest schema's types.
+    use crate::parsed::v1_13_0::{
+        Build,
+        BuildDescriptor,
+        Options,
+        Profile,
+        ProfileDeactivate,
+        SandboxOptions,
+    };
     use crate::test_helpers::{with_latest_schema, with_schema};
 
     #[test]
@@ -218,42 +225,182 @@ mod tests {
     }
 
     #[test]
-    fn options_sandbox_parses_with_latest_schema() {
+    fn options_sandbox_table_with_both_fields_parses() {
+        let manifest = with_latest_schema(indoc! {r#"
+            [options.sandbox]
+            backend = "oci"
+            mode = "enforce"
+        "#});
+
+        let parsed = toml_edit::de::from_str::<ManifestLatest>(&manifest).unwrap();
+
+        assert_eq!(parsed.options, Options {
+            sandbox: Some(SandboxOptions {
+                backend: Some(SandboxBackend::Oci),
+                mode: Some(SandboxMode::Enforce),
+            }),
+            ..Default::default()
+        });
+    }
+
+    #[test]
+    fn options_sandbox_table_backend_only_parses() {
+        let manifest = with_latest_schema(indoc! {r#"
+            [options.sandbox]
+            backend = "host-native"
+        "#});
+
+        let parsed = toml_edit::de::from_str::<ManifestLatest>(&manifest).unwrap();
+
+        assert_eq!(parsed.options, Options {
+            sandbox: Some(SandboxOptions {
+                backend: Some(SandboxBackend::HostNative),
+                mode: None,
+            }),
+            ..Default::default()
+        });
+    }
+
+    #[test]
+    fn options_sandbox_table_mode_only_parses() {
+        let manifest = with_latest_schema(indoc! {r#"
+            [options.sandbox]
+            mode = "warn"
+        "#});
+
+        let parsed = toml_edit::de::from_str::<ManifestLatest>(&manifest).unwrap();
+
+        assert_eq!(parsed.options, Options {
+            sandbox: Some(SandboxOptions {
+                backend: None,
+                mode: Some(SandboxMode::Warn),
+            }),
+            ..Default::default()
+        });
+    }
+
+    #[test]
+    fn options_sandbox_table_mode_off_parses() {
+        let manifest = with_latest_schema(indoc! {r#"
+            [options.sandbox]
+            mode = "off"
+        "#});
+
+        let parsed = toml_edit::de::from_str::<ManifestLatest>(&manifest).unwrap();
+
+        assert_eq!(parsed.options, Options {
+            sandbox: Some(SandboxOptions {
+                backend: None,
+                mode: Some(SandboxMode::Off),
+            }),
+            ..Default::default()
+        });
+    }
+
+    #[test]
+    fn options_sandbox_empty_table_parses() {
+        let manifest = with_latest_schema(indoc! {r#"
+            [options.sandbox]
+        "#});
+
+        let parsed = toml_edit::de::from_str::<ManifestLatest>(&manifest).unwrap();
+
+        assert_eq!(parsed.options, Options {
+            sandbox: Some(SandboxOptions {
+                backend: None,
+                mode: None,
+            }),
+            ..Default::default()
+        });
+    }
+
+    #[test]
+    fn options_flat_sandbox_key_rejected() {
+        // The old flat `sandbox = "warn"` key is no longer valid; the new form
+        // requires `[options.sandbox]` as a table.
         let manifest = with_latest_schema(indoc! {r#"
             [options]
             sandbox = "warn"
         "#});
 
-        let parsed = toml_edit::de::from_str::<ManifestLatest>(&manifest).unwrap();
+        let err = toml_edit::de::from_str::<ManifestLatest>(&manifest)
+            .expect_err("flat 'options.sandbox = string' should be rejected");
 
-        assert_eq!(parsed.options, Options {
-            sandbox: Some(SandboxMode::Warn),
-            ..Default::default()
-        });
+        // The error may mention type mismatch (expected a table, found string)
+        // or an unknown field; either is acceptable.
+        assert!(
+            err.message().contains("invalid type")
+                || err.message().contains("expected")
+                || err.message().contains("unknown"),
+            "unexpected error message: {err}",
+        );
     }
 
     #[test]
-    fn options_sandbox_backend_parses_with_latest_schema() {
+    fn options_flat_sandbox_backend_key_rejected() {
+        // The old flat `sandbox-backend` key is removed; it is now an unknown
+        // field at the `[options]` level (deny_unknown_fields).
         let manifest = with_latest_schema(indoc! {r#"
             [options]
-            sandbox-backend = "host-native"
+            sandbox-backend = "oci"
         "#});
 
-        let parsed = toml_edit::de::from_str::<ManifestLatest>(&manifest).unwrap();
+        let err = toml_edit::de::from_str::<ManifestLatest>(&manifest)
+            .expect_err("flat 'options.sandbox-backend' should be rejected");
 
-        assert_eq!(parsed.options, Options {
-            sandbox_backend: Some(SandboxBackend::HostNative),
-            ..Default::default()
-        });
+        assert!(
+            err.message()
+                .starts_with("unknown field `sandbox-backend`, expected one of"),
+            "unexpected error message: {err}",
+        );
     }
 
     #[test]
-    fn stays_latest_schema_when_sandbox_backend_set() {
-        // A set `options.sandbox-backend` cannot be represented in v1.12.0, so
+    fn options_sandbox_table_rejects_unknown_backend() {
+        let manifest = with_latest_schema(indoc! {r#"
+            [options.sandbox]
+            backend = "bogus"
+        "#});
+
+        let err = toml_edit::de::from_str::<ManifestLatest>(&manifest)
+            .expect_err("'bogus' should not be a valid sandbox backend");
+
+        assert!(
+            err.message().starts_with("unknown variant `bogus`"),
+            "unexpected error message: {err}",
+        );
+    }
+
+    #[test]
+    fn options_sandbox_table_rejected_by_v1_12_0_schema() {
+        let manifest = with_schema(KnownSchemaVersion::V1_12_0, indoc! {r#"
+            [options.sandbox]
+            backend = "oci"
+        "#});
+
+        let err = Manifest::parse_toml_typed(&manifest)
+            .expect_err("'[options.sandbox]' table should be rejected by the v1.12.0 schema");
+
+        let ManifestError::Invalid(err) = err else {
+            panic!("expected ManifestError::Invalid, got: {err:?}");
+        };
+        assert!(
+            err.message()
+                .starts_with("unknown field `sandbox`, expected one of"),
+            "unexpected error message: {err}",
+        );
+    }
+
+    #[test]
+    fn stays_latest_schema_when_sandbox_table_set() {
+        // A set `[options.sandbox]` table cannot be represented in v1.12.0, so
         // the manifest must stay on the latest schema rather than downgrade.
         let manifest = ManifestLatest {
             options: Options {
-                sandbox_backend: Some(SandboxBackend::HostNative),
+                sandbox: Some(SandboxOptions {
+                    backend: Some(SandboxBackend::Oci),
+                    mode: None,
+                }),
                 ..Default::default()
             },
             ..Default::default()
@@ -264,42 +411,6 @@ mod tests {
             .unwrap();
 
         assert_eq!(compat.get_schema_version(), KnownSchemaVersion::V1_13_0);
-    }
-
-    #[test]
-    fn options_sandbox_rejects_unknown_value() {
-        let manifest = with_latest_schema(indoc! {r#"
-            [options]
-            sandbox = "bogus"
-        "#});
-
-        let err = toml_edit::de::from_str::<ManifestLatest>(&manifest)
-            .expect_err("'bogus' should not be a valid sandbox mode");
-
-        assert!(
-            err.message().starts_with("unknown variant `bogus`"),
-            "unexpected error message: {err}",
-        );
-    }
-
-    #[test]
-    fn options_sandbox_rejected_by_v1_12_0_schema() {
-        let manifest = with_schema(KnownSchemaVersion::V1_12_0, indoc! {r#"
-            [options]
-            sandbox = "warn"
-        "#});
-
-        let err = Manifest::parse_toml_typed(&manifest)
-            .expect_err("'options.sandbox' should be rejected by the v1.12.0 schema");
-
-        let ManifestError::Invalid(err) = err else {
-            panic!("expected ManifestError::Invalid, got: {err:?}");
-        };
-        assert!(
-            err.message()
-                .starts_with("unknown field `sandbox`, expected one of"),
-            "unexpected error message: {err}",
-        );
     }
 
     #[test]
@@ -317,7 +428,10 @@ mod tests {
     fn stays_latest_schema_when_sandbox_set() {
         let manifest = ManifestLatest {
             options: Options {
-                sandbox: Some(SandboxMode::Prompt),
+                sandbox: Some(SandboxOptions {
+                    mode: Some(SandboxMode::Prompt),
+                    ..Default::default()
+                }),
                 ..Default::default()
             },
             ..Default::default()

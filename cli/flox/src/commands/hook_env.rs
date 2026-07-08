@@ -970,14 +970,18 @@ fn read_sandbox_class(project_dir: &Path) -> SandboxClass {
     };
 
     let opts = &manifest.as_latest_schema().options;
-    let mode = opts.sandbox;
-    let backend = opts.sandbox_backend.unwrap_or_default();
+    let Some(sandbox_table) = opts.sandbox.as_ref() else {
+        // No `[options.sandbox]` table → no sandbox declared.
+        return SandboxClass::None;
+    };
 
-    // Absent mode or explicit `off` → no sandbox.
-    match mode {
-        None | Some(SandboxMode::Off) => SandboxClass::None,
-        Some(_) if backend.capabilities().enforces => SandboxClass::Wrapping(backend),
-        Some(_) => SandboxClass::Libsandbox,
+    let backend = sandbox_table.backend.unwrap_or_default();
+
+    // `mode = "off"` is the master switch; absent mode activates the sandbox.
+    match sandbox_table.mode {
+        Some(SandboxMode::Off) => SandboxClass::None,
+        _ if backend.capabilities().enforces => SandboxClass::Wrapping(backend),
+        _ => SandboxClass::Libsandbox,
     }
 }
 
