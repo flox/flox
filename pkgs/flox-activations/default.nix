@@ -8,6 +8,7 @@
   rust-toolchain,
   rustfmt ? rust-toolchain.rustfmt,
   flox-src,
+  flox-package-builder,
   rust-external-deps,
   coreutils,
   stdenv,
@@ -24,6 +25,10 @@ let
     X_BASH_BIN = "${bash}/bin/bash";
     COREUTILS = "${coreutils}";
     FLOX_VERSION = FLOX_VERSION;
+    # The sandbox module resolves libsandbox by deriving its path from this
+    # variable, falling back to the value baked in at compile time when the
+    # runtime override is absent. Must match the convention in rust-internal-deps.
+    FLOX_BUILD_MK = "${flox-package-builder}/libexec/flox-build.mk";
   };
 
 in
