@@ -74,9 +74,12 @@ the live terminal shows the same):
 Enter '/Users/you/sandbox-demo' (sandboxed via oci)? [Y/n]
 ```
 
-Type `Y`. The consent prompt is the first-encounter gate for
-session-replacement — the manifest tells Flox to wrap in OCI,
-and the hook asks once per visit. Accept:
+Type `Y`. The consent prompt is the gate for entering a
+sandboxed session — the manifest tells Flox to wrap in OCI,
+and the hook asks once per visit. The session runs as a
+foreground child of your shell: when it ends you are back at
+your own prompt, and the hook stays quiet until you leave the
+directory and return. Accept:
 
 ```
 ? OCI image 'sandbox-demo:<hash12>' is stale (environment has
@@ -87,16 +90,27 @@ and the hook asks once per visit. Accept:
 
 On a **fresh environment** (first bake), accept the bake prompt
 and wait ~2–5 min. Subsequent entries find the cached image and
-launch in under a second. After the bake (or with a warm image):
+launch in under a second. The builder is pinned to a
+prototype-branch rev and compiles inside the builder VM against
+a persistent `flox-nix` cache volume — the very first bake on a
+machine (cold volume) also pays that one-time compile; every
+bake after reuses it. After the bake (or with a warm image):
 
 ```
 ✔ You are now using the environment 'sandbox-demo'
 To stop using this environment, run 'flox deactivate'
 
-flox [floxenv] bash-5.3# uname -sm
+flox [sandbox-demo] bash-5.3# uname -sm
 Linux aarch64
-flox [floxenv] bash-5.3# exit
+flox [sandbox-demo] bash-5.3# flox deactivate
 ```
+
+…and you land back at your own shell prompt. Inside the guest,
+`flox` is a minimal shim: `flox deactivate` ends the session
+(so the banner's instruction is true, mirroring subshell
+activations); any other subcommand prints a notice and returns
+127 — the full CLI is not present in the image. `exit` works
+too.
 
 **"One `cd`. Consent — so an in-progress agent can't silently
 enter a sandboxed session — and you're in a Linux micro-VM with
@@ -105,12 +119,16 @@ only the project mounted. That's the pitch."**
 > **Capture recipe (validated on this host):**
 >
 > ```bash
-> printf 'y\nuname -sm\nexit\n' | \
+> printf 'y\nuname -sm\nflox deactivate\n' | \
 >   script -q /dev/null bash --norc -i \
 >     -c 'eval "$(flox hook-env --shell bash --shell-pid $$)"'
 > ```
 >
-> Run from `~/sandbox-demo` with both feature flags exported.
+> Run from `~/sandbox-demo` with both feature flags exported —
+> exported in the shell (or via `env`), not just inline on the
+> `hook-env` substitution, or the emitted `flox activate` child
+> will not see them and will fall back to an unsandboxed
+> activation with a warning.
 > Clean ANSI noise before projecting. If the image is stale the
 > bake prompt appears first — accept and wait (~2–5 min), or
 > pre-bake with `FLOX_SANDBOX_OCI_AUTOBAKE=true flox activate --
@@ -121,9 +139,9 @@ only the project mounted. That's the pitch."**
 
 > **`ℹ️  Run 'flox activate --dir <path>' to enter this environment
 > sandboxed via oci.`** — this is the non-tty / unsupported-shell
-> notice. It appears when `hook-env` can't exec (non-interactive
-> shell, fish, tcsh). In an interactive bash/zsh terminal the
-> consent prompt appears instead.
+> notice. It appears when `hook-env` can't run the session
+> (non-interactive shell, fish, tcsh). In an interactive
+> bash/zsh terminal the consent prompt appears instead.
 
 > **`ℹ️  This environment declares a libsandbox sandbox;
 > in-place auto-activation is not mediated — run 'flox activate
@@ -526,9 +544,11 @@ tail -1 app.py
 
 **OCI consent semantics (opening beat vs explicit form):**
 - **Auto-activation** (`cd ~/sandbox-demo`): the prompt hook shows
-  the consent prompt from ADR-006, then execs the sandboxed
-  session. A prior allow/deny for the env's auto-activation has
-  no effect; session replacement always re-consents.
+  the consent prompt from ADR-006, then runs the sandboxed
+  session in the foreground; when it ends you return to your
+  shell, and the directory is session-suppressed until you leave
+  and re-enter. A prior allow/deny for the env's auto-activation
+  has no effect; entering a sandboxed session always re-consents.
 - **Explicit form** (`flox activate --sandbox enforce --sandbox-backend oci -- cmd`):
   no consent prompt. Use this in scripts, CI, and agents.
 
@@ -617,7 +637,7 @@ you may see:
 ```
 
 This is a benign artifact of the `detach` call in `hook-env`'s
-deactivation path running against the exec'd activation's state
+deactivation path running against the activation's state
 directory. The error does not affect the activation flow — the
 container boots and the `uname -sm` output is correct. Omit it
 from projected captures but do not attempt to suppress it by
