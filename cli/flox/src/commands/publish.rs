@@ -6,7 +6,7 @@ use flox_events::EventsHub;
 use flox_manifest::{Manifest, MigratedTypedOnly};
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment};
-use flox_rust_sdk::providers::build::{COMMON_NIXPKGS_URL, PackageTarget, PackageTargets};
+use flox_rust_sdk::providers::build::{COMMON_NIXPKGS_URL, PackageTarget};
 use flox_rust_sdk::providers::catalog::SystemEnum;
 use flox_rust_sdk::providers::nix_auth::NixAuth;
 use flox_rust_sdk::providers::publish::{
@@ -132,14 +132,15 @@ impl Publish {
         manifest: &Manifest<MigratedTypedOnly>,
         expression_ref: &NixFlakeref,
         target_arg: Option<PublishTarget>,
-    ) -> Result<(PackageTarget, PackageTargets)> {
-        let (selected, all_targets) = packages_to_build(
+    ) -> Result<PackageTarget> {
+        match packages_to_build(
             manifest,
             expression_ref,
             &Vec::from_iter(target_arg.map(|arg| arg.target)),
-        )?;
-        match selected.as_slice() {
-            [target] => Ok((target.clone(), all_targets)),
+        )?
+        .as_slice()
+        {
+            [target] => Ok(target.clone()),
             [] => bail!("Cannot publish without a build specified"),
             _ => bail!("Must specify an artifact to publish"),
         }
@@ -181,17 +182,17 @@ impl Publish {
         prefetch_flake_ref(&COMMON_NIXPKGS_URL)?;
 
         let lockfile_manifest = lockfile.migrated_manifest()?;
-        let (package, all_targets) = {
+        let package = {
             let expression_dir_parent = path_env.dot_flox_path();
             let expression_ref_local = NixFlakeref::from_path(&expression_dir_parent)?;
-            let (package, all_targets) =
+            let package =
                 Self::get_publish_target(&lockfile_manifest, &expression_ref_local, package_arg)?;
 
             // Note: when publishing an expression build,
             // this causes us to discover the containing git repo twice.
             // While slightly redundant it outweighs the complexity of reusing git instances.
             check_git_tracking_for_expression_builds([&package], &expression_dir_parent)?;
-            (package, all_targets)
+            package
         };
 
         disallow_base_url_select_for_manifest_builds(
@@ -314,14 +315,12 @@ impl Publish {
             },
         }
 
-        let nef_targets = all_targets.nef_target_names();
         let build_metadata = check_build_metadata(
             &flox,
             &selected_base_nixpkgs_url,
             system_override_inner,
             &publish_provider.env_metadata,
             &publish_provider.package_metadata.package,
-            &nef_targets,
         )?;
 
         // CLI args take precedence over config
@@ -407,7 +406,7 @@ mod tests {
             .unwrap()
             .as_migrated_typed_only();
 
-        let (target, _) =
+        let target =
             Publish::get_publish_target(&manifest, prepare_empty_expressions_ref(), None).unwrap();
         assert_eq!(
             target,
@@ -473,7 +472,7 @@ mod tests {
         let manifest = Manifest::parse_and_migrate(manifest_contents, None)
             .unwrap()
             .as_migrated_typed_only();
-        let (target, _) = Publish::get_publish_target(
+        let target = Publish::get_publish_target(
             &manifest,
             prepare_empty_expressions_ref(),
             Some(PublishTarget {
@@ -504,7 +503,7 @@ mod tests {
         let manifest = Manifest::parse_and_migrate(manifest_contents, None)
             .unwrap()
             .as_migrated_typed_only();
-        let (target, _) = Publish::get_publish_target(
+        let target = Publish::get_publish_target(
             &manifest,
             prepare_empty_expressions_ref(),
             Some(PublishTarget {

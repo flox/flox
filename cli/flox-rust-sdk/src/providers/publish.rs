@@ -39,7 +39,6 @@ use super::build::{
     PackageTarget,
     PackageTargetError,
     PackageTargetKind,
-    PackageTargetName,
     find_toplevel_group_nixpkgs,
 };
 use super::buildenv::BuildEnvOutputs;
@@ -891,7 +890,6 @@ pub fn check_build_metadata(
     system_override: Option<String>,
     env_metadata: &CheckedEnvironmentMetadata,
     pkg: &PackageTarget,
-    nef_targets: &[PackageTargetName<'_>],
 ) -> Result<CheckedBuildMetadata, PublishError> {
     let workdir = if sandbox_is_local(pkg) {
         BuildWorkdir::SharedClone
@@ -902,17 +900,10 @@ pub fn check_build_metadata(
 
     let builder = FloxBuildMk::new(flox, &base_dir, &expression_ref, &built_environments);
 
-    // Build the package and collect the outputs.
-    // `nef_targets` carries the complete set of Nix expression build target
-    // names for this environment (supplied by the caller). The Makefile needs
-    // a `catalogLockfile_<pname>` argument for every NEF target so that
-    // expression builds — including those that serve as prerequisites for the
-    // manifest package being published — can proceed.
     let build_results = builder.build(
         &base_nixpkgs_url.as_flake_ref()?,
         &built_environments.dev,
         &[pkg.name()],
-        nef_targets,
         Some(false),
         system_override,
     )?;
@@ -1569,7 +1560,6 @@ pub mod tests {
             None,
             &env_metadata,
             &EXAMPLE_MANIFEST_PACKAGE_TARGET,
-            &[EXAMPLE_MANIFEST_PACKAGE_TARGET.name()],
         )
         .unwrap();
 
@@ -1616,7 +1606,6 @@ pub mod tests {
             None,
             &env_metadata,
             &EXAMPLE_MANIFEST_PACKAGE_TARGET_MISSING_FIELDS,
-            &[EXAMPLE_MANIFEST_PACKAGE_TARGET_MISSING_FIELDS.name()],
         )
         .unwrap();
 
@@ -1673,7 +1662,6 @@ pub mod tests {
             None,
             &env_metadata,
             &pure_pkg,
-            &[pure_pkg.name()],
         )
         .unwrap();
 
@@ -1713,7 +1701,6 @@ pub mod tests {
             None,
             &env_metadata,
             &package_metadata.package,
-            &[package_metadata.package.name()],
         )
         .unwrap();
 
@@ -1775,7 +1762,6 @@ pub mod tests {
             None,
             &env_metadata,
             &package_metadata.package,
-            &[package_metadata.package.name()],
         )
         .unwrap();
 
@@ -2081,7 +2067,6 @@ pub mod tests {
             None,
             &env_metadata,
             &package_metadata.package,
-            &[package_metadata.package.name()],
         )
         .unwrap();
 
