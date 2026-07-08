@@ -18,6 +18,7 @@ flox [<general-options>] activate
      [--start-services | --no-start-services]
      [-m=(dev|run)]
      [--sandbox[=(off|warn|enforce|prompt)]]
+     [--sandbox-backend=<backend>]
      [-g=<generation>]
      [-c=<shell command> | -- <exec command>...]
 ```
@@ -205,6 +206,10 @@ options.
 `--sandbox (off|warn|enforce|prompt)`
 :  Mediate filesystem and outbound-network access during this activation.
    Defaults to `off`, which applies no sandbox.
+   The default-policy, sensitive-path, and advisory-mediation behavior
+   described below applies to the default `libsandbox` backend; the
+   enforcing backends selected with `--sandbox-backend` isolate
+   differently — see [`flox-sandbox(1)`](./flox-sandbox.md).
    A bare `--sandbox` with no value is shorthand for `--sandbox prompt`.
    Environments can request a mode with the `options.sandbox` manifest
    setting (see [`manifest.toml(5)`](./manifest.toml.md)); the
@@ -275,6 +280,21 @@ options.
 
    Under `prompt`, review and approve queued requests — and inspect or edit
    saved grants — with [`flox-sandbox(1)`](./flox-sandbox.md).
+
+`--sandbox-backend <backend>`
+:  Select the isolation backend for a sandboxed activation; only takes
+   effect with an active `--sandbox` mode. One of `libsandbox`, `nix`,
+   `host-native`, `srt`, `oci`, or `libkrun`. Defaults to `libsandbox`,
+   the advisory loader-based mediator described above. `host-native` and
+   `srt` use the OS kernel sandbox; `oci` runs the activation in a Linux
+   container with only the project directory mounted. The enforcing
+   backends (`host-native`, `srt`, `oci`) support `enforce` only and
+   reject `warn`/`prompt`. `nix` and `libkrun` are not yet wired into
+   activation and error if selected. Precedence: this flag, then the
+   `FLOX_SANDBOX_BACKEND` environment variable, then the
+   `options.sandbox-backend` manifest setting.
+   See [`flox-sandbox(1)`](./flox-sandbox.md) for the full backend
+   documentation, including OCI image baking and its operational valves.
 
 `-g <generation>`, `--generation <generation>`
 :  Activate a FloxHub environment at a specific generation.
