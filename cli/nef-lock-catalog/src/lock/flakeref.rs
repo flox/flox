@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::str::FromStr;
 
 use anyhow::{Context, Result};
@@ -6,8 +6,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use url::Url;
 
-use crate::nix::nix_base_command;
-use crate::{LockOptions, nix};
+use crate::nix;
 
 #[derive(Debug, Clone)]
 pub struct NixFlakeref {
@@ -116,98 +115,31 @@ impl NixFlakeref {
     }
 }
 
-/// Lock a flakeref url
-pub fn lock_url_with_options(
-    flakeref: &NixFlakeref,
-    options: &LockOptions,
-) -> Result<NixPrefetchResult> {
-    let mut prefetch = nix_prefetch_url(flakeref.as_url())?;
+/// The raw attribute-set form of a locked nix flakeref (a "source ref"),
+/// carried verbatim as JSON.
+///
+/// Unlike [NixFlakeref], this performs no nix-based parsing or validation: the
+/// catalog `/build-inputs/lookup` endpoint returns sources already locked
+/// server-side, and this type carries that JSON through unchanged into the
+/// build lock, where the NEF feeds it to `builtins.fetchTree`. It is a marker
+/// for the "assumed-locked, stored-verbatim" invariant — the source is not
+/// re-validated client-side.
+///
+/// Serialized transparently, so the lockfile shape is just the inner object.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct RawNixFlakerefAttrs(Value);
 
-    // Extract and remove `dir` from the locked ref.
-    // Replaced by explicit pkgsDir/catalogsLock fields.
-    {
-        let locked = prefetch
-            .locked
-            .as_object_mut()
-            .expect("'locked' attribute should be a map");
-
-        if let Some(ref nef_base_dir) = options.nef_base_dir {
-            let prefix = locked.get("dir").and_then(Value::as_str).unwrap_or(".");
-            locked.insert("dir".to_string(), format!("{prefix}/{nef_base_dir}").into());
-        }
-    }
-
-    Ok(prefetch)
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct NixPrefetchResult {
-    hash: String,
-    locked: Value,
-    original: Value,
-    #[serde(rename = "storePath")]
-    store_path: PathBuf,
-}
-
-impl NixPrefetchResult {
-    pub fn locked_flakeref(&self) -> NixFlakeref {
-        self.locked
-            .clone()
-            .try_into()
-            .expect("valid flakeref by construction")
-    }
-
-    pub fn store_path(&self) -> &Path {
-        &self.store_path
+impl RawNixFlakerefAttrs {
+    /// Wrap an already-locked source value (e.g. a catalog lookup result)
+    /// without validating it — the caller asserts it is a locked flakeref.
+    pub fn new_unchecked(value: Value) -> Self {
+        Self(value)
     }
 }
 
-/// Lock a flakeref url using `nix flake prefetch`.
-/// This resolves urls, downloads the source and returns
-/// a locked source type as well as source information,
-/// such as hash and storePath.
-///
-///
-/// Example:
-///
-/// ```shell
-/// $ nix flake prefetch git+ssh://git@github.com/flox/flox --json
-/// {
-///   "hash": "sha256-LdMMBff1PCXQQl3I5Dvg5U2s4l+7l9lemAncUCjJUY8=",
-///   "locked": {
-///     "lastModified": 1770220825,
-///     "ref": "refs/heads/main",
-///     "rev": "a6250c34313d184c5c5be7ad824ad0bbc7610e38",
-///     "revCount": 4546,
-///     "type": "git",
-///     "url": "ssh://git@github.com/flox/flox"
-///   },
-///   "original": {
-///     "type": "git",
-///     "url": "ssh://git@github.com/flox/flox"
-///   },
-///   "storePath": "/nix/store/pihgq0g5vnrzlx2g5lzdn7dh7aqfbl7g-source"
-/// }
-/// ```
-pub(crate) fn nix_prefetch_url(url: &Url) -> Result<NixPrefetchResult> {
-    let mut command = nix_base_command();
-    command
-        .arg("flake")
-        .arg("prefetch")
-        .arg("--refresh")
-        .arg("--json")
-        .arg(url.as_str());
-
-    let output = command
-        .output()
-        .with_context(|| format!("failed to run '{command:?}')"))?;
-
-    if !output.status.success() {
-        Err(anyhow::anyhow!(
-            String::from_utf8_lossy(&output.stderr).into_owned()
-        ))
-        .with_context(|| format!("failed to lock {url}"))?;
+impl From<floxhub_client::LockedGitSource> for RawNixFlakerefAttrs {
+    fn from(value: floxhub_client::LockedGitSource) -> Self {
+        Self::new_unchecked(serde_json::to_value(value).expect("deserialized from json body"))
     }
-
-    serde_json::from_slice(&output.stdout).context("could not parse nix prefetch")
 }

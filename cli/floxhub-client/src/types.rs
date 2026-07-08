@@ -34,10 +34,23 @@ pub type SearchResults = ResultsPage<SearchResult>;
 pub use api_types::{PackageOutput, PackageOutputs, PackageResolutionInfo as PackageBuild};
 pub type PackageDetails = ResultsPage<PackageBuild>;
 
+// Build-inputs lookup (lockless catalog locking, ECO-93). Re-exported so
+// consumers (e.g. nef-lock-catalog) depend only on floxhub-client.
+pub use api_types::{
+    BuildInputsLookupRequest,
+    BuildInputsLookupResponse,
+    GroupResult,
+    LockedGitSource,
+    LockedInputEntry,
+    LookupGroup,
+    ReferencePoint,
+    Stability,
+    UnresolvableEntry,
+    UnresolvableLeaf,
+};
 // ---------------------------------------------------------------------------
 // Package descriptors
 // ---------------------------------------------------------------------------
-
 /// Just an alias until the auto-generated PackageDescriptor diverges from what
 /// we need.
 pub use api_types::{

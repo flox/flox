@@ -14,6 +14,7 @@ use floxhub_client::{
     CatalogStoreConfig,
     CatalogStoreConfigNixCopy,
     FloxhubClientError,
+    LockedInputEntry,
     NarInfos,
     PackageOutput,
     PackageOutputs,
@@ -26,7 +27,7 @@ use git_url_parse::GitUrl;
 use indexmap::IndexSet;
 use indoc::{formatdoc, indoc};
 use itertools::Itertools;
-use nef_lock_catalog::lock::NixFlakeref;
+use nef_lock_catalog::NixFlakeref;
 use thiserror::Error;
 use tracing::{debug, instrument};
 use url::Url;
@@ -200,6 +201,10 @@ pub struct CheckedBuildMetadata {
     pub unfree: Option<bool>,
 
     pub version: Option<String>,
+
+    /// The direct catalog inputs the build locked, keyed by locked-input
+    /// reference. Empty for build modes that resolve no catalog inputs.
+    pub direct_catalog_inputs: HashMap<String, LockedInputEntry>,
 
     // This field isn't "pub", so no one outside this module can construct this struct. That helps
     // ensure that we can only make this struct as a result of doing the "right thing."
@@ -661,9 +666,8 @@ where
                 version: build_metadata.version.clone(),
             },
             locked_base_catalog_url: Some(self.package_metadata.base_catalog_ref.to_string()),
-            // The server reconstructs the locked-inputs DAG from the recorded
-            // build; the CLI does not populate it on the publish request.
-            locked_inputs: None,
+            // Record the build's direct catalog inputs.
+            locked_inputs: Some(build_metadata.direct_catalog_inputs.clone()),
             base_catalog_rev_count: None,
             base_catalog_rev_date: None,
             url: self.env_metadata.build_repo_meta.url.to_string(),
@@ -860,6 +864,7 @@ fn convert_build_result_to_build_metadata(
             PublishError::UnsupportedEnvironmentState("Invalid system".to_string())
         })?,
         version: Some(build_result.version.clone()),
+        direct_catalog_inputs: build_result.catalog_lockfile.clone(),
         _private: (),
     })
 }
@@ -890,6 +895,7 @@ pub fn check_build_metadata(
     system_override: Option<String>,
     env_metadata: &CheckedEnvironmentMetadata,
     pkg: &PackageTarget,
+    nef_stability: Option<String>,
 ) -> Result<CheckedBuildMetadata, PublishError> {
     let workdir = if sandbox_is_local(pkg) {
         BuildWorkdir::SharedClone
@@ -904,6 +910,9 @@ pub fn check_build_metadata(
         &base_nixpkgs_url.as_flake_ref()?,
         &built_environments.dev,
         &[pkg.name()],
+        // Lock the NEF catalog inputs at the stability selected for publish, so
+        // the recorded inputs match the build the user intends to publish.
+        nef_stability,
         Some(false),
         system_override,
     )?;
@@ -1560,6 +1569,7 @@ pub mod tests {
             None,
             &env_metadata,
             &EXAMPLE_MANIFEST_PACKAGE_TARGET,
+            None,
         )
         .unwrap();
 
@@ -1606,6 +1616,7 @@ pub mod tests {
             None,
             &env_metadata,
             &EXAMPLE_MANIFEST_PACKAGE_TARGET_MISSING_FIELDS,
+            None,
         )
         .unwrap();
 
@@ -1662,6 +1673,7 @@ pub mod tests {
             None,
             &env_metadata,
             &pure_pkg,
+            None,
         )
         .unwrap();
 
@@ -1701,6 +1713,7 @@ pub mod tests {
             None,
             &env_metadata,
             &package_metadata.package,
+            None,
         )
         .unwrap();
 
@@ -1762,6 +1775,7 @@ pub mod tests {
             None,
             &env_metadata,
             &package_metadata.package,
+            None,
         )
         .unwrap();
 
@@ -1887,6 +1901,7 @@ pub mod tests {
             broken: Some(false),
             insecure: None,
             unfree: None,
+            direct_catalog_inputs: HashMap::new(),
             _private: (),
         };
 
@@ -2067,6 +2082,7 @@ pub mod tests {
             None,
             &env_metadata,
             &package_metadata.package,
+            None,
         )
         .unwrap();
 
