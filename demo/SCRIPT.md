@@ -105,16 +105,19 @@ only the project mounted. That's the pitch."**
 > **Capture recipe (validated on this host):**
 >
 > ```bash
-> FLOX_SANDBOX_OCI_ALLOW_STALE=1 \
->   printf 'y\nuname -sm\nexit\n' | \
+> printf 'y\nuname -sm\nexit\n' | \
 >   script -q /dev/null bash --norc -i \
 >     -c 'eval "$(flox hook-env --shell bash --shell-pid $$)"'
 > ```
 >
 > Run from `~/sandbox-demo` with both feature flags exported.
-> Clean ANSI noise before projecting. The `ALLOW_STALE` flag
-> skips the bake prompt for capture; drop it for a live first-bake
-> demo if you have 5 minutes to spare.
+> Clean ANSI noise before projecting. If the image is stale the
+> bake prompt appears first — accept and wait (~2–5 min), or
+> pre-bake with `FLOX_SANDBOX_OCI_AUTOBAKE=true flox activate --
+> true`. **Caution:** the piped-pty harness can wedge and leave a
+> guest session running if the input script doesn't reach `exit`
+> — after any failed capture, check `container ls` and
+> `container rm -f <id>` strays.
 
 > **`ℹ️  Run 'flox activate --dir <path>' to enter this environment
 > sandboxed via oci.`** — this is the non-tty / unsupported-shell
@@ -170,17 +173,17 @@ FLOX_SANDBOX_OCI_IMAGE=sandbox-demo:latest \
   flox activate --sandbox enforce --sandbox-backend oci -- uname -sm
 ```
 
-> **Prototype bake note.** On this dev build, bakes require
-> `_FLOX_CONTAINERIZE_FLAKE_REF_OR_REV=3b4774070ce0a804acf7da299940725454b19d64`
-> exported — the frozen builder pin at `github:flox/flox` cannot
-> parse lockfiles written by this dev build (the schema preflight
-> reports: `unknown field 'sandbox' in options`). This is because
-> `options.sandbox` and `options.sandbox-backend` are prototype-only
-> fields not yet in the frozen builder's manifest schema. Until the
-> prototype merges, use `FLOX_SANDBOX_OCI_ALLOW_STALE=1` to run
-> with the pre-baked image from the demo setup, or pin
-> `_FLOX_CONTAINERIZE_FLAKE_REF_OR_REV` to a commit on this branch
-> that includes the schema additions.
+> **How the bake handles the prototype-only manifest fields:** the
+> builder receives a *sanitized* view of the environment —
+> `options.sandbox` and `options.sandbox-backend` are stripped
+> before anything reaches the in-container flox or the image. The
+> sandbox declaration is a host-side concern; the image is the
+> *inside* of the boundary and never carries it. No overrides or
+> valves are needed to bake a sandbox-declaring environment; the
+> image tag stays keyed to your real (unsanitized) lockfile. If a
+> future manifest schema outruns the frozen builder pin, the bake
+> fails fast with a one-line schema-preflight error naming
+> `_FLOX_CONTAINERIZE_FLAKE_REF_OR_REV` as the override.
 
 ---
 
