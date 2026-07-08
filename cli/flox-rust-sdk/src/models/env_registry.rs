@@ -4,7 +4,7 @@ use std::time::SystemTime;
 use flox_core::{Version, WriteError, serialize_atomically, traceable_path};
 use fslock::LockFile;
 use serde::{Deserialize, Serialize};
-use tracing::{debug, instrument};
+use tracing::{debug, instrument, warn};
 
 use super::environment::{EnvironmentPointer, path_hash};
 use super::floxmeta::{FloxMeta, FloxMetaError};
@@ -31,8 +31,6 @@ pub enum EnvRegistryError {
     WriteEnvironmentRegistry(#[source] WriteError),
     #[error("no registry found")]
     NoEnvRegistry,
-    #[error(transparent)]
-    FloxMeta(#[from] FloxMetaError),
 }
 
 /// A local registry of environments on the system.
@@ -121,31 +119,41 @@ impl EnvRegistry {
     }
 
     /// Prunes environments that no longer exist on disk from the Registry and FloxMeta.
-    fn prune_nonexistent(&mut self, flox: &Flox) -> Result<(), EnvRegistryError> {
-        self.entries
-            .iter()
-            .filter(|entry| !entry.exists())
-            .try_for_each(|entry| {
-                for env in entry.envs.iter() {
-                    // Prune floxmeta branches for managed environments
-                    if let EnvironmentPointer::Managed(ref pointer) = env.pointer {
-                        // Previously canonicalized path that we know no longer exists.
-                        let path = CanonicalPath::new_unchecked(&entry.path);
-                        let mut floxmeta = FloxMeta::open(flox, pointer)?;
-                        prune_branches_from_floxmeta_by_pointer(&mut floxmeta, pointer, &path)?;
-                    }
+    ///
+    /// Pruning floxmeta branches is best-effort and entirely local: the remote
+    /// is never contacted (the backing environment may no longer exist on
+    /// FloxHub), and a failure to prune branches for one entry doesn't prevent
+    /// other entries from being pruned.
+    fn prune_nonexistent(&mut self, flox: &Flox) {
+        for entry in self.entries.iter().filter(|entry| !entry.exists()) {
+            for env in entry.envs.iter() {
+                // Prune floxmeta branches for managed environments
+                let EnvironmentPointer::Managed(ref pointer) = env.pointer else {
+                    continue;
+                };
+                // Previously canonicalized path that we know no longer exists.
+                let path = CanonicalPath::new_unchecked(&entry.path);
+                let res = FloxMeta::open_local(flox, pointer).and_then(|mut floxmeta| {
+                    prune_branches_from_floxmeta_by_pointer(&mut floxmeta, pointer, &path)
+                });
+                match res {
+                    Ok(()) => {},
+                    // No floxmeta repository for this owner means there are no branches to prune.
+                    Err(FloxMetaError::NotFound(_)) => {},
+                    Err(err) => warn!(
+                        %err,
+                        owner = %pointer.owner,
+                        name = %pointer.name,
+                        "failed to prune floxmeta branches for deleted environment"
+                    ),
                 }
-
-                Ok(())
-            })
-            .map_err(EnvRegistryError::FloxMeta)?;
+            }
+        }
 
         // The environment registry is the only method we have of determining
         // whether a branch in floxmeta should be garbage collected, so only
         // remove entries after pruning floxmeta
         self.entries.retain(|entry| entry.exists());
-
-        Ok(())
     }
 }
 
@@ -338,7 +346,7 @@ pub fn garbage_collect(flox: &Flox) -> Result<EnvRegistry, EnvRegistryError> {
     let reg_path = env_registry_path(flox);
     let lock = acquire_env_registry_lock(&reg_path)?;
     let mut reg = read_environment_registry(&reg_path)?.ok_or(EnvRegistryError::NoEnvRegistry)?;
-    reg.prune_nonexistent(flox)?;
+    reg.prune_nonexistent(flox);
     write_environment_registry(&reg, &reg_path, lock)?;
     Ok(reg)
 }
@@ -357,6 +365,7 @@ mod test {
 
     use super::*;
     use crate::flox::test_helpers::flox_instance;
+    use crate::models::environment::ManagedPointer;
     use crate::models::environment::path_environment::test_helpers::new_path_environment;
 
     impl Arbitrary for RegistryEntry {
@@ -511,6 +520,35 @@ mod test {
             // Empty entries should be removed
             prop_assert!(reg.entry_for_hash(&hash).is_none());
         }
+    }
+
+    #[test]
+    fn prunes_stale_managed_env_without_contacting_floxhub() {
+        let (flox, _temp_dir) = flox_instance();
+
+        // A registered managed environment whose `.flox` directory no longer
+        // exists and whose floxmeta was never cloned locally. Pruning must not
+        // try to fetch the environment from FloxHub (the backing environment
+        // may have been deleted upstream) and must still remove the entry.
+        let pointer = ManagedPointer::new(
+            "owner".parse().unwrap(),
+            "name".parse().unwrap(),
+            &flox.floxhub,
+        );
+        let path = flox.temp_dir.join("deleted").join(".flox");
+        let mut reg = EnvRegistry::default();
+        reg.entries.push(RegistryEntry {
+            path_hash: path_hash(&path),
+            path,
+            envs: vec![RegisteredEnv {
+                created_at: 0,
+                pointer: EnvironmentPointer::Managed(pointer),
+            }],
+        });
+
+        reg.prune_nonexistent(&flox);
+
+        assert_eq!(reg.entries, vec![]);
     }
 
     #[test]
