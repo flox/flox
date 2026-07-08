@@ -878,6 +878,10 @@ Semver ::= {
         `libkrun`), `prompt` for `libsandbox`. `mode = "off"` is the
         master switch and disables the sandbox regardless of `backend`.
         An explicit `flox activate --sandbox` flag takes precedence.
+        Note the default follows the *manifest's* `backend` even when
+        the effective backend is overridden by the flag or environment
+        variable; an incompatible resulting pairing (e.g. an advisory
+        mode on an enforcing backend) fails at activation.
 
     Requires the `sandbox_activate` feature flag
     (set `FLOX_FEATURES_SANDBOX_ACTIVATE=true`);
