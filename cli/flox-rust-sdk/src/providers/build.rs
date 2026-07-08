@@ -10,10 +10,10 @@ use flox_manifest::parsed::Inner;
 use flox_manifest::parsed::common::DEFAULT_GROUP_NAME;
 use flox_manifest::parsed::latest::BuildSandbox;
 use flox_manifest::{Manifest, MigratedTypedOnly};
-use floxhub_client::BaseCatalogUrl;
+use floxhub_client::{BaseCatalogUrl, LockedInputEntry};
 use indoc::formatdoc;
 use itertools::Itertools;
-use nef_lock_catalog::lock::NixFlakeref;
+use nef_lock_catalog::NixFlakeref;
 use serde::Deserialize;
 use tempfile::NamedTempFile;
 use thiserror::Error;
@@ -57,11 +57,24 @@ pub trait ManifestBuilder {
     /// The build process will start in the background.
     /// To process the output, the caller should iterate over the returned [BuildOutput].
     /// Once the process is complete, the [BuildOutput] will yield an [Output::Exit] message.
+    ///
+    /// `nef_targets` is the complete set of Nix expression build target names
+    /// present in the environment.
+    /// The builder passes this list to the underlying Makefile so that NEF
+    /// prerequisites of manifest builds (e.g. `${foo}` references) are known
+    /// at Makefile parse time without requiring a second `nix eval` discovery
+    /// call.
+    ///
+    /// `nef_stability` is the stability used to resolve the catalog build
+    /// inputs of NEF (expression) builds, as selected by the `--stability`
+    /// flag. When [None] the Makefile falls back to its default stability.
+    #[allow(clippy::too_many_arguments)]
     fn build(
         self,
         expression_build_nixpkgs: &Url,
         flox_interpreter: &Path,
-        package: &[PackageTargetName],
+        packages: &[PackageTargetName],
+        nef_stability: Option<String>,
         build_cache: Option<bool>,
         system_override: Option<String>,
     ) -> Result<BuildResults, ManifestBuilderError>;
@@ -113,6 +126,11 @@ pub struct BuildResult {
     pub version: String,
     pub system: String,
     pub log: BuiltStorePath,
+    /// The direct catalog inputs the build locked, keyed by locked-input
+    /// reference. Emitted by NEF builds; absent (and so empty) for build modes
+    /// that resolve no catalog inputs.
+    #[serde(rename = "catalogLockfile", default)]
+    pub catalog_lockfile: HashMap<String, LockedInputEntry>,
     // TODO: factor out and use buildenv::BuiltStorePath (?)
     #[serde(rename = "resultLinks")]
     pub result_links: BTreeMap<PathBuf, PathBuf>,
@@ -296,11 +314,13 @@ impl ManifestBuilder for FloxBuildMk<'_> {
     /// of manifest and expression build if `expression_build_nixpkgs_url`
     /// is different from the environments toplevel group,
     /// i.e. manifest builds and expression builds would use incompatible nixpkgs.
+    #[allow(clippy::too_many_arguments)]
     fn build(
         self,
         expression_build_nixpkgs_url: &Url,
         flox_interpreter: &Path,
         packages: &[PackageTargetName],
+        nef_stability: Option<String>,
         build_cache: Option<bool>,
         system_override: Option<String>,
     ) -> Result<BuildResults, ManifestBuilderError> {
@@ -310,6 +330,13 @@ impl ManifestBuilder for FloxBuildMk<'_> {
         command.arg(format!(
             "EXPRESSION_BUILD_NIXPKGS_URL={expression_build_nixpkgs_url}"
         ));
+
+        // The stability used to resolve NEF catalog build inputs. Only passed
+        // when the caller selected one via `--stability`; otherwise the
+        // Makefile applies its own default.
+        if let Some(nef_stability) = nef_stability {
+            command.arg(format!("EXPRESSION_BUILD_STABILITY={nef_stability}"));
+        }
 
         if let Some(system_override) = system_override {
             command.arg(format!("NIX_SYSTEM={system_override}"));
@@ -855,6 +882,7 @@ pub mod test_helpers {
             &toplevel_or_common_nixpkgs,
             &env.rendered_env_links(flox).unwrap().dev,
             &[PackageTargetName::new_unchecked(&package)],
+            None,
             build_cache,
             None,
         );

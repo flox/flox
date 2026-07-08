@@ -107,6 +107,7 @@
           flox-nix-plugins = callPackage ./pkgs/flox-nix-plugins { };
           flox-buildenv = callPackage ./pkgs/flox-buildenv { };
           flox-activations = callPackage ./pkgs/flox-activations { };
+          nef-lock-catalog = callPackage ./pkgs/nef-lock-catalog { };
           flox-cli = callPackage ./pkgs/flox-cli { };
 
           # Kerberos-enabled variant with GSSAPI authentication
@@ -204,6 +205,7 @@
           flox-buildenv
           flox-package-builder
           flox-activations
+          nef-lock-catalog
           flox-cli
           flox-cli-kerberos
           flox-cli-tests

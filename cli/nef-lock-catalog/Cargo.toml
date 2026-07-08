@@ -6,13 +6,16 @@ edition.workspace = true
 [dependencies]
 anyhow.workspace = true
 clap.workspace = true
+indent.workspace = true
+indoc.workspace = true
 url.workspace = true
 serde_json.workspace = true
-toml.workspace = true
 serde.workspace = true
-indexmap.workspace = true
+thiserror.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 floxhub-client = { path = "../floxhub-client" }
 flox-core = {path = "../flox-core"}
+rnix.workspace = true
+rowan.workspace = true
 tokio.workspace = true
