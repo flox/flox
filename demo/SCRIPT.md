@@ -1,50 +1,186 @@
 # Demo: `flox activate --sandbox` (prototype)
 
-A ~5-minute single-terminal walkthrough. **Bold** lines are
-roughly what to *say*; fenced blocks are what to *type*. Every
-command and its output below was verified on macOS (arm64)
-against this prototype.
+A ~7-minute single-terminal walkthrough. **Bold** lines are what
+to *say*; fenced blocks are what to *type*. Every command and its
+output below was verified on macOS (arm64) against this prototype
+at HEAD b0ebb29de.
 
-Prereqs (verified by `bash demo/setup.sh`, which creates
-everything):
+## Setup
 
-- your locally built `flox` (e.g. `target/debug`) is already
-  first in PATH
-- `FLOX_FEATURES_SANDBOX_ACTIVATE=true` is already exported in
-  your shell
-
-Run `bash demo/setup.sh` once, then:
+Run `bash demo/setup.sh` once from the dev shell. The script
+creates the demo env, installs tools, seeds the project, and
+pre-allows auto-activation. The epilogue prints the three lines
+you must have set in your presentation shell:
 
 ```bash
-cd /tmp/sandbox-demo
+alias flox='$FLOX_BIN'            # the prototype binary
+export FLOX_FEATURES_SANDBOX_ACTIVATE=true
+export FLOX_FEATURES_AUTO_ACTIVATE=true
 ```
 
-> The sandbox only mediates Nix-store / env-provided binaries.
-> On macOS, system tools (`/usr/bin/curl`, `/bin/cat`) are
-> SIP-protected and escape the loader, so the demo uses tools
-> installed *into* the environment (`flox install …`, done by
-> setup). For the same reason a sandboxed activation swaps a
-> SIP-protected session shell (`/bin/zsh`) for the bash bundled
-> with Flox — otherwise the shell's own redirections
-> (`echo x > ~/file`) would escape the policy — and rewrites
-> `SHELL` inside the session. Interactive sessions print an
-> `ℹ Cannot mediate …` line explaining the swap; `-- CMD`
-> invocations exec the command directly and stay quiet. That's
-> an honest limitation, not a bug — call it out if asked.
+Also ensure the prompt hook is in your shell's RC file:
+```bash
+eval "$(flox hook-env --shell bash --shell-pid $$)"
+```
 
-> Expected blocks below are live captures with the username
-> shown as `/Users/you`. PIDs in the `[exe:pid]` tags, resolved
-> IPs, and git hashes vary run to run.
+> `FLOX_BIN` is the prototype binary in `target/debug/`. The alias
+> makes `flox` the prototype for the whole presentation without
+> requiring PATH manipulation.
 
 ---
 
-## 0 · Framing (~20s)
+## Framing (~20s)
 
 **"AI agents can do real damage — delete files, leak secrets,
 call out to the network. Flox can now wrap an activation in a
-sandbox so anything you run inside it — including a coding agent
-— is contained. There are three modes: `warn` to observe,
-`enforce` to lock down, and `prompt` to decide interactively."**
+sandbox so anything running inside — including a coding agent —
+is contained. And with two manifest lines and a `cd`, the whole
+thing is locked down by default."**
+
+---
+
+## 0 · Zero-friction lockdown — the opening beat (~60s)
+
+**"Here's the pitch in one command. The manifest declares the
+sandbox — just two lines — and auto-activation does the rest.
+Watch what happens when I `cd` into the project."**
+
+First, show the manifest declaration (add it via `flox edit`):
+
+```bash
+cd ~/sandbox-demo
+flox edit
+```
+
+In the editor, add these two lines to the `[options]` section
+and save:
+
+```toml
+[options]
+sandbox = "enforce"
+sandbox-backend = "oci"
+```
+
+**"Now, just `cd` away and back."**
+
+```bash
+cd /tmp && cd ~/sandbox-demo
+```
+
+Expected (piped through the `script` harness for capture;
+the live terminal shows the same):
+
+```
+Enter '/Users/you/sandbox-demo' (sandboxed via oci)? [Y/n]
+```
+
+Type `Y`. The consent prompt is the first-encounter gate for
+session-replacement — the manifest tells Flox to wrap in OCI,
+and the hook asks once per visit. Accept:
+
+```
+? OCI image 'sandbox-demo:<hash12>' is stale (environment has
+  changed since last bake).
+  Existing image: sandbox-demo:latest
+  Bake now? (~2–5 min on first bake; later bakes reuse layers) (Y/n)
+```
+
+On a **fresh environment** (first bake), accept the bake prompt
+and wait ~2–5 min. Subsequent entries find the cached image and
+launch in under a second. After the bake (or with a warm image):
+
+```
+✔ You are now using the environment 'sandbox-demo'
+To stop using this environment, run 'flox deactivate'
+
+flox [floxenv] bash-5.3# uname -sm
+Linux aarch64
+flox [floxenv] bash-5.3# exit
+```
+
+**"One `cd`. Consent — so an in-progress agent can't silently
+enter a sandboxed session — and you're in a Linux micro-VM with
+only the project mounted. That's the pitch."**
+
+> **Capture recipe (validated on this host):**
+>
+> ```bash
+> FLOX_SANDBOX_OCI_ALLOW_STALE=1 \
+>   printf 'y\nuname -sm\nexit\n' | \
+>   script -q /dev/null bash --norc -i \
+>     -c 'eval "$(flox hook-env --shell bash --shell-pid $$)"'
+> ```
+>
+> Run from `~/sandbox-demo` with both feature flags exported.
+> Clean ANSI noise before projecting. The `ALLOW_STALE` flag
+> skips the bake prompt for capture; drop it for a live first-bake
+> demo if you have 5 minutes to spare.
+
+> **`ℹ️  Run 'flox activate --dir <path>' to enter this environment
+> sandboxed via oci.`** — this is the non-tty / unsupported-shell
+> notice. It appears when `hook-env` can't exec (non-interactive
+> shell, fish, tcsh). In an interactive bash/zsh terminal the
+> consent prompt appears instead.
+
+> **`ℹ️  This environment declares a libsandbox sandbox;
+> in-place auto-activation is not mediated — run 'flox activate
+> --sandbox <MODE> --dir <path>' for a sandboxed session.`** —
+> this notice appears for environments that declare a libsandbox
+> backend. libsandbox is advisory, so in-place activation is not
+> blocked; the notice points you at the explicit form.
+
+### Auto-bake valves
+
+**Non-tty / CI — never stall on a prompt:**
+
+```bash
+FLOX_SANDBOX_OCI_AUTOBAKE=true \
+  flox activate --sandbox enforce --sandbox-backend oci -- uname -sm
+```
+
+```
+⚙️  Baking OCI image 'sandbox-demo:<hash12>' (builder pin: <rev>)...
+   First bake downloads the builder image and cross-compiles the
+   environment closure (~2–5 min).
+   Subsequent bakes reuse layers and are faster.
+✅  Image 'sandbox-demo:<hash12>' loaded into container store.
+Linux aarch64
+```
+
+**Stale image — run the newest existing image offline:**
+
+```bash
+FLOX_SANDBOX_OCI_ALLOW_STALE=1 \
+  flox activate --sandbox enforce --sandbox-backend oci -- uname -sm
+```
+
+```
+⚠️  Running stale image 'sandbox-demo:latest' (expected
+    'sandbox-demo:<hash12>').
+   The environment has changed since this image was built.
+   Unset FLOX_SANDBOX_OCI_ALLOW_STALE and re-run to bake a
+   fresh image.
+Linux aarch64
+```
+
+**Explicit image ref — pin and bypass staleness entirely:**
+
+```bash
+FLOX_SANDBOX_OCI_IMAGE=sandbox-demo:latest \
+  flox activate --sandbox enforce --sandbox-backend oci -- uname -sm
+```
+
+> **Prototype bake note.** On this dev build, bakes require
+> `_FLOX_CONTAINERIZE_FLAKE_REF_OR_REV=3b4774070ce0a804acf7da299940725454b19d64`
+> exported — the frozen builder pin at `github:flox/flox` cannot
+> parse lockfiles written by this dev build (the schema preflight
+> reports: `unknown field 'sandbox' in options`). This is because
+> `options.sandbox` and `options.sandbox-backend` are prototype-only
+> fields not yet in the frozen builder's manifest schema. Until the
+> prototype merges, use `FLOX_SANDBOX_OCI_ALLOW_STALE=1` to run
+> with the pre-baked image from the demo setup, or pin
+> `_FLOX_CONTAINERIZE_FLAKE_REF_OR_REV` to a commit on this branch
+> that includes the schema additions.
 
 ---
 
@@ -54,19 +190,26 @@ sandbox so anything you run inside it — including a coding agent
 access outside the policy — a way to learn what your workload
 actually needs before you lock it down."**
 
+> The §1–§3 beats use `--sandbox-backend libsandbox` explicitly to
+> override the manifest's `oci` default. libsandbox is advisory
+> and provides `warn` and `prompt` modes; the OCI backend is
+> `enforce`-only. Moving the demo dir from `/tmp` to `$HOME` has
+> no effect on the warn output — the sensitive-path and network
+> policy is identical regardless of where the project lives.
+
 ```bash
-flox activate --sandbox warn -- bash -c '
+flox activate --sandbox warn --sandbox-backend libsandbox -- bash -c '
   cat ~/demo-secrets/.env >/dev/null    # reads a secret
   curl -sI https://example.com >/dev/null   # calls the network
   echo "agent ran fine"
 '
 ```
 
-Expected:
+Expected (PIDs vary run to run):
 
 ```
-SANDBOX WARNING[cat:41624]: /Users/you/demo-secrets/.env is not in the sandbox (sensitive)
-SANDBOX WARNING[curl:41625]: connect to example.com:443 (2606:4700:10::6814:179a) is not in the network policy
+SANDBOX WARNING[cat:818]: /Users/you/demo-secrets/.env is not in the sandbox (sensitive)
+SANDBOX WARNING[curl:821]: connect to example.com:443 (2606:4700:10::6814:179a) is not in the network policy
 agent ran fine
 ```
 
@@ -87,7 +230,7 @@ blocked."**
 ### 2a — the agent works, zero friction
 
 ```bash
-flox activate --sandbox enforce -- bash -c '
+flox activate --sandbox enforce --sandbox-backend libsandbox -- bash -c '
   echo "    return 2" >> app.py        # edit a project file
   git commit -aqm "agent: tweak greet" # commit
   git log --oneline | head -1
@@ -96,10 +239,10 @@ flox activate --sandbox enforce -- bash -c '
 '
 ```
 
-Expected (no SANDBOX lines; hash varies):
+Expected (no SANDBOX lines; git hash varies):
 
 ```
-<hash> agent: tweak greet
+57cdd57 agent: tweak greet
 github: reachable
 agent work: done
 ```
@@ -113,36 +256,46 @@ registries and git hosts."**
 
 ```bash
 # read a credential:
-flox activate --sandbox enforce -- bash -c 'cat ~/demo-secrets/.env'
+flox activate --sandbox enforce --sandbox-backend libsandbox -- \
+  bash -c 'cat ~/demo-secrets/.env'
 # write outside the project:
-flox activate --sandbox enforce -- bash -c 'echo pwned > ~/sbx-pwned.txt'
+flox activate --sandbox enforce --sandbox-backend libsandbox -- \
+  bash -c 'echo pwned > ~/sbx-pwned.txt'
 # reach an un-approved host:
-flox activate --sandbox enforce -- bash -c 'curl -sI https://example.com'
+flox activate --sandbox enforce --sandbox-backend libsandbox -- \
+  bash -c 'curl -sI https://example.com'
 ```
 
-Expected (each blocked; curl prints one line per address it
-tries, so the count varies with DNS):
+Expected (PIDs and IP addresses vary; curl prints one line per
+address it tries, so the count varies with DNS):
 
 ```
-SANDBOX ERROR[cat:41648]: /Users/you/demo-secrets/.env is not in the sandbox (sensitive)
+SANDBOX ERROR[cat:957]: /Users/you/demo-secrets/.env is not in the sandbox (sensitive)
 cat: /Users/you/demo-secrets/.env: Permission denied
 
-SANDBOX ERROR[bash:41657]: /Users/you/sbx-pwned.txt is not in the sandbox
+SANDBOX ERROR[bash:983]: /Users/you/sbx-pwned.txt is not in the sandbox
 bash: line 1: /Users/you/sbx-pwned.txt: Permission denied
 
-SANDBOX ERROR[curl:41667]: connect to example.com:443 (2606:4700:10::ac42:93f3) is not in the network policy
-SANDBOX ERROR[curl:41667]: connect to example.com:443 (104.20.23.154) is not in the network policy
+SANDBOX ERROR[curl:1017]: connect to example.com:443 (2606:4700:10::ac42:93f3) is not in the network policy
+SANDBOX ERROR[curl:1017]: connect to example.com:443 (104.20.23.154) is not in the network policy
 ```
+
+> **`$HOME` vs `/tmp` policy note.** The demo project is now in
+> `~/sandbox-demo` (not `/tmp/sandbox-demo`). libsandbox
+> always-allows `/tmp` as a built-in prefix, so the old demo in
+> `/tmp` would not have blocked writes to `~/sbx-pwned.txt`.
+> Moving to `$HOME` means the project dir is NOT always-allowed —
+> it is granted through the default-seed — and writes outside it
+> (to `~/sbx-pwned.txt`) are correctly blocked. The demo behavior
+> is unchanged from the audience's perspective; it is actually more
+> faithful now.
 
 **"Reading a secret — blocked. Writing a file outside the
 project — blocked, and the denial is graceful: the command gets
 `Permission denied`, your shell survives. Calling an unapproved
 host — blocked. The agent edits your code and uses the network
 it needs, but it can't exfiltrate secrets, trash your home
-directory, or phone home somewhere you didn't allow. The same
-holds inside an interactive session — the session shell itself
-is mediated, so even a bare `echo pwned > ~/file` at the prompt
-is denied."**
+directory, or phone home somewhere you didn't allow."**
 
 ---
 
@@ -156,18 +309,19 @@ default: bare `--sandbox` means `--sandbox prompt`."**
 ### 3.1 — a legitimate access is denied and queued
 
 ```bash
-flox activate --sandbox -- bash -c 'cat ~/demo-data/fixtures.csv'
+flox activate --sandbox --sandbox-backend libsandbox -- \
+  bash -c 'cat ~/demo-data/fixtures.csv'
 ```
 
-Expected:
+Expected (PIDs vary):
 
 ```
 ℹ Sandbox 'prompt' enabled (advisory; mediates file reads/writes).
   Out-of-policy access is denied and queued for approval.
     review queue:   flox sandbox
     approve a path: flox sandbox allow '<glob>'   (second terminal)
-SANDBOX DENIED[cat:41681]: read /Users/you/demo-data/fixtures.csv (not in policy)
-SANDBOX DENIED[cat:41681]: queued as req 1 — approve outside: flox sandbox
+SANDBOX DENIED[cat:2086]: read /Users/you/demo-data/fixtures.csv (not in policy)
+SANDBOX DENIED[cat:2086]: queued as req 1 — approve outside: flox sandbox
 cat: /Users/you/demo-data/fixtures.csv: Permission denied
 ```
 
@@ -197,7 +351,8 @@ Expected:
 ### 3.3 — now it just works
 
 ```bash
-flox activate --sandbox -- bash -c 'cat ~/demo-data/fixtures.csv'
+flox activate --sandbox --sandbox-backend libsandbox -- \
+  bash -c 'cat ~/demo-data/fixtures.csv'
 ```
 
 Expected (the `prompt` banner always prints; no denials follow):
@@ -220,18 +375,17 @@ flox sandbox list
 Expected:
 
 ```
-Saved grants for /private/tmp/sandbox-demo/.flox
-(/private/tmp/sandbox-demo/.flox/cache/sandbox/grants.toml — edit by hand or flox sandbox allow|revoke)
+Saved grants for /Users/you/sandbox-demo/.flox
+(/Users/you/sandbox-demo/.flox/cache/sandbox/grants.toml — edit by hand or flox sandbox allow|revoke)
 
   PATTERN                          OPS    SOURCE              ADDED       EVIDENCE
-  /Users/djsauble/Code/flox/target/debug/** any    allow               2026-06-12  manual
-  /Users/you/demo-data/**          any    allow               2026-06-12  manual
+  /Users/you/demo-data/**          any    allow               2026-07-08  manual
   default-seed: 31 grants — use --all to show
 
 Sensitive (never auto-granted, never folded into a directory grant):
   /Users/you/.ssh/** /Users/you/.aws/** /Users/you/.gnupg/** /Users/you/.kube/** /Users/you/.netrc /Users/you/.config/gh/** **/.env* **/.flox/cache/sandbox/**
 
-22 saved filesystem grant(s) use 22 of 256 allow entries (0.6 of 16 KB); network grants are uncapped.
+21 saved filesystem grant(s) use 21 of 256 allow entries (0.6 of 16 KB); network grants are uncapped.
 ℹ OPS is informational; saved grants allow all access kinds in this prototype.
 ```
 
@@ -240,19 +394,18 @@ plain, hand-editable file you can inspect. The `default-seed` row
 is the out-of-box policy itself — git hosts, package registries,
 your shell dotfiles, even flox's own metrics endpoint — every
 implicit allowance is a visible, revocable grant; `--all` expands
-them. (The `target/debug` grant is my dev-build convenience —
-setup added it so the prototype's own binaries run quietly inside
-the session.) Over a session or two the agent zeroes in on
-exactly the policy it needs, and you never had to turn the
-sandbox off."**
+them. Over a session or two the agent zeroes in on exactly the
+policy it needs."**
 
 ### 3.5 — (say it, optionally show it) the agent can't approve itself
 
 ```bash
-flox activate --sandbox -- bash -c 'flox sandbox allow /tmp/anything'
+flox activate --sandbox --sandbox-backend libsandbox -- \
+  bash -c 'flox sandbox allow /tmp/anything'
 ```
 
-Expected (after the `prompt` banner):
+Expected (after the `prompt` banner; requires the prototype `flox`
+first on PATH inside the session):
 
 ```
 ✘ ERROR: refusing to allow from inside the sandboxed session.
@@ -261,71 +414,11 @@ Expected (after the `prompt` banner):
 
 ---
 
-## 4 · Close (~20s)
+## 4 · Backends — same UI, different isolation (~90s)
 
-**"So: `warn` to learn, `enforce` to lock down with a default
-that keeps agents productive, and `prompt` to tighten the policy
-interactively. It's a prototype — it's advisory, not bulletproof:
-it covers cooperative, dynamically-linked tools, not static
-binaries or system binaries that bypass the loader, and file
-*metadata* (stat) isn't mediated yet. But for the 'don't let my
-agent wreck my laptop' problem, it's already useful today."**
-
-```bash
-bash demo/cleanup.sh   # afterwards, off-camera
-```
-
----
-
-## Optional advanced beat — live approve-and-continue (needs a 2nd pane)
-
-The single-terminal flow above approves *between* runs. The
-broker also supports approving a **live, running** session: the
-agent's blocked call is redeemed on its next retry, no restart.
-
-Terminal A (leave it running):
-
-```bash
-flox activate --sandbox
-# on macOS the session swaps to the Flox-bundled bash and says so:
-#   ℹ Cannot mediate '/bin/zsh' inside the sandbox; using the bash
-#     bundled with Flox for this session.
-# inside the session:
-cat ~/demo-data/fixtures.csv      # → denied + queued (req 1)
-```
-
-Terminal B:
-
-```bash
-cd /tmp/sandbox-demo
-flox sandbox            # interactive review → approve req 1
-```
-
-Terminal A — run it again; it now succeeds. (A grant pushed to a
-live session takes effect within a few seconds, so an agent's
-own retry loop just works.)
-
----
-
-## Backends — same UI, different isolation (experimental seam)
-
-Everything above runs on **`libsandbox`**, the advisory loader
-interposer that ships today. It is one enforcement mechanism, not
-the only one. The same `flox sandbox` UI is designed to sit over
-*pluggable* backends — kernel sandboxes, containers, micro-VMs —
-so we can benchmark performance, isolation, and DX and pick a
-default.
-
-> **`warn` and `prompt` are libsandbox-only.** They are *advisory*
-> semantics — observe-but-allow, and deny-then-live-redeem through the
-> broker — that only the loader interposer can provide. The enforcing
-> backends below (kernel / container / micro-VM) implement **`enforce`
-> only**; asking them for `warn` or `prompt` errors with a clear message
-> rather than silently enforcing (see the host-native note). So the
-> three-mode walkthrough in §1–§3 is a *libsandbox* demo; on the other
-> backends, use `--sandbox enforce`.
-
-List the roster and what each one can (claim to) do:
+**"Everything above runs on libsandbox — the advisory loader
+interposer that ships today. The same `flox sandbox` policy layer
+sits over pluggable backends."**
 
 ```bash
 flox sandbox backends
@@ -344,26 +437,13 @@ Select a backend with FLOX_SANDBOX_BACKEND=<name>; the default is 'libsandbox'.
 Only 'implemented' backends are wired into activation today.
 ```
 
-The default backend reproduces today's behavior — the whole demo
-above is `FLOX_SANDBOX_BACKEND=libsandbox`. Select a backend three
-ways, in precedence order: the `--sandbox-backend` flag, the
-`FLOX_SANDBOX_BACKEND` env var, or `options.sandbox-backend` in the
-manifest (a project default) — e.g. `[options]` `sandbox-backend =
-"host-native"`.
-
-The headline tradeoff (macOS-arm64, warm `p50` startup): `libsandbox`
-**52 ms** · `host-native` **72 ms** · `srt` **111 ms** · `oci` (Apple
-Container) **668 ms**. Full three-axis numbers — startup, workload I/O,
-the isolation red-team, and DX parity — are in the Forge slice's
-`results/` (see the closing pointer).
+> **`warn` and `prompt` are libsandbox-only.** They are advisory
+> semantics — observe-but-allow, and deny-then-live-redeem — that
+> only the loader interposer can provide. The enforcing backends
+> implement **`enforce` only**; asking them for `warn` or `prompt`
+> errors with a clear message rather than silently enforcing.
 
 ### `host-native` — the macOS kernel sandbox (no setup)
-
-`host-native` needs nothing installed: it wraps the whole activation in
-the macOS kernel sandbox (`sandbox-exec`), built into the OS. Unlike
-advisory `libsandbox`, it contains even SIP-protected system binaries —
-the exact gap §4 admitted. Watch the *same* read get blocked where
-`libsandbox` lets it through:
 
 ```bash
 # advisory libsandbox: a system /bin/cat escapes the loader →
@@ -375,11 +455,6 @@ flox activate --sandbox enforce --sandbox-backend host-native -- \
   /bin/cat ~/.ssh/id_ed25519        # → cat: ...: Operation not permitted
 ```
 
-**`host-native` is `enforce`-only.** A `sandbox-exec` profile can only
-allow or deny — there is no advisory "log-but-allow," and host-native has
-no broker — so `warn` and `prompt` are rejected up front instead of
-silently locking things down:
-
 ```bash
 flox activate --sandbox warn --sandbox-backend host-native -- true
 ```
@@ -389,146 +464,47 @@ flox activate --sandbox warn --sandbox-backend host-native -- true
 Use '--sandbox enforce' with this backend, or '--sandbox-backend libsandbox' for advisory 'warn'.
 ```
 
-> `host-native` is **deny-by-default for your home directory**: on an
-> allow-default base it denies reading the contents of — and writing
-> to — all of `$HOME` except the project and Flox's own state. So an
-> arbitrary file like `~/Documents/notes` is blocked too, not just the
-> known credential paths, and `.env` files stay secret even inside the
-> project. System and Nix reads (outside `$HOME`) stay open so flox
-> runs. The red-team battery confirms it contains every filesystem
-> attack — reads (incl. SIP `/bin/cat`), overwrites, and new-file
-> creation. A full-filesystem deny-default (also locking `/tmp` and
-> other users' homes) is a further follow-up; the current lossiness is
-> what `flox sandbox backends` declares.
+> `host-native` is **deny-by-default for your home directory**: it
+> denies reading or writing all of `$HOME` except the project and
+> Flox's own state. System and Nix reads stay open so flox runs.
 
-### `srt` — Anthropic's sandbox-runtime (setup: install the tool)
-
-**Setup.** `srt` is a third-party tool that must be on PATH:
+### `srt` — Anthropic's sandbox-runtime (install: `flox install sandbox-runtime`)
 
 ```bash
-flox install sandbox-runtime    # provides `srt`
-```
-
-It drives the *same* kernel boundary (Seatbelt on macOS / bubblewrap on
-Linux) on **both** platforms and adds default-deny TCP egress that
-`host-native` doesn't. Flox generates an srt policy mirroring the
-deny-`$HOME` shape and re-execs under it:
-
-```bash
-flox activate --sandbox enforce --sandbox-backend srt -- cat ~/.ssh/id_ed25519
+flox activate --sandbox enforce --sandbox-backend srt -- \
+  cat ~/.ssh/id_ed25519
 # → cat: ...: Operation not permitted
 ```
 
-Like host-native, `srt` is **`enforce`-only** here: it rejects `warn` and
-`prompt` the same way. (Its `flox sandbox backends` row shows `LIVE-ASK
-yes` — srt *can* adjudicate live in principle, but flox's broker is not
-wired to it in this prototype, so `prompt` is not offered yet.)
+Like host-native, srt is `enforce`-only and rejects `warn`/`prompt`
+the same way. Two known rough edges: srt grants blanket write to
+`/tmp`; a dev `flox` binary under `$HOME` can't be re-exec'd by
+the deny-`$HOME` profile.
 
-Because its TCP egress is default-deny, activate a **realized**
-environment under it (cold catalog fetches would otherwise be blocked).
-Two known rough edges the red-team surfaced: srt's generated settings
-grant **blanket write to `/tmp`** (a file dropped there is not
-contained — to be tightened), and a dev `flox` binary that lives under
-`$HOME` can't be re-exec'd by the deny-`$HOME` profile (a real
-`/nix/store` install is outside `$HOME` and unaffected).
+### `oci` — Apple Container (macOS 26+ / Apple silicon)
 
-### `oci` — Apple Container (macOS 26+): a real micro-VM
-
-`oci` is the container/micro-VM tier, now **wired into the seam** —
-`flox activate --sandbox enforce --sandbox-backend oci -- CMD` works
-like any other backend. It gives the strongest filesystem isolation
-in the roster: the host home is simply *absent* in the guest. The
-runtime dependency is Apple Container alone — Apple's open-source
-tool on the OS's own Virtualization framework, no Docker, no Podman,
-no daemon.
-
-**Setup (macOS 26+ / Apple silicon only).**
-
-```bash
-brew install container
-container system kernel set --recommended
-container system start
-```
-
-**The image bakes itself.** In this model *the image is the
-environment*: the backend runs your containerized env with the
-project live-mounted. Images are content-addressed to the lockfile
-(`<env>:<hash12>`, with a `latest` convenience alias): the first
-activation offers to bake, and after a `flox install` the hash
-moves, so the next activation detects the drift and offers a
-rebake. The whole build runs on Apple Container — no Docker, no
-Podman, no skopeo, at build time or run time:
-
-```bash
-flox activate --sandbox enforce --sandbox-backend oci -- true
-```
-
-```
-? OCI image 'sandbox-demo:a7f880489710' is stale (environment has
-  changed since last bake).
-  Existing image: sandbox-demo:latest
-  Bake now? (~2–5 min on first bake; later bakes reuse layers) (Y/n)
-```
-
-Non-interactive contexts (CI, agents) never stall on a prompt —
-they fail fast with guidance unless explicitly opted in:
-
-```bash
-FLOX_SANDBOX_OCI_AUTOBAKE=true \
-  flox activate --sandbox enforce --sandbox-backend oci -- uname -sm
-```
-
-```
-⚙️  Baking OCI image 'sandbox-demo:a7f880489710' …
-   First bake downloads the builder image and cross-compiles the
-   environment closure (~2–5 min).
-✅  Image 'sandbox-demo:a7f880489710' loaded into container store.
-Linux aarch64
-```
-
-Escape hatches, all loud: `FLOX_SANDBOX_OCI_ALLOW_STALE=1` runs the
-newest existing image with a warning naming the expected tag
-(offline / mid-iteration); `FLOX_SANDBOX_OCI_IMAGE=<ref>` pins an
-explicit image and bypasses staleness entirely; and the manual
-pipeline is now two commands
-(`flox containerize --runtime container -f img.tar` +
-`container image load --input img.tar`).
-
-> Until flox/flox#4464 merges, bake with
-> `_FLOX_CONTAINERIZE_FLAKE_REF_OR_REV=3b4774070ce0a804acf7da299940725454b19d64`
-> exported so the image entrypoint carries the argv exec-semantics
-> fix — images baked from the default builder pin re-introduce the
-> extra expansion pass. Drop this note once the fix is on `main`
-> and the pin advances.
-
-**Run it — same surface, micro-VM boundary:**
+The manifest already declares `sandbox-backend = "oci"`, so
+`flox activate --sandbox enforce` uses OCI by default. The
+opening beat showed the consent-via-auto-activation path; here
+is the explicit form:
 
 ```bash
 flox activate --sandbox enforce --sandbox-backend oci -- uname -sm
 # Linux aarch64
 ```
 
-Warm latency is ~0.7–1.0 s per run — the VM-boot tax (vs ~72 ms
-host-native). Command argv reaches the guest **verbatim** (the
-image entrypoint carries the flox/flox#4464 exec-semantics fix):
+> Warm latency is ~0.7–1.0 s per run — the VM-boot tax.
+
+**Isolation: the host filesystem is invisible** — only the project
+directory is mounted (live, at its real path):
 
 ```bash
 flox activate --sandbox enforce --sandbox-backend oci -- \
-  sh -c 'for x in 1 2 3; do echo "x=$x"; done; echo "shell=$0"'
-# x=1
-# x=2
-# x=3
-# shell=sh
-```
-
-**Isolation: the host filesystem is invisible** — only the project
-directory is mounted (live, at its real path); everything else on
-the host simply does not exist in the guest:
-
-```bash
-flox activate --sandbox enforce --sandbox-backend oci -- ls /Users/you/.ssh
+  ls /Users/you/.ssh
 # ls: cannot access '/Users/you/.ssh': No such file or directory
-flox activate --sandbox enforce --sandbox-backend oci -- cat /Users/you/demo-secrets/.env
+
+flox activate --sandbox enforce --sandbox-backend oci -- \
+  cat /Users/you/demo-secrets/.env
 # cat: /Users/you/demo-secrets/.env: No such file or directory
 ```
 
@@ -538,48 +514,39 @@ flox activate --sandbox enforce --sandbox-backend oci -- cat /Users/you/demo-sec
 flox activate --sandbox enforce --sandbox-backend oci -- cat app.py
 # def greet():
 #     return 1
+
 flox activate --sandbox enforce --sandbox-backend oci -- \
   sh -c 'echo "# edited in guest" >> app.py'
 tail -1 app.py
 # # edited in guest                 ← the edit landed on the host
 ```
 
-Like the other enforcing backends, `oci` is **`enforce`-only** —
-`warn` and `prompt` are rejected with the same message shape as
-host-native.
+**OCI consent semantics (opening beat vs explicit form):**
+- **Auto-activation** (`cd ~/sandbox-demo`): the prompt hook shows
+  the consent prompt from ADR-006, then execs the sandboxed
+  session. A prior allow/deny for the env's auto-activation has
+  no effect; session replacement always re-consents.
+- **Explicit form** (`flox activate --sandbox enforce --sandbox-backend oci -- cmd`):
+  no consent prompt. Use this in scripts, CI, and agents.
 
-> Historical note: an earlier version of this demo claimed
-> live-mounted projects were broken on macOS (**DEV-130**,
-> https://linear.app/floxdotdev/issue/DEV-130). That was a
+Like the other enforcing backends, `oci` rejects `warn` and `prompt`
+with the same message shape as host-native.
+
+> **Historical note:** an earlier version of this demo claimed
+> live-mounted projects were broken on macOS (DEV-130). That was a
 > misdiagnosis — the reads always worked; the "empty read" symptom
 > was the container-entrypoint argv re-expansion bug, since
 > reframed in DEV-130 and fixed (flox/flox#4464, cherry-picked
-> onto this branch). Images baked before the fix (e.g. the old
-> `octest:latest`) still carry the old entrypoint and its extra
-> expansion pass — rebake to clear it.
+> onto this branch).
 
-> **Caveats.** Two big ones. (1) **OS swap:** the guest is Linux, so
-> an interactive macOS user is running Linux packages, not their host
-> tools. (2) **Bind-mount I/O has a measured shape:** the per-file
-> open round-trip over virtio-fs is ~0.15 ms, so small-file traversal
-> (`node_modules`-class) runs ~6× native and ~60× guest-local — and
-> warm ≈ cold, caching doesn't rescue it — while streaming is fine
-> (64 MB write+read in ~55 ms). Posture: live-mount project *source*,
-> keep dependency trees guest-local (volume or image layer). Numbers:
-> the Forge slice's `results/bindmount-io-macos-arm64-2026-07-07.md`.
-> Plus the smaller ones: the ~0.7–1.0 s per-run VM boot above
-> (measured 0.708 s wall on a cache-hit activation), and bakes run
-> against a cold Nix store every time (no cache volume yet — a
-> tracked follow-up on flox/flox#4466), so a rebake costs minutes,
-> not seconds. Drift itself is no longer a caveat: the lockfile
-> hash catches it and the backend offers the rebake.
+> **Caveats.** (1) **OS swap:** the guest is Linux, so an
+> interactive macOS user runs Linux packages. (2) **Bind-mount I/O
+> has a measured shape:** per-file open round-trip over virtio-fs
+> is ~0.15 ms; small-file traversal (`node_modules`-class) runs
+> ~6× native, ~60× guest-local; streaming is fine. Numbers:
+> `results/bindmount-io-macos-arm64-2026-07-07.md`.
 
 ### Selecting an unwired backend fails loudly, on purpose
-
-A backend that is not wired into activation never silently falls back to
-`libsandbox` — that would make a benchmark lie about which mechanism it
-measured. `nix` (the Nix build sandbox as an activation backend) is
-scaffolded but not yet wired, so:
 
 ```bash
 flox activate --sandbox enforce --sandbox-backend nix -- true
@@ -590,14 +557,68 @@ flox activate --sandbox enforce --sandbox-backend nix -- true
 Wired backends: 'libsandbox' (default), 'host-native', 'srt', and 'oci'. Run 'flox sandbox backends' to see status, or unset FLOX_SANDBOX_BACKEND.
 ```
 
-(`libkrun` prints the same way — the remaining micro-VM tier lands
-behind the seam the same way `oci` did.)
+---
 
-As each backend lands, the same `flox activate` command starts working
-with no change to the surface above. The benchmark harness that scores
-the three tradeoffs across every backend lives in the Forge slice:
-`slices/2026/06-sandboxed-activation-prototype/artifacts/`
-(`benchmark-plan.md`, `backend-roster.md`, `backend-contract.md`,
-`red-team-battery.md`, the runnable `bench/` scripts, and the
-`results/` dataset).
+## 5 · Close (~20s)
 
+**"So: two manifest lines plus a `cd` equals locked-down-by-default.
+`warn` to observe what your agent touches, `enforce` to lock it
+down, `prompt` to tighten the policy interactively. It's a
+prototype — advisory on the libsandbox tier, structural on OCI —
+but for the 'don't let my agent wreck my laptop' problem, it's
+already useful today."**
+
+```bash
+bash demo/cleanup.sh   # afterwards, off-camera
+```
+
+> The benchmark data across all backends (startup, workload I/O,
+> isolation red-team, DX parity) lives in the Forge slice:
+> `slices/2026/06-sandboxed-activation-prototype/artifacts/`.
+
+---
+
+## Optional advanced beat — live approve-and-continue (needs a 2nd pane)
+
+The single-terminal flow above approves *between* runs. The
+broker also supports approving a **live, running** session: the
+agent's blocked call is redeemed on its next retry, no restart.
+
+Terminal A (leave it running):
+
+```bash
+flox activate --sandbox --sandbox-backend libsandbox
+# inside the session:
+cat ~/demo-data/fixtures.csv      # → denied + queued (req 1)
+```
+
+Terminal B:
+
+```bash
+cd ~/sandbox-demo
+flox sandbox            # interactive review → approve req 1
+```
+
+Terminal A — run it again; it now succeeds. (A grant pushed to a
+live session takes effect within a few seconds.)
+
+---
+
+## Spurious PID error in pty harnesses
+
+During `script`-based capture of the consent + OCI boot sequence,
+you may see:
+
+```
+✘ ERROR: PID <n> is not attached to the activation
+```
+
+This is a benign artifact of the `detach` call in `hook-env`'s
+deactivation path running against the exec'd activation's state
+directory. The error does not affect the activation flow — the
+container boots and the `uname -sm` output is correct. Omit it
+from projected captures but do not attempt to suppress it by
+editing the binary.
+
+If this error reproduces reproducibly in a real terminal session
+(not a pty harness), report it as a bug with exact repro steps.
