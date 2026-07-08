@@ -563,9 +563,7 @@ impl ContainerizeProxy {
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr).to_string();
             return Err(ContainerizeProxyError::PopulateCacheVolume(
-                std::io::Error::other(format!(
-                    "populate_and_build_env failed:\n{stderr}"
-                )),
+                std::io::Error::other(format!("populate_and_build_env failed:\n{stderr}")),
             ));
         }
 

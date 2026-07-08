@@ -2677,10 +2677,8 @@ fn oci_store_volume_write_ctx(
         .tempdir()
         .context("failed to create temp dir for activateCtx")?;
     let ctx_path = tmpdir.path().join(CTX_FILENAME);
-    let file = std::fs::File::create(&ctx_path)
-        .context("failed to create activateCtx file")?;
-    serde_json::to_writer(file, &ctx)
-        .context("failed to write activateCtx JSON")?;
+    let file = std::fs::File::create(&ctx_path).context("failed to create activateCtx file")?;
+    serde_json::to_writer(file, &ctx).context("failed to write activateCtx JSON")?;
     Ok((tmpdir, CTX_FILENAME))
 }
 
@@ -2835,7 +2833,10 @@ fn wrap_activation_oci_store_volume(
              Then retry with {FLOX_SANDBOX_OCI_STORE_VOLUME_VAR}=1."
         )
     })?;
-    debug!(env_store_path, "store-volume fast path: env store path resolved");
+    debug!(
+        env_store_path,
+        "store-volume fast path: env store path resolved"
+    );
 
     // Check whether the lockfile's expected hash-tag image matches any image
     // already built. If not, the env may have changed; warn the user.
