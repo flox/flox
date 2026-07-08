@@ -44,7 +44,7 @@ use flox_rust_sdk::providers::upgrade_checks::UpgradeInformationGuard;
 use flox_rust_sdk::utils::FLOX_INTERPRETER;
 use indoc::{formatdoc, indoc};
 use toml_edit::Key;
-use tracing::{debug, trace, warn};
+use tracing::{debug, info_span, trace, warn};
 
 use super::{
     EnvironmentSelect,
@@ -2078,10 +2078,8 @@ fn bake_oci_image(
 
     eprintln!("⚙️  Baking OCI image '{hash_tag}' (builder pin: {ref_or_rev})…");
     eprintln!(
-        "   First bake downloads the builder image and cross-compiles the \
-         environment closure (~2–5 min)."
+        "   First bake: ~2–5 min (downloads builder + cross-compiles). Later bakes reuse layers."
     );
-    eprintln!("   Subsequent bakes reuse layers and are faster.");
 
     // The proxy expects the project directory (the directory containing
     // `.flox`), matching `env.parent_path()` in the containerize command.
@@ -2139,7 +2137,14 @@ fn bake_oci_image(
     // The sink receives the OCI archive stream and loads it into the runtime.
     let mut sink = container_runtime.to_writer()?;
     container_source.stream_container(&mut sink)?;
-    sink.wait()?;
+    {
+        let _span = info_span!(
+            "load_image",
+            progress = "[3/3] Loading image into container store"
+        )
+        .entered();
+        sink.wait()?;
+    }
 
     // Clean up the env override now that the bake is done.
     unsafe {
