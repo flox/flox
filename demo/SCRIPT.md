@@ -140,9 +140,9 @@ project mounted. That's the pitch. Now let me show you what the
 boundary actually holds."**
 
 > **How the bake handles the prototype-only manifest fields:** the
-> builder receives a *sanitized* view of the environment —
-> `options.sandbox` and `options.sandbox-backend` are stripped
-> before anything reaches the in-container flox or the image. The
+> builder receives a *sanitized* view of the environment — the
+> prototype-only `[options.sandbox]` table is stripped before
+> anything reaches the in-container flox or the image. The
 > sandbox declaration is a host-side concern; the image is the
 > *inside* of the boundary and never carries it. The image tag stays
 > keyed to your real (unsanitized) lockfile.

@@ -161,7 +161,7 @@ current image and the `latest` alias only.
   manifest (`[vars]`), the project directory, or an in-session login.
 * Nothing credential-bearing is baked into the image: it carries the
   environment closure and activation context only, and the
-  the prototype-only `[options.sandbox]` table is stripped from the
+  prototype-only `[options.sandbox]` table is stripped from the
   view the builder sees.
 
 **Network is not restricted.** The guest has the container runtime's
