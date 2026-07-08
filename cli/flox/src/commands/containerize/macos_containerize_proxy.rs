@@ -487,6 +487,107 @@ impl ContainerizeProxy {
     }
 }
 
+impl ContainerizeProxy {
+    /// Store-volume fast path (cold-start variant): populate the cache volume
+    /// and build the `environment-run` derivation, returning its store path.
+    ///
+    /// This runs a slim builder step inside the `nixos/nix` proxy container
+    /// with the `flox-nix` volume mounted read-write at `/nix`. The script
+    /// runs `flox build` to produce the `environment-run` store path and
+    /// prints it to stdout.
+    ///
+    /// Because `nix copy` (called in `populate_cache_volume`) is incremental,
+    /// only new store paths are copied into the volume after an env change.
+    /// The `flox build` step itself reuses the already-populated store and
+    /// runs in seconds once the volume is warm.
+    ///
+    /// Not currently called from the warm-path fast path (which reads the env
+    /// store path from the existing image's entrypoint config). Retained as
+    /// the foundation for a future cold-start fast path that bypasses the full
+    /// image bake entirely.
+    #[allow(dead_code)]
+    pub(crate) fn populate_and_build_env(
+        &self,
+        flox: &Flox,
+    ) -> Result<String, ContainerizeProxyError> {
+        // Ensure the volume exists and the nixos/nix store is present.
+        self.populate_cache_volume()?;
+
+        let mut command = self.runtime_base_command();
+        self.add_runtime_args(&mut command, flox);
+
+        // The flake ref (already set via _FLOX_CONTAINERIZE_FLAKE_REF_OR_REV)
+        // is read by FLOX_CONTAINERIZE_FLAKE_REF_OR_REV in the proxy.
+        let flox_version = &*flox_rust_sdk::flox::FLOX_VERSION;
+        let flox_version_tag = format!("v{}", flox_version.base_semver());
+        let flox_flake = format!(
+            "{}/{}",
+            FLOX_FLAKE,
+            (*FLOX_CONTAINERIZE_FLAKE_REF_OR_REV)
+                .clone()
+                .unwrap_or(flox_version.commit_sha().unwrap_or(flox_version_tag))
+        );
+
+        let verbosity_arg = match flox.verbosity {
+            -1 => " --quiet".to_string(),
+            v if v > 0 => format!(" -{}", "v".repeat(v.try_into().unwrap())),
+            _ => String::new(),
+        };
+
+        // Build the environment derivation and print its store path.
+        // Uses `flox build --out-link` with a temp link so we can read the
+        // store path without polluting the workspace.
+        let shell_cmd = format!(
+            "set -euo pipefail\n\
+            out=$(nix --extra-experimental-features 'nix-command flakes' --accept-flake-config \
+            run '{flox_flake}' --{verbosity_arg} build --dir {MOUNT_ENV} --output-file /dev/null \
+            --no-link 2>&1 >&2 && \
+            nix --extra-experimental-features 'nix-command flakes' --accept-flake-config \
+            eval --raw '{flox_flake}#packages.aarch64-linux.default.outPath' 2>/dev/null || true)\n\
+            if [ -z \"$out\" ]; then\n\
+              # Fall back: build and print the derivation result path\n\
+              tmplink=$(mktemp -d /tmp/flox-env-link-XXXXXX)\n\
+              nix --extra-experimental-features 'nix-command flakes' --accept-flake-config \
+            run '{flox_flake}' --{verbosity_arg} build --dir {MOUNT_ENV} >&2\n\
+              out=$(readlink {MOUNT_ENV}/result-run 2>/dev/null || readlink {MOUNT_ENV}/result 2>/dev/null || true)\n\
+              rm -rf \"$tmplink\"\n\
+            fi\n\
+            echo \"$out\""
+        );
+
+        command.args(["bash", "-c", &shell_cmd]);
+
+        debug!(?command, "running store-volume populate-and-build command");
+
+        let output = command
+            .output()
+            .map_err(ContainerizeProxyError::PopulateCacheVolume)?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+            return Err(ContainerizeProxyError::PopulateCacheVolume(
+                std::io::Error::other(format!(
+                    "populate_and_build_env failed:\n{stderr}"
+                )),
+            ));
+        }
+
+        // Parse the environment store path from stdout.
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let env_store_path = stdout.trim().to_string();
+
+        if env_store_path.is_empty() || !env_store_path.starts_with("/nix/store/") {
+            return Err(ContainerizeProxyError::PopulateCacheVolume(
+                std::io::Error::other(format!(
+                    "populate_and_build_env: unexpected stdout (expected /nix/store/…): {env_store_path:?}"
+                )),
+            ));
+        }
+
+        Ok(env_store_path)
+    }
+}
+
 impl ContainerBuilder for ContainerizeProxy {
     type Error = ContainerizeProxyError;
 

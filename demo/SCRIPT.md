@@ -341,6 +341,52 @@ Linux aarch64
 FLOX_SANDBOX_OCI_IMAGE=sandbox-demo:latest flox activate -- uname -sm
 ```
 
+**Store-volume fast path — skip image re-assembly after env changes
+(prototype valve, off by default):**
+
+```bash
+FLOX_SANDBOX_OCI_STORE_VOLUME=1 flox activate -- uname -sm
+```
+
+```
+⚠️  Store-volume fast path: env may have changed since last bake
+   (expected image 'sandbox-demo:<hash12>' not found).
+   Running previous closure; re-bake to pick up changes.
+⚡  Running environment from store volume (base: nixos/nix:2.31.5)…
+Linux aarch64
+```
+
+Instead of assembling and loading a new OCI image, this mounts the
+`flox-nix` named cache volume **read-only** at `/nix` inside the
+runtime container (nixos/nix base image) and constructs the
+activation context on the host. The result: even after a
+`flox install <pkg>` that would normally trigger a 2–5 min re-bake,
+activation still starts in ~800 ms (warm volume).
+
+Isolation note: the store volume is mounted **read-only** — no store
+path can be written or removed from inside the sandbox. All GC and
+write operations remain builder-side. This was verified on Apple
+Container 1.1.0 (writes return `Read-only file system`).
+
+Trade-off: when the lockfile has changed since the last bake, the fast
+path runs the **old closure** and prints the staleness warning above.
+A re-bake is still required to pick up new packages. To suppress the
+fast path in that case, set `FLOX_SANDBOX_OCI_ALLOW_STALE=1` or run
+`FLOX_SANDBOX_OCI_AUTOBAKE=true flox activate ...` to trigger a fresh
+bake that also updates the volume.
+
+Measured timing (warm volume, warm nixos/nix image):
+
+| Path | p50 latency |
+|------|-------------|
+| Default path (existing image) | ~730 ms |
+| Fast path (STORE_VOLUME=1) | ~840 ms |
+| After env change: default path | ~2–5 min (full bake) |
+| After env change: fast path | ~840 ms (runs old closure + warning) |
+
+Full gate results and design notes:
+`demo/results/store-volume-fastpath-2026-07-08.md`
+
 ### Storage
 
 ```bash
