@@ -163,17 +163,21 @@ impl ContainerizeProxy {
             volume = CONTAINER_NIX_CACHE_VOLUME,
             "ensuring Apple Container cache volume exists"
         );
-        let status = self
+        // Capture output rather than inheriting it: the expected
+        // "volume already exists" error would otherwise leak into
+        // every bake's output.
+        let output = self
             .container_runtime
             .to_command()
             .args(["volume", "create", CONTAINER_NIX_CACHE_VOLUME])
-            .status()
+            .output()
             .map_err(ContainerizeProxyError::PopulateCacheVolume)?;
-        if !status.success() {
+        if !output.status.success() {
             // A non-zero exit is expected when the volume already exists;
             // treat it as success so repeated builds are idempotent.
             debug!(
                 volume = CONTAINER_NIX_CACHE_VOLUME,
+                stderr = %String::from_utf8_lossy(&output.stderr),
                 "volume create returned non-zero (likely already exists)"
             );
         }
