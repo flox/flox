@@ -9,7 +9,7 @@ pub use flox_core::util::message::{stderr_supports_color, stdout_supports_color}
 use flox_manifest::compose::{COMPOSER_MANIFEST_ID, Warning};
 use flox_manifest::lockfile::{LockedPackage, Lockfile, PackageOutputs};
 use flox_manifest::parsed::latest::SelectedOutputs;
-use flox_manifest::raw::{PackageToInstall, RawSelectedOutputs};
+use flox_manifest::raw::PackageToInstall;
 use indoc::formatdoc;
 use minus::{ExitStrategy, Pager, page_all};
 use tracing::{debug, info};
@@ -190,9 +190,9 @@ pub(crate) fn packages_with_additional_outputs(
     let locked_pkgs = lockfile.packages.as_slice();
     // Yes this is n^2, but n is small
     for pkg in new_pkgs.iter() {
-        // When the user explicitly asked for all outputs (^..) the hint is
-        // redundant — they already opted in to everything.
-        if pkg.outputs() == Some(&RawSelectedOutputs::All) {
+        // When the user explicitly selected outputs (^.. or ^out,man) the hint
+        // is redundant — they already know what they are and aren't selecting.
+        if pkg.outputs().is_some() {
             continue;
         }
         let install_id = pkg.id();

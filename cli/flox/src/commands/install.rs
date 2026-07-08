@@ -1169,4 +1169,38 @@ mod tests {
             "expected no additional-outputs message when user requested all outputs, got: {output:?}"
         );
     }
+
+    /// When a package was installed with an explicit output selection
+    /// (`^out,man`), no additional-outputs hint should be shown — the user
+    /// already knows what they are and aren't selecting.
+    #[tokio::test]
+    async fn no_additional_outputs_message_when_user_requested_specific() {
+        // bash has additional outputs (default is a subset of all), so it normally
+        // triggers the hint. Use it to verify the explicit-selection suppression path.
+        let lockfile_contents =
+            std::fs::read_to_string(GENERATED_DATA.join("envs/bash/manifest.lock")).unwrap();
+        let lockfile: flox_manifest::lockfile::Lockfile = lockfile_contents.parse().unwrap();
+        let system = lockfile.packages[0].system().to_string();
+
+        // Package requested with an explicit output selection (^out)
+        let pkgs = [PackageToInstall::Catalog(CatalogPackage {
+            id: "bash".to_string(),
+            pkg_path: "bashNonInteractive".to_string(),
+            version: None,
+            systems: None,
+            outputs: Some(RawSelectedOutputs::Specific(vec!["out".to_string()])),
+        })];
+        let (subscriber, writer) = test_subscriber_message_only();
+        async {
+            message::packages_with_additional_outputs(&pkgs, &lockfile, &system);
+        }
+        .with_subscriber(subscriber)
+        .await;
+
+        let output = writer.to_string();
+        assert!(
+            output.is_empty(),
+            "expected no additional-outputs message when user selected outputs explicitly, got: {output:?}"
+        );
+    }
 }
