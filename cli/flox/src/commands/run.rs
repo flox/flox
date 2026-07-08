@@ -369,6 +369,10 @@ async fn download_custom_catalog_package(
         .map_err(|e| RunError::BuildFailed(pkg_spec.to_string(), e))?;
     }
 
+    // TODO: wrap the nix copy + GC root sequence in a materialise_with_retry
+    // equivalent to close the race window where nix gc could evict paths
+    // between the two calls. The window is milliseconds today, but a retry loop
+    // is the correct long-term fix.
     substitute_store_paths(store_paths, Some(gc_root_prefix))
         .map_err(|e| RunError::BuildFailed(pkg_spec.to_string(), e))?;
 
@@ -495,6 +499,10 @@ async fn exec_run(run_args: RunArgs, flox: &Flox) -> Result<()> {
     let gc_root_exists = gc_root_prefix.exists();
     let all_present = store_paths.iter().all(|p| Path::new(p).exists());
     if !all_present || !gc_root_exists {
+        // TODO: once the async-to-sync boundary is resolved (spawn_blocking or
+        // block_on), call realise_lockfile with a 1-element list here instead of
+        // download_custom_catalog_package. This would share the semaphore, retry
+        // loop, and error handling already proven in the env-build path.
         if catalog_pkg.is_custom_catalog() {
             download_custom_catalog_package(
                 flox,

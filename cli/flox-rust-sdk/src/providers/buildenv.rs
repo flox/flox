@@ -420,6 +420,9 @@ pub fn copy_from_custom_catalog_locations(
     let mut download_attempts = DownloadAttempts(vec![]);
     let mut any_location_succeeded = false;
 
+    // TODO: check whether all store_paths already exist in the local Nix store
+    // before starting the copy loop, to avoid nix copy subprocess overhead on
+    // repeated activations where packages are already downloaded.
     for location in locations {
         let mut copy_command = nix_base_command();
         let location_url = match &location.url {
