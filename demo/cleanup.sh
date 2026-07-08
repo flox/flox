@@ -1,14 +1,34 @@
 #!/usr/bin/env bash
-# Remove every demo artifact, including grants and receipts.
+# Remove every demo artifact, including grants, receipts, and
+# any OCI images baked for the sandbox-demo environment.
 set -uo pipefail
-DEMO_DIR="${DEMO_DIR:-/tmp/sandbox-demo}"
+DEMO_DIR="${DEMO_DIR:-$HOME/sandbox-demo}"
+FLOX_BIN="${FLOX_BIN:-$(command -v flox)}"
 
 # Removing the env dir also removes its grants and provenance journal —
-# they live at $DEMO_DIR/.flox/cache/sandbox/{grants.toml,journal.ndjson}
-# (per-environment, incl. the target/debug convenience grant). The prompt
-# pending queue is broker-memory only and dies with the session, so there
-# is nothing else to clear.
+# they live at $DEMO_DIR/.flox/cache/sandbox/{grants.toml,journal.ndjson}.
+# The sandbox consent prompt has no persistent state of its own (it
+# is answered per-session via the hook; only the auto_activate_environments
+# config persists, which setup does not touch).
 rm -rf "$DEMO_DIR"
 rm -rf "$HOME/demo-secrets" "$HOME/demo-data"
 rm -f  "$HOME/sbx-pwned.txt"   # only exists if a warn-mode experiment wrote it
-echo "Demo artifacts removed (env, grants, journal, fixtures)."
+
+# Remove any OCI images baked for the sandbox-demo environment.
+# Images are tagged <env-name>:<lockfile-hash12> plus a `latest` alias.
+# List and remove all tags that match the environment name.
+if command -v container >/dev/null 2>&1; then
+  container image list --json 2>/dev/null | \
+    python3 -c "
+import json, sys, subprocess
+images = json.load(sys.stdin)
+for img in images:
+  for tag in img.get('Tags', []):
+    if tag.startswith('sandbox-demo:'):
+      subprocess.run(['container', 'image', 'delete', tag],
+                     check=False, capture_output=True)
+      print(f'Removed OCI image: {tag}')
+" 2>/dev/null || true
+fi
+
+echo "Demo artifacts removed (env, grants, journal, fixtures, OCI images)."
