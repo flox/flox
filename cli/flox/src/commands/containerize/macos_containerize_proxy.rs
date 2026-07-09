@@ -590,7 +590,8 @@ mod tests {
     #[test]
     fn add_runtime_args_omits_guest_flox_marker_when_not_requested() {
         let (flox, _tempdir) = flox_instance();
-        let proxy = ContainerizeProxy::new("/some/env".into(), Runtime::Docker, vec![], None, false);
+        let proxy =
+            ContainerizeProxy::new("/some/env".into(), Runtime::Docker, vec![], None, false);
         let mut cmd = proxy.runtime_base_command();
         proxy.add_runtime_args(&mut cmd, &flox);
         let args = argv(&cmd);
@@ -622,8 +623,13 @@ mod tests {
     #[test]
     fn apple_container_proxy_omits_userns_flag() {
         let (flox, _tempdir) = flox_instance();
-        let proxy =
-            ContainerizeProxy::new("/some/env".into(), Runtime::AppleContainer, vec![], None, false);
+        let proxy = ContainerizeProxy::new(
+            "/some/env".into(),
+            Runtime::AppleContainer,
+            vec![],
+            None,
+            false,
+        );
         let mut cmd = proxy.runtime_base_command();
         proxy.add_runtime_args(&mut cmd, &flox);
         let args = argv(&cmd);
@@ -638,8 +644,13 @@ mod tests {
     #[test]
     fn apple_container_uses_volume_flag_for_cache() {
         let (flox, _tempdir) = flox_instance();
-        let proxy =
-            ContainerizeProxy::new("/some/env".into(), Runtime::AppleContainer, vec![], None, false);
+        let proxy = ContainerizeProxy::new(
+            "/some/env".into(),
+            Runtime::AppleContainer,
+            vec![],
+            None,
+            false,
+        );
         let mut cmd = proxy.runtime_base_command();
         proxy.add_runtime_args(&mut cmd, &flox);
         let args = argv(&cmd);
@@ -713,8 +724,13 @@ mod tests {
 
     #[test]
     fn apple_container_builder_gets_default_memory() {
-        let proxy =
-            ContainerizeProxy::new("/some/env".into(), Runtime::AppleContainer, vec![], None, false);
+        let proxy = ContainerizeProxy::new(
+            "/some/env".into(),
+            Runtime::AppleContainer,
+            vec![],
+            None,
+            false,
+        );
         let cmd = proxy.runtime_base_command();
         let args = argv(&cmd);
         // Default 8g memory flag must be present so the builder VM does not
@@ -864,8 +880,13 @@ mod tests {
     #[test]
     fn oci_conversion_embeds_custom_tag() {
         let (flox, _tempdir) = flox_instance();
-        let proxy =
-            ContainerizeProxy::new("/env/myapp".into(), Runtime::AppleContainer, vec![], None, false);
+        let proxy = ContainerizeProxy::new(
+            "/env/myapp".into(),
+            Runtime::AppleContainer,
+            vec![],
+            None,
+            false,
+        );
         let cmd = proxy.build_oci_conversion_command(&flox, "v1.2.3");
         let args = argv(&cmd);
         // Custom tag must appear in the OCI destination reference
@@ -878,8 +899,13 @@ mod tests {
     #[test]
     fn oci_conversion_escapes_hostile_tags() {
         let (flox, _tempdir) = flox_instance();
-        let proxy =
-            ContainerizeProxy::new("/env/myapp".into(), Runtime::AppleContainer, vec![], None, false);
+        let proxy = ContainerizeProxy::new(
+            "/env/myapp".into(),
+            Runtime::AppleContainer,
+            vec![],
+            None,
+            false,
+        );
 
         // A tag containing a space must be single-quoted so it stays one word.
         let cmd = proxy.build_oci_conversion_command(&flox, "my tag");

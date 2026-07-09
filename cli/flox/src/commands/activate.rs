@@ -2133,8 +2133,13 @@ fn bake_oci_image(
     // include_guest_flox = true: the sandbox bake bakes a real flox into
     // the guest so `flox list` works inside the sandboxed session. This is
     // what distinguishes the bake from a general `flox containerize`.
-    let proxy =
-        ContainerizeProxy::new(builder_project, container_runtime.clone(), vec![], None, true);
+    let proxy = ContainerizeProxy::new(
+        builder_project,
+        container_runtime.clone(),
+        vec![],
+        None,
+        true,
+    );
     // Tag used during bake: we use the hash tag directly so the image lands
     // under the right content-addressed name. The proxy uses this tag when
     // invoking `container image load`.
