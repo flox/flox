@@ -1575,6 +1575,29 @@ mod test {
         ));
     }
 
+    /// The `_FLOX_SERVICES_SOCKET_OVERRIDE` env var bypasses path-length
+    /// validation and is returned verbatim. This is the mechanism used in
+    /// OCI container guests where the socket path is pinned at a fixed location
+    /// (`/run/flox/runtime/services.sock`, 34 chars) to avoid runtime
+    /// path_hash re-derivation inside the guest.
+    #[test]
+    fn services_socket_path_override_bypasses_length_check() {
+        let override_path = "/run/flox/runtime/services.sock";
+        let (mut flox, _temp_dir_handle) = flox_instance();
+        // Make the runtime_dir path absurdly long so the derived path would
+        // fail validation — but the override must win regardless.
+        flox.runtime_dir = flox.runtime_dir.join("X".repeat(100));
+
+        let result = temp_env::with_var(
+            FLOX_SERVICES_SOCKET_OVERRIDE_VAR,
+            Some(override_path),
+            || services_socket_path("1", &flox),
+        )
+        .unwrap();
+
+        assert_eq!(result, std::path::PathBuf::from(override_path));
+    }
+
     /// The dev and run links are the `--out-link` prefix with the nix output
     /// names appended, and `out_link_prefix()` returns that prefix verbatim
     /// rather than re-deriving it from the dev link.

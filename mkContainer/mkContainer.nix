@@ -192,11 +192,15 @@ let
       # /home/flox is a writable HOME for a real guest flox; XDG_CONFIG_HOME,
       # XDG_STATE_HOME, and XDG_CACHE_HOME route under it. XDG_RUNTIME_DIR
       # routes to /run/flox/runtime, created here so the runtime dir exists.
+      # /run/flox/log is writable by the guest user for process-compose logs;
+      # the bind-mounted .flox/log is owned by the host uid and may not be
+      # writable inside the container.
       extraCommands = ''
         mkdir -m 1777 tmp
         mkdir -m 1770 run
         mkdir -p -m 1770 run/flox
         mkdir -p -m 0700 run/flox/runtime
+        mkdir -p -m 0700 run/flox/log
         mkdir -p -m 0700 home/flox
       '';
 
@@ -243,12 +247,25 @@ let
           # /home/flox, and /run/flox/runtime are the writable locations
           # in the image. Append to any user-provided Env rather than
           # replacing it.
+          #
+          # _FLOX_SERVICES_SOCKET_OVERRIDE: pin the services socket to a fixed
+          # guest path so both the activation entrypoint and in-guest
+          # `flox services` always use the same socket without re-deriving a
+          # path_hash inside the guest. /run/flox/runtime is already writable.
+          # Path is 34 chars, well under the 107-char Linux sun_path limit.
+          #
+          # PROCESS_COMPOSE_BIN: flox-activations reads this at runtime to
+          # locate the process-compose supervisor. The flox-activations binary
+          # built for this image does not bake in PROCESS_COMPOSE_BIN at
+          # compile time (unlike the flox binary), so we inject it here.
           Env = (containerConfig.Env or [ ]) ++ [
             "HOME=/home/flox"
             "XDG_CONFIG_HOME=/home/flox/.config"
             "XDG_STATE_HOME=/home/flox/.local/state"
             "XDG_CACHE_HOME=/home/flox/.cache"
             "XDG_RUNTIME_DIR=/run/flox/runtime"
+            "_FLOX_SERVICES_SOCKET_OVERRIDE=/run/flox/runtime/services.sock"
+            "PROCESS_COMPOSE_BIN=${containerPkgs.process-compose}/bin/process-compose"
           ];
         };
 
