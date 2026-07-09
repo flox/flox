@@ -649,8 +649,8 @@ EOF
   FLOX_SHELL="bash" run -0 expect "$TESTS_DIR/activate/hook-consent.exp" "$PROJECT_DIR" "$PROJECT3_DIR" "n" 'echo "v2:$TEST_VAR2 v3:$TEST_VAR3"'
   refute_output --partial 'v2:auto2'
   refute_output --partial 'v3:auto3'
-  assert_output --partial 'Did not auto-activate these environments'
-  assert_equal "$(grep -c 'Did not auto-activate' <<< "$output")" 1
+  assert_output --partial 'Disabled auto-activation for these environments.'
+  assert_equal "$(grep -c 'Disabled auto-activation' <<< "$output")" 1
 }
 
 # ---------------------------------------------------------------------------- #
