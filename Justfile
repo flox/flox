@@ -197,12 +197,22 @@ gen-unit-data-no-publish force="":
     # Use remote services for non-publish tests
     {{ cargo_test_invocation }} --filterset 'not (test(providers::build::tests) | test(providers::publish) | test(commands::publish) | test(providers::catalog::tests::creates_new_catalog))'
 
-gen-unit-data-for-publish floxhub_repo_path force="":
+# Reset the local FloxHub catalog DB to clean dump state via floxhub's
+# catalog-updater db-reset recipe. Requires the floxhub stack to be running.
+# Also useful standalone before ad-hoc recording sessions, e.g.:
+#   just reset-floxhub-db ../floxhub && just ut 'providers::publish' true
+@reset-floxhub-db floxhub_repo_path:
+    echo "Resetting catalog DB to clean dump state..."
+    flox activate -d "{{ floxhub_repo_path }}" -- bash -c \
+        'cd "{{ floxhub_repo_path }}" && just catalog-updater db-reset'
+
+gen-unit-data-for-publish floxhub_repo_path force="": (reset-floxhub-db floxhub_repo_path)
     #!/usr/bin/env bash
 
-    # Use local services for publish tests, must already be running.
-    # In the FloxHub repo, run:
-    # flox activate -- just catalog-server::serve-all
+    # Publish tests need the local FloxHub stack running. In the FloxHub repo:
+    #   flox activate -- just catalog-server::serve-for-mocks
+    # The reset-floxhub-db dependency restores a clean DB on every run, so any
+    # running stack works with no manual teardown between runs.
 
     set -euo pipefail
 
@@ -214,8 +224,14 @@ gen-unit-data-for-publish floxhub_repo_path force="":
         # Get the catalog server URL from the FloxHub environment
         catalog_server_url="$(flox activate -d "{{ floxhub_repo_path }}" -- bash -c 'echo $FLOXHUB_CATALOG_SERVER_URL')"
 
-        # Get the latest Nixpkgs revision that exists in the catalog
-        nixpkgs_rev="$(curl -X 'GET' --silent "${catalog_server_url}/info/base-catalog" -H 'accept: application/json' | jq .scraped_pages[0].rev | tr -d "'\"")"
+        # Latest Nixpkgs rev in the catalog. This must run after the
+        # reset-floxhub-db dependency so the rev comes from the freshly
+        # restored dump, not a stale DB; reorder them and the committed rev
+        # and the recorded mocks drift out of lockstep.
+        # The `|| true` keeps a failed curl from aborting under set -e, so the
+        # "failed to communicate" diagnostic below stays reachable.
+        base_catalog_info="$(curl -X 'GET' --silent "${catalog_server_url}/info/base-catalog" -H 'accept: application/json' || true)"
+        nixpkgs_rev="$(jq .scraped_pages[0].rev <<< "$base_catalog_info" | tr -d "'\"" || true)"
         if [ -z "$nixpkgs_rev" ]; then
             echo "failed to communicate with floxhub services"
             exit 1
