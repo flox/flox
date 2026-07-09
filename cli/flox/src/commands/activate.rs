@@ -2546,8 +2546,14 @@ fn wrap_activation_oci(
                 image_ref,
                 "image entrypoint not parseable; running the baked image instead"
             );
+            eprintln!(
+                "ℹ️  Store-volume run unavailable (image entrypoint not recognized); running the baked image instead."
+            );
         } else {
             debug!("flox-nix volume not found; running the baked image instead");
+            eprintln!(
+                "ℹ️  Store-volume run unavailable ('flox-nix' volume not found); running the baked image instead."
+            );
         }
     }
 

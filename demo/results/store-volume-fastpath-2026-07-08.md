@@ -276,7 +276,9 @@ Nothing currently garbage-collects the `flox-nix` volume, but if a future
 builder-side GC lands, the store-volume run's paths (env bundle and
 activations-context) must be gcroots — otherwise a hash-matched image
 could reference paths pruned from the volume. The fallback (run the baked
-image) covers the failure, but only after a confusing in-guest error.
+image) engages only for the volume-missing and unparseable-entrypoint
+cases; a pruned path fails in-guest with a confusing error and no
+fallback, since the process has already exec'd into the container.
 
 ### 3. nixos/nix base image is heavyweight for a runtime shell
 
