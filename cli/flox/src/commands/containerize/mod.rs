@@ -687,7 +687,10 @@ mod tests {
     /// caller omits it rather than passing a non-store path to storePath.
     #[test]
     fn store_root_rejects_non_store_path() {
-        assert_eq!(store_root(&PathBuf::from("/home/user/flox/target/debug/flox")), None);
+        assert_eq!(
+            store_root(&PathBuf::from("/home/user/flox/target/debug/flox")),
+            None
+        );
         assert_eq!(store_root(&PathBuf::from("/usr/bin/flox")), None);
     }
 
