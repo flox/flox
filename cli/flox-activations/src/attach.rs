@@ -142,7 +142,12 @@ pub(crate) fn startup_ctx(
     // in the rcfile so `flox deactivate` maps to `exit` even when the flox
     // binary is absent from the image. Bash-only: mkContainer.nix always
     // bakes `shell = bash`.
-    let container_shim = ctx.project_ctx.is_none();
+    //
+    // Skip the shim when a real flox binary is baked into the image
+    // (`flox_bin` non-empty): the real binary is on PATH and handles
+    // all subcommands including `flox deactivate`. The real `flox
+    // deactivate` exits the guest session (ADR-006 foreground-child model).
+    let container_shim = ctx.project_ctx.is_none() && ctx.flox_bin.is_empty();
 
     let args = match ctx.shell {
         ShellWithPath::Bash(_) => ShellStartupArgs::Bash(BashStartupArgs {

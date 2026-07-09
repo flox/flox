@@ -238,6 +238,73 @@ pub(crate) mod test_helpers {
         .expect("container test fixture should build")
     }
 
+    /// Like [`test_startup_ctx_container`] but with a real flox binary path
+    /// set in `flox_bin`. The rcfile generated from this context must NOT
+    /// include the `flox()` shim because the real binary is present.
+    pub fn test_startup_ctx_container_with_flox_bin(
+        shell: ShellWithPath,
+        is_in_place: bool,
+    ) -> StartupCtx {
+        let invocation_type = if is_in_place {
+            InvocationType::InPlace
+        } else {
+            InvocationType::Interactive
+        };
+        let attach_ctx = AttachCtx {
+            env: "/flox_env".to_string(),
+            env_cache: PathBuf::from("/flox_env_cache"),
+            env_description: "my-container".to_string(),
+            flox_active_environments: "active_envs".to_string(),
+            prompt_color_1: "99".to_string(),
+            prompt_color_2: "141".to_string(),
+            flox_prompt_environments: "my-container".to_string(),
+            set_prompt: true,
+            flox_env_cuda_detection: "0".to_string(),
+            interpreter_path: PathBuf::from("/interpreter"),
+            sandbox_mode: SandboxMode::default(),
+            metrics_host: None,
+        };
+        let act_ctx = ActivateCtx {
+            flox_activate_store_path: "/store_path".to_string(),
+            attach_ctx,
+            project_ctx: None, // container: no project
+            activation_state_dir: PathBuf::from("/activation_state_dir"),
+            mode: ActivateMode::Dev,
+            shell,
+            invocation_type: Some(invocation_type.clone()),
+            remove_after_reading: false,
+            metrics_uuid: None,
+            // When a real flox binary is baked into the image the hook
+            // can be registered (disable_hook = false) and the shim is
+            // suppressed.
+            disable_hook: false,
+            flox_bin: "/nix/store/fake-flox/bin/flox".to_string(),
+            auto_activate_fish_mode: None,
+            sandbox_mode: SandboxMode::default(),
+        };
+        let start_diff = StartDiff::from_parts(HashMap::new(), vec![]);
+        let vars_from_env = VarsFromEnvironment {
+            flox_env_dirs: None,
+            path: None,
+            manpath: None,
+            full_env: Some(HashMap::new()),
+        };
+        let rc_path = Some(PathBuf::from("/path/to/rc/file"));
+        startup_ctx(
+            act_ctx,
+            invocation_type,
+            rc_path,
+            start_diff,
+            "TRACER",
+            0,
+            vars_from_env,
+            false,
+            true,
+            None, // no .bashrc in container
+        )
+        .expect("container-with-flox-bin test fixture should build")
+    }
+
     /// Build a `DeactivateCtx` for tests of `gen_rc/*`.
     ///
     /// Reuses the encoded `_FLOX_HOOK_DIFF` produced by `test_startup_ctx`
