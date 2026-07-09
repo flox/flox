@@ -611,8 +611,13 @@ mod tests {
     #[test]
     fn add_runtime_args_omits_guest_flox_env_for_oci() {
         let (flox, _tempdir) = flox_instance();
-        let proxy =
-            ContainerizeProxy::new("/some/env".into(), Runtime::AppleContainer, vec![], None, true);
+        let proxy = ContainerizeProxy::new(
+            "/some/env".into(),
+            Runtime::AppleContainer,
+            vec![],
+            None,
+            true,
+        );
         let mut cmd = proxy.runtime_base_command();
         proxy.add_runtime_args(&mut cmd, &flox);
         let args = argv(&cmd);
