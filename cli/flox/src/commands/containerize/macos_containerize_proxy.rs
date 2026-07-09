@@ -68,6 +68,13 @@ pub(crate) struct ContainerizeProxy {
     container_runtime: Runtime,
     labels: Vec<String>,
     mode: Option<ActivateMode>,
+    /// Whether to bake a real flox binary into the guest image. Set only
+    /// by the sandbox activation bake; the general `flox containerize`
+    /// command leaves it false. Passed as a direct bool rather than via a
+    /// process env var: a runtime `std::env::set_var` write is not reliably
+    /// observed under flox's multi-threaded runtime (Rust 2024 made
+    /// `set_var` unsafe for exactly this reason).
+    include_guest_flox: bool,
 }
 
 impl ContainerizeProxy {
@@ -76,12 +83,14 @@ impl ContainerizeProxy {
         container_runtime: Runtime,
         labels: Vec<String>,
         mode: Option<ActivateMode>,
+        include_guest_flox: bool,
     ) -> Self {
         Self {
             environment_path,
             container_runtime,
             labels,
             mode,
+            include_guest_flox,
         }
     }
 
@@ -328,13 +337,12 @@ impl ContainerizeProxy {
             command.args(["--env", &format!("{}=true", FLOX_DISABLE_METRICS_VAR)]);
         }
 
-        // Forward the sandbox-bake marker into the builder VM so the inner
-        // `flox containerize` bakes a real guest flox. Absent for the
-        // general containerize command, so its images are unaffected. Read
-        // fresh (not via a LazyLock): `bake_oci_image` sets this var during
-        // the bake, after this module is first loaded, so a cached read
-        // would miss it.
-        if env::var_os(super::INCLUDE_GUEST_FLOX_ENV).is_some() {
+        // Forward the guest-flox request into the builder VM as an env var
+        // so the inner `flox containerize` (a separate process) bakes a real
+        // guest flox. The decision itself is carried by `self.include_guest_flox`
+        // (a direct bool), not the host process env — only the cross-process
+        // hop into the VM needs the env var.
+        if self.include_guest_flox {
             command.args(["--env", &format!("{}=1", super::INCLUDE_GUEST_FLOX_ENV)]);
         }
 
@@ -548,7 +556,8 @@ mod tests {
     #[test]
     fn docker_proxy_uses_docker_run() {
         let (flox, _tempdir) = flox_instance();
-        let proxy = ContainerizeProxy::new("/some/env".into(), Runtime::Docker, vec![], None);
+        let proxy =
+            ContainerizeProxy::new("/some/env".into(), Runtime::Docker, vec![], None, false);
         let mut cmd = proxy.runtime_base_command();
         proxy.add_runtime_args(&mut cmd, &flox);
         let args = argv(&cmd);
@@ -557,52 +566,47 @@ mod tests {
         assert!(!args.iter().any(|a| a.contains("--userns")));
     }
 
-    /// When the sandbox-bake marker is set, add_runtime_args must forward it
-    /// into the builder VM as `--env _FLOX_CONTAINERIZE_INCLUDE_GUEST_FLOX=1`
-    /// so the inner `flox containerize` bakes a real guest flox. Env-var
-    /// mutation is process-global, so guard with #[serial] and scope the set
-    /// tightly via temp_env::with_var.
+    /// When include_guest_flox is true, add_runtime_args must forward the
+    /// marker into the builder VM as `--env _FLOX_CONTAINERIZE_INCLUDE_GUEST_FLOX=1`
+    /// so the inner `flox containerize` bakes a real guest flox. Driven by
+    /// the constructor bool, so it is deterministic and parallel-safe.
     #[test]
-    #[serial_test::serial]
-    fn add_runtime_args_forwards_guest_flox_marker_when_set() {
+    fn add_runtime_args_forwards_guest_flox_marker_when_requested() {
         let (flox, _tempdir) = flox_instance();
-        temp_env::with_var(super::super::INCLUDE_GUEST_FLOX_ENV, Some("1"), || {
-            let proxy = ContainerizeProxy::new("/some/env".into(), Runtime::Docker, vec![], None);
-            let mut cmd = proxy.runtime_base_command();
-            proxy.add_runtime_args(&mut cmd, &flox);
-            let args = argv(&cmd);
-            let env_pos = args
-                .iter()
-                .position(|a| a == "_FLOX_CONTAINERIZE_INCLUDE_GUEST_FLOX=1")
-                .expect("marker --env must be forwarded when the var is set");
-            assert_eq!(args[env_pos - 1], "--env");
-        });
+        let proxy = ContainerizeProxy::new("/some/env".into(), Runtime::Docker, vec![], None, true);
+        let mut cmd = proxy.runtime_base_command();
+        proxy.add_runtime_args(&mut cmd, &flox);
+        let args = argv(&cmd);
+        let env_pos = args
+            .iter()
+            .position(|a| a == "_FLOX_CONTAINERIZE_INCLUDE_GUEST_FLOX=1")
+            .expect("marker --env must be forwarded when include_guest_flox is true");
+        assert_eq!(args[env_pos - 1], "--env");
     }
 
-    /// General `flox containerize` (marker unset) must NOT forward the
-    /// marker into the builder VM, so its images keep today's behavior.
+    /// General `flox containerize` (include_guest_flox = false) must NOT
+    /// forward the marker into the builder VM, so its images keep today's
+    /// behavior.
     #[test]
-    #[serial_test::serial]
-    fn add_runtime_args_omits_guest_flox_marker_when_unset() {
+    fn add_runtime_args_omits_guest_flox_marker_when_not_requested() {
         let (flox, _tempdir) = flox_instance();
-        temp_env::with_var(super::super::INCLUDE_GUEST_FLOX_ENV, None::<&str>, || {
-            let proxy = ContainerizeProxy::new("/some/env".into(), Runtime::Docker, vec![], None);
-            let mut cmd = proxy.runtime_base_command();
-            proxy.add_runtime_args(&mut cmd, &flox);
-            let args = argv(&cmd);
-            assert!(
-                !args
-                    .iter()
-                    .any(|a| a == "_FLOX_CONTAINERIZE_INCLUDE_GUEST_FLOX=1"),
-                "marker --env must be absent when the var is unset: {args:?}"
-            );
-        });
+        let proxy = ContainerizeProxy::new("/some/env".into(), Runtime::Docker, vec![], None, false);
+        let mut cmd = proxy.runtime_base_command();
+        proxy.add_runtime_args(&mut cmd, &flox);
+        let args = argv(&cmd);
+        assert!(
+            !args
+                .iter()
+                .any(|a| a == "_FLOX_CONTAINERIZE_INCLUDE_GUEST_FLOX=1"),
+            "marker --env must be absent when include_guest_flox is false: {args:?}"
+        );
     }
 
     #[test]
     fn podman_proxy_adds_userns_flag() {
         let (flox, _tempdir) = flox_instance();
-        let proxy = ContainerizeProxy::new("/some/env".into(), Runtime::Podman, vec![], None);
+        let proxy =
+            ContainerizeProxy::new("/some/env".into(), Runtime::Podman, vec![], None, false);
         let mut cmd = proxy.runtime_base_command();
         proxy.add_runtime_args(&mut cmd, &flox);
         let args = argv(&cmd);
@@ -619,7 +623,7 @@ mod tests {
     fn apple_container_proxy_omits_userns_flag() {
         let (flox, _tempdir) = flox_instance();
         let proxy =
-            ContainerizeProxy::new("/some/env".into(), Runtime::AppleContainer, vec![], None);
+            ContainerizeProxy::new("/some/env".into(), Runtime::AppleContainer, vec![], None, false);
         let mut cmd = proxy.runtime_base_command();
         proxy.add_runtime_args(&mut cmd, &flox);
         let args = argv(&cmd);
@@ -635,7 +639,7 @@ mod tests {
     fn apple_container_uses_volume_flag_for_cache() {
         let (flox, _tempdir) = flox_instance();
         let proxy =
-            ContainerizeProxy::new("/some/env".into(), Runtime::AppleContainer, vec![], None);
+            ContainerizeProxy::new("/some/env".into(), Runtime::AppleContainer, vec![], None, false);
         let mut cmd = proxy.runtime_base_command();
         proxy.add_runtime_args(&mut cmd, &flox);
         let args = argv(&cmd);
@@ -661,7 +665,8 @@ mod tests {
     #[test]
     fn docker_uses_mount_flag_for_cache() {
         let (flox, _tempdir) = flox_instance();
-        let proxy = ContainerizeProxy::new("/some/env".into(), Runtime::Docker, vec![], None);
+        let proxy =
+            ContainerizeProxy::new("/some/env".into(), Runtime::Docker, vec![], None, false);
         let mut cmd = proxy.runtime_base_command();
         proxy.add_runtime_args(&mut cmd, &flox);
         let args = argv(&cmd);
@@ -689,6 +694,7 @@ mod tests {
             Runtime::AppleContainer,
             vec![],
             None,
+            false,
         );
         let cmd = proxy.build_oci_conversion_command(&flox, "latest");
         let args = argv(&cmd);
@@ -708,7 +714,7 @@ mod tests {
     #[test]
     fn apple_container_builder_gets_default_memory() {
         let proxy =
-            ContainerizeProxy::new("/some/env".into(), Runtime::AppleContainer, vec![], None);
+            ContainerizeProxy::new("/some/env".into(), Runtime::AppleContainer, vec![], None, false);
         let cmd = proxy.runtime_base_command();
         let args = argv(&cmd);
         // Default 8g memory flag must be present so the builder VM does not
@@ -728,7 +734,7 @@ mod tests {
     #[test]
     fn docker_and_podman_do_not_get_memory_flag() {
         let docker_proxy =
-            ContainerizeProxy::new("/some/env".into(), Runtime::Docker, vec![], None);
+            ContainerizeProxy::new("/some/env".into(), Runtime::Docker, vec![], None, false);
         let docker_args = argv(&docker_proxy.runtime_base_command());
         assert!(
             !docker_args.iter().any(|a| a == "--memory"),
@@ -736,7 +742,7 @@ mod tests {
         );
 
         let podman_proxy =
-            ContainerizeProxy::new("/some/env".into(), Runtime::Podman, vec![], None);
+            ContainerizeProxy::new("/some/env".into(), Runtime::Podman, vec![], None, false);
         let podman_args = argv(&podman_proxy.runtime_base_command());
         assert!(
             !podman_args.iter().any(|a| a == "--memory"),
@@ -769,6 +775,7 @@ mod tests {
             Runtime::AppleContainer,
             vec![],
             None,
+            false,
         );
         let cmd = proxy.build_oci_conversion_command(&flox, "latest");
         let args = argv(&cmd);
@@ -789,6 +796,7 @@ mod tests {
             Runtime::AppleContainer,
             vec![],
             None,
+            false,
         );
         let cmd = proxy.build_oci_conversion_command(&flox, "latest");
         let args = argv(&cmd);
@@ -857,7 +865,7 @@ mod tests {
     fn oci_conversion_embeds_custom_tag() {
         let (flox, _tempdir) = flox_instance();
         let proxy =
-            ContainerizeProxy::new("/env/myapp".into(), Runtime::AppleContainer, vec![], None);
+            ContainerizeProxy::new("/env/myapp".into(), Runtime::AppleContainer, vec![], None, false);
         let cmd = proxy.build_oci_conversion_command(&flox, "v1.2.3");
         let args = argv(&cmd);
         // Custom tag must appear in the OCI destination reference
@@ -871,7 +879,7 @@ mod tests {
     fn oci_conversion_escapes_hostile_tags() {
         let (flox, _tempdir) = flox_instance();
         let proxy =
-            ContainerizeProxy::new("/env/myapp".into(), Runtime::AppleContainer, vec![], None);
+            ContainerizeProxy::new("/env/myapp".into(), Runtime::AppleContainer, vec![], None, false);
 
         // A tag containing a space must be single-quoted so it stays one word.
         let cmd = proxy.build_oci_conversion_command(&flox, "my tag");
