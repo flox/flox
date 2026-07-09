@@ -25,13 +25,6 @@ const FLOX_FLAKE: &str = "github:flox/flox";
 const FLOX_PROXY_IMAGE_FLOX_CONFIG_DIR: &str = "/root/.config/flox";
 static FLOX_CONTAINERIZE_FLAKE_REF_OR_REV: LazyLock<Option<String>> =
     LazyLock::new(|| env::var("_FLOX_CONTAINERIZE_FLAKE_REF_OR_REV").ok());
-
-/// Marker requesting a real guest flox in the baked image. Set by the
-/// sandbox activation bake (`bake_oci_image`); forwarded into the builder
-/// VM so the inner `flox containerize` includes flox. `Some` only during a
-/// sandbox bake.
-static INCLUDE_GUEST_FLOX: LazyLock<Option<String>> =
-    LazyLock::new(|| env::var("_FLOX_CONTAINERIZE_INCLUDE_GUEST_FLOX").ok());
 const CONTAINER_NIX_CACHE_VOLUME: &str = "flox-nix";
 
 /// Default VM memory for Apple Container builder runs.
@@ -337,9 +330,15 @@ impl ContainerizeProxy {
 
         // Forward the sandbox-bake marker into the builder VM so the inner
         // `flox containerize` bakes a real guest flox. Absent for the
-        // general containerize command, so its images are unaffected.
-        if INCLUDE_GUEST_FLOX.is_some() {
-            command.args(["--env", "_FLOX_CONTAINERIZE_INCLUDE_GUEST_FLOX=1"]);
+        // general containerize command, so its images are unaffected. Read
+        // fresh (not via a LazyLock): `bake_oci_image` sets this var during
+        // the bake, after this module is first loaded, so a cached read
+        // would miss it.
+        if env::var_os(super::INCLUDE_GUEST_FLOX_ENV).is_some() {
+            command.args([
+                "--env",
+                &format!("{}=1", super::INCLUDE_GUEST_FLOX_ENV),
+            ]);
         }
 
         // Propagate the host's nix substituters and trusted public keys into
@@ -559,6 +558,48 @@ mod tests {
         assert_eq!(args[0], "docker");
         assert!(args.contains(&"run".to_string()));
         assert!(!args.iter().any(|a| a.contains("--userns")));
+    }
+
+    /// When the sandbox-bake marker is set, add_runtime_args must forward it
+    /// into the builder VM as `--env _FLOX_CONTAINERIZE_INCLUDE_GUEST_FLOX=1`
+    /// so the inner `flox containerize` bakes a real guest flox. Env-var
+    /// mutation is process-global, so guard with #[serial] and scope the set
+    /// tightly via temp_env::with_var.
+    #[test]
+    #[serial_test::serial]
+    fn add_runtime_args_forwards_guest_flox_marker_when_set() {
+        let (flox, _tempdir) = flox_instance();
+        temp_env::with_var(super::super::INCLUDE_GUEST_FLOX_ENV, Some("1"), || {
+            let proxy = ContainerizeProxy::new("/some/env".into(), Runtime::Docker, vec![], None);
+            let mut cmd = proxy.runtime_base_command();
+            proxy.add_runtime_args(&mut cmd, &flox);
+            let args = argv(&cmd);
+            let env_pos = args
+                .iter()
+                .position(|a| a == "_FLOX_CONTAINERIZE_INCLUDE_GUEST_FLOX=1")
+                .expect("marker --env must be forwarded when the var is set");
+            assert_eq!(args[env_pos - 1], "--env");
+        });
+    }
+
+    /// General `flox containerize` (marker unset) must NOT forward the
+    /// marker into the builder VM, so its images keep today's behavior.
+    #[test]
+    #[serial_test::serial]
+    fn add_runtime_args_omits_guest_flox_marker_when_unset() {
+        let (flox, _tempdir) = flox_instance();
+        temp_env::with_var(super::super::INCLUDE_GUEST_FLOX_ENV, None::<&str>, || {
+            let proxy = ContainerizeProxy::new("/some/env".into(), Runtime::Docker, vec![], None);
+            let mut cmd = proxy.runtime_base_command();
+            proxy.add_runtime_args(&mut cmd, &flox);
+            let args = argv(&cmd);
+            assert!(
+                !args
+                    .iter()
+                    .any(|a| a == "_FLOX_CONTAINERIZE_INCLUDE_GUEST_FLOX=1"),
+                "marker --env must be absent when the var is unset: {args:?}"
+            );
+        });
     }
 
     #[test]
