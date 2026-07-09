@@ -335,10 +335,7 @@ impl ContainerizeProxy {
         // the bake, after this module is first loaded, so a cached read
         // would miss it.
         if env::var_os(super::INCLUDE_GUEST_FLOX_ENV).is_some() {
-            command.args([
-                "--env",
-                &format!("{}=1", super::INCLUDE_GUEST_FLOX_ENV),
-            ]);
+            command.args(["--env", &format!("{}=1", super::INCLUDE_GUEST_FLOX_ENV)]);
         }
 
         // Propagate the host's nix substituters and trusted public keys into
