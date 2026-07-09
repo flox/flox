@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::io::{BufRead, BufReader, BufWriter, Write, stdout};
+use std::io::{BufWriter, IsTerminal, Write, stdout};
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
@@ -27,6 +27,7 @@ use super::deactivate::{
 };
 use crate::config::{AutoActivate, AutoActivationPreference, Config};
 use crate::subcommand_metric;
+use crate::utils::dialog::{Confirm, Dialog};
 use crate::utils::message;
 
 #[derive(Debug, Clone, Bpaf)]
@@ -55,7 +56,7 @@ pub struct HookEnv {
 }
 
 impl HookEnv {
-    pub fn handle(self, config: Config, flox: Flox) -> Result<()> {
+    pub async fn handle(self, config: Config, flox: Flox) -> Result<()> {
         let mut writer = BufWriter::new(stdout());
 
         // Consume any actions another flox command (e.g. `flox deactivate`) left
@@ -186,9 +187,9 @@ impl HookEnv {
         // can surface several at once, and a prompt per layer is tedious. The
         // single answer applies to the whole batch (`plan.prompt`).
         let consent = if plan.prompt.is_empty() {
-            AutoActivateConsent::NoTerminal
+            AutoActivateConsent::NoResponse
         } else {
-            prompt_for_auto_activation(&plan.prompt)?
+            prompt_for_auto_activation(&plan.prompt).await?
         };
 
         // Only record a metric when this run actually does something;
@@ -247,7 +248,7 @@ impl HookEnv {
                     // No terminal to prompt on (non-interactive shell): leave
                     // the environment unregistered so a later interactive prompt
                     // can still ask. Take no action and record nothing.
-                    AutoActivateConsent::NoTerminal => {},
+                    AutoActivateConsent::NoResponse => {},
                 }
             }
         }
@@ -775,8 +776,10 @@ enum AutoActivateConsent {
     Allow,
     /// Don't activate; suppress re-prompting for this shell session.
     Decline,
-    /// No controlling terminal to prompt on; make no decision this run.
-    NoTerminal,
+    /// Couldn't get user response
+    /// This is a catchall for things like the user Ctrl-C'ing the prompt or
+    /// times when we can't prompt because we don't have a tty
+    NoResponse,
 }
 
 /// Ask the user, on the controlling terminal, whether to auto-activate the
@@ -786,55 +789,45 @@ enum AutoActivateConsent {
 /// surface several environments at once, and asking per environment is tedious.
 /// The answer applies to all of `project_dirs`.
 ///
-/// The prompt hook's stdout is captured and evaluated by the shell, so the
-/// question and the answer go through `/dev/tty` directly rather than
-/// stdout/stdin. When there is no controlling terminal (a non-interactive
-/// shell), returns [`AutoActivateConsent::NoTerminal`] so the caller leaves the
-/// environments unregistered instead of blocking. A bare Enter (or EOF)
-/// defaults to declining.
-fn prompt_for_auto_activation(project_dirs: &[PathBuf]) -> Result<AutoActivateConsent> {
-    let Ok(tty) = std::fs::OpenOptions::new()
-        .read(true)
-        .write(true)
-        .open("/dev/tty")
-    else {
-        return Ok(AutoActivateConsent::NoTerminal);
-    };
+/// When there is no terminal to prompt on, returns
+/// [`AutoActivateConsent::NoResponse`] so the caller doesn't suppress
+/// prompting.
+async fn prompt_for_auto_activation(project_dirs: &[PathBuf]) -> Result<AutoActivateConsent> {
+    // Instead of using `Dialog::can_prompt`, only check if stderr is a terminal.
+    // We know stdout is not a terminal, which would cause `Dialog::can_prompt` to return false.
+    if !std::io::stderr().is_terminal() {
+        return Ok(AutoActivateConsent::NoResponse);
+    }
 
-    let question = match project_dirs {
-        [dir] => format!(
-            "Auto-activate the environment in '{}'? [y/N] ",
-            dir.display()
-        ),
+    let message = match project_dirs {
+        [dir] => format!("Auto-activate the environment in '{}'?", dir.display()),
         dirs => {
-            let mut question = format!("Auto-activate these {} environments?\n", dirs.len());
+            let mut message = format!("Auto-activate these {} environments?", dirs.len());
             for dir in dirs {
-                question.push_str(&format!("  {}\n", dir.display()));
+                message.push_str(&format!("\n  {}", dir.display()));
             }
-            question.push_str("[y/N] ");
-            question
+            message
         },
     };
 
-    // `File` implements `Read`/`Write` through shared references, so one open
-    // handle drives both the question and the answer.
-    let mut tty_writer = &tty;
-    tty_writer
-        .write_all(question.as_bytes())
-        .context("failed to write the auto-activation prompt")?;
-    tty_writer
-        .flush()
-        .context("failed to flush the auto-activation prompt")?;
+    let consent = Dialog {
+        message: &message,
+        help_message: None,
+        typed: Confirm {
+            default: Some(false),
+        },
+    }
+    .prompt()
+    .await;
 
-    let mut answer = String::new();
-    BufReader::new(&tty)
-        .read_line(&mut answer)
-        .context("failed to read the auto-activation response")?;
-    let answer = answer.trim();
-    if answer.eq_ignore_ascii_case("y") || answer.eq_ignore_ascii_case("yes") {
-        Ok(AutoActivateConsent::Allow)
-    } else {
-        Ok(AutoActivateConsent::Decline)
+    match consent {
+        Ok(true) => Ok(AutoActivateConsent::Allow),
+        Ok(false) => Ok(AutoActivateConsent::Decline),
+        Err(inquire::InquireError::NotTTY) => Ok(AutoActivateConsent::NoResponse),
+        Err(
+            inquire::InquireError::OperationCanceled | inquire::InquireError::OperationInterrupted,
+        ) => Ok(AutoActivateConsent::NoResponse),
+        Err(err) => Err(err).context("failed to prompt for auto-activation"),
     }
 }
 

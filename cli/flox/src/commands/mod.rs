@@ -1050,7 +1050,7 @@ impl InternalCommands {
             InternalCommands::CheckForUpgrades(args) => args.handle(flox).await?,
             InternalCommands::ActivationState(args) => args.handle(flox).await?,
             InternalCommands::ServicesSocket(args) => args.handle(flox).await?,
-            InternalCommands::HookEnv(args) => args.handle(config, flox)?,
+            InternalCommands::HookEnv(args) => args.handle(config, flox).await?,
         }
         Ok(())
     }
