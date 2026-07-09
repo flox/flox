@@ -1,0 +1,70 @@
+name: Validate PR Title
+
+# The merge queue squashes each PR into a single commit whose *subject* is the
+# PR title. The `commitizen-in-ci` hook (pkgs/pre-commit-check/default.nix)
+# validates that squashed subject against Conventional Commits — but only once
+# the PR is already at the front of the queue. A non-conventional title
+# therefore passes every local hook (which only see the branch commits) and
+# every PR check, then fails deep in the merge queue.
+#
+# This workflow closes that gap by validating the PR title on the PR itself,
+# with the same Conventional Commit rules the merge-queue hook enforces. It is
+# a self-contained shell check (no third-party action) so it needs no entry in
+# the repository Actions allow-list.
+
+on:
+  pull_request:
+    types:
+      - opened
+      - edited
+      - reopened
+  merge_group:
+
+permissions: {}
+
+jobs:
+  validate:
+    name: Validate PR title
+    runs-on: ubuntu-latest
+    steps:
+      # Skipped on merge_group: there is no PR title to check there, and the
+      # merge-queue commitizen hook already validates the squashed subject.
+      # The job still reports success on merge_group, so this check is safe to
+      # add to the required status checks without deadlocking the queue.
+      - name: Check PR title follows Conventional Commits
+        if: github.event_name == 'pull_request'
+        env:
+          # Passed via env — never interpolated into the script — so an
+          # untrusted title cannot inject shell commands.
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        shell: bash
+        run: |
+          # Conventional Commit types enforced by commitizen
+          # (cz_conventional_commits) in pkgs/pre-commit-check/default.nix.
+          # Keep this list in sync with that hook so the PR title and the
+          # squashed merge commit can never disagree.
+          types='build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test|bump'
+
+          # The merge-queue hook also allows a leading "Revert" prefix
+          # (--allowed-prefixes Revert) — how GitHub titles revert PRs.
+          if [[ "$PR_TITLE" == "Revert "* ]]; then
+            echo "OK: title uses the allowed 'Revert' prefix."
+            exit 0
+          fi
+
+          regex="^(${types})(\(.+\))?!?: .+"
+          if [[ "$PR_TITLE" =~ $regex ]]; then
+            echo "OK: '$PR_TITLE' is a valid Conventional Commit subject."
+            exit 0
+          fi
+
+          {
+            echo "::error title=Invalid PR title::\"$PR_TITLE\" is not a Conventional Commit subject"
+            echo "The merge queue squashes this PR using the title as the commit"
+            echo "subject, and the commitizen-in-ci hook rejects a subject that is"
+            echo "not in Conventional Commit form."
+            echo
+            echo "Expected: <type>(<optional scope>): <subject>"
+            echo "where <type> is one of: ${types//|/, }"
+          } >&2
+          exit 1
