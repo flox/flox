@@ -2095,15 +2095,9 @@ fn bake_oci_image(
     };
 
     // Temporarily override the flake ref so ContainerizeProxy picks it up.
-    // Also request a real guest flox binary: this marker is what
-    // distinguishes the sandbox bake from a general `flox containerize`,
-    // gating the flox inclusion, hook enablement, and HOME/Env override
-    // to the sandbox path only. ContainerizeProxy forwards it into the
-    // builder VM so the inner `flox containerize` sees it.
-    // SAFETY: single-process, no concurrent readers of these vars during bake.
+    // SAFETY: single-process, no concurrent readers of this var during bake.
     unsafe {
         std::env::set_var("_FLOX_CONTAINERIZE_FLAKE_REF_OR_REV", &ref_or_rev);
-        std::env::set_var("_FLOX_CONTAINERIZE_INCLUDE_GUEST_FLOX", "1");
     }
 
     let container_runtime = {
@@ -2139,7 +2133,11 @@ fn bake_oci_image(
         None => env_path,
     };
 
-    let proxy = ContainerizeProxy::new(builder_project, container_runtime.clone(), vec![], None);
+    // include_guest_flox = true: the sandbox bake bakes a real flox into
+    // the guest so `flox list` works inside the sandboxed session. This is
+    // what distinguishes the bake from a general `flox containerize`.
+    let proxy =
+        ContainerizeProxy::new(builder_project, container_runtime.clone(), vec![], None, true);
     // Tag used during bake: we use the hash tag directly so the image lands
     // under the right content-addressed name. The proxy uses this tag when
     // invoking `container image load`.
@@ -2157,10 +2155,9 @@ fn bake_oci_image(
         sink.wait()?;
     }
 
-    // Clean up the env overrides now that the bake is done.
+    // Clean up the env override now that the bake is done.
     unsafe {
         std::env::remove_var("_FLOX_CONTAINERIZE_FLAKE_REF_OR_REV");
-        std::env::remove_var("_FLOX_CONTAINERIZE_INCLUDE_GUEST_FLOX");
     }
 
     eprintln!("✅  Image '{hash_tag}' loaded into {runtime} store.");

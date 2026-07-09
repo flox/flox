@@ -156,7 +156,10 @@ impl Containerize {
                     "Apple Container builds run without a Nix store cache and fetch dependencies on every run; expect longer build times.",
                 );
             }
-            let builder = ContainerizeProxy::new(env_path, proxy_runtime, self.labels, self.mode);
+            // include_guest_flox = false: the general containerize command
+            // never bakes a guest flox — that behavior is sandbox-only.
+            let builder =
+                ContainerizeProxy::new(env_path, proxy_runtime, self.labels, self.mode, false);
             builder.create_container_source(&flox, env_name.as_ref(), output_tag)?
         };
 
