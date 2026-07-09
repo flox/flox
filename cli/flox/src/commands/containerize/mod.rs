@@ -120,17 +120,17 @@ impl Containerize {
                     extend_config(&self.labels, &mut c);
                     c.into()
                 });
-            // this method is only executed on linux
-            // Provide the running binary as the guest flox so `flox list`
-            // works inside the container. The host binary has the same
-            // architecture as the container system when building on Linux.
-            let flox_bin = std::env::current_exe()
-                .unwrap_or_default()
-                .canonicalize()
-                .unwrap_or_default();
+            // Include a real guest flox binary only for the sandbox
+            // activation bake, never for the general `flox containerize`
+            // command. The sandbox bake path sets the marker env var and
+            // (on macOS) forwards it into the builder VM; that inner
+            // `flox containerize` runs here on Linux.
+            let flox_bin = resolve_guest_flox_bin();
             // MkContainerNix::new is deprecated on non-Linux targets. This
             // code path is only reached at runtime on Linux (guarded by the
             // OS check above), so the deprecation cannot fire in production.
+            // The macOS sandbox bake resolves flox_bin inside the builder
+            // VM, where this same branch runs on Linux.
             #[cfg_attr(not(target_os = "linux"), allow(deprecated))]
             let builder = MkContainerNix::new(
                 built_environment.for_mode(&mode),
@@ -173,6 +173,53 @@ impl Containerize {
 
         message::created(format!("'{env_name}:{output_tag}' written to {output}"));
         Ok(())
+    }
+}
+
+/// Marker env var that requests a real guest flox binary in the image.
+///
+/// Set by the sandbox activation bake (`bake_oci_image` in
+/// `commands/activate.rs`) and forwarded into the macOS builder VM by
+/// `ContainerizeProxy`. The general `flox containerize` command never
+/// sets it, so its images keep today's behavior: no baked flox, the
+/// deactivate-only shim, and no HOME/Env override.
+const INCLUDE_GUEST_FLOX_ENV: &str = "_FLOX_CONTAINERIZE_INCLUDE_GUEST_FLOX";
+
+/// Nix store path prefix. `mkContainer.nix` calls `builtins.storePath` on
+/// the value, which hard-fails for any path outside the store, so we only
+/// pass a path that lives under this prefix.
+const NIX_STORE_PREFIX: &str = "/nix/store/";
+
+/// Resolve the flox binary to bake into a guest image, or an empty path
+/// when none should be included.
+///
+/// Returns empty (→ no `floxBin` argstr, deactivate shim retained) unless
+/// [`INCLUDE_GUEST_FLOX_ENV`] is set. When it is set, the running binary's
+/// canonical path must live under the Nix store; a dev build
+/// (`./target/debug/flox`), a wrapper, or a symlink to a non-store target
+/// is not a valid `storePath`, so it is omitted with a warning instead of
+/// detonating the bake inside Nix.
+fn resolve_guest_flox_bin() -> PathBuf {
+    let requested = std::env::var_os(INCLUDE_GUEST_FLOX_ENV).is_some();
+    if !requested {
+        return PathBuf::new();
+    }
+
+    let Ok(exe) = std::env::current_exe().and_then(|p| p.canonicalize()) else {
+        message::warning(
+            "Could not resolve the flox binary path; the sandbox guest will not include flox.",
+        );
+        return PathBuf::new();
+    };
+
+    if exe.starts_with(NIX_STORE_PREFIX) {
+        exe
+    } else {
+        message::warning(
+            "The running flox is not a Nix store build; the sandbox guest will not include flox. \
+             Use a Nix-built flox to enable in-guest 'flox list'.",
+        );
+        PathBuf::new()
     }
 }
 
@@ -578,6 +625,35 @@ mod tests {
         assert!(Runtime::AppleContainer.requires_oci_format());
         assert!(!Runtime::Docker.requires_oci_format());
         assert!(!Runtime::Podman.requires_oci_format());
+    }
+
+    /// General `flox containerize` (marker env var unset) must never bake a
+    /// guest flox — flox_bin stays empty so no flox is added, the hook
+    /// stays disabled, and no Env override is applied. This guards the
+    /// shipping containerize feature from the sandbox-only behavior.
+    #[test]
+    #[serial_test::serial]
+    fn general_containerize_leaves_flox_bin_empty() {
+        temp_env::with_var(INCLUDE_GUEST_FLOX_ENV, None::<&str>, || {
+            assert_eq!(resolve_guest_flox_bin(), PathBuf::new());
+        });
+    }
+
+    /// The sandbox bake requests a guest flox, but a non-store running
+    /// binary (e.g. a dev `./target/debug/flox`) must be omitted rather
+    /// than passed to `builtins.storePath`, which would fail the bake.
+    #[test]
+    #[serial_test::serial]
+    fn non_store_binary_is_omitted_even_when_requested() {
+        // current_exe() in the test harness is a cargo target path, not a
+        // /nix/store path, so the store-prefix guard must reject it.
+        temp_env::with_var(INCLUDE_GUEST_FLOX_ENV, Some("1"), || {
+            let resolved = resolve_guest_flox_bin();
+            assert!(
+                !resolved.starts_with(NIX_STORE_PREFIX),
+                "a non-store binary must be omitted, got {resolved:?}"
+            );
+        });
     }
 
     #[test]
