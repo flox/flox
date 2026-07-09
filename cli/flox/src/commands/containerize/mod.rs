@@ -190,8 +190,8 @@ const INCLUDE_GUEST_FLOX_ENV: &str = "_FLOX_CONTAINERIZE_INCLUDE_GUEST_FLOX";
 /// pass a path that lives under this prefix.
 const NIX_STORE_PREFIX: &str = "/nix/store/";
 
-/// Resolve the flox binary to bake into a guest image, or an empty path
-/// when none should be included.
+/// Resolve the flox package ROOT store path to bake into a guest image,
+/// or an empty path when none should be included.
 ///
 /// Returns empty (→ no `floxBin` argstr, deactivate shim retained) unless
 /// [`INCLUDE_GUEST_FLOX_ENV`] is set. When it is set, the running binary's
@@ -199,6 +199,10 @@ const NIX_STORE_PREFIX: &str = "/nix/store/";
 /// (`./target/debug/flox`), a wrapper, or a symlink to a non-store target
 /// is not a valid `storePath`, so it is omitted with a warning instead of
 /// detonating the bake inside Nix.
+///
+/// The value returned is the package ROOT (`/nix/store/<hash-name>`), not
+/// the binary file — `mkContainer.nix` adds it to a `buildEnv`, which needs
+/// the package root to symlink `bin/flox` onto the guest PATH.
 fn resolve_guest_flox_bin() -> PathBuf {
     let requested = std::env::var_os(INCLUDE_GUEST_FLOX_ENV).is_some();
     if !requested {
@@ -212,15 +216,27 @@ fn resolve_guest_flox_bin() -> PathBuf {
         return PathBuf::new();
     };
 
-    if exe.starts_with(NIX_STORE_PREFIX) {
-        exe
-    } else {
-        message::warning(
-            "The running flox is not a Nix store build; the sandbox guest will not include flox. \
-             Use a Nix-built flox to enable in-guest 'flox list'.",
-        );
-        PathBuf::new()
+    match store_root(&exe) {
+        Some(root) => root,
+        None => {
+            message::warning(
+                "The running flox is not a Nix store build; the sandbox guest will not \
+                 include flox. Use a Nix-built flox to enable in-guest 'flox list'.",
+            );
+            PathBuf::new()
+        },
     }
+}
+
+/// Extract the Nix store package root (`/nix/store/<hash-name>`) from a path
+/// under the store, or `None` when the path is not under `/nix/store/`.
+///
+/// A canonical store binary lives at `/nix/store/<hash-name>/bin/flox`, so
+/// the root is `/nix/store/` plus the first component after it.
+fn store_root(path: &std::path::Path) -> Option<PathBuf> {
+    let rest = path.strip_prefix(NIX_STORE_PREFIX).ok()?;
+    let first = rest.components().next()?;
+    Some(PathBuf::from(NIX_STORE_PREFIX).join(first))
 }
 
 fn should_extend_config(labels: &[String]) -> bool {
@@ -654,6 +670,25 @@ mod tests {
                 "a non-store binary must be omitted, got {resolved:?}"
             );
         });
+    }
+
+    /// `store_root` must return the PACKAGE ROOT (`/nix/store/<hash-name>`),
+    /// not the binary file — buildEnv needs the root to symlink bin/flox.
+    #[test]
+    fn store_root_extracts_package_root_from_binary_path() {
+        let binary = PathBuf::from("/nix/store/abc123-flox-1.13.1/bin/flox");
+        assert_eq!(
+            store_root(&binary),
+            Some(PathBuf::from("/nix/store/abc123-flox-1.13.1"))
+        );
+    }
+
+    /// `store_root` returns `None` for a path outside the Nix store so the
+    /// caller omits it rather than passing a non-store path to storePath.
+    #[test]
+    fn store_root_rejects_non_store_path() {
+        assert_eq!(store_root(&PathBuf::from("/home/user/flox/target/debug/flox")), None);
+        assert_eq!(store_root(&PathBuf::from("/usr/bin/flox")), None);
     }
 
     #[test]

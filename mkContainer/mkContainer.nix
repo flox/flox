@@ -130,8 +130,9 @@ let
     # would occur when bash tries to invoke an empty flox_bin.
     disable_hook = !hasFloxBin;
     # flox_bin is read by flox-activations to generate the hook code and
-    # to decide whether to emit the deactivate-only shim. An empty string
-    # means "no real flox binary present".
+    # to decide whether to emit the deactivate-only shim. floxBin is the
+    # package root, so bin/flox is appended here. An empty string means
+    # "no real flox binary present".
     flox_bin = optionalString hasFloxBin "${storePath floxBin}/bin/flox";
     flox_activate_store_path = "${environment}";
     activation_state_dir = "/run/flox/container-activations/${baseNameOf environment}";
@@ -208,10 +209,12 @@ let
           (lowPrio containerPkgs.bash) # for a usable shell
           (lowPrio containerPkgs.coreutils) # for just the basic utils
         ]
-        # Include the real flox binary when provided so guest commands
+        # Include the real flox package root when provided so guest commands
         # like `flox list` work against the bind-mounted project lockfile.
+        # No lowPrio: storePath yields a string (not a derivation, so lowPrio
+        # would fail), and there is no bin/flox collision to deprioritize.
         ++ optionals hasFloxBin [
-          (lowPrio (storePath floxBin))
+          (storePath floxBin)
         ];
       };
       config =
@@ -251,7 +254,7 @@ let
 
       passthru = {
         # These tests can be run with the following command from the root of the repository:
-        #     $ nix eval --impure --expr '(import ./mkContainer/mkContainer.nix { nixpkgsFlakeRef = "github:nixos/nixpkgs?ref=nixos-24.11"; environmentOutPath = null; system = builtins.currentSystem; containerSystem = builtins.currentSystem; }).passthru.tests'
+        #     $ nix eval --impure --expr '(import ./mkContainer/mkContainer.nix { nixpkgsFlakeRef = "github:nixos/nixpkgs?ref=nixos-24.11"; environmentOutPath = null; interpreterPath = "/interp"; activationMode = "dev"; system = builtins.currentSystem; containerSystem = builtins.currentSystem; }).passthru.tests'
         #     $ [ ]
         # If it returns anything other than [ ], then the tests failed.
         tests = import ./tests.nix {
@@ -260,6 +263,31 @@ let
             inherit isNixStoreUserOwnedRegex unameGnameRegex mkUnameGnameUidGid;
           };
         };
+
+        # Regression guard for the hasFloxBin=true branch: re-evaluate the
+        # image with a real store-path root passed as floxBin and force the
+        # derivation to instantiate (`drvPath` pulls in `contents` and
+        # `config`, the bug sites). The `hello` package root stands in for
+        # both the environment and the guest flox so the eval does not depend
+        # on a real environmentOutPath. This is the branch that previously
+        # broke on `builtins.storePath` (needs a package root, not a binary)
+        # and `lowPrio` (needs a derivation, not a string). Evaluating
+        # `.passthru.floxBinEval` throws on those errors without a full bake;
+        # a clean run yields a `/nix/store/*.drv` path string.
+        #     $ nix eval --impure --expr '(import ./mkContainer/mkContainer.nix { nixpkgsFlakeRef = "github:nixos/nixpkgs?ref=nixos-24.11"; environmentOutPath = null; interpreterPath = "/interp"; activationMode = "dev"; system = builtins.currentSystem; containerSystem = builtins.currentSystem; }).passthru.floxBinEval'
+        #     $ "/nix/store/....drv"
+        floxBinEval =
+          (import ./mkContainer.nix {
+            inherit
+              nixpkgsFlakeRef
+              interpreterPath
+              activationMode
+              system
+              containerSystem
+              ;
+            environmentOutPath = "${containerPkgs.hello}";
+            floxBin = "${containerPkgs.hello}";
+          }).drvPath;
       };
     };
 in
