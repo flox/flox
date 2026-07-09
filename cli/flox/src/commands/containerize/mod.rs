@@ -207,12 +207,25 @@ const NIX_STORE_PREFIX: &str = "/nix/store/";
 /// the binary file — `mkContainer.nix` adds it to a `buildEnv`, which needs
 /// the package root to symlink `bin/flox` onto the guest PATH.
 fn resolve_guest_flox_bin() -> PathBuf {
+    // Observability for the sandbox bake: this runs in the inner `flox
+    // containerize` inside the builder VM, so with `flox ... -vv` these
+    // lines surface in the bake output and distinguish "marker not seen"
+    // from "current_exe not a store path" from "resolved". Keep them at
+    // debug so they only appear under -vv / RUST_LOG=debug.
     let requested = std::env::var_os(INCLUDE_GUEST_FLOX_ENV).is_some();
+    let raw_exe = std::env::current_exe();
+    debug!(
+        marker_seen = requested,
+        current_exe = ?raw_exe,
+        "resolving guest flox binary for the sandbox bake"
+    );
+
     if !requested {
         return PathBuf::new();
     }
 
-    let Ok(exe) = std::env::current_exe().and_then(|p| p.canonicalize()) else {
+    let Ok(exe) = raw_exe.and_then(|p| p.canonicalize()) else {
+        debug!("guest flox: current_exe() could not be canonicalized");
         message::warning(
             "Could not resolve the flox binary path; the sandbox guest will not include flox.",
         );
@@ -220,8 +233,18 @@ fn resolve_guest_flox_bin() -> PathBuf {
     };
 
     match store_root(&exe) {
-        Some(root) => root,
+        Some(root) => {
+            debug!(
+                store_root = %root.display(),
+                "guest flox: resolved package root"
+            );
+            root
+        },
         None => {
+            debug!(
+                canonical_exe = %exe.display(),
+                "guest flox: canonical exe is not under the Nix store"
+            );
             message::warning(
                 "The running flox is not a Nix store build; the sandbox guest will not \
                  include flox. Use a Nix-built flox to enable in-guest 'flox list'.",

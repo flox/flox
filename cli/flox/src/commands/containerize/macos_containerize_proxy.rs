@@ -338,11 +338,15 @@ impl ContainerizeProxy {
         }
 
         // Forward the guest-flox request into the builder VM as an env var
-        // so the inner `flox containerize` (a separate process) bakes a real
-        // guest flox. The decision itself is carried by `self.include_guest_flox`
-        // (a direct bool), not the host process env — only the cross-process
-        // hop into the VM needs the env var.
-        if self.include_guest_flox {
+        // for the non-OCI (Docker/Podman) path, where the inner `nix run` is
+        // built as exec args rather than a shell script. The OCI path
+        // (Apple Container) instead exports the marker inside the builder
+        // shell script (see `build_oci_conversion_command`), because Apple
+        // Container's `run --env` forwarding into the VM is unreliable; the
+        // shell export is the deterministic channel there. Gating the
+        // `--env` to non-OCI runtimes avoids a redundant, unreliable
+        // host→VM env crossing on the OCI path.
+        if self.include_guest_flox && !self.container_runtime.requires_oci_format() {
             command.args(["--env", &format!("{}=1", super::INCLUDE_GUEST_FLOX_ENV)]);
         }
 
@@ -468,6 +472,19 @@ impl ContainerizeProxy {
             .map(|l| format!(" --label {}", shell_single_quote(l)))
             .collect();
 
+        // Carry the guest-flox marker as a shell export inside the builder
+        // script, so the inner `flox containerize` (launched by this same
+        // bash) inherits it directly. Apple Container's `run --env`
+        // forwarding into the VM is unreliable — the same commit sometimes
+        // bakes flox in and sometimes not — so the OCI path uses the shell
+        // export as the deterministic channel and `add_runtime_args` omits
+        // the `--env` for OCI runtimes.
+        let guest_flox_export = if self.include_guest_flox {
+            format!("export {}=1\n", super::INCLUDE_GUEST_FLOX_ENV)
+        } else {
+            String::new()
+        };
+
         // Sequential phases (not a pipe): running flox containerize and
         // skopeo concurrently can exceed the Apple Container VM's memory
         // and trigger the kernel OOM killer.
@@ -483,6 +500,7 @@ impl ContainerizeProxy {
         // with the single-quoted image ref: "oci-archive:$oci_tmp:"'name:tag'.
         let shell_cmd = format!(
             "set -euo pipefail\n\
+            {guest_flox_export}\
             docker_tmp=$(mktemp /tmp/flox-docker-XXXXXX.tar)\n\
             oci_tmp=$(mktemp /tmp/flox-oci-XXXXXX.tar)\n\
             nix --extra-experimental-features 'nix-command flakes' --accept-flake-config \
@@ -566,12 +584,14 @@ mod tests {
         assert!(!args.iter().any(|a| a.contains("--userns")));
     }
 
-    /// When include_guest_flox is true, add_runtime_args must forward the
-    /// marker into the builder VM as `--env _FLOX_CONTAINERIZE_INCLUDE_GUEST_FLOX=1`
-    /// so the inner `flox containerize` bakes a real guest flox. Driven by
-    /// the constructor bool, so it is deterministic and parallel-safe.
+    /// On the non-OCI (Docker/Podman) path, add_runtime_args forwards the
+    /// marker into the builder VM as `--env
+    /// _FLOX_CONTAINERIZE_INCLUDE_GUEST_FLOX=1` so the inner `flox
+    /// containerize` (exec args, not a shell script) bakes a real guest
+    /// flox. Driven by the constructor bool, so it is deterministic and
+    /// parallel-safe.
     #[test]
-    fn add_runtime_args_forwards_guest_flox_marker_when_requested() {
+    fn add_runtime_args_forwards_guest_flox_marker_for_non_oci() {
         let (flox, _tempdir) = flox_instance();
         let proxy = ContainerizeProxy::new("/some/env".into(), Runtime::Docker, vec![], None, true);
         let mut cmd = proxy.runtime_base_command();
@@ -580,8 +600,28 @@ mod tests {
         let env_pos = args
             .iter()
             .position(|a| a == "_FLOX_CONTAINERIZE_INCLUDE_GUEST_FLOX=1")
-            .expect("marker --env must be forwarded when include_guest_flox is true");
+            .expect("marker --env must be forwarded for non-OCI when include_guest_flox is true");
         assert_eq!(args[env_pos - 1], "--env");
+    }
+
+    /// On the OCI (Apple Container) path, add_runtime_args must NOT forward
+    /// the marker via `--env` — the marker is carried by the builder shell
+    /// script instead (Apple Container `run --env` is unreliable). This
+    /// keeps the host→VM env crossings minimal.
+    #[test]
+    fn add_runtime_args_omits_guest_flox_env_for_oci() {
+        let (flox, _tempdir) = flox_instance();
+        let proxy =
+            ContainerizeProxy::new("/some/env".into(), Runtime::AppleContainer, vec![], None, true);
+        let mut cmd = proxy.runtime_base_command();
+        proxy.add_runtime_args(&mut cmd, &flox);
+        let args = argv(&cmd);
+        assert!(
+            !args
+                .iter()
+                .any(|a| a == "_FLOX_CONTAINERIZE_INCLUDE_GUEST_FLOX=1"),
+            "OCI path must not forward the marker via --env (uses shell export): {args:?}"
+        );
     }
 
     /// General `flox containerize` (include_guest_flox = false) must NOT
@@ -600,6 +640,61 @@ mod tests {
                 .iter()
                 .any(|a| a == "_FLOX_CONTAINERIZE_INCLUDE_GUEST_FLOX=1"),
             "marker --env must be absent when include_guest_flox is false: {args:?}"
+        );
+    }
+
+    /// The OCI builder shell script must `export` the guest-flox marker
+    /// (before the inner `flox containerize` line) when include_guest_flox
+    /// is true, so the inner flox inherits it deterministically without
+    /// relying on Apple Container `--env` forwarding.
+    #[test]
+    fn oci_conversion_command_exports_guest_flox_marker_when_requested() {
+        let (flox, _tempdir) = flox_instance();
+        let proxy = ContainerizeProxy::new(
+            "/some/env/.flox/env".into(),
+            Runtime::AppleContainer,
+            vec![],
+            None,
+            true,
+        );
+        let cmd = proxy.build_oci_conversion_command(&flox, "latest");
+        let args = argv(&cmd);
+        let script = args.last().expect("script is the last arg");
+        let export = "export _FLOX_CONTAINERIZE_INCLUDE_GUEST_FLOX=1";
+        assert!(
+            script.contains(export),
+            "OCI builder script must export the guest-flox marker: {script}"
+        );
+        // The export must precede the inner `flox containerize` invocation
+        // so the inner flox inherits it.
+        let export_pos = script.find(export).unwrap();
+        let containerize_pos = script
+            .find("containerize")
+            .expect("script must invoke containerize");
+        assert!(
+            export_pos < containerize_pos,
+            "export must precede the containerize invocation: {script}"
+        );
+    }
+
+    /// The OCI builder shell script must NOT export the marker when
+    /// include_guest_flox is false (general containerize, unaffected).
+    #[test]
+    fn oci_conversion_command_omits_guest_flox_marker_when_not_requested() {
+        let (flox, _tempdir) = flox_instance();
+        let proxy = ContainerizeProxy::new(
+            "/some/env/.flox/env".into(),
+            Runtime::AppleContainer,
+            vec![],
+            None,
+            false,
+        );
+        let cmd = proxy.build_oci_conversion_command(&flox, "latest");
+        let args = argv(&cmd);
+        let script = args.last().expect("script is the last arg");
+        assert!(
+            !script.contains("_FLOX_CONTAINERIZE_INCLUDE_GUEST_FLOX"),
+            "OCI builder script must not mention the marker when not requested: {script}"
         );
     }
 
