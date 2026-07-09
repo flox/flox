@@ -138,11 +138,7 @@ impl MkContainerNix {
     /// The `floxBin` argstr is emitted only when `flox_bin` is non-empty,
     /// so a guest without a real flox binary omits it and mkContainer.nix
     /// falls back to the deactivate-only shim.
-    fn argstr_args(
-        &self,
-        name: &str,
-        tag: &str,
-    ) -> Result<Vec<String>, MkContainerNixError> {
+    fn argstr_args(&self, name: &str, tag: &str) -> Result<Vec<String>, MkContainerNixError> {
         let mut args = vec![
             "--argstr".into(),
             "nixpkgsFlakeRef".into(),
@@ -395,9 +391,8 @@ mod mk_container_nix_tests {
     /// Return the value that follows the first `--argstr <name>` pair, or
     /// `None` if the argstr is absent.
     fn argstr_value<'a>(args: &'a [String], name: &str) -> Option<&'a str> {
-        args.windows(3).find_map(|w| {
-            (w[0] == "--argstr" && w[1] == name).then(|| w[2].as_str())
-        })
+        args.windows(3)
+            .find_map(|w| (w[0] == "--argstr" && w[1] == name).then(|| w[2].as_str()))
     }
 
     /// When a store-path flox binary is provided, the builder must emit
@@ -406,8 +401,12 @@ mod mk_container_nix_tests {
     fn emits_flox_bin_argstr_when_provided() {
         let bin = PathBuf::from("/nix/store/fake-flox/bin/flox");
         #[allow(deprecated)]
-        let builder =
-            MkContainerNix::new(dummy_store_path(), ActivateMode::default(), None, bin.clone());
+        let builder = MkContainerNix::new(
+            dummy_store_path(),
+            ActivateMode::default(),
+            None,
+            bin.clone(),
+        );
         let args = builder.argstr_args("env", "latest").unwrap();
         assert_eq!(
             argstr_value(&args, "floxBin"),
