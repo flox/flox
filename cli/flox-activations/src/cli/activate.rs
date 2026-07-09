@@ -98,13 +98,13 @@ impl ActivateArgs {
         // (no project context) with a real flox; a plain container without
         // flox keeps the deactivate shim, and normal project activations
         // already populate the list on the host.
-        if context.project_ctx.is_none() && !context.flox_bin.is_empty() {
-            if let Ok(cwd) = std::env::current_dir()
-                && let Some(active_json) =
-                    crate::container_active_env::container_active_environments_json(&cwd)
-            {
-                context.attach_ctx.flox_active_environments = active_json;
-            }
+        if context.project_ctx.is_none()
+            && !context.flox_bin.is_empty()
+            && let Ok(cwd) = std::env::current_dir()
+            && let Some(active_json) =
+                crate::container_active_env::container_active_environments_json(&cwd)
+        {
+            context.attach_ctx.flox_active_environments = active_json;
         }
 
         if let Ok(shell_force) = std::env::var("_FLOX_SHELL_FORCE") {
