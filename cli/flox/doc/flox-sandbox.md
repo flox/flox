@@ -169,6 +169,31 @@ default outbound network access. The isolation story for this
 backend is filesystem and credentials; per-environment network
 policies are planned.
 
+**Serving from the shared store widens the read surface.** To avoid a
+multi-minute image rebuild every time an environment changes, flox can
+run the environment directly from the shared Nix build cache — the
+`flox-nix` volume — mounted read-only at `/nix`, instead of from a
+per-environment image that carries only that one environment's closure
+(enable with `FLOX_SANDBOX_OCI_STORE_VOLUME=1`; macOS/Apple Container
+only). On this path the guest can read the Nix store of *every*
+environment ever baked on this machine: their packages, their build
+recipes, and any secret placed in another environment's manifest
+`[vars]`, which render as plaintext into world-readable store paths.
+Two of your own environments are therefore not confidential from each
+other on the same machine.
+
+This does not weaken the guarantees above. The mount is read-only, so a
+workload in one environment cannot modify or poison another's store
+paths. `/nix` holds only Nix-store content — no host path, host home,
+or host credential — and no host environment variable is forwarded. The
+cost is confined to *cross-environment* read confidentiality, which
+this backend does not promise: the guarantee is that a sandboxed
+workload cannot reach your host or your credentials, not that two of
+your own environments are sealed from each other. On a shared or
+multi-tenant host, keep per-environment secrets out of `[vars]` and
+hand a secret to a specific environment through its project directory
+instead.
+
 **The image is self-sufficient.** The image always carries a shell
 (`bash`) and `coreutils` independent of the manifest, and the
 container entrypoint is flox's own activation binary from the
@@ -191,6 +216,13 @@ the session; other subcommands print a notice and return 127.
 
 `FLOX_SANDBOX_OCI_IMAGE=<ref>`
 :   Run exactly this image ref, bypassing staleness logic entirely.
+
+`FLOX_SANDBOX_OCI_STORE_VOLUME=1`
+:   Experimental (macOS/Apple Container only): run the environment
+    from the shared `flox-nix` store volume instead of a
+    per-environment image, skipping image assembly when the
+    environment changes. Widens the read surface — see "Serving from
+    the shared store widens the read surface" above.
 
 **Caveats.** The guest is Linux: on macOS you run the Linux builds
 of your packages. Warm start costs ~1s (VM boot). Bind-mount I/O
@@ -365,7 +397,7 @@ for handing an agent a credential.
 :   Override the sensitive-path set (libsandbox).
 
 `FLOX_SANDBOX_OCI_AUTOBAKE`, `FLOX_SANDBOX_OCI_ALLOW_STALE`,
-`FLOX_SANDBOX_OCI_IMAGE`
+`FLOX_SANDBOX_OCI_IMAGE`, `FLOX_SANDBOX_OCI_STORE_VOLUME`
 :   OCI valves; see the `oci` backend section above.
 
 # OPTIONS

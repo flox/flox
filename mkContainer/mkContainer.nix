@@ -203,6 +203,14 @@ let
       };
 
       passthru = {
+        # The activations-context store path and the resolved environment
+        # closure, exposed so the store-volume refresh can build just these
+        # two paths without assembling an image. The refresh reuses the same
+        # bindings that produce the baked Entrypoint above, so the context it
+        # builds is byte-identical to the one a full bake would embed.
+        activateCtx = activateCtxStorePath;
+        environment = environment;
+
         # This tests can be ran with the following command from the root of the repository:
         #     $ nix eval --impure --expr '(import ./mkContainer/mkContainer.nix { nixpkgsFlakeRef = "github:nixos/nixpkgs?ref=nixos-24.11"; environmentOutPath = null; system = builtins.currentSystem; containerSystem = builtins.currentSystem; }).passthru.tests'
         #     $ [ ]

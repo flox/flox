@@ -15,7 +15,11 @@ use flox_manifest::lockfile::Lockfile;
 use flox_manifest::parsed::common::ContainerizeConfig;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::Environment;
-use flox_rust_sdk::providers::container_builder::{ContainerBuilder, MkContainerNix};
+use flox_rust_sdk::providers::container_builder::{
+    ContainerBuilder,
+    MkContainerNix,
+    StoreVolumeRefresh,
+};
 use flox_rust_sdk::utils::{ReaderExt, WireTap};
 use indoc::indoc;
 use macos_containerize_proxy::ContainerizeProxy;
@@ -62,6 +66,13 @@ pub struct Containerize {
     /// Overrides the "options.activate.mode" setting in the manifest.
     #[bpaf(short, long)]
     mode: Option<ActivateMode>,
+
+    /// Store-volume refresh: build only the environment bundle and the
+    /// activation context (no image assembly) and print their store paths as
+    /// one line of JSON. Runs inside the Linux builder; used by the macOS
+    /// store-volume fast path. Experimental, hidden.
+    #[bpaf(long, hide)]
+    store_volume_refresh: bool,
 }
 impl Containerize {
     #[instrument(name = "containerize", skip_all)]
@@ -75,6 +86,10 @@ impl Containerize {
             EventsHub::global().record_environment_containerize(env_detail_from_concrete(&env))
         {
             debug!(error = %err, "Failed to record v2 event");
+        }
+
+        if self.store_volume_refresh {
+            return self.handle_store_volume_refresh(&flox, &mut env);
         }
 
         // Check that a specified runtime exists.
@@ -158,6 +173,71 @@ impl Containerize {
         writer.wait()?;
 
         message::created(format!("'{env_name}:{output_tag}' written to {output}"));
+        Ok(())
+    }
+
+    /// Store-volume refresh: build the two store paths a store-volume run
+    /// needs — the environment bundle and the activations-context — and print
+    /// them (plus this binary's own store path) as one line of JSON, assembling
+    /// no image.
+    ///
+    /// This runs inside the Linux builder, invoked by the macOS host's
+    /// store-volume fast path. It reuses the same env build and the same
+    /// mkContainer wiring as a full bake, so the paths it reports are the ones
+    /// a bake would have produced — only without the image assembly that the
+    /// fast path skips.
+    ///
+    /// Only meaningful on Linux; [`MkContainerNix`] cannot build Linux
+    /// containers on other platforms.
+    fn handle_store_volume_refresh(
+        self,
+        flox: &Flox,
+        env: &mut flox_rust_sdk::models::environment::ConcreteEnvironment,
+    ) -> Result<()> {
+        if std::env::consts::OS != "linux" {
+            bail!("'--store-volume-refresh' is only supported inside the Linux builder.");
+        }
+
+        let built_environment = env.build(flox)?;
+        let env_name = env.name();
+        let lockfile: Lockfile = env.lockfile(flox)?.into();
+        let manifest = lockfile.migrated_manifest()?;
+        let manifest = manifest.as_latest_schema();
+
+        let mode = self
+            .mode
+            .unwrap_or(manifest.options.activate.mode.clone().unwrap_or_default());
+        let container_config = manifest
+            .containerize
+            .as_ref()
+            .and_then(|c| c.config.clone())
+            .or_else(|| should_extend_config(&self.labels).then(Default::default))
+            .map(|mut c| {
+                extend_config(&self.labels, &mut c);
+                c.into()
+            });
+
+        let env_run = built_environment.for_mode(&mode);
+
+        // Reuse the exact mkContainer wiring a bake uses so the context is
+        // byte-identical to a baked one; only the image assembly is skipped.
+        #[cfg_attr(not(target_os = "linux"), allow(deprecated))]
+        let builder = MkContainerNix::new(env_run.clone(), mode, container_config);
+        #[cfg_attr(not(target_os = "linux"), allow(deprecated))]
+        let activate_ctx = builder.create_activate_ctx(flox, env_name.as_ref())?;
+
+        // Resolve this binary's own store path; the host caches it to exec the
+        // Linux flox directly on the next refresh (skipping the flake unpack).
+        let flox_bin = fs::read_link("/proc/self/exe")
+            .context("Could not resolve the flox binary path via /proc/self/exe")?;
+
+        let refresh = StoreVolumeRefresh {
+            env_run: env_run.to_string_lossy().into_owned(),
+            activate_ctx: activate_ctx.to_string_lossy().into_owned(),
+            flox_bin: flox_bin.to_string_lossy().into_owned(),
+        };
+
+        println!("{}", refresh.to_json_line());
         Ok(())
     }
 }

@@ -64,6 +64,54 @@ impl From<ContainerizeConfig> for OCIConfig {
     }
 }
 
+/// The three store paths the store-volume refresh produces and reports.
+///
+/// The builder-side `flox containerize --store-volume-refresh` prints this as
+/// a single line of JSON on stdout; the macOS host parses it back to learn
+/// (a) which env bundle and activations-context to run from the volume and
+/// (b) which Linux `flox` binary served the request, so the next refresh can
+/// exec that binary directly instead of paying another flake unpack.
+///
+/// All three fields are absolute `/nix/store/…` paths inside the builder's
+/// store (the `flox-nix` volume). [`StoreVolumeRefresh::is_valid`] enforces
+/// that invariant; the host rejects any line that fails it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct StoreVolumeRefresh {
+    /// The `environment-run` / `environment-dev` bundle built from the lock.
+    pub env_run: String,
+    /// The activations-context store path (mkContainer's `passthru.activateCtx`).
+    pub activate_ctx: String,
+    /// The Linux `flox` binary that served this refresh (from
+    /// `readlink /proc/self/exe`), used to key and populate the host's
+    /// binary-resolution cache.
+    pub flox_bin: String,
+}
+
+impl StoreVolumeRefresh {
+    /// Serialize to the single JSON line the builder prints on stdout.
+    pub fn to_json_line(&self) -> String {
+        serde_json::to_string(self).expect("serializing StoreVolumeRefresh cannot fail")
+    }
+
+    /// Parse a builder stdout line, accepting it only when all three fields
+    /// are absolute store paths. Extra whitespace around the line is trimmed.
+    ///
+    /// Returns `None` for malformed JSON or any field that is not a
+    /// `/nix/store/…` path, mirroring the rejection-shape discipline the
+    /// baked-entrypoint parser uses on the host.
+    pub fn parse_line(line: &str) -> Option<Self> {
+        let parsed: Self = serde_json::from_str(line.trim()).ok()?;
+        parsed.is_valid().then_some(parsed)
+    }
+
+    /// True when every field is an absolute `/nix/store/…` path.
+    fn is_valid(&self) -> bool {
+        [&self.env_run, &self.activate_ctx, &self.flox_bin]
+            .iter()
+            .all(|p| p.starts_with("/nix/store/"))
+    }
+}
+
 /// An implementation of [ContainerBuilder] that uses a Nix script
 /// to build a native [ContainerSource] from a [BuiltStorePath].
 ///
@@ -99,6 +147,9 @@ pub enum MkContainerNixError {
 
     #[error("couldn't serialize container config")]
     SerializeContainerConfig(#[source] serde_json::Error),
+
+    #[error("activations-context build produced no store path")]
+    EmptyActivateCtxPath,
 }
 
 impl MkContainerNix {
@@ -122,6 +173,113 @@ impl MkContainerNix {
             activation_mode,
             container_config,
         }
+    }
+
+    /// Wire up the argstrs shared by every build against `mkContainer.nix`:
+    /// the nixpkgs ref, systems, environment path, activation mode,
+    /// interpreter path, container name, and (optional) container config.
+    ///
+    /// Both the full image build and the activations-context build call this
+    /// so the context is guaranteed byte-identical to the one embedded in a
+    /// baked image — the shared wiring is the freshness contract that lets a
+    /// store-volume run reuse the closure without re-baking.
+    ///
+    /// The build subcommand, output flags, container tag, and build target
+    /// are left to the caller, since those differ between the image and the
+    /// context.
+    fn add_common_argstrs(
+        &self,
+        command: &mut Command,
+        name: &str,
+    ) -> Result<(), MkContainerNixError> {
+        command.args(["--argstr", "nixpkgsFlakeRef", COMMON_NIXPKGS_URL.as_str()]);
+        command.args(["--argstr", "containerSystem", env!("NIX_TARGET_SYSTEM")]);
+        command.args(["--argstr", "system", env!("NIX_TARGET_SYSTEM")]);
+        command.args([
+            "--argstr",
+            "environmentOutPath",
+            self.store_path.to_string_lossy().as_ref(),
+        ]);
+        command.args([
+            "--argstr",
+            "activationMode",
+            &self.activation_mode.to_string(),
+        ]);
+        command.args([
+            "--argstr",
+            "interpreterPath",
+            (*FLOX_INTERPRETER).to_string_lossy().as_ref(),
+        ]);
+        command.args(["--argstr", "containerName", name]);
+        if let Some(container_config) = &self.container_config {
+            command.args([
+                "--argstr",
+                "containerConfigJSON",
+                &serde_json::to_string(container_config)
+                    .map_err(MkContainerNixError::SerializeContainerConfig)?,
+            ]);
+        }
+        Ok(())
+    }
+
+    /// Build only `passthru.activateCtx` from `mkContainer.nix` and return the
+    /// realised store path of the activations-context.
+    ///
+    /// This is the store-volume refresh's activation-context step: it produces
+    /// the same context an image bake would embed, but skips all image
+    /// assembly (`streamLayeredImage`, layer packing, skopeo). Because it
+    /// reuses [`Self::add_common_argstrs`] — the identical wiring the image
+    /// build uses — the resulting context matches the baked one exactly.
+    ///
+    /// Note: this method is only meaningful on Linux (the builder), matching
+    /// [`Self::new`].
+    #[cfg_attr(
+        not(target_os = "linux"),
+        deprecated(note = "MkContainerNix is not supported on this platform")
+    )]
+    #[instrument(skip_all, fields(name = name.as_ref(), progress = "Building activation context"))]
+    pub fn create_activate_ctx(
+        &self,
+        _flox: &Flox,
+        name: impl AsRef<str>,
+    ) -> Result<PathBuf, MkContainerNixError> {
+        let mut command = nix_base_command();
+        command.arg("build");
+        command.arg("--json");
+        command.arg("--no-link");
+        command.arg("--file").arg(&*MK_CONTAINER_NIX);
+        self.add_common_argstrs(&mut command, name.as_ref())?;
+        command.arg("passthru.activateCtx");
+        debug!(cmd=%command.display(), "building activation context");
+
+        let output = command
+            .output()
+            .map_err(MkContainerNixError::CallNixError)?;
+        if !output.status.success() {
+            return Err(MkContainerNixError::BuildContainerError(
+                String::from_utf8_lossy(&output.stderr).to_string(),
+            ));
+        }
+
+        // `nix build --json` of a single attrpath returns a one-element array
+        // whose element carries the realised `outputs.out` store path.
+        #[derive(Debug, Clone, Deserialize)]
+        struct ActivateCtxOutputs {
+            out: PathBuf,
+        }
+
+        #[derive(Debug, Clone, Deserialize)]
+        struct ActivateCtxResultRaw {
+            outputs: ActivateCtxOutputs,
+        }
+
+        let [raw @ ActivateCtxResultRaw { .. }] = serde_json::from_slice(&output.stdout)
+            .map_err(MkContainerNixError::ParseBuildOutput)?;
+        let activate_ctx_path = raw.outputs.out;
+        if activate_ctx_path.as_os_str().is_empty() {
+            return Err(MkContainerNixError::EmptyActivateCtxPath);
+        }
+        Ok(activate_ctx_path)
     }
 }
 
@@ -147,34 +305,10 @@ impl ContainerBuilder for MkContainerNix {
         command.arg("--json");
         command.arg("--no-link");
         command.arg("--file").arg(&*MK_CONTAINER_NIX);
-        command.args(["--argstr", "nixpkgsFlakeRef", COMMON_NIXPKGS_URL.as_str()]);
-        command.args(["--argstr", "containerSystem", env!("NIX_TARGET_SYSTEM")]);
-        command.args(["--argstr", "system", env!("NIX_TARGET_SYSTEM")]);
-        command.args([
-            "--argstr",
-            "environmentOutPath",
-            self.store_path.to_string_lossy().as_ref(),
-        ]);
-        command.args([
-            "--argstr",
-            "activationMode",
-            &self.activation_mode.to_string(),
-        ]);
-        command.args([
-            "--argstr",
-            "interpreterPath",
-            (*FLOX_INTERPRETER).to_string_lossy().as_ref(),
-        ]);
-        command.args(["--argstr", "containerName", name.as_ref()]);
+        self.add_common_argstrs(&mut command, name.as_ref())?;
+        // The tag applies only to the assembled image, not the activation
+        // context, so it lives here rather than in the shared wiring.
         command.args(["--argstr", "containerTag", tag.as_ref()]);
-        if let Some(container_config) = &self.container_config {
-            command.args([
-                "--argstr",
-                "containerConfigJSON",
-                &serde_json::to_string(container_config)
-                    .map_err(MkContainerNixError::SerializeContainerConfig)?,
-            ]);
-        }
         debug!(cmd=%command.display(), "building container");
 
         let output = command
@@ -534,5 +668,63 @@ mod container_source_tests {
 
         let output = fs::read_to_string(&output_path).unwrap();
         assert_eq!(output, "hello world\n");
+    }
+}
+
+#[cfg(test)]
+mod store_volume_refresh_tests {
+    use super::*;
+
+    fn valid_refresh() -> StoreVolumeRefresh {
+        StoreVolumeRefresh {
+            env_run: "/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-environment-run".to_string(),
+            activate_ctx: "/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-activations-context"
+                .to_string(),
+            flox_bin: "/nix/store/cccccccccccccccccccccccccccccccc-flox-1.6.0/bin/flox".to_string(),
+        }
+    }
+
+    #[test]
+    fn round_trips_through_json_line() {
+        let refresh = valid_refresh();
+        let parsed = StoreVolumeRefresh::parse_line(&refresh.to_json_line())
+            .expect("valid refresh should parse");
+        assert_eq!(parsed, refresh);
+    }
+
+    #[test]
+    fn parses_line_with_surrounding_whitespace() {
+        let refresh = valid_refresh();
+        let line = format!("  \n{}\n  ", refresh.to_json_line());
+        assert_eq!(StoreVolumeRefresh::parse_line(&line), Some(refresh));
+    }
+
+    #[test]
+    fn rejects_malformed_json() {
+        assert_eq!(StoreVolumeRefresh::parse_line("not json"), None);
+        assert_eq!(StoreVolumeRefresh::parse_line("{\"env_run\":}"), None);
+    }
+
+    #[test]
+    fn rejects_missing_field() {
+        let line = r#"{"env_run":"/nix/store/aaaa-environment-run","activate_ctx":"/nix/store/bbbb-activations-context"}"#;
+        assert_eq!(StoreVolumeRefresh::parse_line(line), None);
+    }
+
+    #[test]
+    fn rejects_non_store_path_field() {
+        let mut refresh = valid_refresh();
+        refresh.flox_bin = "/usr/local/bin/flox".to_string();
+        assert_eq!(
+            StoreVolumeRefresh::parse_line(&refresh.to_json_line()),
+            None
+        );
+
+        let mut refresh = valid_refresh();
+        refresh.env_run = "environment-run".to_string();
+        assert_eq!(
+            StoreVolumeRefresh::parse_line(&refresh.to_json_line()),
+            None
+        );
     }
 }

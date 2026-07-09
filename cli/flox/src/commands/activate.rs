@@ -2387,6 +2387,40 @@ fn wrap_activation_oci(
     let dot_flox =
         std::fs::canonicalize(dot_flox_path).unwrap_or_else(|_| dot_flox_path.to_path_buf());
     let project = dot_flox.parent().unwrap_or(&dot_flox).to_path_buf();
+    let cwd = std::env::current_dir().unwrap_or_else(|_| project.clone());
+
+    // Store-volume refresh fast path (prototype valve, macOS only): skip the
+    // image bake entirely when the environment can be served from the
+    // `flox-nix` volume. A fresh marker (matching the current lockfile hash)
+    // dispatches directly; a miss/stale marker triggers a lighter refresh
+    // (env + activation context, no image assembly) and then dispatches.
+    //
+    // `FLOX_SANDBOX_OCI_IMAGE` and `FLOX_SANDBOX_OCI_ALLOW_STALE` bypass the
+    // valve entirely, matching the post-bake store-volume run below. Any
+    // refresh failure or unsatisfiable miss falls through to the existing
+    // bake + store-volume path — never a silent stale run.
+    let explicit_image = std::env::var(FLOX_SANDBOX_OCI_IMAGE_VAR)
+        .map(|v| !v.is_empty())
+        .unwrap_or(false);
+    let allow_stale_bypass = std::env::var(FLOX_SANDBOX_OCI_ALLOW_STALE_VAR)
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false);
+    if cfg!(target_os = "macos")
+        && oci_store_volume_valve()
+        && !explicit_image
+        && !allow_stale_bypass
+    {
+        // On success this exec's the run and never returns; `Ok(false)` means
+        // fall through to the bake path below.
+        try_oci_store_volume_refresh_dispatch(
+            dot_flox_path,
+            &project,
+            &cwd,
+            invocation,
+            flox,
+            lockfile,
+        )?;
+    }
 
     // Resolve the image state using the content-hash tag scheme.
     let state = resolve_oci_image_state(runtime, env_name, lockfile);
@@ -2499,8 +2533,6 @@ fn wrap_activation_oci(
             }
         },
     };
-
-    let cwd = std::env::current_dir().unwrap_or_else(|_| project.clone());
 
     // Store-volume run (prototype valve): serve the environment closure from
     // the `flox-nix` cache volume instead of the baked image filesystem.
@@ -2772,6 +2804,209 @@ fn oci_store_volume_run_argv(
     }
 
     (runtime.to_string(), argv)
+}
+
+/// Host-visible freshness marker for the store-volume refresh, written to
+/// `<.flox/cache>/store-volume-refresh.json`.
+///
+/// It replaces the hash-tagged image as the freshness proof: `lockfile_hash12`
+/// is derived from the current lock exactly as the image tag was, so a changed
+/// lockfile misses the marker and forces a refresh. A stale marker can never
+/// run, because the hash will not match.
+///
+/// `builder_pin` records the flake rev that produced these paths; it is
+/// informational for now (the binary-resolution cache is keyed on the pin
+/// host-side) and lets a future reader tell which builder baked the paths.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+struct StoreVolumeRefreshMarker {
+    lockfile_hash12: String,
+    env_run: String,
+    activate_ctx: String,
+    builder_pin: String,
+}
+
+impl StoreVolumeRefreshMarker {
+    /// Path of the marker file for a given `.flox` directory.
+    fn path(dot_flox_path: &Path) -> PathBuf {
+        dot_flox_path
+            .join("cache")
+            .join("store-volume-refresh.json")
+    }
+
+    /// Read and parse the marker, returning `None` when it is absent or
+    /// malformed (a corrupt marker is treated as a miss, forcing a refresh).
+    fn read(dot_flox_path: &Path) -> Option<Self> {
+        let contents = std::fs::read_to_string(Self::path(dot_flox_path)).ok()?;
+        serde_json::from_str(&contents).ok()
+    }
+
+    /// Write the marker, creating the cache directory if needed.
+    fn write(&self, dot_flox_path: &Path) -> std::io::Result<()> {
+        let path = Self::path(dot_flox_path);
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        let json = serde_json::to_string_pretty(self)
+            .expect("serializing StoreVolumeRefreshMarker cannot fail");
+        std::fs::write(path, json)
+    }
+
+    /// True when the marker matches the current lockfile hash — the freshness
+    /// predicate that decides run-directly (fresh) vs refresh (stale/missing).
+    fn is_fresh_for(&self, current_hash12: &str) -> bool {
+        self.lockfile_hash12 == current_hash12
+    }
+}
+
+/// Probe whether the given store paths all exist inside the `flox-nix` volume.
+///
+/// One `container run` mounts the volume read-only and `test -e`s each path,
+/// so a marker that names paths a volume GC has since pruned is caught before
+/// dispatch (rather than failing confusingly in-guest after exec).
+fn oci_store_volume_paths_exist(paths: &[&str]) -> bool {
+    if paths.is_empty() {
+        return true;
+    }
+    let test_script = paths
+        .iter()
+        .map(|p| format!("test -e {p}"))
+        .collect::<Vec<_>>()
+        .join(" && ");
+    std::process::Command::new("container")
+        .args(["run", "--rm", "--mount"])
+        .arg("type=volume,source=flox-nix,target=/nix,readonly")
+        .arg(format!(
+            "nixos/nix:{}",
+            flox_rust_sdk::providers::nix::NIX_VERSION
+        ))
+        .args(["sh", "-c", &test_script])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false)
+}
+
+/// Store-volume refresh fast path: skip the OCI bake entirely by building only
+/// the env bundle and activation context in the builder and serving them from
+/// the volume.
+///
+/// Returns `Ok(true)` only if it exec'd the store-volume run (in which case
+/// this never actually returns — `.exec()` replaces the process). Returns
+/// `Ok(false)` to signal the caller should fall through to the existing bake +
+/// store-volume path, which is the safe fallback on any miss the refresh
+/// cannot satisfy or any refresh failure — never a silent stale run.
+///
+/// macOS/Apple Container only; the caller gates on platform and the valve.
+fn try_oci_store_volume_refresh_dispatch(
+    dot_flox_path: &Path,
+    project: &Path,
+    cwd: &Path,
+    invocation: &InvocationType,
+    flox: &flox_rust_sdk::flox::Flox,
+    lockfile: &flox_manifest::lockfile::Lockfile,
+) -> Result<bool> {
+    use crate::commands::containerize::Runtime;
+    use crate::commands::containerize::macos_containerize_proxy::ContainerizeProxy;
+
+    if !oci_store_volume_exists() {
+        debug!("flox-nix volume not found; falling back to the bake path");
+        return Ok(false);
+    }
+
+    let current_hash12 = lockfile_hash12(lockfile);
+
+    // Fresh hit: marker matches the current lock and both paths are still in
+    // the volume — dispatch directly, no bake, no refresh.
+    if let Some(marker) = StoreVolumeRefreshMarker::read(dot_flox_path)
+        && marker.is_fresh_for(&current_hash12)
+        && oci_store_volume_paths_exist(&[&marker.env_run, &marker.activate_ctx])
+    {
+        debug!(hash12 = %current_hash12, "store-volume refresh marker fresh; dispatching directly");
+        return dispatch_store_volume_run(
+            &marker.env_run,
+            &marker.activate_ctx,
+            project,
+            cwd,
+            invocation,
+        );
+    }
+
+    // Miss/stale: run the refresh, write the marker, then dispatch. A refresh
+    // failure returns Ok(false) so the caller falls back to the bake path.
+    let proxy =
+        ContainerizeProxy::new(project.to_path_buf(), Runtime::AppleContainer, vec![], None);
+    let builder_pin = std::env::var("_FLOX_CONTAINERIZE_FLAKE_REF_OR_REV").unwrap_or_default();
+
+    eprintln!(
+        "Refreshing the 'flox-nix' store volume (building env + activation context, no image)…"
+    );
+    let refresh = match proxy.refresh_store_volume(flox) {
+        Ok(refresh) => refresh,
+        Err(err) => {
+            debug!(%err, "store-volume refresh failed; falling back to the bake path");
+            eprintln!("ℹ️  Store-volume refresh failed ({err}); falling back to the image bake.");
+            return Ok(false);
+        },
+    };
+
+    let marker = StoreVolumeRefreshMarker {
+        lockfile_hash12: current_hash12,
+        env_run: refresh.env_run.clone(),
+        activate_ctx: refresh.activate_ctx.clone(),
+        builder_pin,
+    };
+    if let Err(err) = marker.write(dot_flox_path) {
+        // A missing marker only costs the next activation a refresh, so this
+        // is non-fatal — proceed to dispatch the run we just built.
+        debug!(%err, "could not write store-volume refresh marker");
+    }
+
+    dispatch_store_volume_run(
+        &refresh.env_run,
+        &refresh.activate_ctx,
+        project,
+        cwd,
+        invocation,
+    )
+}
+
+/// Exec the store-volume run for the given env + context paths.
+///
+/// Reuses [`oci_store_volume_run_argv`] — the same pure argv builder the
+/// post-bake store-volume run uses — so the run surface (one read-only volume
+/// mount, one project bind mount) is identical and covered by the same tests.
+/// On success `.exec()` replaces the process and this never returns; the
+/// `Ok(false)` return exists only for the (unreachable) non-exec path.
+fn dispatch_store_volume_run(
+    env_run: &str,
+    activate_ctx: &str,
+    project: &Path,
+    cwd: &Path,
+    invocation: &InvocationType,
+) -> Result<bool> {
+    let entrypoint = OciBakedEntrypoint {
+        env_store_path: env_run.to_string(),
+        activate_ctx_path: activate_ctx.to_string(),
+    };
+    let base_image = format!("nixos/nix:{}", flox_rust_sdk::providers::nix::NIX_VERSION);
+    eprintln!(
+        "Running the environment from the 'flox-nix' store volume (base image: {base_image})."
+    );
+    let (volume_runtime, argv) = oci_store_volume_run_argv(
+        &entrypoint,
+        project,
+        cwd,
+        invocation,
+        &base_image,
+        std::io::stdin().is_terminal(),
+    );
+    let err = std::process::Command::new(volume_runtime)
+        .args(&argv)
+        .exec();
+    Err(anyhow::anyhow!(
+        "Failed to launch the sandbox from the store volume: {err}."
+    ))
 }
 
 /// Extract the stale ref string from an OciImageState::Stale variant.
@@ -3589,6 +3824,52 @@ mod tests {
         );
         let workdir_pos = argv.iter().position(|a| a == "--workdir").unwrap();
         assert_eq!(argv[workdir_pos + 1], "/home/user/proj");
+    }
+
+    fn test_marker() -> StoreVolumeRefreshMarker {
+        StoreVolumeRefreshMarker {
+            lockfile_hash12: "abc123def456".to_string(),
+            env_run: "/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-environment-run".to_string(),
+            activate_ctx: "/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-activations-context"
+                .to_string(),
+            builder_pin: "55673d769ad4d45a03395e6cf9a38c67f70d8ca9".to_string(),
+        }
+    }
+
+    #[test]
+    fn store_volume_marker_round_trips_through_disk() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let dot_flox = tempdir.path().join(".flox");
+        let marker = test_marker();
+        marker.write(&dot_flox).expect("write marker");
+        let read = StoreVolumeRefreshMarker::read(&dot_flox).expect("read marker");
+        assert_eq!(read, marker);
+    }
+
+    #[test]
+    fn store_volume_marker_absent_reads_none() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let dot_flox = tempdir.path().join(".flox");
+        assert_eq!(StoreVolumeRefreshMarker::read(&dot_flox), None);
+    }
+
+    #[test]
+    fn store_volume_marker_malformed_reads_none() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let dot_flox = tempdir.path().join(".flox");
+        let path = StoreVolumeRefreshMarker::path(&dot_flox);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(&path, "{ not valid json").unwrap();
+        assert_eq!(StoreVolumeRefreshMarker::read(&dot_flox), None);
+    }
+
+    #[test]
+    fn store_volume_marker_freshness_matches_on_hash() {
+        let marker = test_marker();
+        // Fresh: same hash -> run directly.
+        assert!(marker.is_fresh_for("abc123def456"));
+        // Stale: a changed lockfile hash -> refresh.
+        assert!(!marker.is_fresh_for("000000000000"));
     }
 }
 

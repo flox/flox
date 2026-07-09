@@ -216,6 +216,44 @@ The mount set is enforced by unit tests that assert the **exact argv** per
 invocation type — exactly one read-only volume mount and one project bind
 mount, no other channels.
 
+### Adversarial isolation check (red-team + live probes)
+
+A multi-lens adversarial review (six independent red-team lenses, each
+finding refuted by an independent skeptic, then judged against the
+promised contract) plus live probes on macOS 26.5.1 / Apple Container
+1.1.0 reached a clear verdict: **the wider read surface breaches no
+promised guarantee and there is no write/integrity escape; it forfeits
+cross-environment read confidentiality, which the sandbox never
+promised.** Ship behind docs (done: see `flox-sandbox(1)`), not back
+out.
+
+- **No write/integrity escape (the disqualifying risk).** `/nix` is a
+  block-device mount (`/dev/vdc`, ext4, `ro`), and the device is
+  exported read-only at the VMM block layer — `blockdev --getro
+  /dev/vdc` returns `1`. As guest root: `mount -o remount,rw /nix` is
+  denied, and a write still fails with `EROFS`. So a compromised agent
+  in one environment cannot poison a store path another environment
+  trusts. Read-only is enforced below anything guest root can
+  reconfigure, not merely by the guest mount flag.
+- **The read widening is real and large.** The shared `flox-nix` volume
+  had **36 environments** accreted on the test machine — the union
+  surface is not hypothetical. A guest can read every one.
+- **No secret is currently leaking on this host.** The 36 environments
+  export only benign Nix plumbing (`SSL_CERT_FILE`, `LOCALE_ARCHIVE`);
+  no manifest `[vars]` secret and no `.drv` carried an embedded
+  credential. The leak is structural (a secret placed in another
+  environment's `[vars]` *would* be readable), not realized here.
+- **Correction to the read-surface list above.** `/nix/var/nix/db/db.sqlite`
+  **is present** in the volume (the builder writes it there live), so
+  the Nix database — path metadata, references, registration times — is
+  readable too. Low severity (metadata, read-only), but the earlier
+  assumption that only `profiles`/`gcroots` cross was wrong.
+
+The proportionate hardening if cross-environment confidentiality ever
+becomes a promised guarantee is a per-environment volume or an
+overlay/closure-scoped mount (Apple Container has no per-path mount
+filtering); see Open Issues.
+
 ### No flox shim on exec paths
 
 Non-interactive invocations (`flox activate -- cmd` and the `sh -c` form)
