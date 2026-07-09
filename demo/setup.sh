@@ -110,6 +110,10 @@ EOF
 
 echo "Seeding a sample project..."
 printf 'def greet():\n    return 1\n' > app.py
+# A tiny index.html so the auto-started web service serves a clean page
+# (http.server serves index.html for '/' instead of a slow directory
+# listing of the project, which includes the heavy .flox/ tree).
+printf '<!doctype html><title>sandbox-demo</title>\n<h1>Hello from inside the flox sandbox</h1>\n' > index.html
 # Agent credentials live under .claude/ inside the project mount —
 # never commit them.
 printf '.claude/\n' > .gitignore
