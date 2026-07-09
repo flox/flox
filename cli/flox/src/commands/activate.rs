@@ -1777,15 +1777,20 @@ fn oci_tag_image(runtime: &str, source_ref: &str, dest_ref: &str) -> Result<()> 
     #[cfg(not(target_os = "macos"))]
     let (cmd_name, subcmd): (&str, &[&str]) = (runtime, &["tag"]);
 
-    let status = std::process::Command::new(cmd_name)
+    // Capture output rather than inheriting it: Apple Container's
+    // `image tag` prints the new ref to stdout, which would leak a stray
+    // line into every bake's output (same class of issue as the
+    // volume-create capture fix).
+    let output = std::process::Command::new(cmd_name)
         .args(subcmd)
         .args([source_ref, dest_ref])
-        .status()
+        .output()
         .with_context(|| format!("failed to run '{cmd_name} {}'", subcmd.join(" ")))?;
-    if !status.success() {
+    if !output.status.success() {
         bail!(
-            "'{cmd_name} {} {source_ref} {dest_ref}' failed",
-            subcmd.join(" ")
+            "'{cmd_name} {} {source_ref} {dest_ref}' failed: {}",
+            subcmd.join(" "),
+            String::from_utf8_lossy(&output.stderr).trim()
         );
     }
     Ok(())

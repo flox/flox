@@ -2,9 +2,9 @@
 
 A ~7-minute single-terminal walkthrough of the end-to-end OCI
 sandbox experience: declare the sandbox in the manifest, bake once,
-then run a coding agent with `--dangerously-skip-permissions` inside
-a boundary it cannot cross. **Bold** lines are what to *say*; fenced
-blocks are what to *type*.
+then run a coding agent at full autonomy inside a boundary it
+cannot cross. **Bold** lines are what to *say*; fenced blocks are
+what to *type*.
 
 This script covers the OCI backend only — the backend we ship
 first. The full user-facing sandbox documentation (all backends,
@@ -322,6 +322,14 @@ FLOX_SANDBOX_OCI_AUTOBAKE=true flox activate -- uname -sm
 ✅  Image 'sandbox-demo:<hash12>' loaded into container store.
 Linux aarch64
 ```
+
+> In a live terminal the bake shows a spinner with a stage counter
+> (`[1/3] Filling build cache` → `[2/3] Writing container layers`,
+> with the latest builder line appended → `[3/3] Loading image into
+> container store`); spinner lines are transient and don't appear in
+> piped captures. Apple's `container` CLI also prints its own
+> `[0/6]…[6/6]` startup progress in non-tty runs — that noise is the
+> runtime's, not flox's.
 
 **Stale image — run the newest existing image offline:**
 
