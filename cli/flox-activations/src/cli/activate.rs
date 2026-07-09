@@ -101,10 +101,23 @@ impl ActivateArgs {
         if context.project_ctx.is_none()
             && !context.flox_bin.is_empty()
             && let Ok(cwd) = std::env::current_dir()
-            && let Some(active_json) =
-                crate::container_active_env::container_active_environments_json(&cwd)
         {
-            context.attach_ctx.flox_active_environments = active_json;
+            if let Some(active_json) =
+                crate::container_active_env::container_active_environments_json(&cwd)
+            {
+                context.attach_ctx.flox_active_environments = active_json;
+            }
+
+            // Populate the project context at runtime so the guest env gets
+            // a running process-compose supervisor and `flox services` works.
+            // The baked context has `project_ctx = null`; filling it in here
+            // mirrors how `flox_active_environments` stays "[]" baked and is
+            // overwritten above. When `_FLOX_SERVICES_SOCKET_OVERRIDE` or
+            // `PROCESS_COMPOSE_BIN` are not set, this returns None and the
+            // activation proceeds without services (safe degradation).
+            if let Some(project_ctx) = crate::container_project_ctx::container_project_ctx(&cwd) {
+                context.project_ctx = Some(project_ctx);
+            }
         }
 
         if let Ok(shell_force) = std::env::var("_FLOX_SHELL_FORCE") {
