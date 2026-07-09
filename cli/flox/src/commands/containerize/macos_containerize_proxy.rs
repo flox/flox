@@ -25,6 +25,13 @@ const FLOX_FLAKE: &str = "github:flox/flox";
 const FLOX_PROXY_IMAGE_FLOX_CONFIG_DIR: &str = "/root/.config/flox";
 static FLOX_CONTAINERIZE_FLAKE_REF_OR_REV: LazyLock<Option<String>> =
     LazyLock::new(|| env::var("_FLOX_CONTAINERIZE_FLAKE_REF_OR_REV").ok());
+
+/// Marker requesting a real guest flox in the baked image. Set by the
+/// sandbox activation bake (`bake_oci_image`); forwarded into the builder
+/// VM so the inner `flox containerize` includes flox. `Some` only during a
+/// sandbox bake.
+static INCLUDE_GUEST_FLOX: LazyLock<Option<String>> =
+    LazyLock::new(|| env::var("_FLOX_CONTAINERIZE_INCLUDE_GUEST_FLOX").ok());
 const CONTAINER_NIX_CACHE_VOLUME: &str = "flox-nix";
 
 /// Default VM memory for Apple Container builder runs.
@@ -326,6 +333,13 @@ impl ContainerizeProxy {
         // (e.g. /etc/flox.toml) that may not be mounted into the container.
         if flox.metrics_device_uuid.is_none() {
             command.args(["--env", &format!("{}=true", FLOX_DISABLE_METRICS_VAR)]);
+        }
+
+        // Forward the sandbox-bake marker into the builder VM so the inner
+        // `flox containerize` bakes a real guest flox. Absent for the
+        // general containerize command, so its images are unaffected.
+        if INCLUDE_GUEST_FLOX.is_some() {
+            command.args(["--env", "_FLOX_CONTAINERIZE_INCLUDE_GUEST_FLOX=1"]);
         }
 
         // Propagate the host's nix substituters and trusted public keys into

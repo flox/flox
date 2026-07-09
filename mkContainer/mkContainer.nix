@@ -95,19 +95,26 @@ let
 
   nixStoreUserGroup = mkUnameGnameUidGid nixStoreOwner;
 
+  # Whether a real flox binary is being included in the image.
+  # When true: real binary is available, skip the deactivate-only shim.
+  # When false: no flox in image, shim keeps `flox deactivate` working.
+  hasFloxBin = floxBin != "";
+
+  # Passwd home directory for the container user. With a real flox binary
+  # the guest needs a writable HOME for config/state/cache, so point passwd
+  # at /home/flox to match the HOME env var and avoid a getpwuid-derived
+  # lookup landing on the read-only /var/empty. Without flox, keep the
+  # historic /var/empty.
+  passwdHome = if hasFloxBin then "/home/flox" else "/var/empty";
+
   fakeNss = containerPkgs.dockerTools.fakeNss.override {
     extraPasswdLines = optionals isNixStoreUserOwned [
-      "${nixStoreUserGroup.uname}:x:${toString nixStoreUserGroup.uid}:${toString nixStoreUserGroup.gid}:created by Flox:/var/empty:/bin/sh"
+      "${nixStoreUserGroup.uname}:x:${toString nixStoreUserGroup.uid}:${toString nixStoreUserGroup.gid}:created by Flox:${passwdHome}:/bin/sh"
     ];
     extraGroupLines = optionals isNixStoreUserOwned [
       "${nixStoreUserGroup.gname}:x:${toString nixStoreUserGroup.gid}:"
     ];
   };
-
-  # Whether a real flox binary is being included in the image.
-  # When true: real binary is available, skip the deactivate-only shim.
-  # When false: no flox in image, shim keeps `flox deactivate` working.
-  hasFloxBin = floxBin != "";
 
   # For field definitions, see `ActivateCtx` in `flox-core`
   activateCtx = {
@@ -181,13 +188,14 @@ let
 
       # No /tmp by default: https://github.com/NixOS/nixpkgs/issues/257172
       # Activate script requires writable directory, /run feels like a logical place.
-      # /home/flox gives the real flox binary a writable HOME for config and
-      # state files (XDG_CONFIG_HOME, XDG_STATE_HOME, XDG_CACHE_HOME, and
-      # XDG_RUNTIME_DIR are all routed there via the activation context).
+      # /home/flox is a writable HOME for a real guest flox; XDG_CONFIG_HOME,
+      # XDG_STATE_HOME, and XDG_CACHE_HOME route under it. XDG_RUNTIME_DIR
+      # routes to /run/flox/runtime, created here so the runtime dir exists.
       extraCommands = ''
         mkdir -m 1777 tmp
         mkdir -m 1770 run
         mkdir -p -m 1770 run/flox
+        mkdir -p -m 0700 run/flox/runtime
         mkdir -p -m 0700 home/flox
       '';
 
@@ -228,9 +236,11 @@ let
         }
         // optionalAttrs hasFloxBin {
           # Point flox at writable per-container directories so it can
-          # store config, state, and runtime files. The container's /tmp
-          # and /home/flox are the only writable locations in the image.
-          Env = [
+          # store config, state, and runtime files. The container's /tmp,
+          # /home/flox, and /run/flox/runtime are the writable locations
+          # in the image. Append to any user-provided Env rather than
+          # replacing it.
+          Env = (containerConfig.Env or [ ]) ++ [
             "HOME=/home/flox"
             "XDG_CONFIG_HOME=/home/flox/.config"
             "XDG_STATE_HOME=/home/flox/.local/state"

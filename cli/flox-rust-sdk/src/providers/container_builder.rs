@@ -131,6 +131,63 @@ impl MkContainerNix {
             flox_bin,
         }
     }
+
+    /// Build the `--argstr NAME VALUE` argument list passed to
+    /// `nix build --file mkContainer.nix`.
+    ///
+    /// The `floxBin` argstr is emitted only when `flox_bin` is non-empty,
+    /// so a guest without a real flox binary omits it and mkContainer.nix
+    /// falls back to the deactivate-only shim.
+    fn argstr_args(
+        &self,
+        name: &str,
+        tag: &str,
+    ) -> Result<Vec<String>, MkContainerNixError> {
+        let mut args = vec![
+            "--argstr".into(),
+            "nixpkgsFlakeRef".into(),
+            COMMON_NIXPKGS_URL.to_string(),
+            "--argstr".into(),
+            "containerSystem".into(),
+            env!("NIX_TARGET_SYSTEM").into(),
+            "--argstr".into(),
+            "system".into(),
+            env!("NIX_TARGET_SYSTEM").into(),
+            "--argstr".into(),
+            "environmentOutPath".into(),
+            self.store_path.to_string_lossy().into_owned(),
+            "--argstr".into(),
+            "activationMode".into(),
+            self.activation_mode.to_string(),
+            "--argstr".into(),
+            "interpreterPath".into(),
+            (*FLOX_INTERPRETER).to_string_lossy().into_owned(),
+        ];
+        if !self.flox_bin.as_os_str().is_empty() {
+            args.extend([
+                "--argstr".into(),
+                "floxBin".into(),
+                self.flox_bin.to_string_lossy().into_owned(),
+            ]);
+        }
+        args.extend([
+            "--argstr".into(),
+            "containerName".into(),
+            name.to_string(),
+            "--argstr".into(),
+            "containerTag".into(),
+            tag.to_string(),
+        ]);
+        if let Some(container_config) = &self.container_config {
+            args.extend([
+                "--argstr".into(),
+                "containerConfigJSON".into(),
+                serde_json::to_string(container_config)
+                    .map_err(MkContainerNixError::SerializeContainerConfig)?,
+            ]);
+        }
+        Ok(args)
+    }
 }
 
 impl ContainerBuilder for MkContainerNix {
@@ -155,41 +212,7 @@ impl ContainerBuilder for MkContainerNix {
         command.arg("--json");
         command.arg("--no-link");
         command.arg("--file").arg(&*MK_CONTAINER_NIX);
-        command.args(["--argstr", "nixpkgsFlakeRef", COMMON_NIXPKGS_URL.as_str()]);
-        command.args(["--argstr", "containerSystem", env!("NIX_TARGET_SYSTEM")]);
-        command.args(["--argstr", "system", env!("NIX_TARGET_SYSTEM")]);
-        command.args([
-            "--argstr",
-            "environmentOutPath",
-            self.store_path.to_string_lossy().as_ref(),
-        ]);
-        command.args([
-            "--argstr",
-            "activationMode",
-            &self.activation_mode.to_string(),
-        ]);
-        command.args([
-            "--argstr",
-            "interpreterPath",
-            (*FLOX_INTERPRETER).to_string_lossy().as_ref(),
-        ]);
-        if !self.flox_bin.as_os_str().is_empty() {
-            command.args([
-                "--argstr",
-                "floxBin",
-                self.flox_bin.to_string_lossy().as_ref(),
-            ]);
-        }
-        command.args(["--argstr", "containerName", name.as_ref()]);
-        command.args(["--argstr", "containerTag", tag.as_ref()]);
-        if let Some(container_config) = &self.container_config {
-            command.args([
-                "--argstr",
-                "containerConfigJSON",
-                &serde_json::to_string(container_config)
-                    .map_err(MkContainerNixError::SerializeContainerConfig)?,
-            ]);
-        }
+        command.args(self.argstr_args(name.as_ref(), tag.as_ref())?);
         debug!(cmd=%command.display(), "building container");
 
         let output = command
@@ -369,25 +392,34 @@ mod mk_container_nix_tests {
         BuiltStorePath::new_for_test(PathBuf::from("/nix/store/fake-env"))
     }
 
-    /// When `flox_bin` is non-empty, it must be recorded in the struct so
-    /// `create_container_source` can emit `--argstr floxBin <path>`.
-    #[test]
-    fn new_stores_flox_bin_when_provided() {
-        let bin = PathBuf::from("/nix/store/fake-flox/bin/flox");
-        #[allow(deprecated)]
-        let builder = MkContainerNix::new(
-            dummy_store_path(),
-            ActivateMode::default(),
-            None,
-            bin.clone(),
-        );
-        assert_eq!(builder.flox_bin, bin);
+    /// Return the value that follows the first `--argstr <name>` pair, or
+    /// `None` if the argstr is absent.
+    fn argstr_value<'a>(args: &'a [String], name: &str) -> Option<&'a str> {
+        args.windows(3).find_map(|w| {
+            (w[0] == "--argstr" && w[1] == name).then(|| w[2].as_str())
+        })
     }
 
-    /// An empty `flox_bin` must also round-trip correctly so the argstr is
-    /// omitted when no flox binary is available.
+    /// When a store-path flox binary is provided, the builder must emit
+    /// `--argstr floxBin <path>` so mkContainer.nix bakes the real binary.
     #[test]
-    fn new_stores_empty_flox_bin_when_not_provided() {
+    fn emits_flox_bin_argstr_when_provided() {
+        let bin = PathBuf::from("/nix/store/fake-flox/bin/flox");
+        #[allow(deprecated)]
+        let builder =
+            MkContainerNix::new(dummy_store_path(), ActivateMode::default(), None, bin.clone());
+        let args = builder.argstr_args("env", "latest").unwrap();
+        assert_eq!(
+            argstr_value(&args, "floxBin"),
+            Some(bin.to_string_lossy().as_ref()),
+            "floxBin argstr must carry the provided path:\n{args:?}"
+        );
+    }
+
+    /// When `flox_bin` is empty, the builder must NOT emit a `floxBin`
+    /// argstr so mkContainer.nix falls back to the deactivate-only shim.
+    #[test]
+    fn omits_flox_bin_argstr_when_empty() {
         #[allow(deprecated)]
         let builder = MkContainerNix::new(
             dummy_store_path(),
@@ -395,10 +427,11 @@ mod mk_container_nix_tests {
             None,
             PathBuf::new(),
         );
-        assert!(
-            builder.flox_bin.as_os_str().is_empty(),
-            "expected empty flox_bin, got {:?}",
-            builder.flox_bin
+        let args = builder.argstr_args("env", "latest").unwrap();
+        assert_eq!(
+            argstr_value(&args, "floxBin"),
+            None,
+            "floxBin argstr must be absent when flox_bin is empty:\n{args:?}"
         );
     }
 }
