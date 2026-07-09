@@ -10,6 +10,7 @@ use flox_core::util::message::format_error;
 use floxhub_client::{
     AuthContext,
     AuthnMode,
+    BaseCatalogInfo,
     FloxhubClient,
     FloxhubClientConfig,
     FloxhubClientError,
@@ -52,7 +53,7 @@ struct Cli {
     out: Option<PathBuf>,
 
     /// Catalog stability channel.
-    #[arg(long, default_value = "stable")]
+    #[arg(long, default_value = BaseCatalogInfo::DEFAULT_STABILITY)]
     stability: String,
 
     /// Explain each step: files read, catalog references found (with source
