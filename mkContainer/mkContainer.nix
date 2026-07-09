@@ -160,14 +160,13 @@ let
 
       # chown the /run directory to the nixStoreOwner, so that Nix can run as a
       # single user installation inside the container
-      fakeRootCommands =
-        ''
-          chown -R ${toString nixStoreUserGroup.uid}:${toString nixStoreUserGroup.gid} /run
-        ''
-        + optionalString (workingDir != null) ''
-          mkdir -p -m 0755 "${workingDir}"
-          chown ${toString nixStoreUserGroup.uid}:${toString nixStoreUserGroup.gid} "${workingDir}"
-        '';
+      fakeRootCommands = ''
+        chown -R ${toString nixStoreUserGroup.uid}:${toString nixStoreUserGroup.gid} /run
+      ''
+      + optionalString (workingDir != null) ''
+        mkdir -p -m 0755 "${workingDir}"
+        chown ${toString nixStoreUserGroup.uid}:${toString nixStoreUserGroup.gid} "${workingDir}"
+      '';
       enableFakechroot = true;
     }
     // {
@@ -195,18 +194,17 @@ let
       # symlinkJoin fails when drv contains a symlinked bin directory, so wrap in an additional buildEnv.
       contents = pkgs.buildEnv {
         name = "contents";
-        paths =
-          [
-            fakeNss
-            environment
-            (lowPrio containerPkgs.bash) # for a usable shell
-            (lowPrio containerPkgs.coreutils) # for just the basic utils
-          ]
-          # Include the real flox binary when provided so guest commands
-          # like `flox list` work against the bind-mounted project lockfile.
-          ++ optionals hasFloxBin [
-            (lowPrio (storePath floxBin))
-          ];
+        paths = [
+          fakeNss
+          environment
+          (lowPrio containerPkgs.bash) # for a usable shell
+          (lowPrio containerPkgs.coreutils) # for just the basic utils
+        ]
+        # Include the real flox binary when provided so guest commands
+        # like `flox list` work against the bind-mounted project lockfile.
+        ++ optionals hasFloxBin [
+          (lowPrio (storePath floxBin))
+        ];
       };
       config =
         containerConfig
