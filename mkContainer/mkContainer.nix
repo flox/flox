@@ -263,6 +263,16 @@ let
           # locate the process-compose supervisor. The flox-activations binary
           # built for this image does not bake in PROCESS_COMPOSE_BIN at
           # compile time (unlike the flox binary), so we inject it here.
+          #
+          # FLOX_DISABLE_METRICS: disable telemetry for two reasons:
+          # (1) The guest HOME (/home/flox) is ephemeral and reset on every
+          #     container entry, so the UUID file written by init_telemetry_uuid
+          #     never persists — the "one-time" notice would fire on every
+          #     sandbox entry instead.
+          # (2) The guest has no route to the metrics host, so leaving
+          #     metrics enabled causes every in-guest flox command to stall
+          #     by TRAILING_NETWORK_CALL_TIMEOUT waiting for an unreachable
+          #     endpoint before returning control to the user.
           Env = (containerConfig.Env or [ ]) ++ [
             "HOME=/home/flox"
             "XDG_CONFIG_HOME=/home/flox/.config"
@@ -271,6 +281,7 @@ let
             "XDG_RUNTIME_DIR=/run/flox/runtime"
             "_FLOX_SERVICES_SOCKET_OVERRIDE=/run/flox/runtime/services.sock"
             "PROCESS_COMPOSE_BIN=${containerPkgs.process-compose}/bin/process-compose"
+            "FLOX_DISABLE_METRICS=true"
           ];
         };
 
