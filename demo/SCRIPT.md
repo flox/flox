@@ -130,10 +130,13 @@ Linux aarch64
 flox [sandbox-demo] bash-5.3# flox deactivate
 ```
 
-…and you land back at your own shell prompt. Inside the guest,
-`flox` is a minimal shim: `flox deactivate` ends the session; any
-other subcommand prints a notice and returns 127 — the full CLI is
-not present in the image. `exit` works too.
+…and you land back at your own shell prompt. In *interactive*
+guest sessions, `flox` is a minimal shim provided by the generated
+rcfile: `flox deactivate` ends the session; any other subcommand
+prints a notice and returns 127 — the full CLI is not present in
+the image. `exit` works too. Non-interactive invocations
+(`flox activate -- cmd` and `sh -c` forms) have no shim at all:
+there is no rcfile, so no `flox` command exists in the guest.
 
 **"One `cd`. Consent, and you're in a Linux micro-VM with only the
 project mounted. That's the pitch. Now let me show you what the
@@ -341,48 +344,49 @@ Linux aarch64
 FLOX_SANDBOX_OCI_IMAGE=sandbox-demo:latest flox activate -- uname -sm
 ```
 
-**Store-volume fast path — skip image re-assembly after env changes
-(prototype valve, off by default):**
+**Store-volume run — serve the closure from the cache volume
+(prototype valve, off by default, macOS only):**
 
 ```bash
 FLOX_SANDBOX_OCI_STORE_VOLUME=1 flox activate -- uname -sm
 ```
 
 ```
-⚠️  Store-volume fast path: env may have changed since last bake
-   (expected image 'sandbox-demo:<hash12>' not found).
-   Running previous closure; re-bake to pick up changes.
-⚡  Running environment from store volume (base: nixos/nix:2.31.5)…
+Running the environment from the 'flox-nix' store volume (base image: nixos/nix:2.31.5).
 Linux aarch64
 ```
 
-Instead of assembling and loading a new OCI image, this mounts the
-`flox-nix` named cache volume **read-only** at `/nix` inside the
-runtime container (nixos/nix base image) and constructs the
-activation context on the host. The result: even after a
-`flox install <pkg>` that would normally trigger a 2–5 min re-bake,
-activation still starts in ~800 ms (warm volume).
+With this valve set, a fresh (hash-matched) image is not run
+directly; instead the runtime container mounts the `flox-nix` cache
+volume **read-only** at `/nix` and reuses the image's own baked
+entrypoint and activation context, which resolve from the volume.
+Staleness semantics are identical to the default path: a missing or
+stale image still goes through the normal bake flow (prompt or
+`FLOX_SANDBOX_OCI_AUTOBAKE`) first — the valve never runs an
+out-of-date closure. `FLOX_SANDBOX_OCI_IMAGE` and
+`FLOX_SANDBOX_OCI_ALLOW_STALE` bypass the valve entirely.
 
-Isolation note: the store volume is mounted **read-only** — no store
-path can be written or removed from inside the sandbox. All GC and
-write operations remain builder-side. This was verified on Apple
-Container 1.1.0 (writes return `Read-only file system`).
+This is groundwork for skipping image re-assembly on env changes
+(the closure already lands in the volume during the builder step);
+delivering that win still needs a lighter refresh step — see the
+open issues in the results file.
 
-Trade-off: when the lockfile has changed since the last bake, the fast
-path runs the **old closure** and prints the staleness warning above.
-A re-bake is still required to pick up new packages. To suppress the
-fast path in that case, set `FLOX_SANDBOX_OCI_ALLOW_STALE=1` or run
-`FLOX_SANDBOX_OCI_AUTOBAKE=true flox activate ...` to trigger a fresh
-bake that also updates the volume.
+Isolation note — the read surface is wider than the baked image:
+the guest sees the **entire** `/nix` from the volume (the union of
+every closure ever baked on this machine, plus `.drv` files and the
+builder's Nix toolchain), not just this environment's closure. It
+is all read-only — writes fail with `Read-only file system`
+(verified on Apple Container 1.1.0) and GC remains builder-side —
+but treat the volume contents as visible to anything in the
+sandbox. The default image path exposes only the env's closure.
 
-Measured timing (warm volume, warm nixos/nix image):
+Measured timing (warm volume, warm nixos/nix base image):
 
 | Path | p50 latency |
 |------|-------------|
-| Default path (existing image) | ~730 ms |
-| Fast path (STORE_VOLUME=1) | ~840 ms |
-| After env change: default path | ~2–5 min (full bake) |
-| After env change: fast path | ~840 ms (runs old closure + warning) |
+| Default path (fresh image) | ~730 ms |
+| Store-volume run (STORE_VOLUME=1) | ~840 ms |
+| After env change (either path) | ~2–5 min (normal bake flow) |
 
 Full gate results and design notes:
 `demo/results/store-volume-fastpath-2026-07-08.md`

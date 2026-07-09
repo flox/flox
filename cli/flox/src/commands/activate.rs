@@ -1404,13 +1404,20 @@ const FLOX_SANDBOX_OCI_ALLOW_STALE_VAR: &str = "FLOX_SANDBOX_OCI_ALLOW_STALE";
 /// messages.
 const FLOX_SANDBOX_OCI_AUTOBAKE_VAR: &str = "FLOX_SANDBOX_OCI_AUTOBAKE";
 
-/// Environment variable that opts into the store-volume fast path.
+/// Environment variable that opts into the store-volume run (prototype,
+/// macOS/Apple Container only).
 ///
-/// When set to `1` or `true`, activation skips the full OCI image bake and
+/// When set to `1` or `true`, activation with a fresh (hash-matched) image
 /// runs the environment's Linux closure directly from the `flox-nix` named
-/// volume, mounted read-only at `/nix` inside the container. Env changes only
-/// require re-copying new store paths into the volume (incremental `nix copy`),
-/// not a full image re-assembly, skopeo conversion, and `image load`.
+/// volume, mounted read-only at `/nix` inside a nixos/nix base container,
+/// instead of running the baked image filesystem. The entrypoint and
+/// activations-context are read from the hash-matched image's config, so
+/// only a closure that matches the current lockfile can ever run.
+///
+/// Staleness semantics are unchanged: a missing or stale image goes through
+/// the normal bake flow (prompt / `FLOX_SANDBOX_OCI_AUTOBAKE`) first, which
+/// refreshes both the image and the volume closure. `FLOX_SANDBOX_OCI_IMAGE`
+/// and `FLOX_SANDBOX_OCI_ALLOW_STALE` bypass this valve entirely.
 ///
 /// This is a prototype valve — off by default. Default path is unchanged.
 ///
@@ -2376,34 +2383,17 @@ fn wrap_activation_oci(
         std::fs::canonicalize(dot_flox_path).unwrap_or_else(|_| dot_flox_path.to_path_buf());
     let project = dot_flox.parent().unwrap_or(&dot_flox).to_path_buf();
 
-    // Store-volume fast path: mount the Nix store volume directly instead of
-    // baking a full OCI image. Bypassed when FLOX_SANDBOX_OCI_IMAGE or
-    // FLOX_SANDBOX_OCI_ALLOW_STALE are set (those imply the caller wants the
-    // full image path, not the store-volume shortcut).
-    let explicit_image = std::env::var(FLOX_SANDBOX_OCI_IMAGE_VAR)
-        .ok()
-        .filter(|v| !v.is_empty());
-    let allow_stale = std::env::var(FLOX_SANDBOX_OCI_ALLOW_STALE_VAR)
-        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-        .unwrap_or(false);
-    if oci_store_volume_valve() && explicit_image.is_none() && !allow_stale {
-        return wrap_activation_oci_store_volume(
-            dot_flox_path,
-            env_name,
-            invocation,
-            flox,
-            lockfile,
-        );
-    }
-
     // Resolve the image state using the content-hash tag scheme.
     let state = resolve_oci_image_state(runtime, env_name, lockfile);
 
-    // Determine the final image ref to run.
-    let image_ref = match state {
+    // Determine the final image ref to run. `fresh_closure` is true only
+    // when the image matches the current lockfile hash (cache hit or a bake
+    // that just completed) — the precondition for the store-volume run
+    // below. Explicit overrides and stale runs never take the volume path.
+    let (image_ref, fresh_closure) = match state {
         OciImageState::Explicit(ref image_ref) => {
             debug!(image_ref, "using explicit FLOX_SANDBOX_OCI_IMAGE override");
-            image_ref.clone()
+            (image_ref.clone(), false)
         },
         OciImageState::Present { ref image_ref } => {
             debug!(image_ref, "cache hit: content-hash tag present");
@@ -2413,7 +2403,7 @@ fn wrap_activation_oci(
             // (plain vs registry-normalized). Converging here cleans the
             // store without requiring a rebake.
             ensure_latest_alias(runtime, env_name, &lockfile_hash12(lockfile));
-            image_ref.clone()
+            (image_ref.clone(), true)
         },
         OciImageState::Stale {
             ref expected_ref, ..
@@ -2451,11 +2441,11 @@ fn wrap_activation_oci(
                          The environment has changed since this image was built.\n   \
                          Unset {FLOX_SANDBOX_OCI_ALLOW_STALE_VAR} and re-run to bake a fresh image."
                     );
-                    run_ref.clone()
+                    (run_ref.clone(), false)
                 },
                 OciBakeDecision::Bake => {
                     bake_oci_image(runtime, env_name, dot_flox_path, flox, lockfile)?;
-                    format!("{env_name}:{}", lockfile_hash12(lockfile))
+                    (format!("{env_name}:{}", lockfile_hash12(lockfile)), true)
                 },
                 OciBakeDecision::Prompt => {
                     let reason = if is_missing {
@@ -2478,7 +2468,7 @@ fn wrap_activation_oci(
                         .unwrap_or(false);
                     if confirmed {
                         bake_oci_image(runtime, env_name, dot_flox_path, flox, lockfile)?;
-                        format!("{env_name}:{}", lockfile_hash12(lockfile))
+                        (format!("{env_name}:{}", lockfile_hash12(lockfile)), true)
                     } else {
                         bail!(
                             "Bake declined. To build the image manually:\n  \
@@ -2506,6 +2496,61 @@ fn wrap_activation_oci(
     };
 
     let cwd = std::env::current_dir().unwrap_or_else(|_| project.clone());
+
+    // Store-volume run (prototype valve): serve the environment closure from
+    // the `flox-nix` cache volume instead of the baked image filesystem.
+    // Taken only when the closure is fresh — a hash-matched image is present
+    // or a bake just completed — so a stale volume closure can never be run
+    // silently. Missing/stale states reach this point only after the normal
+    // bake flow above has refreshed both the image and the volume.
+    //
+    // FLOX_SANDBOX_OCI_ALLOW_STALE is an unconditional escape hatch to the
+    // plain image run: even with a fresh image, setting it bypasses the
+    // valve so the two variables never need to be reasoned about together.
+    let allow_stale_escape = std::env::var(FLOX_SANDBOX_OCI_ALLOW_STALE_VAR)
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false);
+    if fresh_closure && !allow_stale_escape && oci_store_volume_valve() {
+        if !cfg!(target_os = "macos") {
+            bail!(
+                "{FLOX_SANDBOX_OCI_STORE_VOLUME_VAR} is only supported on macOS with Apple Container.\n\
+                 Unset it to run the baked image with '{runtime}'."
+            );
+        }
+        // Fall back to the baked image when the volume is missing or the
+        // image entrypoint cannot be parsed — the image is self-contained,
+        // so the default run below always works.
+        if oci_store_volume_exists() {
+            if let Some(entrypoint) = oci_baked_entrypoint(&image_ref) {
+                let base_image =
+                    format!("nixos/nix:{}", flox_rust_sdk::providers::nix::NIX_VERSION);
+                eprintln!(
+                    "Running the environment from the 'flox-nix' store volume (base image: {base_image})."
+                );
+                let (volume_runtime, argv) = oci_store_volume_run_argv(
+                    &entrypoint,
+                    &project,
+                    &cwd,
+                    invocation,
+                    &base_image,
+                    std::io::stdin().is_terminal(),
+                );
+                let err = std::process::Command::new(volume_runtime)
+                    .args(&argv)
+                    .exec();
+                return Err(anyhow::anyhow!(
+                    "Failed to launch the sandbox from the store volume: {err}."
+                ));
+            }
+            debug!(
+                image_ref,
+                "image entrypoint not parseable; running the baked image instead"
+            );
+        } else {
+            debug!("flox-nix volume not found; running the baked image instead");
+        }
+    }
+
     let (_, argv) = oci_run_argv(&image_ref, &project, &cwd, invocation);
 
     // `.exec()` replaces the current process; only returns on failure.
@@ -2515,42 +2560,94 @@ fn wrap_activation_oci(
     ))
 }
 
-/// Check whether the store-volume fast path is requested.
+/// Parse the store-volume valve value.
 ///
-/// Returns `true` when `FLOX_SANDBOX_OCI_STORE_VOLUME` is set to `1` or
-/// `true` (case-insensitive). Any other value (or unset) returns `false`.
-fn oci_store_volume_valve() -> bool {
-    std::env::var(FLOX_SANDBOX_OCI_STORE_VOLUME_VAR)
-        .ok()
+/// Returns `true` only for `1` or `true` (case-insensitive). Any other
+/// value — including empty string — and unset return `false`.
+fn parse_store_volume_valve(value: Option<&str>) -> bool {
+    value
         .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
         .unwrap_or(false)
 }
 
-/// Extract the environment-run store path from an existing image's entrypoint.
+/// Check whether the store-volume run is requested via
+/// `FLOX_SANDBOX_OCI_STORE_VOLUME`.
+fn oci_store_volume_valve() -> bool {
+    parse_store_volume_valve(
+        std::env::var(FLOX_SANDBOX_OCI_STORE_VOLUME_VAR)
+            .ok()
+            .as_deref(),
+    )
+}
+
+/// The two store paths a baked image's entrypoint records.
 ///
-/// The full bake records the environment store path as the first element of
-/// the entrypoint in the image config:
-/// `["/nix/store/XXXX-environment-run/libexec/flox-activations", "activate", ...]`
+/// `flox containerize` (via mkContainer.nix) sets the image entrypoint to:
 ///
-/// Returns `Some(path)` when the path can be parsed from any image for the
-/// environment, `None` when no usable image exists.
-fn oci_store_volume_env_path_from_image(env_name: &str) -> Option<String> {
-    // Collect all images for this environment; prefer the `latest` tag.
-    let entries = oci_list_env_entries("container", env_name);
-    if entries.is_empty() {
+/// ```text
+/// ["<env>/libexec/flox-activations", "activate",
+///  "--activate-data", "<activations-context>"]
+/// ```
+///
+/// Both store paths were written into the builder's store — which is the
+/// `flox-nix` volume — during the bake, so they resolve from a container
+/// that mounts the volume at `/nix`. Reusing the baked activations-context
+/// verbatim (rather than reconstructing it host-side) guarantees the
+/// activation mode, interpreter path, and shell path are exactly what
+/// mkContainer.nix baked; there is no second copy of the contract to drift.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct OciBakedEntrypoint {
+    /// The environment bundle (`…-environment-run` or `…-environment-dev`).
+    env_store_path: String,
+    /// The baked activations-context JSON store path.
+    activate_ctx_path: String,
+}
+
+/// Parse the baked entrypoint out of `container image inspect` JSON.
+///
+/// Apple Container 1.1.0 inspect returns an array of objects, each with a
+/// `variants` array. The entrypoint lives at:
+/// `[0].variants[0].config.config.Entrypoint`
+/// (the outer `config` is the OCI image manifest; the inner `config` is the
+/// image configuration object that holds `Entrypoint`).
+///
+/// Returns `None` for any shape that does not match the mkContainer.nix
+/// entrypoint contract described on [`OciBakedEntrypoint`].
+fn parse_baked_entrypoint(inspect_json: &serde_json::Value) -> Option<OciBakedEntrypoint> {
+    let entrypoint = inspect_json
+        .as_array()
+        .and_then(|a| a.first())
+        .and_then(|v| v.pointer("/variants/0/config/config/Entrypoint"))
+        .and_then(|v| v.as_array())?;
+
+    let first = entrypoint.first()?.as_str()?;
+    let env_store_path = first.strip_suffix("/libexec/flox-activations")?;
+    if !env_store_path.starts_with("/nix/store/") {
         return None;
     }
 
-    // Try the `latest` entry first, then any other.
-    let image_ref = entries
+    // The context path is the element following `--activate-data`.
+    let data_flag_pos = entrypoint
         .iter()
-        .find(|e| e.tag == "latest")
-        .or_else(|| entries.first())
-        .map(|e| e.reference.as_str())?;
+        .position(|v| v.as_str() == Some("--activate-data"))?;
+    let activate_ctx_path = entrypoint.get(data_flag_pos + 1)?.as_str()?;
+    if !activate_ctx_path.starts_with("/nix/store/") {
+        return None;
+    }
 
-    // Inspect the image and parse the entrypoint.
-    // Apple Container 1.1.0 outputs JSON by default; the --format flag is not
-    // supported and must be omitted.
+    Some(OciBakedEntrypoint {
+        env_store_path: env_store_path.to_string(),
+        activate_ctx_path: activate_ctx_path.to_string(),
+    })
+}
+
+/// Inspect an image and extract its baked entrypoint store paths.
+///
+/// Returns `None` when the image cannot be inspected or its entrypoint does
+/// not match the mkContainer.nix contract. Only meaningful on macOS (Apple
+/// Container); the caller gates on platform before invoking.
+fn oci_baked_entrypoint(image_ref: &str) -> Option<OciBakedEntrypoint> {
+    // Apple Container 1.1.0 outputs JSON by default; it has no --format flag.
     let out = std::process::Command::new("container")
         .args(["image", "inspect", image_ref])
         .output()
@@ -2558,23 +2655,8 @@ fn oci_store_volume_env_path_from_image(env_name: &str) -> Option<String> {
     if !out.status.success() {
         return None;
     }
-
     let parsed: serde_json::Value = serde_json::from_slice(&out.stdout).ok()?;
-    // Apple Container 1.1.0 inspect returns an array of objects, each with a
-    // `variants` array. The entrypoint lives at:
-    //   [0].variants[0].config.config.Entrypoint
-    // (the outer `config` is the OCI image manifest; the inner `config` is the
-    // image configuration object that holds `Entrypoint`).
-    let entrypoint = parsed
-        .as_array()
-        .and_then(|a| a.first())
-        .and_then(|v| v.pointer("/variants/0/config/config/Entrypoint"))
-        .and_then(|v| v.as_array())?;
-
-    // The first element is `<env_store_path>/libexec/flox-activations`.
-    let first = entrypoint.first()?.as_str()?;
-    let env_path = first.strip_suffix("/libexec/flox-activations")?;
-    Some(env_path.to_string())
+    parse_baked_entrypoint(&parsed)
 }
 
 /// Check whether the `flox-nix` named volume exists in the local container
@@ -2589,133 +2671,36 @@ fn oci_store_volume_exists() -> bool {
         .unwrap_or(false)
 }
 
-/// Find the environment store path for the fast path.
+/// Build the container run argv for the store-volume run.
 ///
-/// Resolution order:
-/// 1. Verify the `flox-nix` volume exists.
-/// 2. Check for an existing image for this env; if found, extract the env
-///    path from its entrypoint config.
-/// 3. Return `None` when no usable image exists (caller falls back to the
-///    full bake path).
+/// Runs the nixos/nix base image with exactly two mounts:
+/// - `flox-nix` volume read-only at `/nix` — the environment closure and the
+///   baked activations-context both resolve from here, so no image layer
+///   assembly is needed at run time.
+/// - The project directory bind-mounted at its host path (live mount), same
+///   as the default image run.
 ///
-/// This avoids any builder container invocation on the hot path: when a full
-/// bake has run before, the volume already contains the closure and the image
-/// config records the store path. The fast path then runs in well under a
-/// second.
+/// The entrypoint override reproduces the baked image's own entrypoint
+/// verbatim: the environment's `flox-activations` binary with the baked
+/// activations-context as `--activate-data`. Both paths come from the
+/// hash-matched image's config (see [`OciBakedEntrypoint`]).
 ///
-/// When the env changes and a new bake is needed, the image hash-tag changes
-/// and `oci_store_volume_env_path_from_image` reads the stale image's env
-/// path; the caller warns that the closure may be outdated and proceeds.
-/// A full bake is still needed to update both the image and the closure for
-/// the changed environment.
-fn oci_store_volume_env_path(env_name: &str) -> Option<String> {
-    if !oci_store_volume_exists() {
-        debug!("store-volume: flox-nix volume not found");
-        return None;
-    }
-    let path = oci_store_volume_env_path_from_image(env_name)?;
-    debug!(path, "store-volume: env path from image entrypoint");
-    Some(path)
-}
-
-/// Write the activation context JSON for the store-volume fast path.
+/// `stdin_is_terminal` is passed in (rather than probed here) so the argv
+/// construction is a pure function of its inputs and can be asserted exactly
+/// in tests.
 ///
-/// The activateCtx embedded in a full OCI image at bake time contains paths
-/// that are only known after the environment derivation is built. Here we
-/// write the equivalent JSON to a temp directory on the host so it can be
-/// bind-mounted as a directory into the runtime container.
-///
-/// Apple Container 1.1.0 does not support file bind-mounts (`--mount
-/// type=bind,source=<file>` fails with "path is not a directory"). The
-/// workaround is to bind-mount the parent temp directory instead.
-///
-/// Returns `(tempdir, ctx_filename_in_dir)`:
-/// - `tempdir` is the `TempDir` guard that keeps the directory alive until
-///   `exec()` replaces the process (or the function returns on error).
-/// - `ctx_filename_in_dir` is the filename of the JSON file within the
-///   directory (always `"activate-ctx.json"`).
-///
-/// The bash path uses the nixos/nix image's own profile bash, which is always
-/// at `/root/.nix-profile/bin/bash` in that image.
-fn oci_store_volume_write_ctx(
-    env_store_path: &str,
-    env_name: &str,
-) -> Result<(tempfile::TempDir, &'static str)> {
-    // The runtime container is the nixos/nix image; bash lives in the Nix
-    // profile, not at a fixed store path. Use the profile symlink so the path
-    // is stable across nixos/nix version bumps.
-    let bash_path = "/root/.nix-profile/bin/bash";
-
-    let ctx = serde_json::json!({
-        "mode": "run",
-        "shell": { "bash": bash_path },
-        "invocation_type": null,
-        "remove_after_reading": false,
-        "disable_hook": true,
-        "flox_activate_store_path": env_store_path,
-        "activation_state_dir": format!(
-            "/run/flox/container-activations/{}",
-            std::path::Path::new(env_store_path)
-                .file_name()
-                .unwrap_or_default()
-                .to_string_lossy()
-        ),
-        "flox_bin": "",
-        "metrics_uuid": null,
-        "attach_ctx": {
-            "env": env_store_path,
-            "env_cache": "/tmp",
-            "env_description": env_name,
-            "flox_active_environments": "[]",
-            "prompt_color_1": "99",
-            "prompt_color_2": "141",
-            "interpreter_path": env_store_path,
-            "flox_prompt_environments": env_name,
-            "set_prompt": true,
-            "flox_env_cuda_detection": "0"
-        },
-        "project_ctx": null
-    });
-
-    const CTX_FILENAME: &str = "activate-ctx.json";
-
-    let tmpdir = tempfile::Builder::new()
-        .prefix("flox-activate-ctx-")
-        .tempdir()
-        .context("failed to create temp dir for activateCtx")?;
-    let ctx_path = tmpdir.path().join(CTX_FILENAME);
-    let file = std::fs::File::create(&ctx_path).context("failed to create activateCtx file")?;
-    serde_json::to_writer(file, &ctx).context("failed to write activateCtx JSON")?;
-    Ok((tmpdir, CTX_FILENAME))
-}
-
-/// Build the container run argv for the store-volume fast path.
-///
-/// Runs the nixos/nix base image with:
-/// - `flox-nix` volume mounted read-only at `/nix` (so the env closure is
-///   reachable without rebuilding the image)
-/// - Project directory bind-mounted at its host path (live mount)
-/// - A temp directory bind-mounted read-only at `/run/flox-ctx`; the
-///   activateCtx JSON lives inside that directory as `activate-ctx.json`.
-///   Apple Container 1.1.0 does not support file bind-mounts, so a directory
-///   mount is used instead.
-/// - Entrypoint overridden to the environment's `flox-activations` binary
-///   with `activate --activate-data <ctx_path>` as arguments.
-///
-/// Returns `(runtime_cmd, argv)`.
+/// Returns `(runtime_cmd, argv)`; `runtime_cmd` is always `"container"` —
+/// this run mode is Apple Container only.
 fn oci_store_volume_run_argv(
-    env_store_path: &str,
-    ctx_host_dir: &std::path::Path,
-    ctx_filename: &str,
+    entrypoint: &OciBakedEntrypoint,
     project: &Path,
     cwd: &Path,
     invocation: &InvocationType,
-    nix_image: &str,
+    base_image: &str,
+    stdin_is_terminal: bool,
 ) -> (String, Vec<String>) {
     let runtime = "container";
-    let ctx_guest_dir = "/run/flox-ctx";
-    let ctx_guest_path = format!("{ctx_guest_dir}/{ctx_filename}");
-    let activations_bin = format!("{env_store_path}/libexec/flox-activations");
+    let activations_bin = format!("{}/libexec/flox-activations", entrypoint.env_store_path);
 
     let effective_cwd = if cwd.starts_with(project) {
         cwd
@@ -2725,59 +2710,43 @@ fn oci_store_volume_run_argv(
 
     let mut argv: Vec<String> = vec!["run".to_string(), "--rm".to_string()];
 
-    // Mount the Nix store volume read-only so the env closure is accessible
-    // without any copy overhead. This is the core of the fast path: skipping
-    // the OCI image bake entirely and serving packages from the already-
-    // populated `flox-nix` cache volume.
     argv.push("--mount".to_string());
     argv.push("type=volume,source=flox-nix,target=/nix,readonly".to_string());
 
-    // Live-mount the project directory at the same path as the host so the
-    // guest's working tree matches the host's (identical absolute path).
     argv.push("--volume".to_string());
     argv.push(format!("{}:{}", project.display(), project.display()));
-
-    // Bind-mount the directory containing the activateCtx JSON. Apple
-    // Container 1.1.0 requires the source to be a directory; individual file
-    // bind-mounts are not supported.
-    argv.push("--mount".to_string());
-    argv.push(format!(
-        "type=bind,source={},target={ctx_guest_dir},readonly",
-        ctx_host_dir.display()
-    ));
 
     argv.push("--workdir".to_string());
     argv.push(effective_cwd.display().to_string());
 
-    // Override entrypoint so the image's default entrypoint is not used.
     argv.push("--entrypoint".to_string());
-    argv.push(activations_bin.clone());
+    argv.push(activations_bin);
 
     match invocation {
         InvocationType::Interactive => {
-            if std::io::stdin().is_terminal() {
+            if stdin_is_terminal {
                 argv.push("-it".to_string());
             } else {
                 argv.push("-i".to_string());
             }
-            argv.push(nix_image.to_string());
+            argv.push(base_image.to_string());
             argv.push("activate".to_string());
             argv.push("--activate-data".to_string());
-            argv.push(ctx_guest_path);
+            argv.push(entrypoint.activate_ctx_path.clone());
         },
         InvocationType::ExecCommand(cmd) => {
-            argv.push(nix_image.to_string());
+            argv.push(base_image.to_string());
             argv.push("activate".to_string());
             argv.push("--activate-data".to_string());
-            argv.push(ctx_guest_path);
+            argv.push(entrypoint.activate_ctx_path.clone());
             argv.push("--".to_string());
             argv.extend(cmd.iter().cloned());
         },
         InvocationType::ShellCommand(shell_cmd) => {
-            argv.push(nix_image.to_string());
+            argv.push(base_image.to_string());
             argv.push("activate".to_string());
             argv.push("--activate-data".to_string());
-            argv.push(ctx_guest_path);
+            argv.push(entrypoint.activate_ctx_path.clone());
             argv.push("--".to_string());
             argv.push("sh".to_string());
             argv.push("-c".to_string());
@@ -2785,107 +2754,13 @@ fn oci_store_volume_run_argv(
         },
         InvocationType::InPlace => {
             unreachable!(
-                "in-place invocation cannot reach the oci store-volume fast path \
+                "in-place invocation cannot reach the oci store-volume run \
                  (blocked by ensure_sandbox_not_in_place)"
             );
         },
     }
 
     (runtime.to_string(), argv)
-}
-
-/// Store-volume fast path: run the environment directly from the `flox-nix`
-/// named volume without baking or loading a new OCI image.
-///
-/// On the hot path (volume warm, prior bake exists):
-/// - Reads the environment store path from the existing image's entrypoint.
-/// - Verifies the path is present in the volume (fast probe).
-/// - Writes an `activateCtx` JSON file to a temp location on the host.
-/// - Execs the nixos/nix base image with the volume mounted read-only at
-///   `/nix` and the activateCtx bind-mounted inside the container.
-///
-/// Falls back to `bail!` when no usable image or closure is available,
-/// prompting the caller to run a full bake first.
-///
-/// Bypassed when `FLOX_SANDBOX_OCI_IMAGE` or `FLOX_SANDBOX_OCI_ALLOW_STALE`
-/// are set (the caller checks for these before reaching this function).
-///
-/// Apple Container 1.1.0 gate results (2026-07-08):
-/// - Named-volume mount at run time: PASS
-/// - Read-only mode via `--mount type=volume,...,readonly`: PASS
-/// - Concurrent read-write (builder) + read-only (runtime) access: PASS
-fn wrap_activation_oci_store_volume(
-    dot_flox_path: &Path,
-    env_name: &str,
-    invocation: &InvocationType,
-    _flox: &flox_rust_sdk::flox::Flox,
-    lockfile: &flox_manifest::lockfile::Lockfile,
-) -> Result<()> {
-    let dot_flox =
-        std::fs::canonicalize(dot_flox_path).unwrap_or_else(|_| dot_flox_path.to_path_buf());
-    let project = dot_flox.parent().unwrap_or(&dot_flox).to_path_buf();
-    let cwd = std::env::current_dir().unwrap_or_else(|_| project.clone());
-
-    let hash12 = lockfile_hash12(lockfile);
-    debug!(hash12, "store-volume fast path: lockfile hash");
-
-    // Resolve the environment store path from the volume.
-    let env_store_path = oci_store_volume_env_path(env_name).ok_or_else(|| {
-        anyhow::anyhow!(
-            "Store-volume fast path: no usable environment closure found in the 'flox-nix' \
-             volume for '{env_name}'.\n\
-             Run a full bake first to populate the volume:\n  \
-             FLOX_SANDBOX_OCI_AUTOBAKE=true flox activate --sandbox enforce \
-             --sandbox-backend oci -- true\n\
-             Then retry with {FLOX_SANDBOX_OCI_STORE_VOLUME_VAR}=1."
-        )
-    })?;
-    debug!(
-        env_store_path,
-        "store-volume fast path: env store path resolved"
-    );
-
-    // Check whether the lockfile's expected hash-tag image matches any image
-    // already built. If not, the env may have changed; warn the user.
-    let expected_ref = format!("{env_name}:{hash12}");
-    if !oci_image_present("container", &expected_ref) {
-        eprintln!(
-            "⚠️  Store-volume fast path: env may have changed since last bake\n   \
-             (expected image '{expected_ref}' not found).\n   \
-             Running previous closure; re-bake to pick up changes."
-        );
-    }
-
-    // Write the activateCtx JSON to a temp directory and bind-mount the
-    // directory. Apple Container 1.1.0 requires the bind-mount source to be a
-    // directory; individual file bind-mounts are unsupported.
-    let (ctx_tmpdir, ctx_filename) = oci_store_volume_write_ctx(&env_store_path, env_name)
-        .context("store-volume activateCtx write failed")?;
-
-    // Use the nixos/nix image pinned to the builder's version as the runtime
-    // base. It has bash + coreutils + glibc in its Nix profile.
-    use flox_rust_sdk::providers::nix::NIX_VERSION;
-    let nix_image = format!("nixos/nix:{NIX_VERSION}");
-    eprintln!("⚡  Running environment from store volume (base: {nix_image})…");
-
-    let (_, argv) = oci_store_volume_run_argv(
-        &env_store_path,
-        ctx_tmpdir.path(),
-        ctx_filename,
-        &project,
-        &cwd,
-        invocation,
-        &nix_image,
-    );
-
-    debug!(?argv, "store-volume run argv");
-
-    // exec() replaces the current process; the temp directory is kept alive by
-    // the `ctx_tmpdir` binding and cleaned up if exec fails.
-    let err = std::process::Command::new("container").args(&argv).exec();
-    Err(anyhow::anyhow!(
-        "Failed to launch the oci store-volume sandbox: {err}."
-    ))
 }
 
 /// Extract the stale ref string from an OciImageState::Stale variant.
@@ -3426,6 +3301,283 @@ mod tests {
             !argv.contains(&cwd.display().to_string()),
             "argv must not contain external cwd '{cwd:?}', got: {argv:?}",
         );
+    }
+
+    // ── Store-volume run unit tests ──────────────────────────────────────────
+
+    #[test]
+    fn store_volume_valve_parsing_table() {
+        let cases = [
+            (Some("1"), true),
+            (Some("true"), true),
+            (Some("TRUE"), true),
+            (Some("True"), true),
+            (Some("0"), false),
+            (Some(""), false),
+            (Some("yes"), false),
+            (None, false),
+        ];
+        for (input, expected) in cases {
+            assert_eq!(
+                parse_store_volume_valve(input),
+                expected,
+                "parse_store_volume_valve({input:?}) should be {expected}",
+            );
+        }
+    }
+
+    /// Test entrypoint paths matching the real bake output on this
+    /// machine (Apple Container 1.1.0 `image inspect` of a baked env).
+    fn baked_entrypoint_fixture() -> serde_json::Value {
+        serde_json::json!([{
+            "configuration": {
+                "name": "docker.io/library/myenv:2cd05116938b"
+            },
+            "variants": [{
+                "config": {
+                    "architecture": "arm64",
+                    "config": {
+                        "Entrypoint": [
+                            "/nix/store/5z1drm53smb0l8qd1z9cfkxsai5h7i0r-environment-dev/libexec/flox-activations",
+                            "activate",
+                            "--activate-data",
+                            "/nix/store/92pi0dza4h1grk0m22piyaiplnwh1s22-activations-context"
+                        ]
+                    },
+                    "os": "linux"
+                }
+            }]
+        }])
+    }
+
+    #[test]
+    fn parse_baked_entrypoint_extracts_both_store_paths() {
+        let parsed =
+            parse_baked_entrypoint(&baked_entrypoint_fixture()).expect("fixture should parse");
+        assert_eq!(parsed, OciBakedEntrypoint {
+            env_store_path: "/nix/store/5z1drm53smb0l8qd1z9cfkxsai5h7i0r-environment-dev"
+                .to_string(),
+            activate_ctx_path: "/nix/store/92pi0dza4h1grk0m22piyaiplnwh1s22-activations-context"
+                .to_string(),
+        });
+    }
+
+    #[test]
+    fn parse_baked_entrypoint_rejects_missing_entrypoint() {
+        let json = serde_json::json!([{
+            "variants": [{ "config": { "config": {} } }]
+        }]);
+        assert_eq!(parse_baked_entrypoint(&json), None);
+    }
+
+    #[test]
+    fn parse_baked_entrypoint_rejects_foreign_entrypoint() {
+        // An image whose entrypoint is not flox-activations (e.g. an
+        // explicit FLOX_SANDBOX_OCI_IMAGE pointing at an arbitrary image).
+        let json = serde_json::json!([{
+            "variants": [{ "config": { "config": {
+                "Entrypoint": ["/bin/sh", "-c", "sleep infinity"]
+            } } }]
+        }]);
+        assert_eq!(parse_baked_entrypoint(&json), None);
+    }
+
+    #[test]
+    fn parse_baked_entrypoint_rejects_missing_activate_data() {
+        let json = serde_json::json!([{
+            "variants": [{ "config": { "config": {
+                "Entrypoint": [
+                    "/nix/store/5z1drm53smb0l8qd1z9cfkxsai5h7i0r-environment-dev/libexec/flox-activations",
+                    "activate"
+                ]
+            } } }]
+        }]);
+        assert_eq!(parse_baked_entrypoint(&json), None);
+    }
+
+    #[test]
+    fn parse_baked_entrypoint_rejects_non_store_ctx_path() {
+        let json = serde_json::json!([{
+            "variants": [{ "config": { "config": {
+                "Entrypoint": [
+                    "/nix/store/5z1drm53smb0l8qd1z9cfkxsai5h7i0r-environment-dev/libexec/flox-activations",
+                    "activate",
+                    "--activate-data",
+                    "/tmp/injected-ctx.json"
+                ]
+            } } }]
+        }]);
+        assert_eq!(parse_baked_entrypoint(&json), None);
+    }
+
+    fn test_baked_entrypoint() -> OciBakedEntrypoint {
+        OciBakedEntrypoint {
+            env_store_path: "/nix/store/5z1drm53smb0l8qd1z9cfkxsai5h7i0r-environment-dev"
+                .to_string(),
+            activate_ctx_path: "/nix/store/92pi0dza4h1grk0m22piyaiplnwh1s22-activations-context"
+                .to_string(),
+        }
+    }
+
+    /// The mount set is the machine-checkable form of the isolation
+    /// guarantee: exactly one read-only store volume and one project bind
+    /// mount — no other channel into the guest.
+    fn store_volume_expected_prefix(project: &str, workdir: &str) -> Vec<String> {
+        [
+            "run",
+            "--rm",
+            "--mount",
+            "type=volume,source=flox-nix,target=/nix,readonly",
+            "--volume",
+            &format!("{project}:{project}"),
+            "--workdir",
+            workdir,
+            "--entrypoint",
+            "/nix/store/5z1drm53smb0l8qd1z9cfkxsai5h7i0r-environment-dev/libexec/flox-activations",
+        ]
+        .iter()
+        .map(|s| s.to_string())
+        .collect()
+    }
+
+    #[test]
+    fn store_volume_run_argv_exec_command_exact() {
+        let project = Path::new("/home/user/myproject");
+        let cwd = Path::new("/home/user/myproject/subdir");
+        let invocation = InvocationType::ExecCommand(vec!["echo".to_string(), "hello".to_string()]);
+        let (runtime, argv) = oci_store_volume_run_argv(
+            &test_baked_entrypoint(),
+            project,
+            cwd,
+            &invocation,
+            "nixos/nix:2.31.5",
+            false,
+        );
+        assert_eq!(runtime, "container");
+        let mut expected =
+            store_volume_expected_prefix("/home/user/myproject", "/home/user/myproject/subdir");
+        expected.extend(
+            [
+                "nixos/nix:2.31.5",
+                "activate",
+                "--activate-data",
+                "/nix/store/92pi0dza4h1grk0m22piyaiplnwh1s22-activations-context",
+                "--",
+                "echo",
+                "hello",
+            ]
+            .iter()
+            .map(|s| s.to_string()),
+        );
+        assert_eq!(argv, expected);
+    }
+
+    #[test]
+    fn store_volume_run_argv_shell_command_exact() {
+        let project = Path::new("/home/user/myproject");
+        let cwd = project;
+        let invocation = InvocationType::ShellCommand("echo hi | wc -l".to_string());
+        let (runtime, argv) = oci_store_volume_run_argv(
+            &test_baked_entrypoint(),
+            project,
+            cwd,
+            &invocation,
+            "nixos/nix:2.31.5",
+            false,
+        );
+        assert_eq!(runtime, "container");
+        let mut expected =
+            store_volume_expected_prefix("/home/user/myproject", "/home/user/myproject");
+        expected.extend(
+            [
+                "nixos/nix:2.31.5",
+                "activate",
+                "--activate-data",
+                "/nix/store/92pi0dza4h1grk0m22piyaiplnwh1s22-activations-context",
+                "--",
+                "sh",
+                "-c",
+                "echo hi | wc -l",
+            ]
+            .iter()
+            .map(|s| s.to_string()),
+        );
+        assert_eq!(argv, expected);
+    }
+
+    #[test]
+    fn store_volume_run_argv_interactive_exact_no_tty() {
+        let project = Path::new("/home/user/myproject");
+        let cwd = project;
+        let (runtime, argv) = oci_store_volume_run_argv(
+            &test_baked_entrypoint(),
+            project,
+            cwd,
+            &InvocationType::Interactive,
+            "nixos/nix:2.31.5",
+            false,
+        );
+        assert_eq!(runtime, "container");
+        let mut expected =
+            store_volume_expected_prefix("/home/user/myproject", "/home/user/myproject");
+        expected.extend(
+            [
+                "-i",
+                "nixos/nix:2.31.5",
+                "activate",
+                "--activate-data",
+                "/nix/store/92pi0dza4h1grk0m22piyaiplnwh1s22-activations-context",
+            ]
+            .iter()
+            .map(|s| s.to_string()),
+        );
+        assert_eq!(argv, expected);
+    }
+
+    #[test]
+    fn store_volume_run_argv_interactive_exact_tty() {
+        let project = Path::new("/home/user/myproject");
+        let cwd = project;
+        let (runtime, argv) = oci_store_volume_run_argv(
+            &test_baked_entrypoint(),
+            project,
+            cwd,
+            &InvocationType::Interactive,
+            "nixos/nix:2.31.5",
+            true,
+        );
+        assert_eq!(runtime, "container");
+        let mut expected =
+            store_volume_expected_prefix("/home/user/myproject", "/home/user/myproject");
+        expected.extend(
+            [
+                "-it",
+                "nixos/nix:2.31.5",
+                "activate",
+                "--activate-data",
+                "/nix/store/92pi0dza4h1grk0m22piyaiplnwh1s22-activations-context",
+            ]
+            .iter()
+            .map(|s| s.to_string()),
+        );
+        assert_eq!(argv, expected);
+    }
+
+    #[test]
+    fn store_volume_run_argv_workdir_falls_back_to_project_when_cwd_outside() {
+        let project = Path::new("/home/user/proj");
+        let cwd = Path::new("/tmp/other");
+        let invocation = InvocationType::ExecCommand(vec!["ls".to_string()]);
+        let (_, argv) = oci_store_volume_run_argv(
+            &test_baked_entrypoint(),
+            project,
+            cwd,
+            &invocation,
+            "nixos/nix:2.31.5",
+            false,
+        );
+        let workdir_pos = argv.iter().position(|a| a == "--workdir").unwrap();
+        assert_eq!(argv[workdir_pos + 1], "/home/user/proj");
     }
 }
 

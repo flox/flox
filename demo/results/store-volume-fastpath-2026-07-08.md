@@ -1,6 +1,6 @@
-# Store-Volume Fast Path — Results
+# Store-Volume Run — Results
 
-**Date:** 2026-07-08
+**Date:** 2026-07-08 (revised same day after code review)
 **Host:** macOS arm64, Apple Container 1.1.0
 **Branch:** sl-002-store-volume-fastpath (prototype/sandboxed-activation)
 
@@ -9,16 +9,37 @@
 Full OCI image bake (~2-5 min) is required today every time the environment
 changes, even though the cross-compiled Linux closure already persists in the
 `flox-nix` named cache volume. The runtime container only needs the closure
-plus an activation context — the image assembly (skopeo conversion, archive
-stream, `container image load`) adds no value at run time.
+plus an activation context — the image assembly (layer packing, skopeo
+conversion, archive stream, `container image load`) adds no value at run time.
 
-The goal: skip image assembly on activation by mounting the `flox-nix` volume
-read-only at `/nix` inside the runtime container, and constructing the
-`activateCtx` JSON on the host.
+The exploration goal: skip image assembly on activation by mounting the
+`flox-nix` volume read-only at `/nix` inside the runtime container.
+
+## Outcome summary (honest version)
+
+The mechanics work: a guest can run the environment entirely from the
+volume, read-only, with the baked entrypoint and activation context
+resolving from the mounted store. All empirical gates pass.
+
+The prototype does **not** yet deliver the skip-rebake win. Freshness is
+only provable via the hash-tagged image (lockfile-hash → image tag is the
+only host-visible freshness marker), so an env change still goes through
+the normal bake flow before the store-volume run can proceed. Closing that
+gap needs a lighter builder-side "refresh" step that builds the environment
+derivation and records the (lockfile-hash → env path, ctx path) mapping
+without assembling an image — see Open Issues.
+
+What the prototype does deliver:
+
+- Verified run-from-volume mechanics (gates below) and a working,
+  staleness-safe implementation behind `FLOX_SANDBOX_OCI_STORE_VOLUME=1`.
+- Machine-checkable mount-surface tests (exact argv per invocation type).
+- A precise map of what Apple Container 1.1.0 supports and where the
+  remaining engineering is.
 
 ---
 
-## Empirical Gate Results (Requirement 3)
+## Empirical Gate Results
 
 All gates tested against Apple Container 1.1.0.
 
@@ -99,152 +120,192 @@ $ container run --rm \
 Error: path '/tmp/test.json' is not a directory
 ```
 
-**FAIL.** Apple Container 1.1.0 does not support file bind-mounts. Only
-directory bind-mounts are supported. **Workaround:** write the activateCtx
-JSON into a temp directory and bind-mount the directory instead.
+**FAIL.** Apple Container 1.1.0 does not support file bind-mounts; only
+directory bind-mounts work. The current design does not need any file
+bind-mount (the activation context is read from the volume), so this is a
+recorded limitation rather than a live constraint.
 
 ---
 
 ## Implementation
 
-The fast path is behind `FLOX_SANDBOX_OCI_STORE_VOLUME=1` (default off).
+The store-volume run is behind `FLOX_SANDBOX_OCI_STORE_VOLUME=1`
+(default off, macOS/Apple Container only — setting it on Linux is a hard
+error).
 
 ### How it works
 
-On activation with the valve set:
+Image-state resolution and staleness handling are exactly the default
+path's: the content-hash tag (`<env>:<hash12>`) is resolved first, and a
+missing or stale image goes through the normal bake flow (tty prompt or
+`FLOX_SANDBOX_OCI_AUTOBAKE`). Only when a **fresh** closure exists — the
+hash-matched image is present, or a bake just completed — does the valve
+change the final run step:
 
-1. **Valve check**: If `FLOX_SANDBOX_OCI_IMAGE` or
-   `FLOX_SANDBOX_OCI_ALLOW_STALE` are set, the fast path is bypassed and the
-   default image-based path runs instead.
+1. **Entrypoint extraction**: `container image inspect <env>:<hash12>`
+   records the baked entrypoint:
 
-2. **Env path resolution**: Read the existing image's entrypoint config
-   (`container image inspect <env>:latest`) to extract the environment store
-   path (the first element of `Entrypoint` minus `/libexec/flox-activations`).
-   The `flox-nix` volume must exist.
+   ```
+   ["<env-store-path>/libexec/flox-activations", "activate",
+    "--activate-data", "<activations-context-store-path>"]
+   ```
 
-3. **ActivateCtx JSON**: Write an `activateCtx` JSON file to a temp directory
-   on the host with the extracted env store path and the nixos/nix image's
-   bash path (`/root/.nix-profile/bin/bash`).
+   Both store paths were written into the builder's store — which *is* the
+   `flox-nix` volume — during the bake, so they resolve from a container
+   that mounts the volume at `/nix`.
 
-4. **Container run**: Run `nixos/nix:<NIX_VERSION>` with:
-   - `--mount type=volume,source=flox-nix,target=/nix,readonly` — closure
-     served from the builder volume, no image rebuild needed.
-   - `--volume <project>:<project>` — live project mount (same as default path).
-   - `--mount type=bind,source=<tmpdir>,target=/run/flox-ctx,readonly` —
-     temp directory with the activateCtx JSON inside.
-   - `--entrypoint <env>/libexec/flox-activations` — override with the env's
-     own `flox-activations` binary (resolves from the mounted volume).
-   - `activate --activate-data /run/flox-ctx/activate-ctx.json` — standard
-     activation command.
+2. **Container run**: `nixos/nix:<NIX_VERSION>` with exactly two mounts:
+   - `--mount type=volume,source=flox-nix,target=/nix,readonly`
+   - `--volume <project>:<project>` (live project mount, same as default)
 
-### Staleness handling
+   The entrypoint override reproduces the baked image's own entrypoint
+   verbatim (env's `flox-activations` + baked activations-context).
 
-The fast path warns (but does not fail) when the expected hash-tag image for
-the current lockfile is absent:
+There is **no host-side reconstruction of the activation context**. The
+baked context in the volume is the authoritative artifact produced by
+mkContainer.nix at bake time; reusing it verbatim means the activation
+mode (dev/run), interpreter path, and shell path are exactly as baked —
+there is no second copy of the contract to drift. (The baked context's
+`shell.bash` points at a `containerPkgs.bash` store path, which resolves
+from the volume; the base image's own profile is not involved.)
 
-```
-⚠️  Store-volume fast path: env may have changed since last bake
-   (expected image 'sandbox-demo:a7f880489710' not found).
-   Running previous closure; re-bake to pick up changes.
-```
+Falls back to running the baked image (which is self-contained) when the
+volume is missing or the entrypoint does not match the contract.
 
-This allows the fast path to work after a minor env change that does not yet
-have a fresh bake. The user sees the warning and knows a fresh bake is needed
-to pick up changes.
+### Staleness semantics
 
-`FLOX_SANDBOX_OCI_IMAGE` and `FLOX_SANDBOX_OCI_ALLOW_STALE` bypass the fast
-path entirely and run the default image-based path.
+Identical to the default path by construction. The valve is consulted only
+after image-state resolution:
 
-### Isolation
+| State | Behavior with valve set |
+|-------|------------------------|
+| Fresh (`<env>:<hash12>` present) | Store-volume run |
+| Just baked | Store-volume run (closure was refreshed by the bake) |
+| Stale / missing | Normal bake flow first (prompt / AUTOBAKE / fail-fast) |
+| `FLOX_SANDBOX_OCI_IMAGE` set | Valve bypassed; explicit image runs as-is |
+| `FLOX_SANDBOX_OCI_ALLOW_STALE` | Valve bypassed; stale image runs as-is |
 
-The store volume is mounted **read-only**. The only writable mounts are:
-- The project directory (same as the default path).
-- `/tmp` (container tmpfs, ephemeral).
+A stale or mismatched closure can never run silently: the env store path
+is only ever read from the hash-matched (or just-baked) image.
 
-All volume GC and write operations remain host/builder-side.
+### Isolation: the read surface is wider than the baked image
+
+The store-volume run trades image assembly for a **larger read-only
+surface**. State this clearly when reasoning about the sandbox boundary:
+
+- The guest mounts the **entire `/nix`** from the volume — not just
+  `/nix/store`, and not just this environment's closure. That includes:
+  - The **union of every closure ever baked** on this machine, across all
+    environments — another project's packages are readable.
+  - **`.drv` files** (build recipes, which can embed URLs and metadata).
+  - `/nix/var` (Nix database, profiles, gcroots) and the **builder's full
+    Nix toolchain** — `nix` itself is executable from the volume.
+- The guest runs as **root**, same as the baked-image path.
+- Everything is **read-only** (Gate 2b): no store path can be written or
+  removed from inside the sandbox; volume writes and GC remain
+  host/builder-side operations.
+
+By contrast, the default baked image exposes only the single environment's
+closure. For threat models where cross-environment package visibility or
+`.drv` metadata matters, the store-volume run widens what a compromised
+workload can *read* (not write). A future hardening step could mount only
+the closure's paths, but Apple Container has no per-path mount filtering,
+so that would require a per-env volume or an overlay mechanism.
+
+The mount set is enforced by unit tests that assert the **exact argv** per
+invocation type — exactly one read-only volume mount and one project bind
+mount, no other channels.
+
+### No flox shim on exec paths
+
+Non-interactive invocations (`flox activate -- cmd` and the `sh -c` form)
+have **no `flox` shim in the guest** — there is no rcfile, so no `flox`
+command exists at all (verified live). Only interactive sessions get the
+minimal shim (`flox deactivate` works; other subcommands print a notice
+and return 127), because it is defined by the generated rcfile. This is
+the same behavior as the baked-image path.
 
 ---
 
-## Timing (warm volume, warm nixos/nix image)
+## Timing (warm volume, warm nixos/nix base image)
 
-Environment: `sandbox-demo` (bash, coreutils, curl, git) on macOS arm64.
-Measured as time from process start to `uname -sm` output.
+Environment: `sandbox-demo`-class env (bash, coreutils, curl, git) on
+macOS arm64. Time from process start to `uname -sm` output.
 
 | Path | Run 1 | Run 2 | Run 3 | Notes |
 |------|-------|-------|-------|-------|
-| Default (stale image, ALLOW_STALE) | 755 ms | 737 ms | 717 ms | Image already local |
-| Fast path (STORE_VOLUME=1) | 793 ms | 867 ms | 846 ms | Volume already populated |
+| Default (baked image) | 755 ms | 737 ms | 717 ms | Image already local |
+| Store-volume run | 793 ms | 867 ms | 846 ms | Volume already populated |
 
-The fast path is **~5-15% slower** than the default stale-image path in the
-warm case. This is expected: the fast path adds two extra steps (volume inspect
-check, image inspect for env path extraction) and mounts an additional
-directory.
-
-### Real-world benefit: after env change
-
-| Scenario | Default path | Fast path |
-|----------|-------------|-----------|
-| Fresh `flox install <pkg>` | ~2-5 min (full bake) | ~800 ms (reuses old closure, warns) |
-| Env in sync with volume | ~800 ms | ~840 ms |
-
-The fast path saves the entire bake time after a minor env change, at the cost
-of running the old closure (with a visible warning). A re-bake is still needed
-to pick up the new packages — but the user is not blocked from running in the
-meantime.
+The store-volume run is ~5-15% slower warm: it adds a volume-existence
+probe and an image inspect before the run. After an env change, **both
+paths go through the same bake flow** (~2-5 min) — the valve does not skip
+it (see Outcome summary and Open Issues).
 
 ---
 
 ## Open Issues
 
-### 1. Cold-start (no prior bake) is unsupported
+### 1. The skip-rebake win needs a lighter refresh step (the crux)
 
-When no image exists for the environment, `oci_store_volume_env_path_from_image`
-returns `None` and the fast path fails. The user must run a full bake first.
+Freshness is currently only provable via the hash-tagged image, so a
+changed env must complete a full bake before the store-volume run can
+proceed. To actually skip image assembly on env change, a builder step
+would need to:
 
-A future implementation could call `populate_and_build_env` (the
-`ContainerizeProxy` method retained in the codebase) to run a slim builder
-step that populates the volume and outputs the env store path via `nix build`,
-skipping the image assembly entirely. This would make the first activation
-also fast — but requires the builder flake to support it.
+1. Run `nix copy` into the volume (incremental — already exists as the
+   populate step) and build the environment derivation in the builder
+   (`nix build --file buildenv.nix --argstr manifestLock …`, as
+   `flox containerize` does internally).
+2. Build the activations-context for that env (what mkContainer.nix's
+   `activateCtx` does at image-build time).
+3. Record the `(lockfile-hash12 → env path, ctx path)` mapping somewhere
+   host-visible (e.g. `.flox/cache/`), replacing the image tag as the
+   freshness marker.
 
-### 2. Env changed: stale closure warning requires action
+A first attempt at (1) shipped in an earlier revision of this branch as
+`ContainerizeProxy::populate_and_build_env` and was deleted during review:
+its primary branch evaluated the flox CLI package's outPath rather than
+the built environment, and it hardcoded `aarch64-linux`. The git history
+of this branch preserves it as a reference for the argv/mount plumbing
+only — the eval target needs to be the buildenv derivation.
 
-When the lockfile changes after the last bake, the fast path runs the OLD
-closure with a warning. This is intentional for the prototype: the user sees
-the warning and can re-bake. A stricter mode could fail fast when the hash
-doesn't match, requiring an explicit opt-in to run stale.
+### 2. Volume GC could orphan a fresh image's paths
 
-### 3. nixos/nix base image vs thin busybox
+Nothing currently garbage-collects the `flox-nix` volume, but if a future
+builder-side GC lands, the store-volume run's paths (env bundle and
+activations-context) must be gcroots — otherwise a hash-matched image
+could reference paths pruned from the volume. The fallback (run the baked
+image) covers the failure, but only after a confusing in-guest error.
 
-The fast path uses `nixos/nix:<NIX_VERSION>` as the runtime base image. This
-is the same image used for builder steps and is already in the local store
-after a full bake. It is ~200 MB unpacked, which is large for a runtime
-container. A thinner base image (busybox + coreutils) would suffice if
-`/root/.nix-profile/bin/bash` is replaced with a bash path from the Nix store.
-This is left as future work — the nixos/nix image starts fast once cached.
+### 3. nixos/nix base image is heavyweight for a runtime shell
 
-### 4. Apple Container file bind-mount limitation
+`nixos/nix:<NIX_VERSION>` (~625 MB unpacked) is used because it is already
+local after any bake (it is the builder image). Since the baked activation
+context resolves bash from the volume, a much thinner base (even one with
+no shell of its own) should work; untested.
 
-Apple Container 1.1.0 does not support file bind-mounts. The activateCtx JSON
-is therefore written into a temp directory and the directory is bind-mounted.
-This is a minor complexity but not a blocker.
+### 4. Apple Container file bind-mounts unsupported
+
+Recorded from Gate 5. Not currently load-bearing (no file bind-mounts in
+the design), but relevant to any future host-generated-context variant.
 
 ---
 
 ## Files Changed
 
-- `cli/flox/src/commands/activate.rs` — adds `FLOX_SANDBOX_OCI_STORE_VOLUME`
-  valve constant and the fast-path implementation:
-  `oci_store_volume_valve()`, `oci_store_volume_env_path_from_image()`,
-  `oci_store_volume_exists()`, `oci_store_volume_env_path()`,
-  `oci_store_volume_write_ctx()`, `oci_store_volume_run_argv()`,
-  `wrap_activation_oci_store_volume()`. Fast-path check inserted in
-  `wrap_activation_oci` before the image-state resolution.
+- `cli/flox/src/commands/activate.rs` —
+  `FLOX_SANDBOX_OCI_STORE_VOLUME` valve constant;
+  `parse_store_volume_valve` / `oci_store_volume_valve`;
+  `OciBakedEntrypoint` + `parse_baked_entrypoint` (pure) +
+  `oci_baked_entrypoint` (inspect); `oci_store_volume_exists`;
+  `oci_store_volume_run_argv` (pure argv builder); dispatch in
+  `wrap_activation_oci` after image-state resolution, gated on a fresh
+  closure. Unit tests: valve parsing table, entrypoint contract parsing
+  (valid + 4 rejection shapes), exact-argv snapshots per invocation type.
 
-- `cli/flox/src/commands/containerize/macos_containerize_proxy.rs` — adds
-  `populate_and_build_env()` method on `ContainerizeProxy` (dead code warning
-  suppressed; retained for future cold-start fast path).
-
-- `demo/SCRIPT.md` — documents the new valve in §3.
+- `demo/SCRIPT.md` — valve documented in §3 with staleness table, the
+  read-surface isolation note, and timing; §0 shim claim scoped to
+  interactive sessions.
 
 - `demo/results/store-volume-fastpath-2026-07-08.md` — this file.
