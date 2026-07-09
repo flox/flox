@@ -162,10 +162,7 @@ mod tests {
     #[test]
     fn returns_none_for_managed_env() {
         let tmp = TempDir::new().unwrap();
-        write_env(
-            tmp.path(),
-            r#"{"name":"prod","owner":"acme","version":1}"#,
-        );
+        write_env(tmp.path(), r#"{"name":"prod","owner":"acme","version":1}"#);
         assert_eq!(container_active_environments_json(tmp.path()), None);
     }
 
