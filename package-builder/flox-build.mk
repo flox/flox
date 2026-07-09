@@ -835,7 +835,7 @@ define NIX_EXPRESSION_BUILD_template =
 	  --argstr nixpkgs-url '$(EXPRESSION_BUILD_NIXPKGS_URL)' \
 	  --argstr system '$(NIX_SYSTEM)' \
 	  --argstr source-ref '$(NIX_EXPRESSION_REF)' \
-	  --argstr catalog-lockfile $$< \
+	  --argstr catalog-lockfile '$$<' \
 	  --json \
 	  --apply 'pkg: { \
 	    drvPath = pkg.drvPath; \
