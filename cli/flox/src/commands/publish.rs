@@ -8,7 +8,6 @@ use flox_manifest::{Manifest, MigratedTypedOnly};
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment};
 use flox_rust_sdk::providers::build::{COMMON_NIXPKGS_URL, PackageTarget};
-use flox_rust_sdk::providers::catalog::SystemEnum;
 use flox_rust_sdk::providers::nix_auth::NixAuth;
 use flox_rust_sdk::providers::publish::{
     PublishProvider,
@@ -258,9 +257,23 @@ impl Publish {
             debug!(error = %err, "Failed to record v2 event");
         }
 
-        // Pre-check: ask the catalog server if this exact build already exists
-        // before spending time on the build. If the check fails, warn the
-        // user and continue — the dedup feature must never block publishes.
+        let system_override_inner = publish_config.system_override.into_inner();
+
+        let build_metadata = check_build_metadata(
+            &flox,
+            &selected_base_nixpkgs_url,
+            system_override_inner,
+            &publish_provider.env_metadata,
+            &publish_provider.package_metadata.package,
+            nef_stability,
+        )?;
+
+        // Dedup check: ask the catalog server if this exact build has already
+        // been published before spending time on the upload. The closure
+        // identity (direct_catalog_inputs) is now available after
+        // check_build_metadata, so we can send it to the server for a
+        // closure-aware match. If the check fails, warn and continue —
+        // the pre-check must never block a publish.
         let nixpkgs_rev = publish_provider.package_metadata.base_catalog_ref.rev();
         let nixpkgs_rev = nixpkgs_rev.as_deref().unwrap_or_else(|| {
             warn!(
@@ -270,15 +283,6 @@ impl Publish {
             );
             ""
         });
-        let system_override_inner = publish_config.system_override.into_inner();
-        let system = {
-            let system_str = system_override_inner
-                .as_deref()
-                .unwrap_or(flox.system.as_str());
-            system_str
-                .parse::<SystemEnum>()
-                .context("invalid system value for dedup pre-check")?
-        };
         let catalog = &flox.floxhub_client;
         let check_result = catalog
             .check_build_already_recorded(
@@ -287,7 +291,8 @@ impl Publish {
                 &publish_provider.env_metadata.build_repo_meta.url,
                 &publish_provider.env_metadata.build_repo_meta.rev,
                 nixpkgs_rev,
-                system,
+                build_metadata.system,
+                Some(build_metadata.direct_catalog_inputs.clone()),
             )
             .await;
 
@@ -307,29 +312,20 @@ impl Publish {
                 return Ok(());
             },
             Ok(_) => {
-                // Not a duplicate, proceed with build.
+                // Not a duplicate, proceed with upload and publish.
             },
             Err(e) => {
                 // Pre-check failed; show user-visible warning and proceed
-                // with build (graceful degradation per D3).
+                // (graceful degradation — the check must never block a publish).
                 message::warning(
                     "Unable to check if already published — continuing with build and publish.",
                 );
                 warn!(
                     error = %e,
-                    "Dedup pre-check failed, proceeding with build"
+                    "Dedup pre-check failed, proceeding with publish"
                 );
             },
         }
-
-        let build_metadata = check_build_metadata(
-            &flox,
-            &selected_base_nixpkgs_url,
-            system_override_inner,
-            &publish_provider.env_metadata,
-            &publish_provider.package_metadata.package,
-            nef_stability,
-        )?;
 
         // CLI args take precedence over config
         let key_file = publish_config.cache_args.signing_private_key.or(config
