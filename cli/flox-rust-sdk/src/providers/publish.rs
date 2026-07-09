@@ -866,7 +866,7 @@ fn convert_build_result_to_build_metadata(
             PublishError::UnsupportedEnvironmentState("Invalid system".to_string())
         })?,
         version: Some(build_result.version.clone()),
-        direct_catalog_inputs: build_result.catalog_lockfile.clone(),
+        direct_catalog_inputs: build_result.direct_catalog_inputs.clone(),
         _private: (),
     })
 }

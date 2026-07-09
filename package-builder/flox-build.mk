@@ -888,7 +888,7 @@ define NIX_EXPRESSION_BUILD_template =
 	  --argjson resultLinks '$$($(_pvarname)_resultLinks_json)' \
 	  --slurpfile eval $($(_pvarname)_evalJSON) \
 	  --slurpfile build $($(_pvarname)_buildJSON) \
-	  '$$$$build[0][0] * $$$$eval[0] * { system:$$$$system, catalogLockfile:$$$$catalogLock[0].direct_catalog_inputs, log:$$$$logfile, resultLinks:$$$$resultLinks }' > $$@
+	  '$$$$build[0][0] * $$$$eval[0] * { system:$$$$system, direct_catalog_inputs:$$$$catalogLock[0].direct_catalog_inputs, log:$$$$logfile, resultLinks:$$$$resultLinks }' > $$@
 	@echo -e "Completed build of $$(_name) in Nix expression mode\n"
 
   # Create targets for cleaning up the result and log symlinks.
