@@ -17,7 +17,7 @@ use flox_rust_sdk::providers::publish::{
     check_environment_metadata,
     check_package_metadata,
 };
-use floxhub_client::CatalogClientTrait;
+use floxhub_client::{CatalogClientTrait, CheckBuildResponse, FloxhubClientError};
 use indoc::formatdoc;
 use nef_lock_catalog::NixFlakeref;
 use tracing::{debug, info_span, instrument, warn};
@@ -43,6 +43,29 @@ use crate::{environment_subcommand_metric, subcommand_metric};
 
 const PUBLISH_COMPLETION_POLL_INTERVAL_MILLIS: u64 = 2_000; // 1s
 const PUBLISH_COMPLETION_TIMEOUT_MILLIS: u64 = 30 * 60 * 1_000; // 30 min
+
+/// Outcome of the dedup pre-check against the catalog.
+#[derive(Debug)]
+enum DedupOutcome {
+    /// The server confirmed this exact build (by closure identity) was already
+    /// published. The caller should display provenance and skip the upload.
+    AlreadyPublished(CheckBuildResponse),
+    /// The build is new or the check could not be completed (graceful
+    /// degradation — a check failure must never block a publish).
+    Proceed,
+}
+
+/// Map the raw check-build result to a [`DedupOutcome`].
+///
+/// An `Err` result (network failure, server error, etc.) is treated as
+/// `Proceed` rather than a fatal error: the dedup check is a best-effort
+/// optimisation and must never prevent a legitimate publish.
+fn dedup_outcome(result: Result<CheckBuildResponse, FloxhubClientError>) -> DedupOutcome {
+    match result {
+        Ok(resp) if resp.already_published => DedupOutcome::AlreadyPublished(resp),
+        _ => DedupOutcome::Proceed,
+    }
+}
 
 #[derive(Bpaf, Clone)]
 pub struct Publish {
@@ -296,8 +319,18 @@ impl Publish {
             )
             .await;
 
-        match check_result {
-            Ok(resp) if resp.already_published => {
+        // Emit a user-visible warning if the pre-check itself failed before
+        // handing the result to the pure helper (which consumes it).
+        if let Err(ref e) = check_result {
+            message::warning("Unable to check if already published — continuing with publish.");
+            warn!(
+                error = %e,
+                "Dedup pre-check failed, proceeding with publish"
+            );
+        }
+
+        match dedup_outcome(check_result) {
+            DedupOutcome::AlreadyPublished(resp) => {
                 message::updated(formatdoc! {"
                     Package already published.
 
@@ -311,19 +344,8 @@ impl Publish {
                 });
                 return Ok(());
             },
-            Ok(_) => {
-                // Not a duplicate, proceed with upload and publish.
-            },
-            Err(e) => {
-                // Pre-check failed; show user-visible warning and proceed
-                // (graceful degradation — the check must never block a publish).
-                message::warning(
-                    "Unable to check if already published — continuing with build and publish.",
-                );
-                warn!(
-                    error = %e,
-                    "Dedup pre-check failed, proceeding with publish"
-                );
+            DedupOutcome::Proceed => {
+                // Not a duplicate (or check failed, already warned above).
             },
         }
 
@@ -522,5 +544,40 @@ mod tests {
                 flox_rust_sdk::providers::build::PackageTargetKind::ManifestBuild { sandbox: None }
             )
         );
+    }
+
+    // --- dedup_outcome unit tests ---
+
+    fn make_check_response(already_published: bool) -> CheckBuildResponse {
+        CheckBuildResponse {
+            already_published,
+            published_at: None,
+            source_rev: None,
+            source_rev_date: None,
+        }
+    }
+
+    #[test]
+    fn dedup_outcome_already_published_maps_to_already_published() {
+        let resp = make_check_response(true);
+        let result = Ok(resp);
+        assert!(matches!(
+            dedup_outcome(result),
+            DedupOutcome::AlreadyPublished(_)
+        ));
+    }
+
+    #[test]
+    fn dedup_outcome_not_published_maps_to_proceed() {
+        let resp = make_check_response(false);
+        let result = Ok(resp);
+        assert!(matches!(dedup_outcome(result), DedupOutcome::Proceed));
+    }
+
+    #[test]
+    fn dedup_outcome_err_maps_to_proceed() {
+        let result: Result<CheckBuildResponse, FloxhubClientError> =
+            Err(FloxhubClientError::Other("network error".to_string()));
+        assert!(matches!(dedup_outcome(result), DedupOutcome::Proceed));
     }
 }

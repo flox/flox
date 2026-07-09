@@ -246,10 +246,10 @@ pub trait CatalogClientTrait {
     ///
     /// `locked_inputs` is the build's direct catalog inputs. Passing
     /// `Some(map)` (including an empty map for builds with no catalog
-    /// dependencies) lets the server match on closure identity; `None` falls
-    /// back to source-tuple matching only. The CLI always passes
-    /// `Some(direct_catalog_inputs)` so the server can distinguish
-    /// re-publishes that differ only in transitive dependencies.
+    /// dependencies) gives the server explicit closure identity; absent or
+    /// `None` is canonicalised server-side to the empty-closure hash H(∅).
+    /// The CLI always passes `Some(direct_catalog_inputs)` so the server can
+    /// distinguish re-publishes that differ only in transitive dependencies.
     ///
     /// Returns provenance data (source rev date, rev) in `CheckBuildResponse`
     /// when `already_published` is true. Used for dedup pre-check before
