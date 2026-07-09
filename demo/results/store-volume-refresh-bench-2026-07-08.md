@@ -72,3 +72,33 @@ built flox from this branch and `FLOX_REV` to the pushed rev). Run
 **unsandboxed** — the refresh spawns `container run`, which a command
 sandbox blocks. The first refresh after a new rev builds flox-for-linux
 in the VM (one-time) and writes `~/.cache/flox/store-volume/flox-bin-<rev>`.
+
+---
+
+## After the context-build optimization (2026-07-09)
+
+Eliminating the nixpkgs evaluation from the context build (shared
+`activate-ctx.nix` + `builtins.toFile` fast path + per-pin bash cache):
+
+| env-change → activate | Time |
+|-----------------------|------|
+| Baseline (full OCI rebuild) | ~76 s |
+| Warm refresh, pre-optimization | ~33 s |
+| **Warm refresh, optimized** | **2.5–2.9 s** |
+
+Measured on rev `b3d655cbed`. Refresh #2 = 2.9 s, #3 = 2.5 s; both
+activate (`uname -sm` → `Linux aarch64`), zero image assembly, marker +
+both caches (`flox-bin-<pin>`, `container-bash-<pin>`) written.
+
+**~26–30× faster than the full rebuild on the steady-state path.**
+
+First-refresh cost (one-time, per flox version, not per env change):
+- This run: **133.7 s** — because this unpublished rev recompiles
+  flox-for-linux in the builder AND resolves bash via nixpkgs once.
+- For a *released* flox (flox-linux substitutable from cache), the
+  first refresh after a version bump is just the one-time bash
+  resolution (~24 s), then all subsequent env changes are ~2.5 s.
+
+The bottleneck the 33 s result identified (24 s of nixpkgs eval) is
+gone; the remaining ~2.5 s is populate probe + env build (substituted) +
+two VM boots + the activation run.
