@@ -302,4 +302,40 @@ mod tests {
             ]))
         );
     }
+
+    /// The JSON that flox-activations hand-builds for a container guest
+    /// (`container_active_env::container_active_environments_json`) must
+    /// deserialize into a one-entry `ActiveEnvironments` whose entry is a
+    /// `DotFlox`/`Path` environment that `flox deactivate` can open. This
+    /// guards the hand-built shape against serde drift, since
+    /// flox-activations cannot depend on flox-rust-sdk to reuse the types.
+    ///
+    /// Keep this literal in sync with
+    /// `container_active_env::container_active_environments_json`.
+    #[test]
+    fn container_active_env_json_deserializes_to_openable_path_entry() {
+        let dot_flox_path = "/home/user/sandbox-demo/.flox";
+        let name = "sandbox-demo";
+        let container_json = format!(
+            "[{{\"environment\":{{\"type\":\"dot-flox\",\"path\":\"{dot_flox_path}\",\
+             \"pointer\":{{\"name\":\"{name}\",\"version\":1}}}},\"mode\":\"dev\"}}]"
+        );
+
+        let active = ActiveEnvironments::from_str(&container_json)
+            .expect("container active-env JSON must deserialize");
+
+        let entry = active
+            .last_active_full()
+            .expect("container active-env JSON must yield one entry");
+
+        assert_eq!(entry.mode, ActivateMode::Dev);
+        assert_eq!(entry.generation, None);
+        let expected_env = UninitializedEnvironment::DotFlox(DotFlox {
+            path: PathBuf::from(dot_flox_path),
+            pointer: EnvironmentPointer::Path(PathPointer::new(
+                EnvironmentName::from_str(name).unwrap(),
+            )),
+        });
+        assert_eq!(entry.environment, expected_env);
+    }
 }

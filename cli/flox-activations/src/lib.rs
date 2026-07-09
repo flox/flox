@@ -1,6 +1,7 @@
 pub mod attach;
 pub mod attach_diff;
 pub mod cli;
+pub mod container_active_env;
 pub mod deactivate;
 pub mod env_diff;
 pub mod gen_rc;
