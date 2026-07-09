@@ -826,7 +826,7 @@ define NIX_EXPRESSION_BUILD_template =
 	  --base-dir '$$(NIX_EXPRESSION_ABSDIRPATH_$(_pvarname))' \
 	  --rel-path '$$(NIX_EXPRESSION_RELFILEPATH_$(_pvarname))' \
 	  --stability '$(EXPRESSION_BUILD_STABILITY)' \
-	  --out $$@
+	  --out '$$@'
 
   # Continue by evaluating the build
   $($(_pvarname)_evalJSON): $($(_pvarname)_catalogLockfile)
