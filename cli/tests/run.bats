@@ -78,7 +78,7 @@ teardown() {
 }
 
 # ---------------------------------------------------------------------------- #
-# Unsupported package spec rejection (no network required)
+# Package spec syntax — validation and routing (no network required)
 # ---------------------------------------------------------------------------- #
 
 @test "'flox run' rejects version constraint (@) in package spec" {
@@ -93,11 +93,16 @@ teardown() {
   assert_output --partial "Unsupported package"
 }
 
-@test "'flox run' rejects custom catalog (/) in package spec" {
+@test "'flox run' accepts custom catalog (/) in package spec" {
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/run/failed_resolution.yaml"
   run "$FLOX_BIN" run -p "mycat/vim" vi
+  # Custom catalog packages pass validation; failure here is a resolution or
+  # download error, not UnsupportedPackageSpec.
   assert_failure
-  assert_output --partial "Unsupported package"
+  refute_output --partial "Unsupported package"
 }
+# TODO: add a happy-path run:store test for custom catalog download once
+# test infrastructure exists to mock get_store_info and nix copy --from.
 
 # ---------------------------------------------------------------------------- #
 # Resolution errors (mock catalog, no store required)
