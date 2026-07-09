@@ -222,6 +222,14 @@ impl BuildEnvOutputs {
 )]
 pub struct BuiltStorePath(PathBuf);
 
+impl BuiltStorePath {
+    /// Create a `BuiltStorePath` from a raw `PathBuf` for use in tests.
+    #[cfg(test)]
+    pub fn new_for_test(path: PathBuf) -> Self {
+        Self(path)
+    }
+}
+
 pub trait BuildEnv {
     fn build(
         &self,

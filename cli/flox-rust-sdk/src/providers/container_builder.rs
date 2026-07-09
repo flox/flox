@@ -84,6 +84,12 @@ pub struct MkContainerNix {
     store_path: BuiltStorePath,
     activation_mode: ActivateMode,
     container_config: Option<OCIConfig>,
+    /// Path to the flox binary to include in the container image.
+    ///
+    /// When set, mkContainer.nix adds the binary to the image and populates
+    /// `flox_bin` in the baked activation context so the guest shell finds
+    /// a real `flox` instead of the deactivate-only shim.
+    flox_bin: PathBuf,
 }
 
 #[derive(Debug, Error)]
@@ -116,11 +122,13 @@ impl MkContainerNix {
         store_path: BuiltStorePath,
         activation_mode: ActivateMode,
         container_config: Option<OCIConfig>,
+        flox_bin: PathBuf,
     ) -> Self {
         Self {
             store_path,
             activation_mode,
             container_config,
+            flox_bin,
         }
     }
 }
@@ -165,6 +173,13 @@ impl ContainerBuilder for MkContainerNix {
             "interpreterPath",
             (*FLOX_INTERPRETER).to_string_lossy().as_ref(),
         ]);
+        if !self.flox_bin.as_os_str().is_empty() {
+            command.args([
+                "--argstr",
+                "floxBin",
+                self.flox_bin.to_string_lossy().as_ref(),
+            ]);
+        }
         command.args(["--argstr", "containerName", name.as_ref()]);
         command.args(["--argstr", "containerTag", tag.as_ref()]);
         if let Some(container_config) = &self.container_config {
@@ -343,6 +358,49 @@ pub enum ContainerSourceError {
         {0}"
     )]
     CommandUnsuccessful(String),
+}
+
+#[cfg(test)]
+mod mk_container_nix_tests {
+    use super::*;
+    use crate::providers::buildenv::BuiltStorePath;
+
+    fn dummy_store_path() -> BuiltStorePath {
+        BuiltStorePath::new_for_test(PathBuf::from("/nix/store/fake-env"))
+    }
+
+    /// When `flox_bin` is non-empty, it must be recorded in the struct so
+    /// `create_container_source` can emit `--argstr floxBin <path>`.
+    #[test]
+    fn new_stores_flox_bin_when_provided() {
+        let bin = PathBuf::from("/nix/store/fake-flox/bin/flox");
+        #[allow(deprecated)]
+        let builder = MkContainerNix::new(
+            dummy_store_path(),
+            ActivateMode::default(),
+            None,
+            bin.clone(),
+        );
+        assert_eq!(builder.flox_bin, bin);
+    }
+
+    /// An empty `flox_bin` must also round-trip correctly so the argstr is
+    /// omitted when no flox binary is available.
+    #[test]
+    fn new_stores_empty_flox_bin_when_not_provided() {
+        #[allow(deprecated)]
+        let builder = MkContainerNix::new(
+            dummy_store_path(),
+            ActivateMode::default(),
+            None,
+            PathBuf::new(),
+        );
+        assert!(
+            builder.flox_bin.as_os_str().is_empty(),
+            "expected empty flox_bin, got {:?}",
+            builder.flox_bin
+        );
+    }
 }
 
 #[cfg(test)]

@@ -11,6 +11,11 @@
   # the system to build for
   system,
   containerSystem,
+  # Optional: store path to the flox binary built for containerSystem.
+  # When set, flox is added to the guest image so commands like `flox
+  # list` work inside the container. The bash shim is omitted because
+  # the real binary handles all subcommands including `flox deactivate`.
+  floxBin ? "",
   environment ? builtins.storePath environmentOutPath,
   nixpkgsFlake ? builtins.getFlake nixpkgsFlakeRef,
   pkgs ? nixpkgsFlake.legacyPackages.${system},
@@ -26,6 +31,7 @@ let
     toString
     elemAt
     match
+    storePath
     ;
   inherit (pkgs.lib)
     optionalAttrs
@@ -98,6 +104,11 @@ let
     ];
   };
 
+  # Whether a real flox binary is being included in the image.
+  # When true: real binary is available, skip the deactivate-only shim.
+  # When false: no flox in image, shim keeps `flox deactivate` working.
+  hasFloxBin = floxBin != "";
+
   # For field definitions, see `ActivateCtx` in `flox-core`
   activateCtx = {
     mode = "${activationMode}";
@@ -106,12 +117,15 @@ let
     };
     invocation_type = null;
     remove_after_reading = false;
-    # The auto-activation hook (which calls back into the flox binary) is not
-    # meaningful inside a container guest — no flox binary is present in the
-    # image. Setting disable_hook prevents the generated rcfile from
-    # registering the hook and avoids the "bash: : command not found" error
-    # that occurs when the hook tries to invoke an empty flox_bin path.
-    disable_hook = true;
+    # When a real flox binary is present the prompt hook is meaningful
+    # (it calls back into flox for auto-activation). When no flox binary
+    # is present, disable_hook avoids the "command not found" error that
+    # would occur when bash tries to invoke an empty flox_bin.
+    disable_hook = !hasFloxBin;
+    # flox_bin is read by flox-activations to generate the hook code and
+    # to decide whether to emit the deactivate-only shim. An empty string
+    # means "no real flox binary present".
+    flox_bin = optionalString hasFloxBin "${storePath floxBin}/bin/flox";
     flox_activate_store_path = "${environment}";
     activation_state_dir = "/run/flox/container-activations/${baseNameOf environment}";
     attach_ctx = {
@@ -146,13 +160,14 @@ let
 
       # chown the /run directory to the nixStoreOwner, so that Nix can run as a
       # single user installation inside the container
-      fakeRootCommands = ''
-        chown -R ${toString nixStoreUserGroup.uid}:${toString nixStoreUserGroup.gid} /run
-      ''
-      + optionalString (workingDir != null) ''
-        mkdir -p -m 0755 "${workingDir}"
-        chown ${toString nixStoreUserGroup.uid}:${toString nixStoreUserGroup.gid} "${workingDir}"
-      '';
+      fakeRootCommands =
+        ''
+          chown -R ${toString nixStoreUserGroup.uid}:${toString nixStoreUserGroup.gid} /run
+        ''
+        + optionalString (workingDir != null) ''
+          mkdir -p -m 0755 "${workingDir}"
+          chown ${toString nixStoreUserGroup.uid}:${toString nixStoreUserGroup.gid} "${workingDir}"
+        '';
       enableFakechroot = true;
     }
     // {
@@ -167,46 +182,70 @@ let
 
       # No /tmp by default: https://github.com/NixOS/nixpkgs/issues/257172
       # Activate script requires writable directory, /run feels like a logical place.
+      # /home/flox gives the real flox binary a writable HOME for config and
+      # state files (XDG_CONFIG_HOME, XDG_STATE_HOME, XDG_CACHE_HOME, and
+      # XDG_RUNTIME_DIR are all routed there via the activation context).
       extraCommands = ''
         mkdir -m 1777 tmp
         mkdir -m 1770 run
         mkdir -p -m 1770 run/flox
+        mkdir -p -m 0700 home/flox
       '';
 
       # symlinkJoin fails when drv contains a symlinked bin directory, so wrap in an additional buildEnv.
       contents = pkgs.buildEnv {
         name = "contents";
-        paths = [
-          fakeNss
-          environment
-          (lowPrio containerPkgs.bash) # for a usable shell
-          (lowPrio containerPkgs.coreutils) # for just the basic utils
-        ];
+        paths =
+          [
+            fakeNss
+            environment
+            (lowPrio containerPkgs.bash) # for a usable shell
+            (lowPrio containerPkgs.coreutils) # for just the basic utils
+          ]
+          # Include the real flox binary when provided so guest commands
+          # like `flox list` work against the bind-mounted project lockfile.
+          ++ optionals hasFloxBin [
+            (lowPrio (storePath floxBin))
+          ];
       };
-      config = containerConfig // {
-        # Use activate script as the [one] entrypoint capable of
-        # detecting interactive vs. command activation modes.
-        # Usage:
-        #   podman run -it
-        #     -> launches interactive shell with controlling terminal
-        #   podman run -i <cmd>
-        #     -> invokes interactive command
-        #   podman run -i [SIC]
-        #     -> launches crippled interactive shell with no controlling
-        #        terminal .. kinda useless
-        Entrypoint = [
-          "${environment}/libexec/flox-activations"
-          "activate"
-          "--activate-data"
-          "${activateCtxStorePath}"
-        ];
-      };
+      config =
+        containerConfig
+        // {
+          # Use activate script as the [one] entrypoint capable of
+          # detecting interactive vs. command activation modes.
+          # Usage:
+          #   podman run -it
+          #     -> launches interactive shell with controlling terminal
+          #   podman run -i <cmd>
+          #     -> invokes interactive command
+          #   podman run -i [SIC]
+          #     -> launches crippled interactive shell with no controlling
+          #        terminal .. kinda useless
+          Entrypoint = [
+            "${environment}/libexec/flox-activations"
+            "activate"
+            "--activate-data"
+            "${activateCtxStorePath}"
+          ];
+        }
+        // optionalAttrs hasFloxBin {
+          # Point flox at writable per-container directories so it can
+          # store config, state, and runtime files. The container's /tmp
+          # and /home/flox are the only writable locations in the image.
+          Env = [
+            "HOME=/home/flox"
+            "XDG_CONFIG_HOME=/home/flox/.config"
+            "XDG_STATE_HOME=/home/flox/.local/state"
+            "XDG_CACHE_HOME=/home/flox/.cache"
+            "XDG_RUNTIME_DIR=/run/flox/runtime"
+          ];
+        };
 
       passthru = {
-        # This tests can be ran with the following command from the root of the repository:
+        # These tests can be run with the following command from the root of the repository:
         #     $ nix eval --impure --expr '(import ./mkContainer/mkContainer.nix { nixpkgsFlakeRef = "github:nixos/nixpkgs?ref=nixos-24.11"; environmentOutPath = null; system = builtins.currentSystem; containerSystem = builtins.currentSystem; }).passthru.tests'
         #     $ [ ]
-        # If it returns anything else than [ ], then the tests failed. The output will contain the failing tests.
+        # If it returns anything other than [ ], then the tests failed.
         tests = import ./tests.nix {
           lib = pkgs.lib;
           internals = {

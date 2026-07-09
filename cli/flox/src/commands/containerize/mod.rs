@@ -122,8 +122,19 @@ impl Containerize {
                 });
             // this method is only executed on linux
             #[cfg_attr(not(target_os = "linux"), allow(deprecated))]
-            let builder =
-                MkContainerNix::new(built_environment.for_mode(&mode), mode, container_config);
+            // Provide the running binary as the guest flox so `flox list`
+            // works inside the container. The host binary has the same
+            // architecture as the container system when building on Linux.
+            let flox_bin = std::env::current_exe()
+                .unwrap_or_default()
+                .canonicalize()
+                .unwrap_or_default();
+            let builder = MkContainerNix::new(
+                built_environment.for_mode(&mode),
+                mode,
+                container_config,
+                flox_bin,
+            );
 
             builder.create_container_source(&flox, env_name.as_ref(), output_tag)?
         } else {

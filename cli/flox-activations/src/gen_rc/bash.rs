@@ -328,6 +328,7 @@ mod tests {
         test_deactivate_ctx,
         test_startup_ctx,
         test_startup_ctx_container,
+        test_startup_ctx_container_with_flox_bin,
         test_startup_ctx_disable_hook,
     };
 
@@ -403,6 +404,20 @@ mod tests {
         assert!(
             !output.contains("flox()"),
             "expected no flox() shim in project rcfile:\n{output}"
+        );
+    }
+
+    /// Container guest rcfile must NOT include the `flox()` shim when a
+    /// real flox binary is baked into the image (`flox_bin` is set). The
+    /// real binary handles all subcommands including `flox deactivate`.
+    #[test]
+    fn container_shim_absent_when_real_flox_bin_present() {
+        let shell = ShellWithPath::Bash(PathBuf::from("/bin/bash"));
+        let ctx = test_startup_ctx_container_with_flox_bin(shell, false);
+        let output = render_normalized(&ctx);
+        assert!(
+            !output.contains("flox()"),
+            "expected no flox() shim when real flox binary is baked in:\n{output}"
         );
     }
 
