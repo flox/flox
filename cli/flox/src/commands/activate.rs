@@ -2057,15 +2057,16 @@ fn bake_oci_image(
     use crate::commands::containerize::macos_containerize_proxy::ContainerizeProxy;
 
     // The frozen fallback rev: a known-good prototype-branch commit containing
-    // the container-guest fixes (hook disable, flox() shim, prompt label) and
-    // the packaging fixes that let the branch build for aarch64-linux. Used
-    // when the host is a dev build. Not CI-cached: the builder compiles it
-    // in-VM against the persistent `flox-nix` cache volume, so only the first
-    // bake pays the compile.
+    // the container-guest fixes (hook enable/disable, prompt label), the CF-7
+    // guest-flox baking (real flox in the guest, active-env registration,
+    // deterministic marker), and the packaging fixes that let the branch build
+    // for aarch64-linux. Used when the host is a dev build. Not CI-cached: the
+    // builder compiles it in-VM against the persistent `flox-nix` cache volume,
+    // so only the first bake pays the compile.
     //
     // NOTE: Update this rev when builder-side behavior changes (mkContainer,
     // flox-activations, package-builder); host-side-only commits don't need it.
-    const FROZEN_FALLBACK_REV: &str = "55673d769ad4d45a03395e6cf9a38c67f70d8ca9";
+    const FROZEN_FALLBACK_REV: &str = "bf9293273a665ab559aa807897a1722f17b98cbd";
 
     let hash12 = lockfile_hash12(lockfile);
     let hash_tag = format!("{env_name}:{hash12}");
