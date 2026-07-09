@@ -217,10 +217,10 @@ mod tests {
         match err {
             LockError::Unresolvable(entries) => {
                 assert_eq!(entries.len(), 1);
-                assert_eq!(entries[0].reference, "catalogs.myorg.missing-dep");
+                assert_eq!(entries[0].reference, "myorg.missing-dep");
                 assert_eq!(entries[0].chain, vec![
-                    "catalogs.myorg.hello".to_string(),
-                    "catalogs.myorg.missing-dep".to_string(),
+                    "myorg.hello".to_string(),
+                    "myorg.missing-dep".to_string(),
                 ]);
             },
             other => panic!("expected LockError::Unresolvable, got {other:?}"),
