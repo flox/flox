@@ -88,6 +88,25 @@ impl ActivateArgs {
             .clone()
             .expect("invocation type should have been some");
 
+        // Register the guest environment as ACTIVE for container activations
+        // that carry a real flox binary. The baked context ships an empty
+        // active list, so `flox deactivate` would print "No environment
+        // active!" instead of exiting the session. Build a one-entry list
+        // from the bind-mounted project's `.flox` (present in the guest at
+        // its real host path) so `flox deactivate` opens the environment and
+        // proceeds to its interactive exit. Only for the container guest
+        // (no project context) with a real flox; a plain container without
+        // flox keeps the deactivate shim, and normal project activations
+        // already populate the list on the host.
+        if context.project_ctx.is_none() && !context.flox_bin.is_empty() {
+            if let Ok(cwd) = std::env::current_dir()
+                && let Some(active_json) =
+                    crate::container_active_env::container_active_environments_json(&cwd)
+            {
+                context.attach_ctx.flox_active_environments = active_json;
+            }
+        }
+
         if let Ok(shell_force) = std::env::var("_FLOX_SHELL_FORCE") {
             context.shell = PathBuf::from(shell_force).as_path().try_into()?;
         }
