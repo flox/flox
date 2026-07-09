@@ -666,7 +666,9 @@ where
                 version: build_metadata.version.clone(),
             },
             locked_base_catalog_url: Some(self.package_metadata.base_catalog_ref.to_string()),
-            // Record the build's direct catalog inputs.
+            // Record the build's direct catalog inputs. Always sent: an empty
+            // map when the build resolved none. Older CLIs that omit the field
+            // are coalesced to empty server-side (floxhub#1791).
             locked_inputs: Some(build_metadata.direct_catalog_inputs.clone()),
             base_catalog_rev_count: None,
             base_catalog_rev_date: None,
