@@ -121,7 +121,6 @@ impl Containerize {
                     c.into()
                 });
             // this method is only executed on linux
-            #[cfg_attr(not(target_os = "linux"), allow(deprecated))]
             // Provide the running binary as the guest flox so `flox list`
             // works inside the container. The host binary has the same
             // architecture as the container system when building on Linux.
@@ -129,6 +128,10 @@ impl Containerize {
                 .unwrap_or_default()
                 .canonicalize()
                 .unwrap_or_default();
+            // MkContainerNix::new is deprecated on non-Linux targets. This
+            // code path is only reached at runtime on Linux (guarded by the
+            // OS check above), so the deprecation cannot fire in production.
+            #[cfg_attr(not(target_os = "linux"), allow(deprecated))]
             let builder = MkContainerNix::new(
                 built_environment.for_mode(&mode),
                 mode,
