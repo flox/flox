@@ -98,35 +98,16 @@ let
     ];
   };
 
-  # For field definitions, see `ActivateCtx` in `flox-core`
-  activateCtx = {
-    mode = "${activationMode}";
-    shell = {
-      bash = "${containerPkgs.bash}/bin/bash";
-    };
-    invocation_type = null;
-    remove_after_reading = false;
-    # The auto-activation hook (which calls back into the flox binary) is not
-    # meaningful inside a container guest — no flox binary is present in the
-    # image. Setting disable_hook prevents the generated rcfile from
-    # registering the hook and avoids the "bash: : command not found" error
-    # that occurs when the hook tries to invoke an empty flox_bin path.
-    disable_hook = true;
-    flox_activate_store_path = "${environment}";
-    activation_state_dir = "/run/flox/container-activations/${baseNameOf environment}";
-    attach_ctx = {
-      env = "${environment}"; # FIXME: Incorrect for containers.
-      env_description = "${containerName}";
-      env_cache = "/tmp";
-      prompt_color_1 = "99";
-      prompt_color_2 = "141";
-      interpreter_path = "${interpreterPath}";
-      flox_prompt_environments = "${containerName}";
-      set_prompt = true;
-      flox_env_cuda_detection = "0";
-      flox_active_environments = "[]";
-    };
-    project_ctx = null;
+  # The activation context is defined once in `activate-ctx.nix` (nixpkgs-free)
+  # so a full bake and a store-volume refresh emit the same context. Only
+  # `bashPath` is nixpkgs-derived; resolving it here is the cost the refresh
+  # fast path caches. See the store-volume refresh design for the no-drift
+  # guarantee this shared definition enforces.
+  activateCtx = import ./activate-ctx.nix {
+    bashPath = "${containerPkgs.bash}/bin/bash";
+    environmentOutPath = "${environment}";
+    interpreterPath = "${interpreterPath}";
+    inherit activationMode containerName;
   };
 
   activateCtxJson = builtins.toJSON activateCtx;

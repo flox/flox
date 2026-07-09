@@ -16,7 +16,7 @@ use tracing_indicatif::span_ext::IndicatifSpanExt;
 use super::buildenv::BuiltStorePath;
 use crate::flox::Flox;
 use crate::providers::build::COMMON_NIXPKGS_URL;
-use crate::providers::nix::nix_base_command;
+use crate::providers::nix::{nix_base_command, nix_instantiate_command};
 use crate::utils::gomap::GoMap;
 use crate::utils::{CommandExt, FLOX_INTERPRETER, ReaderExt};
 
@@ -25,6 +25,13 @@ static MK_CONTAINER_NIX: LazyLock<PathBuf> = LazyLock::new(|| {
         .unwrap_or_else(|_| env!("FLOX_MK_CONTAINER_NIX").to_string())
         .into()
 });
+
+/// The nixpkgs-free context builder that sits beside `mkContainer.nix` in the
+/// packaged `mkContainer/` directory. Evaluating it returns the store path of a
+/// `builtins.toFile` activations-context, byte-identical to the one a full bake
+/// embeds for the same inputs.
+static REFRESH_ACTIVATE_CTX_NIX: LazyLock<PathBuf> =
+    LazyLock::new(|| MK_CONTAINER_NIX.with_file_name("refresh-activate-ctx.nix"));
 
 pub trait ContainerBuilder {
     type Error: std::error::Error;
@@ -72,9 +79,10 @@ impl From<ContainerizeConfig> for OCIConfig {
 /// (b) which Linux `flox` binary served the request, so the next refresh can
 /// exec that binary directly instead of paying another flake unpack.
 ///
-/// All three fields are absolute `/nix/store/…` paths inside the builder's
-/// store (the `flox-nix` volume). [`StoreVolumeRefresh::is_valid`] enforces
-/// that invariant; the host rejects any line that fails it.
+/// Every field is an absolute `/nix/store/…` path inside the builder's store
+/// (the `flox-nix` volume); `container_bash` additionally ends in `/bin/bash`.
+/// [`StoreVolumeRefresh::is_valid`] enforces those invariants; the host rejects
+/// any line that fails them.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StoreVolumeRefresh {
     /// The `environment-run` / `environment-dev` bundle built from the lock.
@@ -85,6 +93,11 @@ pub struct StoreVolumeRefresh {
     /// `readlink /proc/self/exe`), used to key and populate the host's
     /// binary-resolution cache.
     pub flox_bin: String,
+    /// The container `bash` path baked into the activation context. Resolving it
+    /// through nixpkgs is the expensive step of a refresh, so the host caches it
+    /// per builder pin and passes it back to skip the nixpkgs evaluation on the
+    /// next refresh. Always a `/nix/store/…/bin/bash` path.
+    pub container_bash: String,
 }
 
 impl StoreVolumeRefresh {
@@ -104,11 +117,18 @@ impl StoreVolumeRefresh {
         parsed.is_valid().then_some(parsed)
     }
 
-    /// True when every field is an absolute `/nix/store/…` path.
+    /// True when every field is an absolute `/nix/store/…` path and
+    /// `container_bash` additionally points at a `/bin/bash`.
     fn is_valid(&self) -> bool {
-        [&self.env_run, &self.activate_ctx, &self.flox_bin]
-            .iter()
-            .all(|p| p.starts_with("/nix/store/"))
+        let all_store_paths = [
+            &self.env_run,
+            &self.activate_ctx,
+            &self.flox_bin,
+            &self.container_bash,
+        ]
+        .iter()
+        .all(|p| p.starts_with("/nix/store/"));
+        all_store_paths && self.container_bash.ends_with("/bin/bash")
     }
 }
 
@@ -195,6 +215,28 @@ impl MkContainerNix {
         command.args(["--argstr", "nixpkgsFlakeRef", COMMON_NIXPKGS_URL.as_str()]);
         command.args(["--argstr", "containerSystem", env!("NIX_TARGET_SYSTEM")]);
         command.args(["--argstr", "system", env!("NIX_TARGET_SYSTEM")]);
+        self.add_ctx_argstrs(command, name);
+        if let Some(container_config) = &self.container_config {
+            command.args([
+                "--argstr",
+                "containerConfigJSON",
+                &serde_json::to_string(container_config)
+                    .map_err(MkContainerNixError::SerializeContainerConfig)?,
+            ]);
+        }
+        Ok(())
+    }
+
+    /// Wire up the argstrs that describe the activation context itself:
+    /// environment path, activation mode, interpreter path, and container name.
+    ///
+    /// These are the inputs both `mkContainer.nix` and the nixpkgs-free
+    /// `refresh-activate-ctx.nix` share. The full image build wraps this with
+    /// the nixpkgs ref, systems, and container config (which the refresh does
+    /// not need); the fast path adds only the pre-resolved `bashPath`. Sharing
+    /// this wiring is what keeps the fast-path context byte-identical to a
+    /// baked one.
+    fn add_ctx_argstrs(&self, command: &mut Command, name: &str) {
         command.args([
             "--argstr",
             "environmentOutPath",
@@ -211,15 +253,6 @@ impl MkContainerNix {
             (*FLOX_INTERPRETER).to_string_lossy().as_ref(),
         ]);
         command.args(["--argstr", "containerName", name]);
-        if let Some(container_config) = &self.container_config {
-            command.args([
-                "--argstr",
-                "containerConfigJSON",
-                &serde_json::to_string(container_config)
-                    .map_err(MkContainerNixError::SerializeContainerConfig)?,
-            ]);
-        }
-        Ok(())
     }
 
     /// Build only `passthru.activateCtx` from `mkContainer.nix` and return the
@@ -280,6 +313,65 @@ impl MkContainerNix {
             return Err(MkContainerNixError::EmptyActivateCtxPath);
         }
         Ok(activate_ctx_path)
+    }
+
+    /// Build the activations-context the nixpkgs-free way, given the already
+    /// resolved container `bash` path, and return the realised store path.
+    ///
+    /// This is the store-volume refresh's warm path: it evaluates
+    /// `refresh-activate-ctx.nix`, which imports the same `activate-ctx.nix`
+    /// definition a full bake uses but takes `bashPath` as an input instead of
+    /// resolving it through nixpkgs. The context is therefore byte-identical to
+    /// a baked one while skipping the ~24s nixpkgs evaluation entirely (~0.1s).
+    ///
+    /// `refresh-activate-ctx.nix` returns a `builtins.toFile` path — a string
+    /// carrying store context, not a derivation — so it is evaluated with
+    /// `nix-instantiate --eval --read-write-mode` (the classic CLI, which
+    /// applies the `--argstr` inputs and realises `toFile` during evaluation).
+    /// The evaluator prints the path as a quoted Nix string literal, which is
+    /// unquoted here. The caller supplies `bash_path` from the host binary
+    /// cache; only meaningful on Linux (the builder), matching [`Self::new`].
+    #[cfg_attr(
+        not(target_os = "linux"),
+        deprecated(note = "MkContainerNix is not supported on this platform")
+    )]
+    #[instrument(skip_all, fields(name = name.as_ref(), progress = "Building activation context (cached bash)"))]
+    pub fn create_activate_ctx_fast(
+        &self,
+        _flox: &Flox,
+        name: impl AsRef<str>,
+        bash_path: &str,
+    ) -> Result<PathBuf, MkContainerNixError> {
+        let mut command = nix_instantiate_command();
+        command.arg("--eval");
+        // toFile realises the context file in the store during evaluation.
+        command.arg("--read-write-mode");
+        command.arg(&*REFRESH_ACTIVATE_CTX_NIX);
+        self.add_ctx_argstrs(&mut command, name.as_ref());
+        command.args(["--argstr", "bashPath", bash_path]);
+        debug!(cmd=%command.display(), "building activation context (nixpkgs-free)");
+
+        let output = command
+            .output()
+            .map_err(MkContainerNixError::CallNixError)?;
+        if !output.status.success() {
+            return Err(MkContainerNixError::BuildContainerError(
+                String::from_utf8_lossy(&output.stderr).to_string(),
+            ));
+        }
+
+        // `nix-instantiate --eval` prints the path as a quoted Nix string
+        // literal (e.g. `"/nix/store/…-activations-context"`). Store paths
+        // contain no characters that require Nix string escaping, so trimming
+        // the surrounding double quotes recovers the raw path.
+        let activate_ctx_path = String::from_utf8_lossy(&output.stdout)
+            .trim()
+            .trim_matches('"')
+            .to_string();
+        if activate_ctx_path.is_empty() {
+            return Err(MkContainerNixError::EmptyActivateCtxPath);
+        }
+        Ok(PathBuf::from(activate_ctx_path))
     }
 }
 
@@ -681,6 +773,9 @@ mod store_volume_refresh_tests {
             activate_ctx: "/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-activations-context"
                 .to_string(),
             flox_bin: "/nix/store/cccccccccccccccccccccccccccccccc-flox-1.6.0/bin/flox".to_string(),
+            container_bash:
+                "/nix/store/dddddddddddddddddddddddddddddddd-bash-interactive-5.3p9/bin/bash"
+                    .to_string(),
         }
     }
 
@@ -722,6 +817,27 @@ mod store_volume_refresh_tests {
 
         let mut refresh = valid_refresh();
         refresh.env_run = "environment-run".to_string();
+        assert_eq!(
+            StoreVolumeRefresh::parse_line(&refresh.to_json_line()),
+            None
+        );
+
+        let mut refresh = valid_refresh();
+        refresh.container_bash = "/usr/bin/bash".to_string();
+        assert_eq!(
+            StoreVolumeRefresh::parse_line(&refresh.to_json_line()),
+            None
+        );
+    }
+
+    #[test]
+    fn rejects_container_bash_not_pointing_at_bash() {
+        // A store path that is not a `/bin/bash` — e.g. the env bundle pasted
+        // into the wrong field — must be rejected so the host never caches a
+        // bogus bash path.
+        let mut refresh = valid_refresh();
+        refresh.container_bash =
+            "/nix/store/dddddddddddddddddddddddddddddddd-coreutils/bin/env".to_string();
         assert_eq!(
             StoreVolumeRefresh::parse_line(&refresh.to_json_line()),
             None

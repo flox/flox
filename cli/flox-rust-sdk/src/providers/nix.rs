@@ -24,6 +24,17 @@ pub fn nix_base_command() -> Command {
     command
 }
 
+/// Returns a `Command` for `nix-instantiate`, the classic-CLI evaluator.
+///
+/// `nix-instantiate` sits alongside the `nix` binary (it is a symlink to it),
+/// so its path is derived from [`NIX_BIN`]. Unlike the `nix eval` subcommand,
+/// the classic CLI applies top-level function arguments passed as `--arg` /
+/// `--argstr`, which is what the store-volume refresh needs to evaluate a
+/// `builtins.toFile`-returning expression without nixpkgs.
+pub fn nix_instantiate_command() -> Command {
+    Command::new(NIX_BIN.with_file_name("nix-instantiate"))
+}
+
 /// Raw shape of a single setting in `nix config show --json` output.
 /// Each setting is `{ "value": [...], ... }` — we only need the value(s).
 #[derive(Default, Deserialize)]

@@ -89,29 +89,47 @@ fn verbosity_arg(verbosity: i32) -> String {
 }
 
 /// The trailing argv of a store-volume refresh, shared by both invocation
-/// paths: `containerize --store-volume-refresh --dir /flox_env`.
+/// paths: `containerize --store-volume-refresh --dir /flox_env`, plus
+/// `--container-bash <path>` when a cached bash is available (the fast path
+/// that skips the nixpkgs evaluation in the context build).
 ///
 /// Kept separate and pure so the direct-exec and nix-run argv builders can be
 /// asserted exactly in tests without spawning a container.
-fn refresh_flox_args() -> Vec<String> {
-    vec![
+fn refresh_flox_args(container_bash: Option<&str>) -> Vec<String> {
+    let mut args = vec![
         "containerize".to_string(),
         "--store-volume-refresh".to_string(),
         "--dir".to_string(),
         MOUNT_ENV.to_string(),
-    ]
+    ];
+    if let Some(bash) = container_bash {
+        args.push("--container-bash".to_string());
+        args.push(bash.to_string());
+    }
+    args
 }
 
 /// The `bash -c` script that runs a store-volume refresh via `nix run` of the
 /// flox flake (the cache-miss path). Pays the flake unpack and a one-time
 /// flox-linux build for a new rev.
 ///
+/// When `container_bash` is set, `--container-bash <path>` is appended so the
+/// inner refresh builds the context without nixpkgs. The path is single-quote
+/// escaped since it is interpolated into a `bash -c` script.
+///
 /// Pure function of its inputs so it can be snapshot-tested.
-fn nix_run_refresh_shell(flake_ref: &str, verbosity_arg: &str) -> String {
+fn nix_run_refresh_shell(
+    flake_ref: &str,
+    verbosity_arg: &str,
+    container_bash: Option<&str>,
+) -> String {
+    let container_bash_arg = container_bash
+        .map(|bash| format!(" --container-bash {}", shell_single_quote(bash)))
+        .unwrap_or_default();
     format!(
         "set -euo pipefail\n\
         nix --extra-experimental-features 'nix-command flakes' --accept-flake-config \
-        run {} --{verbosity_arg} containerize --store-volume-refresh --dir {MOUNT_ENV}",
+        run {} --{verbosity_arg} containerize --store-volume-refresh --dir {MOUNT_ENV}{container_bash_arg}",
         shell_single_quote(flake_ref)
     )
 }
@@ -544,9 +562,28 @@ impl ContainerizeProxy {
     /// (no flake unpack), on a miss it falls back to `nix run` and repopulates
     /// this file.
     fn binary_cache_path(&self, flox: &Flox) -> PathBuf {
+        self.store_volume_cache_path(flox, "flox-bin")
+    }
+
+    /// The host cache file that records the container `bash` path resolved for
+    /// a given builder pin.
+    ///
+    /// Mirrors [`Self::binary_cache_path`]: keyed by the same builder pin, so
+    /// the bash path (a nixpkgs-pin-dependent value) is reused across refreshes
+    /// until the flox version changes. On a hit the refresh builds the context
+    /// without nixpkgs; on a miss the slow context build resolves bash and this
+    /// file is repopulated.
+    fn container_bash_cache_path(&self, flox: &Flox) -> PathBuf {
+        self.store_volume_cache_path(flox, "container-bash")
+    }
+
+    /// Build a store-volume cache-file path for the given prefix, keyed by the
+    /// builder pin. Shared by the binary and container-bash caches so they live
+    /// side by side under the same directory with the same keying scheme.
+    fn store_volume_cache_path(&self, flox: &Flox, prefix: &str) -> PathBuf {
         flox.cache_dir
             .join("store-volume")
-            .join(format!("flox-bin-{}", flox_flake_rev()))
+            .join(format!("{prefix}-{}", flox_flake_rev()))
     }
 
     /// Refresh the store-volume artifacts for the current environment:
@@ -573,12 +610,21 @@ impl ContainerizeProxy {
         // Incremental nix copy into the volume (only new paths after a change).
         self.populate_cache_volume()?;
 
-        let cache_path = self.binary_cache_path(flox);
-        let cached_bin = read_cached_flox_bin(&cache_path);
+        let binary_cache_path = self.binary_cache_path(flox);
+        let cached_bin = read_cached_store_path(&binary_cache_path);
+
+        // The cached container bash lets the inner refresh skip the nixpkgs
+        // evaluation in the context build. It is keyed by the same builder pin
+        // as the binary cache, so both are present or absent together after the
+        // first refresh for a given flox version.
+        let bash_cache_path = self.container_bash_cache_path(flox);
+        let cached_bash = read_cached_store_path(&bash_cache_path);
 
         let command = match &cached_bin {
-            Some(flox_bin) => self.refresh_direct_exec_command(flox, flox_bin),
-            None => self.refresh_nix_run_command(flox),
+            Some(flox_bin) => {
+                self.refresh_direct_exec_command(flox, flox_bin, cached_bash.as_deref())
+            },
+            None => self.refresh_nix_run_command(flox, cached_bash.as_deref()),
         };
 
         let refresh = self.run_refresh_command(command)?;
@@ -586,26 +632,44 @@ impl ContainerizeProxy {
         // On the cache-miss path, persist the resolved binary so the next
         // refresh for this builder pin takes the fast path.
         if cached_bin.is_none() {
-            write_cached_flox_bin(&cache_path, &refresh.flox_bin);
+            write_cached_store_path(&binary_cache_path, &refresh.flox_bin);
+        }
+        // Persist the resolved container bash whenever it was not already
+        // cached, so the next refresh builds the context without nixpkgs.
+        if cached_bash.is_none() {
+            write_cached_store_path(&bash_cache_path, &refresh.container_bash);
         }
 
         Ok(refresh)
     }
 
     /// Direct-exec refresh command (cache hit): run the cached Linux `flox`
-    /// binary from the volume directly, no flake unpack.
-    fn refresh_direct_exec_command(&self, flox: &Flox, flox_bin: &str) -> Command {
+    /// binary from the volume directly, no flake unpack. When a container bash
+    /// is cached, `--container-bash` is appended so the context build skips
+    /// nixpkgs.
+    fn refresh_direct_exec_command(
+        &self,
+        flox: &Flox,
+        flox_bin: &str,
+        container_bash: Option<&str>,
+    ) -> Command {
         let mut command = self.runtime_base_command();
         self.add_runtime_args(&mut command, flox);
         command.arg(flox_bin);
-        command.args(refresh_flox_args());
+        command.args(refresh_flox_args(container_bash));
         command
     }
 
     /// Nix-run refresh command (cache miss): fetch and run the flox flake,
     /// paying the flake unpack and a one-time flox-linux build for a new rev.
-    fn refresh_nix_run_command(&self, flox: &Flox) -> Command {
-        let shell_cmd = nix_run_refresh_shell(&flox_flake_ref(), &verbosity_arg(flox.verbosity));
+    /// A cached container bash is threaded through so even a binary-cache miss
+    /// can still skip the nixpkgs context evaluation.
+    fn refresh_nix_run_command(&self, flox: &Flox, container_bash: Option<&str>) -> Command {
+        let shell_cmd = nix_run_refresh_shell(
+            &flox_flake_ref(),
+            &verbosity_arg(flox.verbosity),
+            container_bash,
+        );
         let mut command = self.runtime_base_command();
         self.add_runtime_args(&mut command, flox);
         // `bash` (unqualified): Apple Container resolves the entrypoint via
@@ -641,30 +705,31 @@ impl ContainerizeProxy {
     }
 }
 
-/// Read the cached Linux `flox` binary path for a builder pin.
+/// Read a cached `/nix/store/…` path for a builder pin.
 ///
-/// Returns `None` when the cache file is absent or does not hold an absolute
-/// `/nix/store/…` path, so a corrupt or truncated entry falls back to the
-/// nix-run path rather than exec'ing a bogus binary.
-fn read_cached_flox_bin(cache_path: &Path) -> Option<String> {
+/// Shared by the binary and container-bash caches. Returns `None` when the
+/// cache file is absent or does not hold an absolute `/nix/store/…` path, so a
+/// corrupt or truncated entry falls back to the slow path rather than exec'ing
+/// a bogus binary or passing a bogus bash.
+fn read_cached_store_path(cache_path: &Path) -> Option<String> {
     let contents = std::fs::read_to_string(cache_path).ok()?;
-    let bin = contents.trim();
-    bin.starts_with("/nix/store/").then(|| bin.to_string())
+    let value = contents.trim();
+    value.starts_with("/nix/store/").then(|| value.to_string())
 }
 
-/// Persist the resolved Linux `flox` binary path for a builder pin.
+/// Persist a resolved `/nix/store/…` path for a builder pin.
 ///
-/// Best-effort: a write failure only costs the next refresh a flake unpack, so
+/// Best-effort: a write failure only costs the next refresh the slow path, so
 /// the error is logged rather than propagated.
-fn write_cached_flox_bin(cache_path: &Path, flox_bin: &str) {
+fn write_cached_store_path(cache_path: &Path, value: &str) {
     if let Some(parent) = cache_path.parent()
         && let Err(err) = std::fs::create_dir_all(parent)
     {
         debug!(%err, path = %cache_path.display(), "could not create store-volume cache dir");
         return;
     }
-    if let Err(err) = std::fs::write(cache_path, flox_bin) {
-        debug!(%err, path = %cache_path.display(), "could not write store-volume binary cache");
+    if let Err(err) = std::fs::write(cache_path, value) {
+        debug!(%err, path = %cache_path.display(), "could not write store-volume cache");
     }
 }
 
@@ -1043,13 +1108,28 @@ mod tests {
         assert_eq!(shell_single_quote("$(rm -rf /)"), "'$(rm -rf /)'");
     }
 
+    const CACHED_BASH: &str =
+        "/nix/store/dddddddddddddddddddddddddddddddd-bash-interactive-5.3p9/bin/bash";
+
     #[test]
     fn refresh_flox_args_are_the_hidden_flag_invocation() {
-        assert_eq!(refresh_flox_args(), vec![
+        assert_eq!(refresh_flox_args(None), vec![
             "containerize".to_string(),
             "--store-volume-refresh".to_string(),
             "--dir".to_string(),
             "/flox_env".to_string(),
+        ]);
+    }
+
+    #[test]
+    fn refresh_flox_args_append_cached_container_bash() {
+        assert_eq!(refresh_flox_args(Some(CACHED_BASH)), vec![
+            "containerize".to_string(),
+            "--store-volume-refresh".to_string(),
+            "--dir".to_string(),
+            "/flox_env".to_string(),
+            "--container-bash".to_string(),
+            CACHED_BASH.to_string(),
         ]);
     }
 
@@ -1059,7 +1139,7 @@ mod tests {
         let proxy =
             ContainerizeProxy::new("/some/env".into(), Runtime::AppleContainer, vec![], None);
         let flox_bin = "/nix/store/cccccccccccccccccccccccccccccccc-flox-1.6.0/bin/flox";
-        let cmd = proxy.refresh_direct_exec_command(&flox, flox_bin);
+        let cmd = proxy.refresh_direct_exec_command(&flox, flox_bin, None);
         let args = argv(&cmd);
         assert_eq!(args[0], "container");
         // The cached binary is exec'd directly — no `nix run`, no flake unpack,
@@ -1087,11 +1167,36 @@ mod tests {
     }
 
     #[test]
+    fn refresh_direct_exec_threads_cached_container_bash() {
+        let (flox, _tempdir) = flox_instance();
+        let proxy =
+            ContainerizeProxy::new("/some/env".into(), Runtime::AppleContainer, vec![], None);
+        let flox_bin = "/nix/store/cccccccccccccccccccccccccccccccc-flox-1.6.0/bin/flox";
+        let cmd = proxy.refresh_direct_exec_command(&flox, flox_bin, Some(CACHED_BASH));
+        let args = argv(&cmd);
+        // The whole trailing argv, in order, carries the cached bash so the
+        // inner refresh builds the context without nixpkgs.
+        let bin_pos = args
+            .iter()
+            .position(|a| a == flox_bin)
+            .expect("cached binary should appear in argv");
+        assert_eq!(&args[bin_pos..], &[
+            flox_bin.to_string(),
+            "containerize".to_string(),
+            "--store-volume-refresh".to_string(),
+            "--dir".to_string(),
+            "/flox_env".to_string(),
+            "--container-bash".to_string(),
+            CACHED_BASH.to_string(),
+        ]);
+    }
+
+    #[test]
     fn refresh_nix_run_command_uses_flake_and_hidden_flag() {
         let (flox, _tempdir) = flox_instance();
         let proxy =
             ContainerizeProxy::new("/some/env".into(), Runtime::AppleContainer, vec![], None);
-        let cmd = proxy.refresh_nix_run_command(&flox);
+        let cmd = proxy.refresh_nix_run_command(&flox, None);
         let args = argv(&cmd);
         assert_eq!(args[0], "container");
         let bash_pos = args.iter().position(|a| a == "bash").expect("bash in argv");
@@ -1109,16 +1214,34 @@ mod tests {
             script.contains("containerize --store-volume-refresh --dir /flox_env"),
             "must invoke the hidden refresh flag: {script}"
         );
+        // Without a cached bash, the nix-run script must not carry the flag.
+        assert!(
+            !script.contains("--container-bash"),
+            "no cached bash means no --container-bash flag: {script}"
+        );
     }
 
     #[test]
     fn nix_run_refresh_shell_is_a_pure_snapshot() {
-        let script = nix_run_refresh_shell("github:flox/flox/deadbeef", "");
+        let script = nix_run_refresh_shell("github:flox/flox/deadbeef", "", None);
         assert_eq!(
             script,
             "set -euo pipefail\n\
             nix --extra-experimental-features 'nix-command flakes' --accept-flake-config \
             run 'github:flox/flox/deadbeef' -- containerize --store-volume-refresh --dir /flox_env"
+        );
+    }
+
+    #[test]
+    fn nix_run_refresh_shell_with_cached_bash_is_a_pure_snapshot() {
+        let script = nix_run_refresh_shell("github:flox/flox/deadbeef", "", Some(CACHED_BASH));
+        assert_eq!(
+            script,
+            format!(
+                "set -euo pipefail\n\
+                nix --extra-experimental-features 'nix-command flakes' --accept-flake-config \
+                run 'github:flox/flox/deadbeef' -- containerize --store-volume-refresh --dir /flox_env --container-bash '{CACHED_BASH}'"
+            )
         );
     }
 
@@ -1143,13 +1266,41 @@ mod tests {
         );
 
         // Miss before write.
-        assert_eq!(read_cached_flox_bin(&cache_path), None);
+        assert_eq!(read_cached_store_path(&cache_path), None);
 
         let flox_bin = "/nix/store/cccccccccccccccccccccccccccccccc-flox-1.6.0/bin/flox";
-        write_cached_flox_bin(&cache_path, flox_bin);
+        write_cached_store_path(&cache_path, flox_bin);
         assert_eq!(
-            read_cached_flox_bin(&cache_path),
+            read_cached_store_path(&cache_path),
             Some(flox_bin.to_string())
+        );
+    }
+
+    #[test]
+    fn container_bash_cache_is_keyed_beside_the_binary_cache() {
+        let (flox, _tempdir) = flox_instance();
+        let proxy =
+            ContainerizeProxy::new("/some/env".into(), Runtime::AppleContainer, vec![], None);
+        let bash_cache_path = proxy.container_bash_cache_path(&flox);
+        let binary_cache_path = proxy.binary_cache_path(&flox);
+        // Both caches live in the same directory (side by side).
+        assert_eq!(bash_cache_path.parent(), binary_cache_path.parent());
+        // Keyed by builder pin under a `container-bash-` prefix.
+        assert!(
+            bash_cache_path
+                .file_name()
+                .unwrap()
+                .to_string_lossy()
+                .starts_with("container-bash-"),
+            "bash cache file must be keyed by builder pin: {bash_cache_path:?}"
+        );
+
+        // Round-trips like the binary cache.
+        assert_eq!(read_cached_store_path(&bash_cache_path), None);
+        write_cached_store_path(&bash_cache_path, CACHED_BASH);
+        assert_eq!(
+            read_cached_store_path(&bash_cache_path),
+            Some(CACHED_BASH.to_string())
         );
     }
 
@@ -1163,6 +1314,6 @@ mod tests {
         std::fs::write(&cache_path, "/usr/local/bin/flox").unwrap();
         // A corrupt entry must be treated as a miss so we don't exec a bogus
         // binary — the nix-run fallback repopulates it.
-        assert_eq!(read_cached_flox_bin(&cache_path), None);
+        assert_eq!(read_cached_store_path(&cache_path), None);
     }
 }

@@ -73,6 +73,14 @@ pub struct Containerize {
     /// store-volume fast path. Experimental, hidden.
     #[bpaf(long, hide)]
     store_volume_refresh: bool,
+
+    /// The pre-resolved container `bash` path for a store-volume refresh. When
+    /// supplied, the activation context is built the nixpkgs-free way (~0.1s)
+    /// instead of resolving bash through nixpkgs (~24s). The host passes the
+    /// value it cached from a prior refresh. Only meaningful with
+    /// '--store-volume-refresh'. Experimental, hidden.
+    #[bpaf(long, argument("path"), hide)]
+    container_bash: Option<String>,
 }
 impl Containerize {
     #[instrument(name = "containerize", skip_all)]
@@ -223,8 +231,24 @@ impl Containerize {
         // byte-identical to a baked one; only the image assembly is skipped.
         #[cfg_attr(not(target_os = "linux"), allow(deprecated))]
         let builder = MkContainerNix::new(env_run.clone(), mode, container_config);
-        #[cfg_attr(not(target_os = "linux"), allow(deprecated))]
-        let activate_ctx = builder.create_activate_ctx(flox, env_name.as_ref())?;
+
+        // Fast path: with a cached container bash, build the context without
+        // nixpkgs (~0.1s). Slow path: resolve bash through nixpkgs (~24s) and
+        // read it back from the built context so the host can cache it. Either
+        // way the resulting context is byte-identical to a baked one.
+        let (activate_ctx, container_bash) = match &self.container_bash {
+            Some(bash) => {
+                #[cfg_attr(not(target_os = "linux"), allow(deprecated))]
+                let ctx = builder.create_activate_ctx_fast(flox, env_name.as_ref(), bash)?;
+                (ctx, bash.clone())
+            },
+            None => {
+                #[cfg_attr(not(target_os = "linux"), allow(deprecated))]
+                let ctx = builder.create_activate_ctx(flox, env_name.as_ref())?;
+                let bash = container_bash_from_ctx(&ctx)?;
+                (ctx, bash)
+            },
+        };
 
         // Resolve this binary's own store path; the host caches it to exec the
         // Linux flox directly on the next refresh (skipping the flake unpack).
@@ -235,11 +259,34 @@ impl Containerize {
             env_run: env_run.to_string_lossy().into_owned(),
             activate_ctx: activate_ctx.to_string_lossy().into_owned(),
             flox_bin: flox_bin.to_string_lossy().into_owned(),
+            container_bash,
         };
 
         println!("{}", refresh.to_json_line());
         Ok(())
     }
+}
+
+/// Read the container `bash` path (`shell.bash`) out of a built
+/// activations-context JSON file.
+///
+/// The slow refresh path resolves bash through nixpkgs inside the context
+/// build; extracting it here lets the host cache it so the next refresh can
+/// take the nixpkgs-free fast path.
+fn container_bash_from_ctx(activate_ctx: &std::path::Path) -> Result<String> {
+    let contents = fs::read_to_string(activate_ctx).with_context(|| {
+        format!(
+            "Could not read the built activation context at {}",
+            activate_ctx.display()
+        )
+    })?;
+    let json: serde_json::Value =
+        serde_json::from_str(&contents).context("Built activation context was not valid JSON")?;
+    json.get("shell")
+        .and_then(|shell| shell.get("bash"))
+        .and_then(|bash| bash.as_str())
+        .map(str::to_string)
+        .context("Built activation context did not contain a 'shell.bash' path")
 }
 
 fn should_extend_config(labels: &[String]) -> bool {

@@ -172,3 +172,70 @@ create env → cold bake (warms the volume + builds flox-linux) → env change
 skips image assembly, (b) the guest activates and `uname` works, (c) wall
 time vs the 76s baseline. Then a second env change to measure the warm
 (~7s, cached binary) path.
+
+---
+
+## Addendum: context-build optimization (33s → ~8-9s)
+
+Benchmark found the warm refresh is ~33s, of which **~24s is
+`create_activate_ctx`** — `mkContainer.nix` runs `builtins.getFlake
+nixpkgs` + `nixpkgs.legacyPackages.aarch64-linux` to resolve the baked
+`bash` path, redone on every refresh though the bash path never changes
+across env changes. A nixpkgs-free `builtins.toFile` context build
+evaluates in ~0.1s (verified). Only `shell.bash` is nixpkgs-derived; all
+other context fields are passed in.
+
+### Change set (no drift — one source of truth for the context attrs)
+
+1. **`mkContainer/activate-ctx.nix`** (new, pure, no nixpkgs): a function
+   `{ bashPath, environmentOutPath, interpreterPath, activationMode,
+   containerName }:` returning the **exact** `activateCtx` attrset now
+   inlined in `mkContainer.nix` (lines ~102-130), with only the sourced
+   values parameterized: `shell.bash = bashPath` (was
+   `"${containerPkgs.bash}/bin/bash"`), `flox_activate_store_path`/
+   `attach_ctx.env` = `environmentOutPath` (was `environment`),
+   `activation_state_dir = ".../${baseNameOf environmentOutPath}"`,
+   `interpreter_path = interpreterPath`, `*_description`/`*_environments
+   = containerName`. Uses only builtins (`baseNameOf`). Returns the
+   attrset (not JSON, not a store path).
+
+2. **`mkContainer.nix`**: replace the inline `activateCtx = { … }` with
+   `activateCtx = import ./activate-ctx.nix { bashPath =
+   "${containerPkgs.bash}/bin/bash"; environmentOutPath = "${environment}";
+   interpreterPath = "${interpreterPath}"; inherit activationMode
+   containerName; };`. Keep `activateCtxJson`/`activateCtxStorePath`
+   (writeTextFile) and `passthru.activateCtx` unchanged. **Verify the
+   emitted context JSON is byte-identical to the pre-refactor output**
+   (diff the toJSON) — existing baked images must not change behavior.
+
+3. **`mkContainer/refresh-activate-ctx.nix`** (new, no nixpkgs): same args
+   as (1); returns `builtins.toFile "activations-context" (builtins.toJSON
+   (import ./activate-ctx.nix { … }))`. Args arrive as `--argstr` (plain
+   strings, no string context) so `toFile` is allowed. Byte-identical JSON
+   to (2) for the same inputs (same `activate-ctx.nix`, same values).
+
+4. **`MkContainerNix::create_activate_ctx_fast(flox, bash_path)`**: builds
+   `refresh-activate-ctx.nix` with the same argstrs as `create_activate_ctx`
+   plus `--argstr bashPath <bash_path>` (no `containerConfigJSON`,
+   `nixpkgsFlakeRef`, `system`, `containerSystem` — none are needed).
+   `builtins.toFile` realises during eval, so `nix eval --raw --file … `
+   returns the path; no nixpkgs, ~0.1s.
+
+5. **Inner `--store-volume-refresh` (`mod.rs`)**: accept optional
+   `--container-bash <path>`. If present → `create_activate_ctx_fast`;
+   set `container_bash` = the arg. If absent → `create_activate_ctx`
+   (slow, nixpkgs) and read `shell.bash` from the built context JSON to
+   report `container_bash`. Emit it in the JSON line.
+
+6. **`StoreVolumeRefresh`**: add `container_bash` (validate
+   `/nix/store/…/bin/bash`). Update parse/to_json_line/is_valid + tests.
+
+7. **Host proxy `refresh_store_volume`**: add a `container-bash-<pin>`
+   cache beside `flox-bin-<pin>`. On hit, pass `--container-bash <path>`
+   to the inner invocation (both direct-exec and nix-run argv). After a
+   refresh, persist the returned `container_bash`.
+
+Amortization mirrors the flox-bin cache: first refresh after a
+flox-version (nixpkgs-pin) change pays the ~24s nixpkgs eval once and
+caches bash; subsequent refreshes build the context nixpkgs-free (~0.1s),
+landing the warm refresh at ~8-9s.
