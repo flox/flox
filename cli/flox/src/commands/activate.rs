@@ -2071,7 +2071,7 @@ fn bake_oci_image(
     //
     // NOTE: Update this rev when builder-side behavior changes (mkContainer,
     // flox-activations, package-builder); host-side-only commits don't need it.
-    const FROZEN_FALLBACK_REV: &str = "73b8a967bf73d354f2d25cf4637d460ff86e0697";
+    const FROZEN_FALLBACK_REV: &str = "a6be22930d5058d42cffe8ebc94adce20bacf32e";
 
     let hash12 = lockfile_hash12(lockfile);
     let hash_tag = format!("{env_name}:{hash12}");
