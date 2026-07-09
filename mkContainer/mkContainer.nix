@@ -202,6 +202,11 @@ let
         mkdir -p -m 0700 run/flox/runtime
         mkdir -p -m 0700 run/flox/log
         mkdir -p -m 0700 home/flox
+        # Resolve `localhost` in the guest so services bound to it (and
+        # commands like `curl localhost:PORT`) work. fakeNss provides
+        # passwd/group but not /etc/hosts.
+        mkdir -p etc
+        printf '127.0.0.1 localhost\n::1 localhost\n' > etc/hosts
       '';
 
       # symlinkJoin fails when drv contains a symlinked bin directory, so wrap in an additional buildEnv.

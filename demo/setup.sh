@@ -47,8 +47,8 @@ cd "$DEMO_DIR"
 # installed here. (The guest image always carries a baked-in bash +
 # coreutils independent of the manifest — these installs are for the
 # demo workload, not a sandbox requirement.)
-echo "Installing agent tooling (git, curl, which)..."
-"$FLOX_BIN" install git curl which >/dev/null
+echo "Installing agent tooling (git, curl, which, python3)..."
+"$FLOX_BIN" install git curl which python3 >/dev/null
 
 # Two manifest additions, applied in one edit:
 #
@@ -87,8 +87,22 @@ on-activate = \'\'\'
   fi
 \'\'\'
 '''
+services = '''[services]
+auto-start = true
+
+[services.web]
+command = "python3 -m http.server 8080"
+'''
+sandbox = '''[options.sandbox]
+backend = "oci"
+'''
 text = text.replace("[install]\n", install, 1)
 text = text.replace("[hook]\n", hook, 1)
+# Replace the empty [services] stub with an auto-starting web service.
+text = text.replace("[services]\n", services, 1)
+# Declare the OCI sandbox so `cd` auto-activates into the guest with
+# no live manifest edit — appended so [options.sandbox] is its own table.
+text = text.rstrip() + "\n\n" + sandbox
 with open(path, "w") as f:
     f.write(text)
 EOF
@@ -133,9 +147,10 @@ Then:
 
 and follow demo/SCRIPT.md. Afterwards: bash demo/cleanup.sh
 
-NOTE: the first bake after setup takes ~2-5 min. To pre-bake
-off-camera, add the two [options] lines from SCRIPT.md section 0 to
-the manifest, then run:
+NOTE: the manifest already declares [options.sandbox] backend = "oci"
+and an auto-starting web service, so the first 'cd' auto-activates
+straight into the sandbox. The first bake takes ~2-5 min; to pre-bake
+off-camera, run:
 
     FLOX_SANDBOX_OCI_AUTOBAKE=true flox activate -- true
 EOF
