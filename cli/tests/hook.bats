@@ -339,6 +339,39 @@ EXPIRED_FLOXHUB_TOKEN="eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3gu
   assert_output --partial "$(realpath "$PROJECT2_DIR")"
 }
 
+# bats test_tags=hook:auto-activate:fish
+@test "fish: hook auto-activation sets the prompt" {
+  project_setup
+  project2_setup
+  export FLOX_FEATURES_AUTO_ACTIVATE=true
+  # Mirror the reported scenario: the hook-registering outer activation is the
+  # 'default' env, which is hidden from FLOX_PROMPT_ENVIRONMENTS, so the outer
+  # activation defines no prompt variables at the top level. (An unscoped fish
+  # `set` reuses an existing variable's scope, so a visible outer env would
+  # mask scoping bugs when the hook later sets prompt variables inside a
+  # function.)
+  "$FLOX_BIN" edit -d "$PROJECT_DIR" --name default
+  # Auto-activation is opt-in; allow the target before entering it.
+  "$FLOX_BIN" activate allow -d "$PROJECT2_DIR"
+
+  # unbuffer provides a pty so that `isatty 1` holds and set-prompt.fish is
+  # sourced. NO_COLOR keeps the prompt prefix a plain "flox [<envs>]" string.
+  # A known fish_prompt is defined up front because non-interactive fish has
+  # no prompt function for set-prompt.fish to save and wrap.
+  run unbuffer fish -c '
+    set -gx FLOX_FEATURES_AUTO_ACTIVATE true
+    set -gx NO_COLOR 1
+    function fish_prompt; echo -n "knownPrompt> "; end
+    eval ("$FLOX_BIN" activate -d "$PROJECT_DIR")
+    cd "$PROJECT2_DIR"
+    _flox_hook
+    echo "<prompt>"(fish_prompt)"</prompt>"
+  '
+  assert_success
+  assert_output --partial "<prompt>flox [project2-"
+  assert_output --partial "knownPrompt>"
+}
+
 # bats test_tags=hook:auto-activate:tcsh
 @test "tcsh: hook auto-activates a discovered environment on cd" {
   project_setup
