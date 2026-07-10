@@ -2986,6 +2986,7 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "clap",
+ "flox-config",
  "flox-core",
  "floxhub-client",
  "indent",
