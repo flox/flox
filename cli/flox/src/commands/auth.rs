@@ -349,10 +349,15 @@ pub async fn login_flox(flox: &mut Flox) -> Result<String> {
     let auth_context = AuthContext::from_mode(&AuthnMode::Auth0, Some(token.clone()));
     let _ = flox.set_auth_context(auth_context);
 
-    message::updated("Authentication complete");
-    message::updated(format!("Logged in as {handle}"));
+    print_login_success(&handle);
 
     Ok(handle)
+}
+
+/// Print the success message shared by all login flows.
+fn print_login_success(handle: &str) {
+    message::updated("Authentication complete");
+    message::updated(format!("Logged in as {handle}"));
 }
 
 /// Log in non-interactively with a token read from a file, or from stdin if
@@ -388,7 +393,7 @@ pub fn login_with_token_file(flox: &mut Flox, token_file: &Path) -> Result<Strin
     let auth_context = AuthContext::from_mode(&AuthnMode::Auth0, Some(token));
     let _ = flox.set_auth_context(auth_context);
 
-    message::updated(format!("Logged in as {handle}"));
+    print_login_success(&handle);
 
     Ok(handle)
 }
@@ -398,17 +403,10 @@ mod tests {
     use std::fs;
 
     use flox_rust_sdk::flox::test_helpers::{create_test_token, flox_instance};
+    use floxhub_client::token_test_helpers::FAKE_EXPIRED_TOKEN;
 
     use super::*;
     use crate::config::FLOX_CONFIG_FILE;
-
-    /// A fake expired FloxHub token
-    ///
-    /// {
-    ///   "https://flox.dev/handle": "test",
-    ///   "exp": 1704063600                 // 2024-01-01T00:00:00+00:00
-    /// }
-    const EXPIRED_TOKEN: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3guZGV2L2hhbmRsZSI6InRlc3QiLCJleHAiOjE3MDQwNjM2MDB9.-5VCofPtmYQuvh21EV1nEJhTFV_URkRP0WFu4QDPFxY";
 
     #[test]
     fn login_with_token_file_stores_valid_token() {
@@ -464,7 +462,7 @@ mod tests {
     fn login_with_token_file_rejects_expired_token() {
         let (mut flox, _temp_dir) = flox_instance();
         let token_file = flox.temp_dir.join("token");
-        fs::write(&token_file, EXPIRED_TOKEN).unwrap();
+        fs::write(&token_file, FAKE_EXPIRED_TOKEN).unwrap();
 
         let err = login_with_token_file(&mut flox, &token_file).unwrap_err();
 

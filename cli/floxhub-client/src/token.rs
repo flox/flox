@@ -91,3 +91,40 @@ pub enum FloxhubTokenError {
     #[error("invalid token")]
     InvalidToken(#[source] jsonwebtoken::errors::Error),
 }
+
+/// Test fixtures for [FloxhubToken].
+///
+/// Intentionally not behind `#[cfg(test)]` so that other crates' (also
+/// non-gated) test helpers can use them without enabling a feature.
+/// Nothing here should be used in production code.
+pub mod test_helpers {
+    /// A fake FloxHub token
+    ///
+    /// {
+    ///  "typ": "JWT",
+    ///  "alg": "HS256"
+    /// }
+    /// .
+    /// {
+    ///   "https://flox.dev/handle": "test"
+    ///   "exp": 9999999999,                // 2286-11-20T17:46:39+00:00
+    /// }
+    /// .
+    /// AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+    pub const FAKE_TOKEN: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3guZGV2L2hhbmRsZSI6InRlc3QiLCJleHAiOjk5OTk5OTk5OTl9.6-nbzFzQEjEX7dfWZFLE-I_qW2N_-9W2HFzzfsquI74";
+
+    /// A fake floxhub token, that is expired
+    ///
+    /// {
+    ///  "typ": "JWT",
+    ///  "alg": "HS256"
+    /// }
+    /// .
+    /// {
+    ///   "https://flox.dev/handle": "test"
+    ///   "exp": 1704063600,                // 2024-01-01T00:00:00+00:00
+    /// }
+    /// .
+    /// AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+    pub const FAKE_EXPIRED_TOKEN: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3guZGV2L2hhbmRsZSI6InRlc3QiLCJleHAiOjE3MDQwNjM2MDB9.-5VCofPtmYQuvh21EV1nEJhTFV_URkRP0WFu4QDPFxY";
+}
