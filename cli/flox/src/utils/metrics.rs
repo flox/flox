@@ -8,6 +8,7 @@ use std::sync::{Arc, LazyLock, Mutex};
 use std::time::Duration as TimeoutDuration;
 
 use anyhow::{Context, Result, bail};
+use flox_config::Config;
 use flox_rust_sdk::flox::FLOX_VERSION;
 use flox_rust_sdk::utils::INVOCATION_SOURCES;
 use fslock::LockFile;
@@ -20,7 +21,6 @@ use tracing::debug;
 use uuid::Uuid;
 
 use super::TRAILING_NETWORK_CALL_TIMEOUT;
-use crate::config::Config;
 
 pub const METRICS_EVENTS_FILE_NAME: &str = "metrics-events-v2.json";
 pub const METRICS_UUID_FILE_NAME: &str = "metrics-uuid";
@@ -650,11 +650,11 @@ impl Drop for MetricGuard {
 mod tests {
     use std::fs;
 
+    use flox_config::FloxConfig;
     use tempfile::TempDir;
     use tracing_subscriber::layer::SubscriberExt;
 
     use super::*;
-    use crate::config::FloxConfig;
     use crate::utils::init::{create_registry_and_filter_reload_handle, update_filters};
 
     #[derive(Debug, Default)]

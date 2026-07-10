@@ -4,6 +4,7 @@ use std::str::FromStr;
 
 use anyhow::{Context, Result};
 use bpaf::Bpaf;
+use flox_config::{Config, FLOX_CONFIG_FILE, ReadWriteError};
 use flox_rust_sdk::flox::Flox;
 use fslock::LockFile;
 use indoc::indoc;
@@ -13,7 +14,6 @@ use tokio::fs;
 use toml_edit::{Key, TomlError};
 use tracing::{debug, instrument};
 
-use crate::config::{Config, FLOX_CONFIG_FILE, ReadWriteError};
 use crate::subcommand_metric;
 use crate::utils::message;
 use crate::utils::metrics::{

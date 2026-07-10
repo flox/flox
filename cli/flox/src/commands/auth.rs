@@ -2,6 +2,7 @@ use anyhow::{Context, Result, bail};
 use bpaf::Bpaf;
 use chrono::offset::Utc;
 use chrono::{DateTime, Duration};
+use flox_config::Config;
 use flox_rust_sdk::flox::{FLOX_VERSION, Flox, FloxhubToken};
 use floxhub_client::{AuthContext, AuthnMode};
 use indoc::formatdoc;
@@ -32,7 +33,6 @@ use tracing::{debug, instrument};
 use url::Url;
 
 use crate::commands::general::update_config;
-use crate::config::Config;
 use crate::utils::dialog::{Checkpoint, Dialog, WaitResult};
 use crate::utils::message;
 use crate::utils::openers::Browser;

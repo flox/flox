@@ -2,6 +2,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use bpaf::Bpaf;
+use flox_config::Config;
 use flox_core::activate::context::InvocationType;
 use flox_core::activate::mode::ActivateMode;
 use flox_core::activations::{activation_state_dir_path, read_activations_json, state_json_path};
@@ -26,7 +27,6 @@ use super::{
 };
 use crate::commands::activate::{ActivateOptions, CommandSelect};
 use crate::commands::display_help;
-use crate::config::Config;
 use crate::utils::message;
 
 mod logs;
