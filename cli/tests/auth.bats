@@ -33,6 +33,11 @@ project_setup() {
   rm -rf "$PROJECT_DIR"
   mkdir -p "$PROJECT_DIR"
   pushd "$PROJECT_DIR" > /dev/null || return
+  # Tests in this file assert on login state persisted in FLOX_CONFIG_DIR.
+  # Bats runs tests within a file in parallel on CI, so each test needs its
+  # own config dir — otherwise a neighboring test's 'auth logout' (below)
+  # removes the token another test just stored.
+  setup_isolated_flox
   unset FLOX_FLOXHUB_TOKEN
   "$FLOX_BIN" auth logout
 }
