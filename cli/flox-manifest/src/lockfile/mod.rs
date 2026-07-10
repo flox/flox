@@ -799,7 +799,10 @@ pub(crate) mod tests {
         let without_sandbox = make_lockfile_v1_13_0_with_sandbox(false);
 
         // Plain PartialEq sees them as different.
-        assert_ne!(with_sandbox, without_sandbox, "PartialEq must see difference");
+        assert_ne!(
+            with_sandbox, without_sandbox,
+            "PartialEq must see difference"
+        );
 
         // The sandbox-ignoring comparison must treat them as equal.
         assert!(
@@ -820,10 +823,7 @@ pub(crate) mod tests {
             fake_catalog_package_lock("foo", Some("group1"));
 
         let mut manifest = ManifestLatest::default();
-        manifest
-            .install
-            .inner_mut()
-            .insert(foo_iid, foo_descriptor);
+        manifest.install.inner_mut().insert(foo_iid, foo_descriptor);
         let lockfile_with_pkg = Lockfile {
             version: Version::<1>,
             manifest: manifest.as_typed_only(),
