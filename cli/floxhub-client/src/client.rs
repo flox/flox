@@ -577,6 +577,12 @@ impl CatalogClientTrait for FloxhubClient {
             source_rev: source_rev.to_string(),
             nixpkgs_rev: nixpkgs_rev.to_string(),
             system,
+            // The pre-check runs before the build, so direct catalog inputs
+            // are not yet known.  None canonicalizes to H(∅) server-side
+            // (AI-410), which is correct: if the stored build had a non-empty
+            // closure it will not match, and the publish call will resolve
+            // the actual duplicate via the full closure hash.
+            locked_inputs: None,
         };
         self.catalog
             .check_build_api_v1_catalog_catalogs_catalog_name_packages_package_name_check_build_post(
