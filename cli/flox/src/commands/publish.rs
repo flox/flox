@@ -317,7 +317,7 @@ impl Publish {
                 &publish_provider.env_metadata.build_repo_meta.rev,
                 nixpkgs_rev,
                 build_metadata.system,
-                Some(build_metadata.direct_catalog_inputs.clone()),
+                build_metadata.direct_catalog_inputs.clone(),
             )
             .await;
 

@@ -401,7 +401,7 @@ impl CatalogClientTrait for MockClient {
         _source_rev: &str,
         _nixpkgs_rev: &str,
         _system: PackageSystem,
-        _locked_inputs: Option<std::collections::HashMap<String, floxhub_client::LockedInputEntry>>,
+        _locked_inputs: std::collections::HashMap<String, floxhub_client::LockedInputEntry>,
     ) -> Result<CheckBuildResponse, FloxhubClientError> {
         unimplemented!("check_build_already_recorded is not supported in MockClient")
     }
