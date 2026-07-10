@@ -5,6 +5,7 @@
 //! (`$XDG_CONFIG_HOME/flox/flox.toml`), `FLOX_*` environment variables.
 
 mod config;
+mod write;
 
 pub use config::{
     AuthnMode,
@@ -20,3 +21,4 @@ pub use config::{
     PublishConfig,
     SearchLimit,
 };
+pub use write::ReadWriteError;

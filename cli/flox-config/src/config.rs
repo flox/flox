@@ -1,13 +1,17 @@
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::num::NonZeroU8;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use flox_core::activate::context::AutoActivateFishMode;
 use flox_core::data::environment_ref::RemoteEnvironmentRef;
 use flox_core::features::Features;
 use serde::{Deserialize, Serialize};
+use toml_edit::Key;
 use url::Url;
+
+use crate::write;
+use crate::write::ReadWriteError;
 
 /// Name of flox managed directories (config, data, cache)
 pub const FLOX_DIR_NAME: &str = "flox";
@@ -213,6 +217,36 @@ impl Display for InstallerChannel {
             InstallerChannel::Nightly => write!(f, "nightly"),
             InstallerChannel::Qa => write!(f, "qa"),
         }
+    }
+}
+
+impl Config {
+    /// get a value from the config
+    ///
+    /// **intended for human consumption/introspection of config only**
+    ///
+    /// Values in the context should be read from the [Config] type instead!
+    pub fn get(&self, path: &[Key]) -> Result<String, ReadWriteError> {
+        write::get(self, path)
+    }
+
+    /// Append or update a key value paring in the toml representation of a partial config
+    ///
+    /// Validate using [Self]
+    pub fn write_to<V: Serialize>(
+        config_file: Option<String>,
+        path: &[Key],
+        value: Option<V>,
+    ) -> Result<String, ReadWriteError> {
+        write::write_to(config_file, path, value)
+    }
+
+    pub fn write_to_in<V: Serialize>(
+        config_file_path: impl AsRef<Path>,
+        query: &[Key],
+        value: Option<V>,
+    ) -> Result<(), ReadWriteError> {
+        write::write_to_in(config_file_path, query, value)
     }
 }
 
