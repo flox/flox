@@ -244,12 +244,9 @@ pub trait CatalogClientTrait {
     /// tuple (source URL, source rev, nixpkgs rev, system, package name, and
     /// direct closure inputs) has already been recorded/published.
     ///
-    /// `locked_inputs` is the build's direct catalog inputs. Passing
-    /// `Some(map)` (including an empty map for builds with no catalog
-    /// dependencies) gives the server explicit closure identity; absent or
-    /// `None` is canonicalised server-side to the empty-closure hash H(∅).
-    /// The CLI always passes `Some(direct_catalog_inputs)` so the server can
-    /// distinguish re-publishes that differ only in transitive dependencies.
+    /// The CLI always passes `Some(direct_catalog_inputs)`. An empty map
+    /// serialises as `{}`, signalling a build with no catalog dependencies.
+    /// Passing `None` is reserved for callers that lack closure information.
     ///
     /// Returns provenance data (source rev date, rev) in `CheckBuildResponse`
     /// when `already_published` is true. Used for dedup pre-check before
@@ -1307,8 +1304,12 @@ pub mod tests {
             .await;
 
         mock.assert();
-        let resp = result.expect("expected Ok");
-        assert!(!resp.already_published);
+        assert_eq!(result.expect("expected Ok"), CheckBuildResponse {
+            already_published: false,
+            published_at: None,
+            source_rev: None,
+            source_rev_date: None,
+        });
     }
 
     /// An empty locked_inputs map serialises as `{}` (not omitted).
@@ -1341,10 +1342,15 @@ pub mod tests {
             .await;
 
         mock.assert();
-        assert!(!result.unwrap().already_published);
+        assert_eq!(result.expect("expected Ok"), CheckBuildResponse {
+            already_published: false,
+            published_at: None,
+            source_rev: None,
+            source_rev_date: None,
+        });
     }
 
-    /// already_published=true → Ok with already_published flag set.
+    /// already_published=true → Ok with all provenance fields populated.
     #[tokio::test]
     async fn check_build_returns_already_published_true() {
         use catalog_api_v1::types as api_types;
@@ -1374,9 +1380,13 @@ pub mod tests {
             .await;
 
         mock.assert();
-        let resp = result.expect("expected Ok");
-        assert!(resp.already_published);
-        assert_eq!(resp.source_rev.as_deref(), Some("deadbeef"));
+        let expected: CheckBuildResponse = serde_json::from_value(json!({
+            "already_published": true,
+            "source_rev": "deadbeef",
+            "published_at": "2024-01-01T00:00:00Z",
+        }))
+        .unwrap();
+        assert_eq!(result.expect("expected Ok"), expected);
     }
 
     /// A 5xx error from the server is returned as Err, not panicked or swallowed.

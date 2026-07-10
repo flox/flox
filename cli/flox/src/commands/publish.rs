@@ -50,20 +50,24 @@ enum DedupOutcome {
     /// The server confirmed this exact build (by closure identity) was already
     /// published. The caller should display provenance and skip the upload.
     AlreadyPublished(CheckBuildResponse),
-    /// The build is new or the check could not be completed (graceful
-    /// degradation — a check failure must never block a publish).
-    Proceed,
+    /// The build is new; proceed with the publish.
+    New,
+    /// The check request itself failed (network error, server error, etc.).
+    /// A failed check must never block a publish — it is a best-effort
+    /// optimisation only.
+    CheckFailed(FloxhubClientError),
 }
 
 /// Map the raw check-build result to a [`DedupOutcome`].
 ///
-/// An `Err` result (network failure, server error, etc.) is treated as
-/// `Proceed` rather than a fatal error: the dedup check is a best-effort
-/// optimisation and must never prevent a legitimate publish.
+/// An `Err` result (network failure, server error, etc.) maps to
+/// `CheckFailed` rather than propagating: the dedup pre-check must never
+/// prevent a legitimate publish.
 fn dedup_outcome(result: Result<CheckBuildResponse, FloxhubClientError>) -> DedupOutcome {
     match result {
         Ok(resp) if resp.already_published => DedupOutcome::AlreadyPublished(resp),
-        _ => DedupOutcome::Proceed,
+        Ok(_) => DedupOutcome::New,
+        Err(e) => DedupOutcome::CheckFailed(e),
     }
 }
 
@@ -293,10 +297,8 @@ impl Publish {
 
         // Dedup check: ask the catalog server if this exact build has already
         // been published before spending time on the upload. The closure
-        // identity (direct_catalog_inputs) is now available after
-        // check_build_metadata, so we can send it to the server for a
-        // closure-aware match. If the check fails, warn and continue —
-        // the pre-check must never block a publish.
+        // identity (direct_catalog_inputs) is available after
+        // check_build_metadata, enabling a closure-aware match on the server.
         let nixpkgs_rev = publish_provider.package_metadata.base_catalog_ref.rev();
         let nixpkgs_rev = nixpkgs_rev.as_deref().unwrap_or_else(|| {
             warn!(
@@ -319,16 +321,6 @@ impl Publish {
             )
             .await;
 
-        // Emit a user-visible warning if the pre-check itself failed before
-        // handing the result to the pure helper (which consumes it).
-        if let Err(ref e) = check_result {
-            message::warning("Unable to check if already published — continuing with publish.");
-            warn!(
-                error = %e,
-                "Dedup pre-check failed, proceeding with publish"
-            );
-        }
-
         match dedup_outcome(check_result) {
             DedupOutcome::AlreadyPublished(resp) => {
                 message::updated(formatdoc! {"
@@ -344,8 +336,14 @@ impl Publish {
                 });
                 return Ok(());
             },
-            DedupOutcome::Proceed => {
-                // Not a duplicate (or check failed, already warned above).
+            DedupOutcome::New => {},
+            DedupOutcome::CheckFailed(e) => {
+                // A failed check must never block a publish; warn and continue.
+                message::warning("Unable to check if already published — continuing with publish.");
+                warn!(
+                    error = %e,
+                    "Dedup pre-check failed, proceeding with publish"
+                );
             },
         }
 
@@ -558,26 +556,28 @@ mod tests {
     }
 
     #[test]
-    fn dedup_outcome_already_published_maps_to_already_published() {
-        let resp = make_check_response(true);
-        let result = Ok(resp);
-        assert!(matches!(
-            dedup_outcome(result),
-            DedupOutcome::AlreadyPublished(_)
-        ));
+    fn dedup_outcome_already_published_passes_response_through() {
+        let input = make_check_response(true);
+        let expected = input.clone();
+        let DedupOutcome::AlreadyPublished(got) = dedup_outcome(Ok(input)) else {
+            panic!("expected AlreadyPublished variant");
+        };
+        assert_eq!(got, expected);
     }
 
     #[test]
-    fn dedup_outcome_not_published_maps_to_proceed() {
+    fn dedup_outcome_not_published_maps_to_new() {
         let resp = make_check_response(false);
-        let result = Ok(resp);
-        assert!(matches!(dedup_outcome(result), DedupOutcome::Proceed));
+        assert!(matches!(dedup_outcome(Ok(resp)), DedupOutcome::New));
     }
 
     #[test]
-    fn dedup_outcome_err_maps_to_proceed() {
+    fn dedup_outcome_err_maps_to_check_failed() {
         let result: Result<CheckBuildResponse, FloxhubClientError> =
             Err(FloxhubClientError::Other("network error".to_string()));
-        assert!(matches!(dedup_outcome(result), DedupOutcome::Proceed));
+        assert!(matches!(
+            dedup_outcome(result),
+            DedupOutcome::CheckFailed(_)
+        ));
     }
 }
