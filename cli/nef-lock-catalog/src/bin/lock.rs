@@ -196,11 +196,11 @@ fn build_client(config: &Config, floxhub_token: Option<String>) -> Result<Floxhu
         "configured catalog client",
     );
 
-    let floxhub_token = floxhub_token.map(|token| token.parse()).transpose()?;
     let auth_context = AuthContext::from_mode(
         &effective_authn_mode(&config.flox.floxhub_authn_mode),
-        floxhub_token,
-    );
+        floxhub_token.as_deref(),
+        &catalog_url,
+    )?;
 
     let config = FloxhubClientConfig {
         base_url: catalog_url,

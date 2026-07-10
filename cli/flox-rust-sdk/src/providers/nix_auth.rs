@@ -6,7 +6,7 @@ use floxhub_client::AuthContext;
 use indoc::formatdoc;
 use tempfile::{NamedTempFile, TempDir, TempPath, tempdir_in};
 
-use crate::flox::{Flox, FloxhubToken};
+use crate::flox::Flox;
 
 /// Hostnames that are authenticated with FloxHub credentials.
 const FLOXHUB_AUTHENTICATED_HOSTNAMES: [&str; 6] = [
@@ -20,7 +20,8 @@ const FLOXHUB_AUTHENTICATED_HOSTNAMES: [&str; 6] = [
 ];
 
 pub trait AuthProvider {
-    fn token(&self) -> Option<&FloxhubToken>;
+    /// Whether a token is present to authenticate with.
+    fn has_credential(&self) -> bool;
     fn create_netrc(&self) -> Result<TempPath, AuthError>;
     /// Attempt to create a netrc file, returning it if the user has a valid
     /// token, or `None` when they don't.
@@ -84,61 +85,61 @@ pub struct NixAuth {
     /// The directory in which we'll create an ad-hoc netrc file if needed.
     /// `None` for auth modes that don't use netrc (e.g. Kerberos).
     netrc_tempdir: Option<TempDir>,
-    /// The user's FloxHub authentication token.
-    floxhub_token: Option<FloxhubToken>,
+    /// The user's credential; its token secret (if any) goes in the netrc.
+    auth_context: AuthContext,
 }
 
 impl NixAuth {
     /// Construct a new auth provider from a Flox instance
     pub fn from_flox(flox: &Flox) -> Result<Self, AuthError> {
-        match &flox.auth_context {
-            AuthContext::Auth0(token) => Ok(Self {
-                floxhub_token: token.clone(),
-                netrc_tempdir: Some(tempdir_in(&flox.temp_dir).map_err(AuthError::CreateTempDir)?),
-            }),
-            AuthContext::Kerberos(_) => Ok(Self {
-                floxhub_token: None,
-                netrc_tempdir: None,
-            }),
-        }
+        let netrc_tempdir = match &flox.auth_context {
+            AuthContext::Auth0(_) | AuthContext::Pat(_) => {
+                Some(tempdir_in(&flox.temp_dir).map_err(AuthError::CreateTempDir)?)
+            },
+            AuthContext::Kerberos(_) => None,
+        };
+        Ok(Self {
+            netrc_tempdir,
+            auth_context: flox.auth_context.clone(),
+        })
     }
 
-    /// Construct a new auth provider from a tempdir and a token.
-    pub fn from_tempdir_and_token(tempdir: TempDir, token: Option<FloxhubToken>) -> Self {
+    /// Construct a new auth provider from a tempdir and a credential.
+    pub fn from_tempdir_and_context(tempdir: TempDir, auth_context: AuthContext) -> Self {
         Self {
             netrc_tempdir: Some(tempdir),
-            floxhub_token: token,
+            auth_context,
         }
     }
 }
 
 impl AuthProvider for NixAuth {
-    /// Get a reference to the user's token (which may be expired).
-    fn token(&self) -> Option<&FloxhubToken> {
-        self.floxhub_token.as_ref()
+    fn has_credential(&self) -> bool {
+        self.auth_context.token_secret().is_some()
     }
 
     /// Creates a temporary netrc file with authentication credentials
     /// and returns the path.
     fn create_netrc(&self) -> Result<TempPath, AuthError> {
-        let token = self.floxhub_token.as_ref().ok_or(AuthError::NoToken)?;
         let tempdir = self.netrc_tempdir.as_ref().ok_or(AuthError::NoToken)?;
-        write_floxhub_netrc(tempdir, token).map_err(AuthError::CreateNetrc)
+        write_floxhub_netrc(tempdir, &self.auth_context)
     }
 
     fn try_create_netrc(&self) -> Option<TempPath> {
-        let token = self.floxhub_token.as_ref()?;
         let tempdir = self.netrc_tempdir.as_ref()?;
-        write_floxhub_netrc(tempdir, token).ok()
+        write_floxhub_netrc(tempdir, &self.auth_context).ok()
     }
 }
 
 /// Write a `netrc` temporary file for providing FloxHub auth.
+///
+/// This is the one place the raw token secret is extracted from the
+/// credential — it has to be written into the netrc contents.
 pub fn write_floxhub_netrc(
     temp_dir: impl AsRef<Path>,
-    token: &FloxhubToken,
-) -> std::io::Result<TempPath> {
-    let token_secret = token.secret();
+    auth_context: &AuthContext,
+) -> Result<TempPath, AuthError> {
+    let token_secret = auth_context.token_secret().ok_or(AuthError::NoToken)?;
     // Restrict to known hostnames so that we don't accidentally leak FloxHub
     // credentials to third-party ingress URIs.
     let netrc_contents = FLOXHUB_AUTHENTICATED_HOSTNAMES
@@ -154,9 +155,11 @@ pub fn write_floxhub_netrc(
         .collect::<Vec<_>>()
         .join("\n\n");
 
-    let mut netrc_file = NamedTempFile::new_in(temp_dir)?;
-    netrc_file.write_all(netrc_contents.as_bytes())?;
-    netrc_file.flush()?;
+    let mut netrc_file = NamedTempFile::new_in(temp_dir).map_err(AuthError::CreateNetrc)?;
+    netrc_file
+        .write_all(netrc_contents.as_bytes())
+        .map_err(AuthError::CreateNetrc)?;
+    netrc_file.flush().map_err(AuthError::CreateNetrc)?;
 
     Ok(netrc_file.into_temp_path())
 }
@@ -178,7 +181,7 @@ mod tests {
 
     fn test_auth() -> NixAuth {
         let token = FloxhubToken::new(FAKE_TOKEN.to_string()).unwrap();
-        NixAuth::from_tempdir_and_token(tempdir().unwrap(), Some(token))
+        NixAuth::from_tempdir_and_context(tempdir().unwrap(), AuthContext::Auth0(Some(token)))
     }
 
     /// create_netrc returns a TempPath whose underlying file exists while held
@@ -223,7 +226,7 @@ mod tests {
     /// try_create_netrc returns None when no token is present.
     #[test]
     fn try_create_netrc_returns_none_without_token() {
-        let auth = NixAuth::from_tempdir_and_token(tempdir().unwrap(), None);
+        let auth = NixAuth::from_tempdir_and_context(tempdir().unwrap(), AuthContext::Auth0(None));
         assert!(auth.try_create_netrc().is_none());
     }
 }

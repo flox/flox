@@ -5,7 +5,14 @@ use std::sync::LazyLock;
 use flox_core::features::Features;
 use flox_core::floxhub::Floxhub;
 use flox_core::vars::FLOX_VERSION_STRING;
-pub use floxhub_client::{AuthContext, AuthnMode, FloxhubToken, FloxhubTokenError};
+pub use floxhub_client::{
+    AuthContext,
+    AuthnMode,
+    FloxhubToken,
+    FloxhubTokenError,
+    PAT_PREFIX,
+    PersonalAccessToken,
+};
 use floxhub_client::{FloxhubClient, FloxhubClientError};
 use url::Url;
 use uuid::Uuid;
@@ -124,9 +131,7 @@ pub mod test_helpers {
     /// Set a pre-existing token on a [Flox] instance and rebuild the auth
     /// strategy so that `auth_context.handle()` and friends see it immediately.
     pub fn set_test_token(flox: &mut Flox, token: FloxhubToken) {
-        let auth_context = AuthContext::from_mode(&AuthnMode::Auth0, Some(token));
-
-        let _ = flox.set_auth_context(auth_context);
+        let _ = flox.set_auth_context(AuthContext::Auth0(Some(token)));
     }
 
     /// Set up test authentication on a [Flox] instance.
@@ -223,7 +228,8 @@ pub mod test_helpers {
             Url::from_directory_path(mock_floxhub_git_dir).unwrap()
         });
 
-        let auth_context = AuthContext::from_mode(&AuthnMode::default(), None);
+        let auth_context = AuthContext::from_mode(&AuthnMode::default(), None, "https://not_used")
+            .expect("no token to parse");
 
         let flox = Flox {
             system: env!("NIX_TARGET_SYSTEM").to_string(),

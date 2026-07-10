@@ -470,7 +470,11 @@ fn complete_login(
         .context("Could not save the token-storage preference")?;
     }
 
-    let auth_context = AuthContext::from_mode(&AuthnMode::Auth0, Some(token));
+    let auth_context = AuthContext::from_mode(
+        &AuthnMode::Auth0,
+        Some(token.secret()),
+        &flox.floxhub.api_url_str(),
+    )?;
     let _ = flox.set_auth_context(auth_context);
 
     print_login_success(&handle);

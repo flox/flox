@@ -339,7 +339,7 @@ async fn download_custom_catalog_package(
 ) -> Result<(), RunError> {
     let auth = NixAuth::from_flox(flox)
         .map_err(|e| RunError::BuildFailed(pkg_spec.to_string(), BuildEnvError::Auth(e)))?;
-    let no_netrc_is_error = auth.token().is_none();
+    let no_netrc_is_error = !auth.has_credential();
     let netrc_guard = auth.try_create_netrc();
     let netrc_path: Option<&Path> = netrc_guard.as_deref();
 

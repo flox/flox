@@ -33,7 +33,6 @@ mod upgrade;
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::path::PathBuf;
-use std::str::FromStr;
 use std::{env, fmt, mem};
 
 use anyhow::{Context, Result, bail};
@@ -44,14 +43,7 @@ use flox_core::floxhub::{DEFAULT_FLOXHUB_URL, Floxhub};
 use flox_core::vars::FLOX_DISABLE_METRICS_VAR;
 use flox_manifest::interfaces::AsLatestSchema;
 use flox_manifest::{Manifest, TypedOnly};
-use flox_rust_sdk::flox::{
-    AuthContext,
-    AuthnMode,
-    FLOX_VERSION,
-    Flox,
-    FloxhubToken,
-    FloxhubTokenError,
-};
+use flox_rust_sdk::flox::{AuthContext, AuthnMode, FLOX_VERSION, Flox, FloxhubTokenError};
 use flox_rust_sdk::models::env_registry;
 use flox_rust_sdk::models::env_registry::{ENV_REGISTRY_FILENAME, EnvRegistry};
 use flox_rust_sdk::models::environment::generations::GenerationId;
@@ -364,8 +356,8 @@ impl FloxArgs {
             }
         }
 
-        let floxhub_token = self.resolve_floxhub_token(&config, &authn_mode, &stores);
-        let credential = AuthContext::from_mode(&authn_mode, floxhub_token.clone());
+        let credential =
+            self.resolve_auth_context(&config, &authn_mode, &floxhub.api_url_str(), &stores);
 
         if let Some(events_client) = build_events_client(
             &config,
@@ -534,46 +526,39 @@ impl FloxArgs {
         )
     }
 
-    /// Parse and validate the configured `floxhub_token`, returning `None` and
-    /// emitting any user-facing warnings as a side effect.
+    /// Parse and validate the configured `floxhub_token`, building the
+    /// [AuthContext] and emitting any user-facing warnings as a side effect.
     ///
-    /// Returns `None` immediately when the configured authn mode does not use
-    /// the token (e.g. Kerberos) — in that case the token in `flox.toml` is
-    /// not consumed by the auth pipeline, so warning about its state — or
-    /// rewriting the user's config — would be misleading.
+    /// The token is not consumed when the configured authn mode does not use
+    /// it (e.g. Kerberos) — construction cannot fail there, so warning about
+    /// the token's state — or rewriting the user's config — never happens.
     ///
     /// For `flox hook-env` the token state is reported by the next
     /// user-invoked command instead; see [Self::is_prompt_hook_flow].
-    fn resolve_floxhub_token(
+    ///
+    /// A `flox_pat_` token is opaque: it is never parsed, never wiped as
+    /// invalid, and its expiry is unknown until it is lazily resolved via
+    /// /me — so no startup warning applies to it.
+    fn resolve_auth_context(
         &self,
         config: &Config,
         authn_mode: &AuthnMode,
+        api_url: &str,
         stores: &CredentialStores,
-    ) -> Option<FloxhubToken> {
-        if !matches!(authn_mode, AuthnMode::Auth0) {
-            return None;
-        }
-
-        let parsed = config
+    ) -> AuthContext {
+        let raw = config
             .flox
             .floxhub_token
             .as_deref()
-            .and_then(|s| {
-                if s.is_empty() {
-                    None
-                } else {
-                    Some(FloxhubToken::from_str(s))
-                }
-            })
-            .transpose();
+            .filter(|s| !s.is_empty());
 
-        match parsed {
+        match AuthContext::from_mode(authn_mode, raw, api_url) {
             Err(FloxhubTokenError::InvalidToken(token_error)) => {
                 // The prompt hook must neither print nor rewrite the user's
                 // config; the next user-invoked command surfaces and removes
                 // the invalid token.
                 if self.is_prompt_hook_flow() {
-                    return None;
+                    return AuthContext::Auth0(None);
                 }
                 message::error(formatdoc! {"
                     Your FloxHub token is invalid: {token_error}
@@ -585,32 +570,35 @@ impl FloxArgs {
                 // credential.
                 let source = stores.probe_source(config);
                 stores.clear_invalid(source);
-                None
+                AuthContext::Auth0(None)
             },
-            Ok(Some(token)) if token.is_expired() => {
-                let reauthenticating = matches!(
-                    self.command,
-                    Some(Commands::Admin(AdminCommands::Auth(
-                        auth::Auth::Login { .. }
-                    )))
-                );
-                // The token is account-global, so the reminder only needs to
-                // appear once per shell session. The outermost activation
-                // surfaces it; any `flox` invocation already running inside an
-                // activation — a nested `flox activate`, or a command in an
-                // activated shell whose rc re-activates an environment — stays
-                // quiet. Activations export `_FLOX_ACTIVE_ENVIRONMENTS` into the
-                // shell, including in-place `eval "$(flox activate)"` ones, so
-                // it is a reliable signal even across the parent shell.
-                let nested = activated_environments().last_active().is_some();
-                if !reauthenticating && !self.is_prompt_hook_flow() && !nested {
-                    message::warning(
-                        "Your FloxHub token has expired. Run 'flox auth login' to re-authenticate.",
+            Ok(auth_context) => {
+                if let AuthContext::Auth0(Some(token)) = &auth_context
+                    && token.is_expired()
+                {
+                    let reauthenticating = matches!(
+                        self.command,
+                        Some(Commands::Admin(AdminCommands::Auth(
+                            auth::Auth::Login { .. }
+                        )))
                     );
+                    // The token is account-global, so the reminder only needs to
+                    // appear once per shell session. The outermost activation
+                    // surfaces it; any `flox` invocation already running inside an
+                    // activation — a nested `flox activate`, or a command in an
+                    // activated shell whose rc re-activates an environment — stays
+                    // quiet. Activations export `_FLOX_ACTIVE_ENVIRONMENTS` into the
+                    // shell, including in-place `eval "$(flox activate)"` ones, so
+                    // it is a reliable signal even across the parent shell.
+                    let nested = activated_environments().last_active().is_some();
+                    if !reauthenticating && !self.is_prompt_hook_flow() && !nested {
+                        message::warning(
+                            "Your FloxHub token has expired. Run 'flox auth login' to re-authenticate.",
+                        );
+                    }
                 }
-                Some(token)
+                auth_context
             },
-            Ok(token) => token,
         }
     }
 }

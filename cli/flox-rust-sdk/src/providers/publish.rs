@@ -1376,7 +1376,8 @@ pub mod tests {
         let cache_url = format!("file://{}", temp_dir.path().display());
         let parsed_cache_url = Url::parse(&cache_url).unwrap();
         let key_file_path = temp_key_file.path().to_path_buf();
-        let auth_file = write_floxhub_netrc(temp_dir.path(), token).unwrap();
+        let auth_file =
+            write_floxhub_netrc(temp_dir.path(), &AuthContext::Auth0(Some(token.clone()))).unwrap();
         let catalog_store = ClientSideCatalogStoreConfig::NixCopy {
             ingress_uri: parsed_cache_url.clone(),
             egress_uri: parsed_cache_url.clone(),
@@ -2355,7 +2356,11 @@ pub mod tests {
         let token = create_test_token("test");
 
         let (flox, _temp_dir_handle) = flox_instance();
-        let auth_file = write_floxhub_netrc(flox.temp_dir.as_path(), &token).unwrap();
+        let auth_file = write_floxhub_netrc(
+            flox.temp_dir.as_path(),
+            &AuthContext::Auth0(Some(token.clone())),
+        )
+        .unwrap();
 
         // The known_store_path includes `/bin/nix`.
         let store_path = {

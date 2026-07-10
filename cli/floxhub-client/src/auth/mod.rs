@@ -10,7 +10,13 @@ use serde::{Deserialize, Serialize};
 mod auth_context;
 mod auth_context_factory;
 
-pub use auth_context::{AuthContext, AuthFailure, AuthHeaderError, KerberosMaterial};
+pub use auth_context::{
+    AuthContext,
+    AuthFailure,
+    AuthHeaderError,
+    KerberosMaterial,
+    UNKNOWN_HANDLE,
+};
 
 /// Errors from authentication validation (internal, used by Kerberos credential acquisition).
 #[derive(Debug, Clone, thiserror::Error)]

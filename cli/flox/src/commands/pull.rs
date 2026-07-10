@@ -27,7 +27,6 @@ use flox_rust_sdk::models::environment::{
     create_dot_flox_gitignore,
 };
 use flox_rust_sdk::providers::buildenv::BuildEnvError;
-use floxhub_client::AuthContext;
 use indoc::{formatdoc, indoc};
 use tracing::{debug, info_span, instrument};
 
@@ -675,8 +674,7 @@ impl Pull {
             .unwrap_or_default();
 
         // Check if the token is expired - this might be why authentication failed
-        let token_expired =
-            matches!(&flox.auth_context, AuthContext::Auth0(Some(token)) if token.is_expired());
+        let token_expired = flox.auth_context.is_expired();
 
         let message = format!("The environment {env_ref} does not exist.");
 

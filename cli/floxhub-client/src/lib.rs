@@ -22,7 +22,7 @@
 //!     base_url: "https://api.flox.dev".to_string(),
 //!     extra_headers: BTreeMap::new(),
 //!     mock_mode: FloxhubMockMode::None,
-//!     auth_context: AuthContext::from_mode(&Default::default(), floxhub_token),
+//!     auth_context: AuthContext::from_mode(&Default::default(), floxhub_token, "https://api.flox.dev")?,
 //!     user_agent: Some("flox-cli/1.0".to_string()),
 //!     stability: FloxhubClientConfig::stability_from_env(),
 //! };
@@ -32,6 +32,7 @@
 //! let builds = client.list_builds(None).await?;
 //! ```
 
+mod accounts;
 mod auth;
 pub mod client;
 mod config;
@@ -52,7 +53,15 @@ pub const FLOX_RESOLVE_STABILITY_VAR: &str = "_FLOX_RESOLVE_STABILITY";
 
 // Re-export catalog-api-v1 types for consumers.
 // This allows consumers to depend only on floxhub-client, not directly on catalog-api-v1.
-pub use auth::{AuthContext, AuthFailure, AuthHeaderError, AuthnMode, KerberosMaterial};
+pub use accounts::{MeError, UserIdentity, fetch_me};
+pub use auth::{
+    AuthContext,
+    AuthFailure,
+    AuthHeaderError,
+    AuthnMode,
+    KerberosMaterial,
+    UNKNOWN_HANDLE,
+};
 pub use catalog_api_v1::{
     Client as ApiClient,
     Error as ApiError,
@@ -88,6 +97,12 @@ pub use factory_api_v1::{
     Error as FactoryApiError,
     ResponseValue as FactoryApiResponseValue,
 };
-pub use token::{FloxhubToken, FloxhubTokenError, test_helpers as token_test_helpers};
+pub use token::{
+    FloxhubToken,
+    FloxhubTokenError,
+    PAT_PREFIX,
+    PersonalAccessToken,
+    test_helpers as token_test_helpers,
+};
 // Types (re-exported from types module for convenience)
 pub use types::*;
