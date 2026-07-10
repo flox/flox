@@ -9,6 +9,7 @@ members = [
     "cli/flox-activations",
     "cli/floxhub-client",
     "cli/flox-core",
+    "cli/flox-config",
     "cli/flox-test-utils",
     "cli/mk_data",
     "cli/shell_gen",
@@ -46,6 +47,7 @@ enum_dispatch = "0.3.13"
 flate2 = "1.0"
 flox-activations = { path = "cli/flox-activations" }
 flox-core = { path = "cli/flox-core" }
+flox-config = { path = "cli/flox-config" }
 flox-events = { path = "cli/flox-events" }
 flox-rust-sdk = { path = "cli/flox-rust-sdk" }
 flox-test-utils = { path = "cli/flox-test-utils" }

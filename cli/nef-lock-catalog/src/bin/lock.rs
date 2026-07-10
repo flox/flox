@@ -3,17 +3,20 @@ use std::io::IsTerminal;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use anyhow::{Result, bail};
+use anyhow::{Result, anyhow, bail};
 use clap::Parser;
+use flox_config::Config;
 use flox_core::floxhub::{DEFAULT_FLOXHUB_URL, Floxhub};
 use flox_core::util::message::format_error;
 use floxhub_client::{
     AuthContext,
     AuthnMode,
+    BaseCatalogInfo,
     FloxhubClient,
     FloxhubClientConfig,
     FloxhubClientError,
     FloxhubMockMode,
+    Stability,
 };
 use nef_lock_catalog::{
     CatalogRef,
@@ -28,9 +31,10 @@ use tracing::debug;
 use tracing_subscriber::fmt::format::FmtSpan;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
-use url::Url;
 
-/// Environment variable holding the FloxHub auth token.
+/// Environment variable holding the FloxHub auth token, referenced in error
+/// hints. The value itself arrives via the layered config (`FLOX_*` env
+/// variables override the config files).
 const ENV_FLOXHUB_TOKEN: &str = "FLOX_FLOXHUB_TOKEN";
 
 /// Lock the catalog inputs of one or more NEF package expressions and write the
@@ -52,8 +56,8 @@ struct Cli {
     out: Option<PathBuf>,
 
     /// Catalog stability channel.
-    #[arg(long, default_value = "stable")]
-    stability: String,
+    #[arg(long, default_value = BaseCatalogInfo::DEFAULT_STABILITY)]
+    stability: Stability,
 
     /// Explain each step: files read, catalog references found (with source
     /// locations), the resolved catalog endpoint, and the full lookup request
@@ -102,16 +106,25 @@ async fn main() -> ExitCode {
         base_dir = %cli.base_dir.display(),
         rel_paths = cli.rel_paths.len(),
         out = cli.out.as_deref().map(|out| out.display().to_string()).unwrap_or_else(|| "<stdout>".to_string()),
-        stability = cli.stability,
+        stability = cli.stability.as_str(),
     )
 )]
 async fn run(cli: Cli) -> Result<()> {
-    // Read the token once; whether it is present selects the auth-hint wording
-    // and needs no second environment read.
-    let floxhub_token = std::env::var(ENV_FLOXHUB_TOKEN).ok();
+    // The layered config gives this helper the same view as the CLI:
+    // defaults, /etc/flox.toml, the user flox.toml and FLOX_* env variables.
+    let config = Config::parse()?;
+
+    // Read the token once; whether it is present selects the auth-hint wording.
+    // CLI parity: an empty token counts as unset (mk_data exports
+    // FLOX_FLOXHUB_TOKEN="").
+    let floxhub_token = config
+        .flox
+        .floxhub_token
+        .clone()
+        .filter(|token| !token.is_empty());
     let token_present = floxhub_token.is_some();
 
-    let client = build_client(floxhub_token)?;
+    let client = build_client(&config, floxhub_token)?;
 
     // Union the catalog references discovered across every rel-path. Multiple
     // rel-paths model a manifest build aggregating its NEF dependencies.
@@ -123,7 +136,7 @@ async fn run(cli: Cli) -> Result<()> {
 
     // Render each failure to its message body at the boundary, while the
     // structured data is still in hand; `main` adds the `✘ ERROR:` decoration.
-    let lock = match lock_references(&client, references, &cli.stability).await {
+    let lock = match lock_references(&client, references, cli.stability).await {
         Ok(lock) => lock,
         // REQ-013: surface the unresolvable dependency chains.
         Err(LockError::Unresolvable(entries)) => bail!(render_unresolvable(&entries)),
@@ -150,13 +163,25 @@ async fn run(cli: Cli) -> Result<()> {
     Ok(())
 }
 
-/// Build the catalog client from the environment and the already-read token.
+/// Build the catalog client from the layered config and the already-read token.
 ///
-/// The catalog URL is resolved via [`resolve_catalog_url`]; mock mode is
-/// environment-driven. The token is read once by the caller (see
-/// [ENV_FLOXHUB_TOKEN]) and passed in.
-fn build_client(floxhub_token: Option<String>) -> Result<FloxhubClient> {
-    let catalog_url = resolve_catalog_url()?;
+/// The catalog API base URL is derived with the *same* implementation as the
+/// CLI: [`Floxhub`] turns the configured base (`floxhub_url`, else the
+/// compiled-in [`DEFAULT_FLOXHUB_URL`]) into the API base (`api_url_str`),
+/// with `catalog_url` as the API override. The generated client then joins
+/// `/api/v1/catalog/...` onto it. Mock mode is environment-driven. The token
+/// is read once by the caller and passed in.
+fn build_client(config: &Config, floxhub_token: Option<String>) -> Result<FloxhubClient> {
+    let floxhub = Floxhub::new(
+        config
+            .flox
+            .floxhub_url
+            .clone()
+            .unwrap_or_else(|| DEFAULT_FLOXHUB_URL.clone()),
+        config.flox.catalog_url.clone(),
+        None,
+    )?;
+    let catalog_url = floxhub.api_url_str();
     let mock_mode = FloxhubMockMode::default_from_env();
 
     // Connection details for `--verbose`: the resolved base, the path the
@@ -171,7 +196,10 @@ fn build_client(floxhub_token: Option<String>) -> Result<FloxhubClient> {
     );
 
     let floxhub_token = floxhub_token.map(|token| token.parse()).transpose()?;
-    let auth_context = AuthContext::from_mode(&AuthnMode::Auth0, floxhub_token);
+    let auth_context = AuthContext::from_mode(
+        &effective_authn_mode(&config.flox.floxhub_authn_mode)?,
+        floxhub_token,
+    );
 
     let config = FloxhubClientConfig {
         base_url: catalog_url,
@@ -184,34 +212,24 @@ fn build_client(floxhub_token: Option<String>) -> Result<FloxhubClient> {
     Ok(FloxhubClient::new(config)?)
 }
 
-/// Resolve the catalog API base URL using the *same* derivation as the CLI:
-/// [`flox_core::floxhub::Floxhub`] turns the one FloxHub base into the API base
-/// (`api_url_str`), sharing the CLI's host-shape transform and the recompilable
-/// [`DEFAULT_FLOXHUB_URL`] default. The generated client then joins
-/// `/api/v1/catalog/...` onto it.
+/// Resolve the configured authn mode to the client's, applying the
+/// compiled-in default when unset.
 ///
-/// - Base: `FLOXHUB_URL` if set, else the compiled-in [`DEFAULT_FLOXHUB_URL`]
-///   (so an on-premise build that recompiles the default redirects this binary
-///   just like it redirects the CLI).
-/// - `FLOX_CATALOG_URL`: the API/catalog override, mirroring the CLI's
-///   `config.flox.catalog_url` (passed as the `api_url_override`).
-///
-/// Unlike the CLI, the layered flox config (`/etc/flox.toml`, user `flox.toml`,
-/// the `--floxhub-url` flag) is not consulted — the lock libexec sees only the
-/// environment and the compiled default. Full layered-config parity is tracked
-/// in flox/flox#4442.
-fn resolve_catalog_url() -> Result<String> {
-    let base = match std::env::var("FLOX_FLOXHUB_URL") {
-        Ok(url) if !url.is_empty() => Url::parse(&url)?,
-        _ => DEFAULT_FLOXHUB_URL.clone(),
-    };
-    let api_url_override = match std::env::var("FLOX_CATALOG_URL") {
-        Ok(url) if !url.is_empty() => Some(Url::parse(&url)?),
-        _ => None,
-    };
-
-    let floxhub = Floxhub::new(base, api_url_override, None)?;
-    Ok(floxhub.api_url_str())
+/// The config enum always parses both modes; the client enum only carries the
+/// modes compiled into this build.
+/// The config enum always parses both modes; the client enum only carries the
+/// modes compiled into this build.
+fn effective_authn_mode(mode: &Option<flox_config::AuthnMode>) -> Result<AuthnMode> {
+    match mode {
+        None => Ok(AuthnMode::default()),
+        Some(flox_config::AuthnMode::Auth0) => Ok(AuthnMode::Auth0),
+        #[cfg(feature = "floxhub-authn-kerberos")]
+        Some(flox_config::AuthnMode::Kerberos) => Ok(AuthnMode::Kerberos),
+        #[cfg(not(feature = "floxhub-authn-kerberos"))]
+        Some(flox_config::AuthnMode::Kerberos) => Err(anyhow!(
+            "Kerberos authentication is not supported by this build."
+        )),
+    }
 }
 
 /// Render an authentication-related catalog failure with a token-aware hint.

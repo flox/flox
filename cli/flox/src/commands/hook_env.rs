@@ -1,11 +1,12 @@
 use std::borrow::Cow;
-use std::io::{BufRead, BufReader, BufWriter, Write, stdout};
+use std::io::{BufWriter, IsTerminal, Write, stdout};
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
 use bpaf::Bpaf;
 use flox_activations::attach_diff::diff_serializer::FLOX_HOOK_DIFF_VAR;
 use flox_activations::deactivate::embedded_hook_diff;
+use flox_config::{AutoActivate, AutoActivationPreference, Config};
 use flox_core::activate::context::InvocationKind;
 use flox_core::activate::vars::{
     FLOX_AUTO_ACTIVATED_ENVIRONMENTS_VAR,
@@ -25,8 +26,8 @@ use super::deactivate::{
     flox_activate_tracelevel,
     open_deactivation_target,
 };
-use crate::config::{AutoActivate, AutoActivationPreference, Config};
 use crate::subcommand_metric;
+use crate::utils::dialog::{Confirm, Dialog};
 use crate::utils::message;
 
 #[derive(Debug, Clone, Bpaf)]
@@ -55,7 +56,7 @@ pub struct HookEnv {
 }
 
 impl HookEnv {
-    pub fn handle(self, config: Config, flox: Flox) -> Result<()> {
+    pub async fn handle(self, config: Config, flox: Flox) -> Result<()> {
         let mut writer = BufWriter::new(stdout());
 
         // Consume any actions another flox command (e.g. `flox deactivate`) left
@@ -188,7 +189,7 @@ impl HookEnv {
         let consent = if plan.prompt.is_empty() {
             AutoActivateConsent::NoTerminal
         } else {
-            prompt_for_auto_activation(&plan.prompt)?
+            prompt_for_auto_activation(&plan.prompt).await?
         };
 
         // Only record a metric when this run actually does something;
@@ -204,7 +205,9 @@ impl HookEnv {
             || plan.reinsert.is_some()
             || matches!(
                 consent,
-                AutoActivateConsent::Allow | AutoActivateConsent::Decline
+                AutoActivateConsent::Allow
+                    | AutoActivateConsent::Deny
+                    | AutoActivateConsent::Suppress
             )
             || !plan.abandoned.is_empty()
         {
@@ -234,12 +237,24 @@ impl HookEnv {
                             auto_activated.push(path.clone());
                         }
                     },
-                    // Decline: suppress for this shell so the hook stops asking
+                    // Deny: remember the refusal by persisting `Deny` to config,
+                    // exactly as `flox activate deny` does.
+                    // The user-facing note is emitted once after the
+                    // loop, not per environment.
+                    AutoActivateConsent::Deny => {
+                        write_auto_activation_preference(
+                            &config.flox.config_dir,
+                            path,
+                            AutoActivationPreference::Deny,
+                        )?;
+                    },
+                    // Skip: suppress for this shell so the hook stops asking
                     // while the shell stays within the directory. Leaving clears
-                    // the suppression (re-entering asks again); `flox activate
-                    // deny` makes the refusal permanent. The user-facing note is
+                    // the suppression (re-entering asks again); answering `N`
+                    // makes the refusal permanent. Reached when the user bails
+                    // out of the prompt (Esc or Ctrl-C). The user-facing note is
                     // emitted once after the loop, not per environment.
-                    AutoActivateConsent::Decline => {
+                    AutoActivateConsent::Suppress => {
                         if !suppressed.contains(path) {
                             suppressed.push(path.clone());
                         }
@@ -291,21 +306,28 @@ impl HookEnv {
         }
 
         // One note for the whole batch: the prompt already listed the
-        // environments, so declining repeats neither the list nor a per
-        // environment explanation. Reached only on the first decline;
-        // afterwards the planner drops the suppressed environments from the
-        // prompt, so `plan.prompt` is empty.
-        if matches!(consent, AutoActivateConsent::Decline) && !plan.prompt.is_empty() {
+        // environments, so the note repeats neither the list nor a per
+        // environment explanation. Reached only on the run the user answers;
+        // afterwards the planner drops the suppressed (Skip) or denied
+        // (Deny) environments from the prompt, so `plan.prompt` is empty.
+        if !plan.prompt.is_empty() {
             let environments = if plan.prompt.len() == 1 {
                 "the environment"
             } else {
                 "these environments"
             };
-            message::info(formatdoc! {"
-                Did not auto-activate {environments}.
-                You will be asked again in a new shell or when you re-enter the directory.
-                Run 'flox activate deny --dir <PATH>' to stop being asked."
-            });
+            match consent {
+                AutoActivateConsent::Suppress => message::info(formatdoc! {"
+                    Did not auto-activate {environments}.
+                    You will be asked again in a new shell or when you re-enter the directory.
+                    Run 'flox activate deny --dir <PATH>' to stop being asked."
+                }),
+                AutoActivateConsent::Deny => message::info(formatdoc! {"
+                    Disabled auto-activation for {environments}.
+                    Run 'flox activate allow --dir <PATH>' to re-enable."
+                }),
+                AutoActivateConsent::Allow | AutoActivateConsent::NoTerminal => {},
+            }
         }
 
         write_path_list_update(
@@ -769,13 +791,17 @@ fn read_path_list_var(var: &str) -> Vec<PathBuf> {
 }
 
 /// The user's answer to the auto-activation consent prompt.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum AutoActivateConsent {
     /// Activate the environments and remember the choice (persist `Allow`).
     Allow,
-    /// Don't activate; suppress re-prompting for this shell session.
-    Decline,
-    /// No controlling terminal to prompt on; make no decision this run.
+    /// Don't activate and remember the refusal (persist `Deny`)
+    Deny,
+    /// Don't activate and suppress re-prompting for this shell session only.
+    /// Leaving and re-entering the directory (or a new shell) asks again.
+    Suppress,
+    /// No response was possible: there was no tty to prompt on. Make no
+    /// decision this run so a later interactive prompt can still ask.
     NoTerminal,
 }
 
@@ -786,55 +812,48 @@ enum AutoActivateConsent {
 /// surface several environments at once, and asking per environment is tedious.
 /// The answer applies to all of `project_dirs`.
 ///
-/// The prompt hook's stdout is captured and evaluated by the shell, so the
-/// question and the answer go through `/dev/tty` directly rather than
-/// stdout/stdin. When there is no controlling terminal (a non-interactive
-/// shell), returns [`AutoActivateConsent::NoTerminal`] so the caller leaves the
-/// environments unregistered instead of blocking. A bare Enter (or EOF)
-/// defaults to declining.
-fn prompt_for_auto_activation(project_dirs: &[PathBuf]) -> Result<AutoActivateConsent> {
-    let Ok(tty) = std::fs::OpenOptions::new()
-        .read(true)
-        .write(true)
-        .open("/dev/tty")
-    else {
+/// When there is no terminal to prompt on, returns
+/// [`AutoActivateConsent::NoResponse`] so the caller doesn't suppress
+/// prompting.
+async fn prompt_for_auto_activation(project_dirs: &[PathBuf]) -> Result<AutoActivateConsent> {
+    // Instead of using `Dialog::can_prompt`, only check if stderr is a terminal.
+    // We know stdout is not a terminal, which would cause `Dialog::can_prompt` to return false.
+    if !std::io::stderr().is_terminal() {
         return Ok(AutoActivateConsent::NoTerminal);
-    };
+    }
 
-    let question = match project_dirs {
-        [dir] => format!(
-            "Auto-activate the environment in '{}'? [y/N] ",
-            dir.display()
-        ),
+    let message = match project_dirs {
+        [dir] => format!("Auto-activate the environment in '{}'?", dir.display()),
         dirs => {
-            let mut question = format!("Auto-activate these {} environments?\n", dirs.len());
+            let mut message = format!("Auto-activate these {} environments?", dirs.len());
             for dir in dirs {
-                question.push_str(&format!("  {}\n", dir.display()));
+                message.push_str(&format!("\n  {}", dir.display()));
             }
-            question.push_str("[y/N] ");
-            question
+            message
         },
     };
 
-    // `File` implements `Read`/`Write` through shared references, so one open
-    // handle drives both the question and the answer.
-    let mut tty_writer = &tty;
-    tty_writer
-        .write_all(question.as_bytes())
-        .context("failed to write the auto-activation prompt")?;
-    tty_writer
-        .flush()
-        .context("failed to flush the auto-activation prompt")?;
+    let consent = Dialog {
+        message: &message,
+        help_message: None,
+        typed: Confirm {
+            default: Some(false),
+        },
+    }
+    .prompt()
+    .await;
 
-    let mut answer = String::new();
-    BufReader::new(&tty)
-        .read_line(&mut answer)
-        .context("failed to read the auto-activation response")?;
-    let answer = answer.trim();
-    if answer.eq_ignore_ascii_case("y") || answer.eq_ignore_ascii_case("yes") {
-        Ok(AutoActivateConsent::Allow)
-    } else {
-        Ok(AutoActivateConsent::Decline)
+    match consent {
+        Ok(true) => Ok(AutoActivateConsent::Allow),
+        Ok(false) => Ok(AutoActivateConsent::Deny),
+        // Bailing out of the prompt (Esc or Ctrl-C) makes no lasting decision:
+        // suppress for this shell session so the hook stops asking, but ask
+        // again in a new shell or on re-entering the directory.
+        Err(
+            inquire::InquireError::OperationCanceled | inquire::InquireError::OperationInterrupted,
+        ) => Ok(AutoActivateConsent::Suppress),
+        Err(inquire::InquireError::NotTTY) => Ok(AutoActivateConsent::NoTerminal),
+        Err(err) => Err(err).context("failed to prompt for auto-activation"),
     }
 }
 

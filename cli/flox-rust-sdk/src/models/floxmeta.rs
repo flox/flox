@@ -126,6 +126,28 @@ impl FloxMeta {
         flox: &Flox,
         pointer: &ManagedPointer,
     ) -> Result<Self, FloxMetaError> {
+        let git = Self::open_git(user_floxmeta_dir, flox, pointer)?;
+        let branch: String = remote_branch_name(pointer);
+        if !git
+            .has_branch(&branch)
+            .map_err(FloxMetaError::CheckForBranch)?
+        {
+            git.fetch_branch("dynamicorigin", &branch)
+                .map_err(FloxMetaError::FetchBranch)?;
+        }
+
+        Ok(FloxMeta { git })
+    }
+
+    /// Open the git repository backing a user's floxmeta.
+    ///
+    /// This performs no remote interaction and does not guarantee that a
+    /// branch exists for the environment identified by `pointer`.
+    fn open_git(
+        user_floxmeta_dir: impl AsRef<Path>,
+        flox: &Flox,
+        pointer: &ManagedPointer,
+    ) -> Result<GitCommandProvider, FloxMetaError> {
         let floxhub = Floxhub::new(
             pointer.floxhub_base_url.to_owned(),
             None,
@@ -146,18 +168,7 @@ impl FloxMeta {
             Err(FloxMetaError::NotFound(pointer.owner.to_string()))?
         }
 
-        let git = GitCommandProvider::open_with(git_options, user_floxmeta_dir)
-            .map_err(FloxMetaError::Open)?;
-        let branch: String = remote_branch_name(pointer);
-        if !git
-            .has_branch(&branch)
-            .map_err(FloxMetaError::CheckForBranch)?
-        {
-            git.fetch_branch("dynamicorigin", &branch)
-                .map_err(FloxMetaError::FetchBranch)?;
-        }
-
-        Ok(FloxMeta { git })
+        GitCommandProvider::open_with(git_options, user_floxmeta_dir).map_err(FloxMetaError::Open)
     }
 
     /// Open a floxmeta repository for a given user
@@ -167,6 +178,17 @@ impl FloxMeta {
     pub fn open(flox: &Flox, pointer: &ManagedPointer) -> Result<Self, FloxMetaError> {
         let user_floxmeta_dir = floxmeta_dir(flox, &pointer.owner);
         Self::open_at(user_floxmeta_dir, flox, pointer)
+    }
+
+    /// Open a floxmeta repository for a given user without contacting FloxHub.
+    ///
+    /// Unlike [`FloxMeta::open`], the environment's branch is not fetched
+    /// when it is absent locally. Use this for operations that only need
+    /// local state, such as pruning branches during garbage collection.
+    pub fn open_local(flox: &Flox, pointer: &ManagedPointer) -> Result<Self, FloxMetaError> {
+        let user_floxmeta_dir = floxmeta_dir(flox, &pointer.owner);
+        let git = Self::open_git(user_floxmeta_dir, flox, pointer)?;
+        Ok(FloxMeta { git })
     }
 
     pub fn new_in(

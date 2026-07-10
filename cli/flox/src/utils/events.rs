@@ -10,6 +10,7 @@ use std::env;
 use std::str::FromStr;
 use std::sync::{LazyLock, OnceLock};
 
+use flox_config::Config;
 use flox_events::{EnvDetail, EventsClient, SharedMetadataTemplate};
 use flox_rust_sdk::flox::FLOX_VERSION;
 use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment};
@@ -17,7 +18,6 @@ use flox_rust_sdk::utils::INVOCATION_SOURCES;
 use tracing::debug;
 use uuid::Uuid;
 
-use crate::config::Config;
 use crate::utils::metrics::read_metrics_uuid;
 
 /// Stores the invocation_id resolved by [`resolve_invocation_id`] so detached
@@ -145,6 +145,7 @@ pub fn env_detail_from_concrete(env: &ConcreteEnvironment) -> EnvDetail {
 mod tests {
     use std::path::PathBuf;
 
+    use flox_config::FloxConfig;
     use flox_events::test_helpers::MockEventsConnection;
     use flox_events::{EVENTS_BUFFER_FILE_NAME, EventsHub};
     use serial_test::serial;
@@ -152,7 +153,6 @@ mod tests {
     use tempfile::TempDir;
 
     use super::*;
-    use crate::config::{Config, FloxConfig};
 
     /// A `Config` value pointing at a fresh tempdir, with metrics enabled
     /// and a pre-written metrics uuid so the wrapper has everything it

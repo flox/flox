@@ -2,6 +2,7 @@ pub mod activate;
 pub mod activations;
 pub mod canonical_path;
 pub mod data;
+pub mod features;
 pub mod floxhub;
 pub mod hook_actions;
 #[cfg(feature = "proc_status")]

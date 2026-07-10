@@ -3,6 +3,7 @@ use std::num::NonZeroU8;
 
 use anyhow::{Result, bail};
 use bpaf::Bpaf;
+use flox_config::Config;
 use flox_events::EventsHub;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::providers::catalog::SearchTerm;
@@ -10,7 +11,6 @@ use floxhub_client::{CatalogClientTrait, SearchResults};
 use indoc::{formatdoc, indoc};
 use tracing::{debug, instrument};
 
-use crate::config::Config;
 use crate::subcommand_metric;
 use crate::utils::didyoumean::{DidYouMean, SearchSuggestion};
 use crate::utils::message::{self, stderr_supports_color, stdout_supports_color};

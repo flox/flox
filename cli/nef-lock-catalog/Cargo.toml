@@ -15,7 +15,11 @@ thiserror.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 floxhub-client = { path = "../floxhub-client" }
+flox-config = { path = "../flox-config" }
 flox-core = {path = "../flox-core"}
 rnix.workspace = true
 rowan.workspace = true
 tokio.workspace = true
+
+[features]
+floxhub-authn-kerberos = ["floxhub-client/floxhub-authn-kerberos"]

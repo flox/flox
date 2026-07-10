@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use std::{env, fs, io};
 
 use anyhow::{Result, anyhow};
+use flox_config::InstallerChannel;
 use flox_core::vars::FLOX_SENTRY_ENV;
 use flox_rust_sdk::data::FloxVersion;
 use flox_rust_sdk::flox::FLOX_VERSION;
@@ -15,7 +16,6 @@ use thiserror::Error;
 use time::{Duration, OffsetDateTime};
 use tracing::debug;
 
-use crate::config::InstallerChannel;
 use crate::utils::dialog::Dialog;
 use crate::utils::errors::display_chain;
 use crate::utils::{TRAILING_NETWORK_CALL_TIMEOUT, message};

@@ -2,6 +2,7 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result, bail};
 use bpaf::Bpaf;
+use flox_config::Config;
 use flox_events::EventsHub;
 use flox_manifest::{Manifest, MigratedTypedOnly};
 use flox_rust_sdk::flox::Flox;
@@ -36,7 +37,6 @@ use crate::commands::build::{
     system_override,
 };
 use crate::commands::{SHELL_COMPLETION_FILE, ensure_auth};
-use crate::config::Config;
 use crate::utils::errors::display_chain;
 use crate::utils::events::env_detail_from_concrete;
 use crate::utils::message;

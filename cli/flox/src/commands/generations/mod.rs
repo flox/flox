@@ -1,10 +1,10 @@
 use anyhow::Result;
 use bpaf::Bpaf;
+use flox_config::Config;
 use flox_rust_sdk::flox::Flox;
 use tracing::instrument;
 
 use super::display_help;
-use crate::config::Config;
 
 mod history;
 mod list;

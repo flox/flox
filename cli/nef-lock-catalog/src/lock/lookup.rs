@@ -38,10 +38,6 @@ pub enum LockError {
     #[error("{} catalog reference(s) were unresolvable", .0.len())]
     Unresolvable(Vec<UnresolvableEntry>),
 
-    /// The requested stability is not a valid catalog stability string.
-    #[error("invalid stability: {0:?}")]
-    InvalidStability(String),
-
     /// The catalog lookup request itself failed.
     #[error(transparent)]
     Client(#[from] FloxhubClientError),
@@ -57,22 +53,17 @@ pub enum LockError {
 /// `/build-inputs/lookup` call, and maps the response to a [BuildLock].
 /// Returns [LockError::Unresolvable] if any reference is unresolvable.
 ///
-/// `stability` is the higher-level string input; it is parsed into the typed
-/// [Stability] required by the request contract, failing with
-/// [LockError::InvalidStability] if empty/invalid.
+/// `stability` is the typed [Stability] parsed at the CLI boundary, so this
+/// function cannot fail on an invalid stability string.
 #[instrument(
     skip(client, references),
-    fields(references = references.len(), stability = stability)
+    fields(references = references.len(), stability = stability.as_str())
 )]
 pub async fn lock_references(
     client: &(impl CatalogClientTrait + Send + Sync),
     references: BTreeSet<CatalogRef>,
-    stability: &str,
+    stability: Stability,
 ) -> Result<BuildLock, LockError> {
-    let stability: Stability = stability
-        .parse()
-        .map_err(|_| LockError::InvalidStability(stability.to_string()))?;
-
     let request = build_request(references, stability);
     // The exact JSON POSTed to `/build-inputs/lookup`, for `--verbose`. Guarded
     // so the request is only serialized when the level is enabled.
@@ -226,10 +217,10 @@ mod tests {
         match err {
             LockError::Unresolvable(entries) => {
                 assert_eq!(entries.len(), 1);
-                assert_eq!(entries[0].reference, "catalogs.myorg.missing-dep");
+                assert_eq!(entries[0].reference, "myorg.missing-dep");
                 assert_eq!(entries[0].chain, vec![
-                    "catalogs.myorg.hello".to_string(),
-                    "catalogs.myorg.missing-dep".to_string(),
+                    "myorg.hello".to_string(),
+                    "myorg.missing-dep".to_string(),
                 ]);
             },
             other => panic!("expected LockError::Unresolvable, got {other:?}"),

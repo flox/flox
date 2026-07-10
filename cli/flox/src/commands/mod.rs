@@ -37,6 +37,7 @@ use std::{env, fmt, mem};
 
 use anyhow::{Context, Result, anyhow, bail};
 use bpaf::{Args, Bpaf, ParseFailure, Parser, ShellComp};
+use flox_config::{Config, EnvironmentTrust, FLOX_DIR_NAME};
 use flox_core::data::environment_ref::{self, DEFAULT_NAME, RemoteEnvironmentRef};
 use flox_core::floxhub::{DEFAULT_FLOXHUB_URL, Floxhub};
 use flox_core::vars::FLOX_DISABLE_METRICS_VAR;
@@ -76,7 +77,6 @@ use xdg::BaseDirectories;
 
 use self::envs::DisplayEnvironments;
 use crate::commands::general::update_config;
-use crate::config::{Config, EnvironmentTrust, FLOX_DIR_NAME};
 use crate::utils::active_environments::{
     ActiveEnvironments,
     activated_environments,
@@ -222,7 +222,7 @@ impl Commands {
 
 impl FloxArgs {
     /// Initialize the command line by creating an initial FloxBuilder
-    pub async fn handle(self, config: crate::config::Config) -> Result<()> {
+    pub async fn handle(self, config: Config) -> Result<()> {
         // ensure xdg dirs exist
         tokio::fs::create_dir_all(&config.flox.config_dir).await?;
         tokio::fs::create_dir_all(&config.flox.data_dir).await?;
@@ -322,14 +322,14 @@ impl FloxArgs {
 
         let floxhub = Floxhub::new(floxhub_url, api_url_override, git_url_override)?;
 
-        let floxhub_token = self.resolve_floxhub_token(&config);
+        let authn_mode = effective_authn_mode(&config)?;
+        let floxhub_token = self.resolve_floxhub_token(&config, &authn_mode);
 
         let metrics_device_uuid = (!config.flox.disable_metrics)
             .then(|| read_metrics_uuid(&config).ok())
             .flatten();
 
-        let credential =
-            AuthContext::from_mode(&config.flox.floxhub_authn_mode, floxhub_token.clone());
+        let credential = AuthContext::from_mode(&authn_mode, floxhub_token.clone());
 
         let floxhub_client = init_floxhub_client(
             floxhub.api_url_str(),
@@ -492,8 +492,12 @@ impl FloxArgs {
     ///
     /// For `flox hook-env` the token state is reported by the next
     /// user-invoked command instead; see [Self::is_prompt_hook_flow].
-    fn resolve_floxhub_token(&self, config: &Config) -> Option<FloxhubToken> {
-        if !matches!(config.flox.floxhub_authn_mode, AuthnMode::Auth0) {
+    fn resolve_floxhub_token(
+        &self,
+        config: &Config,
+        authn_mode: &AuthnMode,
+    ) -> Option<FloxhubToken> {
+        if !matches!(authn_mode, AuthnMode::Auth0) {
             return None;
         }
 
@@ -552,6 +556,24 @@ impl FloxArgs {
             },
             Ok(token) => token,
         }
+    }
+}
+
+/// Resolve the configured authn mode to the client's, applying the
+/// compiled-in default when unset.
+///
+/// The config enum always parses both modes; the client enum only carries the
+/// modes compiled into this build.
+fn effective_authn_mode(config: &Config) -> Result<AuthnMode> {
+    match config.flox.floxhub_authn_mode {
+        None => Ok(AuthnMode::default()),
+        Some(flox_config::AuthnMode::Auth0) => Ok(AuthnMode::Auth0),
+        #[cfg(feature = "floxhub-authn-kerberos")]
+        Some(flox_config::AuthnMode::Kerberos) => Ok(AuthnMode::Kerberos),
+        #[cfg(not(feature = "floxhub-authn-kerberos"))]
+        Some(flox_config::AuthnMode::Kerberos) => Err(anyhow!(
+            "Kerberos authentication is not supported by this build."
+        )),
     }
 }
 
@@ -1038,7 +1060,7 @@ impl InternalCommands {
             InternalCommands::CheckForUpgrades(args) => args.handle(flox).await?,
             InternalCommands::ActivationState(args) => args.handle(flox).await?,
             InternalCommands::ServicesSocket(args) => args.handle(flox).await?,
-            InternalCommands::HookEnv(args) => args.handle(config, flox)?,
+            InternalCommands::HookEnv(args) => args.handle(config, flox).await?,
         }
         Ok(())
     }

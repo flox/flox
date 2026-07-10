@@ -73,7 +73,6 @@ async fn wait_for_enter() -> WaitResult {
     WaitResult::Interrupted
 }
 
-#[allow(unused)]
 #[derive(Debug, Clone)]
 pub struct Confirm {
     pub default: Option<bool>,
@@ -106,7 +105,6 @@ impl Dialog<'_, Checkpoint> {
 }
 
 impl Dialog<'_, Confirm> {
-    #[allow(unused)]
     pub async fn prompt(self) -> inquire::error::InquireResult<bool> {
         let message = self.message.to_owned();
         let help_message: Option<String> = self.help_message.map(ToOwned::to_owned);
@@ -140,7 +138,6 @@ impl Display for Choice {
 }
 
 impl<T: Display> Dialog<'_, Select<T>> {
-    #[allow(dead_code)]
     pub async fn prompt(self) -> inquire::error::InquireResult<T> {
         let message = self.message.to_owned();
         let help_message = self.help_message.map(ToOwned::to_owned);

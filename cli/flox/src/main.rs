@@ -6,6 +6,7 @@ use std::process::ExitCode;
 use anyhow::Result;
 use bpaf::{Args, Parser};
 use commands::{EnvironmentSelectError, FloxArgs, FloxCli, Prefix, Version};
+use flox_config::Config;
 use flox_core::sentry::init_sentry;
 use flox_core::vars::{FLOX_VERSION_STRING, FLOX_VERSION_VAR};
 use flox_events::{EventsGuard, EventsHub};
@@ -30,12 +31,11 @@ use crate::utils::init::init_telemetry_uuid;
 use crate::utils::metrics::{Hub, read_metrics_uuid};
 
 mod commands;
-mod config;
 mod utils;
 
 async fn run(args: FloxArgs) -> Result<()> {
     populate_default_nix_env_vars();
-    let config = config::Config::parse()?;
+    let config = Config::parse()?;
     args.handle(config).await?;
     Ok(())
 }
@@ -99,7 +99,7 @@ fn main() -> ExitCode {
         return ExitCode::from(1);
     }
 
-    let config = config::Config::parse().unwrap_or_default();
+    let config = Config::parse().unwrap_or_default();
     let metrics_uuid = if !config.flox.disable_metrics {
         init_telemetry_uuid(&config.flox.data_dir, &config.flox.cache_dir)
             .and_then(|_| read_metrics_uuid(&config))

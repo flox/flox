@@ -107,6 +107,7 @@ in
       cp -rf --no-preserve=mode ${flox-src}/cli/factory-api-v1/* ./cli/factory-api-v1
       cp -rf --no-preserve=mode ${flox-src}/cli/floxhub-client/* ./cli/floxhub-client
       cp -rf --no-preserve=mode ${flox-src}/cli/flox-core/* ./cli/flox-core
+      cp -rf --no-preserve=mode ${flox-src}/cli/flox-config/* ./cli/flox-config
       cp -rf --no-preserve=mode ${flox-src}/cli/shell_gen/* ./cli/shell_gen
       cp -rf --no-preserve=mode ${flox-src}/cli/flox-test-utils/* ./cli/flox-test-utils
       cp -rf --no-preserve=mode ${flox-src}/cli/systemd/* ./cli/systemd

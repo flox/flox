@@ -129,8 +129,8 @@ pub struct BuildResult {
     /// The direct catalog inputs the build locked, keyed by locked-input
     /// reference. Emitted by NEF builds; absent (and so empty) for build modes
     /// that resolve no catalog inputs.
-    #[serde(rename = "catalogLockfile", default)]
-    pub catalog_lockfile: HashMap<String, LockedInputEntry>,
+    #[serde(rename = "direct_catalog_inputs", default)]
+    pub direct_catalog_inputs: HashMap<String, LockedInputEntry>,
     // TODO: factor out and use buildenv::BuiltStorePath (?)
     #[serde(rename = "resultLinks")]
     pub result_links: BTreeMap<PathBuf, PathBuf>,
