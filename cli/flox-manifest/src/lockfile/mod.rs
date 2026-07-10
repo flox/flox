@@ -173,6 +173,33 @@ impl Lockfile {
             .iter()
             .find(|pkg| pkg.install_id() == id.as_ref())
     }
+
+    /// Compare two lockfiles as equal when they differ only in the
+    /// prototype-only `[options.sandbox]` key.
+    ///
+    /// `PathEnvironment::needs_rebuild` calls this instead of `PartialEq`
+    /// because the sandbox bake sanitizes the lockfile (via
+    /// `sanitize_lockfile_json` / `PROTOTYPE_ONLY_OPTION_KEYS`) before the
+    /// builder VM sees it, so the rendered lockfile inside the built
+    /// environment always has `options.sandbox = None`. The host lockfile
+    /// carries the full value. By the sanitizer's own contract, this key does
+    /// not affect the rendered environment, so it must not mark a rendering
+    /// stale. Both the `manifest` field and, when composition is in use, the
+    /// `compose.composer` manifest are normalized before comparison.
+    pub fn equals_ignoring_sandbox(&self, other: &Self) -> bool {
+        // Normalize both sides: clear options.sandbox on the embedded
+        // manifests before comparing the full lockfile structs.
+        let normalize = |lockfile: &Lockfile| -> Lockfile {
+            let mut normalized = lockfile.clone();
+            normalized.manifest = normalized.manifest.without_sandbox_options();
+            if let Some(ref mut compose) = normalized.compose {
+                compose.composer = compose.composer.without_sandbox_options();
+            }
+            normalized
+        };
+
+        normalize(self) == normalize(other)
+    }
 }
 
 impl FromStr for Lockfile {
@@ -740,5 +767,89 @@ pub(crate) mod tests {
         ];
 
         assert_eq!(&actual, &expected);
+    }
+
+    /// Helper: build a minimal V1_13_0 lockfile, optionally with a sandbox
+    /// option set in the embedded manifest.
+    fn make_lockfile_v1_13_0_with_sandbox(sandbox_set: bool) -> Lockfile {
+        use flox_core::activate::sandbox_backend::SandboxBackend;
+
+        use crate::parsed::v1_13_0::SandboxOptions;
+
+        let mut manifest = ManifestLatest::default();
+        if sandbox_set {
+            manifest.options.sandbox = Some(SandboxOptions {
+                backend: Some(SandboxBackend::Oci),
+                mode: None,
+            });
+        }
+        Lockfile {
+            version: Version::<1>,
+            manifest: manifest.as_typed_only(),
+            packages: vec![],
+            compose: None,
+        }
+    }
+
+    /// Two otherwise-identical V1_13_0 lockfiles that differ only in
+    /// `options.sandbox` must compare as equal under `equals_ignoring_sandbox`.
+    #[test]
+    fn equals_ignoring_sandbox_same_content_different_sandbox() {
+        let with_sandbox = make_lockfile_v1_13_0_with_sandbox(true);
+        let without_sandbox = make_lockfile_v1_13_0_with_sandbox(false);
+
+        // Plain PartialEq sees them as different.
+        assert_ne!(with_sandbox, without_sandbox, "PartialEq must see difference");
+
+        // The sandbox-ignoring comparison must treat them as equal.
+        assert!(
+            with_sandbox.equals_ignoring_sandbox(&without_sandbox),
+            "equals_ignoring_sandbox must ignore sandbox difference"
+        );
+        assert!(
+            without_sandbox.equals_ignoring_sandbox(&with_sandbox),
+            "equals_ignoring_sandbox must be symmetric"
+        );
+    }
+
+    /// Two lockfiles that differ in package content (not just sandbox) must
+    /// still compare as NOT equal under `equals_ignoring_sandbox`.
+    #[test]
+    fn equals_ignoring_sandbox_different_packages_not_equal() {
+        let (foo_iid, foo_descriptor, foo_locked) =
+            fake_catalog_package_lock("foo", Some("group1"));
+
+        let mut manifest = ManifestLatest::default();
+        manifest
+            .install
+            .inner_mut()
+            .insert(foo_iid, foo_descriptor);
+        let lockfile_with_pkg = Lockfile {
+            version: Version::<1>,
+            manifest: manifest.as_typed_only(),
+            packages: vec![foo_locked.into()],
+            compose: None,
+        };
+
+        let lockfile_empty = make_lockfile_v1_13_0_with_sandbox(false);
+
+        assert!(
+            !lockfile_with_pkg.equals_ignoring_sandbox(&lockfile_empty),
+            "lockfiles with different packages must not be equal"
+        );
+    }
+
+    /// Two sandbox-free V1_13_0 lockfiles with identical content compare as
+    /// equal under both PartialEq and `equals_ignoring_sandbox`.
+    #[test]
+    fn equals_ignoring_sandbox_sandbox_free_lockfiles_unchanged() {
+        let a = make_lockfile_v1_13_0_with_sandbox(false);
+        let b = make_lockfile_v1_13_0_with_sandbox(false);
+
+        assert_eq!(a, b, "PartialEq must see them as equal");
+        assert!(
+            a.equals_ignoring_sandbox(&b),
+            "equals_ignoring_sandbox must also see them as equal"
+        );
     }
 }

@@ -480,6 +480,31 @@ impl Manifest<TypedOnly> {
     ) -> Result<Manifest<MigratedTypedOnly>, ManifestError> {
         migrate_typed_only(self, lockfile)
     }
+
+    /// Return a clone with the prototype-only `[options.sandbox]` key set to
+    /// `None`, regardless of what it was set to in the original.
+    ///
+    /// This normalisation exists to support lockfile equality checks that must
+    /// ignore the sandbox key. The sandbox bake sanitizes the lockfile with
+    /// `sanitize_lockfile_json` / `PROTOTYPE_ONLY_OPTION_KEYS` before the
+    /// builder VM sees it, so the rendered lockfile stored inside the built
+    /// environment has `options.sandbox = None`. The host lockfile, however,
+    /// carries the full value. Treating this difference as a rebuild trigger
+    /// would cause `PathEnvironment::needs_rebuild` to always return `true`
+    /// inside the guest, leading to a failed build attempt. By the
+    /// sanitizer's own contract, the key does not affect the rendered
+    /// environment, so it must not mark a rendering stale.
+    ///
+    /// Only V1_13_0 manifests (the schema version that introduced `sandbox`)
+    /// are modified. Older schema versions cannot contain the key and are
+    /// returned unchanged.
+    pub(crate) fn without_sandbox_options(&self) -> Self {
+        let mut cloned = self.clone();
+        if let Parsed::V1_13_0(ref mut m) = cloned.inner.parsed {
+            m.options.sandbox = None;
+        }
+        cloned
+    }
 }
 
 impl<S: ManifestState> Manifest<S> {
