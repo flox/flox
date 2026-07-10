@@ -3,15 +3,17 @@ use std::fmt::Display;
 use std::num::NonZeroU8;
 use std::path::{Path, PathBuf};
 
+use anyhow::Result;
 use flox_core::activate::context::AutoActivateFishMode;
 use flox_core::data::environment_ref::RemoteEnvironmentRef;
 use flox_core::features::Features;
 use serde::{Deserialize, Serialize};
 use toml_edit::Key;
 use url::Url;
+use xdg::BaseDirectories;
 
-use crate::write;
 use crate::write::ReadWriteError;
+use crate::{load, write};
 
 /// Name of flox managed directories (config, data, cache)
 pub const FLOX_DIR_NAME: &str = "flox";
@@ -221,6 +223,21 @@ impl Display for InstallerChannel {
 }
 
 impl Config {
+    /// Creates a [Config] from the environment and config files
+    pub fn parse() -> Result<Config> {
+        load::parse()
+    }
+
+    /// Like [Config::parse], with explicit directories and environment.
+    pub fn parse_with(
+        flox_dirs: &BaseDirectories,
+        user_config_dir: &Path,
+        system_config_dir: Option<&Path>,
+        env: impl IntoIterator<Item = (String, String)>,
+    ) -> Result<Config> {
+        load::parse_with(flox_dirs, user_config_dir, system_config_dir, env)
+    }
+
     /// get a value from the config
     ///
     /// **intended for human consumption/introspection of config only**

@@ -5,6 +5,7 @@
 //! (`$XDG_CONFIG_HOME/flox/flox.toml`), `FLOX_*` environment variables.
 
 mod config;
+mod load;
 mod write;
 
 pub use config::{
