@@ -10,10 +10,12 @@ use flox_core::util::message::format_error;
 use floxhub_client::{
     AuthContext,
     AuthnMode,
+    BaseCatalogInfo,
     FloxhubClient,
     FloxhubClientConfig,
     FloxhubClientError,
     FloxhubMockMode,
+    Stability,
 };
 use nef_lock_catalog::{
     CatalogRef,
@@ -52,8 +54,8 @@ struct Cli {
     out: Option<PathBuf>,
 
     /// Catalog stability channel.
-    #[arg(long, default_value = "stable")]
-    stability: String,
+    #[arg(long, default_value = BaseCatalogInfo::DEFAULT_STABILITY)]
+    stability: Stability,
 
     /// Explain each step: files read, catalog references found (with source
     /// locations), the resolved catalog endpoint, and the full lookup request
@@ -102,7 +104,7 @@ async fn main() -> ExitCode {
         base_dir = %cli.base_dir.display(),
         rel_paths = cli.rel_paths.len(),
         out = cli.out.as_deref().map(|out| out.display().to_string()).unwrap_or_else(|| "<stdout>".to_string()),
-        stability = cli.stability,
+        stability = cli.stability.as_str(),
     )
 )]
 async fn run(cli: Cli) -> Result<()> {
@@ -123,7 +125,7 @@ async fn run(cli: Cli) -> Result<()> {
 
     // Render each failure to its message body at the boundary, while the
     // structured data is still in hand; `main` adds the `✘ ERROR:` decoration.
-    let lock = match lock_references(&client, references, &cli.stability).await {
+    let lock = match lock_references(&client, references, cli.stability).await {
         Ok(lock) => lock,
         // REQ-013: surface the unresolvable dependency chains.
         Err(LockError::Unresolvable(entries)) => bail!(render_unresolvable(&entries)),

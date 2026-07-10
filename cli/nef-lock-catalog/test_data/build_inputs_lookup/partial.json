@@ -5,9 +5,9 @@
       "matched": {},
       "unresolvable": [
         {
-          "chain": ["catalogs.myorg.hello", "catalogs.myorg.missing-dep"],
+          "chain": ["myorg.hello", "myorg.missing-dep"],
           "leaf": { "unresolvable": {} },
-          "reference": "catalogs.myorg.missing-dep"
+          "reference": "myorg.missing-dep"
         }
       ]
     }

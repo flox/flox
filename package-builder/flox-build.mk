@@ -826,7 +826,7 @@ define NIX_EXPRESSION_BUILD_template =
 	  --base-dir '$$(NIX_EXPRESSION_ABSDIRPATH_$(_pvarname))' \
 	  --rel-path '$$(NIX_EXPRESSION_RELFILEPATH_$(_pvarname))' \
 	  --stability '$(EXPRESSION_BUILD_STABILITY)' \
-	  --out $$@
+	  --out '$$@'
 
   # Continue by evaluating the build
   $($(_pvarname)_evalJSON): $($(_pvarname)_catalogLockfile)
@@ -835,7 +835,7 @@ define NIX_EXPRESSION_BUILD_template =
 	  --argstr nixpkgs-url '$(EXPRESSION_BUILD_NIXPKGS_URL)' \
 	  --argstr system '$(NIX_SYSTEM)' \
 	  --argstr source-ref '$(NIX_EXPRESSION_REF)' \
-	  --argstr catalog-lockfile $$< \
+	  --argstr catalog-lockfile '$$<' \
 	  --json \
 	  --apply 'pkg: { \
 	    drvPath = pkg.drvPath; \
@@ -888,7 +888,7 @@ define NIX_EXPRESSION_BUILD_template =
 	  --argjson resultLinks '$$($(_pvarname)_resultLinks_json)' \
 	  --slurpfile eval $($(_pvarname)_evalJSON) \
 	  --slurpfile build $($(_pvarname)_buildJSON) \
-	  '$$$$build[0][0] * $$$$eval[0] * { system:$$$$system, catalogLockfile:$$$$catalogLock[0].direct_catalog_inputs, log:$$$$logfile, resultLinks:$$$$resultLinks }' > $$@
+	  '$$$$build[0][0] * $$$$eval[0] * { system:$$$$system, direct_catalog_inputs:$$$$catalogLock[0].direct_catalog_inputs, log:$$$$logfile, resultLinks:$$$$resultLinks }' > $$@
 	@echo -e "Completed build of $$(_name) in Nix expression mode\n"
 
   # Create targets for cleaning up the result and log symlinks.
