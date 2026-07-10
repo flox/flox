@@ -118,7 +118,13 @@
               rust-external-deps = final.rust-external-deps.override {
                 overrideCatalogAuth = "floxhub-authn-kerberos";
               };
+              flox-package-builder = final.flox-package-builder.override {
+                nef-lock-catalog = final.nef-lock-catalog.override {
+                  overrideCatalogAuth = "floxhub-authn-kerberos";
+                };
+              };
             };
+
           };
 
           flox-manpages = callPackage ./pkgs/flox-manpages { }; # Flox Command Line Interface Manpages

@@ -20,3 +20,6 @@ flox-core = {path = "../flox-core"}
 rnix.workspace = true
 rowan.workspace = true
 tokio.workspace = true
+
+[features]
+floxhub-authn-kerberos = ["floxhub-client/floxhub-authn-kerberos"]

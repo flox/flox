@@ -211,13 +211,18 @@ fn build_client(config: &FloxConfig, floxhub_token: Option<String>) -> Result<Fl
 ///
 /// The config enum always parses both modes; the client enum only carries the
 /// modes compiled into this build.
-fn effective_authn_mode(config: &FloxConfig) -> Result<AuthnMode> {
-    match config.floxhub_authn_mode {
+/// The config enum always parses both modes; the client enum only carries the
+/// modes compiled into this build.
+fn effective_authn_mode(config: &Config) -> Result<AuthnMode> {
+    match config.flox.floxhub_authn_mode {
         None => Ok(AuthnMode::default()),
         Some(flox_config::AuthnMode::Auth0) => Ok(AuthnMode::Auth0),
-        Some(flox_config::AuthnMode::Kerberos) => {
-            bail!("Kerberos authentication is not supported by this build.")
-        },
+        #[cfg(feature = "floxhub-authn-kerberos")]
+        Some(flox_config::AuthnMode::Kerberos) => Ok(AuthnMode::Kerberos),
+        #[cfg(not(feature = "floxhub-authn-kerberos"))]
+        Some(flox_config::AuthnMode::Kerberos) => Err(anyhow!(
+            "Kerberos authentication is not supported by this build."
+        )),
     }
 }
 
