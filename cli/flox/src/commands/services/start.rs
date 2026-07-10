@@ -3,6 +3,7 @@ use std::path::Path;
 
 use anyhow::{Result, anyhow};
 use bpaf::Bpaf;
+use flox_config::Config;
 use flox_events::EventsHub;
 use flox_manifest::interfaces::AsLatestSchema;
 use flox_manifest::parsed::common::Services;
@@ -20,7 +21,6 @@ use crate::commands::services::{
     start_services_with_new_process_compose,
 };
 use crate::commands::{EnvironmentSelect, environment_select};
-use crate::config::Config;
 use crate::environment_subcommand_metric;
 use crate::utils::events::env_detail_from_concrete;
 use crate::utils::message;

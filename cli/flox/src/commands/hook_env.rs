@@ -6,6 +6,7 @@ use anyhow::{Context, Result, bail};
 use bpaf::Bpaf;
 use flox_activations::attach_diff::diff_serializer::FLOX_HOOK_DIFF_VAR;
 use flox_activations::deactivate::embedded_hook_diff;
+use flox_config::{AutoActivate, AutoActivationPreference, Config};
 use flox_core::activate::context::InvocationKind;
 use flox_core::activate::vars::{
     FLOX_AUTO_ACTIVATED_ENVIRONMENTS_VAR,
@@ -25,7 +26,6 @@ use super::deactivate::{
     flox_activate_tracelevel,
     open_deactivation_target,
 };
-use crate::config::{AutoActivate, AutoActivationPreference, Config};
 use crate::subcommand_metric;
 use crate::utils::dialog::{Confirm, Dialog};
 use crate::utils::message;

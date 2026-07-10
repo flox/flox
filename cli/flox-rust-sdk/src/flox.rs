@@ -2,11 +2,11 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::LazyLock;
 
+use flox_core::features::Features;
 use flox_core::floxhub::Floxhub;
 use flox_core::vars::FLOX_VERSION_STRING;
 pub use floxhub_client::{AuthContext, AuthnMode, FloxhubToken, FloxhubTokenError};
 use floxhub_client::{FloxhubClient, FloxhubClientError};
-use serde::{Deserialize, Serialize};
 use url::Url;
 use uuid::Uuid;
 
@@ -87,16 +87,6 @@ impl Flox {
         })?;
         Ok(())
     }
-}
-
-#[derive(Debug, Clone, Copy, Deserialize, Serialize, Default)]
-pub struct Features {
-    #[serde(default)]
-    pub qa: bool,
-    #[serde(default)]
-    pub beta: bool,
-    #[serde(default)]
-    pub auto_activate: bool,
 }
 
 pub mod test_helpers {

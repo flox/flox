@@ -1455,12 +1455,12 @@ dependencies = [
  "bpaf",
  "chrono",
  "close_fds",
- "config",
  "crossterm 0.29.0",
  "derive_more",
  "dirs",
  "factory-api-v1",
  "flox-activations",
+ "flox-config",
  "flox-core",
  "flox-events",
  "flox-manifest",
@@ -1550,6 +1550,28 @@ dependencies = [
  "tracing-subscriber",
  "uuid",
  "waitpid-any",
+]
+
+[[package]]
+name = "flox-config"
+version = "0.0.0"
+dependencies = [
+ "anyhow",
+ "config",
+ "flox-core",
+ "indoc",
+ "itertools 0.14.0",
+ "proptest",
+ "proptest-derive",
+ "serde",
+ "serde_json",
+ "temp-env",
+ "tempfile",
+ "thiserror 2.0.18",
+ "toml_edit",
+ "tracing",
+ "url",
+ "xdg",
 ]
 
 [[package]]
@@ -2964,6 +2986,7 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "clap",
+ "flox-config",
  "flox-core",
  "floxhub-client",
  "indent",

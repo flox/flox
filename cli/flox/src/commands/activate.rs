@@ -7,6 +7,7 @@ use std::{env, fs};
 use anyhow::{Context, Result, anyhow, bail};
 use bpaf::Bpaf;
 use crossterm::tty::IsTty;
+use flox_config::{AutoActivationPreference, Config, EnvironmentPromptConfig};
 use flox_core::activate::context::{
     ActivateCtx,
     ActivateMode,
@@ -60,7 +61,6 @@ use crate::commands::{
     render_composition_manifest,
     uninitialized_environment_description,
 };
-use crate::config::{AutoActivationPreference, Config, EnvironmentPromptConfig};
 use crate::utils::detect_shell::{detect_shell_for_in_place, detect_shell_for_subshell};
 use crate::utils::errors::format_diverged_metadata;
 use crate::utils::events::env_detail_from_concrete;

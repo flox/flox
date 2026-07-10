@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 
 use flox_core::data::System;
+use flox_core::features::Features;
 use flox_manifest::parsed::common::KnownSchemaVersion;
 use flox_manifest::raw::{
     DEFAULT_SYSTEMS_STR,
@@ -19,7 +20,6 @@ use flox_manifest::{Manifest, ManifestError, TomlParsed, Validated};
 use indoc::indoc;
 use toml_edit::{Array, DocumentMut, InlineTable, Item, Key, Table, Value};
 
-use crate::flox::Features;
 use crate::models::environment::path_environment::InitCustomization;
 
 #[derive(Debug, thiserror::Error)]

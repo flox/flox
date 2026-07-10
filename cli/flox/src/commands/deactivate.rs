@@ -4,6 +4,7 @@ use std::str::FromStr;
 
 use anyhow::{Context, Result, anyhow, bail};
 use bpaf::Bpaf;
+use flox_config::Config;
 use flox_core::activate::context::InvocationKind;
 use flox_core::activate::vars::FLOX_ACTIVATIONS_BIN;
 use flox_core::activations::activation_state_dir_path;
@@ -20,7 +21,6 @@ use indoc::{formatdoc, indoc};
 use shell_gen::ShellWithPath;
 
 use super::activated_environments;
-use crate::config::Config;
 use crate::subcommand_metric;
 use crate::utils::active_environments::ActiveEnvironment;
 use crate::utils::detect_shell::detect_shell_for_in_place;
