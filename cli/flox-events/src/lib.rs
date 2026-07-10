@@ -261,11 +261,51 @@ impl CliCommandRunPayload {
 pub struct CliCommandCompletedPayload {
     #[serde(flatten)]
     pub command: CommandPayload,
+    /// `0` on success, `1` on any handler error. `None` when no dispatch
+    /// completed (early-exit / pre-exec / interrupt emits).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub exit_code: Option<i32>,
+    /// Handler wall-clock duration in ms; `None` alongside `exit_code`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub duration_ms: Option<u64>,
+    /// PII-safe operation slug for the failing command; `None` on success.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error_kind: Option<String>,
+    /// PII-safe static error descriptor; `None` on success.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error_message: Option<String>,
 }
 
 impl CliCommandCompletedPayload {
+    /// Payload with no lifecycle fields (early-exit / pre-exec / interrupt).
     pub fn new(command: CommandPayload) -> Self {
-        Self { command }
+        Self {
+            command,
+            exit_code: None,
+            duration_ms: None,
+            error_kind: None,
+            error_message: None,
+        }
+    }
+
+    /// Payload carrying the dispatch lifecycle fields; the caller passes
+    /// PII-safe `(error_kind, error_message)` descriptors. `duration_ms` is
+    /// `None` when the handler hands off instead of completing (e.g. the
+    /// `activate` pre-`exec` emit), where no completion time is observable.
+    pub fn with_lifecycle(
+        command: CommandPayload,
+        exit_code: i32,
+        duration_ms: Option<u64>,
+        error_kind: Option<String>,
+        error_message: Option<String>,
+    ) -> Self {
+        Self {
+            command,
+            exit_code: Some(exit_code),
+            duration_ms,
+            error_kind,
+            error_message,
+        }
     }
 }
 
@@ -1027,6 +1067,88 @@ mod tests {
             "device_id": "00000000-0000-0000-0000-000000000000",
             "event_type": "cli.command_completed",
             "payload": expected_payload_json("install"),
+        });
+        assert_eq!(value, expected);
+    }
+
+    #[test]
+    fn command_completed_with_lifecycle_success_envelope_golden() {
+        let payload = CliCommandCompletedPayload::with_lifecycle(
+            command_payload("install"),
+            0,
+            Some(1234),
+            None,
+            None,
+        );
+        let value = serde_json::to_value(fixed_event(EventKind::CliCommandCompleted(payload)))
+            .expect("event serializes");
+        let mut payload_json = expected_payload_json("install");
+        let obj = payload_json.as_object_mut().expect("payload object");
+        obj.insert("exit_code".to_string(), json!(0));
+        obj.insert("duration_ms".to_string(), json!(1234));
+        let expected = json!({
+            "event_id": "00000000-0000-0000-0000-000000000000",
+            "event_timestamp": EPOCH_UNIX_MS,
+            "source": "cli",
+            "invocation_id": "00000000-0000-0000-0000-000000000000",
+            "device_id": "00000000-0000-0000-0000-000000000000",
+            "event_type": "cli.command_completed",
+            "payload": payload_json,
+        });
+        assert_eq!(value, expected);
+    }
+
+    #[test]
+    fn command_completed_handoff_records_exit_code_without_duration() {
+        // The `activate` pre-exec handoff: exit_code 0, no completion duration.
+        let payload = CliCommandCompletedPayload::with_lifecycle(
+            command_payload("activate"),
+            0,
+            None,
+            None,
+            None,
+        );
+        let value = serde_json::to_value(fixed_event(EventKind::CliCommandCompleted(payload)))
+            .expect("event serializes");
+        let obj = value
+            .get("payload")
+            .and_then(|p| p.as_object())
+            .expect("payload object");
+        assert_eq!(obj.get("exit_code"), Some(&json!(0)));
+        assert!(
+            !obj.contains_key("duration_ms"),
+            "duration_ms should be omitted on handoff"
+        );
+    }
+
+    #[test]
+    fn command_completed_with_lifecycle_failure_envelope_golden() {
+        let payload = CliCommandCompletedPayload::with_lifecycle(
+            command_payload("install"),
+            1,
+            Some(567),
+            Some("catalog_resolve".to_string()),
+            Some("failed to resolve packages from catalog".to_string()),
+        );
+        let value = serde_json::to_value(fixed_event(EventKind::CliCommandCompleted(payload)))
+            .expect("event serializes");
+        let mut payload_json = expected_payload_json("install");
+        let obj = payload_json.as_object_mut().expect("payload object");
+        obj.insert("exit_code".to_string(), json!(1));
+        obj.insert("duration_ms".to_string(), json!(567));
+        obj.insert("error_kind".to_string(), json!("catalog_resolve"));
+        obj.insert(
+            "error_message".to_string(),
+            json!("failed to resolve packages from catalog"),
+        );
+        let expected = json!({
+            "event_id": "00000000-0000-0000-0000-000000000000",
+            "event_timestamp": EPOCH_UNIX_MS,
+            "source": "cli",
+            "invocation_id": "00000000-0000-0000-0000-000000000000",
+            "device_id": "00000000-0000-0000-0000-000000000000",
+            "event_type": "cli.command_completed",
+            "payload": payload_json,
         });
         assert_eq!(value, expected);
     }
@@ -1830,6 +1952,37 @@ mod pipeline_tests {
             total_events, 1,
             "second record_command_completed must be a no-op"
         );
+    }
+
+    #[test]
+    fn events_hub_record_command_completed_with_lifecycle_is_idempotent_per_install() {
+        let tempdir = tempfile::tempdir().expect("tempdir");
+        let connection = MockEventsConnection::default();
+        let sent_batches = connection.sent_batches();
+        let hub = EventsHub::new();
+        hub.set_client(client_with_connection(&tempdir, connection));
+
+        hub.record_command_completed_with_lifecycle(
+            "install".to_string(),
+            0,
+            Some(100),
+            None,
+            None,
+        )
+        .expect("first lifecycle record succeeds");
+        hub.record_command_completed_with_lifecycle(
+            "install".to_string(),
+            1,
+            Some(200),
+            Some("env_not_found".to_string()),
+            Some("environment not found".to_string()),
+        )
+        .expect("second lifecycle record is a silent no-op");
+        hub.flush(true).expect("flush events");
+
+        let sent_batches = sent_batches.lock().expect("sent batches lock").clone();
+        let total_events: usize = sent_batches.iter().map(Vec::len).sum();
+        assert_eq!(total_events, 1, "second lifecycle record must be a no-op");
     }
 
     #[test]

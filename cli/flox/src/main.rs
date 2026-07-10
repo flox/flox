@@ -165,6 +165,8 @@ fn main() -> ExitCode {
                 return e.downcast_ref::<Exit>().unwrap().0;
             }
 
+            // This display ladder is mirrored by `utils::error_class::classify`
+            // for telemetry; a new error type added here should be added there too.
             let message = e
                 .downcast_ref::<EnvironmentError>()
                 .map(format_error)

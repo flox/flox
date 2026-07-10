@@ -1,4 +1,4 @@
-use anyhow::{Result, bail};
+use anyhow::Result;
 use bpaf::Bpaf;
 use flox_events::{EventsHub, PackageOutcome};
 use flox_manifest::parsed::latest::SelectedOutputs;
@@ -6,13 +6,17 @@ use flox_manifest::raw::PackageModification;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::uninstall::UninstallSpec;
 use flox_rust_sdk::models::environment::{Environment, EnvironmentError};
-use indoc::formatdoc;
 use itertools::Itertools;
 use tracing::{debug, info_span, instrument};
 
 use super::services::warn_manifest_changes_for_services;
 use super::{EnvironmentSelect, environment_select};
-use crate::commands::{EnvironmentSelectError, ensure_auth, environment_description};
+use crate::commands::{
+    EnvironmentSelectError,
+    NoEnvironmentError,
+    ensure_auth,
+    environment_description,
+};
 use crate::utils::events::env_detail_from_concrete;
 use crate::utils::message;
 use crate::utils::tracing::sentry_set_tag;
@@ -55,23 +59,15 @@ impl Uninstall {
             .await
         {
             Ok(concrete_environment) => concrete_environment,
-            Err(EnvironmentSelectError::EnvironmentError(
-                ref e @ EnvironmentError::DotFloxNotFound(ref dir),
-            )) => {
-                let parent = dir.parent().unwrap_or(dir).display();
-                bail!(formatdoc! {"
-                {e}
-
-                Create an environment with 'flox init --dir {parent}'"
-                })
+            Err(EnvironmentSelectError::EnvironmentError(EnvironmentError::DotFloxNotFound(
+                ref dir,
+            ))) => {
+                let parent = dir.parent().unwrap_or(dir).display().to_string();
+                Err(NoEnvironmentError::Directory(parent))?
             },
-            Err(e @ EnvironmentSelectError::EnvNotFoundInCurrentDirectory) => {
-                bail!(formatdoc! {"
-                {e}
-
-                Create an environment with 'flox init' or uninstall packages from an environment found elsewhere with 'flox uninstall {} --dir <path>'",
-                self.packages.join(" ")})
-            },
+            Err(EnvironmentSelectError::EnvNotFoundInCurrentDirectory) => Err(
+                NoEnvironmentError::CurrentDirectoryUninstall(self.packages.join(" ")),
+            )?,
             Err(e) => Err(e)?,
         };
         environment_subcommand_metric!("uninstall", concrete_environment);

@@ -104,11 +104,36 @@ impl EventsClient {
         self.record_event(EventKind::CliCommandRun(payload))
     }
 
-    /// Record a `cli.command_completed` event for `subcommand`.
-    pub fn record_command_completed(&self, subcommand: String) -> Result<()> {
-        let payload =
-            CliCommandCompletedPayload::new(self.shared_metadata.into_payload(subcommand));
+    /// Wrap a built `cli.command_completed` payload in its envelope and record
+    /// it — the shared tail of the two `record_command_completed*` methods.
+    fn record_completed_payload(&self, payload: CliCommandCompletedPayload) -> Result<()> {
         self.record_event(EventKind::CliCommandCompleted(payload))
+    }
+
+    /// Record a `cli.command_completed` event with no lifecycle fields.
+    pub fn record_command_completed(&self, subcommand: String) -> Result<()> {
+        self.record_completed_payload(CliCommandCompletedPayload::new(
+            self.shared_metadata.into_payload(subcommand),
+        ))
+    }
+
+    /// Record a `cli.command_completed` event carrying the dispatch
+    /// lifecycle fields.
+    pub fn record_command_completed_with_lifecycle(
+        &self,
+        subcommand: String,
+        exit_code: i32,
+        duration_ms: Option<u64>,
+        error_kind: Option<String>,
+        error_message: Option<String>,
+    ) -> Result<()> {
+        self.record_completed_payload(CliCommandCompletedPayload::with_lifecycle(
+            self.shared_metadata.into_payload(subcommand),
+            exit_code,
+            duration_ms,
+            error_kind,
+            error_message,
+        ))
     }
 
     /// Record a `cli.environment.activate` event with the supplied env

@@ -33,6 +33,7 @@ mod upgrade;
 use std::fmt::Display;
 use std::path::PathBuf;
 use std::str::FromStr;
+use std::time::{Duration, Instant};
 use std::{env, fmt, mem};
 
 use anyhow::{Context, Result, anyhow, bail};
@@ -83,6 +84,7 @@ use crate::utils::active_environments::{
     last_activated_environment,
 };
 use crate::utils::dialog::{Dialog, Select};
+use crate::utils::error_class::classify;
 use crate::utils::errors::display_chain;
 use crate::utils::events::{build_events_client, resolve_invocation_id};
 use crate::utils::init::init_floxhub_client;
@@ -217,6 +219,42 @@ impl Commands {
             // Hidden operator command group; the legacy pipeline emitted no
             // metric for it, so the bare parent name is sufficient here.
             Commands::Factory(_) => "factory",
+        }
+    }
+}
+
+/// The lifecycle fields stamped onto the v2 `cli.command_completed` at the
+/// end-of-dispatch emit.
+#[derive(Debug, PartialEq, Eq)]
+struct DispatchOutcome {
+    exit_code: i32,
+    duration_ms: u64,
+    error_kind: Option<String>,
+    error_message: Option<String>,
+}
+
+impl DispatchOutcome {
+    /// Derive the outcome from the dispatch `Result` and elapsed time:
+    /// `Ok` → no error fields; `Err` → the PII-safe `classify` descriptor.
+    fn from_dispatch(result: &Result<()>, elapsed: Duration) -> Self {
+        // Saturate ms into u64 (u64::MAX ms is ~584M years — a ceiling only).
+        let duration_ms = u64::try_from(elapsed.as_millis()).unwrap_or(u64::MAX);
+        match result {
+            Ok(()) => Self {
+                exit_code: 0,
+                duration_ms,
+                error_kind: None,
+                error_message: None,
+            },
+            Err(err) => {
+                let class = classify(err);
+                Self {
+                    exit_code: 1,
+                    duration_ms,
+                    error_kind: Some(class.kind.to_string()),
+                    error_message: Some(class.message.to_string()),
+                }
+            },
         }
     }
 }
@@ -383,6 +421,11 @@ impl FloxArgs {
         let keep_tempfiles = config.flox.keep_tempdir.unwrap_or_default();
 
         let cli_worker = async move {
+            // Dispatch timer; `.elapsed()` is read right after the match below
+            // (before the update-notification await) so `duration_ms` is
+            // handler-execution time only.
+            let dispatch_start = Instant::now();
+
             // command handled above
             let result = match self.command.unwrap() {
                 Commands::Help(group) => {
@@ -407,6 +450,8 @@ impl FloxArgs {
                 Commands::Factory(args) => args.handle(flox).await,
             };
 
+            let outcome = DispatchOutcome::from_dispatch(&result, dispatch_start.elapsed());
+
             // This will print the update notification after output from a successful
             // command but before an error is printed for an unsuccessful command.
             // That's a bit weird,
@@ -418,12 +463,19 @@ impl FloxArgs {
                 Err(e) => debug!("Failed to check for CLI update: {}", display_chain(&e)),
             }
 
-            // Emit the v2 `cli.command_completed`. When `activate.rs`
-            // has already recorded its own completion before `command.exec()`
-            // replaces the parent process, the hub's idempotent flag silently
-            // turns this call into a no-op.
-            if let Err(err) =
-                flox_events::EventsHub::global().record_command_completed(v2_subcommand.to_string())
+            // Emit the v2 `cli.command_completed` with the dispatch lifecycle
+            // fields. When `activate.rs` recorded a completion before `exec`,
+            // the hub's sticky flag no-ops this — including the rare case where
+            // `exec` returns an error, which is then reported as that pre-exec
+            // success rather than this failure.
+            if let Err(err) = flox_events::EventsHub::global()
+                .record_command_completed_with_lifecycle(
+                    v2_subcommand.to_string(),
+                    outcome.exit_code,
+                    Some(outcome.duration_ms),
+                    outcome.error_kind,
+                    outcome.error_message,
+                )
             {
                 debug!(error = %err, "Failed to record v2 cli.command_completed event");
             }
@@ -1194,6 +1246,29 @@ pub enum EnvironmentSelectError {
     Anyhow(#[from] anyhow::Error),
 }
 
+/// A missing-environment error that also suggests `flox init`. It carries the
+/// hint in its own `Display`, so a command can surface it without the shared
+/// `EnvironmentError` / `EnvironmentSelectError` formatters rendering the hint
+/// on every occurrence. Classified as `env_not_found`.
+#[derive(Debug, Error)]
+pub enum NoEnvironmentError {
+    #[error(
+        "Did not find an environment in the current directory.\n\nCreate an environment with 'flox init'"
+    )]
+    CurrentDirectory,
+    #[error(
+        "Did not find an environment in '{0}'\n\nCreate an environment with 'flox init --dir {0}'"
+    )]
+    Directory(String),
+    /// The `uninstall`-specific current-directory message — carries the packages
+    /// and the `--dir` alternative, so the hint travels with a typed error that
+    /// still classifies as `env_not_found` (the packages string is `.0`).
+    #[error(
+        "Did not find an environment in the current directory.\n\nCreate an environment with 'flox init' or uninstall packages from an environment found elsewhere with 'flox uninstall {0} --dir <path>'"
+    )]
+    CurrentDirectoryUninstall(String),
+}
+
 /// Emit a warning if the manifest specifies a minimum CLI version
 /// that is greater than the currently running CLI version.
 fn warn_minimum_cli_version(env: &ConcreteEnvironment, flox: &Flox) {
@@ -1766,6 +1841,32 @@ mod subcommand_name_tests {
         parsed
             .command
             .expect("expected an inner subcommand after parsing")
+    }
+
+    #[test]
+    fn dispatch_outcome_from_ok_dispatch() {
+        let outcome = DispatchOutcome::from_dispatch(&Ok(()), Duration::from_millis(1234));
+        assert_eq!(outcome, DispatchOutcome {
+            exit_code: 0,
+            duration_ms: 1234,
+            error_kind: None,
+            error_message: None,
+        });
+    }
+
+    #[test]
+    fn dispatch_outcome_from_err_dispatch_sets_exit_1_and_is_pii_safe() {
+        let err = anyhow!("could not open /Users/alice/secret.toml");
+        let outcome = DispatchOutcome::from_dispatch(&Err(err), Duration::from_millis(5));
+        assert_eq!(outcome, DispatchOutcome {
+            exit_code: 1,
+            duration_ms: 5,
+            error_kind: Some("uncategorized".to_string()),
+            error_message: Some("unclassified error".to_string()),
+        });
+        // A path + username went in; assert neither survives on the wire.
+        let msg = outcome.error_message.expect("error_message present on Err");
+        assert!(!msg.contains("alice"), "PII leaked: {msg:?}");
     }
 
     /// `auth` must derive to the literal `"auth2"` on the wire so
