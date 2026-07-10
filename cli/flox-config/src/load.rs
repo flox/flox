@@ -227,7 +227,9 @@ mod tests {
                 }
                 let config = Config::parse().unwrap();
                 assert_eq!(
-                    config.get(&Key::parse("floxhub_url").unwrap()).unwrap(),
+                    config
+                        .get_verbatim(&Key::parse("floxhub_url").unwrap())
+                        .unwrap(),
                     "\"https://example.com/\"".to_string()
                 );
                 unsafe { env::remove_var(FLOX_CONFIG_DIR_VAR) };
