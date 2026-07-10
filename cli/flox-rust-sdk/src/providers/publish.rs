@@ -1300,7 +1300,7 @@ pub mod tests {
 
     use chrono::Utc;
     use flox_manifest::interfaces::{AsWritableManifest, WriteManifest};
-    use flox_test_utils::GENERATED_DATA;
+    use flox_test_utils::{GENERATED_DATA, MANUALLY_GENERATED};
     use floxhub_client::AuthContext;
     use pretty_assertions::assert_eq;
 
@@ -1866,6 +1866,49 @@ pub mod tests {
         );
     }
 
+    /// Store path of the fixed-output derivation used in publish mock tests.
+    ///
+    /// This is a content-addressed, empty-closure derivation (`echo cli128 > $out`)
+    /// with a content hash of sha256-bu6MtKc2APyhK/ltUbl1StrFDn2ZfBHWnbtm3whPSn8=
+    /// built in flat-output mode. Because fixed-output derivations are addressed
+    /// by their content hash rather than by their inputs, the store path is
+    /// byte-stable across machines and nixpkgs revisions. It has no references,
+    /// so `nix path-info --recursive` on it returns exactly one entry.
+    ///
+    /// The path must exist in the local Nix store for both replay and recording:
+    /// replay-mode publish collects narinfos via `nix path-info` locally (this
+    /// is not an HTTP exchange and is not covered by mock recordings).
+    /// `ensure_fixed_test_store_path()` builds the derivation on demand so the
+    /// path is always present before tests use it.
+    const FIXED_TEST_STORE_PATH: &str =
+        "/nix/store/xfigz788kjqvyyxdnyvycs0bfc6cdjp3-cli-128-fixed-empty";
+
+    /// Ensure [`FIXED_TEST_STORE_PATH`] exists in the local Nix store, building
+    /// it from the canonical .nix file if absent.
+    ///
+    /// The exists() check makes repeated calls near-free. Concurrent nix-build
+    /// invocations for the same derivation are safe (Nix locks the build).
+    fn ensure_fixed_test_store_path() {
+        if std::path::Path::new(FIXED_TEST_STORE_PATH).exists() {
+            return;
+        }
+        let nix_file = MANUALLY_GENERATED.join("cli-128-fixed-empty.nix");
+        let output = std::process::Command::new("nix-build")
+            .args(["--no-out-link", nix_file.to_str().unwrap()])
+            .output()
+            .expect("failed to run nix-build for fixed test store path");
+        assert!(
+            output.status.success(),
+            "nix-build failed for fixed test store path: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let built = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        assert_eq!(
+            built, FIXED_TEST_STORE_PATH,
+            "nix-build produced a path that does not match FIXED_TEST_STORE_PATH"
+        );
+    }
+
     /// Generate dummy CheckedBuildMetadata and CheckedEnvironmentMetadata that
     /// can be passed to publish()
     ///
@@ -1877,6 +1920,8 @@ pub mod tests {
         CheckedEnvironmentMetadata,
         PackageMetadata,
     ) {
+        ensure_fixed_test_store_path();
+
         // A bare revision is written to this file when generating the mocks.
         let nixpkgs_rev =
             std::fs::read_to_string(UNIT_TEST_GENERATED.join("latest_dev_catalog_rev.txt"))
@@ -1891,7 +1936,7 @@ pub mod tests {
             pname: pkg_name.to_string(),
             outputs: vec![PackageOutput {
                 name: "out".to_string(),
-                store_path: "/nix/store/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA-foo".to_string(),
+                store_path: FIXED_TEST_STORE_PATH.to_string(),
             }]
             .into(),
             outputs_to_install: None,
@@ -2399,7 +2444,8 @@ pub mod tests {
                 packaged_created_guard,
                 &build_meta,
                 None,
-                // Server returns Null store config so no narinfo collection
+                // Server returns meta-only store config; narinfo collected
+                // from FIXED_TEST_STORE_PATH in the local daemon store.
                 false,
             )
             .await
@@ -2435,7 +2481,8 @@ pub mod tests {
                 packaged_created_guard,
                 &build_meta,
                 None,
-                // Server returns Null store config so no narinfo collection
+                // Server returns meta-only store config; narinfo collected
+                // from FIXED_TEST_STORE_PATH in the local daemon store.
                 false,
             )
             .await
@@ -2479,7 +2526,8 @@ pub mod tests {
                 guard,
                 &build_meta,
                 None,
-                // Server returns Null store config so no narinfo collection
+                // Server returns meta-only store config; narinfo collected
+                // from FIXED_TEST_STORE_PATH in the local daemon store.
                 false,
             )
             .await;
@@ -2513,7 +2561,8 @@ pub mod tests {
                 packaged_created_guard,
                 &build_meta,
                 None,
-                // Server returns Null store config so no narinfo collection
+                // Server returns meta-only store config; narinfo collected
+                // from FIXED_TEST_STORE_PATH in the local daemon store.
                 false,
             )
             .await
@@ -2527,7 +2576,8 @@ pub mod tests {
                 PackageCreatedGuard { _private: () },
                 &build_meta,
                 None,
-                // Server returns Null store config so no narinfo collection
+                // Server returns meta-only store config; narinfo collected
+                // from FIXED_TEST_STORE_PATH in the local daemon store.
                 false,
             )
             .await
@@ -2555,7 +2605,8 @@ pub mod tests {
                 PackageCreatedGuard { _private: () },
                 &build_meta,
                 None,
-                // Server returns Null store config so no narinfo collection
+                // Server returns meta-only store config; narinfo collected
+                // from FIXED_TEST_STORE_PATH in the local daemon store.
                 false,
             )
             .await;
