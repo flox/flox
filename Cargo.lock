@@ -1735,6 +1735,7 @@ dependencies = [
  "catalog-api-v1",
  "derive_more",
  "factory-api-v1",
+ "flox-config",
  "futures",
  "http 1.4.0",
  "httpmock",

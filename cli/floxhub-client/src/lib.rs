@@ -47,7 +47,14 @@ pub const FLOX_CATALOG_DUMP_DATA_VAR: &str = "_FLOX_CATALOG_DUMP_RESPONSE_FILE";
 
 // Re-export catalog-api-v1 types for consumers.
 // This allows consumers to depend only on floxhub-client, not directly on catalog-api-v1.
-pub use auth::{AuthContext, AuthFailure, AuthHeaderError, AuthnMode, KerberosMaterial};
+pub use auth::{
+    AuthContext,
+    AuthFailure,
+    AuthHeaderError,
+    AuthnMode,
+    KerberosMaterial,
+    UnsupportedAuthnModeError,
+};
 pub use catalog_api_v1::{
     Client as ApiClient,
     Error as ApiError,

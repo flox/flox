@@ -8,6 +8,7 @@ async-stream.workspace = true
 catalog-api-v1.workspace = true
 factory-api-v1.workspace = true
 derive_more.workspace = true
+flox-config.workspace = true
 futures.workspace = true
 http.workspace = true
 reqwest.workspace = true
