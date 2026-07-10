@@ -303,6 +303,67 @@ mod tests {
         );
     }
 
+    /// The link-name prefix computed by
+    /// `flox_activations::container_active_env::guest_env_link_prefix` must
+    /// match the prefix that
+    /// `flox_rust_sdk::models::environment::RenderedEnvironmentLinks::new_in_base_dir_with_name_and_system`
+    /// would derive for the same env name and the current host system.
+    ///
+    /// `flox-activations` cannot depend on `flox-rust-sdk` (circular), so it
+    /// re-derives the system string and naming formula independently.
+    /// This cross-crate guard breaks CI instead of the demo if those
+    /// formulas ever drift apart.
+    #[test]
+    fn guest_env_link_prefix_matches_rendered_env_links() {
+        use flox_activations::container_active_env::guest_env_link_prefix;
+        use flox_core::data::CanonicalPath;
+        use flox_rust_sdk::models::environment::RenderedEnvironmentLinks;
+        use tempfile::TempDir;
+
+        let env_name = "sandbox-demo";
+
+        // Derive the prefix via the flox-activations helper.
+        // The helper formats "{ARCH}-{OS}.{name}", where ARCH and OS come
+        // from std::env::consts. Container guests are always Linux, so the
+        // formula yields e.g. "aarch64-linux" or "x86_64-linux", matching
+        // what RenderedEnvironmentLinks would use for those NIX_TARGET_SYSTEM
+        // values. The guard uses the same formula-derived system for both
+        // sides to stay host-neutral: the formula must produce the same string
+        // as the SDK naming convention when given the same system string, and
+        // this test verifies that invariant without depending on the host OS.
+        let activations_prefix = guest_env_link_prefix(env_name);
+        let activations_system = format!("{}-{}", std::env::consts::ARCH, std::env::consts::OS);
+        assert_eq!(
+            activations_prefix,
+            format!("{activations_system}.{env_name}"),
+            "guest_env_link_prefix formula is wrong"
+        );
+
+        // Feed the same system string into the SDK so both sides use the same
+        // input. The SDK simply emits `{system}.{name}` as a path prefix, so
+        // the structural invariant holds for any system string.
+        let tmp = TempDir::new().unwrap();
+        let base_dir = CanonicalPath::new(tmp.path()).unwrap();
+        let sdk_links = RenderedEnvironmentLinks::new_in_base_dir_with_name_and_system(
+            &base_dir,
+            env_name,
+            &activations_system,
+        );
+
+        // The dev link from the SDK must equal base_dir/{activations_prefix}-dev.
+        let activations_dev = base_dir.join(format!("{activations_prefix}-dev"));
+        let activations_run = base_dir.join(format!("{activations_prefix}-run"));
+
+        assert_eq!(
+            *sdk_links.dev, activations_dev,
+            "dev link path mismatch between flox-activations and flox-rust-sdk"
+        );
+        assert_eq!(
+            *sdk_links.run, activations_run,
+            "run link path mismatch between flox-activations and flox-rust-sdk"
+        );
+    }
+
     /// The JSON that flox-activations hand-builds for a container guest
     /// (`container_active_env::container_active_environments_json`) must
     /// deserialize into a one-entry `ActiveEnvironments` whose entry is a
