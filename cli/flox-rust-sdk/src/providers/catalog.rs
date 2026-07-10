@@ -514,6 +514,7 @@ pub mod test_helpers {
     use crate::flox::test_helpers::{
         PublishTestUser,
         set_test_token,
+        test_token_for_handle,
         test_token_from_floxhub_test_users_file,
     };
     use crate::providers::nix_auth::{AuthProvider, NixAuth};
@@ -693,11 +694,49 @@ pub mod test_helpers {
         };
         let mut client =
             FloxhubClient::new(catalog_config).expect("failed to create catalog client");
-        if matches!(mock_mode, FloxhubMockMode::Record(_)) && user == PublishTestUser::WithCatalogs
-        {
-            ensure_test_catalogs_exist(&client).block_on();
-            // Delete all of the setup operations from the recording.
-            client.reset_recording();
+        // Strip ephemeral local-store fields from narinfo request bodies when
+        // recording.  nix path-info --json includes registrationTime (wall-
+        // clock seconds), deriver (drv hash), signatures (local signing keys),
+        // and ultimate (local trust flag).  These vary between machines and
+        // re-records but carry no content-addressed meaning.  Switching those
+        // requests from exact body matching to json_body_includes (subset
+        // matching) lets replay succeed even when a fresh materialise produces
+        // different values.  Production sends the full narinfo untouched —
+        // this redaction only touches the YAML file on disk.
+        client.set_record_body_redact_keys(vec![
+            "registrationTime".to_string(),
+            "deriver".to_string(),
+            "signatures".to_string(),
+            "ultimate".to_string(),
+        ]);
+        if matches!(mock_mode, FloxhubMockMode::Record(_)) {
+            match user {
+                PublishTestUser::WithCatalogs => {
+                    ensure_test_catalogs_exist(&client, &base_url_str).block_on();
+                    // Delete all of the setup operations from the recording.
+                    client.reset_recording();
+                },
+                PublishTestUser::NoCatalogs => {
+                    // Pre-configure the personal catalog with meta-only so the
+                    // server does not return a publisher store config with
+                    // rotating STS credentials (which would make every
+                    // re-recording produce a different mock file).
+                    // Accepted divergence: the dev-shell server defaults
+                    // unconfigured catalogs to the `publisher` store type
+                    // (floxhub src/catalog-server/catalog_server/settings.py
+                    // `default_store_type`; the dev shell sets no
+                    // FLOXHUB_CATALOG_DEFAULT_STORE_TYPE) — the meta-only
+                    // state in the recorded mocks comes from this pre-seed,
+                    // which is the intended mechanism.
+                    let config = CatalogStoreConfig::MetaOnly;
+                    create_catalog_with_config(&client, TEST_USER_NO_CATALOG, &config, true)
+                        .block_on()
+                        .expect("failed to pre-configure no-catalogs personal catalog");
+                    // Delete the setup from the recording so it does not
+                    // appear in the mock file.
+                    client.reset_recording();
+                },
+            }
         }
         client
     }
@@ -707,9 +746,30 @@ pub mod test_helpers {
         mock.reset_mocks(responses);
     }
 
-    /// Create a catalog with the given name and config.
+    /// Create a catalog with the given name and set its store config.
     ///
-    /// Will continue with config and not return an error if the catalog already exists.
+    /// The store-config PUT always runs (even when the catalog already
+    /// exists and `exists_ok` is set) so this function guarantees
+    /// "exists WITH this config", not "config only if newly created" —
+    /// determinism of recorded mocks must not depend on the DB dump
+    /// never containing a drifted catalog.
+    ///
+    /// Retries the create POST up to 5 times on 503 Service Unavailable.
+    ///
+    /// The 503 arises only when mock generation explicitly runs
+    /// `reset-floxhub-db` against the live stack: `dropdb --force`
+    /// severs the server's established DB connections; the server
+    /// heals a stale singleton only on the request *after* the one
+    /// that errors; the db-reset readiness probe polls
+    /// `/status/catalog`, which exercises only the READONLY singleton,
+    /// so the first WRITE after a reset deterministically eats one 503.
+    /// A fresh server start does not exhibit this: lazy connect works
+    /// and no stale singleton exists.
+    ///
+    /// DEPRECATION: delete this retry once floxhub HUB-81 lands
+    /// (bounded connection pool per role, floxhub PR #1812) — pooled
+    /// checkout disposes broken connections, eliminating the
+    /// stale-singleton failure class entirely.
     pub async fn create_catalog_with_config(
         client: &FloxhubClient,
         name: &str,
@@ -719,20 +779,38 @@ pub mod test_helpers {
         // This also performs validation that the name meets the catalog name requirements.
         let catalog_name = str_to_catalog_name(name)?;
 
-        let resp = client
-            .api()
-            .create_catalog_api_v1_catalog_catalogs_post(&catalog_name)
-            .await;
+        // Retry on 503; see the doc comment for the readwrite-singleton
+        // mechanism behind these transient errors after a DB reset.
+        let max_attempts = 5u32;
+        let mut attempt = 0u32;
+        let resp = loop {
+            attempt += 1;
+            let result = client
+                .api()
+                .create_catalog_api_v1_catalog_catalogs_post(&catalog_name)
+                .await;
+            match &result {
+                Err(e)
+                    if e.status() == Some(StatusCode::SERVICE_UNAVAILABLE)
+                        && attempt < max_attempts =>
+                {
+                    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                    continue;
+                },
+                _ => break result,
+            }
+        };
+
         match resp {
             Ok(_) => {},
-            // Continue if already exists.
             Err(e) if e.status() == Some(StatusCode::CONFLICT) => {
                 if !exists_ok {
                     return Err(FloxhubClientError::Other(
                         "catalog already existed".to_string(),
                     ));
                 }
-                // return Ok(());
+                // Catalog already exists: fall through to the store-config
+                // PUT so the config is enforced either way.
             },
             Err(e) => {
                 return Err(FloxhubClientError::APIError(e));
@@ -756,19 +834,40 @@ pub mod test_helpers {
     pub const TEST_USER_NO_CATALOG: &str = "test_user_no_catalogs";
     pub const TEST_USER_WITH_EXISTING_CATALOG: &str = "test1";
 
-    /// Ensures that the test org catalog exists, ignoring errors that arise from
-    /// trying to create it when it already exists.
-    pub async fn ensure_test_catalogs_exist(client: &FloxhubClient) {
+    /// Ensures that the test org catalogs exist with the correct store config.
+    ///
+    /// The recording client (authenticated as `test1`) creates the
+    /// read/write catalog and the `test1` personal catalog. A separate
+    /// plain client (no recording, `FloxhubMockMode::None`) authenticated
+    /// as `test_catalog_admin` configures `publish_tests_read_only` — that
+    /// user holds Writer rights on that catalog while `test1` is Reader-only
+    /// by design.
+    pub async fn ensure_test_catalogs_exist(client: &FloxhubClient, base_url: &str) {
         let config = CatalogStoreConfig::MetaOnly;
         create_catalog_with_config(client, TEST_READ_WRITE_CATALOG_NAME, &config, true)
             .await
             .expect("failed to create read/write test catalog");
-        create_catalog_with_config(client, TEST_READ_ONLY_CATALOG_NAME, &config, true)
-            .await
-            .expect("failed to create read only test catalog");
         create_catalog_with_config(client, TEST_USER_WITH_EXISTING_CATALOG, &config, true)
             .await
             .expect("failed to create personal catalog for user with existing catalog");
+
+        // Configure the read-only catalog via a dedicated admin client that
+        // never enters any recording. The recording client (test1) only has
+        // Reader rights on this catalog, so the store-config PUT would fail.
+        let admin_token = test_token_for_handle("test_catalog_admin");
+        let admin_config = FloxhubClientConfig {
+            base_url: base_url.to_string(),
+            extra_headers: Default::default(),
+            mock_mode: FloxhubMockMode::None,
+            auth_context: AuthContext::from_mode(&AuthnMode::Auth0, Some(admin_token)),
+            user_agent: None,
+            stability: None,
+        };
+        let admin_client =
+            FloxhubClient::new(admin_config).expect("failed to create admin catalog client");
+        create_catalog_with_config(&admin_client, TEST_READ_ONLY_CATALOG_NAME, &config, true)
+            .await
+            .expect("failed to create read-only test catalog");
     }
 }
 
