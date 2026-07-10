@@ -53,6 +53,7 @@ use super::{EnvironmentSelect, environment_select};
 use crate::commands::{
     ConcreteEnvironment,
     EnvironmentSelectError,
+    NoEnvironmentError,
     ensure_auth,
     environment_description,
 };
@@ -164,15 +165,11 @@ impl Install {
             .await
         {
             Ok(concrete_environment) => concrete_environment,
-            Err(EnvironmentSelectError::EnvironmentError(
-                ref e @ EnvironmentError::DotFloxNotFound(ref dir),
-            )) => {
-                let parent = dir.parent().unwrap_or(dir).display();
-                bail!(formatdoc! {"
-                {e}
-
-                Create an environment with 'flox init --dir {parent}'"
-                })
+            Err(EnvironmentSelectError::EnvironmentError(EnvironmentError::DotFloxNotFound(
+                ref dir,
+            ))) => {
+                let parent = dir.parent().unwrap_or(dir).display().to_string();
+                Err(NoEnvironmentError::Directory(parent))?
             },
             Err(e @ EnvironmentSelectError::EnvNotFoundInCurrentDirectory) => {
                 try_create_default_environment_interactive(

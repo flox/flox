@@ -85,11 +85,11 @@ impl EventsHub {
         })
     }
 
-    /// Record a `cli.command_completed` event for `subcommand`. No-op when
-    /// no client is installed. Subsequent calls against the same client
-    /// install are no-ops so the dispatcher and the `activate.rs` pre-exec
-    /// path cannot race-emit twice for one invocation.
-    pub fn record_command_completed(&self, subcommand: String) -> Result<()> {
+    /// Shared sticky-idempotency + client-installed scaffolding for the
+    /// `command_completed` recorders: the first record per client install wins
+    /// (so the dispatcher and the `activate.rs` pre-exec path can't double-emit
+    /// for one invocation), and it no-ops when no client is installed.
+    fn record_completed(&self, record: impl FnOnce(&EventsClient) -> Result<()>) -> Result<()> {
         if self.completed_recorded.swap(true, Ordering::SeqCst) {
             debug!("command_completed already recorded for this client install, skipping");
             return Ok(());
@@ -99,7 +99,33 @@ impl EventsHub {
                 trace!("No v2 events client configured, skipping command_completed record");
                 return Ok(());
             };
-            client.record_command_completed(subcommand)
+            record(client)
+        })
+    }
+
+    /// Record a `cli.command_completed` event with no lifecycle fields.
+    pub fn record_command_completed(&self, subcommand: String) -> Result<()> {
+        self.record_completed(|client| client.record_command_completed(subcommand))
+    }
+
+    /// Record a `cli.command_completed` event carrying the dispatch lifecycle
+    /// fields.
+    pub fn record_command_completed_with_lifecycle(
+        &self,
+        subcommand: String,
+        exit_code: i32,
+        duration_ms: Option<u64>,
+        error_kind: Option<String>,
+        error_message: Option<String>,
+    ) -> Result<()> {
+        self.record_completed(|client| {
+            client.record_command_completed_with_lifecycle(
+                subcommand,
+                exit_code,
+                duration_ms,
+                error_kind,
+                error_message,
+            )
         })
     }
 

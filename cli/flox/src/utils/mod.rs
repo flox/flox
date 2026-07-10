@@ -11,6 +11,7 @@ pub mod credential_store;
 pub mod detect_shell;
 pub mod dialog;
 pub mod didyoumean;
+pub mod error_class;
 pub mod errors;
 pub mod events;
 pub mod init;
