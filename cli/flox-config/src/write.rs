@@ -120,7 +120,7 @@ pub(crate) fn write_to<V: Serialize>(
             trace!("try parsing the new virtual config (validation)");
             let validation_config: Config = toml_edit::de::from_document(validation_document)?;
 
-            validation_config.get(path)?;
+            validation_config.get_verbatim(path)?;
         },
     }
 
@@ -165,7 +165,9 @@ mod tests {
         let mut config = Config::default();
         config.flox.disable_metrics = true;
         assert_eq!(
-            config.get(&Key::parse("disable_metrics").unwrap()).unwrap(),
+            config
+                .get_verbatim(&Key::parse("disable_metrics").unwrap())
+                .unwrap(),
             "true".to_string()
         );
     }

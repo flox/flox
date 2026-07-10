@@ -86,7 +86,7 @@ impl ConfigArgs {
     pub async fn handle(&self, config: Config, flox: Flox) -> Result<()> {
         subcommand_metric!("config");
         match self {
-            ConfigArgs::List => println!("{}", config.get(&[])?),
+            ConfigArgs::List => println!("{}", config.get_verbatim(&[])?),
             ConfigArgs::Reset => {
                 match fs::remove_file(&flox.config_dir.join(FLOX_CONFIG_FILE)).await {
                     Err(err) if err.kind() != io::ErrorKind::NotFound => {

@@ -243,7 +243,7 @@ impl Config {
     /// **intended for human consumption/introspection of config only**
     ///
     /// Values in the context should be read from the [Config] type instead!
-    pub fn get(&self, path: &[Key]) -> Result<String, ReadWriteError> {
+    pub fn get_verbatim(&self, path: &[Key]) -> Result<String, ReadWriteError> {
         write::get(self, path)
     }
 
