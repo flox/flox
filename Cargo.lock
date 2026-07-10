@@ -1553,6 +1553,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "flox-config"
+version = "0.0.0"
+dependencies = [
+ "anyhow",
+ "config",
+ "flox-core",
+ "indoc",
+ "itertools 0.14.0",
+ "proptest",
+ "proptest-derive",
+ "serde",
+ "serde_json",
+ "temp-env",
+ "tempfile",
+ "thiserror 2.0.18",
+ "toml_edit",
+ "tracing",
+ "url",
+ "xdg",
+]
+
+[[package]]
 name = "flox-core"
 version = "0.0.0"
 dependencies = [
