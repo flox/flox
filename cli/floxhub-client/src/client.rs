@@ -134,6 +134,24 @@ impl FloxhubClient {
         }
     }
 
+    /// Configure JSON field names to remove from recorded request bodies.
+    ///
+    /// Any request body that is valid JSON and contains any of the given keys
+    /// (at any nesting depth) will have those keys removed in the saved YAML
+    /// file, and the matcher switched from exact `body` to
+    /// `json_body_includes` (subset matching via
+    /// `assert-json-diff::CompareMode::Inclusive`).  Replay therefore accepts
+    /// any value for those fields, which makes recordings stable across
+    /// machines when the fields vary per build (e.g. `registrationTime`,
+    /// `deriver`).
+    ///
+    /// Only takes effect in `Record` mode; no-op in `Replay`/`None`.
+    pub fn set_record_body_redact_keys(&mut self, keys: Vec<String>) {
+        if let Some(ref mut guard) = self._mock_guard {
+            guard.set_body_redact_keys(keys);
+        }
+    }
+
     /// Update the client configuration and recreate the client.
     pub fn update_config(
         &mut self,
