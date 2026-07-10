@@ -244,9 +244,10 @@ pub trait CatalogClientTrait {
     /// tuple (source URL, source rev, nixpkgs rev, system, package name, and
     /// direct closure inputs) has already been recorded/published.
     ///
-    /// The CLI always passes `Some(direct_catalog_inputs)`. An empty map
-    /// serialises as `{}`, signalling a build with no catalog dependencies.
-    /// Passing `None` is reserved for callers that lack closure information.
+    /// Callers must always provide the direct catalog inputs. An empty map
+    /// means the build has no catalog dependencies and serialises as `{}` on
+    /// the wire. Optionality at the generated request type level exists only
+    /// for old-CLI compatibility and does not apply here.
     ///
     /// Returns provenance data (source rev date, rev) in `CheckBuildResponse`
     /// when `already_published` is true. Used for dedup pre-check before
@@ -260,7 +261,7 @@ pub trait CatalogClientTrait {
         source_rev: &str,
         nixpkgs_rev: &str,
         system: api_types::PackageSystem,
-        locked_inputs: Option<std::collections::HashMap<String, api_types::LockedInputEntry>>,
+        locked_inputs: std::collections::HashMap<String, api_types::LockedInputEntry>,
     ) -> Result<CheckBuildResponse, FloxhubClientError>;
 }
 
@@ -576,7 +577,7 @@ impl CatalogClientTrait for FloxhubClient {
         source_rev: &str,
         nixpkgs_rev: &str,
         system: api_types::PackageSystem,
-        locked_inputs: Option<std::collections::HashMap<String, api_types::LockedInputEntry>>,
+        locked_inputs: std::collections::HashMap<String, api_types::LockedInputEntry>,
     ) -> Result<CheckBuildResponse, FloxhubClientError> {
         let catalog = str_to_catalog_name(catalog_name)?;
         let package = str_to_package_name(package_name)?;
@@ -585,7 +586,7 @@ impl CatalogClientTrait for FloxhubClient {
             source_rev: source_rev.to_string(),
             nixpkgs_rev: nixpkgs_rev.to_string(),
             system,
-            locked_inputs,
+            locked_inputs: Some(locked_inputs),
         };
         self.catalog
             .check_build_api_v1_catalog_catalogs_catalog_name_packages_package_name_check_build_post(
@@ -1299,7 +1300,7 @@ pub mod tests {
                 "deadbeef",
                 "cafebabe",
                 api_types::PackageSystem::X8664Linux,
-                Some(locked_inputs),
+                locked_inputs,
             )
             .await;
 
@@ -1337,7 +1338,7 @@ pub mod tests {
                 "deadbeef",
                 "cafebabe",
                 api_types::PackageSystem::X8664Linux,
-                Some(std::collections::HashMap::new()),
+                std::collections::HashMap::new(),
             )
             .await;
 
@@ -1375,7 +1376,7 @@ pub mod tests {
                 "deadbeef",
                 "cafebabe",
                 api_types::PackageSystem::X8664Linux,
-                Some(std::collections::HashMap::new()),
+                std::collections::HashMap::new(),
             )
             .await;
 
@@ -1410,7 +1411,7 @@ pub mod tests {
                 "deadbeef",
                 "cafebabe",
                 api_types::PackageSystem::X8664Linux,
-                Some(std::collections::HashMap::new()),
+                std::collections::HashMap::new(),
             )
             .await;
 
