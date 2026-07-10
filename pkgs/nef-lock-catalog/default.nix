@@ -10,6 +10,9 @@
   flox-src,
   rust-external-deps,
   stdenv,
+  # Override catalog authentication strategy if needed
+  # Options: "floxhub-authn-kerberos"
+  overrideCatalogAuth ? null,
 }:
 let
   FLOX_VERSION = lib.fileContents ./../../VERSION;
@@ -48,7 +51,9 @@ craneLib.buildPackage (
     #
     # `nef-lock-catalog` is not a cargo default-member, so it must be built
     # explicitly with `-p`.
-    cargoExtraArgs = "--locked -p nef-lock-catalog";
+    cargoExtraArgs =
+      "--locked -p nef-lock-catalog"
+      + lib.optionalString (overrideCatalogAuth != null) " --features ${overrideCatalogAuth}";
 
     CARGO_PROFILE = "small";
 
