@@ -1199,3 +1199,196 @@ EOF
   # on top (out of ancestor order, but active and correct).
   assert_output --partial "after:[mid inner outer] mid:mid"
 }
+
+# ---------------------------------------------------------------------------- #
+# Failure and interrupt handling: an interrupted or failed step must not leave
+# a half-activated shell, and must not be retried on every subsequent prompt.
+#
+# The desired behavior:
+#   1. Ctrl+C during a `flox activate` run by the hook activates nothing, and
+#      the environments are suppressed until the directory changes.
+#   2. Ctrl+C during `flox hook-env` activates nothing, and the environments
+#      are suppressed until the directory changes.
+#   3. An error in `flox hook-env` activates nothing, and the environments are
+#      suppressed until the directory changes.
+#   4. An error in a `flox activate` run by the hook suppresses that
+#      environment until the directory changes, but other environments still
+#      activate.
+#
+# That suppression clears on leaving the directory is already pinned by
+# "'flox deactivate' suppresses re-activation until the directory is left"
+# above, so these tests assert the failing step is (a) not applied and (b)
+# recorded in _FLOX_SUPPRESSED_ENVIRONMENTS.
+# ---------------------------------------------------------------------------- #
+
+# A manifest for the project at $1 with an observable var and an on-activate
+# hook that announces itself on stderr and then sleeps, giving the test a
+# window in which to deliver Ctrl+C while `flox activate` is running.
+set_slow_activate_manifest() {
+  cat << EOF | "$FLOX_BIN" edit -d "$1" -f -
+version = 1
+
+[vars]
+TEST_VAR2 = "auto2"
+
+[hook]
+on-activate = "echo ACTIVATE-SLEEPING >&2; sleep 8"
+EOF
+}
+
+# bats test_tags=hook:interrupt:activate
+@test "bash: Ctrl+C during an auto-activation activates nothing and suppresses it" {
+  # Desired behavior 1, exercised with a nested pair so "no environments"
+  # covers the activations queued behind the interrupted one. What already
+  # works today: `flox` handles SIGINT itself (despite the hook's
+  # `trap '' SIGINT`, which only silences the shell), so the in-flight outer
+  # activation aborts and the next prompt's reconcile suppresses it. What
+  # fails: the remaining activations emitted in the same hook run still
+  # proceed, so the inner environment activates (v3:auto3) and is not
+  # suppressed.
+  skip "Ctrl+C aborts only the in-flight activation; the rest of the hook run's activations still proceed"
+
+  project_setup
+  project2_setup
+  project3_setup
+  set_slow_activate_manifest "$PROJECT2_DIR"
+  export FLOX_FEATURES_AUTO_ACTIVATE=true
+  # Auto-activation is opt-in; allow both layers before entering them.
+  "$FLOX_BIN" activate allow -d "$PROJECT2_DIR"
+  "$FLOX_BIN" activate allow -d "$PROJECT3_DIR"
+
+  # Set up a .bashrc so the interactive shell has a known prompt
+  export KNOWN_PROMPT="hooktest> "
+  cat >"$HOME/.bashrc" <<EOF
+export PS1="$KNOWN_PROMPT"
+EOF
+  cat >"$HOME/.inputrc" <<EOF
+set enable-bracketed-paste off
+EOF
+
+  FLOX_SHELL="bash" run -0 expect "$TESTS_DIR/activate/hook-interrupt-activate.exp" \
+    "$PROJECT_DIR" "$PROJECT3_DIR" \
+    'echo "v2:${TEST_VAR2:-unset} v3:${TEST_VAR3:-unset} sup:${_FLOX_SUPPRESSED_ENVIRONMENTS:-unset}"'
+  # Neither the interrupted outer activation nor the queued inner one applies ...
+  assert_output --partial "v2:unset"
+  assert_output --partial "v3:unset"
+  # ... and both are suppressed so the next prompt does not retry them. Match
+  # the JSON-quoted elements of the `sup:` list; the bare paths also appear in
+  # the echoed `cd` command in the transcript.
+  assert_output --partial "\"$(realpath "$PROJECT2_DIR")\""
+  assert_output --partial "\"$(realpath "$PROJECT3_DIR")\""
+}
+
+# bats test_tags=hook:interrupt:hook-env
+@test "bash: Ctrl+C during hook-env activates nothing and suppresses the environment" {
+  # Desired behavior 2. The consent prompt is where `hook-env` blocks (reading
+  # /dev/tty), so that is where the interrupt lands. Currently fails: hook-env
+  # swallows the Ctrl+C and keeps blocking on the tty read, so the shell hangs
+  # at the consent prompt until the question is answered (the expect script
+  # times out waiting for the prompt to come back).
+  skip "Ctrl+C is swallowed by hook-env, which keeps blocking on the consent prompt"
+
+  project_setup
+  project2_setup
+  export FLOX_FEATURES_AUTO_ACTIVATE=true
+  # No allow/deny recorded, so the default 'prompt' mode asks for consent.
+
+  # Set up a .bashrc so the interactive shell has a known prompt
+  export KNOWN_PROMPT="hooktest> "
+  cat >"$HOME/.bashrc" <<EOF
+export PS1="$KNOWN_PROMPT"
+EOF
+  cat >"$HOME/.inputrc" <<EOF
+set enable-bracketed-paste off
+EOF
+
+  FLOX_SHELL="bash" run -0 expect "$TESTS_DIR/activate/hook-interrupt-consent.exp" \
+    "$PROJECT_DIR" "$PROJECT2_DIR" \
+    'echo "v2:${TEST_VAR2:-unset} sup:${_FLOX_SUPPRESSED_ENVIRONMENTS:-unset}"'
+  # The interrupted consent must not activate the environment ...
+  assert_output --partial "v2:unset"
+  # ... and must suppress it so the next prompt does not ask again. Match the
+  # JSON-quoted element of the `sup:` list; the bare path also appears in the
+  # echoed `cd` command in the transcript.
+  assert_output --partial "\"$(realpath "$PROJECT2_DIR")\""
+}
+
+# bats test_tags=hook:error:hook-env
+@test "bash: a hook-env error activates nothing and suppresses the environment" {
+  # Desired behavior 3. Currently fails the suppression half: hook-env bails
+  # before emitting anything (nothing activates), but no suppression is
+  # recorded, so every subsequent prompt re-runs hook-env and either fails
+  # again or activates the environment once the error clears.
+  skip "a hook-env error activates nothing but is retried on every prompt instead of suppressing"
+
+  project_setup
+  project2_setup
+  export FLOX_FEATURES_AUTO_ACTIVATE=true
+  # Auto-activation is opt-in; allow the target before entering it.
+  "$FLOX_BIN" activate allow -d "$PROJECT2_DIR"
+
+  # Make hook-env fail persistently: its first step is to read this shell's
+  # prompt-hook action file, so turning that path into a directory makes the
+  # read error (and, unlike a malformed file, it cannot be consumed). The
+  # runtime dir is XDG_RUNTIME_DIR/flox when the xdg crate accepts
+  # XDG_RUNTIME_DIR (it must be user-owned with mode 0700) and
+  # FLOX_CACHE_DIR/run otherwise; plant the directory under both.
+  run --separate-stderr bash -c "
+    export FLOX_FEATURES_AUTO_ACTIVATE=true
+    export FLOX_SHELL=\$(which bash)
+    eval \"\$($FLOX_BIN activate -d $PROJECT_DIR)\"
+    mkdir -p \"\$XDG_RUNTIME_DIR/flox/prompt-hook-actions/\$\$.json\"
+    mkdir -p \"\$FLOX_CACHE_DIR/run/prompt-hook-actions/\$\$.json\"
+    cd $PROJECT2_DIR
+    _flox_hook
+    echo \"v2:\${TEST_VAR2:-unset}\"
+    echo \"sup:\${_FLOX_SUPPRESSED_ENVIRONMENTS:-unset}\"
+  "
+  assert_success
+  # The failed hook run must not activate the environment ...
+  assert_output --partial "v2:unset"
+  # ... and must suppress it so the next prompt does not retry.
+  assert_output --partial "\"$(realpath "$PROJECT2_DIR")\""
+}
+
+# bats test_tags=hook:error:activate
+@test "bash: a failing auto-activation is suppressed while other environments still activate" {
+  # Desired behavior 4: entering a nested pair where the outer environment is
+  # broken must still activate the inner one, and the next prompt must move
+  # the broken environment from tracked to suppressed rather than retrying it.
+  project_setup
+  project2_setup
+  project3_setup
+  export FLOX_FEATURES_AUTO_ACTIVATE=true
+  # Auto-activation is opt-in; allow both layers before breaking the outer.
+  "$FLOX_BIN" activate allow -d "$PROJECT2_DIR"
+  "$FLOX_BIN" activate allow -d "$PROJECT3_DIR"
+  # Break the outer environment so its `flox activate` exits non-zero: an
+  # unparseable manifest with no lockfile fails at lock time.
+  echo 'not valid toml [' > "$PROJECT2_DIR/.flox/env/manifest.toml"
+  rm -f "$PROJECT2_DIR/.flox/env/manifest.lock"
+
+  run --separate-stderr bash -c "
+    export FLOX_FEATURES_AUTO_ACTIVATE=true
+    export FLOX_SHELL=\$(which bash)
+    eval \"\$($FLOX_BIN activate -d $PROJECT_DIR)\"
+    cd $PROJECT3_DIR
+    _flox_hook
+    echo \"first: v2:\${TEST_VAR2:-unset} v3:\${TEST_VAR3:-unset}\"
+    _flox_hook
+    echo \"sup:\${_FLOX_SUPPRESSED_ENVIRONMENTS:-unset}\"
+    echo \"second: v2:\${TEST_VAR2:-unset} v3:\${TEST_VAR3:-unset}\"
+    cd $BATS_TEST_TMPDIR
+    _flox_hook
+    echo \"left:\${_FLOX_SUPPRESSED_ENVIRONMENTS:-unset}\"
+  "
+  assert_success
+  # The broken outer environment does not activate; the inner one does.
+  assert_output --partial "first: v2:unset v3:auto3"
+  # The next prompt suppresses the broken environment instead of retrying it,
+  # and leaves the inner activation in place.
+  assert_output --partial "sup:[\"$(realpath "$PROJECT2_DIR")\"]"
+  assert_output --partial "second: v2:unset v3:auto3"
+  # Leaving the directory clears the suppression.
+  assert_output --partial "left:unset"
+}

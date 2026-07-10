@@ -1,0 +1,45 @@
+# Activate a project environment using --dir, then cd into a second directory
+# whose allowed environment has a slow `on-activate` hook, and press Ctrl+C
+# while that auto-activation is running. The third argument is a command run
+# afterwards to observe whether the environment activated and whether it was
+# suppressed.
+
+set dir [lindex $argv 0]
+set target [lindex $argv 1]
+set command [lindex $argv 2]
+set flox $env(FLOX_BIN)
+# Auto-activation may lock and build an environment on first use.
+set timeout 60
+set env(NO_COLOR) 1
+set env(TERM) xterm-mono
+set stty_init "cols 1000"
+
+spawn $flox activate --dir $dir
+expect_after {
+  timeout { exit 1 }
+  eof { exit 2 }
+  "*\n" { exp_continue }
+  "*\r" { exp_continue }
+}
+
+expect "You are now using the environment"
+expect $env(KNOWN_PROMPT)
+
+send "cd $target\n"
+# The target's on-activate hook prints this marker to stderr and then sleeps,
+# so the interrupt arrives while `flox activate` is running inside the hook's
+# eval.
+expect "ACTIVATE-SLEEPING"
+sleep 0.5
+send "\x03"
+# The interrupt must abort the activation and return to the prompt promptly,
+# well before the on-activate sleep would have finished on its own.
+expect $env(KNOWN_PROMPT)
+
+# Let one more prompt fire so suppression recorded by the next hook run (e.g.
+# the tracked-but-not-active reconcile) is visible to the observation command.
+send "true\n"
+expect $env(KNOWN_PROMPT)
+
+send "$command && exit\n"
+expect eof
