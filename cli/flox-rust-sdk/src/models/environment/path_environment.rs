@@ -598,6 +598,15 @@ impl PathEnvironment {
     /// If no lockfile exists in the rendered environment,
     /// or differs from the definition in the environment,
     /// the environment will be rebuilt.
+    ///
+    /// The comparison uses `Lockfile::equals_ignoring_sandbox` rather than
+    /// `PartialEq` to avoid spurious rebuild signals inside OCI sandbox
+    /// guests. The sandbox bake sanitizes the lockfile (stripping
+    /// `[options.sandbox]`) before the builder VM sees it, so the rendered
+    /// lockfile inside the built environment always has
+    /// `options.sandbox = None`. The host lockfile carries the full value.
+    /// By the sanitizer's own contract, this key does not affect the rendered
+    /// environment and must not mark a rendering stale.
     fn needs_rebuild(&self) -> Result<bool, EnvironmentError> {
         let env_view = self.as_core_environment()?;
         let Some(lockfile) = env_view.existing_lockfile()? else {
@@ -614,7 +623,7 @@ impl PathEnvironment {
             return Ok(true);
         };
 
-        if lockfile != rendered_lockfile {
+        if !lockfile.equals_ignoring_sandbox(&rendered_lockfile) {
             return Ok(true);
         }
 
