@@ -33,9 +33,13 @@ static RESOLVED_INVOCATION_ID: OnceLock<Uuid> = OnceLock::new();
 pub const FLOX_INVOCATION_ID_VAR: &str = "FLOX_INVOCATION_ID";
 
 static METRICS_EVENTS_URL_V2: LazyLock<String> = LazyLock::new(|| {
-    std::env::var("_FLOX_METRICS_URL_OVERRIDE").unwrap_or(env!("METRICS_EVENTS_URL_V2").to_string())
+    std::env::var("_FLOX_METRICS_URL_V2_OVERRIDE")
+        .unwrap_or(env!("METRICS_EVENTS_URL_V2").to_string())
 });
-const METRICS_EVENTS_API_KEY_V2: &str = env!("METRICS_EVENTS_API_KEY_V2");
+static METRICS_EVENTS_API_KEY_V2: LazyLock<String> = LazyLock::new(|| {
+    std::env::var("_FLOX_METRICS_API_KEY_V2_OVERRIDE")
+        .unwrap_or(env!("METRICS_EVENTS_API_KEY_V2").to_string())
+});
 
 /// Resolve the invocation id for the current process.
 ///
@@ -114,7 +118,7 @@ pub fn build_events_client(config: &Config, invocation_id: Uuid) -> Option<Event
         device_id,
         &config.flox.data_dir,
         METRICS_EVENTS_URL_V2.clone(),
-        METRICS_EVENTS_API_KEY_V2,
+        METRICS_EVENTS_API_KEY_V2.clone(),
         invocation_id,
         shared_metadata_template(),
     ))
