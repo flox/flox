@@ -345,6 +345,89 @@ test-all: test-nix-plugins impure-tests integ-tests nix-integ-tests
 
 # ---------------------------------------------------------------------------- #
 
+# Measure line/function coverage for a single crate (default: flox-core).
+#
+# The nix Rust toolchain ships llvm-tools and profiler builtins, but there
+# is no rustup, so cargo-llvm-cov's automatic tool discovery fails. We
+# therefore export LLVM_COV and LLVM_PROFDATA directly from the toolchain
+# sysroot before invoking cargo-llvm-cov.
+#
+# cargo-llvm-cov is provisioned non-invasively via nixpkgs — no global
+# install, no rustup, no toolchain file changes.
+#
+# Per-crate feature handling:
+#   flox-core        — needs --features tests  (enables proptest helpers)
+#   flox-rust-sdk    — needs --features tests  (enables test helpers)
+#   flox             — needs --features extra-tests  (impure unit tests)
+#   flox-manifest    — needs --features tests
+#   other crates     — no extra features required
+#
+# Usage:
+#   just coverage              # measure flox-core (default, ~50 s cold)
+#   just coverage flox-rust-sdk
+#   just coverage flox         # requires `just build` first (needs
+#                              #   built subsystems at build/)
+#   just coverage --workspace  # all crates; also requires `just build`
+#                              #   first; measured wall-clock: ~3 min
+coverage crate="flox-core":
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    CRATE="{{crate}}"
+
+    # --- Locate LLVM tools from the Rust toolchain sysroot ------------------
+    # The nix toolchain bundles llvm-cov and llvm-profdata alongside rustc,
+    # but cargo-llvm-cov's rustup-based discovery won't find them. Point it
+    # at the sysroot binaries directly.
+    SYSROOT="$(rustc --print sysroot)"
+    TARGET_TRIPLE="$(rustc -Vv | awk '/^host:/ { print $2 }')"
+    LLVM_BIN="${SYSROOT}/lib/rustlib/${TARGET_TRIPLE}/bin"
+
+    if [ ! -f "${LLVM_BIN}/llvm-cov" ]; then
+        echo "error: llvm-cov not found at ${LLVM_BIN}/llvm-cov" >&2
+        echo "       Is llvm-tools available in the Rust toolchain?" >&2
+        exit 1
+    fi
+
+    export LLVM_COV="${LLVM_BIN}/llvm-cov"
+    export LLVM_PROFDATA="${LLVM_BIN}/llvm-profdata"
+
+    # --- Build cargo-llvm-cov arguments -------------------------------------
+    ARGS=()
+
+    if [ "$CRATE" = "--workspace" ]; then
+        ARGS+=(--workspace)
+    else
+        ARGS+=(-p "$CRATE")
+
+        # Per-crate feature flags: enable test helpers that ship behind
+        # feature gates so they don't bloat production binaries.
+        case "$CRATE" in
+            flox-core | flox-rust-sdk | flox-manifest)
+                ARGS+=(--features tests)
+                ;;
+            flox)
+                ARGS+=(--features extra-tests)
+                ;;
+        esac
+    fi
+
+    echo "==> Coverage for: ${CRATE}"
+    echo "    LLVM_COV=${LLVM_COV}"
+    echo "    LLVM_PROFDATA=${LLVM_PROFDATA}"
+    echo
+
+    # cargo-llvm-cov is provisioned from nixpkgs — no install step needed.
+    # The '--' separator passes remaining flags to nextest.
+    nix run \
+        --extra-experimental-features 'nix-command flakes' \
+        nixpkgs#cargo-llvm-cov -- \
+        llvm-cov nextest \
+        "${ARGS[@]}" \
+        --summary-only
+
+# ---------------------------------------------------------------------------- #
+
 # Refresh the prior-release lockfile fixtures under
 #   test_data/manually_generated/prior_release_baselines/
 # used by the cross-release tests: a current Flox release must still honor
