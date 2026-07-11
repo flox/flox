@@ -84,6 +84,7 @@ use crate::utils::active_environments::{
 };
 use crate::utils::dialog::{Dialog, Select};
 use crate::utils::errors::display_chain;
+use crate::utils::events::{build_events_client, resolve_invocation_id};
 use crate::utils::init::init_floxhub_client;
 use crate::utils::message;
 use crate::utils::metrics::{AWSDatalakeConnection, Client, Hub, read_metrics_uuid};
@@ -281,6 +282,10 @@ impl FloxArgs {
             unsafe {
                 env::set_var(FLOX_DISABLE_METRICS_VAR, "true");
             }
+        }
+
+        if let Some(events_client) = build_events_client(&config, resolve_invocation_id()) {
+            flox_events::EventsHub::global().set_client(events_client);
         }
 
         // Emit the v2 `cli.command_run` once at dispatch start. The matching

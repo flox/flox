@@ -9,7 +9,7 @@ use commands::{EnvironmentSelectError, FloxArgs, FloxCli, Prefix, Version};
 use flox_config::Config;
 use flox_core::sentry::init_sentry;
 use flox_core::vars::{FLOX_VERSION_STRING, FLOX_VERSION_VAR};
-use flox_events::{EventsGuard, EventsHub};
+use flox_events::EventsGuard;
 use flox_rust_sdk::flox::FLOX_VERSION;
 use flox_rust_sdk::models::environment::EnvironmentError;
 use flox_rust_sdk::models::environment::managed_environment::ManagedEnvironmentError;
@@ -26,7 +26,6 @@ use crate::utils::errors::{
     format_managed_error,
     format_remote_error,
 };
-use crate::utils::events::{build_events_client, resolve_invocation_id};
 use crate::utils::init::init_telemetry_uuid;
 use crate::utils::metrics::{Hub, read_metrics_uuid};
 
@@ -113,10 +112,6 @@ fn main() -> ExitCode {
     // https://docs.sentry.io/platforms/rust/#async-main-function
     let _sentry_guard = metrics_uuid.map(|uuid| init_sentry("flox-cli", uuid));
     let _metrics_guard = Hub::global().try_guard().ok();
-    let invocation_id = resolve_invocation_id();
-    if let Some(client) = build_events_client(&config, invocation_id) {
-        EventsHub::global().set_client(client);
-    }
     let _v2_events_guard = EventsGuard::new();
 
     // Pass down the verbosity level to all sub-processes
