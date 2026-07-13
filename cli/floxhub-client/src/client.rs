@@ -190,6 +190,16 @@ pub trait CatalogClientTrait {
         attr_path: impl AsRef<str> + Send + Sync,
     ) -> Result<PackageDetails, VersionsError>;
 
+    /// Get the packages that provide a binary, via the catalog's
+    /// binary-to-package index.
+    ///
+    /// An unknown binary yields an empty result page, not an error.
+    async fn packages_by_binary(
+        &self,
+        binary_name: impl AsRef<str> + Send + Sync,
+        system: api_types::PackageSystem,
+    ) -> Result<ResultsPage<PackageBuild>, FloxhubClientError>;
+
     /// Get publish info for a package.
     async fn publish_info(
         &self,
@@ -406,6 +416,39 @@ impl CatalogClientTrait for FloxhubClient {
         let search_results = PackageDetails { results, count };
 
         Ok(search_results)
+    }
+
+    async fn packages_by_binary(
+        &self,
+        binary_name: impl AsRef<str> + Send + Sync,
+        system: api_types::PackageSystem,
+    ) -> Result<ResultsPage<PackageBuild>, FloxhubClientError> {
+        let binary_name = binary_name.as_ref();
+        tracing::debug!(binary_name, %system, "looking up packages by binary");
+
+        let stream = make_depaging_stream(
+            |page_number, page_size| async move {
+                let response = self
+                    .catalog
+                    .packages_by_binary_api_v1_catalog_packages_by_binary_binary_name_get(
+                        binary_name,
+                        Some(page_number),
+                        Some(page_size),
+                        system,
+                    )
+                    .await
+                    .map_api_error()
+                    .await?
+                    .into_inner();
+
+                Ok::<_, FloxhubClientError>((response.total_count, response.items))
+            },
+            RESPONSE_PAGE_SIZE,
+        );
+
+        let (count, results) = collect_all_results(stream).await?;
+
+        Ok(ResultsPage { results, count })
     }
 
     async fn get_catalog_locked_sources(

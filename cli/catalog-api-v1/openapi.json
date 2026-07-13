@@ -101,6 +101,85 @@
         }
       }
     },
+    "/api/v1/catalog/packages/by-binary/{binary_name}": {
+      "get": {
+        "tags": [
+          "catalog"
+        ],
+        "summary": "Shows packages that provide a binary",
+        "description": "Returns a list of packages whose outputs contain the given binary name\n\nRequired Query Parameters:\n- **system**: The system to filter packages by.\n\nOptional Query Parameters:\n- **page**: Optional page number for pagination (def = 0)\n- **pageSize**: Optional page size for pagination (def = 10)\n\nReturns:\n- **PackagesResult**: A list of PackageResolutionInfo and the total result count",
+        "operationId": "packages_by_binary_api_v1_catalog_packages_by_binary__binary_name__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          },
+          {
+            "HTTPBasic": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "binary_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Binary Name"
+            }
+          },
+          {
+            "name": "system",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/PackageSystem"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 0,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 10,
+              "title": "Pagesize"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A list of packages that provide the binary",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PackagesResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/catalog/packages/{attr_path}": {
       "get": {
         "tags": [
