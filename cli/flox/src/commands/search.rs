@@ -4,7 +4,7 @@ use std::num::NonZeroU8;
 use anyhow::{Result, bail};
 use bpaf::Bpaf;
 use flox_config::Config;
-use flox_events::EventsHub;
+use flox_events::{CliSearchPayload, EventKind, EventsHub};
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::providers::catalog::SearchTerm;
 use floxhub_client::{CatalogClientTrait, SearchResults};
@@ -54,7 +54,9 @@ impl Search {
         sentry_set_tag("show_all", self.all);
         sentry_set_tag("search_term", search_term);
         subcommand_metric!("search", search_term = search_term);
-        if let Err(err) = EventsHub::global().record_search(search_term.clone()) {
+        if let Err(err) = EventsHub::global().record_event(EventKind::CliSearch(
+            CliSearchPayload::new(search_term.clone()),
+        )) {
             debug!(error = %err, "Failed to record v2 event");
         }
 

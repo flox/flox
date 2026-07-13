@@ -1,6 +1,6 @@
 use anyhow::Result;
 use bpaf::Bpaf;
-use flox_events::EventsHub;
+use flox_events::{CliEnvironmentPayload, EventKind, EventsHub};
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::generations::{
     GenerationId,
@@ -33,8 +33,10 @@ impl Switch {
             .await?;
 
         environment_subcommand_metric!("generations::switch", env);
-        if let Err(err) = EventsHub::global()
-            .record_environment_generations_switch(env_detail_from_concrete(&env))
+        if let Err(err) =
+            EventsHub::global().record_event(EventKind::CliEnvironmentGenerationsSwitch(
+                CliEnvironmentPayload::new(env_detail_from_concrete(&env)),
+            ))
         {
             debug!(error = %err, "Failed to record v2 event");
         }

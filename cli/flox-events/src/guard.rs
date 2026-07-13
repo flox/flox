@@ -12,9 +12,11 @@ pub struct EventsGuard {
 
 impl EventsGuard {
     pub fn new() -> Self {
-        Self {
-            hub: EventsHub::global().clone(),
-        }
+        EventsHub::global().guard()
+    }
+
+    pub(crate) fn from_hub(hub: EventsHub) -> Self {
+        Self { hub }
     }
 }
 

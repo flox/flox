@@ -4,7 +4,7 @@ use std::fs::File;
 use anyhow::{Result, bail};
 use bpaf::Bpaf;
 use flox_core::data::environment_ref::ActivateEnvironmentRef;
-use flox_events::EventsHub;
+use flox_events::{CliEnvironmentPayload, EventKind, EventsHub};
 use flox_manifest::interfaces::AsLatestSchema;
 use flox_manifest::parsed::Inner;
 use flox_manifest::parsed::common::ServiceDescriptor;
@@ -37,8 +37,10 @@ impl Persist {
         let env =
             ServicesEnvironment::from_environment_selection(&mut flox, &self.environment).await?;
         environment_subcommand_metric!("services::persist", env.environment);
-        if let Err(err) = EventsHub::global()
-            .record_environment_services_persist(env_detail_from_concrete(&env.environment))
+        if let Err(err) =
+            EventsHub::global().record_event(EventKind::CliEnvironmentServicesPersist(
+                CliEnvironmentPayload::new(env_detail_from_concrete(&env.environment)),
+            ))
         {
             debug!(error = %err, "Failed to record v2 event");
         }

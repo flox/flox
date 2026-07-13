@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use anyhow::{Context, Result, anyhow, bail};
 use bpaf::Bpaf;
 use flox_core::data::environment_ref::RemoteEnvironmentRef;
-use flox_events::{EnvDetail, EventsHub};
+use flox_events::{CliEnvironmentPayload, EnvDetail, EventKind, EventsHub};
 use flox_manifest::interfaces::{AsLatestSchema, AsWritableManifest, WriteManifest};
 use flox_manifest::raw::SyncTypedToRaw;
 use flox_manifest::{Manifest, Migrated};
@@ -113,7 +113,9 @@ impl Pull {
                     env_kind: "managed".to_string(),
                     env_ref_or_name: remote.to_string(),
                 };
-                if let Err(err) = EventsHub::global().record_environment_pull(env_detail) {
+                if let Err(err) = EventsHub::global().record_event(EventKind::CliEnvironmentPull(
+                    CliEnvironmentPayload::new(env_detail),
+                )) {
                     debug!(error = %err, "Failed to record v2 event");
                 }
 
@@ -157,9 +159,9 @@ impl Pull {
                 // path-environment bail below — mirroring it 1:1 (parity
                 // contract). Outcome rides on `cli.command_completed`
                 // (exit_code), so emitting before the bail is intentional.
-                if let Err(err) = EventsHub::global()
-                    .record_environment_pull(env_detail_from_concrete(&environment))
-                {
+                if let Err(err) = EventsHub::global().record_event(EventKind::CliEnvironmentPull(
+                    CliEnvironmentPayload::new(env_detail_from_concrete(&environment)),
+                )) {
                     debug!(error = %err, "Failed to record v2 event");
                 }
 

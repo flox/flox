@@ -3,7 +3,7 @@ use std::fmt::Display;
 
 use anyhow::{Result, anyhow};
 use bpaf::Bpaf;
-use flox_events::EventsHub;
+use flox_events::{CliEnvironmentPayload, EventKind, EventsHub};
 use flox_manifest::interfaces::AsLatestSchema;
 use flox_manifest::parsed::Inner;
 use flox_rust_sdk::flox::Flox;
@@ -42,9 +42,9 @@ impl Status {
         let env =
             ServicesEnvironment::from_environment_selection(&mut flox, &self.environment).await?;
         environment_subcommand_metric!("services::status", env.environment);
-        if let Err(err) = EventsHub::global()
-            .record_environment_services_status(env_detail_from_concrete(&env.environment))
-        {
+        if let Err(err) = EventsHub::global().record_event(EventKind::CliEnvironmentServicesStatus(
+            CliEnvironmentPayload::new(env_detail_from_concrete(&env.environment)),
+        )) {
             debug!(error = %err, "Failed to record v2 event");
         }
         guard_service_commands_available(&env, &flox.system)?;

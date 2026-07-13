@@ -1,6 +1,6 @@
 use anyhow::Result;
 use bpaf::Bpaf;
-use flox_events::EventsHub;
+use flox_events::{CliEnvironmentPayload, EventKind, EventsHub};
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::Environment;
 use indoc::indoc;
@@ -76,9 +76,9 @@ impl Upgrade {
             .await?;
 
         environment_subcommand_metric!("include::upgrade", environment);
-        if let Err(err) = EventsHub::global()
-            .record_environment_include_upgrade(env_detail_from_concrete(&environment))
-        {
+        if let Err(err) = EventsHub::global().record_event(EventKind::CliEnvironmentIncludeUpgrade(
+            CliEnvironmentPayload::new(env_detail_from_concrete(&environment)),
+        )) {
             debug!(error = %err, "Failed to record v2 event");
         }
 

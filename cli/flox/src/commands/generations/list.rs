@@ -3,7 +3,7 @@ use std::fmt::Display;
 use anyhow::Result;
 use bpaf::Bpaf;
 use crossterm::style::Stylize;
-use flox_events::EventsHub;
+use flox_events::{CliEnvironmentGenerationsListPayload, EventKind, EventsHub};
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::generations::{
     AllGenerationsMetadata,
@@ -60,10 +60,11 @@ impl List {
             .await?;
         let request_tree = self.output_mode == OutputMode::Tree;
         environment_subcommand_metric!("generations::list", env, request_tree = request_tree);
-        if let Err(err) = EventsHub::global()
-            .record_environment_generations_list_with(env_detail_from_concrete(&env), |p| {
-                p.with_request_tree(request_tree)
-            })
+        if let Err(err) =
+            EventsHub::global().record_event(EventKind::CliEnvironmentGenerationsList(
+                CliEnvironmentGenerationsListPayload::new(env_detail_from_concrete(&env))
+                    .with_request_tree(request_tree),
+            ))
         {
             debug!(error = %err, "Failed to record v2 event");
         }

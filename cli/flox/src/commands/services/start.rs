@@ -4,7 +4,7 @@ use std::path::Path;
 use anyhow::{Result, anyhow};
 use bpaf::Bpaf;
 use flox_config::Config;
-use flox_events::EventsHub;
+use flox_events::{CliEnvironmentPayload, EventKind, EventsHub};
 use flox_manifest::interfaces::AsLatestSchema;
 use flox_manifest::parsed::common::Services;
 use flox_rust_sdk::data::System;
@@ -41,9 +41,9 @@ impl Start {
         let mut env =
             ServicesEnvironment::from_environment_selection(&mut flox, &self.environment).await?;
         environment_subcommand_metric!("services::start", env.environment);
-        if let Err(err) = EventsHub::global()
-            .record_environment_services_start(env_detail_from_concrete(&env.environment))
-        {
+        if let Err(err) = EventsHub::global().record_event(EventKind::CliEnvironmentServicesStart(
+            CliEnvironmentPayload::new(env_detail_from_concrete(&env.environment)),
+        )) {
             debug!(error = %err, "Failed to record v2 event");
         }
         let (current_mode, generation) = guard_is_within_activation(&env, "start")?;

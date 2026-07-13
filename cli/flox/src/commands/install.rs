@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, anyhow, bail};
 use bpaf::Bpaf;
 use flox_core::data::environment_ref::DEFAULT_NAME;
-use flox_events::{EventsHub, PackageOutcome};
+use flox_events::{CliEnvironmentPayload, CliPackagePayload, EventKind, EventsHub, PackageOutcome};
 use flox_manifest::compose::{
     COMPOSER_MANIFEST_ID,
     new_package_overrides,
@@ -184,9 +184,9 @@ impl Install {
             Err(e) => Err(e)?,
         };
         environment_subcommand_metric!("install", concrete_environment);
-        if let Err(err) = EventsHub::global()
-            .record_environment_install(env_detail_from_concrete(&concrete_environment))
-        {
+        if let Err(err) = EventsHub::global().record_event(EventKind::CliEnvironmentInstall(
+            CliEnvironmentPayload::new(env_detail_from_concrete(&concrete_environment)),
+        )) {
             debug!(error = %err, "Failed to record v2 event");
         }
 
@@ -298,10 +298,12 @@ impl Install {
         // nothing per-package on success.
         let hub = EventsHub::global();
         for package in &packages_to_install {
-            if let Err(err) = hub.record_package_install(
-                Install::package_identifier(package),
-                PackageOutcome::Success,
-            ) {
+            if let Err(err) =
+                hub.record_event(EventKind::CliPackageInstall(CliPackagePayload::new(
+                    Install::package_identifier(package),
+                    PackageOutcome::Success,
+                )))
+            {
                 debug!(error = %err, "Failed to record v2 event");
             }
         }
@@ -491,10 +493,12 @@ impl Install {
 
         let hub = EventsHub::global();
         for package in packages {
-            if let Err(err) = hub.record_package_install(
-                Install::package_identifier(package),
-                PackageOutcome::Failure,
-            ) {
+            if let Err(err) =
+                hub.record_event(EventKind::CliPackageInstall(CliPackagePayload::new(
+                    Install::package_identifier(package),
+                    PackageOutcome::Failure,
+                )))
+            {
                 debug!(error = %err, "Failed to record v2 event");
             }
         }

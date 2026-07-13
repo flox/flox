@@ -1716,7 +1716,6 @@ name = "flox-events"
 version = "0.0.0"
 dependencies = [
  "anyhow",
- "derive_more",
  "fslock",
  "pretty_assertions",
  "reqwest",
