@@ -1,0 +1,165 @@
+when:
+  path: /api/v1/catalog/packages/by-binary/hello
+  method: GET
+then:
+  status: 200
+  header:
+    - name: content-type
+      value: application/json
+  body: '{"items":[{"catalog":"nixpkgs","attr_path":"hello-go","pkg_path":"hello-go","derivation":"/nix/store/000000000000000000000000000000a1-hello-go.drv","name":"hello-go-1.0","pname":"hello-go","version":"1.0","system":"aarch64-darwin","outputs":[{"name":"out","store_path":"/nix/store/000000000000000000000000000000a1-hello-go"}],"outputs_to_install":["out"],"description":"Hello world in Go","license":"MIT","locked_url":"https://github.com/flox/nixpkgs?rev=b12141ef619e0a9c1c84dc8c684040326f27cdcc","rev":"b12141ef619e0a9c1c84dc8c684040326f27cdcc","rev_count":982522,"rev_date":"2026-04-18T21:33:21Z","broken":false,"insecure":false,"unfree":false,"missing_builds":false,"stabilities":["unstable"],"scrape_date":"2026-04-21T06:03:34.910020Z","cache_uri":null},{"catalog":"nixpkgs","attr_path":"hello","pkg_path":"hello","derivation":"/nix/store/000000000000000000000000000000a2-hello.drv","name":"hello-2.12.3","pname":"hello","version":"2.12.3","system":"aarch64-darwin","outputs":[{"name":"out","store_path":"/nix/store/000000000000000000000000000000a2-hello"}],"outputs_to_install":["out"],"description":"Program that produces a familiar, friendly greeting","license":"MIT","locked_url":"https://github.com/flox/nixpkgs?rev=b12141ef619e0a9c1c84dc8c684040326f27cdcc","rev":"b12141ef619e0a9c1c84dc8c684040326f27cdcc","rev_count":982522,"rev_date":"2026-04-18T21:33:21Z","broken":false,"insecure":false,"unfree":false,"missing_builds":false,"stabilities":["unstable"],"scrape_date":"2026-04-21T06:03:34.910020Z","cache_uri":null}],"total_count":2}'
+---
+when:
+  path: /api/v1/catalog/packages/by-binary/rg
+  method: GET
+then:
+  status: 200
+  header:
+    - name: content-type
+      value: application/json
+  body: '{"items":[{"catalog":"nixpkgs","attr_path":"ripgrep","pkg_path":"ripgrep","derivation":"/nix/store/000000000000000000000000000000b1-ripgrep.drv","name":"ripgrep-15.1.0","pname":"ripgrep","version":"15.1.0","system":"aarch64-darwin","outputs":[{"name":"out","store_path":"/nix/store/000000000000000000000000000000b1-ripgrep"}],"outputs_to_install":["out"],"description":"Utility that combines the usability of The Silver Searcher with the raw speed of grep","license":"MIT","locked_url":"https://github.com/flox/nixpkgs?rev=b12141ef619e0a9c1c84dc8c684040326f27cdcc","rev":"b12141ef619e0a9c1c84dc8c684040326f27cdcc","rev_count":982522,"rev_date":"2026-04-18T21:33:21Z","broken":false,"insecure":false,"unfree":false,"missing_builds":false,"stabilities":["unstable"],"scrape_date":"2026-04-21T06:03:34.910020Z","cache_uri":null}],"total_count":1}'
+---
+when:
+  path: /api/v1/catalog/packages/by-binary/python3
+  method: GET
+then:
+  status: 200
+  header:
+    - name: content-type
+      value: application/json
+  body: '{"items":[{"catalog":"nixpkgs","attr_path":"python312","pkg_path":"python312","derivation":"/nix/store/000000000000000000000000000000c1-python312.drv","name":"python312-3.12.13","pname":"python3","version":"3.12.13","system":"aarch64-darwin","outputs":[{"name":"out","store_path":"/nix/store/000000000000000000000000000000c1-python312"}],"outputs_to_install":["out"],"description":"High-level dynamically-typed programming language","license":"MIT","locked_url":"https://github.com/flox/nixpkgs?rev=b12141ef619e0a9c1c84dc8c684040326f27cdcc","rev":"b12141ef619e0a9c1c84dc8c684040326f27cdcc","rev_count":982522,"rev_date":"2026-04-18T21:33:21Z","broken":false,"insecure":false,"unfree":false,"missing_builds":false,"stabilities":["unstable"],"scrape_date":"2026-04-21T06:03:34.910020Z","cache_uri":null},{"catalog":"nixpkgs","attr_path":"python313","pkg_path":"python313","derivation":"/nix/store/000000000000000000000000000000c2-python313.drv","name":"python313-3.13.13","pname":"python3","version":"3.13.13","system":"aarch64-darwin","outputs":[{"name":"out","store_path":"/nix/store/000000000000000000000000000000c2-python313"}],"outputs_to_install":["out"],"description":"High-level dynamically-typed programming language","license":"MIT","locked_url":"https://github.com/flox/nixpkgs?rev=b12141ef619e0a9c1c84dc8c684040326f27cdcc","rev":"b12141ef619e0a9c1c84dc8c684040326f27cdcc","rev_count":982522,"rev_date":"2026-04-18T21:33:21Z","broken":false,"insecure":false,"unfree":false,"missing_builds":false,"stabilities":["unstable"],"scrape_date":"2026-04-21T06:03:34.910020Z","cache_uri":null}],"total_count":2}'
+---
+when:
+  path: /api/v1/catalog/resolve
+  method: POST
+  body: '{"items":[{"descriptors":[{"allow_broken":null,"allow_insecure":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"ripgrep","install_id":"ripgrep","systems":["aarch64-darwin"]}],"name":"toplevel"}]}'
+then:
+  status: 200
+  header:
+    - name: date
+      value: Mon, 13 Jul 2026 18:53:25 GMT
+    - name: content-type
+      value: application/json
+    - name: content-length
+      value: '1013'
+    - name: server
+      value: uvicorn
+    - name: apigw-requestid
+      value: AdUV7jslIAMEYDA=
+  body: '{"items":[{"name":"toplevel","page":{"page":1027867,"url":"","packages":[{"catalog":"nixpkgs","attr_path":"ripgrep","pkg_path":"ripgrep","derivation":"/nix/store/4h6fwzsa2cwxsvik56m1wwc56xqsiz5k-ripgrep-15.1.0.drv","name":"ripgrep-15.1.0","pname":"ripgrep","version":"15.1.0","system":"aarch64-darwin","outputs":[{"name":"out","store_path":"/nix/store/h5fzp9vb16p8z3ha51hhx37rqjh4l81z-ripgrep-15.1.0"}],"outputs_to_install":["out"],"description":"Utility that combines the usability of The Silver Searcher with the raw speed of grep","license":"[ Unlicense, MIT ]","locked_url":"https://github.com/flox/nixpkgs?rev=d407951447dcd00442e97087bf374aad70c04cea","rev":"d407951447dcd00442e97087bf374aad70c04cea","rev_count":1027867,"rev_date":"2026-07-05T04:06:12Z","broken":false,"insecure":false,"unfree":false,"missing_builds":false,"stabilities":["unstable"],"scrape_date":"2026-07-06T03:14:28.294597Z","cache_uri":null,"install_id":"ripgrep"}],"messages":[],"complete":true},"candidate_pages":null,"messages":[]}]}'
+---
+when:
+  path: /api/v1/catalog/resolve
+  method: POST
+  body: '{"items":[{"descriptors":[{"allow_broken":null,"allow_insecure":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"python312","install_id":"python312","systems":["aarch64-darwin"]}],"name":"toplevel"}]}'
+then:
+  status: 200
+  header:
+    - name: date
+      value: Mon, 13 Jul 2026 18:53:27 GMT
+    - name: content-type
+      value: application/json
+    - name: content-length
+      value: '989'
+    - name: server
+      value: uvicorn
+    - name: apigw-requestid
+      value: AdUWSi-CoAMEMqA=
+  body: '{"items":[{"name":"toplevel","page":{"page":1027867,"url":"","packages":[{"catalog":"nixpkgs","attr_path":"python312","pkg_path":"python312","derivation":"/nix/store/0scvydzrq1fwrd2g6qkxzwhfr74jb5bi-python3-3.12.13.drv","name":"python3-3.12.13","pname":"python312","version":"python3-3.12.13","system":"aarch64-darwin","outputs":[{"name":"out","store_path":"/nix/store/65p6ipj712fb5igr9w1h5k5cb7bymj42-python3-3.12.13"}],"outputs_to_install":["out"],"description":"High-level dynamically-typed programming language","license":"Python-2.0","locked_url":"https://github.com/flox/nixpkgs?rev=d407951447dcd00442e97087bf374aad70c04cea","rev":"d407951447dcd00442e97087bf374aad70c04cea","rev_count":1027867,"rev_date":"2026-07-05T04:06:12Z","broken":false,"insecure":false,"unfree":false,"missing_builds":false,"stabilities":["unstable"],"scrape_date":"2026-07-06T03:13:37.152128Z","cache_uri":null,"install_id":"python312"}],"messages":[],"complete":true},"candidate_pages":null,"messages":[]}]}'
+---
+when:
+  path: /api/v1/catalog/resolve
+  method: POST
+  body: '{"items":[{"descriptors":[{"allow_broken":null,"allow_insecure":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"python313","install_id":"python313","systems":["aarch64-darwin"]}],"name":"toplevel"}]}'
+then:
+  status: 200
+  header:
+    - name: date
+      value: Mon, 13 Jul 2026 18:53:28 GMT
+    - name: content-type
+      value: application/json
+    - name: content-length
+      value: '989'
+    - name: server
+      value: uvicorn
+    - name: apigw-requestid
+      value: AdUWYj1DoAMEMjg=
+  body: '{"items":[{"name":"toplevel","page":{"page":1027867,"url":"","packages":[{"catalog":"nixpkgs","attr_path":"python313","pkg_path":"python313","derivation":"/nix/store/ffz1bwjdzglryqx0pn3jngal4bz66xfh-python3-3.13.13.drv","name":"python3-3.13.13","pname":"python313","version":"python3-3.13.13","system":"aarch64-darwin","outputs":[{"name":"out","store_path":"/nix/store/mfkdmplffnbc0av8r6pknl796a6b1r2n-python3-3.13.13"}],"outputs_to_install":["out"],"description":"High-level dynamically-typed programming language","license":"Python-2.0","locked_url":"https://github.com/flox/nixpkgs?rev=d407951447dcd00442e97087bf374aad70c04cea","rev":"d407951447dcd00442e97087bf374aad70c04cea","rev_count":1027867,"rev_date":"2026-07-05T04:06:12Z","broken":false,"insecure":false,"unfree":false,"missing_builds":false,"stabilities":["unstable"],"scrape_date":"2026-07-06T03:13:37.154008Z","cache_uri":null,"install_id":"python313"}],"messages":[],"complete":true},"candidate_pages":null,"messages":[]}]}'
+---
+when:
+  path: /api/v1/catalog/resolve
+  method: POST
+  body: '{"items":[{"descriptors":[{"allow_broken":null,"allow_insecure":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"hello","install_id":"hello","systems":["aarch64-darwin"],"version":"2.12"}],"name":"toplevel"}]}'
+then:
+  status: 200
+  header:
+    - name: date
+      value: Mon, 13 Jul 2026 18:53:29 GMT
+    - name: content-type
+      value: application/json
+    - name: content-length
+      value: '963'
+    - name: server
+      value: uvicorn
+    - name: apigw-requestid
+      value: AdUWej2ooAMEY7A=
+  body: '{"items":[{"name":"toplevel","page":{"page":1027867,"url":"","packages":[{"catalog":"nixpkgs","attr_path":"hello","pkg_path":"hello","derivation":"/nix/store/gsnnaglyb9vpvqcgw3i4czy3n892smms-hello-2.12.3.drv","name":"hello-2.12.3","pname":"hello","version":"2.12.3","system":"aarch64-darwin","outputs":[{"name":"out","store_path":"/nix/store/srhnlxadg479lhf3r6ijjc0arsxaimzs-hello-2.12.3"}],"outputs_to_install":["out"],"description":"Program that produces a familiar, friendly greeting","license":"GPL-3.0-or-later","locked_url":"https://github.com/flox/nixpkgs?rev=d407951447dcd00442e97087bf374aad70c04cea","rev":"d407951447dcd00442e97087bf374aad70c04cea","rev_count":1027867,"rev_date":"2026-07-05T04:06:12Z","broken":false,"insecure":false,"unfree":false,"missing_builds":false,"stabilities":["unstable"],"scrape_date":"2026-07-06T03:13:10.948632Z","cache_uri":null,"install_id":"hello"}],"messages":[],"complete":true},"candidate_pages":null,"messages":[]}]}'
+---
+when:
+  path: /api/v1/catalog/resolve
+  method: POST
+  body: '{"items":[{"descriptors":[{"allow_broken":null,"allow_insecure":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"hello","install_id":"hello","systems":["aarch64-darwin"]}],"name":"toplevel"}]}'
+then:
+  status: 200
+  header:
+    - name: content-type
+      value: application/json
+    - name: content-length
+      value: '961'
+    - name: server
+      value: uvicorn
+  body: '{"items":[{"name":"toplevel","page":{"page":982522,"url":"","packages":[{"catalog":"nixpkgs","attr_path":"hello","pkg_path":"hello","derivation":"/nix/store/w0axphsdrbdjylhf1rp6wrh4xb7q8cf8-hello-2.12.3.drv","name":"hello-2.12.3","pname":"hello","version":"2.12.3","system":"aarch64-darwin","outputs":[{"name":"out","store_path":"/nix/store/5cg54ha6i85582akxl6vpp5421lyr4pb-hello-2.12.3"}],"outputs_to_install":["out"],"description":"Program that produces a familiar, friendly greeting","license":"GPL-3.0-or-later","locked_url":"https://github.com/flox/nixpkgs?rev=b12141ef619e0a9c1c84dc8c684040326f27cdcc","rev":"b12141ef619e0a9c1c84dc8c684040326f27cdcc","rev_count":982522,"rev_date":"2026-04-18T21:33:21Z","broken":false,"insecure":false,"unfree":false,"missing_builds":false,"stabilities":["unstable"],"scrape_date":"2026-04-21T06:03:34.910020Z","cache_uri":null,"install_id":"hello"}],"messages":[],"complete":true},"candidate_pages":null,"messages":[]}]}'
+---
+when:
+  path: /api/v1/catalog/resolve
+  method: POST
+  body: '{"items":[{"descriptors":[{"allow_broken":null,"allow_insecure":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"hello","install_id":"hello","systems":["aarch64-linux"]}],"name":"toplevel"}]}'
+then:
+  status: 200
+  header:
+    - name: content-type
+      value: application/json
+    - name: content-length
+      value: '960'
+    - name: server
+      value: uvicorn
+  body: '{"items":[{"name":"toplevel","page":{"page":982522,"url":"","packages":[{"catalog":"nixpkgs","attr_path":"hello","pkg_path":"hello","derivation":"/nix/store/6cccmgw49dd50vgh6p0cz4g9ja772l6j-hello-2.12.3.drv","name":"hello-2.12.3","pname":"hello","version":"2.12.3","system":"aarch64-linux","outputs":[{"name":"out","store_path":"/nix/store/g383j16f2lxz4zzs967i9hjgvivy6q7h-hello-2.12.3"}],"outputs_to_install":["out"],"description":"Program that produces a familiar, friendly greeting","license":"GPL-3.0-or-later","locked_url":"https://github.com/flox/nixpkgs?rev=b12141ef619e0a9c1c84dc8c684040326f27cdcc","rev":"b12141ef619e0a9c1c84dc8c684040326f27cdcc","rev_count":982522,"rev_date":"2026-04-18T21:33:21Z","broken":false,"insecure":false,"unfree":false,"missing_builds":false,"stabilities":["unstable"],"scrape_date":"2026-04-21T06:36:56.359081Z","cache_uri":null,"install_id":"hello"}],"messages":[],"complete":true},"candidate_pages":null,"messages":[]}]}'
+---
+when:
+  path: /api/v1/catalog/resolve
+  method: POST
+  body: '{"items":[{"descriptors":[{"allow_broken":null,"allow_insecure":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"hello","install_id":"hello","systems":["x86_64-darwin"]}],"name":"toplevel"}]}'
+then:
+  status: 200
+  header:
+    - name: content-type
+      value: application/json
+    - name: content-length
+      value: '960'
+    - name: server
+      value: uvicorn
+  body: '{"items":[{"name":"toplevel","page":{"page":982522,"url":"","packages":[{"catalog":"nixpkgs","attr_path":"hello","pkg_path":"hello","derivation":"/nix/store/m0ccxjpn61yr7zngqra0ahg8aqarpvca-hello-2.12.3.drv","name":"hello-2.12.3","pname":"hello","version":"2.12.3","system":"x86_64-darwin","outputs":[{"name":"out","store_path":"/nix/store/kqbjfx3hp125sg0fkv1141m4s02z9w0r-hello-2.12.3"}],"outputs_to_install":["out"],"description":"Program that produces a familiar, friendly greeting","license":"GPL-3.0-or-later","locked_url":"https://github.com/flox/nixpkgs?rev=b12141ef619e0a9c1c84dc8c684040326f27cdcc","rev":"b12141ef619e0a9c1c84dc8c684040326f27cdcc","rev_count":982522,"rev_date":"2026-04-18T21:33:21Z","broken":false,"insecure":false,"unfree":false,"missing_builds":false,"stabilities":["unstable"],"scrape_date":"2026-04-21T07:08:27.302720Z","cache_uri":null,"install_id":"hello"}],"messages":[],"complete":true},"candidate_pages":null,"messages":[]}]}'
+---
+when:
+  path: /api/v1/catalog/resolve
+  method: POST
+  body: '{"items":[{"descriptors":[{"allow_broken":null,"allow_insecure":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"hello","install_id":"hello","systems":["x86_64-linux"]}],"name":"toplevel"}]}'
+then:
+  status: 200
+  header:
+    - name: content-type
+      value: application/json
+    - name: content-length
+      value: '959'
+    - name: server
+      value: uvicorn
+  body: '{"items":[{"name":"toplevel","page":{"page":982522,"url":"","packages":[{"catalog":"nixpkgs","attr_path":"hello","pkg_path":"hello","derivation":"/nix/store/7mdg60drrnh0wq1j8hmmbhll47czm107-hello-2.12.3.drv","name":"hello-2.12.3","pname":"hello","version":"2.12.3","system":"x86_64-linux","outputs":[{"name":"out","store_path":"/nix/store/10s5j3mfdg22k1597x580qrhprnzcjwb-hello-2.12.3"}],"outputs_to_install":["out"],"description":"Program that produces a familiar, friendly greeting","license":"GPL-3.0-or-later","locked_url":"https://github.com/flox/nixpkgs?rev=b12141ef619e0a9c1c84dc8c684040326f27cdcc","rev":"b12141ef619e0a9c1c84dc8c684040326f27cdcc","rev_count":982522,"rev_date":"2026-04-18T21:33:21Z","broken":false,"insecure":false,"unfree":false,"missing_builds":false,"stabilities":["unstable"],"scrape_date":"2026-04-21T07:44:59.797392Z","cache_uri":null,"install_id":"hello"}],"messages":[],"complete":true},"candidate_pages":null,"messages":[]}]}'
