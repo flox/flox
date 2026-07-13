@@ -76,7 +76,7 @@ flox run hello
 > lives in the `ripgrep` package."
 
 ```bash
-flox run -- rg --version
+flox run rg -- --version
 ```
 
 **Expect:**

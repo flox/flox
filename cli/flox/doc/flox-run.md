@@ -14,7 +14,7 @@ flox-run - run a command from a Flox Catalog package
 flox [<general-options>] run
      [-p <package>]
      [--reselect]
-     [--] <command> [<arguments>]
+     <command> [--] [<arguments>]
 ```
 
 # DESCRIPTION
@@ -35,7 +35,7 @@ When invoked without `-p`/`--package`,
 to find the packages whose outputs contain the command:
 
 ```bash
-$ flox run readelf -a /bin/ls   # readelf is provided by binutils
+$ flox run readelf -- -a /bin/ls   # readelf is provided by binutils
 ```
 
 The package is selected in this order:
@@ -104,18 +104,24 @@ Use 'flox run --package <PACKAGE> vi' to specify a package.
 flags before the command name belong to `flox run`;
 everything after the command name is passed to the command verbatim.
 
+Always use `--` between the command name and its arguments when
+the arguments contain flags:
+
 ```bash
-$ flox run curl -sL http://example.com   # -sL goes to curl
+$ flox run curl -- -sL http://example.com   # -sL goes to curl
 ```
 
+A single `--` immediately after the command name is treated as the
+separator and is not passed to the command.
 Use `--` before the command name if the name itself starts with `-`.
 
 **`--version` caveat:**
-Flox intercepts `--version` from the full argument list before parsing.
-Use `--` so `--version` reaches the command:
+Flox intercepts a bare `--version` from the full argument list before
+parsing, so the separator is required for `--version` to reach the
+command:
 
 ```bash
-$ flox run -- hello --version   # ✅ shows hello's version
+$ flox run hello -- --version   # ✅ shows hello's version
 $ flox run hello --version      # ❌ shows flox's version instead
 ```
 
@@ -167,8 +173,10 @@ Repeated invocations of the same package skip the download step.
 
 `[--] [<arguments>]`
 :   Arguments passed to the command verbatim.
-    `--` is only needed when the command name itself starts with `-`
-    or to pass `--version` to the command.
+    A single `--` between the command name and its arguments is
+    treated as a separator and not forwarded;
+    use it whenever the arguments contain flags.
+    Use `--` before the command name if the name itself starts with `-`.
 
 ```{.include}
 ./include/general-options.md
@@ -185,7 +193,7 @@ $ flox run hello
 Run a command whose name differs from the package name:
 
 ```bash
-$ flox run readelf -a /bin/ls
+$ flox run readelf -- -a /bin/ls
 ```
 
 Choose between several packages that provide the same command
@@ -204,7 +212,7 @@ $ flox run --reselect vi
 Specify the package explicitly, with a version constraint:
 
 ```bash
-$ flox run -p curl@8.0 curl -sL http://example.com
+$ flox run -p curl@8.0 curl -- -sL http://example.com
 ```
 
 Pipe input to a command:
@@ -216,8 +224,8 @@ $ echo '{"name":"Flox"}' | flox run jq '.name'
 Show the command's own help or version:
 
 ```bash
-$ flox run -- hello --help
-$ flox run -- hello --version
+$ flox run hello -- --help
+$ flox run hello -- --version
 ```
 
 # LIMITATIONS

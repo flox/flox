@@ -278,8 +278,9 @@ impl Run {
 /// - `--` → force positional mode; next arg is the command even if it starts with `-`
 /// - any other `"-…"` → `UnknownFlag`
 ///
-/// After the first positional (or after `--`), everything is forwarded
-/// verbatim including any literal `--`.
+/// After the command name, a single `--` immediately following it is the
+/// command/arguments separator and is dropped; everything else is forwarded
+/// verbatim, including any later literal `--`.
 pub fn parse_run_args(args: Vec<OsString>) -> Result<ParsedArgs, RunError> {
     let mut package: Option<String> = None;
     let mut reselect = false;
@@ -301,7 +302,7 @@ pub fn parse_run_args(args: Vec<OsString>) -> Result<ParsedArgs, RunError> {
                 if let Some(cmd) = iter.next() {
                     executable = Some(cmd);
                 }
-                passthrough.extend(iter);
+                extend_passthrough(&mut passthrough, iter);
                 break 'flags;
             },
             Some("-h") | Some("--help") => {
@@ -324,9 +325,9 @@ pub fn parse_run_args(args: Vec<OsString>) -> Result<ParsedArgs, RunError> {
             },
             _ => {
                 // First non-flag positional is the command name; everything
-                // after it is passthrough verbatim (including any literal `--`).
+                // after it is passthrough.
                 executable = Some(arg);
-                passthrough.extend(iter);
+                extend_passthrough(&mut passthrough, iter);
                 break 'flags;
             },
         }
@@ -340,6 +341,21 @@ pub fn parse_run_args(args: Vec<OsString>) -> Result<ParsedArgs, RunError> {
         executable,
         args: passthrough,
     }))
+}
+
+/// Forward the arguments that follow the command name.
+///
+/// A single `--` immediately after the command name is the
+/// command/arguments separator (`flox run curl -- -sL <URL>`) and is
+/// dropped; everything else is forwarded verbatim, including any later
+/// literal `--`.
+fn extend_passthrough(passthrough: &mut Vec<OsString>, mut iter: impl Iterator<Item = OsString>) {
+    match iter.next() {
+        Some(first) if first == "--" => {},
+        Some(first) => passthrough.push(first),
+        None => {},
+    }
+    passthrough.extend(iter);
 }
 
 // ---------------------------------------------------------------------------
@@ -1213,7 +1229,7 @@ pub fn print_help() {
     print!(indoc! {"
         Run a command from a Flox Catalog package
 
-        Usage: flox run [-p <PACKAGE>] [--reselect] [--] <COMMAND> [ARGS...]
+        Usage: flox run [-p <PACKAGE>] [--reselect] <COMMAND> [--] [ARGS...]
 
         Options:
           -p, --package <PACKAGE>   Package that provides the command.
@@ -1229,15 +1245,16 @@ pub fn print_help() {
           interactive prompt asks you to choose. Choices made with '--package'
           or the prompt are saved as preferences and reused silently.
 
-        Use '--' before the command name if it starts with '-', or to pass
-        '--version' to the command rather than flox.
+        Use '--' between the command name and its arguments when the
+        arguments contain flags, and before the command name if the name
+        itself starts with '-'.
 
         Examples:
           flox run hello
-          flox run readelf -a /bin/ls
+          flox run readelf -- -a /bin/ls
           flox run --reselect vi
-          flox run -p curl@8.0 curl -sL http://example.com
-          flox run -p hello -- hello --version
+          flox run -p curl@8.0 curl -- -sL http://example.com
+          flox run hello -- --version
 
         Limitations:
           Output selectors (^) are not supported.
@@ -1319,8 +1336,8 @@ mod tests {
     }
 
     #[test]
-    fn double_dash_after_command_stays_in_passthrough() {
-        // A literal `--` after the command stays in passthrough.
+    fn double_dash_after_command_is_dropped_as_separator() {
+        // A single `--` right after the command is the args separator.
         let result = parse_run_args(os_vec(&["-p", "x", "cmd", "--", "-z"])).unwrap();
         assert_eq!(
             result,
@@ -1328,7 +1345,54 @@ mod tests {
                 package: Some("x".to_string()),
                 reselect: false,
                 executable: os("cmd"),
+                args: os_vec(&["-z"]),
+            })
+        );
+    }
+
+    #[test]
+    fn second_double_dash_after_command_stays_in_passthrough() {
+        // Only the first `--` after the command is a separator; a literal
+        // `--` can still be passed by writing it after the separator.
+        let result = parse_run_args(os_vec(&["cmd", "--", "--", "-z"])).unwrap();
+        assert_eq!(
+            result,
+            ParsedArgs::Run(RunArgs {
+                package: None,
+                reselect: false,
+                executable: os("cmd"),
                 args: os_vec(&["--", "-z"]),
+            })
+        );
+    }
+
+    #[test]
+    fn separator_dropped_after_forced_positional_command() {
+        // The separator rule also applies when the command name itself was
+        // introduced with a leading `--`.
+        let result = parse_run_args(os_vec(&["--", "-weirdname", "--", "-z"])).unwrap();
+        assert_eq!(
+            result,
+            ParsedArgs::Run(RunArgs {
+                package: None,
+                reselect: false,
+                executable: os("-weirdname"),
+                args: os_vec(&["-z"]),
+            })
+        );
+    }
+
+    #[test]
+    fn version_after_separator_stays_in_passthrough() {
+        // Canonical form for passing `--version` to the command.
+        let result = parse_run_args(os_vec(&["hello", "--", "--version"])).unwrap();
+        assert_eq!(
+            result,
+            ParsedArgs::Run(RunArgs {
+                package: None,
+                reselect: false,
+                executable: os("hello"),
+                args: os_vec(&["--version"]),
             })
         );
     }

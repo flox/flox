@@ -88,7 +88,7 @@ demo_step "Command name != package name"
 
 echo "readelf is provided by binutils. You don't need to know that:"
 echo ""
-run_cmd flox run readelf -a "\$(command -v ls)"
+run_cmd flox run readelf -- -a "\$(command -v ls)"
 
 pause
 

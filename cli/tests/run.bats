@@ -266,6 +266,17 @@ teardown() {
 }
 
 # bats test_tags=run:store
+@test "flox run hello -- --version passes --version to command [run:store]" {
+  # Canonical form: `--` between the command name and its arguments is the
+  # separator; it is dropped and --version reaches the command.
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/run/hello.yaml"
+  run "$FLOX_BIN" run -p hello hello -- --version
+  assert_success
+  # GNU hello prints its version to stdout
+  assert_output --partial "hello"
+}
+
+# bats test_tags=run:store
 @test "flox run -p hello -- hello --help shows hello's help [run:store]" {
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/run/hello.yaml"
   run "$FLOX_BIN" run -p hello -- hello --help
