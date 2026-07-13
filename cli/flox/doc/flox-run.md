@@ -190,7 +190,7 @@ Repeated invocations of the same package skip the download step.
 Run a command (the package is found via the index):
 
 ```bash
-$ flox run hello
+$ flox run cowsay "Hello, Flox\!"
 ```
 
 Run a command whose name differs from the package name:
