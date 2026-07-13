@@ -213,7 +213,10 @@ impl SetVar {
     }
 
     pub fn unset(&self) -> UnsetVar {
-        UnsetVar::new(self.name.clone())
+        UnsetVar {
+            name: self.name.clone(),
+            exported: self.exported,
+        }
     }
 }
 
@@ -278,32 +281,53 @@ impl GenerateShell for SetVar {
     }
 }
 
+/// Unsetting a variable needs to know whether it was exported because of
+/// tcsh: unlike bash, zsh, and fish — which keep one variable namespace and
+/// clear it with one builtin — tcsh keeps environment variables and shell
+/// variables in separate namespaces with separate builtins, and each builtin
+/// silently ignores the other kind. `unsetenv` on a `set` shell variable (or
+/// `unset` on a `setenv` environment variable) leaves it in place, so
+/// emitting the wrong one produces a script that appears to run clean but
+/// leaks the variable.
 #[derive(Debug, Clone)]
 pub struct UnsetVar {
     name: String,
+    exported: bool,
 }
 
 impl UnsetVar {
+    /// Unset an exported (environment) variable, as set by
+    /// [`SetVar::exported_no_expansion`] and friends: `unsetenv` in tcsh.
     pub fn new(name: impl AsRef<str>) -> Self {
         Self {
             name: name.as_ref().to_string(),
+            exported: true,
+        }
+    }
+
+    /// Unset a shell (non-exported) variable, as set by
+    /// [`SetVar::not_exported_no_expansion`] and friends: `unset` in tcsh.
+    pub fn not_exported(name: impl AsRef<str>) -> Self {
+        Self {
+            name: name.as_ref().to_string(),
+            exported: false,
         }
     }
 }
 
 impl GenerateShell for UnsetVar {
     fn generate(&self, shell: Shell, writer: &mut impl Write) -> Result<(), Error> {
-        match shell {
-            Shell::Bash => {
+        match (shell, self.exported) {
+            (Shell::Bash | Shell::Zsh, _) => {
                 write!(writer, "unset {};", self.name)?;
             },
-            Shell::Zsh => {
-                write!(writer, "unset {};", self.name)?;
-            },
-            Shell::Tcsh => {
+            (Shell::Tcsh, true) => {
                 write!(writer, "unsetenv {};", self.name)?;
             },
-            Shell::Fish => {
+            (Shell::Tcsh, false) => {
+                write!(writer, "unset {};", self.name)?;
+            },
+            (Shell::Fish, _) => {
                 write!(writer, "set -e {};", self.name)?;
             },
         }

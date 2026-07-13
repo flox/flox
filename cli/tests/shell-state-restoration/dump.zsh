@@ -60,8 +60,8 @@ _flox_dump() {
 _flox_dump "$1"
 
 eval "$($FLOX_BIN activate -d $PROJECT_DIR)"
-# `--print-script` requires the invocation type; `activate` exports
-# `_FLOX_INVOCATION_TYPE` (here: in-place). See deactivate.bats.
-eval "$($FLOX_BIN deactivate --print-script "$_FLOX_INVOCATION_TYPE")"
+# `--print-script` takes the invocation type map that `activate` recorded
+# in `_FLOX_INVOCATION_TYPES` (here: in-place). See deactivate.bats.
+eval "$($FLOX_BIN deactivate --print-script "$_FLOX_INVOCATION_TYPES")"
 
 _flox_dump "$2"

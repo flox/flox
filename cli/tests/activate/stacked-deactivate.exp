@@ -1,0 +1,49 @@
+# Activate a project environment interactively, layer an in-place activation
+# of a second environment at the prompt, then run a plain `flox deactivate`
+# twice, each followed by a probe: echo still_"running". A deactivation takes
+# effect at the next prompt, so the first probe runs after the in-place layer
+# is popped — the session survives and prints still_running — while the exit
+# emitted for the second deactivation ends the shell before its probe is
+# read. The probe quote-splits its argument so the echoed input line can't
+# satisfy the match for the probe's output.
+#
+# argv: <dir> <inplace_cmd>
+#   inplace_cmd  shell command that evals an in-place activation of the
+#                second environment
+
+set dir [lindex $argv 0]
+set inplace_cmd [lindex $argv 1]
+set flox $env(FLOX_BIN)
+set timeout 10
+set env(NO_COLOR) 1
+set env(TERM) xterm-mono
+set stty_init "cols 1000"
+
+spawn $flox activate --dir $dir
+expect_after {
+  timeout { exit 1 }
+  eof { exit 2 }
+  "*\n" { exp_continue }
+  "*\r" { exp_continue }
+}
+
+expect "You are now using the environment"
+expect $env(KNOWN_PROMPT)
+
+# Layer the second environment in place.
+send "$inplace_cmd\r"
+expect $env(KNOWN_PROMPT)
+
+# First deactivate: the next prompt's hook pops only the in-place layer, so
+# the session survives to run the probe.
+send "$flox deactivate\r"
+expect $env(KNOWN_PROMPT)
+send "echo still_\"running\"\r"
+expect -ex "still_running"
+expect $env(KNOWN_PROMPT)
+
+# Second deactivate: pops the interactive layer and exits the session before
+# the queued probe is read.
+send "$flox deactivate\r"
+send "echo still_\"running\"\r"
+expect eof

@@ -31,6 +31,37 @@ pub const FLOX_EXECUTIVE_VERBOSITY_VAR: &str = "_FLOX_EXECUTIVE_VERBOSITY";
 /// auto-deactivate when the shell leaves their directory.
 pub const FLOX_AUTO_ACTIVATED_ENVIRONMENTS_VAR: &str = "_FLOX_AUTO_ACTIVATED_ENVIRONMENTS";
 
+/// The invocation types of the activations performed by *this* shell, as a
+/// JSON array of `{env, invocation_type}` entries keyed by the environment
+/// pointer as it appears in `_FLOX_ACTIVE_ENVIRONMENTS` (see
+/// [`super::context::InvocationTypes`]).
+/// Deliberately a shell variable rather than an exported one: a subshell
+/// inherits the activation's exported environment but did not attach to the
+/// activation itself, and an absent/empty value is how deactivation knows
+/// not to emit a `flox-activations detach` for it. Updated by
+/// `flox-activations push-invocation-type` from each activation's startup
+/// script (only the eval'ing shell can see the current value); passed to
+/// `flox hook-env`/`flox deactivate --print-script` by shell code expanding
+/// it (a subprocess can't read it from the environment), which take the
+/// entry for each layer they deactivate and emit an update writing the
+/// remainder back.
+pub const FLOX_INVOCATION_TYPES_VAR: &str = "_FLOX_INVOCATION_TYPES";
+
+/// Short-lived exported variable through which tcsh passes the current
+/// [`FLOX_INVOCATION_TYPES_VAR`] value to `flox hook-env`,
+/// `flox deactivate --print-script-from-env` and
+/// `flox-activations push-invocation-type`: raw JSON cannot ride a tcsh
+/// backtick command line (globbing and quote-stripping mangle it), so the
+/// caller `setenv`s this immediately before the call and `unsetenv`s it
+/// immediately after. The other shells pass the value as a quoted argument.
+pub const FLOX_INVOCATION_TYPES_WIRE_VAR: &str = "_FLOX_INVOCATION_TYPES_WIRE";
+
+/// Short-lived exported variable through which tcsh passes the environment
+/// pointer of the environment being activated to
+/// `flox-activations push-invocation-type` (same tcsh constraint and
+/// setenv/unsetenv lifetime as [`FLOX_INVOCATION_TYPES_WIRE_VAR`]).
+pub const FLOX_INVOCATION_TYPES_PUSH_ENV_VAR: &str = "_FLOX_INVOCATION_TYPES_PUSH_ENV";
+
 /// Project directories the prompt hook must not auto-(re)activate while the
 /// shell remains inside them, as a JSON array of absolute paths. An entry is
 /// added when an environment is deactivated while the shell is still inside

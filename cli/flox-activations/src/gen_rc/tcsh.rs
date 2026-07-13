@@ -4,12 +4,17 @@ use std::path::PathBuf;
 
 use anyhow::Result;
 use flox_core::activate::context::InvocationType;
-use flox_core::activate::vars::FLOX_ACTIVATIONS_BIN;
+use flox_core::activate::vars::{
+    FLOX_ACTIVATIONS_BIN,
+    FLOX_INVOCATION_TYPES_PUSH_ENV_VAR,
+    FLOX_INVOCATION_TYPES_VAR,
+    FLOX_INVOCATION_TYPES_WIRE_VAR,
+};
 use flox_core::hook_actions::PROMPT_HOOK_VERSION_ENV;
-use shell_gen::{GenerateShell, Shell};
+use shell_gen::{GenerateShell, SetVar, Shell};
 
 use crate::attach_diff::todo_drop_set_exported_unexpanded;
-use crate::gen_rc::{Action, RM};
+use crate::gen_rc::{Action, RM, invocation_types_update_stmt};
 
 /// Arguments for generating tcsh startup commands
 #[derive(Debug, Clone)]
@@ -18,6 +23,10 @@ pub struct TcshStartupArgs {
     pub activate_d: PathBuf,
     pub flox_env: PathBuf,
     pub invocation_type: InvocationType,
+    /// The activated environment's pointer as serialized in
+    /// `_FLOX_ACTIVE_ENVIRONMENTS`, used to key its `_FLOX_INVOCATION_TYPES`
+    /// entry.
+    pub env_pointer: String,
     pub clean_up: Option<PathBuf>,
 
     pub flox_activate_tracer: String,
@@ -82,20 +91,62 @@ pub fn generate_tcsh_profile_commands(
         },
     }
 
-    // Export _FLOX_INVOCATION_TYPE (via setenv) so it is visible to
-    // std::env::vars() when computing the activation diff for stacked
-    // in-place activations. The diff then handles cleanup (unset on outermost
-    // deactivate, restore outer value on nested deactivate) without requiring
-    // an explicit unset here.
+    // Record this activation in the shell's `_FLOX_INVOCATION_TYPES` map;
+    // see the matching block in gen_rc/bash.rs for the design notes.
+    //
+    // Unlike the other shells, the JSON values cannot ride the backtick
+    // command line: `:q` quoting does not survive the substitution re-lex,
+    // so `[`/`{` glob-expand into a hard "No match" error, and with globbing
+    // suppressed every double quote is stripped (both empirically verified).
+    // The current map and the new entry's pointer instead cross to
+    // `push-invocation-type` through short-lived exported variables:
+    // `setenv` immediately before the call, `unsetenv` immediately after.
+    // The seed guard is needed first because referencing an unset variable
+    // is a hard error (and a one-line `if` body is substituted even when the
+    // condition is false, so the guard body must not contain `$`).
     match action {
-        Action::Activate { args, .. } => {
-            stmts.push(todo_drop_set_exported_unexpanded(
-                "_FLOX_INVOCATION_TYPE",
-                format!("{}", args.invocation_type),
-            ));
+        Action::Activate { args, .. } if !args.env_pointer.is_empty() => {
+            stmts.push(
+                format!(
+                    r#"if ( ! $?{var} ) set {var}="";"#,
+                    var = FLOX_INVOCATION_TYPES_VAR
+                )
+                .to_stmt(),
+            );
+            stmts.push(
+                format!(
+                    "setenv {wire} ${var}:q;",
+                    wire = FLOX_INVOCATION_TYPES_WIRE_VAR,
+                    var = FLOX_INVOCATION_TYPES_VAR
+                )
+                .to_stmt(),
+            );
+            stmts.push(
+                SetVar::exported_no_expansion(
+                    FLOX_INVOCATION_TYPES_PUSH_ENV_VAR,
+                    &args.env_pointer,
+                )
+                .to_stmt(),
+            );
+            stmts.push(
+                format!(
+                    r#"set {var}="`'{flox_activations}' push-invocation-type --invocation-type {invocation_type} --current-from-env --env-from-env`";"#,
+                    var = FLOX_INVOCATION_TYPES_VAR,
+                    flox_activations = args.flox_activations.display(),
+                    invocation_type = args.invocation_type,
+                )
+                .to_stmt(),
+            );
+            stmts.push(format!("unsetenv {FLOX_INVOCATION_TYPES_WIRE_VAR};").to_stmt());
+            stmts.push(format!("unsetenv {FLOX_INVOCATION_TYPES_PUSH_ENV_VAR};").to_stmt());
         },
-        Action::Deactivate(_) => {
-            // Handled by the activation diff (added → unset, modified → restore).
+        Action::Activate { .. } => {},
+        Action::Deactivate(ctx) => {
+            // A subshell that inherited activation environment variables should
+            // leave _FLOX_INVOCATION_TYPES alone
+            if let Some(remaining) = &ctx.invocation_types {
+                stmts.push(invocation_types_update_stmt(remaining));
+            }
         },
     }
 
@@ -344,7 +395,12 @@ mod tests {
             unsetenv DELETED_VAR;
             setenv _activate_d /interpreter/activate.d;
             setenv _flox_activate_tracer TRACER;
-            setenv _FLOX_INVOCATION_TYPE interactive;
+            if ( ! $?_FLOX_INVOCATION_TYPES ) set _FLOX_INVOCATION_TYPES="";
+            setenv _FLOX_INVOCATION_TYPES_WIRE $_FLOX_INVOCATION_TYPES:q;
+            setenv _FLOX_INVOCATION_TYPES_PUSH_ENV '{"name":"test_env","type":"path"}';
+            set _FLOX_INVOCATION_TYPES="`'/flox_activations' push-invocation-type --invocation-type interactive --current-from-env --env-from-env`";
+            unsetenv _FLOX_INVOCATION_TYPES_WIRE;
+            unsetenv _FLOX_INVOCATION_TYPES_PUSH_ENV;
             if ( $?tty ) then; source '/interpreter/activate.d/set-prompt.tcsh'; endif;
             if (! $?FLOX_ENV_DIRS) setenv FLOX_ENV_DIRS "empty";
             eval "`'/flox_activations' set-env-dirs --shell tcsh --flox-env '/flox_env' --env-dirs $FLOX_ENV_DIRS:q`";
@@ -357,8 +413,8 @@ mod tests {
             unset verbose;
             /nix/store/XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX-coreutils-9.10/bin/rm /path/to/rc/file;
             setenv _FLOX_PROMPT_HOOK_VERSION 1;
-            alias precmd 'set _flox_invocation_type=inplace; if ( $?_FLOX_INVOCATION_TYPE ) set _flox_invocation_type="$_FLOX_INVOCATION_TYPE"; eval "`/flox hook-env --shell tcsh --shell-pid $$ --invocation-type "$_flox_invocation_type"`"; unset _flox_invocation_type; if ( $?_flox_exit ) exit';
-            alias cwdcmd 'set _flox_invocation_type=inplace; if ( $?_FLOX_INVOCATION_TYPE ) set _flox_invocation_type="$_FLOX_INVOCATION_TYPE"; eval "`/flox hook-env --shell tcsh --shell-pid $$ --invocation-type "$_flox_invocation_type"`"; unset _flox_invocation_type; if ( $?_flox_exit ) exit';
+            alias precmd 'if ( ! $?_FLOX_INVOCATION_TYPES ) set _FLOX_INVOCATION_TYPES; setenv _FLOX_INVOCATION_TYPES_WIRE $_FLOX_INVOCATION_TYPES:q; eval "`/flox hook-env --shell tcsh --shell-pid $$ --invocation-types-from-env`"; unsetenv _FLOX_INVOCATION_TYPES_WIRE; if ( $?_flox_exit ) exit';
+            alias cwdcmd 'if ( ! $?_FLOX_INVOCATION_TYPES ) set _FLOX_INVOCATION_TYPES; setenv _FLOX_INVOCATION_TYPES_WIRE $_FLOX_INVOCATION_TYPES:q; eval "`/flox hook-env --shell tcsh --shell-pid $$ --invocation-types-from-env`"; unsetenv _FLOX_INVOCATION_TYPES_WIRE; if ( $?_flox_exit ) exit';
         "#]].assert_eq(&output);
     }
 
@@ -383,7 +439,12 @@ mod tests {
             unsetenv DELETED_VAR;
             setenv _activate_d /interpreter/activate.d;
             setenv _flox_activate_tracer TRACER;
-            setenv _FLOX_INVOCATION_TYPE inplace;
+            if ( ! $?_FLOX_INVOCATION_TYPES ) set _FLOX_INVOCATION_TYPES="";
+            setenv _FLOX_INVOCATION_TYPES_WIRE $_FLOX_INVOCATION_TYPES:q;
+            setenv _FLOX_INVOCATION_TYPES_PUSH_ENV '{"name":"test_env","type":"path"}';
+            set _FLOX_INVOCATION_TYPES="`'/flox_activations' push-invocation-type --invocation-type inplace --current-from-env --env-from-env`";
+            unsetenv _FLOX_INVOCATION_TYPES_WIRE;
+            unsetenv _FLOX_INVOCATION_TYPES_PUSH_ENV;
             if ( $?tty ) then; source '/interpreter/activate.d/set-prompt.tcsh'; endif;
             if (! $?FLOX_ENV_DIRS) setenv FLOX_ENV_DIRS "empty";
             eval "`'/flox_activations' set-env-dirs --shell tcsh --flox-env '/flox_env' --env-dirs $FLOX_ENV_DIRS:q`";
@@ -396,8 +457,8 @@ mod tests {
             unset verbose;
             /nix/store/XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX-coreutils-9.10/bin/rm /path/to/rc/file;
             setenv _FLOX_PROMPT_HOOK_VERSION 1;
-            alias precmd 'set _flox_invocation_type=inplace; if ( $?_FLOX_INVOCATION_TYPE ) set _flox_invocation_type="$_FLOX_INVOCATION_TYPE"; eval "`/flox hook-env --shell tcsh --shell-pid $$ --invocation-type "$_flox_invocation_type"`"; unset _flox_invocation_type; if ( $?_flox_exit ) exit';
-            alias cwdcmd 'set _flox_invocation_type=inplace; if ( $?_FLOX_INVOCATION_TYPE ) set _flox_invocation_type="$_FLOX_INVOCATION_TYPE"; eval "`/flox hook-env --shell tcsh --shell-pid $$ --invocation-type "$_flox_invocation_type"`"; unset _flox_invocation_type; if ( $?_flox_exit ) exit';
+            alias precmd 'if ( ! $?_FLOX_INVOCATION_TYPES ) set _FLOX_INVOCATION_TYPES; setenv _FLOX_INVOCATION_TYPES_WIRE $_FLOX_INVOCATION_TYPES:q; eval "`/flox hook-env --shell tcsh --shell-pid $$ --invocation-types-from-env`"; unsetenv _FLOX_INVOCATION_TYPES_WIRE; if ( $?_flox_exit ) exit';
+            alias cwdcmd 'if ( ! $?_FLOX_INVOCATION_TYPES ) set _FLOX_INVOCATION_TYPES; setenv _FLOX_INVOCATION_TYPES_WIRE $_FLOX_INVOCATION_TYPES:q; eval "`/flox hook-env --shell tcsh --shell-pid $$ --invocation-types-from-env`"; unsetenv _FLOX_INVOCATION_TYPES_WIRE; if ( $?_flox_exit ) exit';
         "#]].assert_eq(&output);
     }
 
@@ -420,10 +481,10 @@ mod tests {
             unsetenv QUOTED_VAR;
             unsetenv _FLOX_ACTIVE_ENVIRONMENTS;
             unsetenv _FLOX_HOOK_DIFF;
-            unsetenv _FLOX_INVOCATION_TYPE;
             unsetenv _flox_activations;
             setenv MODIFIED_VAR MODIFIED_ORIGINAL;
             setenv DELETED_VAR DELETED_ORIGINAL;
+            unset _FLOX_INVOCATION_TYPES;
             unsetenv _FLOX_PROMPT_HOOK_VERSION;
             if ( $?tty ) then; source '/interpreter/activate.d/set-prompt.tcsh'; endif;
             set _already_sourced_args = ();

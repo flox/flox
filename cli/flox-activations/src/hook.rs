@@ -6,22 +6,28 @@
 //! so it naturally does not trigger in non-interactive (e.g. `bash -c`) contexts.
 //!
 //! Each hook passes the interactive shell's PID (`$$` / `$fish_pid`) so
-//! `hook-env` can find this shell's prompt-hook action file, and the invocation
-//! type so `hook-env` can emit the right deactivation script.
-//! `_FLOX_INVOCATION_TYPE` is a shell-local set during activation and unset on
-//! deactivation, so the hook — which keeps firing afterwards — defaults it to
-//! `inplace` when it is unset. bash and zsh express that default inline; fish
-//! factors it into the `_flox_invocation_type` helper function; tcsh can't
-//! reference a possibly-unset variable without erroring, so it guards with `$?`
-//! and a throwaway variable (see `tcsh_hook`). `--invocation-type` is still
-//! optional on `hook-env` as a defensive measure.
+//! `hook-env` can find this shell's prompt-hook action file, plus the shell's
+//! `_FLOX_INVOCATION_TYPES` map so `hook-env` knows which of the layers it
+//! pops were activated by this shell — and with which invocation type.
+//! `_FLOX_INVOCATION_TYPES` is a shell-local JSON array with one entry per
+//! activation performed by this shell, keyed by environment pointer; each
+//! activation's startup script records an entry (see `gen_rc`), and the
+//! deactivation emitters (`hook-env`, `flox deactivate --print-script`)
+//! receive the map, take the entry for each layer they deactivate, and write
+//! back the remainder as a plain variable update. Because it is not
+//! exported, a subshell — which inherits the activation's exported
+//! environment without ever attaching to the activation — has an empty
+//! map, and that is how `hook-env` knows not to emit a
+//! `flox-activations detach` for layers this shell never attached to.
 //!
 //! Each hook also exports [`PROMPT_HOOK_VERSION_ENV`] =
 //! [`PROMPT_HOOK_VERSION`] at registration time (top level, so it is set
-//! before the first prompt). It is exported, unlike `_FLOX_INVOCATION_TYPE`, so
-//! a subprocess such as `flox deactivate` can confirm a compatible hook is set
-//! up before writing an action file the hook would otherwise never consume.
+//! before the first prompt). It is exported, unlike `_FLOX_INVOCATION_TYPES`,
+//! so a subprocess such as `flox deactivate` can confirm a compatible hook is
+//! set up before writing an action file the hook would otherwise never
+//! consume.
 
+use flox_core::activate::vars::{FLOX_INVOCATION_TYPES_VAR, FLOX_INVOCATION_TYPES_WIRE_VAR};
 use flox_core::hook_actions::{PROMPT_HOOK_VERSION, PROMPT_HOOK_VERSION_ENV};
 use indoc::formatdoc;
 
@@ -32,7 +38,7 @@ pub fn bash_hook(flox_bin: &str) -> String {
         _flox_hook() {{
           local _prev_exit=$?;
           local _flox_vars;
-          _flox_vars="$("{flox_bin}" hook-env --shell bash --shell-pid $$ --invocation-type "${{_FLOX_INVOCATION_TYPE:-inplace}}")";
+          _flox_vars="$("{flox_bin}" hook-env --shell bash --shell-pid $$ --invocation-types "${{{FLOX_INVOCATION_TYPES_VAR}:-}}")";
           trap -- '' SIGINT;
           eval "$_flox_vars";
           trap - SIGINT;
@@ -57,7 +63,7 @@ pub fn zsh_hook(flox_bin: &str) -> String {
         export {PROMPT_HOOK_VERSION_ENV}={PROMPT_HOOK_VERSION};
         _flox_hook() {{
           local _flox_vars;
-          _flox_vars="$("{flox_bin}" hook-env --shell zsh --shell-pid $$ --invocation-type "${{_FLOX_INVOCATION_TYPE:-inplace}}")";
+          _flox_vars="$("{flox_bin}" hook-env --shell zsh --shell-pid $$ --invocation-types "${{{FLOX_INVOCATION_TYPES_VAR}:-}}")";
           trap -- '' SIGINT;
           eval "$_flox_vars";
           trap - SIGINT;
@@ -105,11 +111,8 @@ pub fn fish_hook(flox_bin: &str) -> String {
     formatdoc!(
         r#"
         set -gx {PROMPT_HOOK_VERSION_ENV} {PROMPT_HOOK_VERSION};
-        function _flox_invocation_type;
-            test -n "$_FLOX_INVOCATION_TYPE"; and echo $_FLOX_INVOCATION_TYPE; or echo inplace;
-        end;
         function _flox_hook --on-event fish_prompt;
-            eval ("{flox_bin}" hook-env --shell fish --shell-pid $fish_pid --invocation-type (_flox_invocation_type) | string collect);
+            eval ("{flox_bin}" hook-env --shell fish --shell-pid $fish_pid --invocation-types "${FLOX_INVOCATION_TYPES_VAR}" | string collect);
             if test "$FLOX_AUTO_ACTIVATE_FISH_MODE" != "disable_arrow";
                 set -g _flox_pwd_hook_active 1;
             end;
@@ -119,14 +122,14 @@ pub fn fish_hook(flox_bin: &str) -> String {
                 if test "$FLOX_AUTO_ACTIVATE_FISH_MODE" = "eval_after_arrow";
                     set -g _flox_env_again 0;
                 else;
-                    eval ("{flox_bin}" hook-env --shell fish --shell-pid $fish_pid --invocation-type (_flox_invocation_type) | string collect);
+                    eval ("{flox_bin}" hook-env --shell fish --shell-pid $fish_pid --invocation-types "${FLOX_INVOCATION_TYPES_VAR}" | string collect);
                 end;
             end;
         end;
         function _flox_hook_preexec --on-event fish_preexec;
             if set -q _flox_env_again;
                 set -e _flox_env_again;
-                eval ("{flox_bin}" hook-env --shell fish --shell-pid $fish_pid --invocation-type (_flox_invocation_type) | string collect);
+                eval ("{flox_bin}" hook-env --shell fish --shell-pid $fish_pid --invocation-types "${FLOX_INVOCATION_TYPES_VAR}" | string collect);
             end;
             set -e _flox_pwd_hook_active;
         end;
@@ -136,13 +139,25 @@ pub fn fish_hook(flox_bin: &str) -> String {
 
 // Set both precmd and cwdcmd so we get pushd/popd behavior similar to what we have for zsh.
 //
-// Passing --invocation-type in tcsh is awkward: referencing an unset variable is
-// a hard error, so a possibly-unset `_FLOX_INVOCATION_TYPE` can't be expanded
-// directly the way bash/zsh/fish do with a default. Guard it with `$?` instead:
-// seed a throwaway `_flox_invocation_type` with the `inplace` default, overwrite
-// it from `_FLOX_INVOCATION_TYPE` only when that is set, pass it, then unset it
-// so it doesn't linger. `inplace` is the right default because the prompt hook
-// only ever deactivates in place.
+// Passing the invocation type map in tcsh is awkward, for empirically
+// verified reasons:
+//
+// - Referencing an unset variable is a hard error, and the one-line `if`
+//   form substitutes its body even when the condition is false — worse, a
+//   substitution error inside `precmd` makes tcsh print
+//   "Faulty alias 'precmd' removed." and delete the hook. So before
+//   anything reads `_FLOX_INVOCATION_TYPES`, a guard whose body contains no
+//   `$` at all (safe to substitute unconditionally) seeds it empty when
+//   unset. Side effect: the hook leaves the variable set-but-empty in
+//   shells that performed no activation, which is fine because an empty
+//   value means the same as an absent one everywhere.
+// - The JSON map cannot ride a backtick command line at all: `:q` quoting
+//   does not survive the substitution re-lex, so `[`/`{` glob-expand into a
+//   hard "No match" error, and with globbing suppressed every double quote
+//   is stripped. Instead the value crosses to `hook-env` through the
+//   short-lived exported [`FLOX_INVOCATION_TYPES_WIRE_VAR`]: `setenv`
+//   immediately before the call (top-level `:q` expansion is byte-clean),
+//   `unsetenv` immediately after, so it never outlives the hook run.
 //
 // Exiting from the hook is also awkward: if `exit` unwinds out of the eval'd
 // `hook-env` output, tcsh treats the special alias as broken, prints
@@ -150,17 +165,18 @@ pub fn fish_hook(flox_bin: &str) -> String {
 // `exit` at the alias-body top level is fine, so for an interactive
 // deactivation `hook-env` emits `set _flox_exit=1` (see
 // `emit_deactivate_script` in the `flox` crate) and the alias body checks the
-// flag after the eval completes.
+// flag after the eval completes — after the `unsetenv`, so the wire variable
+// dies with the hook run even when the shell exits.
 pub fn tcsh_hook(flox_bin: &str) -> String {
     // A tcsh alias body must be a single line, so assemble the statements here
     // and join them with "; " rather than writing one long string literal.
     let hook = [
-        "set _flox_invocation_type=inplace".to_string(),
-        r#"if ( $?_FLOX_INVOCATION_TYPE ) set _flox_invocation_type="$_FLOX_INVOCATION_TYPE""#.to_string(),
+        format!("if ( ! $?{FLOX_INVOCATION_TYPES_VAR} ) set {FLOX_INVOCATION_TYPES_VAR}"),
+        format!("setenv {FLOX_INVOCATION_TYPES_WIRE_VAR} ${FLOX_INVOCATION_TYPES_VAR}:q"),
         format!(
-            r#"eval "`{flox_bin} hook-env --shell tcsh --shell-pid $$ --invocation-type "$_flox_invocation_type"`""#
+            r#"eval "`{flox_bin} hook-env --shell tcsh --shell-pid $$ --invocation-types-from-env`""#
         ),
-        "unset _flox_invocation_type".to_string(),
+        format!("unsetenv {FLOX_INVOCATION_TYPES_WIRE_VAR}"),
         "if ( $?_flox_exit ) exit".to_string(),
     ]
     .join("; ");

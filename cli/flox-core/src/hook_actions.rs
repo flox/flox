@@ -60,7 +60,7 @@ pub const PROMPT_HOOK_VERSION: u8 = 1;
 /// Environment variable the shell hook exports to advertise that a prompt hook
 /// speaking version [`PROMPT_HOOK_VERSION`] is registered in this shell.
 ///
-/// It is exported (unlike `_FLOX_INVOCATION_TYPE`) precisely so a subprocess
+/// It is exported (unlike `_FLOX_INVOCATION_TYPES`) precisely so a subprocess
 /// like `flox deactivate` can read it to confirm the hook is set up and
 /// compatible before writing an action file the hook would otherwise never
 /// consume.

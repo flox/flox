@@ -120,7 +120,7 @@ EOF
     export TEST_VAR=original
     eval "$($FLOX_BIN activate --print-script)"
     echo "during:$TEST_VAR"
-    eval "$($FLOX_BIN deactivate --print-script "$_FLOX_INVOCATION_TYPE")"
+    eval "$($FLOX_BIN deactivate --print-script "$_FLOX_INVOCATION_TYPES")"
     echo "after:$TEST_VAR"
   '
   assert_success
@@ -155,7 +155,7 @@ EOF
     set -gx TEST_VAR original
     eval "$($FLOX_BIN activate --print-script)"
     echo "during:$TEST_VAR"
-    eval "$($FLOX_BIN deactivate --print-script "$_FLOX_INVOCATION_TYPE")"
+    eval "$($FLOX_BIN deactivate --print-script "$_FLOX_INVOCATION_TYPES")"
     echo "after:$TEST_VAR"
   '
   assert_success
@@ -190,7 +190,9 @@ EOF
     setenv TEST_VAR original
     eval "`$FLOX_BIN activate --print-script`"
     echo "during:$TEST_VAR"
-    eval "`$FLOX_BIN deactivate --print-script $_FLOX_INVOCATION_TYPE`"
+    setenv _FLOX_INVOCATION_TYPES_WIRE $_FLOX_INVOCATION_TYPES:q
+    eval "`$FLOX_BIN deactivate --print-script-from-env`"
+    unsetenv _FLOX_INVOCATION_TYPES_WIRE
     echo "after:$TEST_VAR"
   '
   assert_success
@@ -225,7 +227,7 @@ EOF
     export TEST_VAR=original
     eval "$($FLOX_BIN activate --print-script)"
     echo "during:$TEST_VAR"
-    eval "$($FLOX_BIN deactivate --print-script "$_FLOX_INVOCATION_TYPE")"
+    eval "$($FLOX_BIN deactivate --print-script "$_FLOX_INVOCATION_TYPES")"
     echo "after:$TEST_VAR"
   '
   assert_success
@@ -259,7 +261,7 @@ EOF
   FLOX_SHELL="bash" run --separate-stderr bash -c '
     eval "$($FLOX_BIN activate --print-script)"
     echo "during:$TEST_NEW_VAR"
-    eval "$($FLOX_BIN deactivate --print-script "$_FLOX_INVOCATION_TYPE")"
+    eval "$($FLOX_BIN deactivate --print-script "$_FLOX_INVOCATION_TYPES")"
     if [ -z "${TEST_NEW_VAR+x}" ]; then
       echo "after:unset"
     fi
@@ -295,7 +297,7 @@ EOF
   SHELL="$(which fish)" run --separate-stderr fish -c '
     eval "$($FLOX_BIN activate --print-script)"
     echo "during:$TEST_NEW_VAR"
-    eval "$($FLOX_BIN deactivate --print-script "$_FLOX_INVOCATION_TYPE")"
+    eval "$($FLOX_BIN deactivate --print-script "$_FLOX_INVOCATION_TYPES")"
     if not set -q TEST_NEW_VAR
       echo "after:unset"
     end
@@ -331,7 +333,9 @@ EOF
   SHELL="$(which tcsh)" run --separate-stderr tcsh -c '
     eval "`$FLOX_BIN activate --print-script`"
     echo "during:$TEST_NEW_VAR"
-    eval "`$FLOX_BIN deactivate --print-script $_FLOX_INVOCATION_TYPE`"
+    setenv _FLOX_INVOCATION_TYPES_WIRE $_FLOX_INVOCATION_TYPES:q
+    eval "`$FLOX_BIN deactivate --print-script-from-env`"
+    unsetenv _FLOX_INVOCATION_TYPES_WIRE
     if ( ! $?TEST_NEW_VAR ) then
       echo "after:unset"
     endif
@@ -367,7 +371,7 @@ EOF
   FLOX_SHELL="zsh" run --separate-stderr zsh -c '
     eval "$($FLOX_BIN activate --print-script)"
     echo "during:$TEST_NEW_VAR"
-    eval "$($FLOX_BIN deactivate --print-script "$_FLOX_INVOCATION_TYPE")"
+    eval "$($FLOX_BIN deactivate --print-script "$_FLOX_INVOCATION_TYPES")"
     if [ -z "${TEST_NEW_VAR+x}" ]; then
       echo "after:unset"
     fi
@@ -389,7 +393,7 @@ EOF
 
   run bash -c '
     export TEST_VAR=unchanged
-    eval "$($FLOX_BIN deactivate --print-script "$_FLOX_INVOCATION_TYPE")"
+    eval "$($FLOX_BIN deactivate --print-script "$_FLOX_INVOCATION_TYPES")"
     echo "after:$TEST_VAR"
   '
   assert_success
@@ -445,7 +449,7 @@ assert_prompt_round_trip() {
     echo "<before>$PS1</before>"
     eval "$("$FLOX_BIN" activate -d "$PROJECT_DIR")"
     echo "<active>$PS1</active>"
-    eval "$("$FLOX_BIN" deactivate --print-script "$_FLOX_INVOCATION_TYPE")"
+    eval "$("$FLOX_BIN" deactivate --print-script "$_FLOX_INVOCATION_TYPES")"
     echo "<after>$PS1</after>"
   '
   assert_success
@@ -460,7 +464,7 @@ assert_prompt_round_trip() {
     echo "<before>$PS1</before>"
     eval "$("$FLOX_BIN" activate -d "$PROJECT_DIR")"
     echo "<active>$PS1</active>"
-    eval "$("$FLOX_BIN" deactivate --print-script "$_FLOX_INVOCATION_TYPE")"
+    eval "$("$FLOX_BIN" deactivate --print-script "$_FLOX_INVOCATION_TYPES")"
     echo "<after>$PS1</after>"
   '
   assert_success
@@ -475,7 +479,7 @@ assert_prompt_round_trip() {
     echo "<before>"(fish_prompt)"</before>"
     eval ($FLOX_BIN activate -d $PROJECT_DIR)
     echo "<active>"(fish_prompt)"</active>"
-    eval ($FLOX_BIN deactivate --print-script $_FLOX_INVOCATION_TYPE)
+    eval ($FLOX_BIN deactivate --print-script "$_FLOX_INVOCATION_TYPES")
     echo "<after>"(fish_prompt)"</after>"
   '
   assert_success
@@ -490,7 +494,9 @@ assert_prompt_round_trip() {
     echo "<before>$prompt</before>"
     eval "`$FLOX_BIN activate -d $PROJECT_DIR`"
     echo "<active>$prompt</active>"
-    eval "`$FLOX_BIN deactivate --print-script $_FLOX_INVOCATION_TYPE`"
+    setenv _FLOX_INVOCATION_TYPES_WIRE $_FLOX_INVOCATION_TYPES:q
+    eval "`$FLOX_BIN deactivate --print-script-from-env`"
+    unsetenv _FLOX_INVOCATION_TYPES_WIRE
     echo "<after>$prompt</after>"
   '
   assert_success
@@ -548,7 +554,10 @@ FLOX_COLD_START_UNSET=(
   # inside one) and unset by the deactivate flow, so leaked values surface
   # as spurious env-diff records.
   -u _FLOX_PROMPT_HOOK_VERSION
+  # The old name was exported by released flox; the new one is never
+  # exported, but scrub both defensively.
   -u _FLOX_INVOCATION_TYPE
+  -u _FLOX_INVOCATION_TYPES
   # A leaked auto-activate flag makes the prompt hook auto-activate inside
   # interactive test sessions, which also surfaces in the env diff.
   -u FLOX_FEATURES_AUTO_ACTIVATE
@@ -701,7 +710,7 @@ diff_env_dumps() {
   FLOX_SHELL="bash" run -0 flox_cold_start bash -c '
     "$ENV_BIN" -0 > "$BEFORE"
     eval "$($FLOX_BIN activate --print-script)"
-    eval "$($FLOX_BIN deactivate --print-script "$_FLOX_INVOCATION_TYPE")"
+    eval "$($FLOX_BIN deactivate --print-script "$_FLOX_INVOCATION_TYPES")"
     "$ENV_BIN" -0 > "$AFTER"
   '
 
@@ -723,7 +732,7 @@ diff_env_dumps() {
   SHELL="$(which fish)" run -0 flox_cold_start fish -c '
     "$ENV_BIN" -0 > "$BEFORE"
     eval "$($FLOX_BIN activate --print-script)"
-    eval "$($FLOX_BIN deactivate --print-script "$_FLOX_INVOCATION_TYPE")"
+    eval "$($FLOX_BIN deactivate --print-script "$_FLOX_INVOCATION_TYPES")"
     "$ENV_BIN" -0 > "$AFTER"
   '
 
@@ -745,7 +754,9 @@ diff_env_dumps() {
   SHELL="$(which tcsh)" run -0 flox_cold_start tcsh -c '
     "$ENV_BIN" -0 > "$BEFORE"
     eval "`$FLOX_BIN activate --print-script`"
-    eval "`$FLOX_BIN deactivate --print-script $_FLOX_INVOCATION_TYPE`"
+    setenv _FLOX_INVOCATION_TYPES_WIRE $_FLOX_INVOCATION_TYPES:q
+    eval "`$FLOX_BIN deactivate --print-script-from-env`"
+    unsetenv _FLOX_INVOCATION_TYPES_WIRE
     "$ENV_BIN" -0 > "$AFTER"
   '
 
@@ -767,7 +778,7 @@ diff_env_dumps() {
   FLOX_SHELL="zsh" run -0 flox_cold_start zsh -c '
     "$ENV_BIN" -0 > "$BEFORE"
     eval "$($FLOX_BIN activate --print-script)"
-    eval "$($FLOX_BIN deactivate --print-script "$_FLOX_INVOCATION_TYPE")"
+    eval "$($FLOX_BIN deactivate --print-script "$_FLOX_INVOCATION_TYPES")"
     "$ENV_BIN" -0 > "$AFTER"
   '
 
@@ -790,7 +801,7 @@ EOF
   ENV_BIN=$(command -v env)
   BEFORE="$BATS_TEST_TMPDIR/before"
   AFTER="$BATS_TEST_TMPDIR/after"
-  COMMAND='eval "$($FLOX_BIN deactivate --print-script "$_FLOX_INVOCATION_TYPE")"; $ENV_BIN -0'
+  COMMAND='eval "$($FLOX_BIN deactivate --print-script "$_FLOX_INVOCATION_TYPES")"; $ENV_BIN -0'
   export ENV_BIN
 
   flox_cold_start "$ENV_BIN" -0 > "$BEFORE"
@@ -826,7 +837,7 @@ EOF
   ENV_BIN=$(command -v env)
   BEFORE="$BATS_TEST_TMPDIR/before"
   AFTER="$BATS_TEST_TMPDIR/after"
-  COMMAND='eval "$($FLOX_BIN deactivate --print-script "$_FLOX_INVOCATION_TYPE")"; $ENV_BIN -0'
+  COMMAND='eval "$($FLOX_BIN deactivate --print-script "$_FLOX_INVOCATION_TYPES")"; $ENV_BIN -0'
   export ENV_BIN
 
   flox_cold_start "$ENV_BIN" -0 > "$BEFORE"
@@ -862,7 +873,7 @@ EOF
   ENV_BIN=$(command -v env)
   BEFORE="$BATS_TEST_TMPDIR/before"
   AFTER="$BATS_TEST_TMPDIR/after"
-  COMMAND='eval "`$FLOX_BIN deactivate --print-script $_FLOX_INVOCATION_TYPE`"; $ENV_BIN -0'
+  COMMAND='setenv _FLOX_INVOCATION_TYPES_WIRE $_FLOX_INVOCATION_TYPES:q; eval "`$FLOX_BIN deactivate --print-script-from-env`"; unsetenv _FLOX_INVOCATION_TYPES_WIRE; $ENV_BIN -0'
   export ENV_BIN
 
   flox_cold_start "$ENV_BIN" -0 > "$BEFORE"
@@ -913,7 +924,7 @@ EOF
   ENV_BIN=$(command -v env)
   BEFORE="$BATS_TEST_TMPDIR/before"
   AFTER="$BATS_TEST_TMPDIR/after"
-  COMMAND='eval "$($FLOX_BIN deactivate --print-script "$_FLOX_INVOCATION_TYPE")"; $ENV_BIN -0'
+  COMMAND='eval "$($FLOX_BIN deactivate --print-script "$_FLOX_INVOCATION_TYPES")"; $ENV_BIN -0'
   export ENV_BIN
 
   flox_cold_start "$ENV_BIN" -0 > "$BEFORE"
@@ -971,7 +982,7 @@ EOF
   # inside the activated session (the test rc files reset it to BADPATH).
   SHELL_BIN=$(command -v bash)
   flox_cold_start "$ENV_BIN" -0 > "$BEFORE"
-  CMD="$SHELL_BIN -c 'eval \"\$(\$FLOX_BIN deactivate --print-script inplace)\"; \$ENV_BIN -0 > \$AFTER'"
+  CMD="$SHELL_BIN -c 'eval \"\$(\$FLOX_BIN deactivate --print-script \"\$_FLOX_INVOCATION_TYPES\")\"; \$ENV_BIN -0 > \$AFTER'"
   FLOX_SHELL="bash" run -0 \
     flox_cold_start expect "$TESTS_DIR/activate/activate-command.exp" "$PROJECT_DIR" "$CMD"
 
@@ -1014,7 +1025,7 @@ EOF
 
   SHELL_BIN=$(command -v fish)
   flox_cold_start "$ENV_BIN" -0 > "$BEFORE"
-  CMD="$SHELL_BIN -c 'eval \"\$(\$FLOX_BIN deactivate --print-script inplace)\"; \$ENV_BIN -0 > \$AFTER'"
+  CMD="$SHELL_BIN -c 'eval \"\$(\$FLOX_BIN deactivate --print-script \"\$_FLOX_INVOCATION_TYPES\")\"; \$ENV_BIN -0 > \$AFTER'"
   FLOX_SHELL="fish" run -0 \
     flox_cold_start expect "$TESTS_DIR/activate/activate-command.exp" "$PROJECT_DIR" "$CMD"
 
@@ -1059,7 +1070,7 @@ EOF
 
   SHELL_BIN=$(command -v tcsh)
   flox_cold_start "$ENV_BIN" -0 > "$BEFORE"
-  CMD="$SHELL_BIN -c 'eval \"\`\$FLOX_BIN deactivate --print-script inplace\`\"; \$ENV_BIN -0 > \$AFTER'"
+  CMD="$SHELL_BIN -c 'if ( ! \$?_FLOX_INVOCATION_TYPES ) set _FLOX_INVOCATION_TYPES; setenv _FLOX_INVOCATION_TYPES_WIRE \$_FLOX_INVOCATION_TYPES:q; eval \"\`\$FLOX_BIN deactivate --print-script-from-env\`\"; unsetenv _FLOX_INVOCATION_TYPES_WIRE; \$ENV_BIN -0 > \$AFTER'"
   FLOX_SHELL="tcsh" run -0 \
     flox_cold_start expect "$TESTS_DIR/activate/activate-command.exp" "$PROJECT_DIR" "$CMD"
 
@@ -1156,7 +1167,7 @@ EOF
 
   SHELL_BIN=$(command -v zsh)
   flox_cold_start "$ENV_BIN" -0 > "$BEFORE"
-  CMD="$SHELL_BIN -c 'eval \"\$(\$FLOX_BIN deactivate --print-script inplace)\"; \$ENV_BIN -0 > \$AFTER'"
+  CMD="$SHELL_BIN -c 'eval \"\$(\$FLOX_BIN deactivate --print-script \"\$_FLOX_INVOCATION_TYPES\")\"; \$ENV_BIN -0 > \$AFTER'"
   FLOX_SHELL="zsh" run -0 \
     flox_cold_start expect "$TESTS_DIR/activate/activate-command.exp" "$PROJECT_DIR" "$CMD"
 
@@ -1200,9 +1211,9 @@ EOF
 #
 # These verify that stacking two in-place activations and then performing two
 # deactivations leaves the environment identical to the pre-activation state.
-# The key invariant: _FLOX_HOOK_DIFF and _FLOX_INVOCATION_TYPE must be
-# restored to their outer values (or unset, for the outermost activation)
-# rather than unconditionally cleared on the first deactivation.
+# The key invariant: _FLOX_HOOK_DIFF must be restored to its outer value (or
+# unset, for the outermost activation) rather than unconditionally cleared on
+# the first deactivation.
 # ---------------------------------------------------------------------------- #
 
 # bats test_tags=activate,deactivate
@@ -1222,13 +1233,13 @@ EOF
     "$ENV_BIN" -0 > "$BEFORE"
     eval "$($FLOX_BIN activate -d "$PROJECT_DIR1" --print-script)"
     eval "$($FLOX_BIN activate -d "$PROJECT_DIR2" --print-script)"
-    eval "$($FLOX_BIN deactivate --print-script "$_FLOX_INVOCATION_TYPE")"
+    eval "$($FLOX_BIN deactivate --print-script "$_FLOX_INVOCATION_TYPES")"
     # After first deactivate: env2 removed, env1 still active
     echo "$_FLOX_ACTIVE_ENVIRONMENTS" | grep -qF "$PROJECT_DIR1" \
       || { echo "env1 not active after first deactivate: $_FLOX_ACTIVE_ENVIRONMENTS"; exit 1; }
     echo "$_FLOX_ACTIVE_ENVIRONMENTS" | grep -qvF "$PROJECT_DIR2" \
       || { echo "env2 still active after first deactivate: $_FLOX_ACTIVE_ENVIRONMENTS"; exit 1; }
-    eval "$($FLOX_BIN deactivate --print-script "$_FLOX_INVOCATION_TYPE")"
+    eval "$($FLOX_BIN deactivate --print-script "$_FLOX_INVOCATION_TYPES")"
     "$ENV_BIN" -0 > "$AFTER"
   '
 
@@ -1242,19 +1253,253 @@ EOF
   unset PROJECT_DIR
 }
 
-# bats test_tags=activate,deactivate
-@test "in-place deactivate restores outer invocation type (zsh)" {
-  project_setup
+# ---------------------------------------------------------------------------- #
+# Subshells: a nested shell inherits the activation's exported environment but
+# its PID was never attached, so deactivating there must restore the
+# environment without emitting a detach (DEV-159)
+# ---------------------------------------------------------------------------- #
 
-  FLOX_SHELL="zsh" run --separate-stderr zsh -c '
-    # Simulate an outer interactive shell that set _FLOX_INVOCATION_TYPE
-    export _FLOX_INVOCATION_TYPE=interactive
-    eval "$($FLOX_BIN activate -d "$PROJECT_DIR" --print-script)"
-    # After in-place activation the type must be "inplace"
-    [[ "$_FLOX_INVOCATION_TYPE" == "inplace" ]] || { echo "expected inplace, got: $_FLOX_INVOCATION_TYPE"; exit 1; }
-    eval "$($FLOX_BIN deactivate --print-script "$_FLOX_INVOCATION_TYPE")"
-    # After deactivation the outer interactive type must be restored
-    [[ "$_FLOX_INVOCATION_TYPE" == "interactive" ]] || { echo "expected interactive restored, got: $_FLOX_INVOCATION_TYPE"; exit 1; }
-  '
+# Repro for DEV-159 with shell $1: activate in command mode, spawn a nested
+# copy of the same shell, and deactivate inside it. $2 is the
+# deactivate-and-observe script for the nested shell: it probes the manifest
+# var FOO before and after eval'ing
+# `flox deactivate --print-script "$_FLOX_INVOCATION_TYPES"` — the map
+# variable is unset in a shell that performed no activation, so the nested
+# shell passes an empty map exactly as its prompt hook would. FOO must go
+# set → unset in the nested shell ("sub1:set" / "sub2:unset") while the
+# parent's copy stays set, and the emitted script must not detach the
+# parent's activation.
+assert_subshell_deactivate_does_not_detach() {
+  local shell="${1:?}" inner="${2:?}"
+
+  project_setup
+  cat << "EOF" | "$FLOX_BIN" edit -f -
+version = 1
+
+[vars]
+FOO = "set"
+EOF
+
+  # Absolute paths: the nested shell is spawned from inside the activation,
+  # where bare names may not resolve (user_dotfiles_setup resets PATH).
+  SHELL_BIN="$(command -v "$shell")"
+  INNER_SCRIPT="$BATS_TEST_TMPDIR/subshell-deactivate.$shell"
+  echo "$inner" > "$INNER_SCRIPT"
+  export SHELL_BIN INNER_SCRIPT
+
+  FLOX_SHELL="$SHELL_BIN" run --separate-stderr "$FLOX_BIN" activate -d "$PROJECT_DIR" -c \
+    '"$SHELL_BIN" "$INNER_SCRIPT" && echo "parent:$FOO"'
   assert_success
+  refute_regex "$stderr" "is not attached to the activation"
+  # The nested shell saw the inherited value, then restored its environment...
+  assert_output --partial "sub1:set"
+  assert_output --partial "sub2:unset"
+  # ...without affecting the parent's.
+  assert_output --partial "parent:set"
+}
+
+# bats test_tags=deactivate:subshell
+@test "'flox deactivate' in a subshell does not detach the parent's activation (bash)" {
+  assert_subshell_deactivate_does_not_detach bash '
+    echo "sub1:$FOO"
+    eval "$($FLOX_BIN deactivate --print-script "$_FLOX_INVOCATION_TYPES")"
+    echo "sub2:${FOO:-unset}"
+  '
+}
+
+# bats test_tags=deactivate:subshell
+@test "'flox deactivate' in a subshell does not detach the parent's activation (fish)" {
+  assert_subshell_deactivate_does_not_detach fish '
+    echo "sub1:$FOO"
+    eval "$($FLOX_BIN deactivate --print-script "$_FLOX_INVOCATION_TYPES")"
+    set -q FOO; and echo "sub2:$FOO"; or echo "sub2:unset"
+  '
+}
+
+# bats test_tags=deactivate:subshell
+@test "'flox deactivate' in a subshell does not detach the parent's activation (tcsh)" {
+  # Referencing an unset variable is a hard error in tcsh, and a one-line
+  # `if` body must not contain `$` (it is substituted even when the
+  # condition is false), so mirror the tcsh prompt hook: seed the map
+  # variable empty, then pass it through the short-lived wire variable (a
+  # JSON value cannot ride a tcsh backtick command line; see `tcsh_hook` in
+  # flox-activations).
+  assert_subshell_deactivate_does_not_detach tcsh "
+    echo \"sub1:\$FOO\"
+    if ( ! \$?_FLOX_INVOCATION_TYPES ) set _FLOX_INVOCATION_TYPES
+    setenv _FLOX_INVOCATION_TYPES_WIRE \$_FLOX_INVOCATION_TYPES:q
+    eval \"\`\$FLOX_BIN deactivate --print-script-from-env\`\"
+    unsetenv _FLOX_INVOCATION_TYPES_WIRE
+    if ( \$?FOO ) echo 'sub2:set'
+    if ( ! \$?FOO ) echo 'sub2:unset'
+  "
+}
+
+# bats test_tags=deactivate:subshell
+@test "'flox deactivate' in a subshell does not detach the parent's activation (zsh)" {
+  assert_subshell_deactivate_does_not_detach zsh '
+    echo "sub1:$FOO"
+    eval "$($FLOX_BIN deactivate --print-script "$_FLOX_INVOCATION_TYPES")"
+    echo "sub2:${FOO:-unset}"
+  '
+}
+
+# ---------------------------------------------------------------------------- #
+# Stacked deactivation: an interactive activation layered with an in-place
+# activation deactivates one layer per `flox deactivate`, and only the last
+# one exits the shell
+# ---------------------------------------------------------------------------- #
+
+# Drive an interactive activation of PROJECT_DIR, layer an in-place
+# activation of a second environment at the prompt, then run a plain
+# `flox deactivate` twice, each followed by a probe that echoes
+# "still_running". A deactivation takes effect at the next prompt, so the
+# first one pops only the in-place layer and the session survives to run its
+# probe; the second exits the activation subshell before its probe is read —
+# exactly one "still_running" appears.
+assert_stacked_deactivate_exits_only_last() {
+  local shell="${1:?}"
+
+  project_setup
+  export PROJECT_DIR2="${BATS_TEST_TMPDIR}/project2"
+  mkdir -p "$PROJECT_DIR2"
+  "$FLOX_BIN" init -d "$PROJECT_DIR2"
+
+  # Shell-syntax-specific eval of an in-place activation at the prompt.
+  local inplace_cmd
+  case "$shell" in
+    bash | zsh | fish)
+      inplace_cmd='eval "$('"$FLOX_BIN"' activate -d '"$PROJECT_DIR2"')"'
+      ;;
+    tcsh)
+      inplace_cmd='eval "`'"$FLOX_BIN"' activate -d '"$PROJECT_DIR2"'`"'
+      ;;
+  esac
+
+  FLOX_SHELL="$shell" run -0 flox_cold_start \
+    expect "$TESTS_DIR/activate/stacked-deactivate.exp" \
+    "$PROJECT_DIR" "$inplace_cmd"
+
+  # The probe quote-splits its argument (still_"running"), so the echoed
+  # input lines can't match; only probe output counts.
+  assert_equal "$(grep -c 'still_running' <<< "$output")" 1
+
+  wait_for_activations "$PROJECT_DIR2" || true
+  rm -rf "$PROJECT_DIR2"
+  unset PROJECT_DIR2
+}
+
+# bats test_tags=activate,deactivate
+@test "stacked deactivate exits the shell only on the last layer (bash)" {
+  assert_stacked_deactivate_exits_only_last bash
+}
+
+# bats test_tags=activate,deactivate
+@test "stacked deactivate exits the shell only on the last layer (fish)" {
+  assert_stacked_deactivate_exits_only_last fish
+}
+
+# bats test_tags=activate,deactivate
+@test "stacked deactivate exits the shell only on the last layer (tcsh)" {
+  assert_stacked_deactivate_exits_only_last tcsh
+}
+
+# bats test_tags=activate,deactivate
+@test "stacked deactivate exits the shell only on the last layer (zsh)" {
+  assert_stacked_deactivate_exits_only_last zsh
+}
+
+# ---------------------------------------------------------------------------- #
+
+# Create a default environment and append the eval of an in-place activation
+# to the shell's rc file, so every new $shell activates it the way a
+# default-env setup does.
+rc_default_env_setup() {
+  local shell="${1:?}"
+
+  export DEFAULT_DIR="${BATS_TEST_TMPDIR}/default"
+  mkdir -p "$DEFAULT_DIR"
+  "$FLOX_BIN" init -d "$DEFAULT_DIR"
+  MANIFEST_CONTENTS="$(cat << "EOF"
+    version = 1
+
+    [vars]
+    DEFAULT_MARKER = "default_env_active"
+EOF
+  )"
+  echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -d "$DEFAULT_DIR" -f -
+
+  local rc_file
+  case "$shell" in
+    bash) rc_file=".bashrc.extra" ;;
+    zsh) rc_file=".zshrc.extra" ;;
+    fish) rc_file=".config/fish/config.fish.extra" ;;
+    tcsh) rc_file=".tcshrc.extra" ;;
+  esac
+  case "$shell" in
+    bash | zsh | fish)
+      echo 'eval "$('"$FLOX_BIN"' activate -d '"$DEFAULT_DIR"')"' >> "$HOME/$rc_file"
+      ;;
+    tcsh)
+      echo 'eval "`'"$FLOX_BIN"' activate -d '"$DEFAULT_DIR"'`"' >> "$HOME/$rc_file"
+      ;;
+  esac
+}
+
+rc_default_env_teardown() {
+  wait_for_activations "$DEFAULT_DIR" || true
+  rm -rf "$DEFAULT_DIR"
+  unset DEFAULT_DIR
+}
+
+# Activate a project environment interactively from a shell where the
+# default env is already active, so the rc file's eval is a repeat
+# activation that must not add a layer: one `flox deactivate` exits the
+# session, and the outer shell's default env activation still deactivates
+# cleanly afterwards.
+assert_rc_default_repeat_deactivate_exits() {
+  local shell="${1:?}"
+
+  project_setup
+  rc_default_env_setup "$shell"
+
+  run --separate-stderr flox_cold_start bash <(cat <<EOF
+    set -euo pipefail
+    _expect="\$(command -v expect)"
+    eval "\$(FLOX_SHELL=bash "$FLOX_BIN" activate -d "$DEFAULT_DIR")"
+    echo "outer:\$DEFAULT_MARKER"
+    FLOX_SHELL="$shell" "\$_expect" "$TESTS_DIR/activate/rc-default-repeat-deactivate.exp" "$PROJECT_DIR" "default_env_active"
+    eval "\$(FLOX_SHELL=bash "$FLOX_BIN" deactivate --print-script "\$_FLOX_INVOCATION_TYPES")"
+    echo "outer2:\${DEFAULT_MARKER:-unset}"
+EOF
+)
+  assert_success
+  refute_regex "$output" "is not attached to the activation"
+  refute_regex "$stderr" "is not attached to the activation"
+  assert_line "outer:default_env_active"
+  # Not assert_line: pty escape residue from the expect session can share
+  # the line with the probe output.
+  assert_output --partial "outer2:unset"
+
+  rc_default_env_teardown
+}
+
+# bats test_tags=activate,deactivate
+@test "deactivate exits a session nested on an already-active rc-file default env (bash)" {
+  assert_rc_default_repeat_deactivate_exits bash
+}
+
+# bats test_tags=activate,deactivate
+@test "deactivate exits a session nested on an already-active rc-file default env (fish)" {
+  assert_rc_default_repeat_deactivate_exits fish
+}
+
+# bats test_tags=activate,deactivate
+@test "deactivate exits a session nested on an already-active rc-file default env (tcsh)" {
+  assert_rc_default_repeat_deactivate_exits tcsh
+}
+
+# bats test_tags=activate,deactivate
+@test "deactivate exits a session nested on an already-active rc-file default env (zsh)" {
+  assert_rc_default_repeat_deactivate_exits zsh
 }
