@@ -17,6 +17,7 @@ use floxhub_client::{
     FloxhubClientError,
     FloxhubMockMode,
     LockedSourceItem,
+    PackageBuild,
     PackageDetails,
     PackageGroup,
     PackageSystem,
@@ -390,6 +391,16 @@ impl CatalogClientTrait for MockClient {
         // record/replay client and pure nef-lock-catalog unit tests, not the
         // MockClient response queue.
         unimplemented!("build_inputs_lookup is not supported in MockClient")
+    }
+
+    async fn packages_by_binary(
+        &self,
+        _binary_name: impl AsRef<str> + Send + Sync,
+        _system: PackageSystem,
+    ) -> Result<ResultsPage<PackageBuild>, FloxhubClientError> {
+        // Intentionally unsupported: the binary lookup path is tested via the
+        // record/replay client, not the MockClient response queue.
+        unimplemented!("packages_by_binary is not supported in MockClient")
     }
 
     #[allow(clippy::too_many_arguments)]

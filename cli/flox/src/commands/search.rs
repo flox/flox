@@ -7,7 +7,13 @@ use flox_config::Config;
 use flox_events::EventsHub;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::providers::catalog::SearchTerm;
-use floxhub_client::{CatalogClientTrait, SearchResults};
+use floxhub_client::{
+    CatalogClientTrait,
+    PackageBuild,
+    PackageSystem,
+    SearchResult,
+    SearchResults,
+};
 use indoc::{formatdoc, indoc};
 use tracing::{debug, instrument};
 
@@ -38,6 +44,10 @@ pub struct Search {
     #[bpaf(short, long)]
     pub all: bool,
 
+    /// Search for packages that provide a specific binary
+    #[bpaf(long)]
+    pub binary: bool,
+
     /// The package to search for in the format '<pkg-path>'.
     ///
     /// ex. python310Packages.pip
@@ -52,10 +62,15 @@ impl Search {
 
         sentry_set_tag("json", self.json);
         sentry_set_tag("show_all", self.all);
+        sentry_set_tag("binary", self.binary);
         sentry_set_tag("search_term", search_term);
         subcommand_metric!("search", search_term = search_term);
         if let Err(err) = EventsHub::global().record_search(search_term.clone()) {
             debug!(error = %err, "Failed to record v2 event");
+        }
+
+        if self.binary {
+            return self.handle_binary_search(&flox).await;
         }
 
         debug!("performing search for term: {}", search_term);
@@ -144,6 +159,105 @@ impl Search {
             eprintln!("{hints}");
         }
         Ok(())
+    }
+
+    /// Handle `flox search --binary <name>`: list the packages that provide
+    /// a binary, via the catalog's binary-to-package index.
+    ///
+    /// Renders with the same formatting as a regular search.
+    async fn handle_binary_search(&self, flox: &Flox) -> Result<()> {
+        let binary_name = &self.search_term;
+        debug!("performing binary search for: {}", binary_name);
+
+        let results = binary_search_results(binary_name, flox).await?;
+
+        if self.json {
+            return render_search_results_json(results);
+        }
+
+        if results.results.is_empty() {
+            bail!("No packages found that provide the binary '{binary_name}'.");
+        }
+
+        let results = DisplaySearchResults::from_search_results(
+            binary_name,
+            results,
+            stdout_supports_color(),
+        )?;
+        println!("{results}");
+
+        // We should use message::plain once bold formatting is fixed in
+        // tracing-subscriber
+        // https://github.com/tokio-rs/tracing/issues/3369
+        eprintln!("\n{FLOX_SHOW_HINT}");
+        Ok(())
+    }
+}
+
+/// Look up the packages that provide `binary_name`.
+///
+/// Tries the dedicated binary-to-package index first; if the endpoint is
+/// unavailable (e.g. an older FloxHub), falls back to a search that keeps
+/// exact name matches only.
+async fn binary_search_results(binary_name: &str, flox: &Flox) -> Result<SearchResults> {
+    let system: PackageSystem = flox.system.clone().try_into()?;
+
+    match flox
+        .floxhub_client
+        .packages_by_binary(binary_name, system)
+        .await
+    {
+        Ok(page) => {
+            debug!(
+                binary_name,
+                count = page.results.len(),
+                "found packages via by-binary index"
+            );
+            // The index returns one row per package version; list each
+            // package once. The row count is not a package count, so no
+            // pagination hint is shown.
+            let mut seen = std::collections::HashSet::new();
+            let results = page
+                .results
+                .into_iter()
+                .filter(|pkg| seen.insert(pkg.attr_path.clone()))
+                .map(package_build_to_search_result)
+                .collect();
+            Ok(SearchResults {
+                results,
+                count: None,
+            })
+        },
+        Err(err) => {
+            debug!(binary_name, error = %err, "by-binary index unavailable, falling back to search");
+            let mut results = flox
+                .floxhub_client
+                .search(binary_name, system, DEFAULT_SEARCH_LIMIT)
+                .await?;
+            results.results.retain(|pkg| {
+                let last_segment = pkg.attr_path.rsplit('.').next().unwrap_or(&pkg.attr_path);
+                last_segment == binary_name || pkg.pname == binary_name
+            });
+            // The count refers to the unfiltered search, not the matches.
+            results.count = None;
+            Ok(results)
+        },
+    }
+}
+
+/// Convert a by-binary index row into a search result for display.
+fn package_build_to_search_result(pkg: PackageBuild) -> SearchResult {
+    SearchResult {
+        attr_path: pkg.attr_path,
+        catalog: pkg.catalog,
+        deprecation: None,
+        description: pkg.description,
+        name: pkg.name,
+        pkg_path: pkg.pkg_path,
+        pname: pkg.pname,
+        stabilities: pkg.stabilities.unwrap_or_default(),
+        system: pkg.system,
+        version: Some(pkg.version),
     }
 }
 

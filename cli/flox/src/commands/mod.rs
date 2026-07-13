@@ -771,7 +771,7 @@ impl UseCommands {
         match self {
             UseCommands::Activate(args) => args.handle(config, flox).await,
             UseCommands::Deactivate(args) => args.handle(config, flox),
-            UseCommands::Run(args) => args.handle(flox).await,
+            UseCommands::Run(args) => args.handle(config, flox).await,
             UseCommands::Services(args) => args.handle(config, flox).await,
         }
     }

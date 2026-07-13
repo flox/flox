@@ -6520,6 +6520,70 @@ Sends a `GET` request to `/api/v1/catalog/info/base-catalog`
             _ => Err(Error::UnexpectedResponse(response)),
         }
     }
+    /**Shows packages that provide a binary
+
+Returns a list of packages whose outputs contain the given binary name
+
+Required Query Parameters:
+- **system**: The system to filter packages by.
+
+Optional Query Parameters:
+- **page**: Optional page number for pagination (def = 0)
+- **pageSize**: Optional page size for pagination (def = 10)
+
+Returns:
+- **PackagesResult**: A list of PackageResolutionInfo and the total result count
+
+Sends a `GET` request to `/api/v1/catalog/packages/by-binary/{binary_name}`
+
+*/
+    pub async fn packages_by_binary_api_v1_catalog_packages_by_binary_binary_name_get<
+        'a,
+    >(
+        &'a self,
+        binary_name: &'a str,
+        page: Option<i64>,
+        page_size: Option<i64>,
+        system: types::PackageSystem,
+    ) -> Result<ResponseValue<types::PackagesResult>, Error<types::ErrorResponse>> {
+        let url = format!(
+            "{}/api/v1/catalog/packages/by-binary/{}", self.baseurl, encode_path(&
+            binary_name.to_string()),
+        );
+        let mut header_map = ::reqwest::header::HeaderMap::with_capacity(1usize);
+        header_map
+            .append(
+                ::reqwest::header::HeaderName::from_static("api-version"),
+                ::reqwest::header::HeaderValue::from_static(Self::api_version()),
+            );
+        #[allow(unused_mut)]
+        let mut request = self
+            .client
+            .get(url)
+            .header(
+                ::reqwest::header::ACCEPT,
+                ::reqwest::header::HeaderValue::from_static("application/json"),
+            )
+            .query(&progenitor_client::QueryParam::new("page", &page))
+            .query(&progenitor_client::QueryParam::new("pageSize", &page_size))
+            .query(&progenitor_client::QueryParam::new("system", &system))
+            .headers(header_map)
+            .build()?;
+        let info = OperationInfo {
+            operation_id: "packages_by_binary_api_v1_catalog_packages_by_binary_binary_name_get",
+        };
+        self.pre(&mut request, &info).await?;
+        let result = self.exec(request, &info).await;
+        self.post(&result, &info).await?;
+        let response = result?;
+        match response.status().as_u16() {
+            200u16 => ResponseValue::from_response(response).await,
+            422u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            _ => Err(Error::UnexpectedResponse(response)),
+        }
+    }
     /**Shows available packages of a specific package
 
 Returns a list of versions for a given attr_path

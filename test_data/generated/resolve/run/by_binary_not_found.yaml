@@ -1,0 +1,9 @@
+when:
+  path: /api/v1/catalog/packages/by-binary/nonexistent-binary-xyz
+  method: GET
+then:
+  status: 200
+  header:
+  - name: content-type
+    value: application/json
+  body: '{"items":[],"total_count":0}'

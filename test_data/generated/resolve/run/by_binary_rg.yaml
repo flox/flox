@@ -1,0 +1,9 @@
+when:
+  path: /api/v1/catalog/packages/by-binary/rg
+  method: GET
+then:
+  status: 200
+  header:
+  - name: content-type
+    value: application/json
+  body: '{"items":[{"catalog":"nixpkgs","attr_path":"ripgrep","pkg_path":"ripgrep","derivation":"/nix/store/0000000000000000000000000000002a-ripgrep-14.1.1.drv","name":"ripgrep-14.1.1","pname":"ripgrep","version":"14.1.1","system":"aarch64-darwin","outputs":[{"name":"out","store_path":"/nix/store/0000000000000000000000000000002b-ripgrep-14.1.1"}],"outputs_to_install":["out"],"description":"Utility that combines the usability of The Silver Searcher with the raw speed of grep","license":"MIT","locked_url":"https://github.com/flox/nixpkgs?rev=b12141ef619e0a9c1c84dc8c684040326f27cdcc","rev":"b12141ef619e0a9c1c84dc8c684040326f27cdcc","rev_count":982522,"rev_date":"2026-04-18T21:33:21Z","broken":false,"insecure":false,"unfree":false,"missing_builds":false,"stabilities":["unstable"],"scrape_date":"2026-04-21T06:03:34.910020Z","cache_uri":null}],"total_count":1}'
