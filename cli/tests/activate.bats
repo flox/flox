@@ -3472,6 +3472,22 @@ PIDs of the running activations: ${ACTIVATION_PID}"
 # ---------------------------------------------------------------------------- #
 
 
+# bats test_tags=activate,activate:paths
+@test "INFOPATH keeps the default search path" {
+  project_setup
+
+  # An unset INFOPATH must gain a trailing colon so info(1) appends its
+  # default (compiled-in) search path.
+  INFOPATH= run "$FLOX_BIN" activate -c "sh -c 'echo \$INFOPATH'"
+  assert_success
+  assert_output --regexp "/share/info:$"
+
+  # An existing INFOPATH is preserved and still ends with a colon.
+  INFOPATH=/some/info run "$FLOX_BIN" activate -c "sh -c 'echo \$INFOPATH'"
+  assert_success
+  assert_output --regexp "/share/info:/some/info:$"
+}
+
 # bats test_tags=activate,activate:attach
 @test "attach doesn't break MANPATH" {
   project_setup
