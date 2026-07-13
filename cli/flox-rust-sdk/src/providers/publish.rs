@@ -2489,20 +2489,13 @@ pub mod tests {
             .expect("failed to do publish");
     }
 
-    // This test was intended to ensure that a user gets an error if they try to
-    // publish to a catalog that exists but that they don't have write access to.
-    // However, ownership (the user targeting their personal catalog) takes precedence
-    // over roles, and so the user WILL be able to publish.
-    // To properly test this, we would need two user, one to create the catalog,
-    // and another to try and publish to it where they have only READER access.
-    // The mocks currently do not support this.
-    //
-    // Additionally, this is covered by the service and integration tests.
-    // For now we can leave this with a should_panic attribute.
+    // The read-only catalog is configured by the `test_catalog_admin` fixture
+    // user during recording setup while `test1` holds Reader-only access, so
+    // the server rejects package creation with 403. The recording contains
+    // exactly that exchange.
     #[tokio::test(flavor = "multi_thread")]
-    #[should_panic]
     async fn error_publishing_to_read_only_catalog() {
-        let (build_meta, env_meta, pkg_meta) = dummy_publish_metadata("mypkg5");
+        let (_build_meta, env_meta, pkg_meta) = dummy_publish_metadata("mypkg5");
         let (flox, _tmpdir) = flox_instance();
         let (flox, auth) = auto_recording_catalog_client_for_authed_local_services(
             flox,
@@ -2510,28 +2503,17 @@ pub mod tests {
             "publish_provider_error_when_user_only_has_read_access_to_catalog",
         );
         let publish_provider = PublishProvider::new(env_meta, pkg_meta, auth);
-        let guard = publish_provider
+        let err = publish_provider
             .create_package_and_possibly_user_catalog(
                 &flox.floxhub_client,
-                // This catalog name matches one that the test user has read-only
-                // access to as defined in _FLOXHUB_TEST_USERS.json from the floxhub repo.
                 TEST_READ_ONLY_CATALOG_NAME,
             )
             .await
-            .unwrap();
-        let res = publish_provider
-            .publish(
-                &flox.floxhub_client,
-                TEST_READ_ONLY_CATALOG_NAME,
-                guard,
-                &build_meta,
-                None,
-                // Server returns meta-only store config; narinfo collected
-                // from FIXED_TEST_STORE_PATH in the local daemon store.
-                false,
-            )
-            .await;
-        assert!(res.is_err());
+            .unwrap_err();
+        assert!(
+            matches!(err, PublishError::CatalogError(_)),
+            "expected CatalogError for 403 rejection, got: {err}"
+        );
     }
 
     #[tokio::test(flavor = "multi_thread")]
