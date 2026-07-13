@@ -155,8 +155,12 @@ eval `flox activate`     # WRONG — output is word-split and brace-expanded
 
 ## Pull Requests
 
+Always follow `CONTRIBUTING.md`.
+
 When opening a PR, consider if the PR has user-facing changes that aren't behind a feature flag.
 If so, add a `## Release Notes` section to the PR description describing the change.
+
+Update your branch against `main` by rebasing — never a merge commit.
 
 ## Conventions
 
