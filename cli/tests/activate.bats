@@ -3499,11 +3499,11 @@ PIDs of the running activations: ${ACTIVATION_PID}"
   assert_output --regexp "/share/info:/home/bob/info:$"
   refute_output --regexp "::"
 
-  # An INFOPATH without the marker is preserved and still gains a trailing
-  # colon so the default search path isn't lost (same policy as MANPATH).
+  # An INFOPATH without the marker deliberately excludes the default search
+  # path; that choice is preserved rather than forcing the marker back in.
   INFOPATH=/some/info run "$FLOX_BIN" activate -c "sh -c 'echo \$INFOPATH'"
   assert_success
-  assert_output --regexp "/share/info:/some/info:$"
+  assert_output --regexp "/share/info:/some/info$"
 }
 
 # bats test_tags=activate,activate:attach
