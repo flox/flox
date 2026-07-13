@@ -1832,27 +1832,42 @@ dependencies = [
 ]
 
 [[package]]
+name = "floxhub-auth"
+version = "0.0.0"
+dependencies = [
+ "base64",
+ "chrono",
+ "httpmock",
+ "jsonwebtoken",
+ "libgssapi",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "serde_with",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "url",
+]
+
+[[package]]
 name = "floxhub-client"
 version = "0.0.0"
 dependencies = [
  "async-stream",
- "base64",
  "catalog-api-v1",
- "chrono",
  "derive_more",
  "factory-api-v1",
+ "floxhub-auth",
  "futures",
  "http 1.4.0",
  "httpmock",
  "itertools 0.14.0",
- "jsonwebtoken",
- "libgssapi",
  "proptest",
  "reqwest",
  "sentry",
  "serde",
  "serde_json",
- "serde_with",
  "serde_yaml",
  "temp-env",
  "tempfile",

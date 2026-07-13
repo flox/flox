@@ -32,8 +32,8 @@ pub enum MeError {
 /// Fetch the identity behind `token` from `{api_url}/api/v1/accounts/me`.
 ///
 /// Uses a one-off HTTP client: this runs at most once per process (the result
-/// is cached by [`crate::PersonalAccessToken`]), and the shared [`crate::FloxhubClient`]
-/// is constructed *from* the auth context, so it cannot be used here.
+/// is cached by [`crate::PersonalAccessToken`]), and the shared FloxHub API
+/// client is constructed *from* the auth context, so it cannot be used here.
 pub async fn fetch_me(api_url: &str, token: &str) -> Result<UserIdentity, MeError> {
     let url = format!("{}/api/v1/accounts/me", api_url.trim_end_matches('/'));
     let response = reqwest::Client::new()

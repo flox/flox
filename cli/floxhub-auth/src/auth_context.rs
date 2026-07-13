@@ -1,4 +1,4 @@
-//! Authentication context types.
+//! [`AuthContext`] — the credential threaded through the CLI.
 //!
 //! [`AuthContext`] is the central authentication type threaded through the CLI.
 //! It captures both the *kind* of authentication in use (Auth0 / Kerberos) and
@@ -10,12 +10,12 @@
 //! explicit state rather than a separate variant so that the configured auth
 //! mode is always preserved.
 
-use std::sync::Arc;
-
 use url::Url;
 
 use crate::accounts::MeError;
-use crate::token::{FloxhubToken, PersonalAccessToken};
+use crate::authn_mode::AuthnMode;
+use crate::kerberos::KerberosMaterial;
+use crate::token::{FloxhubToken, FloxhubTokenError, PAT_PREFIX, PersonalAccessToken};
 
 /// Describes why authentication failed.
 ///
@@ -43,18 +43,6 @@ pub const UNKNOWN_HANDLE: &str = "UNKNOWN";
 #[derive(Debug, Clone, thiserror::Error)]
 #[error("{0}")]
 pub struct AuthHeaderError(pub String);
-
-/// A function that generates a SPNEGO token for a given URL.
-pub type TokenGenerator = Arc<dyn Fn(&Url) -> Result<String, AuthHeaderError> + Send + Sync>;
-
-/// Material for Kerberos authentication.
-#[derive(Clone)]
-pub struct KerberosMaterial {
-    /// The resolved principal name.
-    pub principal: String,
-    /// A function to generate SPNEGO tokens.
-    pub generate_token: TokenGenerator,
-}
 
 /// Authentication context threaded through the CLI.
 ///
@@ -202,6 +190,39 @@ impl AuthContext {
     }
 }
 
+impl AuthContext {
+    /// Create an [`AuthContext`] from the configured [`AuthnMode`] and the
+    /// stored token, both of which are needed to pick the right material:
+    ///
+    /// - Auth0 + `flox_pat_` token: [`AuthContext::Pat`] — the token stays
+    ///   opaque and its identity is resolved lazily via `/me`.
+    /// - Auth0 + any other token: must decode as a JWT →
+    ///   [`AuthContext::Auth0`].
+    /// - Auth0 + no token: `Auth0(None)` (not logged in).
+    /// - Kerberos: resolves the principal and embeds a SPNEGO token
+    ///   generator; returns `Kerberos(None)` (with a warning log) if the
+    ///   ticket cannot be resolved. The token is not consumed.
+    ///
+    /// `api_url` is the FloxHub API base an opaque token resolves its
+    /// identity against; the other materials do not use it.
+    pub fn from_mode(
+        mode: &AuthnMode,
+        token: Option<&str>,
+        api_url: &str,
+    ) -> Result<Self, FloxhubTokenError> {
+        match mode {
+            AuthnMode::Auth0 => match token {
+                Some(token) if token.starts_with(PAT_PREFIX) => Ok(AuthContext::Pat(
+                    PersonalAccessToken::new(token.to_string(), api_url.to_string()),
+                )),
+                Some(token) => Ok(AuthContext::Auth0(Some(token.parse()?))),
+                None => Ok(AuthContext::Auth0(None)),
+            },
+            AuthnMode::Kerberos => Ok(crate::kerberos::kerberos_credential()),
+        }
+    }
+}
+
 impl std::fmt::Debug for AuthContext {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -335,5 +356,57 @@ mod tests {
             "https://not_used".to_string(),
         ));
         assert!(!format!("{auth:?}").contains("flox_pat_secret"));
+    }
+
+    /// A structurally valid JWT with the flox handle claim, signed with a
+    /// throwaway key (signatures are not verified client side).
+    fn make_jwt(handle: &str, exp: i64) -> String {
+        let claims = serde_json::json!({
+            "https://flox.dev/handle": handle,
+            "exp": exp,
+        });
+        jsonwebtoken::encode(
+            &jsonwebtoken::Header::default(),
+            &claims,
+            &jsonwebtoken::EncodingKey::from_secret("test".as_bytes()),
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn from_mode_routes_pat_prefix_to_pat() {
+        let auth = AuthContext::from_mode(
+            &AuthnMode::Auth0,
+            Some("flox_pat_abc123"),
+            "https://not_used",
+        )
+        .unwrap();
+        let AuthContext::Pat(token) = auth else {
+            panic!("expected Pat, got {auth:?}");
+        };
+        assert_eq!(token.secret(), "flox_pat_abc123");
+    }
+
+    #[test]
+    fn from_mode_routes_jwt_to_auth0() {
+        let jwt = make_jwt("testuser", 9999999999);
+        let auth =
+            AuthContext::from_mode(&AuthnMode::Auth0, Some(&jwt), "https://not_used").unwrap();
+        let AuthContext::Auth0(Some(token)) = auth else {
+            panic!("expected Auth0, got {auth:?}");
+        };
+        assert_eq!(token.secret(), jwt);
+    }
+
+    #[test]
+    fn from_mode_without_token_is_not_logged_in() {
+        let auth = AuthContext::from_mode(&AuthnMode::Auth0, None, "https://not_used").unwrap();
+        assert!(matches!(auth, AuthContext::Auth0(None)));
+    }
+
+    #[test]
+    fn from_mode_rejects_garbage() {
+        AuthContext::from_mode(&AuthnMode::Auth0, Some("not-a-token"), "https://not_used")
+            .unwrap_err();
     }
 }

@@ -21,6 +21,7 @@ use async_stream::try_stream;
 use catalog_api_v1::types::{self as api_types};
 use catalog_api_v1::{Client as CatalogApiClient, Error as APIError, RequestHooks};
 use factory_api_v1::Client as FactoryApiClient;
+use floxhub_auth::AuthContext;
 use futures::stream::Stream;
 use futures::{StreamExt, TryStreamExt};
 use reqwest::StatusCode;
@@ -29,7 +30,6 @@ use tracing::{debug, instrument};
 use url::Url;
 
 use crate::MapApiErrorExt;
-use crate::auth::AuthContext;
 use crate::config::FloxhubClientConfig;
 use crate::error::{FloxhubClientError, ResolveError, SearchError, VersionsError};
 use crate::mock::MockGuard;
@@ -867,8 +867,9 @@ pub(crate) fn build_header_map(
 /// non-gated) test helpers can build a client without enabling a feature.
 /// Nothing here should be used in production code.
 pub mod test_helpers {
+    use floxhub_auth::AuthContext;
+
     use super::FloxhubClient;
-    use crate::auth::AuthContext;
     use crate::config::FloxhubClientConfig;
 
     /// Build an unauthenticated [`FloxhubClientConfig`] pointed at `url`,

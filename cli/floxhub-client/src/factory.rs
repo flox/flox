@@ -293,23 +293,15 @@ pub mod tests {
 
     use super::*;
     use crate::client::test_helpers::client_config;
-    use crate::{AuthContext, FloxhubClientConfig, FloxhubMockMode, FloxhubToken};
+    use crate::{AuthContext, FloxhubClientConfig, FloxhubMockMode, PersonalAccessToken};
 
-    /// Build a fake JWT for use in tests.
-    pub fn make_test_token(handle: &str) -> FloxhubToken {
-        use std::str::FromStr;
-
-        let claims = serde_json::json!({
-            "https://flox.dev/handle": handle,
-            "exp": 9999999999_i64
-        });
-        let token = jsonwebtoken::encode(
-            &jsonwebtoken::Header::default(),
-            &claims,
-            &jsonwebtoken::EncodingKey::from_secret("secret".as_ref()),
-        )
-        .unwrap();
-        FloxhubToken::from_str(&token).unwrap()
+    /// Build a bearer credential for tests. A personal access token is just a
+    /// string, so no JWT construction is needed to test header handling.
+    fn make_test_auth(secret: &str) -> AuthContext {
+        AuthContext::Pat(PersonalAccessToken::new(
+            secret.to_string(),
+            "https://not_used".to_string(),
+        ))
     }
 
     /// Exercise `list_builds` against a mock server, asserting:
@@ -319,14 +311,13 @@ pub mod tests {
     async fn list_builds_sends_auth_header_and_deserialises_response() {
         let server = MockServer::start_async().await;
 
-        let token = make_test_token("testuser");
-        let expected_header = format!("bearer {}", token.secret());
-        let auth = AuthContext::Auth0(Some(token));
+        let auth = make_test_auth("flox_pat_test");
+        let expected_header = "bearer flox_pat_test";
 
         let mock = server.mock(|when, then| {
             when.method("GET")
                 .path("/api/v1/factory/builds")
-                .header("authorization", &expected_header);
+                .header("authorization", expected_header);
             then.status(200).json_body(json!({
                 "builds": [],
                 "page": 1,
