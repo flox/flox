@@ -165,6 +165,9 @@ Repeated invocations of the same package skip the download step.
     Accepts a package name (e.g. `curl`, `python3Packages.requests`),
     optionally with a version constraint (e.g. `curl@8.0`),
     or a custom catalog package (e.g. `mycatalog/vim`).
+    Without a version constraint, the package resolves to the latest
+    version available in the Flox Catalog —
+    the same version `flox install <PACKAGE>` would install.
     The choice is saved as the preference for this command.
 
 `--reselect`
