@@ -83,6 +83,6 @@ pub use factory_api_v1::{
     Error as FactoryApiError,
     ResponseValue as FactoryApiResponseValue,
 };
-pub use token::{FloxhubToken, FloxhubTokenError};
+pub use token::{FloxhubToken, FloxhubTokenError, test_helpers as token_test_helpers};
 // Types (re-exported from types module for convenience)
 pub use types::*;

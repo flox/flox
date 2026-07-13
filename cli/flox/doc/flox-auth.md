@@ -13,7 +13,7 @@ flox-auth - FloxHub authentication commands
 
 ```text
 flox [<general-options>] auth
-     (login | logout | status | token)
+     (login [--token-file <path>] | logout | status | token)
 ```
 
 # DESCRIPTION
@@ -32,6 +32,13 @@ Authenticating also automatically trusts your personal environments.
 
 Prompts you to enter a one-time code at a specified URL.
 If called interactively it can open the browser for you if you press `<enter>`.
+
+With `--token-file <path>` the login is non-interactive:
+the FloxHub token is read from `<path>` instead
+(pass `-` to read the token from stdin).
+The token is validated and stored,
+and no browser, prompt, or network access is involved.
+Use this in CI, containers, and other scripted setups.
 
 See also: [`flox-push(1)`](./flox-push.md),
 [`flox-pull(1)`](./flox-pull.md),
