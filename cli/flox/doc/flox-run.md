@@ -12,8 +12,9 @@ flox-run - run a command from a Flox Catalog package
 
 ```text
 flox [<general-options>] run
-     -p <package>
-     -- <command> [<arguments>]
+     [-p <package>]
+     [--reselect]
+     [--] <command> [<arguments>]
 ```
 
 # DESCRIPTION
@@ -21,48 +22,101 @@ flox [<general-options>] run
 Run a command from a Flox Catalog package without creating an environment.
 
 `flox run` is designed for one-off invocations.
-It resolves the requested package from the Flox Catalog,
+It finds the package that provides the requested command,
 downloads its store paths,
 and executes the command directly —
 no `flox init`, `flox install`, or environment cleanup needed.
 
-## Specifying the Package
+## Package Selection
 
-The `-p`/`--package` flag is required and names the package explicitly.
-For example:
+You do not need to know which package provides a command.
+When invoked without `-p`/`--package`,
+`flox run` queries the FloxHub binary-to-package index
+to find the packages whose outputs contain the command:
 
 ```bash
-$ flox run -p gnugrep -- grep "pattern" file.txt
+$ flox run readelf -a /bin/ls   # readelf is provided by binutils
 ```
 
-The package name is a plain Flox Catalog attribute path
-(e.g. `curl`, `python3Packages.requests`).
+The package is selected in this order:
+
+1. **Explicit `--package`.**
+   The named package is used directly, bypassing the lookup,
+   and is saved as the preference for this command.
+2. **Saved preference.**
+   A previously saved choice for this command is used silently.
+   Use `--reselect` to clear it and choose again.
+3. **Index lookup.**
+   The command name is looked up in the binary-to-package index:
+   - If exactly one package provides the command, it is used silently.
+   - If several packages provide the command and one of them is named
+     exactly like the command, that package is used silently.
+   - Otherwise an interactive prompt asks which package to use,
+     and the choice is saved as the preference for this command.
+
+If no package provides the command, `flox run` exits with an error
+suggesting `--package` as an escape hatch.
+
+Use [`flox search --binary <command>`](./flox-search.md) to inspect
+which packages provide a command without running anything.
+
+## Saved Preferences
+
+Choices made explicitly — via `--package` or the disambiguation prompt —
+are saved as user-level preferences,
+so subsequent invocations of the same command run silently
+without re-prompting.
+
+Preferences are stored in the user configuration under
+`binary_preferences` and can be inspected with `flox config`
+or managed directly:
+
+```bash
+$ flox config --set binary_preferences.vi vim
+```
+
+Pass `--reselect` to clear the saved preference for a command
+and choose again:
+
+```bash
+$ flox run --reselect vi
+```
+
+## Non-Interactive Invocations
+
+When there is no terminal to prompt on
+(piped input or output, scripts, CI),
+`flox run` never prompts and never hangs:
+
+- A saved preference (or an exact package name match) is used silently.
+- Otherwise the command fails fast with an error that lists the
+  candidate packages inline and suggests `--package`:
+
+```text
+Multiple packages provide 'vi' and no preference is saved.
+Packages with this binary: vim, neovim, vimer
+Use 'flox run --package <PACKAGE> vi' to specify a package.
+```
 
 ## Flags Before and After the Command
 
 `flox run` uses POSIX stop-at-first-positional parsing:
-flags before `--` belong to `flox run`;
-everything after `--` is passed to the command verbatim.
-
-Always use `--` to separate the flox flags from the command:
+flags before the command name belong to `flox run`;
+everything after the command name is passed to the command verbatim.
 
 ```bash
-flox run -p curl -- curl http://example.com
+$ flox run curl -sL http://example.com   # -sL goes to curl
 ```
 
-Without `--`, flags that look like options could be claimed by the
-wrong side of the boundary — for example, `flox run -p curl curl
--sL http://example.com` passes `-sL` to `curl`, but
-`flox run curl -p curl -- curl ...` would fail because `-p` is
-consumed by `curl`, leaving flox without a package.
+Use `--` before the command name if the name itself starts with `-`.
 
 **`--version` caveat:**
 Flox intercepts `--version` from the full argument list before parsing.
-Always use `--` so `--version` reaches the command:
+Use `--` so `--version` reaches the command:
 
 ```bash
-$ flox run -p hello -- hello --version   # ✅ shows hello's version
-$ flox run -p hello hello --version      # ❌ shows flox's version instead
+$ flox run -- hello --version   # ✅ shows hello's version
+$ flox run hello --version      # ❌ shows flox's version instead
 ```
 
 ## Command Lookup
@@ -94,15 +148,27 @@ Repeated invocations of the same package skip the download step.
 
 ## Run Options
 
-`-p <package>`, `--package <package>`
-:   Required. The Flox Catalog package that provides the command.
-    Accepts plain package names only (e.g. `curl`, `ripgrep`).
-    Version constraints (`@`), output selectors (`^`), and custom
-    catalogs (`/`) are not supported in this release.
+`<command>`
+:   The command to run.
+    Without `--package`, the command name is looked up in the
+    FloxHub binary-to-package index to find the providing package.
 
-`-- <command> [<arguments>]`
-:   The command to run and any arguments to pass to it.
-    Use `--` to separate flox flags from the command and its arguments.
+`-p <package>`, `--package <package>`
+:   The Flox Catalog package that provides the command,
+    bypassing the binary-to-package lookup.
+    Accepts a package name (e.g. `curl`, `python3Packages.requests`),
+    optionally with a version constraint (e.g. `curl@8.0`),
+    or a custom catalog package (e.g. `mycatalog/vim`).
+    The choice is saved as the preference for this command.
+
+`--reselect`
+:   Clear the saved package preference for the command and choose again.
+    Requires an interactive terminal.
+
+`[--] [<arguments>]`
+:   Arguments passed to the command verbatim.
+    `--` is only needed when the command name itself starts with `-`
+    or to pass `--version` to the command.
 
 ```{.include}
 ./include/general-options.md
@@ -110,48 +176,54 @@ Repeated invocations of the same package skip the download step.
 
 # EXAMPLES
 
-Run a command:
+Run a command (the package is found via the index):
 
 ```bash
-$ flox run -p cowsay -- cowsay "Hello, Flox!"
+$ flox run hello
 ```
 
 Run a command whose name differs from the package name:
 
 ```bash
-$ flox run -p binutils -- readelf -a /bin/ls
+$ flox run readelf -a /bin/ls
 ```
 
-Pass option-style arguments to the command:
+Choose between several packages that provide the same command
+(the choice is saved for next time):
 
 ```bash
-$ flox run -p curl -- curl -sL http://example.com
+$ flox run vi
+```
+
+Clear a saved preference and choose again:
+
+```bash
+$ flox run --reselect vi
+```
+
+Specify the package explicitly, with a version constraint:
+
+```bash
+$ flox run -p curl@8.0 curl -sL http://example.com
 ```
 
 Pipe input to a command:
 
 ```bash
-$ echo '{"name":"Flox"}' | flox run -p jq -- jq '.name'
+$ echo '{"name":"Flox"}' | flox run jq '.name'
 ```
 
 Show the command's own help or version:
 
 ```bash
-$ flox run -p hello -- hello --help
-$ flox run -p hello -- hello --version
+$ flox run -- hello --help
+$ flox run -- hello --version
 ```
 
 # LIMITATIONS
 
-This release (phase 1) requires the `-p`/`--package` flag.
-The following features are not yet supported and will be available
-in a future release:
-
-- Defaulting the package to the command name (`flox run readelf`)
-- Version constraints: `flox run -p curl@8.0 -- curl …`
-- Output selectors: `flox run -p foo^dev …`
-- Custom catalogs: `flox run -p mycatalog/vim -- vim …`
-- Executable-to-package lookup and disambiguation
+- Output selectors (`flox run -p foo^dev …`) are not supported.
+- Saved preferences are user-level, not per-project.
 
 ## Binary cache requirement
 
@@ -174,4 +246,5 @@ Use `flox install` to add a package to a persistent environment instead.
 
 [`flox-activate(1)`](./flox-activate.md),
 [`flox-install(1)`](./flox-install.md),
-[`flox-search(1)`](./flox-search.md)
+[`flox-search(1)`](./flox-search.md),
+[`flox-config(1)`](./flox-config.md)
