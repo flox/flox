@@ -41,6 +41,7 @@ fn try_main() -> Result<(), Error> {
         cli::Command::SetEnvDirs(args) => args.handle(),
         cli::Command::ProfileScripts(args) => args.handle(),
         cli::Command::ProfileScriptsDeactivate(args) => args.handle(),
+        cli::Command::PushInvocationType(args) => args.handle(),
         cli::Command::PrependAndDedup(args) => {
             args.handle();
             Ok(())

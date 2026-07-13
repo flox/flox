@@ -148,7 +148,7 @@ teardown() {
 @test "'flox hook-env' succeeds without auto_activate feature flag but doesn't auto-activate" {
   project_setup
   unset FLOX_FEATURES_AUTO_ACTIVATE
-  run --separate-stderr "$FLOX_BIN" hook-env --shell bash --shell-pid "$$" --invocation-type inplace
+  run --separate-stderr "$FLOX_BIN" hook-env --shell bash --shell-pid "$$"
   assert_success
   assert_output ""
 }
@@ -173,7 +173,7 @@ EXPIRED_FLOXHUB_TOKEN="eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3gu
   unset FLOX_FEATURES_AUTO_ACTIVATE
   _FLOX_FLOXHUB_GIT_URL="https://git.example.invalid/" \
     FLOX_FLOXHUB_TOKEN="$EXPIRED_FLOXHUB_TOKEN" \
-    run --separate-stderr "$FLOX_BIN" hook-env --shell bash --shell-pid "$$" --invocation-type inplace
+    run --separate-stderr "$FLOX_BIN" hook-env --shell bash --shell-pid "$$"
   assert_success
   assert_equal "$stderr" ""
   assert_output ""
@@ -187,7 +187,7 @@ EXPIRED_FLOXHUB_TOKEN="eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3gu
   mkdir -p "$FLOX_CONFIG_DIR"
   echo 'floxhub_token = "not-a-jwt"' >> "$FLOX_CONFIG_DIR/flox.toml"
 
-  run --separate-stderr "$FLOX_BIN" hook-env --shell bash --shell-pid "$$" --invocation-type inplace
+  run --separate-stderr "$FLOX_BIN" hook-env --shell bash --shell-pid "$$"
   assert_success
   assert_equal "$stderr" ""
   run grep floxhub_token "$FLOX_CONFIG_DIR/flox.toml"
@@ -809,13 +809,15 @@ set_test_var_manifest() {
   # ordinary alias expansion and bypasses the faulty-alias handling under test;
   # `tcsh -i` auto-fires precmd before each prompt even with stdin piped.
   #
-  # The activation is in place; _FLOX_INVOCATION_TYPE is overridden to
-  # `interactive` so the hook requests the interactive (exit) deactivation
-  # script, as it would inside a real `flox activate` subshell.
+  # The activation is in place; its entry in the _FLOX_INVOCATION_TYPES map
+  # (a shell variable, recorded by the activation) is rewritten to
+  # `interactive` with tcsh's `:s` modifier so the hook requests the
+  # interactive (exit) deactivation script, as it would inside a real
+  # `flox activate` subshell.
   SESSION="$BATS_TEST_TMPDIR/interactive-deactivate.tcsh"
   cat > "$SESSION" <<EOF
 eval "\`$FLOX_BIN activate -d $PROJECT_DIR\`"
-setenv _FLOX_INVOCATION_TYPE interactive
+set _FLOX_INVOCATION_TYPES="\$_FLOX_INVOCATION_TYPES:s/inplace/interactive/"
 $FLOX_BIN deactivate
 echo SHOULD_NOT_PRINT: the shell exits at the next prompt, before this line
 EOF

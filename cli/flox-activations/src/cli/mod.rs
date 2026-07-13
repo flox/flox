@@ -12,6 +12,7 @@ mod fix_fpath;
 pub mod fix_paths;
 mod prepend_and_dedup;
 mod profile_scripts;
+mod push_invocation_type;
 pub mod set_env_dirs;
 
 use activate::ActivateArgs;
@@ -21,6 +22,7 @@ use fix_fpath::FixFpathArgs;
 use fix_paths::FixPathsArgs;
 use prepend_and_dedup::PrependAndDedupArgs;
 use profile_scripts::{ProfileScriptsArgs, ProfileScriptsDeactivateArgs};
+use push_invocation_type::PushInvocationTypeArgs;
 use set_env_dirs::SetEnvDirsArgs;
 
 const SHORT_HELP: &str = "Monitors activation lifecycle to perform cleanup.";
@@ -70,6 +72,8 @@ pub enum Command {
     PrependAndDedup(PrependAndDedupArgs),
     #[command(about = "Print sourceable output fixing fpath/FPATH for zsh.")]
     FixFpath(FixFpathArgs),
+    #[command(about = "Print the new _FLOX_INVOCATION_TYPES value for an activation.")]
+    PushInvocationType(PushInvocationTypeArgs),
 }
 
 /// Splits PATH-like variables into individual paths, removing any empty strings.

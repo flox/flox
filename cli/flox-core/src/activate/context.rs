@@ -1,4 +1,5 @@
 use std::path::PathBuf;
+use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
 use shell_gen::ShellWithPath;
@@ -91,6 +92,13 @@ pub struct ActivateCtx {
     /// None when determined at runtime (e.g., containers)
     pub invocation_type: Option<InvocationType>,
 
+    /// The activated environment's pointer as serialized in
+    /// `_FLOX_ACTIVE_ENVIRONMENTS`, used to key its `_FLOX_INVOCATION_TYPES`
+    /// entry. Empty when there is no activation state to key against
+    /// (e.g. containers).
+    #[serde(default)]
+    pub env_pointer: String,
+
     /// Whether to clean up the context file after reading it.
     pub remove_after_reading: bool,
 
@@ -163,14 +171,102 @@ impl std::fmt::Display for InvocationType {
     }
 }
 
-#[derive(Clone, Copy, Debug, derive_more::Display, derive_more::FromStr, Eq, PartialEq)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    derive_more::Display,
+    derive_more::FromStr,
+    Eq,
+    PartialEq,
+    Serialize,
+    Deserialize,
+)]
 #[display(rename_all = "lowercase")]
 #[from_str(rename_all = "lowercase")]
+#[serde(rename_all = "lowercase")]
 pub enum InvocationKind {
     InPlace,
     Interactive,
     ShellCommand,
     ExecCommand,
+}
+
+/// One entry of [`InvocationTypes`]: the invocation type of an activation
+/// the calling shell performed, keyed by the environment pointer as it
+/// appears in `_FLOX_ACTIVE_ENVIRONMENTS`. The pointer is kept as an opaque
+/// JSON value (its Rust type lives in flox-rust-sdk); keys are compared by
+/// value, so JSON object key order does not matter.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct InvocationTypeEntry {
+    pub env: serde_json::Value,
+    pub invocation_type: InvocationKind,
+}
+
+/// The parsed value of `_FLOX_INVOCATION_TYPES` (see
+/// [`super::vars::FLOX_INVOCATION_TYPES_VAR`]): for each activation the
+/// calling shell performed, the invocation type keyed by environment
+/// pointer. A JSON array on the wire. An empty value parses to an empty map
+/// and means the same as not passing the value at all — the shell performed
+/// no activations.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct InvocationTypes(pub Vec<InvocationTypeEntry>);
+
+impl InvocationTypes {
+    /// Remove and return the entry for `env`, if any.
+    ///
+    /// Callers emitting a deactivation script take one entry per layer
+    /// popped off the activation stack and then write the remainder back to
+    /// the shell variable in one update. A missing entry means the calling
+    /// shell did not perform that activation (it inherited the layer), so
+    /// the layer's script must not detach.
+    pub fn take(&mut self, env: &serde_json::Value) -> Option<InvocationKind> {
+        let idx = self.0.iter().position(|entry| &entry.env == env)?;
+        Some(self.0.remove(idx).invocation_type)
+    }
+
+    /// Record an entry for `env` unless one already exists.
+    ///
+    /// Keeping the original entry covers repeat activations of an
+    /// already-active environment: re-attaching in place must not downgrade
+    /// an `interactive` entry, or `flox deactivate` would restore in place
+    /// instead of exiting the session. The reverse — an interactive
+    /// activation of an already-active environment — fails in the CLI
+    /// before any script is generated.
+    pub fn insert_if_absent(&mut self, env: serde_json::Value, invocation_type: InvocationKind) {
+        if !self.0.iter().any(|entry| entry.env == env) {
+            self.0.push(InvocationTypeEntry {
+                env,
+                invocation_type,
+            });
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+}
+
+impl FromStr for InvocationTypes {
+    type Err = serde_json::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let trimmed = s.trim();
+        if trimmed.is_empty() {
+            Ok(Self::default())
+        } else {
+            Ok(Self(serde_json::from_str(trimmed)?))
+        }
+    }
+}
+
+/// The wire format for [`super::vars::FLOX_INVOCATION_TYPES_VAR`]: a compact
+/// JSON array. Round-trips with [`FromStr`].
+impl std::fmt::Display for InvocationTypes {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let json = serde_json::to_string(&self.0).map_err(|_| std::fmt::Error)?;
+        f.write_str(&json)
+    }
 }
 
 #[cfg(test)]
@@ -202,5 +298,86 @@ mod tests {
                 kind,
             );
         }
+    }
+
+    fn entry(env: serde_json::Value, invocation_type: InvocationKind) -> InvocationTypeEntry {
+        InvocationTypeEntry {
+            env,
+            invocation_type,
+        }
+    }
+
+    #[test]
+    fn invocation_types_parse_map_and_empty() {
+        let map = r#"[{"env":{"name":"default","type":"path"},"invocation_type":"inplace"}]"#
+            .parse::<InvocationTypes>()
+            .unwrap();
+        assert_eq!(
+            map,
+            InvocationTypes(vec![entry(
+                serde_json::json!({"name": "default", "type": "path"}),
+                InvocationKind::InPlace
+            )]),
+        );
+
+        // Empty means the shell performed no activations.
+        assert_eq!(
+            "".parse::<InvocationTypes>().unwrap(),
+            InvocationTypes::default(),
+        );
+
+        assert!("bogus".parse::<InvocationTypes>().is_err());
+        assert!("[{".parse::<InvocationTypes>().is_err());
+    }
+
+    #[test]
+    fn invocation_types_take_compares_env_by_value() {
+        let mut types = InvocationTypes(vec![
+            entry(
+                serde_json::json!({"name": "default", "type": "path"}),
+                InvocationKind::InPlace,
+            ),
+            entry(
+                serde_json::json!({"name": "proj"}),
+                InvocationKind::Interactive,
+            ),
+        ]);
+
+        // Object key order doesn't matter.
+        let key = serde_json::json!({"type": "path", "name": "default"});
+        assert_eq!(types.take(&key), Some(InvocationKind::InPlace));
+        // Taking removes the entry.
+        assert_eq!(types.take(&key), None);
+        // An unknown env means the shell didn't perform that activation.
+        assert_eq!(types.take(&serde_json::json!({"name": "other"})), None);
+        assert_eq!(
+            types.take(&serde_json::json!({"name": "proj"})),
+            Some(InvocationKind::Interactive)
+        );
+        assert!(types.is_empty());
+    }
+
+    #[test]
+    fn invocation_types_insert_keeps_existing() {
+        let key = serde_json::json!({"name": "default"});
+
+        let mut types = InvocationTypes::default();
+        types.insert_if_absent(key.clone(), InvocationKind::Interactive);
+        // A repeat activation keeps the original entry: an in-place
+        // re-activation must not downgrade `interactive`.
+        types.insert_if_absent(key.clone(), InvocationKind::InPlace);
+        assert_eq!(
+            types,
+            InvocationTypes(vec![entry(key, InvocationKind::Interactive)]),
+        );
+    }
+
+    #[test]
+    fn invocation_types_display_round_trips() {
+        let types = InvocationTypes(vec![entry(
+            serde_json::json!({"name": "default", "type": "path"}),
+            InvocationKind::InPlace,
+        )]);
+        assert_eq!(types.to_string().parse::<InvocationTypes>().unwrap(), types);
     }
 }

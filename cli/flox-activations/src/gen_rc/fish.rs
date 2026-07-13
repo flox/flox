@@ -4,12 +4,12 @@ use std::path::PathBuf;
 
 use anyhow::Result;
 use flox_core::activate::context::{AutoActivateFishMode, InvocationType};
-use flox_core::activate::vars::FLOX_ACTIVATIONS_BIN;
+use flox_core::activate::vars::{FLOX_ACTIVATIONS_BIN, FLOX_INVOCATION_TYPES_VAR};
 use flox_core::hook_actions::PROMPT_HOOK_VERSION_ENV;
 use shell_gen::{GenerateShell, Shell};
 
 use crate::attach_diff::{todo_drop_set_exported_unexpanded, todo_drop_unset};
-use crate::gen_rc::{Action, RM};
+use crate::gen_rc::{Action, RM, invocation_types_update_stmt};
 
 /// Arguments for generating fish startup commands
 #[derive(Debug, Clone)]
@@ -18,6 +18,10 @@ pub struct FishStartupArgs {
     pub activate_d: PathBuf,
     pub flox_env: PathBuf,
     pub invocation_type: InvocationType,
+    /// The activated environment's pointer as serialized in
+    /// `_FLOX_ACTIVE_ENVIRONMENTS`, used to key its `_FLOX_INVOCATION_TYPES`
+    /// entry.
+    pub env_pointer: String,
     pub clean_up: Option<PathBuf>,
 
     // Some(_) if it exists, None otherwise
@@ -89,19 +93,28 @@ pub fn generate_fish_profile_commands(
         },
     }
 
-    // Export _FLOX_INVOCATION_TYPE so it is visible to std::env::vars() when
-    // computing the activation diff for stacked in-place activations. The diff
-    // then handles cleanup (unset on outermost deactivate, restore outer value
-    // on nested deactivate) without requiring an explicit unset here.
+    // Record this activation in the shell's `_FLOX_INVOCATION_TYPES` map;
+    // see the matching block in gen_rc/bash.rs for the design notes.
     match action {
-        Action::Activate { args, .. } => {
-            stmts.push(todo_drop_set_exported_unexpanded(
-                "_FLOX_INVOCATION_TYPE",
-                format!("{}", args.invocation_type),
-            ));
+        Action::Activate { args, .. } if !args.env_pointer.is_empty() => {
+            stmts.push(
+                format!(
+                    r#"set -g {var} ('{flox_activations}' push-invocation-type --invocation-type {invocation_type} --env {env} --current "${var}");"#,
+                    var = FLOX_INVOCATION_TYPES_VAR,
+                    flox_activations = args.flox_activations.display(),
+                    invocation_type = args.invocation_type,
+                    env = shell_escape::escape(args.env_pointer.as_str().into()),
+                )
+                .to_stmt(),
+            );
         },
-        Action::Deactivate(_) => {
-            // Handled by the activation diff (added → unset, modified → restore).
+        Action::Activate { .. } => {},
+        Action::Deactivate(ctx) => {
+            // A subshell that inherited activation environment variables should
+            // leave _FLOX_INVOCATION_TYPES alone
+            if let Some(remaining) = &ctx.invocation_types {
+                stmts.push(invocation_types_update_stmt(remaining));
+            }
         },
     }
 
@@ -326,7 +339,7 @@ mod tests {
             set -e DELETED_VAR;
             set -gx _activate_d /interpreter/activate.d;
             set -gx _flox_activate_tracer TRACER;
-            set -gx _FLOX_INVOCATION_TYPE interactive;
+            set -g _FLOX_INVOCATION_TYPES ('/flox_activations' push-invocation-type --invocation-type interactive --env '{"name":"test_env","type":"path"}' --current "$_FLOX_INVOCATION_TYPES");
             if isatty 1; source '/interpreter/activate.d/set-prompt.fish'; end;
             set -gx FLOX_ENV_DIRS (if set -q FLOX_ENV_DIRS; echo "$FLOX_ENV_DIRS"; else; echo empty; end);
             /flox_activations set-env-dirs --shell fish --flox-env "/flox_env" --env-dirs "$FLOX_ENV_DIRS" | source;
@@ -337,11 +350,8 @@ mod tests {
             set -gx fish_trace 0;
             /nix/store/XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX-coreutils-9.10/bin/rm /path/to/rc/file;
             set -gx _FLOX_PROMPT_HOOK_VERSION 1;
-            function _flox_invocation_type;
-                test -n "$_FLOX_INVOCATION_TYPE"; and echo $_FLOX_INVOCATION_TYPE; or echo inplace;
-            end;
             function _flox_hook --on-event fish_prompt;
-                eval ("/flox" hook-env --shell fish --shell-pid $fish_pid --invocation-type (_flox_invocation_type) | string collect);
+                eval ("/flox" hook-env --shell fish --shell-pid $fish_pid --invocation-types "$_FLOX_INVOCATION_TYPES" | string collect);
                 if test "$FLOX_AUTO_ACTIVATE_FISH_MODE" != "disable_arrow";
                     set -g _flox_pwd_hook_active 1;
                 end;
@@ -351,14 +361,14 @@ mod tests {
                     if test "$FLOX_AUTO_ACTIVATE_FISH_MODE" = "eval_after_arrow";
                         set -g _flox_env_again 0;
                     else;
-                        eval ("/flox" hook-env --shell fish --shell-pid $fish_pid --invocation-type (_flox_invocation_type) | string collect);
+                        eval ("/flox" hook-env --shell fish --shell-pid $fish_pid --invocation-types "$_FLOX_INVOCATION_TYPES" | string collect);
                     end;
                 end;
             end;
             function _flox_hook_preexec --on-event fish_preexec;
                 if set -q _flox_env_again;
                     set -e _flox_env_again;
-                    eval ("/flox" hook-env --shell fish --shell-pid $fish_pid --invocation-type (_flox_invocation_type) | string collect);
+                    eval ("/flox" hook-env --shell fish --shell-pid $fish_pid --invocation-types "$_FLOX_INVOCATION_TYPES" | string collect);
                 end;
                 set -e _flox_pwd_hook_active;
             end;
@@ -386,7 +396,7 @@ mod tests {
             set -e DELETED_VAR;
             set -gx _activate_d /interpreter/activate.d;
             set -gx _flox_activate_tracer TRACER;
-            set -gx _FLOX_INVOCATION_TYPE inplace;
+            set -g _FLOX_INVOCATION_TYPES ('/flox_activations' push-invocation-type --invocation-type inplace --env '{"name":"test_env","type":"path"}' --current "$_FLOX_INVOCATION_TYPES");
             if isatty 1; source '/interpreter/activate.d/set-prompt.fish'; end;
             set -gx FLOX_ENV_DIRS (if set -q FLOX_ENV_DIRS; echo "$FLOX_ENV_DIRS"; else; echo empty; end);
             /flox_activations set-env-dirs --shell fish --flox-env "/flox_env" --env-dirs "$FLOX_ENV_DIRS" | source;
@@ -397,11 +407,8 @@ mod tests {
             set -gx fish_trace 0;
             /nix/store/XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX-coreutils-9.10/bin/rm /path/to/rc/file;
             set -gx _FLOX_PROMPT_HOOK_VERSION 1;
-            function _flox_invocation_type;
-                test -n "$_FLOX_INVOCATION_TYPE"; and echo $_FLOX_INVOCATION_TYPE; or echo inplace;
-            end;
             function _flox_hook --on-event fish_prompt;
-                eval ("/flox" hook-env --shell fish --shell-pid $fish_pid --invocation-type (_flox_invocation_type) | string collect);
+                eval ("/flox" hook-env --shell fish --shell-pid $fish_pid --invocation-types "$_FLOX_INVOCATION_TYPES" | string collect);
                 if test "$FLOX_AUTO_ACTIVATE_FISH_MODE" != "disable_arrow";
                     set -g _flox_pwd_hook_active 1;
                 end;
@@ -411,14 +418,14 @@ mod tests {
                     if test "$FLOX_AUTO_ACTIVATE_FISH_MODE" = "eval_after_arrow";
                         set -g _flox_env_again 0;
                     else;
-                        eval ("/flox" hook-env --shell fish --shell-pid $fish_pid --invocation-type (_flox_invocation_type) | string collect);
+                        eval ("/flox" hook-env --shell fish --shell-pid $fish_pid --invocation-types "$_FLOX_INVOCATION_TYPES" | string collect);
                     end;
                 end;
             end;
             function _flox_hook_preexec --on-event fish_preexec;
                 if set -q _flox_env_again;
                     set -e _flox_env_again;
-                    eval ("/flox" hook-env --shell fish --shell-pid $fish_pid --invocation-type (_flox_invocation_type) | string collect);
+                    eval ("/flox" hook-env --shell fish --shell-pid $fish_pid --invocation-types "$_FLOX_INVOCATION_TYPES" | string collect);
                 end;
                 set -e _flox_pwd_hook_active;
             end;
@@ -444,10 +451,10 @@ mod tests {
             set -e QUOTED_VAR;
             set -e _FLOX_ACTIVE_ENVIRONMENTS;
             set -e _FLOX_HOOK_DIFF;
-            set -e _FLOX_INVOCATION_TYPE;
             set -e _flox_activations;
             set -gx MODIFIED_VAR MODIFIED_ORIGINAL;
             set -gx DELETED_VAR DELETED_ORIGINAL;
+            set -e _FLOX_INVOCATION_TYPES;
             set -e _FLOX_PROMPT_HOOK_VERSION;
             if isatty 1; source '/interpreter/activate.d/set-prompt.fish'; end;
             /flox_activations profile-scripts-deactivate --shell fish --env '/flox_env' --already-sourced-env-dirs (if set -q _FLOX_SOURCED_PROFILE_SCRIPTS; echo "$_FLOX_SOURCED_PROFILE_SCRIPTS"; else; echo ""; end) | source;

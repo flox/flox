@@ -986,7 +986,7 @@ EOF
     print -- \"baseline: \${_comps[fd]:-none}\"
     eval \"\$($FLOX_BIN activate -d $PROJECT_DIR)\"
     print -- \"activated: \${_comps[fd]:-none}\"
-    eval \"\$($FLOX_BIN deactivate --print-script \"\$_FLOX_INVOCATION_TYPE\")\"
+    eval \"\$($FLOX_BIN deactivate --print-script \"\$_FLOX_INVOCATION_TYPES\")\"
     print -- \"deactivated: \${_comps[fd]:-none}\"
   "
   assert_success
@@ -1017,7 +1017,7 @@ EOF
     eval \"\$($FLOX_BIN activate -d $PROJECT_DIR)\"
     eval \"\$($FLOX_BIN activate -d $inner_dir)\"
     print -- \"inner active: \${_comps[fd]:-none}\"
-    eval \"\$($FLOX_BIN deactivate --print-script \"\$_FLOX_INVOCATION_TYPE\")\"
+    eval \"\$($FLOX_BIN deactivate --print-script \"\$_FLOX_INVOCATION_TYPES\")\"
     print -- \"inner deactivated: \${_comps[fd]:-none}\"
   "
   assert_success

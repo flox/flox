@@ -88,7 +88,7 @@ EOF
   FLOX_SHELL="bash" run --separate-stderr bash -c '
     eval "$($FLOX_BIN activate --print-script)"
     echo "during:${FOO-unset}"
-    eval "$($FLOX_BIN deactivate --print-script "$_FLOX_INVOCATION_TYPE")"
+    eval "$($FLOX_BIN deactivate --print-script "$_FLOX_INVOCATION_TYPES")"
     echo "after:${FOO-unset}"
   '
   assert_success
@@ -103,7 +103,7 @@ EOF
   FLOX_SHELL="zsh" run --separate-stderr zsh -c '
     eval "$($FLOX_BIN activate --print-script)"
     echo "during:${FOO-unset}"
-    eval "$($FLOX_BIN deactivate --print-script "$_FLOX_INVOCATION_TYPE")"
+    eval "$($FLOX_BIN deactivate --print-script "$_FLOX_INVOCATION_TYPES")"
     echo "after:${FOO-unset}"
   '
   assert_success
@@ -122,7 +122,7 @@ EOF
     else
       echo "during:unset"
     end
-    eval "$($FLOX_BIN deactivate --print-script "$_FLOX_INVOCATION_TYPE")"
+    eval "$($FLOX_BIN deactivate --print-script "$_FLOX_INVOCATION_TYPES")"
     if set -q FOO
       echo "after:$FOO"
     else
@@ -145,7 +145,9 @@ EOF
     else
       echo during:unset
     endif
-    eval "`$FLOX_BIN deactivate --print-script $_FLOX_INVOCATION_TYPE`"
+    setenv _FLOX_INVOCATION_TYPES_WIRE $_FLOX_INVOCATION_TYPES:q
+    eval "`$FLOX_BIN deactivate --print-script-from-env`"
+    unsetenv _FLOX_INVOCATION_TYPES_WIRE
     if ( $?FOO ) then
       echo "after:$FOO"
     else
