@@ -3472,7 +3472,7 @@ PIDs of the running activations: ${ACTIVATION_PID}"
 # ---------------------------------------------------------------------------- #
 
 
-# bats test_tags=activate,activate:paths
+# bats test_tags=activate,activate:path
 @test "INFOPATH keeps the default search path" {
   project_setup
 
