@@ -1,0 +1,9 @@
+when:
+  path: /api/v1/catalog/packages/by-binary/readelf
+  method: GET
+then:
+  status: 200
+  header:
+  - name: content-type
+    value: application/json
+  body: '{"items":[{"catalog":"nixpkgs","attr_path":"binutils","pkg_path":"binutils","derivation":"/nix/store/0000000000000000000000000000001a-binutils-2.43.1.drv","name":"binutils-2.43.1","pname":"binutils","version":"2.43.1","system":"aarch64-darwin","outputs":[{"name":"out","store_path":"/nix/store/0000000000000000000000000000001b-binutils-2.43.1"}],"outputs_to_install":["out"],"description":"Tools for manipulating binaries (linker, assembler, etc.)","license":"GPL-3.0-or-later","locked_url":"https://github.com/flox/nixpkgs?rev=b12141ef619e0a9c1c84dc8c684040326f27cdcc","rev":"b12141ef619e0a9c1c84dc8c684040326f27cdcc","rev_count":982522,"rev_date":"2026-04-18T21:33:21Z","broken":false,"insecure":false,"unfree":false,"missing_builds":false,"stabilities":["unstable"],"scrape_date":"2026-04-21T06:03:34.910020Z","cache_uri":null}],"total_count":1}'

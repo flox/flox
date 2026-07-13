@@ -35,6 +35,7 @@ teardown() {
   assert_success
   assert_output --partial "flox run"
   assert_output --partial "-p"
+  assert_output --partial "--reselect"
 }
 
 @test "'flox help run' shows synopsis without panic" {
@@ -45,19 +46,13 @@ teardown() {
 }
 
 # ---------------------------------------------------------------------------- #
-# Required-flag errors (no network or store required)
+# Argument errors (no network or store required)
 # ---------------------------------------------------------------------------- #
 
-@test "'flox run' with no args reports missing package" {
+@test "'flox run' with no args reports missing command" {
   run "$FLOX_BIN" run
   assert_failure
-  assert_output --partial "No package specified"
-}
-
-@test "'flox run <command>' without -p reports missing package" {
-  run "$FLOX_BIN" run cowsay
-  assert_failure
-  assert_output --partial "No package specified"
+  assert_output --partial "No command specified"
 }
 
 @test "'flox run -p' without a value reports missing package value" {
@@ -81,10 +76,13 @@ teardown() {
 # Package spec syntax — validation and routing (no network required)
 # ---------------------------------------------------------------------------- #
 
-@test "'flox run' rejects version constraint (@) in package spec" {
+@test "'flox run' accepts version constraint (@) in package spec" {
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/run/failed_resolution.yaml"
   run "$FLOX_BIN" run -p "hello@2.12" hello
+  # Version constraints pass validation; failure here is a resolution error,
+  # not UnsupportedPackageSpec.
   assert_failure
-  assert_output --partial "Unsupported package"
+  refute_output --partial "Unsupported package"
 }
 
 @test "'flox run' rejects output selector (^) in package spec" {
@@ -114,6 +112,83 @@ teardown() {
   assert_failure
   assert_output --partial "not found"
   assert_output --partial "flox search"
+}
+
+# ---------------------------------------------------------------------------- #
+# Binary-to-package lookup (mock catalog, no store required)
+# ---------------------------------------------------------------------------- #
+
+@test "'flox run <command>' without -p reports no providing packages" {
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/run/by_binary_not_found.yaml"
+  run "$FLOX_BIN" run nonexistent-binary-xyz
+  assert_failure
+  assert_output --partial "No packages found that provide 'nonexistent-binary-xyz'"
+  assert_output --partial "--package"
+}
+
+@test "'flox run' ambiguous binary fails non-interactively with inline package list" {
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/run/by_binary_vi_ambiguous.yaml"
+  run "$FLOX_BIN" run vi
+  assert_failure
+  assert_output --partial "Multiple packages provide 'vi' and no preference is saved"
+  assert_output --partial "Packages with this binary: vim, neovim, vimer"
+  assert_output --partial "--package"
+}
+
+@test "'flox run' exact package name match wins silently on multiple candidates" {
+  # 'vi' is provided by both 'vim' and 'vi'; the exact match must be chosen
+  # without a prompt. The mock has no resolve response, so the run fails at
+  # resolution — for the chosen package 'vi', not with an ambiguity error.
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/run/by_binary_vi_exact_match.yaml"
+  run "$FLOX_BIN" run vi
+  assert_failure
+  refute_output --partial "Multiple packages provide"
+  assert_output --partial "'vi'"
+}
+
+@test "'flox run' single candidate resolves silently and reports the package" {
+  # 'readelf' is provided only by 'binutils'. The mock has no resolve
+  # response, so the run fails at resolution — after reporting the lookup.
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/run/by_binary_readelf.yaml"
+  run "$FLOX_BIN" run readelf
+  assert_failure
+  assert_output --partial "Running 'readelf' from package 'binutils'"
+  refute_output --partial "Multiple packages provide"
+}
+
+# ---------------------------------------------------------------------------- #
+# Saved preferences and --reselect (mock catalog, no store required)
+# ---------------------------------------------------------------------------- #
+
+@test "'flox run --package' saves the choice as a preference" {
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/run/by_binary_not_found.yaml"
+  # Resolution fails (no resolve mock), but the preference is saved first.
+  run "$FLOX_BIN" run -p vim vi
+  assert_failure
+  assert_output --partial "Saved 'vim' as the package for 'vi'"
+  run "$FLOX_BIN" config
+  assert_success
+  assert_output --partial "vi = \"vim\""
+}
+
+@test "'flox run' uses a saved preference without a lookup" {
+  # Seed a preference; the mock contains no by-binary or resolve response for
+  # 'preferredpkg', so failing with the preferred package name proves the
+  # preference short-circuited the lookup.
+  run "$FLOX_BIN" config --set 'binary_preferences.vi' preferredpkg
+  assert_success
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/run/by_binary_vi_ambiguous.yaml"
+  run "$FLOX_BIN" run vi
+  assert_failure
+  assert_output --partial "preferredpkg"
+  refute_output --partial "Multiple packages provide"
+}
+
+@test "'flox run --reselect' fails without an interactive terminal" {
+  run "$FLOX_BIN" run --reselect vi
+  assert_failure
+  assert_output --partial "requires an interactive terminal"
+  assert_output --partial "--package"
 }
 
 # ---------------------------------------------------------------------------- #
@@ -151,6 +226,17 @@ teardown() {
   run "$FLOX_BIN" run -p hello hello
   assert_success
   assert_output --partial "Hello"
+}
+
+# bats test_tags=run:store
+@test "flox run hello without -p resolves via the binary index and executes [run:store]" {
+  # The by-binary mock returns two candidates ('hello-go' and 'hello'); the
+  # exact name match 'hello' wins silently and the run proceeds end to end.
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/run/by_binary_hello_run.yaml"
+  run "$FLOX_BIN" run hello
+  assert_success
+  assert_output --partial "Hello"
+  refute_output --partial "Multiple packages provide"
 }
 
 # bats test_tags=run:store
