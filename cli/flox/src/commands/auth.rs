@@ -402,11 +402,11 @@ pub fn login_with_token_file(flox: &mut Flox, token_file: &Path) -> Result<Strin
 mod tests {
     use std::fs;
 
+    use flox_config::FLOX_CONFIG_FILE;
     use flox_rust_sdk::flox::test_helpers::{create_test_token, flox_instance};
     use floxhub_client::token_test_helpers::FAKE_EXPIRED_TOKEN;
 
     use super::*;
-    use crate::config::FLOX_CONFIG_FILE;
 
     #[test]
     fn login_with_token_file_stores_valid_token() {
