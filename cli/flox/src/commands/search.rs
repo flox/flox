@@ -44,9 +44,9 @@ pub struct Search {
     #[bpaf(short, long)]
     pub all: bool,
 
-    /// Search for packages that provide a specific binary
+    /// Search for packages that provide a specific command
     #[bpaf(long)]
-    pub binary: bool,
+    pub command: bool,
 
     /// The package to search for in the format '<pkg-path>'.
     ///
@@ -62,15 +62,15 @@ impl Search {
 
         sentry_set_tag("json", self.json);
         sentry_set_tag("show_all", self.all);
-        sentry_set_tag("binary", self.binary);
+        sentry_set_tag("command", self.command);
         sentry_set_tag("search_term", search_term);
         subcommand_metric!("search", search_term = search_term);
         if let Err(err) = EventsHub::global().record_search(search_term.clone()) {
             debug!(error = %err, "Failed to record v2 event");
         }
 
-        if self.binary {
-            return self.handle_binary_search(&flox).await;
+        if self.command {
+            return self.handle_command_search(&flox).await;
         }
 
         debug!("performing search for term: {}", search_term);
@@ -161,26 +161,26 @@ impl Search {
         Ok(())
     }
 
-    /// Handle `flox search --binary <name>`: list the packages that provide
-    /// a binary, via the catalog's binary-to-package index.
+    /// Handle `flox search --command <name>`: list the packages that provide
+    /// a command, via the catalog's command-to-package index.
     ///
     /// Renders with the same formatting as a regular search.
-    async fn handle_binary_search(&self, flox: &Flox) -> Result<()> {
-        let binary_name = &self.search_term;
-        debug!("performing binary search for: {}", binary_name);
+    async fn handle_command_search(&self, flox: &Flox) -> Result<()> {
+        let command_name = &self.search_term;
+        debug!("performing command search for: {}", command_name);
 
-        let results = binary_search_results(binary_name, flox).await?;
+        let results = command_search_results(command_name, flox).await?;
 
         if self.json {
             return render_search_results_json(results);
         }
 
         if results.results.is_empty() {
-            bail!("No packages found that provide the binary '{binary_name}'.");
+            bail!("No packages found that provide the command '{command_name}'.");
         }
 
         let results = DisplaySearchResults::from_search_results(
-            binary_name,
+            command_name,
             results,
             stdout_supports_color(),
         )?;
@@ -194,24 +194,24 @@ impl Search {
     }
 }
 
-/// Look up the packages that provide `binary_name`.
+/// Look up the packages that provide `command_name`.
 ///
-/// Tries the dedicated binary-to-package index first; if the endpoint is
+/// Tries the dedicated command-to-package index first; if the endpoint is
 /// unavailable (e.g. an older FloxHub), falls back to a search that keeps
 /// exact name matches only.
-async fn binary_search_results(binary_name: &str, flox: &Flox) -> Result<SearchResults> {
+async fn command_search_results(command_name: &str, flox: &Flox) -> Result<SearchResults> {
     let system: PackageSystem = flox.system.clone().try_into()?;
 
     match flox
         .floxhub_client
-        .packages_by_binary(binary_name, system)
+        .packages_by_binary(command_name, system)
         .await
     {
         Ok(page) => {
             debug!(
-                binary_name,
+                command_name,
                 count = page.results.len(),
-                "found packages via by-binary index"
+                "found packages via command-to-package index"
             );
             // The index returns one row per package version; list each
             // package once. The row count is not a package count, so no
@@ -229,14 +229,14 @@ async fn binary_search_results(binary_name: &str, flox: &Flox) -> Result<SearchR
             })
         },
         Err(err) => {
-            debug!(binary_name, error = %err, "by-binary index unavailable, falling back to search");
+            debug!(command_name, error = %err, "command-to-package index unavailable, falling back to search");
             let mut results = flox
                 .floxhub_client
-                .search(binary_name, system, DEFAULT_SEARCH_LIMIT)
+                .search(command_name, system, DEFAULT_SEARCH_LIMIT)
                 .await?;
             results.results.retain(|pkg| {
                 let last_segment = pkg.attr_path.rsplit('.').next().unwrap_or(&pkg.attr_path);
-                last_segment == binary_name || pkg.pname == binary_name
+                last_segment == command_name || pkg.pname == command_name
             });
             // The count refers to the unfiltered search, not the matches.
             results.count = None;
@@ -245,7 +245,7 @@ async fn binary_search_results(binary_name: &str, flox: &Flox) -> Result<SearchR
     }
 }
 
-/// Convert a by-binary index row into a search result for display.
+/// Convert a command-to-package index row into a search result for display.
 fn package_build_to_search_result(pkg: PackageBuild) -> SearchResult {
     SearchResult {
         attr_path: pkg.attr_path,

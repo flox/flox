@@ -15,7 +15,7 @@ flox-search - search for packages
 flox [<general options>] search
      [--json]
      [-a]
-     [--binary]
+     [--command]
      <search-term>
 ```
 
@@ -39,15 +39,15 @@ More specific information for a single package is available via the
 `flox search` uses a fuzzy search mechanism that tries to match either some
 portion of the pkg-path or description.
 
-## Searching by binary
-With the `--binary` flag, the search term is treated as a binary name
-and matched against the FloxHub binary-to-package index instead of
+## Searching by command
+With the `--command` flag, the search term is treated as a command name
+and matched against the FloxHub command-to-package index instead of
 package names and descriptions.
-This finds packages whose outputs contain the named binary,
+This finds packages whose outputs contain the named command,
 even when the package is named differently:
 
 ```bash
-$ flox search --binary rg
+$ flox search --command rg
 ripgrep    Utility that combines the usability of The Silver Searcher with ...
 ```
 
@@ -60,7 +60,7 @@ invoked without `--package`.
 
 `<search-term>`
 :   The package name to search for.
-    With `--binary`, the binary name to look up.
+    With `--command`, the command name to look up.
 
 `--json`
 :   Display the search results in JSON format.
@@ -68,8 +68,8 @@ invoked without `--package`.
 `-a`, `--all`
 :   Display all search results (default: at most 10).
 
-`--binary`
-:   Search for packages that provide a specific binary
+`--command`
+:   Search for packages that provide a specific command
     instead of matching package names and descriptions.
 
 ```{.include}

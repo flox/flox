@@ -92,7 +92,7 @@ pub struct FloxConfig {
     /// Maps a command name to the package spec the user chose for it,
     /// either explicitly via '--package' or via the disambiguation prompt.
     #[serde(default)]
-    pub binary_preferences: HashMap<String, String>,
+    pub command_preferences: HashMap<String, String>,
 
     /// The URL of the FloxHub instance to use
     pub floxhub_url: Option<Url>,

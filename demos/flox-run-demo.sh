@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 #
-# flox run - Binary-First Package Execution Demo (Phase 2)
+# flox run - Command-First Package Execution Demo (Phase 2)
 #
 # Run any command without installing it — and without knowing which
 # package provides it. Flox looks the command up in the FloxHub
-# binary-to-package index.
+# command-to-package index.
 #
 # Phase 1 (shipped): flox run -p <package> <command>
 # Phase 2 (this demo): the -p flag is optional.
 #
-# NOTE: the binary-to-package index requires a FloxHub with the
+# NOTE: the command-to-package index requires a FloxHub with the
 # `packages/by-binary` endpoint (e.g. a local floxhub stack with the
 # feat/binary-to-package-index branch). Against an older FloxHub the
 # CLI falls back to a search-based heuristic.
@@ -31,7 +31,7 @@ step=0
 header() {
     echo ""
     echo -e "${BOLD}${CYAN}========================================${RESET}"
-    echo -e "${BOLD}${CYAN}  flox run - Binary-First Execution${RESET}"
+    echo -e "${BOLD}${CYAN}  flox run - Command-First Execution${RESET}"
     echo -e "${BOLD}${CYAN}========================================${RESET}"
     echo ""
     echo -e "Run any command without installing it."
@@ -76,7 +76,7 @@ pause
 
 demo_step "Just run a command - no package name needed"
 
-echo "The command name is looked up in the FloxHub binary-to-package index:"
+echo "The command name is looked up in the FloxHub command-to-package index:"
 echo ""
 run_cmd flox run hello
 
@@ -114,7 +114,7 @@ run_cmd flox run vi
 
 echo "The preference lives in the user config:"
 echo ""
-run_cmd flox config \| grep -A2 binary_preferences
+run_cmd flox config \| grep -A2 command_preferences
 
 pause
 
@@ -141,11 +141,11 @@ pause
 
 # ============================================================
 
-demo_step "Which packages provide a binary? flox search --binary"
+demo_step "Which packages provide a command? flox search --command"
 
 echo "The same index powers search:"
 echo ""
-run_cmd flox search --binary rg
+run_cmd flox search --command rg
 
 pause
 
@@ -156,7 +156,7 @@ demo_step "Non-interactive: never prompts, never hangs"
 echo "Without a terminal and without a saved preference, ambiguity"
 echo "fails fast with the candidates listed inline:"
 echo ""
-run_cmd flox config --delete binary_preferences.vi \|\| true
+run_cmd flox config --delete command_preferences.vi \|\| true
 run_cmd "echo '' | flox run vi || true"
 
 pause
@@ -170,7 +170,7 @@ echo -e "${BOLD}${CYAN}========================================${RESET}"
 echo ""
 echo -e "Key takeaways:"
 echo -e "  1. ${BOLD}No package name needed${RESET} - flox run <command> just works"
-echo -e "  2. ${BOLD}Accurate lookup${RESET}        - backed by the binary-to-package index"
+echo -e "  2. ${BOLD}Accurate lookup${RESET}        - backed by the command-to-package index"
 echo -e "  3. ${BOLD}Exact match wins${RESET}       - package named like the command runs silently"
 echo -e "  4. ${BOLD}Choices are saved${RESET}      - prompt once, reuse silently, --reselect to change"
 echo -e "  5. ${BOLD}CI-safe${RESET}                - non-interactive runs never prompt or hang"

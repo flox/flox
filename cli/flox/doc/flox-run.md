@@ -31,7 +31,7 @@ no `flox init`, `flox install`, or environment cleanup needed.
 
 You do not need to know which package provides a command.
 When invoked without `-p`/`--package`,
-`flox run` queries the FloxHub binary-to-package index
+`flox run` queries the FloxHub command-to-package index
 to find the packages whose outputs contain the command:
 
 ```bash
@@ -47,7 +47,7 @@ The package is selected in this order:
    A previously saved choice for this command is used silently.
    Use `--reselect` to clear it and choose again.
 3. **Index lookup.**
-   The command name is looked up in the binary-to-package index:
+   The command name is looked up in the command-to-package index:
    - If exactly one package provides the command, it is used silently.
    - If several packages provide the command and one of them is named
      exactly like the command, that package is used silently.
@@ -57,7 +57,7 @@ The package is selected in this order:
 If no package provides the command, `flox run` exits with an error
 suggesting `--package` as an escape hatch.
 
-Use [`flox search --binary <command>`](./flox-search.md) to inspect
+Use [`flox search --command <command>`](./flox-search.md) to inspect
 which packages provide a command without running anything.
 
 ## Saved Preferences
@@ -68,11 +68,11 @@ so subsequent invocations of the same command run silently
 without re-prompting.
 
 Preferences are stored in the user configuration under
-`binary_preferences` and can be inspected with `flox config`
+`command_preferences` and can be inspected with `flox config`
 or managed directly:
 
 ```bash
-$ flox config --set binary_preferences.vi vim
+$ flox config --set command_preferences.vi vim
 ```
 
 Pass `--reselect` to clear the saved preference for a command
@@ -94,7 +94,7 @@ When there is no terminal to prompt on
 
 ```text
 Multiple packages provide 'vi' and no preference is saved.
-Packages with this binary: vim, neovim, vimer
+Packages with this command: vim, neovim, vimer
 Use 'flox run --package <PACKAGE> vi' to specify a package.
 ```
 
@@ -157,11 +157,11 @@ Repeated invocations of the same package skip the download step.
 `<command>`
 :   The command to run.
     Without `--package`, the command name is looked up in the
-    FloxHub binary-to-package index to find the providing package.
+    FloxHub command-to-package index to find the providing package.
 
 `-p <package>`, `--package <package>`
 :   The Flox Catalog package that provides the command,
-    bypassing the binary-to-package lookup.
+    bypassing the command-to-package lookup.
     Accepts a package name (e.g. `curl`, `python3Packages.requests`),
     optionally with a version constraint (e.g. `curl@8.0`),
     or a custom catalog package (e.g. `mycatalog/vim`).

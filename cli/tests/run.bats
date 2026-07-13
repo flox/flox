@@ -115,7 +115,7 @@ teardown() {
 }
 
 # ---------------------------------------------------------------------------- #
-# Binary-to-package lookup (mock catalog, no store required)
+# Command-to-package lookup (mock catalog, no store required)
 # ---------------------------------------------------------------------------- #
 
 @test "'flox run <command>' without -p reports no providing packages" {
@@ -126,12 +126,12 @@ teardown() {
   assert_output --partial "--package"
 }
 
-@test "'flox run' ambiguous binary fails non-interactively with inline package list" {
+@test "'flox run' ambiguous command fails non-interactively with inline package list" {
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/run/by_binary_vi_ambiguous.yaml"
   run "$FLOX_BIN" run vi
   assert_failure
   assert_output --partial "Multiple packages provide 'vi' and no preference is saved"
-  assert_output --partial "Packages with this binary: vim, neovim, vimer"
+  assert_output --partial "Packages with this command: vim, neovim, vimer"
   assert_output --partial "--package"
 }
 
@@ -175,7 +175,7 @@ teardown() {
   # Seed a preference; the mock contains no by-binary or resolve response for
   # 'preferredpkg', so failing with the preferred package name proves the
   # preference short-circuited the lookup.
-  run "$FLOX_BIN" config --set 'binary_preferences.vi' preferredpkg
+  run "$FLOX_BIN" config --set 'command_preferences.vi' preferredpkg
   assert_success
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/run/by_binary_vi_ambiguous.yaml"
   run "$FLOX_BIN" run vi
@@ -229,7 +229,7 @@ teardown() {
 }
 
 # bats test_tags=run:store
-@test "flox run hello without -p resolves via the binary index and executes [run:store]" {
+@test "flox run hello without -p resolves via the command index and executes [run:store]" {
   # The by-binary mock returns two candidates ('hello-go' and 'hello'); the
   # exact name match 'hello' wins silently and the run proceeds end to end.
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/run/by_binary_hello_run.yaml"

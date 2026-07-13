@@ -106,22 +106,22 @@ pub enum RunError {
     )]
     CommandNotUtf8,
 
-    /// The binary-to-package lookup returned no candidates.
+    /// The command-to-package lookup returned no candidates.
     #[error(
         "No packages found that provide '{0}'.\n\
          Use 'flox run --package <PACKAGE> {0}' to specify the package directly."
     )]
-    BinaryNotFound(String),
+    CommandNotFound(String),
 
-    /// Several packages provide the binary and no preference is saved,
+    /// Several packages provide the command and no preference is saved,
     /// but there is no terminal to prompt on.
     #[error(
-        "Multiple packages provide '{binary}' and no preference is saved.\n\
-         Packages with this binary: {package_list}\n\
-         Use 'flox run --package <PACKAGE> {binary}' to specify a package."
+        "Multiple packages provide '{command}' and no preference is saved.\n\
+         Packages with this command: {package_list}\n\
+         Use 'flox run --package <PACKAGE> {command}' to specify a package."
     )]
-    AmbiguousBinary {
-        binary: String,
+    AmbiguousCommand {
+        command: String,
         package_list: String,
     },
 
@@ -132,7 +132,7 @@ pub enum RunError {
     )]
     ReselectRequiresTerminal(String),
 
-    /// Transport/network failure during the binary-to-package lookup.
+    /// Transport/network failure during the command-to-package lookup.
     #[error(
         "Failed to look up packages that provide '{0}'.\n\
          Check your network connection and try again."
@@ -209,7 +209,7 @@ pub enum ParsedArgs {
 pub struct RunArgs {
     /// Package spec from `-p`/`--package`.
     /// When absent, the command name is looked up in the catalog's
-    /// binary-to-package index.
+    /// command-to-package index.
     pub package: Option<String>,
     /// Clear the saved package preference for the command and choose again.
     pub reselect: bool,
@@ -375,11 +375,11 @@ pub fn validate_plain_package(pkg: &CatalogPackage, raw: &str) -> Result<(), Run
 }
 
 // ---------------------------------------------------------------------------
-// Binary-to-package selection
+// Command-to-package selection
 // ---------------------------------------------------------------------------
 
-/// A package that provides a requested binary, as returned by the
-/// binary-to-package lookup.
+/// A package that provides a requested command, as returned by the
+/// command-to-package lookup.
 #[derive(Clone, Debug, PartialEq)]
 pub struct PackageCandidate {
     /// Full attribute path (e.g. `binutils`).
@@ -426,7 +426,7 @@ enum PackageSelection {
     Saved(String),
     /// The lookup returned exactly one candidate.
     OnlyCandidate(String),
-    /// Several candidates, but one is named exactly like the binary.
+    /// Several candidates, but one is named exactly like the command.
     ExactNameMatch(String),
     /// The user chose from the disambiguation prompt.
     Prompted(String),
@@ -458,7 +458,7 @@ impl PackageSelection {
 /// 1. `-p`/`--package` given → use it (and save it as a preference later).
 /// 2. `--reselect` → clear the saved preference and fall through to lookup.
 /// 3. Saved preference → use it silently.
-/// 4. Catalog binary-to-package lookup:
+/// 4. Catalog command-to-package lookup:
 ///    - no candidates → error
 ///    - one candidate → use it silently
 ///    - several, one named exactly like the command → use it silently
@@ -473,42 +473,42 @@ async fn select_package(
         return Ok(PackageSelection::Explicit(pkg_spec.clone()));
     }
 
-    let Some(binary) = run_args.executable.to_str() else {
+    let Some(command) = run_args.executable.to_str() else {
         return Err(RunError::CommandNotUtf8.into());
     };
 
     if run_args.reselect {
         if !Dialog::can_prompt() {
-            return Err(RunError::ReselectRequiresTerminal(binary.to_string()).into());
+            return Err(RunError::ReselectRequiresTerminal(command.to_string()).into());
         }
-        clear_preference(&flox.config_dir, binary);
-    } else if let Some(saved) = config.flox.binary_preferences.get(binary) {
-        debug!(binary, package = %saved, "using saved package preference");
+        clear_preference(&flox.config_dir, command);
+    } else if let Some(saved) = config.flox.command_preferences.get(command) {
+        debug!(command, package = %saved, "using saved package preference");
         return Ok(PackageSelection::Saved(saved.clone()));
     }
 
-    let candidates = lookup_binary_candidates(binary, flox).await?;
+    let candidates = lookup_command_candidates(command, flox).await?;
 
     if candidates.is_empty() {
-        return Err(RunError::BinaryNotFound(binary.to_string()).into());
+        return Err(RunError::CommandNotFound(command.to_string()).into());
     }
 
     if candidates.len() == 1 {
         let candidate = &candidates[0];
-        if candidate.attr_path != binary {
+        if candidate.attr_path != command {
             message::plain(format!(
-                "Running '{binary}' from package '{}'.",
+                "Running '{command}' from package '{}'.",
                 candidate.attr_path
             ));
         }
         return Ok(PackageSelection::OnlyCandidate(candidate.attr_path.clone()));
     }
 
-    // Several candidates: a package named exactly like the binary wins
+    // Several candidates: a package named exactly like the command wins
     // silently; otherwise prompt (or fail without a terminal).
-    if let Some(exact) = candidates.iter().find(|c| c.attr_path == binary) {
+    if let Some(exact) = candidates.iter().find(|c| c.attr_path == command) {
         debug!(
-            binary,
+            command,
             count = candidates.len(),
             "several candidates, exact name match wins"
         );
@@ -521,36 +521,40 @@ async fn select_package(
             .map(|c| c.attr_path.as_str())
             .collect::<Vec<_>>()
             .join(", ");
-        return Err(RunError::AmbiguousBinary {
-            binary: binary.to_string(),
+        return Err(RunError::AmbiguousCommand {
+            command: command.to_string(),
             package_list,
         }
         .into());
     }
 
-    let chosen = choose_package_interactive(binary, &candidates)?;
+    let chosen = choose_package_interactive(command, &candidates)?;
     Ok(PackageSelection::Prompted(chosen.attr_path))
 }
 
-/// Look up the packages that provide `binary` via the catalog.
+/// Look up the packages that provide `command` via the catalog.
 ///
-/// Tries the dedicated binary-to-package index first; if the endpoint is
+/// Tries the dedicated command-to-package index first; if the endpoint is
 /// unavailable (e.g. an older FloxHub), falls back to a search-based
 /// heuristic that keeps exact name matches only.
-async fn lookup_binary_candidates(
-    binary: &str,
+async fn lookup_command_candidates(
+    command: &str,
     flox: &Flox,
 ) -> Result<Vec<PackageCandidate>, RunError> {
     let system: PackageSystem = flox.system.parse().map_err(|_| {
-        RunError::PackageUnavailableOnSystem(binary.to_string(), flox.system.clone())
+        RunError::PackageUnavailableOnSystem(command.to_string(), flox.system.clone())
     })?;
 
-    match flox.floxhub_client.packages_by_binary(binary, system).await {
+    match flox
+        .floxhub_client
+        .packages_by_binary(command, system)
+        .await
+    {
         Ok(page) => {
             debug!(
-                binary,
+                command,
                 count = page.results.len(),
-                "found candidates via by-binary index"
+                "found candidates via command-to-package index"
             );
             let candidates = page
                 .results
@@ -565,30 +569,30 @@ async fn lookup_binary_candidates(
             Ok(dedupe_candidates(candidates))
         },
         Err(err) => {
-            debug!(binary, error = %err, "by-binary index unavailable, falling back to search");
-            let candidates = search_fallback_candidates(binary, system, flox).await?;
+            debug!(command, error = %err, "command-to-package index unavailable, falling back to search");
+            let candidates = search_fallback_candidates(command, system, flox).await?;
             Ok(dedupe_candidates(candidates))
         },
     }
 }
 
-/// Search-based fallback for catalogs without the binary-to-package index.
+/// Search-based fallback for catalogs without the command-to-package index.
 ///
-/// Searches for the binary name and keeps only results whose `pname` or last
-/// attr-path segment matches the binary exactly.
+/// Searches for the command name and keeps only results whose `pname` or last
+/// attr-path segment matches the command exactly.
 async fn search_fallback_candidates(
-    binary: &str,
+    command: &str,
     system: PackageSystem,
     flox: &Flox,
 ) -> Result<Vec<PackageCandidate>, RunError> {
     let limit = std::num::NonZeroU8::new(20);
     let results = flox
         .floxhub_client
-        .search(binary, system, limit)
+        .search(command, system, limit)
         .await
         .map_err(|err| {
-            debug!(binary, error = %err, "search fallback failed");
-            RunError::LookupFailed(binary.to_string())
+            debug!(command, error = %err, "search fallback failed");
+            RunError::LookupFailed(command.to_string())
         })?;
 
     let candidates = results
@@ -596,7 +600,7 @@ async fn search_fallback_candidates(
         .into_iter()
         .filter(|pkg| {
             let last_segment = pkg.attr_path.rsplit('.').next().unwrap_or(&pkg.attr_path);
-            last_segment == binary || pkg.pname == binary
+            last_segment == command || pkg.pname == command
         })
         .map(|pkg| PackageCandidate {
             attr_path: pkg.attr_path,
@@ -611,7 +615,7 @@ async fn search_fallback_candidates(
 
 /// Drop duplicate attr-paths, keeping the first (highest-ranked) occurrence.
 ///
-/// The by-binary index returns one row per package version; the
+/// The command-to-package index returns one row per package version; the
 /// disambiguation prompt should list each package once.
 fn dedupe_candidates(candidates: Vec<PackageCandidate>) -> Vec<PackageCandidate> {
     let mut seen = std::collections::HashSet::new();
@@ -626,10 +630,10 @@ fn dedupe_candidates(candidates: Vec<PackageCandidate>) -> Vec<PackageCandidate>
 /// Callers must check `Dialog::can_prompt()` first. The prompt renders on
 /// stderr, so piped stdout stays clean.
 fn choose_package_interactive(
-    binary: &str,
+    command: &str,
     candidates: &[PackageCandidate],
 ) -> Result<PackageCandidate> {
-    let message = format!("Multiple packages provide '{binary}'. Which would you like to use?");
+    let message = format!("Multiple packages provide '{command}'. Which would you like to use?");
     let (_, chosen) = Dialog {
         message: &message,
         help_message: Some("Use arrow keys to select, Enter to confirm"),
@@ -646,8 +650,8 @@ fn choose_package_interactive(
 ///
 /// Uses a pre-parsed key query so command names containing dots
 /// (e.g. `python3.12`) stay a single TOML key.
-fn save_preference(config_dir: &Path, binary: &str, pkg_spec: &str) -> Result<()> {
-    let query = [Key::new("binary_preferences"), Key::new(binary)];
+fn save_preference(config_dir: &Path, command: &str, pkg_spec: &str) -> Result<()> {
+    let query = [Key::new("command_preferences"), Key::new(command)];
     update_config_with_query(config_dir, &query, Some(pkg_spec))
 }
 
@@ -657,15 +661,15 @@ fn save_preference(config_dir: &Path, binary: &str, pkg_spec: &str) -> Result<()
 /// a preference just falls through to the lookup. Other write failures are
 /// logged and ignored — the subsequent prompt selection will overwrite the
 /// entry anyway.
-fn clear_preference(config_dir: &Path, binary: &str) {
-    let query = [Key::new("binary_preferences"), Key::new(binary)];
+fn clear_preference(config_dir: &Path, command: &str) {
+    let query = [Key::new("command_preferences"), Key::new(command)];
     match update_config_with_query::<String>(config_dir, &query, None) {
         Ok(()) => {},
         Err(err) if matches!(err.downcast_ref(), Some(ReadWriteError::NotAUserValue(_))) => {
-            debug!(binary, "no saved preference to clear");
+            debug!(command, "no saved preference to clear");
         },
         Err(err) => {
-            debug!(binary, error = ?err, "failed to clear saved preference");
+            debug!(command, error = ?err, "failed to clear saved preference");
         },
     }
 }
@@ -750,17 +754,17 @@ async fn exec_run(run_args: RunArgs, config: &Config, flox: &Flox) -> Result<()>
     // Persist explicit choices (validated above) as preferences. A failed
     // write should not stop the run.
     if selection.should_save()
-        && let Some(binary) = run_args.executable.to_str()
-        && config.flox.binary_preferences.get(binary) != Some(&pkg_spec)
+        && let Some(command) = run_args.executable.to_str()
+        && config.flox.command_preferences.get(command) != Some(&pkg_spec)
     {
-        match save_preference(&flox.config_dir, binary, &pkg_spec) {
+        match save_preference(&flox.config_dir, command, &pkg_spec) {
             Ok(()) => {
                 message::plain(format!(
-                    "Saved '{pkg_spec}' as the package for '{binary}'. Use 'flox run --reselect {binary}' to change it."
+                    "Saved '{pkg_spec}' as the package for '{command}'. Use 'flox run --reselect {command}' to change it."
                 ));
             },
             Err(err) => {
-                debug!(binary, error = ?err, "failed to save package preference");
+                debug!(command, error = ?err, "failed to save package preference");
             },
         }
     }
@@ -1646,22 +1650,22 @@ mod tests {
     }
 
     #[test]
-    fn ambiguous_binary_error_lists_packages_inline() {
-        let err = RunError::AmbiguousBinary {
-            binary: "vi".to_string(),
+    fn ambiguous_command_error_lists_packages_inline() {
+        let err = RunError::AmbiguousCommand {
+            command: "vi".to_string(),
             package_list: "vim, neovim, vimer".to_string(),
         };
         assert_eq!(
             err.to_string(),
             "Multiple packages provide 'vi' and no preference is saved.\n\
-             Packages with this binary: vim, neovim, vimer\n\
+             Packages with this command: vim, neovim, vimer\n\
              Use 'flox run --package <PACKAGE> vi' to specify a package."
         );
     }
 
     #[test]
-    fn binary_not_found_error_suggests_package_flag() {
-        let err = RunError::BinaryNotFound("frobnicate".to_string());
+    fn command_not_found_error_suggests_package_flag() {
+        let err = RunError::CommandNotFound("frobnicate".to_string());
         assert_eq!(
             err.to_string(),
             "No packages found that provide 'frobnicate'.\n\
@@ -1676,7 +1680,7 @@ mod tests {
         save_preference(tmp.path(), "vi", "vim").unwrap();
         let config_contents =
             std::fs::read_to_string(tmp.path().join(flox_config::FLOX_CONFIG_FILE)).unwrap();
-        assert!(config_contents.contains("[binary_preferences]"));
+        assert!(config_contents.contains("[command_preferences]"));
         assert!(config_contents.contains("vi = \"vim\""));
 
         clear_preference(tmp.path(), "vi");
@@ -1689,7 +1693,7 @@ mod tests {
     }
 
     #[test]
-    fn save_preference_keeps_dotted_binary_name_as_single_key() {
+    fn save_preference_keeps_dotted_command_name_as_single_key() {
         let tmp = tempfile::TempDir::new().unwrap();
 
         save_preference(tmp.path(), "python3.12", "python312").unwrap();

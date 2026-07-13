@@ -1,16 +1,16 @@
 # `flox run` Phase 2 — Video Recording Script
 
-A scene-by-scene script for recording the phase-2 (binary-first)
+A scene-by-scene script for recording the phase-2 (command-first)
 behavior of `flox run`, as documented in `man flox-run`. Every command
 below runs offline and deterministically against a bundled catalog
 mock (`demos/demo-mocks.yaml`) that contains real, substitutable
 store paths — the packages genuinely download and execute.
 
-**What this demonstrates (SL-002):** binary-to-package lookup without
+**What this demonstrates (SL-002):** command-to-package lookup without
 `-p`, the exact-name-match silent default, the disambiguation prompt,
 saved preferences, `--reselect`, explicit `--package` (which also
 saves), non-interactive degradation, `@version` constraints, and
-`flox search --binary`.
+`flox search --command`.
 
 ---
 
@@ -52,7 +52,7 @@ Notes:
 > "Phase 1 of `flox run` shipped: you can run any package's command
 > without installing it — but you had to name the package with `-p`.
 > Phase 2 removes that: you just name the *command*, and Flox asks the
-> FloxHub binary-to-package index which package provides it."
+> FloxHub command-to-package index which package provides it."
 
 No typing in this scene.
 
@@ -66,7 +66,7 @@ flox run hello
 
 **Expect:** `Hello, world!` — instantly, no prompt.
 
-> "Behind the scenes, *two* packages provide a `hello` binary. One of
+> "Behind the scenes, *two* packages provide a `hello` command. One of
 > them is named exactly `hello`, and per the resolution rules the
 > exact name match wins silently — no prompt."
 
@@ -90,11 +90,11 @@ ripgrep 15.1.0
 > which package was used. (The `--` is only needed here so
 > `--version` reaches `rg` rather than flox.)"
 
-## Scene 4 — Inspect the index with `flox search --binary`
+## Scene 4 — Inspect the index with `flox search --command`
 
 ```bash
-flox search --binary rg
-flox search --binary python3
+flox search --command rg
+flox search --command python3
 ```
 
 **Expect:** `ripgrep` for the first; `python312` and `python313` for
@@ -143,10 +143,10 @@ flox run python3 -c 'import sys; print(sys.version)'
 > "Preferences live in the regular Flox config:"
 
 ```bash
-flox config | grep binary_preferences
+flox config | grep command_preferences
 ```
 
-**Expect:** `binary_preferences` containing `python3 = "python313"`.
+**Expect:** `command_preferences` containing `python3 = "python313"`.
 
 ## Scene 7 — Change your mind with `--reselect`
 
@@ -182,7 +182,7 @@ explicit
 > listed inline."
 
 ```bash
-flox config --delete binary_preferences.python3
+flox config --delete command_preferences.python3
 echo '' | flox run python3
 ```
 
@@ -190,7 +190,7 @@ echo '' | flox run python3
 
 ```text
 ❌ ERROR: Multiple packages provide 'python3' and no preference is saved.
-Packages with this binary: python312, python313
+Packages with this command: python312, python313
 Use 'flox run --package <PACKAGE> python3' to specify a package.
 ```
 
@@ -219,7 +219,7 @@ Scroll through **Package Selection**, **Saved Preferences**, and
 > "To recap: name the command, not the package. Exact matches and
 > single providers run silently; ambiguity prompts once and is
 > remembered; `--reselect` and `--package` put you in control; and
-> scripts never hang. Backed by an accurate binary-to-package index
+> scripts never hang. Backed by an accurate command-to-package index
 > on FloxHub — not a name heuristic — so `rg` finds ripgrep and
 > `readelf` finds binutils."
 

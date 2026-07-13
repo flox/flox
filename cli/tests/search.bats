@@ -164,29 +164,29 @@ EOF
 
 # ---------------------------------------------------------------------------- #
 
-# bats test_tags=search:binary
-@test "'flox search --binary' lists the packages that provide a binary" {
+# bats test_tags=search:command
+@test "'flox search --command' lists the packages that provide a command" {
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/run/by_binary_rg.yaml"
-  run "$FLOX_BIN" search --binary rg
+  run "$FLOX_BIN" search --command rg
   assert_success
   assert_output --partial "ripgrep"
 }
 
-# bats test_tags=search:binary
-@test "'flox search --binary' returns JSON with --json" {
+# bats test_tags=search:command
+@test "'flox search --command' returns JSON with --json" {
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/run/by_binary_rg.yaml"
-  run "$FLOX_BIN" search --binary --json rg
+  run "$FLOX_BIN" search --command --json rg
   assert_success
   version="$(echo "$output" | jq -r '.[0].version')"
   assert_equal "$version" "14.1.1"
 }
 
-# bats test_tags=search:binary
-@test "'flox search --binary' reports when nothing provides the binary" {
+# bats test_tags=search:command
+@test "'flox search --command' reports when nothing provides the command" {
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/run/by_binary_not_found.yaml"
-  run "$FLOX_BIN" search --binary nonexistent-binary-xyz
+  run "$FLOX_BIN" search --command nonexistent-binary-xyz
   assert_failure
-  assert_output --partial "No packages found that provide the binary 'nonexistent-binary-xyz'"
+  assert_output --partial "No packages found that provide the command 'nonexistent-binary-xyz'"
 }
 
 # ---------------------------------------------------------------------------- #
