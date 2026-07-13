@@ -392,6 +392,7 @@ impl CatalogClientTrait for MockClient {
         unimplemented!("build_inputs_lookup is not supported in MockClient")
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn check_build_already_recorded(
         &self,
         _catalog_name: impl AsRef<str> + Send + Sync,
@@ -400,6 +401,7 @@ impl CatalogClientTrait for MockClient {
         _source_rev: &str,
         _nixpkgs_rev: &str,
         _system: PackageSystem,
+        _locked_inputs: std::collections::HashMap<String, floxhub_client::LockedInputEntry>,
     ) -> Result<CheckBuildResponse, FloxhubClientError> {
         unimplemented!("check_build_already_recorded is not supported in MockClient")
     }

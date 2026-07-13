@@ -682,7 +682,7 @@
             "required": true,
             "schema": {
               "type": "string",
-              "pattern": "[a-zA-Z0-9.\\-_]{1,128}",
+              "pattern": "^[a-zA-Z0-9.\\-_]{1,128}$",
               "title": "Package Name",
               "name": "package_name",
               "example": "curl"
@@ -850,7 +850,7 @@
             "required": true,
             "schema": {
               "type": "string",
-              "pattern": "[a-zA-Z0-9.\\-_]{1,128}",
+              "pattern": "^[a-zA-Z0-9.\\-_]{1,128}$",
               "title": "Package Name",
               "name": "package_name",
               "example": "curl"
@@ -926,7 +926,7 @@
             "required": true,
             "schema": {
               "type": "string",
-              "pattern": "[a-zA-Z0-9.\\-_]{1,128}",
+              "pattern": "^[a-zA-Z0-9.\\-_]{1,128}$",
               "title": "Package Name",
               "name": "package_name",
               "example": "curl"
@@ -1022,7 +1022,7 @@
             "required": true,
             "schema": {
               "type": "string",
-              "pattern": "[a-zA-Z0-9.\\-_]{1,128}",
+              "pattern": "^[a-zA-Z0-9.\\-_]{1,128}$",
               "title": "Package Name",
               "name": "package_name",
               "example": "curl"
@@ -1126,7 +1126,7 @@
             "required": true,
             "schema": {
               "type": "string",
-              "pattern": "[a-zA-Z0-9.\\-_]{1,128}",
+              "pattern": "^[a-zA-Z0-9.\\-_]{1,128}$",
               "title": "Package Name",
               "name": "package_name",
               "example": "curl"
@@ -1230,7 +1230,7 @@
             "required": true,
             "schema": {
               "type": "string",
-              "pattern": "[a-zA-Z0-9.\\-_]{1,128}",
+              "pattern": "^[a-zA-Z0-9.\\-_]{1,128}$",
               "title": "Package Name",
               "name": "package_name",
               "example": "curl"
@@ -1277,7 +1277,7 @@
           "catalogs"
         ],
         "summary": "Check if a build already exists",
-        "description": "Check whether a build already exists for the given source tuple.\n\nPath Parameters:\n- **catalog_name**: The name of the catalog\n- **package_name**: The name of the package\n\nRequest Body:\n- **source_url**: Source repository URL\n- **source_rev**: Source revision\n- **nixpkgs_rev**: Nixpkgs revision used for the build\n- **system**: Target system (e.g. x86_64-linux)\n\nReturns:\n- **CheckBuildResponse** with already_published=true and provenance\n  if a matching build exists, or already_published=false otherwise.",
+        "description": "Check whether a build already exists for the given source tuple.\n\nPath Parameters:\n- **catalog_name**: The name of the catalog\n- **package_name**: The name of the package\n\nRequest Body:\n- **source_url**: Source repository URL\n- **source_rev**: Source revision\n- **nixpkgs_rev**: Nixpkgs revision used for the build\n- **system**: Target system (e.g. x86_64-linux)\n- **locked_inputs**: Optional flat map of DIRECT catalog dependencies,\n  same shape as the locked_inputs field on the publish endpoint.  The\n  check is always closure-aware \u2014 there is no hash-blind path:\n  absent/null/{} \u2192 empty closure (H(\u2205)); {\u2026} \u2192 resolved + Merkle-hashed.\n  Old clients that omit the field are accepted (no 422); they are treated\n  as publishing with an empty closure.\n\nReturns:\n- **CheckBuildResponse** with already_published=true and provenance\n  if a matching build exists, or already_published=false otherwise.",
         "operationId": "check_build_api_v1_catalog_catalogs__catalog_name__packages__package_name__check_build_post",
         "security": [
           {
@@ -1306,7 +1306,7 @@
             "required": true,
             "schema": {
               "type": "string",
-              "pattern": "[a-zA-Z0-9.\\-_]{1,128}",
+              "pattern": "^[a-zA-Z0-9.\\-_]{1,128}$",
               "title": "Package Name",
               "name": "package_name",
               "example": "curl"
@@ -2164,6 +2164,7 @@
               "$ref": "#/components/schemas/LookupGroup"
             },
             "type": "array",
+            "maxItems": 256,
             "title": "Groups"
           }
         },
@@ -2534,6 +2535,14 @@
           },
           "system": {
             "$ref": "#/components/schemas/PackageSystem"
+          },
+          "locked_inputs": {
+            "title": "Locked Inputs",
+            "nullable": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/LockedInputEntry"
+            },
+            "type": "object"
           }
         },
         "type": "object",
@@ -2818,7 +2827,7 @@
           "locked_inputs_hash"
         ],
         "title": "LockedInputEntry",
-        "description": "A single entry in the flat locked-inputs map.\n\nOne type, two directions (intentionally NOT split into two models \u2014 the\npublish entry is the same entity with its edges not yet stated):\n\n- Publish request: the CLI sends {catalog, attr_path, build_type, source,\n  locked_inputs_hash} and leaves inputs null.  Null here means \"not stated\n  \u2014 the server is authoritative for the DAG\": the CLI knows its direct\n  inputs but is not the source of truth, and the server reconstructs the\n  DAG from package_inputs (keyed by locked_inputs_hash).\n- Lookup response: all fields are present and inputs is populated with the\n  full transitive-closure DAG.\n\ninputs uses the tri-state SBOM convention in both directions:\n  inputs: [k, ...]  \u2014 known direct inputs (by key)\n  inputs: []        \u2014 explicitly no dependencies\n  inputs null       \u2014 not stated (server is authoritative for the DAG)\n\nattr_path is a list of components, e.g. [\"python3Packages\", \"boolex\"].\nA flat catalog entry collapses what the CLI lockfile represents as a\nhierarchy of single-component package-set / package nodes.  Giving the\nCLI the components lets it re-expand that hierarchy.  A list is also\nunambiguous where a dot-joined string is not \u2014 Nix attr paths may\ncontain quoted dotted components, e.g. python3Packages.\"foo.bar\".\n\nlocked_inputs_hash is REQUIRED on every entry: the closure identity hash is\nthe round-trip disambiguator that pins which recorded build a locked input\nrefers to (lookup response \u2192 CLI \u2192 publish request).  A publish request\nmissing it fails validation (422) at this contract boundary \u2014 there is no\nhash-free / old-client fallback.  It always serializes as a string.\n\nWire behavior: a null `inputs` (the tri-state \"not stated\") is emitted as\nan explicit null \u2014 deliberately, NOT dropped; do not add exclude_none here.\nThe source sub-model never emits nulls at all: its named attributes are\nall required, and unknown ones pass through verbatim (see LockedGitSource).\n\nUse key() to build the canonical flat-map key for this entry."
+        "description": "A single entry in the flat locked-inputs map.\n\nOne type, two directions (intentionally NOT split into two models \u2014 the\npublish entry is the same entity with its edges not yet stated):\n\n- Publish request: the CLI sends {catalog, attr_path, build_type, source,\n  locked_inputs_hash} and leaves inputs null.  Null here means \"not stated\n  \u2014 the server is authoritative for the DAG\": the CLI knows its direct\n  inputs but is not the source of truth, and the server reconstructs the\n  DAG from package_inputs (keyed by locked_inputs_hash).\n- Lookup response: all fields are present and inputs is populated with the\n  full transitive-closure DAG.\n\ninputs uses the tri-state SBOM convention in both directions:\n  inputs: [k, ...]  \u2014 known direct inputs (by key)\n  inputs: []        \u2014 explicitly no dependencies\n  inputs null       \u2014 not stated (server is authoritative for the DAG)\n\nattr_path is a list of components, e.g. [\"python3Packages\", \"boolex\"].\nA flat catalog entry collapses what the CLI lockfile represents as a\nhierarchy of single-component package-set / package nodes.  Giving the\nCLI the components lets it re-expand that hierarchy.  A list is also\nunambiguous: if nested-dot component support is ever added (AI-267),\nthe list form remains the unambiguous carrier.\n\nlocked_inputs_hash is REQUIRED on every entry: the closure identity hash is\nthe round-trip disambiguator that pins which recorded build a locked input\nrefers to (lookup response \u2192 CLI \u2192 publish request).  A publish request\nmissing it fails validation (422) at this contract boundary \u2014 there is no\nhash-free / old-client fallback.  It always serializes as a string.\n\nWire behavior: a null `inputs` (the tri-state \"not stated\") is emitted as\nan explicit null \u2014 deliberately, NOT dropped; do not add exclude_none here.\nThe source sub-model never emits nulls at all: its named attributes are\nall required, and unknown ones pass through verbatim (see LockedGitSource).\n\nUse key() to build the canonical flat-map key for this entry."
       },
       "LockedSourceItem": {
         "properties": {
@@ -2879,9 +2888,11 @@
           },
           "references": {
             "items": {
-              "type": "string"
+              "type": "string",
+              "maxLength": 1024
             },
             "type": "array",
+            "maxItems": 1024,
             "title": "References"
           }
         },
@@ -2891,7 +2902,7 @@
           "references"
         ],
         "title": "LookupGroup",
-        "description": "A named group of reference strings for a build-inputs lookup.\n\nreferences is flat and mixed-kind; the server disambiguates.\nSentinel strings like 'catalogs.<owner>' and 'python3Packages.*' are\naccepted without validation \u2014 the server handles expansion."
+        "description": "A named group of reference strings for a build-inputs lookup.\n\nreferences is flat and mixed-kind; the server disambiguates.\nWildcard sentinels are owner-first, like '<owner>.*' (whole\ncatalog) or '<owner>.<pkgset>.*' (package set) \u2014 e.g. 'brantley.*'\n\u2014 and are accepted without validation; the server expands them."
       },
       "MessageLevel": {
         "type": "string",

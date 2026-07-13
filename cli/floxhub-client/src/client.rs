@@ -241,12 +241,18 @@ pub trait CatalogClientTrait {
     async fn get_base_catalog_info(&self) -> Result<BaseCatalogInfo, FloxhubClientError>;
 
     /// Query the catalog to check whether a build matching the given source
-    /// tuple (source URL, source rev, nixpkgs rev, system, package name) has
-    /// already been recorded/published.
+    /// tuple (source URL, source rev, nixpkgs rev, system, package name, and
+    /// direct closure inputs) has already been recorded/published.
+    ///
+    /// Callers must always provide the direct catalog inputs. An empty map
+    /// means the build has no catalog dependencies and serialises as `{}` on
+    /// the wire. Optionality at the generated request type level exists only
+    /// for old-CLI compatibility and does not apply here.
     ///
     /// Returns provenance data (source rev date, rev) in `CheckBuildResponse`
     /// when `already_published` is true. Used for dedup pre-check before
-    /// running the build.
+    /// uploading/publishing.
+    #[allow(clippy::too_many_arguments)]
     async fn check_build_already_recorded(
         &self,
         catalog_name: impl AsRef<str> + Send + Sync,
@@ -255,6 +261,7 @@ pub trait CatalogClientTrait {
         source_rev: &str,
         nixpkgs_rev: &str,
         system: api_types::PackageSystem,
+        locked_inputs: std::collections::HashMap<String, api_types::LockedInputEntry>,
     ) -> Result<CheckBuildResponse, FloxhubClientError>;
 }
 
@@ -561,6 +568,7 @@ impl CatalogClientTrait for FloxhubClient {
             .map(|res| res.into_inner().into())
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn check_build_already_recorded(
         &self,
         catalog_name: impl AsRef<str> + Send + Sync,
@@ -569,6 +577,7 @@ impl CatalogClientTrait for FloxhubClient {
         source_rev: &str,
         nixpkgs_rev: &str,
         system: api_types::PackageSystem,
+        locked_inputs: std::collections::HashMap<String, api_types::LockedInputEntry>,
     ) -> Result<CheckBuildResponse, FloxhubClientError> {
         let catalog = str_to_catalog_name(catalog_name)?;
         let package = str_to_package_name(package_name)?;
@@ -577,6 +586,7 @@ impl CatalogClientTrait for FloxhubClient {
             source_rev: source_rev.to_string(),
             nixpkgs_rev: nixpkgs_rev.to_string(),
             system,
+            locked_inputs: Some(locked_inputs),
         };
         self.catalog
             .check_build_api_v1_catalog_catalogs_catalog_name_packages_package_name_check_build_post(
@@ -1225,5 +1235,187 @@ pub mod tests {
             };
             prop_assert_eq!(expected_results, collected_results);
         }
+    }
+
+    // ---------------------------------------------------------------------------
+    // check_build_already_recorded — closure-aware dedup pre-check
+    // ---------------------------------------------------------------------------
+
+    const CHECK_BUILD_PATH: &str = "/api/v1/catalog/catalogs/myorg/packages/mypkg/check-build";
+
+    /// locked_inputs (non-empty map) is serialised into the check-build request
+    /// body so the server can perform a closure-aware dedup match.
+    #[tokio::test]
+    async fn check_build_sends_locked_inputs() {
+        use catalog_api_v1::types as api_types;
+
+        let server = MockServer::start_async().await;
+        let mock = server.mock(|when, then| {
+            // Verify key fields are present; inputs=null is omitted by
+            // skip_serializing_if so we don't assert on it here.
+            when.method("POST")
+                .path(CHECK_BUILD_PATH)
+                .json_body_includes(
+                    json!({
+                        "locked_inputs": {
+                            "dep-key": {
+                                "catalog": "nixpkgs",
+                                "attr_path": ["hello"],
+                                "build_type": "manifest",
+                                "locked_inputs_hash": "sha256:aabbcc"
+                            }
+                        }
+                    })
+                    .to_string(),
+                );
+            then.status(200).json_body(json!({
+                "already_published": false
+            }));
+        });
+
+        let client = FloxhubClient::new(client_config(server.base_url().as_str())).unwrap();
+
+        let entry = api_types::LockedInputEntry {
+            catalog: "nixpkgs".to_string(),
+            attr_path: vec!["hello".to_string()],
+            build_type: api_types::BuildType::Manifest,
+            source: api_types::LockedGitSource {
+                type_: "git".to_string(),
+                url: "https://github.com/NixOS/nixpkgs".to_string(),
+                rev: "abc123".to_string(),
+                ref_: "main".to_string(),
+                dir: ".".to_string(),
+            },
+            inputs: None,
+            locked_inputs_hash: "sha256:aabbcc".to_string(),
+        };
+        let mut locked_inputs = std::collections::HashMap::new();
+        locked_inputs.insert("dep-key".to_string(), entry);
+
+        let result = client
+            .check_build_already_recorded(
+                "myorg",
+                "mypkg",
+                &"https://example.com/repo".parse().unwrap(),
+                "deadbeef",
+                "cafebabe",
+                api_types::PackageSystem::X8664Linux,
+                locked_inputs,
+            )
+            .await;
+
+        mock.assert();
+        assert_eq!(result.expect("expected Ok"), CheckBuildResponse {
+            already_published: false,
+            published_at: None,
+            source_rev: None,
+            source_rev_date: None,
+        });
+    }
+
+    /// An empty locked_inputs map serialises as `{}` (not omitted).
+    #[tokio::test]
+    async fn check_build_sends_empty_locked_inputs_as_object() {
+        use catalog_api_v1::types as api_types;
+
+        let server = MockServer::start_async().await;
+        let mock = server.mock(|when, then| {
+            when.method("POST")
+                .path(CHECK_BUILD_PATH)
+                .json_body_includes(json!({ "locked_inputs": {} }).to_string());
+            then.status(200).json_body(json!({
+                "already_published": false
+            }));
+        });
+
+        let client = FloxhubClient::new(client_config(server.base_url().as_str())).unwrap();
+
+        let result = client
+            .check_build_already_recorded(
+                "myorg",
+                "mypkg",
+                &"https://example.com/repo".parse().unwrap(),
+                "deadbeef",
+                "cafebabe",
+                api_types::PackageSystem::X8664Linux,
+                std::collections::HashMap::new(),
+            )
+            .await;
+
+        mock.assert();
+        assert_eq!(result.expect("expected Ok"), CheckBuildResponse {
+            already_published: false,
+            published_at: None,
+            source_rev: None,
+            source_rev_date: None,
+        });
+    }
+
+    /// already_published=true → Ok with all provenance fields populated.
+    #[tokio::test]
+    async fn check_build_returns_already_published_true() {
+        use catalog_api_v1::types as api_types;
+
+        let server = MockServer::start_async().await;
+        let mock = server.mock(|when, then| {
+            when.method("POST").path(CHECK_BUILD_PATH);
+            then.status(200).json_body(json!({
+                "already_published": true,
+                "source_rev": "deadbeef",
+                "published_at": "2024-01-01T00:00:00Z"
+            }));
+        });
+
+        let client = FloxhubClient::new(client_config(server.base_url().as_str())).unwrap();
+
+        let result = client
+            .check_build_already_recorded(
+                "myorg",
+                "mypkg",
+                &"https://example.com/repo".parse().unwrap(),
+                "deadbeef",
+                "cafebabe",
+                api_types::PackageSystem::X8664Linux,
+                std::collections::HashMap::new(),
+            )
+            .await;
+
+        mock.assert();
+        let expected: CheckBuildResponse = serde_json::from_value(json!({
+            "already_published": true,
+            "source_rev": "deadbeef",
+            "published_at": "2024-01-01T00:00:00Z",
+        }))
+        .unwrap();
+        assert_eq!(result.expect("expected Ok"), expected);
+    }
+
+    /// A 5xx error from the server is returned as Err, not panicked or swallowed.
+    #[tokio::test]
+    async fn check_build_server_error_returns_err() {
+        use catalog_api_v1::types as api_types;
+
+        let server = MockServer::start_async().await;
+        let mock = server.mock(|when, then| {
+            when.method("POST").path(CHECK_BUILD_PATH);
+            then.status(500);
+        });
+
+        let client = FloxhubClient::new(client_config(server.base_url().as_str())).unwrap();
+
+        let result = client
+            .check_build_already_recorded(
+                "myorg",
+                "mypkg",
+                &"https://example.com/repo".parse().unwrap(),
+                "deadbeef",
+                "cafebabe",
+                api_types::PackageSystem::X8664Linux,
+                std::collections::HashMap::new(),
+            )
+            .await;
+
+        mock.assert();
+        assert!(result.is_err(), "expected Err from 5xx, got: {result:?}");
     }
 }
