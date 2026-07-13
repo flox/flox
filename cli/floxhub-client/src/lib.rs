@@ -56,7 +56,13 @@ pub use catalog_api_v1::{
 // Client
 #[cfg(any(test, feature = "tests"))]
 pub use client::EMPTY_SEARCH_RESPONSE;
-pub use client::{CatalogClientTrait, FloxhubClient, str_to_catalog_name, str_to_package_name};
+pub use client::{
+    CatalogClientTrait,
+    CheckBuildQuery,
+    FloxhubClient,
+    str_to_catalog_name,
+    str_to_package_name,
+};
 pub use config::{FloxhubClientConfig, FloxhubMockMode};
 // Errors
 pub use error::*;

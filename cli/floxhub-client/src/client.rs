@@ -152,6 +152,25 @@ impl FloxhubClient {
 
 const RESPONSE_PAGE_SIZE: NonZeroU32 = NonZeroU32::new(1000).unwrap();
 
+/// Query describing a build to check for prior recording/publication via
+/// [`CatalogClientTrait::check_build_already_recorded`].
+///
+/// Mirrors the server-side `CheckBuildRequest` API type field-by-field
+/// (except `locked_inputs`, which is optional on the wire but always sent),
+/// plus the catalog/package name path segments. Adding a new server-side
+/// field is then a struct-field change here, not a signature change across
+/// the trait, the [`FloxhubClient`] impl, and the mock implementation.
+#[derive(Debug, Clone, Copy)]
+pub struct CheckBuildQuery<'a> {
+    pub catalog_name: &'a str,
+    pub package_name: &'a str,
+    pub source_url: &'a Url,
+    pub source_rev: &'a str,
+    pub nixpkgs_rev: &'a str,
+    pub system: api_types::PackageSystem,
+    pub locked_inputs: &'a HashMap<String, api_types::LockedInputEntry>,
+}
+
 /// The complete catalog API interface.
 ///
 /// This trait enables alternate implementations:
@@ -252,16 +271,9 @@ pub trait CatalogClientTrait {
     /// Returns provenance data (source rev date, rev) in `CheckBuildResponse`
     /// when `already_published` is true. Used for dedup pre-check before
     /// uploading/publishing.
-    #[allow(clippy::too_many_arguments)]
     async fn check_build_already_recorded(
         &self,
-        catalog_name: impl AsRef<str> + Send + Sync,
-        package_name: impl AsRef<str> + Send + Sync,
-        source_url: &Url,
-        source_rev: &str,
-        nixpkgs_rev: &str,
-        system: api_types::PackageSystem,
-        locked_inputs: std::collections::HashMap<String, api_types::LockedInputEntry>,
+        query: CheckBuildQuery<'_>,
     ) -> Result<CheckBuildResponse, FloxhubClientError>;
 }
 
@@ -568,25 +580,18 @@ impl CatalogClientTrait for FloxhubClient {
             .map(|res| res.into_inner().into())
     }
 
-    #[allow(clippy::too_many_arguments)]
     async fn check_build_already_recorded(
         &self,
-        catalog_name: impl AsRef<str> + Send + Sync,
-        package_name: impl AsRef<str> + Send + Sync,
-        source_url: &Url,
-        source_rev: &str,
-        nixpkgs_rev: &str,
-        system: api_types::PackageSystem,
-        locked_inputs: std::collections::HashMap<String, api_types::LockedInputEntry>,
+        query: CheckBuildQuery<'_>,
     ) -> Result<CheckBuildResponse, FloxhubClientError> {
-        let catalog = str_to_catalog_name(catalog_name)?;
-        let package = str_to_package_name(package_name)?;
+        let catalog = str_to_catalog_name(query.catalog_name)?;
+        let package = str_to_package_name(query.package_name)?;
         let body = api_types::CheckBuildRequest {
-            source_url: source_url.to_string(),
-            source_rev: source_rev.to_string(),
-            nixpkgs_rev: nixpkgs_rev.to_string(),
-            system,
-            locked_inputs: Some(locked_inputs),
+            source_url: query.source_url.to_string(),
+            source_rev: query.source_rev.to_string(),
+            nixpkgs_rev: query.nixpkgs_rev.to_string(),
+            system: query.system,
+            locked_inputs: Some(query.locked_inputs.clone()),
         };
         self.catalog
             .check_build_api_v1_catalog_catalogs_catalog_name_packages_package_name_check_build_post(
@@ -1289,19 +1294,19 @@ pub mod tests {
             inputs: None,
             locked_inputs_hash: "sha256:aabbcc".to_string(),
         };
-        let mut locked_inputs = std::collections::HashMap::new();
+        let mut locked_inputs = HashMap::new();
         locked_inputs.insert("dep-key".to_string(), entry);
 
         let result = client
-            .check_build_already_recorded(
-                "myorg",
-                "mypkg",
-                &"https://example.com/repo".parse().unwrap(),
-                "deadbeef",
-                "cafebabe",
-                api_types::PackageSystem::X8664Linux,
-                locked_inputs,
-            )
+            .check_build_already_recorded(CheckBuildQuery {
+                catalog_name: "myorg",
+                package_name: "mypkg",
+                source_url: &"https://example.com/repo".parse().unwrap(),
+                source_rev: "deadbeef",
+                nixpkgs_rev: "cafebabe",
+                system: api_types::PackageSystem::X8664Linux,
+                locked_inputs: &locked_inputs,
+            })
             .await;
 
         mock.assert();
@@ -1331,15 +1336,15 @@ pub mod tests {
         let client = FloxhubClient::new(client_config(server.base_url().as_str())).unwrap();
 
         let result = client
-            .check_build_already_recorded(
-                "myorg",
-                "mypkg",
-                &"https://example.com/repo".parse().unwrap(),
-                "deadbeef",
-                "cafebabe",
-                api_types::PackageSystem::X8664Linux,
-                std::collections::HashMap::new(),
-            )
+            .check_build_already_recorded(CheckBuildQuery {
+                catalog_name: "myorg",
+                package_name: "mypkg",
+                source_url: &"https://example.com/repo".parse().unwrap(),
+                source_rev: "deadbeef",
+                nixpkgs_rev: "cafebabe",
+                system: api_types::PackageSystem::X8664Linux,
+                locked_inputs: &HashMap::new(),
+            })
             .await;
 
         mock.assert();
@@ -1369,15 +1374,15 @@ pub mod tests {
         let client = FloxhubClient::new(client_config(server.base_url().as_str())).unwrap();
 
         let result = client
-            .check_build_already_recorded(
-                "myorg",
-                "mypkg",
-                &"https://example.com/repo".parse().unwrap(),
-                "deadbeef",
-                "cafebabe",
-                api_types::PackageSystem::X8664Linux,
-                std::collections::HashMap::new(),
-            )
+            .check_build_already_recorded(CheckBuildQuery {
+                catalog_name: "myorg",
+                package_name: "mypkg",
+                source_url: &"https://example.com/repo".parse().unwrap(),
+                source_rev: "deadbeef",
+                nixpkgs_rev: "cafebabe",
+                system: api_types::PackageSystem::X8664Linux,
+                locked_inputs: &HashMap::new(),
+            })
             .await;
 
         mock.assert();
@@ -1404,15 +1409,15 @@ pub mod tests {
         let client = FloxhubClient::new(client_config(server.base_url().as_str())).unwrap();
 
         let result = client
-            .check_build_already_recorded(
-                "myorg",
-                "mypkg",
-                &"https://example.com/repo".parse().unwrap(),
-                "deadbeef",
-                "cafebabe",
-                api_types::PackageSystem::X8664Linux,
-                std::collections::HashMap::new(),
-            )
+            .check_build_already_recorded(CheckBuildQuery {
+                catalog_name: "myorg",
+                package_name: "mypkg",
+                source_url: &"https://example.com/repo".parse().unwrap(),
+                source_rev: "deadbeef",
+                nixpkgs_rev: "cafebabe",
+                system: api_types::PackageSystem::X8664Linux,
+                locked_inputs: &HashMap::new(),
+            })
             .await;
 
         mock.assert();

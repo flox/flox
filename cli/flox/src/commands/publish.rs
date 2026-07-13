@@ -17,7 +17,7 @@ use flox_rust_sdk::providers::publish::{
     check_environment_metadata,
     check_package_metadata,
 };
-use floxhub_client::{CatalogClientTrait, CheckBuildResponse, FloxhubClientError};
+use floxhub_client::{CatalogClientTrait, CheckBuildQuery, CheckBuildResponse, FloxhubClientError};
 use indoc::formatdoc;
 use nef_lock_catalog::NixFlakeref;
 use tracing::{debug, info_span, instrument, warn};
@@ -310,15 +310,15 @@ impl Publish {
         });
         let catalog = &flox.floxhub_client;
         let check_result = catalog
-            .check_build_already_recorded(
-                &catalog_name,
-                publish_provider.package_metadata.package.name().as_ref(),
-                &publish_provider.env_metadata.build_repo_meta.url,
-                &publish_provider.env_metadata.build_repo_meta.rev,
+            .check_build_already_recorded(CheckBuildQuery {
+                catalog_name: &catalog_name,
+                package_name: publish_provider.package_metadata.package.name().as_ref(),
+                source_url: &publish_provider.env_metadata.build_repo_meta.url,
+                source_rev: &publish_provider.env_metadata.build_repo_meta.rev,
                 nixpkgs_rev,
-                build_metadata.system,
-                build_metadata.direct_catalog_inputs.clone(),
-            )
+                system: build_metadata.system,
+                locked_inputs: &build_metadata.direct_catalog_inputs,
+            })
             .await;
 
         match dedup_outcome(check_result) {
