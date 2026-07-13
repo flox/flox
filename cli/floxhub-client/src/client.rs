@@ -155,10 +155,11 @@ const RESPONSE_PAGE_SIZE: NonZeroU32 = NonZeroU32::new(1000).unwrap();
 /// Query describing a build to check for prior recording/publication via
 /// [`CatalogClientTrait::check_build_already_recorded`].
 ///
-/// Mirrors the server-side `CheckBuildRequest` API type field-by-field, plus
-/// the catalog/package name path segments. Adding a new server-side field is
-/// then a struct-field change here, not a signature change across the trait,
-/// the [`FloxhubClient`] impl, and the mock implementation.
+/// Mirrors the server-side `CheckBuildRequest` API type field-by-field
+/// (except `locked_inputs`, which is optional on the wire but always sent),
+/// plus the catalog/package name path segments. Adding a new server-side
+/// field is then a struct-field change here, not a signature change across
+/// the trait, the [`FloxhubClient`] impl, and the mock implementation.
 #[derive(Debug, Clone, Copy)]
 pub struct CheckBuildQuery<'a> {
     pub catalog_name: &'a str,
@@ -167,7 +168,7 @@ pub struct CheckBuildQuery<'a> {
     pub source_rev: &'a str,
     pub nixpkgs_rev: &'a str,
     pub system: api_types::PackageSystem,
-    pub locked_inputs: &'a std::collections::HashMap<String, api_types::LockedInputEntry>,
+    pub locked_inputs: &'a HashMap<String, api_types::LockedInputEntry>,
 }
 
 /// The complete catalog API interface.
@@ -1293,7 +1294,7 @@ pub mod tests {
             inputs: None,
             locked_inputs_hash: "sha256:aabbcc".to_string(),
         };
-        let mut locked_inputs = std::collections::HashMap::new();
+        let mut locked_inputs = HashMap::new();
         locked_inputs.insert("dep-key".to_string(), entry);
 
         let result = client
@@ -1342,7 +1343,7 @@ pub mod tests {
                 source_rev: "deadbeef",
                 nixpkgs_rev: "cafebabe",
                 system: api_types::PackageSystem::X8664Linux,
-                locked_inputs: &std::collections::HashMap::new(),
+                locked_inputs: &HashMap::new(),
             })
             .await;
 
@@ -1380,7 +1381,7 @@ pub mod tests {
                 source_rev: "deadbeef",
                 nixpkgs_rev: "cafebabe",
                 system: api_types::PackageSystem::X8664Linux,
-                locked_inputs: &std::collections::HashMap::new(),
+                locked_inputs: &HashMap::new(),
             })
             .await;
 
@@ -1415,7 +1416,7 @@ pub mod tests {
                 source_rev: "deadbeef",
                 nixpkgs_rev: "cafebabe",
                 system: api_types::PackageSystem::X8664Linux,
-                locked_inputs: &std::collections::HashMap::new(),
+                locked_inputs: &HashMap::new(),
             })
             .await;
 
