@@ -35,7 +35,6 @@ use serde::Serialize;
 use tracing::{debug, instrument};
 use url::Url;
 
-use crate::commands::general::update_config;
 use crate::utils::credential_store::{CredentialSource, CredentialStores, TokenStorage};
 use crate::utils::dialog::{Checkpoint, Dialog, WaitResult};
 use crate::utils::message;
@@ -270,7 +269,7 @@ impl Auth {
                 let _guard = span.enter();
                 match token_file {
                     Some(path) => {
-                        login_with_token_file(&mut flox, &path)?;
+                        login_with_token_file(&mut flox, &path, insecure_storage)?;
                     },
                     None => {
                         login_flox(&mut flox, insecure_storage).await?;
@@ -379,17 +378,23 @@ pub async fn login_flox(flox: &mut Flox, insecure_storage: bool) -> Result<Strin
 
     // set the token in the runtime config
     let token = FloxhubToken::new(cred.token)?;
+
+    complete_login(flox, token, insecure_storage)
+}
+
+/// Finish a login with a fresh, validated token, shared by the interactive
+/// and token-file flows: store the token in the OS keyring (falling back to
+/// the plaintext config file, or forced there by `--insecure-storage`), set
+/// the auth context, and report where the credential landed.
+fn complete_login(flox: &mut Flox, token: FloxhubToken, insecure_storage: bool) -> Result<String> {
     let handle = token.handle().to_string();
 
-    // Store the token in the OS keyring by default, falling back to the
-    // plaintext config file (explicit 0600) with a warning on any keyring
-    // failure — or when --insecure-storage forces plaintext.
     let stores = CredentialStores::from_flox(flox);
     let storage = stores
         .persist_login_token(token.secret(), insecure_storage)
         .context("Could not store token")?;
 
-    let auth_context = AuthContext::from_mode(&AuthnMode::Auth0, Some(token.clone()));
+    let auth_context = AuthContext::from_mode(&AuthnMode::Auth0, Some(token));
     let _ = flox.set_auth_context(auth_context);
 
     print_login_success(&handle);
@@ -415,9 +420,14 @@ fn print_login_success(handle: &str) {
 /// the path is `-`.
 ///
 /// * validates the token and rejects expired tokens
-/// * updates the config file with the token
+/// * stores the token like an interactive login (OS keyring, plaintext
+///   fallback, or forced plaintext via `--insecure-storage`)
 /// * updates the auth context of the [Flox] instance
-pub fn login_with_token_file(flox: &mut Flox, token_file: &Path) -> Result<String> {
+pub fn login_with_token_file(
+    flox: &mut Flox,
+    token_file: &Path,
+    insecure_storage: bool,
+) -> Result<String> {
     let contents = if token_file == Path::new("-") {
         let mut contents = String::new();
         std::io::stdin()
@@ -436,17 +446,7 @@ pub fn login_with_token_file(flox: &mut Flox, token_file: &Path) -> Result<Strin
         bail!("The provided token is expired.\nObtain a fresh token from FloxHub and try again.");
     }
 
-    let handle = token.handle().to_string();
-
-    update_config(&flox.config_dir, "floxhub_token", Some(token.clone()))
-        .context("Could not write token to config")?;
-
-    let auth_context = AuthContext::from_mode(&AuthnMode::Auth0, Some(token));
-    let _ = flox.set_auth_context(auth_context);
-
-    print_login_success(&handle);
-
-    Ok(handle)
+    complete_login(flox, token, insecure_storage)
 }
 
 #[cfg(test)]
@@ -459,25 +459,31 @@ mod tests {
 
     use super::*;
 
+    /// A token-file login persists through the credential stores like an
+    /// interactive one: with the OS keyring disabled it falls back to the
+    /// plaintext config file rather than writing plain text unconditionally.
     #[test]
     fn login_with_token_file_stores_valid_token() {
-        let (mut flox, _temp_dir) = flox_instance();
-        let token = create_test_token("test-user");
-        let token_file = flox.temp_dir.join("token");
-        fs::write(&token_file, format!("{}\n", token.secret())).unwrap();
+        temp_env::with_var("_FLOX_DISABLE_KEYRING", Some("true"), || {
+            let (mut flox, _temp_dir) = flox_instance();
+            let token = create_test_token("test-user");
+            let token_file = flox.temp_dir.join("token");
+            fs::write(&token_file, format!("{}\n", token.secret())).unwrap();
 
-        let handle = login_with_token_file(&mut flox, &token_file).unwrap();
+            let handle = login_with_token_file(&mut flox, &token_file, false).unwrap();
 
-        assert_eq!(handle, "test-user");
-        let config_contents = fs::read_to_string(flox.config_dir.join(FLOX_CONFIG_FILE)).unwrap();
-        assert_eq!(
-            config_contents,
-            format!("floxhub_token = \"{}\"\n", token.secret())
-        );
-        let AuthContext::Auth0(Some(stored)) = &flox.auth_context else {
-            panic!("expected an Auth0 auth context with a token");
-        };
-        assert_eq!(stored.secret(), token.secret());
+            assert_eq!(handle, "test-user");
+            let config_contents =
+                fs::read_to_string(flox.config_dir.join(FLOX_CONFIG_FILE)).unwrap();
+            assert_eq!(
+                config_contents,
+                format!("floxhub_token = \"{}\"\n", token.secret())
+            );
+            let AuthContext::Auth0(Some(stored)) = &flox.auth_context else {
+                panic!("expected an Auth0 auth context with a token");
+            };
+            assert_eq!(stored.secret(), token.secret());
+        });
     }
 
     #[test]
@@ -485,7 +491,7 @@ mod tests {
         let (mut flox, _temp_dir) = flox_instance();
         let missing = flox.temp_dir.join("nonexistent");
 
-        let err = login_with_token_file(&mut flox, &missing).unwrap_err();
+        let err = login_with_token_file(&mut flox, &missing, false).unwrap_err();
 
         assert_eq!(
             err.to_string(),
@@ -500,7 +506,7 @@ mod tests {
         let token_file = flox.temp_dir.join("token");
         fs::write(&token_file, "not-a-jwt").unwrap();
 
-        let err = login_with_token_file(&mut flox, &token_file).unwrap_err();
+        let err = login_with_token_file(&mut flox, &token_file, false).unwrap_err();
 
         assert_eq!(
             err.to_string(),
@@ -515,7 +521,7 @@ mod tests {
         let token_file = flox.temp_dir.join("token");
         fs::write(&token_file, FAKE_EXPIRED_TOKEN).unwrap();
 
-        let err = login_with_token_file(&mut flox, &token_file).unwrap_err();
+        let err = login_with_token_file(&mut flox, &token_file, false).unwrap_err();
 
         assert_eq!(
             err.to_string(),
