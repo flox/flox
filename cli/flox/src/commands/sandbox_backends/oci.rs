@@ -117,9 +117,13 @@ impl ActivationSandbox for OciBackend<'_> {
 /// Return the container runtime name for the current platform.
 fn platform_runtime() -> &'static str {
     #[cfg(target_os = "macos")]
-    { "container" }
+    {
+        "container"
+    }
     #[cfg(not(target_os = "macos"))]
-    { "podman" }
+    {
+        "podman"
+    }
 }
 
 /// `true` if an executable named `name` is on `PATH`.
@@ -324,7 +328,13 @@ fn resolve_oci_image_state(runtime: &str, env_name: &str, lockfile: &Lockfile) -
         Vec::new()
     };
 
-    classify_oci_image_state(explicit, expected_present, env_name, &hash12, &existing_tags)
+    classify_oci_image_state(
+        explicit,
+        expected_present,
+        env_name,
+        &hash12,
+        &existing_tags,
+    )
 }
 
 /// Pure core of [`resolve_oci_image_state`]. Extracted for unit testing.
@@ -412,9 +422,7 @@ pub(crate) fn should_bake_oci(
 
     // Non-tty, no autobake: fail fast with guidance.
     let stale_hint = if let Some(s) = stale_ref {
-        format!(
-            "\nA stale image exists ({s}); set {FLOX_SANDBOX_OCI_ALLOW_STALE_VAR}=1 to run it."
-        )
+        format!("\nA stale image exists ({s}); set {FLOX_SANDBOX_OCI_ALLOW_STALE_VAR}=1 to run it.")
     } else {
         String::new()
     };
@@ -702,10 +710,7 @@ pub(crate) fn oci_prune_set(env_name: &str, existing_tags: &[String], hash12: &s
 /// No action is taken when the expected `<env>:<hash12>` image is absent.
 /// Hash-tag bearers are never removal candidates; superseded hash tags are
 /// handled by [`oci_prune_set`].
-pub(crate) fn latest_alias_actions(
-    entries: &[OciImageEntry],
-    hash12: &str,
-) -> (Vec<String>, bool) {
+pub(crate) fn latest_alias_actions(entries: &[OciImageEntry], hash12: &str) -> (Vec<String>, bool) {
     let Some(expected_digest) = entries
         .iter()
         .find(|e| e.tag == hash12)
@@ -1371,10 +1376,9 @@ mod tests {
 
         #[test]
         fn pin_dev_host_schema_mismatch_fails_with_guidance() {
-            let err =
-                select_builder_pin(None, Some("abc"), "v1.13.1", false, "1.14.0", "frozen")
-                    .unwrap_err()
-                    .to_string();
+            let err = select_builder_pin(None, Some("abc"), "v1.13.1", false, "1.14.0", "frozen")
+                .unwrap_err()
+                .to_string();
             assert!(err.contains("1.14.0"));
             assert!(err.contains("_FLOX_CONTAINERIZE_FLAKE_REF_OR_REV"));
         }

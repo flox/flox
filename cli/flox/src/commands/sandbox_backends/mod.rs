@@ -103,17 +103,14 @@ pub trait ActivationSandbox {
 /// - `Libsandbox` — in-process env-var injection, handled in `activate.rs`.
 /// - Any `other` arm — falls through to the "not yet wired" bail in
 ///   `activate.rs`, preserving the loud failure for scaffolded backends.
-pub fn for_backend(backend: SandboxBackend, ctx: SandboxLaunchCtx<'_>) -> Option<Box<dyn ActivationSandbox + '_>> {
+pub fn for_backend(
+    backend: SandboxBackend,
+    ctx: SandboxLaunchCtx<'_>,
+) -> Option<Box<dyn ActivationSandbox + '_>> {
     match backend {
-        SandboxBackend::HostNative => {
-            Some(Box::new(host_native::HostNativeBackend::new(ctx)))
-        },
-        SandboxBackend::Srt => {
-            Some(Box::new(srt::SrtBackend::new(ctx)))
-        },
-        SandboxBackend::Oci => {
-            Some(Box::new(oci::OciBackend::new(ctx)))
-        },
+        SandboxBackend::HostNative => Some(Box::new(host_native::HostNativeBackend::new(ctx))),
+        SandboxBackend::Srt => Some(Box::new(srt::SrtBackend::new(ctx))),
+        SandboxBackend::Oci => Some(Box::new(oci::OciBackend::new(ctx))),
         // Libsandbox is the default in-process path; no wrapper object.
         // All other variants keep the "not yet wired" bail in activate.rs.
         _ => None,

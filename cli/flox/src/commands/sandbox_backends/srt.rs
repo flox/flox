@@ -70,8 +70,7 @@ fn wrap_srt(dot_flox_path: &Path) -> Result<Infallible> {
     let settings = srt_settings_json(&home, &project);
     // The settings file must outlive this process (exec replaces us), so it is
     // written to a temp file that is intentionally not cleaned up.
-    let settings_path =
-        std::env::temp_dir().join(format!("flox-srt-{}.json", std::process::id()));
+    let settings_path = std::env::temp_dir().join(format!("flox-srt-{}.json", std::process::id()));
     std::fs::write(&settings_path, settings)
         .map_err(|err| anyhow::anyhow!("Failed to write the srt settings file: {err}"))?;
 
