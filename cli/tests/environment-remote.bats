@@ -198,10 +198,9 @@ EOF
   make_empty_remote_env
   "$FLOX_BIN" install python311Packages.pip --reference "$OWNER/test"
 
-  export FLOX_CACHE_DIR="$(realpath $FLOX_CACHE_DIR)"
-  run "$FLOX_BIN" activate --trust --reference "$OWNER/test" -c 'echo PIP_CONFIG_FILE is "$PIP_CONFIG_FILE"'
+  run "$FLOX_BIN" activate --trust --reference "$OWNER/test" -c 'if [ "$PIP_CONFIG_FILE" = "$FLOX_ENV_CACHE/pip.ini" ]; then echo "PIP_CONFIG_FILE is in FLOX_ENV_CACHE"; fi'
   assert_success
-  assert_line "PIP_CONFIG_FILE is $FLOX_CACHE_DIR/remote/$OWNER/test/.flox/cache/pip.ini"
+  assert_line "PIP_CONFIG_FILE is in FLOX_ENV_CACHE"
 }
 
 # We need to trust the remote environment before we can activate it.

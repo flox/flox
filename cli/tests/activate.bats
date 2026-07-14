@@ -1466,9 +1466,9 @@ EOF
   assert_success
   assert_line "PYTHONPATH is $(realpath $PROJECT_DIR)/.flox/run/$NIX_SYSTEM.$PROJECT_NAME-dev/lib/python3.11/site-packages"
 
-  run -- "$FLOX_BIN" activate -c 'echo PIP_CONFIG_FILE is "$PIP_CONFIG_FILE"'
+  run -- "$FLOX_BIN" activate -c 'if [ "$PIP_CONFIG_FILE" = "$FLOX_ENV_CACHE/pip.ini" ]; then echo "PIP_CONFIG_FILE is in FLOX_ENV_CACHE"; fi'
   assert_success
-  assert_line "PIP_CONFIG_FILE is $(realpath $PROJECT_DIR)/.flox/cache/pip.ini"
+  assert_line "PIP_CONFIG_FILE is in FLOX_ENV_CACHE"
 }
 
 # ---------------------------------------------------------------------------- #

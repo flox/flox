@@ -47,7 +47,7 @@ use super::git::{GitCommandError, GitCommandGetOriginError, GitCommandProvider, 
 use super::nix_auth::{AuthError, AuthProvider, CatalogAuth, NixCopyAuth};
 use crate::data::CanonicalPath;
 use crate::flox::Flox;
-use crate::models::environment::{Environment, EnvironmentError, open_path};
+use crate::models::environment::{CACHE_DIR_NAME, DOT_FLOX, Environment, EnvironmentError, open_path};
 use crate::providers::git::GitProvider;
 use crate::providers::nix::nix_base_command;
 use crate::providers::nix_auth::catalog_auth_to_envs;
@@ -906,7 +906,17 @@ pub fn check_build_metadata(
     };
     let (expression_ref, base_dir, built_environments) = build_source(flox, env_metadata, workdir)?;
 
-    let builder = FloxBuildMk::new(flox, &base_dir, &expression_ref, &built_environments);
+    // The build may run in a shared clone rather than the original checkout,
+    // so the environment cache is derived from the build working directory
+    // instead of the environment's own cache path.
+    let flox_env_cache = base_dir.join(DOT_FLOX).join(CACHE_DIR_NAME);
+    let builder = FloxBuildMk::new(
+        flox,
+        &base_dir,
+        &expression_ref,
+        &built_environments,
+        &flox_env_cache,
+    );
 
     let build_results = builder.build(
         &base_nixpkgs_url.as_flake_ref()?,

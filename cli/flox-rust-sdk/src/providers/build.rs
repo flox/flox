@@ -224,6 +224,7 @@ pub struct FloxBuildMk<'args> {
     // common build components for manifest builds
     base_dir: &'args Path,
     built_environments: &'args BuildEnvOutputs,
+    flox_env_cache: &'args Path,
 
     // fetchable ref for nix expression builds
     expression_ref: &'args NixFlakeref,
@@ -240,6 +241,7 @@ impl FloxBuildMk<'_> {
         base_dir: &'args Path,
         expression_ref: &'args NixFlakeref,
         built_environments: &'args BuildEnvOutputs,
+        flox_env_cache: &'args Path,
     ) -> FloxBuildMk<'args> {
         FloxBuildMk {
             verbosity: flox.verbosity,
@@ -247,6 +249,7 @@ impl FloxBuildMk<'_> {
             base_dir,
             expression_ref,
             built_environments,
+            flox_env_cache,
             stdout_buffer: None,
             stderr_buffer: None,
         }
@@ -261,6 +264,7 @@ impl FloxBuildMk<'_> {
         base_dir: &'args Path,
         expression_ref: &'args NixFlakeref,
         built_environments: &'args BuildEnvOutputs,
+        flox_env_cache: &'args Path,
         stdout: &'args mut String,
         stderr: &'args mut String,
     ) -> FloxBuildMk<'args> {
@@ -270,6 +274,7 @@ impl FloxBuildMk<'_> {
             base_dir,
             expression_ref,
             built_environments,
+            flox_env_cache,
             stdout_buffer: Some(stdout),
             stderr_buffer: Some(stderr),
         }
@@ -349,6 +354,10 @@ impl ManifestBuilder for FloxBuildMk<'_> {
         command.arg(format!(
             "FLOX_ENV_OUTPUTS={}",
             serde_json::json!(self.built_environments)
+        ));
+        command.arg(format!(
+            "FLOX_ENV_CACHE={}",
+            self.flox_env_cache.display()
         ));
 
         // TODO: modify flox-build.mk to allow missing expression dirs
@@ -875,6 +884,7 @@ pub mod test_helpers {
             &env.parent_path().unwrap(),
             expression_ref,
             &env.build(flox).unwrap(),
+            &env.cache_path().unwrap(),
             &mut output_stdout,
             &mut output_stderr,
         )
@@ -934,6 +944,7 @@ pub mod test_helpers {
             &env.parent_path().unwrap(),
             &NixFlakeref::from_path(env.dot_flox_path()).unwrap(),
             &env.build(flox).unwrap(),
+            &env.cache_path().unwrap(),
             &mut String::new(),
             &mut String::new(),
         )
