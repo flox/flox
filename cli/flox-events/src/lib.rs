@@ -265,7 +265,9 @@ pub struct CliCommandCompletedPayload {
     /// completed (early-exit / pre-exec / interrupt emits).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub exit_code: Option<i32>,
-    /// Handler wall-clock duration in ms; `None` alongside `exit_code`.
+    /// Handler wall-clock duration in ms; `None` when the handler hands off
+    /// before timing (e.g. `activate` pre-exec, which emits `exit_code = 0`
+    /// with no duration), otherwise present alongside `exit_code`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub duration_ms: Option<u64>,
     /// PII-safe operation slug for the failing command; `None` on success.
