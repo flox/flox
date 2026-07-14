@@ -469,7 +469,7 @@ impl ActivateOptions {
         // misattribute its results). `_FLOX_SANDBOX_WRAPPED` marks the inner
         // activation so it neither wraps again nor also applies libsandbox.
         let already_wrapped =
-            std::env::var_os(sandbox_backends::host_native::WRAPPED_MARKER_VAR).is_some();
+            std::env::var_os(sandbox_backends::WRAPPED_MARKER_VAR).is_some();
         let sandbox_mode = if already_wrapped {
             // Inside an OS-sandbox wrap: the wrapper enforces, so suppress the
             // libsandbox injection and run a vanilla activation.

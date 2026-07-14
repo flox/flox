@@ -18,8 +18,7 @@ use std::path::{Path, PathBuf};
 use anyhow::Result;
 use flox_core::activate::sandbox_backend::SandboxBackend;
 
-use super::{ActivationSandbox, SandboxLaunchCtx};
-use crate::commands::sandbox_backends::host_native::WRAPPED_MARKER_VAR;
+use super::{ActivationSandbox, SandboxLaunchCtx, WRAPPED_MARKER_VAR};
 
 pub struct SrtBackend {
     dot_flox_path: PathBuf,

@@ -33,6 +33,15 @@ use flox_manifest::lockfile::Lockfile;
 
 use crate::config::Config;
 
+/// Environment variable set on the re-exec'd inner activation so all backends
+/// can detect that wrapping already occurred.
+///
+/// Both `host-native` (via `sandbox-exec`) and `srt` set this variable on
+/// their re-exec; `activate.rs` reads it to short-circuit a second wrap.
+/// Living here rather than in a single backend module makes the cross-backend
+/// protocol visible in one place.
+pub(crate) const WRAPPED_MARKER_VAR: &str = "_FLOX_SANDBOX_WRAPPED";
+
 /// Context bundling everything the sandbox wrap functions need.
 ///
 /// Passed from `activate.rs` to [`ActivationSandbox::wrap_activation`] so
