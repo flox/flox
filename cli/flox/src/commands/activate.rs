@@ -54,7 +54,6 @@ use super::{
     environment_description,
     environment_select,
 };
-use crate::commands::sandbox_backends;
 use crate::commands::check_for_upgrades::spawn_detached_check_for_upgrades_process;
 use crate::commands::general::update_config_with_query;
 use crate::commands::services::ServicesCommandsError;
@@ -64,6 +63,7 @@ use crate::commands::{
     SHELL_COMPLETION_FILE,
     ensure_environment_trust,
     render_composition_manifest,
+    sandbox_backends,
     uninitialized_environment_description,
 };
 use crate::utils::detect_shell::{detect_shell_for_in_place, detect_shell_for_subshell};
@@ -468,8 +468,7 @@ impl ActivateOptions {
         // libsandbox under another name (which would make a benchmark
         // misattribute its results). `_FLOX_SANDBOX_WRAPPED` marks the inner
         // activation so it neither wraps again nor also applies libsandbox.
-        let already_wrapped =
-            std::env::var_os(sandbox_backends::WRAPPED_MARKER_VAR).is_some();
+        let already_wrapped = std::env::var_os(sandbox_backends::WRAPPED_MARKER_VAR).is_some();
         let sandbox_mode = if already_wrapped {
             // Inside an OS-sandbox wrap: the wrapper enforces, so suppress the
             // libsandbox injection and run a vanilla activation.
@@ -1193,7 +1192,6 @@ fn ensure_advisory_mode_supported(backend: SandboxBackend, mode: SandboxMode) ->
     Ok(())
 }
 
-
 /// Resolve the effective sandbox mode for an activation.
 ///
 /// Precedence: CLI flag > manifest `[options.sandbox].mode` > backend
@@ -1644,5 +1642,4 @@ mod tests {
             .is_ok()
         );
     }
-
 }

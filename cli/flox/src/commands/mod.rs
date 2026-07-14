@@ -1,6 +1,5 @@
 mod activate;
 mod activation_state;
-pub(crate) mod sandbox_backends;
 mod auth;
 mod beta;
 mod build;
@@ -25,6 +24,7 @@ mod pull;
 mod push;
 mod run;
 mod sandbox;
+pub(crate) mod sandbox_backends;
 mod search;
 mod services;
 mod services_socket;
