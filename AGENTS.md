@@ -379,3 +379,17 @@ For rust-analyzer, add to `.vscode/settings.json`:
   "rust-analyzer.cargo.features": ["extra-tests"]
 }
 ```
+
+## Comments
+
+- Write concise comments
+- Capture the "why" behind important decisions and explain those decisions, but
+  don't just repeat what the code does.
+- When explaining code, capture reasoning behind the final state of the
+  code, but don't include the reasoning for individual commits.
+  That belongs in a commit message.
+  Don't narrate changes.
+- A comment should document the code next to it. Don't explain another
+  module's implementation details, and don't repeat the same explanation in
+  multiple files — document a shared design decision once, in the most
+  relevant place.
