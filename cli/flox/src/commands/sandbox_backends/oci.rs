@@ -784,6 +784,15 @@ fn ensure_latest_alias(runtime: &str, env_name: &str, hash12: &str) {
 
 // ── Builder flake-ref selection ───────────────────────────────────────────────
 
+/// `pub(crate)` re-export of [`oci_builder_flake_ref`] for the `openshell`
+/// backend, which reuses the same builder pin selection logic.
+pub(crate) fn oci_builder_flake_ref_pub(
+    lockfile: &Lockfile,
+    frozen_fallback: &str,
+) -> Result<String> {
+    oci_builder_flake_ref(lockfile, frozen_fallback)
+}
+
 /// Select the flake ref for the `flox containerize` builder inside the proxy
 /// container. Thin wrapper around [`select_builder_pin`]; reads the
 /// `_FLOX_CONTAINERIZE_FLAKE_REF_OR_REV` override and host version facts.
@@ -1126,6 +1135,14 @@ fn copy_dir_recursive(src: &Path, dst: &Path) -> std::io::Result<()> {
         }
     }
     Ok(())
+}
+
+/// `pub(crate)` re-export of [`sanitized_project_view`] for the `openshell`
+/// backend, which reuses the same builder-view sanitization logic.
+pub(crate) fn sanitized_project_view_pub(
+    project_dir: &Path,
+) -> Result<Option<(tempfile::TempDir, std::path::PathBuf)>> {
+    sanitized_project_view(project_dir)
 }
 
 /// Build a sanitized temp view of the project for the in-container builder,

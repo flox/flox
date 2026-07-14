@@ -505,8 +505,8 @@ impl ActivateOptions {
                         bail!(
                             "Sandbox backend '{backend}' is not yet wired into activation.\n\
                              Wired backends: 'libsandbox' (default), 'host-native', 'srt', \
-                             and 'oci'. Run 'flox sandbox backends' to see status, or unset \
-                             FLOX_SANDBOX_BACKEND."
+                             'oci', and 'openshell'. Run 'flox sandbox backends' to see \
+                             status, or unset FLOX_SANDBOX_BACKEND."
                         );
                     }
                     sandbox_mode
