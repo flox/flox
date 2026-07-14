@@ -131,6 +131,15 @@ let
     ln -s ${containerPkgs.util-linux}/bin/nsenter $out/bin/nsenter
   '';
 
+  # OpenShell compat: `ip netns add` writes /var/run/netns; Nix images
+  # have /run but no /var. Ship the conventional /var/run -> /run symlink
+  # as a contents package — creating it in extraCommands fails under the
+  # fakechroot customisation layer (Permission denied on var/ creation).
+  openshellVarRun = containerPkgs.runCommand "openshell-var-run" { } ''
+    mkdir -p $out/var
+    ln -s /run $out/var/run
+  '';
+
   fakeNss = containerPkgs.dockerTools.fakeNss.override {
     extraPasswdLines =
       optionals isNixStoreUserOwned [
@@ -264,12 +273,12 @@ let
       # OpenShell compat: ensure /bin/sh exists (required by the activation
       # entrypoint contract and the workdir wrapper) and create the /sandbox
       # working directory expected by the OpenShell supervisor.
+      # /var/run is shipped as openshellVarRun in contents rather than here
+      # because ln -s under the fakechroot layer fails with Permission denied.
       + optionalString openshellCompat ''
         mkdir -p bin
         if [ ! -e bin/sh ]; then ln -s ${containerPkgs.bash}/bin/bash bin/sh; fi
         mkdir -p -m 1777 sandbox
-        mkdir -p var
-        if [ ! -e var/run ]; then ln -s ../run var/run; fi
       '';
 
       # symlinkJoin fails when drv contains a symlinked bin directory, so wrap in an additional buildEnv.
@@ -292,10 +301,13 @@ let
         # supervisor's netns setup. openshellNsenter provides only nsenter
         # (no lowPrio needed — bin/nsenter conflicts with nothing); using the
         # full util-linux package would conflict with coreutils on bin/kill.
+        # openshellVarRun ships /var/run -> /run; created here rather than in
+        # extraCommands because ln -s fails there under the fakechroot layer.
         # lowPrio on iproute2 avoids conflicts with any ip the env provides.
         ++ optionals openshellCompat [
           (lowPrio containerPkgs.iproute2)
           openshellNsenter
+          openshellVarRun
         ];
       };
       config =
