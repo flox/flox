@@ -71,10 +71,13 @@ impl TryFrom<PackageGroup> for api_types::PackageGroup {
     type Error = FloxhubClientError;
 
     fn try_from(package_group: PackageGroup) -> Result<Self, FloxhubClientError> {
+        let stability = std::env::var(crate::FLOX_RESOLVE_STABILITY_VAR)
+            .ok()
+            .filter(|s| !s.is_empty());
         Ok(Self {
             descriptors: package_group.descriptors,
             name: package_group.name,
-            stability: None,
+            stability,
         })
     }
 }
@@ -682,5 +685,36 @@ mod tests {
             flake_ref.as_str(),
             "git+https://github.com/NixOS/nixpkgs?shallow=1"
         );
+    }
+
+    fn make_package_group() -> PackageGroup {
+        PackageGroup {
+            name: "toplevel".to_string(),
+            descriptors: vec![],
+        }
+    }
+
+    #[test]
+    fn package_group_convert_stability_unset_gives_none() {
+        temp_env::with_var(crate::FLOX_RESOLVE_STABILITY_VAR, None::<&str>, || {
+            let api_group: api_types::PackageGroup = make_package_group().try_into().unwrap();
+            assert_eq!(api_group.stability, None);
+        });
+    }
+
+    #[test]
+    fn package_group_convert_stability_set_gives_some() {
+        temp_env::with_var(crate::FLOX_RESOLVE_STABILITY_VAR, Some("lts"), || {
+            let api_group: api_types::PackageGroup = make_package_group().try_into().unwrap();
+            assert_eq!(api_group.stability, Some("lts".to_string()));
+        });
+    }
+
+    #[test]
+    fn package_group_convert_stability_empty_gives_none() {
+        temp_env::with_var(crate::FLOX_RESOLVE_STABILITY_VAR, Some(""), || {
+            let api_group: api_types::PackageGroup = make_package_group().try_into().unwrap();
+            assert_eq!(api_group.stability, None);
+        });
     }
 }

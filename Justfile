@@ -158,6 +158,11 @@ gen-unit-data-no-publish force="":
 
     set -euo pipefail
 
+    # Pin resolve requests to the LTS stability channel so recordings are not
+    # subject to version drift across nixpkgs revisions. Only active during
+    # record runs; existing cassettes and replay matching are unaffected.
+    export _FLOX_RESOLVE_STABILITY="lts"
+
     if [ "{{ force }}" = "true" ]; then
         export _FLOX_UNIT_TEST_RECORD="force"
 
