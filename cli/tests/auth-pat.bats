@@ -141,3 +141,25 @@ teardown() {
   assert_success
   assert_output --partial "owner/test"
 }
+
+# bats test_tags=auth:pat:login
+@test "pat: auth login --token-file logs in with a pat" {
+  unset FLOX_FLOXHUB_TOKEN
+  start_me_server "flox_pat_test-secret" "owner" "null"
+  echo "flox_pat_test-secret" > "$BATS_TEST_TMPDIR/token"
+
+  run "$FLOX_BIN" auth login --token-file "$BATS_TEST_TMPDIR/token"
+  assert_success
+  assert_output --partial "Logged in as owner"
+}
+
+# bats test_tags=auth:pat:login:revoked
+@test "pat: auth login --token-file rejects a revoked pat" {
+  unset FLOX_FLOXHUB_TOKEN
+  start_me_server "flox_pat_test-secret" "owner" "null"
+  echo "flox_pat_revoked" > "$BATS_TEST_TMPDIR/token"
+
+  run "$FLOX_BIN" auth login --token-file "$BATS_TEST_TMPDIR/token"
+  assert_failure
+  assert_output --partial "The provided token is expired."
+}

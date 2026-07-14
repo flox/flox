@@ -7,7 +7,7 @@ use chrono::offset::Utc;
 use chrono::{DateTime, Duration};
 use flox_config::{Config, FLOX_CONFIG_FILE, TokenStorageMode};
 use flox_rust_sdk::flox::{FLOX_VERSION, Flox, FloxhubToken};
-use floxhub_client::{AuthContext, AuthnMode};
+use floxhub_client::{AuthContext, AuthFailure, AuthnMode};
 use indoc::{formatdoc, indoc};
 use oauth2::basic::{
     BasicClient,
@@ -421,8 +421,18 @@ pub async fn login_flox(
 
     // set the token in the runtime config
     let token = FloxhubToken::new(cred.token)?;
+    let handle = token.handle().to_string();
 
-    complete_login(flox, token, insecure_storage, once, storage_pref)
+    // The OAuth flow always yields an Auth0 JWT, parsed above — no token
+    // routing or identity resolution applies.
+    complete_login(
+        flox,
+        AuthContext::Auth0(Some(token)),
+        handle,
+        insecure_storage,
+        once,
+        storage_pref,
+    )
 }
 
 /// Finish a login with a fresh, validated token, shared by the interactive
@@ -431,12 +441,16 @@ pub async fn login_flox(
 /// the auth context, and report where the credential landed.
 fn complete_login(
     flox: &mut Flox,
-    token: FloxhubToken,
+    auth_context: AuthContext,
+    handle: String,
     insecure_storage: bool,
     once: bool,
     storage_pref: TokenStorageMode,
 ) -> Result<String> {
-    let handle = token.handle().to_string();
+    let secret = auth_context
+        .token_secret()
+        .expect("login completes with a bearer credential")
+        .to_string();
 
     // `--insecure-storage` forces plain text for this login; otherwise honor the
     // standing storage preference.
@@ -451,7 +465,7 @@ fn complete_login(
     // (explicit 0600).
     let stores = CredentialStores::from_flox(flox);
     let storage = stores
-        .persist_login_token(token.secret(), target)
+        .persist_login_token(&secret, target)
         .context("Could not store token")?;
 
     // Persist the plain-text choice as a standing preference only when
@@ -470,11 +484,6 @@ fn complete_login(
         .context("Could not save the token-storage preference")?;
     }
 
-    let auth_context = AuthContext::from_mode(
-        &AuthnMode::Auth0,
-        Some(token.secret()),
-        &flox.floxhub.api_url_str(),
-    )?;
     let _ = flox.set_auth_context(auth_context);
 
     print_login_success(&handle);
@@ -534,10 +543,14 @@ fn print_login_success(handle: &str) {
 /// Log in non-interactively with a token read from a file, or from stdin if
 /// the path is `-`.
 ///
-/// * validates the token and rejects expired tokens
+/// * validates the token and rejects expired (or, for a personal access
+///   token, revoked) tokens
 /// * stores the token like an interactive login (OS keyring, plaintext
 ///   fallback, or forced plaintext via `--insecure-storage`)
 /// * updates the auth context of the [Flox] instance
+///
+/// The token may be an Auth0 JWT or a `flox_pat_` personal access token;
+/// [AuthContext::from_mode] routes by the token's form.
 pub fn login_with_token_file(
     flox: &mut Flox,
     token_file: &Path,
@@ -556,14 +569,28 @@ pub fn login_with_token_file(
             .with_context(|| format!("Could not read token file {}.", token_file.display()))?
     };
 
-    let token = FloxhubToken::new(contents.trim().to_string())
-        .context("The provided token is not a valid FloxHub token.")?;
+    let secret = contents.trim();
 
-    if token.is_expired() {
-        bail!("The provided token is expired.\nObtain a fresh token from FloxHub and try again.");
-    }
+    let auth_context =
+        AuthContext::from_mode(&AuthnMode::Auth0, Some(secret), &flox.floxhub.api_url_str())
+            .context("The provided token is not a valid FloxHub token.")?;
 
-    complete_login(flox, token, insecure_storage, once, storage_pref)
+    // Validates locally for a JWT; via /me for a personal access token
+    // (blocking), where a 401 covers expired and revoked tokens alike. An
+    // unreachable /me degrades to the UNKNOWN handle instead of failing.
+    let handle = match auth_context.authenticated_handle() {
+        Ok(handle) => handle.to_string(),
+        Err(AuthFailure::TokenExpired) => {
+            bail!(
+                "The provided token is expired.\nObtain a fresh token from FloxHub and try again."
+            );
+        },
+        Err(failure) => {
+            return Err(failure).context("The provided token could not be validated.");
+        },
+    };
+
+    complete_login(flox, auth_context, handle, insecure_storage, once, storage_pref)
 }
 
 #[cfg(test)]
@@ -571,10 +598,22 @@ mod tests {
     use std::fs;
 
     use flox_config::FLOX_CONFIG_FILE;
+    use flox_core::floxhub::Floxhub;
     use flox_rust_sdk::flox::test_helpers::{create_test_token, flox_instance};
     use floxhub_client::token_test_helpers::FAKE_EXPIRED_TOKEN;
+    use httpmock::MockServer;
 
     use super::*;
+
+    /// Point the Flox instance's API base at a mock `/me` server.
+    fn override_api_url(flox: &mut Flox, server: &MockServer) {
+        flox.floxhub = Floxhub::new(
+            Url::parse("https://hub.flox.dev").unwrap(),
+            Some(Url::parse(&server.base_url()).unwrap()),
+            None,
+        )
+        .unwrap();
+    }
 
     /// A token-file login persists through the credential stores like an
     /// interactive one: with the OS keyring disabled it falls back to the
@@ -644,6 +683,70 @@ mod tests {
         assert_eq!(
             err.to_string(),
             "The provided token is not a valid FloxHub token."
+        );
+        assert!(!flox.config_dir.join(FLOX_CONFIG_FILE).exists());
+    }
+
+    #[test]
+    fn login_with_token_file_stores_pat_and_resolves_handle() {
+        let server = MockServer::start();
+        server.mock(|when, then| {
+            when.method(httpmock::Method::GET)
+                .path("/api/v1/accounts/me")
+                .header("authorization", "bearer flox_pat_secret");
+            then.status(200).json_body(serde_json::json!({
+                "user_id": "pat|1",
+                "handle": "pat-user",
+                "expires_at": null,
+            }));
+        });
+
+        let (mut flox, _temp_dir) = flox_instance();
+        override_api_url(&mut flox, &server);
+        let token_file = flox.temp_dir.join("token");
+        fs::write(&token_file, "flox_pat_secret\n").unwrap();
+
+        let handle = login_with_token_file(
+            &mut flox,
+            &token_file,
+            false,
+            false,
+            TokenStorageMode::Keyring,
+        )
+        .unwrap();
+
+        assert_eq!(handle, "pat-user");
+        let config_contents = fs::read_to_string(flox.config_dir.join(FLOX_CONFIG_FILE)).unwrap();
+        assert_eq!(config_contents, "floxhub_token = \"flox_pat_secret\"\n");
+        assert!(matches!(&flox.auth_context, AuthContext::Pat(_)));
+    }
+
+    #[test]
+    fn login_with_token_file_rejects_revoked_pat() {
+        let server = MockServer::start();
+        server.mock(|when, then| {
+            when.method(httpmock::Method::GET)
+                .path("/api/v1/accounts/me");
+            then.status(401);
+        });
+
+        let (mut flox, _temp_dir) = flox_instance();
+        override_api_url(&mut flox, &server);
+        let token_file = flox.temp_dir.join("token");
+        fs::write(&token_file, "flox_pat_revoked").unwrap();
+
+        let err = login_with_token_file(
+            &mut flox,
+            &token_file,
+            false,
+            false,
+            TokenStorageMode::Keyring,
+        )
+        .unwrap_err();
+
+        assert_eq!(
+            err.to_string(),
+            "The provided token is expired.\nObtain a fresh token from FloxHub and try again."
         );
         assert!(!flox.config_dir.join(FLOX_CONFIG_FILE).exists());
     }
