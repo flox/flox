@@ -47,7 +47,13 @@ use super::git::{GitCommandError, GitCommandGetOriginError, GitCommandProvider, 
 use super::nix_auth::{AuthError, AuthProvider, CatalogAuth, NixCopyAuth};
 use crate::data::CanonicalPath;
 use crate::flox::Flox;
-use crate::models::environment::{CACHE_DIR_NAME, DOT_FLOX, Environment, EnvironmentError, open_path};
+use crate::models::environment::{
+    CACHE_DIR_NAME,
+    DOT_FLOX,
+    Environment,
+    EnvironmentError,
+    open_path,
+};
 use crate::providers::git::GitProvider;
 use crate::providers::nix::nix_base_command;
 use crate::providers::nix_auth::catalog_auth_to_envs;

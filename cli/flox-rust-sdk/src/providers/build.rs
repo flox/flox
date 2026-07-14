@@ -355,10 +355,7 @@ impl ManifestBuilder for FloxBuildMk<'_> {
             "FLOX_ENV_OUTPUTS={}",
             serde_json::json!(self.built_environments)
         ));
-        command.arg(format!(
-            "FLOX_ENV_CACHE={}",
-            self.flox_env_cache.display()
-        ));
+        command.arg(format!("FLOX_ENV_CACHE={}", self.flox_env_cache.display()));
 
         // TODO: modify flox-build.mk to allow missing expression dirs
         let expression_ref = self.expression_ref.as_url();
