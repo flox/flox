@@ -722,8 +722,12 @@ fn bake_openshell_image(
     let hash12 = lockfile_hash12(lockfile);
     let hash_tag = format!("{repo}:{hash12}");
 
-    // Reuse the same frozen fallback rev as the OCI backend.
-    const FROZEN_FALLBACK_REV: &str = "3c374021c8df69441895a04be9c3c59da4bddec7";
+    // Pin the builder to a rev on this branch that contains the
+    // openshell compat layer (mkContainer openshellCompat + the
+    // _FLOX_CONTAINERIZE_OPENSHELL_COMPAT marker plumbing). The oci
+    // backend keeps its own, older pin — the compat layer is gated off
+    // there and its builder does not need it.
+    const FROZEN_FALLBACK_REV: &str = "6aa87536e7a8afa3eeaddc48363002e87acbf9d8";
 
     let flake_ref = crate::commands::sandbox_backends::oci::oci_builder_flake_ref(
         lockfile,
