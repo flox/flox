@@ -501,6 +501,9 @@ pub(crate) struct OciImageEntry {
 /// has no server-side name filter, so we receive all images and filter
 /// here. Registry-prefixed names like `docker.io/library/<name>` are
 /// matched on the last path segment.
+// Only the macOS cfg branch calls this in production; tests exercise it on
+// every platform.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 fn parse_apple_container_entries(json: &[u8], env_name: &str) -> Vec<OciImageEntry> {
     let Ok(parsed) = serde_json::from_slice::<serde_json::Value>(json) else {
         return Vec::new();
@@ -537,6 +540,9 @@ fn parse_apple_container_entries(json: &[u8], env_name: &str) -> Vec<OciImageEnt
 /// full references like `<name>:<tag>`). podman accepts a server-side
 /// `--filter reference=<env>` so the caller pre-filters; we still check
 /// the name segment to guard against partial matches and registry prefixes.
+// Only the Linux cfg branch calls this in production; tests exercise it on
+// every platform.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 fn parse_podman_entries(json: &[u8], env_name: &str) -> Vec<OciImageEntry> {
     let Ok(parsed) = serde_json::from_slice::<serde_json::Value>(json) else {
         return Vec::new();
