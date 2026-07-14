@@ -68,6 +68,11 @@ pub trait ManifestBuilder {
     /// `nef_stability` is the stability used to resolve the catalog build
     /// inputs of NEF (expression) builds, as selected by the `--stability`
     /// flag. When [None] the Makefile falls back to its default stability.
+    ///
+    /// `reuse_catalog_lock` reuses a catalog lock previously computed by
+    /// [`ManifestBuilder::lock`] against the same `base_dir`, instead of
+    /// recomputing it. It must be `false` on the `flox build` path so that
+    /// builds always resolve a fresh catalog lock.
     #[allow(clippy::too_many_arguments)]
     fn build(
         self,
@@ -77,9 +82,23 @@ pub trait ManifestBuilder {
         nef_stability: Option<String>,
         build_cache: Option<bool>,
         system_override: Option<String>,
+        reuse_catalog_lock: bool,
     ) -> Result<BuildResults, ManifestBuilderError>;
 
     fn clean(self, package: &[PackageTargetName]) -> Result<(), ManifestBuilderError>;
+
+    /// Compute the catalog lock for `packages` without building them.
+    ///
+    /// Stops at the catalog-lock targets in the underlying Makefile (the
+    /// `lock` goal), so no package build is performed and no `result-*`
+    /// symlinks are created. Used to make the closure identity available
+    /// ahead of a build, e.g. for publish dedup.
+    fn lock(
+        self,
+        packages: &[PackageTargetName],
+        nef_stability: Option<String>,
+        system_override: Option<String>,
+    ) -> Result<LockResults, ManifestBuilderError>;
 }
 
 #[derive(Debug, Error)]
@@ -95,6 +114,15 @@ pub enum ManifestBuilderError {
 
     #[error("failed to parse file for build results")]
     ParseBuildResultFile(#[source] serde_json::Error),
+
+    #[error("failed to create file for lock results")]
+    CreateLockResultFile(#[source] std::io::Error),
+
+    #[error("failed to read file for lock results")]
+    ReadLockResultFile(#[source] std::io::Error),
+
+    #[error("failed to parse file for lock results")]
+    ParseLockResultFile(#[source] serde_json::Error),
 
     #[error("failed to call nix to eval NEF")]
     CallNef(#[source] std::io::Error),
@@ -134,6 +162,23 @@ pub struct BuildResult {
     // TODO: factor out and use buildenv::BuiltStorePath (?)
     #[serde(rename = "resultLinks")]
     pub result_links: BTreeMap<PathBuf, PathBuf>,
+}
+
+/// Deserialization mirror of [`BuildResults`] for the `lock` goal's
+/// `LOCK_RESULT_FILE`: the catalog lock's closure identity, computed
+/// without performing a package build.
+#[derive(Debug, PartialEq, Deserialize, Default, derive_more::Deref)]
+pub struct LockResults(Vec<LockResult>);
+
+/// Deserialization mirror of [`BuildResult`]'s closure-identity fields.
+#[derive(Debug, PartialEq, Deserialize)]
+pub struct LockResult {
+    pub system: String,
+    /// The direct catalog inputs the lock phase resolved, keyed by
+    /// locked-input reference. Empty for build modes (e.g. manifest builds)
+    /// that resolve no catalog inputs.
+    #[serde(default)]
+    pub direct_catalog_inputs: HashMap<String, LockedInputEntry>,
 }
 
 /// Represents different license formats that can be found in package metadata
@@ -323,6 +368,7 @@ impl ManifestBuilder for FloxBuildMk<'_> {
         nef_stability: Option<String>,
         build_cache: Option<bool>,
         system_override: Option<String>,
+        reuse_catalog_lock: bool,
     ) -> Result<BuildResults, ManifestBuilderError> {
         let mut command = self.base_command(self.base_dir);
         command.arg("build");
@@ -340,6 +386,14 @@ impl ManifestBuilder for FloxBuildMk<'_> {
 
         if let Some(system_override) = system_override {
             command.arg(format!("NIX_SYSTEM={system_override}"));
+        }
+
+        // Reuse the catalog lock a preceding `lock()` call against this same
+        // `base_dir` already wrote, instead of recomputing it. Must stay
+        // `false` on the `flox build` path so builds always resolve a fresh
+        // lock.
+        if reuse_catalog_lock {
+            command.arg("FLOX_REUSE_CATALOG_LOCK=1");
         }
 
         command.arg(format!(
@@ -532,6 +586,128 @@ impl ManifestBuilder for FloxBuildMk<'_> {
         }
 
         Ok(())
+    }
+
+    /// Compute the catalog lock for `packages` defined in the environment
+    /// rendered at `flox_env`, using the [FLOX_BUILD_MK] makefile's `lock`
+    /// goal.
+    ///
+    /// Mirrors [`ManifestBuilder::build`], but targets `make lock` instead of
+    /// `make build`: it passes only the variables the lock goal reads
+    /// (`BUILDTIME_NIXPKGS_URL`, `NIX_EXPRESSION_REF`, `FLOX_ENV`,
+    /// `FLOX_ENV_OUTPUTS`, `PACKAGES`, and the optional stability/system
+    /// overrides) and never passes `EXPRESSION_BUILD_NIXPKGS_URL` or
+    /// `FLOX_INTERPRETER`, since the lock goal stops before eval/build.
+    fn lock(
+        self,
+        packages: &[PackageTargetName],
+        nef_stability: Option<String>,
+        system_override: Option<String>,
+    ) -> Result<LockResults, ManifestBuilderError> {
+        let mut command = self.base_command(self.base_dir);
+        command.arg("lock");
+        command.arg(format!("BUILDTIME_NIXPKGS_URL={}", &*COMMON_NIXPKGS_URL));
+
+        // The stability used to resolve NEF catalog build inputs. Only passed
+        // when the caller selected one via `--stability`; otherwise the
+        // Makefile applies its own default.
+        if let Some(nef_stability) = nef_stability {
+            command.arg(format!("EXPRESSION_BUILD_STABILITY={nef_stability}"));
+        }
+
+        if let Some(system_override) = system_override {
+            command.arg(format!("NIX_SYSTEM={system_override}"));
+        }
+
+        command.arg(format!(
+            "FLOX_ENV={}",
+            self.built_environments.dev.display()
+        ));
+        command.arg(format!(
+            "FLOX_ENV_OUTPUTS={}",
+            serde_json::json!(self.built_environments)
+        ));
+
+        let expression_ref = self.expression_ref.as_url();
+        command.arg(format!("NIX_EXPRESSION_REF={expression_ref}"));
+
+        // Add the list of packages to be locked by passing a space-delimited
+        // list of pnames in the PACKAGES variable. If no packages are
+        // specified then the makefile will lock all packages by default.
+        command.arg(format!(
+            "PACKAGES={}",
+            packages.iter().map(|name| name.as_ref()).join(" ")
+        ));
+
+        let lock_result_path = NamedTempFile::new_in(self.temp_dir)
+            .map_err(ManifestBuilderError::CreateLockResultFile)?
+            .into_temp_path();
+
+        // SAFETY: according to the docs, this is fallible on _Windows_
+        let lock_result_path = lock_result_path
+            .keep()
+            .expect("failed to keep lock result fifo");
+
+        command.arg(format!("LOCK_RESULT_FILE={}", lock_result_path.display()));
+
+        if self.stdout_buffer.is_some() {
+            command.stdout(Stdio::piped());
+        }
+
+        if self.stderr_buffer.is_some() {
+            command.stderr(Stdio::piped());
+        }
+
+        debug!(command = %command.display(), "running manifest lock target");
+
+        let mut child = command
+            .spawn()
+            .map_err(ManifestBuilderError::CallBuilderError)?;
+
+        // setup `WireTap` for stdout
+        let stdout_tap_context = self.stdout_buffer.map(|buffer| {
+            let stdout = child
+                .stdout
+                .take()
+                .expect("STDOUT is piped when stdout_buffer is provided");
+            let tap = stdout.tap_lines(|_| {});
+            (tap, buffer)
+        });
+
+        // setup `WireTap` for stderr
+        let stderr_tap_context = self.stderr_buffer.map(|buffer| {
+            let stderr = child
+                .stderr
+                .take()
+                .expect("STDERR is piped when stdout_buffer is provided");
+            let tap = stderr.tap_lines(|_| {});
+            (tap, buffer)
+        });
+
+        // **After** taps have been started for std{out,err},
+        // read until EOF on both outputs, i.e. wait until the process terminates.
+        if let Some((tap, buffer)) = stdout_tap_context {
+            *buffer = tap.wait()
+        }
+        if let Some((tap, buffer)) = stderr_tap_context {
+            *buffer = tap.wait()
+        }
+
+        let status = child
+            .wait()
+            .map_err(ManifestBuilderError::CallBuilderError)?;
+
+        if !status.success() {
+            return Err(ManifestBuilderError::BuildFailure);
+        }
+
+        let lock_results = std::fs::read_to_string(&lock_result_path)
+            .map_err(ManifestBuilderError::ReadLockResultFile)?;
+
+        let lock_results = serde_json::from_str(&lock_results)
+            .map_err(ManifestBuilderError::ParseLockResultFile)?;
+
+        Ok(lock_results)
     }
 }
 
@@ -885,6 +1061,7 @@ pub mod test_helpers {
             None,
             build_cache,
             None,
+            false,
         );
 
         let output_build_results = match output_build_results {
@@ -906,6 +1083,47 @@ pub mod test_helpers {
             stdout: output_stdout,
             stderr: output_stderr,
         }
+    }
+
+    /// Runs [`ManifestBuilder::lock`] for `package` against `expression_ref`
+    /// and returns the parsed [`LockResults`]. Mirrors
+    /// [`assert_build_status_with_nix_expr`], but drives the `lock` goal
+    /// instead of `build`, so no package build occurs and no `result-*`
+    /// symlinks are created.
+    pub fn lock_with_nix_expr(
+        flox: &Flox,
+        env: &mut PathEnvironment,
+        expression_ref: &NixFlakeref,
+        package: &str,
+    ) -> LockResults {
+        let base_dir = env.parent_path().unwrap();
+        let built_environments = env.build(flox).unwrap();
+        FloxBuildMk::new(flox, &base_dir, expression_ref, &built_environments)
+            .lock(&[PackageTargetName::new_unchecked(&package)], None, None)
+            .expect("lock() should succeed")
+    }
+
+    /// Computes the path of the per-package catalog-lock file
+    /// `flox-build.mk` derives from `base_dir`: `$(TMPDIR)/<hash of
+    /// base_dir>/<pname>/catalog.lock`, where `<hash>` is the first 8
+    /// characters of the hex sha256 digest of `base_dir`
+    /// (`flox-build.mk:142`, `PROJECT_TMPDIR`). Shells out to the same
+    /// `sha256sum`/`head` coreutils the Makefile uses, so this stays in
+    /// lockstep with the Makefile's derivation without duplicating a hash
+    /// implementation in Rust.
+    pub fn catalog_lockfile_path(base_dir: &Path, pname: &str) -> PathBuf {
+        let tmpdir = std::env::var("TMPDIR").unwrap_or_else(|_| "/tmp".to_string());
+        let output = Command::new("sh")
+            .arg("-c")
+            .arg("echo \"$1\" | sha256sum | head -c8")
+            .arg("sh") // becomes $0
+            .arg(base_dir.as_os_str())
+            .output()
+            .expect("failed to hash base_dir for PROJECT_TMPDIR");
+        assert!(output.status.success(), "hashing base_dir failed");
+        let hash = String::from_utf8(output.stdout).expect("hash output should be utf8");
+
+        Path::new(&tmpdir).join(hash).join(pname).join("catalog.lock")
     }
 
     /// Runs a build and asserts that the `ExitStatus` matches `expect_status`.
@@ -1279,6 +1497,33 @@ mod tests {
 
         assert_build_status(&flox, &mut env, &package_name, None, true);
         assert_build_file(&env_path, &package_name, &file_name, &file_content);
+    }
+
+    #[test]
+    fn manifest_lock_returns_empty_catalog_inputs() {
+        let package_name = String::from("foo");
+
+        let manifest = formatdoc! {r#"
+            version = 1
+
+            [build.{package_name}]
+            command = "mkdir $out"
+        "#};
+
+        let (flox, _temp_dir_handle) = flox_instance();
+        let mut env = new_path_environment(&flox, &manifest);
+
+        // Manifest builds resolve no catalog inputs, so the lock goal emits
+        // an empty map without building anything.
+        let lock_results = lock_with_nix_expr(
+            &flox,
+            &mut env,
+            &NixFlakeref::from_path(env.dot_flox_path()).unwrap(),
+            &package_name,
+        );
+        assert_eq!(lock_results.len(), 1);
+        assert_eq!(lock_results[0].system, flox.system);
+        assert!(lock_results[0].direct_catalog_inputs.is_empty());
     }
 
     #[test]
@@ -3854,8 +4099,127 @@ mod nef_tests {
     use crate::models::environment::path_environment::test_helpers::new_path_environment;
     use crate::providers::build::test_helpers::{
         assert_build_status_with_nix_expr,
+        catalog_lockfile_path,
+        lock_with_nix_expr,
         prepare_nix_expressions_in,
     };
+
+    #[test]
+    fn nef_lock_matches_build_catalog_inputs_and_skips_build() {
+        let pname = "foo".to_string();
+
+        let (flox, tempdir) = flox_instance();
+
+        // Create a manifest (may be empty)
+        let manifest = formatdoc! {r#"
+            version = 1
+        "#};
+        let mut env = new_path_environment(&flox, &manifest);
+        let env_path = env.parent_path().unwrap();
+
+        // Create expressions
+        let expressions_ref = prepare_nix_expressions_in(&tempdir, &[(&[&pname], indoc! {r#"
+            {runCommand}: runCommand "{pname}" {} ''
+                echo -n "Hello, World!" >> $out
+            ''
+            "#})]);
+
+        // lock() should compute the catalog lock without building.
+        let lock_results = lock_with_nix_expr(&flox, &mut env, &expressions_ref, &pname);
+        assert_eq!(lock_results.len(), 1);
+        assert_eq!(lock_results[0].system, flox.system);
+
+        let result_path = env_path.join(format!("result-{pname}"));
+        assert!(
+            !result_path.exists(),
+            "lock() must not create a result-* symlink"
+        );
+
+        // A full build's direct_catalog_inputs must match what lock()
+        // recorded (this fixture references no catalog packages, so both
+        // are empty; the equality still exercises the lock/build parity).
+        let collected = assert_build_status_with_nix_expr(
+            &flox,
+            &mut env,
+            &expressions_ref,
+            &pname,
+            None,
+            true,
+        );
+        let build_results = collected.build_results.unwrap();
+        assert_eq!(
+            lock_results[0].direct_catalog_inputs,
+            build_results[0].direct_catalog_inputs
+        );
+    }
+
+    /// `build(reuse_catalog_lock = true)` against the same `base_dir` a
+    /// preceding `lock()` call used must reuse that lock instead of
+    /// recomputing it: the catalog-lock file's mtime must be unchanged
+    /// across the build invocation. This is the single-lock guarantee the
+    /// publish reorder depends on (a naive `make lock` then `make build`
+    /// re-locks, since the catalog lock's DAG root is `.PHONY`).
+    #[test]
+    fn build_reuses_catalog_lock_from_preceding_lock_call() {
+        let pname = "foo".to_string();
+
+        let (flox, tempdir) = flox_instance();
+
+        let manifest = formatdoc! {r#"
+            version = 1
+        "#};
+        let mut env = new_path_environment(&flox, &manifest);
+        let base_dir = env.parent_path().unwrap();
+
+        let expressions_ref = prepare_nix_expressions_in(&tempdir, &[(&[&pname], indoc! {r#"
+            {runCommand}: runCommand "{pname}" {} ''
+                echo -n "Hello, World!" >> $out
+            ''
+            "#})]);
+
+        let built_environments = env.build(&flox).unwrap();
+        let lock_file = catalog_lockfile_path(&base_dir, &pname);
+
+        FloxBuildMk::new(&flox, &base_dir, &expressions_ref, &built_environments)
+            .lock(&[PackageTargetName::new_unchecked(&pname)], None, None)
+            .expect("lock() should succeed");
+
+        let mtime_after_lock = fs::metadata(&lock_file)
+            .expect("lock() should have written the catalog-lock file")
+            .modified()
+            .unwrap();
+
+        let toplevel_or_common_nixpkgs =
+            find_toplevel_group_nixpkgs(&env.lockfile(&flox).unwrap().into())
+                .map(|toplevel_nixpkgs| toplevel_nixpkgs.as_flake_ref().unwrap())
+                .unwrap_or_else(|| COMMON_NIXPKGS_URL.clone());
+
+        // A second, distinct `FloxBuildMk` instance over the *same* base_dir
+        // (mirroring how `lock_build_inputs`/`check_build_metadata` share one
+        // `RenderedSource` in the publish reorder).
+        FloxBuildMk::new(&flox, &base_dir, &expressions_ref, &built_environments)
+            .build(
+                &toplevel_or_common_nixpkgs,
+                &env.rendered_env_links(&flox).unwrap().dev,
+                &[PackageTargetName::new_unchecked(&pname)],
+                None,
+                None,
+                None,
+                true,
+            )
+            .expect("build() should succeed");
+
+        let mtime_after_build = fs::metadata(&lock_file)
+            .expect("catalog-lock file should still exist after build()")
+            .modified()
+            .unwrap();
+
+        assert_eq!(
+            mtime_after_lock, mtime_after_build,
+            "build(reuse_catalog_lock = true) must not recompute the catalog lock \
+             a preceding lock() call already wrote"
+        );
+    }
 
     #[test]
     fn nef_build_creates_out_link() {
