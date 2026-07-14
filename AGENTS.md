@@ -168,6 +168,12 @@ Update your branch against `main` by rebasing — never a merge commit.
   - Follow existing style and Rust idioms
   - Use early returns from functions and functional programming style; don't use nested conditionals
   - Structs should derive `Clone` and `Debug`
+  - **Lifetimes: use sparingly.** Named lifetime parameters —
+    especially on structs, where they propagate to every use of
+    the type — are usually not worth the complexity. Prefer owned
+    fields and prioritize readability over micro-optimizations
+    like avoiding the clone of a short `&str`. Ordinary elided
+    borrows in function signatures (`&str` parameters) are fine.
   - Use structured log and tracing fields; don't interpolate variables into single strings
   - Use `assert_eq!` on entire structs in tests so that it's easier to debug failures and catch new fields; don't `assert!` or `assert_eq!` on individual fields
   - `use` guidelines
