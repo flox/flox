@@ -28,7 +28,7 @@
 //!   `docker image inspect` and re-injected as repeated `--env KEY=VALUE` flags.
 //! - **Policy file.** OpenShell requires a `--policy <file>` YAML that declares
 //!   filesystem visibility. flox generates one per activation under
-//!   `<dot_flox>/../.flox/cache/` and passes it to `sandbox create`.
+//!   `<dot_flox>/cache/` and passes it to `sandbox create`.
 //! - **Ephemerality.** `--no-keep` deletes the sandbox when the initial command
 //!   exits, mirroring the OCI backend's `--rm`.
 //! - **Working directory.** `sandbox create` has no `--workdir` flag; the cwd
@@ -48,6 +48,7 @@ use std::io::IsTerminal;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
+use serde_json::json;
 use flox_core::activate::context::InvocationType;
 use flox_core::activate::sandbox_backend::SandboxBackend;
 use flox_manifest::lockfile::Lockfile;
@@ -591,11 +592,21 @@ pub(crate) fn openshell_create_argv(params: &CreateArgvParams<'_>) -> (String, V
     // Bind-mount the project at its identical absolute path so the guest
     // sees the same paths as the host. enable_bind_mounts must be true in
     // the local gateway config.
-    let driver_config = format!(
-        r#"{{"docker":{{"mounts":[{{"type":"bind","source":"{src}","target":"{tgt}","read_only":false}}]}}}}"#,
-        src = project.display(),
-        tgt = project.display(),
-    );
+    //
+    // Build via serde_json so that paths containing `"` or other special
+    // characters are properly JSON-escaped (a format!-interpolated string
+    // would produce malformed JSON in that case).
+    let driver_config = json!({
+        "docker": {
+            "mounts": [{
+                "type": "bind",
+                "source": project,
+                "target": project,
+                "read_only": false
+            }]
+        }
+    })
+    .to_string();
     argv.push("--driver-config-json".to_string());
     argv.push(driver_config);
 
@@ -704,7 +715,7 @@ fn bake_openshell_image(
     // Reuse the same frozen fallback rev as the OCI backend.
     const FROZEN_FALLBACK_REV: &str = "3c374021c8df69441895a04be9c3c59da4bddec7";
 
-    let flake_ref = crate::commands::sandbox_backends::oci::oci_builder_flake_ref_pub(
+    let flake_ref = crate::commands::sandbox_backends::oci::oci_builder_flake_ref(
         lockfile,
         FROZEN_FALLBACK_REV,
     )?;
@@ -737,7 +748,7 @@ fn bake_openshell_image(
     let container_runtime = Runtime::Docker;
 
     // Sanitize the project view (strip prototype-only manifest keys).
-    let sanitized_view = crate::commands::sandbox_backends::oci::sanitized_project_view_pub(
+    let sanitized_view = crate::commands::sandbox_backends::oci::sanitized_project_view(
         &env_path,
     )
     .context("failed to prepare sanitized builder view")?;
@@ -1080,6 +1091,43 @@ mod tests {
         assert_eq!(mount["source"], "/home/user/project");
         assert_eq!(mount["target"], "/home/user/project");
         assert_eq!(mount["read_only"], false);
+    }
+
+    #[test]
+    fn argv_bind_mount_path_with_space_is_valid_json() {
+        // Paths containing spaces (or other special chars) must be JSON-escaped;
+        // a format!-interpolated path would produce malformed JSON.
+        let project = Path::new("/home/user/my project");
+        let cwd = project;
+        let policy = Path::new("/tmp/p.yaml");
+        let inv = InvocationType::ExecCommand(vec!["ls".to_string()]);
+        let (_, argv) = openshell_create_argv(&CreateArgvParams {
+            image_ref: "img:tag",
+            entrypoint: &fake_entrypoint(),
+            image_env: &[],
+            project,
+            cwd,
+            invocation: &inv,
+            policy_path: policy,
+            sandbox_name: "flox-env-1",
+            tty: false,
+        });
+        let dconf_pos = argv.iter().position(|a| a == "--driver-config-json").unwrap();
+        let json_val = &argv[dconf_pos + 1];
+        // Must parse without error — a format!-built string would have produced
+        // e.g. `"source":"/home/user/my project"` with an unescaped space,
+        // which is valid JSON, but a path with `"` would break the format!
+        // approach. serde_json::json! handles all cases correctly.
+        let parsed: serde_json::Value =
+            serde_json::from_str(json_val).expect("driver-config-json must be valid JSON");
+        let mount = &parsed["docker"]["mounts"][0];
+        assert_eq!(mount["source"], "/home/user/my project");
+        assert_eq!(mount["target"], "/home/user/my project");
+        // Also verify the workdir wrapper uses the path verbatim (no corruption).
+        assert!(
+            argv.contains(&"/home/user/my project".to_string()),
+            "space in path must appear verbatim in workdir wrapper: {argv:?}"
+        );
     }
 
     #[test]
