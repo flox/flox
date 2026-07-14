@@ -122,21 +122,23 @@ let
   openshellSandboxGid = 1000660000;
 
   fakeNss = containerPkgs.dockerTools.fakeNss.override {
-    extraPasswdLines = optionals isNixStoreUserOwned [
-      "${nixStoreUserGroup.uname}:x:${toString nixStoreUserGroup.uid}:${toString nixStoreUserGroup.gid}:created by Flox:${passwdHome}:/bin/sh"
-    ]
-    # OpenShell compat: add the `sandbox` user so the supervisor can resolve
-    # it in /etc/passwd at runtime.
-    ++ optionals openshellCompat [
-      "sandbox:x:${toString openshellSandboxUid}:${toString openshellSandboxGid}:OpenShell sandbox user:/home/flox:/bin/sh"
-    ];
-    extraGroupLines = optionals isNixStoreUserOwned [
-      "${nixStoreUserGroup.gname}:x:${toString nixStoreUserGroup.gid}:"
-    ]
-    # OpenShell compat: add the `sandbox` group.
-    ++ optionals openshellCompat [
-      "sandbox:x:${toString openshellSandboxGid}:"
-    ];
+    extraPasswdLines =
+      optionals isNixStoreUserOwned [
+        "${nixStoreUserGroup.uname}:x:${toString nixStoreUserGroup.uid}:${toString nixStoreUserGroup.gid}:created by Flox:${passwdHome}:/bin/sh"
+      ]
+      # OpenShell compat: add the `sandbox` user so the supervisor can resolve
+      # it in /etc/passwd at runtime.
+      ++ optionals openshellCompat [
+        "sandbox:x:${toString openshellSandboxUid}:${toString openshellSandboxGid}:OpenShell sandbox user:/home/flox:/bin/sh"
+      ];
+    extraGroupLines =
+      optionals isNixStoreUserOwned [
+        "${nixStoreUserGroup.gname}:x:${toString nixStoreUserGroup.gid}:"
+      ]
+      # OpenShell compat: add the `sandbox` group.
+      ++ optionals openshellCompat [
+        "sandbox:x:${toString openshellSandboxGid}:"
+      ];
   };
 
   # For field definitions, see `ActivateCtx` in `flox-core`
