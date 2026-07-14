@@ -1468,7 +1468,7 @@ EOF
 
   run -- "$FLOX_BIN" activate -c 'echo PIP_CONFIG_FILE is "$PIP_CONFIG_FILE"'
   assert_success
-  assert_line "PIP_CONFIG_FILE is $(realpath $PROJECT_DIR)/.flox/pip.ini"
+  assert_line "PIP_CONFIG_FILE is $(realpath $PROJECT_DIR)/.flox/cache/pip.ini"
 }
 
 # ---------------------------------------------------------------------------- #

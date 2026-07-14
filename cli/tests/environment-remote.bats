@@ -189,6 +189,21 @@ EOF
   assert_output --partial "$FLOX_CACHE_DIR/remote/$OWNER/test/.flox/run/$NIX_SYSTEM.test-dev/bin/hello"
 }
 
+# Activating a pip-providing remote environment must not fail (or write
+# anything) when the working directory has no `.flox` directory; pip.ini is
+# written to the environment's own cache instead.
+# bats test_tags=remote,activate,remote:activate:pip
+@test "m9.1: 'activate --reference' works with pip when cwd has no .flox" {
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/python311Packages.pip.yaml"
+  make_empty_remote_env
+  "$FLOX_BIN" install python311Packages.pip --reference "$OWNER/test"
+
+  export FLOX_CACHE_DIR="$(realpath $FLOX_CACHE_DIR)"
+  run "$FLOX_BIN" activate --trust --reference "$OWNER/test" -c 'echo PIP_CONFIG_FILE is "$PIP_CONFIG_FILE"'
+  assert_success
+  assert_line "PIP_CONFIG_FILE is $FLOX_CACHE_DIR/remote/$OWNER/test/.flox/cache/pip.ini"
+}
+
 # We need to trust the remote environment before we can activate it.
 # bats test_tags=remote,activate,trust,remote:activate:trust-required
 @test "m10.0: 'activate --reference' fails if remote environment is not trusted" {

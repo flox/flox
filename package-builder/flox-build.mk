@@ -482,7 +482,13 @@ define BUILD_local_template =
 	@# expanding ~ or globbing *, leaving libsandbox to interpret the patterns).
 	@# As a result of the space delimiter, individual patterns cannot contain
 	@# spaces; this is documented for the `sandbox-allow` manifest field.
+	@#
+	@# FLOX_ENV_CACHE is set explicitly (rather than inherited from any
+	@# enclosing activation) so that the interpreter's profile.d scripts
+	@# write generated state (e.g. pip.ini) to this build's environment
+	@# cache deterministically.
 	$(_V_) $(_env) $$(QUOTED_ENV_DISALLOW_ARGS) out=$($(_pvarname)_out) \
+	  FLOX_ENV_CACHE=$(PWD)/.flox/cache \
 	  $(FLOX_INTERPRETER)/activate --env $$($(_pvarname)_develop_copy_env) \
 	    --mode build --skip-hook-on-activate --env-project $(PWD) -- \
 	    $(_t3) $($(_pvarname)_logfile) -- \
