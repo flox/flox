@@ -258,6 +258,8 @@ let
         mkdir -p bin
         if [ ! -e bin/sh ]; then ln -s ${containerPkgs.bash}/bin/bash bin/sh; fi
         mkdir -p -m 1777 sandbox
+        mkdir -p var
+        if [ ! -e var/run ]; then ln -s ../run var/run; fi
       '';
 
       # symlinkJoin fails when drv contains a symlinked bin directory, so wrap in an additional buildEnv.
