@@ -105,6 +105,14 @@ pub struct MkContainerNix {
     /// `flox_bin` in the baked activation context so the guest shell finds
     /// a real `flox` instead of the deactivate-only shim.
     flox_bin: PathBuf,
+    /// When true, pass `openshellCompat = true` to mkContainer.nix.
+    ///
+    /// This adds the `sandbox` user/group, `iproute2`, and `/bin/sh` to the
+    /// guest image — all required by the OpenShell supervisor. The flag is
+    /// set only by the `openshell` sandbox backend bake; all other callers
+    /// leave it false so the `oci` backend and plain `flox containerize` are
+    /// byte-identical to today.
+    openshell_compat: bool,
 }
 
 #[derive(Debug, Error)]
@@ -144,6 +152,24 @@ impl MkContainerNix {
             activation_mode,
             container_config,
             flox_bin,
+            openshell_compat: false,
+        }
+    }
+
+    /// Variant of [`new`] that also enables the OpenShell compat layer in
+    /// `mkContainer.nix`. Used only by the `openshell` sandbox backend bake.
+    pub fn new_with_openshell_compat(
+        store_path: BuiltStorePath,
+        activation_mode: ActivateMode,
+        container_config: Option<OCIConfig>,
+        flox_bin: PathBuf,
+    ) -> Self {
+        Self {
+            store_path,
+            activation_mode,
+            container_config,
+            flox_bin,
+            openshell_compat: true,
         }
     }
 
@@ -180,6 +206,11 @@ impl MkContainerNix {
                 "floxBin".into(),
                 self.flox_bin.to_string_lossy().into_owned(),
             ]);
+        }
+        if self.openshell_compat {
+            // Nix booleans require `--arg` (not `--argstr`) so the value is
+            // parsed as a Nix expression rather than a string literal.
+            args.extend(["--arg".into(), "openshellCompat".into(), "true".into()]);
         }
         args.extend([
             "--argstr".into(),

@@ -20,6 +20,9 @@ use thiserror::Error;
 use tracing::{debug, info, instrument};
 
 use super::Runtime;
+use flox_config::FLOX_CONFIG_FILE;
+
+use crate::commands::sandbox_backends::openshell::OPENSHELL_COMPAT_ENV;
 
 const NIX_PROXY_IMAGE: &str = "nixos/nix";
 static NIX_PROXY_IMAGE_REF: LazyLock<Option<String>> =
@@ -90,6 +93,11 @@ pub(crate) struct ContainerizeProxy {
     /// Callers at the composition root supply the pin computed for the bake;
     /// the general `flox containerize` command passes `None`.
     flake_ref_override: Option<String>,
+    /// Whether to enable the OpenShell compat layer in `mkContainer.nix`
+    /// (sandbox user/group uid/gid 1000660000, iproute2, /bin/sh symlink).
+    /// Set only by the OpenShell backend bake; all other callers leave it
+    /// false so the oci backend and plain `flox containerize` are unaffected.
+    openshell_compat: bool,
 }
 
 impl ContainerizeProxy {
@@ -108,6 +116,33 @@ impl ContainerizeProxy {
             mode,
             include_guest_flox,
             flake_ref_override,
+            openshell_compat: false,
+        }
+    }
+
+    /// Variant of [`new`] that also enables the OpenShell compat layer.
+    ///
+    /// Used exclusively by the `openshell` sandbox backend bake to add the
+    /// `sandbox` user/group, `iproute2`, and `/bin/sh` to the guest image.
+    /// All other callers use [`new`] to leave `openshell_compat` false and
+    /// keep the `oci` backend and plain `flox containerize` unaffected.
+    pub(crate) fn new_with_openshell_compat(
+        environment_path: PathBuf,
+        container_runtime: Runtime,
+        labels: Vec<String>,
+        mode: Option<ActivateMode>,
+        include_guest_flox: bool,
+        flake_ref_override: Option<String>,
+        openshell_compat: bool,
+    ) -> Self {
+        Self {
+            environment_path,
+            container_runtime,
+            labels,
+            mode,
+            include_guest_flox,
+            flake_ref_override,
+            openshell_compat,
         }
     }
 
@@ -386,6 +421,13 @@ impl ContainerizeProxy {
         if self.include_guest_flox && !self.container_runtime.requires_oci_format() {
             command.args(["--env", &format!("{}=1", super::INCLUDE_GUEST_FLOX_ENV)]);
         }
+        // Forward the OpenShell compat marker on non-OCI paths. The OCI
+        // (Apple Container) path carries it inside the builder shell script
+        // (see `build_oci_conversion_command`) for the same reliability
+        // reason as the guest-flox marker.
+        if self.openshell_compat && !self.container_runtime.requires_oci_format() {
+            command.args(["--env", &format!("{}=1", OPENSHELL_COMPAT_ENV)]);
+        }
 
         // Propagate the host's nix substituters and trusted public keys into
         // the proxy container so that all nix invocations can fetch packages
@@ -515,6 +557,13 @@ impl ContainerizeProxy {
         } else {
             String::new()
         };
+        // Carry the OpenShell compat marker the same way: as a shell export
+        // inside the builder script for the OCI (Apple Container) path.
+        let openshell_compat_export = if self.openshell_compat {
+            format!("export {}=1\n", OPENSHELL_COMPAT_ENV)
+        } else {
+            String::new()
+        };
 
         // Sequential phases (not a pipe): running flox containerize and
         // skopeo concurrently can exceed the Apple Container VM's memory
@@ -532,6 +581,7 @@ impl ContainerizeProxy {
         let shell_cmd = format!(
             "set -euo pipefail\n\
             {guest_flox_export}\
+            {openshell_compat_export}\
             docker_tmp=$(mktemp /tmp/flox-docker-XXXXXX.tar)\n\
             oci_tmp=$(mktemp /tmp/flox-oci-XXXXXX.tar)\n\
             nix --extra-experimental-features 'nix-command flakes' --accept-flake-config \
@@ -763,6 +813,137 @@ mod tests {
         assert!(
             !script.contains("_FLOX_CONTAINERIZE_INCLUDE_GUEST_FLOX"),
             "OCI builder script must not mention the marker when not requested: {script}"
+        );
+    }
+
+    // ── OpenShell compat marker tests ─────────────────────────────────────────
+
+    /// On the non-OCI (Docker) path, add_runtime_args must forward the
+    /// OpenShell compat marker via `--env _FLOX_CONTAINERIZE_OPENSHELL_COMPAT=1`
+    /// when openshell_compat is true.
+    #[test]
+    fn add_runtime_args_forwards_openshell_compat_marker_for_non_oci() {
+        let (flox, _tempdir) = flox_instance();
+        let proxy = ContainerizeProxy::new_with_openshell_compat(
+            "/some/env".into(),
+            Runtime::Docker,
+            vec![],
+            None,
+            false,
+            true,
+        );
+        let mut cmd = proxy.runtime_base_command();
+        proxy.add_runtime_args(&mut cmd, &flox);
+        let args = argv(&cmd);
+        let env_pos = args
+            .iter()
+            .position(|a| a == "_FLOX_CONTAINERIZE_OPENSHELL_COMPAT=1")
+            .expect(
+                "openshell compat --env must be forwarded for Docker when openshell_compat is true",
+            );
+        assert_eq!(args[env_pos - 1], "--env");
+    }
+
+    /// On the OCI (Apple Container) path, add_runtime_args must NOT forward
+    /// the OpenShell compat marker via `--env` — the marker is carried by the
+    /// builder shell script instead (Apple Container `run --env` is unreliable).
+    #[test]
+    fn add_runtime_args_omits_openshell_compat_marker_for_oci() {
+        let (flox, _tempdir) = flox_instance();
+        let proxy = ContainerizeProxy::new_with_openshell_compat(
+            "/some/env".into(),
+            Runtime::AppleContainer,
+            vec![],
+            None,
+            false,
+            true,
+        );
+        let mut cmd = proxy.runtime_base_command();
+        proxy.add_runtime_args(&mut cmd, &flox);
+        let args = argv(&cmd);
+        assert!(
+            !args
+                .iter()
+                .any(|a| a == "_FLOX_CONTAINERIZE_OPENSHELL_COMPAT=1"),
+            "OCI path must not forward openshell compat via --env (uses shell export): {args:?}"
+        );
+    }
+
+    /// The OCI builder shell script must `export` the OpenShell compat marker
+    /// when openshell_compat is true, so the inner `flox containerize` inherits
+    /// it deterministically without relying on Apple Container `--env` forwarding.
+    #[test]
+    fn oci_conversion_command_exports_openshell_compat_marker_when_requested() {
+        let (flox, _tempdir) = flox_instance();
+        let proxy = ContainerizeProxy::new_with_openshell_compat(
+            "/some/env/.flox/env".into(),
+            Runtime::AppleContainer,
+            vec![],
+            None,
+            false,
+            true,
+        );
+        let cmd = proxy.build_oci_conversion_command(&flox, "latest");
+        let args = argv(&cmd);
+        let script = args.last().expect("script is the last arg");
+        let export = "export _FLOX_CONTAINERIZE_OPENSHELL_COMPAT=1";
+        assert!(
+            script.contains(export),
+            "OCI builder script must export the openshell compat marker: {script}"
+        );
+        // The export must precede the inner `flox containerize` invocation.
+        let export_pos = script.find(export).unwrap();
+        let containerize_pos = script
+            .find("containerize")
+            .expect("script must invoke containerize");
+        assert!(
+            export_pos < containerize_pos,
+            "export must precede the containerize invocation: {script}"
+        );
+    }
+
+    /// The OCI builder shell script must NOT export the OpenShell compat marker
+    /// when openshell_compat is false (general containerize and oci backend
+    /// are unaffected).
+    #[test]
+    fn oci_conversion_command_omits_openshell_compat_marker_when_not_requested() {
+        let (flox, _tempdir) = flox_instance();
+        let proxy = ContainerizeProxy::new(
+            "/some/env/.flox/env".into(),
+            Runtime::AppleContainer,
+            vec![],
+            None,
+            false,
+        );
+        let cmd = proxy.build_oci_conversion_command(&flox, "latest");
+        let args = argv(&cmd);
+        let script = args.last().expect("script is the last arg");
+        assert!(
+            !script.contains(OPENSHELL_COMPAT_ENV),
+            "OCI builder script must not mention openshell compat when not requested: {script}"
+        );
+    }
+
+    /// The `oci` backend bake (include_guest_flox=true, openshell_compat=false)
+    /// must not set the OpenShell compat marker — only the openshell backend
+    /// bake triggers the compat layer.
+    #[test]
+    fn oci_backend_bake_does_not_set_openshell_compat() {
+        let (flox, _tempdir) = flox_instance();
+        // OCI backend bake uses include_guest_flox=true but openshell_compat=false
+        let proxy = ContainerizeProxy::new(
+            "/some/env/.flox/env".into(),
+            Runtime::Docker,
+            vec![],
+            None,
+            true,
+        );
+        let mut cmd = proxy.runtime_base_command();
+        proxy.add_runtime_args(&mut cmd, &flox);
+        let args = argv(&cmd);
+        assert!(
+            !args.iter().any(|a| a.contains(OPENSHELL_COMPAT_ENV)),
+            "OCI backend must not set openshell compat marker: {args:?}"
         );
     }
 

@@ -35,6 +35,8 @@ use crate::utils::openers::first_in_path;
 
 pub(crate) mod macos_containerize_proxy;
 
+use crate::commands::sandbox_backends::openshell::OPENSHELL_COMPAT_ENV;
+
 // Containerize an environment
 #[derive(Bpaf, Clone, Debug)]
 pub struct Containerize {
@@ -138,18 +140,33 @@ impl Containerize {
             // (on macOS) forwards it into the builder VM; that inner
             // `flox containerize` runs here on Linux.
             let flox_bin = resolve_guest_flox_bin();
+            // The OpenShell compat layer is requested by the openshell backend
+            // bake via the marker env var (forwarded from the host into the
+            // builder VM by ContainerizeProxy). When set, mkContainer.nix adds
+            // the `sandbox` user/group, iproute2, and /bin/sh.
+            let openshell_compat =
+                std::env::var_os(OPENSHELL_COMPAT_ENV).is_some_and(|v| !v.is_empty());
             // MkContainerNix::new is deprecated on non-Linux targets. This
             // code path is only reached at runtime on Linux (guarded by the
             // OS check above), so the deprecation cannot fire in production.
             // The macOS sandbox bake resolves flox_bin inside the builder
             // VM, where this same branch runs on Linux.
             #[cfg_attr(not(target_os = "linux"), allow(deprecated))]
-            let builder = MkContainerNix::new(
-                built_environment.for_mode(&mode),
-                mode,
-                container_config,
-                flox_bin,
-            );
+            let builder = if openshell_compat {
+                MkContainerNix::new_with_openshell_compat(
+                    built_environment.for_mode(&mode),
+                    mode,
+                    container_config,
+                    flox_bin,
+                )
+            } else {
+                MkContainerNix::new(
+                    built_environment.for_mode(&mode),
+                    mode,
+                    container_config,
+                    flox_bin,
+                )
+            };
 
             builder.create_container_source(&builder_params, env_name.as_ref(), output_tag)?
         } else {
