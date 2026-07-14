@@ -102,8 +102,10 @@ eval "$(flox hook-env --shell bash --shell-pid $$)"
 > frozen builder pin on this branch. (A nix-built prototype flox
 > reports a dev version on its own and needs no override.)
 
-**Pre-bake off-camera.** The first bake takes ~2–5 min. Do it before
-the demo so `cd` drops you in in about a second:
+**Pre-bake off-camera.** The first bake takes ~5–15 min (the builder
+VM cross-compiles the pinned flox rev on first use; later bakes
+reuse its store). Do it before the demo so `cd` drops you in in
+about a second:
 
 ```bash
 cd ~/sandbox-demo && FLOX_SANDBOX_OCI_AUTOBAKE=true flox activate -- true
