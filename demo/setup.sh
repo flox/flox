@@ -14,6 +14,9 @@
 set -euo pipefail
 
 DEMO_DIR="${DEMO_DIR:-$HOME/sandbox-demo}"
+# Sandbox backend the manifest declares: "oci" (default; Apple Container /
+# podman) or "openshell" (NVIDIA OpenShell — see demo/OPENSHELL.md).
+BACKEND="${BACKEND:-oci}"
 # `|| true` so an empty result reaches the friendly preflight below
 # instead of aborting silently under `set -e`.
 FLOX_BIN="${FLOX_BIN:-$(command -v flox || true)}"
@@ -34,6 +37,29 @@ if [ "${FLOX_FEATURES_AUTO_ACTIVATE:-}" != "true" ]; then
 fi
 export FLOX_FEATURES_SANDBOX_ACTIVATE=true
 export FLOX_FEATURES_AUTO_ACTIVATE=true
+
+case "$BACKEND" in
+  oci) ;;
+  openshell)
+    # The openshell backend shells out to the OpenShell CLI and loads
+    # images through Docker — check both up front so the first
+    # activation doesn't fail mid-demo.
+    if ! command -v openshell >/dev/null 2>&1; then
+      echo "WARNING: 'openshell' not found on PATH." >&2
+      echo "         Install: https://github.com/NVIDIA/OpenShell#install" >&2
+    elif ! openshell status >/dev/null 2>&1; then
+      echo "WARNING: the OpenShell gateway is not reachable" >&2
+      echo "         ('openshell status' failed). Start/select it first." >&2
+    fi
+    if ! command -v docker >/dev/null 2>&1; then
+      echo "WARNING: 'docker' not found on PATH (required by openshell)." >&2
+    fi
+    ;;
+  *)
+    echo "ERROR: BACKEND='$BACKEND' is not a demo backend (oci|openshell)." >&2
+    exit 1
+    ;;
+esac
 
 # --- demo project ----------------------------------------------------------
 echo "Creating demo environment at ${DEMO_DIR}..."
@@ -62,9 +88,10 @@ echo "Installing agent tooling (git, curl, which, python3)..."
 #    onboarding-complete and folder trust so the first in-guest run
 #    reaches the login prompt with minimal ceremony.
 echo "Adding claude-code and the agent-state hook to the manifest..."
-python3 - "$DEMO_DIR/.flox/env/manifest.toml" <<'EOF'
+python3 - "$DEMO_DIR/.flox/env/manifest.toml" "$BACKEND" <<'EOF'
 import sys
 path = sys.argv[1]
+backend = sys.argv[2]
 with open(path) as f:
     text = f.read()
 install = '''[install]
@@ -93,8 +120,8 @@ auto-start = true
 [services.web]
 command = "python3 -m http.server 8080"
 '''
-sandbox = '''[options.sandbox]
-backend = "oci"
+sandbox = f'''[options.sandbox]
+backend = "{backend}"
 '''
 text = text.replace("[install]\n", install, 1)
 text = text.replace("[hook]\n", hook, 1)
@@ -149,12 +176,13 @@ Then:
 
     cd $DEMO_DIR
 
-and follow demo/SCRIPT.md. Afterwards: bash demo/cleanup.sh
+and follow demo/SCRIPT.md (backend "oci") or demo/OPENSHELL.md
+(backend "openshell"). Afterwards: bash demo/cleanup.sh
 
-NOTE: the manifest already declares [options.sandbox] backend = "oci"
-and an auto-starting web service, so the first 'cd' auto-activates
-straight into the sandbox. The first bake takes ~2-5 min; to pre-bake
-off-camera, run:
+NOTE: the manifest already declares [options.sandbox]
+backend = "$BACKEND" and an auto-starting web service, so the first
+'cd' auto-activates straight into the sandbox. The first bake takes
+~2-5 min; to pre-bake off-camera, run:
 
     FLOX_SANDBOX_OCI_AUTOBAKE=true flox activate -- true
 EOF
