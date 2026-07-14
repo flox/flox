@@ -48,6 +48,12 @@ pub enum SandboxBackend {
     Srt,
     /// OCI container: Apple Container on macOS, Podman on Linux.
     Oci,
+    /// NVIDIA OpenShell: bakes the environment into a Docker-resident OCI image
+    /// and launches it via `openshell sandbox create`, which connects through a
+    /// local OpenShell gateway. Provides native L7 domain-egress policy via
+    /// OpenShell's egress proxy. Linux-native; macOS requires a Linux VM
+    /// (provided by the gateway's Docker compute driver).
+    Openshell,
     /// Embeddable micro-VM (libkrun): hypervisor isolation with a guest kernel
     /// via libkrunfw (Hypervisor.framework on macOS, KVM on Linux).
     Libkrun,
@@ -128,12 +134,13 @@ pub struct BackendCapabilities {
 
 impl SandboxBackend {
     /// Every backend on the roster, in spectrum order (weakest boundary first).
-    pub const ALL: [SandboxBackend; 6] = [
+    pub const ALL: [SandboxBackend; 7] = [
         SandboxBackend::Libsandbox,
         SandboxBackend::Nix,
         SandboxBackend::HostNative,
         SandboxBackend::Srt,
         SandboxBackend::Oci,
+        SandboxBackend::Openshell,
         SandboxBackend::Libkrun,
     ];
 
@@ -217,6 +224,22 @@ impl SandboxBackend {
                 linux: Native,
                 status: Implemented,
             },
+            SandboxBackend::Openshell => BackendCapabilities {
+                backend: self,
+                enforcement: Container,
+                enforces: true,
+                live_ask: false,
+                // OpenShell's egress proxy provides native L7 domain-egress
+                // policy; no additional flox-side proxy is required.
+                domain_egress: true,
+                per_op: true,
+                fs_virtualized: true,
+                // macOS users land in a Linux guest via the gateway's Docker
+                // compute driver (same DX as the `oci` backend).
+                macos: ViaLinuxVm,
+                linux: Native,
+                status: Implemented,
+            },
             SandboxBackend::Libkrun => BackendCapabilities {
                 backend: self,
                 enforcement: Hypervisor,
@@ -241,6 +264,7 @@ impl Display for SandboxBackend {
             SandboxBackend::HostNative => "host-native",
             SandboxBackend::Srt => "srt",
             SandboxBackend::Oci => "oci",
+            SandboxBackend::Openshell => "openshell",
             SandboxBackend::Libkrun => "libkrun",
         };
         write!(f, "{name}")
@@ -249,7 +273,7 @@ impl Display for SandboxBackend {
 
 #[derive(Debug, thiserror::Error)]
 #[error(
-    "'{0}' is not a valid sandbox backend. Expected one of: libsandbox, nix, host-native, srt, oci, libkrun."
+    "'{0}' is not a valid sandbox backend. Expected one of: libsandbox, nix, host-native, srt, oci, openshell, libkrun."
 )]
 pub struct SandboxBackendParseError(String);
 
@@ -263,6 +287,7 @@ impl FromStr for SandboxBackend {
             "host-native" => Ok(SandboxBackend::HostNative),
             "srt" => Ok(SandboxBackend::Srt),
             "oci" => Ok(SandboxBackend::Oci),
+            "openshell" => Ok(SandboxBackend::Openshell),
             "libkrun" => Ok(SandboxBackend::Libkrun),
             other => Err(SandboxBackendParseError(other.to_string())),
         }
@@ -293,7 +318,7 @@ mod tests {
         let err = "bogus".parse::<SandboxBackend>().unwrap_err();
         assert_eq!(
             err.to_string(),
-            "'bogus' is not a valid sandbox backend. Expected one of: libsandbox, nix, host-native, srt, oci, libkrun.",
+            "'bogus' is not a valid sandbox backend. Expected one of: libsandbox, nix, host-native, srt, oci, openshell, libkrun.",
         );
     }
 
@@ -314,7 +339,7 @@ mod tests {
     }
 
     #[test]
-    fn implemented_backends_are_libsandbox_host_native_srt_and_oci() {
+    fn implemented_backends_are_libsandbox_host_native_srt_oci_and_openshell() {
         let implemented: Vec<SandboxBackend> = SandboxBackend::ALL
             .into_iter()
             .filter(|b| b.capabilities().status == IntegrationStatus::Implemented)
@@ -324,7 +349,41 @@ mod tests {
             SandboxBackend::HostNative,
             SandboxBackend::Srt,
             SandboxBackend::Oci,
+            SandboxBackend::Openshell,
         ]);
+    }
+
+    #[test]
+    fn openshell_capabilities_row() {
+        let caps = SandboxBackend::Openshell.capabilities();
+        assert_eq!(caps, BackendCapabilities {
+            backend: SandboxBackend::Openshell,
+            enforcement: Enforcement::Container,
+            enforces: true,
+            live_ask: false,
+            domain_egress: true,
+            per_op: true,
+            fs_virtualized: true,
+            macos: PlatformSupport::ViaLinuxVm,
+            linux: PlatformSupport::Native,
+            status: IntegrationStatus::Implemented,
+        });
+    }
+
+    #[test]
+    fn openshell_display_and_parse_round_trip() {
+        let backend = SandboxBackend::Openshell;
+        let s = backend.to_string();
+        assert_eq!(s, "openshell");
+        assert_eq!(s.parse::<SandboxBackend>().unwrap(), backend);
+    }
+
+    #[test]
+    fn openshell_serde_round_trip() {
+        let json = serde_json::to_string(&SandboxBackend::Openshell).unwrap();
+        assert_eq!(json, "\"openshell\"");
+        let parsed: SandboxBackend = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed, SandboxBackend::Openshell);
     }
 
     #[test]
