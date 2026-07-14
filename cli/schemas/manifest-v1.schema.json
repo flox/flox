@@ -1406,6 +1406,11 @@
           "type": "string"
         },
         {
+          "const": "openshell",
+          "description": "NVIDIA OpenShell: bakes the environment into a Docker-resident OCI image\nand launches it via `openshell sandbox create`, which connects through a\nlocal OpenShell gateway. Provides native L7 domain-egress policy via\nOpenShell's egress proxy. Linux-native; macOS requires a Linux VM\n(provided by the gateway's Docker compute driver).",
+          "type": "string"
+        },
+        {
           "const": "libkrun",
           "description": "Embeddable micro-VM (libkrun): hypervisor isolation with a guest kernel\nvia libkrunfw (Hypervisor.framework on macOS, KVM on Linux).",
           "type": "string"
