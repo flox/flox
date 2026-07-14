@@ -191,7 +191,10 @@ pkgs.runCommand name
 
                 # N.B. not using t3 --forcecolor option because Nix sandbox
                 # strips color codes from output anyway.
-                FLOX_SRC_DIR=$(pwd) \
+                # FLOX_ENV_CACHE points into the sandbox's build directory so
+                # the interpreter's profile.d scripts have a writable cache
+                # for generated state (e.g. pip.ini).
+                FLOX_SRC_DIR=$(pwd) FLOX_ENV_CACHE="$(pwd)/.flox/cache" \
                   ${develop-copy-env-package}/activate --env ${develop-copy-env-package} \
                     --mode build --skip-hook-on-activate --env-project $(pwd) -- \
                       t3 --relative $log -- bash -e ${buildScript-contents}
@@ -204,7 +207,10 @@ pkgs.runCommand name
 
                 # See flox-build.mk for a detailed explanation of why we use a nested
                 # activation when performing builds.
-                FLOX_SRC_DIR=$(pwd) \
+                # FLOX_ENV_CACHE points into the sandbox's build directory so
+                # the interpreter's profile.d scripts have a writable cache
+                # for generated state (e.g. pip.ini).
+                FLOX_SRC_DIR=$(pwd) FLOX_ENV_CACHE="$(pwd)/.flox/cache" \
                   ${develop-copy-env-package}/activate --env ${develop-copy-env-package} \
                     --mode build --skip-hook-on-activate --env-project $(pwd) -- \
                       t3 --relative $log -- bash -e ${buildScript-contents} || \
