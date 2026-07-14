@@ -850,7 +850,11 @@ pub(crate) fn docker_retag_openshell_image(bare_tag: &str, suffixed_tag: &str) -
              the source tag may be missing or Docker is unavailable"
         );
     }
-    debug!(from = bare_tag, to = suffixed_tag, "retagged openshell image");
+    debug!(
+        from = bare_tag,
+        to = suffixed_tag,
+        "retagged openshell image"
+    );
 
     // Step 2: unlink the bare tag (best-effort; ignore if already gone).
     let rmi_status = std::process::Command::new("docker")
