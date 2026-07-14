@@ -181,6 +181,8 @@ let
   };
 
   buildLayeredImageArgs =
+    # uid/gid/uname/gname: only meaningful when the Nix store is owned by a
+    # non-root user inside the container.
     optionalAttrs (isNixStoreUserOwned) {
       inherit (nixStoreUserGroup)
         uname
@@ -188,23 +190,32 @@ let
         uid
         gid
         ;
-
-      # chown the /run directory to the nixStoreOwner, so that Nix can run as a
-      # single user installation inside the container
-      fakeRootCommands = ''
-        chown -R ${toString nixStoreUserGroup.uid}:${toString nixStoreUserGroup.gid} /run
-      ''
-      + optionalString (workingDir != null) ''
-        mkdir -p -m 0755 "${workingDir}"
-        chown ${toString nixStoreUserGroup.uid}:${toString nixStoreUserGroup.gid} "${workingDir}"
-      ''
-      # OpenShell compat: chown /run, /home/flox, and /sandbox to the sandbox
-      # uid/gid (1000660000) so the OpenShell supervisor can write to them.
-      + optionalString openshellCompat ''
-        chown -R ${toString openshellSandboxUid}:${toString openshellSandboxGid} /run
-        chown ${toString openshellSandboxUid}:${toString openshellSandboxGid} /home/flox
-        chown ${toString openshellSandboxUid}:${toString openshellSandboxGid} /sandbox
-      '';
+    }
+    # fakeRootCommands + enableFakechroot: needed any time we must chown paths
+    # in the image — either for a non-root nixStore owner or for the OpenShell
+    # compat layer (sandbox uid 1000660000 must own /run, /home/flox, /sandbox).
+    # The (false, false) case — root-owned store, no compat — must not gain
+    # these attrs at all, since an empty fakeRootCommands string still triggers
+    # fakechroot overhead unnecessarily.
+    // optionalAttrs (isNixStoreUserOwned || openshellCompat) {
+      fakeRootCommands =
+        # chown /run to the nixStoreOwner so single-user Nix works inside the
+        # container; also chown any explicit workingDir.
+        optionalString isNixStoreUserOwned ''
+          chown -R ${toString nixStoreUserGroup.uid}:${toString nixStoreUserGroup.gid} /run
+        ''
+        + optionalString (isNixStoreUserOwned && workingDir != null) ''
+          mkdir -p -m 0755 "${workingDir}"
+          chown ${toString nixStoreUserGroup.uid}:${toString nixStoreUserGroup.gid} "${workingDir}"
+        ''
+        # OpenShell compat: chown /run, /home/flox, and /sandbox to the sandbox
+        # uid/gid (1000660000) so the OpenShell supervisor can write to them.
+        # This runs even when isNixStoreUserOwned=false (root-owned store).
+        + optionalString openshellCompat ''
+          chown -R ${toString openshellSandboxUid}:${toString openshellSandboxGid} /run
+          chown ${toString openshellSandboxUid}:${toString openshellSandboxGid} /home/flox
+          chown ${toString openshellSandboxUid}:${toString openshellSandboxGid} /sandbox
+        '';
       enableFakechroot = true;
     }
     // {
