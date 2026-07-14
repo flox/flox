@@ -121,6 +121,16 @@ let
   openshellSandboxUid = 1000660000;
   openshellSandboxGid = 1000660000;
 
+  # OpenShell compat: the supervisor requires a trusted nsenter helper at
+  # one of /{usr/,}{s,}bin/nsenter. We link only nsenter — the full
+  # util-linux bin set collides with coreutils (e.g. bin/kill) in buildEnv
+  # even at lowPrio, because both packages are lowPrio and buildEnv cannot
+  # resolve equal-priority conflicts.
+  openshellNsenter = containerPkgs.runCommand "openshell-nsenter" { } ''
+    mkdir -p $out/bin
+    ln -s ${containerPkgs.util-linux}/bin/nsenter $out/bin/nsenter
+  '';
+
   fakeNss = containerPkgs.dockerTools.fakeNss.override {
     extraPasswdLines =
       optionals isNixStoreUserOwned [
@@ -279,14 +289,13 @@ let
           (storePath floxBin)
         ]
         # OpenShell compat: iproute2 provides `ip`, required by the OpenShell
-        # supervisor's netns setup. Without it the supervisor crash-loops.
-        # util-linux provides `nsenter`; the supervisor checks four paths
-        # (/usr/bin, /bin, /usr/sbin, /sbin) and fails if none exists —
-        # buildEnv links it at /bin/nsenter, satisfying the /bin check.
-        # lowPrio avoids conflicts with binaries the environment provides.
+        # supervisor's netns setup. openshellNsenter provides only nsenter
+        # (no lowPrio needed — bin/nsenter conflicts with nothing); using the
+        # full util-linux package would conflict with coreutils on bin/kill.
+        # lowPrio on iproute2 avoids conflicts with any ip the env provides.
         ++ optionals openshellCompat [
           (lowPrio containerPkgs.iproute2)
-          (lowPrio containerPkgs.util-linux)
+          openshellNsenter
         ];
       };
       config =
