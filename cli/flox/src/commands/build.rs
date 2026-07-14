@@ -351,6 +351,7 @@ impl Build {
             nef_stability,
             None,
             system_override,
+            false,
         );
         let build_duration_ms = duration_to_ms(build_start.elapsed());
 

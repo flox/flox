@@ -933,6 +933,7 @@ pub fn check_build_metadata(
         nef_stability,
         Some(false),
         system_override,
+        false,
     )?;
 
     if build_results.len() != 1 {
