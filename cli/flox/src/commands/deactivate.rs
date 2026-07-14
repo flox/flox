@@ -6,8 +6,10 @@ use anyhow::{Context, Result, anyhow, bail};
 use bpaf::Bpaf;
 use flox_config::Config;
 use flox_core::activate::context::{InvocationKind, InvocationTypes};
+use flox_core::activate::mode::ActivateMode;
 use flox_core::activate::vars::{FLOX_ACTIVATIONS_BIN, FLOX_INVOCATION_TYPES_WIRE_VAR};
-use flox_core::activations::activation_state_dir_path;
+use flox_core::activations::{activation_state_dir_path, read_activations_json, state_json_path};
+use flox_core::canonical_path::CanonicalPath;
 use flox_core::hook_actions::{
     HookAction,
     PROMPT_HOOK_VERSION,
@@ -15,7 +17,13 @@ use flox_core::hook_actions::{
     write_hook_actions,
 };
 use flox_rust_sdk::flox::Flox;
-use flox_rust_sdk::models::environment::Environment;
+use flox_rust_sdk::models::environment::{
+    Environment,
+    EnvironmentError,
+    GCROOTS_DIR_NAME,
+    RenderedEnvironmentLinks,
+    UninitializedEnvironment,
+};
 use flox_rust_sdk::utils::FLOX_INTERPRETER;
 use indoc::{formatdoc, indoc};
 use shell_gen::ShellWithPath;
@@ -201,6 +209,7 @@ fn ensure_prompt_hook_available(config: &Config) -> Result<()> {
 }
 
 /// The data needed to deactivate the front-of-stack active environment.
+#[derive(Clone, Debug, PartialEq)]
 pub(crate) struct DeactivationTarget {
     /// Activation state dir, for the `flox-activations detach` call.
     pub(crate) activation_state_dir: PathBuf,
@@ -218,15 +227,29 @@ pub(crate) struct DeactivationTarget {
 /// one be torn down. This is also where a future `flox deactivate <ENV>`
 /// argument would resolve a specific environment rather than the last-active
 /// one.
+///
+/// An environment whose directory was deleted while active (e.g. a removed git
+/// worktree) can no longer be opened; its deactivation data is recovered from
+/// the state recorded at activation time instead, so leaving a deleted
+/// directory still tears the activation down.
 pub(crate) fn open_deactivation_target(
     flox: &Flox,
     active: ActiveEnvironment,
 ) -> Result<DeactivationTarget> {
     let mode = active.mode;
-    let mut concrete_env = active
+    let mut concrete_env = match active
         .environment
+        .clone()
         .into_concrete_environment(flox, None)
-        .context("failed to open active environment for deactivation")?;
+    {
+        Ok(concrete_env) => concrete_env,
+        Err(EnvironmentError::DotFloxNotFound(_)) => {
+            return deactivation_target_from_recorded_state(flox, &active.environment, &mode);
+        },
+        Err(err) => {
+            return Err(err).context("failed to open active environment for deactivation");
+        },
+    };
     let dot_flox_path = concrete_env.dot_flox_path().to_path_buf();
     let flox_env = concrete_env
         .rendered_env_links(flox)
@@ -234,6 +257,56 @@ pub(crate) fn open_deactivation_target(
         .for_mode(&mode)
         .to_path_buf();
     let activation_state_dir = activation_state_dir_path(&flox.runtime_dir, &dot_flox_path);
+
+    Ok(DeactivationTarget {
+        activation_state_dir,
+        flox_env,
+    })
+}
+
+/// Construct a [DeactivationTarget] for an environment whose `.flox` directory
+/// no longer exists, from state recorded when it was activated.
+///
+/// The activation state dir derives from the recorded `.flox` path alone, a
+/// pure computation that supports deleted environments by design. The rendered
+/// env path comes from `state.json`, which recorded the exact `$FLOX_ENV` the
+/// activation exported; if that state is gone too (e.g. the runtime dir was
+/// cleaned), the path is reconstructed from the recorded environment name and
+/// mode, mirroring how opening the environment would derive it. The generated
+/// deactivation script restores env vars from the activation diff and only
+/// uses this path for string matching and existence-guarded sourcing, so a
+/// dangling path is harmless.
+fn deactivation_target_from_recorded_state(
+    flox: &Flox,
+    environment: &UninitializedEnvironment,
+    mode: &ActivateMode,
+) -> Result<DeactivationTarget> {
+    let Some(dot_flox_path) = environment.path() else {
+        // Unreachable: remote environments live under the cache dir, which is
+        // recreated when they are opened, so they never fail to open with
+        // `DotFloxNotFound`.
+        bail!("cannot recover deactivation data for a remote environment");
+    };
+    let activation_state_dir = activation_state_dir_path(&flox.runtime_dir, dot_flox_path);
+    let recorded_flox_env = match read_activations_json(state_json_path(&activation_state_dir)) {
+        Ok((Some(state), _lock)) => Some(state.flox_env().to_path_buf()),
+        Ok((None, _lock)) => None,
+        Err(err) => {
+            debug!(%err, "failed to read activation state of deleted environment");
+            None
+        },
+    };
+    let flox_env = recorded_flox_env.unwrap_or_else(|| {
+        // Previously canonicalized path that we know no longer exists.
+        let run_dir = CanonicalPath::new_unchecked(dot_flox_path.join(GCROOTS_DIR_NAME));
+        RenderedEnvironmentLinks::new_in_base_dir_with_name_and_system(
+            &run_dir,
+            environment.name().as_ref(),
+            &flox.system,
+        )
+        .for_mode(mode)
+        .to_path_buf()
+    });
 
     Ok(DeactivationTarget {
         activation_state_dir,
@@ -346,6 +419,13 @@ mod tests {
     use std::collections::{HashMap, HashSet};
 
     use flox_activations::attach_diff::diff_serializer::DiffSerializer;
+    use flox_core::activations::{
+        ActivationState,
+        acquire_activations_json_lock,
+        write_activations_json,
+    };
+    use flox_rust_sdk::flox::test_helpers::flox_instance;
+    use flox_rust_sdk::models::environment::{DotFlox, EnvironmentPointer, PathPointer};
 
     use super::*;
 
@@ -455,5 +535,62 @@ mod tests {
         // alias checks after the eval instead.
         let script = interactive_deactivate_script(ShellWithPath::Tcsh("tcsh".into()));
         assert_eq!(script, "set _flox_exit=1;");
+    }
+
+    /// An active-stack entry for a path environment named `proj` at
+    /// `dot_flox_path`.
+    fn active_path_environment(dot_flox_path: &Path, mode: ActivateMode) -> ActiveEnvironment {
+        ActiveEnvironment {
+            environment: UninitializedEnvironment::DotFlox(DotFlox {
+                path: dot_flox_path.to_path_buf(),
+                pointer: EnvironmentPointer::Path(PathPointer::new("proj".parse().unwrap())),
+            }),
+            generation: None,
+            mode,
+        }
+    }
+
+    #[test]
+    fn deactivation_target_recovered_from_state_json_when_directory_deleted() {
+        let (flox, tempdir) = flox_instance();
+        // Never created: stands in for a project directory deleted while its
+        // environment was active.
+        let dot_flox_path = tempdir.path().join("proj/.flox");
+        let recorded_flox_env = dot_flox_path.join(format!("run/{}.proj-dev", flox.system));
+
+        let activation_state_dir = activation_state_dir_path(&flox.runtime_dir, &dot_flox_path);
+        std::fs::create_dir_all(&activation_state_dir).unwrap();
+        let state_json = state_json_path(&activation_state_dir);
+        let mut state =
+            ActivationState::new(&ActivateMode::Dev, Some(&dot_flox_path), &recorded_flox_env);
+        state.set_executive_pid(1);
+        let lock = acquire_activations_json_lock(&state_json).unwrap();
+        write_activations_json(&state, &state_json, lock).unwrap();
+
+        let target = open_deactivation_target(
+            &flox,
+            active_path_environment(&dot_flox_path, ActivateMode::Dev),
+        )
+        .unwrap();
+        assert_eq!(target, DeactivationTarget {
+            activation_state_dir,
+            flox_env: recorded_flox_env,
+        });
+    }
+
+    #[test]
+    fn deactivation_target_reconstructed_when_state_json_also_missing() {
+        let (flox, tempdir) = flox_instance();
+        let dot_flox_path = tempdir.path().join("proj/.flox");
+
+        let target = open_deactivation_target(
+            &flox,
+            active_path_environment(&dot_flox_path, ActivateMode::Run),
+        )
+        .unwrap();
+        assert_eq!(target, DeactivationTarget {
+            activation_state_dir: activation_state_dir_path(&flox.runtime_dir, &dot_flox_path),
+            flox_env: dot_flox_path.join(format!("run/{}.proj-run", flox.system)),
+        });
     }
 }
