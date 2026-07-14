@@ -43,9 +43,8 @@ function setup_python {
   # Only run if `pip' is in `PATH' for non-containerize activations.
   # FLOX_ENV_PROJECT is unset in `containerize`, but *is* set for builds and
   # other activations. We don't need a virtual environment inside a container.
-  # Write pip.ini to FLOX_ENV_CACHE rather than FLOX_ENV_PROJECT: for remote
-  # environments FLOX_ENV_PROJECT is the invocation directory, which may not
-  # contain a `.flox` directory to write into.
+  # pip.ini is written to the environment's cache directory, which exists
+  # for every environment type (path, managed, and remote).
   if [[ (-x "$FLOX_ENV/bin/pip3") && (-n "${FLOX_ENV_PROJECT:-}") && (-n "${FLOX_ENV_CACHE:-}") ]]; then
     "$_mkdir" -p "$FLOX_ENV_CACHE"
     PIP_CONFIG_FILE="$FLOX_ENV_CACHE/pip.ini"
