@@ -48,10 +48,10 @@ use std::io::IsTerminal;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
-use serde_json::json;
 use flox_core::activate::context::InvocationType;
 use flox_core::activate::sandbox_backend::SandboxBackend;
 use flox_manifest::lockfile::Lockfile;
+use serde_json::json;
 use tracing::debug;
 
 use super::{ActivationSandbox, SandboxLaunchCtx};
@@ -364,9 +364,7 @@ fn docker_list_repo_tags(repo: &str) -> Vec<String> {
     };
     String::from_utf8_lossy(&stdout)
         .lines()
-        .filter_map(|line| {
-            line.rsplit_once(':').map(|(_, tag)| tag.to_string())
-        })
+        .filter_map(|line| line.rsplit_once(':').map(|(_, tag)| tag.to_string()))
         .collect()
 }
 
@@ -379,7 +377,13 @@ fn docker_list_repo_tags(repo: &str) -> Vec<String> {
 /// configured entrypoint.
 pub(crate) fn docker_image_entrypoint(image_ref: &str) -> Result<Vec<String>> {
     let output = std::process::Command::new("docker")
-        .args(["image", "inspect", "--format", "{{json .Config.Entrypoint}}", image_ref])
+        .args([
+            "image",
+            "inspect",
+            "--format",
+            "{{json .Config.Entrypoint}}",
+            image_ref,
+        ])
         .output()
         .with_context(|| format!("failed to run 'docker image inspect' for '{image_ref}'"))?;
     if !output.status.success() {
@@ -406,7 +410,13 @@ pub(crate) fn docker_image_entrypoint(image_ref: &str) -> Result<Vec<String>> {
 /// silently dropped.
 pub(crate) fn docker_image_env(image_ref: &str) -> Result<Vec<String>> {
     let output = std::process::Command::new("docker")
-        .args(["image", "inspect", "--format", "{{json .Config.Env}}", image_ref])
+        .args([
+            "image",
+            "inspect",
+            "--format",
+            "{{json .Config.Env}}",
+            image_ref,
+        ])
         .output()
         .with_context(|| format!("failed to run 'docker image inspect' for '{image_ref}'"))?;
     if !output.status.success() {
@@ -619,7 +629,11 @@ pub(crate) fn openshell_create_argv(params: &CreateArgvParams<'_>) -> (String, V
 
     // Determine the effective working directory: use cwd when under the
     // project, otherwise fall back to the project root.
-    let effective_cwd = if cwd.starts_with(project) { cwd } else { project };
+    let effective_cwd = if cwd.starts_with(project) {
+        cwd
+    } else {
+        project
+    };
 
     // `sandbox create` has no --workdir; wrap the command to set cwd.
     // /bin/sh is guaranteed by the compat layer.
@@ -638,11 +652,7 @@ pub(crate) fn openshell_create_argv(params: &CreateArgvParams<'_>) -> (String, V
         },
         InvocationType::ShellCommand(shell_cmd) => {
             // Shell command: wrap in `sh -c` so pipelines and builtins work.
-            let sh_cmd = vec![
-                "sh".to_string(),
-                "-c".to_string(),
-                shell_cmd.clone(),
-            ];
+            let sh_cmd = vec!["sh".to_string(), "-c".to_string(), shell_cmd.clone()];
             append_workdir_wrapper(&mut argv, effective_cwd, entrypoint, &sh_cmd);
         },
         InvocationType::InPlace => {
@@ -724,9 +734,7 @@ fn bake_openshell_image(
         .unwrap_or(&flake_ref)
         .to_string();
 
-    eprintln!(
-        "⚙️  Baking OpenShell image '{hash_tag}' (builder pin: {ref_or_rev})…"
-    );
+    eprintln!("⚙️  Baking OpenShell image '{hash_tag}' (builder pin: {ref_or_rev})…");
     eprintln!(
         "   First bake: ~2–5 min (downloads builder + cross-compiles). \
          Later bakes reuse layers."
@@ -748,10 +756,8 @@ fn bake_openshell_image(
     let container_runtime = Runtime::Docker;
 
     // Sanitize the project view (strip prototype-only manifest keys).
-    let sanitized_view = crate::commands::sandbox_backends::oci::sanitized_project_view(
-        &env_path,
-    )
-    .context("failed to prepare sanitized builder view")?;
+    let sanitized_view = crate::commands::sandbox_backends::oci::sanitized_project_view(&env_path)
+        .context("failed to prepare sanitized builder view")?;
     let builder_project = match &sanitized_view {
         Some((_, mount_path)) => {
             debug!(
@@ -820,10 +826,7 @@ mod tests {
     #[test]
     fn sandbox_name_sanitizes_special_chars() {
         let name = openshell_sandbox_name("my.env-v2 beta");
-        assert!(
-            name.starts_with("flox-my-env-v2-beta-"),
-            "got: {name}"
-        );
+        assert!(name.starts_with("flox-my-env-v2-beta-"), "got: {name}");
     }
 
     // ── env_entry_valid ───────────────────────────────────────────────────────
@@ -907,7 +910,10 @@ mod tests {
     }
 
     fn fake_image_env() -> Vec<String> {
-        vec!["HOME=/home/flox".to_string(), "PATH=/usr/bin:/bin".to_string()]
+        vec![
+            "HOME=/home/flox".to_string(),
+            "PATH=/usr/bin:/bin".to_string(),
+        ]
     }
 
     #[test]
@@ -1004,7 +1010,10 @@ mod tests {
         let project = Path::new("/proj");
         let cwd = project;
         let policy = Path::new("/tmp/p.yaml");
-        let image_env = vec!["HOME=/home/flox".to_string(), "XDG_RUNTIME_DIR=/run".to_string()];
+        let image_env = vec![
+            "HOME=/home/flox".to_string(),
+            "XDG_RUNTIME_DIR=/run".to_string(),
+        ];
         let inv = InvocationType::ExecCommand(vec!["ls".to_string()]);
         let (_, argv) = openshell_create_argv(&CreateArgvParams {
             image_ref: "img:tag",
@@ -1082,10 +1091,13 @@ mod tests {
             sandbox_name: "flox-env-1",
             tty: false,
         });
-        let dconf_pos = argv.iter().position(|a| a == "--driver-config-json").unwrap();
+        let dconf_pos = argv
+            .iter()
+            .position(|a| a == "--driver-config-json")
+            .unwrap();
         let json_val = &argv[dconf_pos + 1];
-        let parsed: serde_json::Value = serde_json::from_str(json_val)
-            .expect("driver-config-json must be valid JSON");
+        let parsed: serde_json::Value =
+            serde_json::from_str(json_val).expect("driver-config-json must be valid JSON");
         let mount = &parsed["docker"]["mounts"][0];
         assert_eq!(mount["type"], "bind");
         assert_eq!(mount["source"], "/home/user/project");
@@ -1112,7 +1124,10 @@ mod tests {
             sandbox_name: "flox-env-1",
             tty: false,
         });
-        let dconf_pos = argv.iter().position(|a| a == "--driver-config-json").unwrap();
+        let dconf_pos = argv
+            .iter()
+            .position(|a| a == "--driver-config-json")
+            .unwrap();
         let json_val = &argv[dconf_pos + 1];
         // Must parse without error — a format!-built string would have produced
         // e.g. `"source":"/home/user/my project"` with an unescaped space,
