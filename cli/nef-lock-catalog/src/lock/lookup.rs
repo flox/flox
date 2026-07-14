@@ -16,6 +16,7 @@ use floxhub_client::{
     CatalogClientTrait,
     FloxhubClientError,
     LookupGroup,
+    ReferencesItem,
     Stability,
     UnresolvableEntry,
 };
@@ -107,12 +108,14 @@ fn build_request(
 /// (`catalogs.<catalog>.<package>`), but the catalog server's reference
 /// namespace is catalog-relative (`<catalog>.<package>`). Drop the leading root
 /// segment so the request matches what the server expects.
-fn wire_reference(reference: &CatalogRef) -> String {
+fn wire_reference(reference: &CatalogRef) -> ReferencesItem {
     let reference = reference.as_str();
-    reference
+    let s = reference
         .split_once('.')
         .map(|(_root, rest)| rest.to_string())
-        .unwrap_or_else(|| reference.to_string())
+        .unwrap_or_else(|| reference.to_string());
+    // Catalog paths are well below the 1024-char wire limit.
+    s.parse().expect("catalog reference exceeded 1024 chars")
 }
 
 /// Map a lookup response into a [BuildLock], or fail with the unresolvable

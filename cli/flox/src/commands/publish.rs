@@ -8,7 +8,6 @@ use flox_manifest::{Manifest, MigratedTypedOnly};
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment};
 use flox_rust_sdk::providers::build::{COMMON_NIXPKGS_URL, PackageTarget};
-use flox_rust_sdk::providers::catalog::SystemEnum;
 use flox_rust_sdk::providers::nix_auth::NixAuth;
 use flox_rust_sdk::providers::publish::{
     PublishProvider,
@@ -18,7 +17,7 @@ use flox_rust_sdk::providers::publish::{
     check_environment_metadata,
     check_package_metadata,
 };
-use floxhub_client::CatalogClientTrait;
+use floxhub_client::{CatalogClientTrait, CheckBuildQuery, CheckBuildResponse, FloxhubClientError};
 use indoc::formatdoc;
 use nef_lock_catalog::NixFlakeref;
 use tracing::{debug, info_span, instrument, warn};
@@ -44,6 +43,33 @@ use crate::{environment_subcommand_metric, subcommand_metric};
 
 const PUBLISH_COMPLETION_POLL_INTERVAL_MILLIS: u64 = 2_000; // 1s
 const PUBLISH_COMPLETION_TIMEOUT_MILLIS: u64 = 30 * 60 * 1_000; // 30 min
+
+/// Outcome of the dedup pre-check against the catalog.
+#[derive(Debug)]
+enum DedupOutcome {
+    /// The server confirmed this exact build (by closure identity) was already
+    /// published. The caller should display provenance and skip the upload.
+    AlreadyPublished(CheckBuildResponse),
+    /// The build is new; proceed with the publish.
+    New,
+    /// The check request itself failed (network error, server error, etc.).
+    /// A failed check must never block a publish — it is a best-effort
+    /// optimisation only.
+    CheckFailed(FloxhubClientError),
+}
+
+/// Map the raw check-build result to a [`DedupOutcome`].
+///
+/// An `Err` result (network failure, server error, etc.) maps to
+/// `CheckFailed` rather than propagating: the dedup pre-check must never
+/// prevent a legitimate publish.
+fn dedup_outcome(result: Result<CheckBuildResponse, FloxhubClientError>) -> DedupOutcome {
+    match result {
+        Ok(resp) if resp.already_published => DedupOutcome::AlreadyPublished(resp),
+        Ok(_) => DedupOutcome::New,
+        Err(e) => DedupOutcome::CheckFailed(e),
+    }
+}
 
 #[derive(Bpaf, Clone)]
 pub struct Publish {
@@ -258,9 +284,21 @@ impl Publish {
             debug!(error = %err, "Failed to record v2 event");
         }
 
-        // Pre-check: ask the catalog server if this exact build already exists
-        // before spending time on the build. If the check fails, warn the
-        // user and continue — the dedup feature must never block publishes.
+        let system_override_inner = publish_config.system_override.into_inner();
+
+        let build_metadata = check_build_metadata(
+            &flox,
+            &selected_base_nixpkgs_url,
+            system_override_inner,
+            &publish_provider.env_metadata,
+            &publish_provider.package_metadata.package,
+            nef_stability,
+        )?;
+
+        // Dedup check: ask the catalog server if this exact build has already
+        // been published before spending time on the upload. The closure
+        // identity (direct_catalog_inputs) is available after
+        // check_build_metadata, enabling a closure-aware match on the server.
         let nixpkgs_rev = publish_provider.package_metadata.base_catalog_ref.rev();
         let nixpkgs_rev = nixpkgs_rev.as_deref().unwrap_or_else(|| {
             warn!(
@@ -270,29 +308,21 @@ impl Publish {
             );
             ""
         });
-        let system_override_inner = publish_config.system_override.into_inner();
-        let system = {
-            let system_str = system_override_inner
-                .as_deref()
-                .unwrap_or(flox.system.as_str());
-            system_str
-                .parse::<SystemEnum>()
-                .context("invalid system value for dedup pre-check")?
-        };
         let catalog = &flox.floxhub_client;
         let check_result = catalog
-            .check_build_already_recorded(
-                &catalog_name,
-                publish_provider.package_metadata.package.name().as_ref(),
-                &publish_provider.env_metadata.build_repo_meta.url,
-                &publish_provider.env_metadata.build_repo_meta.rev,
+            .check_build_already_recorded(CheckBuildQuery {
+                catalog_name: &catalog_name,
+                package_name: publish_provider.package_metadata.package.name().as_ref(),
+                source_url: &publish_provider.env_metadata.build_repo_meta.url,
+                source_rev: &publish_provider.env_metadata.build_repo_meta.rev,
                 nixpkgs_rev,
-                system,
-            )
+                system: build_metadata.system,
+                locked_inputs: &build_metadata.direct_catalog_inputs,
+            })
             .await;
 
-        match check_result {
-            Ok(resp) if resp.already_published => {
+        match dedup_outcome(check_result) {
+            DedupOutcome::AlreadyPublished(resp) => {
                 message::updated(formatdoc! {"
                     Package already published.
 
@@ -306,30 +336,16 @@ impl Publish {
                 });
                 return Ok(());
             },
-            Ok(_) => {
-                // Not a duplicate, proceed with build.
-            },
-            Err(e) => {
-                // Pre-check failed; show user-visible warning and proceed
-                // with build (graceful degradation per D3).
-                message::warning(
-                    "Unable to check if already published — continuing with build and publish.",
-                );
+            DedupOutcome::New => {},
+            DedupOutcome::CheckFailed(e) => {
+                // A failed check must never block a publish; warn and continue.
+                message::warning("Unable to check if already published — continuing with publish.");
                 warn!(
                     error = %e,
-                    "Dedup pre-check failed, proceeding with build"
+                    "Dedup pre-check failed, proceeding with publish"
                 );
             },
         }
-
-        let build_metadata = check_build_metadata(
-            &flox,
-            &selected_base_nixpkgs_url,
-            system_override_inner,
-            &publish_provider.env_metadata,
-            &publish_provider.package_metadata.package,
-            nef_stability,
-        )?;
 
         // CLI args take precedence over config
         let key_file = publish_config.cache_args.signing_private_key.or(config
@@ -526,5 +542,42 @@ mod tests {
                 flox_rust_sdk::providers::build::PackageTargetKind::ManifestBuild { sandbox: None }
             )
         );
+    }
+
+    // --- dedup_outcome unit tests ---
+
+    fn make_check_response(already_published: bool) -> CheckBuildResponse {
+        CheckBuildResponse {
+            already_published,
+            published_at: None,
+            source_rev: None,
+            source_rev_date: None,
+        }
+    }
+
+    #[test]
+    fn dedup_outcome_already_published_passes_response_through() {
+        let input = make_check_response(true);
+        let expected = input.clone();
+        let DedupOutcome::AlreadyPublished(got) = dedup_outcome(Ok(input)) else {
+            panic!("expected AlreadyPublished variant");
+        };
+        assert_eq!(got, expected);
+    }
+
+    #[test]
+    fn dedup_outcome_not_published_maps_to_new() {
+        let resp = make_check_response(false);
+        assert!(matches!(dedup_outcome(Ok(resp)), DedupOutcome::New));
+    }
+
+    #[test]
+    fn dedup_outcome_err_maps_to_check_failed() {
+        let result: Result<CheckBuildResponse, FloxhubClientError> =
+            Err(FloxhubClientError::Other("network error".to_string()));
+        assert!(matches!(
+            dedup_outcome(result),
+            DedupOutcome::CheckFailed(_)
+        ));
     }
 }

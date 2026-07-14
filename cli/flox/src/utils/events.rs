@@ -1,54 +1,52 @@
 //! Integration wrapper between the flox binary and the [`flox_events`] crate.
 //!
-//! This module is the **single integration surface** through which the flox
-//! binary decides whether to install an [`EventsClient`] and how to populate
-//! the shared metadata stamped onto every v2 event. The
-//! [`flox_events`] crate itself is a clean leaf — no `flox-rust-sdk` edge, no
-//! `env!` macros, no `Config` access — and this wrapper holds all of the
-//! integration concerns that would otherwise have to live in the crate.
-//!
-//! The cutover PR replaces the production branch of [`build_events_client`]
-//! to install a real client; until then the wrapper installs a client only
-//! when the dev/test override `_FLOX_METRICS_URL_OVERRIDE` is set, so
-//! production builds remain byte-identical to `main` on every code path.
+//! The CLI emits two telemetry streams in parallel: the legacy
+//! `subcommand_metric!` pipeline (`cli/flox/src/utils/metrics.rs`) and the
+//! v2-events pipeline (this module + the [`flox_events`] crate). The two
+//! stacks share no code and write separate on-disk buffers.
+//! `config.flox.disable_metrics` silences both.
 
 use std::env;
 use std::str::FromStr;
-use std::sync::OnceLock;
+use std::sync::{LazyLock, OnceLock};
 
 use flox_config::Config;
-use flox_events::{EnvDetail, EventsClient, EventsGuard, EventsHub, SharedMetadataTemplate};
+use flox_events::{EnvDetail, EventsClient, SharedMetadataTemplate};
 use flox_rust_sdk::flox::FLOX_VERSION;
 use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment};
 use flox_rust_sdk::utils::INVOCATION_SOURCES;
 use tracing::debug;
 use uuid::Uuid;
 
-use crate::utils::metrics::{METRICS_EVENTS_API_KEY, read_metrics_uuid};
+use crate::utils::metrics::read_metrics_uuid;
 
 /// Stores the invocation_id resolved by [`resolve_invocation_id`] so detached
-/// subprocess spawn sites can propagate it via [`FLOX_INVOCATION_ID_VAR`]
-/// without threading it through every call layer.
+/// subprocess spawn sites can propagate it via [`FLOX_INVOCATION_ID_VAR`].
 ///
-/// Set exactly once per process by [`resolve_invocation_id`]; never read by
-/// the [`flox_events`] crate (the value flows there through [`EventsClient`]
-/// at install time). The value lives in this `OnceLock` rather than in the
-/// process environment because we do not want the activated user shell to
-/// inherit it — subsequent `flox` commands run from inside an activate'd
-/// shell should be treated as fresh top-level invocations.
+/// Kept out of the process environment so that an activated user shell does
+/// not inherit it — `flox` commands run from inside an activated shell are
+/// fresh top-level invocations.
 static RESOLVED_INVOCATION_ID: OnceLock<Uuid> = OnceLock::new();
 
 /// Env var carrying the parent flox process's invocation id across a
-/// detached subprocess boundary. Internal — never documented as a
-/// user-facing knob.
+/// detached subprocess boundary.
 pub const FLOX_INVOCATION_ID_VAR: &str = "FLOX_INVOCATION_ID";
+
+static METRICS_EVENTS_URL_V2: LazyLock<String> = LazyLock::new(|| {
+    std::env::var("_FLOX_METRICS_URL_V2_OVERRIDE")
+        .unwrap_or(env!("METRICS_EVENTS_URL_V2").to_string())
+});
+static METRICS_EVENTS_API_KEY_V2: LazyLock<String> = LazyLock::new(|| {
+    std::env::var("_FLOX_METRICS_API_KEY_V2_OVERRIDE")
+        .unwrap_or(env!("METRICS_EVENTS_API_KEY_V2").to_string())
+});
 
 /// Resolve the invocation id for the current process.
 ///
-/// If [`FLOX_INVOCATION_ID_VAR`] is set in the environment and parses as a
-/// UUID, the process inherits it from a parent flox invocation — so its
-/// v2 events join the parent's stream downstream. Otherwise a fresh
-/// v4 UUID is minted, marking this as a top-level user invocation.
+/// If [`FLOX_INVOCATION_ID_VAR`] is set and parses as a UUID, the process
+/// inherits it from a parent flox invocation so its v2 events join the
+/// parent's stream. Otherwise a fresh v4 UUID is minted, marking this as a
+/// top-level invocation.
 pub fn resolve_invocation_id() -> Uuid {
     let resolved = match env::var(FLOX_INVOCATION_ID_VAR) {
         Ok(raw) => match Uuid::from_str(&raw) {
@@ -57,39 +55,27 @@ pub fn resolve_invocation_id() -> Uuid {
                 uuid
             },
             Err(err) => {
-                // Deliberately do not log the raw value — it is an env var
-                // a parent flox process set, so it is generally not
-                // sensitive, but matching `resolve_endpoint_url`'s rule
-                // keeps the policy uniform for tracing subscribers.
                 debug!(error = %err, "FLOX_INVOCATION_ID set but unparseable; minting fresh id");
                 Uuid::new_v4()
             },
         },
         Err(_) => Uuid::new_v4(),
     };
-    // Best-effort: store in the once-cell so subprocess spawn sites can
-    // propagate it. If `resolve_invocation_id` was already called (e.g.
-    // from a test), keep the first value.
     let _ = RESOLVED_INVOCATION_ID.set(resolved);
     resolved
 }
 
 /// Return the invocation_id resolved by [`resolve_invocation_id`] earlier in
 /// this process, if any. Detached subprocess spawn sites use this to set
-/// [`FLOX_INVOCATION_ID_VAR`] on the child's `Command` so the child joins
-/// the parent's v2 event stream rather than minting a fresh top-level
-/// invocation downstream.
+/// [`FLOX_INVOCATION_ID_VAR`] on the child's `Command`.
 pub fn current_invocation_id() -> Option<Uuid> {
     RESOLVED_INVOCATION_ID.get().copied()
 }
 
-/// Build the [`SharedMetadataTemplate`] stamped onto every v2 event
-/// emitted by this process.
-///
-/// The fields here mirror what the legacy [`crate::utils::metrics::MetricEntry`]
-/// carries today, so downstream consumers can reconstruct the existing
-/// `cli.telemetry` columns once the cutover flips traffic to the new
-/// pipeline.
+/// Build the [`SharedMetadataTemplate`] stamped onto every v2 event emitted
+/// by this process. The fields mirror the legacy
+/// [`crate::utils::metrics::MetricEntry`] so downstream consumers can
+/// reconstruct the existing columns.
 fn shared_metadata_template() -> SharedMetadataTemplate {
     let linux_release = sys_info::linux_os_release().ok();
     SharedMetadataTemplate {
@@ -105,28 +91,15 @@ fn shared_metadata_template() -> SharedMetadataTemplate {
     }
 }
 
-/// Decide whether to install an [`EventsClient`] on the global
-/// [`flox_events::EventsHub`] for this invocation.
+/// Try to build an [`EventsClient`] to install on the global
+/// [`flox_events::EventsHub`].
 ///
-/// Returns `None` (production dormant — no client installed, `record_event`
-/// short-circuits) when any of the following holds:
+/// Clients across invocations share an anonymous per-installation id via
+/// [`read_metrics_uuid`].
 ///
-/// - [`Config::flox::disable_metrics`] is `true` (the same gate the legacy
-///   metrics pipeline honors at `cli/flox/src/main.rs` and
-///   `cli/flox/src/commands/mod.rs`). Honoring the gate is consent-affecting:
-///   silent telemetry-after-opt-out would be a privacy violation in a
-///   public OSS repo.
-/// - [`read_metrics_uuid`] returns `Err` (missing or unparseable
-///   per-installation uuid file). The CLI runs to completion normally;
-///   only the v2 event stream is silenced for the run.
-/// - The dev/test override `_FLOX_METRICS_URL_OVERRIDE` is unset (this is
-///   the **production-dormant** branch). The cutover PR replaces this `None`
-///   with a Client pointing at the new pipeline's build-injected URL.
-/// - `_FLOX_METRICS_URL_OVERRIDE` is set but not parseable as a URL.
-///
-/// When the override is set to a parseable URL, the returned client points
-/// at it and authenticates with the existing build-injected
-/// [`METRICS_EVENTS_API_KEY`].
+/// Returns `None` if
+/// a) metrics are disabled by config, or
+/// b) reading the metrics uuid fails.
 pub fn build_events_client(config: &Config, invocation_id: Uuid) -> Option<EventsClient> {
     if config.flox.disable_metrics {
         debug!("v2 events: disable_metrics is true; not installing client");
@@ -141,55 +114,20 @@ pub fn build_events_client(config: &Config, invocation_id: Uuid) -> Option<Event
         },
     };
 
-    let endpoint_url = match resolve_endpoint_url() {
-        Some(url) => url,
-        None => {
-            debug!("v2 events: no override URL set; production dormant");
-            return None;
-        },
-    };
-
     Some(EventsClient::new(
         device_id,
         &config.flox.data_dir,
-        endpoint_url,
-        METRICS_EVENTS_API_KEY,
+        METRICS_EVENTS_URL_V2.clone(),
+        METRICS_EVENTS_API_KEY_V2.clone(),
         invocation_id,
         shared_metadata_template(),
     ))
 }
 
-/// Install (or skip-install) an [`EventsClient`] on the global
-/// [`EventsHub`] for the lifetime of `main` and return an [`EventsGuard`]
-/// the caller holds until end of process.
-///
-/// The guard's `Drop` flushes any buffered events through the connection,
-/// so a normal-flow command's `command_run` (emitted by the chokepoint),
-/// any per-domain events emitted during the dispatch (PRs 3–5), and the
-/// `command_completed` emitted by the dispatcher or by `activate.rs` are
-/// all delivered before the process exits.
-///
-/// When [`build_events_client`] returns `None` (production-dormant case),
-/// the guard is still returned but its flush is a no-op — `EventsHub::global()`
-/// has no client installed and `record_event` short-circuits.
-pub fn install_events_client_for_main(config: &Config, invocation_id: Uuid) -> EventsGuard {
-    if let Some(client) = build_events_client(config, invocation_id) {
-        EventsHub::global().set_client(client);
-    }
-    EventsGuard::new()
-}
-
-/// Build an [`EnvDetail`] for the supplied [`ConcreteEnvironment`], using
-/// the same env-kind / env-ref mapping the legacy
-/// `environment_subcommand_metric!` macro at
-/// `cli/flox/src/utils/metrics.rs:57-71` applies.
-///
-/// This is the **single shared helper** the spec mandates for the new path
-/// — the per-kind match must not be duplicated across `activate`, `push`,
-/// and `pull` call sites. (PR 2's `pull.rs:103` `NewAbbreviated` branch is
-/// the lone exception: it runs before a `ConcreteEnvironment` is
-/// materialized, so it constructs the `EnvDetail` directly from the
-/// `RemoteRef` available there — see the call-site comment.)
+/// Build an [`EnvDetail`] for the supplied [`ConcreteEnvironment`], using the
+/// same env-kind / env-ref mapping as the legacy
+/// `environment_subcommand_metric!` macro. Shared across call sites so the
+/// per-kind match is not duplicated.
 pub fn env_detail_from_concrete(env: &ConcreteEnvironment) -> EnvDetail {
     match env {
         ConcreteEnvironment::Remote(environment) => EnvDetail {
@@ -203,30 +141,6 @@ pub fn env_detail_from_concrete(env: &ConcreteEnvironment) -> EnvDetail {
         ConcreteEnvironment::Path(environment) => EnvDetail {
             env_kind: "path".to_string(),
             env_ref_or_name: Environment::name(environment).to_string(),
-        },
-    }
-}
-
-/// Resolve the endpoint URL for the v2 events client.
-///
-/// Until the cutover PR repoints the production endpoint, this only returns
-/// `Some` when `_FLOX_METRICS_URL_OVERRIDE` is set to a parseable URL. The
-/// override is the dev/test capture hatch — the legacy pipeline already
-/// honors it, so with it set both pipelines emit to the same local
-/// collector and the payloads can be diffed.
-fn resolve_endpoint_url() -> Option<String> {
-    let raw = env::var("_FLOX_METRICS_URL_OVERRIDE").ok()?;
-    match url::Url::parse(&raw) {
-        Ok(parsed) => Some(parsed.to_string()),
-        Err(err) => {
-            // Deliberately do not log `raw` — a dev who experiments with
-            // putting credentials in the override URL should not have them
-            // captured by a `RUST_LOG=debug` tracing subscriber.
-            debug!(
-                error = %err,
-                "v2 events: _FLOX_METRICS_URL_OVERRIDE is unparseable; not installing client"
-            );
-            None
         },
     }
 }
@@ -246,7 +160,7 @@ mod tests {
 
     /// A `Config` value pointing at a fresh tempdir, with metrics enabled
     /// and a pre-written metrics uuid so the wrapper has everything it
-    /// needs to install a client (subject to the override gate).
+    /// needs to install a client.
     fn test_config_with_uuid(tempdir: &TempDir, uuid: Uuid) -> Config {
         let data_dir = tempdir.path().join("data");
         std::fs::create_dir_all(&data_dir).expect("data dir");
@@ -309,14 +223,8 @@ mod tests {
             /* disable_metrics */ true,
         );
 
-        with_var(
-            "_FLOX_METRICS_URL_OVERRIDE",
-            Some("http://127.0.0.1:9999"),
-            || {
-                let client = build_events_client(&config, Uuid::new_v4());
-                assert!(client.is_none(), "disable_metrics must take priority");
-            },
-        );
+        let client = build_events_client(&config, Uuid::new_v4());
+        assert!(client.is_none(), "disable_metrics must take priority");
     }
 
     #[test]
@@ -328,65 +236,25 @@ mod tests {
         // No metrics-uuid file written: read_metrics_uuid errors.
         let config = test_config(&tempdir, data_dir, /* disable_metrics */ false);
 
-        with_var(
-            "_FLOX_METRICS_URL_OVERRIDE",
-            Some("http://127.0.0.1:9999"),
-            || {
-                let client = build_events_client(&config, Uuid::new_v4());
-                assert!(client.is_none(), "missing uuid must short-circuit");
-            },
-        );
+        let client = build_events_client(&config, Uuid::new_v4());
+        assert!(client.is_none(), "missing uuid must short-circuit");
     }
 
     #[test]
     #[serial(v2_events_wrapper_env)]
-    fn build_events_client_returns_none_when_override_unset() {
+    fn build_events_client_returns_some_by_default() {
         let tempdir = tempfile::tempdir().expect("tempdir");
         let uuid = Uuid::new_v4();
         let config = test_config_with_uuid(&tempdir, uuid);
 
-        with_var("_FLOX_METRICS_URL_OVERRIDE", None::<&str>, || {
-            let client = build_events_client(&config, Uuid::new_v4());
-            assert!(client.is_none(), "production must be dormant pre-cutover");
-        });
+        let client = build_events_client(&config, Uuid::new_v4());
+        assert!(client.is_some(), "v2 is enabled by default");
+        assert_eq!(client.unwrap().device_id, uuid);
     }
 
-    #[test]
-    #[serial(v2_events_wrapper_env)]
-    fn build_events_client_returns_none_when_override_unparseable() {
-        let tempdir = tempfile::tempdir().expect("tempdir");
-        let uuid = Uuid::new_v4();
-        let config = test_config_with_uuid(&tempdir, uuid);
-
-        with_var("_FLOX_METRICS_URL_OVERRIDE", Some("not a url"), || {
-            let client = build_events_client(&config, Uuid::new_v4());
-            assert!(client.is_none(), "unparseable override must short-circuit");
-        });
-    }
-
-    #[test]
-    #[serial(v2_events_wrapper_env)]
-    fn build_events_client_returns_some_when_override_is_parseable() {
-        let tempdir = tempfile::tempdir().expect("tempdir");
-        let uuid = Uuid::new_v4();
-        let config = test_config_with_uuid(&tempdir, uuid);
-
-        with_var(
-            "_FLOX_METRICS_URL_OVERRIDE",
-            Some("http://127.0.0.1:9999/"),
-            || {
-                let client = build_events_client(&config, Uuid::new_v4());
-                assert!(client.is_some(), "parseable override must yield a client");
-                let client = client.unwrap();
-                assert_eq!(client.device_id, uuid);
-            },
-        );
-    }
-
-    /// End-to-end test mirroring the spec's "one-run-one-completed" AC:
-    /// install a hub-owned client backed by a [`MockEventsConnection`],
-    /// record run + completed for one invocation, and assert exactly one
-    /// of each lands on the connection sharing one `invocation_id`.
+    /// End-to-end: install a hub-owned client backed by a
+    /// [`MockEventsConnection`], record run + completed for one invocation,
+    /// and assert exactly one of each lands sharing one `invocation_id`.
     #[test]
     #[serial(global_events_client)]
     fn one_run_one_completed_end_to_end() {

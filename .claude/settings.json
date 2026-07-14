@@ -1,4 +1,7 @@
 {
+  "enabledPlugins": {
+    "flox-rust-lsp@skills-dir": true
+  },
   "hooks": {
     "PostToolUse": [
       {
