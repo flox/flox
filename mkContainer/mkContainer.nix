@@ -16,6 +16,14 @@
   # list` work inside the container. The bash shim is omitted because
   # the real binary handles all subcommands including `flox deactivate`.
   floxBin ? "",
+  # When true, add the OpenShell compat layer:
+  #   - `sandbox` user and group (uid/gid 1000660000, per NVIDIA convention)
+  #   - iproute2 (required by the OpenShell supervisor's netns setup)
+  #   - /bin/sh symlink (guaranteed by the activation entrypoint contract)
+  #   - /sandbox and /home/flox writable dirs owned by uid/gid 1000660000
+  # When false (default), output is byte-identical to today — the oci
+  # backend and plain `flox containerize` are completely unaffected.
+  openshellCompat ? false,
   environment ? builtins.storePath environmentOutPath,
   nixpkgsFlake ? builtins.getFlake nixpkgsFlakeRef,
   pkgs ? nixpkgsFlake.legacyPackages.${system},
@@ -107,12 +115,27 @@ let
   # historic /var/empty.
   passwdHome = if hasFloxBin then "/home/flox" else "/var/empty";
 
+  # uid/gid for the OpenShell supervisor's sandboxed process. Released
+  # OpenShell resolves the literal name "sandbox" in /etc/passwd; the
+  # numeric value follows NVIDIA convention.
+  openshellSandboxUid = 1000660000;
+  openshellSandboxGid = 1000660000;
+
   fakeNss = containerPkgs.dockerTools.fakeNss.override {
     extraPasswdLines = optionals isNixStoreUserOwned [
       "${nixStoreUserGroup.uname}:x:${toString nixStoreUserGroup.uid}:${toString nixStoreUserGroup.gid}:created by Flox:${passwdHome}:/bin/sh"
+    ]
+    # OpenShell compat: add the `sandbox` user so the supervisor can resolve
+    # it in /etc/passwd at runtime.
+    ++ optionals openshellCompat [
+      "sandbox:x:${toString openshellSandboxUid}:${toString openshellSandboxGid}:OpenShell sandbox user:/home/flox:/bin/sh"
     ];
     extraGroupLines = optionals isNixStoreUserOwned [
       "${nixStoreUserGroup.gname}:x:${toString nixStoreUserGroup.gid}:"
+    ]
+    # OpenShell compat: add the `sandbox` group.
+    ++ optionals openshellCompat [
+      "sandbox:x:${toString openshellSandboxGid}:"
     ];
   };
 
@@ -174,6 +197,13 @@ let
       + optionalString (workingDir != null) ''
         mkdir -p -m 0755 "${workingDir}"
         chown ${toString nixStoreUserGroup.uid}:${toString nixStoreUserGroup.gid} "${workingDir}"
+      ''
+      # OpenShell compat: chown /run, /home/flox, and /sandbox to the sandbox
+      # uid/gid (1000660000) so the OpenShell supervisor can write to them.
+      + optionalString openshellCompat ''
+        chown -R ${toString openshellSandboxUid}:${toString openshellSandboxGid} /run
+        chown ${toString openshellSandboxUid}:${toString openshellSandboxGid} /home/flox
+        chown ${toString openshellSandboxUid}:${toString openshellSandboxGid} /sandbox
       '';
       enableFakechroot = true;
     }
@@ -207,6 +237,14 @@ let
         # passwd/group but not /etc/hosts.
         mkdir -p etc
         printf '127.0.0.1 localhost\n::1 localhost\n' > etc/hosts
+      ''
+      # OpenShell compat: ensure /bin/sh exists (required by the activation
+      # entrypoint contract and the workdir wrapper) and create the /sandbox
+      # working directory expected by the OpenShell supervisor.
+      + optionalString openshellCompat ''
+        mkdir -p bin
+        if [ ! -e bin/sh ]; then ln -s ${containerPkgs.bash}/bin/bash bin/sh; fi
+        mkdir -p -m 1777 sandbox
       '';
 
       # symlinkJoin fails when drv contains a symlinked bin directory, so wrap in an additional buildEnv.
@@ -224,6 +262,12 @@ let
         # would fail), and there is no bin/flox collision to deprioritize.
         ++ optionals hasFloxBin [
           (storePath floxBin)
+        ]
+        # OpenShell compat: iproute2 provides `ip`, required by the OpenShell
+        # supervisor's netns setup. Without it the supervisor crash-loops.
+        # lowPrio avoids conflicts with any ip binary the environment provides.
+        ++ optionals openshellCompat [
+          (lowPrio containerPkgs.iproute2)
         ];
       };
       config =
