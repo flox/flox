@@ -784,7 +784,9 @@ fn bake_openshell_image(
         true,
         true,
     );
-    let container_source = proxy.create_container_source(flox, env_name, &hash12)?;
+    // The image must land under the `-openshell` suffixed repository, not
+    // the bare env name — the oci backend owns `<env>:<hash12>`.
+    let container_source = proxy.create_container_source(flox, &repo, &hash12)?;
 
     let mut sink = container_runtime.to_writer()?;
     container_source.stream_container(&mut sink)?;
