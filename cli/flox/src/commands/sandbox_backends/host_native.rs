@@ -16,12 +16,7 @@ use std::path::{Path, PathBuf};
 use anyhow::Result;
 use flox_core::activate::sandbox_backend::SandboxBackend;
 
-use super::{ActivationSandbox, SandboxLaunchCtx};
-
-/// Environment marker set on the re-exec'd inner activation so it neither
-/// wraps again nor also applies libsandbox while running inside an OS-sandbox
-/// wrap. Must match the constant in `activate.rs`.
-pub(crate) const WRAPPED_MARKER_VAR: &str = "_FLOX_SANDBOX_WRAPPED";
+use super::{ActivationSandbox, SandboxLaunchCtx, WRAPPED_MARKER_VAR};
 
 pub struct HostNativeBackend {
     dot_flox_path: PathBuf,

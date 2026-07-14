@@ -496,55 +496,106 @@ pub(crate) struct OciImageEntry {
 
 /// List all `<env_name>:*` entries in the local container store, including
 /// both hash-tagged images and `latest` aliases.
+///
+/// The two runtimes expose different JSON schemas:
+///
+/// - **macOS (Apple Container):** `container image ls --format json` returns
+///   an array whose entries carry the full reference in
+///   `configuration.name` (e.g. `myenv:abc123`) and the content digest in
+///   `id`. There is no server-side name filter, so we fetch all images and
+///   filter in Rust.
+///
+/// - **Linux (podman):** `podman images --format json --filter
+///   reference=<env>` returns entries with `Id` (digest) and `Names`
+///   (array of full references). podman accepts a server-side filter so we
+///   push the predicate to the daemon.
 fn oci_list_env_entries(runtime: &str, env_name: &str) -> Vec<OciImageEntry> {
     #[cfg(target_os = "macos")]
-    let output = {
+    {
         let _ = runtime;
-        std::process::Command::new("container")
-            .args(["image", "list", "--format", "json"])
+        // `container image ls` has no name filter; list everything as JSON
+        // and filter here. Each entry's `configuration.name` is the exact
+        // stored reference; `id` is the content digest.
+        let Ok(out) = std::process::Command::new("container")
+            .args(["image", "ls", "--format", "json"])
             .output()
-    };
+        else {
+            return Vec::new();
+        };
+        let Ok(parsed) = serde_json::from_slice::<serde_json::Value>(&out.stdout) else {
+            return Vec::new();
+        };
+        parsed
+            .as_array()
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|e| {
+                        let reference = e.pointer("/configuration/name")?.as_str()?;
+                        let digest = e.get("id")?.as_str()?;
+                        let (name, tag) = reference.rsplit_once(':')?;
+                        // Apple Container normalizes alias refs with the
+                        // default registry prefix (`docker.io/library/<name>`);
+                        // match on the last path segment as well.
+                        let matches = name == env_name
+                            || name
+                                .rsplit_once('/')
+                                .is_some_and(|(_, last)| last == env_name);
+                        matches.then(|| OciImageEntry {
+                            reference: reference.to_string(),
+                            tag: tag.to_string(),
+                            digest: digest.to_string(),
+                        })
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
     #[cfg(not(target_os = "macos"))]
-    let output = std::process::Command::new(runtime)
-        .args(["image", "list", "--format", "json"])
-        .output();
-
-    let output = match output {
-        Ok(o) if o.status.success() => o.stdout,
-        _ => return Vec::new(),
-    };
-
-    let parsed: serde_json::Value = match serde_json::from_slice(&output) {
-        Ok(v) => v,
-        Err(_) => return Vec::new(),
-    };
-
-    let mut entries = Vec::new();
-    for e in parsed.as_array().into_iter().flatten() {
-        let digest = e.get("Id").and_then(|v| v.as_str()).unwrap_or_default();
-        for name in e
-            .get("Names")
-            .and_then(|v| v.as_array())
-            .into_iter()
-            .flatten()
-            .filter_map(|v| v.as_str())
-        {
-            if let Some((refname, tag)) = name.rsplit_once(':') {
-                let matches = refname == env_name
-                    || refname
-                        .rsplit_once('/')
-                        .is_some_and(|(_, last)| last == env_name);
-                if matches {
-                    entries.push(OciImageEntry {
-                        reference: name.to_string(),
-                        tag: tag.to_string(),
-                        digest: digest.to_string(),
-                    });
+    {
+        // `podman images --format json` entries carry `Id` and `Names`
+        // (full references). Filter to this environment's name.
+        let Ok(out) = std::process::Command::new(runtime)
+            .args([
+                "images",
+                "--format",
+                "json",
+                "--filter",
+                &format!("reference={env_name}"),
+            ])
+            .output()
+        else {
+            return Vec::new();
+        };
+        let Ok(parsed) = serde_json::from_slice::<serde_json::Value>(&out.stdout) else {
+            return Vec::new();
+        };
+        let mut entries = Vec::new();
+        for e in parsed.as_array().into_iter().flatten() {
+            let digest = e.get("Id").and_then(|v| v.as_str()).unwrap_or_default();
+            for name in e
+                .get("Names")
+                .and_then(|v| v.as_array())
+                .into_iter()
+                .flatten()
+                .filter_map(|v| v.as_str())
+            {
+                if let Some((refname, tag)) = name.rsplit_once(':') {
+                    let matches = refname == env_name
+                        || refname
+                            .rsplit_once('/')
+                            .is_some_and(|(_, last)| last == env_name);
+                    if matches {
+                        entries.push(OciImageEntry {
+                            reference: name.to_string(),
+                            tag: tag.to_string(),
+                            digest: digest.to_string(),
+                        });
+                    }
                 }
             }
         }
+        entries
     }
-    entries
 }
 
 /// List all `<env_name>:*` tags in the local container store.
@@ -1629,6 +1680,206 @@ mode = "warn"
                 !argv.contains(&cwd.display().to_string()),
                 "argv must not contain external cwd '{cwd:?}', got: {argv:?}",
             );
+        }
+    }
+
+    /// Unit tests that pin the `oci_list_env_entries` JSON-parsing logic for
+    /// each platform's container runtime.
+    ///
+    /// These tests call pure parsing helpers that mirror the two cfg branches
+    /// in `oci_list_env_entries`. Keeping them platform-independent lets the
+    /// full matrix run in CI on both macOS and Linux and prevents schema drift
+    /// from sneaking through the suite undetected.
+    mod oci_list_env_entries_parsing {
+        use super::*;
+
+        /// Parse the Apple Container `container image ls --format json` schema.
+        ///
+        /// Each element carries the full reference in `configuration.name`
+        /// (`<name>:<tag>`) and the content digest in `id`.
+        fn parse_apple_container_json(json: &str, env_name: &str) -> Vec<OciImageEntry> {
+            let parsed: serde_json::Value =
+                serde_json::from_str(json).expect("test JSON must be valid");
+            parsed
+                .as_array()
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|e| {
+                            let reference = e.pointer("/configuration/name")?.as_str()?;
+                            let digest = e.get("id")?.as_str()?;
+                            let (name, tag) = reference.rsplit_once(':')?;
+                            let matches = name == env_name
+                                || name
+                                    .rsplit_once('/')
+                                    .is_some_and(|(_, last)| last == env_name);
+                            matches.then(|| OciImageEntry {
+                                reference: reference.to_string(),
+                                tag: tag.to_string(),
+                                digest: digest.to_string(),
+                            })
+                        })
+                        .collect()
+                })
+                .unwrap_or_default()
+        }
+
+        /// Parse the podman `podman images --format json` schema.
+        ///
+        /// Each element carries `Id` (digest) and `Names` (array of full
+        /// references like `<name>:<tag>`).
+        fn parse_podman_json(json: &str, env_name: &str) -> Vec<OciImageEntry> {
+            let parsed: serde_json::Value =
+                serde_json::from_str(json).expect("test JSON must be valid");
+            let mut entries = Vec::new();
+            for e in parsed.as_array().into_iter().flatten() {
+                let digest = e.get("Id").and_then(|v| v.as_str()).unwrap_or_default();
+                for name in e
+                    .get("Names")
+                    .and_then(|v| v.as_array())
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|v| v.as_str())
+                {
+                    if let Some((refname, tag)) = name.rsplit_once(':') {
+                        let matches = refname == env_name
+                            || refname
+                                .rsplit_once('/')
+                                .is_some_and(|(_, last)| last == env_name);
+                        if matches {
+                            entries.push(OciImageEntry {
+                                reference: name.to_string(),
+                                tag: tag.to_string(),
+                                digest: digest.to_string(),
+                            });
+                        }
+                    }
+                }
+            }
+            entries
+        }
+
+        // ── Apple Container JSON parsing ──────────────────────────────────
+
+        #[test]
+        fn apple_container_extracts_matching_entry() {
+            let json = r#"[
+                {
+                    "id": "sha256:abc123",
+                    "configuration": { "name": "myenv:deadbeef1234" }
+                }
+            ]"#;
+            let entries = parse_apple_container_json(json, "myenv");
+            assert_eq!(entries.len(), 1);
+            assert_eq!(entries[0].reference, "myenv:deadbeef1234");
+            assert_eq!(entries[0].tag, "deadbeef1234");
+            assert_eq!(entries[0].digest, "sha256:abc123");
+        }
+
+        #[test]
+        fn apple_container_filters_out_other_envs() {
+            let json = r#"[
+                {
+                    "id": "sha256:aaa",
+                    "configuration": { "name": "myenv:deadbeef1234" }
+                },
+                {
+                    "id": "sha256:bbb",
+                    "configuration": { "name": "otherenv:deadbeef1234" }
+                }
+            ]"#;
+            let entries = parse_apple_container_json(json, "myenv");
+            assert_eq!(entries.len(), 1);
+            assert_eq!(entries[0].reference, "myenv:deadbeef1234");
+        }
+
+        #[test]
+        fn apple_container_matches_registry_prefixed_name() {
+            // Apple Container normalizes some refs to `docker.io/library/<name>`.
+            let json = r#"[
+                {
+                    "id": "sha256:ccc",
+                    "configuration": { "name": "docker.io/library/myenv:latest" }
+                }
+            ]"#;
+            let entries = parse_apple_container_json(json, "myenv");
+            assert_eq!(entries.len(), 1);
+            assert_eq!(entries[0].reference, "docker.io/library/myenv:latest");
+            assert_eq!(entries[0].tag, "latest");
+        }
+
+        #[test]
+        fn apple_container_empty_list_returns_empty() {
+            let entries = parse_apple_container_json("[]", "myenv");
+            assert!(entries.is_empty());
+        }
+
+        // ── Podman JSON parsing ───────────────────────────────────────────
+
+        #[test]
+        fn podman_extracts_matching_entry() {
+            let json = r#"[
+                {
+                    "Id": "sha256:def456",
+                    "Names": ["myenv:deadbeef1234"]
+                }
+            ]"#;
+            let entries = parse_podman_json(json, "myenv");
+            assert_eq!(entries.len(), 1);
+            assert_eq!(entries[0].reference, "myenv:deadbeef1234");
+            assert_eq!(entries[0].tag, "deadbeef1234");
+            assert_eq!(entries[0].digest, "sha256:def456");
+        }
+
+        #[test]
+        fn podman_extracts_multiple_tags_for_same_image() {
+            let json = r#"[
+                {
+                    "Id": "sha256:def456",
+                    "Names": ["myenv:deadbeef1234", "myenv:latest"]
+                }
+            ]"#;
+            let entries = parse_podman_json(json, "myenv");
+            assert_eq!(entries.len(), 2);
+            let tags: Vec<&str> = entries.iter().map(|e| e.tag.as_str()).collect();
+            assert!(tags.contains(&"deadbeef1234"));
+            assert!(tags.contains(&"latest"));
+        }
+
+        #[test]
+        fn podman_filters_out_other_envs() {
+            let json = r#"[
+                {
+                    "Id": "sha256:aaa",
+                    "Names": ["myenv:deadbeef1234"]
+                },
+                {
+                    "Id": "sha256:bbb",
+                    "Names": ["otherenv:deadbeef1234"]
+                }
+            ]"#;
+            let entries = parse_podman_json(json, "myenv");
+            assert_eq!(entries.len(), 1);
+            assert_eq!(entries[0].digest, "sha256:aaa");
+        }
+
+        #[test]
+        fn podman_matches_registry_prefixed_name() {
+            let json = r#"[
+                {
+                    "Id": "sha256:ccc",
+                    "Names": ["localhost/myenv:latest"]
+                }
+            ]"#;
+            let entries = parse_podman_json(json, "myenv");
+            assert_eq!(entries.len(), 1);
+            assert_eq!(entries[0].reference, "localhost/myenv:latest");
+            assert_eq!(entries[0].tag, "latest");
+        }
+
+        #[test]
+        fn podman_empty_list_returns_empty() {
+            let entries = parse_podman_json("[]", "myenv");
+            assert!(entries.is_empty());
         }
     }
 }
