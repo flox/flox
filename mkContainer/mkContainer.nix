@@ -280,9 +280,13 @@ let
         ]
         # OpenShell compat: iproute2 provides `ip`, required by the OpenShell
         # supervisor's netns setup. Without it the supervisor crash-loops.
-        # lowPrio avoids conflicts with any ip binary the environment provides.
+        # util-linux provides `nsenter`; the supervisor checks four paths
+        # (/usr/bin, /bin, /usr/sbin, /sbin) and fails if none exists —
+        # buildEnv links it at /bin/nsenter, satisfying the /bin check.
+        # lowPrio avoids conflicts with binaries the environment provides.
         ++ optionals openshellCompat [
           (lowPrio containerPkgs.iproute2)
+          (lowPrio containerPkgs.util-linux)
         ];
       };
       config =
