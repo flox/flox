@@ -170,8 +170,8 @@ server-side from the freshest authoritative source:
   factory_builds.cancelled_at — ``"cancelled"`` when set, else
   ``"pending"``. Neither word is stored; the timestamp is the only
   persisted pre-dispatch state.
-- Dispatched: tasks.status (``"queued"``, ``"running"``,
-  ``"completed"``, ``"failed"``, ``"cancelled"``).
+- Dispatched: tasks.status (``"running"``, ``"completed"``,
+  ``"failed"``, ``"cancelled"``).
 - On cancel responses: Build Coordinator's returned status, which
   is fresher than the local row (which lags until BC's callback
   lands), normalized into the task vocabulary above — BC's
@@ -192,7 +192,7 @@ coordinator-reported status appears.*/
     /// ```json
     ///{
     ///  "title": "BuildResponse",
-    ///  "description": "Build-specific details with optional task sub-object.\n\nThe task field is None for undispatched builds (task_id IS NULL\nin factory_builds).\n\nThe status field is the build's effective current status, computed\nserver-side from the freshest authoritative source:\n\n- Pre-dispatch (task_id IS NULL): computed from\n  factory_builds.cancelled_at — ``\"cancelled\"`` when set, else\n  ``\"pending\"``. Neither word is stored; the timestamp is the only\n  persisted pre-dispatch state.\n- Dispatched: tasks.status (``\"queued\"``, ``\"running\"``,\n  ``\"completed\"``, ``\"failed\"``, ``\"cancelled\"``).\n- On cancel responses: Build Coordinator's returned status, which\n  is fresher than the local row (which lags until BC's callback\n  lands), normalized into the task vocabulary above — BC's\n  ``timed_out`` is reported as ``failed``, exactly as the callback\n  path persists it. The field never carries a word outside the\n  union of the two sets above.\n\nStaleness: after handoff the field tracks tasks.status, which only\nadvances when Build Coordinator's terminal callback lands. When\ncallbacks are disabled (no callback base URL configured — a\nsupported worker configuration), the post-handoff status stays at\nthe last persisted value (typically ``\"running\"``) indefinitely;\na cancel response is then the only place a fresher\ncoordinator-reported status appears.",
+    ///  "description": "Build-specific details with optional task sub-object.\n\nThe task field is None for undispatched builds (task_id IS NULL\nin factory_builds).\n\nThe status field is the build's effective current status, computed\nserver-side from the freshest authoritative source:\n\n- Pre-dispatch (task_id IS NULL): computed from\n  factory_builds.cancelled_at — ``\"cancelled\"`` when set, else\n  ``\"pending\"``. Neither word is stored; the timestamp is the only\n  persisted pre-dispatch state.\n- Dispatched: tasks.status (``\"running\"``, ``\"completed\"``,\n  ``\"failed\"``, ``\"cancelled\"``).\n- On cancel responses: Build Coordinator's returned status, which\n  is fresher than the local row (which lags until BC's callback\n  lands), normalized into the task vocabulary above — BC's\n  ``timed_out`` is reported as ``failed``, exactly as the callback\n  path persists it. The field never carries a word outside the\n  union of the two sets above.\n\nStaleness: after handoff the field tracks tasks.status, which only\nadvances when Build Coordinator's terminal callback lands. When\ncallbacks are disabled (no callback base URL configured — a\nsupported worker configuration), the post-handoff status stays at\nthe last persisted value (typically ``\"running\"``) indefinitely;\na cancel response is then the only place a fresher\ncoordinator-reported status appears.",
     ///  "type": "object",
     ///  "required": [
     ///    "attr_path",
