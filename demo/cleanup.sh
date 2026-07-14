@@ -36,4 +36,31 @@ for img in images:
 " 2>/dev/null || true
 fi
 
-echo "Demo artifacts removed (env, grants, journal, fixtures, OCI images)."
+# Remove openshell-backend leftovers: any lingering demo sandboxes
+# (normally deleted by --no-keep on exit) and the Docker-side images
+# baked under the -openshell suffixed repository.
+if command -v openshell >/dev/null 2>&1; then
+  openshell sandbox list -o json 2>/dev/null | \
+    python3 -c "
+import json, sys, subprocess
+try:
+  sandboxes = json.load(sys.stdin)
+except Exception:
+  sandboxes = []
+for sb in sandboxes:
+  name = sb.get('name', '')
+  if name.startswith('flox-sandbox-demo-'):
+    subprocess.run(['openshell', 'sandbox', 'delete', name],
+                   check=False, capture_output=True)
+    print(f'Removed OpenShell sandbox: {name}')
+" 2>/dev/null || true
+fi
+if command -v docker >/dev/null 2>&1; then
+  docker image ls --format '{{.Repository}}:{{.Tag}}' 2>/dev/null | \
+    grep '^sandbox-demo-openshell:' | \
+    while read -r tag; do
+      docker rmi "$tag" >/dev/null 2>&1 && echo "Removed Docker image: $tag"
+    done || true
+fi
+
+echo "Demo artifacts removed (env, grants, journal, fixtures, images)."
