@@ -777,15 +777,18 @@ fn bake_openshell_image(
     // list` works inside the sandboxed session.
     // openshell_compat = true: add the sandbox user/group and iproute2.
     let proxy = ContainerizeProxy::new_with_openshell_compat(
-        builder_project,
+        builder_project.clone(),
         container_runtime.clone(),
         vec![],
         None,
         true,
         true,
     );
-    // The image must land under the `-openshell` suffixed repository, not
-    // the bare env name — the oci backend owns `<env>:<hash12>`.
+    // NOTE: create_container_source ignores the `name` argument — the inner
+    // `flox containerize` derives the image name from the environment directory
+    // name, so the archive always loads as `<env_name>:<hash12>`. After loading
+    // we retag to `<env_name>-openshell:<hash12>` and remove the bare tag so
+    // resolve_docker_image_state can find the image under the suffixed repo.
     let container_source = proxy.create_container_source(flox, &repo, &hash12)?;
 
     let mut sink = container_runtime.to_writer()?;
@@ -804,7 +807,74 @@ fn bake_openshell_image(
         std::env::remove_var("_FLOX_CONTAINERIZE_FLAKE_REF_OR_REV");
     }
 
+    // The inner builder derives the image name from the environment directory,
+    // so the image loads as `<dir_name>:<hash12>` rather than the suffixed
+    // repo. Retag it into `<env_name>-openshell:<hash12>` and remove the bare
+    // tag to keep the oci namespace clean.
+    let bare_name = builder_project
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_else(|| env_name.to_string());
+    let bare_tag = format!("{bare_name}:{hash12}");
+    docker_retag_openshell_image(&bare_tag, &hash_tag)
+        .with_context(|| format!("failed to retag '{bare_tag}' → '{hash_tag}'"))?;
+
     eprintln!("✅  Image '{hash_tag}' loaded into Docker store.");
+    Ok(())
+}
+
+// ── Post-load retag ───────────────────────────────────────────────────────────
+
+/// Retag a loaded Docker image from its builder-assigned name into the
+/// `-openshell` suffixed repository, then remove the bare tag.
+///
+/// The inner `flox containerize` builder derives the image name from the
+/// environment directory name and has no way to set it to the suffixed repo.
+/// After `docker load` completes the image sits at `<env>:<hash12>`; this
+/// function moves it to `<env>-openshell:<hash12>` so that
+/// [`resolve_docker_image_state`] can find it.
+///
+/// `docker tag` failure is fatal — without the retag, the image is effectively
+/// invisible to the openshell backend. `docker rmi` failure is non-fatal
+/// (the bare tag may already be absent or shared with another image); a debug
+/// log is emitted instead of propagating the error.
+pub(crate) fn docker_retag_openshell_image(bare_tag: &str, suffixed_tag: &str) -> Result<()> {
+    // Step 1: tag into the suffixed repo.
+    let status = std::process::Command::new("docker")
+        .args(["tag", bare_tag, suffixed_tag])
+        .status()
+        .with_context(|| format!("failed to run 'docker tag {bare_tag} {suffixed_tag}'"))?;
+    if !status.success() {
+        bail!(
+            "'docker tag {bare_tag} {suffixed_tag}' exited with {status}; \
+             the source tag may be missing or Docker is unavailable"
+        );
+    }
+    debug!(from = bare_tag, to = suffixed_tag, "retagged openshell image");
+
+    // Step 2: unlink the bare tag (best-effort; ignore if already gone).
+    let rmi_status = std::process::Command::new("docker")
+        .args(["rmi", bare_tag])
+        .status();
+    match rmi_status {
+        Ok(s) if s.success() => {
+            debug!(tag = bare_tag, "removed bare openshell image tag");
+        },
+        Ok(s) => {
+            debug!(
+                tag = bare_tag,
+                exit_status = %s,
+                "docker rmi of bare tag failed (non-fatal)"
+            );
+        },
+        Err(e) => {
+            debug!(
+                tag = bare_tag,
+                err = %e,
+                "docker rmi of bare tag errored (non-fatal)"
+            );
+        },
+    }
     Ok(())
 }
 
