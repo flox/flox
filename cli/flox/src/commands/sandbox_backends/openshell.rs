@@ -727,7 +727,7 @@ fn bake_openshell_image(
     // _FLOX_CONTAINERIZE_OPENSHELL_COMPAT marker plumbing). The oci
     // backend keeps its own, older pin — the compat layer is gated off
     // there and its builder does not need it.
-    const FROZEN_FALLBACK_REV: &str = "17d44b5d92829b890388d1431a3a57b30a9309eb";
+    const FROZEN_FALLBACK_REV: &str = "c7d31a235a3cdd24aca4c61546ea1517525c7277";
 
     let flake_ref = crate::commands::sandbox_backends::oci::oci_builder_flake_ref(
         lockfile,
