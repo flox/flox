@@ -87,6 +87,9 @@ pre-commit-hooks.lib.${stdenv.hostPlatform.system}.run {
 
           entry = ''
             ${bash}/bin/bash -c '
+
+              set -x # temporarily inpect how cz is actually invoked
+
               if [ "$PRE_COMMIT" = "1" ] \
               && [ -n "$PRE_COMMIT_FROM_REF" ] \
               && [ -n "$PRE_COMMIT_TO_REF" ]; then
