@@ -4,6 +4,7 @@
 //! reach telemetry.
 
 use anyhow::Error;
+use flox_events::LifecycleError;
 use flox_rust_sdk::models::environment::EnvironmentError;
 use flox_rust_sdk::models::environment::managed_environment::ManagedEnvironmentError;
 use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironmentError;
@@ -20,9 +21,26 @@ pub(crate) struct ErrorClass {
     pub message: &'static str,
 }
 
+impl From<ErrorClass> for LifecycleError {
+    fn from(class: ErrorClass) -> Self {
+        Self {
+            kind: class.kind.to_string(),
+            message: class.message.to_string(),
+        }
+    }
+}
+
 const UNCATEGORIZED: ErrorClass = ErrorClass {
     kind: "uncategorized",
     message: "unclassified error",
+};
+
+/// Ctrl-C ended the dispatch before it completed. Not produced by
+/// `classify` — the interrupt handler in `commands/mod.rs` emits it
+/// directly, since there is no dispatch error to classify.
+pub(crate) const INTERRUPTED: ErrorClass = ErrorClass {
+    kind: "interrupted",
+    message: "user interrupted",
 };
 
 // Shared so a managed/remote environment error classifies the same whether
@@ -127,8 +145,6 @@ fn classify_environment(e: &EnvironmentError) -> ErrorClass {
 
 #[cfg(test)]
 mod tests {
-    use std::process::ExitCode;
-
     use anyhow::anyhow;
     use flox_rust_sdk::models::environment::EnvironmentError;
 
@@ -138,7 +154,7 @@ mod tests {
 
     #[test]
     fn controlled_exit_is_not_uncategorized() {
-        let err = anyhow::Error::from(Exit(ExitCode::from(1)));
+        let err = anyhow::Error::from(Exit(1));
         assert_eq!(classify(&err), ErrorClass {
             kind: "controlled_exit",
             message: "controlled exit",

@@ -1,6 +1,5 @@
 use std::io::{BufWriter, Write};
 use std::num::NonZeroU64;
-use std::process::ExitCode;
 
 use anstream::adapter::StripBytes;
 use anyhow::Result;
@@ -33,7 +32,7 @@ impl Logs {
             Ok(stream) => stream,
             Err(FactoryClientError::NotFound) => {
                 message::error(format!("No logs available for build {}.", self.id));
-                return Err(Exit(ExitCode::from(2)).into());
+                return Err(Exit(2).into());
             },
             Err(other) => return Err(super::user_facing_error(other, None)),
         };

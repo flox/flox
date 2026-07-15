@@ -12,6 +12,7 @@ use crate::{
     CliEnvironmentPublishPayload,
     EnvDetail,
     EventKind,
+    LifecycleFields,
     PackageOutcome,
 };
 
@@ -85,11 +86,15 @@ impl EventsHub {
         })
     }
 
-    /// Shared sticky-idempotency + client-installed scaffolding for the
-    /// `command_completed` recorders: the first record per client install wins
-    /// (so the dispatcher and the `activate.rs` pre-exec path can't double-emit
-    /// for one invocation), and it no-ops when no client is installed.
-    fn record_completed(&self, record: impl FnOnce(&EventsClient) -> Result<()>) -> Result<()> {
+    /// Record a `cli.command_completed` event carrying the dispatch lifecycle
+    /// fields. No-op when no client is installed. The first record per client
+    /// install wins, so the dispatcher, the `activate.rs` pre-exec path, and
+    /// the interrupt handler cannot double-emit for one invocation.
+    pub fn record_command_completed(
+        &self,
+        subcommand: String,
+        lifecycle: LifecycleFields,
+    ) -> Result<()> {
         if self.completed_recorded.swap(true, Ordering::SeqCst) {
             debug!("command_completed already recorded for this client install, skipping");
             return Ok(());
@@ -99,33 +104,7 @@ impl EventsHub {
                 trace!("No v2 events client configured, skipping command_completed record");
                 return Ok(());
             };
-            record(client)
-        })
-    }
-
-    /// Record a `cli.command_completed` event with no lifecycle fields.
-    pub fn record_command_completed(&self, subcommand: String) -> Result<()> {
-        self.record_completed(|client| client.record_command_completed(subcommand))
-    }
-
-    /// Record a `cli.command_completed` event carrying the dispatch lifecycle
-    /// fields.
-    pub fn record_command_completed_with_lifecycle(
-        &self,
-        subcommand: String,
-        exit_code: i32,
-        duration_ms: Option<u64>,
-        error_kind: Option<String>,
-        error_message: Option<String>,
-    ) -> Result<()> {
-        self.record_completed(|client| {
-            client.record_command_completed_with_lifecycle(
-                subcommand,
-                exit_code,
-                duration_ms,
-                error_kind,
-                error_message,
-            )
+            client.record_command_completed(subcommand, lifecycle)
         })
     }
 

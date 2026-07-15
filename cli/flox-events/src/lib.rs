@@ -256,57 +256,55 @@ impl CliCommandRunPayload {
     }
 }
 
+/// PII-safe descriptor of a failed dispatch. Callers must derive both values
+/// from a fixed set of compile-time strings (never from a rendered error) so
+/// user data cannot reach telemetry.
+///
+/// Serializes flattened into the payload as `error_kind` / `error_message`.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct LifecycleError {
+    /// Bounded operation slug (e.g. `env_not_found`).
+    #[serde(rename = "error_kind")]
+    pub kind: String,
+    /// Short static descriptor for the same failure.
+    #[serde(rename = "error_message")]
+    pub message: String,
+}
+
+/// The dispatch lifecycle stamped onto a `cli.command_completed` event,
+/// serialized flattened into [`CliCommandCompletedPayload`].
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct LifecycleFields {
+    /// The exit code the invocation produces.
+    pub exit_code: i32,
+    /// Wall-clock duration in ms from dispatch start to completion (or to
+    /// interrupt); `None` when the handler hands off instead of completing
+    /// (e.g. the `activate` pre-`exec` emit), where no completion time is
+    /// observable.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub duration_ms: Option<u64>,
+    /// PII-safe descriptor of the failure; `None` on success.
+    #[serde(flatten)]
+    pub error: Option<LifecycleError>,
+}
+
 /// Payload for [`EventKind::CliCommandCompleted`].
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CliCommandCompletedPayload {
     #[serde(flatten)]
     pub command: CommandPayload,
-    /// `0` on success, `1` on any handler error. `None` when no dispatch
-    /// completed (early-exit / pre-exec / interrupt emits).
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub exit_code: Option<i32>,
-    /// Handler wall-clock duration in ms; `None` when the handler hands off
-    /// before timing (e.g. `activate` pre-exec, which emits `exit_code = 0`
-    /// with no duration), otherwise present alongside `exit_code`.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub duration_ms: Option<u64>,
-    /// PII-safe operation slug for the failing command; `None` on success.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub error_kind: Option<String>,
-    /// PII-safe static error descriptor; `None` on success.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub error_message: Option<String>,
+    /// `None` only on events recorded by clients that predate lifecycle
+    /// reporting, which carry none of the lifecycle keys; the flatten keeps
+    /// the wire shape field-additive for them.
+    #[serde(flatten)]
+    pub lifecycle: Option<LifecycleFields>,
 }
 
 impl CliCommandCompletedPayload {
-    /// Payload with no lifecycle fields (early-exit / pre-exec / interrupt).
-    pub fn new(command: CommandPayload) -> Self {
+    pub fn new(command: CommandPayload, lifecycle: LifecycleFields) -> Self {
         Self {
             command,
-            exit_code: None,
-            duration_ms: None,
-            error_kind: None,
-            error_message: None,
-        }
-    }
-
-    /// Payload carrying the dispatch lifecycle fields; the caller passes
-    /// PII-safe `(error_kind, error_message)` descriptors. `duration_ms` is
-    /// `None` when the handler hands off instead of completing (e.g. the
-    /// `activate` pre-`exec` emit), where no completion time is observable.
-    pub fn with_lifecycle(
-        command: CommandPayload,
-        exit_code: i32,
-        duration_ms: Option<u64>,
-        error_kind: Option<String>,
-        error_message: Option<String>,
-    ) -> Self {
-        Self {
-            command,
-            exit_code: Some(exit_code),
-            duration_ms,
-            error_kind,
-            error_message,
+            lifecycle: Some(lifecycle),
         }
     }
 }
@@ -1056,32 +1054,55 @@ mod tests {
     }
 
     #[test]
-    fn command_completed_serializes_to_v2_envelope() {
-        let value = serde_json::to_value(fixed_event(EventKind::CliCommandCompleted(
-            CliCommandCompletedPayload::new(command_payload("install")),
-        )))
-        .expect("event serializes");
-        let expected = json!({
-            "event_id": "00000000-0000-0000-0000-000000000000",
-            "event_timestamp": EPOCH_UNIX_MS,
-            "source": "cli",
-            "invocation_id": "00000000-0000-0000-0000-000000000000",
-            "device_id": "00000000-0000-0000-0000-000000000000",
-            "event_type": "cli.command_completed",
-            "payload": expected_payload_json("install"),
+    fn command_completed_payload_without_lifecycle_fields_deserializes() {
+        // Events buffered by clients that predate lifecycle reporting carry
+        // none of the lifecycle fields; the payload must stay field-additive.
+        let legacy = expected_payload_json("install");
+        let payload: CliCommandCompletedPayload =
+            serde_json::from_value(legacy).expect("legacy payload deserializes");
+        assert_eq!(payload, CliCommandCompletedPayload {
+            command: command_payload("install"),
+            lifecycle: None,
         });
-        assert_eq!(value, expected);
     }
 
     #[test]
-    fn command_completed_with_lifecycle_success_envelope_golden() {
-        let payload = CliCommandCompletedPayload::with_lifecycle(
-            command_payload("install"),
-            0,
-            Some(1234),
-            None,
-            None,
+    fn command_completed_payload_with_lifecycle_fields_deserializes() {
+        // Buffered events are read back before delivery; the flattened
+        // lifecycle (including the flattened error pair) must deserialize to
+        // `Some`, not silently collapse to `None`.
+        let mut json = expected_payload_json("install");
+        let obj = json.as_object_mut().expect("payload object");
+        obj.insert("exit_code".to_string(), json!(1));
+        obj.insert("duration_ms".to_string(), json!(567));
+        obj.insert("error_kind".to_string(), json!("catalog_resolve"));
+        obj.insert(
+            "error_message".to_string(),
+            json!("failed to resolve packages from catalog"),
         );
+        let payload: CliCommandCompletedPayload =
+            serde_json::from_value(json).expect("payload deserializes");
+        assert_eq!(payload, CliCommandCompletedPayload {
+            command: command_payload("install"),
+            lifecycle: Some(LifecycleFields {
+                exit_code: 1,
+                duration_ms: Some(567),
+                error: Some(LifecycleError {
+                    kind: "catalog_resolve".to_string(),
+                    message: "failed to resolve packages from catalog".to_string(),
+                }),
+            }),
+        });
+    }
+
+    #[test]
+    fn command_completed_success_envelope_golden() {
+        let payload =
+            CliCommandCompletedPayload::new(command_payload("install"), LifecycleFields {
+                exit_code: 0,
+                duration_ms: Some(1234),
+                error: None,
+            });
         let value = serde_json::to_value(fixed_event(EventKind::CliCommandCompleted(payload)))
             .expect("event serializes");
         let mut payload_json = expected_payload_json("install");
@@ -1103,13 +1124,12 @@ mod tests {
     #[test]
     fn command_completed_handoff_records_exit_code_without_duration() {
         // The `activate` pre-exec handoff: exit_code 0, no completion duration.
-        let payload = CliCommandCompletedPayload::with_lifecycle(
-            command_payload("activate"),
-            0,
-            None,
-            None,
-            None,
-        );
+        let payload =
+            CliCommandCompletedPayload::new(command_payload("activate"), LifecycleFields {
+                exit_code: 0,
+                duration_ms: None,
+                error: None,
+            });
         let value = serde_json::to_value(fixed_event(EventKind::CliCommandCompleted(payload)))
             .expect("event serializes");
         let obj = value
@@ -1124,14 +1144,16 @@ mod tests {
     }
 
     #[test]
-    fn command_completed_with_lifecycle_failure_envelope_golden() {
-        let payload = CliCommandCompletedPayload::with_lifecycle(
-            command_payload("install"),
-            1,
-            Some(567),
-            Some("catalog_resolve".to_string()),
-            Some("failed to resolve packages from catalog".to_string()),
-        );
+    fn command_completed_failure_envelope_golden() {
+        let payload =
+            CliCommandCompletedPayload::new(command_payload("install"), LifecycleFields {
+                exit_code: 1,
+                duration_ms: Some(567),
+                error: Some(LifecycleError {
+                    kind: "catalog_resolve".to_string(),
+                    message: "failed to resolve packages from catalog".to_string(),
+                }),
+            });
         let value = serde_json::to_value(fixed_event(EventKind::CliCommandCompleted(payload)))
             .expect("event serializes");
         let mut payload_json = expected_payload_json("install");
@@ -1690,6 +1712,11 @@ mod pipeline_tests {
     fn command_completed_kind() -> EventKind {
         EventKind::CliCommandCompleted(CliCommandCompletedPayload::new(
             shared_metadata().into_payload("install".to_string()),
+            LifecycleFields {
+                exit_code: 0,
+                duration_ms: Some(1),
+                error: None,
+            },
         ))
     }
 
@@ -1942,10 +1969,21 @@ mod pipeline_tests {
         let hub = EventsHub::new();
         hub.set_client(client_with_connection(&tempdir, connection));
 
-        hub.record_command_completed("install".to_string())
-            .expect("first completed record succeeds");
-        hub.record_command_completed("install".to_string())
-            .expect("second completed record is a silent no-op");
+        hub.record_command_completed("install".to_string(), LifecycleFields {
+            exit_code: 0,
+            duration_ms: Some(100),
+            error: None,
+        })
+        .expect("first completed record succeeds");
+        hub.record_command_completed("install".to_string(), LifecycleFields {
+            exit_code: 1,
+            duration_ms: Some(200),
+            error: Some(LifecycleError {
+                kind: "env_not_found".to_string(),
+                message: "environment not found".to_string(),
+            }),
+        })
+        .expect("second completed record is a silent no-op");
         hub.flush(true).expect("flush events");
 
         let sent_batches = sent_batches.lock().expect("sent batches lock").clone();
@@ -1954,37 +1992,6 @@ mod pipeline_tests {
             total_events, 1,
             "second record_command_completed must be a no-op"
         );
-    }
-
-    #[test]
-    fn events_hub_record_command_completed_with_lifecycle_is_idempotent_per_install() {
-        let tempdir = tempfile::tempdir().expect("tempdir");
-        let connection = MockEventsConnection::default();
-        let sent_batches = connection.sent_batches();
-        let hub = EventsHub::new();
-        hub.set_client(client_with_connection(&tempdir, connection));
-
-        hub.record_command_completed_with_lifecycle(
-            "install".to_string(),
-            0,
-            Some(100),
-            None,
-            None,
-        )
-        .expect("first lifecycle record succeeds");
-        hub.record_command_completed_with_lifecycle(
-            "install".to_string(),
-            1,
-            Some(200),
-            Some("env_not_found".to_string()),
-            Some("environment not found".to_string()),
-        )
-        .expect("second lifecycle record is a silent no-op");
-        hub.flush(true).expect("flush events");
-
-        let sent_batches = sent_batches.lock().expect("sent batches lock").clone();
-        let total_events: usize = sent_batches.iter().map(Vec::len).sum();
-        assert_eq!(total_events, 1, "second lifecycle record must be a no-op");
     }
 
     #[test]
@@ -1998,11 +2005,20 @@ mod pipeline_tests {
 
         let hub = EventsHub::new();
         hub.set_client(client_with_connection(&first_dir, first_conn));
-        hub.record_command_completed("install".to_string()).unwrap();
+        hub.record_command_completed("install".to_string(), LifecycleFields {
+            exit_code: 0,
+            duration_ms: Some(1),
+            error: None,
+        })
+        .unwrap();
         hub.flush(true).unwrap();
         hub.set_client(client_with_connection(&second_dir, second_conn));
-        hub.record_command_completed("upgrade".to_string())
-            .expect("new install's completed record is allowed");
+        hub.record_command_completed("upgrade".to_string(), LifecycleFields {
+            exit_code: 0,
+            duration_ms: Some(1),
+            error: None,
+        })
+        .expect("new install's completed record is allowed");
         hub.flush(true).unwrap();
 
         assert_eq!(
