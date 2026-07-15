@@ -110,26 +110,6 @@
           nef-lock-catalog = callPackage ./pkgs/nef-lock-catalog { };
           flox-cli = callPackage ./pkgs/flox-cli { };
 
-          # Kerberos-enabled variant with GSSAPI authentication
-          flox-cli-kerberos = callPackage ./pkgs/flox-cli {
-            overrideCatalogAuth = "floxhub-authn-kerberos";
-            rust-internal-deps = final.rust-internal-deps.override {
-              overrideCatalogAuth = "floxhub-authn-kerberos";
-              rust-external-deps = final.rust-external-deps.override {
-                overrideCatalogAuth = "floxhub-authn-kerberos";
-              };
-              flox-package-builder = final.flox-package-builder.override {
-                nef-lock-catalog = final.nef-lock-catalog.override {
-                  overrideCatalogAuth = "floxhub-authn-kerberos";
-                  rust-external-deps = final.rust-external-deps.override {
-                    overrideCatalogAuth = "floxhub-authn-kerberos";
-                  };
-                };
-              };
-            };
-
-          };
-
           flox-manpages = callPackage ./pkgs/flox-manpages { }; # Flox Command Line Interface Manpages
           flox = callPackage ./pkgs/flox { }; # Flox Command Line Interface ( production build ).
 
@@ -216,7 +196,6 @@
           flox-activations
           nef-lock-catalog
           flox-cli
-          flox-cli-kerberos
           flox-cli-tests
           flox-manpages
           flox

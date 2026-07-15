@@ -18,9 +18,6 @@
   rust-toolchain,
   rustfmt ? rust-toolchain.rustfmt,
   stdenv,
-  # Override catalog authentication strategy if needed
-  # Options: "floxhub-authn-kerberos"
-  overrideCatalogAuth ? null,
 }:
 let
   FLOX_VERSION = lib.fileContents ./../../VERSION;
@@ -84,11 +81,7 @@ craneLib.buildPackage (
 
     # Set up incremental compilation
     cargoArtifacts = rust-internal-deps;
-    cargoExtraArgs =
-      "--locked -p flox"
-      + lib.optionalString (
-        overrideCatalogAuth != null
-      ) " --features flox-rust-sdk/${overrideCatalogAuth}";
+    cargoExtraArgs = "--locked -p flox";
 
     # runtime dependencies
     buildInputs = rust-internal-deps.buildInputs ++ [ ];
