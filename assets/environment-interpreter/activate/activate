@@ -30,12 +30,8 @@ _flox_activations="@flox_activations@"
 
 set -euo pipefail
 
-# These all derive from the `flox-interpreter` package.
-# FIXME This is wrong; the profile.d scripts in particular should be
-#       sourced from the environment itself so that users can add pkgs
-#       which add additional scripts to the etc/profile.d directory.
+# The activation helper scripts derive from the `flox-interpreter` package.
 export _activate_d="__OUT__/activate.d"
-_profile_d="__OUT__/etc/profile.d"
 
 # shellcheck source-path=SCRIPTDIR/activate.d
 source "${_activate_d}/helpers.bash"
@@ -152,6 +148,12 @@ if [ -z "${_FLOX_ENV:-}" ]; then
   echo "$USAGE" >&2
   exit 1
 fi
+
+# Source profile.d scripts from the rendered environment rather than the
+# interpreter package so that scripts provided by installed packages are
+# processed in addition to the interpreter's own scripts, which are
+# symlinked into the environment as it is built.
+_profile_d="$_FLOX_ENV/etc/profile.d"
 
 # Convert the provided command string into an array of arguments in "$@".
 # Henceforth in the script it is assumed that these are the arguments to be

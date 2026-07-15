@@ -2695,6 +2695,39 @@ EOF
   assert_success
 }
 
+# Packages installed to an environment may provide their own etc/profile.d
+# scripts, which are linked into the rendered environment and must be sourced
+# from $FLOX_ENV on activation, not just the scripts provided by the
+# interpreter package.
+@test "profile: package-provided profile.d scripts are sourced from FLOX_ENV" {
+  project_setup
+
+  # Fabricate a package that provides an etc/profile.d script and install it
+  # to the environment as a store path.
+  mkdir -p "$BATS_TEST_TMPDIR/pkg/etc/profile.d"
+  cat > "$BATS_TEST_TMPDIR/pkg/etc/profile.d/0900_from-package.sh" <<'EOF'
+export _FLOX_PROFILE_D_TEST_VAR="from-package-profile.d"
+EOF
+  pkg_store_path="$(nix --extra-experimental-features nix-command \
+    store add --name profile-d-test-pkg "$BATS_TEST_TMPDIR/pkg")"
+  run "$FLOX_BIN" install "$pkg_store_path"
+  assert_success
+
+  SCRIPT="$(cat <<'EOF'
+    if ! [ -e "$FLOX_ENV/etc/profile.d/0900_from-package.sh" ]; then
+      echo "package profile.d script was not linked into the environment" >&3
+      exit 1
+    fi
+    if [ "$_FLOX_PROFILE_D_TEST_VAR" != "from-package-profile.d" ]; then
+      echo "package profile.d script was not sourced" >&3
+      exit 1
+    fi
+EOF
+  )"
+  FLOX_SHELL=bash run "$FLOX_BIN" activate -c "$SCRIPT"
+  assert_success
+}
+
 @test "activate works with fish 3.2.2" {
   if [ "$NIX_SYSTEM" == aarch64-linux ]; then
     # running fish at all on aarch64-linux throws:
