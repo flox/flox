@@ -112,6 +112,17 @@ on-activate = \'\'\'
     printf '{"hasCompletedOnboarding":true,"projects":{"%s":{"hasTrustDialogAccepted":true}}}' \
       "$_proj" > "$CLAUDE_CONFIG_DIR/.claude.json"
   fi
+  # Pre-seeded agent auth: a gitignored .env at the project root is
+  # the one host-writable, guest-readable channel (the project is the
+  # only mount). Drop CLAUDE_CODE_OAUTH_TOKEN=... there (from
+  # `claude setup-token` on the host) and the agent needs no
+  # interactive login inside the sandbox — the OAuth URL it prints
+  # cannot be copied out of a sandboxed session.
+  if [ -f "$_proj/.env" ]; then
+    set -a
+    . "$_proj/.env"
+    set +a
+  fi
 \'\'\'
 '''
 services = '''[services]
@@ -141,9 +152,9 @@ printf 'def greet():\n    return 1\n' > app.py
 # (http.server serves index.html for '/' instead of a slow directory
 # listing of the project, which includes the heavy .flox/ tree).
 printf '<!doctype html><title>sandbox-demo</title>\n<h1>Hello from inside the flox sandbox</h1>\n' > index.html
-# Agent credentials live under .claude/ inside the project mount —
-# never commit them.
-printf '.claude/\n' > .gitignore
+# Agent credentials live under .claude/ and .env inside the project
+# mount — never commit them.
+printf '.claude/\n.env\n' > .gitignore
 git init -q
 git config user.email demo@flox.dev
 git config user.name  "Demo"

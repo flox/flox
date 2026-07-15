@@ -32,8 +32,11 @@ stayed denied — confirming per-binary scoping. Beat 3's write-denial
 was also rehearsed 2026-07-14 with a negative result: `read-only`
 does not block write methods on 0.0.82 (see the warning in beat 3)
 — keep it out of the talk track. The one thing still needing an
-off-camera rehearsal is beat 4's interactive Anthropic login + live
-agent run.
+off-camera rehearsal is beat 4's live agent run. (Interactive
+login inside the guest turned out to be a dead end — the OAuth URL
+can't be copied out of a sandboxed session — so beat 4 now
+pre-seeds a `claude setup-token` token via a gitignored `.env`;
+added 2026-07-15, not yet rehearsed.)
 
 ---
 
@@ -342,9 +345,32 @@ Claude edits `app.py` and commits — no per-action prompts. If it
 tries to reach anywhere outside the policy, the proxy denies it and
 the denial shows up in `openshell logs`.
 
-> One-time `claude` login persists in `$CLAUDE_CONFIG_DIR` under the
-> project mount, exactly as in the OCI demo. The guest runs as the
-> unprivileged `sandbox` user, so
+> **Authenticate before the demo — don't log in inside the guest.**
+> The interactive `claude` login prints an OAuth URL, and a sandboxed
+> session gives you no way to copy it out (or paste the code back).
+> Skip the flow entirely: on the **host**, run
+>
+> ```bash
+> claude setup-token
+> ```
+>
+> (browser OAuth; prints a one-year `sk-ant-oat01-…` token; requires
+> a Claude subscription), then drop the token into a gitignored
+> `.env` at the project root:
+>
+> ```bash
+> printf 'CLAUDE_CODE_OAUTH_TOKEN=%s\n' '<token>' > ~/sandbox-demo/.env
+> ```
+>
+> The env hook sources `.env` into every activation, so the first
+> in-guest `claude` starts already authenticated — no prompts. The
+> file lives under the project mount, the one directory you chose to
+> share, so beat 2's isolation story is unchanged; setup.sh
+> gitignores it alongside `.claude/`. (Interactive login, if you
+> ever do it somewhere copy/paste works, still persists in
+> `$CLAUDE_CONFIG_DIR` under the project mount as before.)
+>
+> The guest runs as the unprivileged `sandbox` user, so
 > `claude --dangerously-skip-permissions` also works here if you
 > prefer it to auto mode.
 
