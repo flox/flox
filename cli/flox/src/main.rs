@@ -2,14 +2,23 @@ use std::backtrace::BacktraceStatus;
 use std::env;
 use std::fmt::{Debug, Display};
 use std::process::ExitCode;
+use std::time::Instant;
 
 use anyhow::Result;
 use bpaf::{Args, Parser};
-use commands::{EnvironmentSelectError, FloxArgs, FloxCli, NoEnvironmentError, Prefix, Version};
+use commands::{
+    EnvironmentSelectError,
+    FloxArgs,
+    FloxCli,
+    Interrupted,
+    NoEnvironmentError,
+    Prefix,
+    Version,
+};
 use flox_config::Config;
 use flox_core::sentry::init_sentry;
 use flox_core::vars::{FLOX_VERSION_STRING, FLOX_VERSION_VAR};
-use flox_events::EventsGuard;
+use flox_events::{EventsGuard, LifecycleFields};
 use flox_rust_sdk::flox::FLOX_VERSION;
 use flox_rust_sdk::models::environment::EnvironmentError;
 use flox_rust_sdk::models::environment::managed_environment::ManagedEnvironmentError;
@@ -152,72 +161,111 @@ fn main() -> ExitCode {
     // Errors handled above
     let FloxCli(args) = args.unwrap();
 
+    let v2_subcommand = args.subcommand_name();
+
     // Runtime creates our SIGINT/Ctrl-C handler, so care must be taken to drop it last
     let runtime = tokio::runtime::Runtime::new().unwrap();
 
-    // Run flox. Print errors and exit with status 1 on failure
-    let exit_code = match runtime.block_on(run(args)) {
-        Ok(()) => ExitCode::from(0),
+    let dispatch_start = Instant::now();
+    let result = runtime.block_on(run(args));
+
+    // Print errors; derive the exit code and the telemetry `error_kind`.
+    let (code, error_kind): (u8, Option<&'static str>) = match &result {
+        Ok(()) => (0, None),
+
+        // Do not print any error for a controlled exit
+        Err(e) if e.is::<Exit>() => (e.downcast_ref::<Exit>().unwrap().0, Some("controlled_exit")),
 
         Err(e) => {
-            // Do not print any error
-            if e.is::<Exit>() {
-                return ExitCode::from(e.downcast_ref::<Exit>().unwrap().0);
-            }
-
-            // This display ladder is mirrored by `utils::error_class::classify`
-            // for telemetry; a new error type added here should be added there too.
-            let message = e
-                .downcast_ref::<NoEnvironmentError>()
-                .map(ToString::to_string)
-                .or_else(|| e.downcast_ref::<EnvironmentError>().map(format_error))
-                .or_else(|| {
-                    e.downcast_ref::<ManagedEnvironmentError>()
-                        .map(format_managed_error)
-                })
-                .or_else(|| {
-                    e.downcast_ref::<RemoteEnvironmentError>()
-                        .map(format_remote_error)
-                })
-                .or_else(|| {
-                    e.downcast_ref::<EnvironmentSelectError>()
-                        .map(format_environment_select_error)
-                })
-                .or_else(|| e.downcast_ref::<ServiceError>().map(format_service_error));
-
-            if let Some(message) = message {
+            let kind = if let Some((message, kind)) = display_and_kind(e) {
                 message::error(message);
-
-                if matches!(e.backtrace().status(), BacktraceStatus::Captured) {
-                    eprintln!("{}", e.backtrace());
-                }
-
-                return ExitCode::from(1);
-            }
-
-            // unknown errors are printed with an error trace
-            let err_str = e
-                .chain()
-                .skip(1)
-                .fold(e.to_string(), |acc, cause| format!("{acc}: {cause}"));
-
-            message::error(err_str);
+                kind
+            } else {
+                // unknown errors are printed with an error trace
+                let err_str = e
+                    .chain()
+                    .skip(1)
+                    .fold(e.to_string(), |acc, cause| format!("{acc}: {cause}"));
+                message::error(err_str);
+                "uncategorized"
+            };
 
             if matches!(e.backtrace().status(), BacktraceStatus::Captured) {
                 eprintln!("{}", e.backtrace());
             }
 
-            ExitCode::from(1)
+            (1, Some(kind))
         },
     };
+
+    // Emit the v2 `cli.command_completed`. The hub no-ops when no client was
+    // installed (e.g. a bare `flox` invocation) or when `activate.rs`
+    // recorded the pre-exec completion before `exec`.
+    if let Err(err) = flox_events::EventsHub::global().record_command_completed(
+        v2_subcommand.to_string(),
+        LifecycleFields {
+            exit_code: i32::from(code),
+            duration_ms: Some(duration_to_ms(dispatch_start.elapsed())),
+            error_kind: error_kind.map(String::from),
+        },
+    ) {
+        debug!(error = %err, "Failed to record v2 cli.command_completed event");
+    }
 
     drop(_v2_events_guard);
     drop(_metrics_guard);
     drop(_sentry_guard);
 
-    exit_code
+    ExitCode::from(code)
 
     // drop(runtime) should implicitly be last
+}
+
+/// Display message and telemetry `error_kind` for a typed dispatch error;
+/// `None` when the error has no typed match. The kinds are the strum-derived
+/// namespaced variant slugs, so classification cannot drift from this ladder.
+fn display_and_kind(e: &anyhow::Error) -> Option<(String, &'static str)> {
+    e.downcast_ref::<NoEnvironmentError>()
+        .map(|err| (err.to_string(), kind_of(err)))
+        .or_else(|| {
+            e.downcast_ref::<EnvironmentError>()
+                .map(|err| (format_error(err), kind_of(err)))
+        })
+        .or_else(|| {
+            e.downcast_ref::<ManagedEnvironmentError>()
+                .map(|err| (format_managed_error(err), kind_of(err)))
+        })
+        .or_else(|| {
+            e.downcast_ref::<RemoteEnvironmentError>()
+                .map(|err| (format_remote_error(err), kind_of(err)))
+        })
+        .or_else(|| {
+            e.downcast_ref::<EnvironmentSelectError>()
+                .map(|err| (format_environment_select_error(err), kind_of(err)))
+        })
+        .or_else(|| {
+            e.downcast_ref::<ServiceError>()
+                .map(|err| (format_service_error(err), kind_of(err)))
+        })
+        .or_else(|| {
+            // `Interrupted` is a struct, so it has no strum variant slug.
+            e.downcast_ref::<Interrupted>()
+                .map(|err| (err.to_string(), "interrupted"))
+        })
+}
+
+/// The strum-derived namespaced variant slug for `e`.
+fn kind_of<T>(e: &T) -> &'static str
+where
+    for<'a> &'a T: Into<&'static str>,
+{
+    e.into()
+}
+
+/// Saturate a duration into whole ms (u64::MAX ms is ~584M years — a
+/// ceiling only).
+fn duration_to_ms(elapsed: std::time::Duration) -> u64 {
+    u64::try_from(elapsed.as_millis()).unwrap_or(u64::MAX)
 }
 
 /// Fixed bash completion script that replaces bpaf's generated version.
@@ -293,5 +341,50 @@ fn set_user() -> Result<()> {
 fn reset_sigpipe() {
     unsafe {
         nix::libc::signal(nix::libc::SIGPIPE, nix::libc::SIG_DFL);
+    }
+}
+
+#[cfg(test)]
+mod error_kind_tests {
+    use std::path::PathBuf;
+
+    use super::*;
+
+    #[test]
+    fn kind_is_namespaced_variant_slug() {
+        let err = anyhow::Error::from(EnvironmentError::ManifestNotFound);
+        let (_, kind) = display_and_kind(&err).expect("typed error classifies");
+        assert_eq!(kind, "environment.manifest_not_found");
+    }
+
+    #[test]
+    fn no_environment_error_kind() {
+        let err = anyhow::Error::from(NoEnvironmentError::CurrentDirectory);
+        let (_, kind) = display_and_kind(&err).expect("typed error classifies");
+        assert_eq!(kind, "no_environment.current_directory");
+    }
+
+    /// The derived kind is the outer variant: a wrapped `EnvironmentError`
+    /// classifies as `env_select.environment_error`, not its inner variant.
+    #[test]
+    fn nested_environment_error_reports_outer_variant() {
+        let inner = EnvironmentError::DotFloxNotFound(PathBuf::from("/tmp/project/.flox"));
+        let err = anyhow::Error::from(EnvironmentSelectError::EnvironmentError(inner));
+        let (_, kind) = display_and_kind(&err).expect("typed error classifies");
+        assert_eq!(kind, "env_select.environment_error");
+    }
+
+    #[test]
+    fn interrupted_classifies_with_original_message() {
+        let err = anyhow::Error::from(Interrupted);
+        let (message, kind) = display_and_kind(&err).expect("typed error classifies");
+        assert_eq!(kind, "interrupted");
+        assert_eq!(message, "user interrupted process");
+    }
+
+    #[test]
+    fn untyped_error_has_no_kind_and_no_pii() {
+        let err = anyhow::anyhow!("could not open /Users/alice/secret.toml");
+        assert_eq!(display_and_kind(&err), None);
     }
 }

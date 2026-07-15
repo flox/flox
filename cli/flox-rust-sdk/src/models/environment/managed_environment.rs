@@ -77,7 +77,8 @@ pub struct ManagedEnvironment {
     generation: Option<GenerationId>,
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, strum::IntoStaticStr)]
+#[strum(serialize_all = "snake_case", prefix = "managed_environment.")]
 pub enum ManagedEnvironmentError {
     #[error(transparent)]
     FloxmetaBranch(#[from] FloxmetaBranchError),

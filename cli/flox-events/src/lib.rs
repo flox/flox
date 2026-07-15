@@ -256,21 +256,6 @@ impl CliCommandRunPayload {
     }
 }
 
-/// PII-safe descriptor of a failed dispatch. Callers must derive both values
-/// from a fixed set of compile-time strings (never from a rendered error) so
-/// user data cannot reach telemetry.
-///
-/// Serializes flattened into the payload as `error_kind` / `error_message`.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct LifecycleError {
-    /// Bounded operation slug (e.g. `env_not_found`).
-    #[serde(rename = "error_kind")]
-    pub kind: String,
-    /// Short static descriptor for the same failure.
-    #[serde(rename = "error_message")]
-    pub message: String,
-}
-
 /// The dispatch lifecycle stamped onto a `cli.command_completed` event,
 /// serialized flattened into [`CliCommandCompletedPayload`].
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -283,9 +268,12 @@ pub struct LifecycleFields {
     /// observable.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub duration_ms: Option<u64>,
-    /// PII-safe descriptor of the failure; `None` on success.
-    #[serde(flatten)]
-    pub error: Option<LifecycleError>,
+    /// PII-safe slug for the failure, namespaced per error type (e.g.
+    /// `environment.manifest_not_found`); `None` on success. Callers must
+    /// derive it from a fixed set of compile-time strings (never from a
+    /// rendered error) so user data cannot reach telemetry.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error_kind: Option<String>,
 }
 
 /// Payload for [`EventKind::CliCommandCompleted`].
@@ -1069,16 +1057,15 @@ mod tests {
     #[test]
     fn command_completed_payload_with_lifecycle_fields_deserializes() {
         // Buffered events are read back before delivery; the flattened
-        // lifecycle (including the flattened error pair) must deserialize to
-        // `Some`, not silently collapse to `None`.
+        // lifecycle must deserialize to `Some`, not silently collapse to
+        // `None`.
         let mut json = expected_payload_json("install");
         let obj = json.as_object_mut().expect("payload object");
         obj.insert("exit_code".to_string(), json!(1));
         obj.insert("duration_ms".to_string(), json!(567));
-        obj.insert("error_kind".to_string(), json!("catalog_resolve"));
         obj.insert(
-            "error_message".to_string(),
-            json!("failed to resolve packages from catalog"),
+            "error_kind".to_string(),
+            json!("environment.manifest_not_found"),
         );
         let payload: CliCommandCompletedPayload =
             serde_json::from_value(json).expect("payload deserializes");
@@ -1087,10 +1074,7 @@ mod tests {
             lifecycle: Some(LifecycleFields {
                 exit_code: 1,
                 duration_ms: Some(567),
-                error: Some(LifecycleError {
-                    kind: "catalog_resolve".to_string(),
-                    message: "failed to resolve packages from catalog".to_string(),
-                }),
+                error_kind: Some("environment.manifest_not_found".to_string()),
             }),
         });
     }
@@ -1101,7 +1085,7 @@ mod tests {
             CliCommandCompletedPayload::new(command_payload("install"), LifecycleFields {
                 exit_code: 0,
                 duration_ms: Some(1234),
-                error: None,
+                error_kind: None,
             });
         let value = serde_json::to_value(fixed_event(EventKind::CliCommandCompleted(payload)))
             .expect("event serializes");
@@ -1128,7 +1112,7 @@ mod tests {
             CliCommandCompletedPayload::new(command_payload("activate"), LifecycleFields {
                 exit_code: 0,
                 duration_ms: None,
-                error: None,
+                error_kind: None,
             });
         let value = serde_json::to_value(fixed_event(EventKind::CliCommandCompleted(payload)))
             .expect("event serializes");
@@ -1149,10 +1133,7 @@ mod tests {
             CliCommandCompletedPayload::new(command_payload("install"), LifecycleFields {
                 exit_code: 1,
                 duration_ms: Some(567),
-                error: Some(LifecycleError {
-                    kind: "catalog_resolve".to_string(),
-                    message: "failed to resolve packages from catalog".to_string(),
-                }),
+                error_kind: Some("environment.manifest_not_found".to_string()),
             });
         let value = serde_json::to_value(fixed_event(EventKind::CliCommandCompleted(payload)))
             .expect("event serializes");
@@ -1160,10 +1141,9 @@ mod tests {
         let obj = payload_json.as_object_mut().expect("payload object");
         obj.insert("exit_code".to_string(), json!(1));
         obj.insert("duration_ms".to_string(), json!(567));
-        obj.insert("error_kind".to_string(), json!("catalog_resolve"));
         obj.insert(
-            "error_message".to_string(),
-            json!("failed to resolve packages from catalog"),
+            "error_kind".to_string(),
+            json!("environment.manifest_not_found"),
         );
         let expected = json!({
             "event_id": "00000000-0000-0000-0000-000000000000",
@@ -1715,7 +1695,7 @@ mod pipeline_tests {
             LifecycleFields {
                 exit_code: 0,
                 duration_ms: Some(1),
-                error: None,
+                error_kind: None,
             },
         ))
     }
@@ -1972,16 +1952,13 @@ mod pipeline_tests {
         hub.record_command_completed("install".to_string(), LifecycleFields {
             exit_code: 0,
             duration_ms: Some(100),
-            error: None,
+            error_kind: None,
         })
         .expect("first completed record succeeds");
         hub.record_command_completed("install".to_string(), LifecycleFields {
             exit_code: 1,
             duration_ms: Some(200),
-            error: Some(LifecycleError {
-                kind: "env_not_found".to_string(),
-                message: "environment not found".to_string(),
-            }),
+            error_kind: Some("environment.env_dir_not_found".to_string()),
         })
         .expect("second completed record is a silent no-op");
         hub.flush(true).expect("flush events");
@@ -2008,7 +1985,7 @@ mod pipeline_tests {
         hub.record_command_completed("install".to_string(), LifecycleFields {
             exit_code: 0,
             duration_ms: Some(1),
-            error: None,
+            error_kind: None,
         })
         .unwrap();
         hub.flush(true).unwrap();
@@ -2016,7 +1993,7 @@ mod pipeline_tests {
         hub.record_command_completed("upgrade".to_string(), LifecycleFields {
             exit_code: 0,
             duration_ms: Some(1),
-            error: None,
+            error_kind: None,
         })
         .expect("new install's completed record is allowed");
         hub.flush(true).unwrap();

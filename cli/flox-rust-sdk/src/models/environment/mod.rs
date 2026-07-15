@@ -751,7 +751,8 @@ impl UninitializedEnvironment {
     }
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, strum::IntoStaticStr)]
+#[strum(serialize_all = "snake_case", prefix = "environment.")]
 pub enum EnvironmentError {
     // todo: candidate for impl specific error
     // * only path and managed env are defined in .flox
