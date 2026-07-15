@@ -44,6 +44,7 @@ pub use api_types::{
     LockedInputEntry,
     LookupGroup,
     ReferencePoint,
+    ReferencesItem,
     Stability,
     UnresolvableEntry,
     UnresolvableLeaf,

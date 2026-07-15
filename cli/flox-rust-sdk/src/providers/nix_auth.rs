@@ -170,13 +170,11 @@ pub(crate) fn store_needs_auth(url: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use floxhub_client::token_test_helpers::FAKE_TOKEN;
     use tempfile::tempdir;
 
     use super::*;
     use crate::flox::FloxhubToken;
-
-    // Unexpired JWT with handle "test" for use in tests.
-    const FAKE_TOKEN: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3guZGV2L2hhbmRsZSI6InRlc3QiLCJleHAiOjk5OTk5OTk5OTl9.6-nbzFzQEjEX7dfWZFLE-I_qW2N_-9W2HFzzfsquI74";
 
     fn test_auth() -> NixAuth {
         let token = FloxhubToken::new(FAKE_TOKEN.to_string()).unwrap();

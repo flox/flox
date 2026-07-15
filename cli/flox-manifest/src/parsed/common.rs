@@ -674,6 +674,8 @@ impl Display for IncludeDescriptor {
 
 #[cfg(test)]
 mod tests {
+    use flox_core::data::flox_version::FloxVersion;
+
     use super::*;
 
     /// Ensure the manifest.toml man page documents all schema versions that use
@@ -701,6 +703,32 @@ mod tests {
                  Update the 'Valid string values' list in cli/flox/doc/manifest.toml.md."
             );
         }
+    }
+
+    /// Ensure the repo `VERSION` file is at least the latest manifest schema version.
+    ///
+    /// `schema-version` is a Flox CLI release version. If someone adds a newer
+    /// schema (e.g. `1.14.0`) without bumping `VERSION`, new manifests would
+    /// claim a newer Flox release than the CLI reports.
+    #[test]
+    fn cli_version_is_at_least_latest_schema_version() {
+        let version_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../VERSION");
+        let cli_version: FloxVersion = std::fs::read_to_string(&version_path)
+            .expect("failed to read VERSION")
+            .trim()
+            .parse()
+            .expect("VERSION should be valid FloxVersion");
+
+        let latest_schema: FloxVersion = KnownSchemaVersion::latest()
+            .to_string()
+            .parse()
+            .expect("latest schema version must be valid FloxVersion");
+
+        assert!(
+            cli_version >= latest_schema,
+            "VERSION ({cli_version}) must be >= latest schema-version ({latest_schema}).\n\
+             When adding a new manifest schema, bump the VERSION file."
+        );
     }
 }
 

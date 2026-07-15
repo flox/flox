@@ -56,7 +56,13 @@ pub use catalog_api_v1::{
 // Client
 #[cfg(any(test, feature = "tests"))]
 pub use client::EMPTY_SEARCH_RESPONSE;
-pub use client::{CatalogClientTrait, FloxhubClient, str_to_catalog_name, str_to_package_name};
+pub use client::{
+    CatalogClientTrait,
+    CheckBuildQuery,
+    FloxhubClient,
+    str_to_catalog_name,
+    str_to_package_name,
+};
 pub use config::{FloxhubClientConfig, FloxhubMockMode};
 // Errors
 pub use error::*;
@@ -77,6 +83,6 @@ pub use factory_api_v1::{
     Error as FactoryApiError,
     ResponseValue as FactoryApiResponseValue,
 };
-pub use token::{FloxhubToken, FloxhubTokenError};
+pub use token::{FloxhubToken, FloxhubTokenError, test_helpers as token_test_helpers};
 // Types (re-exported from types module for convenience)
 pub use types::*;

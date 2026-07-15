@@ -3472,6 +3472,40 @@ PIDs of the running activations: ${ACTIVATION_PID}"
 # ---------------------------------------------------------------------------- #
 
 
+# bats test_tags=activate,activate:path
+@test "INFOPATH keeps the default search path" {
+  project_setup
+
+  # Both info(1) and emacs treat a trailing separator in INFOPATH as "append
+  # the default (compiled-in) search path here". Asserting on that marker
+  # tests the exact mechanism that keeps system manuals (e.g. the built-in
+  # emacs manual) discoverable; neither tool is available in the sandbox to
+  # assert on directly.
+
+  # An unset INFOPATH must gain a trailing colon.
+  run env -u INFOPATH "$FLOX_BIN" activate -c "sh -c 'echo \$INFOPATH'"
+  assert_success
+  assert_output --regexp "/share/info:$"
+
+  # An empty INFOPATH behaves the same as unset.
+  INFOPATH= run "$FLOX_BIN" activate -c "sh -c 'echo \$INFOPATH'"
+  assert_success
+  assert_output --regexp "/share/info:$"
+
+  # An INFOPATH that already ends with the marker is preserved without
+  # gaining an extra empty entry.
+  INFOPATH=/home/bob/info: run "$FLOX_BIN" activate -c "sh -c 'echo \$INFOPATH'"
+  assert_success
+  assert_output --regexp "/share/info:/home/bob/info:$"
+  refute_output --regexp "::"
+
+  # An INFOPATH without the marker deliberately excludes the default search
+  # path; that choice is preserved rather than forcing the marker back in.
+  INFOPATH=/some/info run "$FLOX_BIN" activate -c "sh -c 'echo \$INFOPATH'"
+  assert_success
+  assert_output --regexp "/share/info:/some/info$"
+}
+
 # bats test_tags=activate,activate:attach
 @test "attach doesn't break MANPATH" {
   project_setup

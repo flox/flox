@@ -13,7 +13,7 @@ mod hub;
 pub use buffer::{EVENTS_BUFFER_FILE_NAME, EventsBuffer};
 pub use client::{BATCH_SIZE, EventsClient};
 pub use connection::{EventsConnection, EventsConnectionV2, TRAILING_NETWORK_CALL_TIMEOUT};
-pub use guard::EventsGuard;
+pub use guard::{EventsGuard, force_flush_requested};
 pub use hub::EventsHub;
 use serde::{Deserialize, Serialize, de};
 use serde_with::{TimestampMilliSeconds, serde_as};
@@ -1756,9 +1756,11 @@ mod pipeline_tests {
         }
     }
 
+    /// Guard drop leaves unexpired events in the on-disk buffer for a later
+    /// invocation to deliver, matching the legacy `MetricGuard`.
     #[test]
     #[serial(global_events_client)]
-    fn events_guard_drop_flushes_global_hub() {
+    fn events_guard_drop_defers_unexpired_events() {
         let tempdir = tempfile::tempdir().expect("tempdir");
         let connection = MockEventsConnection::default();
         let sent_batches = connection.sent_batches();
@@ -1776,8 +1778,10 @@ mod pipeline_tests {
         }
 
         let sent_batches = sent_batches.lock().expect("sent batches lock").clone();
-        assert_eq!(sent_batches.len(), 1);
-        assert_eq!(sent_batches[0].len(), 1);
+        assert_eq!(sent_batches.len(), 0, "fresh events must not send on drop");
+        let buffered = std::fs::read_to_string(tempdir.path().join(EVENTS_BUFFER_FILE_NAME))
+            .expect("read buffer");
+        assert_eq!(buffered.lines().count(), 1, "event stays buffered on disk");
     }
 
     #[test]

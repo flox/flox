@@ -84,6 +84,7 @@ use crate::utils::active_environments::{
 };
 use crate::utils::dialog::{Dialog, Select};
 use crate::utils::errors::display_chain;
+use crate::utils::events::{build_events_client, resolve_invocation_id};
 use crate::utils::init::init_floxhub_client;
 use crate::utils::message;
 use crate::utils::metrics::{AWSDatalakeConnection, Client, Hub, read_metrics_uuid};
@@ -196,19 +197,12 @@ impl fmt::Debug for Commands {
 }
 
 impl Commands {
-    /// Centrally-derived subcommand name stamped onto v2
-    /// `cli.command_run` / `cli.command_completed` events.
+    /// Subcommand name stamped onto v2 `cli.command_run` /
+    /// `cli.command_completed` events.
     ///
-    /// Each sub-enum owns its own [`Self::subcommand_name`] returning
-    /// the full wire string (including any `parent::child` prefix);
-    /// this top-level method just dispatches.
-    ///
-    /// Nested commands use the `parent::child` join convention (see
-    /// `services::start`, `generations::switch`, etc.) — pinned
-    /// against the consumer-side classifiers in PR 5. The `auth`
-    /// command's downstream classifier needs the literal `auth2`;
-    /// that special-case lives on [`AdminCommands::subcommand_name`]
-    /// so the carve-out is co-located with the `Auth` variant.
+    /// Each sub-enum owns its own [`Self::subcommand_name`] returning the
+    /// full wire string; nested commands join as `parent::child` (see
+    /// `services::start`, `generations::switch`, etc.).
     pub fn subcommand_name(&self) -> &'static str {
         match self {
             Commands::Help(_) => "help",
@@ -290,14 +284,13 @@ impl FloxArgs {
             }
         }
 
-        // Emit the v2 `cli.command_run` exactly once at dispatch
-        // start. The flox-events `EventsHub` was installed in `main.rs`
-        // and short-circuits in production until the cutover PR. The
-        // matching `cli.command_completed` is emitted at the end of
-        // `cli_worker` below (or immediately before `activate.rs`'s
-        // `command.exec()` call when activate replaces the parent
-        // process) — the hub's idempotent flag ensures only one of the
-        // two paths actually records the completed event.
+        if let Some(events_client) = build_events_client(&config, resolve_invocation_id()) {
+            flox_events::EventsHub::global().set_client(events_client);
+        }
+
+        // Emit the v2 `cli.command_run` once at dispatch start. The matching
+        // `cli.command_completed` is emitted when the dispatch finishes (or by
+        // `activate` before it replaces the process); the hub deduplicates.
         let v2_subcommand: &'static str = self
             .command
             .as_ref()
@@ -548,7 +541,9 @@ impl FloxArgs {
             Ok(Some(token)) if token.is_expired() => {
                 let reauthenticating = matches!(
                     self.command,
-                    Some(Commands::Admin(AdminCommands::Auth(auth::Auth::Login)))
+                    Some(Commands::Admin(AdminCommands::Auth(
+                        auth::Auth::Login { .. }
+                    )))
                 );
                 // The token is account-global, so the reminder only needs to
                 // appear once per shell session. The outermost activation

@@ -11,6 +11,7 @@ use floxhub_client::{
     BuildInputsLookupResponse,
     CatalogClientTrait,
     CatalogStoreConfig,
+    CheckBuildQuery,
     CheckBuildResponse,
     FloxhubClient,
     FloxhubClientConfig,
@@ -40,7 +41,6 @@ use reqwest::header::HeaderMap;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::info;
-use url::Url;
 
 use super::publish::CheckedEnvironmentMetadata;
 use crate::flox::Flox;
@@ -394,12 +394,7 @@ impl CatalogClientTrait for MockClient {
 
     async fn check_build_already_recorded(
         &self,
-        _catalog_name: impl AsRef<str> + Send + Sync,
-        _package_name: impl AsRef<str> + Send + Sync,
-        _source_url: &Url,
-        _source_rev: &str,
-        _nixpkgs_rev: &str,
-        _system: PackageSystem,
+        _query: CheckBuildQuery<'_>,
     ) -> Result<CheckBuildResponse, FloxhubClientError> {
         unimplemented!("check_build_already_recorded is not supported in MockClient")
     }
