@@ -191,11 +191,13 @@ pkgs.runCommand name
 
                 # N.B. not using t3 --forcecolor option because Nix sandbox
                 # strips color codes from output anyway.
-                # FLOX_ENV_CACHE points into the sandbox's build directory so
+                # --env-cache points into the sandbox's build directory so
                 # the interpreter's profile.d scripts have a writable cache
                 # for generated state (e.g. pip.ini).
-                FLOX_SRC_DIR=$(pwd) FLOX_ENV_CACHE="$(pwd)/.flox/cache" \
+                mkdir -p "$(pwd)/.flox/cache"
+                FLOX_SRC_DIR=$(pwd) \
                   ${develop-copy-env-package}/activate --env ${develop-copy-env-package} \
+                    --env-cache "$(pwd)/.flox/cache" \
                     --mode build --skip-hook-on-activate --env-project $(pwd) -- \
                       t3 --relative $log -- bash -e ${buildScript-contents}
               ''
@@ -207,11 +209,13 @@ pkgs.runCommand name
 
                 # See flox-build.mk for a detailed explanation of why we use a nested
                 # activation when performing builds.
-                # FLOX_ENV_CACHE points into the sandbox's build directory so
+                # --env-cache points into the sandbox's build directory so
                 # the interpreter's profile.d scripts have a writable cache
                 # for generated state (e.g. pip.ini).
-                FLOX_SRC_DIR=$(pwd) FLOX_ENV_CACHE="$(pwd)/.flox/cache" \
+                mkdir -p "$(pwd)/.flox/cache"
+                FLOX_SRC_DIR=$(pwd) \
                   ${develop-copy-env-package}/activate --env ${develop-copy-env-package} \
+                    --env-cache "$(pwd)/.flox/cache" \
                     --mode build --skip-hook-on-activate --env-project $(pwd) -- \
                       t3 --relative $log -- bash -e ${buildScript-contents} || \
                 ( find $out -type d -exec chmod +w {} \; && rm -rf $out && echo "flox build failed (caching build dir)" | tee $out 1>&2 )
