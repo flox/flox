@@ -46,6 +46,7 @@ source "${_activate_d}/helpers.bash"
 OPTIONS="e:c:m:"
 LONGOPTS="command:,\
 env:,\
+env-cache:,\
 env-project:,\
 mode:,\
 start-state-dir:,\
@@ -53,6 +54,7 @@ skip-hook-on-activate,\
 cuda-detection"
 USAGE="Usage: $0 [-c \"<cmd> <args>\"] \
 [(-e|--env) <env>] \
+[--env-cache <path>] \
 [--env-project <path>] \
 [(-m|--mode) (dev|run|build)] \
 [--start-state-dir <path>] \
@@ -92,6 +94,16 @@ while true; do
         exit 1
       fi
       _FLOX_ENV="$1"
+      shift
+      ;;
+    --env-cache)
+      shift
+      if [ -z "${1:-}" ] || [ ! -d "$1" ]; then
+        echo "Option --env-cache requires a valid path as an argument." >&2
+        echo "$USAGE" >&2
+        exit 1
+      fi
+      _FLOX_ENV_CACHE="$1"
       shift
       ;;
     --env-project)
@@ -180,8 +192,7 @@ if [ "$_command_mode" = "true" ]; then
 
   # Propagate optional variables that are documented as exposed.
   # NB: `generate_*_start_commands()` performs the same logic except for zsh.
-  # shellcheck disable=SC2043
-  for var_key in FLOX_ENV_PROJECT; do
+  for var_key in FLOX_ENV_CACHE FLOX_ENV_PROJECT; do
     eval "var_val=\${_$var_key-}"
     if [ -n "$var_val" ]; then
       export $var_key="${var_val}"
