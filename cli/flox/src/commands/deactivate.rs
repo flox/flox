@@ -19,6 +19,7 @@ use flox_rust_sdk::models::environment::Environment;
 use flox_rust_sdk::utils::FLOX_INTERPRETER;
 use indoc::{formatdoc, indoc};
 use shell_gen::ShellWithPath;
+use tracing::debug;
 
 use super::activated_environments;
 use crate::subcommand_metric;
@@ -98,6 +99,10 @@ impl Deactivate {
 
         let target = open_deactivation_target(&flox, active)?;
 
+        debug!(
+            flox_env = ?target.flox_env,
+            "requesting hook-env performs deactivation"
+        );
         write_hook_actions(&flox.runtime_dir, nix::unistd::getppid().as_raw(), vec![
             HookAction::Deactivate {
                 activation_state_dir: target.activation_state_dir,
@@ -291,6 +296,7 @@ pub(crate) fn emit_deactivate_script(
 ) -> Result<()> {
     match invocation_kind {
         Some(InvocationKind::Interactive) => {
+            debug!("triggering exit for interactive deactivation");
             match shell {
                 ShellWithPath::Tcsh(_) => write!(writer, "set _flox_exit=1;")?,
                 _ => write!(writer, "exit;")?,
@@ -298,6 +304,7 @@ pub(crate) fn emit_deactivate_script(
             Ok(())
         },
         Some(InvocationKind::InPlace | InvocationKind::ShellCommand) | None => {
+            debug!("emitting deactivation script for environment");
             let emit_detach = invocation_kind.is_some();
             match encoded_diff {
                 Some(encoded_diff) => {
