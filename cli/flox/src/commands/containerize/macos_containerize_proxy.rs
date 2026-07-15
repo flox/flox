@@ -20,8 +20,6 @@ use thiserror::Error;
 use tracing::{debug, info, instrument};
 
 use super::Runtime;
-use flox_config::FLOX_CONFIG_FILE;
-
 use crate::commands::sandbox_backends::openshell::OPENSHELL_COMPAT_ENV;
 
 const NIX_PROXY_IMAGE: &str = "nixos/nix";

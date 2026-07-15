@@ -49,6 +49,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
 use flox_core::activate::context::InvocationType;
+use flox_config::Config;
 use flox_core::activate::sandbox_backend::SandboxBackend;
 use flox_manifest::lockfile::Lockfile;
 use semver::Version;
@@ -91,7 +92,7 @@ pub struct OpenshellBackend<'a> {
     invocation_type: &'a InvocationType,
     flox: &'a flox_rust_sdk::flox::Flox,
     lockfile: &'a Lockfile,
-    config: &'a crate::config::Config,
+    config: &'a Config,
 }
 
 impl<'a> OpenshellBackend<'a> {
@@ -232,7 +233,7 @@ fn wrap_openshell(
     invocation: &InvocationType,
     flox: &flox_rust_sdk::flox::Flox,
     lockfile: &Lockfile,
-    config: &crate::config::Config,
+    config: &Config,
 ) -> Result<Infallible> {
     let dot_flox =
         std::fs::canonicalize(dot_flox_path).unwrap_or_else(|_| dot_flox_path.to_path_buf());
