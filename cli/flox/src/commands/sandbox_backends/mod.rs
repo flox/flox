@@ -31,7 +31,7 @@ use flox_core::activate::context::InvocationType;
 use flox_core::activate::sandbox_backend::SandboxBackend;
 use flox_manifest::lockfile::Lockfile;
 
-use crate::config::Config;
+use flox_config::Config;
 
 /// Environment variable set on the re-exec'd inner activation so all backends
 /// can detect that wrapping already occurred.

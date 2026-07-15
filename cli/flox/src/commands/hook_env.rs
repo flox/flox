@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::io::{BufWriter, IsTerminal, Write, stdout};
+use std::io::{BufRead, BufReader, BufWriter, IsTerminal, Write, stdout};
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};

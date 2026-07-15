@@ -41,7 +41,7 @@ use flox_rust_sdk::models::environment::Environment;
 use serde::{Deserialize, Serialize};
 
 use super::{EnvironmentSelect, environment_select};
-use crate::config::Config;
+use flox_config::Config;
 use crate::utils::dialog::{Dialog, Select};
 use crate::utils::message;
 

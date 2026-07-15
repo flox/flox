@@ -18,6 +18,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
 use flox_core::activate::context::InvocationType;
+use flox_config::Config;
 use flox_core::activate::sandbox_backend::SandboxBackend;
 use flox_manifest::lockfile::Lockfile;
 use tracing::debug;
@@ -39,7 +40,7 @@ pub(crate) const FLOX_SANDBOX_OCI_ALLOW_STALE_VAR: &str = "FLOX_SANDBOX_OCI_ALLO
 /// tty prompt). Default: off.
 ///
 /// This name is the config env-layer spelling of the `sandbox_oci_autobake`
-/// config key (see `crate::config::FloxConfig`), so the value must be
+/// config key (see `flox_config::FloxConfig`), so the value must be
 /// `true`/`false` — `1` fails config parsing as an integer. The value is read
 /// via `config.flox.sandbox_oci_autobake`, not directly from the environment;
 /// this constant exists for user-facing messages.
@@ -64,7 +65,7 @@ pub struct OciBackend<'a> {
     invocation_type: &'a InvocationType,
     flox: &'a flox_rust_sdk::flox::Flox,
     lockfile: &'a Lockfile,
-    config: &'a crate::config::Config,
+    config: &'a Config,
 }
 
 impl<'a> OciBackend<'a> {
@@ -139,7 +140,7 @@ fn wrap_oci(
     invocation: &InvocationType,
     flox: &flox_rust_sdk::flox::Flox,
     lockfile: &Lockfile,
-    config: &crate::config::Config,
+    config: &Config,
 ) -> Result<Infallible> {
     let runtime = platform_runtime();
 
