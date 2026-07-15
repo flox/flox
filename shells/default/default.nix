@@ -85,7 +85,7 @@ mkShell (
       flox-activations
     ];
 
-    # Include krb5 for development to enable building with GSSAPI feature
+    # krb5 is required to build the GSSAPI/Kerberos authentication support
     buildInputs = [ krb5.dev ];
     nativeBuildInputs = [ rustPlatform.bindgenHook ];
 

@@ -23,9 +23,9 @@ url.workspace = true
 httpmock.workspace = true
 serde_yaml.workspace = true
 
-# Optional dependencies for GSSAPI/Kerberos authentication
-libgssapi = { workspace = true, optional = true }
-base64 = { workspace = true, optional = true }
+# GSSAPI/Kerberos authentication
+libgssapi.workspace = true
+base64.workspace = true
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
@@ -39,6 +39,3 @@ tracing-subscriber.workspace = true
 [features]
 default = []
 tests = []
-# Catalog authentication strategy
-# Kerberos authentication is available when this feature is enabled
-floxhub-authn-kerberos = ["dep:libgssapi", "dep:base64"]

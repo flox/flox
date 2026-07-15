@@ -327,7 +327,7 @@ impl FloxArgs {
 
         let floxhub = Floxhub::new(floxhub_url, api_url_override, git_url_override)?;
 
-        let authn_mode = effective_authn_mode(&config)?;
+        let authn_mode = effective_authn_mode(&config);
         let floxhub_token = self.resolve_floxhub_token(&config, &authn_mode);
 
         let metrics_device_uuid = (!config.flox.disable_metrics)
@@ -566,21 +566,13 @@ impl FloxArgs {
     }
 }
 
-/// Resolve the configured authn mode to the client's, applying the
-/// compiled-in default when unset.
-///
-/// The config enum always parses both modes; the client enum only carries the
-/// modes compiled into this build.
-fn effective_authn_mode(config: &Config) -> Result<AuthnMode> {
+/// Resolve the configured authn mode to the client's, applying the default
+/// when unset.
+fn effective_authn_mode(config: &Config) -> AuthnMode {
     match config.flox.floxhub_authn_mode {
-        None => Ok(AuthnMode::default()),
-        Some(flox_config::AuthnMode::Auth0) => Ok(AuthnMode::Auth0),
-        #[cfg(feature = "floxhub-authn-kerberos")]
-        Some(flox_config::AuthnMode::Kerberos) => Ok(AuthnMode::Kerberos),
-        #[cfg(not(feature = "floxhub-authn-kerberos"))]
-        Some(flox_config::AuthnMode::Kerberos) => Err(anyhow!(
-            "Kerberos authentication is not supported by this build."
-        )),
+        None => AuthnMode::default(),
+        Some(flox_config::AuthnMode::Auth0) => AuthnMode::Auth0,
+        Some(flox_config::AuthnMode::Kerberos) => AuthnMode::Kerberos,
     }
 }
 

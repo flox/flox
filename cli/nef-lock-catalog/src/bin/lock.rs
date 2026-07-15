@@ -3,7 +3,7 @@ use std::io::IsTerminal;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use anyhow::{Result, anyhow, bail};
+use anyhow::{Result, bail};
 use clap::Parser;
 use flox_config::Config;
 use flox_core::floxhub::{DEFAULT_FLOXHUB_URL, Floxhub};
@@ -197,7 +197,7 @@ fn build_client(config: &Config, floxhub_token: Option<String>) -> Result<Floxhu
 
     let floxhub_token = floxhub_token.map(|token| token.parse()).transpose()?;
     let auth_context = AuthContext::from_mode(
-        &effective_authn_mode(&config.flox.floxhub_authn_mode)?,
+        &effective_authn_mode(&config.flox.floxhub_authn_mode),
         floxhub_token,
     );
 
@@ -212,23 +212,13 @@ fn build_client(config: &Config, floxhub_token: Option<String>) -> Result<Floxhu
     Ok(FloxhubClient::new(config)?)
 }
 
-/// Resolve the configured authn mode to the client's, applying the
-/// compiled-in default when unset.
-///
-/// The config enum always parses both modes; the client enum only carries the
-/// modes compiled into this build.
-/// The config enum always parses both modes; the client enum only carries the
-/// modes compiled into this build.
-fn effective_authn_mode(mode: &Option<flox_config::AuthnMode>) -> Result<AuthnMode> {
+/// Resolve the configured authn mode to the client's, applying the default
+/// when unset.
+fn effective_authn_mode(mode: &Option<flox_config::AuthnMode>) -> AuthnMode {
     match mode {
-        None => Ok(AuthnMode::default()),
-        Some(flox_config::AuthnMode::Auth0) => Ok(AuthnMode::Auth0),
-        #[cfg(feature = "floxhub-authn-kerberos")]
-        Some(flox_config::AuthnMode::Kerberos) => Ok(AuthnMode::Kerberos),
-        #[cfg(not(feature = "floxhub-authn-kerberos"))]
-        Some(flox_config::AuthnMode::Kerberos) => Err(anyhow!(
-            "Kerberos authentication is not supported by this build."
-        )),
+        None => AuthnMode::default(),
+        Some(flox_config::AuthnMode::Auth0) => AuthnMode::Auth0,
+        Some(flox_config::AuthnMode::Kerberos) => AuthnMode::Kerberos,
     }
 }
 
