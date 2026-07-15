@@ -217,7 +217,7 @@ fn build_client(config: &Config, floxhub_token: Option<String>) -> Result<Floxhu
 fn effective_authn_mode(mode: &Option<flox_config::AuthnMode>) -> AuthnMode {
     match mode {
         None => AuthnMode::default(),
-        Some(flox_config::AuthnMode::Auth0) => AuthnMode::Auth0,
+        Some(flox_config::AuthnMode::Token) => AuthnMode::Auth0,
         Some(flox_config::AuthnMode::Kerberos) => AuthnMode::Kerberos,
     }
 }

@@ -571,7 +571,7 @@ impl FloxArgs {
 fn effective_authn_mode(config: &Config) -> AuthnMode {
     match config.flox.floxhub_authn_mode {
         None => AuthnMode::default(),
-        Some(flox_config::AuthnMode::Auth0) => AuthnMode::Auth0,
+        Some(flox_config::AuthnMode::Token) => AuthnMode::Auth0,
         Some(flox_config::AuthnMode::Kerberos) => AuthnMode::Kerberos,
     }
 }

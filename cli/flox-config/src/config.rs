@@ -31,8 +31,8 @@ pub type SearchLimit = NonZeroU8;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum AuthnMode {
-    /// Auth0 authentication
-    Auth0,
+    /// Token authentication
+    Token,
     /// Kerberos authentication
     Kerberos,
 }
