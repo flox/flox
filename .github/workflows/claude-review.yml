@@ -41,6 +41,9 @@ jobs:
             --model opus
             --effort xhigh
             --dangerously-skip-permissions
+            # Trigger MCP installations. No actual effect on permissions since
+            # we're allowing all.
+            --allowedTools "mcp__github_inline_comment__*,mcp__github_comment__*"
           plugins: 'superpowers@claude-plugins-official'
           prompt: |
             Review PR #${{ github.event.pull_request.number }} in ${{ github.repository }}.
@@ -51,3 +54,8 @@ jobs:
 
             Fetch whatever git history you need using `gh pr diff`, `gh pr
             view`, or `git fetch`. The current checkout is shallow.
+
+            Reporting requirements:
+            - Post each issue as an inline comment on the relevant line using
+              the mcp__github_inline_comment__create_inline_comment tool, so
+              findings are threaded and individually addressable.
