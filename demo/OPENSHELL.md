@@ -23,11 +23,17 @@ L7 egress policy. Same manifest, one word changed:
 **Verification status:** see the "verified" notes per beat. Beats
 1, 2, and 5 were verified live on macOS (arm64, Docker Desktop
 28.5.1, OpenShell 0.0.82) on 2026-07-13, as were beat 3's
-deny-by-default, hot-reload, and binary-scoped GET. Two things need
-one off-camera rehearsal before recording: beat 3's write-denial
-output shape (L7 read-only semantics vary with the endpoint's
-protocol config), and beat 4 (agent login/run, which needs an
-interactive Anthropic login).
+deny-by-default, hot-reload, and binary-scoped GET. All of those
+were re-verified exec-mode on 2026-07-14, plus beat 4's network
+path: the corrected Anthropic grant (see beat 3's tip) let `claude`
+with a placeholder API key reach the API through the proxy (the
+API's own auth error came back) while curl in the same session
+stayed denied — confirming per-binary scoping. Beat 3's write-denial
+was also rehearsed 2026-07-14 with a negative result: `read-only`
+does not block write methods on 0.0.82 (see the warning in beat 3)
+— keep it out of the talk track. The one thing still needing an
+off-camera rehearsal is beat 4's interactive Anthropic login + live
+agent run.
 
 ---
 
@@ -36,13 +42,24 @@ interactive Anthropic login).
 ### One-time host prerequisites
 
 1. **Docker Desktop** (or Docker Engine ≥ 28) running.
-2. **OpenShell CLI + gateway** (v0.0.82 tested). Homebrew install:
+2. **OpenShell CLI + gateway** (v0.0.82 tested; flox requires
+   ≥ 0.0.62 — `sandbox create --env` shipped in 0.0.59 and Docker
+   bind mounts via `--driver-config-json` in 0.0.62). Homebrew
+   install:
    `curl -LsSf https://raw.githubusercontent.com/NVIDIA/OpenShell/main/install.sh | sh`
    — or install the release tarballs (`openshell`,
    `openshell-gateway`) from
    https://github.com/NVIDIA/OpenShell/releases and provision the
    gateway manually (generate-certs + `gateway add`; see the
    openshell.rb formula for the exact service recipe).
+
+   > **PATH pitfall:** the Flox catalog also packages `openshell`
+   > (0.0.36 as of 2026-07-14 — far too old). If any active flox
+   > environment installs it (check `which openshell`), it shadows
+   > a newer manual install and preflight fails with an
+   > "OpenShell CLI version … is too old" error. Remove
+   > `openshell` from that environment or put the newer binary's
+   > directory first on PATH.
 3. **Gateway config** — the demo needs the Docker driver and bind
    mounts enabled. In `~/.config/openshell/gateway.toml`:
 
@@ -205,7 +222,7 @@ layer 7:"**
 
 ```bash
 flox [sandbox-demo] bash-5.3$ curl -sS https://api.github.com/zen
-curl: (56) Received HTTP code 403 from proxy after CONNECT
+curl: (7) CONNECT tunnel failed, response 403
 ```
 
 **"flox generated an OpenShell policy for this activation — Nix
@@ -218,11 +235,19 @@ policy allows it."**
 ## 3 · Hot-reload a network policy — no restart
 
 *(deny-by-default, hot-reload, and the binary-scoped GET verified
-2026-07-13; rehearse the write-denial output once off-camera — L7
-read-only semantics vary with the endpoint's protocol config)*
+2026-07-13 and re-verified 2026-07-14)*
+
+> **Do not demo write-denial.** Rehearsed 2026-07-14 on OpenShell
+> 0.0.82: under a `read-only:rest` grant the L7 engine logs
+> explicit `HTTP:POST … ALLOWED` / `HTTP:DELETE … ALLOWED`
+> verdicts and the writes reach the origin — the access mode does
+> not block write methods in this build. Keep the talk track on
+> deny-by-default, hot-reload, per-binary identity, and the audit
+> log; raise read-only method enforcement with NVIDIA (see the
+> integration notes pointer at the bottom).
 
 **"Here's what OpenShell adds that a bare container can't do: I'm
-going to grant this running sandbox read-only GitHub access — without
+going to grant this running sandbox GitHub access — without
 restarting it, without touching my session. And the grant names the
 exact binary allowed to use it."**
 
@@ -260,7 +285,9 @@ In the host terminal:
 
 ```bash
 openshell logs flox-sandbox-demo-##### --tail
-# ... l7_decision=allow GET /zen ...
+# [ocsf] HTTP:GET [INFO] ALLOWED GET http://api.github.com:443/zen [policy:allow_api_github_com_443 engine:l7]
+# (before the grant, connects show as:)
+# [ocsf] NET:OPEN [MED] DENIED /nix/store/…-curl-8.x.x/bin/curl(…) -> api.github.com:443 [reason:network connections not allowed by policy]
 ```
 
 **"Every allow and deny is an audit event. This is the division of
@@ -268,16 +295,24 @@ labor: flox defines *what the environment is* — reproducibly, from
 the manifest — and OpenShell governs *what it's allowed to do*,
 live."**
 
-> For the agent beat next, grant the Anthropic API the same way
-> (the claude CLI runs on the env's node — scope the rule to that
-> store path, or omit `--binary` scoping per your OpenShell
-> version's identity mode):
+> For the agent beat next, grant the Anthropic API the same way.
+> The `claude` CLI is a native binary behind a shell wrapper — the
+> L7 identity the proxy sees is the wrapped binary, so resolve it
+> in the guest and scope the rule to that store path (or omit
+> `--binary` to skip scoping). The endpoint protocol segment must
+> be `rest`, `websocket`, or `sql` — `https` is rejected:
 >
 > ```bash
+> # in the guest:
+> dirname "$(readlink -f "$(command -v claude)")"
+> # /nix/store/…-claude-code-2.x.y/bin
+>
+> # on the host:
 > openshell policy update flox-sandbox-demo-##### \
->   --add-endpoint 'api.anthropic.com:443:full:https' \
->   --add-endpoint 'statsig.anthropic.com:443:full:https' \
->   --binary "$(readlink -f $(command -v node))" --wait
+>   --add-endpoint 'api.anthropic.com:443:full:rest' \
+>   --add-endpoint 'statsig.anthropic.com:443:full:rest' \
+>   --binary '/nix/store/…-claude-code-2.x.y/bin/.claude-wrapped' \
+>   --wait
 > ```
 
 ---
