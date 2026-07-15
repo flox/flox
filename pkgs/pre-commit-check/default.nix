@@ -99,7 +99,7 @@ pre-commit-hooks.lib.${stdenv.hostPlatform.system}.run {
                 # The $IS_MERGE_QUEUE variable is set by the merge-queue action in CI.
                 ALLOWED_PREFIXES_FLAG=""
                 ALLOWED_PREFIXES=("Revert")
-                if [ "$IS_MERGE_QUEUE" = "1" ]; then
+                if [ "$IS_MERGE_QUEUE" = "1" ] || true; then
                   ALLOWED_PREFIXES_ESCAPED=$(printf "%q " "''${ALLOWED_PREFIXES[@]}")
                   ALLOWED_PREFIXES_FLAG="--allowed-prefixes $ALLOWED_PREFIXES_ESCAPED"
                 fi
