@@ -51,6 +51,7 @@ use anyhow::{Context, Result, bail};
 use flox_core::activate::context::InvocationType;
 use flox_core::activate::sandbox_backend::SandboxBackend;
 use flox_manifest::lockfile::Lockfile;
+use semver::Version;
 use serde_json::json;
 use tracing::debug;
 
@@ -75,6 +76,14 @@ pub(crate) const OPENSHELL_COMPAT_ENV: &str = "_FLOX_CONTAINERIZE_OPENSHELL_COMP
 /// so `<env>-openshell:<hash12>` never collides with the `oci` backend's
 /// `<env>:<hash12>`.
 const OPENSHELL_REPO_SUFFIX: &str = "-openshell";
+
+/// Minimum supported OpenShell CLI version.
+///
+/// `sandbox create` gained `--env` in 0.0.59 and Docker bind mounts via
+/// `--driver-config-json` in 0.0.62; the backend passes both, and older CLIs
+/// reject them with a bare usage error. The prototype is tested against
+/// 0.0.82.
+const OPENSHELL_MIN_VERSION: Version = Version::new(0, 0, 62);
 
 pub struct OpenshellBackend<'a> {
     dot_flox_path: PathBuf,
@@ -104,14 +113,15 @@ impl ActivationSandbox for OpenshellBackend<'_> {
     }
 
     fn preflight(&self) -> Result<()> {
-        if !binary_on_path("openshell") {
+        let Some(openshell_path) = first_on_path("openshell") else {
             bail!(
                 "The 'openshell' sandbox backend requires the OpenShell CLI, which was not \
                  found on PATH.\n\
                  Install it from https://github.com/NVIDIA/OpenShell#install, then re-run."
             );
-        }
-        if !binary_on_path("docker") {
+        };
+        check_openshell_version(&openshell_path)?;
+        if first_on_path("docker").is_none() {
             bail!(
                 "The 'openshell' sandbox backend requires Docker for image management, which \
                  was not found on PATH.\n\
@@ -149,10 +159,65 @@ impl ActivationSandbox for OpenshellBackend<'_> {
     }
 }
 
-/// `true` if an executable named `name` is on `PATH`.
-fn binary_on_path(name: &str) -> bool {
-    std::env::var_os("PATH")
-        .is_some_and(|paths| std::env::split_paths(&paths).any(|dir| dir.join(name).is_file()))
+/// Resolve the first executable named `name` on `PATH`.
+fn first_on_path(name: &str) -> Option<PathBuf> {
+    std::env::var_os("PATH").and_then(|paths| {
+        std::env::split_paths(&paths)
+            .map(|dir| dir.join(name))
+            .find(|candidate| candidate.is_file())
+    })
+}
+
+/// Verify the resolved OpenShell CLI meets [`OPENSHELL_MIN_VERSION`].
+///
+/// A too-old CLI would otherwise surface as a raw `unexpected argument
+/// '--env'` usage error from `sandbox create`. A failed or unparseable
+/// `--version` invocation skips the gate (logged at debug) rather than
+/// blocking on an unknown output format.
+fn check_openshell_version(openshell_path: &Path) -> Result<()> {
+    let output = std::process::Command::new(openshell_path)
+        .arg("--version")
+        .output();
+    let raw = match output {
+        Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).into_owned(),
+        _ => {
+            debug!(
+                path = %openshell_path.display(),
+                "could not run 'openshell --version'; skipping version gate"
+            );
+            return Ok(());
+        },
+    };
+    let Some(version) = parse_openshell_version(&raw) else {
+        debug!(
+            path = %openshell_path.display(),
+            output = raw.trim(),
+            "unparseable 'openshell --version' output; skipping version gate"
+        );
+        return Ok(());
+    };
+    if version < OPENSHELL_MIN_VERSION {
+        bail!(
+            "OpenShell CLI version {version} is too old for the 'openshell' sandbox backend (needs {OPENSHELL_MIN_VERSION} or newer).\n\
+             Resolved binary: {path}\n\
+             A Flox environment providing 'openshell' may be shadowing a newer install.\n\
+             If one is installed elsewhere, put its directory earlier on PATH.\n\
+             Otherwise install the latest release from https://github.com/NVIDIA/OpenShell#install, then re-run.",
+            path = openshell_path.display()
+        );
+    }
+    debug!(%version, "openshell CLI version meets the minimum");
+    Ok(())
+}
+
+/// Parse the version from `openshell --version` output (e.g. `openshell 0.0.82`).
+///
+/// Returns `None` when no whitespace-separated token parses as a semver
+/// version (an optional leading `v` is tolerated).
+pub(crate) fn parse_openshell_version(output: &str) -> Option<Version> {
+    output
+        .split_whitespace()
+        .find_map(|token| Version::parse(token.strip_prefix('v').unwrap_or(token)).ok())
 }
 
 /// Return the `<env>-openshell` repository name used for Docker image tagging.
@@ -889,6 +954,30 @@ mod tests {
     use std::path::Path;
 
     use super::*;
+
+    // ── parse_openshell_version ───────────────────────────────────────────────
+
+    #[test]
+    fn version_parses_plain_cli_output() {
+        assert_eq!(
+            parse_openshell_version("openshell 0.0.82"),
+            Some(Version::new(0, 0, 82))
+        );
+    }
+
+    #[test]
+    fn version_parses_v_prefixed_output() {
+        assert_eq!(
+            parse_openshell_version("openshell v0.0.62"),
+            Some(Version::new(0, 0, 62))
+        );
+    }
+
+    #[test]
+    fn version_unparseable_output_returns_none() {
+        assert_eq!(parse_openshell_version("not a version"), None);
+        assert_eq!(parse_openshell_version(""), None);
+    }
 
     // ── openshell_sandbox_name ────────────────────────────────────────────────
 
