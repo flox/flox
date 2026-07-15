@@ -5550,7 +5550,7 @@ Sends a `POST` request to `/api/v1/catalog/build-inputs/lookup`
         ResponseValue<types::BuildInputsLookupResponse>,
         Error<types::ErrorResponse>,
     > {
-        let url = format!("{}/api/v1/catalog/build-inputs/lookup", self.baseurl,);
+        let url = format!("{}/api/v1/catalog/build-inputs/lookup", self.baseurl);
         let mut header_map = ::reqwest::header::HeaderMap::with_capacity(1usize);
         header_map
             .append(
@@ -5601,7 +5601,7 @@ Sends a `POST` request to `/api/v1/catalog/catalogs/`
         &'a self,
         name: &'a types::CatalogName,
     ) -> Result<ResponseValue<types::UserCatalog>, Error<types::ErrorResponse>> {
-        let url = format!("{}/api/v1/catalog/catalogs/", self.baseurl,);
+        let url = format!("{}/api/v1/catalog/catalogs/", self.baseurl);
         let mut header_map = ::reqwest::header::HeaderMap::with_capacity(1usize);
         header_map
             .append(
@@ -5655,8 +5655,9 @@ Sends a `GET` request to `/api/v1/catalog/catalogs/{catalog_name}`
         catalog_name: &'a types::CatalogName,
     ) -> Result<ResponseValue<types::UserCatalog>, Error<types::ErrorResponse>> {
         let url = format!(
-            "{}/api/v1/catalog/catalogs/{}", self.baseurl, encode_path(& catalog_name
-            .to_string()),
+            "{}/api/v1/catalog/catalogs/{}",
+            self.baseurl,
+            encode_path(&catalog_name.to_string()),
         );
         let mut header_map = ::reqwest::header::HeaderMap::with_capacity(1usize);
         header_map
@@ -5712,8 +5713,9 @@ Sends a `DELETE` request to `/api/v1/catalog/catalogs/{catalog_name}`
         catalog_name: &'a types::CatalogName,
     ) -> Result<ResponseValue<::serde_json::Value>, Error<types::ErrorResponse>> {
         let url = format!(
-            "{}/api/v1/catalog/catalogs/{}", self.baseurl, encode_path(& catalog_name
-            .to_string()),
+            "{}/api/v1/catalog/catalogs/{}",
+            self.baseurl,
+            encode_path(&catalog_name.to_string()),
         );
         let mut header_map = ::reqwest::header::HeaderMap::with_capacity(1usize);
         header_map
@@ -5782,8 +5784,9 @@ Sends a `GET` request to `/api/v1/catalog/catalogs/{catalog_name}/locked-sources
         Error<types::ErrorResponse>,
     > {
         let url = format!(
-            "{}/api/v1/catalog/catalogs/{}/locked-sources", self.baseurl, encode_path(&
-            catalog_name.to_string()),
+            "{}/api/v1/catalog/catalogs/{}/locked-sources",
+            self.baseurl,
+            encode_path(&catalog_name.to_string()),
         );
         let mut header_map = ::reqwest::header::HeaderMap::with_capacity(1usize);
         header_map
@@ -5841,8 +5844,9 @@ Sends a `GET` request to `/api/v1/catalog/catalogs/{catalog_name}/packages`
         catalog_name: &'a types::CatalogName,
     ) -> Result<ResponseValue<types::UserPackageList>, Error<types::ErrorResponse>> {
         let url = format!(
-            "{}/api/v1/catalog/catalogs/{}/packages", self.baseurl, encode_path(&
-            catalog_name.to_string()),
+            "{}/api/v1/catalog/catalogs/{}/packages",
+            self.baseurl,
+            encode_path(&catalog_name.to_string()),
         );
         let mut header_map = ::reqwest::header::HeaderMap::with_capacity(1usize);
         header_map
@@ -5903,8 +5907,9 @@ Sends a `POST` request to `/api/v1/catalog/catalogs/{catalog_name}/packages`
         body: &'a types::UserPackageCreate,
     ) -> Result<ResponseValue<types::UserPackage>, Error<types::ErrorResponse>> {
         let url = format!(
-            "{}/api/v1/catalog/catalogs/{}/packages", self.baseurl, encode_path(&
-            catalog_name.to_string()),
+            "{}/api/v1/catalog/catalogs/{}/packages",
+            self.baseurl,
+            encode_path(&catalog_name.to_string()),
         );
         let mut header_map = ::reqwest::header::HeaderMap::with_capacity(1usize);
         header_map
@@ -5972,8 +5977,10 @@ Sends a `GET` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{pack
         package_name: &'a types::PackageName,
     ) -> Result<ResponseValue<types::UserPackage>, Error<types::ErrorResponse>> {
         let url = format!(
-            "{}/api/v1/catalog/catalogs/{}/packages/{}", self.baseurl, encode_path(&
-            catalog_name.to_string()), encode_path(& package_name.to_string()),
+            "{}/api/v1/catalog/catalogs/{}/packages/{}",
+            self.baseurl,
+            encode_path(&catalog_name.to_string()),
+            encode_path(&package_name.to_string()),
         );
         let mut header_map = ::reqwest::header::HeaderMap::with_capacity(1usize);
         header_map
@@ -6031,9 +6038,10 @@ Sends a `GET` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{pack
         package_name: &'a types::PackageName,
     ) -> Result<ResponseValue<types::PackageBuildList>, Error<types::ErrorResponse>> {
         let url = format!(
-            "{}/api/v1/catalog/catalogs/{}/packages/{}/builds", self.baseurl,
-            encode_path(& catalog_name.to_string()), encode_path(& package_name
-            .to_string()),
+            "{}/api/v1/catalog/catalogs/{}/packages/{}/builds",
+            self.baseurl,
+            encode_path(&catalog_name.to_string()),
+            encode_path(&package_name.to_string()),
         );
         let mut header_map = ::reqwest::header::HeaderMap::with_capacity(1usize);
         header_map
@@ -6097,9 +6105,10 @@ Sends a `PUT` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{pack
         Error<types::ErrorResponse>,
     > {
         let url = format!(
-            "{}/api/v1/catalog/catalogs/{}/packages/{}/builds", self.baseurl,
-            encode_path(& catalog_name.to_string()), encode_path(& package_name
-            .to_string()),
+            "{}/api/v1/catalog/catalogs/{}/packages/{}/builds",
+            self.baseurl,
+            encode_path(&catalog_name.to_string()),
+            encode_path(&package_name.to_string()),
         );
         let mut header_map = ::reqwest::header::HeaderMap::with_capacity(1usize);
         header_map
@@ -6168,9 +6177,10 @@ Sends a `POST` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{pac
         Error<types::ErrorResponse>,
     > {
         let url = format!(
-            "{}/api/v1/catalog/catalogs/{}/packages/{}/builds", self.baseurl,
-            encode_path(& catalog_name.to_string()), encode_path(& package_name
-            .to_string()),
+            "{}/api/v1/catalog/catalogs/{}/packages/{}/builds",
+            self.baseurl,
+            encode_path(&catalog_name.to_string()),
+            encode_path(&package_name.to_string()),
         );
         let mut header_map = ::reqwest::header::HeaderMap::with_capacity(1usize);
         header_map
@@ -6247,9 +6257,10 @@ Sends a `POST` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{pac
         body: &'a types::CheckBuildRequest,
     ) -> Result<ResponseValue<types::CheckBuildResponse>, Error<types::ErrorResponse>> {
         let url = format!(
-            "{}/api/v1/catalog/catalogs/{}/packages/{}/check-build", self.baseurl,
-            encode_path(& catalog_name.to_string()), encode_path(& package_name
-            .to_string()),
+            "{}/api/v1/catalog/catalogs/{}/packages/{}/check-build",
+            self.baseurl,
+            encode_path(&catalog_name.to_string()),
+            encode_path(&package_name.to_string()),
         );
         let mut header_map = ::reqwest::header::HeaderMap::with_capacity(1usize);
         header_map
@@ -6312,9 +6323,10 @@ Sends a `POST` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{pac
         Error<types::ErrorResponse>,
     > {
         let url = format!(
-            "{}/api/v1/catalog/catalogs/{}/packages/{}/publish/info", self.baseurl,
-            encode_path(& catalog_name.to_string()), encode_path(& package_name
-            .to_string()),
+            "{}/api/v1/catalog/catalogs/{}/packages/{}/publish/info",
+            self.baseurl,
+            encode_path(&catalog_name.to_string()),
+            encode_path(&package_name.to_string()),
         );
         let mut header_map = ::reqwest::header::HeaderMap::with_capacity(1usize);
         header_map
@@ -6378,8 +6390,9 @@ Sends a `GET` request to `/api/v1/catalog/catalogs/{catalog_name}/store/config`
         Error<types::ErrorResponse>,
     > {
         let url = format!(
-            "{}/api/v1/catalog/catalogs/{}/store/config", self.baseurl, encode_path(&
-            catalog_name.to_string()),
+            "{}/api/v1/catalog/catalogs/{}/store/config",
+            self.baseurl,
+            encode_path(&catalog_name.to_string()),
         );
         let mut header_map = ::reqwest::header::HeaderMap::with_capacity(1usize);
         header_map
@@ -6442,8 +6455,9 @@ Sends a `PUT` request to `/api/v1/catalog/catalogs/{catalog_name}/store/config`
         Error<types::ErrorResponse>,
     > {
         let url = format!(
-            "{}/api/v1/catalog/catalogs/{}/store/config", self.baseurl, encode_path(&
-            catalog_name.to_string()),
+            "{}/api/v1/catalog/catalogs/{}/store/config",
+            self.baseurl,
+            encode_path(&catalog_name.to_string()),
         );
         let mut header_map = ::reqwest::header::HeaderMap::with_capacity(1usize);
         header_map
@@ -6488,7 +6502,7 @@ Sends a `GET` request to `/api/v1/catalog/info/base-catalog`
     pub async fn get_base_catalog_api_v1_catalog_info_base_catalog_get<'a>(
         &'a self,
     ) -> Result<ResponseValue<types::BaseCatalogInfo>, Error<types::ErrorResponse>> {
-        let url = format!("{}/api/v1/catalog/info/base-catalog", self.baseurl,);
+        let url = format!("{}/api/v1/catalog/info/base-catalog", self.baseurl);
         let mut header_map = ::reqwest::header::HeaderMap::with_capacity(1usize);
         header_map
             .append(
@@ -6544,8 +6558,9 @@ Sends a `GET` request to `/api/v1/catalog/packages/{attr_path}`
         page_size: Option<i64>,
     ) -> Result<ResponseValue<types::PackagesResult>, Error<types::ErrorResponse>> {
         let url = format!(
-            "{}/api/v1/catalog/packages/{}", self.baseurl, encode_path(& attr_path
-            .to_string()),
+            "{}/api/v1/catalog/packages/{}",
+            self.baseurl,
+            encode_path(&attr_path.to_string()),
         );
         let mut header_map = ::reqwest::header::HeaderMap::with_capacity(1usize);
         header_map
@@ -6639,7 +6654,7 @@ Sends a `POST` request to `/api/v1/catalog/resolve`
         ResponseValue<types::ResolvedPackageGroups>,
         Error<types::ErrorResponse>,
     > {
-        let url = format!("{}/api/v1/catalog/resolve", self.baseurl,);
+        let url = format!("{}/api/v1/catalog/resolve", self.baseurl);
         let mut header_map = ::reqwest::header::HeaderMap::with_capacity(1usize);
         header_map
             .append(
@@ -6702,7 +6717,7 @@ Sends a `POST` request to `/api/v1/catalog/sbom/environment`
         ResponseValue<::serde_json::Map<::std::string::String, ::serde_json::Value>>,
         Error<types::ErrorResponse>,
     > {
-        let url = format!("{}/api/v1/catalog/sbom/environment", self.baseurl,);
+        let url = format!("{}/api/v1/catalog/sbom/environment", self.baseurl);
         let mut header_map = ::reqwest::header::HeaderMap::with_capacity(1usize);
         header_map
             .append(
@@ -6773,8 +6788,9 @@ Arguments:
         Error<types::ErrorResponse>,
     > {
         let url = format!(
-            "{}/api/v1/catalog/sbom/package/{}", self.baseurl, encode_path(& derivation
-            .to_string()),
+            "{}/api/v1/catalog/sbom/package/{}",
+            self.baseurl,
+            encode_path(&derivation.to_string()),
         );
         let mut header_map = ::reqwest::header::HeaderMap::with_capacity(1usize);
         header_map
@@ -6837,7 +6853,7 @@ Sends a `GET` request to `/api/v1/catalog/search`
         search_term: Option<&'a types::SearchTerm>,
         system: types::PackageSystem,
     ) -> Result<ResponseValue<types::PackageSearchResult>, Error<types::ErrorResponse>> {
-        let url = format!("{}/api/v1/catalog/search", self.baseurl,);
+        let url = format!("{}/api/v1/catalog/search", self.baseurl);
         let mut header_map = ::reqwest::header::HeaderMap::with_capacity(1usize);
         header_map
             .append(
@@ -6893,8 +6909,9 @@ Sends a `POST` request to `/api/v1/catalog/settings/{key}`
         value: &'a str,
     ) -> Result<ResponseValue<::serde_json::Value>, Error<types::ErrorResponse>> {
         let url = format!(
-            "{}/api/v1/catalog/settings/{}", self.baseurl, encode_path(& key
-            .to_string()),
+            "{}/api/v1/catalog/settings/{}",
+            self.baseurl,
+            encode_path(&key.to_string()),
         );
         let mut header_map = ::reqwest::header::HeaderMap::with_capacity(1usize);
         header_map
@@ -6947,7 +6964,7 @@ Sends a `POST` request to `/api/v1/catalog/store`
         &'a self,
         body: &'a types::StoreInfoRequest,
     ) -> Result<ResponseValue<types::StoreInfoResponse>, Error<types::ErrorResponse>> {
-        let url = format!("{}/api/v1/catalog/store", self.baseurl,);
+        let url = format!("{}/api/v1/catalog/store", self.baseurl);
         let mut header_map = ::reqwest::header::HeaderMap::with_capacity(1usize);
         header_map
             .append(
@@ -7001,7 +7018,7 @@ Sends a `POST` request to `/api/v1/catalog/store/status`
         ResponseValue<types::StorepathStatusResponse>,
         Error<types::ErrorResponse>,
     > {
-        let url = format!("{}/api/v1/catalog/store/status", self.baseurl,);
+        let url = format!("{}/api/v1/catalog/store/status", self.baseurl);
         let mut header_map = ::reqwest::header::HeaderMap::with_capacity(1usize);
         header_map
             .append(

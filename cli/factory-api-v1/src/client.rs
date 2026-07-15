@@ -597,7 +597,7 @@ Sends a `GET` request to `/api/v1/factory/builds`
         page_size: Option<::std::num::NonZeroU64>,
         status: Option<&'a str>,
     ) -> Result<ResponseValue<types::BuildListResponse>, Error<types::ErrorResponse>> {
-        let url = format!("{}/api/v1/factory/builds", self.baseurl,);
+        let url = format!("{}/api/v1/factory/builds", self.baseurl);
         let mut header_map = ::reqwest::header::HeaderMap::with_capacity(1usize);
         header_map
             .append(
@@ -644,8 +644,9 @@ Sends a `GET` request to `/api/v1/factory/builds/{build_id}`
         build_id: i64,
     ) -> Result<ResponseValue<types::BuildResponse>, Error<types::ErrorResponse>> {
         let url = format!(
-            "{}/api/v1/factory/builds/{}", self.baseurl, encode_path(& build_id
-            .to_string()),
+            "{}/api/v1/factory/builds/{}",
+            self.baseurl,
+            encode_path(&build_id.to_string()),
         );
         let mut header_map = ::reqwest::header::HeaderMap::with_capacity(1usize);
         header_map
@@ -727,8 +728,9 @@ Sends a `DELETE` request to `/api/v1/factory/builds/{build_id}`
         build_id: i64,
     ) -> Result<ResponseValue<types::BuildResponse>, Error<types::ErrorResponse>> {
         let url = format!(
-            "{}/api/v1/factory/builds/{}", self.baseurl, encode_path(& build_id
-            .to_string()),
+            "{}/api/v1/factory/builds/{}",
+            self.baseurl,
+            encode_path(&build_id.to_string()),
         );
         let mut header_map = ::reqwest::header::HeaderMap::with_capacity(1usize);
         header_map
@@ -795,8 +797,9 @@ Sends a `GET` request to `/api/v1/factory/builds/{build_id}/logs`
         build_id: i64,
     ) -> Result<ResponseValue<ByteStream>, Error<types::ErrorResponse>> {
         let url = format!(
-            "{}/api/v1/factory/builds/{}/logs", self.baseurl, encode_path(& build_id
-            .to_string()),
+            "{}/api/v1/factory/builds/{}/logs",
+            self.baseurl,
+            encode_path(&build_id.to_string()),
         );
         let mut header_map = ::reqwest::header::HeaderMap::with_capacity(1usize);
         header_map
