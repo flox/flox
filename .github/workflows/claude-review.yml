@@ -45,6 +45,7 @@ jobs:
             # we're allowing all.
             --allowedTools "mcp__github_inline_comment__*,mcp__github_comment__*"
           plugins: 'superpowers@claude-plugins-official'
+          track_progress: true
           prompt: |
             Review PR #${{ github.event.pull_request.number }} in ${{ github.repository }}.
 
@@ -59,3 +60,6 @@ jobs:
             - Post each issue as an inline comment on the relevant line using
               the mcp__github_inline_comment__create_inline_comment tool, so
               findings are threaded and individually addressable.
+            - Finish by writing the review summary into the tracking comment.
+              If there are no issues, say specifically what you reviewed and
+              verified rather than a bare "no issues found".
