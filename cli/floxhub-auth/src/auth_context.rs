@@ -358,21 +358,6 @@ mod tests {
         assert!(!format!("{auth:?}").contains("flox_pat_secret"));
     }
 
-    /// A structurally valid JWT with the flox handle claim, signed with a
-    /// throwaway key (signatures are not verified client side).
-    fn make_jwt(handle: &str, exp: i64) -> String {
-        let claims = serde_json::json!({
-            "https://flox.dev/handle": handle,
-            "exp": exp,
-        });
-        jsonwebtoken::encode(
-            &jsonwebtoken::Header::default(),
-            &claims,
-            &jsonwebtoken::EncodingKey::from_secret("test".as_bytes()),
-        )
-        .unwrap()
-    }
-
     #[test]
     fn from_mode_routes_pat_prefix_to_pat() {
         let auth = AuthContext::from_mode(
@@ -389,13 +374,12 @@ mod tests {
 
     #[test]
     fn from_mode_routes_jwt_to_auth0() {
-        let jwt = make_jwt("testuser", 9999999999);
-        let auth =
-            AuthContext::from_mode(&AuthnMode::Auth0, Some(&jwt), "https://not_used").unwrap();
+        let auth = AuthContext::from_mode(&AuthnMode::Auth0, Some(FAKE_TOKEN), "https://not_used")
+            .unwrap();
         let AuthContext::Auth0(Some(token)) = auth else {
             panic!("expected Auth0, got {auth:?}");
         };
-        assert_eq!(token.secret(), jwt);
+        assert_eq!(token.secret(), FAKE_TOKEN);
     }
 
     #[test]

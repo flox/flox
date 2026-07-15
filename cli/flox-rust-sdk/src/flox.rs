@@ -262,7 +262,7 @@ pub mod test_helpers {
 
 #[cfg(test)]
 pub mod tests {
-    use floxhub_client::token_test_helpers::{FAKE_EXPIRED_TOKEN, FAKE_TOKEN};
+    use floxhub_client::test_helpers::{FAKE_EXPIRED_TOKEN, FAKE_TOKEN};
 
     use super::*;
 

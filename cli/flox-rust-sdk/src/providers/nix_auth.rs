@@ -173,7 +173,7 @@ pub(crate) fn store_needs_auth(url: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use floxhub_client::token_test_helpers::FAKE_TOKEN;
+    use floxhub_client::test_helpers::FAKE_TOKEN;
     use tempfile::tempdir;
 
     use super::*;

@@ -25,10 +25,4 @@ pub use accounts::{MeError, UserIdentity, fetch_me};
 pub use auth_context::{AuthContext, AuthFailure, AuthHeaderError, UNKNOWN_HANDLE};
 pub use authn_mode::AuthnMode;
 pub use kerberos::{KerberosMaterial, TokenGenerator};
-pub use token::{
-    FloxhubToken,
-    FloxhubTokenError,
-    PAT_PREFIX,
-    PersonalAccessToken,
-    test_helpers as token_test_helpers,
-};
+pub use token::{FloxhubToken, FloxhubTokenError, PAT_PREFIX, PersonalAccessToken, test_helpers};

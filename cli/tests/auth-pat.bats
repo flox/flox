@@ -137,6 +137,8 @@ teardown() {
   export FLOX_CATALOG_URL="http://127.0.0.1:1"
 
   "$FLOX_BIN" init --name "test"
+  # The push itself goes to the file-based floxhub from floxhub_setup
+  # (_FLOX_FLOXHUB_GIT_URL); /me is the only HTTP dependency in this test.
   run "$FLOX_BIN" push --owner "owner"
   assert_success
   assert_output --partial "owner/test"

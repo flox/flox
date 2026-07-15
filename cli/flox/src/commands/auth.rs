@@ -600,7 +600,7 @@ mod tests {
     use flox_config::FLOX_CONFIG_FILE;
     use flox_core::floxhub::Floxhub;
     use flox_rust_sdk::flox::test_helpers::{create_test_token, flox_instance};
-    use floxhub_client::token_test_helpers::FAKE_EXPIRED_TOKEN;
+    use floxhub_client::test_helpers::FAKE_EXPIRED_TOKEN;
     use httpmock::MockServer;
 
     use super::*;

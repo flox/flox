@@ -79,6 +79,8 @@ impl PersonalAccessToken {
                 .join()
                 .expect("/me request thread panicked")
         })?;
+        // Concurrent first calls may each fetch; the first write wins and
+        // every later call returns the cached identity from the check above.
         Ok(self.identity.get_or_init(|| identity))
     }
 }
@@ -136,8 +138,12 @@ mod tests {
         });
 
         let token = PersonalAccessToken::new("flox_pat_secret".to_string(), server.base_url());
-        token.resolve_identity().unwrap_err();
-        token.resolve_identity().unwrap_err();
+        token
+            .resolve_identity()
+            .expect_err("a 500 from /me should fail resolution");
+        token
+            .resolve_identity()
+            .expect_err("the error must not be cached; the retry hits /me again");
 
         // Both attempts hit the server: failures don't poison the cache.
         mock.assert_calls(2);
