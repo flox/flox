@@ -293,7 +293,7 @@ impl Auth {
                 let _guard = span.enter();
                 let AuthContext::Auth0(Some(token)) = flox.auth_context else {
                     message::warning("You are not currently logged in to FloxHub.");
-                    return Err(Exit(1.into()).into());
+                    return Err(Exit(1).into());
                 };
 
                 let handle = token.handle();
@@ -311,7 +311,7 @@ impl Auth {
 
                 let AuthContext::Auth0(Some(token)) = flox.auth_context else {
                     message::warning("You are not currently logged in to FloxHub.");
-                    return Err(Exit(1.into()).into());
+                    return Err(Exit(1).into());
                 };
 
                 println!("{}", token.secret());

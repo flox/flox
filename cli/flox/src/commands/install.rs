@@ -646,7 +646,7 @@ async fn try_create_default_environment_interactive(
             packages_arguments.join(" ")
         );
         message::plain(msg);
-        return Err(Exit(1.into()).into());
+        return Err(Exit(1).into());
     }
 
     // Creates a default environment for the user, skipping checks for init

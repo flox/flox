@@ -5,7 +5,7 @@ use std::process::ExitCode;
 
 use anyhow::Result;
 use bpaf::{Args, Parser};
-use commands::{EnvironmentSelectError, FloxArgs, FloxCli, Prefix, Version};
+use commands::{EnvironmentSelectError, FloxArgs, FloxCli, NoEnvironmentError, Prefix, Version};
 use flox_config::Config;
 use flox_core::sentry::init_sentry;
 use flox_core::vars::{FLOX_VERSION_STRING, FLOX_VERSION_VAR};
@@ -162,14 +162,15 @@ fn main() -> ExitCode {
         Err(e) => {
             // Do not print any error
             if e.is::<Exit>() {
-                return e.downcast_ref::<Exit>().unwrap().0;
+                return ExitCode::from(e.downcast_ref::<Exit>().unwrap().0);
             }
 
             // This display ladder is mirrored by `utils::error_class::classify`
             // for telemetry; a new error type added here should be added there too.
             let message = e
-                .downcast_ref::<EnvironmentError>()
-                .map(format_error)
+                .downcast_ref::<NoEnvironmentError>()
+                .map(ToString::to_string)
+                .or_else(|| e.downcast_ref::<EnvironmentError>().map(format_error))
                 .or_else(|| {
                     e.downcast_ref::<ManagedEnvironmentError>()
                         .map(format_managed_error)
@@ -241,9 +242,11 @@ const BASH_COMPLETION_SCRIPT: &str = r#"_bpaf_dynamic_completion()
 complete -o nosort -F _bpaf_dynamic_completion flox
 "#;
 
-/// Error to exit without printing an error message
+/// Error to exit without printing an error message. Carries the process exit
+/// code as a `u8` (rather than an opaque [`ExitCode`]) so telemetry can
+/// report the code the process actually exits with.
 #[derive(Debug)]
-struct Exit(ExitCode);
+struct Exit(u8);
 impl Display for Exit {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         <Self as Debug>::fmt(self, f)

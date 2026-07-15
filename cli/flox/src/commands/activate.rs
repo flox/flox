@@ -20,7 +20,7 @@ use flox_core::activations::activation_state_dir_path;
 use flox_core::data::System;
 use flox_core::data::environment_ref::DEFAULT_NAME;
 use flox_core::traceable_path;
-use flox_events::EventsHub;
+use flox_events::{EventsHub, LifecycleFields};
 use flox_manifest::interfaces::{AsLatestSchema, AsWritableManifest, WriteManifest};
 use flox_manifest::parsed::Inner;
 use flox_manifest::parsed::common::IncludeDescriptor;
@@ -653,7 +653,7 @@ impl ActivateOptions {
                 // We might be able to just use Stdio::inherit above but I'm not
                 // 100% flox-activations will only print in the error case
                 eprint!("{}", String::from_utf8_lossy(&output.stderr));
-                Err(Exit(1.into()))?;
+                Err(Exit(1))?;
             }
             trace!(
                 "ephemeral activation stderr:\n{}",
@@ -672,13 +672,13 @@ impl ActivateOptions {
             // optimistically as this success. The buffered events are delivered
             // by a later invocation unless a forced flush is requested.
             let hub = flox_events::EventsHub::global();
-            if let Err(err) = hub.record_command_completed_with_lifecycle(
-                "activate".to_string(),
-                0,
-                None,
-                None,
-                None,
-            ) {
+            if let Err(err) =
+                hub.record_command_completed("activate".to_string(), LifecycleFields {
+                    exit_code: 0,
+                    duration_ms: None,
+                    error: None,
+                })
+            {
                 debug!(
                     error = %err,
                     "Failed to record v2 cli.command_completed event before exec"
