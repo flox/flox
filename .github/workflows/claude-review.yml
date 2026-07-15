@@ -27,7 +27,7 @@ jobs:
 
       - name: Run Claude Code Review
         id: claude-review
-        uses: anthropics/claude-code-action@bee87b3258c251f9279e5371b0cc3660f37f3f77 # v1
+        uses: anthropics/claude-code-action@12531344451323133b0493233c759991ac61da12 # v1.0.174
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           # Allow PRs opened by Bob (flox-forge-agent) to be reviewed; the
