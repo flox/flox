@@ -50,7 +50,8 @@ use crate::providers::lock_manifest::LockResult;
 
 const REMOTE_ENVIRONMENT_BASE_DIR: &str = "remote";
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, strum::IntoStaticStr)]
+#[strum(serialize_all = "snake_case", prefix = "remote_environment.")]
 pub enum RemoteEnvironmentError {
     #[error("open managed environment")]
     OpenManagedEnvironment(#[source] ManagedEnvironmentError),

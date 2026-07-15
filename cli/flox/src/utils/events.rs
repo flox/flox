@@ -289,7 +289,7 @@ mod tests {
             .record_command_completed("install".to_string(), LifecycleFields {
                 exit_code: 0,
                 duration_ms: Some(1),
-                error: None,
+                error_kind: None,
             })
             .expect("record completed");
         EventsHub::global().flush(true).expect("flush");

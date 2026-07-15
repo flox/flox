@@ -33,7 +33,6 @@ mod upgrade;
 use std::fmt::Display;
 use std::path::PathBuf;
 use std::str::FromStr;
-use std::time::{Duration, Instant};
 use std::{env, fmt, mem};
 
 use anyhow::{Context, Result, anyhow, bail};
@@ -42,7 +41,6 @@ use flox_config::{Config, EnvironmentTrust, FLOX_DIR_NAME, TokenStorageMode};
 use flox_core::data::environment_ref::{self, DEFAULT_NAME, RemoteEnvironmentRef};
 use flox_core::floxhub::{DEFAULT_FLOXHUB_URL, Floxhub};
 use flox_core::vars::FLOX_DISABLE_METRICS_VAR;
-use flox_events::LifecycleFields;
 use flox_manifest::interfaces::AsLatestSchema;
 use flox_manifest::{Manifest, TypedOnly};
 use flox_rust_sdk::flox::{
@@ -78,7 +76,6 @@ use url::Url;
 use xdg::BaseDirectories;
 
 use self::envs::DisplayEnvironments;
-use crate::Exit;
 use crate::commands::general::update_config;
 use crate::utils::active_environments::{
     ActiveEnvironments,
@@ -87,7 +84,6 @@ use crate::utils::active_environments::{
 };
 use crate::utils::credential_store::{CredentialStores, ResolveOutcome};
 use crate::utils::dialog::{Dialog, Select};
-use crate::utils::error_class::{INTERRUPTED, classify};
 use crate::utils::errors::display_chain;
 use crate::utils::events::{build_events_client, resolve_invocation_id};
 use crate::utils::init::init_floxhub_client;
@@ -195,6 +191,17 @@ pub struct FloxArgs {
     command: Option<Commands>,
 }
 
+impl FloxArgs {
+    /// The v2 wire subcommand name for this invocation; `"help"` when no
+    /// subcommand was given.
+    pub fn subcommand_name(&self) -> &'static str {
+        self.command
+            .as_ref()
+            .map(Commands::subcommand_name)
+            .unwrap_or("help")
+    }
+}
+
 impl fmt::Debug for Commands {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Command")
@@ -226,33 +233,11 @@ impl Commands {
     }
 }
 
-/// Saturate a duration into whole ms (u64::MAX ms is ~584M years — a
-/// ceiling only).
-fn duration_to_ms(elapsed: Duration) -> u64 {
-    u64::try_from(elapsed.as_millis()).unwrap_or(u64::MAX)
-}
-
-/// Derive the lifecycle fields for the v2 `cli.command_completed` from the
-/// dispatch `Result` and elapsed time: `Ok` → no error; `Err` → the PII-safe
-/// `classify` descriptor, with the carried code when the error is a
-/// controlled `Exit` (so telemetry matches the process's actual exit code).
-fn lifecycle_from_dispatch(result: &Result<()>, elapsed: Duration) -> LifecycleFields {
-    let duration_ms = Some(duration_to_ms(elapsed));
-    match result {
-        Ok(()) => LifecycleFields {
-            exit_code: 0,
-            duration_ms,
-            error: None,
-        },
-        Err(err) => LifecycleFields {
-            exit_code: err
-                .downcast_ref::<Exit>()
-                .map_or(1, |exit| i32::from(exit.0)),
-            duration_ms,
-            error: Some(classify(err).into()),
-        },
-    }
-}
+/// Ctrl-C ended the dispatch before it completed. Classified as
+/// `interrupted` by the telemetry emit in `main.rs`.
+#[derive(Debug, Error)]
+#[error("user interrupted process")]
+pub struct Interrupted;
 
 impl FloxArgs {
     /// Initialize the command line by creating an initial FloxBuilder
@@ -445,12 +430,6 @@ impl FloxArgs {
         let signal_handler = async { tokio::signal::ctrl_c().await.unwrap() };
         let keep_tempfiles = config.flox.keep_tempdir.unwrap_or_default();
 
-        // Dispatch timer; `.elapsed()` is read right after the match below
-        // (before the update-notification await) so `duration_ms` is
-        // handler-execution time only. Declared outside `cli_worker` so the
-        // interrupt arm below can read elapsed-at-interrupt from its copy.
-        let dispatch_start = Instant::now();
-
         let cli_worker = async move {
             // command handled above
             let result = match self.command.unwrap() {
@@ -476,8 +455,6 @@ impl FloxArgs {
                 Commands::Factory(args) => args.handle(flox).await,
             };
 
-            let lifecycle = lifecycle_from_dispatch(&result, dispatch_start.elapsed());
-
             // This will print the update notification after output from a successful
             // command but before an error is printed for an unsuccessful command.
             // That's a bit weird,
@@ -489,17 +466,6 @@ impl FloxArgs {
                 Err(e) => debug!("Failed to check for CLI update: {}", display_chain(&e)),
             }
 
-            // Emit the v2 `cli.command_completed` with the dispatch lifecycle
-            // fields. When `activate.rs` recorded a completion before `exec`,
-            // the hub's sticky flag no-ops this — including the rare case where
-            // `exec` returns an error, which is then reported as that pre-exec
-            // success rather than this failure.
-            if let Err(err) = flox_events::EventsHub::global()
-                .record_command_completed(v2_subcommand.to_string(), lifecycle)
-            {
-                debug!(error = %err, "Failed to record v2 cli.command_completed event");
-            }
-
             result
         };
 
@@ -508,29 +474,12 @@ impl FloxArgs {
             .run_until(async {
                 tokio::select! {
                     _ = tokio::task::spawn_local(signal_handler) => {
-                        // On Ctrl-C the `cli_worker` task is dropped before it
-                        // reaches its `record_command_completed`, so record it
-                        // here too — an interrupted invocation still ends, and
-                        // the hub's idempotent flag means at most one completion
-                        // is recorded per invocation. The `anyhow!` returned
-                        // below reaches `main.rs` as an unclassified error, so
-                        // the process exits 1; `duration_ms` is the time from
-                        // dispatch start to the interrupt.
-                        if let Err(err) = flox_events::EventsHub::global()
-                            .record_command_completed(v2_subcommand.to_string(), LifecycleFields {
-                                exit_code: 1,
-                                duration_ms: Some(duration_to_ms(dispatch_start.elapsed())),
-                                error: Some(INTERRUPTED.into()),
-                            })
-                        {
-                            debug!(error = %err, "Failed to record v2 cli.command_completed event (interrupted)");
-                        }
                         // TODO:
                         // For now we rely on subprocesses to inherit `flox` process group
                         // and thus being sent ctrl_c signals in sync with flox itself.
                         // If we do need more control here,
                         // we can find process children and propagate signals manually.
-                        Err(anyhow!("user interrupted process"))
+                        Err(Interrupted.into())
                     }
                     result = tokio::task::spawn_local(cli_worker) => result?
                 }
@@ -1253,7 +1202,8 @@ pub enum DirEnvironmentSelect {
     Unspecified,
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, strum::IntoStaticStr)]
+#[strum(serialize_all = "snake_case", prefix = "env_select.")]
 pub enum EnvironmentSelectError {
     #[error(transparent)]
     EnvironmentError(#[from] EnvironmentError),
@@ -1270,8 +1220,9 @@ pub enum EnvironmentSelectError {
 /// A missing-environment error that also suggests `flox init`. It carries the
 /// hint in its own `Display`, so a command can surface it without the shared
 /// `EnvironmentError` / `EnvironmentSelectError` formatters rendering the hint
-/// on every occurrence. Classified as `env_not_found`.
-#[derive(Debug, Error)]
+/// on every occurrence.
+#[derive(Debug, Error, strum::IntoStaticStr)]
+#[strum(serialize_all = "snake_case", prefix = "no_environment.")]
 pub enum NoEnvironmentError {
     #[error(
         "Did not find an environment in the current directory.\n\nCreate an environment with 'flox init'"
@@ -1871,8 +1822,6 @@ fn render_composition_manifest(manifest: &Manifest<TypedOnly>) -> Result<String>
 
 #[cfg(test)]
 mod subcommand_name_tests {
-    use flox_events::LifecycleError;
-
     use super::*;
 
     /// Run the top-level `flox_args` parser against `argv` and return
@@ -1886,47 +1835,6 @@ mod subcommand_name_tests {
         parsed
             .command
             .expect("expected an inner subcommand after parsing")
-    }
-
-    #[test]
-    fn lifecycle_from_ok_dispatch() {
-        let lifecycle = lifecycle_from_dispatch(&Ok(()), Duration::from_millis(1234));
-        assert_eq!(lifecycle, LifecycleFields {
-            exit_code: 0,
-            duration_ms: Some(1234),
-            error: None,
-        });
-    }
-
-    #[test]
-    fn lifecycle_from_err_dispatch_sets_exit_1_and_is_pii_safe() {
-        let err = anyhow!("could not open /Users/alice/secret.toml");
-        let lifecycle = lifecycle_from_dispatch(&Err(err), Duration::from_millis(5));
-        assert_eq!(lifecycle, LifecycleFields {
-            exit_code: 1,
-            duration_ms: Some(5),
-            error: Some(LifecycleError {
-                kind: "uncategorized".to_string(),
-                message: "unclassified error".to_string(),
-            }),
-        });
-        // A path + username went in; assert neither survives on the wire.
-        let msg = lifecycle.error.expect("error present on Err").message;
-        assert!(!msg.contains("alice"), "PII leaked: {msg:?}");
-    }
-
-    #[test]
-    fn lifecycle_from_err_dispatch_reads_exit_code_from_controlled_exit() {
-        let err = anyhow::Error::from(Exit(2));
-        let lifecycle = lifecycle_from_dispatch(&Err(err), Duration::from_millis(5));
-        assert_eq!(lifecycle, LifecycleFields {
-            exit_code: 2,
-            duration_ms: Some(5),
-            error: Some(LifecycleError {
-                kind: "controlled_exit".to_string(),
-                message: "controlled exit".to_string(),
-            }),
-        });
     }
 
     /// `auth` must derive to the literal `"auth2"` on the wire so

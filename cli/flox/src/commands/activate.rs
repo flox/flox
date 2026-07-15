@@ -678,7 +678,7 @@ impl ActivateOptions {
                 hub.record_command_completed("activate".to_string(), LifecycleFields {
                     exit_code: 0,
                     duration_ms: None,
-                    error: None,
+                    error_kind: None,
                 })
             {
                 debug!(
