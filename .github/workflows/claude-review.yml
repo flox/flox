@@ -41,5 +41,13 @@ jobs:
             --model opus
             --effort xhigh
             --dangerously-skip-permissions
-          plugins: 'code-review@claude-plugins-official'
-          prompt: '/code-review:code-review PR #${{ github.event.pull_request.number }} in ${{ github.repository }}'
+          plugins: 'superpowers@claude-plugins-official'
+          prompt: |
+            Review PR #${{ github.event.pull_request.number }} in ${{ github.repository }}.
+
+            Conduct the review using the superpowers:requesting-code-review skill
+            and its code-reviewer template, reviewing the PR's full diff against
+            its base.
+
+            Fetch whatever git history you need using `gh pr diff`, `gh pr
+            view`, or `git fetch`. The current checkout is shallow.
