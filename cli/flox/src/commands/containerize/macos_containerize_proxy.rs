@@ -157,11 +157,7 @@ impl ContainerizeProxy {
         env_override
             .map(|s| s.to_string())
             .or_else(|| self.flake_ref_override.clone())
-            .unwrap_or_else(|| {
-                flox_version
-                    .commit_sha()
-                    .unwrap_or(flox_version_tag)
-            })
+            .unwrap_or_else(|| flox_version.commit_sha().unwrap_or(flox_version_tag))
     }
 
     // Use a Nix container that matches the version of Nix that this Flox
@@ -616,8 +612,14 @@ mod tests {
     #[test]
     fn docker_proxy_uses_docker_run() {
         let (flox, _tempdir) = flox_instance();
-        let proxy =
-            ContainerizeProxy::new("/some/env".into(), Runtime::Docker, vec![], None, false, None);
+        let proxy = ContainerizeProxy::new(
+            "/some/env".into(),
+            Runtime::Docker,
+            vec![],
+            None,
+            false,
+            None,
+        );
         let mut cmd = proxy.runtime_base_command();
         proxy.add_runtime_args(&mut cmd, &params_from_flox(&flox));
         let args = argv(&cmd);
@@ -635,8 +637,14 @@ mod tests {
     #[test]
     fn add_runtime_args_forwards_guest_flox_marker_for_non_oci() {
         let (flox, _tempdir) = flox_instance();
-        let proxy =
-            ContainerizeProxy::new("/some/env".into(), Runtime::Docker, vec![], None, true, None);
+        let proxy = ContainerizeProxy::new(
+            "/some/env".into(),
+            Runtime::Docker,
+            vec![],
+            None,
+            true,
+            None,
+        );
         let mut cmd = proxy.runtime_base_command();
         proxy.add_runtime_args(&mut cmd, &params_from_flox(&flox));
         let args = argv(&cmd);
@@ -679,8 +687,14 @@ mod tests {
     #[test]
     fn add_runtime_args_omits_guest_flox_marker_when_not_requested() {
         let (flox, _tempdir) = flox_instance();
-        let proxy =
-            ContainerizeProxy::new("/some/env".into(), Runtime::Docker, vec![], None, false, None);
+        let proxy = ContainerizeProxy::new(
+            "/some/env".into(),
+            Runtime::Docker,
+            vec![],
+            None,
+            false,
+            None,
+        );
         let mut cmd = proxy.runtime_base_command();
         proxy.add_runtime_args(&mut cmd, &params_from_flox(&flox));
         let args = argv(&cmd);
@@ -752,8 +766,14 @@ mod tests {
     #[test]
     fn podman_proxy_adds_userns_flag() {
         let (flox, _tempdir) = flox_instance();
-        let proxy =
-            ContainerizeProxy::new("/some/env".into(), Runtime::Podman, vec![], None, false, None);
+        let proxy = ContainerizeProxy::new(
+            "/some/env".into(),
+            Runtime::Podman,
+            vec![],
+            None,
+            false,
+            None,
+        );
         let mut cmd = proxy.runtime_base_command();
         proxy.add_runtime_args(&mut cmd, &params_from_flox(&flox));
         let args = argv(&cmd);
@@ -824,8 +844,14 @@ mod tests {
     #[test]
     fn docker_uses_mount_flag_for_cache() {
         let (flox, _tempdir) = flox_instance();
-        let proxy =
-            ContainerizeProxy::new("/some/env".into(), Runtime::Docker, vec![], None, false, None);
+        let proxy = ContainerizeProxy::new(
+            "/some/env".into(),
+            Runtime::Docker,
+            vec![],
+            None,
+            false,
+            None,
+        );
         let mut cmd = proxy.runtime_base_command();
         proxy.add_runtime_args(&mut cmd, &params_from_flox(&flox));
         let args = argv(&cmd);
@@ -899,16 +925,28 @@ mod tests {
 
     #[test]
     fn docker_and_podman_do_not_get_memory_flag() {
-        let docker_proxy =
-            ContainerizeProxy::new("/some/env".into(), Runtime::Docker, vec![], None, false, None);
+        let docker_proxy = ContainerizeProxy::new(
+            "/some/env".into(),
+            Runtime::Docker,
+            vec![],
+            None,
+            false,
+            None,
+        );
         let docker_args = argv(&docker_proxy.runtime_base_command());
         assert!(
             !docker_args.iter().any(|a| a == "--memory"),
             "Docker should not receive --memory (it is not a VM)"
         );
 
-        let podman_proxy =
-            ContainerizeProxy::new("/some/env".into(), Runtime::Podman, vec![], None, false, None);
+        let podman_proxy = ContainerizeProxy::new(
+            "/some/env".into(),
+            Runtime::Podman,
+            vec![],
+            None,
+            false,
+            None,
+        );
         let podman_args = argv(&podman_proxy.runtime_base_command());
         assert!(
             !podman_args.iter().any(|a| a == "--memory"),
@@ -1127,10 +1165,7 @@ mod tests {
         fn default_used_when_neither_env_nor_field_set() {
             let proxy = proxy_with_override(None);
             let resolved = proxy.resolve_flake_ref(None);
-            assert!(
-                !resolved.is_empty(),
-                "default flake ref must not be empty"
-            );
+            assert!(!resolved.is_empty(), "default flake ref must not be empty");
             // The resolved value is a tag or SHA — both are non-empty strings.
             // We cannot assert the exact value without pinning FLOX_VERSION in
             // tests, but we can assert it is neither of the explicit inputs.

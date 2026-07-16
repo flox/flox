@@ -29,6 +29,7 @@ use bpaf::Bpaf;
 use flox_activations::sandbox::grants::{self, Grant, GrantsFile};
 use flox_activations::sandbox::sensitive::SensitiveSet;
 use flox_activations::sandbox::{FLOX_VIRTUAL_SANDBOX_VAR, control_socket_path};
+use flox_config::Config;
 use flox_core::activate::sandbox_backend::{
     BackendCapabilities,
     Enforcement,
@@ -41,7 +42,6 @@ use flox_rust_sdk::models::environment::Environment;
 use serde::{Deserialize, Serialize};
 
 use super::{EnvironmentSelect, environment_select};
-use flox_config::Config;
 use crate::utils::dialog::{Dialog, Select};
 use crate::utils::message;
 
