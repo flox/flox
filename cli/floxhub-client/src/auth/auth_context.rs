@@ -99,6 +99,17 @@ impl AuthContext {
         }
     }
 
+    /// Return the user's handle if authenticated, allowing expired auth0 tokens,
+    /// or an [`AuthFailure`] describing why authentication failed.
+    pub fn authenticated_handle_allowing_expired(&self) -> Result<&str, AuthFailure> {
+        match self {
+            AuthContext::Auth0(Some(token)) => Ok(token.handle()),
+            AuthContext::Auth0(None) => Err(AuthFailure::NotLoggedIn),
+            AuthContext::Kerberos(Some(material)) => Ok(&material.principal),
+            AuthContext::Kerberos(None) => Err(AuthFailure::NoKerberosTicket),
+        }
+    }
+
     /// Produce the value for an HTTP Authorization header targeting the given URL.
     pub fn authorization_header(&self, url: &Url) -> Option<Result<String, AuthHeaderError>> {
         match self {
