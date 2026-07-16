@@ -361,6 +361,8 @@ test-all: test-nix-plugins impure-tests integ-tests nix-integ-tests
 #   flox             — needs --features extra-tests  (impure unit tests)
 #   flox-manifest    — needs --features tests
 #   other crates     — no extra features required
+#   --workspace      — enables all of the above via package-qualified
+#                      features (flox-core/tests, ..., flox/extra-tests)
 #
 # Usage:
 #   just coverage              # measure flox-core (default, ~50 s cold)
@@ -396,7 +398,10 @@ coverage crate="flox-core":
     ARGS=()
 
     if [ "$CRATE" = "--workspace" ]; then
+        # Package-qualified features mirror the per-crate flags below so
+        # workspace coverage measures the same test set as per-crate runs.
         ARGS+=(--workspace)
+        ARGS+=(--features flox-core/tests,flox-rust-sdk/tests,flox-manifest/tests,flox/extra-tests)
     else
         ARGS+=(-p "$CRATE")
 
