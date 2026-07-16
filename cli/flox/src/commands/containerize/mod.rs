@@ -15,7 +15,11 @@ use flox_manifest::lockfile::Lockfile;
 use flox_manifest::parsed::common::ContainerizeConfig;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::Environment;
-use flox_rust_sdk::providers::container_builder::{ContainerBuilder, MkContainerNix};
+use flox_rust_sdk::providers::container_builder::{
+    ContainerBuilder,
+    ContainerBuilderParams,
+    MkContainerNix,
+};
 use flox_rust_sdk::utils::{ReaderExt, WireTap};
 use indoc::indoc;
 use macos_containerize_proxy::ContainerizeProxy;
@@ -107,6 +111,14 @@ impl Containerize {
         let lockfile: Lockfile = env.lockfile(&flox)?.into();
         let manifest = lockfile.migrated_manifest()?;
         let manifest = manifest.as_latest_schema();
+        // Concretize the Flox context values that the builder pipeline needs.
+        // The composition root extracts these here so neither the trait nor
+        // its implementations depend on the full Flox god-context type.
+        let builder_params = ContainerBuilderParams {
+            config_dir: flox.config_dir.clone(),
+            metrics_disabled: flox.metrics_device_uuid.is_none(),
+            verbosity: flox.verbosity,
+        };
         let source = if std::env::consts::OS == "linux" {
             let mode = self
                 .mode
@@ -139,7 +151,7 @@ impl Containerize {
                 flox_bin,
             );
 
-            builder.create_container_source(&flox, env_name.as_ref(), output_tag)?
+            builder.create_container_source(&builder_params, env_name.as_ref(), output_tag)?
         } else {
             let env_path = env.parent_path()?;
             let Some(proxy_runtime) = runtime else {
@@ -158,9 +170,17 @@ impl Containerize {
             }
             // include_guest_flox = false: the general containerize command
             // never bakes a guest flox — that behavior is sandbox-only.
-            let builder =
-                ContainerizeProxy::new(env_path, proxy_runtime, self.labels, self.mode, false);
-            builder.create_container_source(&flox, env_name.as_ref(), output_tag)?
+            // flake_ref_override = None: the user-facing env var is the
+            // override channel for this path.
+            let builder = ContainerizeProxy::new(
+                env_path,
+                proxy_runtime,
+                self.labels,
+                self.mode,
+                false,
+                None,
+            );
+            builder.create_container_source(&builder_params, env_name.as_ref(), output_tag)?
         };
 
         let mut writer = output.to_writer()?;

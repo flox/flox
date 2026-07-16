@@ -14,7 +14,6 @@ use tracing::{Span, debug, info, instrument};
 use tracing_indicatif::span_ext::IndicatifSpanExt;
 
 use super::buildenv::BuiltStorePath;
-use crate::flox::Flox;
 use crate::providers::build::COMMON_NIXPKGS_URL;
 use crate::providers::nix::nix_base_command;
 use crate::utils::gomap::GoMap;
@@ -26,11 +25,27 @@ static MK_CONTAINER_NIX: LazyLock<PathBuf> = LazyLock::new(|| {
         .into()
 });
 
+/// Concrete parameters that [`ContainerBuilder::create_container_source`]
+/// implementations may need from the Flox context. Callers at the composition
+/// root (CLI layer) extract these values from `&Flox` before handing them
+/// down, so neither the trait nor its implementations depend on the full
+/// god-context type.
+#[derive(Debug, Clone)]
+pub struct ContainerBuilderParams {
+    /// Directory that holds the user's `flox.toml` configuration file.
+    pub config_dir: PathBuf,
+    /// Whether metrics are disabled (`true` when `metrics_device_uuid` is
+    /// `None` on the originating `Flox` instance).
+    pub metrics_disabled: bool,
+    /// CLI verbosity level (negative = quiet, positive = verbose).
+    pub verbosity: i32,
+}
+
 pub trait ContainerBuilder {
     type Error: std::error::Error;
     fn create_container_source(
         &self,
-        flox: &Flox,
+        params: &ContainerBuilderParams,
         name: impl AsRef<str>,
         tag: impl AsRef<str>,
     ) -> Result<ContainerSource, Self::Error>;
@@ -199,7 +214,7 @@ impl ContainerBuilder for MkContainerNix {
         progress = "Building container layers"))]
     fn create_container_source(
         &self,
-        _flox: &Flox,
+        _params: &ContainerBuilderParams,
         name: impl AsRef<str>,
         tag: impl AsRef<str>,
     ) -> Result<ContainerSource, Self::Error> {
