@@ -618,6 +618,7 @@ impl ActivateOptions {
             invocation_type: Some(invocation_type),
             env_pointer: serde_json::to_string(&now_active)
                 .context("could not serialize the environment pointer")?,
+            already_active,
             remove_after_reading: true,
             metrics_uuid: flox.metrics_device_uuid,
             disable_hook: config.flox.disable_hook.unwrap_or(false),

@@ -132,6 +132,7 @@ pub(crate) fn startup_ctx(
         vars_from_env,
         &start_diff,
         invocation_type.is_in_place(),
+        ctx.already_active,
     )?;
 
     let set_prompt = ctx.attach_ctx.set_prompt;

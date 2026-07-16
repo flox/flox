@@ -85,6 +85,7 @@ impl AttachDiff {
         mut vars_from_env: VarsFromEnvironment,
         start_diff: &StartDiff,
         is_in_place: bool,
+        already_active: bool,
     ) -> Result<Self> {
         // Extract the pre-activation snapshot before consuming vars_from_env.
         let full_env = vars_from_env.full_env.take();
@@ -115,7 +116,16 @@ impl AttachDiff {
             .extend(start_diff.deletions().iter().cloned());
 
         // Compute the activation diff if we have a pre-activation snapshot.
-        let encoded_diff = if let Some(ref current_env) = full_env {
+        // A repeat activation of an already-active environment adds no layer
+        // to `_FLOX_ACTIVE_ENVIRONMENTS` and must not record a diff either:
+        // prepending an entry to the `_FLOX_HOOK_DIFF` chain would misalign
+        // the chain with the activation stack, and the next deactivation
+        // would restore the repeat's near-empty diff instead of the front
+        // layer's. The layer's real diff was recorded by the activation that
+        // added it and stays reachable through the chain.
+        let encoded_diff = if already_active {
+            None
+        } else if let Some(ref current_env) = full_env {
             let mut intended_sets = if is_in_place {
                 // These variables are computed by set-env-dirs and fix-paths,
                 // for which values must be computed dynamically at runtime.
@@ -475,6 +485,44 @@ mod tests {
 
     fn make_keys(keys: &[&str]) -> HashSet<String> {
         keys.iter().map(|k| k.to_string()).collect()
+    }
+
+    #[test]
+    fn repeat_activation_records_no_diff() {
+        use std::path::PathBuf;
+
+        use crate::start_diff::StartDiff;
+        use crate::vars_from_env::VarsFromEnvironment;
+
+        let context = AttachCtx {
+            env: "/flox_env".to_string(),
+            env_cache: PathBuf::from("/flox_env_cache"),
+            env_description: "env_description".to_string(),
+            flox_active_environments: "active_envs".to_string(),
+            prompt_color_1: "1".to_string(),
+            prompt_color_2: "2".to_string(),
+            flox_prompt_environments: "prompt_envs".to_string(),
+            set_prompt: true,
+            flox_env_cuda_detection: "0".to_string(),
+            interpreter_path: PathBuf::from("/interpreter"),
+        };
+        let vars_from_env = || VarsFromEnvironment {
+            flox_env_dirs: None,
+            path: None,
+            manpath: None,
+            full_env: Some(HashMap::new()),
+        };
+        let start_diff = StartDiff::from_parts(HashMap::new(), vec![]);
+
+        let fresh =
+            AttachDiff::new(&context, None, 0, vars_from_env(), &start_diff, true, false).unwrap();
+        assert!(fresh.encoded_diff().is_some());
+
+        // A repeat activation adds no layer, so it must not prepend a
+        // `_FLOX_HOOK_DIFF` entry either.
+        let repeat =
+            AttachDiff::new(&context, None, 0, vars_from_env(), &start_diff, true, true).unwrap();
+        assert!(repeat.encoded_diff().is_none());
     }
 
     #[test]

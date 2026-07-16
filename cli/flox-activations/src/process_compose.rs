@@ -104,6 +104,7 @@ pub fn start_process_compose_no_services(
         vars_from_env,
         &start_diff,
         false,
+        false,
     )?;
     attach_diff.apply_to_command(&mut command);
 

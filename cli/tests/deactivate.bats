@@ -1344,6 +1344,70 @@ EOF
   '
 }
 
+# Layer a default env and then a project env in an outer shell, spawn a
+# nested $shell that re-activates the default env (the way a default-env rc
+# file would), and deactivate once. The repeat activation must leave the
+# `_FLOX_HOOK_DIFF` chain aligned with `_FLOX_ACTIVE_ENVIRONMENTS`, so that
+# single deactivation pops the front (project) layer: its var is restored
+# and it leaves the active list while the default env stays. $2 is the
+# nested shell's script: repeat-activate, deactivate, then probe.
+assert_subshell_repeat_keeps_deactivate_in_sync() {
+  local shell="${1:?}" inner="${2:?}"
+
+  project_setup
+  cat << "EOF" | "$FLOX_BIN" edit -f -
+version = 1
+
+[vars]
+PROJECT_VAR = "project_active"
+EOF
+  export DEFAULT_DIR="${BATS_TEST_TMPDIR}/default"
+  mkdir -p "$DEFAULT_DIR"
+  "$FLOX_BIN" init -d "$DEFAULT_DIR"
+
+  SHELL_BIN="$(command -v "$shell")"
+  INNER_SCRIPT="$BATS_TEST_TMPDIR/subshell-repeat.$shell"
+  echo "$inner" > "$INNER_SCRIPT"
+  export SHELL_BIN INNER_SCRIPT
+
+  run --separate-stderr flox_cold_start "$SHELL_BIN" -c '
+    eval "$($FLOX_BIN activate -d "$DEFAULT_DIR")"
+    eval "$($FLOX_BIN activate -d "$PROJECT_DIR")"
+    "$SHELL_BIN" "$INNER_SCRIPT"
+  '
+  assert_success
+  refute_regex "$stderr" "is not attached to the activation"
+  # One deactivate pops the project layer: its var is restored...
+  assert_output --partial "sub:unset"
+  # ...and it leaves the active list, while the default env remains.
+  assert_regex "$output" "active:.*default"
+  refute_regex "$output" "active:.*${PROJECT_NAME}"
+
+  wait_for_activations "$DEFAULT_DIR" || true
+  rm -rf "$DEFAULT_DIR"
+  unset DEFAULT_DIR
+}
+
+# bats test_tags=deactivate:subshell
+@test "'flox deactivate' pops the front layer after a repeat activation in a subshell (bash)" {
+  assert_subshell_repeat_keeps_deactivate_in_sync bash '
+    eval "$($FLOX_BIN activate -d "$DEFAULT_DIR")"
+    eval "$($FLOX_BIN deactivate --print-script "$_FLOX_INVOCATION_TYPES")"
+    echo "sub:${PROJECT_VAR:-unset}"
+    echo "active:$_FLOX_ACTIVE_ENVIRONMENTS"
+  '
+}
+
+# bats test_tags=deactivate:subshell
+@test "'flox deactivate' pops the front layer after a repeat activation in a subshell (fish)" {
+  assert_subshell_repeat_keeps_deactivate_in_sync fish '
+    eval "$($FLOX_BIN activate -d "$DEFAULT_DIR")"
+    eval "$($FLOX_BIN deactivate --print-script "$_FLOX_INVOCATION_TYPES")"
+    set -q PROJECT_VAR; and echo "sub:$PROJECT_VAR"; or echo "sub:unset"
+    echo "active:$_FLOX_ACTIVE_ENVIRONMENTS"
+  '
+}
+
 # ---------------------------------------------------------------------------- #
 # Stacked deactivation: an interactive activation layered with an in-place
 # activation deactivates one layer per `flox deactivate`, and only the last

@@ -170,6 +170,7 @@ pub(crate) mod test_helpers {
             shell,
             invocation_type: Some(invocation_type.clone()),
             env_pointer: test_env_pointer("test_env").to_string(),
+            already_active: false,
             remove_after_reading: false,
             metrics_uuid: None,
             disable_hook,

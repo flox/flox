@@ -99,6 +99,12 @@ pub struct ActivateCtx {
     #[serde(default)]
     pub env_pointer: String,
 
+    /// Whether the environment was already active when this activation
+    /// started, i.e. this is a repeat activation that adds no layer to
+    /// `_FLOX_ACTIVE_ENVIRONMENTS` and must not record an activation diff.
+    #[serde(default)]
+    pub already_active: bool,
+
     /// Whether to clean up the context file after reading it.
     pub remove_after_reading: bool,
 
