@@ -143,7 +143,11 @@ signal-hook = "0.4.3"
 
 # build(.rs) dependencies
 openapiv3 = "2.2"
-prettyplease = "0.2"
+# libgssapi{-sys} -> bindgen enables prettyplease[verbatim].
+# Due to feature unification, when compiling flox crates using prettyplease
+# ({catalog,factory}-api-v1), the generated client code changes when built
+# together with another crate that depends on libgssapi.
+prettyplease = { version = "0.2", features = ["verbatim"] }
 progenitor = "0.11.2"
 syn = "2.0"
 
