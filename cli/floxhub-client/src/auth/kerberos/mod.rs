@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use url::Url;
 
-use crate::auth_context::AuthHeaderError;
+use crate::auth::auth_context::AuthHeaderError;
 
 /// A function that generates a SPNEGO token for a given URL.
 pub type TokenGenerator = Arc<dyn Fn(&Url) -> Result<String, AuthHeaderError> + Send + Sync>;

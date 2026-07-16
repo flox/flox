@@ -98,7 +98,6 @@ in
       cp -rf --no-preserve=mode ${flox-src}/cli/flox-manifest/* ./cli/flox-manifest
       cp -rf --no-preserve=mode ${flox-src}/cli/catalog-api-v1/* ./cli/catalog-api-v1
       cp -rf --no-preserve=mode ${flox-src}/cli/factory-api-v1/* ./cli/factory-api-v1
-      cp -rf --no-preserve=mode ${flox-src}/cli/floxhub-auth/* ./cli/floxhub-auth
       cp -rf --no-preserve=mode ${flox-src}/cli/floxhub-client/* ./cli/floxhub-client
       cp -rf --no-preserve=mode ${flox-src}/cli/flox-core/* ./cli/flox-core
       cp -rf --no-preserve=mode ${flox-src}/cli/flox-config/* ./cli/flox-config

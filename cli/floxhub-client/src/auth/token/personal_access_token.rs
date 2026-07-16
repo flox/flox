@@ -1,7 +1,7 @@
 //! [`PersonalAccessToken`] — an opaque `flox_pat_` token whose identity is
 //! resolved lazily and cached in memory.
 
-use crate::identity::{IdentityError, LazyIdentity, UserIdentity};
+use crate::auth::identity::{IdentityError, LazyIdentity, UserIdentity};
 
 /// Prefix identifying a FloxHub personal access token.
 pub const PAT_PREFIX: &str = "flox_pat_";
@@ -78,8 +78,12 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     use super::*;
-    use crate::identity::lazy_identity;
-    use crate::identity::test_helpers::{static_identity, test_identity, unreachable_identity};
+    use crate::auth::identity::lazy_identity;
+    use crate::auth::identity::test_helpers::{
+        static_identity,
+        test_identity,
+        unreachable_identity,
+    };
 
     #[test]
     fn opaque_token_resolves_and_caches_identity() {

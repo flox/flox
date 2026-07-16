@@ -12,10 +12,10 @@
 
 use url::Url;
 
-use crate::authn_mode::AuthnMode;
-use crate::identity::{IdentityError, UserIdentity, lazy_identity};
-use crate::kerberos::KerberosMaterial;
-use crate::token::{FloxhubToken, FloxhubTokenError, PAT_PREFIX, PersonalAccessToken};
+use crate::auth::authn_mode::AuthnMode;
+use crate::auth::identity::{IdentityError, UserIdentity, lazy_identity};
+use crate::auth::kerberos::KerberosMaterial;
+use crate::auth::token::{FloxhubToken, FloxhubTokenError, PAT_PREFIX, PersonalAccessToken};
 
 /// Describes why authentication failed.
 ///
@@ -226,7 +226,7 @@ impl AuthContext {
                 Some(token) => Ok(AuthContext::Auth0(Some(token.parse()?))),
                 None => Ok(AuthContext::Auth0(None)),
             },
-            AuthnMode::Kerberos => Ok(crate::kerberos::kerberos_credential()),
+            AuthnMode::Kerberos => Ok(crate::auth::kerberos::kerberos_credential()),
         }
     }
 }
@@ -253,20 +253,20 @@ mod tests {
     use chrono::{Duration, Utc};
 
     use super::*;
-    use crate::identity::LazyIdentity;
-    use crate::identity::test_helpers::{
+    use crate::auth::identity::LazyIdentity;
+    use crate::auth::identity::test_helpers::{
         static_identity,
         test_identity,
         unauthorized_identity,
         unreachable_identity,
         unreachable_resolve,
     };
-    use crate::token::test_helpers::{
+    use crate::auth::token::test_helpers::{
         FAKE_EXPIRED_TOKEN_WITH_SUB,
         FAKE_TOKEN,
         FAKE_TOKEN_WITH_SUB,
     };
-    use crate::token::{FloxhubToken, PersonalAccessToken};
+    use crate::auth::token::{FloxhubToken, PersonalAccessToken};
 
     #[test]
     fn user_subject_returns_sub_for_auth0_token() {

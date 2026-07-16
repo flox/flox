@@ -6,10 +6,9 @@
 //! configured [`AuthnMode`] and the stored token via
 //! [`AuthContext::from_mode`].
 //!
-//! This crate carries no transport: identity resolution for opaque tokens is
-//! injected as a resolution function bound into a [`LazyIdentity`], with the
-//! production implementation living next to the FloxHub HTTP client
-//! (`floxhub-client`).
+//! This module carries no transport: identity resolution for opaque tokens
+//! is injected as a resolution function bound into a [`LazyIdentity`], with
+//! the production implementation in [`crate::accounts`].
 //!
 //! One file per type:
 //! - [`auth_context`]: [`AuthContext`] and its failure types
@@ -37,6 +36,6 @@ pub use token::{FloxhubToken, FloxhubTokenError, PAT_PREFIX, PersonalAccessToken
 /// Intentionally not behind `#[cfg(test)]` so that other crates' (also
 /// non-gated) test helpers can use them without enabling a feature.
 pub mod test_helpers {
-    pub use crate::identity::test_helpers::*;
-    pub use crate::token::test_helpers::*;
+    pub use crate::auth::identity::test_helpers::*;
+    pub use crate::auth::token::test_helpers::*;
 }

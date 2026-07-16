@@ -33,6 +33,7 @@
 //! ```
 
 mod accounts;
+pub mod auth;
 pub mod client;
 mod config;
 mod error;
@@ -54,6 +55,7 @@ pub const FLOX_RESOLVE_STABILITY_VAR: &str = "_FLOX_RESOLVE_STABILITY";
 // Re-export the authentication types so consumers can keep depending only
 // on floxhub-client.
 pub use accounts::{AccountsApiClient, MeError, fetch_me_blocking, identity_resolver};
+pub use auth::*;
 pub use catalog_api_v1::{
     Client as ApiClient,
     Error as ApiError,
@@ -89,6 +91,5 @@ pub use factory_api_v1::{
     Error as FactoryApiError,
     ResponseValue as FactoryApiResponseValue,
 };
-pub use floxhub_auth::*;
 // Types (re-exported from types module for convenience)
 pub use types::*;

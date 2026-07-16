@@ -300,7 +300,7 @@ pub mod tests {
     fn make_test_auth(secret: &str) -> AuthContext {
         AuthContext::Pat(PersonalAccessToken::new(
             secret.to_string(),
-            floxhub_auth::test_helpers::unreachable_identity(),
+            crate::auth::test_helpers::unreachable_identity(),
         ))
     }
 

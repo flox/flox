@@ -10,7 +10,7 @@ use tracing::debug;
 use url::Url;
 
 use super::KerberosMaterial;
-use crate::auth_context::{AuthContext, AuthHeaderError};
+use crate::auth::auth_context::{AuthContext, AuthHeaderError};
 
 /// Errors from Kerberos credential acquisition.
 #[derive(Debug, Clone, thiserror::Error)]

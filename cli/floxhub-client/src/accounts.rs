@@ -2,8 +2,8 @@
 //!
 //! `GET /api/v1/accounts/me` reports who the presented credential belongs to
 //! and when it expires. This module provides the production
-//! [`IdentityResolver`] injected into personal access tokens, keeping the
-//! `floxhub-auth` crate free of transport concerns.
+//! [`identity_resolver`] injected into personal access tokens, keeping the
+//! [`crate::auth`] module free of transport concerns.
 //!
 //! TODO: generate this client from the accounts service's OpenAPI schema
 //! (the service emits a 3.0.2 schema for exactly this purpose) and replace
@@ -11,9 +11,9 @@
 
 use std::collections::BTreeMap;
 
-use floxhub_auth::{IdentityError, UserIdentity};
 use thiserror::Error;
 
+use crate::auth::{IdentityError, UserIdentity};
 use crate::client::build_http_client;
 
 #[derive(Debug, Error)]
@@ -74,7 +74,7 @@ impl AccountsApiClient {
 }
 
 /// The production identity resolution for
-/// [`AuthContext::from_mode`](floxhub_auth::AuthContext::from_mode): fetch
+/// [`AuthContext::from_mode`](crate::auth::AuthContext::from_mode): fetch
 /// the identity from `{api_url}/api/v1/accounts/me`, blocking the calling
 /// thread.
 ///
