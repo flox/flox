@@ -20,7 +20,7 @@ use flox_core::hook_actions::{
     take_hook_actions,
 };
 use flox_rust_sdk::flox::Flox;
-use flox_rust_sdk::models::environment::find_all_dot_flox;
+use flox_rust_sdk::models::environment::{Environment, find_all_dot_flox, open_path};
 use indoc::formatdoc;
 use shell_gen::{GenerateShell, SetVar, Shell, ShellWithPath, UnsetVar};
 use tracing::debug;
@@ -301,6 +301,7 @@ impl HookEnv {
         let mut suppressed = plan.suppressed.clone();
         for path in &ctx.discovered {
             if plan.activate.contains(path) {
+                prebuild_environment(&flox, path);
                 write_activate_command(self.shell, path, &mut writer)?;
             } else if plan.prompt.contains(path) {
                 match consent {
@@ -310,6 +311,7 @@ impl HookEnv {
                             path,
                             AutoActivationPreference::Allow,
                         )?;
+                        prebuild_environment(&flox, path);
                         write_activate_command(self.shell, path, &mut writer)?;
                         if !auto_activated.contains(path) {
                             auto_activated.push(path.clone());
@@ -359,6 +361,7 @@ impl HookEnv {
         if let Some(target) = &plan.reinsert
             && popped_all
         {
+            prebuild_environment(&flox, target);
             write_activate_command(self.shell, target, &mut writer)?;
             if !auto_activated.contains(target) {
                 auto_activated.push(target.clone());
@@ -379,6 +382,7 @@ impl HookEnv {
         // silently on the next prompt.
         if !plan.reactivate.is_empty() && popped_all {
             for path in &plan.reactivate {
+                prebuild_environment(&flox, path);
                 write_activate_command(self.shell, path, &mut writer)?;
             }
         }
@@ -966,6 +970,27 @@ async fn prompt_for_auto_activation(project_dirs: &[PathBuf]) -> Result<AutoActi
         ) => Ok(AutoActivateConsent::Suppress),
         Err(inquire::InquireError::NotTTY) => Ok(AutoActivateConsent::NoTerminal),
         Err(err) => Err(err).context("failed to prompt for auto-activation"),
+    }
+}
+
+/// Lock and build the environment in `project_dir` before its activate
+/// command is emitted, so the `flox activate` the shell evals starts from an
+/// already-rendered environment. A failure is only logged: the emitted
+/// activate hits the same error and reports it, and the next prompt then
+/// suppresses the environment like any other failed activation.
+fn prebuild_environment(flox: &Flox, project_dir: &Path) {
+    let result = open_path(flox, project_dir, None)
+        .map_err(anyhow::Error::new)
+        .and_then(|mut env| {
+            env.rendered_env_links(flox)?;
+            Ok(())
+        });
+    if let Err(err) = result {
+        debug!(
+            path = %project_dir.display(),
+            error = %err,
+            "failed to pre-build environment for auto-activation"
+        );
     }
 }
 

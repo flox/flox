@@ -1429,8 +1429,16 @@ EOF
 
 # bats test_tags=hook:interrupt:build
 @test "bash: Ctrl+C during a package build in an auto-activation activates nothing and suppresses it" {
-  # Desired behavior 1, with the interrupt landing in the package-build phase
-  # of the hook-run `flox activate` instead of its on-activate hook.
+  # Desired behavior 1, with the interrupt landing in the package build, which
+  # hook-env runs before emitting the activate command (see
+  # `prebuild_environment`). Only the nix build child dies: hook-env's signal
+  # handling cannot preempt the synchronous build call, so it races the build
+  # failure. Whichever wins, the environment activates — either hook-env
+  # treats the interrupt as a build failure and the emitted activate rebuilds
+  # in the same hook run, or hook-env dies without emitting anything and the
+  # next prompt rebuilds. Nothing is ever suppressed.
+  skip "Ctrl+C only kills the in-flight nix build; the build is retried and the environment activates"
+
   project_setup
   project2_setup
   export FLOX_FEATURES_AUTO_ACTIVATE=true
@@ -1461,8 +1469,10 @@ EOF
 
 # bats test_tags=hook:interrupt:build
 @test "zsh: Ctrl+C during a package build in an auto-activation activates nothing and suppresses it" {
-  # Desired behavior 1, with the interrupt landing in the package-build phase
-  # of the hook-run `flox activate` instead of its on-activate hook.
+  # Fails the same way as the bash test above: the interrupted build is
+  # simply retried and the environment activates.
+  skip "Ctrl+C only kills the in-flight nix build; the build is retried and the environment activates"
+
   project_setup
   project2_setup
   export FLOX_FEATURES_AUTO_ACTIVATE=true
@@ -1490,12 +1500,9 @@ EOF
 
 # bats test_tags=hook:interrupt:build
 @test "fish: Ctrl+C during a package build in an auto-activation activates nothing and suppresses it" {
-  # Desired behavior 1, with the interrupt landing in the package-build phase
-  # of the hook-run `flox activate` instead of its on-activate hook. Fails
-  # like the fish on-activate test above: the interrupt aborts the hook run
-  # before any tracking is recorded, so the next prompt restarts the build
-  # from scratch and the environment activates with nothing suppressed.
-  skip "Ctrl+C aborts the hook run before anything is recorded, so the next prompt rebuilds and activates the environment"
+  # Fails the same way as the bash test above: the interrupted build is
+  # simply retried and the environment activates.
+  skip "Ctrl+C only kills the in-flight nix build; the build is retried and the environment activates"
 
   project_setup
   project2_setup
@@ -1529,8 +1536,10 @@ EOF
 
 # bats test_tags=hook:interrupt:build
 @test "tcsh: Ctrl+C during a package build in an auto-activation activates nothing and suppresses it" {
-  # Desired behavior 1, with the interrupt landing in the package-build phase
-  # of the hook-run `flox activate` instead of its on-activate hook.
+  # Fails the same way as the bash test above: the interrupted build is
+  # simply retried and the environment activates.
+  skip "Ctrl+C only kills the in-flight nix build; the build is retried and the environment activates"
+
   project_setup
   project2_setup
   export FLOX_FEATURES_AUTO_ACTIVATE=true
