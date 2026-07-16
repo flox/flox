@@ -128,7 +128,7 @@ EOF
 # invoke the wrapper directly against a fabricated environment instead of
 # driving it through `flox build`.
 @test "Build wrapper sources package-provided profile.d scripts" {
-  _wrapper="${FLOX_INTERPRETER?}-build_executable_wrapper"
+  _wrapper="${FLOX_INTERPRETER_WRAPPER?}"
 
   # Fabricate a rendered environment the way buildenv would: the wrapper
   # package's own profile.d contents merged with a package-provided script.
