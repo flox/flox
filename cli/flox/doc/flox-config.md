@@ -161,8 +161,8 @@ flox config --set 'trusted_environments."owner/name"' trust
 
 `trusted_environments`
 :   Remote environments that are trusted for activation.
-    Contains keys of the form `"<owner>/<name>"` that map to either `"trust"` or
-    `"deny"`.
+    Keys are of the form `"<owner>/<name>"` or can include a wildcard for environment names `"<owner>/*"`.
+    Values can be `"trust"` or `"deny"`
 
 `upgrade_notifications`
 :   Print notification if upgrades are available on `flox activate`.

@@ -30,6 +30,7 @@ mod show;
 mod uninstall;
 mod upgrade;
 
+use std::collections::HashMap;
 use std::fmt::Display;
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -1490,9 +1491,20 @@ fn query_which_environment(
     }
 }
 
+/// Resolve the effective trust for `env_ref` by checking for an exact entry
+/// first, then falling back to an org-level wildcard (`owner/*`).
+fn resolve_trust<'a>(
+    trusted: &'a HashMap<RemoteEnvironmentRef, EnvironmentTrust>,
+    env_ref: &RemoteEnvironmentRef,
+) -> Option<&'a EnvironmentTrust> {
+    let wildcard_ref = RemoteEnvironmentRef::new(env_ref.owner().as_str(), "*")
+        .expect("* is always valid in EnvironmentName");
+    trusted.get(env_ref).or_else(|| trusted.get(&wildcard_ref))
+}
+
 /// Check whether the given [EnvironmentRef] is trusted.
 ///
-/// If not, prompt the user to trust or deny abort or ask again.
+/// If not, prompt the user to choose a trust level or bail in non-interactive mode.
 ///
 /// This function returns [`Ok`] if the environment is trusted
 /// and a formatted error message if not.
@@ -1503,7 +1515,7 @@ pub(super) async fn ensure_environment_trust(
     env_included: bool,
     manifest_contents: &String,
 ) -> Result<()> {
-    let trust = config.flox.trusted_environments.get(env_ref);
+    let trust = resolve_trust(&config.flox.trusted_environments, env_ref);
     let env_config_key = format!("trusted_environments.{env_ref}");
     let env_prefixed_name = match env_included {
         true => format!("included environment {env_ref}"),
@@ -1532,19 +1544,30 @@ pub(super) async fn ensure_environment_trust(
     if matches!(trust, Some(EnvironmentTrust::Deny)) {
         debug!("{env_prefixed_name} is denied by config");
 
-        let message = formatdoc! {"
-            The {env_prefixed_name} is not trusted.
+        let message = if config.flox.trusted_environments.contains_key(env_ref) {
+            // Denied by an exact owner/name entry — a wildcard can't override it.
+            formatdoc! {"
+                The {env_prefixed_name} is not trusted.
 
-            Run 'flox config --set {env_config_key} trust' to trust it."};
+                Run 'flox config --set {env_config_key} trust' to trust this environment."}
+        } else {
+            // Denied by an org-level wildcard (owner/*).
+            let owner = env_ref.owner();
+            formatdoc! {"
+                The {env_prefixed_name} is not trusted.
+
+                Run 'flox config --set {env_config_key} trust' to trust this environment,
+                or run flox config --set 'trusted_environments.{owner}/*' trust to trust all environments from {owner}."}
+        };
         bail!("{message}");
     }
 
     #[derive(Debug, PartialEq)]
     enum Choices {
         Trust,
+        TrustOrg,
         Deny,
         TrustTemporarily,
-        Abort,
         ShowConfig,
     }
 
@@ -1581,11 +1604,14 @@ pub(super) async fn ensure_environment_trust(
             help_message: None,
             typed: Select {
                 options: vec![
-                    Choice("Do not trust, ask again next time", Choices::Abort),
-                    Choice("Do not trust, save choice", Choices::Deny),
-                    Choice("Trust, ask again next time", Choices::TrustTemporarily),
-                    Choice("Trust, save choice", Choices::Trust),
-                    Choice("Show the manifest", Choices::ShowConfig),
+                    Choice("Never trust".to_string(), Choices::Deny),
+                    Choice("Trust one time".to_string(), Choices::TrustTemporarily),
+                    Choice("Trust always".to_string(), Choices::Trust),
+                    Choice(
+                        format!("Trust everything from '{}'", env_ref.owner()),
+                        Choices::TrustOrg,
+                    ),
+                    Choice("Show the manifest".to_string(), Choices::ShowConfig),
                 ],
             },
         }
@@ -1616,11 +1642,21 @@ pub(super) async fn ensure_environment_trust(
                 let _ = mem::replace(config, Config::parse()?);
                 bail!("Denied {env_prefixed_name} (saved choice).");
             },
+            Choices::TrustOrg => {
+                let org_key = format!("trusted_environments.{}/*", env_ref.owner());
+                update_config(&flox.config_dir, &org_key, Some(EnvironmentTrust::Trust))
+                    .context("Could not update trust config")?;
+                let _ = mem::replace(config, Config::parse()?);
+                info!(
+                    "Trusted all environments from '{}' (saved choice)",
+                    env_ref.owner()
+                );
+                return Ok(());
+            },
             Choices::TrustTemporarily => {
                 info!("Trusted {env_prefixed_name} (temporary)");
                 return Ok(());
             },
-            Choices::Abort => bail!("Denied {env_prefixed_name} (temporary)"),
             Choices::ShowConfig => eprintln!("{}", manifest_contents),
         }
     }
@@ -1863,5 +1899,77 @@ mod subcommand_name_tests {
     fn build_update_catalogs_uses_parent_child_join_encoding() {
         let command = parse_command(&["build", "update-catalogs"]);
         assert_eq!(command.subcommand_name(), "build::update-catalogs");
+    }
+}
+
+#[cfg(test)]
+mod wildcard_trust_tests {
+    use std::collections::HashMap;
+
+    use flox_config::EnvironmentTrust;
+    use flox_core::data::environment_ref::RemoteEnvironmentRef;
+
+    #[test]
+    fn wildcard_trust_matches_any_env_from_owner() {
+        let mut map = HashMap::new();
+        map.insert(
+            RemoteEnvironmentRef::new("alice", "*").unwrap(),
+            EnvironmentTrust::Trust,
+        );
+        let env_ref = RemoteEnvironmentRef::new("alice", "env1").unwrap();
+        assert_eq!(
+            super::resolve_trust(&map, &env_ref),
+            Some(&EnvironmentTrust::Trust)
+        );
+    }
+
+    #[test]
+    fn wildcard_deny_matches_any_env_from_owner() {
+        let mut map = HashMap::new();
+        map.insert(
+            RemoteEnvironmentRef::new("alice", "*").unwrap(),
+            EnvironmentTrust::Deny,
+        );
+        let env_ref = RemoteEnvironmentRef::new("alice", "env1").unwrap();
+        assert_eq!(
+            super::resolve_trust(&map, &env_ref),
+            Some(&EnvironmentTrust::Deny)
+        );
+    }
+
+    #[test]
+    fn exact_match_takes_precedence_over_wildcard_trust() {
+        let mut map = HashMap::new();
+        map.insert(
+            RemoteEnvironmentRef::new("alice", "bad").unwrap(),
+            EnvironmentTrust::Deny,
+        );
+        map.insert(
+            RemoteEnvironmentRef::new("alice", "*").unwrap(),
+            EnvironmentTrust::Trust,
+        );
+        let env_ref = RemoteEnvironmentRef::new("alice", "bad").unwrap();
+        assert_eq!(
+            super::resolve_trust(&map, &env_ref),
+            Some(&EnvironmentTrust::Deny)
+        );
+    }
+
+    #[test]
+    fn exact_match_takes_precedence_over_wildcard_deny() {
+        let mut map = HashMap::new();
+        map.insert(
+            RemoteEnvironmentRef::new("alice", "good").unwrap(),
+            EnvironmentTrust::Trust,
+        );
+        map.insert(
+            RemoteEnvironmentRef::new("alice", "*").unwrap(),
+            EnvironmentTrust::Deny,
+        );
+        let env_ref = RemoteEnvironmentRef::new("alice", "good").unwrap();
+        assert_eq!(
+            super::resolve_trust(&map, &env_ref),
+            Some(&EnvironmentTrust::Trust)
+        );
     }
 }

@@ -162,6 +162,8 @@ options.
     `trusted_environments."<owner/name>" = (trust | deny)`,
     or via the following command:
     `flox config --set trusted_environments.\"<owner/name>\" trust`.
+    To trust all environments from an organization, use a wildcard key:
+    `flox config --set 'trusted_environments."<owner>/*"' trust`.
 
 `--print-script`
 :  Prints an activation script to `stdout` that's suitable for sourcing in

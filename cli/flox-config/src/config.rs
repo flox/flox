@@ -154,7 +154,7 @@ pub struct FloxConfig {
     pub disable_hook: Option<bool>,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum EnvironmentTrust {
     Trust,
