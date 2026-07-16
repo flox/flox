@@ -1221,6 +1221,35 @@ EOF
 # recorded in _FLOX_SUPPRESSED_ENVIRONMENTS.
 # ---------------------------------------------------------------------------- #
 
+# Add hello-unfree to the manifest of the project at $1 without locking or
+# building it: append straight to manifest.toml (bypassing `flox edit`) and
+# drop the lockfile, so the hook's `flox activate` has to lock and build.
+# hello-unfree is never in the binary cache, so the activation builds it from
+# source — a long-running window in which to deliver an interrupt. That window
+# only exists while the output path is absent from the store, so delete it if
+# an earlier test or run built it (the marker never prints on a store hit).
+add_unbuilt_package_manifest() {
+  local store_path
+  store_path="$(grep -oE "\"system\":\"$NIX_SYSTEM\",\"outputs\":\[\{\"name\":\"out\",\"store_path\":\"[^\"]+\"" \
+    "$GENERATED_DATA/resolve/hello_unfree.yaml" | grep -oE '/nix/store/[^"]+')"
+  if [ -e "$store_path" ]; then
+    # Environments built from earlier runs refer to the package, so the whole
+    # referrer closure has to go.
+    nix-store --delete $(nix-store --query --referrers-closure "$store_path") >/dev/null 2>&1 || true
+  fi
+  if [ -e "$store_path" ]; then
+    skip "hello-unfree is already in the store and pinned by a live root; no build to interrupt"
+  fi
+
+  cat >> "$1/.flox/env/manifest.toml" <<EOF
+
+[install]
+hello-unfree.pkg-path = "hello-unfree"
+EOF
+  rm -f "$1/.flox/env/manifest.lock"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello_unfree.yaml"
+}
+
 # A manifest for the project at $1 with an observable var and an on-activate
 # hook that announces itself on stderr and then sleeps, giving the test a
 # window in which to deliver Ctrl+C while `flox activate` is running.
@@ -1268,7 +1297,8 @@ EOF
 
   FLOX_SHELL="bash" run -0 expect "$TESTS_DIR/activate/hook-interrupt-activate.exp" \
     "$PROJECT_DIR" "$PROJECT3_DIR" \
-    'echo "v2:${TEST_VAR2:-unset} v3:${TEST_VAR3:-unset} sup:${_FLOX_SUPPRESSED_ENVIRONMENTS:-unset}"'
+    'echo "v2:${TEST_VAR2:-unset} v3:${TEST_VAR3:-unset} sup:${_FLOX_SUPPRESSED_ENVIRONMENTS:-unset}"' \
+    "ACTIVATE-SLEEPING"
   # Neither the interrupted outer activation nor the queued inner one applies ...
   assert_output --partial "v2:unset"
   assert_output --partial "v3:unset"
@@ -1303,7 +1333,8 @@ EOF
 
   FLOX_SHELL="zsh" run -0 expect "$TESTS_DIR/activate/hook-interrupt-activate.exp" \
     "$PROJECT_DIR" "$PROJECT3_DIR" \
-    'echo "v2:${TEST_VAR2:-unset} v3:${TEST_VAR3:-unset} sup:${_FLOX_SUPPRESSED_ENVIRONMENTS:-unset}"'
+    'echo "v2:${TEST_VAR2:-unset} v3:${TEST_VAR3:-unset} sup:${_FLOX_SUPPRESSED_ENVIRONMENTS:-unset}"' \
+    "ACTIVATE-SLEEPING"
   # Neither the interrupted outer activation nor the queued inner one applies ...
   assert_output --partial "v2:unset"
   assert_output --partial "v3:unset"
@@ -1345,7 +1376,8 @@ EOF
   # not fish syntax; the vars are exported so a child sh sees them.
   FLOX_SHELL="fish" run -0 expect "$TESTS_DIR/activate/hook-interrupt-activate.exp" \
     "$PROJECT_DIR" "$PROJECT3_DIR" \
-    'sh -c '\''echo "v2:${TEST_VAR2:-unset} v3:${TEST_VAR3:-unset} sup:${_FLOX_SUPPRESSED_ENVIRONMENTS:-unset}"'\'''
+    'sh -c '\''echo "v2:${TEST_VAR2:-unset} v3:${TEST_VAR3:-unset} sup:${_FLOX_SUPPRESSED_ENVIRONMENTS:-unset}"'\''' \
+    "ACTIVATE-SLEEPING"
   # Neither the interrupted outer activation nor the queued inner one applies ...
   assert_output --partial "v2:unset"
   assert_output --partial "v3:unset"
@@ -1383,7 +1415,8 @@ EOF
   # not tcsh syntax; the vars are exported so a child sh sees them.
   FLOX_SHELL="tcsh" run -0 expect "$TESTS_DIR/activate/hook-interrupt-activate.exp" \
     "$PROJECT_DIR" "$PROJECT3_DIR" \
-    'sh -c '\''echo "v2:${TEST_VAR2:-unset} v3:${TEST_VAR3:-unset} sup:${_FLOX_SUPPRESSED_ENVIRONMENTS:-unset}"'\'''
+    'sh -c '\''echo "v2:${TEST_VAR2:-unset} v3:${TEST_VAR3:-unset} sup:${_FLOX_SUPPRESSED_ENVIRONMENTS:-unset}"'\''' \
+    "ACTIVATE-SLEEPING"
   # Neither the interrupted outer activation nor the queued inner one applies ...
   assert_output --partial "v2:unset"
   assert_output --partial "v3:unset"
@@ -1392,6 +1425,137 @@ EOF
   # the echoed `cd` command in the transcript.
   assert_output --partial "\"$(realpath "$PROJECT2_DIR")\""
   assert_output --partial "\"$(realpath "$PROJECT3_DIR")\""
+}
+
+# bats test_tags=hook:interrupt:build
+@test "bash: Ctrl+C during a package build in an auto-activation activates nothing and suppresses it" {
+  # Desired behavior 1, with the interrupt landing in the package-build phase
+  # of the hook-run `flox activate` instead of its on-activate hook.
+  project_setup
+  project2_setup
+  export FLOX_FEATURES_AUTO_ACTIVATE=true
+  # Auto-activation is opt-in; allow the target before entering it.
+  "$FLOX_BIN" activate allow -d "$PROJECT2_DIR"
+  add_unbuilt_package_manifest "$PROJECT2_DIR"
+
+  # Set up a .bashrc so the interactive shell has a known prompt
+  export KNOWN_PROMPT="hooktest> "
+  cat >"$HOME/.bashrc" <<EOF
+export PS1="$KNOWN_PROMPT"
+EOF
+  cat >"$HOME/.inputrc" <<EOF
+set enable-bracketed-paste off
+EOF
+
+  FLOX_SHELL="bash" run -0 expect "$TESTS_DIR/activate/hook-interrupt-activate.exp" \
+    "$PROJECT_DIR" "$PROJECT2_DIR" \
+    'echo "v2:${TEST_VAR2:-unset} sup:${_FLOX_SUPPRESSED_ENVIRONMENTS:-unset}"' \
+    "Building 'hello-unfree' from source"
+  # The interrupted activation must not apply ...
+  assert_output --partial "v2:unset"
+  # ... and must be suppressed so the next prompt does not restart the build.
+  # Match the JSON-quoted element of the `sup:` list; the bare path also
+  # appears in the echoed `cd` command in the transcript.
+  assert_output --partial "\"$(realpath "$PROJECT2_DIR")\""
+}
+
+# bats test_tags=hook:interrupt:build
+@test "zsh: Ctrl+C during a package build in an auto-activation activates nothing and suppresses it" {
+  # Desired behavior 1, with the interrupt landing in the package-build phase
+  # of the hook-run `flox activate` instead of its on-activate hook.
+  project_setup
+  project2_setup
+  export FLOX_FEATURES_AUTO_ACTIVATE=true
+  # Auto-activation is opt-in; allow the target before entering it.
+  "$FLOX_BIN" activate allow -d "$PROJECT2_DIR"
+  add_unbuilt_package_manifest "$PROJECT2_DIR"
+
+  # Set up a .zshrc so the interactive shell has a known prompt
+  export KNOWN_PROMPT="hooktest> "
+  cat >"$HOME/.zshrc" <<EOF
+export PS1="$KNOWN_PROMPT"
+EOF
+
+  FLOX_SHELL="zsh" run -0 expect "$TESTS_DIR/activate/hook-interrupt-activate.exp" \
+    "$PROJECT_DIR" "$PROJECT2_DIR" \
+    'echo "v2:${TEST_VAR2:-unset} sup:${_FLOX_SUPPRESSED_ENVIRONMENTS:-unset}"' \
+    "Building 'hello-unfree' from source"
+  # The interrupted activation must not apply ...
+  assert_output --partial "v2:unset"
+  # ... and must be suppressed so the next prompt does not restart the build.
+  # Match the JSON-quoted element of the `sup:` list; the bare path also
+  # appears in the echoed `cd` command in the transcript.
+  assert_output --partial "\"$(realpath "$PROJECT2_DIR")\""
+}
+
+# bats test_tags=hook:interrupt:build
+@test "fish: Ctrl+C during a package build in an auto-activation activates nothing and suppresses it" {
+  # Desired behavior 1, with the interrupt landing in the package-build phase
+  # of the hook-run `flox activate` instead of its on-activate hook. Fails
+  # like the fish on-activate test above: the interrupt aborts the hook run
+  # before any tracking is recorded, so the next prompt restarts the build
+  # from scratch and the environment activates with nothing suppressed.
+  skip "Ctrl+C aborts the hook run before anything is recorded, so the next prompt rebuilds and activates the environment"
+
+  project_setup
+  project2_setup
+  export FLOX_FEATURES_AUTO_ACTIVATE=true
+  # Auto-activation is opt-in; allow the target before entering it.
+  "$FLOX_BIN" activate allow -d "$PROJECT2_DIR"
+  add_unbuilt_package_manifest "$PROJECT2_DIR"
+
+  # Set up a config.fish so the interactive shell has a known prompt
+  export KNOWN_PROMPT="hooktest> "
+  mkdir -p "$HOME/.config/fish"
+  cat >"$HOME/.config/fish/config.fish" <<EOF
+function fish_prompt
+  echo -n "$KNOWN_PROMPT"
+end
+EOF
+
+  # The observation runs through `sh` because the \${VAR:-unset} fallback is
+  # not fish syntax; the vars are exported so a child sh sees them.
+  FLOX_SHELL="fish" run -0 expect "$TESTS_DIR/activate/hook-interrupt-activate.exp" \
+    "$PROJECT_DIR" "$PROJECT2_DIR" \
+    'sh -c '\''echo "v2:${TEST_VAR2:-unset} sup:${_FLOX_SUPPRESSED_ENVIRONMENTS:-unset}"'\''' \
+    "Building 'hello-unfree' from source"
+  # The interrupted activation must not apply ...
+  assert_output --partial "v2:unset"
+  # ... and must be suppressed so the next prompt does not restart the build.
+  # Match the JSON-quoted element of the `sup:` list; the bare path also
+  # appears in the echoed `cd` command in the transcript.
+  assert_output --partial "\"$(realpath "$PROJECT2_DIR")\""
+}
+
+# bats test_tags=hook:interrupt:build
+@test "tcsh: Ctrl+C during a package build in an auto-activation activates nothing and suppresses it" {
+  # Desired behavior 1, with the interrupt landing in the package-build phase
+  # of the hook-run `flox activate` instead of its on-activate hook.
+  project_setup
+  project2_setup
+  export FLOX_FEATURES_AUTO_ACTIVATE=true
+  # Auto-activation is opt-in; allow the target before entering it.
+  "$FLOX_BIN" activate allow -d "$PROJECT2_DIR"
+  add_unbuilt_package_manifest "$PROJECT2_DIR"
+
+  # Set up a .tcshrc so the interactive shell has a known prompt
+  export KNOWN_PROMPT="hooktest> "
+  cat >"$HOME/.tcshrc" <<EOF
+set prompt = "$KNOWN_PROMPT"
+EOF
+
+  # The observation runs through `sh` because the \${VAR:-unset} fallback is
+  # not tcsh syntax; the vars are exported so a child sh sees them.
+  FLOX_SHELL="tcsh" run -0 expect "$TESTS_DIR/activate/hook-interrupt-activate.exp" \
+    "$PROJECT_DIR" "$PROJECT2_DIR" \
+    'sh -c '\''echo "v2:${TEST_VAR2:-unset} sup:${_FLOX_SUPPRESSED_ENVIRONMENTS:-unset}"'\''' \
+    "Building 'hello-unfree' from source"
+  # The interrupted activation must not apply ...
+  assert_output --partial "v2:unset"
+  # ... and must be suppressed so the next prompt does not restart the build.
+  # Match the JSON-quoted element of the `sup:` list; the bare path also
+  # appears in the echoed `cd` command in the transcript.
+  assert_output --partial "\"$(realpath "$PROJECT2_DIR")\""
 }
 
 # bats test_tags=hook:interrupt:hook-env

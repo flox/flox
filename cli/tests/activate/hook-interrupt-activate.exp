@@ -1,12 +1,14 @@
 # Activate a project environment using --dir, then cd into a second directory
-# whose allowed environment has a slow `on-activate` hook, and press Ctrl+C
-# while that auto-activation is running. The third argument is a command run
-# afterwards to observe whether the environment activated and whether it was
-# suppressed.
+# whose allowed environment prints a marker while its auto-activation is still
+# in flight (a slow `on-activate` hook, or a package build), and press Ctrl+C
+# when the marker appears. The third argument is a command run afterwards to
+# observe whether the environment activated and whether it was suppressed; the
+# fourth is the marker to wait for.
 
 set dir [lindex $argv 0]
 set target [lindex $argv 1]
 set command [lindex $argv 2]
+set marker [lindex $argv 3]
 set flox $env(FLOX_BIN)
 # Auto-activation may lock and build an environment on first use.
 set timeout 60
@@ -26,10 +28,9 @@ expect "You are now using the environment"
 expect $env(KNOWN_PROMPT)
 
 send "cd $target\n"
-# The target's on-activate hook prints this marker to stderr and then sleeps,
-# so the interrupt arrives while `flox activate` is running inside the hook's
-# eval.
-expect "ACTIVATE-SLEEPING"
+# The marker is printed while `flox activate` is still running inside the
+# hook's eval, so that is where the interrupt arrives.
+expect $marker
 send "\x03"
 # The interrupt must abort the activation and return to the prompt promptly,
 # well before the on-activate sleep would have finished on its own.
