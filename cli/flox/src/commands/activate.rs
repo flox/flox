@@ -39,6 +39,7 @@ use flox_rust_sdk::models::environment::{
     EnvironmentError,
     UpgradeResult,
 };
+use flox_rust_sdk::providers::container_builder::ContainerBuilderParams;
 use flox_rust_sdk::providers::lock_manifest::LockResult;
 use flox_rust_sdk::providers::services::process_compose::{PROCESS_COMPOSE_BIN, ProcessStates};
 use flox_rust_sdk::providers::upgrade_checks::UpgradeInformationGuard;
@@ -480,13 +481,22 @@ impl ActivateOptions {
                 self.sandbox_backend,
                 manifest_sandbox.and_then(|s| s.backend),
             )?;
+            // Concretize at the composition root: extract the narrow values
+            // that sandbox backends actually need, so backends receive plain
+            // types rather than the full god-context objects.
+            let sandbox_oci_autobake = config.flox.sandbox_oci_autobake.unwrap_or(false);
+            let container_builder_params = ContainerBuilderParams {
+                config_dir: flox.config_dir.clone(),
+                metrics_disabled: flox.metrics_device_uuid.is_none(),
+                verbosity: flox.verbosity,
+            };
             match sandbox_backends::for_backend(backend, sandbox_backends::SandboxLaunchCtx {
                 dot_flox_path: concrete_environment.dot_flox_path().to_path_buf(),
                 env_name: now_active.name().to_string(),
                 invocation_type: &invocation_type,
-                flox: &flox,
                 lockfile: &lockfile,
-                config: &config,
+                sandbox_oci_autobake,
+                container_builder_params,
             }) {
                 None => {
                     // `Libsandbox` stays in-process; other unrecognized variants

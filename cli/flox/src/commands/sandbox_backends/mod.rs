@@ -30,8 +30,7 @@ use anyhow::Result;
 use flox_core::activate::context::InvocationType;
 use flox_core::activate::sandbox_backend::SandboxBackend;
 use flox_manifest::lockfile::Lockfile;
-
-use flox_config::Config;
+use flox_rust_sdk::providers::container_builder::ContainerBuilderParams;
 
 /// Environment variable set on the re-exec'd inner activation so all backends
 /// can detect that wrapping already occurred.
@@ -45,26 +44,29 @@ pub(crate) const WRAPPED_MARKER_VAR: &str = "_FLOX_SANDBOX_WRAPPED";
 /// Context bundling everything the sandbox wrap functions need.
 ///
 /// Passed from `activate.rs` to [`ActivationSandbox::wrap_activation`] so
-/// each backend can destructure only what it uses.
+/// each backend can destructure only what it uses. Each field names the
+/// backend(s) that consume it.
 #[derive(Debug)]
 pub struct SandboxLaunchCtx<'a> {
     /// Absolute path to the `.flox` directory of the environment being
-    /// activated.
+    /// activated. Consumed by: `host-native`, `srt`, `oci`.
     pub dot_flox_path: PathBuf,
     /// Short environment name used as the OCI image tag prefix and in
-    /// error messages.
+    /// error messages. Consumed by: `oci`.
     pub env_name: String,
     /// How the user invoked `flox activate` (interactive shell, exec, shell
-    /// command, or in-place script).
+    /// command, or in-place script). Consumed by: `oci`.
     pub invocation_type: &'a InvocationType,
-    /// Flox handle for API access (OCI bake uses it for the container
-    /// builder pipeline).
-    pub flox: &'a flox_rust_sdk::flox::Flox,
-    /// Resolved lockfile for the environment (OCI uses it for hash-tag
-    /// derivation and builder-pin selection).
+    /// Resolved lockfile for the environment (hash-tag derivation and
+    /// builder-pin selection). Consumed by: `oci`.
     pub lockfile: &'a Lockfile,
-    /// User and manifest config (OCI reads `sandbox_oci_autobake`).
-    pub config: &'a Config,
+    /// Whether to auto-bake an OCI image when the expected tag is absent,
+    /// without prompting. Derived from `config.flox.sandbox_oci_autobake`.
+    /// Consumed by: `oci`.
+    pub sandbox_oci_autobake: bool,
+    /// Narrow context for the container builder pipeline (config dir,
+    /// metrics flag, verbosity). Consumed by: `oci`.
+    pub container_builder_params: ContainerBuilderParams,
 }
 
 /// A sandbox backend that wraps `flox activate` under an enforcement
