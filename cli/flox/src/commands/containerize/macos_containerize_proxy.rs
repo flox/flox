@@ -7,8 +7,12 @@ use std::sync::LazyLock;
 use flox_config::FLOX_CONFIG_FILE;
 use flox_core::activate::context::ActivateMode;
 use flox_core::vars::FLOX_DISABLE_METRICS_VAR;
-use flox_rust_sdk::flox::{FLOX_VERSION, Flox};
-use flox_rust_sdk::providers::container_builder::{ContainerBuilder, ContainerSource};
+use flox_rust_sdk::flox::FLOX_VERSION;
+use flox_rust_sdk::providers::container_builder::{
+    ContainerBuilder,
+    ContainerBuilderParams,
+    ContainerSource,
+};
 use flox_rust_sdk::providers::nix::{NIX_VERSION, NixSubstituterConfig};
 use flox_rust_sdk::utils::ReaderExt;
 use indoc::formatdoc;
@@ -75,6 +79,13 @@ pub(crate) struct ContainerizeProxy {
     /// observed under flox's multi-threaded runtime (Rust 2024 made
     /// `set_var` unsafe for exactly this reason).
     include_guest_flox: bool,
+    /// Explicit builder flake-ref or revision override for the in-container
+    /// `nix run github:flox/flox/<ref>` invocation. When `Some`, this value
+    /// takes precedence over the ambient `_FLOX_CONTAINERIZE_FLAKE_REF_OR_REV`
+    /// environment variable (which remains the user-facing override). Callers
+    /// at the composition root supply the pin computed for the bake; the
+    /// general `flox containerize` command passes `None`.
+    flake_ref_override: Option<String>,
 }
 
 impl ContainerizeProxy {
@@ -84,6 +95,7 @@ impl ContainerizeProxy {
         labels: Vec<String>,
         mode: Option<ActivateMode>,
         include_guest_flox: bool,
+        flake_ref_override: Option<String>,
     ) -> Self {
         Self {
             environment_path,
@@ -91,6 +103,7 @@ impl ContainerizeProxy {
             labels,
             mode,
             include_guest_flox,
+            flake_ref_override,
         }
     }
 
@@ -274,7 +287,7 @@ impl ContainerizeProxy {
     /// - Apple Container: `--mount type=bind,...` for bind mounts, `--volume
     ///   name:dst` for named volumes; no `--userns` flag (runs as the host
     ///   user by default in its VM).
-    fn add_runtime_args(&self, command: &mut Command, flox: &Flox) {
+    fn add_runtime_args(&self, command: &mut Command, params: &ContainerBuilderParams) {
         // Podman needs --userns to map the current user to root inside the
         // container; otherwise multi-user Nix operations fail. Docker and Apple
         // Container do not need this flag.
@@ -307,13 +320,13 @@ impl ContainerizeProxy {
         // requires the bind-mount source to be a directory. When the runtime
         // is Apple Container we mount the entire config directory
         // (~/.config/flox) to avoid the "path is not a directory" error.
-        let flox_toml = flox.config_dir.join(FLOX_CONFIG_FILE);
+        let flox_toml = params.config_dir.join(FLOX_CONFIG_FILE);
         if flox_toml.exists() {
             if self.container_runtime == Runtime::AppleContainer {
                 // Mount the whole config directory; `flox.toml` lives inside.
                 let mut config_dir_mount = OsString::new();
                 config_dir_mount.push("type=bind,source=");
-                config_dir_mount.push(&flox.config_dir);
+                config_dir_mount.push(&params.config_dir);
                 config_dir_mount.push(format!(",target={}", FLOX_PROXY_IMAGE_FLOX_CONFIG_DIR));
                 command.arg("--mount");
                 command.arg(config_dir_mount);
@@ -333,7 +346,7 @@ impl ContainerizeProxy {
         // If metrics are disabled (no device UUID), propagate that into the
         // proxy container. This covers both the env var and config file paths
         // (e.g. /etc/flox.toml) that may not be mounted into the container.
-        if flox.metrics_device_uuid.is_none() {
+        if params.metrics_disabled {
             command.args(["--env", &format!("{}=true", FLOX_DISABLE_METRICS_VAR)]);
         }
 
@@ -382,26 +395,28 @@ impl ContainerizeProxy {
         let flox_flake = format!(
             "{}/{}",
             FLOX_FLAKE,
-            // Use a more specific commit if available, e.g. pushed to GitHub.
-            (*FLOX_CONTAINERIZE_FLAKE_REF_OR_REV)
+            // Precedence: explicit field (bake pin) → user env var → default.
+            self.flake_ref_override
                 .clone()
-                .unwrap_or(flox_version.commit_sha().unwrap_or(flox_version_tag))
+                .or_else(|| (*FLOX_CONTAINERIZE_FLAKE_REF_OR_REV).clone())
+                .unwrap_or_else(|| {
+                    flox_version
+                        .commit_sha()
+                        .unwrap_or(flox_version_tag)
+                })
         );
         command.args(["run", &flox_flake, "--"]);
     }
 
     /// Inception L3: Flox args.
-    fn add_flox_args(&self, command: &mut Command, flox: &Flox, tag: impl AsRef<str>) {
+    fn add_flox_args(&self, command: &mut Command, verbosity: i32, tag: impl AsRef<str>) {
         // TODO: this should probably be a method on Verbosity
-        match flox.verbosity {
+        match verbosity {
             -1 => {
                 command.arg("--quiet");
             },
-            _ if flox.verbosity > 0 => {
-                command.arg(format!(
-                    "-{}",
-                    "v".repeat(flox.verbosity.try_into().unwrap())
-                ));
+            v if v > 0 => {
+                command.arg(format!("-{}", "v".repeat(v.try_into().unwrap())));
             },
             _ => {},
         }
@@ -431,7 +446,11 @@ impl ContainerizeProxy {
     /// host-side tooling is required. Apple Container image refs require an
     /// explicit tag (`name:latest` works where bare `name` fails), so the
     /// tag is embedded in the skopeo destination reference.
-    fn build_oci_conversion_command(&self, flox: &Flox, tag: impl AsRef<str>) -> Command {
+    fn build_oci_conversion_command(
+        &self,
+        params: &ContainerBuilderParams,
+        tag: impl AsRef<str>,
+    ) -> Command {
         let tag_str = tag.as_ref();
 
         // Derive the image name from the environment directory name, matching
@@ -451,12 +470,17 @@ impl ContainerizeProxy {
         let flox_flake = format!(
             "{}/{}",
             FLOX_FLAKE,
-            (*FLOX_CONTAINERIZE_FLAKE_REF_OR_REV)
+            self.flake_ref_override
                 .clone()
-                .unwrap_or(flox_version.commit_sha().unwrap_or(flox_version_tag))
+                .or_else(|| (*FLOX_CONTAINERIZE_FLAKE_REF_OR_REV).clone())
+                .unwrap_or_else(|| {
+                    flox_version
+                        .commit_sha()
+                        .unwrap_or(flox_version_tag)
+                })
         );
 
-        let verbosity_arg = match flox.verbosity {
+        let verbosity_arg = match params.verbosity {
             -1 => " --quiet".to_string(),
             v if v > 0 => format!(" -{}", "v".repeat(v.try_into().unwrap())),
             _ => String::new(),
@@ -514,7 +538,7 @@ impl ContainerizeProxy {
         );
 
         let mut command = self.runtime_base_command();
-        self.add_runtime_args(&mut command, flox);
+        self.add_runtime_args(&mut command, params);
         // `bash` (unqualified): Apple Container resolves the entrypoint via
         // the image's PATH env var and does not follow absolute Nix profile
         // symlink paths.
@@ -533,7 +557,7 @@ impl ContainerBuilder for ContainerizeProxy {
     /// For Docker and Podman, the output remains docker-archive format.
     fn create_container_source(
         &self,
-        flox: &Flox,
+        params: &ContainerBuilderParams,
         // Inferred from `self.environment_path` by flox _inside_ the container.
         _name: impl AsRef<str>,
         tag: impl AsRef<str>,
@@ -542,13 +566,13 @@ impl ContainerBuilder for ContainerizeProxy {
 
         let command = if self.container_runtime.requires_oci_format() {
             // Apple Container: emit OCI archive via an in-container skopeo pipe.
-            self.build_oci_conversion_command(flox, tag)
+            self.build_oci_conversion_command(params, tag)
         } else {
             // Docker / Podman: standard docker-archive path.
             let mut command = self.runtime_base_command();
-            self.add_runtime_args(&mut command, flox);
+            self.add_runtime_args(&mut command, params);
             self.add_nix_args(&mut command);
-            self.add_flox_args(&mut command, flox, tag);
+            self.add_flox_args(&mut command, params.verbosity, tag);
             command
         };
 
@@ -559,6 +583,7 @@ impl ContainerBuilder for ContainerizeProxy {
 
 #[cfg(test)]
 mod tests {
+    use flox_rust_sdk::flox::Flox;
     use flox_rust_sdk::flox::test_helpers::flox_instance;
 
     use super::*;
@@ -571,13 +596,22 @@ mod tests {
             .collect()
     }
 
+    /// Build a [`ContainerBuilderParams`] from a [`Flox`] test instance.
+    fn params_from_flox(flox: &Flox) -> ContainerBuilderParams {
+        ContainerBuilderParams {
+            config_dir: flox.config_dir.clone(),
+            metrics_disabled: flox.metrics_device_uuid.is_none(),
+            verbosity: flox.verbosity,
+        }
+    }
+
     #[test]
     fn docker_proxy_uses_docker_run() {
         let (flox, _tempdir) = flox_instance();
         let proxy =
-            ContainerizeProxy::new("/some/env".into(), Runtime::Docker, vec![], None, false);
+            ContainerizeProxy::new("/some/env".into(), Runtime::Docker, vec![], None, false, None);
         let mut cmd = proxy.runtime_base_command();
-        proxy.add_runtime_args(&mut cmd, &flox);
+        proxy.add_runtime_args(&mut cmd, &params_from_flox(&flox));
         let args = argv(&cmd);
         assert_eq!(args[0], "docker");
         assert!(args.contains(&"run".to_string()));
@@ -593,9 +627,10 @@ mod tests {
     #[test]
     fn add_runtime_args_forwards_guest_flox_marker_for_non_oci() {
         let (flox, _tempdir) = flox_instance();
-        let proxy = ContainerizeProxy::new("/some/env".into(), Runtime::Docker, vec![], None, true);
+        let proxy =
+            ContainerizeProxy::new("/some/env".into(), Runtime::Docker, vec![], None, true, None);
         let mut cmd = proxy.runtime_base_command();
-        proxy.add_runtime_args(&mut cmd, &flox);
+        proxy.add_runtime_args(&mut cmd, &params_from_flox(&flox));
         let args = argv(&cmd);
         let env_pos = args
             .iter()
@@ -617,9 +652,10 @@ mod tests {
             vec![],
             None,
             true,
+            None,
         );
         let mut cmd = proxy.runtime_base_command();
-        proxy.add_runtime_args(&mut cmd, &flox);
+        proxy.add_runtime_args(&mut cmd, &params_from_flox(&flox));
         let args = argv(&cmd);
         assert!(
             !args
@@ -636,9 +672,9 @@ mod tests {
     fn add_runtime_args_omits_guest_flox_marker_when_not_requested() {
         let (flox, _tempdir) = flox_instance();
         let proxy =
-            ContainerizeProxy::new("/some/env".into(), Runtime::Docker, vec![], None, false);
+            ContainerizeProxy::new("/some/env".into(), Runtime::Docker, vec![], None, false, None);
         let mut cmd = proxy.runtime_base_command();
-        proxy.add_runtime_args(&mut cmd, &flox);
+        proxy.add_runtime_args(&mut cmd, &params_from_flox(&flox));
         let args = argv(&cmd);
         assert!(
             !args
@@ -661,8 +697,9 @@ mod tests {
             vec![],
             None,
             true,
+            None,
         );
-        let cmd = proxy.build_oci_conversion_command(&flox, "latest");
+        let cmd = proxy.build_oci_conversion_command(&params_from_flox(&flox), "latest");
         let args = argv(&cmd);
         let script = args.last().expect("script is the last arg");
         let export = "export _FLOX_CONTAINERIZE_INCLUDE_GUEST_FLOX=1";
@@ -693,8 +730,9 @@ mod tests {
             vec![],
             None,
             false,
+            None,
         );
-        let cmd = proxy.build_oci_conversion_command(&flox, "latest");
+        let cmd = proxy.build_oci_conversion_command(&params_from_flox(&flox), "latest");
         let args = argv(&cmd);
         let script = args.last().expect("script is the last arg");
         assert!(
@@ -707,9 +745,9 @@ mod tests {
     fn podman_proxy_adds_userns_flag() {
         let (flox, _tempdir) = flox_instance();
         let proxy =
-            ContainerizeProxy::new("/some/env".into(), Runtime::Podman, vec![], None, false);
+            ContainerizeProxy::new("/some/env".into(), Runtime::Podman, vec![], None, false, None);
         let mut cmd = proxy.runtime_base_command();
-        proxy.add_runtime_args(&mut cmd, &flox);
+        proxy.add_runtime_args(&mut cmd, &params_from_flox(&flox));
         let args = argv(&cmd);
         assert_eq!(args[0], "podman");
         // --userns must appear for Podman to map the host user to root inside the container.
@@ -729,9 +767,10 @@ mod tests {
             vec![],
             None,
             false,
+            None,
         );
         let mut cmd = proxy.runtime_base_command();
-        proxy.add_runtime_args(&mut cmd, &flox);
+        proxy.add_runtime_args(&mut cmd, &params_from_flox(&flox));
         let args = argv(&cmd);
         assert_eq!(args[0], "container");
         // Apple Container does not need --userns
@@ -750,9 +789,10 @@ mod tests {
             vec![],
             None,
             false,
+            None,
         );
         let mut cmd = proxy.runtime_base_command();
-        proxy.add_runtime_args(&mut cmd, &flox);
+        proxy.add_runtime_args(&mut cmd, &params_from_flox(&flox));
         let args = argv(&cmd);
         // Apple Container uses --volume name:dst, not --mount type=volume,...
         let vol_pos = args
@@ -777,9 +817,9 @@ mod tests {
     fn docker_uses_mount_flag_for_cache() {
         let (flox, _tempdir) = flox_instance();
         let proxy =
-            ContainerizeProxy::new("/some/env".into(), Runtime::Docker, vec![], None, false);
+            ContainerizeProxy::new("/some/env".into(), Runtime::Docker, vec![], None, false, None);
         let mut cmd = proxy.runtime_base_command();
-        proxy.add_runtime_args(&mut cmd, &flox);
+        proxy.add_runtime_args(&mut cmd, &params_from_flox(&flox));
         let args = argv(&cmd);
         // Docker uses --mount type=volume,...
         let mount_pos = args
@@ -806,8 +846,9 @@ mod tests {
             vec![],
             None,
             false,
+            None,
         );
-        let cmd = proxy.build_oci_conversion_command(&flox, "latest");
+        let cmd = proxy.build_oci_conversion_command(&params_from_flox(&flox), "latest");
         let args = argv(&cmd);
         // The OCI conversion command also mounts the cache so the builder VM
         // can reuse stored paths during the conversion phase.
@@ -830,6 +871,7 @@ mod tests {
             vec![],
             None,
             false,
+            None,
         );
         let cmd = proxy.runtime_base_command();
         let args = argv(&cmd);
@@ -850,7 +892,7 @@ mod tests {
     #[test]
     fn docker_and_podman_do_not_get_memory_flag() {
         let docker_proxy =
-            ContainerizeProxy::new("/some/env".into(), Runtime::Docker, vec![], None, false);
+            ContainerizeProxy::new("/some/env".into(), Runtime::Docker, vec![], None, false, None);
         let docker_args = argv(&docker_proxy.runtime_base_command());
         assert!(
             !docker_args.iter().any(|a| a == "--memory"),
@@ -858,7 +900,7 @@ mod tests {
         );
 
         let podman_proxy =
-            ContainerizeProxy::new("/some/env".into(), Runtime::Podman, vec![], None, false);
+            ContainerizeProxy::new("/some/env".into(), Runtime::Podman, vec![], None, false, None);
         let podman_args = argv(&podman_proxy.runtime_base_command());
         assert!(
             !podman_args.iter().any(|a| a == "--memory"),
@@ -892,8 +934,9 @@ mod tests {
             vec![],
             None,
             false,
+            None,
         );
-        let cmd = proxy.build_oci_conversion_command(&flox, "latest");
+        let cmd = proxy.build_oci_conversion_command(&params_from_flox(&flox), "latest");
         let args = argv(&cmd);
         // The OCI conversion command uses runtime_base_command, so it must
         // also carry the memory flag.
@@ -913,8 +956,9 @@ mod tests {
             vec![],
             None,
             false,
+            None,
         );
-        let cmd = proxy.build_oci_conversion_command(&flox, "latest");
+        let cmd = proxy.build_oci_conversion_command(&params_from_flox(&flox), "latest");
         let args = argv(&cmd);
 
         // Command is `container run ...`
@@ -986,8 +1030,9 @@ mod tests {
             vec![],
             None,
             false,
+            None,
         );
-        let cmd = proxy.build_oci_conversion_command(&flox, "v1.2.3");
+        let cmd = proxy.build_oci_conversion_command(&params_from_flox(&flox), "v1.2.3");
         let args = argv(&cmd);
         // Custom tag must appear in the OCI destination reference
         assert!(
@@ -1005,10 +1050,11 @@ mod tests {
             vec![],
             None,
             false,
+            None,
         );
 
         // A tag containing a space must be single-quoted so it stays one word.
-        let cmd = proxy.build_oci_conversion_command(&flox, "my tag");
+        let cmd = proxy.build_oci_conversion_command(&params_from_flox(&flox), "my tag");
         let args = argv(&cmd);
         let script = args.last().expect("script is last arg");
         assert!(
@@ -1022,7 +1068,7 @@ mod tests {
 
         // A tag containing a single quote must not be able to close the
         // quoting and inject shell syntax. `a'b` becomes `'a'\''b'`.
-        let cmd = proxy.build_oci_conversion_command(&flox, "a'b");
+        let cmd = proxy.build_oci_conversion_command(&params_from_flox(&flox), "a'b");
         let args = argv(&cmd);
         let script = args.last().expect("script is last arg");
         assert!(
@@ -1046,5 +1092,105 @@ mod tests {
         assert_eq!(shell_single_quote("has space"), "'has space'");
         assert_eq!(shell_single_quote("a'b"), "'a'\\''b'");
         assert_eq!(shell_single_quote("$(rm -rf /)"), "'$(rm -rf /)'");
+    }
+
+    /// Tests for `flake_ref_override` precedence in the container builder
+    /// pipeline.
+    ///
+    /// The precedence is: explicit field → ambient user env var → default.
+    /// These tests verify the explicit field path, which is the new behavior
+    /// introduced to eliminate the `set_var` bracket from the OCI bake path.
+    mod flake_ref_override_precedence {
+        use super::*;
+
+        fn extract_flake_ref_from_nix_args(args: &[String]) -> Option<String> {
+            // Nix args look like: nix --extra-experimental-features ... run
+            // github:flox/flox/<ref> --
+            // Find "run" followed by the flake ref.
+            args.windows(2)
+                .find_map(|w| (w[0] == "run").then(|| w[1].clone()))
+        }
+
+        /// When `flake_ref_override` is `Some`, `add_nix_args` embeds the
+        /// explicit ref in the `github:flox/flox/<ref>` flake argument.
+        #[test]
+        fn explicit_field_appears_in_nix_args() {
+            let proxy = ContainerizeProxy::new(
+                "/some/env".into(),
+                Runtime::Docker,
+                vec![],
+                None,
+                false,
+                Some("deadbeef1234".to_string()),
+            );
+            let mut cmd = std::process::Command::new("nix");
+            proxy.add_nix_args(&mut cmd);
+            let args: Vec<String> = cmd
+                .get_args()
+                .map(|a| a.to_string_lossy().into_owned())
+                .collect();
+            let flake_ref = extract_flake_ref_from_nix_args(&args)
+                .expect("add_nix_args must emit a 'run <flake>' arg pair");
+            assert!(
+                flake_ref.ends_with("/deadbeef1234"),
+                "explicit flake_ref_override must appear in the flake ref: {flake_ref}"
+            );
+        }
+
+        /// When `flake_ref_override` is `None` and the user env var is also
+        /// unset, the default version-based ref is used. The default behavior
+        /// is version-dependent and cannot be asserted exactly in tests, but
+        /// we can verify that the flake ref is non-empty and starts with the
+        /// expected prefix.
+        #[test]
+        fn no_override_uses_version_based_default() {
+            let proxy = ContainerizeProxy::new(
+                "/some/env".into(),
+                Runtime::Docker,
+                vec![],
+                None,
+                false,
+                None,
+            );
+            let mut cmd = std::process::Command::new("nix");
+            proxy.add_nix_args(&mut cmd);
+            let args: Vec<String> = cmd
+                .get_args()
+                .map(|a| a.to_string_lossy().into_owned())
+                .collect();
+            let flake_ref = extract_flake_ref_from_nix_args(&args)
+                .expect("add_nix_args must emit a 'run <flake>' arg pair");
+            assert!(
+                flake_ref.starts_with("github:flox/flox/"),
+                "default flake ref must use the github:flox/flox/ prefix: {flake_ref}"
+            );
+            // The ref must not be the empty suffix (i.e. "github:flox/flox/").
+            assert!(
+                flake_ref.len() > "github:flox/flox/".len(),
+                "default flake ref must have a non-empty ref component: {flake_ref}"
+            );
+        }
+
+        /// The OCI conversion command (Apple Container path) also embeds the
+        /// explicit flake ref in the shell script, not just `add_nix_args`.
+        #[test]
+        fn oci_conversion_command_uses_explicit_ref() {
+            let (flox, _tempdir) = flox_instance();
+            let proxy = ContainerizeProxy::new(
+                "/some/env/.flox/env".into(),
+                Runtime::AppleContainer,
+                vec![],
+                None,
+                false,
+                Some("abc123456789".to_string()),
+            );
+            let cmd = proxy.build_oci_conversion_command(&params_from_flox(&flox), "latest");
+            let args = argv(&cmd);
+            let script = args.last().expect("script is the last arg");
+            assert!(
+                script.contains("abc123456789"),
+                "OCI conversion script must embed the explicit flake_ref_override: {script}"
+            );
+        }
     }
 }

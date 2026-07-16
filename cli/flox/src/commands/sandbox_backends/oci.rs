@@ -18,9 +18,9 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
 use flox_core::activate::context::InvocationType;
-use flox_config::Config;
 use flox_core::activate::sandbox_backend::SandboxBackend;
 use flox_manifest::lockfile::Lockfile;
+use flox_rust_sdk::providers::container_builder::ContainerBuilderParams;
 use tracing::debug;
 
 use super::{ActivationSandbox, SandboxLaunchCtx};
@@ -42,8 +42,8 @@ pub(crate) const FLOX_SANDBOX_OCI_ALLOW_STALE_VAR: &str = "FLOX_SANDBOX_OCI_ALLO
 /// This name is the config env-layer spelling of the `sandbox_oci_autobake`
 /// config key (see `flox_config::FloxConfig`), so the value must be
 /// `true`/`false` — `1` fails config parsing as an integer. The value is read
-/// via `config.flox.sandbox_oci_autobake`, not directly from the environment;
-/// this constant exists for user-facing messages.
+/// via the `sandbox_oci_autobake` field on `SandboxLaunchCtx`, not directly
+/// from the environment; this constant exists for user-facing messages.
 pub(crate) const FLOX_SANDBOX_OCI_AUTOBAKE_VAR: &str = "FLOX_SANDBOX_OCI_AUTOBAKE";
 
 /// Number of leading hex characters from the lockfile content hash used as the
@@ -63,9 +63,9 @@ pub struct OciBackend<'a> {
     dot_flox_path: PathBuf,
     env_name: String,
     invocation_type: &'a InvocationType,
-    flox: &'a flox_rust_sdk::flox::Flox,
     lockfile: &'a Lockfile,
-    config: &'a Config,
+    sandbox_oci_autobake: bool,
+    container_builder_params: ContainerBuilderParams,
 }
 
 impl<'a> OciBackend<'a> {
@@ -74,9 +74,9 @@ impl<'a> OciBackend<'a> {
             dot_flox_path: ctx.dot_flox_path,
             env_name: ctx.env_name,
             invocation_type: ctx.invocation_type,
-            flox: ctx.flox,
             lockfile: ctx.lockfile,
-            config: ctx.config,
+            sandbox_oci_autobake: ctx.sandbox_oci_autobake,
+            container_builder_params: ctx.container_builder_params,
         }
     }
 }
@@ -108,9 +108,9 @@ impl ActivationSandbox for OciBackend<'_> {
             &self.dot_flox_path,
             &self.env_name,
             self.invocation_type,
-            self.flox,
             self.lockfile,
-            self.config,
+            self.sandbox_oci_autobake,
+            &self.container_builder_params,
         )
     }
 }
@@ -138,9 +138,9 @@ fn wrap_oci(
     dot_flox_path: &Path,
     env_name: &str,
     invocation: &InvocationType,
-    flox: &flox_rust_sdk::flox::Flox,
     lockfile: &Lockfile,
-    config: &Config,
+    autobake: bool,
+    container_builder_params: &ContainerBuilderParams,
 ) -> Result<Infallible> {
     let runtime = platform_runtime();
 
@@ -181,10 +181,6 @@ fn wrap_oci(
             let allow_stale = std::env::var(FLOX_SANDBOX_OCI_ALLOW_STALE_VAR)
                 .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
                 .unwrap_or(false);
-            // FLOX_SANDBOX_OCI_AUTOBAKE=true arrives through the config env
-            // layer (same machinery as `flox config` keys), so one config read
-            // covers both the env var and the config file.
-            let autobake = config.flox.sandbox_oci_autobake.unwrap_or(false);
             let is_tty = std::io::stdin().is_terminal();
 
             let decision = should_bake_oci(
@@ -207,7 +203,13 @@ fn wrap_oci(
                     run_ref.clone()
                 },
                 OciBakeDecision::Bake => {
-                    bake_oci_image(runtime, env_name, dot_flox_path, flox, lockfile)?;
+                    bake_oci_image(
+                        runtime,
+                        env_name,
+                        dot_flox_path,
+                        container_builder_params,
+                        lockfile,
+                    )?;
                     format!("{env_name}:{}", lockfile_hash12(lockfile))
                 },
                 OciBakeDecision::Prompt => {
@@ -230,7 +232,13 @@ fn wrap_oci(
                         .prompt()
                         .unwrap_or(false);
                     if confirmed {
-                        bake_oci_image(runtime, env_name, dot_flox_path, flox, lockfile)?;
+                        bake_oci_image(
+                            runtime,
+                            env_name,
+                            dot_flox_path,
+                            container_builder_params,
+                            lockfile,
+                        )?;
                         format!("{env_name}:{}", lockfile_hash12(lockfile))
                     } else {
                         bail!(
@@ -935,7 +943,7 @@ fn bake_oci_image(
     runtime: &str,
     env_name: &str,
     dot_flox_path: &Path,
-    flox: &flox_rust_sdk::flox::Flox,
+    builder_params: &ContainerBuilderParams,
     lockfile: &Lockfile,
 ) -> Result<()> {
     use flox_rust_sdk::providers::container_builder::ContainerBuilder;
@@ -983,12 +991,6 @@ fn bake_oci_image(
         dot_flox.parent().unwrap_or(&dot_flox).to_path_buf()
     };
 
-    // Temporarily override the flake ref so ContainerizeProxy picks it up.
-    // SAFETY: single-process, no concurrent readers of this var during bake.
-    unsafe {
-        std::env::set_var("_FLOX_CONTAINERIZE_FLAKE_REF_OR_REV", &ref_or_rev);
-    }
-
     let container_runtime = {
         #[cfg(target_os = "macos")]
         {
@@ -1022,14 +1024,18 @@ fn bake_oci_image(
 
     // include_guest_flox = true: the sandbox bake bakes a real flox into the
     // guest so `flox list` works inside the sandboxed session.
+    // flake_ref_override = Some(ref_or_rev): pass the computed builder pin
+    // as an explicit constructor argument so the proxy embeds it directly
+    // without touching the process environment.
     let proxy = ContainerizeProxy::new(
         builder_project,
         container_runtime.clone(),
         vec![],
         None,
         true,
+        Some(ref_or_rev),
     );
-    let container_source = proxy.create_container_source(flox, env_name, &hash12)?;
+    let container_source = proxy.create_container_source(builder_params, env_name, &hash12)?;
 
     let mut sink = container_runtime.to_writer()?;
     container_source.stream_container(&mut sink)?;
@@ -1041,11 +1047,6 @@ fn bake_oci_image(
         )
         .entered();
         sink.wait()?;
-    }
-
-    // Clean up the env override now that the bake is done.
-    unsafe {
-        std::env::remove_var("_FLOX_CONTAINERIZE_FLAKE_REF_OR_REV");
     }
 
     eprintln!("✅  Image '{hash_tag}' loaded into {runtime} store.");
