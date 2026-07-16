@@ -27,8 +27,11 @@ static NIX_PROXY_IMAGE_REF: LazyLock<Option<String>> =
 
 const FLOX_FLAKE: &str = "github:flox/flox";
 const FLOX_PROXY_IMAGE_FLOX_CONFIG_DIR: &str = "/root/.config/flox";
-static FLOX_CONTAINERIZE_FLAKE_REF_OR_REV: LazyLock<Option<String>> =
-    LazyLock::new(|| env::var("_FLOX_CONTAINERIZE_FLAKE_REF_OR_REV").ok());
+static FLOX_CONTAINERIZE_FLAKE_REF_OR_REV: LazyLock<Option<String>> = LazyLock::new(|| {
+    env::var("_FLOX_CONTAINERIZE_FLAKE_REF_OR_REV")
+        .ok()
+        .filter(|v| !v.is_empty())
+});
 const CONTAINER_NIX_CACHE_VOLUME: &str = "flox-nix";
 
 /// Default VM memory for Apple Container builder runs.
