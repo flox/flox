@@ -828,10 +828,11 @@ mod tests {
             vec![],
             None,
             false,
+            None,
             true,
         );
         let mut cmd = proxy.runtime_base_command();
-        proxy.add_runtime_args(&mut cmd, &flox);
+        proxy.add_runtime_args(&mut cmd, &params_from_flox(&flox));
         let args = argv(&cmd);
         let env_pos = args
             .iter()
@@ -854,10 +855,11 @@ mod tests {
             vec![],
             None,
             false,
+            None,
             true,
         );
         let mut cmd = proxy.runtime_base_command();
-        proxy.add_runtime_args(&mut cmd, &flox);
+        proxy.add_runtime_args(&mut cmd, &params_from_flox(&flox));
         let args = argv(&cmd);
         assert!(
             !args
@@ -879,9 +881,10 @@ mod tests {
             vec![],
             None,
             false,
+            None,
             true,
         );
-        let cmd = proxy.build_oci_conversion_command(&flox, "latest");
+        let cmd = proxy.build_oci_conversion_command(&params_from_flox(&flox), "latest");
         let args = argv(&cmd);
         let script = args.last().expect("script is the last arg");
         let export = "export _FLOX_CONTAINERIZE_OPENSHELL_COMPAT=1";
@@ -912,8 +915,9 @@ mod tests {
             vec![],
             None,
             false,
+            None,
         );
-        let cmd = proxy.build_oci_conversion_command(&flox, "latest");
+        let cmd = proxy.build_oci_conversion_command(&params_from_flox(&flox), "latest");
         let args = argv(&cmd);
         let script = args.last().expect("script is the last arg");
         assert!(
@@ -935,9 +939,10 @@ mod tests {
             vec![],
             None,
             true,
+            None,
         );
         let mut cmd = proxy.runtime_base_command();
-        proxy.add_runtime_args(&mut cmd, &flox);
+        proxy.add_runtime_args(&mut cmd, &params_from_flox(&flox));
         let args = argv(&cmd);
         assert!(
             !args.iter().any(|a| a.contains(OPENSHELL_COMPAT_ENV)),

@@ -49,9 +49,9 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
 use flox_core::activate::context::InvocationType;
-use flox_config::Config;
 use flox_core::activate::sandbox_backend::SandboxBackend;
 use flox_manifest::lockfile::Lockfile;
+use flox_rust_sdk::providers::container_builder::ContainerBuilderParams;
 use semver::Version;
 use serde_json::json;
 use tracing::debug;
@@ -90,9 +90,12 @@ pub struct OpenshellBackend<'a> {
     dot_flox_path: PathBuf,
     env_name: String,
     invocation_type: &'a InvocationType,
-    flox: &'a flox_rust_sdk::flox::Flox,
     lockfile: &'a Lockfile,
-    config: &'a Config,
+    /// Whether to auto-bake without prompting. Consumed by `wrap_openshell`.
+    sandbox_oci_autobake: bool,
+    /// Narrow context for the container builder pipeline. Consumed by
+    /// `bake_openshell_image`.
+    container_builder_params: ContainerBuilderParams,
 }
 
 impl<'a> OpenshellBackend<'a> {
@@ -101,9 +104,9 @@ impl<'a> OpenshellBackend<'a> {
             dot_flox_path: ctx.dot_flox_path,
             env_name: ctx.env_name,
             invocation_type: ctx.invocation_type,
-            flox: ctx.flox,
             lockfile: ctx.lockfile,
-            config: ctx.config,
+            sandbox_oci_autobake: ctx.sandbox_oci_autobake,
+            container_builder_params: ctx.container_builder_params,
         }
     }
 }
@@ -153,9 +156,9 @@ impl ActivationSandbox for OpenshellBackend<'_> {
             &self.dot_flox_path,
             &self.env_name,
             self.invocation_type,
-            self.flox,
             self.lockfile,
-            self.config,
+            self.sandbox_oci_autobake,
+            &self.container_builder_params,
         )
     }
 }
@@ -231,9 +234,9 @@ fn wrap_openshell(
     dot_flox_path: &Path,
     env_name: &str,
     invocation: &InvocationType,
-    flox: &flox_rust_sdk::flox::Flox,
     lockfile: &Lockfile,
-    config: &Config,
+    autobake: bool,
+    container_builder_params: &ContainerBuilderParams,
 ) -> Result<Infallible> {
     let dot_flox =
         std::fs::canonicalize(dot_flox_path).unwrap_or_else(|_| dot_flox_path.to_path_buf());
@@ -265,7 +268,6 @@ fn wrap_openshell(
             let allow_stale = std::env::var(FLOX_SANDBOX_OCI_ALLOW_STALE_VAR)
                 .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
                 .unwrap_or(false);
-            let autobake = config.flox.sandbox_oci_autobake.unwrap_or(false);
             let is_tty = std::io::stdin().is_terminal();
 
             let decision = should_bake_oci(
@@ -288,7 +290,12 @@ fn wrap_openshell(
                     run_ref.clone()
                 },
                 OciBakeDecision::Bake => {
-                    bake_openshell_image(env_name, dot_flox_path, flox, lockfile)?;
+                    bake_openshell_image(
+                        env_name,
+                        dot_flox_path,
+                        container_builder_params,
+                        lockfile,
+                    )?;
                     format!("{repo}:{}", lockfile_hash12(lockfile))
                 },
                 OciBakeDecision::Prompt => {
@@ -311,7 +318,12 @@ fn wrap_openshell(
                         .prompt()
                         .unwrap_or(false);
                     if confirmed {
-                        bake_openshell_image(env_name, dot_flox_path, flox, lockfile)?;
+                        bake_openshell_image(
+                            env_name,
+                            dot_flox_path,
+                            container_builder_params,
+                            lockfile,
+                        )?;
                         format!("{repo}:{}", lockfile_hash12(lockfile))
                     } else {
                         bail!(
@@ -776,7 +788,7 @@ fn append_workdir_wrapper(
 fn bake_openshell_image(
     env_name: &str,
     dot_flox_path: &Path,
-    flox: &flox_rust_sdk::flox::Flox,
+    builder_params: &ContainerBuilderParams,
     lockfile: &Lockfile,
 ) -> Result<()> {
     use flox_rust_sdk::providers::container_builder::ContainerBuilder;
@@ -816,11 +828,6 @@ fn bake_openshell_image(
         dot_flox.parent().unwrap_or(&dot_flox).to_path_buf()
     };
 
-    // Set the builder flake ref override.
-    unsafe {
-        std::env::set_var("_FLOX_CONTAINERIZE_FLAKE_REF_OR_REV", &ref_or_rev);
-    }
-
     // Use Docker for image loading (openshell requires Docker, not
     // Apple Container or Podman).
     let container_runtime = Runtime::Docker;
@@ -841,6 +848,9 @@ fn bake_openshell_image(
 
     // include_guest_flox = true: bake a real flox into the guest so `flox
     // list` works inside the sandboxed session.
+    // flake_ref_override = Some(ref_or_rev): pass the computed builder pin
+    // as an explicit constructor argument so the proxy embeds it directly
+    // without touching the process environment.
     // openshell_compat = true: add the sandbox user/group and iproute2.
     let proxy = ContainerizeProxy::new_with_openshell_compat(
         builder_project.clone(),
@@ -848,6 +858,7 @@ fn bake_openshell_image(
         vec![],
         None,
         true,
+        Some(ref_or_rev),
         true,
     );
     // NOTE: create_container_source ignores the `name` argument — the inner
@@ -855,7 +866,7 @@ fn bake_openshell_image(
     // name, so the archive always loads as `<env_name>:<hash12>`. After loading
     // we retag to `<env_name>-openshell:<hash12>` and remove the bare tag so
     // resolve_docker_image_state can find the image under the suffixed repo.
-    let container_source = proxy.create_container_source(flox, &repo, &hash12)?;
+    let container_source = proxy.create_container_source(builder_params, &repo, &hash12)?;
 
     let mut sink = container_runtime.to_writer()?;
     container_source.stream_container(&mut sink)?;
@@ -867,10 +878,6 @@ fn bake_openshell_image(
         )
         .entered();
         sink.wait()?;
-    }
-
-    unsafe {
-        std::env::remove_var("_FLOX_CONTAINERIZE_FLAKE_REF_OR_REV");
     }
 
     // The inner builder derives the image name from the environment directory,
