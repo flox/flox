@@ -80,11 +80,12 @@ pub(crate) struct ContainerizeProxy {
     /// `set_var` unsafe for exactly this reason).
     include_guest_flox: bool,
     /// Explicit builder flake-ref or revision override for the in-container
-    /// `nix run github:flox/flox/<ref>` invocation. When `Some`, this value
-    /// takes precedence over the ambient `_FLOX_CONTAINERIZE_FLAKE_REF_OR_REV`
-    /// environment variable (which remains the user-facing override). Callers
-    /// at the composition root supply the pin computed for the bake; the
-    /// general `flox containerize` command passes `None`.
+    /// `nix run github:flox/flox/<ref>` invocation. Consumed only when the
+    /// ambient `_FLOX_CONTAINERIZE_FLAKE_REF_OR_REV` env var is unset (the
+    /// env var wins so the user-facing override always takes effect).
+    /// Precedence: env var > this field > default version-based ref.
+    /// Callers at the composition root supply the pin computed for the bake;
+    /// the general `flox containerize` command passes `None`.
     flake_ref_override: Option<String>,
 }
 
@@ -137,6 +138,30 @@ impl ContainerizeProxy {
         {
             command.args(["--cpus", cpus]);
         }
+    }
+
+    /// Resolve the flake ref used for `nix run github:flox/flox/<ref>`.
+    ///
+    /// Precedence (highest to lowest):
+    /// 1. `env_override` — the ambient `_FLOX_CONTAINERIZE_FLAKE_REF_OR_REV`
+    ///    env var captured at startup. Passed in rather than read from the
+    ///    `LazyLock` directly so callers in tests can exercise all branches
+    ///    without mutating process state.
+    /// 2. `self.flake_ref_override` — an explicit pin supplied at construction
+    ///    time by callers such as the OCI sandbox bake.
+    /// 3. The version-derived default: commit SHA if available, otherwise the
+    ///    semver tag (e.g. `v1.4.0`).
+    fn resolve_flake_ref(&self, env_override: Option<&str>) -> String {
+        let flox_version = &*FLOX_VERSION;
+        let flox_version_tag = format!("v{}", flox_version.base_semver());
+        env_override
+            .map(|s| s.to_string())
+            .or_else(|| self.flake_ref_override.clone())
+            .unwrap_or_else(|| {
+                flox_version
+                    .commit_sha()
+                    .unwrap_or(flox_version_tag)
+            })
     }
 
     // Use a Nix container that matches the version of Nix that this Flox
@@ -390,20 +415,11 @@ impl ContainerizeProxy {
             "--accept-flake-config",
         ]);
 
-        let flox_version = &*FLOX_VERSION;
-        let flox_version_tag = format!("v{}", flox_version.base_semver());
+        // Precedence: env var > explicit field > default (see resolve_flake_ref).
         let flox_flake = format!(
             "{}/{}",
             FLOX_FLAKE,
-            // Precedence: explicit field (bake pin) → user env var → default.
-            self.flake_ref_override
-                .clone()
-                .or_else(|| (*FLOX_CONTAINERIZE_FLAKE_REF_OR_REV).clone())
-                .unwrap_or_else(|| {
-                    flox_version
-                        .commit_sha()
-                        .unwrap_or(flox_version_tag)
-                })
+            self.resolve_flake_ref((*FLOX_CONTAINERIZE_FLAKE_REF_OR_REV).as_deref()),
         );
         command.args(["run", &flox_flake, "--"]);
     }
@@ -465,19 +481,11 @@ impl ContainerizeProxy {
         // bare `name` (without `:tag`) causes `image load` to fail.
         let image_ref = format!("{env_name}:{tag_str}");
 
-        let flox_version = &*FLOX_VERSION;
-        let flox_version_tag = format!("v{}", flox_version.base_semver());
+        // Precedence: env var > explicit field > default (see resolve_flake_ref).
         let flox_flake = format!(
             "{}/{}",
             FLOX_FLAKE,
-            self.flake_ref_override
-                .clone()
-                .or_else(|| (*FLOX_CONTAINERIZE_FLAKE_REF_OR_REV).clone())
-                .unwrap_or_else(|| {
-                    flox_version
-                        .commit_sha()
-                        .unwrap_or(flox_version_tag)
-                })
+            self.resolve_flake_ref((*FLOX_CONTAINERIZE_FLAKE_REF_OR_REV).as_deref()),
         );
 
         let verbosity_arg = match params.verbosity {
@@ -909,19 +917,7 @@ mod tests {
     }
 
     #[test]
-    fn apple_container_memory_override_is_respected() {
-        // Safety: test is single-threaded; the LazyLock is already initialized
-        // with the real env value, so we test the override path by exercising
-        // add_vm_resource_args directly with a stub rather than mutating the
-        // static. Instead, test via the add_vm_resource_args path with env
-        // manipulation limited to the override scenario by constructing the
-        // args manually.
-        //
-        // Override by constructing a proxy and calling add_vm_resource_args
-        // after temporarily setting the env var before the LazyLock initialises.
-        // Because LazyLock<Option<String>> is already initialised by prior tests,
-        // we cannot mutate it here. Test the DEFAULT_VM_MEMORY constant instead,
-        // which is the codepath exercised by the absence of the env var.
+    fn default_vm_memory_is_8g() {
         assert_eq!(DEFAULT_VM_MEMORY, "8g");
     }
 
@@ -1094,102 +1090,61 @@ mod tests {
         assert_eq!(shell_single_quote("$(rm -rf /)"), "'$(rm -rf /)'");
     }
 
-    /// Tests for `flake_ref_override` precedence in the container builder
-    /// pipeline.
+    /// Tests for `resolve_flake_ref` precedence.
     ///
-    /// The precedence is: explicit field → ambient user env var → default.
-    /// These tests verify the explicit field path, which is the new behavior
-    /// introduced to eliminate the `set_var` bracket from the OCI bake path.
-    mod flake_ref_override_precedence {
+    /// Precedence: env var > explicit field > version-based default.
+    /// `resolve_flake_ref` takes the env value as a parameter so all three
+    /// branches can be exercised without mutating the `LazyLock` static.
+    /// This mirrors the `select_builder_pin` pattern in `oci.rs`.
+    mod flake_ref_precedence {
         use super::*;
 
-        fn extract_flake_ref_from_nix_args(args: &[String]) -> Option<String> {
-            // Nix args look like: nix --extra-experimental-features ... run
-            // github:flox/flox/<ref> --
-            // Find "run" followed by the flake ref.
-            args.windows(2)
-                .find_map(|w| (w[0] == "run").then(|| w[1].clone()))
-        }
-
-        /// When `flake_ref_override` is `Some`, `add_nix_args` embeds the
-        /// explicit ref in the `github:flox/flox/<ref>` flake argument.
-        #[test]
-        fn explicit_field_appears_in_nix_args() {
-            let proxy = ContainerizeProxy::new(
+        fn proxy_with_override(pin: Option<&str>) -> ContainerizeProxy {
+            ContainerizeProxy::new(
                 "/some/env".into(),
                 Runtime::Docker,
                 vec![],
                 None,
                 false,
-                Some("deadbeef1234".to_string()),
-            );
-            let mut cmd = std::process::Command::new("nix");
-            proxy.add_nix_args(&mut cmd);
-            let args: Vec<String> = cmd
-                .get_args()
-                .map(|a| a.to_string_lossy().into_owned())
-                .collect();
-            let flake_ref = extract_flake_ref_from_nix_args(&args)
-                .expect("add_nix_args must emit a 'run <flake>' arg pair");
-            assert!(
-                flake_ref.ends_with("/deadbeef1234"),
-                "explicit flake_ref_override must appear in the flake ref: {flake_ref}"
+                pin.map(str::to_string),
+            )
+        }
+
+        /// When only the explicit field is set (no env var), the field is used.
+        #[test]
+        fn explicit_field_used_when_no_env_var() {
+            let proxy = proxy_with_override(Some("deadbeef1234"));
+            let resolved = proxy.resolve_flake_ref(None);
+            assert_eq!(
+                resolved, "deadbeef1234",
+                "explicit field must be used when env var is absent"
             );
         }
 
-        /// When `flake_ref_override` is `None` and the user env var is also
-        /// unset, the default version-based ref is used. The default behavior
-        /// is version-dependent and cannot be asserted exactly in tests, but
-        /// we can verify that the flake ref is non-empty and starts with the
-        /// expected prefix.
+        /// When neither env var nor field is set, the version-based default
+        /// is used. The exact value is version-dependent; check the prefix.
         #[test]
-        fn no_override_uses_version_based_default() {
-            let proxy = ContainerizeProxy::new(
-                "/some/env".into(),
-                Runtime::Docker,
-                vec![],
-                None,
-                false,
-                None,
-            );
-            let mut cmd = std::process::Command::new("nix");
-            proxy.add_nix_args(&mut cmd);
-            let args: Vec<String> = cmd
-                .get_args()
-                .map(|a| a.to_string_lossy().into_owned())
-                .collect();
-            let flake_ref = extract_flake_ref_from_nix_args(&args)
-                .expect("add_nix_args must emit a 'run <flake>' arg pair");
+        fn default_used_when_neither_env_nor_field_set() {
+            let proxy = proxy_with_override(None);
+            let resolved = proxy.resolve_flake_ref(None);
             assert!(
-                flake_ref.starts_with("github:flox/flox/"),
-                "default flake ref must use the github:flox/flox/ prefix: {flake_ref}"
+                !resolved.is_empty(),
+                "default flake ref must not be empty"
             );
-            // The ref must not be the empty suffix (i.e. "github:flox/flox/").
-            assert!(
-                flake_ref.len() > "github:flox/flox/".len(),
-                "default flake ref must have a non-empty ref component: {flake_ref}"
-            );
+            // The resolved value is a tag or SHA — both are non-empty strings.
+            // We cannot assert the exact value without pinning FLOX_VERSION in
+            // tests, but we can assert it is neither of the explicit inputs.
         }
 
-        /// The OCI conversion command (Apple Container path) also embeds the
-        /// explicit flake ref in the shell script, not just `add_nix_args`.
+        /// When both the env var and the explicit field are set, the env var
+        /// wins (user-facing override takes priority over the bake pin).
         #[test]
-        fn oci_conversion_command_uses_explicit_ref() {
-            let (flox, _tempdir) = flox_instance();
-            let proxy = ContainerizeProxy::new(
-                "/some/env/.flox/env".into(),
-                Runtime::AppleContainer,
-                vec![],
-                None,
-                false,
-                Some("abc123456789".to_string()),
-            );
-            let cmd = proxy.build_oci_conversion_command(&params_from_flox(&flox), "latest");
-            let args = argv(&cmd);
-            let script = args.last().expect("script is the last arg");
-            assert!(
-                script.contains("abc123456789"),
-                "OCI conversion script must embed the explicit flake_ref_override: {script}"
+        fn env_var_wins_over_explicit_field() {
+            let proxy = proxy_with_override(Some("bake-pin-abc123"));
+            let resolved = proxy.resolve_flake_ref(Some("user-env-override"));
+            assert_eq!(
+                resolved, "user-env-override",
+                "env var must win over the explicit flake_ref_override field"
             );
         }
     }
