@@ -3,8 +3,6 @@
 use crate::auth::{AuthContext, AuthnMode};
 use crate::token::FloxhubToken;
 
-// Conditionally include Kerberos
-#[cfg(feature = "floxhub-authn-kerberos")]
 mod kerberos;
 
 impl AuthContext {
@@ -14,13 +12,9 @@ impl AuthContext {
     /// - Kerberos: resolves the principal and embeds a SPNEGO token generator;
     ///   returns `Kerberos(None)` (with a warning log) if the ticket cannot be
     ///   resolved.
-    // TODO(ENT-101): surface a user-friendly error when the configured authn
-    // mode is not supported by this build (e.g. kerberos mode without the
-    // floxhub-authn-kerberos feature).
     pub fn from_mode(mode: &AuthnMode, floxhub_token: Option<FloxhubToken>) -> Self {
         match mode {
             AuthnMode::Auth0 => AuthContext::Auth0(floxhub_token),
-            #[cfg(feature = "floxhub-authn-kerberos")]
             AuthnMode::Kerberos => kerberos::kerberos_credential(),
         }
     }

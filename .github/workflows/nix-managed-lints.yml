@@ -106,6 +106,7 @@ jobs:
           nix develop -L --no-update-lock-file --command \
             pre-commit run \
               --verbose \
+              --show-diff-on-failure \
               --hook-stage manual \
               --from-ref "$( git rev-parse "target" )" \
               --to-ref   "$( git rev-parse "head" )";
