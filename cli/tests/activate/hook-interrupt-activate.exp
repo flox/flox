@@ -30,7 +30,6 @@ send "cd $target\n"
 # so the interrupt arrives while `flox activate` is running inside the hook's
 # eval.
 expect "ACTIVATE-SLEEPING"
-sleep 0.5
 send "\x03"
 # The interrupt must abort the activation and return to the prompt promptly,
 # well before the on-activate sleep would have finished on its own.

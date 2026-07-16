@@ -1,0 +1,67 @@
+# Activate a project environment using --dir, then cd into a second,
+# unregistered directory so the prompt hook's `hook-env` blocks at the
+# auto-activation consent prompt (default `auto_activate = "prompt"`), and
+# deliver SIGINT to that `hook-env` process while it is blocked. The consent
+# prompt is only a deterministic window in which to catch `hook-env` running:
+# the prompt puts the tty in raw mode, so a keyboard Ctrl+C there is a key
+# event consumed by the prompt itself; a kill-delivered SIGINT instead hits
+# the process's signal handler, interrupting `hook-env` the same way as a
+# Ctrl+C landing anywhere else in its run. The third argument is a command run
+# afterwards to observe whether the environment activated and whether it was
+# suppressed.
+
+set dir [lindex $argv 0]
+set target [lindex $argv 1]
+set command [lindex $argv 2]
+set flox $env(FLOX_BIN)
+# Auto-activation may lock and build an environment on first use.
+set timeout 60
+set env(NO_COLOR) 1
+set env(TERM) xterm-mono
+set stty_init "cols 1000"
+
+spawn $flox activate --dir $dir
+# On timeout, kill any hook-env still hanging after the SIGINT: it holds the
+# pty open, and leaving it behind can block the test runner long after this
+# script has exited.
+expect_after {
+  timeout {
+    catch {exec pkill -KILL -n -f "hook-env --shell"}
+    exit 1
+  }
+  eof { exit 2 }
+  "*\n" { exp_continue }
+  "*\r" { exp_continue }
+}
+
+expect "You are now using the environment"
+expect $env(KNOWN_PROMPT)
+
+send "cd $target\n"
+# The prompt hook runs before the next prompt and asks for consent on the tty;
+# hook-env is blocked there when the signal arrives.
+expect "y/N"
+exec pkill -INT -n -f "hook-env --shell"
+# The interrupted hook-env must return the shell to a usable prompt without
+# asking again. Failure modes: a second consent prompt means nothing was
+# suppressed and the next hook run re-prompted (exit 3); a timeout means the
+# interrupted hook-env never exited and the shell is still blocked in the
+# hook. The environment build already happened before the consent prompt, so
+# a short timeout suffices here.
+set timeout 15
+expect {
+  "y/N" { exit 3 }
+  $env(KNOWN_PROMPT) { }
+}
+
+# Let one more prompt fire to verify the suppression sticks: with the
+# environment suppressed the hook must not ask for consent again.
+send "true\n"
+expect {
+  "y/N" { exit 3 }
+  $env(KNOWN_PROMPT) { }
+}
+set timeout 60
+
+send "$command && exit\n"
+expect eof
