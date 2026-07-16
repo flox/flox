@@ -1,7 +1,7 @@
 # Activate a project environment using --dir, then cd into a second,
 # unregistered directory and press Ctrl+C at the auto-activation consent
 # prompt the hook raises (default `auto_activate = "prompt"`). `hook-env` is
-# blocked reading the answer from /dev/tty, so the interrupt arrives while
+# blocked on the prompt reading the terminal, so the interrupt arrives while
 # `hook-env` itself is running. The third argument is a command run afterwards
 # to observe whether the environment activated and whether it was suppressed.
 
