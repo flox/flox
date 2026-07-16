@@ -114,10 +114,7 @@ enum SubcommandOrBuildTargets {
     /// Update catalog lockfile
     ///
     /// Resolves catalog inputs and writes the lockfile.
-    #[bpaf(
-        command,
-        footer("Run 'man flox-build-update-catalogs' for more details.")
-    )]
+    #[bpaf(command, hide)]
     UpdateCatalogs {},
     BuildTargets {
         #[bpaf(external(base_catalog_url_select), optional)]
