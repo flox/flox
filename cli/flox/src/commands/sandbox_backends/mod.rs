@@ -50,23 +50,23 @@ pub(crate) const WRAPPED_MARKER_VAR: &str = "_FLOX_SANDBOX_WRAPPED";
 #[derive(Debug)]
 pub struct SandboxLaunchCtx<'a> {
     /// Absolute path to the `.flox` directory of the environment being
-    /// activated. Consumed by: `host-native`, `srt`, `oci`.
+    /// activated. Consumed by: `host-native`, `srt`, `oci`, `openshell`.
     pub dot_flox_path: PathBuf,
     /// Short environment name used as the OCI image tag prefix and in
-    /// error messages. Consumed by: `oci`.
+    /// error messages. Consumed by: `oci`, `openshell`.
     pub env_name: String,
     /// How the user invoked `flox activate` (interactive shell, exec, shell
-    /// command, or in-place script). Consumed by: `oci`.
+    /// command, or in-place script). Consumed by: `oci`, `openshell`.
     pub invocation_type: &'a InvocationType,
     /// Resolved lockfile for the environment (hash-tag derivation and
-    /// builder-pin selection). Consumed by: `oci`.
+    /// builder-pin selection). Consumed by: `oci`, `openshell`.
     pub lockfile: &'a Lockfile,
     /// Whether to auto-bake an OCI image when the expected tag is absent,
     /// without prompting. Derived from `config.flox.sandbox_oci_autobake`.
-    /// Consumed by: `oci`.
+    /// Consumed by: `oci`, `openshell`.
     pub sandbox_oci_autobake: bool,
     /// Narrow context for the container builder pipeline (config dir,
-    /// metrics flag, verbosity). Consumed by: `oci`.
+    /// metrics flag, verbosity). Consumed by: `oci`, `openshell`.
     pub container_builder_params: ContainerBuilderParams,
 }
 
