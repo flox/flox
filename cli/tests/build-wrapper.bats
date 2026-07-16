@@ -119,3 +119,30 @@ EOF
 }
 
 # ---------------------------------------------------------------------------- #
+
+# The build wrapper must source profile.d scripts from the environment given
+# via --env, not just the scripts provided by the interpreter package.
+#
+# Packages installed by store path aren't part of the `toplevel` package
+# group, and no mocked catalog package ships an etc/profile.d script, so
+# invoke the wrapper directly against a fabricated environment instead of
+# driving it through `flox build`.
+@test "Build wrapper sources package-provided profile.d scripts" {
+  _wrapper="${FLOX_INTERPRETER?}-build_executable_wrapper"
+
+  # Fabricate a rendered environment the way buildenv would: the wrapper
+  # package's own profile.d contents merged with a package-provided script.
+  fake_env="$BATS_TEST_TMPDIR/env"
+  mkdir -p "$fake_env/etc/profile.d"
+  cp -RL "$_wrapper/etc/profile.d/." "$fake_env/etc/profile.d/"
+  cat > "$fake_env/etc/profile.d/0900_from-package.sh" <<'EOF'
+export _FLOX_PROFILE_D_TEST_VAR="from-package-profile.d"
+EOF
+
+  run "$_wrapper/wrapper" --env "$fake_env" -- \
+    bash -c 'echo "VAR: ${_FLOX_PROFILE_D_TEST_VAR:-unset}"'
+  assert_success
+  assert_output "VAR: from-package-profile.d"
+}
+
+# ---------------------------------------------------------------------------- #

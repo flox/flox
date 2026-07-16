@@ -2726,6 +2726,30 @@ EOF
   )"
   FLOX_SHELL=bash run "$FLOX_BIN" activate -c "$SCRIPT"
   assert_success
+
+  # Run mode sources only the interpreter's run-mode paths script from
+  # $FLOX_ENV; package-provided scripts are linked into the run environment
+  # but deliberately not sourced.
+  RUN_SCRIPT="$(cat <<'EOF'
+    if ! [ -e "$FLOX_ENV/etc/profile.d/0900_from-package.sh" ]; then
+      echo "package profile.d script was not linked into the run environment" >&3
+      exit 1
+    fi
+    case "$XDG_DATA_DIRS" in
+      *"$FLOX_ENV/share"*) : ;;
+      *)
+        echo "run-mode paths script was not sourced" >&3
+        exit 1
+        ;;
+    esac
+    if [ -n "${_FLOX_PROFILE_D_TEST_VAR:-}" ]; then
+      echo "package profile.d script was unexpectedly sourced in run mode" >&3
+      exit 1
+    fi
+EOF
+  )"
+  FLOX_SHELL=bash run "$FLOX_BIN" activate -m run -c "$RUN_SCRIPT"
+  assert_success
 }
 
 @test "activate works with fish 3.2.2" {
