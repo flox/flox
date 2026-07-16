@@ -228,8 +228,12 @@ pub mod test_helpers {
             Url::from_directory_path(mock_floxhub_git_dir).unwrap()
         });
 
-        let auth_context = AuthContext::from_mode(&AuthnMode::default(), None, "https://not_used")
-            .expect("no token to parse");
+        let auth_context = AuthContext::from_mode(
+            &AuthnMode::default(),
+            None,
+            floxhub_client::test_helpers::unreachable_resolve,
+        )
+        .expect("no token to parse");
 
         let flox = Flox {
             system: env!("NIX_TARGET_SYSTEM").to_string(),

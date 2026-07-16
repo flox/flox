@@ -30,6 +30,7 @@ use tracing::{debug, instrument};
 use url::Url;
 
 use crate::MapApiErrorExt;
+use crate::accounts::AccountsApiClient;
 use crate::config::FloxhubClientConfig;
 use crate::error::{FloxhubClientError, ResolveError, SearchError, VersionsError};
 use crate::mock::MockGuard;
@@ -57,6 +58,8 @@ pub struct FloxhubClient {
     pub(crate) catalog: CatalogApiClient,
     /// Factory inner client, sharing the same reqwest client and auth hook.
     pub(crate) factory: FactoryApiClient,
+    /// Accounts inner client (hand-written), sharing the same reqwest client.
+    pub(crate) accounts: AccountsApiClient,
     config: FloxhubClientConfig,
 
     _mock_guard: Option<MockGuard>,
@@ -105,14 +108,22 @@ impl FloxhubClient {
 
         let catalog =
             CatalogApiClient::new_with_client(&effective_url, http_client.clone(), catalog_hooks);
-        let factory = FactoryApiClient::new_with_client(&effective_url, http_client, factory_hooks);
+        let factory =
+            FactoryApiClient::new_with_client(&effective_url, http_client.clone(), factory_hooks);
+        let accounts = AccountsApiClient::new_with_client(&effective_url, http_client);
 
         Ok(Self {
             catalog,
             factory,
+            accounts,
             config,
             _mock_guard: mock_guard,
         })
+    }
+
+    /// Access the underlying accounts API client for making requests.
+    pub fn accounts(&self) -> &AccountsApiClient {
+        &self.accounts
     }
 
     /// Access the underlying catalog API client for making requests.
@@ -879,8 +890,12 @@ pub mod test_helpers {
             base_url: url.to_string(),
             extra_headers: Default::default(),
             mock_mode: Default::default(),
-            auth_context: AuthContext::from_mode(&Default::default(), None, url)
-                .expect("no token to parse"),
+            auth_context: AuthContext::from_mode(
+                &Default::default(),
+                None,
+                floxhub_auth::test_helpers::unreachable_resolve,
+            )
+            .expect("no token to parse"),
             user_agent: None,
             stability: None,
         }

@@ -571,9 +571,12 @@ pub fn login_with_token_file(
 
     let secret = contents.trim();
 
-    let auth_context =
-        AuthContext::from_mode(&AuthnMode::Auth0, Some(secret), &flox.floxhub.api_url_str())
-            .context("The provided token is not a valid FloxHub token.")?;
+    let auth_context = AuthContext::from_mode(
+        &AuthnMode::Auth0,
+        Some(secret),
+        floxhub_client::identity_resolver(&flox.floxhub.api_url_str()),
+    )
+    .context("The provided token is not a valid FloxHub token.")?;
 
     // Validates locally for a JWT; via /me for a personal access token
     // (blocking), where a 401 covers expired and revoked tokens alike. An

@@ -32,6 +32,7 @@
 //! let builds = client.list_builds(None).await?;
 //! ```
 
+mod accounts;
 pub mod client;
 mod config;
 mod error;
@@ -52,6 +53,7 @@ pub const FLOX_RESOLVE_STABILITY_VAR: &str = "_FLOX_RESOLVE_STABILITY";
 // This allows consumers to depend only on floxhub-client, not directly on catalog-api-v1.
 // Re-export the authentication types so consumers can keep depending only
 // on floxhub-client.
+pub use accounts::{AccountsApiClient, MeError, fetch_me_blocking, identity_resolver};
 pub use catalog_api_v1::{
     Client as ApiClient,
     Error as ApiError,

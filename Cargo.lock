@@ -1837,15 +1837,11 @@ version = "0.0.0"
 dependencies = [
  "base64",
  "chrono",
- "httpmock",
  "jsonwebtoken",
  "libgssapi",
- "reqwest",
  "serde",
- "serde_json",
  "serde_with",
  "thiserror 2.0.18",
- "tokio",
  "tracing",
  "url",
 ]
@@ -1856,6 +1852,7 @@ version = "0.0.0"
 dependencies = [
  "async-stream",
  "catalog-api-v1",
+ "chrono",
  "derive_more",
  "factory-api-v1",
  "floxhub-auth",

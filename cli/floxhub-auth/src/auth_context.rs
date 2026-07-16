@@ -1,9 +1,9 @@
 //! [`AuthContext`] — the credential threaded through the CLI.
 //!
 //! [`AuthContext`] is the central authentication type threaded through the CLI.
-//! It captures both the *kind* of authentication in use (Auth0 / Kerberos) and
-//! the authentication material available for that kind (which may be absent —
-//! e.g. no token yet, or no Kerberos ticket).
+//! It captures both the *kind* of authentication in use (Auth0 / PAT /
+//! Kerberos) and the authentication material available for that kind (which
+//! may be absent — e.g. no token yet, or no Kerberos ticket).
 //!
 //! Transport layers (HTTP catalog client, git credential helper) inspect the
 //! variant to decide how to authenticate requests. "No material" is an
@@ -12,8 +12,8 @@
 
 use url::Url;
 
-use crate::accounts::MeError;
 use crate::authn_mode::AuthnMode;
+use crate::identity::{IdentityError, UserIdentity, lazy_identity};
 use crate::kerberos::KerberosMaterial;
 use crate::token::{FloxhubToken, FloxhubTokenError, PAT_PREFIX, PersonalAccessToken};
 
@@ -35,8 +35,8 @@ pub enum AuthFailure {
 }
 
 /// Placeholder handle for an opaque token whose identity has not been
-/// resolved from `/me`. The server is the authority for authn/authz, so an
-/// unknown handle is a display concern, never an access decision.
+/// resolved. The server is the authority for authn/authz, so an unknown
+/// handle is a display concern, never an access decision.
 pub const UNKNOWN_HANDLE: &str = "UNKNOWN";
 
 /// Error from producing an authorization header (e.g. SPNEGO token generation).
@@ -53,7 +53,7 @@ pub struct AuthHeaderError(pub String);
 ///   expired (checked lazily).
 /// - `Auth0(None)` — Auth0 mode but no token yet (not logged in).
 /// - `Pat(token)` — personal access token (`flox_pat_…`); identity is
-///   resolved lazily via `/me`.
+///   resolved lazily through the token's injected resolver.
 /// - `Kerberos(Some(material))` — Kerberos mode with a resolved principal
 ///   and SPNEGO token generator.
 /// - `Kerberos(None)` — Kerberos mode but no ticket available (`kinit`
@@ -69,8 +69,8 @@ pub enum AuthContext {
     /// Auth0 authentication — may or may not have a token.
     Auth0(Option<FloxhubToken>),
     /// Personal access token (`flox_pat_…`) — opaque; identity is resolved
-    /// lazily via `GET /api/v1/accounts/me` and cached in memory. No
-    /// `Option`: "Auth0 mode with no token" remains `Auth0(None)`.
+    /// lazily and cached in memory. No `Option`: "Auth0 mode with no token"
+    /// remains `Auth0(None)`.
     Pat(PersonalAccessToken),
     /// Kerberos authentication — may or may not have a ticket/principal.
     Kerberos(Option<KerberosMaterial>),
@@ -108,16 +108,29 @@ impl AuthContext {
         }
     }
 
+    /// Whether the credential is known to have expired.
+    ///
+    /// `false` when there is nothing to expire: no token, an opaque token
+    /// whose identity has not been resolved yet, or Kerberos (ticket
+    /// lifetimes are managed externally via 'kinit').
+    pub fn is_expired(&self) -> bool {
+        match self {
+            AuthContext::Auth0(Some(token)) => token.is_expired(),
+            AuthContext::Auth0(None) => false,
+            AuthContext::Pat(token) => token.is_expired(),
+            AuthContext::Kerberos(_) => false,
+        }
+    }
+
     /// Return the user's handle if authenticated, or an [`AuthFailure`]
     /// describing why authentication failed.
     ///
-    /// For an opaque token this lazily resolves the identity from `/me`,
-    /// blocking the calling thread (cached in memory for the process). A 401
-    /// from `/me` means the token is invalid, expired, or revoked and is
-    /// reported as [`AuthFailure::TokenExpired`]. Any other resolution
-    /// failure is not fatal: the handle degrades to [`UNKNOWN_HANDLE`] — the
-    /// server remains the authority for whether the token actually
-    /// authenticates.
+    /// For an opaque token this lazily resolves the identity, blocking the
+    /// calling thread (cached in memory for the process). A rejected token
+    /// (invalid, expired, or revoked) is reported as
+    /// [`AuthFailure::TokenExpired`]. Any other resolution failure is not
+    /// fatal: the handle degrades to [`UNKNOWN_HANDLE`] — the server remains
+    /// the authority for whether the token actually authenticates.
     pub fn authenticated_handle(&self) -> Result<&str, AuthFailure> {
         match self {
             AuthContext::Auth0(Some(token)) if token.is_expired() => Err(AuthFailure::TokenExpired),
@@ -126,8 +139,8 @@ impl AuthContext {
             AuthContext::Pat(token) => {
                 match token.resolve_identity() {
                     Ok(_) => {},
-                    Err(MeError::Unauthorized) => return Err(AuthFailure::TokenExpired),
-                    Err(err) => tracing::debug!("could not resolve identity from /me: {err}"),
+                    Err(IdentityError::Unauthorized) => return Err(AuthFailure::TokenExpired),
+                    Err(err) => tracing::debug!("could not resolve identity: {err}"),
                 }
                 if token.is_expired() {
                     return Err(AuthFailure::TokenExpired);
@@ -163,20 +176,6 @@ impl AuthContext {
         }
     }
 
-    /// Whether the credential is known to have expired.
-    ///
-    /// `false` when there is nothing to expire: no token, an opaque token
-    /// whose identity has not been resolved yet, or Kerberos (ticket
-    /// lifetimes are managed externally via 'kinit').
-    pub fn is_expired(&self) -> bool {
-        match self {
-            AuthContext::Auth0(Some(token)) => token.is_expired(),
-            AuthContext::Auth0(None) => false,
-            AuthContext::Pat(token) => token.is_expired(),
-            AuthContext::Kerberos(_) => false,
-        }
-    }
-
     /// Return the raw token secret, if this credential carries one.
     ///
     /// Kerberos does not use bearer tokens, so it has no secret.
@@ -195,7 +194,7 @@ impl AuthContext {
     /// stored token, both of which are needed to pick the right material:
     ///
     /// - Auth0 + `flox_pat_` token: [`AuthContext::Pat`] — the token stays
-    ///   opaque and its identity is resolved lazily via `/me`.
+    ///   opaque and resolves its identity lazily through `resolve`.
     /// - Auth0 + any other token: must decode as a JWT →
     ///   [`AuthContext::Auth0`].
     /// - Auth0 + no token: `Auth0(None)` (not logged in).
@@ -203,18 +202,27 @@ impl AuthContext {
     ///   generator; returns `Kerberos(None)` (with a warning log) if the
     ///   ticket cannot be resolved. The token is not consumed.
     ///
-    /// `api_url` is the FloxHub API base an opaque token resolves its
-    /// identity against; the other materials do not use it.
+    /// `resolve_identity` supplies the identity behind an opaque token; it is
+    /// bound to the token's secret as a lazy, once-per-process resolution.
+    /// The other materials do not use it.
     pub fn from_mode(
         mode: &AuthnMode,
         token: Option<&str>,
-        api_url: &str,
+        resolve_identity: impl FnOnce(String) -> Result<UserIdentity, IdentityError>
+        + Send
+        + Sync
+        + 'static,
     ) -> Result<Self, FloxhubTokenError> {
         match mode {
             AuthnMode::Auth0 => match token {
-                Some(token) if token.starts_with(PAT_PREFIX) => Ok(AuthContext::Pat(
-                    PersonalAccessToken::new(token.to_string(), api_url.to_string()),
-                )),
+                Some(token) if token.starts_with(PAT_PREFIX) => {
+                    let secret = token.to_string();
+                    let identity = lazy_identity({
+                        let secret = secret.clone();
+                        move || resolve_identity(secret)
+                    });
+                    Ok(AuthContext::Pat(PersonalAccessToken::new(secret, identity)))
+                },
                 Some(token) => Ok(AuthContext::Auth0(Some(token.parse()?))),
                 None => Ok(AuthContext::Auth0(None)),
             },
@@ -242,9 +250,17 @@ impl std::fmt::Debug for AuthContext {
 mod tests {
     use std::str::FromStr;
 
-    use httpmock::MockServer;
+    use chrono::{Duration, Utc};
 
     use super::*;
+    use crate::identity::LazyIdentity;
+    use crate::identity::test_helpers::{
+        static_identity,
+        test_identity,
+        unauthorized_identity,
+        unreachable_identity,
+        unreachable_resolve,
+    };
     use crate::token::test_helpers::{
         FAKE_EXPIRED_TOKEN_WITH_SUB,
         FAKE_TOKEN,
@@ -281,31 +297,25 @@ mod tests {
         assert_eq!(AuthContext::Kerberos(None).user_subject(), None);
     }
 
-    #[test]
-    fn pat_handle_degrades_when_me_is_unreachable() {
-        let auth = AuthContext::Pat(PersonalAccessToken::new(
+    fn pat_with(identity: LazyIdentity) -> AuthContext {
+        AuthContext::Pat(PersonalAccessToken::new(
             "flox_pat_secret".to_string(),
-            // Nothing listens on this port: resolution fails, which is not fatal.
-            "http://127.0.0.1:1".to_string(),
-        ));
+            identity,
+        ))
+    }
+
+    #[test]
+    fn pat_handle_degrades_when_resolution_fails() {
+        let auth = pat_with(unreachable_identity());
 
         assert_eq!(auth.handle(), None);
         assert_eq!(auth.authenticated_handle().unwrap(), UNKNOWN_HANDLE);
     }
 
     #[test]
-    fn pat_handle_reports_expired_on_401() {
-        let server = MockServer::start();
-        server.mock(|when, then| {
-            when.method(httpmock::Method::GET)
-                .path("/api/v1/accounts/me");
-            then.status(401);
-        });
+    fn pat_handle_reports_expired_when_rejected() {
+        let auth = pat_with(unauthorized_identity());
 
-        let auth = AuthContext::Pat(PersonalAccessToken::new(
-            "flox_pat_revoked".to_string(),
-            server.base_url(),
-        ));
         assert!(matches!(
             auth.authenticated_handle(),
             Err(AuthFailure::TokenExpired)
@@ -313,11 +323,36 @@ mod tests {
     }
 
     #[test]
-    fn pat_authorization_header_is_bearer_secret() {
-        let auth = AuthContext::Pat(PersonalAccessToken::new(
-            "flox_pat_secret".to_string(),
-            "https://not_used".to_string(),
+    fn pat_handle_reports_expired_from_resolved_expiry() {
+        let identity = UserIdentity {
+            expires_at: Some(Utc::now() - Duration::hours(1)),
+            ..test_identity("testuser")
+        };
+        let auth = pat_with(static_identity(identity));
+
+        assert!(matches!(
+            auth.authenticated_handle(),
+            Err(AuthFailure::TokenExpired)
         ));
+        assert!(auth.is_expired());
+    }
+
+    #[test]
+    fn pat_getters_read_cache_after_resolution() {
+        let auth = pat_with(static_identity(test_identity("testuser")));
+
+        assert_eq!(auth.authenticated_handle().unwrap(), "testuser");
+        // The identity is now cached; the sync getters see it too.
+        assert_eq!(auth.handle(), Some("testuser"));
+        assert!(
+            !auth.is_expired(),
+            "an identity without expiry never expires"
+        );
+    }
+
+    #[test]
+    fn pat_authorization_header_is_bearer_secret() {
+        let auth = pat_with(unreachable_identity());
         let url = Url::parse("https://api.flox.dev").unwrap();
 
         assert_eq!(
@@ -327,35 +362,17 @@ mod tests {
     }
 
     #[test]
-    fn pat_getters_read_cache_after_resolution() {
-        let server = MockServer::start();
-        server.mock(|when, then| {
-            when.method(httpmock::Method::GET)
-                .path("/api/v1/accounts/me");
-            then.status(200).json_body(serde_json::json!({
-                "user_id": "auth0|123",
-                "handle": "testuser",
-                "expires_at": null,
-            }));
-        });
-
-        let auth = AuthContext::Pat(PersonalAccessToken::new(
-            "flox_pat_secret".to_string(),
-            server.base_url(),
-        ));
-
-        assert_eq!(auth.authenticated_handle().unwrap(), "testuser");
-        // The identity is now cached; the sync getter sees it too.
-        assert_eq!(auth.handle(), Some("testuser"));
+    fn pat_debug_redacts_the_secret() {
+        let auth = pat_with(unreachable_identity());
+        assert!(!format!("{auth:?}").contains("flox_pat_secret"));
     }
 
     #[test]
-    fn pat_debug_redacts_the_secret() {
-        let auth = AuthContext::Pat(PersonalAccessToken::new(
-            "flox_pat_secret".to_string(),
-            "https://not_used".to_string(),
-        ));
-        assert!(!format!("{auth:?}").contains("flox_pat_secret"));
+    fn jwt_getters_derive_from_claims() {
+        let auth = AuthContext::Auth0(Some(FAKE_TOKEN.parse().unwrap()));
+
+        assert_eq!(auth.handle(), Some("test"));
+        assert!(!auth.is_expired());
     }
 
     #[test]
@@ -363,7 +380,7 @@ mod tests {
         let auth = AuthContext::from_mode(
             &AuthnMode::Auth0,
             Some("flox_pat_abc123"),
-            "https://not_used",
+            unreachable_resolve,
         )
         .unwrap();
         let AuthContext::Pat(token) = auth else {
@@ -374,7 +391,7 @@ mod tests {
 
     #[test]
     fn from_mode_routes_jwt_to_auth0() {
-        let auth = AuthContext::from_mode(&AuthnMode::Auth0, Some(FAKE_TOKEN), "https://not_used")
+        let auth = AuthContext::from_mode(&AuthnMode::Auth0, Some(FAKE_TOKEN), unreachable_resolve)
             .unwrap();
         let AuthContext::Auth0(Some(token)) = auth else {
             panic!("expected Auth0, got {auth:?}");
@@ -384,13 +401,13 @@ mod tests {
 
     #[test]
     fn from_mode_without_token_is_not_logged_in() {
-        let auth = AuthContext::from_mode(&AuthnMode::Auth0, None, "https://not_used").unwrap();
+        let auth = AuthContext::from_mode(&AuthnMode::Auth0, None, unreachable_resolve).unwrap();
         assert!(matches!(auth, AuthContext::Auth0(None)));
     }
 
     #[test]
     fn from_mode_rejects_garbage() {
-        AuthContext::from_mode(&AuthnMode::Auth0, Some("not-a-token"), "https://not_used")
+        AuthContext::from_mode(&AuthnMode::Auth0, Some("not-a-token"), unreachable_resolve)
             .unwrap_err();
     }
 }

@@ -552,7 +552,7 @@ impl FloxArgs {
             .as_deref()
             .filter(|s| !s.is_empty());
 
-        match AuthContext::from_mode(authn_mode, raw, api_url) {
+        match AuthContext::from_mode(authn_mode, raw, floxhub_client::identity_resolver(api_url)) {
             Err(FloxhubTokenError::InvalidToken(token_error)) => {
                 // The prompt hook must neither print nor rewrite the user's
                 // config; the next user-invoked command surfaces and removes

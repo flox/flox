@@ -1,9 +1,7 @@
 //! [`PersonalAccessToken`] — an opaque `flox_pat_` token whose identity is
-//! resolved lazily via `/me` and cached in memory.
+//! resolved lazily and cached in memory.
 
-use std::sync::{Arc, OnceLock};
-
-use crate::accounts::{self, MeError, UserIdentity};
+use crate::identity::{IdentityError, LazyIdentity, UserIdentity};
 
 /// Prefix identifying a FloxHub personal access token.
 pub const PAT_PREFIX: &str = "flox_pat_";
@@ -11,30 +9,24 @@ pub const PAT_PREFIX: &str = "flox_pat_";
 /// An opaque token (`flox_pat_…` personal access token) authenticating a user
 /// with FloxHub.
 ///
-/// The CLI cannot decode identity from an opaque token. Identity (`handle`,
-/// `expires_at`) is fetched lazily from `GET {api_url}/api/v1/accounts/me` by
-/// [`Self::resolve_identity`] and cached in memory for the lifetime of the
-/// process; clones share the cache. Until resolution succeeds, [`Self::handle`]
-/// returns `None` and [`Self::is_expired`] returns `false` — the server's 401
-/// is the authoritative backstop.
+/// The CLI cannot decode identity from an opaque token. Identity is a
+/// [`LazyIdentity`] bound at construction: resolved on first use by
+/// [`Self::resolve_identity`], at most once per process, shared across
+/// clones. Until resolution succeeds, [`Self::handle`] returns `None` and
+/// [`Self::is_expired`] returns `false` — the server's 401 is the
+/// authoritative backstop.
 #[derive(Clone)]
 pub struct PersonalAccessToken {
     /// The entire token as a string.
     token: String,
-    /// Base URL of the FloxHub API this token authenticates against.
-    api_url: String,
-    /// Identity resolved from `/me`; shared across clones.
-    identity: Arc<OnceLock<UserIdentity>>,
+    /// The lazily resolved identity behind the token.
+    identity: LazyIdentity,
 }
 
 impl PersonalAccessToken {
     /// Create an opaque token from a string; nothing is parsed or validated.
-    pub fn new(token: String, api_url: String) -> Self {
-        PersonalAccessToken {
-            token,
-            api_url,
-            identity: Arc::new(OnceLock::new()),
-        }
+    pub fn new(token: String, identity: LazyIdentity) -> Self {
+        PersonalAccessToken { token, identity }
     }
 
     /// Return the token as a string.
@@ -42,125 +34,107 @@ impl PersonalAccessToken {
         &self.token
     }
 
-    /// Return the cached handle; `None` until [`Self::resolve_identity`]
+    /// Return the resolved handle; `None` until [`Self::resolve_identity`]
     /// has succeeded.
     pub fn handle(&self) -> Option<&str> {
-        self.identity.get().map(|identity| identity.handle.as_str())
+        std::sync::LazyLock::get(&self.identity)
+            .and_then(|resolved| resolved.as_ref().ok())
+            .map(|identity| identity.handle.as_str())
     }
 
-    /// Whether the cached `expires_at` is in the past.
+    /// Whether the resolved `expires_at` is in the past.
     ///
     /// `false` when unresolved or when the token never expires.
     pub fn is_expired(&self) -> bool {
-        match self.identity.get().and_then(|identity| identity.expires_at) {
+        let expires_at = std::sync::LazyLock::get(&self.identity)
+            .and_then(|resolved| resolved.as_ref().ok())
+            .and_then(|identity| identity.expires_at);
+        match expires_at {
             Some(expires_at) => expires_at < chrono::Utc::now(),
             None => false,
         }
     }
 
-    /// Fetch and cache the identity from `/me`, blocking the calling thread;
-    /// at most one successful fetch per process. Errors are returned but not
-    /// cached, so a later call retries.
-    pub fn resolve_identity(&self) -> Result<&UserIdentity, MeError> {
-        if let Some(identity) = self.identity.get() {
-            return Ok(identity);
-        }
-        // The fetch runs on its own thread with its own runtime so that this
-        // can block safely from both sync and async (tokio) callers.
-        let identity = std::thread::scope(|scope| {
-            scope
-                .spawn(|| {
-                    tokio::runtime::Builder::new_current_thread()
-                        .enable_all()
-                        .build()
-                        .expect("failed to build runtime for /me request")
-                        .block_on(accounts::fetch_me(&self.api_url, &self.token))
-                })
-                .join()
-                .expect("/me request thread panicked")
-        })?;
-        // Concurrent first calls may each fetch; the first write wins and
-        // every later call returns the cached identity from the check above.
-        Ok(self.identity.get_or_init(|| identity))
+    /// Resolve the identity, blocking the calling thread on first use. The
+    /// outcome — success or failure — is resolved at most once per process.
+    pub fn resolve_identity(&self) -> Result<&UserIdentity, IdentityError> {
+        std::sync::LazyLock::force(&self.identity)
+            .as_ref()
+            .map_err(Clone::clone)
     }
 }
 
 impl std::fmt::Debug for PersonalAccessToken {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("PersonalAccessToken")
-            .field("identity", &self.identity.get())
+            .field("identity", &std::sync::LazyLock::get(&self.identity))
             .finish_non_exhaustive()
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use httpmock::MockServer;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
     use super::*;
-
-    fn identity_response(handle: &str, expires_at: Option<&str>) -> serde_json::Value {
-        serde_json::json!({
-            "user_id": "auth0|123",
-            "handle": handle,
-            "expires_at": expires_at,
-        })
-    }
+    use crate::identity::lazy_identity;
+    use crate::identity::test_helpers::{static_identity, test_identity, unreachable_identity};
 
     #[test]
     fn opaque_token_resolves_and_caches_identity() {
-        let server = MockServer::start();
-        let mock = server.mock(|when, then| {
-            when.method(httpmock::Method::GET)
-                .path("/api/v1/accounts/me");
-            then.status(200)
-                .json_body(identity_response("testuser", Some("2027-01-01T00:00:00Z")));
-        });
-
-        let token = PersonalAccessToken::new("flox_pat_secret".to_string(), server.base_url());
+        let calls = Arc::new(AtomicUsize::new(0));
+        let counted = calls.clone();
+        let token = PersonalAccessToken::new(
+            "flox_pat_secret".to_string(),
+            lazy_identity(move || {
+                counted.fetch_add(1, Ordering::SeqCst);
+                Ok(test_identity("testuser"))
+            }),
+        );
         assert_eq!(token.handle(), None, "handle is unknown before resolution");
 
         token.resolve_identity().unwrap();
-        // A clone shares the cache, and a second resolve does not refetch.
+        // A clone shares the lazy identity, and a second resolve does not
+        // re-resolve.
         token.clone().resolve_identity().unwrap();
 
-        mock.assert_calls(1);
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
         assert_eq!(token.handle(), Some("testuser"));
     }
 
     #[test]
-    fn opaque_token_resolve_error_is_not_cached() {
-        let server = MockServer::start();
-        let mock = server.mock(|when, then| {
-            when.method(httpmock::Method::GET)
-                .path("/api/v1/accounts/me");
-            then.status(500);
-        });
+    fn opaque_token_resolution_failure_is_final_for_the_process() {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let counted = calls.clone();
+        let token = PersonalAccessToken::new(
+            "flox_pat_secret".to_string(),
+            lazy_identity(move || {
+                counted.fetch_add(1, Ordering::SeqCst);
+                Err(IdentityError::Other("server unreachable".to_string()))
+            }),
+        );
 
-        let token = PersonalAccessToken::new("flox_pat_secret".to_string(), server.base_url());
         token
             .resolve_identity()
-            .expect_err("a 500 from /me should fail resolution");
+            .expect_err("an unreachable server should fail resolution");
         token
             .resolve_identity()
-            .expect_err("the error must not be cached; the retry hits /me again");
+            .expect_err("the outcome is cached; the failure persists");
 
-        // Both attempts hit the server: failures don't poison the cache.
-        mock.assert_calls(2);
+        // The resolution function ran exactly once; the failure is cached.
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
         assert_eq!(token.handle(), None);
     }
 
     #[test]
-    fn opaque_token_expiry_reads_the_cache() {
-        let server = MockServer::start();
-        server.mock(|when, then| {
-            when.method(httpmock::Method::GET)
-                .path("/api/v1/accounts/me");
-            then.status(200)
-                .json_body(identity_response("testuser", Some("2000-01-01T00:00:00Z")));
-        });
-
-        let token = PersonalAccessToken::new("flox_pat_secret".to_string(), server.base_url());
+    fn opaque_token_expiry_reads_the_resolved_identity() {
+        let identity = UserIdentity {
+            expires_at: Some(chrono::Utc::now() - chrono::Duration::hours(1)),
+            ..test_identity("testuser")
+        };
+        let token =
+            PersonalAccessToken::new("flox_pat_secret".to_string(), static_identity(identity));
         assert!(
             !token.is_expired(),
             "unresolved token is not reported expired"
@@ -172,25 +146,17 @@ mod tests {
 
     #[test]
     fn opaque_token_without_expiry_never_expires() {
-        let server = MockServer::start();
-        server.mock(|when, then| {
-            when.method(httpmock::Method::GET)
-                .path("/api/v1/accounts/me");
-            then.status(200)
-                .json_body(identity_response("testuser", None));
-        });
-
-        let token = PersonalAccessToken::new("flox_pat_secret".to_string(), server.base_url());
+        let token = PersonalAccessToken::new(
+            "flox_pat_secret".to_string(),
+            static_identity(test_identity("testuser")),
+        );
         token.resolve_identity().unwrap();
         assert!(!token.is_expired());
     }
 
     #[test]
     fn opaque_token_debug_redacts_the_secret() {
-        let token = PersonalAccessToken::new(
-            "flox_pat_secret".to_string(),
-            "https://not_used".to_string(),
-        );
+        let token = PersonalAccessToken::new("flox_pat_secret".to_string(), unreachable_identity());
         assert!(!format!("{token:?}").contains("flox_pat_secret"));
     }
 }
