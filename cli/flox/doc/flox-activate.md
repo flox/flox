@@ -69,6 +69,17 @@ are set to the appropriate values for the environment in which the shell
 hook was defined.
 See [`manifest.toml(5)`](./manifest.toml.md) for more details on shell hooks.
 
+## Package-provided startup scripts
+
+Some packages ship startup scripts in their `etc/profile.d` directory.
+When such a package is installed to an environment,
+those scripts are linked into the environment's `etc/profile.d` directory,
+and activation sources every `*.sh` script found there in lexical order,
+alongside the startup scripts provided by Flox itself.
+These scripts run before the environment's `[hook]` and `[profile]` scripts.
+Activations in "run" mode source only the startup scripts provided by Flox,
+not those provided by packages.
+
 To reverse activation,
 run [`flox-deactivate(1)`](./flox-deactivate.md).
 Inside a `flox activate` subshell,
