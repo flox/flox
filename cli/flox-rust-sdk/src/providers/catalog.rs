@@ -585,9 +585,13 @@ pub mod test_helpers {
             mock_mode: FloxhubMockMode::Replay(path.as_ref().to_path_buf()),
             auth_context: AuthContext::from_mode(&AuthnMode::Auth0, None),
             user_agent: None,
-            // Replay-only helper: never read `_FLOX_RESOLVE_STABILITY` here.
-            // Existing cassettes were recorded without a stability key, so
-            // setting it during replay would break every match today.
+            // Replays the mk_data-generated cassette store
+            // (test_data/generated/resolve/*.yaml), recorded without a
+            // stability key. Stays hardcoded `None` until that store's
+            // first LTS force-regen; flip to
+            // `FloxhubClientConfig::stability_from_env()` in that same
+            // change (see the Justfile `gen-unit-data-no-publish` comment
+            // for the full atomic flip checklist).
             stability: None,
         };
         FloxhubClient::new(catalog_config).expect("failed to create catalog client")

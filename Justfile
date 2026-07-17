@@ -158,20 +158,31 @@ gen-unit-data-no-publish force="":
 
     set -euo pipefail
 
-    # Pin resolve requests to the LTS stability channel so future force-regens
-    # are not subject to version drift across nixpkgs revisions.
-    # `FloxhubClientConfig::stability` (applied in resolve()) reads this var
-    # once at client construction and is symmetric between record and
-    # replay by construction, so it is NOT safe to add this export to any
-    # test-running recipe/CI path (unit-tests, ut, impure-tests) yet:
-    # every cassette committed today was recorded without a stability key,
-    # and replaying against them with this var set would break request
-    # matching (httpmock's playback matcher matches on the recorded `when`
-    # body — the same trap this var would hit in reverse). The flip to also
-    # set this var for test-running contexts happens atomically in the same
-    # future commit as the first LTS force-regen, gated on HUB-119
-    # (flox/floxhub#1908) reaching production.
-    export _FLOX_RESOLVE_STABILITY="lts"
+    # `_FLOX_RESOLVE_STABILITY` / `FloxhubClientConfig::stability` (this PR)
+    # is mechanism only — NOT pinned yet, deliberately no export here. There
+    # are two committed cassette stores (`test_data/unit_test_generated/`,
+    # replayed by `auto_recording_client_inner`; and
+    # `test_data/generated/resolve/`, replayed by `catalog_replay_client`),
+    # and neither was recorded with a stability key. httpmock's playback
+    # matcher matches on the recorded `when` body, so setting this var
+    # anywhere it reaches a record or replay path before both stores are
+    # regenerated together would strand cassette matches in one direction
+    # or the other.
+    #
+    # The first LTS pin lands as a single atomic future change, gated on
+    # HUB-119 (flox/floxhub#1908) reaching production:
+    #   1. Set _FLOX_RESOLVE_STABILITY=lts here, in
+    #      test_data/config.toml [vars], and in the test-running/replay
+    #      contexts (unit-tests, ut, impure-tests).
+    #   2. Flip `catalog_replay_client` (cli/flox-rust-sdk/src/providers/
+    #      catalog.rs) from hardcoded `stability: None` to
+    #      `FloxhubClientConfig::stability_from_env()`.
+    #      `auto_recording_client_inner` already reads the env var and
+    #      needs no change.
+    #   3. Force-regenerate both cassette stores: unit_test_generated via
+    #      `just gen-unit-data-no-publish force=true`, and the mk_data
+    #      store via `just md`.
+    #   4. Verify both replay suites are green.
 
     if [ "{{ force }}" = "true" ]; then
         export _FLOX_UNIT_TEST_RECORD="force"

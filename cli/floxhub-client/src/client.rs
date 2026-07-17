@@ -295,10 +295,11 @@ impl CatalogClientTrait for FloxhubClient {
                 .collect::<Result<Vec<api_types::PackageGroup>, _>>()?
                 .into_iter()
                 .map(|mut group| {
-                    // Apply the client's stability pin to every outgoing
-                    // group. Test/regen-only — see
-                    // `FloxhubClientConfig::stability`.
-                    group.stability = self.config.stability.clone();
+                    // Fall back to the client's stability pin when a group
+                    // doesn't carry its own value. A per-group value (once
+                    // plumbed in) always wins over the config default.
+                    // Test/regen-only — see `FloxhubClientConfig::stability`.
+                    group.stability = group.stability.or_else(|| self.config.stability.clone());
                     group
                 })
                 .collect(),

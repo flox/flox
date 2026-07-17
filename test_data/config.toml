@@ -1,6 +1,3 @@
-[vars]
-_FLOX_RESOLVE_STABILITY = "lts"
-
 [resolve.empty]
 # Not actually a resolve response, just have to put it somewhere
 skip_if_output_exists = "empty.yaml"
