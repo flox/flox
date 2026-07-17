@@ -106,7 +106,7 @@ alias flox='$FLOX_BIN'                 # the prototype binary
 export FLOX_FEATURES_SANDBOX_ACTIVATE=true
 export FLOX_FEATURES_AUTO_ACTIVATE=true
 export GITHUB_TOKEN=ghp-demo-FAKE      # for the token-isolation beat
-export FLOX_VERSION="1.13.1-g$(git -C /path/to/flox rev-parse --short origin/prototype/sandboxed-activation-openshell)"
+export FLOX_VERSION=`flox --version`
 ```
 
 Ensure the prompt hook is in your shell's RC:
@@ -115,12 +115,12 @@ Ensure the prompt hook is in your shell's RC:
 eval "$(flox hook-env --shell bash --shell-pid $$)"
 ```
 
-> The `FLOX_VERSION` export matters for `target/debug` builds: they
-> report a plain release version, which routes the in-VM builder to
-> the release tag — and the release builder doesn't know the
-> OpenShell compat layer. The `-g<sha>` suffix routes it to the
-> frozen builder pin on this branch. (A nix-built prototype flox
-> reports a dev version on its own and needs no override.)
+> The `FLOX_VERSION` export pins the bake's in-VM builder: a
+> `-g<sha>` suffix in the version routes the builder to that exact
+> rev (this branch's frozen builder pin), while a plain release
+> version routes it to the release tag — and the release builder
+> doesn't know the OpenShell compat layer. Exporting the running
+> binary's own version keeps the routing pinned to this branch.
 
 **Pre-bake off-camera.** The first bake takes ~5–15 min (the builder
 VM cross-compiles the pinned flox rev on first use; later bakes
