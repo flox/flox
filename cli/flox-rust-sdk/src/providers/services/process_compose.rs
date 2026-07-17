@@ -8,6 +8,7 @@
 use std::collections::BTreeMap;
 use std::env;
 use std::io::{BufRead, BufReader, Read};
+use std::num::NonZeroU32;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::LazyLock;
@@ -188,12 +189,17 @@ where
 pub struct ProcessShutdown {
     #[cfg_attr(test, proptest(strategy = "alphanum_string(5)"))]
     pub command: String,
+    /// How long to wait for the shutdown command before sending SIGKILL.
+    /// When unset, process-compose applies its own default of 10 seconds.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub timeout_seconds: Option<NonZeroU32>,
 }
 
 impl From<ServiceShutdown> for ProcessShutdown {
     fn from(value: ServiceShutdown) -> Self {
         Self {
             command: value.command,
+            timeout_seconds: None,
         }
     }
 }
@@ -1091,6 +1097,38 @@ mod tests {
                 command: {sleep} infinity
               foo:
                 command: bar
+        ", sleep = &*SLEEP_BIN });
+    }
+
+    #[test]
+    fn serializes_shutdown_with_timeout_seconds() {
+        let config_in = ProcessComposeConfig {
+            processes: BTreeMap::from([("foo".to_string(), ProcessConfig {
+                command: String::from("bar"),
+                vars: None,
+                is_daemon: Some(true),
+                shutdown: Some(ProcessShutdown {
+                    command: String::from("stop bar"),
+                    timeout_seconds: Some(NonZeroU32::new(30).unwrap()),
+                }),
+            })]),
+            ..Default::default()
+        };
+        let config_out = serde_yaml::to_string(&config_in).unwrap();
+        assert_eq!(config_out, formatdoc! { "
+            log_level: debug
+            log_configuration:
+              no_color: true
+            disable_env_expansion: true
+            processes:
+              flox_never_exit:
+                command: {sleep} infinity
+              foo:
+                command: bar
+                is_daemon: true
+                shutdown:
+                  command: stop bar
+                  timeout_seconds: 30
         ", sleep = &*SLEEP_BIN });
     }
 
