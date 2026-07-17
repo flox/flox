@@ -1,0 +1,12 @@
+when:
+  method: GET
+  path: /api/v1/accounts/me
+  header:
+  - name: authorization
+    value: bearer flox_pat_test-secret
+then:
+  status: 200
+  header:
+  - name: content-type
+    value: application/json
+  body: '{"user_id":"pat|test","handle":"owner","expires_at":null}'

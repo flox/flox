@@ -7,13 +7,14 @@
 //! [`AuthContext::from_mode`].
 //!
 //! This module carries no transport: identity resolution for opaque tokens
-//! is injected as a resolution function bound into a [`LazyIdentity`], with
-//! the production implementation in [`crate::accounts`].
+//! is passed as an argument at the point of use
+//! ([`AuthContext::authenticated_handle`]), with the production `/me`
+//! resolution supplied by `FloxhubClient::authenticated_handle`.
 //!
 //! One file per type:
 //! - [`auth_context`]: [`AuthContext`] and its failure types
 //! - [`authn_mode`]: the configured [`AuthnMode`]
-//! - [`identity`]: [`UserIdentity`] and the [`LazyIdentity`] contract
+//! - [`identity`]: [`UserIdentity`] and its resolution errors
 //! - [`token`]: [`FloxhubToken`] (decoded Auth0 JWT) and
 //!   [`PersonalAccessToken`] (opaque `flox_pat_` token with lazy identity
 //!   resolution)
@@ -21,13 +22,13 @@
 
 mod auth_context;
 mod authn_mode;
-mod identity;
+pub(crate) mod identity;
 mod kerberos;
 mod token;
 
 pub use auth_context::{AuthContext, AuthFailure, AuthHeaderError, UNKNOWN_HANDLE};
 pub use authn_mode::AuthnMode;
-pub use identity::{IdentityError, LazyIdentity, UserIdentity, lazy_identity};
+pub use identity::{IdentityError, UserIdentity};
 pub use kerberos::{KerberosMaterial, TokenGenerator};
 pub use token::{FloxhubToken, FloxhubTokenError, PAT_PREFIX, PersonalAccessToken};
 

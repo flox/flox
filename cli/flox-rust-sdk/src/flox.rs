@@ -7,13 +7,15 @@ use flox_core::floxhub::Floxhub;
 use flox_core::vars::FLOX_VERSION_STRING;
 pub use floxhub_client::{
     AuthContext,
+    AuthFailure,
     AuthnMode,
     FloxhubToken,
     FloxhubTokenError,
     PAT_PREFIX,
     PersonalAccessToken,
+    UserIdentity,
 };
-use floxhub_client::{FloxhubClient, FloxhubClientError};
+use floxhub_client::{FloxhubClient, FloxhubClientError, IdentityError, UNKNOWN_HANDLE};
 use url::Url;
 use uuid::Uuid;
 
@@ -93,6 +95,42 @@ impl Flox {
             config.auth_context = auth_context;
         })?;
         Ok(())
+    }
+
+    /// The identity behind the current credential — the one uniform way to
+    /// answer "who is authenticated": JWT claims for Auth0, `GET
+    /// /api/v1/accounts/me` for a personal access token (blocking on first
+    /// use, cached on the token for the process), and the principal for
+    /// Kerberos.
+    ///
+    /// Expiry is reported *in* the identity ([`UserIdentity::is_expired`]) —
+    /// what expiry means is the caller's decision. `None` means there is no
+    /// identity: no credential, no Kerberos ticket, or a personal access
+    /// token the server rejected. An *unresolvable* personal access token
+    /// (e.g. FloxHub unreachable) is not `None`: the identity degrades to
+    /// [`UNKNOWN_HANDLE`] — the server stays the authority for whether the
+    /// token actually authenticates.
+    pub fn get_identity(&self) -> Option<UserIdentity> {
+        match &self.auth_context {
+            AuthContext::Auth0(Some(token)) => Some(UserIdentity {
+                handle: token.handle().to_string(),
+                expires_at: Some(token.expires_at()),
+            }),
+            AuthContext::Auth0(None) => None,
+            AuthContext::Pat(token) => match self.floxhub_client.resolve_identity(token) {
+                Err(IdentityError::Unauthorized) => None,
+                Err(_) => Some(UserIdentity {
+                    handle: UNKNOWN_HANDLE.to_string(),
+                    expires_at: None,
+                }),
+                Ok(identity) => Some(identity),
+            },
+            AuthContext::Kerberos(Some(material)) => Some(UserIdentity {
+                handle: material.principal.clone(),
+                expires_at: None,
+            }),
+            AuthContext::Kerberos(None) => None,
+        }
     }
 }
 
@@ -228,12 +266,8 @@ pub mod test_helpers {
             Url::from_directory_path(mock_floxhub_git_dir).unwrap()
         });
 
-        let auth_context = AuthContext::from_mode(
-            &AuthnMode::default(),
-            None,
-            floxhub_client::test_helpers::unreachable_resolve,
-        )
-        .expect("no token to parse");
+        let auth_context =
+            AuthContext::from_mode(&AuthnMode::default(), None).expect("no token to parse");
 
         let flox = Flox {
             system: env!("NIX_TARGET_SYSTEM").to_string(),
@@ -268,6 +302,7 @@ pub mod test_helpers {
 pub mod tests {
     use floxhub_client::test_helpers::{FAKE_EXPIRED_TOKEN, FAKE_TOKEN};
 
+    use super::test_helpers::flox_instance;
     use super::*;
 
     #[tokio::test]
@@ -286,5 +321,36 @@ pub mod tests {
             !token.secret().is_empty(),
             "secret() should still return the token string for expired tokens"
         );
+    }
+
+    #[test]
+    fn get_identity_without_token_is_none() {
+        let (flox, _temp_dir) = flox_instance();
+        assert_eq!(flox.get_identity(), None);
+    }
+
+    #[test]
+    fn get_identity_derives_jwt_identity_from_claims() {
+        let (mut flox, _temp_dir) = flox_instance();
+        let token: FloxhubToken = FAKE_TOKEN.parse().unwrap();
+        let expires_at = token.expires_at();
+        let _ = flox.set_auth_context(AuthContext::Auth0(Some(token)));
+
+        assert_eq!(flox.get_identity().unwrap(), UserIdentity {
+            handle: "test".to_string(),
+            expires_at: Some(expires_at),
+        });
+    }
+
+    #[test]
+    fn get_identity_reports_expiry_in_the_identity() {
+        let (mut flox, _temp_dir) = flox_instance();
+        let _ = flox.set_auth_context(AuthContext::Auth0(Some(
+            FAKE_EXPIRED_TOKEN.parse().unwrap(),
+        )));
+
+        let identity = flox.get_identity().unwrap();
+        assert_eq!(identity.handle, "test");
+        assert!(identity.is_expired(), "expiry is data, not an error");
     }
 }

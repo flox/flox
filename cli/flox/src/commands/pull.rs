@@ -8,7 +8,7 @@ use flox_events::{CliEnvironmentPayload, EnvDetail, EventKind, EventsHub};
 use flox_manifest::interfaces::{AsLatestSchema, AsWritableManifest, WriteManifest};
 use flox_manifest::raw::SyncTypedToRaw;
 use flox_manifest::{Manifest, Migrated};
-use flox_rust_sdk::flox::Flox;
+use flox_rust_sdk::flox::{AuthContext, Flox};
 use flox_rust_sdk::models::environment::floxmeta_branch::FloxmetaBranchError;
 use flox_rust_sdk::models::environment::generations::{GenerationId, GenerationsExt};
 use flox_rust_sdk::models::environment::managed_environment::{
@@ -673,8 +673,14 @@ impl Pull {
             .map(|u| u == env_ref.owner().as_str())
             .unwrap_or_default();
 
-        // Check if the token is expired - this might be why authentication failed
-        let token_expired = flox.auth_context.is_expired();
+        // Check if the token is expired (resolving a personal access token's
+        // identity if needed) - this might be why authentication failed.
+        let token_expired = match flox.get_identity() {
+            Some(identity) => identity.is_expired(),
+            // A personal access token with no identity was rejected by the
+            // server; other kinds simply have no credential to expire.
+            None => matches!(&flox.auth_context, AuthContext::Pat(_)),
+        };
 
         let message = format!("The environment {env_ref} does not exist.");
 

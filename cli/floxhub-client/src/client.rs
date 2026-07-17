@@ -29,8 +29,8 @@ use tracing::{debug, instrument};
 use url::Url;
 
 use crate::MapApiErrorExt;
-use crate::accounts::AccountsApiClient;
-use crate::auth::AuthContext;
+use crate::accounts::{AccountsApiClient, MeError};
+use crate::auth::{AuthContext, IdentityError, PersonalAccessToken, UserIdentity};
 use crate::config::FloxhubClientConfig;
 use crate::error::{FloxhubClientError, ResolveError, SearchError, VersionsError};
 use crate::mock::MockGuard;
@@ -776,6 +776,51 @@ where
 }
 
 // ---------------------------------------------------------------------------
+// PAT identity resolution
+// ---------------------------------------------------------------------------
+
+impl FloxhubClient {
+    /// Resolve the identity behind a personal access token from
+    /// `GET /api/v1/accounts/me`, blocking the calling thread. The outcome —
+    /// success or failure — is cached on the token once per process.
+    ///
+    /// This is the only auth operation that needs a client; every other
+    /// credential kind derives its identity locally. Callers holding a
+    /// [`Flox`] should use its uniform `Flox::get_identity` instead.
+    pub fn resolve_identity(
+        &self,
+        token: &PersonalAccessToken,
+    ) -> Result<UserIdentity, IdentityError> {
+        crate::auth::identity::resolve_and_cache(token.secret(), |secret| {
+            fetch_me_blocking(self, secret).map_err(|err| match err {
+                MeError::Unauthorized => IdentityError::Unauthorized,
+                other => IdentityError::Other(other.to_string()),
+            })
+        })
+        .inspect_err(|err| debug!(%err, "could not resolve identity"))
+    }
+}
+
+/// Fetch the identity behind `token` from `/me`, blocking the calling thread.
+///
+/// The request runs on its own thread with its own runtime so that it can
+/// block safely from both sync and async (tokio) callers.
+pub fn fetch_me_blocking(client: &FloxhubClient, token: &str) -> Result<UserIdentity, MeError> {
+    std::thread::scope(|scope| {
+        scope
+            .spawn(|| {
+                tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                    .expect("failed to build runtime for /me request")
+                    .block_on(client.accounts().me(token))
+            })
+            .join()
+            .expect("/me request thread panicked")
+    })
+}
+
+// ---------------------------------------------------------------------------
 // Shared HTTP client construction helpers (pub(crate) for factory module)
 // ---------------------------------------------------------------------------
 
@@ -889,12 +934,8 @@ pub mod test_helpers {
             base_url: url.to_string(),
             extra_headers: Default::default(),
             mock_mode: Default::default(),
-            auth_context: AuthContext::from_mode(
-                &Default::default(),
-                None,
-                crate::auth::test_helpers::unreachable_resolve,
-            )
-            .expect("no token to parse"),
+            auth_context: AuthContext::from_mode(&Default::default(), None)
+                .expect("no token to parse"),
             user_agent: None,
             stability: None,
         }
@@ -928,6 +969,67 @@ pub mod tests {
     use super::test_helpers::client_config;
     use super::*;
     const SENTRY_TRACE_HEADER: &str = "sentry-trace";
+
+    #[test]
+    fn resolve_identity_fetches_and_caches_via_me() {
+        let server = MockServer::start();
+        let mock = server.mock(|when, then| {
+            when.method(httpmock::Method::GET)
+                .path("/api/v1/accounts/me")
+                .header("authorization", "bearer flox_pat_client-cache-test");
+            then.status(200).json_body(json!({
+                "user_id": "pat|test",
+                "handle": "testuser",
+                "expires_at": null,
+            }));
+        });
+
+        let client = FloxhubClient::new(client_config(&server.base_url())).unwrap();
+        let token = PersonalAccessToken::new("flox_pat_client-cache-test".to_string());
+
+        let identity = client.resolve_identity(&token).unwrap();
+        assert_eq!(identity.handle, "testuser");
+        // A second resolve reads the cache instead of the server.
+        client.resolve_identity(&token).unwrap();
+        mock.assert_calls(1);
+    }
+
+    #[test]
+    fn resolve_identity_maps_401_to_unauthorized() {
+        let server = MockServer::start();
+        server.mock(|when, then| {
+            when.method(httpmock::Method::GET)
+                .path("/api/v1/accounts/me");
+            then.status(401)
+                .json_body(json!({"detail": "unauthorized"}));
+        });
+
+        let client = FloxhubClient::new(client_config(&server.base_url())).unwrap();
+        let token = PersonalAccessToken::new("flox_pat_client-401-test".to_string());
+
+        assert!(matches!(
+            client.resolve_identity(&token),
+            Err(IdentityError::Unauthorized)
+        ));
+    }
+
+    #[test]
+    fn resolve_identity_maps_other_failures_to_other() {
+        let server = MockServer::start();
+        server.mock(|when, then| {
+            when.method(httpmock::Method::GET)
+                .path("/api/v1/accounts/me");
+            then.status(500);
+        });
+
+        let client = FloxhubClient::new(client_config(&server.base_url())).unwrap();
+        let token = PersonalAccessToken::new("flox_pat_client-500-test".to_string());
+
+        assert!(matches!(
+            client.resolve_identity(&token),
+            Err(IdentityError::Other(_))
+        ));
+    }
 
     #[tokio::test]
     async fn resolve_response_with_new_message_type() {

@@ -70,6 +70,12 @@ impl FloxhubToken {
         };
         self.token_data.exp < now
     }
+
+    /// The wall-clock expiry of the token, from the `exp` claim.
+    pub fn expires_at(&self) -> chrono::DateTime<chrono::Utc> {
+        chrono::DateTime::from_timestamp(self.token_data.exp as i64, 0)
+            .expect("the exp claim is a valid unix timestamp")
+    }
 }
 
 impl Serialize for FloxhubToken {

@@ -199,7 +199,6 @@ fn build_client(config: &Config, floxhub_token: Option<String>) -> Result<Floxhu
     let auth_context = AuthContext::from_mode(
         &effective_authn_mode(&config.flox.floxhub_authn_mode),
         floxhub_token.as_deref(),
-        floxhub_client::identity_resolver(&catalog_url),
     )?;
 
     let config = FloxhubClientConfig {

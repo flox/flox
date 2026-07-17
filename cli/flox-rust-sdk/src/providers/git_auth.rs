@@ -120,10 +120,7 @@ mod tests {
 
     #[test]
     fn pat_sets_credential_helper_with_secret() {
-        let token = floxhub_client::PersonalAccessToken::new(
-            "flox_pat_secret".to_string(),
-            floxhub_client::test_helpers::unreachable_identity(),
-        );
+        let token = floxhub_client::PersonalAccessToken::new("flox_pat_secret".to_string());
         let auth = AuthContext::Pat(token.clone());
         let mut options = GitCommandOptions::default();
 

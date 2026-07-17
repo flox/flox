@@ -356,8 +356,7 @@ impl FloxArgs {
             }
         }
 
-        let credential =
-            self.resolve_auth_context(&config, &authn_mode, &floxhub.api_url_str(), &stores);
+        let credential = self.resolve_auth_context(&config, &authn_mode, &stores);
 
         if let Some(events_client) = build_events_client(
             &config,
@@ -543,7 +542,6 @@ impl FloxArgs {
         &self,
         config: &Config,
         authn_mode: &AuthnMode,
-        api_url: &str,
         stores: &CredentialStores,
     ) -> AuthContext {
         let raw = config
@@ -552,7 +550,7 @@ impl FloxArgs {
             .as_deref()
             .filter(|s| !s.is_empty());
 
-        match AuthContext::from_mode(authn_mode, raw, floxhub_client::identity_resolver(api_url)) {
+        match AuthContext::from_mode(authn_mode, raw) {
             Err(FloxhubTokenError::InvalidToken(token_error)) => {
                 // The prompt hook must neither print nor rewrite the user's
                 // config; the next user-invoked command surfaces and removes
@@ -1592,7 +1590,7 @@ pub(super) async fn ensure_environment_trust(
     }
 
     let handle = flox.auth_context.handle();
-    if handle == Some(env_ref.owner().as_str()) {
+    if handle.as_deref() == Some(env_ref.owner().as_str()) {
         debug!("{env_prefixed_name} is trusted by auth handle");
         return Ok(());
     }
@@ -1730,8 +1728,18 @@ pub(super) async fn ensure_environment_trust(
 pub(super) async fn ensure_auth(flox: &mut Flox) -> Result<String> {
     use floxhub_client::AuthFailure;
 
-    match flox.auth_context.authenticated_handle() {
-        Ok(handle) => Ok(handle.to_string()),
+    // Gating authentication: classify a missing or expired identity into
+    // the failure it presents to the user.
+    let identity = match (flox.get_identity(), &flox.auth_context) {
+        (Some(identity), _) if identity.is_expired() => Err(AuthFailure::TokenExpired),
+        (Some(identity), _) => Ok(identity),
+        // A personal access token with no identity was rejected by the server.
+        (None, AuthContext::Pat(_)) => Err(AuthFailure::TokenExpired),
+        (None, AuthContext::Auth0(_)) => Err(AuthFailure::NotLoggedIn),
+        (None, AuthContext::Kerberos(_)) => Err(AuthFailure::NoKerberosTicket),
+    };
+    match identity {
+        Ok(identity) => Ok(identity.handle),
         Err(ref failure @ (AuthFailure::TokenExpired | AuthFailure::NotLoggedIn))
             if Dialog::can_prompt() =>
         {
@@ -1787,9 +1795,12 @@ pub(super) async fn ensure_auth(flox: &mut Flox) -> Result<String> {
 /// request. Missing credentials (not logged in / no Kerberos ticket) fall back
 /// to [`ensure_auth`] and its recovery flow.
 async fn ensure_auth_allowing_expired(flox: &mut Flox) -> Result<String> {
-    match flox.auth_context.authenticated_handle_allowing_expired() {
-        Ok(handle) => Ok(handle.to_string()),
-        Err(_) => ensure_auth(flox).await,
+    // An expired identity still carries its handle; only a missing identity
+    // (not logged in, no ticket, or a server-rejected token) falls back to
+    // the recovery flow.
+    match flox.get_identity() {
+        Some(identity) => Ok(identity.handle),
+        None => ensure_auth(flox).await,
     }
 }
 

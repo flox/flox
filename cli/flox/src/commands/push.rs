@@ -122,7 +122,7 @@ fn handle_path_environment_push(
     let owner = if let Some(owner) = owner {
         owner
     } else {
-        EnvironmentOwner::from_str(flox.auth_context.handle().context("Need to be logged in")?)?
+        EnvironmentOwner::from_str(&flox.get_identity().context("Need to be logged in")?.handle)?
     };
 
     let pointer = ManagedPointer::new(owner.clone(), path_environment.name(), &flox.floxhub);

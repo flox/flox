@@ -2436,13 +2436,13 @@ pub mod tests {
         let user_handle = flox.auth_context.handle().unwrap();
         let publish_provider = PublishProvider::new(env_meta, pkg_meta, auth);
         let packaged_created_guard = publish_provider
-            .create_package_and_possibly_user_catalog(&flox.floxhub_client, user_handle)
+            .create_package_and_possibly_user_catalog(&flox.floxhub_client, &user_handle)
             .await
             .unwrap();
         publish_provider
             .publish(
                 &flox.floxhub_client,
-                user_handle,
+                &user_handle,
                 packaged_created_guard,
                 &build_meta,
                 None,
@@ -2585,7 +2585,7 @@ pub mod tests {
         let res = publish_provider
             .publish(
                 &flox.floxhub_client,
-                flox.auth_context.handle().unwrap(),
+                &flox.auth_context.handle().unwrap(),
                 PackageCreatedGuard { _private: () },
                 &build_meta,
                 None,

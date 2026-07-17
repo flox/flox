@@ -583,12 +583,8 @@ pub mod test_helpers {
             base_url: "https://not_used".to_string(),
             extra_headers: Default::default(),
             mock_mode: FloxhubMockMode::Replay(path.as_ref().to_path_buf()),
-            auth_context: AuthContext::from_mode(
-                &AuthnMode::Auth0,
-                None,
-                floxhub_client::test_helpers::unreachable_resolve,
-            )
-            .expect("no token to parse"),
+            auth_context: AuthContext::from_mode(&AuthnMode::Auth0, None)
+                .expect("no token to parse"),
             user_agent: None,
             // Replays the mk_data-generated cassette store
             // (test_data/generated/resolve/*.yaml), recorded without a
