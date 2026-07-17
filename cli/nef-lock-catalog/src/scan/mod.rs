@@ -1276,7 +1276,7 @@ mod tests {
     #[test]
     fn get_attr_static_key_bare() {
         let got = refs(
-            "{ catalogs }: getAttr \"hello\" catalogs.myorg",
+            "{ catalogs }: with builtins; getAttr \"hello\" catalogs.myorg",
             &roots(&["catalogs"]),
         );
         assert_eq!(got, set(&["catalogs.myorg.hello"]));
@@ -1303,7 +1303,7 @@ mod tests {
     #[test]
     fn get_attr_non_rooted_target_ignored() {
         let got = refs(
-            "{ catalogs }: builtins.getAttr \"hello\" someOtherAttrset",
+            "{ catalogs, someOtherAttrset }: builtins.getAttr \"hello\" someOtherAttrset",
             &roots(&["catalogs"]),
         );
         assert_eq!(got, BTreeSet::new());
