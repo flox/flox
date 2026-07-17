@@ -1,0 +1,56 @@
+{
+  "lockfile-version": 1,
+  "manifest": {
+    "schema-version": "1.13.0",
+    "install": {
+      "openshell": {
+        "pkg-path": "djsauble/openshell"
+      }
+    },
+    "hook": {
+      "on-activate": "  # One-time TLS material for the local gateway, kept in the env cache.\n  tls_dir=\"$FLOX_ENV_CACHE/openshell/tls\"\n  if [ ! -d \"$tls_dir\" ]; then\n    mkdir -p \"$tls_dir\"\n    openshell-gateway generate-certs \\\n      --output-dir \"$tls_dir\" \\\n      --server-san host.openshell.internal\n  fi\n  export OPENSHELL_LOCAL_TLS_DIR=\"$tls_dir\"\n\n  # Gateway config rendered into the env cache: the demo needs the\n  # docker driver with bind mounts (flox live-mounts the project into\n  # the sandbox at its real path).\n  config=\"$FLOX_ENV_CACHE/openshell/gateway.toml\"\n  if [ ! -f \"$config\" ]; then\n    mkdir -p \"$(dirname \"$config\")\"\n    cat > \"$config\" <<'EOF'\n[openshell.gateway]\ncompute_drivers = [\"docker\"]\n\n[openshell.drivers.docker]\nenable_bind_mounts = true\nEOF\n  fi\n  export OPENSHELL_GATEWAY_CONFIG=\"$config\"\n"
+    },
+    "options": {
+      "systems": [
+        "aarch64-darwin"
+      ]
+    },
+    "services": {
+      "auto-start": true,
+      "gateway": {
+        "command": "exec openshell-gateway --config \"$OPENSHELL_GATEWAY_CONFIG\""
+      },
+      "gateway-register": {
+        "command": "  if [ -d \"$HOME/.config/openshell/gateways/flox-demo\" ]; then\n    echo \"gateway 'flox-demo' already registered\"\n    exit 0\n  fi\n  for _ in $(seq 60); do\n    if openshell gateway add https://127.0.0.1:17670 --local --name flox-demo 2>/dev/null; then\n      echo \"registered gateway 'flox-demo'\"\n      exit 0\n    fi\n    sleep 2\n  done\n  echo \"gateway did not become reachable on 127.0.0.1:17670\" >&2\n  exit 1\n"
+      }
+    }
+  },
+  "packages": [
+    {
+      "attr_path": "openshell",
+      "derivation": "/nix/store/wfy1r39764x6zjsrnqpfzn3axpwzghmi-openshell-0.0.86.drv",
+      "description": "NVIDIA OpenShell CLI + gateway, repackaged from the v0.0.86 release binaries",
+      "install_id": "openshell",
+      "locked_url": "https://github.com/djsauble/openshell-flox.git?rev=47103160c4b3d14819b3a68af7f36ee2999efd8c",
+      "name": "openshell-0.0.86",
+      "pname": "openshell",
+      "rev": "47103160c4b3d14819b3a68af7f36ee2999efd8c",
+      "rev_count": 1,
+      "rev_date": "2026-07-17T23:16:21Z",
+      "scrape_date": "2026-07-17T23:18:32.194558Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "version": "0.0.86",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/cmzx3cszz7vprqkprs7kvds9ck35099i-openshell-0.0.86"
+      },
+      "system": "aarch64-darwin",
+      "group": "toplevel",
+      "priority": 5
+    }
+  ]
+}

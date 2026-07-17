@@ -1,0 +1,65 @@
+schema-version = "1.13.0"
+
+[install]
+openshell.pkg-path = "djsauble/openshell"
+
+[hook]
+on-activate = '''
+  # One-time TLS material for the local gateway, kept in the env cache.
+  tls_dir="$FLOX_ENV_CACHE/openshell/tls"
+  if [ ! -d "$tls_dir" ]; then
+    mkdir -p "$tls_dir"
+    openshell-gateway generate-certs \
+      --output-dir "$tls_dir" \
+      --server-san host.openshell.internal
+  fi
+  export OPENSHELL_LOCAL_TLS_DIR="$tls_dir"
+
+  # Gateway config rendered into the env cache: the demo needs the
+  # docker driver with bind mounts (flox live-mounts the project into
+  # the sandbox at its real path).
+  config="$FLOX_ENV_CACHE/openshell/gateway.toml"
+  if [ ! -f "$config" ]; then
+    mkdir -p "$(dirname "$config")"
+    cat > "$config" <<'EOF'
+[openshell.gateway]
+compute_drivers = ["docker"]
+
+[openshell.drivers.docker]
+enable_bind_mounts = true
+EOF
+  fi
+  export OPENSHELL_GATEWAY_CONFIG="$config"
+'''
+
+[services]
+auto-start = true
+
+# The gateway is a plain foreground process (the brew formula wraps the
+# same exec in launchd); as a flox service it lives exactly as long as
+# the activation.
+[services.gateway]
+command = 'exec openshell-gateway --config "$OPENSHELL_GATEWAY_CONFIG"'
+
+# One-shot registration: wait for the gateway to answer, then register
+# it with the CLI under a demo-scoped name. Guarded so re-activations
+# are no-ops. NOTE: writes ~/.config/openshell (see ../README.md).
+[services.gateway-register]
+command = '''
+  if [ -d "$HOME/.config/openshell/gateways/flox-demo" ]; then
+    echo "gateway 'flox-demo' already registered"
+    exit 0
+  fi
+  for _ in $(seq 60); do
+    if openshell gateway add https://127.0.0.1:17670 --local --name flox-demo 2>/dev/null; then
+      echo "registered gateway 'flox-demo'"
+      exit 0
+    fi
+    sleep 2
+  done
+  echo "gateway did not become reachable on 127.0.0.1:17670" >&2
+  exit 1
+'''
+
+[options]
+systems = ["aarch64-darwin"]
