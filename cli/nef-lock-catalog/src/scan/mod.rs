@@ -200,8 +200,6 @@ fn analyze_file_at(
     let parse = rnix::Root::parse(content);
     let root = parse.tree();
 
-    let mut refs = BTreeSet::new();
-
     let mut dep_names = HashSet::new();
     if let Some(rnix::ast::Expr::Lambda(lambda)) = root.expr()
         && let Some(rnix::ast::Param::Pattern(pat)) = lambda.param()
@@ -222,12 +220,53 @@ fn analyze_file_at(
     let mut deps: Vec<Vec<String>> = dep_names.iter().map(|name| vec![name.clone()]).collect();
     collect_dep_member_paths(root.syntax(), &dep_names, &mut deps);
 
-    let aliases = collect_aliases(root.syntax(), roots);
     let ctx = ScanCtx { path, content };
-    collect_refs(root.syntax(), &mut refs, roots, &aliases, &ctx);
+    let mut walker = Walker {
+        roots,
+        ctx,
+        refs: BTreeSet::new(),
+        pending_imports: Vec::new(),
+    };
 
+    // Seed the environment with the catalog roots. Lambda parameters —
+    // including the top-level package function's — keep root-named names
+    // rooted and shadow everything else (see [Walker::walk_lambda]).
+    let env: Env = roots
+        .iter()
+        .map(|root| (root.clone(), Binding::Path(vec![root.clone()])))
+        .collect();
+    if let Some(expr) = root.expr() {
+        walker.walk(expr.syntax(), &env);
+    }
+
+    let Walker {
+        mut refs,
+        pending_imports,
+        ..
+    } = walker;
+
+    // Imports are IO: the walker only records facts, the drain here reads and
+    // recurses. Relative paths resolve against the importing file's directory;
+    // `visited` guards against import cycles.
     if let Some(dir) = file_dir {
-        follow_imports(root.syntax(), roots, &aliases, dir, visited, &mut refs);
+        for pending in pending_imports {
+            let target = dir.join(&pending.path);
+            let target = fs::canonicalize(&target).unwrap_or(target);
+            if !visited.insert(target.clone()) {
+                continue;
+            }
+            if let Ok(content) = fs::read_to_string(&target) {
+                let import_dir = target.parent().map(Path::to_path_buf);
+                let imported = analyze_file_at(
+                    &content,
+                    &pending.roots,
+                    import_dir.as_deref(),
+                    visited,
+                    Some(&target),
+                );
+                refs.extend(imported.refs);
+            }
+        }
     }
 
     FileInfo { refs, deps }
@@ -309,118 +348,417 @@ fn collect_transitive(
     result
 }
 
-/// Build the map of `let` bindings that alias a catalog path.
+/// A name's meaning in the lexical environment threaded through the walk.
+#[derive(Clone, Debug)]
+enum Binding {
+    /// The name resolves to a catalog attr-path: a root itself
+    /// (`catalogs` = `Path(["catalogs"])`) or an alias of one. A path may end
+    /// in `"*"` when a dynamic component collapsed it.
+    Path(Vec<String>),
+    /// The name is bound to something the scanner cannot model; selects on it
+    /// produce no refs.
+    Opaque,
+}
+
+/// Lexical environment: what each in-scope name is known to be.
+type Env = HashMap<String, Binding>;
+
+/// An `import <path> { … }` application forwarding catalog roots, recorded by
+/// the walker and resolved by the IO drain loop in [analyze_file_at].
+#[derive(Debug)]
+struct PendingImport {
+    /// Import path as written (relative paths resolve against the importing
+    /// file's directory).
+    path: String,
+    /// Root names the imported file receives.
+    roots: HashSet<String>,
+}
+
+/// Syntax-tree walker threading the lexical environment.
 ///
-/// Repeats passes until no new alias is found, so bindings may reference
-/// earlier aliases regardless of source order.
-fn collect_aliases(root: &rnix::SyntaxNode, roots: &HashSet<String>) -> HashMap<String, String> {
-    let mut aliases: HashMap<String, String> = HashMap::new();
-    let mut changed = true;
-    while changed {
-        changed = false;
-        gather_let_aliases(root, roots, &mut aliases, &mut changed);
-    }
-    aliases
+/// The walker emits refs for use sites resolved through the environment
+/// (selects, `inherit (…)`, `with`, `getAttr`) and records `import`
+/// applications as [PendingImport] facts; it performs no IO itself.
+struct Walker<'a> {
+    roots: &'a HashSet<String>,
+    ctx: ScanCtx<'a>,
+    refs: BTreeSet<String>,
+    pending_imports: Vec<PendingImport>,
 }
 
-/// Single pass over `let` bindings, recording any that resolve to a catalog
-/// path and setting `changed` when a new alias is added.
-fn gather_let_aliases(
-    node: &rnix::SyntaxNode,
-    roots: &HashSet<String>,
-    aliases: &mut HashMap<String, String>,
-    changed: &mut bool,
-) {
-    if let Some(let_in) = ast::LetIn::cast(node.clone()) {
+impl Walker<'_> {
+    fn emit(&mut self, offset: usize, reference: String) {
+        self.ctx.report(offset, &reference);
+        self.refs.insert(reference);
+    }
+
+    fn walk(&mut self, node: &rnix::SyntaxNode, env: &Env) {
+        if let Some(attrpath) = ast::Attrpath::cast(node.clone()) {
+            // Reached generically from attrset keys and `?` operands: only the
+            // dynamic components are expressions, static names are not uses.
+            return self.walk_attrpath_dynamics(&attrpath, env);
+        }
+        if let Some(inherit) = ast::Inherit::cast(node.clone()) {
+            return self.walk_inherit(&inherit, env);
+        }
+        let Some(expr) = ast::Expr::cast(node.clone()) else {
+            return self.walk_children(node, env);
+        };
+        match expr {
+            ast::Expr::Lambda(lambda) => self.walk_lambda(&lambda, env),
+            ast::Expr::LetIn(let_in) => self.walk_let_in(&let_in, env),
+            ast::Expr::With(with_expr) => self.walk_with(&with_expr, env),
+            ast::Expr::Apply(apply) => self.walk_apply(&apply, env),
+            ast::Expr::Select(select) => self.walk_select(&select, env),
+            _ => self.walk_children(node, env),
+        }
+    }
+
+    fn walk_children(&mut self, node: &rnix::SyntaxNode, env: &Env) {
+        for child in node.children() {
+            self.walk(&child, env);
+        }
+    }
+
+    /// Lambda parameters shadow the outer scope. A parameter named like a
+    /// catalog root keeps its root meaning: such lambdas are (almost always)
+    /// applied to the namespace itself, and assuming so can only produce
+    /// spurious refs that fail loudly, while assuming the opposite drops
+    /// real refs silently. Every other parameter is opaque — the scanner
+    /// cannot know what it will be applied to.
+    fn walk_lambda(&mut self, lambda: &ast::Lambda, env: &Env) {
+        let mut inner = env.clone();
+        match lambda.param() {
+            Some(ast::Param::IdentParam(param)) => {
+                if let Some(name) = param.ident().as_ref().and_then(ident_name) {
+                    let binding = self.param_binding(&name);
+                    inner.insert(name, binding);
+                }
+            },
+            Some(ast::Param::Pattern(pat)) => {
+                for entry in pat.pat_entries() {
+                    if let Some(name) = entry.ident().as_ref().and_then(ident_name) {
+                        let binding = self.param_binding(&name);
+                        inner.insert(name, binding);
+                    }
+                }
+                if let Some(name) = pat
+                    .pat_bind()
+                    .and_then(|bind| bind.ident())
+                    .as_ref()
+                    .and_then(ident_name)
+                {
+                    inner.insert(name, Binding::Opaque);
+                }
+                for entry in pat.pat_entries() {
+                    if let Some(default) = entry.default() {
+                        self.walk(default.syntax(), &inner);
+                    }
+                }
+            },
+            None => {},
+        }
+        if let Some(body) = lambda.body() {
+            self.walk(body.syntax(), &inner);
+        }
+    }
+
+    /// What a lambda parameter of this name means (see [Self::walk_lambda]).
+    fn param_binding(&self, name: &str) -> Binding {
+        if self.roots.contains(name) {
+            Binding::Path(vec![name.to_string()])
+        } else {
+            Binding::Opaque
+        }
+    }
+
+    fn walk_let_in(&mut self, let_in: &ast::LetIn, env: &Env) {
+        let inner = let_scope_env(let_in, env);
         for entry in let_in.attrpath_values() {
-            let Some(lhs) = entry.attrpath() else {
-                continue;
-            };
-            let attrs: Vec<ast::Attr> = lhs.attrs().collect();
-            if attrs.len() != 1 {
-                continue;
+            if let Some(attrpath) = entry.attrpath() {
+                self.walk_attrpath_dynamics(&attrpath, &inner);
             }
-            let Some(name) = attr_static_name(&attrs[0]) else {
-                continue;
-            };
-            if aliases.contains_key(&name) {
-                continue;
+            if let Some(value) = entry.value() {
+                self.walk(value.syntax(), &inner);
             }
-            let Some(ast::Expr::Select(select)) = entry.value() else {
-                continue;
+        }
+        for inherit in let_in.inherits() {
+            self.walk_inherit(&inherit, &inner);
+        }
+        if let Some(body) = let_in.body() {
+            self.walk(body.syntax(), &inner);
+        }
+    }
+
+    /// `inherit (<source>) a b c;` — when the source resolves to a catalog
+    /// path, each name is one member ref. A name the catalog cannot contain
+    /// (dotted quoted attr) collapses to a sentinel at the source.
+    fn walk_inherit(&mut self, inherit: &ast::Inherit, env: &Env) {
+        let Some(from_expr) = inherit.from().and_then(|from| from.expr()) else {
+            return;
+        };
+        let Some(base) = resolve_expr_path(&from_expr, env) else {
+            self.walk(from_expr.syntax(), env);
+            return;
+        };
+        for attr in inherit.attrs() {
+            let path = match attr_static_name(&attr) {
+                Some(name) => append_component(base.clone(), name),
+                None => append_star(base.clone()),
             };
-            if let Some(path) = extract_ref_path(&select, roots, aliases) {
-                aliases.insert(name, path);
-                *changed = true;
+            let path = widen_if_catalog_level(path);
+            self.emit(offset_of(attr.syntax()), join_path(&path));
+        }
+    }
+
+    fn walk_with(&mut self, with_expr: &ast::With, env: &Env) {
+        if let Some(ns) = with_expr.namespace()
+            && let Some(path) = resolve_expr_path(&ns, env)
+        {
+            self.emit(offset_of(with_expr.syntax()), join_path(&append_star(path)));
+            if let Some(body) = with_expr.body() {
+                self.walk(body.syntax(), env);
+            }
+            return;
+        }
+        for child in with_expr.syntax().children() {
+            self.walk(&child, env);
+        }
+    }
+
+    fn walk_apply(&mut self, apply: &ast::Apply, env: &Env) {
+        // `getAttr <key> <target>`: the resolved target is consumed, the key
+        // subexpression is still scanned for refs of its own.
+        if let Some(inner) = inner_apply(apply)
+            && inner.lambda().is_some_and(|f| is_get_attr_fn(&f))
+            && let Some(target) = apply.argument()
+            && let Some(target_path) = resolve_expr_path(&target, env)
+        {
+            let key = inner.argument();
+            let path = match key.as_ref().and_then(static_str) {
+                Some(key) => append_component(target_path, key),
+                None => append_star(target_path),
+            };
+            self.emit(offset_of(apply.syntax()), join_path(&path));
+            if let Some(key) = key {
+                self.walk(key.syntax(), env);
+            }
+            return;
+        }
+        if let Some((path, arg)) = extract_import(apply) {
+            let forwarded = roots_forwarded(&arg, self.roots);
+            if !forwarded.is_empty() {
+                self.pending_imports.push(PendingImport {
+                    path,
+                    roots: forwarded,
+                });
+            }
+        }
+        for child in apply.syntax().children() {
+            self.walk(&child, env);
+        }
+    }
+
+    fn walk_select(&mut self, select: &ast::Select, env: &Env) {
+        match resolve_select_path(select, env) {
+            Some(path) => self.emit(offset_of(select.syntax()), join_path(&path)),
+            None => {
+                if let Some(base) = select.expr() {
+                    self.walk(base.syntax(), env);
+                }
+            },
+        }
+        if let Some(attrpath) = select.attrpath() {
+            self.walk_attrpath_dynamics(&attrpath, env);
+        }
+        if let Some(default) = select.default_expr() {
+            self.walk(default.syntax(), env);
+        }
+    }
+
+    /// Scan the expression components of an attr path: dynamic attrs and
+    /// string interpolations. Static names are not value uses.
+    fn walk_attrpath_dynamics(&mut self, attrpath: &ast::Attrpath, env: &Env) {
+        for attr in attrpath.attrs() {
+            match attr {
+                ast::Attr::Dynamic(dynamic) => {
+                    if let Some(expr) = dynamic.expr() {
+                        self.walk(expr.syntax(), env);
+                    }
+                },
+                ast::Attr::Str(s) => self.walk(s.syntax(), env),
+                ast::Attr::Ident(_) => {},
             }
         }
     }
-    for child in node.children() {
-        gather_let_aliases(&child, roots, aliases, changed);
-    }
 }
 
-/// Walk the tree for `import ./file { <root> = …; }` calls and merge the refs
-/// found in each imported file into `refs`.
-fn follow_imports(
-    node: &rnix::SyntaxNode,
-    roots: &HashSet<String>,
-    aliases: &HashMap<String, String>,
-    file_dir: &Path,
-    visited: &mut HashSet<PathBuf>,
-    refs: &mut BTreeSet<String>,
-) {
-    if let Some(apply) = ast::Apply::cast(node.clone())
-        && let Some((path_str, import_roots)) = try_extract_import(&apply, roots, aliases)
-    {
-        let target = file_dir.join(&path_str);
-        let target = fs::canonicalize(&target).unwrap_or(target);
-        if !visited.contains(&target) {
-            visited.insert(target.clone());
-            if let Ok(content) = fs::read_to_string(&target) {
-                let import_dir = target.parent().map(Path::to_path_buf);
-                let imported = analyze_file_at(
-                    &content,
-                    &import_roots,
-                    import_dir.as_deref(),
-                    visited,
-                    Some(&target),
-                );
-                refs.extend(imported.refs);
-            }
+/// Environment for a `let … in` scope.
+///
+/// Every bound name shadows the outer scope. `let` is recursive, so bindings
+/// that alias catalog paths are resolved to a fixpoint: a pass may enable
+/// another binding regardless of source order, and names that never resolve
+/// stay opaque (which is what makes `let catalogs = …;` shadow a root).
+fn let_scope_env(let_in: &ast::LetIn, outer: &Env) -> Env {
+    let mut env = outer.clone();
+
+    let mut values: Vec<(String, ast::Expr)> = Vec::new();
+    for entry in let_in.attrpath_values() {
+        let Some(attrpath) = entry.attrpath() else {
+            continue;
+        };
+        let attrs: Vec<ast::Attr> = attrpath.attrs().collect();
+        let Some(name) = attrs.first().and_then(attr_static_name) else {
+            continue;
+        };
+        env.insert(name.clone(), Binding::Opaque);
+        if attrs.len() == 1
+            && let Some(value) = entry.value()
+        {
+            values.push((name, value));
         }
     }
-    for child in node.children() {
-        follow_imports(&child, roots, aliases, file_dir, visited, refs);
+    for inherit in let_in.inherits() {
+        for attr in inherit.attrs() {
+            let Some(name) = attr_static_name(&attr) else {
+                continue;
+            };
+            // `inherit x;` (no source) rebinds the outer x under the same name.
+            let binding = match inherit.from() {
+                None => outer.get(&name).cloned().unwrap_or(Binding::Opaque),
+                Some(_) => Binding::Opaque,
+            };
+            env.insert(name, binding);
+        }
+    }
+
+    loop {
+        let mut changed = false;
+        for (name, value) in &values {
+            if !matches!(env.get(name), Some(Binding::Opaque)) {
+                continue;
+            }
+            if let Some(binding) = resolve_binding(value, &env) {
+                env.insert(name.clone(), binding);
+                changed = true;
+            }
+        }
+        for inherit in let_in.inherits() {
+            let Some(from_expr) = inherit.from().and_then(|from| from.expr()) else {
+                continue;
+            };
+            let Some(base) = resolve_expr_path(&from_expr, &env) else {
+                continue;
+            };
+            for attr in inherit.attrs() {
+                let Some(name) = attr_static_name(&attr) else {
+                    continue;
+                };
+                if matches!(env.get(&name), Some(Binding::Opaque)) {
+                    let path = append_component(base.clone(), name.clone());
+                    env.insert(name, Binding::Path(path));
+                    changed = true;
+                }
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
+    env
+}
+
+/// Resolve a binding's right-hand side to what the bound name will mean.
+fn resolve_binding(expr: &ast::Expr, env: &Env) -> Option<Binding> {
+    resolve_expr_path(expr, env).map(Binding::Path)
+}
+
+/// Resolve an expression to the catalog attr-path it denotes, following the
+/// environment for idents and aliases. `None` when the expression does not
+/// reach a catalog root.
+fn resolve_expr_path(expr: &ast::Expr, env: &Env) -> Option<Vec<String>> {
+    match expr {
+        ast::Expr::Ident(ident) => match env.get(&ident_name(ident)?)? {
+            Binding::Path(path) => Some(path.clone()),
+            Binding::Opaque => None,
+        },
+        ast::Expr::Select(select) => resolve_select_path(select, env),
+        ast::Expr::Paren(paren) => resolve_expr_path(&paren.expr()?, env),
+        _ => None,
     }
 }
 
-/// Recognize an `import <path> { … }` application that forwards at least one
-/// catalog root, returning the import path and the roots passed to it.
-fn try_extract_import(
-    apply: &ast::Apply,
-    roots: &HashSet<String>,
-    aliases: &HashMap<String, String>,
-) -> Option<(String, HashSet<String>)> {
-    let inner = match apply.lambda()? {
-        ast::Expr::Apply(a) => a,
-        _ => return None,
-    };
+/// [resolve_expr_path] for a select: base path plus the static components of
+/// the attr path, collapsing at the first dynamic component.
+fn resolve_select_path(select: &ast::Select, env: &Env) -> Option<Vec<String>> {
+    let mut path = resolve_expr_path(&select.expr()?, env)?;
+    for attr in select.attrpath()?.attrs() {
+        match attr_static_name(&attr) {
+            Some(name) => path = append_component(path, name),
+            None => {
+                path = append_star(path);
+                break;
+            },
+        }
+    }
+    Some(path)
+}
+
+/// Append one component; a path already collapsed to `*` absorbs it.
+fn append_component(mut path: Vec<String>, name: String) -> Vec<String> {
+    if path.last().map(String::as_str) != Some("*") {
+        path.push(name);
+    }
+    path
+}
+
+/// Collapse the path's tail to a `*` sentinel (idempotent).
+fn append_star(path: Vec<String>) -> Vec<String> {
+    append_component(path, "*".to_string())
+}
+
+/// Widen a path that names a whole catalog or the root itself (fewer than two
+/// components past the root) to a `.*` sentinel: the server's resolution floor
+/// is catalog + one component, so such an exact ref can never resolve.
+fn widen_if_catalog_level(path: Vec<String>) -> Vec<String> {
+    if path.len() < 3 {
+        append_star(path)
+    } else {
+        path
+    }
+}
+
+fn join_path(path: &[String]) -> String {
+    path.join(".")
+}
+
+fn ident_name(ident: &ast::Ident) -> Option<String> {
+    Some(ident.ident_token()?.text().to_string())
+}
+
+/// The inner application of a two-argument call `f a b`, i.e. `f a`.
+fn inner_apply(apply: &ast::Apply) -> Option<ast::Apply> {
+    match apply.lambda()? {
+        ast::Expr::Apply(inner) => Some(inner),
+        _ => None,
+    }
+}
+
+/// Recognize an `import <static-path> { … }` application, returning the
+/// import path and its argument attrset.
+fn extract_import(apply: &ast::Apply) -> Option<(String, ast::AttrSet)> {
+    let inner = inner_apply(apply)?;
     let ast::Expr::Ident(import_fn) = inner.lambda()? else {
         return None;
     };
     if import_fn.ident_token()?.text() != "import" {
         return None;
     }
-    let path_str = static_path_str(&inner.argument()?)?;
-    let ast::Expr::AttrSet(attrset) = apply.argument()? else {
+    let path = static_path_str(&inner.argument()?)?;
+    let ast::Expr::AttrSet(arg) = apply.argument()? else {
         return None;
     };
-    let passed = roots_passed_to_import(&attrset, roots, aliases);
-    if passed.is_empty() {
-        return None;
-    }
-    Some((path_str, passed))
+    Some((path, arg))
 }
 
 /// Extract a statically-known path or string literal as a string, or `None`
@@ -436,11 +774,7 @@ fn static_path_str(expr: &ast::Expr) -> Option<String> {
 
 /// Collect the catalog roots forwarded into an import's argument attrset,
 /// via either `inherit` or `<root> = <root>;` bindings.
-fn roots_passed_to_import(
-    attrset: &ast::AttrSet,
-    roots: &HashSet<String>,
-    _aliases: &HashMap<String, String>,
-) -> HashSet<String> {
+fn roots_forwarded(attrset: &ast::AttrSet, roots: &HashSet<String>) -> HashSet<String> {
     let mut passed = HashSet::new();
     for inherit in attrset.inherits() {
         if inherit.from().is_some() {
@@ -469,103 +803,9 @@ fn roots_passed_to_import(
     passed
 }
 
-/// Recursively walk the syntax tree, inserting every catalog attr-path
-/// reference into `refs`.
-///
-/// Handles `inherit (…)`, `with`, `builtins.getAttr`, and plain selects;
-/// dynamic attrs collapse to a `<path>.*` sentinel.
-fn collect_refs(
-    node: &rnix::SyntaxNode,
-    refs: &mut BTreeSet<String>,
-    roots: &HashSet<String>,
-    aliases: &HashMap<String, String>,
-    ctx: &ScanCtx,
-) {
-    if let Some(inherit) = ast::Inherit::cast(node.clone())
-        && try_handle_inherit(&inherit, refs, roots, aliases, ctx)
-    {
-        return;
-    }
-
-    if let Some(with_expr) = ast::With::cast(node.clone())
-        && let Some(ns) = with_expr.namespace()
-        && let Some(path) = namespace_path(&ns, roots, aliases)
-    {
-        let reference = format!("{}.*", path);
-        ctx.report(offset_of(with_expr.syntax()), &reference);
-        refs.insert(reference);
-        if let Some(body) = with_expr.body() {
-            collect_refs(body.syntax(), refs, roots, aliases, ctx);
-        }
-        return;
-    }
-
-    if let Some(apply) = ast::Apply::cast(node.clone())
-        && let Some(path) = try_handle_get_attr(&apply, roots, aliases)
-    {
-        ctx.report(offset_of(apply.syntax()), &path);
-        refs.insert(path);
-        return;
-    }
-
-    if let Some(select) = ast::Select::cast(node.clone())
-        && let Some(path) = extract_ref_path(&select, roots, aliases)
-    {
-        ctx.report(offset_of(select.syntax()), &path);
-        refs.insert(path);
-        return;
-    }
-
-    for child in node.children() {
-        collect_refs(&child, refs, roots, aliases, ctx);
-    }
-}
-
 /// Byte offset of a syntax node's start, for [`ScanCtx::report`].
 fn offset_of(node: &rnix::SyntaxNode) -> usize {
     u32::from(node.text_range().start()) as usize
-}
-
-/// Resolve an expression used as a namespace (in `with` or `getAttr`) to its
-/// catalog path, following aliases.
-fn namespace_path(
-    expr: &ast::Expr,
-    roots: &HashSet<String>,
-    aliases: &HashMap<String, String>,
-) -> Option<String> {
-    match expr {
-        ast::Expr::Select(select) => extract_ref_path(select, roots, aliases),
-        ast::Expr::Ident(ident) => {
-            let name = ident.ident_token()?.text().to_string();
-            if roots.contains(name.as_str()) {
-                Some(name)
-            } else {
-                aliases.get(&name).cloned()
-            }
-        },
-        _ => None,
-    }
-}
-
-/// Resolve a `getAttr "key" <root>` application to a `<path>.key` reference,
-/// or a `<path>.*` sentinel when the key is dynamic.
-fn try_handle_get_attr(
-    apply: &ast::Apply,
-    roots: &HashSet<String>,
-    aliases: &HashMap<String, String>,
-) -> Option<String> {
-    let inner = match apply.lambda()? {
-        ast::Expr::Apply(a) => a,
-        _ => return None,
-    };
-    if !is_get_attr_fn(&inner.lambda()?) {
-        return None;
-    }
-    let base_path = namespace_path(&apply.argument()?, roots, aliases)?;
-    match static_str(&inner.argument()?) {
-        Some(key) => Some(format!("{}.{}", base_path, key)),
-        None => Some(format!("{}.*", base_path)),
-    }
 }
 
 /// Whether an expression is the `getAttr` builtin, named either bare
@@ -628,76 +868,6 @@ fn attr_static_name(attr: &ast::Attr) -> Option<String> {
         },
         ast::Attr::Dynamic(_) => None,
     }
-}
-
-/// Handle `inherit (<root-path>) a b c;`, emitting one `<path>.<name>`
-/// reference per inherited name. Returns whether the inherit was rooted.
-fn try_handle_inherit(
-    inherit: &ast::Inherit,
-    refs: &mut BTreeSet<String>,
-    roots: &HashSet<String>,
-    aliases: &HashMap<String, String>,
-    ctx: &ScanCtx,
-) -> bool {
-    let Some(from) = inherit.from() else {
-        return false;
-    };
-    let Some(from_expr) = from.expr() else {
-        return false;
-    };
-    let ast::Expr::Select(select) = from_expr else {
-        return false;
-    };
-    let Some(base_path) = extract_ref_path(&select, roots, aliases) else {
-        return false;
-    };
-
-    for attr in inherit.attrs() {
-        // A name the catalog cannot contain (dotted quoted attr) collapses to
-        // a sentinel at the inherit base.
-        let reference = match attr_static_name(&attr) {
-            Some(name) => format!("{}.{}", base_path, name),
-            None => format!("{}.*", base_path),
-        };
-        ctx.report(offset_of(attr.syntax()), &reference);
-        refs.insert(reference);
-    }
-    true
-}
-
-/// Build the dotted catalog path for a `select` expression rooted at a catalog
-/// root or alias. A dynamic component collapses the path to end in `*`.
-fn extract_ref_path(
-    select: &ast::Select,
-    roots: &HashSet<String>,
-    aliases: &HashMap<String, String>,
-) -> Option<String> {
-    let expr = select.expr()?;
-    let ast::Expr::Ident(base) = expr else {
-        return None;
-    };
-    let base_name = base.ident_token()?.text().to_string();
-
-    let base_path = if roots.contains(base_name.as_str()) {
-        base_name
-    } else if let Some(alias) = aliases.get(&base_name) {
-        alias.clone()
-    } else {
-        return None;
-    };
-
-    let attrpath = select.attrpath()?;
-    let mut parts = vec![base_path];
-    for attr in attrpath.attrs() {
-        match attr_static_name(&attr) {
-            Some(name) => parts.push(name),
-            None => {
-                parts.push("*".to_string());
-                break;
-            },
-        }
-    }
-    Some(parts.join("."))
 }
 
 /// Resolve a dependency attr-path to the package file it names and analyze it.
@@ -888,7 +1058,16 @@ mod tests {
             include_str!("../../test_data/catalog_refs/inherit-subattrset.nix"),
             &roots(&["catalogs"]),
         );
-        assert_eq!(got, set(&["catalogs.myorg.toolkit"]));
+        // `toolkit` is inherited (an exact depth-2 ref) and then used as an
+        // alias in the body (`toolkit.buildGoModule`); the deeper use-site ref
+        // canonicalizes to the same package server-side.
+        assert_eq!(
+            got,
+            set(&[
+                "catalogs.myorg.toolkit",
+                "catalogs.myorg.toolkit.buildGoModule"
+            ])
+        );
     }
 
     #[test]
@@ -936,6 +1115,7 @@ mod tests {
             got,
             set(&[
                 "inputs.nixpkgs.lib",
+                "inputs.nixpkgs.lib.fileContents",
                 "inputs.devtools-flake.packages.default",
                 "inputs.self",
             ])
@@ -976,6 +1156,7 @@ mod tests {
             got,
             set(&[
                 "inputs.nixpkgs.lib",
+                "inputs.nixpkgs.lib.fakeStr",
                 "inputs.devtools-flake.packages.default",
             ])
         );
@@ -993,6 +1174,7 @@ mod tests {
                 "catalogs.myorg.toolkit.readVersion",
                 "catalogs.myorg.python3Packages.alpha-lib",
                 "inputs.nixpkgs.lib",
+                "inputs.nixpkgs.lib.fakeStr",
                 "inputs.devtools-flake.packages.default",
             ])
         );
@@ -1210,6 +1392,143 @@ mod tests {
     }
 
     #[test]
+    fn select_or_default_scans_both_arms() {
+        let got = refs(
+            "{ catalogs }: catalogs.a.b or catalogs.c.d",
+            &roots(&["catalogs"]),
+        );
+        assert_eq!(got, set(&["catalogs.a.b", "catalogs.c.d"]));
+    }
+
+    #[test]
+    fn get_attr_key_subexpression_scanned() {
+        let got = refs(
+            "{ catalogs, f }: builtins.getAttr (f catalogs.a.key) catalogs.myorg",
+            &roots(&["catalogs"]),
+        );
+        assert_eq!(got, set(&["catalogs.a.key", "catalogs.myorg.*"]));
+    }
+
+    #[test]
+    fn dynamic_attr_interpolation_scanned() {
+        let got = refs(
+            "{ catalogs }: catalogs.myorg.${catalogs.a.name}",
+            &roots(&["catalogs"]),
+        );
+        assert_eq!(got, set(&["catalogs.a.name", "catalogs.myorg.*"]));
+    }
+
+    #[test]
+    fn ident_aliases_resolve_through_scope() {
+        let cases: &[(&str, &[&str])] = &[
+            // A whole-root alias: uses through it are ordinary refs.
+            ("{ catalogs }: let c = catalogs; in c.myorg.pkg", &[
+                "catalogs.myorg.pkg",
+            ]),
+            // An alias of an alias resolves transitively.
+            ("{ catalogs }: let c = catalogs; d = c; in d.myorg.pkg", &[
+                "catalogs.myorg.pkg",
+            ]),
+        ];
+        for (content, expected) in cases {
+            assert_eq!(
+                refs(content, &roots(&["catalogs"])),
+                set(expected),
+                "content: {content}"
+            );
+        }
+    }
+
+    #[test]
+    fn inherit_from_root_and_alias_ident() {
+        let cases: &[(&str, &[&str])] = &[
+            // Inheriting a member of the bare root names a whole catalog,
+            // which can never resolve as an exact ref — widen to a sentinel.
+            ("{ catalogs }: { inherit (catalogs) myorg; }", &[
+                "catalogs.myorg.*",
+            ]),
+            // The inherit source may be an alias ident, not just a select.
+            (
+                "{ catalogs }: let org = catalogs.myorg; in { inherit (org) toolkit; }",
+                &["catalogs.myorg", "catalogs.myorg.toolkit"],
+            ),
+        ];
+        for (content, expected) in cases {
+            assert_eq!(
+                refs(content, &roots(&["catalogs"])),
+                set(expected),
+                "content: {content}"
+            );
+        }
+    }
+
+    #[test]
+    fn inherit_bound_name_acts_as_alias() {
+        let got = refs(
+            "{ catalogs }: let inherit (catalogs.myorg) toolkit; in toolkit.readVersion",
+            &roots(&["catalogs"]),
+        );
+        assert_eq!(
+            got,
+            set(&[
+                "catalogs.myorg.toolkit",
+                "catalogs.myorg.toolkit.readVersion"
+            ])
+        );
+    }
+
+    #[test]
+    fn shadowed_root_names_do_not_emit() {
+        // A let binding shadows a root for its whole scope.
+        let got = refs(
+            "{ catalogs }: let catalogs = { other.pkg = null; }; in catalogs.other.pkg",
+            &roots(&["catalogs"]),
+        );
+        assert_eq!(got, BTreeSet::new());
+    }
+
+    #[test]
+    fn root_named_lambda_params_stay_rooted() {
+        let cases: &[(&str, &[&str])] = &[
+            // A helper lambda taking the namespace under the root's name and
+            // applied to it: its body refs are real and must be locked.
+            (
+                "{ catalogs }: let mkPkg = { catalogs }: catalogs.myorg.helper-used; in mkPkg { inherit catalogs; }",
+                &["catalogs.myorg.helper-used"],
+            ),
+            // Even when the application passes something else, assuming the
+            // parameter is the namespace can only add refs that fail loudly;
+            // assuming the opposite would under-lock silently.
+            (
+                "{ catalogs }: let f = catalogs: catalogs.other.pkg; in f {}",
+                &["catalogs.other.pkg"],
+            ),
+        ];
+        for (content, expected) in cases {
+            assert_eq!(
+                refs(content, &roots(&["catalogs"])),
+                set(expected),
+                "content: {content}"
+            );
+        }
+    }
+
+    #[test]
+    fn conditional_branch_refs_both_collected() {
+        let got = refs(
+            "{ catalogs, x }: if x then catalogs.a.p else catalogs.b.q",
+            &roots(&["catalogs"]),
+        );
+        assert_eq!(got, set(&["catalogs.a.p", "catalogs.b.q"]));
+    }
+
+    #[test]
+    fn nested_lambda_body_refs_collected() {
+        let got = refs("{ catalogs }: x: catalogs.myorg.pkg", &roots(&["catalogs"]));
+        assert_eq!(got, set(&["catalogs.myorg.pkg"]));
+    }
+
+    #[test]
     fn quoted_attrs_static_when_valid_names() {
         let cases: &[(&str, &[&str])] = &[
             // A non-interpolated string attr that is a valid catalog component
@@ -1262,6 +1581,18 @@ mod tests {
             &roots(&["catalogs"]),
         );
         assert_eq!(got, set(&["catalogs.myorg.*"]));
+    }
+
+    #[test]
+    fn dynamic_attr_at_set_depth_emits_set_sentinel() {
+        // The sentinel keeps the full static prefix: a dynamic member of a
+        // package set widens to the set (`<catalog>.<set>.*`), not the whole
+        // catalog.
+        let got = refs(
+            "{ catalogs, name }: catalogs.myorg.pythonPackages.${name}",
+            &roots(&["catalogs"]),
+        );
+        assert_eq!(got, set(&["catalogs.myorg.pythonPackages.*"]));
     }
 
     #[test]
