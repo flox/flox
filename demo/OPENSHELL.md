@@ -185,7 +185,7 @@ flox [sandbox-demo] bash-5.3$ curl -s localhost:8080
 ```
 
 Meanwhile, in a **second terminal on the host** (keep it visible —
-it's the control plane for beat 3):
+it's the control plane for beats 2 and 3):
 
 ```bash
 openshell sandbox list
@@ -202,7 +202,8 @@ wiring."**
 
 ## 2 · Prove the boundary is intact
 
-*(verified 2026-07-13)*
+*(verified 2026-07-13; the log tail moved up from beat 3,
+2026-07-17)*
 
 **"My filesystem is invisible, my credentials don't cross, and only
 my project is live."**
@@ -220,17 +221,33 @@ flox [sandbox-demo] bash-5.3$
 ```
 
 **"And unlike a plain container, the network is deny-by-default at
-layer 7:"**
+layer 7 — and every verdict is an audit event. Watch live:"**
+
+In the **host terminal**, start tailing verdicts (sandbox name from
+`openshell sandbox list` in beat 1) and leave it running:
+
+```bash
+openshell logs flox-sandbox-demo-##### --tail
+```
+
+Back in the guest, try to reach the network:
 
 ```bash
 flox [sandbox-demo] bash-5.3$ curl -sS https://api.github.com/zen
 curl: (7) CONNECT tunnel failed, response 403
 ```
 
+The tail prints the denial as it happens:
+
+```
+# [ocsf] NET:OPEN [MED] DENIED /nix/store/…-curl-8.x.x/bin/curl(…) -> api.github.com:443 [reason:network connections not allowed by policy]
+```
+
 **"flox generated an OpenShell policy for this activation — Nix
 store read-only, project read-write, zero network. Every outbound
 connection goes through OpenShell's proxy and is denied unless a
-policy allows it."**
+policy allows it — and the audit log names the exact store path of
+the binary that tried."**
 
 ---
 
@@ -280,16 +297,14 @@ Practicality beats purity.
 
 **"OpenShell enforces per-binary network identity, and flox makes
 that precise: a Nix store path pins the policy to the exact build
-of curl the environment shipped — not 'anything named curl'. Watch
-the verdicts live:"**
+of curl the environment shipped — not 'anything named curl'. And
+the verdict flipped in the log tail:"**
 
-In the host terminal:
+The tail from beat 2 is still running in the host terminal — the
+same request that was denied a minute ago now shows an allow:
 
-```bash
-openshell logs flox-sandbox-demo-##### --tail
+```
 # [ocsf] HTTP:GET [INFO] ALLOWED GET http://api.github.com:443/zen [policy:allow_api_github_com_443 engine:l7]
-# (before the grant, connects show as:)
-# [ocsf] NET:OPEN [MED] DENIED /nix/store/…-curl-8.x.x/bin/curl(…) -> api.github.com:443 [reason:network connections not allowed by policy]
 ```
 
 **"Every allow and deny is an audit event. This is the division of
