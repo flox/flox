@@ -63,4 +63,16 @@ if command -v docker >/dev/null 2>&1; then
     done || true
 fi
 
+# demo/host-env leftovers: the gateway-register service writes persistent
+# CLI state under ~/.config/openshell (and may have switched the active
+# gateway selection). The gateway's own TLS/config live in the env cache
+# and are removed with it.
+if [ -d "$HOME/.config/openshell/gateways/flox-demo" ]; then
+  rm -rf "$HOME/.config/openshell/gateways/flox-demo"
+  echo "Removed host-env gateway registration 'flox-demo'."
+  echo "If it was your active gateway, re-select the previous one:"
+  echo "  openshell gateway select <name>"
+fi
+rm -rf "$(dirname "$0")/host-env/.flox/cache/openshell" 2>/dev/null || true
+
 echo "Demo artifacts removed (env, grants, journal, fixtures, images)."

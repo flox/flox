@@ -25,8 +25,11 @@ OpenShell 0.0.82):
   starts the log tail in beat 2 (confirm `--tail` doesn't replay
   old events), and the manifest-declared agent grants that replace
   beat 3's manual Anthropic `policy update`.
-- Per-binary scoping confirmed: `claude` reached its API through
-  the proxy while `curl` in the same session stayed denied.
+- Grant-follows-binary confirmed in the allow direction: `claude`
+  (scoped grant) reached its API through the proxy while `curl` in
+  the same session stayed denied against ungranted endpoints. A
+  binary-mismatch denial against a *granted* endpoint has not been
+  staged.
 - `read-only` does **not** block write methods on 0.0.82 — keep
   write-denial out of the talk track (see beat 3).
 - In-guest `claude` login is a dead end (the OAuth URL can't be
@@ -69,6 +72,10 @@ OpenShell 0.0.82):
    > at its real path — an isolation tradeoff scoped to exactly the
    > one directory you're asking the agent to work on.
 
+   > Experimental alternative: `demo/host-env` provisions steps 2–3
+   > as a flox environment (gateway as a service) — read its README
+   > warnings before use.
+
 ### Demo environment
 
 Run once from the dev shell:
@@ -87,6 +94,7 @@ claude binary:
 [[options.sandbox.network]]
 endpoint = "api.anthropic.com:443"
 binary   = "claude-code/.claude-wrapped"
+# plus an identical grant for statsig.anthropic.com (agent telemetry)
 ```
 
 flox compiles these into the OpenShell policy at sandbox create,
@@ -243,10 +251,11 @@ The tail prints the denial as it happens:
 
 **"flox generated this policy for the activation — Nix store
 read-only, project read-write, and only the network the manifest
-grants: here, the agent's API endpoints, scoped to the exact claude
-binary. curl isn't claude, so it's denied at layer 7 — and every
-denial is on the audit log, down to the store path of the binary
-that tried."**
+grants. api.github.com has no rule, so curl is denied at layer 7 —
+and every denial lands on the audit log, down to the store path of
+the binary that tried. The grants that do exist are scoped to the
+exact claude binary; even curl against the agent's endpoints would
+be denied."**
 
 ---
 

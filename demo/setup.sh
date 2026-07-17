@@ -152,8 +152,9 @@ text = text.replace("[install]\n", install, 1)
 text = text.replace("[hook]\n", hook, 1)
 # Replace the empty [services] stub with an auto-starting web service.
 text = text.replace("[services]\n", services, 1)
-# Declare the OCI sandbox so `cd` auto-activates into the guest with
-# no live manifest edit — appended so [options.sandbox] is its own table.
+# Declare the sandbox backend (and, for openshell, the agent's network
+# grants) so `cd` auto-activates into the guest with no live manifest
+# edit — appended so [options.sandbox] is its own table.
 text = text.rstrip() + "\n\n" + sandbox
 with open(path, "w") as f:
     f.write(text)
@@ -197,6 +198,7 @@ Before running the demo, in your presentation shell:
     export FLOX_FEATURES_AUTO_ACTIVATE=true
     export GITHUB_TOKEN=ghp-demo-FAKE   # for the token-isolation beat
     export FLOX_VERSION=\`flox --version\`  # route the bake to this branch's builder
+    eval "\$(flox hook-env --shell bash --shell-pid \$\$)"  # skip if already in your RC
 
 Then:
 
@@ -206,8 +208,10 @@ and follow demo/SCRIPT.md (backend "oci") or demo/OPENSHELL.md
 (backend "openshell"). Afterwards: bash demo/cleanup.sh
 
 NOTE: the manifest already declares [options.sandbox]
-backend = "$BACKEND" and an auto-starting web service, so the first
-'cd' auto-activates straight into the sandbox. The first-ever bake
+backend = "$BACKEND", an auto-starting web service, and (openshell)
+[[options.sandbox.network]] grants for the agent's Anthropic
+endpoints, so the first 'cd' auto-activates straight into the
+sandbox. The first-ever bake
 takes ~5-15 min (the builder VM compiles the pinned flox rev; later
 bakes reuse its cache, ~2-5 min); to pre-bake off-camera, run:
 
