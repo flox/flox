@@ -466,6 +466,9 @@ enum Binding {
     /// parameter names. Applying it to a namespace whose name the lambda
     /// binds is not an escape — the body was walked with that binding.
     Lambda(HashSet<String>),
+    /// The name is bound to an unapplied `import <static-path>`; applying it
+    /// follows the import like a direct `import <path> <arg>`.
+    Import(String),
     /// The name is bound to something the scanner cannot model; selects on it
     /// produce no refs.
     Opaque,
@@ -827,31 +830,10 @@ impl Walker<'_> {
             return;
         }
         match extract_import(apply) {
-            Some((Some(path), arg)) => match &arg {
-                ast::Expr::AttrSet(attrset) => {
-                    let forwards = self.import_forwards(attrset, env);
-                    if !forwards.is_empty() {
-                        self.pending_imports.push(PendingImport {
-                            path,
-                            arg: ImportArg::Set(forwards),
-                        });
-                    }
-                    self.walk_import_arg(attrset, env);
+            Some((Some(path), arg)) => {
+                if self.apply_import(path, &arg, env) {
                     return;
-                },
-                other => {
-                    // `import ./h.nix catalogs` — the whole namespace is the
-                    // argument, consumed by following the import.
-                    if let Some(Binding::Path(root_path)) = resolve_expr_binding(other, env)
-                        && let [root] = root_path.as_slice()
-                    {
-                        self.pending_imports.push(PendingImport {
-                            path,
-                            arg: ImportArg::Root(root.clone()),
-                        });
-                        return;
-                    }
-                },
+                }
             },
             // A dynamic import path cannot be followed; when the argument
             // would forward a namespace, say so rather than failing silently
@@ -861,21 +843,67 @@ impl Walker<'_> {
             },
             Some((None, _)) | None => {},
         }
-        // Applying a lambda defined in this file: an argument that binds a
-        // root under the parameter name the lambda declares for it was
-        // already accounted for when the body was walked, so it is consumed
-        // rather than escaping.
-        if let Some(fn_expr) = apply.lambda()
-            && let Some(Binding::Lambda(params)) = resolve_expr_binding(&fn_expr, env)
-        {
-            self.walk_consumed_source(&fn_expr, env);
-            if let Some(argument) = apply.argument() {
-                self.walk_known_lambda_arg(&argument, &params, env);
+        if let Some(fn_expr) = apply.lambda() {
+            match resolve_expr_binding(&fn_expr, env) {
+                // Applying a let-bound `import ./file` follows the import
+                // like a direct application.
+                Some(Binding::Import(path)) => {
+                    if let Some(argument) = apply.argument()
+                        && self.apply_import(path, &argument, env)
+                    {
+                        self.walk_consumed_source(&fn_expr, env);
+                        return;
+                    }
+                },
+                // Applying a lambda defined in this file: an argument that
+                // binds a root under the parameter name the lambda declares
+                // for it was already accounted for when the body was walked,
+                // so it is consumed rather than escaping.
+                Some(Binding::Lambda(params)) => {
+                    self.walk_consumed_source(&fn_expr, env);
+                    if let Some(argument) = apply.argument() {
+                        self.walk_known_lambda_arg(&argument, &params, env);
+                    }
+                    return;
+                },
+                _ => {},
             }
-            return;
         }
         for child in apply.syntax().children() {
             self.walk(&child, env);
+        }
+    }
+
+    /// Handle the application of `import <path>` to `arg` — direct or through
+    /// a bound name. Records the pending import and consumes the argument
+    /// when its forwarding shape is recognized; returns whether it was.
+    fn apply_import(&mut self, path: String, arg: &ast::Expr, env: &Env) -> bool {
+        match arg {
+            ast::Expr::AttrSet(attrset) => {
+                let forwards = self.import_forwards(attrset, env);
+                if !forwards.is_empty() {
+                    self.pending_imports.push(PendingImport {
+                        path,
+                        arg: ImportArg::Set(forwards),
+                    });
+                }
+                self.walk_import_arg(attrset, env);
+                true
+            },
+            other => {
+                // `import ./h.nix catalogs` — the whole namespace is the
+                // argument, consumed by following the import.
+                if let Some(Binding::Path(root_path)) = resolve_expr_binding(other, env)
+                    && let [root] = root_path.as_slice()
+                {
+                    self.pending_imports.push(PendingImport {
+                        path,
+                        arg: ImportArg::Root(root.clone()),
+                    });
+                    return true;
+                }
+                false
+            },
         }
     }
 
@@ -1452,7 +1480,7 @@ fn resolve_expr_binding(expr: &ast::Expr, env: &Env) -> Option<Binding> {
                     },
                     (Binding::Set(members), Some(name)) => members.get(&name)?.clone(),
                     (Binding::Set(_), None) => return None,
-                    (Binding::Lambda(_), _) => return None,
+                    (Binding::Lambda(_) | Binding::Import(_), _) => return None,
                     (Binding::Opaque, _) => return None,
                 };
             }
@@ -1460,6 +1488,17 @@ fn resolve_expr_binding(expr: &ast::Expr, env: &Env) -> Option<Binding> {
                 Binding::Opaque => None,
                 binding => Some(binding),
             }
+        },
+        // An unapplied `import <static-path>` — applying the bound name later
+        // follows the import.
+        ast::Expr::Apply(apply) => {
+            let ast::Expr::Ident(import_fn) = apply.lambda()? else {
+                return None;
+            };
+            if import_fn.ident_token()?.text() != "import" {
+                return None;
+            }
+            static_path_str(&apply.argument()?).map(Binding::Import)
         },
         // A conditional resolves to whichever branches the scanner can model;
         // all of them must be locked.
@@ -2913,6 +2952,15 @@ mod tests {
             &roots(&["catalogs"]),
         );
         assert_eq!(got, set(&["catalogs.*"]));
+    }
+
+    #[test]
+    fn import_let_bound_function_followed() {
+        let got = refs_at(
+            "test_data/catalog_refs/import-entry-letbound.nix",
+            &roots(&["catalogs"]),
+        );
+        assert_eq!(got, set(&["catalogs.myorg.toolkit.readVersion"]));
     }
 
     #[test]
