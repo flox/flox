@@ -238,6 +238,7 @@ mod tests {
             sandbox: Some(SandboxOptions {
                 backend: Some(SandboxBackend::Oci),
                 mode: Some(SandboxMode::Enforce),
+                network: None,
             }),
             ..Default::default()
         });
@@ -256,6 +257,7 @@ mod tests {
             sandbox: Some(SandboxOptions {
                 backend: Some(SandboxBackend::HostNative),
                 mode: None,
+                network: None,
             }),
             ..Default::default()
         });
@@ -274,6 +276,7 @@ mod tests {
             sandbox: Some(SandboxOptions {
                 backend: None,
                 mode: Some(SandboxMode::Warn),
+                network: None,
             }),
             ..Default::default()
         });
@@ -292,6 +295,7 @@ mod tests {
             sandbox: Some(SandboxOptions {
                 backend: None,
                 mode: Some(SandboxMode::Off),
+                network: None,
             }),
             ..Default::default()
         });
@@ -309,6 +313,7 @@ mod tests {
             sandbox: Some(SandboxOptions {
                 backend: None,
                 mode: None,
+                network: None,
             }),
             ..Default::default()
         });
@@ -400,6 +405,7 @@ mod tests {
                 sandbox: Some(SandboxOptions {
                     backend: Some(SandboxBackend::Oci),
                     mode: None,
+                    network: None,
                 }),
                 ..Default::default()
             },

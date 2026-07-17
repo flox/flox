@@ -1442,6 +1442,99 @@
         }
       ]
     },
+    "SandboxNetworkAccess": {
+      "description": "HTTP access level of a [`SandboxNetworkRule`].",
+      "oneOf": [
+        {
+          "const": "read-only",
+          "description": "Read methods only (GET/HEAD/OPTIONS).",
+          "type": "string"
+        },
+        {
+          "const": "read-write",
+          "description": "Read and write methods, excluding destructive ones.",
+          "type": "string"
+        },
+        {
+          "const": "full",
+          "description": "All methods.",
+          "type": "string"
+        }
+      ]
+    },
+    "SandboxNetworkProtocol": {
+      "description": "Application protocol of a [`SandboxNetworkRule`].\n\nThese are the protocols OpenShell's L7 engine can enforce; `sql` exists\nin OpenShell's CLI grammar but is rejected under enforcement and is\ndeliberately not offered here.",
+      "oneOf": [
+        {
+          "const": "rest",
+          "description": "Plain HTTP request/response APIs.",
+          "type": "string"
+        },
+        {
+          "const": "websocket",
+          "description": "WebSocket connections.",
+          "type": "string"
+        },
+        {
+          "const": "graphql",
+          "description": "GraphQL over HTTP.",
+          "type": "string"
+        },
+        {
+          "const": "mcp",
+          "description": "Model Context Protocol.",
+          "type": "string"
+        },
+        {
+          "const": "json-rpc",
+          "description": "JSON-RPC over HTTP.",
+          "type": "string"
+        }
+      ]
+    },
+    "SandboxNetworkRule": {
+      "additionalProperties": false,
+      "description": "A single network grant for the activation sandbox.\n\n```toml\n[[options.sandbox.network]]\nendpoint = \"api.github.com:443\"\naccess   = \"read-only\"                  # default: \"full\"\nprotocol = \"rest\"                       # default: \"rest\"\nbinary   = \"curl\"                       # default: any process\n```\n\n`binary` scopes the grant to one executable and accepts three forms:\nan install id from `[install]` (`\"curl\"` → the locked package's\n`bin/curl`), `\"<install-id>/<exe>\"` for packages whose executable name\ndiffers from the install id (`\"claude-code/.claude-wrapped\"`), or an\nabsolute path used verbatim. Install ids resolve to the exact Nix store\npath locked for the sandbox's system, so grants follow upgrades without\nediting the rule.",
+      "properties": {
+        "access": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SandboxNetworkAccess"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "HTTP access level for the grant. Defaults to `full`."
+        },
+        "binary": {
+          "description": "Executable the grant is scoped to (see the type-level docs for the\naccepted forms). When omitted the grant applies to every process in\nthe sandbox.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "endpoint": {
+          "description": "The endpoint to grant, as `<HOST>:<PORT>` (e.g. `api.github.com:443`).",
+          "type": "string"
+        },
+        "protocol": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SandboxNetworkProtocol"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Application protocol the backend's L7 proxy should enforce.\nDefaults to `rest`."
+        }
+      },
+      "required": [
+        "endpoint"
+      ],
+      "type": "object"
+    },
     "SandboxOptions": {
       "additionalProperties": false,
       "description": "The `[options.sandbox]` table.\n\nBoth fields are optional: an empty table (or a table with just `backend`)\nenables the sandbox with backend-appropriate defaults. `mode = \"off\"` is\nthe master switch and disables the sandbox regardless of `backend`.",
@@ -1467,6 +1560,16 @@
             }
           ],
           "description": "The sandbox mode. When omitted the default is derived from the\nbackend's capabilities (see above). `mode = \"off\"` is the master\nswitch: it disables the sandbox regardless of `backend`."
+        },
+        "network": {
+          "description": "Network grants applied by policy-capable backends (`openshell`)\nwhen the sandbox is created. Everything not granted stays denied.\n\n```toml\n[[options.sandbox.network]]\nendpoint = \"api.github.com:443\"\naccess   = \"read-only\"\nbinary   = \"curl\"\n```",
+          "items": {
+            "$ref": "#/$defs/SandboxNetworkRule"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
         }
       },
       "type": "object"

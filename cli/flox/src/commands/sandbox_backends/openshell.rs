@@ -28,7 +28,12 @@
 //!   `docker image inspect` and re-injected as repeated `--env KEY=VALUE` flags.
 //! - **Policy file.** OpenShell requires a `--policy <file>` YAML that declares
 //!   filesystem visibility. flox generates one per activation under
-//!   `<dot_flox>/cache/` and passes it to `sandbox create`.
+//!   `<dot_flox>/cache/` and passes it to `sandbox create`. Network grants
+//!   declared in the manifest (`[[options.sandbox.network]]`) are compiled
+//!   into the policy's `network_policies` map, with `binary` install ids
+//!   resolved to guest store paths via the lockfile — so declared endpoints
+//!   are enforced from the sandbox's first instruction, and everything else
+//!   stays deny-by-default.
 //! - **Ephemerality.** `--no-keep` deletes the sandbox when the initial command
 //!   exits, mirroring the OCI backend's `--rm`.
 //! - **Working directory.** `sandbox create` has no `--workdir` flag; the cwd
@@ -43,6 +48,7 @@
 //!   the expected hash-tag is absent.
 //! - `FLOX_SANDBOX_OCI_AUTOBAKE` — bake without prompting.
 
+use std::collections::BTreeMap;
 use std::convert::Infallible;
 use std::io::IsTerminal;
 use std::path::{Path, PathBuf};
@@ -50,7 +56,13 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, bail};
 use flox_core::activate::context::InvocationType;
 use flox_core::activate::sandbox_backend::SandboxBackend;
-use flox_manifest::lockfile::Lockfile;
+use flox_core::activate::sandbox_policy::{
+    SandboxNetworkAccess,
+    SandboxNetworkProtocol,
+    SandboxNetworkRule,
+};
+use flox_manifest::interfaces::AsLatestSchema;
+use flox_manifest::lockfile::{LockedPackage, Lockfile};
 use flox_rust_sdk::providers::container_builder::ContainerBuilderParams;
 use semver::Version;
 use serde_json::json;
@@ -360,8 +372,9 @@ fn wrap_openshell(
     let entrypoint = docker_image_entrypoint(&image_ref)?;
     let image_env = docker_image_env(&image_ref)?;
 
-    // Generate the policy YAML for this activation.
-    let policy_path = write_openshell_policy(dot_flox_path, &project)?;
+    // Generate the policy YAML for this activation, including any network
+    // grants declared in the manifest.
+    let policy_path = write_openshell_policy(dot_flox_path, &project, lockfile)?;
 
     // Build the `openshell sandbox create` argv.
     let sandbox_name = openshell_sandbox_name(env_name);
@@ -540,7 +553,9 @@ pub(crate) fn env_entry_valid(entry: &str) -> bool {
 /// directory before writing. The paths listed here give the sandbox workable
 /// read-only access to the Nix store and standard Linux directories, and
 /// read-write access to the working dirs and the project bind-mount.
-pub(crate) fn openshell_policy_yaml(project: &Path) -> String {
+/// `network` holds the manifest's resolved `[[options.sandbox.network]]`
+/// grants; an empty slice keeps the deny-all `network_policies: {}`.
+pub(crate) fn openshell_policy_yaml(project: &Path, network: &[ResolvedNetworkRule]) -> String {
     format!(
         "version: 1\n\
          filesystem_policy:\n\
@@ -565,19 +580,206 @@ pub(crate) fn openshell_policy_yaml(project: &Path) -> String {
          process:\n\
          \x20 run_as_user: sandbox\n\
          \x20 run_as_group: sandbox\n\
-         network_policies: {{}}\n",
-        project.display()
+         {}",
+        project.display(),
+        render_network_policies(network)
     )
+}
+
+/// The Linux system the sandbox guest runs as.
+///
+/// The image is baked for the host's architecture on a Linux kernel; macOS
+/// hosts run the guest inside the gateway's Docker VM. Lockfile lookups for
+/// guest paths must therefore use this system, not the host's.
+pub(crate) fn openshell_guest_system() -> &'static str {
+    if cfg!(target_arch = "aarch64") {
+        "aarch64-linux"
+    } else {
+        "x86_64-linux"
+    }
+}
+
+/// A `[[options.sandbox.network]]` rule resolved against the lockfile:
+/// endpoint split into host/port, defaults applied, and the `binary` spec
+/// resolved to an absolute path inside the guest.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ResolvedNetworkRule {
+    /// Rule-map key, `allow_<host>_<port>` matching OpenShell's own
+    /// generated-rule naming so audit-log lines look native. Deduplicated
+    /// with a numeric suffix when several rules grant the same endpoint.
+    key: String,
+    host: String,
+    port: u16,
+    access: SandboxNetworkAccess,
+    protocol: SandboxNetworkProtocol,
+    binary: Option<String>,
+}
+
+/// Render the `network_policies` section of the policy YAML.
+fn render_network_policies(rules: &[ResolvedNetworkRule]) -> String {
+    if rules.is_empty() {
+        return "network_policies: {}\n".to_string();
+    }
+    let mut out = String::from("network_policies:\n");
+    for rule in rules {
+        out.push_str(&format!("  {}:\n", rule.key));
+        out.push_str(&format!("    name: {}\n", rule.key));
+        out.push_str("    endpoints:\n");
+        out.push_str(&format!("      - host: {}\n", rule.host));
+        out.push_str(&format!("        port: {}\n", rule.port));
+        out.push_str(&format!("        protocol: {}\n", rule.protocol));
+        // OpenShell's `enforcement` defaults to `audit` (violations are
+        // logged but the request is allowed); enforcement must be explicit.
+        out.push_str("        enforcement: enforce\n");
+        out.push_str(&format!("        access: {}\n", rule.access));
+        if let Some(binary) = &rule.binary {
+            out.push_str("    binaries:\n");
+            out.push_str(&format!("      - path: '{}'\n", binary.replace('\'', "''")));
+        }
+    }
+    out
+}
+
+/// Resolve the manifest's network rules against the lockfile for the guest
+/// system.
+pub(crate) fn resolve_network_rules(
+    rules: &[SandboxNetworkRule],
+    lockfile: &Lockfile,
+    system: &str,
+) -> Result<Vec<ResolvedNetworkRule>> {
+    let mut used_keys: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut resolved = Vec::with_capacity(rules.len());
+    for rule in rules {
+        let (host, port) = split_endpoint(&rule.endpoint)?;
+        let base_key = format!(
+            "allow_{}_{}",
+            host.chars()
+                .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
+                .collect::<String>(),
+            port
+        );
+        let mut key = base_key.clone();
+        let mut suffix = 2;
+        while !used_keys.insert(key.clone()) {
+            key = format!("{base_key}_{suffix}");
+            suffix += 1;
+        }
+        let binary = rule
+            .binary
+            .as_deref()
+            .map(|spec| resolve_policy_binary(lockfile, system, spec))
+            .transpose()?;
+        resolved.push(ResolvedNetworkRule {
+            key,
+            host,
+            port,
+            access: rule.access.unwrap_or_default(),
+            protocol: rule.protocol.unwrap_or_default(),
+            binary,
+        });
+    }
+    Ok(resolved)
+}
+
+/// Split a `<HOST>:<PORT>` endpoint and validate both halves.
+fn split_endpoint(endpoint: &str) -> Result<(String, u16)> {
+    let invalid = || {
+        anyhow::anyhow!(
+            "Invalid sandbox network endpoint '{endpoint}'.\nWrite the endpoint as <HOST>:<PORT>, e.g. 'api.github.com:443'."
+        )
+    };
+    let (host, port) = endpoint.rsplit_once(':').ok_or_else(invalid)?;
+    // Restrict the host to hostname characters plus OpenShell's first-label
+    // wildcards; this doubles as YAML-injection protection since the value
+    // is rendered unquoted.
+    let host_ok = !host.is_empty()
+        && host
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '*'));
+    if !host_ok {
+        return Err(invalid());
+    }
+    let port: u16 = port.parse().map_err(|_| invalid())?;
+    Ok((host.to_string(), port))
+}
+
+/// Resolve a rule's `binary` spec to an absolute path inside the guest.
+///
+/// Accepted forms: an absolute path (used verbatim), an install id
+/// (`"curl"` → `<store path>/bin/curl`), or `"<install-id>/<exe>"` for
+/// packages whose executable name differs from the install id
+/// (`"claude-code/.claude-wrapped"`). The store path comes from the
+/// lockfile's locked outputs for `system`, so the grant tracks upgrades.
+pub(crate) fn resolve_policy_binary(
+    lockfile: &Lockfile,
+    system: &str,
+    spec: &str,
+) -> Result<String> {
+    if spec.starts_with('/') {
+        if spec.contains('\n') {
+            bail!("Invalid sandbox network binary path '{spec}'.");
+        }
+        return Ok(spec.to_string());
+    }
+    let (install_id, exe) = match spec.split_once('/') {
+        Some((install_id, exe)) => (install_id, exe),
+        None => (spec, spec),
+    };
+    let package = lockfile
+        .packages
+        .iter()
+        .find(|p| p.install_id() == install_id && p.system().as_str() == system)
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "Sandbox network rule names binary '{spec}', but package '{install_id}' is not locked for system '{system}'.\nAdd '{install_id}' to '[install]' in the manifest, or use an absolute path in the rule."
+            )
+        })?;
+    let store_path = match package {
+        LockedPackage::Catalog(pkg) => pick_binary_output(&pkg.outputs),
+        LockedPackage::Flake(pkg) => pick_binary_output(&pkg.locked_installable.outputs),
+        LockedPackage::StorePath(pkg) => Some(pkg.store_path.clone()),
+    }
+    .ok_or_else(|| {
+        anyhow::anyhow!(
+            "Package '{install_id}' has no locked store path outputs to resolve binary '{spec}' against."
+        )
+    })?;
+    Ok(format!("{store_path}/bin/{exe}"))
+}
+
+/// Pick the output most likely to hold executables: `bin`, then `out`, then
+/// the alphabetically first.
+fn pick_binary_output(outputs: &BTreeMap<String, String>) -> Option<String> {
+    outputs
+        .get("bin")
+        .or_else(|| outputs.get("out"))
+        .or_else(|| outputs.values().next())
+        .cloned()
 }
 
 /// Write the per-activation OpenShell policy YAML under `.flox/cache/` and
 /// return the path.
-fn write_openshell_policy(dot_flox_path: &Path, project: &Path) -> Result<PathBuf> {
+fn write_openshell_policy(
+    dot_flox_path: &Path,
+    project: &Path,
+    lockfile: &Lockfile,
+) -> Result<PathBuf> {
+    let manifest = lockfile
+        .migrated_manifest()
+        .context("failed to migrate the manifest for sandbox policy generation")?;
+    let rules = manifest
+        .as_latest_schema()
+        .options
+        .sandbox
+        .as_ref()
+        .and_then(|sandbox| sandbox.network.clone())
+        .unwrap_or_default();
+    let network = resolve_network_rules(&rules, lockfile, openshell_guest_system())?;
     let cache_dir = dot_flox_path.join("cache");
     std::fs::create_dir_all(&cache_dir)
         .with_context(|| format!("failed to create cache dir '{}'", cache_dir.display()))?;
     let policy_path = cache_dir.join("openshell-policy.yaml");
-    let yaml = openshell_policy_yaml(project);
+    let yaml = openshell_policy_yaml(project, &network);
     std::fs::write(&policy_path, &yaml)
         .with_context(|| format!("failed to write policy to '{}'", policy_path.display()))?;
     debug!(path = %policy_path.display(), "wrote openshell policy YAML");
@@ -1048,7 +1250,7 @@ mod tests {
     #[test]
     fn policy_yaml_contains_project_path() {
         let project = Path::new("/home/user/myproject");
-        let yaml = openshell_policy_yaml(project);
+        let yaml = openshell_policy_yaml(project, &[]);
         assert!(yaml.contains("/home/user/myproject"), "got:\n{yaml}");
         assert!(yaml.contains("version: 1"), "got:\n{yaml}");
         assert!(yaml.contains("run_as_user: sandbox"), "got:\n{yaml}");
@@ -1059,6 +1261,144 @@ mod tests {
         assert!(yaml.contains("network_policies: {}"), "got:\n{yaml}");
         assert!(yaml.contains("landlock:"), "got:\n{yaml}");
         assert!(yaml.contains("best_effort"), "got:\n{yaml}");
+    }
+
+    // ── manifest network rules ────────────────────────────────────────────────
+
+    fn fixture_lockfile(env: &str) -> Lockfile {
+        let path = flox_test_utils::GENERATED_DATA.join(format!("envs/{env}/manifest.lock"));
+        let content = std::fs::read_to_string(&path)
+            .unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
+        content
+            .parse()
+            .unwrap_or_else(|e| panic!("parse {}: {e:?}", path.display()))
+    }
+
+    fn network_rule(endpoint: &str, binary: Option<&str>) -> SandboxNetworkRule {
+        SandboxNetworkRule {
+            endpoint: endpoint.to_string(),
+            access: None,
+            protocol: None,
+            binary: binary.map(String::from),
+        }
+    }
+
+    #[test]
+    fn network_rules_render_into_policy_yaml() {
+        let lockfile = fixture_lockfile("hello");
+        let rules = [SandboxNetworkRule {
+            endpoint: "api.github.com:443".to_string(),
+            access: Some(SandboxNetworkAccess::ReadOnly),
+            protocol: None,
+            binary: Some("hello".to_string()),
+        }];
+        let resolved = resolve_network_rules(&rules, &lockfile, "aarch64-linux").unwrap();
+        let yaml = openshell_policy_yaml(Path::new("/home/user/p"), &resolved);
+        let expected = indoc::indoc! {"
+            network_policies:
+              allow_api_github_com_443:
+                name: allow_api_github_com_443
+                endpoints:
+                  - host: api.github.com
+                    port: 443
+                    protocol: rest
+                    enforcement: enforce
+                    access: read-only
+                binaries:
+                  - path: '/nix/store/g383j16f2lxz4zzs967i9hjgvivy6q7h-hello-2.12.3/bin/hello'
+        "};
+        assert!(yaml.ends_with(expected), "got:\n{yaml}");
+        assert!(!yaml.contains("network_policies: {}"), "got:\n{yaml}");
+    }
+
+    #[test]
+    fn network_rule_defaults_are_full_rest_unscoped() {
+        let lockfile = fixture_lockfile("hello");
+        let resolved =
+            resolve_network_rules(&[network_rule("example.com:8080", None)], &lockfile, "aarch64-linux").unwrap();
+        assert_eq!(resolved, vec![ResolvedNetworkRule {
+            key: "allow_example_com_8080".to_string(),
+            host: "example.com".to_string(),
+            port: 8080,
+            access: SandboxNetworkAccess::Full,
+            protocol: SandboxNetworkProtocol::Rest,
+            binary: None,
+        }]);
+        let yaml = render_network_policies(&resolved);
+        assert!(!yaml.contains("binaries:"), "got:\n{yaml}");
+    }
+
+    #[test]
+    fn duplicate_endpoints_get_deduplicated_keys() {
+        let lockfile = fixture_lockfile("hello");
+        let rules = [
+            network_rule("example.com:443", None),
+            network_rule("example.com:443", Some("hello")),
+        ];
+        let resolved = resolve_network_rules(&rules, &lockfile, "aarch64-linux").unwrap();
+        assert_eq!(resolved[0].key, "allow_example_com_443");
+        assert_eq!(resolved[1].key, "allow_example_com_443_2");
+    }
+
+    #[test]
+    fn endpoint_without_port_is_rejected() {
+        let lockfile = fixture_lockfile("hello");
+        let err = resolve_network_rules(&[network_rule("example.com", None)], &lockfile, "aarch64-linux")
+            .unwrap_err();
+        assert!(err.to_string().contains("<HOST>:<PORT>"), "got: {err}");
+    }
+
+    #[test]
+    fn endpoint_with_invalid_host_is_rejected() {
+        let lockfile = fixture_lockfile("hello");
+        let err = resolve_network_rules(
+            &[network_rule("bad host\nhost:443", None)],
+            &lockfile,
+            "aarch64-linux",
+        )
+        .unwrap_err();
+        assert!(err.to_string().contains("Invalid sandbox network endpoint"), "got: {err}");
+    }
+
+    #[test]
+    fn binary_install_id_resolves_to_guest_store_path() {
+        let lockfile = fixture_lockfile("hello");
+        let path = resolve_policy_binary(&lockfile, "aarch64-linux", "hello").unwrap();
+        assert_eq!(
+            path,
+            "/nix/store/g383j16f2lxz4zzs967i9hjgvivy6q7h-hello-2.12.3/bin/hello"
+        );
+    }
+
+    #[test]
+    fn binary_id_slash_exe_form_overrides_executable_name() {
+        let lockfile = fixture_lockfile("hello");
+        let path = resolve_policy_binary(&lockfile, "aarch64-linux", "hello/.hello-wrapped").unwrap();
+        assert_eq!(
+            path,
+            "/nix/store/g383j16f2lxz4zzs967i9hjgvivy6q7h-hello-2.12.3/bin/.hello-wrapped"
+        );
+    }
+
+    #[test]
+    fn binary_absolute_path_passes_through() {
+        let lockfile = fixture_lockfile("hello");
+        let path = resolve_policy_binary(&lockfile, "aarch64-linux", "/usr/bin/curl").unwrap();
+        assert_eq!(path, "/usr/bin/curl");
+    }
+
+    #[test]
+    fn binary_unknown_install_id_errors_with_next_step() {
+        let lockfile = fixture_lockfile("hello");
+        let err = resolve_policy_binary(&lockfile, "aarch64-linux", "curl").unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("not locked for system 'aarch64-linux'"), "got: {msg}");
+        assert!(msg.contains("[install]"), "got: {msg}");
+    }
+
+    #[test]
+    fn guest_system_is_linux() {
+        assert!(openshell_guest_system().ends_with("-linux"));
     }
 
     // ── resolve_tty ───────────────────────────────────────────────────────────

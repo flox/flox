@@ -781,6 +781,7 @@ pub(crate) mod tests {
             manifest.options.sandbox = Some(SandboxOptions {
                 backend: Some(SandboxBackend::Oci),
                 mode: None,
+                network: None,
             });
         }
         Lockfile {

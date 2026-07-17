@@ -970,6 +970,7 @@ mod tests {
             sandbox: Some(SandboxOptions {
                 mode: Some(SandboxMode::Warn),
                 backend: None,
+                network: None,
             }),
             ..Default::default()
         };
@@ -977,6 +978,7 @@ mod tests {
             sandbox: Some(SandboxOptions {
                 mode: Some(SandboxMode::Enforce),
                 backend: Some(SandboxBackend::Oci),
+                network: None,
             }),
             ..Default::default()
         };
@@ -988,6 +990,7 @@ mod tests {
             sandbox: Some(SandboxOptions {
                 mode: Some(SandboxMode::Enforce),
                 backend: Some(SandboxBackend::Oci),
+                network: None,
             }),
             ..Default::default()
         });
@@ -1007,6 +1010,7 @@ mod tests {
             sandbox: Some(SandboxOptions {
                 mode: Some(SandboxMode::Prompt),
                 backend: None,
+                network: None,
             }),
             ..Default::default()
         };
@@ -1019,6 +1023,7 @@ mod tests {
             sandbox: Some(SandboxOptions {
                 mode: Some(SandboxMode::Prompt),
                 backend: None,
+                network: None,
             }),
             ..Default::default()
         });

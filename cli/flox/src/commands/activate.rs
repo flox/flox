@@ -1469,6 +1469,7 @@ mod tests {
         SandboxOptions {
             mode: Some(mode),
             backend: None,
+            network: None,
         }
     }
 
@@ -1516,6 +1517,7 @@ mod tests {
         let manifest = SandboxOptions {
             mode: Some(SandboxMode::Off),
             backend: Some(SandboxBackend::Oci),
+            network: None,
         };
         let mode = resolve_sandbox_mode(None, Some(&manifest), true, false).unwrap();
         assert_eq!(mode, SandboxMode::Off);
@@ -1527,6 +1529,7 @@ mod tests {
         let manifest = SandboxOptions {
             mode: None,
             backend: Some(SandboxBackend::Oci),
+            network: None,
         };
         let mode = resolve_sandbox_mode(None, Some(&manifest), true, false).unwrap();
         assert_eq!(mode, SandboxMode::Enforce);
@@ -1538,6 +1541,7 @@ mod tests {
         let manifest = SandboxOptions {
             mode: None,
             backend: Some(SandboxBackend::Libsandbox),
+            network: None,
         };
         let mode = resolve_sandbox_mode(None, Some(&manifest), true, false).unwrap();
         assert_eq!(mode, SandboxMode::Prompt);
@@ -1549,6 +1553,7 @@ mod tests {
         let manifest = SandboxOptions {
             mode: None,
             backend: None,
+            network: None,
         };
         let mode = resolve_sandbox_mode(None, Some(&manifest), true, false).unwrap();
         assert_eq!(mode, SandboxMode::Prompt);

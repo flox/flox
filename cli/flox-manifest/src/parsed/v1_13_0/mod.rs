@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 
 use flox_core::activate::sandbox_backend::SandboxBackend;
 use flox_core::activate::sandbox_mode::SandboxMode;
+use flox_core::activate::sandbox_policy::SandboxNetworkRule;
 use flox_core::data::System;
 #[cfg(test)]
 use flox_test_utils::proptest::alphanum_and_whitespace_string;
@@ -290,6 +291,16 @@ pub struct SandboxOptions {
     /// backend's capabilities (see above). `mode = "off"` is the master
     /// switch: it disables the sandbox regardless of `backend`.
     pub mode: Option<SandboxMode>,
+    /// Network grants applied by policy-capable backends (`openshell`)
+    /// when the sandbox is created. Everything not granted stays denied.
+    ///
+    /// ```toml
+    /// [[options.sandbox.network]]
+    /// endpoint = "api.github.com:443"
+    /// access   = "read-only"
+    /// binary   = "curl"
+    /// ```
+    pub network: Option<Vec<SandboxNetworkRule>>,
 }
 
 // Conversion from the common Options, used by the V1_12_0 -> V1_13_0
