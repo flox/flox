@@ -345,20 +345,6 @@ trust — the sandbox, not the agent, is the boundary. And this time
 the agent's network access is an auditable policy, not all-or-
 nothing."**
 
-```bash
-flox [sandbox-demo] bash-5.3$ claude --permission-mode auto
-```
-
-Give it real work:
-
-```
-> add a docstring to greet() in app.py and commit the change
-```
-
-Claude edits `app.py` and commits — no per-action prompts. If it
-tries to reach anywhere outside the policy, the proxy denies it and
-the denial shows up in `openshell logs`.
-
 > **Authenticate before the demo — don't log in inside the guest.**
 > The interactive `claude` login prints an OAuth URL, and a sandboxed
 > session gives you no way to copy it out (or paste the code back).
@@ -387,6 +373,22 @@ the denial shows up in `openshell logs`.
 > The guest runs as the unprivileged `sandbox` user, so
 > `claude --dangerously-skip-permissions` also works here if you
 > prefer it to auto mode.
+
+With the token pre-seeded, start the agent:
+
+```bash
+flox [sandbox-demo] bash-5.3$ claude --permission-mode auto
+```
+
+Give it real work:
+
+```
+> add a docstring to greet() in app.py and commit the change
+```
+
+Claude edits `app.py` and commits — no per-action prompts. If it
+tries to reach anywhere outside the policy, the proxy denies it and
+the denial shows up in `openshell logs`.
 
 ---
 
