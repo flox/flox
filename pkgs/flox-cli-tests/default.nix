@@ -204,6 +204,7 @@ writeShellScriptBin PROJECT_NAME ''
     export FLOX_ACTIVATIONS_BIN="${flox-activations}/libexec/flox-activations"
     export PROCESS_COMPOSE_BIN='${process-compose}/bin/process-compose'
     export FLOX_INTERPRETER='${flox-interpreter}'
+    export FLOX_INTERPRETER_WRAPPER='${flox-interpreter.build_executable_wrapper}'
   ''}
 
   # Default flag values
