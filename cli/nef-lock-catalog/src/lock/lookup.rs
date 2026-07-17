@@ -39,6 +39,17 @@ pub enum LockError {
     #[error("{} catalog reference(s) were unresolvable", .0.len())]
     Unresolvable(Vec<UnresolvableEntry>),
 
+    /// The scan produced a root-level sentinel (`catalogs.*`): the expression
+    /// uses the whole catalog namespace in a way that cannot be analyzed
+    /// statically (e.g. passes `catalogs` to an opaque function or selects a
+    /// catalog dynamically). The wire form of such a reference (`*`) can
+    /// never resolve, so fail before making a request.
+    #[error(
+        "Cannot determine which catalogs the expression uses; it references the whole catalog namespace in a way that cannot be analyzed.\n\
+         Reference packages as 'catalogs.<catalog>.<package>', or forward 'catalogs' only through 'import' arguments."
+    )]
+    RootNamespaceEscape,
+
     /// The catalog lookup request itself failed.
     #[error(transparent)]
     Client(#[from] FloxhubClientError),
@@ -65,6 +76,10 @@ pub async fn lock_references(
     references: BTreeSet<CatalogRef>,
     stability: Stability,
 ) -> Result<BuildLock, LockError> {
+    if references.iter().any(is_root_sentinel) {
+        return Err(LockError::RootNamespaceEscape);
+    }
+
     let request = build_request(references, stability);
     // The exact JSON POSTed to `/build-inputs/lookup`, for `--verbose`. Guarded
     // so the request is only serialized when the level is enabled.
@@ -78,6 +93,12 @@ pub async fn lock_references(
 
     let response = client.build_inputs_lookup(request).await?;
     lock_from_response(response)
+}
+
+/// Whether a scanned reference is a root-level sentinel (`<root>.*`), whose
+/// wire form (`*`) the server can never resolve.
+fn is_root_sentinel(reference: &CatalogRef) -> bool {
+    reference.as_str().split_once('.').map(|(_root, rest)| rest) == Some("*")
 }
 
 /// Convert the reference list into the generated wire request.
@@ -156,6 +177,24 @@ mod tests {
     use serde_json::json;
 
     use super::*;
+
+    #[test]
+    fn root_sentinel_detected_only_at_root_level() {
+        let cases = [
+            // A root-level sentinel would go on the wire as `*`.
+            ("catalogs.*", true),
+            // Catalog and package sentinels expand server-side.
+            ("catalogs.myorg.*", false),
+            ("catalogs.myorg.pkg.*", false),
+            ("catalogs.myorg.pkg", false),
+        ];
+        let got: Vec<(&str, bool)> = cases
+            .iter()
+            .map(|(reference, _)| (*reference, is_root_sentinel(&CatalogRef::from(*reference))))
+            .collect();
+        let expected: Vec<(&str, bool)> = cases.into_iter().collect();
+        assert_eq!(got, expected);
+    }
 
     #[test]
     fn build_request_maps_references_and_stability() {
