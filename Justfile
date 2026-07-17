@@ -179,9 +179,14 @@ gen-unit-data-no-publish force="":
     #      `FloxhubClientConfig::stability_from_env()`.
     #      `auto_recording_client_inner` already reads the env var and
     #      needs no change.
-    #   3. Force-regenerate both cassette stores: unit_test_generated via
-    #      `just gen-unit-data-no-publish force=true`, and the mk_data
-    #      store via `just md`.
+    #   3. Force-regenerate the mk_data store first (`just md -f`), then
+    #      unit_test_generated (`just gen-unit-data-no-publish force=true`).
+    #      Order matters: gen-unit-data-no-publish's test suite replays the
+    #      mk_data store via `catalog_replay_client`, which after step 2
+    #      sends `lts` — those replays fail unless the mk_data store is
+    #      already regenerated with a matching stability key. `just md`
+    #      (no `-f`) skips any cassette whose output file already exists,
+    #      so it would leave the store unpinned; `-f` is required.
     #   4. Verify both replay suites are green.
 
     if [ "{{ force }}" = "true" ]; then
