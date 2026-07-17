@@ -700,7 +700,11 @@ mod tests {
     #[test]
     fn package_group_convert_defaults_stability_to_none() {
         let api_group: api_types::PackageGroup = make_package_group().try_into().unwrap();
-        assert_eq!(api_group.stability, None);
+        assert_eq!(api_group, api_types::PackageGroup {
+            descriptors: vec![],
+            name: "toplevel".to_string(),
+            stability: None,
+        });
     }
 
     /// Regression guard: `TryFrom` must not read
@@ -710,7 +714,11 @@ mod tests {
     fn package_group_convert_ignores_stability_env_var() {
         temp_env::with_var(crate::FLOX_RESOLVE_STABILITY_VAR, Some("lts"), || {
             let api_group: api_types::PackageGroup = make_package_group().try_into().unwrap();
-            assert_eq!(api_group.stability, None);
+            assert_eq!(api_group, api_types::PackageGroup {
+                descriptors: vec![],
+                name: "toplevel".to_string(),
+                stability: None,
+            });
         });
     }
 }
