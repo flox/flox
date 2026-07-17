@@ -4,13 +4,13 @@ use std::path::PathBuf;
 
 use anyhow::Result;
 use flox_core::activate::context::InvocationType;
-use flox_core::activate::vars::FLOX_ACTIVATIONS_BIN;
+use flox_core::activate::vars::{FLOX_ACTIVATIONS_BIN, FLOX_INVOCATION_TYPES_VAR};
 use flox_core::hook_actions::PROMPT_HOOK_VERSION_ENV;
 use indoc::{formatdoc, indoc};
 use shell_gen::{GenerateShell, Shell, set_unexported_unexpanded, source_file};
 
-use crate::attach_diff::{todo_drop_set_exported_unexpanded, todo_drop_unset};
-use crate::gen_rc::{Action, RM};
+use crate::attach_diff::todo_drop_unset;
+use crate::gen_rc::{Action, RM, invocation_types_update_stmt};
 
 /// Arguments for generating zsh startup commands
 #[derive(Debug, Clone)]
@@ -18,6 +18,10 @@ pub struct ZshStartupArgs {
     pub flox_activate_tracelevel: u32,
     pub activate_d: PathBuf,
     pub invocation_type: InvocationType,
+    /// The activated environment's pointer as serialized in
+    /// `_FLOX_ACTIVE_ENVIRONMENTS`, used to key its `_FLOX_INVOCATION_TYPES`
+    /// entry.
+    pub env_pointer: String,
     pub clean_up: Option<PathBuf>,
     pub register_hook: bool,
     pub flox_bin: String,
@@ -191,19 +195,28 @@ pub fn generate_zsh_profile_commands(
         },
     }
 
-    // Export _FLOX_INVOCATION_TYPE so it is visible to std::env::vars() when
-    // computing the activation diff for stacked in-place activations. The diff
-    // then handles cleanup (unset on outermost deactivate, restore outer value
-    // on nested deactivate) without requiring an explicit unset here.
+    // Record this activation in the shell's `_FLOX_INVOCATION_TYPES` map;
+    // see the matching block in gen_rc/bash.rs for the design notes.
     match action {
-        Action::Activate { args, .. } => {
-            stmts.push(todo_drop_set_exported_unexpanded(
-                "_FLOX_INVOCATION_TYPE",
-                format!("{}", args.invocation_type),
-            ));
+        Action::Activate { args, .. } if !args.env_pointer.is_empty() => {
+            stmts.push(
+                format!(
+                    r#"{var}="$('{flox_activations}' push-invocation-type --invocation-type {invocation_type} --env {env} --current "${{{var}:-}}")";"#,
+                    var = FLOX_INVOCATION_TYPES_VAR,
+                    flox_activations = FLOX_ACTIVATIONS_BIN.display(),
+                    invocation_type = args.invocation_type,
+                    env = shell_escape::escape(args.env_pointer.as_str().into()),
+                )
+                .to_stmt(),
+            );
         },
-        Action::Deactivate(_) => {
-            // Handled by the activation diff (added → unset, modified → restore).
+        Action::Activate { .. } => {},
+        Action::Deactivate(ctx) => {
+            // A subshell that inherited activation environment variables should
+            // leave _FLOX_INVOCATION_TYPES alone
+            if let Some(remaining) = &ctx.invocation_types {
+                stmts.push(invocation_types_update_stmt(remaining));
+            }
         },
     }
 
@@ -363,13 +376,13 @@ mod tests {
             export QUOTED_VAR='QUOTED'\''VALUE';
             unset DELETED_VAR;
             source /interpreter/activate.d/zsh;
-            export _FLOX_INVOCATION_TYPE=interactive;
+            _FLOX_INVOCATION_TYPES="$('/flox_activations' push-invocation-type --invocation-type interactive --env '{"name":"test_env","type":"path"}' --current "${_FLOX_INVOCATION_TYPES:-}")";
             if [[ -o interactive ]]; then source '/interpreter/activate.d/set-prompt.zsh'; fi;
             /nix/store/XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX-coreutils-9.10/bin/rm /path/to/rc/file;
             export _FLOX_PROMPT_HOOK_VERSION=1;
             _flox_hook() {
               local _flox_vars;
-              _flox_vars="$("/flox" hook-env --shell zsh --shell-pid $$ --invocation-type "${_FLOX_INVOCATION_TYPE:-inplace}")";
+              _flox_vars="$("/flox" hook-env --shell zsh --shell-pid $$ --invocation-types "${_FLOX_INVOCATION_TYPES:-}")";
               trap -- '' SIGINT;
               eval "$_flox_vars";
               trap - SIGINT;
@@ -407,13 +420,13 @@ mod tests {
             export QUOTED_VAR='QUOTED'\''VALUE';
             unset DELETED_VAR;
             source /interpreter/activate.d/zsh;
-            export _FLOX_INVOCATION_TYPE=inplace;
+            _FLOX_INVOCATION_TYPES="$('/flox_activations' push-invocation-type --invocation-type inplace --env '{"name":"test_env","type":"path"}' --current "${_FLOX_INVOCATION_TYPES:-}")";
             if [[ -o interactive ]]; then source '/interpreter/activate.d/set-prompt.zsh'; fi;
             /nix/store/XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX-coreutils-9.10/bin/rm /path/to/rc/file;
             export _FLOX_PROMPT_HOOK_VERSION=1;
             _flox_hook() {
               local _flox_vars;
-              _flox_vars="$("/flox" hook-env --shell zsh --shell-pid $$ --invocation-type "${_FLOX_INVOCATION_TYPE:-inplace}")";
+              _flox_vars="$("/flox" hook-env --shell zsh --shell-pid $$ --invocation-types "${_FLOX_INVOCATION_TYPES:-}")";
               trap -- '' SIGINT;
               eval "$_flox_vars";
               trap - SIGINT;
@@ -449,7 +462,6 @@ mod tests {
             unset QUOTED_VAR;
             unset _FLOX_ACTIVE_ENVIRONMENTS;
             unset _FLOX_HOOK_DIFF;
-            unset _FLOX_INVOCATION_TYPE;
             unset _flox_activations;
             export MODIFIED_VAR=MODIFIED_ORIGINAL;
             export DELETED_VAR=DELETED_ORIGINAL;
@@ -470,6 +482,7 @@ mod tests {
                 unset _FLOX_HOOK_SAVE_FPATH _FLOX_HOOK_SAVE_COMPINIT_DUMPFILE;
             fi;
             eval "$('/flox_activations' profile-scripts-deactivate --shell zsh --env '/flox_env' --already-sourced-env-dirs "${_FLOX_SOURCED_PROFILE_SCRIPTS:-}")";
+            unset _FLOX_INVOCATION_TYPES;
             unset _FLOX_PROMPT_HOOK_VERSION;
             if [[ -o interactive ]]; then source '/interpreter/activate.d/set-prompt.zsh'; fi;
             unset _activate_d _flox_activate_tracer _flox_activate_tracelevel;
@@ -488,7 +501,6 @@ mod tests {
             export MODIFIED_VAR=MODIFIED_ORIGINAL;
             export _FLOX_ACTIVE_ENVIRONMENTS=/outer/env;
             export _FLOX_HOOK_DIFF=outer_encoded_diff_placeholder;
-            export _FLOX_INVOCATION_TYPE=inplace;
             export DELETED_VAR=DELETED_ORIGINAL;
             if [[ -n "${_FLOX_HOOK_SAVE_FPATH+set}" ]]; then
                 _flox_deactivate_old_fpath="$FPATH";
@@ -506,6 +518,7 @@ mod tests {
                 unset _flox_deactivate_old_fpath;
             fi;
             eval "$('/flox_activations' profile-scripts-deactivate --shell zsh --env '/flox_env' --already-sourced-env-dirs "${_FLOX_SOURCED_PROFILE_SCRIPTS:-}")";
+            typeset -g _FLOX_INVOCATION_TYPES='[{"env":{"name":"outer_env","type":"path"},"invocation_type":"inplace"}]';
             if [[ -o interactive ]]; then source '/interpreter/activate.d/set-prompt.zsh'; fi;
             unset _activate_d _flox_activate_tracer _flox_activate_tracelevel;
         "#]]

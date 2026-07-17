@@ -1,6 +1,8 @@
 use std::path::PathBuf;
 
-use flox_core::activate::context::ActivateCtx;
+use flox_core::activate::context::{ActivateCtx, InvocationTypes};
+use flox_core::activate::vars::FLOX_INVOCATION_TYPES_VAR;
+use shell_gen::{GenerateShell, SetVar, Statement, UnsetVar};
 
 /// Absolute path to coreutils `rm`, avoiding user alias expansion (e.g. `alias rm='rm -i'`).
 const RM: &str = concat!(env!("COREUTILS"), "/bin/rm");
@@ -42,6 +44,28 @@ pub struct DeactivateCtx {
     /// Path to the `flox-activations` binary, embedded in generated shell
     /// for inner-deactivation `fix-fpath` calls.
     pub flox_activations: PathBuf,
+    /// `Some(remaining)` when this layer consumed an entry from the eval'ing
+    /// shell's `_FLOX_INVOCATION_TYPES` map: the deactivate script writes
+    /// `remaining` back to the (deliberately unexported) shell variable, in
+    /// lockstep with the layer being popped. `None` when the layer was
+    /// inherited (no entry consumed): the variable is left alone. Computed by
+    /// the deactivation emitters (`hook-env`,
+    /// `flox deactivate --print-script`), which receive the map as an
+    /// argument — this generator runs in a subprocess that cannot read the
+    /// unexported variable itself.
+    pub invocation_types: Option<InvocationTypes>,
+}
+
+/// The statement writing a consumed `_FLOX_INVOCATION_TYPES` map back to the
+/// eval'ing shell: an unset once the map ran empty, a plain (deliberately
+/// unexported) assignment otherwise. See [`DeactivateCtx::invocation_types`].
+pub(crate) fn invocation_types_update_stmt(remaining: &InvocationTypes) -> Statement {
+    if remaining.is_empty() {
+        UnsetVar::not_exported(FLOX_INVOCATION_TYPES_VAR).to_stmt()
+    } else {
+        SetVar::not_exported_no_expansion(FLOX_INVOCATION_TYPES_VAR, remaining.to_string())
+            .to_stmt()
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -66,7 +90,15 @@ pub(crate) mod test_helpers {
     use std::collections::{HashMap, HashSet};
     use std::path::PathBuf;
 
-    use flox_core::activate::context::{ActivateCtx, AttachCtx, AttachProjectCtx, InvocationType};
+    use flox_core::activate::context::{
+        ActivateCtx,
+        AttachCtx,
+        AttachProjectCtx,
+        InvocationKind,
+        InvocationType,
+        InvocationTypeEntry,
+        InvocationTypes,
+    };
     use flox_core::activate::mode::ActivateMode;
     use flox_core::activate::vars::{FLOX_ACTIVATIONS_BIN, FLOX_ACTIVE_ENVIRONMENTS_VAR};
     use shell_gen::ShellWithPath;
@@ -76,6 +108,12 @@ pub(crate) mod test_helpers {
     use crate::attach_diff::diff_serializer::{DiffSerializer, FLOX_HOOK_DIFF_VAR};
     use crate::start_diff::StartDiff;
     use crate::vars_from_env::VarsFromEnvironment;
+
+    /// An environment pointer for gen_rc fixtures, serialized the way it
+    /// would appear in `_FLOX_ACTIVE_ENVIRONMENTS`.
+    pub fn test_env_pointer(name: &str) -> serde_json::Value {
+        serde_json::json!({"name": name, "type": "path"})
+    }
 
     /// Build a deterministic `StartupCtx` for tests of `gen_rc/*`.
     /// Fills every `AttachCtx` / `AttachProjectCtx` / `ActivateCtx`
@@ -131,6 +169,7 @@ pub(crate) mod test_helpers {
             mode: ActivateMode::Dev,
             shell,
             invocation_type: Some(invocation_type.clone()),
+            env_pointer: test_env_pointer("test_env").to_string(),
             remove_after_reading: false,
             metrics_uuid: None,
             disable_hook,
@@ -193,6 +232,9 @@ pub(crate) mod test_helpers {
             flox_activate_tracelevel: 0,
             restore_diff,
             flox_activations: PathBuf::from("/flox-activations"),
+            // Outermost deactivate of the shell's only own activation: the
+            // map runs empty, so the script unsets the variable.
+            invocation_types: Some(InvocationTypes::default()),
         }
     }
 
@@ -217,8 +259,6 @@ pub(crate) mod test_helpers {
                     FLOX_HOOK_DIFF_VAR.to_string(),
                     "outer_encoded_diff_placeholder".to_string(),
                 ),
-                // Outer invocation type to restore when deactivating the inner env.
-                ("_FLOX_INVOCATION_TYPE".to_string(), "inplace".to_string()),
             ]),
             removed: HashMap::from([("DELETED_VAR".to_string(), "DELETED_ORIGINAL".to_string())]),
         };
@@ -229,6 +269,12 @@ pub(crate) mod test_helpers {
             flox_activate_tracelevel: 0,
             restore_diff,
             flox_activations: PathBuf::from("/flox-activations"),
+            // Inner deactivate: the outer activation's entry remains in the
+            // map, so the script writes the remainder back.
+            invocation_types: Some(InvocationTypes(vec![InvocationTypeEntry {
+                env: test_env_pointer("outer_env"),
+                invocation_type: InvocationKind::InPlace,
+            }])),
         }
     }
 

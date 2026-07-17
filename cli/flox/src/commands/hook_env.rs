@@ -7,9 +7,10 @@ use bpaf::Bpaf;
 use flox_activations::attach_diff::diff_serializer::FLOX_HOOK_DIFF_VAR;
 use flox_activations::deactivate::embedded_hook_diff;
 use flox_config::{AutoActivate, AutoActivationPreference, Config};
-use flox_core::activate::context::InvocationKind;
+use flox_core::activate::context::{InvocationKind, InvocationTypes};
 use flox_core::activate::vars::{
     FLOX_AUTO_ACTIVATED_ENVIRONMENTS_VAR,
+    FLOX_INVOCATION_TYPES_WIRE_VAR,
     FLOX_SUPPRESSED_ENVIRONMENTS_VAR,
 };
 use flox_core::hook_actions::{HookAction, take_hook_actions};
@@ -27,6 +28,7 @@ use super::deactivate::{
     open_deactivation_target,
 };
 use crate::subcommand_metric;
+use crate::utils::active_environments::ActiveEnvironment;
 use crate::utils::dialog::{Confirm, Dialog};
 use crate::utils::message;
 
@@ -45,39 +47,85 @@ pub struct HookEnv {
     #[bpaf(long("shell-pid"), argument("PID"))]
     shell_pid: i32,
 
-    /// Invocation type of the activation the hook is running in
-    /// (`$_FLOX_INVOCATION_TYPE`), used when emitting a deactivation script.
+    /// The calling shell's `$_FLOX_INVOCATION_TYPES` map: one entry per
+    /// activation that shell performed, keyed by environment pointer, used
+    /// when emitting deactivation scripts.
     ///
-    /// Optional as a defensive measure. Every shell hook passes it (tcsh guards
-    /// a possibly-unset value with `$?`); when a deactivate action is pending but
-    /// none was provided, the hook falls back to `inplace`.
-    #[bpaf(long("invocation-type"), argument("INVOCATION_TYPE"), optional)]
-    invocation_kind: Option<InvocationKind>,
+    /// Omitted or empty when the shell performed no activations — e.g. a
+    /// subshell that inherited the activation's exported environment. Layers
+    /// popped without a corresponding entry restore the environment without a
+    /// `flox-activations detach`: this shell's PID was never attached, and
+    /// the shell that did attach detaches itself when it deactivates.
+    #[bpaf(long("invocation-types"), argument("INVOCATION_TYPES"), optional)]
+    invocation_types: Option<InvocationTypes>,
+
+    /// Read the map from `_FLOX_INVOCATION_TYPES_WIRE` instead of an
+    /// argument: tcsh cannot pass JSON values on a backtick command line, so
+    /// its hook exports the short-lived variable around this call.
+    #[bpaf(long("invocation-types-from-env"), switch)]
+    invocation_types_from_env: bool,
 }
 
 impl HookEnv {
     pub async fn handle(self, config: Config, flox: Flox) -> Result<()> {
         let mut writer = BufWriter::new(stdout());
 
+        // The shell's invocation-type map holds one entry per activation the
+        // shell performed, keyed by environment pointer. Every deactivation
+        // emitted below pops one layer off the activation stack and takes
+        // that layer's entry, and each emitted script writes the consumed
+        // remainder back to the shell variable itself (via
+        // `DeactivateCtx::invocation_types`) — keeping the variable in
+        // lockstep with the layers actually popped. A layer without an entry
+        // was inherited from an ancestor shell (a subshell has no entries at
+        // all): its script restores the environment without detaching,
+        // because this shell's PID was never attached to that activation.
+        let mut remaining_invocation_types = if self.invocation_types_from_env {
+            if self.invocation_types.is_some() {
+                bail!("--invocation-types and --invocation-types-from-env are mutually exclusive");
+            }
+            match std::env::var(FLOX_INVOCATION_TYPES_WIRE_VAR) {
+                Ok(value) => Some(
+                    value
+                        .parse()
+                        .context(format!("could not parse {FLOX_INVOCATION_TYPES_WIRE_VAR}"))?,
+                ),
+                // Treat a missing wire variable like an absent argument: the
+                // safe reading is that this shell performed no activations.
+                Err(_) => None,
+            }
+        } else {
+            self.invocation_types.clone()
+        };
+
         // Consume any actions another flox command (e.g. `flox deactivate`) left
         // for this shell and emit the corresponding script. The common case is
         // no pending actions.
         let actions = take_hook_actions(&flox.runtime_dir, self.shell_pid)
             .context("failed to read prompt-hook actions")?;
+        // Actions target the front layers of the activation stack in request
+        // order (`flox deactivate` requests the most recent layer), so pair
+        // them positionally to learn each popped layer's pointer. The
+        // auto-deactivate sweep below never pops in the same run as pending
+        // actions (`plan_auto_activation` returns early on
+        // `pending_deactivations`), so it can walk the same stack from the
+        // front independently.
+        let action_stack = activated_environments();
+        let mut action_layers = action_stack.iter_full();
         for action in &actions {
             match action {
                 HookAction::Deactivate {
                     activation_state_dir,
                     flox_env,
                 } => {
-                    // Default to in-place when the shell didn't pass an
-                    // invocation type. Every shell hook passes it today; this is
-                    // a defensive fallback, and the prompt hook only ever
-                    // deactivates in place.
-                    let invocation_kind = self.invocation_kind.unwrap_or(InvocationKind::InPlace);
+                    let (invocation_kind, invocation_types_update) = take_invocation_type(
+                        &mut remaining_invocation_types,
+                        action_layers.next(),
+                    )?;
                     emit_deactivate_script(
                         ShellWithPath::from(self.shell),
                         invocation_kind,
+                        invocation_types_update,
                         activation_state_dir,
                         flox_env,
                         flox_activate_tracelevel(),
@@ -160,10 +208,31 @@ impl HookEnv {
                 };
                 let target = open_deactivation_target(&flox, layer.clone())?;
                 // Auto-activations are always in-place, so the matching
-                // deactivation is too.
+                // deactivation restores in place either way; this layer's
+                // map entry only decides whether to detach. A non-in-place
+                // entry here means the map is out of sync with the
+                // activation stack — skip the detach rather than emit
+                // something destructive (an `exit`). The remainder is written
+                // back whenever an entry was consumed, coerced or not.
+                let (entry, invocation_types_update) =
+                    take_invocation_type(&mut remaining_invocation_types, Some(layer))?;
+                let invocation_kind = match entry {
+                    Some(kind @ (InvocationKind::InPlace | InvocationKind::ShellCommand)) => {
+                        Some(kind)
+                    },
+                    Some(kind) => {
+                        debug!(
+                            ?kind,
+                            "invocation type entry is not in-place for an auto-activated layer; skipping detach"
+                        );
+                        None
+                    },
+                    None => None,
+                };
                 emit_deactivate_script(
                     ShellWithPath::from(self.shell),
-                    InvocationKind::InPlace,
+                    invocation_kind,
+                    invocation_types_update,
                     &target.activation_state_dir,
                     &target.flox_env,
                     flox_activate_tracelevel(),
@@ -348,6 +417,27 @@ impl HookEnv {
         writer.flush()?;
         Ok(())
     }
+}
+
+/// Take the invocation-type entry for a layer being deactivated, plus the
+/// remainder to write back to the shell variable.
+///
+/// `None` for the remainder when no entry was consumed — the variable is
+/// left alone. `remaining` is `None` when the caller received no map at all;
+/// `layer` is `None` when the layer being popped can't be identified (the
+/// activation stack ran out), which is treated like a missing entry: restore
+/// without detach is the safe reading.
+fn take_invocation_type(
+    remaining: &mut Option<InvocationTypes>,
+    layer: Option<&ActiveEnvironment>,
+) -> Result<(Option<InvocationKind>, Option<InvocationTypes>)> {
+    let (Some(remaining), Some(layer)) = (remaining, layer) else {
+        return Ok((None, None));
+    };
+    let key = serde_json::to_value(&layer.environment)
+        .context("could not serialize the environment pointer")?;
+    let kind = remaining.take(&key);
+    Ok((kind, kind.is_some().then(|| remaining.clone())))
 }
 
 /// Inputs to [`plan_auto_activation`].

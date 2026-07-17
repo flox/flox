@@ -56,9 +56,13 @@ echo '=== ENV_VARS ===' >> $1
 setenv | awk -F= '{print $1}' | sort -u | grep -vE "$_TEST_HARNESS_NOISE_RE" >> $1
 
 eval "`$FLOX_BIN activate -d $PROJECT_DIR`"
-# `--print-script` requires the invocation type; `activate` sets
-# `_FLOX_INVOCATION_TYPE` (here: in-place). See deactivate.bats.
-eval "`$FLOX_BIN deactivate --print-script $_FLOX_INVOCATION_TYPE`"
+# `--print-script-from-env` reads the invocation type map that `activate`
+# recorded in `_FLOX_INVOCATION_TYPES` (here: in-place) through the
+# short-lived wire variable — JSON cannot ride a tcsh backtick command
+# line. See deactivate.bats.
+setenv _FLOX_INVOCATION_TYPES_WIRE $_FLOX_INVOCATION_TYPES:q
+eval "`$FLOX_BIN deactivate --print-script-from-env`"
+unsetenv _FLOX_INVOCATION_TYPES_WIRE
 
 # Post snapshot
 echo -n '' > $2

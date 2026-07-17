@@ -9,6 +9,7 @@ use std::io::Write;
 use std::path::Path;
 
 use anyhow::{Context, Result};
+use flox_core::activate::context::InvocationTypes;
 use shell_gen::{Shell, ShellWithPath};
 
 use crate::attach_diff::diff_serializer::{DiffSerializer, FLOX_HOOK_DIFF_VAR};
@@ -30,10 +31,19 @@ use crate::gen_rc::{Action, DeactivateCtx};
 /// Returns an error if `_FLOX_HOOK_DIFF` is not set in the environment or
 /// cannot be decoded.
 ///
-/// After the per-shell env-var restoration, emits a `flox-activations detach`
-/// command so that state.json is updated when the caller eval's the script.
-/// The shell-specific self-PID variable expands to the caller's PID at
-/// eval time.
+/// With `emit_detach`, a `flox-activations detach` command follows the
+/// per-shell env-var restoration so that state.json is updated when the
+/// caller eval's the script; the shell-specific self-PID variable expands to
+/// the caller's PID at eval time. Pass `false` when the eval'ing shell never
+/// attached to the activation (its `_FLOX_INVOCATION_TYPES` map has no entry
+/// for this layer, e.g. a subshell that inherited the activation's
+/// environment): there is nothing to detach, and the attached shell detaches
+/// itself when it deactivates.
+///
+/// `invocation_types` is the consumed remainder of that map to write back to
+/// the eval'ing shell, or `None` to leave the variable alone — see
+/// [`DeactivateCtx::invocation_types`].
+#[allow(clippy::too_many_arguments)]
 pub fn generate_deactivate_script(
     shell: ShellWithPath,
     writer: &mut impl Write,
@@ -42,6 +52,8 @@ pub fn generate_deactivate_script(
     activation_state_dir: &Path,
     flox_env: &Path,
     flox_activate_tracelevel: u32,
+    emit_detach: bool,
+    invocation_types: Option<InvocationTypes>,
 ) -> Result<()> {
     let encoded_diff = env::var(FLOX_HOOK_DIFF_VAR)
         .context(format!("{} not set in environment", FLOX_HOOK_DIFF_VAR))?;
@@ -54,6 +66,8 @@ pub fn generate_deactivate_script(
         flox_env,
         flox_activate_tracelevel,
         &encoded_diff,
+        emit_detach,
+        invocation_types,
     )
 }
 
@@ -74,6 +88,8 @@ pub fn generate_deactivate_script_with_diff(
     flox_env: &Path,
     flox_activate_tracelevel: u32,
     encoded_diff: &str,
+    emit_detach: bool,
+    invocation_types: Option<InvocationTypes>,
 ) -> Result<()> {
     let activate_d = interpreter_path.as_ref().join("activate.d");
     let restore_diff = DiffSerializer::decode(encoded_diff)
@@ -84,6 +100,7 @@ pub fn generate_deactivate_script_with_diff(
         flox_activate_tracelevel,
         restore_diff,
         flox_activations: flox_activations_bin.to_path_buf(),
+        invocation_types,
     };
 
     // Capture the shell variant before consuming `shell` in the match below.
@@ -111,13 +128,16 @@ pub fn generate_deactivate_script_with_diff(
     // Emit the detach command using the shell-appropriate self-PID variable
     // so that the expression expands correctly when the caller eval's the
     // output.  `$$` is correct for bash/zsh/tcsh; fish uses `$fish_pid`.
-    let pid_var = shell_variant.self_pid_var();
-    writeln!(
-        writer,
-        r#""{}" detach --activation-state-dir "{}" --pid {pid_var};"#,
-        flox_activations_bin.display(),
-        activation_state_dir.display(),
-    )?;
+    // Skipped when the eval'ing shell never attached to the activation
+    if emit_detach {
+        let pid_var = shell_variant.self_pid_var();
+        writeln!(
+            writer,
+            r#""{}" detach --activation-state-dir "{}" --pid {pid_var};"#,
+            flox_activations_bin.display(),
+            activation_state_dir.display(),
+        )?;
+    }
 
     Ok(())
 }

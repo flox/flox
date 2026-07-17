@@ -13,11 +13,7 @@ use itertools::Itertools;
 use shell_gen::{GenerateShell, SetVar, Statement, UnsetVar};
 use tracing::debug;
 
-use crate::attach_diff::diff_serializer::{
-    DiffSerializer,
-    FLOX_HOOK_DIFF_VAR,
-    FLOX_INVOCATION_TYPE_VAR,
-};
+use crate::attach_diff::diff_serializer::{DiffSerializer, FLOX_HOOK_DIFF_VAR};
 use crate::cli::fix_paths::{fix_manpath_var, fix_path_var};
 use crate::cli::set_env_dirs::fix_env_dirs_var;
 use crate::env_diff::EnvDiff;
@@ -123,15 +119,14 @@ impl AttachDiff {
             let mut intended_sets = if is_in_place {
                 // These variables are computed by set-env-dirs and fix-paths,
                 // for which values must be computed dynamically at runtime.
-                // Also track _FLOX_HOOK_DIFF and _FLOX_INVOCATION_TYPE so that
-                // nested (stacked) activations can restore the outer values on
-                // deactivation rather than unconditionally unsetting them.
+                // Also track _FLOX_HOOK_DIFF so that nested (stacked)
+                // activations can restore the outer value on deactivation
+                // rather than unconditionally unsetting it.
                 HashSet::from([
                     FLOX_ENV_DIRS_VAR.to_string(),
                     "PATH".to_string(),
                     "MANPATH".to_string(),
                     FLOX_HOOK_DIFF_VAR.to_string(),
-                    FLOX_INVOCATION_TYPE_VAR.to_string(),
                 ])
             } else {
                 non_in_place_sets.keys().cloned().collect()
@@ -248,7 +243,6 @@ fn unset(name: impl AsRef<str>) -> Statement {
 //   • `_flox_activate_tracer`   — gen_rc/{bash,fish,tcsh}.rs (export, via args.flox_activate_tracer)
 //   • `_flox_sourcing_rc`       — gen_rc/bash.rs            (export + unset, bashrc-sourcing dance)
 //   • `fish_trace` (opener)     — gen_rc/fish.rs            (export, when tracelevel ≥ 2)
-//   • `_FLOX_INVOCATION_TYPE`   — gen_rc/{bash,zsh,fish,tcsh}.rs (export; cleanup handled by diff)
 //
 // Note: `_FLOX_HOOK_DIFF` is not listed above — it is set by the Rust binary
 // via `generate_statements` / `apply_to_command`, not by a gen_rc helper, so
