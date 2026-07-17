@@ -625,7 +625,10 @@ fn render_network_policies(rules: &[ResolvedNetworkRule]) -> String {
         out.push_str(&format!("  {}:\n", rule.key));
         out.push_str(&format!("    name: {}\n", rule.key));
         out.push_str("    endpoints:\n");
-        out.push_str(&format!("      - host: {}\n", rule.host));
+        // Single-quoted: a wildcard host like `*.github.com` is an alias
+        // token to a YAML parser when unquoted. The endpoint charset check
+        // guarantees no quote or newline can appear in the host.
+        out.push_str(&format!("      - host: '{}'\n", rule.host));
         out.push_str(&format!("        port: {}\n", rule.port));
         out.push_str(&format!("        protocol: {}\n", rule.protocol));
         // OpenShell's `enforcement` defaults to `audit` (violations are
@@ -690,8 +693,8 @@ fn split_endpoint(endpoint: &str) -> Result<(String, u16)> {
     };
     let (host, port) = endpoint.rsplit_once(':').ok_or_else(invalid)?;
     // Restrict the host to hostname characters plus OpenShell's first-label
-    // wildcards; this doubles as YAML-injection protection since the value
-    // is rendered unquoted.
+    // wildcards; this doubles as YAML-injection protection for the rendered
+    // (single-quoted) scalar.
     let host_ok = !host.is_empty()
         && host
             .chars()
@@ -715,10 +718,12 @@ pub(crate) fn resolve_policy_binary(
     system: &str,
     spec: &str,
 ) -> Result<String> {
+    // Every branch interpolates the spec into a single-quoted YAML scalar;
+    // control characters or quotes would break out of it.
+    if spec.chars().any(|c| c.is_ascii_control() || c == '\'') {
+        bail!("Invalid sandbox network binary '{}'.", spec.escape_debug());
+    }
     if spec.starts_with('/') {
-        if spec.contains('\n') {
-            bail!("Invalid sandbox network binary path '{spec}'.");
-        }
         return Ok(spec.to_string());
     }
     let (install_id, exe) = match spec.split_once('/') {
@@ -1299,7 +1304,7 @@ mod tests {
               allow_api_github_com_443:
                 name: allow_api_github_com_443
                 endpoints:
-                  - host: api.github.com
+                  - host: 'api.github.com'
                     port: 443
                     protocol: rest
                     enforcement: enforce
@@ -1385,6 +1390,30 @@ mod tests {
         let lockfile = fixture_lockfile("hello");
         let path = resolve_policy_binary(&lockfile, "aarch64-linux", "/usr/bin/curl").unwrap();
         assert_eq!(path, "/usr/bin/curl");
+    }
+
+    #[test]
+    fn wildcard_host_renders_single_quoted() {
+        let lockfile = fixture_lockfile("hello");
+        let resolved =
+            resolve_network_rules(&[network_rule("*.github.com:443", None)], &lockfile, "aarch64-linux")
+                .unwrap();
+        let yaml = render_network_policies(&resolved);
+        // Unquoted, `*.github.com` is a YAML alias token and the whole
+        // policy fails to parse.
+        assert!(yaml.contains("- host: '*.github.com'"), "got:\n{yaml}");
+    }
+
+    #[test]
+    fn binary_spec_with_control_chars_rejected() {
+        let lockfile = fixture_lockfile("hello");
+        for spec in ["hello/foo\nbar", "/usr/bin/cu\nrl", "hello'"] {
+            let err = resolve_policy_binary(&lockfile, "aarch64-linux", spec).unwrap_err();
+            assert!(
+                err.to_string().contains("Invalid sandbox network binary"),
+                "spec {spec:?} got: {err}"
+            );
+        }
     }
 
     #[test]
