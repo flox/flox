@@ -251,9 +251,10 @@ fn collect_dep_member_paths(
         let mut path = vec![base_name];
         if let Some(attrpath) = select.attrpath() {
             for attr in attrpath.attrs() {
-                let ast::Attr::Ident(id) = attr else { break };
-                let Some(token) = id.ident_token() else { break };
-                path.push(token.text().to_string());
+                let Some(name) = attr_static_name(&attr) else {
+                    break;
+                };
+                path.push(name);
             }
         }
         if path.len() > 1 {
@@ -339,10 +340,7 @@ fn gather_let_aliases(
             if attrs.len() != 1 {
                 continue;
             }
-            let ast::Attr::Ident(ref id) = attrs[0] else {
-                continue;
-            };
-            let Some(name) = id.ident_token().map(|t| t.text().to_string()) else {
+            let Some(name) = attr_static_name(&attrs[0]) else {
                 continue;
             };
             if aliases.contains_key(&name) {
@@ -449,8 +447,7 @@ fn roots_passed_to_import(
             continue;
         }
         for attr in inherit.attrs() {
-            if let ast::Attr::Ident(id) = attr
-                && let Some(name) = id.ident_token().map(|t| t.text().to_string())
+            if let Some(name) = attr_static_name(&attr)
                 && roots.contains(name.as_str())
             {
                 passed.insert(name);
@@ -463,8 +460,7 @@ fn roots_passed_to_import(
         if attrs.len() != 1 {
             continue;
         }
-        if let ast::Attr::Ident(id) = &attrs[0]
-            && let Some(name) = id.ident_token().map(|t| t.text().to_string())
+        if let Some(name) = attr_static_name(&attrs[0])
             && roots.contains(name.as_str())
         {
             passed.insert(name);
@@ -599,6 +595,11 @@ fn is_get_attr_fn(expr: &ast::Expr) -> bool {
 /// Extract the contents of a string literal with no interpolation, or `None`.
 fn static_str(expr: &ast::Expr) -> Option<String> {
     let ast::Expr::Str(s) = expr else { return None };
+    static_str_content(s)
+}
+
+/// Extract a string node's contents when it has no interpolation, or `None`.
+fn static_str_content(s: &ast::Str) -> Option<String> {
     if s.syntax().children().next().is_some() {
         return None;
     }
@@ -610,6 +611,23 @@ fn static_str(expr: &ast::Expr) -> Option<String> {
         }
         None
     })
+}
+
+/// Resolve an attribute to its statically-known component name: a plain
+/// identifier, or a non-interpolated string literal that is a valid catalog
+/// component name. Returns `None` for dynamic attrs and for quoted names the
+/// catalog cannot contain (`.`, `"`, `\` are rejected by the server's name
+/// validators), which callers collapse to a `*` sentinel.
+fn attr_static_name(attr: &ast::Attr) -> Option<String> {
+    match attr {
+        ast::Attr::Ident(id) => Some(id.ident_token()?.text().to_string()),
+        ast::Attr::Str(s) => {
+            let name = static_str_content(s)?;
+            let valid = !name.is_empty() && !name.contains(['.', '"', '\\']);
+            valid.then_some(name)
+        },
+        ast::Attr::Dynamic(_) => None,
+    }
 }
 
 /// Handle `inherit (<root-path>) a b c;`, emitting one `<path>.<name>`
@@ -635,13 +653,14 @@ fn try_handle_inherit(
     };
 
     for attr in inherit.attrs() {
-        if let ast::Attr::Ident(id) = attr
-            && let Some(token) = id.ident_token()
-        {
-            let reference = format!("{}.{}", base_path, token.text());
-            ctx.report(u32::from(token.text_range().start()) as usize, &reference);
-            refs.insert(reference);
-        }
+        // A name the catalog cannot contain (dotted quoted attr) collapses to
+        // a sentinel at the inherit base.
+        let reference = match attr_static_name(&attr) {
+            Some(name) => format!("{}.{}", base_path, name),
+            None => format!("{}.*", base_path),
+        };
+        ctx.report(offset_of(attr.syntax()), &reference);
+        refs.insert(reference);
     }
     true
 }
@@ -670,11 +689,9 @@ fn extract_ref_path(
     let attrpath = select.attrpath()?;
     let mut parts = vec![base_path];
     for attr in attrpath.attrs() {
-        match attr {
-            ast::Attr::Ident(id) => {
-                parts.push(id.ident_token()?.text().to_string());
-            },
-            _ => {
+        match attr_static_name(&attr) {
+            Some(name) => parts.push(name),
+            None => {
                 parts.push("*".to_string());
                 break;
             },
@@ -1190,6 +1207,34 @@ mod tests {
             &roots(&["catalogs"]),
         );
         assert_eq!(got, set(&["catalogs.myorg", "catalogs.myorg.hello"]));
+    }
+
+    #[test]
+    fn quoted_attrs_static_when_valid_names() {
+        let cases: &[(&str, &[&str])] = &[
+            // A non-interpolated string attr that is a valid catalog component
+            // name is an ordinary static component.
+            (r#"{ catalogs }: catalogs.myorg."with-dash".x"#, &[
+                "catalogs.myorg.with-dash.x",
+            ]),
+            // A quoted attr containing `.` cannot exist as a catalog component
+            // (server rejects dotted names), so it collapses to a sentinel.
+            (r#"{ catalogs }: catalogs.myorg."foo.bar""#, &[
+                "catalogs.myorg.*",
+            ]),
+            // Quoted inherit names are components too, not silently dropped.
+            (
+                r#"{ catalogs }: { inherit (catalogs.myorg) "with-dash" baz; }"#,
+                &["catalogs.myorg.baz", "catalogs.myorg.with-dash"],
+            ),
+        ];
+        for (content, expected) in cases {
+            assert_eq!(
+                refs(content, &roots(&["catalogs"])),
+                set(expected),
+                "content: {content}"
+            );
+        }
     }
 
     #[test]
