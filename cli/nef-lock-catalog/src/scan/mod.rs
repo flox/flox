@@ -2183,6 +2183,34 @@ mod tests {
         );
     }
 
+    /// Invariant over every fixture: an emitted ref is either a sentinel
+    /// (`….*`) or an exact ref with at least two components past the root —
+    /// anything shallower can never resolve (the server's floor is catalog +
+    /// one component) and would fail the whole lock.
+    #[test]
+    fn all_fixture_refs_are_lockable_shapes() {
+        let dir = Path::new("test_data/catalog_refs");
+        let mut scanned = 0;
+        let mut violations: Vec<String> = Vec::new();
+        for entry in fs::read_dir(dir).expect("fixture dir") {
+            let path = entry.expect("fixture entry").path();
+            if path.extension().and_then(|ext| ext.to_str()) != Some("nix") {
+                continue;
+            }
+            let rel = path.file_name().expect("fixture file name");
+            for reference in scan_package(dir, Path::new(rel)) {
+                scanned += 1;
+                let reference = reference.as_str();
+                let post_root = reference.split('.').count() - 1;
+                if !reference.ends_with(".*") && post_root < 2 {
+                    violations.push(reference.to_string());
+                }
+            }
+        }
+        assert_eq!(violations, Vec::<String>::new());
+        assert!(scanned > 0, "no fixture refs scanned");
+    }
+
     #[test]
     fn with_direct_namespace_emits_sentinel() {
         let got = refs(
