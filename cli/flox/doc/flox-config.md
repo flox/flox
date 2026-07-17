@@ -73,11 +73,13 @@ flox config --set 'trusted_environments."owner/name"' trust
 `auto_activate`
 :   How auto-activation treats environments you have not yet allowed or denied,
     when the `auto_activate` feature flag is enabled.
-    Possible values are `prompt` (default) and `allowed`.
+    Possible values are `prompt` (default), `allowlist`, and `disabled`.
     `prompt` asks before auto-activating an environment the first time you enter
     its directory.
-    `allowed` skips the prompt and auto-activates only environments you have
-    already allowed with `flox activate allow`.
+    `allowlist` skips the prompt and auto-activates only environments you have
+    already allowed with `flox activate allow` or a prior prompt.
+    `disabled` turns auto-activation off entirely: nothing is auto-activated
+    even if previously allowed.
     See the *AUTO-ACTIVATION* section of [`flox-activate(1)`](./flox-activate.md).
 
 `auto_activate_environments`
@@ -175,8 +177,8 @@ flox config --set 'trusted_environments."owner/name"' trust
     (default: true)
 
 `keep_tempdir`
-:   Flox creates a single tempdir for each process in   
-    `$FLOX_CACHE_HOME/process`.   
+:   Flox creates a single tempdir for each process in
+    `$FLOX_CACHE_HOME/process`.
     Flox will delete this tempdir upon conclusion of the process
     unless `keep_tempdir == true` AND verbose logs are enabled.
 

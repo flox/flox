@@ -464,11 +464,10 @@ struct AutoActivateContext {
     /// Project directories the user has denied auto-activation for via
     /// `flox activate deny` (config `auto_activate_environments`).
     denied: Vec<PathBuf>,
-    /// Whether to prompt before auto-activating an environment that is neither
-    /// allowed nor denied (config `auto_activate = "prompt"`). When false
-    /// (`auto_activate = "allowed"`), unregistered environments are skipped
-    /// silently.
-    prompt_unregistered: bool,
+    /// The user's `auto_activate` config value. Drives whether the planner
+    /// activates allowed environments and whether it prompts for
+    /// unregistered ones (see [`plan_auto_activation`]).
+    auto_activate: AutoActivate,
     /// Whether this run consumed pending prompt-hook deactivation actions.
     pending_deactivations: bool,
 }
@@ -546,8 +545,10 @@ struct AutoActivatePlan {
 /// user has allowed it (via the consent prompt or `flox activate allow`).
 /// An environment that is neither allowed nor denied is "unregistered": in
 /// `prompt` mode it is added to the plan's `prompt` list so the hook can ask
-/// for consent; in `allowed` mode it is skipped silently. Denied environments
-/// are never activated and never prompted.
+/// for consent; in `allowlist` mode it is skipped silently. Denied
+/// environments are never activated and never prompted. In `disabled` mode
+/// neither activation nor prompting happens for discovered environments, but
+/// leaver teardown below still runs (see [`AutoActivate::Disabled`]).
 ///
 /// Allow/deny govern future auto-activation only: an environment that is
 /// already active (whether activated manually or before being denied) is left
@@ -558,6 +559,8 @@ fn plan_auto_activation(ctx: &AutoActivateContext) -> AutoActivatePlan {
     let is_active = |path: &PathBuf| ctx.active.iter().flatten().any(|active| active == path);
     let is_allowed = |path: &PathBuf| ctx.allowed.contains(path);
     let is_denied = |path: &PathBuf| ctx.denied.contains(path);
+    let prompt_unregistered = matches!(ctx.auto_activate, AutoActivate::Prompt);
+    let auto_activation_enabled = !matches!(ctx.auto_activate, AutoActivate::Disabled);
 
     // Reconcile tracked state with the actual activation stack. A suppressed
     // environment stays suppressed only while the shell remains inside its
@@ -734,7 +737,7 @@ fn plan_auto_activation(ctx: &AutoActivateContext) -> AutoActivatePlan {
         }
     };
 
-    if !unwinding {
+    if !unwinding && auto_activation_enabled {
         for path in &ctx.discovered {
             if is_active(path)
                 || suppressed.contains(path)
@@ -780,7 +783,7 @@ fn plan_auto_activation(ctx: &AutoActivateContext) -> AutoActivatePlan {
                         auto_activated.push(path.clone());
                     },
                 }
-            } else if ctx.prompt_unregistered {
+            } else if prompt_unregistered {
                 // Unregistered: ask before activating. Not tracked as
                 // auto-activated yet — the hook adds it only if the user
                 // consents.
@@ -844,10 +847,7 @@ fn gather_auto_activate_context(
     };
     let allowed = preference(AutoActivationPreference::Allow);
     let denied = preference(AutoActivationPreference::Deny);
-    let prompt_unregistered = matches!(
-        config.flox.auto_activate.clone().unwrap_or_default(),
-        AutoActivate::Prompt
-    );
+    let auto_activate = config.flox.auto_activate.clone().unwrap_or_default();
     Ok(AutoActivateContext {
         cwd,
         discovered,
@@ -856,7 +856,7 @@ fn gather_auto_activate_context(
         suppressed: read_path_list_var(FLOX_SUPPRESSED_ENVIRONMENTS_VAR),
         allowed,
         denied,
-        prompt_unregistered,
+        auto_activate,
         pending_deactivations,
     })
 }
@@ -1010,8 +1010,8 @@ mod tests {
 
     /// A context with nothing discovered, nothing active, and no state.
     ///
-    /// Defaults to `allowed` mode (`prompt_unregistered: false`); tests that
-    /// exercise the consent prompt set it to true explicitly.
+    /// Defaults to `allowlist` mode; tests that exercise the consent prompt
+    /// or the `disabled` short-circuit set `auto_activate` explicitly.
     fn empty_ctx(cwd: &str) -> AutoActivateContext {
         AutoActivateContext {
             cwd: PathBuf::from(cwd),
@@ -1021,7 +1021,7 @@ mod tests {
             suppressed: Vec::new(),
             allowed: Vec::new(),
             denied: Vec::new(),
-            prompt_unregistered: false,
+            auto_activate: AutoActivate::Allowlist,
             pending_deactivations: false,
         }
     }
@@ -1683,7 +1683,7 @@ mod tests {
         // tracked until the user consents.
         let ctx = AutoActivateContext {
             discovered: paths(&["/home/user/proj"]),
-            prompt_unregistered: true,
+            auto_activate: AutoActivate::Prompt,
             ..empty_ctx("/home/user/proj")
         };
         assert_eq!(plan_auto_activation(&ctx), AutoActivatePlan {
@@ -1693,12 +1693,12 @@ mod tests {
     }
 
     #[test]
-    fn unregistered_env_is_skipped_in_allowed_mode() {
-        // In `allowed` mode an unregistered environment is skipped silently —
-        // no activation, no prompt.
+    fn unregistered_env_is_skipped_in_allowlist_mode() {
+        // In `allowlist` mode an unregistered environment is skipped
+        // silently — no activation, no prompt.
         let ctx = AutoActivateContext {
             discovered: paths(&["/home/user/proj"]),
-            prompt_unregistered: false,
+            auto_activate: AutoActivate::Allowlist,
             ..empty_ctx("/home/user/proj")
         };
         assert_eq!(plan_auto_activation(&ctx), noop_plan());
@@ -1710,7 +1710,7 @@ mod tests {
         let ctx = AutoActivateContext {
             discovered: paths(&["/home/user/proj"]),
             denied: paths(&["/home/user/proj"]),
-            prompt_unregistered: true,
+            auto_activate: AutoActivate::Prompt,
             ..empty_ctx("/home/user/proj")
         };
         assert_eq!(plan_auto_activation(&ctx), noop_plan());
@@ -1724,13 +1724,55 @@ mod tests {
         let ctx = AutoActivateContext {
             discovered: paths(&["/home/user/outer", "/home/user/outer/inner"]),
             allowed: paths(&["/home/user/outer"]),
-            prompt_unregistered: true,
+            auto_activate: AutoActivate::Prompt,
             ..empty_ctx("/home/user/outer/inner")
         };
         assert_eq!(plan_auto_activation(&ctx), AutoActivatePlan {
             activate: paths(&["/home/user/outer"]),
             prompt: paths(&["/home/user/outer/inner"]),
             auto_activated: paths(&["/home/user/outer"]),
+            ..noop_plan()
+        });
+    }
+
+    #[test]
+    fn disabled_does_not_activate_allowed_env() {
+        // `disabled` turns off activation entirely, even for an environment
+        // the user has already allowed.
+        let ctx = AutoActivateContext {
+            discovered: paths(&["/home/user/proj"]),
+            allowed: paths(&["/home/user/proj"]),
+            auto_activate: AutoActivate::Disabled,
+            ..empty_ctx("/home/user/proj")
+        };
+        assert_eq!(plan_auto_activation(&ctx), noop_plan());
+    }
+
+    #[test]
+    fn disabled_does_not_prompt_unregistered() {
+        // `disabled` never prompts, unlike `prompt` mode.
+        let ctx = AutoActivateContext {
+            discovered: paths(&["/home/user/proj"]),
+            auto_activate: AutoActivate::Disabled,
+            ..empty_ctx("/home/user/proj")
+        };
+        assert_eq!(plan_auto_activation(&ctx), noop_plan());
+    }
+
+    #[test]
+    fn disabled_still_deactivates_tracked_leaver() {
+        // `disabled` short-circuits only the activation/prompt loop; leaver
+        // teardown of a previously auto-activated environment still runs so
+        // switching to `disabled` mid-session doesn't strand it active but
+        // untracked.
+        let ctx = AutoActivateContext {
+            active: vec![Some(PathBuf::from("/home/user/proj"))],
+            auto_activated: paths(&["/home/user/proj"]),
+            auto_activate: AutoActivate::Disabled,
+            ..empty_ctx("/home/user/elsewhere")
+        };
+        assert_eq!(plan_auto_activation(&ctx), AutoActivatePlan {
+            deactivate: paths(&["/home/user/proj"]),
             ..noop_plan()
         });
     }

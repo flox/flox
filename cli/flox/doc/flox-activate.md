@@ -138,8 +138,9 @@ Auto-activate the environment in '/path/to/project'? [y/N]
 The decision is persisted, but to change it run either [`flox-activate-allow(1)`](./flox-activate-allow.md) or
 [`flox-activate-deny(1)`](./flox-activate-deny.md).
 
-Set the `auto_activate` config option to `allowed` to skip the prompt entirely
-and auto-activate only environments you have already allowed.
+Set the `auto_activate` config option to `allowlist` to skip the prompt
+entirely and auto-activate only environments you have already allowed.
+Set it to `disabled` to turn auto-activation off entirely.
 
 Manage these decisions ahead of time with the
 [`flox-activate-allow(1)`](./flox-activate-allow.md) and
