@@ -3,6 +3,7 @@ use std::fmt::{self, Display};
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use indoc::formatdoc;
 use rnix::ast;
 use rnix::ast::HasEntry;
 use rowan::ast::AstNode;
@@ -49,6 +50,41 @@ impl Display for CatalogRef {
     }
 }
 
+/// A scan failure that must stop locking.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum ScanError {
+    /// A catalog root is referenced by a file whose top-level lambda does not
+    /// declare it as a parameter. NEF supplies only declared arguments
+    /// (callPackage semantics), so every reference through the root is
+    /// guaranteed to fail evaluation as an undefined variable.
+    #[error("{}", undeclared_root_message(root, file.as_deref(), *position))]
+    UndeclaredRoot {
+        root: String,
+        file: Option<PathBuf>,
+        /// 1-based `(line, column)` of the root's first use, when recorded.
+        position: Option<(usize, usize)>,
+    },
+}
+
+/// Render [ScanError::UndeclaredRoot] for the user; location parts are
+/// best-effort (unit scans have no file, forwarded-only uses may lack a
+/// position).
+fn undeclared_root_message(
+    root: &str,
+    file: Option<&Path>,
+    position: Option<(usize, usize)>,
+) -> String {
+    let location = match (file, position) {
+        (Some(file), Some((line, column))) => format!(" at {}:{line}:{column}", file.display()),
+        (Some(file), None) => format!(" in {}", file.display()),
+        (None, Some((line, column))) => format!(" at {line}:{column}"),
+        (None, None) => String::new(),
+    };
+    formatdoc! {"
+        '{root}' is referenced{location} but is not declared in the function arguments.
+        Add '{root}' to the function arguments, e.g. '{{ {root}, ... }}:'."}
+}
+
 /// Catalog references and dependency attr-paths extracted from one file.
 #[derive(Debug)]
 struct FileInfo {
@@ -82,11 +118,14 @@ const DEFAULT_ROOTS: &[&str] = &["catalogs"];
 /// it (`<name>.<member>`) is resolved as a member of a sibling attribute set,
 /// descending namespace directories under `base_dir`.
 ///
+/// Fails when a scanned file references a catalog root it does not declare in
+/// its function arguments (see [ScanError::UndeclaredRoot]).
+///
 /// Uses the default `catalogs` root; see [scan_package_with_roots] to override.
 pub fn scan_package(
     base_dir: impl AsRef<Path>,
     rel_file: impl AsRef<Path>,
-) -> BTreeSet<CatalogRef> {
+) -> Result<BTreeSet<CatalogRef>, ScanError> {
     scan_package_with_roots(base_dir, rel_file, DEFAULT_ROOTS.iter().copied())
 }
 
@@ -106,7 +145,7 @@ pub fn scan_package_with_roots(
     base_dir: impl AsRef<Path>,
     rel_file: impl AsRef<Path>,
     roots: impl IntoIterator<Item = impl Into<String>>,
-) -> BTreeSet<CatalogRef> {
+) -> Result<BTreeSet<CatalogRef>, ScanError> {
     let roots: HashSet<String> = roots.into_iter().map(Into::into).collect();
     let roots = &roots;
 
@@ -125,17 +164,17 @@ pub fn scan_package_with_roots(
             let mut visited = HashSet::new();
             db.insert(
                 stem,
-                analyze_file_at(&content, roots, dir, &mut visited, Some(path)),
+                analyze_file_at(&content, roots, dir, &mut visited, Some(path))?,
             );
         }
         db
     };
-    let references: BTreeSet<CatalogRef> = collect_transitive(db, base_dir.as_ref(), roots)
+    let references: BTreeSet<CatalogRef> = collect_transitive(db, base_dir.as_ref(), roots)?
         .into_iter()
         .map(CatalogRef)
         .collect();
     debug!(references = references.len(), "scanned catalog references");
-    references
+    Ok(references)
 }
 
 /// Source context for verbose reference reporting: the file a reference was
@@ -253,7 +292,7 @@ fn analyze_file_at(
     file_dir: Option<&Path>,
     visited: &mut HashSet<PathBuf>,
     path: Option<&Path>,
-) -> FileInfo {
+) -> Result<FileInfo, ScanError> {
     if let Some(path) = path {
         debug!(file = %path.display(), "reading NEF expression");
     }
@@ -275,6 +314,33 @@ fn analyze_file_at(
         }
     }
 
+    // The parameter names the top-level lambda declares. Only declared
+    // arguments are supplied when NEF calls the file (callPackage semantics),
+    // so a root referenced without being declared can never resolve; that is
+    // reported as [ScanError::UndeclaredRoot] after the walk. `None` fails
+    // open: a file whose top level is not a plain lambda (e.g. a let-wrapped
+    // lambda) hides its parameters from the scanner, and the lenient seeding
+    // below is kept without the declaration check.
+    let declared_params: Option<HashSet<String>> = match root.expr() {
+        Some(ast::Expr::Lambda(lambda)) => match lambda.param() {
+            Some(ast::Param::IdentParam(param)) => Some(
+                param
+                    .ident()
+                    .as_ref()
+                    .and_then(ident_name)
+                    .into_iter()
+                    .collect(),
+            ),
+            Some(ast::Param::Pattern(pat)) => Some(
+                pat.pat_entries()
+                    .filter_map(|entry| entry.ident().as_ref().and_then(ident_name))
+                    .collect(),
+            ),
+            None => None,
+        },
+        _ => None,
+    };
+
     // Each dependency argument resolves as a whole sibling package (single
     // component). Members selected on an argument add longer attr-paths, e.g.
     // `python3Packages.isdr-zk-client`, resolved as sibling attribute sets.
@@ -284,9 +350,11 @@ fn analyze_file_at(
     let ctx = ScanCtx { path, content };
     let mut walker = Walker {
         roots,
+        declared_params: declared_params.as_ref(),
         ctx,
         refs: BTreeSet::new(),
         pending_imports: Vec::new(),
+        first_root_use: HashMap::new(),
     };
 
     // Seed the environment with the catalog roots. Lambda parameters —
@@ -303,6 +371,7 @@ fn analyze_file_at(
     let Walker {
         mut refs,
         pending_imports,
+        first_root_use,
         ..
     } = walker;
 
@@ -358,7 +427,7 @@ fn analyze_file_at(
                 import_dir.as_deref(),
                 visited,
                 Some(&target),
-            );
+            )?;
             refs.extend(
                 imported
                     .refs
@@ -368,7 +437,37 @@ fn analyze_file_at(
         }
     }
 
-    FileInfo { refs, deps }
+    // With the refs complete (imports included), reject any that resolve
+    // through a root the top-level lambda does not declare — they could never
+    // evaluate. Roots are checked in sorted order for a deterministic error.
+    if let Some(declared) = &declared_params {
+        let mut undeclared: Vec<&String> = roots
+            .iter()
+            .filter(|root| !declared.contains(root.as_str()))
+            .collect();
+        undeclared.sort();
+        for root in undeclared {
+            if refs
+                .iter()
+                .any(|reference| reference_root(reference) == root)
+            {
+                return Err(ScanError::UndeclaredRoot {
+                    root: root.clone(),
+                    file: path.map(Path::to_path_buf),
+                    position: first_root_use
+                        .get(root)
+                        .map(|&offset| line_col(content, offset)),
+                });
+            }
+        }
+    }
+
+    Ok(FileInfo { refs, deps })
+}
+
+/// The root component of a dotted reference (`catalogs.a.b` → `catalogs`).
+fn reference_root(reference: &str) -> &str {
+    reference.split('.').next().unwrap_or(reference)
 }
 
 /// Collect the static attr-paths selected on dependency arguments.
@@ -416,7 +515,7 @@ fn collect_transitive(
     mut db: HashMap<String, FileInfo>,
     dir: &Path,
     roots: &HashSet<String>,
-) -> BTreeSet<String> {
+) -> Result<BTreeSet<String>, ScanError> {
     let mut visited: HashSet<String> = HashSet::new();
     let mut result: BTreeSet<String> = BTreeSet::new();
     let mut queue: Vec<Vec<String>> = db
@@ -430,7 +529,7 @@ fn collect_transitive(
             continue;
         }
         if !db.contains_key(&key)
-            && let Some(info) = resolve_dep(dir, &path, roots)
+            && let Some(info) = resolve_dep(dir, &path, roots)?
         {
             db.insert(key.clone(), info);
         }
@@ -444,7 +543,7 @@ fn collect_transitive(
         }
     }
 
-    result
+    Ok(result)
 }
 
 /// A name's meaning in the lexical environment threaded through the walk.
@@ -516,15 +615,31 @@ enum InheritPosition {
 /// applications as [PendingImport] facts; it performs no IO itself.
 struct Walker<'a> {
     roots: &'a HashSet<String>,
+    /// The top-level lambda's parameter names; `None` when the file's shape
+    /// hides them (see the declaration check in [analyze_file_at]).
+    declared_params: Option<&'a HashSet<String>>,
     ctx: ScanCtx<'a>,
     refs: BTreeSet<String>,
     pending_imports: Vec<PendingImport>,
+    /// Byte offset of the first use of each root, for locating an
+    /// undeclared-root error after the walk.
+    first_root_use: HashMap<String, usize>,
 }
 
 impl Walker<'_> {
     fn emit(&mut self, offset: usize, reference: String) {
         self.ctx.report(offset, &reference);
+        self.note_root_use(offset, &reference);
         self.refs.insert(reference);
+    }
+
+    /// Record where a root was first used (`reference` may be the bare root
+    /// name or a dotted path under it).
+    fn note_root_use(&mut self, offset: usize, reference: &str) {
+        let root = reference_root(reference);
+        if !self.first_root_use.contains_key(root) {
+            self.first_root_use.insert(root.to_string(), offset);
+        }
     }
 
     fn walk(&mut self, node: &rnix::SyntaxNode, env: &Env) {
@@ -594,6 +709,7 @@ impl Walker<'_> {
             } else {
                 let reference = join_path(&append_star(path));
                 self.ctx.warn_escape(offset, &reference);
+                self.note_root_use(offset, &reference);
                 self.refs.insert(reference);
             }
         }
@@ -610,11 +726,12 @@ impl Walker<'_> {
     }
 
     /// Lambda parameters shadow the outer scope. A parameter named like a
-    /// catalog root keeps its root meaning: such lambdas are (almost always)
-    /// applied to the namespace itself, and assuming so can only produce
-    /// spurious refs that fail loudly, while assuming the opposite drops
-    /// real refs silently. Every other parameter is opaque — the scanner
-    /// cannot know what it will be applied to.
+    /// receivable catalog root keeps its root meaning (see
+    /// [Self::param_binding]): such lambdas are (almost always) applied to
+    /// the namespace itself, and assuming so can only produce spurious refs
+    /// that fail loudly, while assuming the opposite drops real refs
+    /// silently. Every other parameter is opaque — the scanner cannot know
+    /// what it will be applied to.
     fn walk_lambda(&mut self, lambda: &ast::Lambda, env: &Env) {
         let mut inner = env.clone();
         match lambda.param() {
@@ -664,8 +781,16 @@ impl Walker<'_> {
     }
 
     /// What a lambda parameter of this name means (see [Self::walk_lambda]).
+    ///
+    /// A root-named parameter keeps its root meaning only when the file's
+    /// top level can receive that root: a root the file never declares
+    /// cannot flow to an inner lambda, so there the name is just a name.
+    /// An unrecognized top-level shape fails open and keeps the heuristic.
     fn param_binding(&self, name: &str) -> Binding {
-        if self.roots.contains(name) {
+        let receivable = self
+            .declared_params
+            .is_none_or(|declared| declared.contains(name));
+        if receivable && self.roots.contains(name) {
             Binding::Path(vec![name.to_string()])
         } else {
             Binding::Opaque
@@ -882,6 +1007,12 @@ impl Walker<'_> {
             ast::Expr::AttrSet(attrset) => {
                 let forwards = self.import_forwards(attrset, env);
                 if !forwards.is_empty() {
+                    // Forwarding is a use of each parent root: refs surfacing
+                    // from the import trace back to this argument.
+                    let offset = offset_of(attrset.syntax());
+                    for parent_root in forwards.values() {
+                        self.note_root_use(offset, parent_root);
+                    }
                     self.pending_imports.push(PendingImport {
                         path,
                         arg: ImportArg::Set(forwards),
@@ -896,6 +1027,7 @@ impl Walker<'_> {
                 if let Some(Binding::Path(root_path)) = resolve_expr_binding(other, env)
                     && let [root] = root_path.as_slice()
                 {
+                    self.note_root_use(offset_of(other.syntax()), root);
                     self.pending_imports.push(PendingImport {
                         path,
                         arg: ImportArg::Root(root.clone()),
@@ -1747,7 +1879,11 @@ fn attr_static_name(attr: &ast::Attr) -> Option<String> {
 /// directory); a `<comp>/default.nix` is a package directory; a directory with
 /// no `default.nix` is an attribute set that is descended into. Components past
 /// the package file are attributes within it and are ignored.
-fn resolve_dep(dir: &Path, components: &[String], roots: &HashSet<String>) -> Option<FileInfo> {
+fn resolve_dep(
+    dir: &Path,
+    components: &[String],
+    roots: &HashSet<String>,
+) -> Result<Option<FileInfo>, ScanError> {
     let mut cur = dir.to_path_buf();
     for comp in components {
         let file = cur.join(format!("{comp}.nix"));
@@ -1763,24 +1899,28 @@ fn resolve_dep(dir: &Path, components: &[String], roots: &HashSet<String>) -> Op
             cur = sub;
             continue;
         }
-        return None;
+        return Ok(None);
     }
-    None
+    Ok(None)
 }
 
 /// Read and analyze a resolved package file.
 ///
 /// Relative imports in the file resolve against its own directory, so the
-/// file's parent is passed as the import base.
-fn read_and_analyze(path: &Path, roots: &HashSet<String>) -> Option<FileInfo> {
-    let content = fs::read_to_string(path).ok()?;
-    Some(analyze_file_at(
+/// file's parent is passed as the import base. An unreadable file resolves to
+/// `Ok(None)`; only scan failures are errors.
+fn read_and_analyze(path: &Path, roots: &HashSet<String>) -> Result<Option<FileInfo>, ScanError> {
+    let Ok(content) = fs::read_to_string(path) else {
+        return Ok(None);
+    };
+    analyze_file_at(
         &content,
         roots,
         path.parent(),
         &mut HashSet::new(),
         Some(path),
-    ))
+    )
+    .map(Some)
 }
 
 #[cfg(test)]
@@ -1793,10 +1933,16 @@ mod tests {
 
     fn analyze_file(content: &str, roots: &HashSet<String>) -> FileInfo {
         analyze_file_at(content, roots, None, &mut HashSet::new(), None)
+            .expect("scan should succeed")
     }
 
     fn refs(content: &str, roots: &HashSet<String>) -> BTreeSet<String> {
         analyze_file(content, roots).refs
+    }
+
+    fn scan_err(content: &str, roots: &HashSet<String>) -> ScanError {
+        analyze_file_at(content, roots, None, &mut HashSet::new(), None)
+            .expect_err("scan should fail")
     }
 
     fn refs_at(path: &str, roots: &HashSet<String>) -> BTreeSet<String> {
@@ -1804,7 +1950,9 @@ mod tests {
         let content = fs::read_to_string(path).expect("test fixture missing");
         let dir = path.parent();
         let mut visited = HashSet::new();
-        analyze_file_at(&content, roots, dir, &mut visited, Some(path)).refs
+        analyze_file_at(&content, roots, dir, &mut visited, Some(path))
+            .expect("scan should succeed")
+            .refs
     }
 
     fn set(items: &[&str]) -> BTreeSet<String> {
@@ -2061,7 +2209,7 @@ mod tests {
         db.insert("alpha-lib".to_string(), analyze_file(file_a, &r));
         db.insert("beta-client".to_string(), analyze_file(file_b, &r));
 
-        let got = collect_transitive(db, Path::new("."), &r);
+        let got = collect_transitive(db, Path::new("."), &r).unwrap();
         assert_eq!(
             got,
             set(&[
@@ -2081,7 +2229,7 @@ mod tests {
         db.insert("pkg-a".to_string(), analyze_file(file_a, &r));
         db.insert("pkg-b".to_string(), analyze_file(file_b, &r));
 
-        let got = collect_transitive(db, Path::new("."), &r);
+        let got = collect_transitive(db, Path::new("."), &r).unwrap();
         assert_eq!(got, set(&["catalogs.myorg.x", "catalogs.myorg.y"]));
     }
 
@@ -2095,7 +2243,7 @@ mod tests {
         db.insert("main-pkg".to_string(), analyze_file(file_a, &r));
         db.insert("dep-pkg".to_string(), analyze_file(file_b, &r));
 
-        let got = collect_transitive(db, Path::new("."), &r);
+        let got = collect_transitive(db, Path::new("."), &r).unwrap();
         assert_eq!(
             got,
             set(&[
@@ -2111,7 +2259,7 @@ mod tests {
         // dep-entry.nix references one catalog path and pulls in a `dep-helper`
         // dependency argument; dep-helper.nix (its sibling under base_dir)
         // references another. The closure is the union of both.
-        let got = scan_package(base_dir, Path::new("dep-entry.nix"));
+        let got = scan_package(base_dir, Path::new("dep-entry.nix")).unwrap();
         assert_eq!(
             got,
             refset(&[
@@ -2130,7 +2278,7 @@ mod tests {
     #[test]
     fn scan_package_dep_subdir_default_follows_relative_import() {
         let base_dir = Path::new("test_data/catalog_refs/depdir-import");
-        let got = scan_package(base_dir, Path::new("entry.nix"));
+        let got = scan_package(base_dir, Path::new("entry.nix")).unwrap();
         assert_eq!(
             got,
             refset(&["catalogs.myorg.direct", "catalogs.myorg.helper-ref"]),
@@ -2148,7 +2296,7 @@ mod tests {
     #[test]
     fn scan_package_follows_alias_to_pkgset_member() {
         let base_dir = Path::new("test_data/catalog_refs/pkgset-member-alias");
-        let got = scan_package(base_dir, Path::new("isdr-zk-client.nix"));
+        let got = scan_package(base_dir, Path::new("isdr-zk-client.nix")).unwrap();
         assert_eq!(got, refset(&["catalogs.myorg.toolkit.readVersion"]));
     }
 
@@ -2160,7 +2308,7 @@ mod tests {
     #[test]
     fn scan_package_nested_target_resolves_deps_at_root() {
         let base_dir = Path::new("test_data/catalog_refs/nested-target-access");
-        let got = scan_package(base_dir, Path::new("foo/bar.nix"));
+        let got = scan_package(base_dir, Path::new("foo/bar.nix")).unwrap();
         assert_eq!(
             got,
             refset(&["catalogs.myorg.bar-own", "catalogs.myorg.top-src"]),
@@ -2176,7 +2324,7 @@ mod tests {
     #[test]
     fn scan_package_follows_pkgset_member_transitive_deps() {
         let base_dir = Path::new("test_data/catalog_refs/pkgset-member-transitive");
-        let got = scan_package(base_dir, Path::new("top.nix"));
+        let got = scan_package(base_dir, Path::new("top.nix")).unwrap();
         assert_eq!(
             got,
             refset(&["catalogs.myorg.widget-src", "catalogs.myorg.helper-lib-src"]),
@@ -2198,7 +2346,7 @@ mod tests {
                 continue;
             }
             let rel = path.file_name().expect("fixture file name");
-            for reference in scan_package(dir, Path::new(rel)) {
+            for reference in scan_package(dir, Path::new(rel)).unwrap() {
                 scanned += 1;
                 let reference = reference.as_str();
                 let post_root = reference.split('.').count() - 1;
@@ -3004,5 +3152,125 @@ mod tests {
                 "catalogs.myorg.toolkit.readVersion",
             ])
         );
+    }
+
+    #[test]
+    fn undeclared_root_reference_is_an_error() {
+        // Each case references `catalogs` through a different emit path while
+        // the top-level lambda does not declare it; the expected position is
+        // the first use.
+        let cases = [
+            (
+                "direct select",
+                "{ mkDerivation }:\nmkDerivation {\n  version = catalogs.myorg.toolkit.readVersion;\n}\n",
+                (3, 13),
+            ),
+            (
+                "namespace escaping as a value",
+                "{ mkDerivation }:\nmkDerivation {\n  passthru = catalogs;\n}\n",
+                (3, 14),
+            ),
+            (
+                "inherit from the namespace",
+                "{ mkDerivation }:\nlet\n  inherit (catalogs.myorg.toolkit) readVersion;\nin\nmkDerivation { version = readVersion; }\n",
+                (3, 36),
+            ),
+            (
+                "with over the namespace",
+                "{ mkDerivation }:\nwith catalogs;\nmkDerivation { }\n",
+                (2, 1),
+            ),
+        ];
+        for (label, content, position) in cases {
+            assert_eq!(
+                scan_err(content, &roots(&["catalogs"])),
+                ScanError::UndeclaredRoot {
+                    root: "catalogs".to_string(),
+                    file: None,
+                    position: Some(position),
+                },
+                "{label}",
+            );
+        }
+    }
+
+    #[test]
+    fn root_named_inner_param_only_rooted_when_file_can_receive_root() {
+        let cases: &[(&str, &[&str])] = &[
+            // The file's top level cannot receive `catalogs`, so an inner
+            // parameter of that name cannot be the namespace; its uses are
+            // not refs and must not trip the undeclared-root rejection.
+            (
+                "{ mkDerivation }: let f = catalogs: catalogs.version; in mkDerivation { v = f { version = \"1\"; }; }",
+                &[],
+            ),
+            // An unrecognized top-level shape fails open: the parameter
+            // keeps its root meaning.
+            ("let f = catalogs: catalogs.other.pkg; in f {}", &[
+                "catalogs.other.pkg",
+            ]),
+        ];
+        for (content, expected) in cases {
+            assert_eq!(
+                refs(content, &roots(&["catalogs"])),
+                set(expected),
+                "content: {content}"
+            );
+        }
+    }
+
+    #[test]
+    fn undeclared_root_without_references_is_not_an_error() {
+        let content = "{ mkDerivation }: mkDerivation { pname = \"tool\"; }";
+        assert_eq!(refs(content, &roots(&["catalogs"])), BTreeSet::new());
+    }
+
+    #[test]
+    fn let_bound_root_name_shadows_without_error() {
+        let content = "{ config }:\nlet catalogs = config;\nin catalogs.myorg.toolkit.readVersion";
+        assert_eq!(refs(content, &roots(&["catalogs"])), BTreeSet::new());
+    }
+
+    #[test]
+    fn unrecognized_top_level_shape_scans_leniently() {
+        // A let-wrapped file still evaluates to a function, but the scanner
+        // cannot see its parameters; the declaration check fails open and the
+        // refs are kept.
+        let content = "let version = \"1.0\";\nin { mkDerivation }:\nmkDerivation { v = catalogs.myorg.pkg.readVersion; }";
+        assert_eq!(
+            refs(content, &roots(&["catalogs"])),
+            set(&["catalogs.myorg.pkg.readVersion"])
+        );
+    }
+
+    #[test]
+    fn undeclared_root_forwarded_to_import_errors_at_forward_site() {
+        let path = Path::new("test_data/catalog_refs/undeclared-forward/entry.nix");
+        let content = fs::read_to_string(path).expect("test fixture missing");
+        let err = analyze_file_at(
+            &content,
+            &roots(&["catalogs"]),
+            path.parent(),
+            &mut HashSet::new(),
+            Some(path),
+        )
+        .expect_err("scan should fail");
+        assert_eq!(err, ScanError::UndeclaredRoot {
+            root: "catalogs".to_string(),
+            file: Some(path.to_path_buf()),
+            position: Some((6, 35)),
+        });
+    }
+
+    #[test]
+    fn undeclared_root_error_message_points_at_the_arguments() {
+        let err = ScanError::UndeclaredRoot {
+            root: "catalogs".to_string(),
+            file: Some(PathBuf::from("pkgs/foo.nix")),
+            position: Some((4, 13)),
+        };
+        assert_eq!(err.to_string(), indoc::indoc! {"
+                'catalogs' is referenced at pkgs/foo.nix:4:13 but is not declared in the function arguments.
+                Add 'catalogs' to the function arguments, e.g. '{ catalogs, ... }:'."});
     }
 }
