@@ -410,6 +410,7 @@ impl Walker<'_> {
             ast::Expr::With(with_expr) => self.walk_with(&with_expr, env),
             ast::Expr::Apply(apply) => self.walk_apply(&apply, env),
             ast::Expr::Select(select) => self.walk_select(&select, env),
+            ast::Expr::Ident(ident) => self.walk_ident(&ident, env),
             _ => self.walk_children(node, env),
         }
     }
@@ -417,6 +418,21 @@ impl Walker<'_> {
     fn walk_children(&mut self, node: &rnix::SyntaxNode, env: &Env) {
         for child in node.children() {
             self.walk(&child, env);
+        }
+    }
+
+    /// A bare ident in a value position: using an alias uses the package it
+    /// names. Uses at catalog depth or shallower are escape hatches handled
+    /// separately, not exact refs.
+    fn walk_ident(&mut self, ident: &ast::Ident, env: &Env) {
+        let Some(name) = ident_name(ident) else {
+            return;
+        };
+        let Some(Binding::Path(path)) = env.get(&name) else {
+            return;
+        };
+        if path.len() >= 3 || path.last().map(String::as_str) == Some("*") {
+            self.emit(offset_of(ident.syntax()), join_path(path));
         }
     }
 
@@ -475,10 +491,24 @@ impl Walker<'_> {
     fn walk_let_in(&mut self, let_in: &ast::LetIn, env: &Env) {
         let inner = let_scope_env(let_in, env);
         for entry in let_in.attrpath_values() {
+            let attrs: Vec<ast::Attr> = entry
+                .attrpath()
+                .map(|attrpath| attrpath.attrs().collect())
+                .unwrap_or_default();
             if let Some(attrpath) = entry.attrpath() {
                 self.walk_attrpath_dynamics(&attrpath, &inner);
             }
-            if let Some(value) = entry.value() {
+            let Some(value) = entry.value() else { continue };
+            // A binding consumed as an alias walks in binding mode (see
+            // [Self::walk_binding_rhs]); everything else is a value position.
+            let consumed = attrs.len() == 1
+                && attrs
+                    .first()
+                    .and_then(attr_static_name)
+                    .is_some_and(|name| matches!(inner.get(&name), Some(Binding::Path(_))));
+            if consumed {
+                self.walk_binding_rhs(&value, &inner);
+            } else {
                 self.walk(value.syntax(), &inner);
             }
         }
@@ -539,7 +569,10 @@ impl Walker<'_> {
                 Some(key) => append_component(target_path, key),
                 None => append_star(target_path),
             };
-            self.emit(offset_of(apply.syntax()), join_path(&path));
+            self.emit(
+                offset_of(apply.syntax()),
+                join_path(&widen_if_catalog_level(path)),
+            );
             if let Some(key) = key {
                 self.walk(key.syntax(), env);
             }
@@ -561,18 +594,58 @@ impl Walker<'_> {
 
     fn walk_select(&mut self, select: &ast::Select, env: &Env) {
         match resolve_select_path(select, env) {
-            Some(path) => self.emit(offset_of(select.syntax()), join_path(&path)),
+            Some(path) => self.emit(
+                offset_of(select.syntax()),
+                join_path(&widen_if_catalog_level(path)),
+            ),
             None => {
                 if let Some(base) = select.expr() {
                     self.walk(base.syntax(), env);
                 }
             },
         }
+        self.walk_select_parts(select, env);
+    }
+
+    /// Scan the non-consumed subtrees of a select: dynamic attr components and
+    /// the `or` default.
+    fn walk_select_parts(&mut self, select: &ast::Select, env: &Env) {
         if let Some(attrpath) = select.attrpath() {
             self.walk_attrpath_dynamics(&attrpath, env);
         }
         if let Some(default) = select.default_expr() {
             self.walk(default.syntax(), env);
+        }
+    }
+
+    /// Walk the right-hand side of a binding consumed as a catalog alias.
+    ///
+    /// A deep RHS (two or more components past the root) is a package ref of
+    /// its own and still emits; a catalog-level RHS is suppressed entirely —
+    /// it only defines the alias, and the alias's use sites drive the refs.
+    fn walk_binding_rhs(&mut self, value: &ast::Expr, env: &Env) {
+        match value {
+            ast::Expr::Select(select) => {
+                match resolve_select_path(select, env) {
+                    Some(path) if path.len() >= 3 => {
+                        self.emit(offset_of(select.syntax()), join_path(&path));
+                    },
+                    Some(_) => {},
+                    None => {
+                        if let Some(base) = select.expr() {
+                            self.walk(base.syntax(), env);
+                        }
+                    },
+                }
+                self.walk_select_parts(select, env);
+            },
+            ast::Expr::Ident(_) => {},
+            ast::Expr::Paren(paren) => {
+                if let Some(inner) = paren.expr() {
+                    self.walk_binding_rhs(&inner, env);
+                }
+            },
+            _ => self.walk(value.syntax(), env),
         }
     }
 
@@ -1111,13 +1184,16 @@ mod tests {
             include_str!("../../test_data/catalog_refs/inputs-only.nix"),
             &roots(&["inputs"]),
         );
+        // `inputs.self` is used at catalog depth in value positions
+        // (`src = inputs.self;`, `"${inputs.self}/VERSION"`), so it widens to
+        // a sentinel rather than an unresolvable exact ref.
         assert_eq!(
             got,
             set(&[
                 "inputs.nixpkgs.lib",
                 "inputs.nixpkgs.lib.fileContents",
                 "inputs.devtools-flake.packages.default",
-                "inputs.self",
+                "inputs.self.*",
             ])
         );
     }
@@ -1359,11 +1435,13 @@ mod tests {
 
     #[test]
     fn aliased_select_single_level() {
+        // The alias RHS names a whole catalog, which can never resolve as an
+        // exact ref; only the use site drives the ref.
         let got = refs(
             "{ catalogs }: let org = catalogs.myorg; in org.toolkit",
             &roots(&["catalogs"]),
         );
-        assert_eq!(got, set(&["catalogs.myorg", "catalogs.myorg.toolkit"]));
+        assert_eq!(got, set(&["catalogs.myorg.toolkit"]));
     }
 
     #[test]
@@ -1375,7 +1453,6 @@ mod tests {
         assert_eq!(
             got,
             set(&[
-                "catalogs.myorg",
                 "catalogs.myorg.toolkit",
                 "catalogs.myorg.toolkit.readVersion",
             ])
@@ -1388,7 +1465,29 @@ mod tests {
             "{ catalogs }: let b = a.hello; a = catalogs.myorg; in b",
             &roots(&["catalogs"]),
         );
-        assert_eq!(got, set(&["catalogs.myorg", "catalogs.myorg.hello"]));
+        assert_eq!(got, set(&["catalogs.myorg.hello"]));
+    }
+
+    #[test]
+    fn alias_rebound_as_lambda_param_not_emitted() {
+        // `org` inside `g` is the lambda's own parameter, not the outer alias,
+        // and the outer alias is never used in a value position.
+        let got = refs(
+            "{ catalogs, x }: let org = catalogs.myorg; g = org: org.other; in g x",
+            &roots(&["catalogs"]),
+        );
+        assert_eq!(got, BTreeSet::new());
+    }
+
+    #[test]
+    fn catalog_level_value_use_emits_sentinel() {
+        // Passing a whole catalog to a function makes every member reachable;
+        // an exact `catalogs.myorg` ref would be unresolvable.
+        let got = refs(
+            "{ catalogs }: builtins.attrValues catalogs.myorg",
+            &roots(&["catalogs"]),
+        );
+        assert_eq!(got, set(&["catalogs.myorg.*"]));
     }
 
     #[test]
@@ -1450,7 +1549,7 @@ mod tests {
             // The inherit source may be an alias ident, not just a select.
             (
                 "{ catalogs }: let org = catalogs.myorg; in { inherit (org) toolkit; }",
-                &["catalogs.myorg", "catalogs.myorg.toolkit"],
+                &["catalogs.myorg.toolkit"],
             ),
         ];
         for (content, expected) in cases {
@@ -1628,7 +1727,7 @@ mod tests {
             "{ catalogs, name }: let org = catalogs.myorg; in builtins.getAttr \"hello\" org",
             &roots(&["catalogs"]),
         );
-        assert_eq!(got, set(&["catalogs.myorg", "catalogs.myorg.hello"]));
+        assert_eq!(got, set(&["catalogs.myorg.hello"]));
     }
 
     #[test]
