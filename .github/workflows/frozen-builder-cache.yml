@@ -15,6 +15,18 @@ name: "Frozen builder cache"
 # (cli/flox/src/commands/sandbox_backends/{oci,openshell}.rs):
 #
 #   gh workflow run frozen-builder-cache.yml --ref <branch>
+#
+# First dispatch on a branch where the workflow has never existed on the
+# default branch may need the REST form:
+#
+#   gh api repos/flox/flox/actions/workflows/frozen-builder-cache.yml/dispatches -f ref=<branch>
+#
+# KEEP THE PINS FETCHABLE: rebases strip the pinned revs from the
+# prototype branch, leaving them reachable only via backup branches.
+# Anchor each pin with a tag before deleting backups, or both this
+# workflow and the in-VM `nix run github:flox/flox/<pin>` break:
+#
+#   git push origin <rev>:refs/tags/frozen-builder/<rev12>
 
 on:
   workflow_dispatch:
@@ -46,6 +58,8 @@ jobs:
     steps:
       - name: "Install Nix"
         uses: cachix/install-nix-action@ab739621df7a23f52766f9ccc97f38da6b7af14f # v31
+        with:
+          github_access_token: "${{ github.token }}"
 
       - name: "Configure AWS Credentials"
         uses: aws-actions/configure-aws-credentials@8df5847569e6427dd6c4fb1cf565c83acfa8afa7 # v6
@@ -60,9 +74,10 @@ jobs:
           NIX_SUBSTITUTER: "${{ vars.MANAGED_CACHE_PUBLIC_S3_BUCKET }}"
           NIX_SUBSTITUTER_KEY: "${{ secrets.MANAGED_CACHE_PUBLIC_SECRET_KEY }}"
         run: |
-          set -euxo pipefail
+          set -euo pipefail
           umask 077
-          printf '%s' "$NIX_SUBSTITUTER_KEY" > /tmp/nix-substituter-secret-key
+          printenv NIX_SUBSTITUTER_KEY > /tmp/nix-substituter-secret-key
+          set -x
           for rev in $REVS; do
             out="$(nix build \
               --extra-experimental-features 'nix-command flakes' \
