@@ -207,14 +207,13 @@ wiring."**
 **"My filesystem is invisible, my credentials don't cross, and only
 my project is live."**
 
-Still inside the guest:
+On the host, `ls -a ~/demo-secrets/` shows a real `.env` secret
+(seeded by setup.sh). Inside the guest, the directory doesn't
+exist:
 
 ```bash
-flox [sandbox-demo] bash-5.3$ ls /Users/you/.ssh
-ls: cannot access '/Users/you/.ssh': No such file or directory
-
-flox [sandbox-demo] bash-5.3$ cat /Users/you/demo-secrets/.env
-cat: /Users/you/demo-secrets/.env: No such file or directory
+flox [sandbox-demo] bash-5.3$ ls -a /Users/you/demo-secrets/
+ls: cannot access '/Users/you/demo-secrets/': No such file or directory
 
 flox [sandbox-demo] bash-5.3$ printenv GITHUB_TOKEN
 flox [sandbox-demo] bash-5.3$
