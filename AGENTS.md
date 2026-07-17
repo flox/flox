@@ -240,6 +240,11 @@ Update your branch against `main` by rebasing — never a merge commit.
     invalid state unrepresentable (`NonZero`, domain types) over a
     runtime guard plus a test for it. Do not add a client mock to
     test a thin wrapper; see the provider-trait rule above.
+  - **Avoid `expect`/`unwrap`:** Do not reach for `expect` or
+    `unwrap` when the code can be structured so that only valid
+    states are reachable. Prefer types, return types, and logic flow
+    that make the invalid state unrepresentable, so the panic path
+    cannot exist rather than being asserted away at runtime.
   - **Type safety at function boundaries:** Parse strings
     at entry points (CLI arg parsing, API response
     deserialization), not deep in business logic. Before
