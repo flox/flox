@@ -22,8 +22,9 @@ L7 egress policy. Same manifest, one word changed:
 
 **Verification status:** see the "verified" notes per beat. Beats
 1, 2, and 5 were verified live on macOS (arm64, Docker Desktop
-28.5.1, OpenShell 0.0.82) on 2026-07-13, as were beat 3's
-deny-by-default, hot-reload, and binary-scoped GET. All of those
+28.5.1, OpenShell 0.0.82) on 2026-07-13, as were the
+deny-by-default probe (now part of beat 2's log-tail flow) and
+beat 3's hot-reload and binary-scoped GET. All of those
 were re-verified exec-mode on 2026-07-14, plus beat 4's network
 path: the corrected Anthropic grant (see beat 3's tip) let `claude`
 with a placeholder API key reach the API through the proxy (the
@@ -33,7 +34,9 @@ was also rehearsed 2026-07-14 with a negative result: `read-only`
 does not block write methods on 0.0.82 (see the warning in beat 3)
 — keep it out of the talk track. Beat 4's live agent run — with
 the pre-seeded `claude setup-token` token — was verified in a full
-end-to-end run of the script on 2026-07-16. (Interactive login
+end-to-end run of the script on 2026-07-16 (that run predates the
+2026-07-17 beat 2/3 log-tail resequencing, which still needs one
+rehearsal in the new order). (Interactive login
 inside the guest remains a dead end — the OAuth URL can't be
 copied out of a sandboxed session — which is why beat 4 pre-seeds
 the token via a gitignored `.env`.)
@@ -202,15 +205,22 @@ wiring."**
 
 ## 2 · Prove the boundary is intact
 
-*(verified 2026-07-13; the log tail moved up from beat 3,
-2026-07-17)*
+*(verified 2026-07-13; the log tail moved up from beat 3 on
+2026-07-17 — not yet rehearsed in this order; confirm `--tail`
+doesn't replay old events)*
 
 **"My filesystem is invisible, my credentials don't cross, and only
 my project is live."**
 
-On the host, `ls -a ~/demo-secrets/` shows a real `.env` secret
-(seeded by setup.sh). Inside the guest, the directory doesn't
-exist:
+First, in the **host terminal** — there's a real (planted) secret
+out there, seeded by setup.sh:
+
+```bash
+ls -a ~/demo-secrets/
+# .  ..  .env
+```
+
+Inside the guest, the directory doesn't exist:
 
 ```bash
 flox [sandbox-demo] bash-5.3$ ls -a /Users/you/demo-secrets/
@@ -223,8 +233,10 @@ flox [sandbox-demo] bash-5.3$
 **"And unlike a plain container, the network is deny-by-default at
 layer 7 — and every verdict is an audit event. Watch live:"**
 
-In the **host terminal**, start tailing verdicts (sandbox name from
-`openshell sandbox list` in beat 1) and leave it running:
+In a **third host terminal** (or a split pane beside the control
+terminal — beat 3 still needs the control terminal free for policy
+commands), start tailing verdicts (sandbox name from `openshell
+sandbox list` in beat 1) and leave it running:
 
 ```bash
 openshell logs flox-sandbox-demo-##### --tail
@@ -253,8 +265,8 @@ the binary that tried."**
 
 ## 3 · Hot-reload a network policy — no restart
 
-*(deny-by-default, hot-reload, and the binary-scoped GET verified
-2026-07-13 and re-verified 2026-07-14)*
+*(hot-reload and the binary-scoped GET verified 2026-07-13 and
+re-verified 2026-07-14)*
 
 > **Do not demo write-denial.** Rehearsed 2026-07-14 on OpenShell
 > 0.0.82: under a `read-only:rest` grant the L7 engine logs
@@ -300,8 +312,8 @@ that precise: a Nix store path pins the policy to the exact build
 of curl the environment shipped — not 'anything named curl'. And
 the verdict flipped in the log tail:"**
 
-The tail from beat 2 is still running in the host terminal — the
-same request that was denied a minute ago now shows an allow:
+The tail pane from beat 2 is still running — the same request that
+was denied a minute ago now shows an allow:
 
 ```
 # [ocsf] HTTP:GET [INFO] ALLOWED GET http://api.github.com:443/zen [policy:allow_api_github_com_443 engine:l7]
@@ -372,7 +384,7 @@ nothing."**
 >
 > The guest runs as the unprivileged `sandbox` user, so
 > `claude --dangerously-skip-permissions` also works here if you
-> prefer it to auto mode.
+> prefer it to the `--permission-mode auto` invocation below.
 
 With the token pre-seeded, start the agent:
 
