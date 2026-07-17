@@ -460,28 +460,23 @@ pub(crate) enum OciBakeDecision {
 // ── Image lifecycle helpers ───────────────────────────────────────────────────
 
 /// Compute the first `OCI_HASH_TAG_LEN` hex characters of the blake3 hash of
-/// the canonical JSON serialization of a lockfile, with prototype-only
-/// `[options]` keys stripped.
+/// the canonical JSON serialization of a lockfile, with the prototype-only
+/// `options.sandbox` key cleared from every embedded manifest.
 ///
-/// Hashing the canonical JSON (a `serde_json::Value` serializes object keys
-/// in sorted order) means the tag is stable across re-serialization and
-/// across machines. Changing any package pin, hook, or manifest field
-/// changes the hash and thus the tag, correctly marking the cached image
-/// stale — except the prototype-only keys, which are excluded for the same
-/// reason the builder sanitizer strips them: they never reach the baked
-/// image, so editing `[options.sandbox]` (mode, backend, network grants)
-/// must not force a pointless rebake.
+/// Hashing the canonical JSON (sorted map keys, deterministic struct field
+/// order) means the tag is stable across re-serialization and across
+/// machines. Changing any package pin, hook, or manifest field changes the
+/// hash and thus the tag, correctly marking the cached image stale — except
+/// the sandbox key, which is excluded for the same reason the builder
+/// sanitizer strips it: it never reaches the baked image, so editing
+/// `[options.sandbox]` (mode, backend, network grants) must not force a
+/// pointless rebake. The normalization happens in struct-land so lockfiles
+/// without sandbox options serialize byte-identically to before and keep
+/// their existing tags.
 pub(crate) fn lockfile_hash12(lockfile: &Lockfile) -> String {
-    let mut value =
-        serde_json::to_value(lockfile).expect("serializing a Lockfile to JSON cannot fail");
-    for pointer in ["/manifest/options", "/compose/composer/options"] {
-        if let Some(options) = value.pointer_mut(pointer).and_then(|v| v.as_object_mut()) {
-            for key in PROTOTYPE_ONLY_OPTION_KEYS {
-                options.remove(key);
-            }
-        }
-    }
-    let json = serde_json::to_vec(&value).expect("serializing a JSON value cannot fail");
+    let normalized = lockfile.without_sandbox_options();
+    let json =
+        serde_json::to_vec(&normalized).expect("serializing a Lockfile to JSON cannot fail");
     let mut hex = blake3::hash(&json).to_hex();
     hex.truncate(OCI_HASH_TAG_LEN);
     hex.to_string()
@@ -1108,13 +1103,27 @@ pub(crate) fn sanitize_lockfile_json(json_text: &str) -> Result<Option<String>> 
     let mut value: serde_json::Value = serde_json::from_str(json_text)
         .context("failed to parse lockfile for builder sanitization")?;
     let mut changed = false;
+    let mut strip = |options: Option<&mut serde_json::Value>| {
+        let Some(options) = options.and_then(|v| v.as_object_mut()) else {
+            return false;
+        };
+        let mut removed = false;
+        for key in PROTOTYPE_ONLY_OPTION_KEYS {
+            removed |= options.remove(key).is_some();
+        }
+        removed
+    };
     for pointer in ["/manifest/options", "/compose/composer/options"] {
-        if let Some(options) = value.pointer_mut(pointer).and_then(|v| v.as_object_mut()) {
-            for key in PROTOTYPE_ONLY_OPTION_KEYS {
-                if options.remove(key).is_some() {
-                    changed = true;
-                }
-            }
+        changed |= strip(value.pointer_mut(pointer));
+    }
+    // Included environments embed their own manifests, which the mainline
+    // parser in the builder rejects just as hard on unknown option keys.
+    if let Some(includes) = value
+        .pointer_mut("/compose/include")
+        .and_then(|v| v.as_array_mut())
+    {
+        for include in includes {
+            changed |= strip(include.pointer_mut("/manifest/options"));
         }
     }
     if changed {

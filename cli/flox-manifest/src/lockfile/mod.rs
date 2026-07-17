@@ -177,6 +177,26 @@ impl Lockfile {
     /// Compare two lockfiles as equal when they differ only in the
     /// prototype-only `[options.sandbox]` key.
     ///
+    /// A copy of this lockfile with the prototype-only `options.sandbox` key
+    /// cleared from every embedded manifest (top-level, composer, and
+    /// includes).
+    ///
+    /// The sandbox bake sanitizes this key out of the builder's view, so a
+    /// rendered environment never depends on it. Consumers that compare or
+    /// fingerprint lockfiles use this normalization so sandbox edits don't
+    /// look like environment changes.
+    pub fn without_sandbox_options(&self) -> Self {
+        let mut normalized = self.clone();
+        normalized.manifest = normalized.manifest.without_sandbox_options();
+        if let Some(ref mut compose) = normalized.compose {
+            compose.composer = compose.composer.without_sandbox_options();
+            for include in compose.include.iter_mut() {
+                include.manifest = include.manifest.without_sandbox_options();
+            }
+        }
+        normalized
+    }
+
     /// `PathEnvironment::needs_rebuild` calls this instead of `PartialEq`
     /// because the sandbox bake sanitizes the lockfile (via
     /// `sanitize_lockfile_json` / `PROTOTYPE_ONLY_OPTION_KEYS`) before the
@@ -184,21 +204,9 @@ impl Lockfile {
     /// environment always has `options.sandbox = None`. The host lockfile
     /// carries the full value. By the sanitizer's own contract, this key does
     /// not affect the rendered environment, so it must not mark a rendering
-    /// stale. Both the `manifest` field and, when composition is in use, the
-    /// `compose.composer` manifest are normalized before comparison.
+    /// stale. All embedded manifests are normalized before comparison.
     pub fn equals_ignoring_sandbox(&self, other: &Self) -> bool {
-        // Normalize both sides: clear options.sandbox on the embedded
-        // manifests before comparing the full lockfile structs.
-        let normalize = |lockfile: &Lockfile| -> Lockfile {
-            let mut normalized = lockfile.clone();
-            normalized.manifest = normalized.manifest.without_sandbox_options();
-            if let Some(ref mut compose) = normalized.compose {
-                compose.composer = compose.composer.without_sandbox_options();
-            }
-            normalized
-        };
-
-        normalize(self) == normalize(other)
+        self.without_sandbox_options() == other.without_sandbox_options()
     }
 }
 
