@@ -4,7 +4,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use rnix::ast;
-use rnix::ast::HasEntry as _;
+use rnix::ast::HasEntry;
 use rowan::ast::AstNode;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, instrument};
@@ -355,6 +355,10 @@ enum Binding {
     /// (`catalogs` = `Path(["catalogs"])`) or an alias of one. A path may end
     /// in `"*"` when a dynamic component collapsed it.
     Path(Vec<String>),
+    /// The name is bound to an attrset literal; selecting a member continues
+    /// resolution with that member's binding. Members the scanner cannot
+    /// model are absent.
+    Set(HashMap<String, Binding>),
     /// The name is bound to something the scanner cannot model; selects on it
     /// produce no refs.
     Opaque,
@@ -408,6 +412,11 @@ impl Walker<'_> {
             ast::Expr::Lambda(lambda) => self.walk_lambda(&lambda, env),
             ast::Expr::LetIn(let_in) => self.walk_let_in(&let_in, env),
             ast::Expr::With(with_expr) => self.walk_with(&with_expr, env),
+            // `rec { }` scopes like `let`: members see each other.
+            ast::Expr::AttrSet(attrset) if attrset.rec_token().is_some() => {
+                let inner = recursive_scope_env(&attrset, env);
+                self.walk_binding_entries(&attrset, &inner);
+            },
             ast::Expr::Apply(apply) => self.walk_apply(&apply, env),
             ast::Expr::Select(select) => self.walk_select(&select, env),
             ast::Expr::Ident(ident) => self.walk_ident(&ident, env),
@@ -458,13 +467,24 @@ impl Walker<'_> {
                         inner.insert(name, binding);
                     }
                 }
+                // The @-name is the whole argument set: members named in the
+                // pattern resolve like the parameters themselves, so
+                // `args.catalogs.<org>…` stays rooted.
                 if let Some(name) = pat
                     .pat_bind()
                     .and_then(|bind| bind.ident())
                     .as_ref()
                     .and_then(ident_name)
                 {
-                    inner.insert(name, Binding::Opaque);
+                    let members: HashMap<String, Binding> = pat
+                        .pat_entries()
+                        .filter_map(|entry| entry.ident().as_ref().and_then(ident_name))
+                        .map(|entry_name| {
+                            let binding = self.param_binding(&entry_name);
+                            (entry_name, binding)
+                        })
+                        .collect();
+                    inner.insert(name, Binding::Set(members));
                 }
                 for entry in pat.pat_entries() {
                     if let Some(default) = entry.default() {
@@ -489,34 +509,38 @@ impl Walker<'_> {
     }
 
     fn walk_let_in(&mut self, let_in: &ast::LetIn, env: &Env) {
-        let inner = let_scope_env(let_in, env);
-        for entry in let_in.attrpath_values() {
+        let inner = recursive_scope_env(let_in, env);
+        self.walk_binding_entries(let_in, &inner);
+        if let Some(body) = let_in.body() {
+            self.walk(body.syntax(), &inner);
+        }
+    }
+
+    /// Walk the entries of a binding scope (`let`, `rec { }`, or an attrset
+    /// literal consumed as a binding): an entry that models as a binding
+    /// walks in binding mode (see [Self::walk_binding_rhs]), everything else
+    /// is a value position.
+    fn walk_binding_entries(&mut self, scope: &impl HasEntry, env: &Env) {
+        for entry in scope.attrpath_values() {
             let attrs: Vec<ast::Attr> = entry
                 .attrpath()
                 .map(|attrpath| attrpath.attrs().collect())
                 .unwrap_or_default();
             if let Some(attrpath) = entry.attrpath() {
-                self.walk_attrpath_dynamics(&attrpath, &inner);
+                self.walk_attrpath_dynamics(&attrpath, env);
             }
             let Some(value) = entry.value() else { continue };
-            // A binding consumed as an alias walks in binding mode (see
-            // [Self::walk_binding_rhs]); everything else is a value position.
             let consumed = attrs.len() == 1
-                && attrs
-                    .first()
-                    .and_then(attr_static_name)
-                    .is_some_and(|name| matches!(inner.get(&name), Some(Binding::Path(_))));
+                && attrs.first().and_then(attr_static_name).is_some()
+                && resolve_binding(&value, env).is_some();
             if consumed {
-                self.walk_binding_rhs(&value, &inner);
+                self.walk_binding_rhs(&value, env);
             } else {
-                self.walk(value.syntax(), &inner);
+                self.walk(value.syntax(), env);
             }
         }
-        for inherit in let_in.inherits() {
-            self.walk_inherit(&inherit, &inner);
-        }
-        if let Some(body) = let_in.body() {
-            self.walk(body.syntax(), &inner);
+        for inherit in scope.inherits() {
+            self.walk_inherit(&inherit, env);
         }
     }
 
@@ -645,6 +669,17 @@ impl Walker<'_> {
                     self.walk_binding_rhs(&inner, env);
                 }
             },
+            // An attrset literal consumed as a binding: its members follow
+            // the binding policy too (`s = { org = catalogs.myorg; }` only
+            // defines aliases reachable through `s`).
+            ast::Expr::AttrSet(attrset) => {
+                let scope = if attrset.rec_token().is_some() {
+                    recursive_scope_env(attrset, env)
+                } else {
+                    env.clone()
+                };
+                self.walk_binding_entries(attrset, &scope);
+            },
             _ => self.walk(value.syntax(), env),
         }
     }
@@ -666,17 +701,18 @@ impl Walker<'_> {
     }
 }
 
-/// Environment for a `let … in` scope.
+/// Environment for a recursive binding scope: `let … in` or `rec { }`.
 ///
-/// Every bound name shadows the outer scope. `let` is recursive, so bindings
-/// that alias catalog paths are resolved to a fixpoint: a pass may enable
-/// another binding regardless of source order, and names that never resolve
-/// stay opaque (which is what makes `let catalogs = …;` shadow a root).
-fn let_scope_env(let_in: &ast::LetIn, outer: &Env) -> Env {
+/// Every bound name shadows the outer scope. Both constructs are recursive,
+/// so bindings that alias catalog paths are resolved to a fixpoint: a pass
+/// may enable another binding regardless of source order, and names that
+/// never resolve stay opaque (which is what makes `let catalogs = …;` shadow
+/// a root).
+fn recursive_scope_env(scope: &impl HasEntry, outer: &Env) -> Env {
     let mut env = outer.clone();
 
     let mut values: Vec<(String, ast::Expr)> = Vec::new();
-    for entry in let_in.attrpath_values() {
+    for entry in scope.attrpath_values() {
         let Some(attrpath) = entry.attrpath() else {
             continue;
         };
@@ -691,7 +727,7 @@ fn let_scope_env(let_in: &ast::LetIn, outer: &Env) -> Env {
             values.push((name, value));
         }
     }
-    for inherit in let_in.inherits() {
+    for inherit in scope.inherits() {
         for attr in inherit.attrs() {
             let Some(name) = attr_static_name(&attr) else {
                 continue;
@@ -716,7 +752,7 @@ fn let_scope_env(let_in: &ast::LetIn, outer: &Env) -> Env {
                 changed = true;
             }
         }
-        for inherit in let_in.inherits() {
+        for inherit in scope.inherits() {
             let Some(from_expr) = inherit.from().and_then(|from| from.expr()) else {
                 continue;
             };
@@ -743,38 +779,112 @@ fn let_scope_env(let_in: &ast::LetIn, outer: &Env) -> Env {
 
 /// Resolve a binding's right-hand side to what the bound name will mean.
 fn resolve_binding(expr: &ast::Expr, env: &Env) -> Option<Binding> {
-    resolve_expr_path(expr, env).map(Binding::Path)
+    if let ast::Expr::AttrSet(attrset) = expr {
+        return Some(attr_set_binding(attrset, env));
+    }
+    resolve_expr_binding(expr, env)
 }
 
-/// Resolve an expression to the catalog attr-path it denotes, following the
-/// environment for idents and aliases. `None` when the expression does not
-/// reach a catalog root.
-fn resolve_expr_path(expr: &ast::Expr, env: &Env) -> Option<Vec<String>> {
+/// Model an attrset literal as a [Binding::Set] of its statically-known
+/// members. A `rec { }` literal resolves its members in its own scope.
+fn attr_set_binding(attrset: &ast::AttrSet, env: &Env) -> Binding {
+    let scope = if attrset.rec_token().is_some() {
+        recursive_scope_env(attrset, env)
+    } else {
+        env.clone()
+    };
+    let mut members: HashMap<String, Binding> = HashMap::new();
+    for entry in attrset.attrpath_values() {
+        let Some(attrpath) = entry.attrpath() else {
+            continue;
+        };
+        let attrs: Vec<ast::Attr> = attrpath.attrs().collect();
+        if attrs.len() != 1 {
+            continue;
+        }
+        let Some(name) = attrs.first().and_then(attr_static_name) else {
+            continue;
+        };
+        let Some(value) = entry.value() else { continue };
+        if let Some(binding) = resolve_binding(&value, &scope) {
+            members.insert(name, binding);
+        }
+    }
+    for inherit in attrset.inherits() {
+        match inherit.from().and_then(|from| from.expr()) {
+            Some(from_expr) => {
+                if let Some(base) = resolve_expr_path(&from_expr, &scope) {
+                    for attr in inherit.attrs() {
+                        if let Some(name) = attr_static_name(&attr) {
+                            let path = append_component(base.clone(), name.clone());
+                            members.insert(name, Binding::Path(path));
+                        }
+                    }
+                }
+            },
+            None => {
+                for attr in inherit.attrs() {
+                    if let Some(name) = attr_static_name(&attr)
+                        && let Some(binding) = scope.get(&name)
+                    {
+                        members.insert(name, binding.clone());
+                    }
+                }
+            },
+        }
+    }
+    Binding::Set(members)
+}
+
+/// Resolve an expression to its binding, following the environment for idents
+/// and stepping through attrset members for selects. `None` when the
+/// expression does not reach anything the scanner can model.
+fn resolve_expr_binding(expr: &ast::Expr, env: &Env) -> Option<Binding> {
     match expr {
         ast::Expr::Ident(ident) => match env.get(&ident_name(ident)?)? {
-            Binding::Path(path) => Some(path.clone()),
             Binding::Opaque => None,
+            binding => Some(binding.clone()),
         },
-        ast::Expr::Select(select) => resolve_select_path(select, env),
-        ast::Expr::Paren(paren) => resolve_expr_path(&paren.expr()?, env),
+        ast::Expr::Select(select) => {
+            let mut current = resolve_expr_binding(&select.expr()?, env)?;
+            for attr in select.attrpath()?.attrs() {
+                current = match (current, attr_static_name(&attr)) {
+                    (Binding::Path(path), Some(name)) => {
+                        Binding::Path(append_component(path, name))
+                    },
+                    // A dynamic component collapses the path and consumes
+                    // whatever follows.
+                    (Binding::Path(path), None) => return Some(Binding::Path(append_star(path))),
+                    (Binding::Set(members), Some(name)) => members.get(&name)?.clone(),
+                    (Binding::Set(_), None) => return None,
+                    (Binding::Opaque, _) => return None,
+                };
+            }
+            match current {
+                Binding::Opaque => None,
+                binding => Some(binding),
+            }
+        },
+        ast::Expr::Paren(paren) => resolve_expr_binding(&paren.expr()?, env),
         _ => None,
     }
 }
 
-/// [resolve_expr_path] for a select: base path plus the static components of
-/// the attr path, collapsing at the first dynamic component.
-fn resolve_select_path(select: &ast::Select, env: &Env) -> Option<Vec<String>> {
-    let mut path = resolve_expr_path(&select.expr()?, env)?;
-    for attr in select.attrpath()?.attrs() {
-        match attr_static_name(&attr) {
-            Some(name) => path = append_component(path, name),
-            None => {
-                path = append_star(path);
-                break;
-            },
-        }
+/// Resolve an expression to the catalog attr-path it denotes. `None` when the
+/// expression does not reach a catalog root.
+fn resolve_expr_path(expr: &ast::Expr, env: &Env) -> Option<Vec<String>> {
+    match resolve_expr_binding(expr, env)? {
+        Binding::Path(path) => Some(path),
+        _ => None,
     }
-    Some(path)
+}
+
+/// [resolve_expr_path] for a select node.
+fn resolve_select_path(select: &ast::Select, env: &Env) -> Option<Vec<String>> {
+    match resolve_expr_binding(&ast::Expr::Select(select.clone()), env)? {
+        Binding::Path(path) => Some(path),
+        _ => None,
+    }
 }
 
 /// Append one component; a path already collapsed to `*` absorbs it.
@@ -1480,6 +1590,26 @@ mod tests {
     }
 
     #[test]
+    fn rec_attrset_members_alias_each_other() {
+        // `rec { }` scopes like `let`: `org` is visible to `pkg`, and its
+        // catalog-level RHS only defines the alias.
+        let got = refs(
+            "{ catalogs }: rec { org = catalogs.myorg; pkg = org.toolkit; }",
+            &roots(&["catalogs"]),
+        );
+        assert_eq!(got, set(&["catalogs.myorg.toolkit"]));
+    }
+
+    #[test]
+    fn attrset_member_alias_resolves_through_select() {
+        let got = refs(
+            "{ catalogs }: let s = { org = catalogs.myorg; }; in s.org.toolkit",
+            &roots(&["catalogs"]),
+        );
+        assert_eq!(got, set(&["catalogs.myorg.toolkit"]));
+    }
+
+    #[test]
     fn catalog_level_value_use_emits_sentinel() {
         // Passing a whole catalog to a function makes every member reachable;
         // an exact `catalogs.myorg` ref would be unresolvable.
@@ -1602,6 +1732,30 @@ mod tests {
                 "{ catalogs }: let f = catalogs: catalogs.other.pkg; in f {}",
                 &["catalogs.other.pkg"],
             ),
+        ];
+        for (content, expected) in cases {
+            assert_eq!(
+                refs(content, &roots(&["catalogs"])),
+                set(expected),
+                "content: {content}"
+            );
+        }
+    }
+
+    #[test]
+    fn at_pattern_bind_carries_the_pattern_entries() {
+        let cases: &[(&str, &[&str])] = &[
+            // The @-name is the whole argument set; the root member keeps its
+            // root meaning through it.
+            ("args@{ catalogs, ... }: args.catalogs.myorg.pkg", &[
+                "catalogs.myorg.pkg",
+            ]),
+            // The bind may appear on either side of the pattern.
+            ("{ catalogs, ... }@args: args.catalogs.myorg.pkg", &[
+                "catalogs.myorg.pkg",
+            ]),
+            // A non-root member stays opaque.
+            ("args@{ catalogs, pkgs, ... }: args.pkgs.foo", &[]),
         ];
         for (content, expected) in cases {
             assert_eq!(
