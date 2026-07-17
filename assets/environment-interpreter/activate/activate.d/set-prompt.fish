@@ -11,14 +11,17 @@ if set -q FLOX_PROMPT_ENVIRONMENTS && test -n "$FLOX_PROMPT_ENVIRONMENTS"
         set FLOX_PROMPT flox
     end
 
+    # _flox must be global: fish_prompt reads it on every prompt, and this
+    # script may be sourced inside a function (the auto-activate hook), where
+    # an unscoped set on a new variable would vanish when the function returns.
     if set -q NO_COLOR
-        set _flox "flox [$FLOX_PROMPT_ENVIRONMENTS]"
+        set -g _flox "flox [$FLOX_PROMPT_ENVIRONMENTS]"
     else
         set colorPrompt1 \e\[38\;5\;$FLOX_PROMPT_COLOR_1""m
         set colorPrompt2 \e\[38\;5\;$FLOX_PROMPT_COLOR_2""m
         set _floxPrompt1 $colorPrompt1$FLOX_PROMPT
         set _floxPrompt2 $colorPrompt2"["$FLOX_PROMPT_ENVIRONMENTS"]"
-        set _flox (set_color --bold)$_floxPrompt1" "$_floxPrompt2
+        set -g _flox (set_color --bold)$_floxPrompt1" "$_floxPrompt2
     end
 
     if not functions -q flox_saved_fish_prompt
@@ -34,6 +37,7 @@ else if functions -q flox_saved_fish_prompt
     functions --erase fish_prompt
     functions --copy flox_saved_fish_prompt fish_prompt
     functions --erase flox_saved_fish_prompt
+    set -eg _flox
 end
 
 "$_flox_activate_tracer" "$_activate_d/set-prompt.fish" END
