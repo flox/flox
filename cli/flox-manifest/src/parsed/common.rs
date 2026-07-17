@@ -743,7 +743,7 @@ pub mod test_helpers {
     /// Generate a single ServiceUnit with just enough fields to test `skip_serializing_none`
     /// Generating more than 1(!) value with proptest,
     /// increases the runtime of `proptest!`s to the point that we exhausted our stack space in CI
-    pub(super) fn service_unit_with_none_fields() -> impl Strategy<Value = Option<ServiceUnit>> {
+    pub(crate) fn service_unit_with_none_fields() -> impl Strategy<Value = Option<ServiceUnit>> {
         Just(Some(ServiceUnit {
             unit: Some(systemd::unit::Unit {
                 ..Default::default()

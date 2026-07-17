@@ -11,7 +11,7 @@ use flox_core::proc_status::is_descendant_of;
 use flox_manifest::interfaces::AsLatestSchema;
 use flox_manifest::lockfile::Lockfile;
 use flox_manifest::parsed::Inner;
-use flox_manifest::parsed::common::Services;
+use flox_manifest::parsed::v1_14_0::Services;
 use flox_manifest::{Manifest, MigratedTypedOnly};
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::Environment;
@@ -467,7 +467,7 @@ fn defined_service_not_active_error(name: &str) -> ServicesCommandsError {
 
 #[cfg(test)]
 mod tests {
-    use flox_manifest::parsed::common::ServiceDescriptor;
+    use flox_manifest::parsed::v1_14_0::ServiceDescriptor;
     use flox_rust_sdk::providers::services::process_compose::test_helpers::generate_process_state;
 
     use super::*;

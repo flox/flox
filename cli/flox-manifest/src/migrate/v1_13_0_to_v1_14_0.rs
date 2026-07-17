@@ -4,8 +4,9 @@ use crate::parsed::v1_14_0::ManifestV1_14_0;
 
 /// Migrate a v1.13.0 manifest to a v1.14.0 manifest.
 ///
-/// This is a lossless migration: all fields carry over unchanged. All V1_13_0
-/// manifests are valid V1_14_0 manifests.
+/// This is a lossless migration: V1_14_0 adds an optional `timeout-seconds`
+/// field to `[services.<name>.shutdown]`. All V1_13_0 manifests are valid
+/// V1_14_0 manifests with `shutdown.timeout-seconds: None`.
 pub(crate) fn migrate_manifest_v1_13_0_to_v1_14_0(
     manifest: ManifestV1_13_0,
 ) -> Result<ManifestV1_14_0, MigrationError> {
@@ -17,7 +18,7 @@ pub(crate) fn migrate_manifest_v1_13_0_to_v1_14_0(
         hook: manifest.hook,
         profile: manifest.profile,
         options: manifest.options,
-        services: manifest.services,
+        services: manifest.services.into(),
         build: manifest.build,
         containerize: manifest.containerize,
         include: manifest.include,
@@ -43,7 +44,7 @@ mod tests {
                 hook: manifest.hook,
                 profile: manifest.profile,
                 options: manifest.options,
-                services: manifest.services,
+                services: manifest.services.into(),
                 build: manifest.build,
                 containerize: manifest.containerize,
                 include: manifest.include,

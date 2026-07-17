@@ -1647,6 +1647,47 @@ EOF
   assert_success
 }
 
+# bats test_tags=services:stop
+@test "stop: shutdown.timeout-seconds allows a slow shutdown command to finish" {
+  # The process manager kills the shutdown command after 10 seconds by
+  # default, so a 12 second shutdown command only leaves its marker file
+  # behind if 'shutdown.timeout-seconds' takes effect.
+  MANIFEST_CONTENTS="$(cat <<"EOF"
+    schema-version = "1.14.0"
+
+    [install]
+    daemonize.pkg-path = "daemonize"
+
+    [services.daemonized_sleep]
+    command = '''
+      daemonize -p "$FLOX_ENV_PROJECT/pidfile" "$(which sleep)" 999999
+    '''
+    is-daemon = true
+    shutdown.command = '''
+      sleep 12 && kill -9 "$(cat "$FLOX_ENV_PROJECT/pidfile")" && touch "$FLOX_ENV_PROJECT/shutdown_finished"
+    '''
+    shutdown.timeout-seconds = 30
+EOF
+)"
+
+  "$FLOX_BIN" init
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/daemonize.yaml"
+  echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f -
+
+  run "$FLOX_BIN" activate -s -- bash <(cat <<'EOF'
+    set -euxo pipefail
+
+    timeout 2 bash -c 'set -x; while [ ! -e "$FLOX_ENV_PROJECT/pidfile" ]; do sleep .1; done'
+
+    "$FLOX_BIN" services stop
+
+    [ -e "$FLOX_ENV_PROJECT/shutdown_finished" ]
+    ! kill -0 "$(cat "$FLOX_ENV_PROJECT/pidfile")"
+EOF
+  )
+  assert_success
+}
+
 
 @test "services stop after multiple activations of an environment exit" {
   setup_sleeping_services

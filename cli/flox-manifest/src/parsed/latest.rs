@@ -113,6 +113,7 @@ impl ManifestLatest {
 
 #[cfg(test)]
 mod tests {
+    use std::num::NonZeroU32;
     use std::path::PathBuf;
 
     use flox_core::data::environment_ref::RemoteEnvironmentRef;
@@ -134,6 +135,7 @@ mod tests {
     // ManifestLatest's build section is the version-specific Build (with
     // `sandbox-allow`), so build assertions use the latest schema's types.
     use crate::parsed::v1_13_0::{Build, BuildDescriptor, Profile, ProfileDeactivate};
+    use crate::parsed::v1_14_0::{ServiceDescriptor, ServiceShutdown, Services};
     use crate::test_helpers::{with_latest_schema, with_schema};
 
     #[test]
@@ -256,6 +258,129 @@ mod tests {
 
         let compat = manifest
             .as_maybe_backwards_compatible(KnownSchemaVersion::V1_12_0, None)
+            .unwrap();
+
+        assert_eq!(compat.get_schema_version(), KnownSchemaVersion::latest());
+    }
+
+    #[test]
+    fn shutdown_timeout_rejected_by_v1_13_0_schema() {
+        let manifest = with_schema(KnownSchemaVersion::V1_13_0, indoc! {r#"
+            [services.postgres]
+            command = "postgres"
+            shutdown.command = "pg_ctl stop"
+            shutdown.timeout-seconds = 30
+        "#});
+
+        let err = Manifest::parse_toml_typed(&manifest)
+            .expect_err("'shutdown.timeout-seconds' should be rejected by the v1.13.0 schema");
+
+        let ManifestError::Invalid(err) = err else {
+            panic!("expected ManifestError::Invalid, got: {err:?}");
+        };
+        assert!(
+            err.message()
+                .starts_with("unknown field `timeout-seconds`, expected"),
+            "unexpected error message: {err}",
+        );
+    }
+
+    #[test]
+    fn parses_services_shutdown_timeout_with_latest_schema() {
+        let manifest = with_latest_schema(indoc! {r#"
+            [services.postgres]
+            command = "postgres"
+            shutdown.command = "pg_ctl stop"
+            shutdown.timeout-seconds = 30
+        "#});
+
+        let parsed = toml_edit::de::from_str::<ManifestLatest>(&manifest).unwrap();
+
+        assert_eq!(
+            parsed.services.inner().get("postgres"),
+            Some(&ServiceDescriptor {
+                command: "postgres".to_string(),
+                vars: None,
+                is_daemon: None,
+                shutdown: Some(ServiceShutdown {
+                    command: "pg_ctl stop".to_string(),
+                    timeout_seconds: Some(NonZeroU32::new(30).unwrap()),
+                }),
+                systemd: None,
+                systems: None,
+            })
+        );
+    }
+
+    #[test]
+    fn rejects_zero_shutdown_timeout() {
+        let manifest = with_latest_schema(indoc! {r#"
+            [services.postgres]
+            command = "postgres"
+            shutdown.command = "pg_ctl stop"
+            shutdown.timeout-seconds = 0
+        "#});
+
+        let err = toml_edit::de::from_str::<ManifestLatest>(&manifest)
+            .expect_err("'shutdown.timeout-seconds = 0' should be rejected");
+
+        assert!(
+            err.message().contains("nonzero"),
+            "unexpected error message: {err}",
+        );
+    }
+
+    #[test]
+    fn downgrades_to_v1_13_0_when_shutdown_timeout_unused() {
+        let manifest = ManifestLatest {
+            services: Services {
+                auto_start: None,
+                service_map: [("postgres".to_string(), ServiceDescriptor {
+                    command: "postgres".to_string(),
+                    vars: None,
+                    is_daemon: None,
+                    shutdown: Some(ServiceShutdown {
+                        command: "pg_ctl stop".to_string(),
+                        timeout_seconds: None,
+                    }),
+                    systemd: None,
+                    systems: None,
+                })]
+                .into(),
+            },
+            ..Default::default()
+        };
+
+        let compat = manifest
+            .as_maybe_backwards_compatible(KnownSchemaVersion::V1_13_0, None)
+            .unwrap();
+
+        assert_eq!(compat.get_schema_version(), KnownSchemaVersion::V1_13_0);
+    }
+
+    #[test]
+    fn stays_latest_schema_when_shutdown_timeout_used() {
+        let manifest = ManifestLatest {
+            services: Services {
+                auto_start: None,
+                service_map: [("postgres".to_string(), ServiceDescriptor {
+                    command: "postgres".to_string(),
+                    vars: None,
+                    is_daemon: None,
+                    shutdown: Some(ServiceShutdown {
+                        command: "pg_ctl stop".to_string(),
+                        timeout_seconds: Some(NonZeroU32::new(30).unwrap()),
+                    }),
+                    systemd: None,
+                    systems: None,
+                })]
+                .into(),
+            },
+            ..Default::default()
+        };
+
+        let compat = manifest
+            .as_maybe_backwards_compatible(KnownSchemaVersion::V1_13_0, None)
             .unwrap();
 
         assert_eq!(compat.get_schema_version(), KnownSchemaVersion::latest());

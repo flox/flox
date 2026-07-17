@@ -18,8 +18,8 @@ use flox_core::process_compose::PROCESS_NEVER_EXIT_NAME;
 use flox_core::traceable_path;
 use flox_manifest::interfaces::AsLatestSchema;
 use flox_manifest::lockfile::Lockfile;
-use flox_manifest::parsed::common::ServiceShutdown;
-use flox_manifest::parsed::{Inner, v1_12_0};
+use flox_manifest::parsed::v1_14_0::ServiceShutdown;
+use flox_manifest::parsed::{Inner, v1_14_0};
 #[cfg(test)]
 use flox_test_utils::proptest::alphanum_string;
 #[cfg(test)]
@@ -199,7 +199,7 @@ impl From<ServiceShutdown> for ProcessShutdown {
     fn from(value: ServiceShutdown) -> Self {
         Self {
             command: value.command,
-            timeout_seconds: None,
+            timeout_seconds: value.timeout_seconds,
         }
     }
 }
@@ -226,8 +226,8 @@ pub fn generate_never_exit_process() -> ProcessConfig {
     }
 }
 
-impl From<v1_12_0::Services> for ProcessComposeConfig {
-    fn from(services: v1_12_0::Services) -> Self {
+impl From<v1_14_0::Services> for ProcessComposeConfig {
+    fn from(services: v1_14_0::Services) -> Self {
         let processes = services
             .into_inner()
             .into_iter()
@@ -1098,6 +1098,39 @@ mod tests {
               foo:
                 command: bar
         ", sleep = &*SLEEP_BIN });
+    }
+
+    #[test]
+    fn maps_manifest_shutdown_timeout_into_process_config() {
+        let mut services = v1_14_0::Services::default();
+        services
+            .inner_mut()
+            .insert("foo".to_string(), v1_14_0::ServiceDescriptor {
+                command: "bar".to_string(),
+                vars: None,
+                is_daemon: Some(true),
+                shutdown: Some(ServiceShutdown {
+                    command: "stop bar".to_string(),
+                    timeout_seconds: Some(NonZeroU32::new(30).unwrap()),
+                }),
+                systemd: None,
+                systems: None,
+            });
+
+        let config = ProcessComposeConfig::from(services);
+
+        assert_eq!(config, ProcessComposeConfig {
+            processes: BTreeMap::from([("foo".to_string(), ProcessConfig {
+                command: "bar".to_string(),
+                vars: None,
+                is_daemon: Some(true),
+                shutdown: Some(ProcessShutdown {
+                    command: "stop bar".to_string(),
+                    timeout_seconds: Some(NonZeroU32::new(30).unwrap()),
+                }),
+            })]),
+            ..Default::default()
+        });
     }
 
     #[test]

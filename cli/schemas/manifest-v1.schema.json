@@ -934,7 +934,7 @@
           "type": "string"
         },
         "services": {
-          "$ref": "#/$defs/Services2",
+          "$ref": "#/$defs/Services3",
           "description": "Service definitions"
         },
         "vars": {
@@ -1841,12 +1841,99 @@
       ],
       "type": "object"
     },
+    "ServiceDescriptor2": {
+      "additionalProperties": false,
+      "description": "The definition of a service in a manifest.\n\nThis is a version-specific copy of `common::ServiceDescriptor` because\nV1_14_0's [ServiceShutdown] adds the `timeout-seconds` field; it is\notherwise identical.",
+      "properties": {
+        "command": {
+          "description": "The command to run to start the service",
+          "type": "string"
+        },
+        "is-daemon": {
+          "description": "Whether the service spawns a background process (daemon)",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "shutdown": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ServiceShutdown2"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "How to shut down the service"
+        },
+        "systemd": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ServiceUnit"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Additional manual config of the systemd service generated for persistent services"
+        },
+        "systems": {
+          "description": "Systems to allow running the service on",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "vars": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Vars"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Service-specific environment variables"
+        }
+      },
+      "required": [
+        "command"
+      ],
+      "type": "object"
+    },
     "ServiceShutdown": {
       "additionalProperties": false,
       "properties": {
         "command": {
           "description": "What command to run to shut down the service",
           "type": "string"
+        }
+      },
+      "required": [
+        "command"
+      ],
+      "type": "object"
+    },
+    "ServiceShutdown2": {
+      "additionalProperties": false,
+      "description": "How to shut down a service.\n\nThis is a version-specific copy of `common::ServiceShutdown` because\nV1_14_0 adds the `timeout-seconds` field. Keeping the new field out of the\ncommon struct is what stops older schema versions (whose\n`ServiceDescriptor` uses `common::ServiceShutdown`) from accepting it.",
+      "properties": {
+        "command": {
+          "description": "What command to run to shut down the service",
+          "type": "string"
+        },
+        "timeout-seconds": {
+          "description": "How long to wait, in seconds, for the shutdown command to complete\nbefore the service is killed. The process manager applies its own\ndefault of 10 seconds when unset. Zero is not a valid value because\nthe process manager treats it as unset.",
+          "format": "uint32",
+          "minimum": 1,
+          "type": [
+            "integer",
+            "null"
+          ]
         }
       },
       "required": [
@@ -1905,6 +1992,22 @@
         "$ref": "#/$defs/ServiceDescriptor"
       },
       "description": "Service configuration for V1_12_0: adds optional auto-start behavior\nalongside the map of service names to service definitions.\n\nThe `service_map` field is a `parsed::common::Services` (BTreeMap tuple\nstruct) to allow the internal `CommonFields::services()` accessor on\n`Parsed` to return a uniform `&common::Services` across all versions.",
+      "properties": {
+        "auto-start": {
+          "description": "Whether to start all services automatically on `flox activate`.\nCan be suppressed with `--no-start-services`.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "Services3": {
+      "additionalProperties": {
+        "$ref": "#/$defs/ServiceDescriptor2"
+      },
+      "description": "Service configuration for V1_14_0.\n\nThis is a version-specific copy of `v1_12_0::Services` because V1_14_0's\n[ServiceDescriptor] adds `shutdown.timeout-seconds`. Unlike v1_12_0 the\nservice map is a plain `BTreeMap` rather than a wrapped\n`common::Services`: the uniform `CommonFields::services()` accessor that\nmotivated the wrapping was replaced by per-version validation dispatch.",
       "properties": {
         "auto-start": {
           "description": "Whether to start all services automatically on `flox activate`.\nCan be suppressed with `--no-start-services`.",

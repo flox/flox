@@ -4,7 +4,7 @@ use std::io;
 
 use flox_core::data::environment_ref::ActivateEnvironmentRef;
 use flox_manifest::parsed::Inner;
-use flox_manifest::parsed::common::ServiceDescriptor;
+use flox_manifest::parsed::v1_14_0::ServiceDescriptor;
 use shell_escape::escape;
 use systemd::unit::ServiceUnit;
 
@@ -142,7 +142,8 @@ mod tests {
     use std::path::Path;
 
     use flox_core::data::environment_ref::RemoteEnvironmentRef;
-    use flox_manifest::parsed::common::{ServiceShutdown, Vars};
+    use flox_manifest::parsed::common::Vars;
+    use flox_manifest::parsed::v1_14_0::ServiceShutdown;
     use indoc::indoc;
     use pretty_assertions::assert_eq;
     use systemd::unit::{Service, ServiceType, ServiceUnit, Unit};
@@ -266,6 +267,7 @@ mod tests {
             is_daemon: Some(true),
             shutdown: Some(ServiceShutdown {
                 command: "stop-command".to_string(),
+                timeout_seconds: None,
             }),
             systemd: None,
             systems: None,
@@ -308,6 +310,7 @@ mod tests {
             shutdown: Some(ServiceShutdown {
                 // overridden by systemd.service.exec_start_post
                 command: "stop-descriptor".to_string(),
+                timeout_seconds: None,
             }),
             systemd: Some(ServiceUnit {
                 unit: Some(Unit {
