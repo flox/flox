@@ -349,12 +349,16 @@ fn collect_transitive(
 }
 
 /// A name's meaning in the lexical environment threaded through the walk.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 enum Binding {
     /// The name resolves to a catalog attr-path: a root itself
     /// (`catalogs` = `Path(["catalogs"])`) or an alias of one. A path may end
     /// in `"*"` when a dynamic component collapsed it.
     Path(Vec<String>),
+    /// The name resolves to one of several attr-paths (a conditional alias);
+    /// every path is locked so the expression works whichever branch is
+    /// taken.
+    Paths(BTreeSet<Vec<String>>),
     /// The name is bound to an attrset literal; selecting a member continues
     /// resolution with that member's binding. Members the scanner cannot
     /// model are absent.
@@ -430,18 +434,23 @@ impl Walker<'_> {
         }
     }
 
-    /// A bare ident in a value position: using an alias uses the package it
-    /// names. Uses at catalog depth or shallower are escape hatches handled
-    /// separately, not exact refs.
+    /// A bare ident in a value position: using an alias uses the package(s)
+    /// it names. Uses at catalog depth or shallower are escape hatches
+    /// handled separately, not exact refs.
     fn walk_ident(&mut self, ident: &ast::Ident, env: &Env) {
         let Some(name) = ident_name(ident) else {
             return;
         };
-        let Some(Binding::Path(path)) = env.get(&name) else {
+        let Some(binding) = env.get(&name) else {
             return;
         };
-        if path.len() >= 3 || path.last().map(String::as_str) == Some("*") {
-            self.emit(offset_of(ident.syntax()), join_path(path));
+        let Some(paths) = paths_of(binding.clone()) else {
+            return;
+        };
+        for path in paths {
+            if path.len() >= 3 || path.last().map(String::as_str) == Some("*") {
+                self.emit(offset_of(ident.syntax()), join_path(&path));
+            }
         }
     }
 
@@ -551,25 +560,29 @@ impl Walker<'_> {
         let Some(from_expr) = inherit.from().and_then(|from| from.expr()) else {
             return;
         };
-        let Some(base) = resolve_expr_path(&from_expr, env) else {
+        let Some(bases) = resolve_expr_paths(&from_expr, env) else {
             self.walk(from_expr.syntax(), env);
             return;
         };
         for attr in inherit.attrs() {
-            let path = match attr_static_name(&attr) {
-                Some(name) => append_component(base.clone(), name),
-                None => append_star(base.clone()),
-            };
-            let path = widen_if_catalog_level(path);
-            self.emit(offset_of(attr.syntax()), join_path(&path));
+            for base in &bases {
+                let path = match attr_static_name(&attr) {
+                    Some(name) => append_component(base.clone(), name),
+                    None => append_star(base.clone()),
+                };
+                let path = widen_if_catalog_level(path);
+                self.emit(offset_of(attr.syntax()), join_path(&path));
+            }
         }
     }
 
     fn walk_with(&mut self, with_expr: &ast::With, env: &Env) {
         if let Some(ns) = with_expr.namespace()
-            && let Some(path) = resolve_expr_path(&ns, env)
+            && let Some(paths) = resolve_expr_paths(&ns, env)
         {
-            self.emit(offset_of(with_expr.syntax()), join_path(&append_star(path)));
+            for path in paths {
+                self.emit(offset_of(with_expr.syntax()), join_path(&append_star(path)));
+            }
             if let Some(body) = with_expr.body() {
                 self.walk(body.syntax(), env);
             }
@@ -586,17 +599,19 @@ impl Walker<'_> {
         if let Some(inner) = inner_apply(apply)
             && inner.lambda().is_some_and(|f| is_get_attr_fn(&f))
             && let Some(target) = apply.argument()
-            && let Some(target_path) = resolve_expr_path(&target, env)
+            && let Some(target_paths) = resolve_expr_paths(&target, env)
         {
             let key = inner.argument();
-            let path = match key.as_ref().and_then(static_str) {
-                Some(key) => append_component(target_path, key),
-                None => append_star(target_path),
-            };
-            self.emit(
-                offset_of(apply.syntax()),
-                join_path(&widen_if_catalog_level(path)),
-            );
+            for target_path in target_paths {
+                let path = match key.as_ref().and_then(static_str) {
+                    Some(key) => append_component(target_path, key),
+                    None => append_star(target_path),
+                };
+                self.emit(
+                    offset_of(apply.syntax()),
+                    join_path(&widen_if_catalog_level(path)),
+                );
+            }
             if let Some(key) = key {
                 self.walk(key.syntax(), env);
             }
@@ -617,11 +632,15 @@ impl Walker<'_> {
     }
 
     fn walk_select(&mut self, select: &ast::Select, env: &Env) {
-        match resolve_select_path(select, env) {
-            Some(path) => self.emit(
-                offset_of(select.syntax()),
-                join_path(&widen_if_catalog_level(path)),
-            ),
+        match resolve_select_paths(select, env) {
+            Some(paths) => {
+                for path in paths {
+                    self.emit(
+                        offset_of(select.syntax()),
+                        join_path(&widen_if_catalog_level(path)),
+                    );
+                }
+            },
             None => {
                 if let Some(base) = select.expr() {
                     self.walk(base.syntax(), env);
@@ -650,11 +669,14 @@ impl Walker<'_> {
     fn walk_binding_rhs(&mut self, value: &ast::Expr, env: &Env) {
         match value {
             ast::Expr::Select(select) => {
-                match resolve_select_path(select, env) {
-                    Some(path) if path.len() >= 3 => {
-                        self.emit(offset_of(select.syntax()), join_path(&path));
+                match resolve_select_paths(select, env) {
+                    Some(paths) => {
+                        for path in paths {
+                            if path.len() >= 3 {
+                                self.emit(offset_of(select.syntax()), join_path(&path));
+                            }
+                        }
                     },
-                    Some(_) => {},
                     None => {
                         if let Some(base) = select.expr() {
                             self.walk(base.syntax(), env);
@@ -662,6 +684,16 @@ impl Walker<'_> {
                     },
                 }
                 self.walk_select_parts(select, env);
+            },
+            // Branches of a conditional alias are themselves binding
+            // positions; the condition is an ordinary value.
+            ast::Expr::IfElse(if_else) => {
+                if let Some(condition) = if_else.condition() {
+                    self.walk(condition.syntax(), env);
+                }
+                for branch in [if_else.body(), if_else.else_body()].into_iter().flatten() {
+                    self.walk_binding_rhs(&branch, env);
+                }
             },
             ast::Expr::Ident(_) => {},
             ast::Expr::Paren(paren) => {
@@ -741,13 +773,24 @@ fn recursive_scope_env(scope: &impl HasEntry, outer: &Env) -> Env {
         }
     }
 
-    loop {
+    // Bindings are re-resolved every pass, including ones already resolved:
+    // a `Paths` or `Set` resolved early may reference names that only
+    // resolve on a later pass. A self-referential binding
+    // (`a = if c then a.sub else catalogs.x`) could otherwise grow its path
+    // set forever, so passes are capped at the number of bindings — enough
+    // for any acyclic reference chain to settle.
+    let inherit_count: usize = scope
+        .inherits()
+        .map(|inherit| inherit.attrs().count())
+        .sum();
+    let max_passes = values.len() + inherit_count + 1;
+    for _ in 0..max_passes {
         let mut changed = false;
         for (name, value) in &values {
-            if !matches!(env.get(name), Some(Binding::Opaque)) {
+            let Some(binding) = resolve_binding(value, &env) else {
                 continue;
-            }
-            if let Some(binding) = resolve_binding(value, &env) {
+            };
+            if env.get(name) != Some(&binding) {
                 env.insert(name.clone(), binding);
                 changed = true;
             }
@@ -756,16 +799,18 @@ fn recursive_scope_env(scope: &impl HasEntry, outer: &Env) -> Env {
             let Some(from_expr) = inherit.from().and_then(|from| from.expr()) else {
                 continue;
             };
-            let Some(base) = resolve_expr_path(&from_expr, &env) else {
+            let Some(source) = resolve_expr_binding(&from_expr, &env) else {
                 continue;
             };
             for attr in inherit.attrs() {
                 let Some(name) = attr_static_name(&attr) else {
                     continue;
                 };
-                if matches!(env.get(&name), Some(Binding::Opaque)) {
-                    let path = append_component(base.clone(), name.clone());
-                    env.insert(name, Binding::Path(path));
+                let Some(binding) = member_binding(&source, &name) else {
+                    continue;
+                };
+                if env.get(&name) != Some(&binding) {
+                    env.insert(name, binding);
                     changed = true;
                 }
             }
@@ -813,11 +858,12 @@ fn attr_set_binding(attrset: &ast::AttrSet, env: &Env) -> Binding {
     for inherit in attrset.inherits() {
         match inherit.from().and_then(|from| from.expr()) {
             Some(from_expr) => {
-                if let Some(base) = resolve_expr_path(&from_expr, &scope) {
+                if let Some(source) = resolve_expr_binding(&from_expr, &scope) {
                     for attr in inherit.attrs() {
-                        if let Some(name) = attr_static_name(&attr) {
-                            let path = append_component(base.clone(), name.clone());
-                            members.insert(name, Binding::Path(path));
+                        if let Some(name) = attr_static_name(&attr)
+                            && let Some(binding) = member_binding(&source, &name)
+                        {
+                            members.insert(name, binding);
                         }
                     }
                 }
@@ -855,6 +901,15 @@ fn resolve_expr_binding(expr: &ast::Expr, env: &Env) -> Option<Binding> {
                     // A dynamic component collapses the path and consumes
                     // whatever follows.
                     (Binding::Path(path), None) => return Some(Binding::Path(append_star(path))),
+                    (Binding::Paths(paths), Some(name)) => Binding::Paths(
+                        paths
+                            .into_iter()
+                            .map(|path| append_component(path, name.clone()))
+                            .collect(),
+                    ),
+                    (Binding::Paths(paths), None) => {
+                        return Some(Binding::Paths(paths.into_iter().map(append_star).collect()));
+                    },
                     (Binding::Set(members), Some(name)) => members.get(&name)?.clone(),
                     (Binding::Set(_), None) => return None,
                     (Binding::Opaque, _) => return None,
@@ -865,26 +920,47 @@ fn resolve_expr_binding(expr: &ast::Expr, env: &Env) -> Option<Binding> {
                 binding => Some(binding),
             }
         },
+        // A conditional resolves to whichever branches the scanner can model;
+        // all of them must be locked.
+        ast::Expr::IfElse(if_else) => {
+            let mut paths: BTreeSet<Vec<String>> = BTreeSet::new();
+            for branch in [if_else.body(), if_else.else_body()].into_iter().flatten() {
+                match resolve_expr_binding(&branch, env) {
+                    Some(Binding::Path(path)) => {
+                        paths.insert(path);
+                    },
+                    Some(Binding::Paths(more)) => paths.extend(more),
+                    _ => {},
+                }
+            }
+            (!paths.is_empty()).then_some(Binding::Paths(paths))
+        },
         ast::Expr::Paren(paren) => resolve_expr_binding(&paren.expr()?, env),
         _ => None,
     }
 }
 
-/// Resolve an expression to the catalog attr-path it denotes. `None` when the
-/// expression does not reach a catalog root.
-fn resolve_expr_path(expr: &ast::Expr, env: &Env) -> Option<Vec<String>> {
-    match resolve_expr_binding(expr, env)? {
-        Binding::Path(path) => Some(path),
+/// The attr-paths a binding denotes: one for an alias, several for a
+/// conditional alias, none for sets and opaque bindings.
+fn paths_of(binding: Binding) -> Option<BTreeSet<Vec<String>>> {
+    match binding {
+        Binding::Path(path) => Some(BTreeSet::from([path])),
+        Binding::Paths(paths) => Some(paths),
         _ => None,
     }
 }
 
-/// [resolve_expr_path] for a select node.
-fn resolve_select_path(select: &ast::Select, env: &Env) -> Option<Vec<String>> {
-    match resolve_expr_binding(&ast::Expr::Select(select.clone()), env)? {
-        Binding::Path(path) => Some(path),
-        _ => None,
-    }
+/// Resolve an expression to the set of attr-paths it may denote.
+fn resolve_expr_paths(expr: &ast::Expr, env: &Env) -> Option<BTreeSet<Vec<String>>> {
+    paths_of(resolve_expr_binding(expr, env)?)
+}
+
+/// [resolve_expr_paths] for a select node.
+fn resolve_select_paths(select: &ast::Select, env: &Env) -> Option<BTreeSet<Vec<String>>> {
+    paths_of(resolve_expr_binding(
+        &ast::Expr::Select(select.clone()),
+        env,
+    )?)
 }
 
 /// Append one component; a path already collapsed to `*` absorbs it.
@@ -898,6 +974,27 @@ fn append_component(mut path: Vec<String>, name: String) -> Vec<String> {
 /// Collapse the path's tail to a `*` sentinel (idempotent).
 fn append_star(path: Vec<String>) -> Vec<String> {
     append_component(path, "*".to_string())
+}
+
+/// The binding `inherit (<source>) <name>;` produces for `name`, given the
+/// source's binding: one more component on an attr-path, or a member of a
+/// modeled set.
+fn member_binding(source: &Binding, name: &str) -> Option<Binding> {
+    match source {
+        Binding::Path(base) => Some(Binding::Path(append_component(
+            base.clone(),
+            name.to_string(),
+        ))),
+        Binding::Paths(bases) => Some(Binding::Paths(
+            bases
+                .iter()
+                .cloned()
+                .map(|base| append_component(base, name.to_string()))
+                .collect(),
+        )),
+        Binding::Set(members) => members.get(name).cloned(),
+        _ => None,
+    }
 }
 
 /// Widen a path that names a whole catalog or the root itself (fewer than two
@@ -1601,12 +1698,83 @@ mod tests {
     }
 
     #[test]
+    fn recursive_scope_resolves_forward_references() {
+        let cases: &[(&str, &[&str])] = &[
+            // A conditional branch referencing a later binding still unions
+            // that branch.
+            (
+                "{ catalogs, x }: let org = if x then catalogs.a else other; other = catalogs.b; in org.pkg",
+                &["catalogs.a.pkg", "catalogs.b.pkg"],
+            ),
+            // A set member referencing a later binding resolves through it.
+            (
+                "{ catalogs }: let s = { helper = other; }; other = catalogs.othercat; in s.helper.pkg",
+                &["catalogs.othercat.pkg"],
+            ),
+            // An inherit whose source is a modeled set binds the member as an
+            // alias; the use site drives the ref.
+            (
+                "{ catalogs }: let s = { org = catalogs.myorg; }; inherit (s) org; in org.pkg",
+                &["catalogs.myorg.pkg"],
+            ),
+            // The same stepping works for a set literal's own inherits.
+            (
+                "{ catalogs }: let s = { org = catalogs.myorg; }; t = { inherit (s) org; }; in t.org.pkg",
+                &["catalogs.myorg.pkg"],
+            ),
+        ];
+        for (content, expected) in cases {
+            assert_eq!(
+                refs(content, &roots(&["catalogs"])),
+                set(expected),
+                "content: {content}"
+            );
+        }
+    }
+
+    #[test]
+    fn self_referential_alias_terminates() {
+        // `a` can only evaluate through the else branch (forcing the then
+        // branch recurses forever in Nix too). The property under test is
+        // that resolution terminates with the base ref locked; the exact
+        // tail refs past it depend on the resolution pass cap.
+        let got = refs(
+            "{ catalogs, x }: let a = if x then a.sub else catalogs.b.pkg; in a",
+            &roots(&["catalogs"]),
+        );
+        assert!(got.contains("catalogs.b.pkg"), "got: {got:?}");
+    }
+
+    #[test]
     fn attrset_member_alias_resolves_through_select() {
         let got = refs(
             "{ catalogs }: let s = { org = catalogs.myorg; }; in s.org.toolkit",
             &roots(&["catalogs"]),
         );
         assert_eq!(got, set(&["catalogs.myorg.toolkit"]));
+    }
+
+    #[test]
+    fn conditional_alias_unions_resolvable_branches() {
+        let cases: &[(&str, &[&str])] = &[
+            // The alias may be either catalog at runtime; lock both.
+            (
+                "{ catalogs, x }: let org = if x then catalogs.a else catalogs.b; in org.pkg",
+                &["catalogs.a.pkg", "catalogs.b.pkg"],
+            ),
+            // A branch the scanner cannot model contributes nothing.
+            (
+                "{ catalogs, x, y }: let org = if x then catalogs.a else y; in org.pkg",
+                &["catalogs.a.pkg"],
+            ),
+        ];
+        for (content, expected) in cases {
+            assert_eq!(
+                refs(content, &roots(&["catalogs"])),
+                set(expected),
+                "content: {content}"
+            );
+        }
     }
 
     #[test]
