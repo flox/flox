@@ -460,16 +460,28 @@ pub(crate) enum OciBakeDecision {
 // ── Image lifecycle helpers ───────────────────────────────────────────────────
 
 /// Compute the first `OCI_HASH_TAG_LEN` hex characters of the blake3 hash of
-/// the canonical JSON serialization of a lockfile.
+/// the canonical JSON serialization of a lockfile, with prototype-only
+/// `[options]` keys stripped.
 ///
-/// Hashing the canonical JSON (sorted keys, deterministic) means the tag is
-/// stable across re-serialization and across machines. Changing any package
-/// pin, hook, or manifest field changes the hash and thus the tag, correctly
-/// marking the cached image stale.
+/// Hashing the canonical JSON (a `serde_json::Value` serializes object keys
+/// in sorted order) means the tag is stable across re-serialization and
+/// across machines. Changing any package pin, hook, or manifest field
+/// changes the hash and thus the tag, correctly marking the cached image
+/// stale — except the prototype-only keys, which are excluded for the same
+/// reason the builder sanitizer strips them: they never reach the baked
+/// image, so editing `[options.sandbox]` (mode, backend, network grants)
+/// must not force a pointless rebake.
 pub(crate) fn lockfile_hash12(lockfile: &Lockfile) -> String {
-    // serde_json serializes BTreeMap keys in sorted order, so the output is
-    // canonical across different serialization passes of the same value.
-    let json = serde_json::to_vec(lockfile).expect("serializing a Lockfile to JSON cannot fail");
+    let mut value =
+        serde_json::to_value(lockfile).expect("serializing a Lockfile to JSON cannot fail");
+    for pointer in ["/manifest/options", "/compose/composer/options"] {
+        if let Some(options) = value.pointer_mut(pointer).and_then(|v| v.as_object_mut()) {
+            for key in PROTOTYPE_ONLY_OPTION_KEYS {
+                options.remove(key);
+            }
+        }
+    }
+    let json = serde_json::to_vec(&value).expect("serializing a JSON value cannot fail");
     let mut hex = blake3::hash(&json).to_hex();
     hex.truncate(OCI_HASH_TAG_LEN);
     hex.to_string()
@@ -1303,6 +1315,36 @@ mod tests {
         }
 
         #[test]
+        fn hash12_ignores_sandbox_options() {
+            let path = GENERATED_DATA.join("envs/hello/manifest.lock");
+            let content = std::fs::read_to_string(&path).unwrap();
+            let mut value: serde_json::Value = serde_json::from_str(&content).unwrap();
+            // The sandbox table only exists in the newest schema.
+            value
+                .pointer_mut("/manifest")
+                .unwrap()
+                .as_object_mut()
+                .unwrap()
+                .insert("schema-version".to_string(), "1.13.0".into());
+            let base: Lockfile = serde_json::to_string(&value).unwrap().parse().unwrap();
+            value
+                .pointer_mut("/manifest/options")
+                .unwrap()
+                .as_object_mut()
+                .unwrap()
+                .insert(
+                    "sandbox".to_string(),
+                    serde_json::json!({
+                        "backend": "openshell",
+                        "network": [{"endpoint": "api.github.com:443"}],
+                    }),
+                );
+            let with_sandbox: Lockfile =
+                serde_json::to_string(&value).unwrap().parse().unwrap();
+            assert_eq!(lockfile_hash12(&base), lockfile_hash12(&with_sandbox));
+        }
+
+        #[test]
         fn classify_explicit_override_wins_over_everything() {
             let tags = vec!["latest".to_string()];
             let s = classify_oci_image_state(
@@ -1612,7 +1654,7 @@ mode = "warn"
         }
 
         #[test]
-        fn tag_derivation_is_unchanged_by_sanitization() {
+        fn tag_is_stable_across_sanitization() {
             let with_sandbox = lockfile_json_with_sandbox();
             let original: Lockfile = with_sandbox.parse().unwrap();
             let hash_before = lockfile_hash12(&original);
@@ -1620,8 +1662,11 @@ mode = "warn"
             let sanitized_text = sanitize_lockfile_json(&with_sandbox).unwrap().unwrap();
             let sanitized: Lockfile = sanitized_text.parse().unwrap();
 
+            // The hash excludes the prototype-only keys, so the original and
+            // the sanitized builder view derive the same tag: sandbox edits
+            // never invalidate a baked image.
             assert_eq!(lockfile_hash12(&original), hash_before);
-            assert_ne!(lockfile_hash12(&sanitized), hash_before);
+            assert_eq!(lockfile_hash12(&sanitized), hash_before);
         }
     }
 
