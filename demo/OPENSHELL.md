@@ -31,12 +31,12 @@ API's own auth error came back) while curl in the same session
 stayed denied — confirming per-binary scoping. Beat 3's write-denial
 was also rehearsed 2026-07-14 with a negative result: `read-only`
 does not block write methods on 0.0.82 (see the warning in beat 3)
-— keep it out of the talk track. The one thing still needing an
-off-camera rehearsal is beat 4's live agent run. (Interactive
-login inside the guest turned out to be a dead end — the OAuth URL
-can't be copied out of a sandboxed session — so beat 4 now
-pre-seeds a `claude setup-token` token via a gitignored `.env`;
-added 2026-07-15, not yet rehearsed.)
+— keep it out of the talk track. Beat 4's live agent run — with
+the pre-seeded `claude setup-token` token — was verified in a full
+end-to-end run of the script on 2026-07-16. (Interactive login
+inside the guest remains a dead end — the OAuth URL can't be
+copied out of a sandboxed session — which is why beat 4 pre-seeds
+the token via a gitignored `.env`.)
 
 ---
 
@@ -336,9 +336,9 @@ live."**
 
 ## 4 · Run a coding agent, at full autonomy
 
-*(agent flow identical to demo/SCRIPT.md §3; requires the Anthropic
-endpoints granted via `openshell policy update` — see the tip at the
-end of beat 3. Rehearse once off-camera.)*
+*(verified end-to-end 2026-07-16; agent flow identical to
+demo/SCRIPT.md §3; requires the Anthropic endpoints granted via
+`openshell policy update` — see the tip at the end of beat 3.)*
 
 **"A coding agent with no permission prompts, that I don't have to
 trust — the sandbox, not the agent, is the boundary. And this time
