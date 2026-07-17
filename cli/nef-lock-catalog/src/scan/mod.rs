@@ -598,14 +598,20 @@ enum ImportArg {
     Root(String),
 }
 
-/// Where an `inherit` appears, which decides what a from-less `inherit x;`
-/// means (see [Walker::walk_inherit]).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum InheritPosition {
-    /// Inside a binding scope (`let`, `rec { }`, consumed set literal).
-    Binding,
-    /// Inside an attrset literal used as a value.
-    Value,
+/// What consumes an attrset appearing in value position, deciding which of
+/// its entries are accounted for elsewhere rather than escaping as values
+/// (see [Walker::walk_attrset]).
+#[derive(Debug)]
+enum AttrsetConsumer<'a> {
+    /// Nothing: an ordinary value attrset.
+    None,
+    /// An `import` application: names forwarded into the imported file (per
+    /// [Walker::import_forwards]) are scanned through it; a root-named entry
+    /// that does not forward is warned about.
+    Import(&'a HashMap<String, String>),
+    /// A lambda defined in this file: an entry binding a root under a
+    /// parameter of the same name was already walked in the body.
+    Lambda(&'a HashSet<String>),
 }
 
 /// Syntax-tree walker threading the lexical environment.
@@ -649,7 +655,7 @@ impl Walker<'_> {
             return self.walk_attrpath_dynamics(&attrpath, env);
         }
         if let Some(inherit) = ast::Inherit::cast(node.clone()) {
-            return self.walk_inherit(&inherit, env, InheritPosition::Value);
+            return self.walk_value_inherit(&inherit, &AttrsetConsumer::None, env);
         }
         let Some(expr) = ast::Expr::cast(node.clone()) else {
             return self.walk_children(node, env);
@@ -658,11 +664,15 @@ impl Walker<'_> {
             ast::Expr::Lambda(lambda) => self.walk_lambda(&lambda, env),
             ast::Expr::LetIn(let_in) => self.walk_let_in(&let_in, env),
             ast::Expr::With(with_expr) => self.walk_with(&with_expr, env),
-            // `rec { }` scopes like `let`: members see each other.
+            // `rec { }` scopes like `let` — members see each other — but a
+            // set reached here is in value position, so its entries escape
+            // like a plain set's; alias suppression only applies where the
+            // set is consumed as a binding (see [Self::walk_binding_rhs]).
             ast::Expr::AttrSet(attrset) if attrset.rec_token().is_some() => {
                 let inner = recursive_scope_env(&attrset, env);
-                self.walk_binding_entries(&attrset, &inner);
+                self.walk_attrset(&attrset, &AttrsetConsumer::None, &inner);
             },
+            ast::Expr::AttrSet(attrset) => self.walk_attrset(&attrset, &AttrsetConsumer::None, env),
             ast::Expr::Apply(apply) => self.walk_apply(&apply, env),
             ast::Expr::Select(select) => self.walk_select(&select, env),
             ast::Expr::Ident(ident) => self.walk_ident(&ident, env),
@@ -829,42 +839,27 @@ impl Walker<'_> {
             }
         }
         for inherit in scope.inherits() {
-            self.walk_inherit(&inherit, env, InheritPosition::Binding);
+            self.walk_binding_inherit(&inherit, env);
         }
     }
 
-    /// `inherit (<source>) a b c;` — a name the catalog cannot contain
-    /// (dotted quoted attr) collapses to a sentinel at the source. In a
-    /// binding scope each name only becomes an alias (use sites drive the
-    /// refs, like an alias binding's RHS: only package-deep members are refs
-    /// of their own); in a value position each name is a value use of the
-    /// member (a catalog-level member escapes and widens).
-    ///
-    /// A from-less `inherit x;` depends on position: in a binding scope it
-    /// only rebinds the outer name; in a value position it puts the named
-    /// value into an attrset, which is an ordinary use (and an escape when
-    /// the name is a whole namespace).
-    fn walk_inherit(&mut self, inherit: &ast::Inherit, env: &Env, position: InheritPosition) {
+    /// `inherit (<source>) a b c;` in a binding scope (`let`, `rec { }`,
+    /// consumed set literal) — each name only becomes an alias (use sites
+    /// drive the refs, like an alias binding's RHS: only package-deep
+    /// members are refs of their own). A name the catalog cannot contain
+    /// (dotted quoted attr) collapses to a sentinel at the source. A
+    /// from-less `inherit x;` only rebinds the outer name.
+    fn walk_binding_inherit(&mut self, inherit: &ast::Inherit, env: &Env) {
         let Some(from_expr) = inherit.from().and_then(|from| from.expr()) else {
-            if position == InheritPosition::Binding {
-                return;
-            }
-            for attr in inherit.attrs() {
-                if let Some(name) = attr_static_name(&attr)
-                    && let Some(binding) = env.get(&name)
-                {
-                    self.emit_value_binding(offset_of(attr.syntax()), binding);
-                }
-            }
             return;
         };
         let Some(source) = resolve_expr_binding(&from_expr, env) else {
             self.walk(from_expr.syntax(), env);
             return;
         };
+        self.walk_consumed_source(&from_expr, env);
         match paths_of(source.clone()) {
             Some(bases) => {
-                self.walk_consumed_source(&from_expr, env);
                 for attr in inherit.attrs() {
                     let name = attr_static_name(&attr);
                     let paths: BTreeSet<Vec<String>> = bases
@@ -874,40 +869,134 @@ impl Walker<'_> {
                             None => append_star(base.clone()),
                         })
                         .collect();
-                    let offset = offset_of(attr.syntax());
-                    match position {
-                        InheritPosition::Binding => self.emit_deep_paths(offset, paths),
-                        InheritPosition::Value => {
-                            for path in paths {
-                                self.emit(offset, join_path(&widen_if_catalog_level(path)));
-                            }
-                        },
-                    }
+                    self.emit_deep_paths(offset_of(attr.syntax()), paths);
                 }
             },
-            // A modeled-set source: each inherited name is that member's
-            // value. In a binding scope the name becomes an alias (use sites
-            // drive the refs, like an alias binding's RHS: only package-deep
-            // members are refs of their own); in a value position it is an
-            // ordinary value use.
             None => {
-                let Binding::Set(members) = source else {
-                    self.walk(from_expr.syntax(), env);
-                    return;
-                };
-                self.walk_consumed_source(&from_expr, env);
                 for attr in inherit.attrs() {
                     let paths = attr_static_name(&attr)
-                        .and_then(|name| members.get(&name).cloned())
+                        .and_then(|name| member_binding(&source, &name))
                         .and_then(paths_of);
-                    let Some(paths) = paths else { continue };
-                    let offset = offset_of(attr.syntax());
-                    match position {
-                        InheritPosition::Binding => self.emit_deep_paths(offset, paths),
-                        InheritPosition::Value => self.emit_value_paths(offset, paths),
+                    if let Some(paths) = paths {
+                        self.emit_deep_paths(offset_of(attr.syntax()), paths);
                     }
                 }
             },
+        }
+    }
+
+    /// Walk an attrset in value position. An entry the `consumer` accounts
+    /// for elsewhere is consumed — it is not an escape — and every other
+    /// entry is an ordinary value position.
+    fn walk_attrset(&mut self, attrset: &ast::AttrSet, consumer: &AttrsetConsumer, env: &Env) {
+        for entry in attrset.attrpath_values() {
+            if let Some(attrpath) = entry.attrpath() {
+                self.walk_attrpath_dynamics(&attrpath, env);
+            }
+            let Some(value) = entry.value() else { continue };
+            let attrs: Vec<ast::Attr> = entry
+                .attrpath()
+                .map(|attrpath| attrpath.attrs().collect())
+                .unwrap_or_default();
+            let name = (attrs.len() == 1)
+                .then(|| attrs.first().and_then(attr_static_name))
+                .flatten();
+            if let Some(name) = &name {
+                let binding = resolve_expr_binding(&value, env);
+                if self.consumed_by(consumer, name, binding.as_ref()) {
+                    self.walk_consumed_source(&value, env);
+                    continue;
+                }
+                self.warn_unforwarded_root(consumer, name, || {
+                    entry
+                        .attrpath()
+                        .map(|attrpath| offset_of(attrpath.syntax()))
+                        .unwrap_or_else(|| offset_of(value.syntax()))
+                });
+            }
+            self.walk(value.syntax(), env);
+        }
+        for inherit in attrset.inherits() {
+            self.walk_value_inherit(&inherit, consumer, env);
+        }
+    }
+
+    /// One `inherit` inside a value attrset: each name not consumed by the
+    /// `consumer` is a value use of the inherited binding.
+    fn walk_value_inherit(
+        &mut self,
+        inherit: &ast::Inherit,
+        consumer: &AttrsetConsumer,
+        env: &Env,
+    ) {
+        let from_expr = inherit.from().and_then(|from| from.expr());
+        let from_binding = from_expr
+            .as_ref()
+            .and_then(|from_expr| resolve_expr_binding(from_expr, env));
+        if let Some(from_expr) = &from_expr {
+            match &from_binding {
+                Some(_) => self.walk_consumed_source(from_expr, env),
+                None => self.walk(from_expr.syntax(), env),
+            }
+        }
+        for attr in inherit.attrs() {
+            let offset = offset_of(attr.syntax());
+            let Some(name) = attr_static_name(&attr) else {
+                // A name the catalog cannot contain (dotted quoted attr)
+                // collapses to a sentinel at the source.
+                if let Some(source) = &from_binding {
+                    let paths: BTreeSet<Vec<String>> = escaping_paths_of(source)
+                        .into_iter()
+                        .map(append_star)
+                        .collect();
+                    self.emit_value_paths(offset, paths);
+                }
+                continue;
+            };
+            let binding = match (from_expr.is_some(), &from_binding) {
+                (false, _) => env.get(&name).cloned(),
+                (true, Some(source)) => member_binding(source, &name),
+                (true, None) => None,
+            };
+            if self.consumed_by(consumer, &name, binding.as_ref()) {
+                continue;
+            }
+            self.warn_unforwarded_root(consumer, &name, || offset);
+            if let Some(binding) = binding {
+                self.emit_value_binding(offset, &binding);
+            }
+        }
+    }
+
+    /// Whether the `consumer` accounts for binding `name` to `binding`
+    /// elsewhere, making the entry a consumed forward rather than a value.
+    fn consumed_by(
+        &self,
+        consumer: &AttrsetConsumer,
+        name: &str,
+        binding: Option<&Binding>,
+    ) -> bool {
+        match consumer {
+            AttrsetConsumer::None => false,
+            AttrsetConsumer::Import(forwards) => forwards.contains_key(name),
+            AttrsetConsumer::Lambda(params) => {
+                params.contains(name)
+                    && self.roots.contains(name)
+                    && matches!(binding, Some(Binding::Path(path)) if path.len() == 1 && path[0] == name)
+            },
+        }
+    }
+
+    /// Warn when an import argument names a root without forwarding it — the
+    /// imported file is not scanned through that name.
+    fn warn_unforwarded_root(
+        &self,
+        consumer: &AttrsetConsumer,
+        name: &str,
+        offset: impl FnOnce() -> usize,
+    ) {
+        if matches!(consumer, AttrsetConsumer::Import(_)) && self.roots.contains(name) {
+            self.ctx.warn_unfollowed_import(offset(), name);
         }
     }
 
@@ -1006,6 +1095,7 @@ impl Walker<'_> {
         match arg {
             ast::Expr::AttrSet(attrset) => {
                 let forwards = self.import_forwards(attrset, env);
+                self.walk_attrset(attrset, &AttrsetConsumer::Import(&forwards), env);
                 if !forwards.is_empty() {
                     // Forwarding is a use of each parent root: refs surfacing
                     // from the import trace back to this argument.
@@ -1018,7 +1108,6 @@ impl Walker<'_> {
                         arg: ImportArg::Set(forwards),
                     });
                 }
-                self.walk_import_arg(attrset, env);
                 true
             },
             other => {
@@ -1044,17 +1133,13 @@ impl Walker<'_> {
     /// consumed — when the lambda body saw the same root under the same name;
     /// everything else is an ordinary value position.
     fn walk_known_lambda_arg(&mut self, argument: &ast::Expr, params: &HashSet<String>, env: &Env) {
-        let covered = |name: &str, binding: Option<Binding>| {
-            params.contains(name)
-                && self.roots.contains(name)
-                && matches!(binding, Some(Binding::Path(path)) if path == vec![name.to_string()])
-        };
+        let consumer = AttrsetConsumer::Lambda(params);
         match argument {
             // `mkPkg catalogs` where the lambda's plain parameter is the
             // root's own name.
             ast::Expr::Ident(ident) => {
                 if let Some(name) = ident_name(ident) {
-                    if covered(&name, env.get(&name).cloned()) {
+                    if self.consumed_by(&consumer, &name, env.get(&name)) {
                         return;
                     }
                     // A modeled set passed whole (`mkPkg args`): members the
@@ -1063,7 +1148,9 @@ impl Walker<'_> {
                     if let Some(Binding::Set(members)) = env.get(&name) {
                         let uncovered: BTreeSet<Vec<String>> = members
                             .iter()
-                            .filter(|(member, binding)| !covered(member, Some((*binding).clone())))
+                            .filter(|(member, binding)| {
+                                !self.consumed_by(&consumer, member, Some(binding))
+                            })
                             .flat_map(|(_, binding)| escaping_paths_of(binding))
                             .collect();
                         if !uncovered.is_empty() {
@@ -1074,43 +1161,13 @@ impl Walker<'_> {
                 }
                 self.walk(argument.syntax(), env);
             },
-            ast::Expr::AttrSet(attrset) if attrset.rec_token().is_none() => {
-                for entry in attrset.attrpath_values() {
-                    if let Some(attrpath) = entry.attrpath() {
-                        self.walk_attrpath_dynamics(&attrpath, env);
-                    }
-                    let Some(value) = entry.value() else { continue };
-                    let attrs: Vec<ast::Attr> = entry
-                        .attrpath()
-                        .map(|attrpath| attrpath.attrs().collect())
-                        .unwrap_or_default();
-                    let name = (attrs.len() == 1)
-                        .then(|| attrs.first().and_then(attr_static_name))
-                        .flatten();
-                    if let Some(name) = name
-                        && covered(&name, resolve_expr_binding(&value, env))
-                    {
-                        continue;
-                    }
-                    self.walk(value.syntax(), env);
-                }
-                for inherit in attrset.inherits() {
-                    if inherit.from().is_some() {
-                        self.walk_inherit(&inherit, env, InheritPosition::Value);
-                        continue;
-                    }
-                    for attr in inherit.attrs() {
-                        let Some(name) = attr_static_name(&attr) else {
-                            continue;
-                        };
-                        if covered(&name, env.get(&name).cloned()) {
-                            continue;
-                        }
-                        if let Some(binding) = env.get(&name) {
-                            self.emit_value_binding(offset_of(attr.syntax()), binding);
-                        }
-                    }
-                }
+            ast::Expr::AttrSet(attrset) => {
+                let scope = if attrset.rec_token().is_some() {
+                    recursive_scope_env(attrset, env)
+                } else {
+                    env.clone()
+                };
+                self.walk_attrset(attrset, &consumer, &scope);
             },
             other => self.walk(other.syntax(), env),
         }
@@ -1187,74 +1244,6 @@ impl Walker<'_> {
             }
         }
         forwards
-    }
-
-    /// Walk an import's argument attrset. An entry whose name forwards a
-    /// namespace (per [Self::import_forwards]) is consumed — the imported
-    /// file is scanned through it — so it is not an escape; a root-named
-    /// entry that does not forward is warned about, and every other entry is
-    /// an ordinary value position.
-    fn walk_import_arg(&mut self, attrset: &ast::AttrSet, env: &Env) {
-        let forwards = self.import_forwards(attrset, env);
-        for entry in attrset.attrpath_values() {
-            if let Some(attrpath) = entry.attrpath() {
-                self.walk_attrpath_dynamics(&attrpath, env);
-            }
-            let Some(value) = entry.value() else { continue };
-            let attrs: Vec<ast::Attr> = entry
-                .attrpath()
-                .map(|attrpath| attrpath.attrs().collect())
-                .unwrap_or_default();
-            let name = (attrs.len() == 1)
-                .then(|| attrs.first().and_then(attr_static_name))
-                .flatten();
-            if let Some(name) = &name {
-                if forwards.contains_key(name) {
-                    self.walk_consumed_source(&value, env);
-                    continue;
-                }
-                if self.roots.contains(name) {
-                    let offset = entry
-                        .attrpath()
-                        .map(|attrpath| offset_of(attrpath.syntax()))
-                        .unwrap_or_else(|| offset_of(value.syntax()));
-                    self.ctx.warn_unfollowed_import(offset, name);
-                }
-            }
-            self.walk(value.syntax(), env);
-        }
-        for inherit in attrset.inherits() {
-            let from_expr = inherit.from().and_then(|from| from.expr());
-            let from_binding = from_expr
-                .as_ref()
-                .and_then(|from_expr| resolve_expr_binding(from_expr, env));
-            if let Some(from_expr) = &from_expr {
-                match &from_binding {
-                    Some(_) => self.walk_consumed_source(from_expr, env),
-                    None => self.walk(from_expr.syntax(), env),
-                }
-            }
-            for attr in inherit.attrs() {
-                let Some(name) = attr_static_name(&attr) else {
-                    continue;
-                };
-                if forwards.contains_key(&name) {
-                    continue;
-                }
-                if self.roots.contains(&name) {
-                    self.ctx
-                        .warn_unfollowed_import(offset_of(attr.syntax()), &name);
-                }
-                let binding = match (from_expr.is_some(), &from_binding) {
-                    (false, _) => env.get(&name).cloned(),
-                    (true, Some(source)) => member_binding(source, &name),
-                    (true, None) => None,
-                };
-                if let Some(binding) = binding {
-                    self.emit_value_binding(offset_of(attr.syntax()), &binding);
-                }
-            }
-        }
     }
 
     fn walk_select(&mut self, select: &ast::Select, env: &Env) {
@@ -2452,13 +2441,13 @@ mod tests {
 
     #[test]
     fn rec_attrset_members_alias_each_other() {
-        // `rec { }` scopes like `let`: `org` is visible to `pkg`, and its
-        // catalog-level RHS only defines the alias.
+        // `rec { }` scopes like `let`: `org` is visible to `pkg`. The set is
+        // the file's value, so the catalog-level member also escapes.
         let got = refs(
             "{ catalogs }: rec { org = catalogs.myorg; pkg = org.toolkit; }",
             &roots(&["catalogs"]),
         );
-        assert_eq!(got, set(&["catalogs.myorg.toolkit"]));
+        assert_eq!(got, set(&["catalogs.myorg.*", "catalogs.myorg.toolkit"]));
     }
 
     #[test]
@@ -2570,6 +2559,18 @@ mod tests {
                 "{ catalogs, f }: let s = { org = catalogs.myorg; }; in f { inherit s; }",
                 &["catalogs.myorg.*"],
             ),
+            // A `rec { }` literal in value position escapes like a plain set;
+            // its members still resolve against each other.
+            ("{ catalogs, f }: f rec { org = catalogs.myorg; }", &[
+                "catalogs.myorg.*",
+            ]),
+            (
+                "{ catalogs, f }: f rec { org = catalogs.myorg; pkg = org.tool; }",
+                &["catalogs.myorg.*", "catalogs.myorg.tool"],
+            ),
+            ("{ catalogs }: rec { org = catalogs.myorg; }", &[
+                "catalogs.myorg.*",
+            ]),
             // The @-name carries the root, so passing it whole escapes the
             // root like `f catalogs` does.
             ("args@{ catalogs, f, ... }: f args", &["catalogs.*"]),
@@ -2643,6 +2644,18 @@ mod tests {
                 "content: {content}"
             );
         }
+    }
+
+    #[test]
+    fn known_lambda_inherit_from_wrapper_is_consumed() {
+        // `inherit (wrapper) catalogs;` binds the root under the lambda's own
+        // `catalogs` parameter, so the body was walked with it: the argument
+        // is consumed, not an escape.
+        let got = refs(
+            "{ catalogs }: let wrapper = { inherit catalogs; }; mkPkg = { catalogs }: catalogs.myorg.viaWrapper; in mkPkg { inherit (wrapper) catalogs; }",
+            &roots(&["catalogs"]),
+        );
+        assert_eq!(got, set(&["catalogs.myorg.viaWrapper"]));
     }
 
     #[test]
@@ -2788,6 +2801,12 @@ mod tests {
             // applied to it: its body refs are real and must be locked.
             (
                 "{ catalogs }: let mkPkg = { catalogs }: catalogs.myorg.helper-used; in mkPkg { inherit catalogs; }",
+                &["catalogs.myorg.helper-used"],
+            ),
+            // A `rec { }` argument classifies its entries like a plain set:
+            // the forwarded root is consumed, not an escape.
+            (
+                "{ catalogs }: let mkPkg = { catalogs }: catalogs.myorg.helper-used; in mkPkg rec { inherit catalogs; version = \"1\"; }",
                 &["catalogs.myorg.helper-used"],
             ),
             // Even when the application passes something else, assuming the
