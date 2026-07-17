@@ -182,6 +182,7 @@ Before running the demo, in your presentation shell:
     export FLOX_FEATURES_SANDBOX_ACTIVATE=true
     export FLOX_FEATURES_AUTO_ACTIVATE=true
     export GITHUB_TOKEN=ghp-demo-FAKE   # for the token-isolation beat
+    export FLOX_VERSION=\`flox --version\`  # route the bake to this branch's builder
 
 Then:
 
@@ -192,8 +193,9 @@ and follow demo/SCRIPT.md (backend "oci") or demo/OPENSHELL.md
 
 NOTE: the manifest already declares [options.sandbox]
 backend = "$BACKEND" and an auto-starting web service, so the first
-'cd' auto-activates straight into the sandbox. The first bake takes
-~2-5 min; to pre-bake off-camera, run:
+'cd' auto-activates straight into the sandbox. The first-ever bake
+takes ~5-15 min (the builder VM compiles the pinned flox rev; later
+bakes reuse its cache, ~2-5 min); to pre-bake off-camera, run:
 
     FLOX_SANDBOX_OCI_AUTOBAKE=true flox activate -- true
 EOF
