@@ -959,12 +959,14 @@ fn bake_oci_image(
     // fixes (guest metrics disabled, state-dir alignment, guest rendered-env
     // links so deactivate/services never rebuild), and the packaging fixes
     // that let the branch build for aarch64-linux. Used when the host is a
-    // dev build. Not CI-cached: the builder compiles it in-VM against the
-    // persistent `flox-nix` cache volume, so only the first bake pays the
-    // compile.
+    // dev build. Prototype-branch pins are not built by ci.yml; without a
+    // cached build the builder compiles the rev in-VM against the
+    // persistent `flox-nix` cache volume (first bake only).
     //
     // NOTE: Update this rev when builder-side behavior changes (mkContainer,
-    // flox-activations, package-builder); host-side-only commits don't need it.
+    // flox-activations, package-builder); host-side-only commits don't need
+    // it. After bumping, dispatch .github/workflows/frozen-builder-cache.yml
+    // so fresh machines substitute the pin instead of compiling it.
     const FROZEN_FALLBACK_REV: &str = "3c374021c8df69441895a04be9c3c59da4bddec7";
 
     let hash12 = lockfile_hash12(lockfile);

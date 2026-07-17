@@ -100,9 +100,11 @@ eval "$(flox hook-env --shell bash --shell-pid $$)"
 > version routes to the release builder, which lacks the OpenShell
 > compat layer.
 
-**Pre-bake off-camera.** The first bake takes ~5–15 min (the
-builder VM compiles the pinned flox rev on first use; later bakes
-reuse its store):
+**Pre-bake off-camera.** The first bake takes ~5–15 min on a
+machine that has to compile the pinned flox rev in-VM, or ~2–5 min
+if the pin is in the flox cache (dispatch
+`.github/workflows/frozen-builder-cache.yml` once per pin bump).
+Later bakes reuse the builder's store:
 
 ```bash
 cd ~/sandbox-demo && FLOX_SANDBOX_OCI_AUTOBAKE=true flox activate -- true

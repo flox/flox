@@ -1,0 +1,79 @@
+name: "Frozen builder cache"
+
+# The sandbox bake runs `nix run github:flox/flox/<frozen-pin>` inside a
+# Linux builder VM. Pins on prototype branches are never built by ci.yml
+# (it doesn't run on prototype-branch pushes), so the first bake on a
+# fresh machine compiles the whole Rust workspace in-VM (~5-15 min).
+#
+# This workflow prebuilds the pinned revs for Linux and pushes the
+# closures to the public flox cache. The in-VM nix already trusts that
+# cache (`--accept-flake-config` picks up the flake's nixConfig), so a
+# cached pin turns the compile into a substitution — no consumer-side
+# changes needed.
+#
+# Dispatch it once after bumping a FROZEN_FALLBACK_REV
+# (cli/flox/src/commands/sandbox_backends/{oci,openshell}.rs):
+#
+#   gh workflow run frozen-builder-cache.yml --ref <branch>
+
+on:
+  workflow_dispatch:
+    inputs:
+      revs:
+        description: "Space-separated flox revs to prebuild (default: the current frozen builder pins)"
+        required: false
+        default: "3c374021c8df69441895a04be9c3c59da4bddec7 fd6b40219bb7761926fcc8fd393cf8483615c5e8"
+
+jobs:
+  prebuild:
+    name: "Prebuild ${{ matrix.system }}"
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 120
+
+    permissions:
+      id-token: write # Needed for AWS Creds
+      contents: read
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - system: "aarch64-linux"
+            runner: "ubuntu-24.04-arm"
+          - system: "x86_64-linux"
+            runner: "ubuntu-latest"
+
+    steps:
+      - name: "Install Nix"
+        uses: cachix/install-nix-action@ab739621df7a23f52766f9ccc97f38da6b7af14f # v31
+
+      - name: "Configure AWS Credentials"
+        uses: aws-actions/configure-aws-credentials@8df5847569e6427dd6c4fb1cf565c83acfa8afa7 # v6
+        with:
+          role-to-assume: "arn:aws:iam::759020684799:role/github-oidc-role-flox-cache-public"
+          role-session-name: "${{ github.run_id }}"
+          aws-region: "us-east-1"
+
+      - name: "Prebuild pins and push to cache"
+        env:
+          REVS: "${{ inputs.revs }}"
+          NIX_SUBSTITUTER: "${{ vars.MANAGED_CACHE_PUBLIC_S3_BUCKET }}"
+          NIX_SUBSTITUTER_KEY: "${{ secrets.MANAGED_CACHE_PUBLIC_SECRET_KEY }}"
+        run: |
+          set -euxo pipefail
+          umask 077
+          printf '%s' "$NIX_SUBSTITUTER_KEY" > /tmp/nix-substituter-secret-key
+          for rev in $REVS; do
+            out="$(nix build \
+              --extra-experimental-features 'nix-command flakes' \
+              --accept-flake-config \
+              --no-link \
+              --print-build-logs \
+              --json \
+              "github:flox/flox/$rev#packages.${{ matrix.system }}.flox" \
+              | jq -r '.[0].outputs.out')"
+            nix copy \
+              --extra-experimental-features nix-command \
+              --to "$NIX_SUBSTITUTER?secret-key=/tmp/nix-substituter-secret-key" \
+              "$out"
+          done
