@@ -134,6 +134,20 @@ command = "python3 -m http.server 8080"
 sandbox = f'''[options.sandbox]
 backend = "{backend}"
 '''
+if backend == "openshell":
+    # Grant the coding agent its API endpoints, scoped to the exact
+    # claude binary the environment ships (`binary` resolves to the
+    # locked store path via the lockfile). Compiled into the OpenShell
+    # policy at sandbox create; everything else stays deny-by-default.
+    sandbox += '''
+[[options.sandbox.network]]
+endpoint = "api.anthropic.com:443"
+binary = "claude-code/.claude-wrapped"
+
+[[options.sandbox.network]]
+endpoint = "statsig.anthropic.com:443"
+binary = "claude-code/.claude-wrapped"
+'''
 text = text.replace("[install]\n", install, 1)
 text = text.replace("[hook]\n", hook, 1)
 # Replace the empty [services] stub with an auto-starting web service.

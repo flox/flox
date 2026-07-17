@@ -21,8 +21,10 @@ OpenShell 0.0.82):
 
 - Beats 1–5 verified 2026-07-13/14; full end-to-end run including
   beat 4's live agent on 2026-07-16.
-- Not yet rehearsed: the 2026-07-17 resequencing that starts the
-  log tail in beat 2 (confirm `--tail` doesn't replay old events).
+- Not yet rehearsed (2026-07-17 changes): the resequencing that
+  starts the log tail in beat 2 (confirm `--tail` doesn't replay
+  old events), and the manifest-declared agent grants that replace
+  beat 3's manual Anthropic `policy update`.
 - Per-binary scoping confirmed: `claude` reached its API through
   the proxy while `curl` in the same session stayed denied.
 - `read-only` does **not** block write methods on 0.0.82 — keep
@@ -77,7 +79,20 @@ BACKEND=openshell bash demo/setup.sh
 
 Same demo env as the OCI walkthrough (git, curl, which, python3,
 `flox/claude-code`, an auto-starting web service, seeded `app.py` /
-`index.html`); the manifest declares `backend = "openshell"`.
+`index.html`); the manifest declares `backend = "openshell"` plus
+network grants for the agent's API endpoints, scoped to the exact
+claude binary:
+
+```toml
+[[options.sandbox.network]]
+endpoint = "api.anthropic.com:443"
+binary   = "claude-code/.claude-wrapped"
+```
+
+flox compiles these into the OpenShell policy at sandbox create,
+resolving `binary` to the locked store path for the guest. Policy
+edits never rebake the image — the image tag ignores
+`[options.sandbox]`.
 
 Then, in your presentation shell:
 
@@ -227,8 +242,11 @@ The tail prints the denial as it happens:
 ```
 
 **"flox generated this policy for the activation — Nix store
-read-only, project read-write, zero network. Every denial is on the
-audit log, down to the store path of the binary that tried."**
+read-only, project read-write, and only the network the manifest
+grants: here, the agent's API endpoints, scoped to the exact claude
+binary. curl isn't claude, so it's denied at layer 7 — and every
+denial is on the audit log, down to the store path of the binary
+that tried."**
 
 ---
 
@@ -281,30 +299,18 @@ flipped in the tail:"**
 **"That's the division of labor: flox defines *what the environment
 is*; OpenShell governs *what it's allowed to do* — live."**
 
-> For the agent beat, grant the Anthropic API the same way. The L7
-> identity of `claude` is its *wrapped* binary — resolve it in the
-> guest and scope the rule to that path (or omit `--binary`). The
-> protocol segment must be `rest`, `websocket`, or `sql`:
->
-> ```bash
-> # in the guest:
-> dirname "$(readlink -f "$(command -v claude)")"
-> # /nix/store/…-claude-code-2.x.y/bin
->
-> # on the host:
-> openshell policy update flox-sandbox-demo-##### \
->   --add-endpoint 'api.anthropic.com:443:full:rest' \
->   --add-endpoint 'statsig.anthropic.com:443:full:rest' \
->   --binary '/nix/store/…-claude-code-2.x.y/bin/.claude-wrapped' \
->   --wait
-> ```
+> The agent beat needs no grant of its own: the manifest already
+> declares the Anthropic endpoints, scoped to the claude binary
+> (see §0). Beat 3's live `policy update` is the hot-reload story;
+> the manifest is the declarative one — same policy engine.
 
 ---
 
 ## 4 · Run a coding agent, at full autonomy
 
-*(verified end-to-end 2026-07-16; agent flow identical to
-demo/SCRIPT.md §3; needs the Anthropic grants from beat 3's tip)*
+*(verified end-to-end 2026-07-16 with manual Anthropic grants;
+the manifest-declared grants that replace them are not yet
+rehearsed. Agent flow identical to demo/SCRIPT.md §3.)*
 
 **"A coding agent with no permission prompts, that I don't have to
 trust — the sandbox, not the agent, is the boundary."**
