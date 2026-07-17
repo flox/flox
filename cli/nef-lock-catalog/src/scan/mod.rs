@@ -160,6 +160,25 @@ impl ScanCtx<'_> {
         }
     }
 
+    /// Warn that an import with a dynamic path forwards a catalog namespace
+    /// the scanner cannot follow.
+    fn warn_dynamic_import(&self, offset: usize) {
+        let (line, column) = line_col(self.content, offset);
+        match self.path {
+            Some(path) => warn!(
+                file = %path.display(),
+                line,
+                column,
+                "import path is not statically known; the imported file is not scanned for catalog references",
+            ),
+            None => warn!(
+                line,
+                column,
+                "import path is not statically known; the imported file is not scanned for catalog references",
+            ),
+        }
+    }
+
     /// Warn that an import argument names a catalog root without forwarding
     /// it, so the imported file is not scanned through that name.
     fn warn_unfollowed_import(&self, offset: usize, name: &str) {
@@ -294,10 +313,20 @@ fn analyze_file_at(
         for pending in pending_imports {
             let target = dir.join(&pending.path);
             let target = fs::canonicalize(&target).unwrap_or(target);
+            // `import ./dir` means `./dir/default.nix`.
+            let target = if target.is_dir() {
+                target.join("default.nix")
+            } else {
+                target
+            };
             if !visited.insert(target.clone()) {
                 continue;
             }
             let Ok(content) = fs::read_to_string(&target) else {
+                warn!(
+                    file = %target.display(),
+                    "cannot read imported file; its catalog references are not scanned",
+                );
                 continue;
             };
             // The child is scanned with its own parameter names as roots;
@@ -797,8 +826,8 @@ impl Walker<'_> {
             }
             return;
         }
-        if let Some((path, arg)) = extract_import(apply) {
-            match &arg {
+        match extract_import(apply) {
+            Some((Some(path), arg)) => match &arg {
                 ast::Expr::AttrSet(attrset) => {
                     let forwards = self.import_forwards(attrset, env);
                     if !forwards.is_empty() {
@@ -823,7 +852,14 @@ impl Walker<'_> {
                         return;
                     }
                 },
-            }
+            },
+            // A dynamic import path cannot be followed; when the argument
+            // would forward a namespace, say so rather than failing silently
+            // (the argument then escapes analysis as a value below).
+            Some((None, arg)) if self.forwards_any_root(&arg, env) => {
+                self.ctx.warn_dynamic_import(offset_of(apply.syntax()));
+            },
+            Some((None, _)) | None => {},
         }
         // Applying a lambda defined in this file: an argument that binds a
         // root under the parameter name the lambda declares for it was
@@ -917,6 +953,30 @@ impl Walker<'_> {
                 }
             },
             other => self.walk(other.syntax(), env),
+        }
+    }
+
+    /// Whether an import argument would forward a whole root namespace.
+    fn forwards_any_root(&self, arg: &ast::Expr, env: &Env) -> bool {
+        match arg {
+            ast::Expr::AttrSet(attrset) => {
+                attrset.attrpath_values().any(|entry| {
+                    entry
+                        .value()
+                        .and_then(|value| resolve_expr_binding(&value, env))
+                        .is_some_and(|binding| is_root_binding(&binding))
+                }) || attrset.inherits().any(|inherit| {
+                    inherit.from().is_none()
+                        && inherit.attrs().any(|attr| {
+                            attr_static_name(&attr)
+                                .and_then(|name| env.get(&name))
+                                .is_some_and(is_root_binding)
+                        })
+                })
+            },
+            other => {
+                resolve_expr_binding(other, env).is_some_and(|binding| is_root_binding(&binding))
+            },
         }
     }
 
@@ -1518,9 +1578,9 @@ fn inner_apply(apply: &ast::Apply) -> Option<ast::Apply> {
     }
 }
 
-/// Recognize an `import <static-path> <arg>` application, returning the
-/// import path and its argument expression.
-fn extract_import(apply: &ast::Apply) -> Option<(String, ast::Expr)> {
+/// Recognize an `import <path> <arg>` application, returning the import path
+/// (`None` when it is not statically known) and the argument expression.
+fn extract_import(apply: &ast::Apply) -> Option<(Option<String>, ast::Expr)> {
     let inner = inner_apply(apply)?;
     let ast::Expr::Ident(import_fn) = inner.lambda()? else {
         return None;
@@ -1528,8 +1588,13 @@ fn extract_import(apply: &ast::Apply) -> Option<(String, ast::Expr)> {
     if import_fn.ident_token()?.text() != "import" {
         return None;
     }
-    let path = static_path_str(&inner.argument()?)?;
+    let path = static_path_str(&inner.argument()?);
     Some((path, apply.argument()?))
+}
+
+/// Whether a binding is a whole catalog root.
+fn is_root_binding(binding: &Binding) -> bool {
+    matches!(binding, Binding::Path(path) if path.len() == 1)
 }
 
 /// The name of a file's top-level plain lambda parameter (`cats: …`), if any.
@@ -2828,6 +2893,26 @@ mod tests {
             &roots(&["catalogs"]),
         );
         assert_eq!(got, set(&["catalogs.myorg.direct-pkg"]));
+    }
+
+    #[test]
+    fn import_directory_target_resolves_default_nix() {
+        let got = refs_at(
+            "test_data/catalog_refs/import-entry-dir.nix",
+            &roots(&["catalogs"]),
+        );
+        assert_eq!(got, set(&["catalogs.myorg.dir-pkg"]));
+    }
+
+    #[test]
+    fn import_dynamic_path_forwarding_root_is_conservative() {
+        // The import target cannot be read, so the forwarded namespace
+        // escapes analysis (a warning points at the dynamic path).
+        let got = refs(
+            "{ catalogs, p }: import p { inherit catalogs; }",
+            &roots(&["catalogs"]),
+        );
+        assert_eq!(got, set(&["catalogs.*"]));
     }
 
     #[test]
