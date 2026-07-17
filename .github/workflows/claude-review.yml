@@ -27,9 +27,13 @@ jobs:
 
       - name: Run Claude Code Review
         id: claude-review
-        uses: anthropics/claude-code-action@bee87b3258c251f9279e5371b0cc3660f37f3f77 # v1
+        uses: anthropics/claude-code-action@12531344451323133b0493233c759991ac61da12 # v1.0.174
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # Temporarily uncomment to verify changes to the workflow before
+          # merging and without tripping `workflow-must-match-default-branch`
+          # validation. Bypasses app-token exchange and posts at GitHub bot.
+          #github_token: ${{ secrets.GITHUB_TOKEN }}
           # Allow PRs opened by Bob (flox-forge-agent) to be reviewed; the
           # action rejects bot actors by default.
           allowed_bots: 'flox-forge-agent'
@@ -37,6 +41,29 @@ jobs:
           additional_permissions: |
             actions: read
           plugin_marketplaces: https://github.com/anthropics/claude-plugins-official.git
-          claude_args: '--dangerously-skip-permissions'
-          plugins: 'code-review@claude-plugins-official'
-          prompt: '/code-review:code-review PR #${{ github.event.pull_request.number }} in ${{ github.repository }}'
+          claude_args: |
+            --model opus
+            --effort xhigh
+            --dangerously-skip-permissions
+            # Trigger MCP installations. No actual effect on permissions since
+            # we're allowing all.
+            --allowedTools "mcp__github_inline_comment__*,mcp__github_comment__*"
+          plugins: 'superpowers@claude-plugins-official'
+          track_progress: true
+          prompt: |
+            Review PR #${{ github.event.pull_request.number }} in ${{ github.repository }}.
+
+            Conduct the review using the superpowers:requesting-code-review skill
+            and its code-reviewer template, reviewing the PR's full diff against
+            its base.
+
+            Fetch whatever git history you need using `gh pr diff`, `gh pr
+            view`, or `git fetch`. The current checkout is shallow.
+
+            Reporting requirements:
+            - Post each issue as an inline comment on the relevant line using
+              the mcp__github_inline_comment__create_inline_comment tool, so
+              findings are threaded and individually addressable.
+            - Finish by writing the review summary into the tracking comment.
+              If there are no issues, say specifically what you reviewed and
+              verified rather than a bare "no issues found".
