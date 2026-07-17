@@ -1789,7 +1789,7 @@ pub(super) async fn ensure_auth(flox: &mut Flox) -> Result<String> {
 /// the user's handle.
 ///
 /// Unlike [`ensure_auth`], an expired Auth0 token is not a hard failure: the
-/// handle is still readable from the token, and [`FloxArgs::resolve_floxhub_token`]
+/// handle is still readable from the token, and [`FloxArgs::resolve_auth_context`]
 /// has already warned about the expiry, so activation proceeds with the handle
 /// rather than blocking. FloxHub still validates the token on the actual
 /// request. Missing credentials (not logged in / no Kerberos ticket) fall back

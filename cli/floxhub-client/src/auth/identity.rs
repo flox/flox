@@ -49,13 +49,14 @@ pub enum IdentityError {
 }
 
 /// Process-wide cache of identities resolved for opaque tokens, keyed by
-/// token secret. A token's identity never changes, so each token resolves at
-/// most once per process; the outcome — success or failure — is cached.
-static RESOLVED_IDENTITIES: LazyLock<Mutex<HashMap<String, Result<UserIdentity, IdentityError>>>> =
+/// token secret. A token's identity never changes, so a successful
+/// resolution is cached for the process. Failures are not cached — a later
+/// call retries.
+static RESOLVED_IDENTITIES: LazyLock<Mutex<HashMap<String, UserIdentity>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
-/// Read the cached identity for `secret`, if resolution has completed.
-pub(crate) fn cached_identity(secret: &str) -> Option<Result<UserIdentity, IdentityError>> {
+/// Read the cached identity for `secret`, if resolution has succeeded.
+pub(crate) fn cached_identity(secret: &str) -> Option<UserIdentity> {
     RESOLVED_IDENTITIES
         .lock()
         .expect("identity cache is never poisoned")
@@ -64,17 +65,24 @@ pub(crate) fn cached_identity(secret: &str) -> Option<Result<UserIdentity, Ident
 }
 
 /// Return the cached identity for `secret`, running `resolve` to fill the
-/// cache if this is the first resolution in the process.
+/// cache when it has not been resolved yet. A failed resolution is returned
+/// but not cached.
+///
+/// The lock is not held while resolving — the request can take seconds and
+/// must not block concurrent readers of the cache.
 pub(crate) fn resolve_and_cache(
     secret: &str,
     resolve: impl FnOnce(&str) -> Result<UserIdentity, IdentityError>,
 ) -> Result<UserIdentity, IdentityError> {
+    if let Some(identity) = cached_identity(secret) {
+        return Ok(identity);
+    }
+    let identity = resolve(secret)?;
     RESOLVED_IDENTITIES
         .lock()
         .expect("identity cache is never poisoned")
-        .entry(secret.to_string())
-        .or_insert_with(|| resolve(secret))
-        .clone()
+        .insert(secret.to_string(), identity.clone());
+    Ok(identity)
 }
 
 /// Test fixtures for identity resolution.
@@ -117,27 +125,38 @@ mod tests {
 
         assert_eq!(calls.load(Ordering::SeqCst), 1);
         assert_eq!(
-            cached_identity("flox_pat_success-cache-test")
-                .unwrap()
-                .unwrap(),
+            cached_identity("flox_pat_success-cache-test").unwrap(),
             test_identity("testuser")
         );
     }
 
     #[test]
-    fn identity_resolution_failure_is_final_for_the_process() {
+    fn identity_resolution_failures_are_retried() {
         let calls = AtomicUsize::new(0);
-        let resolve = |_: &str| {
+
+        resolve_and_cache("flox_pat_retry-test", |_: &str| {
             calls.fetch_add(1, Ordering::SeqCst);
             Err(IdentityError::Other("server unreachable".to_string()))
-        };
+        })
+        .expect_err("an unreachable server should fail resolution");
+        assert_eq!(
+            cached_identity("flox_pat_retry-test"),
+            None,
+            "a failure is not cached"
+        );
 
-        resolve_and_cache("flox_pat_failure-cache-test", resolve)
-            .expect_err("an unreachable server should fail resolution");
-        resolve_and_cache("flox_pat_failure-cache-test", resolve)
-            .expect_err("the outcome is cached; the failure persists");
+        // The next call retries — and its success is cached.
+        resolve_and_cache("flox_pat_retry-test", |_: &str| {
+            calls.fetch_add(1, Ordering::SeqCst);
+            Ok(test_identity("testuser"))
+        })
+        .unwrap();
+        resolve_and_cache("flox_pat_retry-test", |_: &str| {
+            calls.fetch_add(1, Ordering::SeqCst);
+            Ok(test_identity("testuser"))
+        })
+        .unwrap();
 
-        // The resolution function ran exactly once; the failure is cached.
-        assert_eq!(calls.load(Ordering::SeqCst), 1);
+        assert_eq!(calls.load(Ordering::SeqCst), 2);
     }
 }

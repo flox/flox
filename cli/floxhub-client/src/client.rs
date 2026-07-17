@@ -781,8 +781,9 @@ where
 
 impl FloxhubClient {
     /// Resolve the identity behind a personal access token from
-    /// `GET /api/v1/accounts/me`, blocking the calling thread. The outcome —
-    /// success or failure — is cached on the token once per process.
+    /// `GET /api/v1/accounts/me`, blocking the calling thread. A successful
+    /// resolution is cached for the process; failures are returned but not
+    /// cached, so a later call retries.
     ///
     /// This is the only auth operation that needs a client; every other
     /// credential kind derives its identity locally. Callers holding a

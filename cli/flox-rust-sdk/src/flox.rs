@@ -99,9 +99,9 @@ impl Flox {
 
     /// The identity behind the current credential — the one uniform way to
     /// answer "who is authenticated": JWT claims for Auth0, `GET
-    /// /api/v1/accounts/me` for a personal access token (blocking on first
-    /// use, cached on the token for the process), and the principal for
-    /// Kerberos.
+    /// /api/v1/accounts/me` for a personal access token (blocking; a
+    /// successful resolution is cached for the process), and the principal
+    /// for Kerberos.
     ///
     /// Expiry is reported *in* the identity ([`UserIdentity::is_expired`]) —
     /// what expiry means is the caller's decision. `None` means there is no

@@ -7,7 +7,7 @@ use chrono::offset::Utc;
 use chrono::{DateTime, Duration};
 use flox_config::{Config, FLOX_CONFIG_FILE, TokenStorageMode};
 use flox_rust_sdk::flox::{FLOX_VERSION, Flox, FloxhubToken};
-use floxhub_client::{AuthContext, AuthnMode};
+use floxhub_client::{AuthContext, AuthnMode, UNKNOWN_HANDLE};
 use indoc::formatdoc;
 use oauth2::basic::{
     BasicClient,
@@ -576,9 +576,14 @@ pub fn login_with_token_file(
     let _ = flox.set_auth_context(auth_context.clone());
 
     // Validates locally for a JWT; via /me for a personal access token
-    // (blocking), where a 401 covers expired and revoked tokens alike. An
-    // unreachable /me degrades to the UNKNOWN handle instead of failing.
+    // (blocking), where a 401 covers expired and revoked tokens alike.
+    // Elsewhere an unresolvable identity degrades to the UNKNOWN handle, but
+    // login exists to verify-and-store the credential — an unverifiable
+    // token is a failure here, not a success.
     let handle = match flox.get_identity() {
+        Some(identity) if identity.handle == UNKNOWN_HANDLE => {
+            bail!("Could not reach FloxHub to verify the token.\nTry again.");
+        },
         Some(identity) if !identity.is_expired() => identity.handle,
         // An expired identity, or no identity at all — which here can only
         // mean the server rejected the token, since the context was just
@@ -714,6 +719,29 @@ mod tests {
         let config_contents = fs::read_to_string(flox.config_dir.join(FLOX_CONFIG_FILE)).unwrap();
         assert_eq!(config_contents, "floxhub_token = \"flox_pat_secret\"\n");
         assert!(matches!(&flox.auth_context, AuthContext::Pat(_)));
+    }
+
+    #[test]
+    fn login_with_token_file_rejects_unverifiable_pat() {
+        let server = MockServer::start();
+        server.mock(|when, then| {
+            when.method(httpmock::Method::GET)
+                .path("/api/v1/accounts/me");
+            then.status(500);
+        });
+
+        let (mut flox, _temp_dir) = flox_instance();
+        override_client(&mut flox, &server);
+        let token_file = flox.temp_dir.join("token");
+        fs::write(&token_file, "flox_pat_unverifiable").unwrap();
+
+        let err = login_with_token_file(&mut flox, &token_file).unwrap_err();
+
+        assert_eq!(
+            err.to_string(),
+            "Could not reach FloxHub to verify the token.\nTry again."
+        );
+        assert!(!flox.config_dir.join(FLOX_CONFIG_FILE).exists());
     }
 
     #[test]

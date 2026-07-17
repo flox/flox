@@ -6,10 +6,9 @@
 //! configured [`AuthnMode`] and the stored token via
 //! [`AuthContext::from_mode`].
 //!
-//! This module carries no transport: identity resolution for opaque tokens
-//! is passed as an argument at the point of use
-//! ([`AuthContext::authenticated_handle`]), with the production `/me`
-//! resolution supplied by `FloxhubClient::authenticated_handle`.
+//! This module carries no transport: the identity behind an opaque token is
+//! resolved at the point of use through `FloxhubClient::resolve_identity`
+//! and surfaced uniformly via `Flox::get_identity`.
 //!
 //! One file per type:
 //! - [`auth_context`]: [`AuthContext`] and its failure types

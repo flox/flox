@@ -34,9 +34,7 @@ impl PersonalAccessToken {
     /// Reads the process-wide cache — never blocks, never touches the
     /// network.
     pub fn handle(&self) -> Option<String> {
-        identity::cached_identity(&self.token)?
-            .ok()
-            .map(|identity| identity.handle)
+        identity::cached_identity(&self.token).map(|identity| identity.handle)
     }
 }
 
