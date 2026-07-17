@@ -1103,7 +1103,7 @@ pub(crate) fn sanitize_lockfile_json(json_text: &str) -> Result<Option<String>> 
     let mut value: serde_json::Value = serde_json::from_str(json_text)
         .context("failed to parse lockfile for builder sanitization")?;
     let mut changed = false;
-    let mut strip = |options: Option<&mut serde_json::Value>| {
+    let strip = |options: Option<&mut serde_json::Value>| {
         let Some(options) = options.and_then(|v| v.as_object_mut()) else {
             return false;
         };
