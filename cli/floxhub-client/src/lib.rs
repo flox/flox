@@ -24,6 +24,7 @@
 //!     mock_mode: FloxhubMockMode::None,
 //!     auth_context: AuthContext::from_mode(&Default::default(), floxhub_token),
 //!     user_agent: Some("flox-cli/1.0".to_string()),
+//!     stability: FloxhubClientConfig::stability_from_env(),
 //! };
 //!
 //! let client = FloxhubClient::new(config)?;

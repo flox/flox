@@ -585,6 +585,10 @@ pub mod test_helpers {
             mock_mode: FloxhubMockMode::Replay(path.as_ref().to_path_buf()),
             auth_context: AuthContext::from_mode(&AuthnMode::Auth0, None),
             user_agent: None,
+            // Replay-only helper: never read `_FLOX_RESOLVE_STABILITY` here.
+            // Existing cassettes were recorded without a stability key, so
+            // setting it during replay would break every match today.
+            stability: None,
         };
         FloxhubClient::new(catalog_config).expect("failed to create catalog client")
     }
@@ -676,6 +680,11 @@ pub mod test_helpers {
             mock_mode: mock_mode.clone(),
             auth_context: AuthContext::from_mode(&AuthnMode::Auth0, auth.token().cloned()),
             user_agent: None,
+            // Read once here, symmetric with `init_floxhub_client`: whatever
+            // `_FLOX_RESOLVE_STABILITY` is set to at test-process start
+            // affects both the record and replay client built by this
+            // function identically.
+            stability: FloxhubClientConfig::stability_from_env(),
         };
         let mut client =
             FloxhubClient::new(catalog_config).expect("failed to create catalog client");

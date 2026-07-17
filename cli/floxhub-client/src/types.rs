@@ -71,13 +71,13 @@ impl TryFrom<PackageGroup> for api_types::PackageGroup {
     type Error = FloxhubClientError;
 
     fn try_from(package_group: PackageGroup) -> Result<Self, FloxhubClientError> {
-        let stability = std::env::var(crate::FLOX_RESOLVE_STABILITY_VAR)
-            .ok()
-            .filter(|s| !s.is_empty());
+        // `stability` defaults to `None` here; the client-level pin lives on
+        // `FloxhubClientConfig` and is applied by `resolve()`, which also
+        // leaves room for a future per-group value to override it.
         Ok(Self {
             descriptors: package_group.descriptors,
             name: package_group.name,
-            stability,
+            stability: None,
         })
     }
 }
@@ -694,25 +694,21 @@ mod tests {
         }
     }
 
+    /// `TryFrom` always defaults `stability` to `None` — the client-level pin
+    /// is applied later by `resolve()` from `FloxhubClientConfig::stability`,
+    /// not read here. Direct construction, no env involved.
     #[test]
-    fn package_group_convert_stability_unset_gives_none() {
-        temp_env::with_var(crate::FLOX_RESOLVE_STABILITY_VAR, None::<&str>, || {
-            let api_group: api_types::PackageGroup = make_package_group().try_into().unwrap();
-            assert_eq!(api_group.stability, None);
-        });
+    fn package_group_convert_defaults_stability_to_none() {
+        let api_group: api_types::PackageGroup = make_package_group().try_into().unwrap();
+        assert_eq!(api_group.stability, None);
     }
 
+    /// Regression guard: `TryFrom` must not read
+    /// `_FLOX_RESOLVE_STABILITY` even when it is set, now that the read
+    /// site lives on `FloxhubClientConfig`.
     #[test]
-    fn package_group_convert_stability_set_gives_some() {
+    fn package_group_convert_ignores_stability_env_var() {
         temp_env::with_var(crate::FLOX_RESOLVE_STABILITY_VAR, Some("lts"), || {
-            let api_group: api_types::PackageGroup = make_package_group().try_into().unwrap();
-            assert_eq!(api_group.stability, Some("lts".to_string()));
-        });
-    }
-
-    #[test]
-    fn package_group_convert_stability_empty_gives_none() {
-        temp_env::with_var(crate::FLOX_RESOLVE_STABILITY_VAR, Some(""), || {
             let api_group: api_types::PackageGroup = make_package_group().try_into().unwrap();
             assert_eq!(api_group.stability, None);
         });

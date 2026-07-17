@@ -207,6 +207,10 @@ fn build_client(config: &Config, floxhub_token: Option<String>) -> Result<Floxhu
         mock_mode,
         auth_context,
         user_agent: None,
+        // This binary uses `build_inputs_lookup`, not `resolve()`; its own
+        // `--stability` flag targets a different endpoint entirely, so it
+        // does not participate in the `_FLOX_RESOLVE_STABILITY` mechanism.
+        stability: None,
     };
 
     Ok(FloxhubClient::new(config)?)

@@ -158,9 +158,19 @@ gen-unit-data-no-publish force="":
 
     set -euo pipefail
 
-    # Pin resolve requests to the LTS stability channel so recordings are not
-    # subject to version drift across nixpkgs revisions. Only active during
-    # record runs; existing cassettes and replay matching are unaffected.
+    # Pin resolve requests to the LTS stability channel so future force-regens
+    # are not subject to version drift across nixpkgs revisions.
+    # `FloxhubClientConfig::stability` (applied in resolve()) reads this var
+    # once at client construction and is symmetric between record and
+    # replay by construction, so it is NOT safe to add this export to any
+    # test-running recipe/CI path (unit-tests, ut, impure-tests) yet:
+    # every cassette committed today was recorded without a stability key,
+    # and replaying against them with this var set would break request
+    # matching (httpmock's playback matcher matches on the recorded `when`
+    # body — the same trap this var would hit in reverse). The flip to also
+    # set this var for test-running contexts happens atomically in the same
+    # future commit as the first LTS force-regen, gated on HUB-119
+    # (flox/floxhub#1908) reaching production.
     export _FLOX_RESOLVE_STABILITY="lts"
 
     if [ "{{ force }}" = "true" ]; then

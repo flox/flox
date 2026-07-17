@@ -20,6 +20,25 @@ pub struct FloxhubClientConfig {
     pub mock_mode: FloxhubMockMode,
     pub auth_context: AuthContext,
     pub user_agent: Option<String>,
+    /// Stability pin applied to every outgoing `PackageGroup` in
+    /// `resolve()`. Test/regen-only — not a user-facing interface. See
+    /// [`crate::FLOX_RESOLVE_STABILITY_VAR`] and [`Self::stability_from_env`].
+    pub stability: Option<String>,
+}
+
+impl FloxhubClientConfig {
+    /// Read the test/regen-only stability pin from
+    /// [`crate::FLOX_RESOLVE_STABILITY_VAR`]. Empty string is treated as
+    /// unset, matching [`FloxhubMockMode::default_from_env`].
+    ///
+    /// Call this once at client construction time and store the result on
+    /// the config's `stability` field; `resolve()` applies it to every
+    /// outgoing package group.
+    pub fn stability_from_env() -> Option<String> {
+        std::env::var(crate::FLOX_RESOLVE_STABILITY_VAR)
+            .ok()
+            .filter(|s| !s.is_empty())
+    }
 }
 
 /// Mock recording/replay mode for integration testing.
@@ -45,5 +64,34 @@ impl FloxhubMockMode {
         } else {
             FloxhubMockMode::None
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn stability_from_env_unset_gives_none() {
+        temp_env::with_var(crate::FLOX_RESOLVE_STABILITY_VAR, None::<&str>, || {
+            assert_eq!(FloxhubClientConfig::stability_from_env(), None);
+        });
+    }
+
+    #[test]
+    fn stability_from_env_empty_gives_none() {
+        temp_env::with_var(crate::FLOX_RESOLVE_STABILITY_VAR, Some(""), || {
+            assert_eq!(FloxhubClientConfig::stability_from_env(), None);
+        });
+    }
+
+    #[test]
+    fn stability_from_env_set_gives_some() {
+        temp_env::with_var(crate::FLOX_RESOLVE_STABILITY_VAR, Some("lts"), || {
+            assert_eq!(
+                FloxhubClientConfig::stability_from_env(),
+                Some("lts".to_string())
+            );
+        });
     }
 }
