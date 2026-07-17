@@ -91,15 +91,13 @@ The `build.<package>.version` field can be specified in one of the following way
 ### Catalog imports for Nix expression builds
 
 Nix expression builds (packages defined as `.nix` files under `.flox/pkgs/`)
-can depend on packages from external catalogs.
-Declare catalog sources in
-[`nix-builds.toml(5)`](./nix-builds.toml.md),
-then run `flox build update-catalogs` to resolve and lock them.
-The resulting lockfile pins every catalog to a specific revision,
-ensuring reproducible builds.
-
-See [`flox-build-update-catalogs(1)`](./flox-build-update-catalogs.md)
-and [`nix-builds.toml(5)`](./nix-builds.toml.md) for details.
+can depend on packages from FloxHub catalogs.
+An expression references a catalog package as `catalogs.<catalog>.<package>`,
+where the package receives a `catalogs` argument.
+The referenced packages are the ones published to a FloxHub catalog with
+`flox publish`.
+These references are resolved and locked automatically during `flox build`.
+There is no separate declaration file and no separate lock step.
 
 # OPTIONS
 
@@ -214,7 +212,5 @@ npx serve result-app
 
 [`flox-build-clean(1)`](./flox-build-clean.md)
 [`flox-build-import-nixpkgs(1)`](./flox-build-import-nixpkgs.md)
-[`flox-build-update-catalogs(1)`](./flox-build-update-catalogs.md)
 [`flox-activate(1)`](./flox-activate.md)
 [`manifest.toml(5)`](./manifest.toml.md)
-[`nix-builds.toml(5)`](./nix-builds.toml.md)

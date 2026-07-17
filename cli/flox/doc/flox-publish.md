@@ -85,9 +85,10 @@ that it was published to.
 
 Published packages on FloxHub are also available as catalog imports for
 Nix expression builds.
-Other environments can declare a FloxHub catalog in
-[`nix-builds.toml(5)`](./nix-builds.toml.md) and reference the published
-packages directly from `.nix` expressions under `.flox/pkgs/`.
+Other environments reference the published packages as
+`catalogs.<catalog>.<package>` in `.nix` expressions under `.flox/pkgs/`.
+These references are resolved and locked automatically during
+`flox build` and `flox publish`.
 
 ## Sharing published packages
 
@@ -135,7 +136,5 @@ Note that this is a paid feature available with Flox for Teams.
 # SEE ALSO
 
 [`flox-build(1)`](./flox-build.md)
-[`flox-build-update-catalogs(1)`](./flox-build-update-catalogs.md)
 [`flox-activate(1)`](./flox-activate.md)
 [`manifest.toml(5)`](./manifest.toml.md)
-[`nix-builds.toml(5)`](./nix-builds.toml.md)
