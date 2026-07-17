@@ -5493,6 +5493,32 @@ success"
   assert_output --partial "activated"
 }
 
+# bats test_tags=activate,activate:default-flag
+@test "activate -D warns but does not block with an expired token" {
+  project_setup
+  floxhub_setup "test"
+
+  # Create a directory for the default environment
+  DEFAULT_ENV_DIR="$PROJECT_DIR/default-env"
+  mkdir "$DEFAULT_ENV_DIR"
+
+  # Create and push test/default environment while the token is still valid
+  run "$FLOX_BIN" init -d "$DEFAULT_ENV_DIR" --name default
+  assert_success
+  run "$FLOX_BIN" push -d "$DEFAULT_ENV_DIR" --owner test
+  assert_success
+
+  # Swap in an expired token (exp: 2024-01-01T00:00:00+00:00, handle: "test").
+  # The handle is still readable from the expired token, so activation should
+  # proceed with a warning rather than blocking on the auth check.
+  export FLOX_FLOXHUB_TOKEN="eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3guZGV2L2hhbmRsZSI6InRlc3QiLCJleHAiOjE3MDQwNjM2MDB9.-5VCofPtmYQuvh21EV1nEJhTFV_URkRP0WFu4QDPFxY"
+
+  run "$FLOX_BIN" activate -D -- echo "activated"
+  assert_success
+  assert_output --partial "activated"
+  assert_output --partial "Your FloxHub token has expired."
+}
+
 # bats test_tags=activate,activate:idempotent
 @test "activate is idempotent for an already-locked already-built environment" {
   # Ensure flox activate does not re-lock or re-build when the lockfile is

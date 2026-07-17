@@ -1269,7 +1269,7 @@ impl EnvironmentSelect {
                 ConcreteEnvironment::Remote(env)
             },
             EnvironmentSelect::Default => {
-                let user_handle = ensure_auth(flox).await?;
+                let user_handle = ensure_auth_allowing_expired(flox).await?;
 
                 debug!(
                     user = %user_handle,
@@ -1671,6 +1671,22 @@ pub(super) async fn ensure_auth(flox: &mut Flox) -> Result<String> {
             };
             bail!("{message}");
         },
+    }
+}
+
+/// Validate authentication for the default-environment activate path and return
+/// the user's handle.
+///
+/// Unlike [`ensure_auth`], an expired Auth0 token is not a hard failure: the
+/// handle is still readable from the token, and [`FloxArgs::resolve_floxhub_token`]
+/// has already warned about the expiry, so activation proceeds with the handle
+/// rather than blocking. FloxHub still validates the token on the actual
+/// request. Missing credentials (not logged in / no Kerberos ticket) fall back
+/// to [`ensure_auth`] and its recovery flow.
+async fn ensure_auth_allowing_expired(flox: &mut Flox) -> Result<String> {
+    match flox.auth_context.authenticated_handle_allowing_expired() {
+        Ok(handle) => Ok(handle.to_string()),
+        Err(_) => ensure_auth(flox).await,
     }
 }
 
