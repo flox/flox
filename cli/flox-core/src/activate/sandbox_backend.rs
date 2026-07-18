@@ -215,6 +215,27 @@ pub enum SandboxBackend {
     /// up the compiled policy. Reachable on macOS and Linux (Cursor's local
     /// sandbox runs on both).
     Cursor,
+    /// Vercel Sandbox: a cloud-API code-execution provider backed by Firecracker
+    /// microVMs. Unlike the OCI-ingesting cloud backends, Vercel Sandbox does not
+    /// consume an arbitrary image — `Sandbox.create` boots one of a FIXED set of
+    /// base runtimes (`node22`, `node24`, `python3.13`; Amazon Linux 2023) and
+    /// seeds it from a git source. This is the first BOOTSTRAP-shaped backend: the
+    /// baked OCI closure is not ingestible, so flox instead generates (a) a
+    /// self-contained flox bootstrap script that installs Flox inside the running
+    /// sandbox and activates the environment from FloxHub, and (b) a Node/ESM
+    /// launcher using the `@vercel/sandbox` SDK that creates the sandbox, uploads
+    /// the bootstrap, and runs it. Cloud-remote: nothing runs on the host, so host
+    /// assertions are preflight-only and the threat model inverts (host fs
+    /// unreachable, code and secrets leave the laptop). Network: the SDK exposes NO
+    /// per-sandbox egress allowlist / firewall vocabulary — `ports` governs
+    /// INBOUND exposure only — so `domain_egress` is false and a manifest egress
+    /// grant is DECLINED with a clear message rather than silently widened; that
+    /// inexpressible-egress axis is the declared lossiness. Auth is a Vercel OIDC
+    /// token (`vercel env pull`) or an access token (`VERCEL_TOKEN` +
+    /// `VERCEL_TEAM_ID` + `VERCEL_PROJECT_ID`), the launch wall. Reached over the
+    /// API identically from macOS and Linux, so `Native` means "the host can drive
+    /// it", not "the workload runs on this OS".
+    VercelSandbox,
     /// Embeddable micro-VM (libkrun): hypervisor isolation with a guest kernel
     /// via libkrunfw (Hypervisor.framework on macOS, KVM on Linux).
     Libkrun,
@@ -295,7 +316,7 @@ pub struct BackendCapabilities {
 
 impl SandboxBackend {
     /// Every backend on the roster, in spectrum order (weakest boundary first).
-    pub const ALL: [SandboxBackend; 15] = [
+    pub const ALL: [SandboxBackend; 16] = [
         SandboxBackend::Libsandbox,
         SandboxBackend::Nix,
         SandboxBackend::HostNative,
@@ -309,6 +330,7 @@ impl SandboxBackend {
         SandboxBackend::E2b,
         SandboxBackend::Daytona,
         SandboxBackend::CognitionDevin,
+        SandboxBackend::VercelSandbox,
         SandboxBackend::Anjuna,
         SandboxBackend::Libkrun,
     ];
@@ -765,6 +787,50 @@ impl SandboxBackend {
                 // Scaffolded, not Implemented.
                 status: Scaffolded,
             },
+            SandboxBackend::VercelSandbox => BackendCapabilities {
+                backend: self,
+                // Vercel Sandbox runs the workload in a cloud Firecracker microVM;
+                // the boundary is Vercel's, and the policy surface (a fixed base
+                // runtime seeded by a bootstrap script) clusters with the other
+                // container-class cloud backends.
+                enforcement: Container,
+                enforces: true,
+                // The sandbox is created with a fixed runtime and timeout; there
+                // is no live per-request adjudication of an out-of-policy access.
+                // Redemption is recreating the sandbox.
+                live_ask: false,
+                // The `@vercel/sandbox` SDK exposes NO per-sandbox egress
+                // allowlist or firewall vocabulary: `ports` governs INBOUND
+                // exposure only (`sandbox.domain(port)`), not outbound filtering.
+                // flox cannot compile a domain-egress policy onto this provider,
+                // so an egress grant is DECLINED rather than silently widened.
+                // This inexpressible-egress axis is the declared lossiness — and
+                // the reason `domain_egress` is honestly false here (unlike the
+                // other cloud backends, which each have a native domain allowlist).
+                domain_egress: false,
+                // No network allowlist and no per-path r/w/x grants: the sandbox
+                // filesystem is the fixed base runtime plus the bootstrap-installed
+                // closure. Op-blind by the contract's meaning.
+                per_op: false,
+                // The workload runs in a remote Firecracker microVM, so it pays
+                // the virtualized-filesystem cost class rather than native host I/O.
+                fs_virtualized: true,
+                // Cloud-remote: the sandbox is reached over the Vercel API, so the
+                // launch path is identical from macOS and Linux — nothing runs on
+                // the host. `Native` here means "the host can drive it", not "the
+                // workload runs on this OS".
+                macos: Native,
+                linux: Native,
+                // The launch boundary needs a Vercel account and an OIDC/access
+                // token (the SDK authenticates every `Sandbox.create` call).
+                // Because the base runtime is fixed (no image ingestion), flox also
+                // requires the environment to be reachable from FloxHub so the
+                // bootstrap can install and activate it inside the sandbox.
+                // Preflight, the flox bootstrap script, network-decline, and the
+                // `@vercel/sandbox` launcher artifact are wired; the final remote
+                // launch is not, so this is honestly Scaffolded, not Implemented.
+                status: Scaffolded,
+            },
             SandboxBackend::Libkrun => BackendCapabilities {
                 backend: self,
                 enforcement: Hypervisor,
@@ -798,6 +864,7 @@ impl Display for SandboxBackend {
             SandboxBackend::CognitionDevin => "cognition-devin",
             SandboxBackend::Anjuna => "anjuna",
             SandboxBackend::Cursor => "cursor",
+            SandboxBackend::VercelSandbox => "vercel-sandbox",
             SandboxBackend::Libkrun => "libkrun",
         };
         write!(f, "{name}")
@@ -806,7 +873,7 @@ impl Display for SandboxBackend {
 
 #[derive(Debug, thiserror::Error)]
 #[error(
-    "'{0}' is not a valid sandbox backend. Expected one of: libsandbox, nix, host-native, srt, oci, openshell, modal, docker-sbx, ona, e2b, daytona, cognition-devin, anjuna, cursor, libkrun."
+    "'{0}' is not a valid sandbox backend. Expected one of: libsandbox, nix, host-native, srt, oci, openshell, modal, docker-sbx, ona, e2b, daytona, cognition-devin, vercel-sandbox, anjuna, cursor, libkrun."
 )]
 pub struct SandboxBackendParseError(String);
 
@@ -829,6 +896,7 @@ impl FromStr for SandboxBackend {
             "cognition-devin" => Ok(SandboxBackend::CognitionDevin),
             "anjuna" => Ok(SandboxBackend::Anjuna),
             "cursor" => Ok(SandboxBackend::Cursor),
+            "vercel-sandbox" => Ok(SandboxBackend::VercelSandbox),
             "libkrun" => Ok(SandboxBackend::Libkrun),
             other => Err(SandboxBackendParseError(other.to_string())),
         }
@@ -859,7 +927,7 @@ mod tests {
         let err = "bogus".parse::<SandboxBackend>().unwrap_err();
         assert_eq!(
             err.to_string(),
-            "'bogus' is not a valid sandbox backend. Expected one of: libsandbox, nix, host-native, srt, oci, openshell, modal, docker-sbx, ona, e2b, daytona, cognition-devin, anjuna, cursor, libkrun.",
+            "'bogus' is not a valid sandbox backend. Expected one of: libsandbox, nix, host-native, srt, oci, openshell, modal, docker-sbx, ona, e2b, daytona, cognition-devin, vercel-sandbox, anjuna, cursor, libkrun.",
         );
     }
 
@@ -1192,6 +1260,41 @@ mod tests {
         assert_eq!(json, "\"cursor\"");
         let parsed: SandboxBackend = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed, SandboxBackend::Cursor);
+    }
+
+    #[test]
+    fn vercel_sandbox_capabilities_row() {
+        let caps = SandboxBackend::VercelSandbox.capabilities();
+        assert_eq!(caps, BackendCapabilities {
+            backend: SandboxBackend::VercelSandbox,
+            enforcement: Enforcement::Container,
+            enforces: true,
+            live_ask: false,
+            // The one cloud backend here with no expressible egress vocabulary:
+            // the `@vercel/sandbox` SDK has no per-sandbox allowlist / firewall.
+            domain_egress: false,
+            per_op: false,
+            fs_virtualized: true,
+            macos: PlatformSupport::Native,
+            linux: PlatformSupport::Native,
+            status: IntegrationStatus::Scaffolded,
+        });
+    }
+
+    #[test]
+    fn vercel_sandbox_display_and_parse_round_trip() {
+        let backend = SandboxBackend::VercelSandbox;
+        let s = backend.to_string();
+        assert_eq!(s, "vercel-sandbox");
+        assert_eq!(s.parse::<SandboxBackend>().unwrap(), backend);
+    }
+
+    #[test]
+    fn vercel_sandbox_serde_round_trip() {
+        let json = serde_json::to_string(&SandboxBackend::VercelSandbox).unwrap();
+        assert_eq!(json, "\"vercel-sandbox\"");
+        let parsed: SandboxBackend = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed, SandboxBackend::VercelSandbox);
     }
 
     #[test]

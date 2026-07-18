@@ -1451,6 +1451,11 @@
           "type": "string"
         },
         {
+          "const": "vercel-sandbox",
+          "description": "Vercel Sandbox: a cloud-API code-execution provider backed by Firecracker\nmicroVMs. Unlike the OCI-ingesting cloud backends, Vercel Sandbox does not\nconsume an arbitrary image — `Sandbox.create` boots one of a FIXED set of\nbase runtimes (`node22`, `node24`, `python3.13`; Amazon Linux 2023) and\nseeds it from a git source. This is the first BOOTSTRAP-shaped backend: the\nbaked OCI closure is not ingestible, so flox instead generates (a) a\nself-contained flox bootstrap script that installs Flox inside the running\nsandbox and activates the environment from FloxHub, and (b) a Node/ESM\nlauncher using the `@vercel/sandbox` SDK that creates the sandbox, uploads\nthe bootstrap, and runs it. Cloud-remote: nothing runs on the host, so host\nassertions are preflight-only and the threat model inverts (host fs\nunreachable, code and secrets leave the laptop). Network: the SDK exposes NO\nper-sandbox egress allowlist / firewall vocabulary — `ports` governs\nINBOUND exposure only — so `domain_egress` is false and a manifest egress\ngrant is DECLINED with a clear message rather than silently widened; that\ninexpressible-egress axis is the declared lossiness. Auth is a Vercel OIDC\ntoken (`vercel env pull`) or an access token (`VERCEL_TOKEN` +\n`VERCEL_TEAM_ID` + `VERCEL_PROJECT_ID`), the launch wall. Reached over the\nAPI identically from macOS and Linux, so `Native` means \"the host can drive\nit\", not \"the workload runs on this OS\".",
+          "type": "string"
+        },
+        {
           "const": "libkrun",
           "description": "Embeddable micro-VM (libkrun): hypervisor isolation with a guest kernel\nvia libkrunfw (Hypervisor.framework on macOS, KVM on Linux).",
           "type": "string"

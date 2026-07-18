@@ -1574,6 +1574,7 @@ mod tests {
             SandboxBackend::E2b,
             SandboxBackend::Daytona,
             SandboxBackend::CognitionDevin,
+            SandboxBackend::VercelSandbox,
             SandboxBackend::Libkrun,
         ];
         for backend in enforcing {

@@ -119,6 +119,20 @@ if [ -f "$DEMO_DIR/.cursor/cli.json" ]; then
   echo "Removed cursor permission config under $DEMO_DIR/.cursor."
 fi
 
+# The vercel-sandbox backend is bootstrap-shaped: nothing is baked, so there is
+# no image to prune. It writes its two hand-off artifacts under .flox/cache
+# (vercel-sandbox-bootstrap.sh + vercel-sandbox-launch.mjs), removed with
+# $DEMO_DIR above, but a demo run may have left copies if $DEMO_DIR was
+# overridden — surface them rather than silently orphaning them. Any sandboxes
+# launched on Vercel are ephemeral and stop on exit.
+for f in "$DEMO_DIR/.flox/cache/vercel-sandbox-bootstrap.sh" \
+         "$DEMO_DIR/.flox/cache/vercel-sandbox-launch.mjs"; do
+  if [ -f "$f" ]; then
+    rm -f "$f"
+    echo "Removed vercel-sandbox artifact: $f"
+  fi
+done
+
 # demo/host-env leftovers: the gateway-register service writes persistent
 # CLI state under ~/.config/openshell (and may have switched the active
 # gateway selection). The gateway's own TLS/config live in the env cache

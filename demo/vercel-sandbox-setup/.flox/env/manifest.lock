@@ -1,0 +1,96 @@
+{
+  "lockfile-version": 1,
+  "manifest": {
+    "schema-version": "1.13.0",
+    "install": {
+      "nodejs": {
+        "pkg-path": "nodejs"
+      }
+    },
+    "vars": {
+      "FLOX_FEATURES_AUTO_ACTIVATE": "true",
+      "FLOX_FEATURES_SANDBOX_ACTIVATE": "true",
+      "GITHUB_TOKEN": "ghp-demo-FAKE"
+    },
+    "hook": {
+      "on-activate": "  # Vercel Sandbox is cloud-remote — there is no local gateway to run as a\n  # service. The setup concern is the launch prerequisites, surfaced here so the\n  # operator learns of them before the first 'cd', not mid-demo.\n\n  # 1. CLI: the vercel CLI authenticates the @vercel/sandbox SDK (it downloads\n  #    the OIDC token with `vercel env pull`). It is a Node package (`vercel`),\n  #    not in the catalog, so install it via npm (nodejs is installed by this\n  #    env). Presence-detect and guide.\n  if ! command -v vercel >/dev/null 2>&1; then\n    echo \"note: 'vercel' CLI not found on PATH. Install it with:\" >&2\n    echo \"        npm install -g vercel\" >&2\n    echo \"      (nodejs/npm are provided by this env; see demo/VERCEL-SANDBOX.md beat 0).\" >&2\n  elif ! vercel whoami >/dev/null 2>&1 && [ -z \"${VERCEL_OIDC_TOKEN:-}\" ] \\\n       && [ -z \"${VERCEL_TOKEN:-}\" ]; then\n    # Non-interactive auth probe: never open a browser. `vercel whoami` reports\n    # the signed-in scope; env-token presence is the SDK fallback signal.\n    echo \"note: the Vercel CLI is present but not authenticated.\" >&2\n    echo \"      Run 'vercel login' then 'vercel link' + 'vercel env pull' before\" >&2\n    echo \"      the launch beats (see demo/VERCEL-SANDBOX.md beat 0), or export\" >&2\n    echo \"      VERCEL_TOKEN with VERCEL_TEAM_ID/VERCEL_PROJECT_ID.\" >&2\n  fi\n\n  # 2. FloxHub push: the runtime is fixed and no image is pushed, so the\n  #    generated bootstrap activates `flox activate -r <owner>/<env>`. The\n  #    environment must be on FloxHub. flox reads FLOX_SANDBOX_VERCEL_FLOXHUB_REF\n  #    when it renders the bootstrap; without it a <owner>/<env> placeholder is\n  #    used and the launch-boundary message calls it out.\n  if [ -z \"${FLOX_SANDBOX_VERCEL_FLOXHUB_REF:-}\" ]; then\n    echo \"note: FLOX_SANDBOX_VERCEL_FLOXHUB_REF is unset; the generated bootstrap\" >&2\n    echo \"      will use a <owner>/<env> placeholder. Push the demo env\" >&2\n    echo \"      ('flox push --owner <you>') and export the ref (e.g.\" >&2\n    echo \"      <you>/sandbox-demo) before the launch.\" >&2\n  fi\n\n  # 3. Runtime: Vercel Sandbox boots a FIXED base runtime; the default is\n  #    node24. Note the override knob and the accepted set.\n  if [ -n \"${FLOX_SANDBOX_VERCEL_RUNTIME:-}\" ]; then\n    case \"${FLOX_SANDBOX_VERCEL_RUNTIME}\" in\n      node22|node24|python3.13) ;;\n      *)\n        echo \"note: FLOX_SANDBOX_VERCEL_RUNTIME='${FLOX_SANDBOX_VERCEL_RUNTIME}' is not a\" >&2\n        echo \"      known Vercel Sandbox runtime (node22|node24|python3.13); the launch\" >&2\n        echo \"      will reject it. Unset it to use the default (node24).\" >&2\n        ;;\n    esac\n  fi\n\n  # Demo fixture: a planted \"secret\" the sandbox must never see (beat 3 of\n  # demo/VERCEL-SANDBOX.md). On Vercel Sandbox the sandbox is remote and has no\n  # view of the host filesystem at all, so this is unreachable by construction.\n  # Removed by profile.deactivate.\n  mkdir -p \"$HOME/demo-secrets\"\n  printf 'API_KEY=sk-demo-FAKE-do-not-use\\n' > \"$HOME/demo-secrets/.env\"\n"
+    },
+    "profile": {
+      "bash": "  if [ -n \"${FLOX_BIN:-}\" ]; then\n    alias flox='$FLOX_BIN'\n  fi\n  export FLOX_VERSION=\"$(\"${FLOX_BIN:-flox}\" --version)\"\n",
+      "zsh": "  if [ -n \"${FLOX_BIN:-}\" ]; then\n    alias flox='$FLOX_BIN'\n  fi\n  export FLOX_VERSION=\"$(\"${FLOX_BIN:-flox}\" --version)\"\n",
+      "deactivate": {
+        "common": "  # Deactivating the demo cleans up after itself: remove the planted secret.\n  rm -rf \"$HOME/demo-secrets\"\n"
+      }
+    },
+    "options": {
+      "systems": [
+        "aarch64-darwin",
+        "x86_64-linux"
+      ]
+    }
+  },
+  "packages": [
+    {
+      "attr_path": "nodejs",
+      "broken": false,
+      "derivation": "/nix/store/cr8w869qmg1yb021mnpzgrfsy6hj2lxk-nodejs-24.18.0.drv",
+      "description": "Event-driven I/O framework for the V8 JavaScript engine",
+      "install_id": "nodejs",
+      "license": "MIT",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=753cc8a3a87467296ddd1fa93f0cc3e81120ee46",
+      "name": "nodejs-24.18.0",
+      "pname": "nodejs",
+      "rev": "753cc8a3a87467296ddd1fa93f0cc3e81120ee46",
+      "rev_count": 1035164,
+      "rev_date": "2026-07-15T13:07:34Z",
+      "scrape_date": "2026-07-17T04:52:57.866190Z",
+      "stabilities": [
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "24.18.0",
+      "outputs_to_install": [
+        "out",
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/a89rnfd3px0fxmjwd8km471ypxirs1am-nodejs-24.18.0"
+      },
+      "system": "aarch64-darwin",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "nodejs",
+      "broken": false,
+      "derivation": "/nix/store/54kmx1vzkr1g3j3xg4ja2wljihygqbba-nodejs-24.18.0.drv",
+      "description": "Event-driven I/O framework for the V8 JavaScript engine",
+      "install_id": "nodejs",
+      "license": "MIT",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=753cc8a3a87467296ddd1fa93f0cc3e81120ee46",
+      "name": "nodejs-24.18.0",
+      "pname": "nodejs",
+      "rev": "753cc8a3a87467296ddd1fa93f0cc3e81120ee46",
+      "rev_count": 1035164,
+      "rev_date": "2026-07-15T13:07:34Z",
+      "scrape_date": "2026-07-17T05:55:37.195038Z",
+      "stabilities": [
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "24.18.0",
+      "outputs_to_install": [
+        "out",
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/lnfxdsvvm1srsa9kk94s7jqw06yq1h2d-nodejs-24.18.0"
+      },
+      "system": "x86_64-linux",
+      "group": "toplevel",
+      "priority": 5
+    }
+  ]
+}

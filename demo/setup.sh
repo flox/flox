@@ -21,7 +21,9 @@ DEMO_DIR="${DEMO_DIR:-$HOME/sandbox-demo}"
 # "ona" (Ona control-plane CDE, formerly Gitpod — see demo/ONA.md),
 # "e2b" (E2B cloud-API sandbox — see demo/E2B.md),
 # "daytona" (Daytona cloud-API sandbox — see demo/DAYTONA.md),
-# "cognition-devin" (Cognition/Devin partner runtime — see demo/DEVIN.md), or
+# "cognition-devin" (Cognition/Devin partner runtime — see demo/DEVIN.md),
+# "vercel-sandbox" (Vercel Sandbox cloud-API, bootstrap-shaped — see
+# demo/VERCEL-SANDBOX.md), or
 # "anjuna" (Anjuna Security TEE partner runtime — see demo/ANJUNA.md).
 BACKEND="${BACKEND:-oci}"
 # `|| true` so an empty result reaches the friendly preflight below
@@ -232,6 +234,34 @@ case "$BACKEND" in
       echo "      a Cursor account (see demo/CURSOR.md beat 0)." >&2
     fi
     ;;
+  vercel-sandbox)
+    # The vercel-sandbox backend is cloud-API (Vercel Sandbox) and the first
+    # BOOTSTRAP-shaped backend: it does NOT bake an image (Vercel Sandbox boots a
+    # fixed runtime and cannot ingest one). It generates a flox bootstrap
+    # (.flox/cache/vercel-sandbox-bootstrap.sh, installs Flox + activates from
+    # FloxHub) and a @vercel/sandbox launcher
+    # (.flox/cache/vercel-sandbox-launch.mjs), then stops at the launch boundary.
+    # Preflight requires only the `vercel` CLI (no Docker — nothing is baked) and
+    # distinguishes CLI-missing from CLI-present-but-unauthenticated. The launch
+    # needs a Vercel account/token and the env pushed to FloxHub; neither is set
+    # up by this script (see demo/VERCEL-SANDBOX.md).
+    if ! command -v vercel >/dev/null 2>&1; then
+      echo "WARNING: 'vercel' CLI not found on PATH." >&2
+      echo "         Install: npm install -g vercel (nodejs from the vercel-sandbox-setup env)" >&2
+    elif ! vercel whoami >/dev/null 2>&1 && [ -z "${VERCEL_OIDC_TOKEN:-}" ] \
+         && [ -z "${VERCEL_TOKEN:-}" ]; then
+      echo "NOTE: the Vercel CLI is present but not authenticated." >&2
+      echo "      That is expected for the local beats; the launch needs" >&2
+      echo "      'vercel login' + 'vercel env pull' or VERCEL_TOKEN (see" >&2
+      echo "      demo/VERCEL-SANDBOX.md beat 0)." >&2
+    fi
+    if [ -z "${FLOX_SANDBOX_VERCEL_FLOXHUB_REF:-}" ]; then
+      echo "NOTE: FLOX_SANDBOX_VERCEL_FLOXHUB_REF is unset; the generated bootstrap" >&2
+      echo "      will use a <owner>/<env> placeholder. Push the env" >&2
+      echo "      ('flox push --owner <you>') and export the ref (e.g." >&2
+      echo "      <you>/sandbox-demo) before the launch." >&2
+    fi
+    ;;
   anjuna)
     # The anjuna backend is partner-handoff/TEE (Anjuna Security's
     # confidential-computing runtime): it bakes the converter's input image
@@ -261,7 +291,7 @@ case "$BACKEND" in
     fi
     ;;
   *)
-    echo "ERROR: BACKEND='$BACKEND' is not a demo backend (oci|openshell|modal|docker-sbx|ona|e2b|daytona|cognition-devin|anjuna|cursor)." >&2
+    echo "ERROR: BACKEND='$BACKEND' is not a demo backend (oci|openshell|modal|docker-sbx|ona|e2b|daytona|cognition-devin|vercel-sandbox|anjuna|cursor)." >&2
     exit 1
     ;;
 esac
@@ -366,6 +396,11 @@ if backend in ("openshell", "modal", "docker-sbx", "ona", "e2b", "daytona",
     # cloud/microVM/control-plane/TEE cases and on cursor the binary/access/
     # protocol scoping is recorded but not enforceable, a declared lossiness.
     # Either way, everything else stays deny-by-default.
+    #
+    # vercel-sandbox is deliberately ABSENT from this list: the @vercel/sandbox
+    # SDK has no egress vocabulary at all, so flox DECLINES any network grant
+    # (it would hard-error at the first 'cd'). Its demo declares no grants and
+    # shows the decline directly (see demo/VERCEL-SANDBOX.md beat 3).
     sandbox += '''
 [[options.sandbox.network]]
 endpoint = "api.anthropic.com:443"
@@ -436,6 +471,7 @@ and follow demo/SCRIPT.md (backend "oci"), demo/OPENSHELL.md
 demo/DOCKER-SBX.md (backend "docker-sbx"), demo/ONA.md
 (backend "ona"), demo/E2B.md (backend "e2b"), demo/DAYTONA.md
 (backend "daytona"), demo/DEVIN.md (backend "cognition-devin"),
+demo/VERCEL-SANDBOX.md (backend "vercel-sandbox"),
 demo/ANJUNA.md (backend "anjuna"), or demo/CURSOR.md
 (backend "cursor").
 Afterwards: bash demo/cleanup.sh
@@ -488,6 +524,20 @@ build + session need a Devin subscription/partnership and a registry
 Devin can pull from (export
 FLOX_SANDBOX_COGNITION_DEVIN_REGISTRY=<prefix>). The devin CLI is
 presence-detected, not required. See demo/DEVIN.md.
+
+NOTE (vercel-sandbox): the vercel-sandbox backend is cloud-API
+(Vercel Sandbox) and the first BOOTSTRAP-shaped backend — it does
+NOT bake an image (Vercel Sandbox boots a fixed runtime and cannot
+ingest one). It generates a flox bootstrap
+(.flox/cache/vercel-sandbox-bootstrap.sh, installs Flox + activates
+from FloxHub) and a @vercel/sandbox launcher
+(.flox/cache/vercel-sandbox-launch.mjs), but the launch needs a
+Vercel account/token (vercel login + vercel env pull, or
+VERCEL_TOKEN) and the env pushed to FloxHub (flox push, then export
+FLOX_SANDBOX_VERCEL_FLOXHUB_REF=<owner>/<env>). The @vercel/sandbox
+SDK has NO egress vocabulary, so flox declines any network grant —
+this backend's manifest declares none. The vercel CLI is
+'npm install -g vercel'. See demo/VERCEL-SANDBOX.md.
 
 NOTE (anjuna): the anjuna backend is partner-handoff/TEE (Anjuna
 Security's confidential-computing runtime). It bakes the converter's

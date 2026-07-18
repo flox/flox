@@ -60,6 +60,7 @@ pub mod ona;
 pub mod openshell;
 pub mod preflight;
 pub mod srt;
+pub mod vercel_sandbox;
 
 use std::convert::Infallible;
 use std::path::PathBuf;
@@ -162,6 +163,9 @@ pub fn for_backend(
         },
         SandboxBackend::Anjuna => Some(Box::new(anjuna::AnjunaBackend::new(ctx))),
         SandboxBackend::Cursor => Some(Box::new(cursor::CursorBackend::new(ctx))),
+        SandboxBackend::VercelSandbox => {
+            Some(Box::new(vercel_sandbox::VercelSandboxBackend::new(ctx)))
+        },
         // Libsandbox is the default in-process path; no wrapper object.
         // All other variants keep the "not yet wired" bail in activate.rs.
         _ => None,
