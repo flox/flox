@@ -4105,6 +4105,7 @@ mod nef_tests {
 
     use indoc::{formatdoc, indoc};
     use pretty_assertions::assert_eq;
+    use tempfile::tempdir_in;
 
     use super::*;
     use crate::flox::test_helpers::flox_instance;
@@ -4115,6 +4116,8 @@ mod nef_tests {
         lock_with_nix_expr,
         prepare_nix_expressions_in,
     };
+    use crate::providers::git::tests::test_git_options;
+    use crate::providers::git::{GitCommandProvider, GitProvider};
 
     #[test]
     fn nef_lock_matches_build_catalog_inputs_and_skips_build() {
@@ -4150,6 +4153,8 @@ mod nef_tests {
         // A full build's direct_catalog_inputs must match what lock()
         // recorded (this fixture references no catalog packages, so both
         // are empty; the equality still exercises the lock/build parity).
+        // See nef_lock_matches_build_catalog_inputs_and_skips_build_with_populated_catalog_input
+        // for the populated-map case.
         let collected = assert_build_status_with_nix_expr(
             &flox,
             &mut env,
@@ -4159,6 +4164,151 @@ mod nef_tests {
             true,
         );
         let build_results = collected.build_results.unwrap();
+        assert_eq!(
+            lock_results[0].direct_catalog_inputs,
+            build_results[0].direct_catalog_inputs
+        );
+    }
+
+    /// Companion to `nef_lock_matches_build_catalog_inputs_and_skips_build`:
+    /// that test's fixture references no catalog packages, so its parity
+    /// assertion is `{} == {}` and would pass even if catalog inputs were
+    /// dropped or mis-projected. This test resolves a real catalog
+    /// reference and asserts lock/build parity on the populated map.
+    ///
+    /// The catalog `/build-inputs/lookup` endpoint is mocked hermetically
+    /// via `_FLOX_USE_CATALOG_MOCK` (an httpmock recording, no network).
+    /// The resolved package's source is a local git repository — the same
+    /// directory that hosts the `foo` package under test also hosts a
+    /// `hello` package, and doubles as `hello`'s own git-fetchable catalog
+    /// source — so `nix build` can actually fetch and build it via
+    /// `builtins.fetchTree {type = "git"; url = "file://...";}`, which
+    /// resolves from the local filesystem with no network access.
+    #[test]
+    fn nef_lock_matches_build_catalog_inputs_and_skips_build_with_populated_catalog_input() {
+        let pname = "foo".to_string();
+
+        let (flox, tempdir) = flox_instance();
+
+        let manifest = formatdoc! {r#"
+            version = 1
+        "#};
+        let mut env = new_path_environment(&flox, &manifest);
+
+        // `foo` references a real catalog input (`catalogs.myorg.hello`).
+        // `hello` is the catalog-side NEF package the mocked lookup below
+        // resolves that reference to.
+        let expressions_dir = tempdir_in(&tempdir).unwrap().keep();
+        let pkgs_dir = expressions_dir.join("pkgs");
+        fs::create_dir_all(pkgs_dir.join(&pname)).unwrap();
+        fs::write(pkgs_dir.join(&pname).join("default.nix"), indoc! {r#"
+            {catalogs, runCommand}: runCommand "foo" {} ''
+                echo -n "Hello, World!" >> $out
+                cat ${catalogs.myorg.hello} >> $out
+            ''
+            "#})
+        .unwrap();
+        fs::create_dir_all(pkgs_dir.join("hello")).unwrap();
+        fs::write(pkgs_dir.join("hello").join("default.nix"), indoc! {r#"
+            {runCommand}: runCommand "hello" {} ''
+                echo -n "Hello from the catalog" > $out
+            ''
+            "#})
+        .unwrap();
+        let expressions_ref =
+            NixFlakeref::from_path(expressions_dir.canonicalize().unwrap()).unwrap();
+
+        // Turn the same directory into a git repo so it can serve as the
+        // catalog package's fetchable source: the mocked lookup response
+        // below points `myorg.hello` at this repo/rev, attr_path ["hello"].
+        let git =
+            GitCommandProvider::init_with(test_git_options(), &expressions_dir, false).unwrap();
+        git.add(&[&expressions_dir]).unwrap();
+        git.commit("add nef catalog fixtures").unwrap();
+        let status = git.status().unwrap();
+        let catalog_source_url = Url::from_file_path(&expressions_dir).unwrap();
+        let catalog_source_ref = status
+            .ref_
+            .expect("freshly committed repo has a symbolic HEAD ref");
+
+        let response_body = serde_json::json!({
+            "groups": {
+                "default": {
+                    "lock": {
+                        "myorg.hello": {
+                            "attr_path": ["hello"],
+                            "build_type": "nef",
+                            "catalog": "myorg",
+                            "locked_inputs_hash": "sha256-test-fixture",
+                            "source": {
+                                "dir": ".",
+                                "ref": catalog_source_ref,
+                                "rev": status.rev,
+                                "type": "git",
+                                "url": catalog_source_url.as_str(),
+                            },
+                        },
+                    },
+                    "matched": {"myorg.hello": ["myorg.hello"]},
+                    "unresolvable": [],
+                },
+            },
+            "version": 1,
+        });
+        let recording = serde_json::json!({
+            "when": {
+                "method": "POST",
+                "path": "/api/v1/catalog/build-inputs/lookup",
+                "json_body": {
+                    "groups": [{"key": "default", "references": ["myorg.hello"]}],
+                    "stability": "unstable",
+                },
+            },
+            "then": {
+                "status": 200,
+                "header": [{"name": "content-type", "value": "application/json"}],
+                "body": serde_json::to_string(&response_body).unwrap(),
+            },
+        });
+        let mock_recording_path = flox.temp_dir.join("catalog_lookup_mock.yaml");
+        fs::write(
+            &mock_recording_path,
+            serde_json::to_string(&recording).unwrap(),
+        )
+        .unwrap();
+
+        // Scope the mock to this test's make/nix subprocesses only: they
+        // inherit the current process env at spawn time, and temp_env
+        // serializes concurrent mutators so parallel tests don't race on
+        // this process-wide variable.
+        let (lock_results, build_results) = temp_env::with_var(
+            "_FLOX_USE_CATALOG_MOCK",
+            Some(mock_recording_path.as_os_str()),
+            || {
+                // lock() should compute the catalog lock without building.
+                let lock_results = lock_with_nix_expr(&flox, &mut env, &expressions_ref, &pname);
+
+                let collected = assert_build_status_with_nix_expr(
+                    &flox,
+                    &mut env,
+                    &expressions_ref,
+                    &pname,
+                    None,
+                    true,
+                );
+
+                (lock_results, collected.build_results.unwrap())
+            },
+        );
+
+        assert_eq!(lock_results.len(), 1);
+        assert!(
+            !lock_results[0].direct_catalog_inputs.is_empty(),
+            "expected the mocked lookup to populate a real catalog input"
+        );
+
+        // A full build's direct_catalog_inputs must match what lock()
+        // recorded, now exercised against a populated map.
         assert_eq!(
             lock_results[0].direct_catalog_inputs,
             build_results[0].direct_catalog_inputs
