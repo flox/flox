@@ -55,6 +55,30 @@ for sb in sandboxes:
     print(f'Removed OpenShell sandbox: {name}')
 " 2>/dev/null || true
 fi
+# The coder backend launches workspaces through a local `coder server`. Unlike
+# openshell's --no-keep sandboxes, Coder keeps workspaces for reuse, so the
+# demo's `flox-sandbox-demo-*` workspaces and the `flox-sandbox-demo` template
+# are removed here. Best-effort: the server may not be reachable at cleanup time
+# (the setup env was already deactivated), in which case there is nothing to
+# reap on the control plane and the Docker image prune below still runs.
+if command -v coder >/dev/null 2>&1 && coder whoami >/dev/null 2>&1; then
+  coder list --all --output json 2>/dev/null | \
+    python3 -c "
+import json, sys, subprocess
+try:
+  workspaces = json.load(sys.stdin)
+except Exception:
+  workspaces = []
+for ws in workspaces:
+  name = ws.get('name', '')
+  if name.startswith('flox-sandbox-demo'):
+    subprocess.run(['coder', 'delete', name, '--yes'],
+                   check=False, capture_output=True)
+    print(f'Removed Coder workspace: {name}')
+" 2>/dev/null || true
+  coder templates delete flox-sandbox-demo --yes >/dev/null 2>&1 \
+    && echo "Removed Coder template: flox-sandbox-demo" || true
+fi
 # The docker-sbx backend launches local microVMs via the `sbx` CLI. Any
 # lingering demo sandbox (normally removed on `sbx rm`) is cleaned up here.
 if command -v sbx >/dev/null 2>&1; then
@@ -69,13 +93,13 @@ if command -v docker >/dev/null 2>&1; then
   # The openshell and modal backends both bake under the -openshell repo;
   # the modal backend additionally names its pushed registry image under the
   # -modal repo, which may have been retagged locally before a push; the
-  # docker-sbx backend bakes under the -docker-sbx repo; the ona backend
-  # bakes under the -ona repo; the e2b backend bakes under the -e2b repo;
-  # the daytona backend bakes under the -daytona repo; the cognition-devin
-  # backend bakes under the -cognition-devin repo; the anjuna backend bakes
-  # under the -anjuna repo.
+  # coder backend bakes under the -coder repo; the docker-sbx backend bakes
+  # under the -docker-sbx repo; the ona backend bakes under the -ona repo;
+  # the e2b backend bakes under the -e2b repo; the daytona backend bakes
+  # under the -daytona repo; the cognition-devin backend bakes under the
+  # -cognition-devin repo; the anjuna backend bakes under the -anjuna repo.
   docker image ls --format '{{.Repository}}:{{.Tag}}' 2>/dev/null | \
-    grep -E '^sandbox-demo-(openshell|modal|docker-sbx|ona|e2b|daytona|cognition-devin|anjuna):' | \
+    grep -E '^sandbox-demo-(openshell|coder|modal|docker-sbx|ona|e2b|daytona|cognition-devin|anjuna):' | \
     while read -r tag; do
       docker rmi "$tag" >/dev/null 2>&1 && echo "Removed Docker image: $tag"
     done || true
@@ -144,5 +168,9 @@ if [ -d "$HOME/.config/openshell/gateways/flox-demo" ]; then
   echo "  openshell gateway select <name>"
 fi
 rm -rf "$(dirname "$0")/openshell-setup/.flox/cache/openshell" 2>/dev/null || true
+
+# The coder-setup env keeps the local server state (built-in PostgreSQL, config)
+# under its env cache; remove it so a fresh run bootstraps a clean deployment.
+rm -rf "$(dirname "$0")/coder-setup/.flox/cache/coder" 2>/dev/null || true
 
 echo "Demo artifacts removed (env, grants, journal, fixtures, images)."

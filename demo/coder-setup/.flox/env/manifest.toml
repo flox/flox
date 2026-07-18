@@ -1,0 +1,125 @@
+schema-version = "1.13.0"
+
+[install]
+# The Coder control plane CLI + server (AGPL-3.0 core), from the Flox
+# Catalog / nixpkgs. Provides both `coder server` and the `coder` client.
+# Pinned to 2.x: the non-interactive first-user bootstrap flags
+# (`coder login --first-user-*`) and the non-deprecated
+# `coder templates push` path the backend drives are 2.x surface — the
+# catalog's default `coder` resolves to a 0.x build that predates them.
+coder.pkg-path = "coder"
+coder.version = "^2.33"
+
+[vars]
+# Feature flags the demo needs in the presentation shell.
+FLOX_FEATURES_SANDBOX_ACTIVATE = "true"
+FLOX_FEATURES_AUTO_ACTIVATE = "true"
+# Planted for the token-isolation beat: visible on the host, absent
+# in the guest.
+GITHUB_TOKEN = "ghp-demo-FAKE"
+
+# Where the local Coder server listens and how the CLI reaches it.
+# host.docker.internal in the generated template lets the in-container
+# workspace agent dial back to this host-run server.
+CODER_ACCESS_URL = "http://127.0.0.1:3000"
+CODER_URL = "http://127.0.0.1:3000"
+
+# Non-interactive first-user bootstrap (no browser). The login service
+# below consumes these; the password is a throwaway for the local
+# demo deployment only.
+CODER_FIRST_USER_EMAIL = "demo@flox.dev"
+CODER_FIRST_USER_USERNAME = "flox"
+CODER_FIRST_USER_PASSWORD = "flox-demo-SqueamishOssifrage-1"
+CODER_FIRST_USER_FULL_NAME = "Flox Demo"
+CODER_FIRST_USER_TRIAL = "false"
+
+[hook]
+on-activate = '''
+  # The built-in PostgreSQL and server state live in the env cache so
+  # the deployment is self-contained and disposable with the env.
+  export CODER_CONFIG_DIR="$FLOX_ENV_CACHE/coder/config"
+  export CODER_CACHE_DIRECTORY="$FLOX_ENV_CACHE/coder/cache"
+  mkdir -p "$CODER_CONFIG_DIR" "$CODER_CACHE_DIRECTORY"
+
+  # Demo fixture: a planted "secret" the guest must never see
+  # (beat 2 of demo/CODER.md). Removed by profile.deactivate.
+  mkdir -p "$HOME/demo-secrets"
+  printf 'API_KEY=sk-demo-FAKE-do-not-use\n' > "$HOME/demo-secrets/.env"
+'''
+
+# Presentation-shell setup, so the walkthrough's manual export block
+# disappears. bash and zsh only — the demo script targets bash, and
+# `alias`/`export` syntax is not portable to fish/tcsh.
+[profile]
+bash = '''
+  if [ -n "${FLOX_BIN:-}" ]; then
+    alias flox='$FLOX_BIN'
+  fi
+  export FLOX_VERSION="$("${FLOX_BIN:-flox}" --version)"
+'''
+zsh = '''
+  if [ -n "${FLOX_BIN:-}" ]; then
+    alias flox='$FLOX_BIN'
+  fi
+  export FLOX_VERSION="$("${FLOX_BIN:-flox}" --version)"
+'''
+
+[profile.deactivate]
+common = '''
+  # Deactivating the demo cleans up after itself: remove the planted
+  # secret. The server + built-in DB stop with the activation (they are
+  # flox services); their state under $FLOX_ENV_CACHE/coder persists
+  # across sessions — demo/cleanup.sh removes it.
+  rm -rf "$HOME/demo-secrets"
+'''
+
+[services]
+auto-start = true
+
+# The Coder control plane. With CODER_PG_CONNECTION_URL unset, `coder
+# server` downloads a built-in PostgreSQL (first start only, from Maven)
+# and stores all state under CODER_CONFIG_DIR — self-contained, no
+# external database. As a flox service it lives exactly as long as the
+# activation. The port preflight fails LOUDLY when something else owns
+# 3000 (e.g. a leftover server from a previous run) — without it the
+# bind failure is silent and the CLI ends up talking to the wrong
+# deployment.
+[services.server]
+command = '''
+  if lsof -nP -iTCP:3000 -sTCP:LISTEN >/dev/null 2>&1; then
+    echo "ERROR: something else already listens on 127.0.0.1:3000:" >&2
+    lsof -nP -iTCP:3000 -sTCP:LISTEN >&2
+    echo "Likely a leftover coder server from a previous run. Stop it." >&2
+    exit 1
+  fi
+  exec coder server --access-url "$CODER_ACCESS_URL" --http-address 127.0.0.1:3000
+'''
+
+# One-shot non-interactive first-user bootstrap + CLI login. Polls the
+# server until it is reachable, then runs `coder login` with the
+# CODER_FIRST_USER_* env: on a fresh deployment this creates the first
+# user and logs the CLI in; on a re-activation (user already exists) the
+# login still succeeds against the persisted credentials. No browser.
+[services.login]
+command = '''
+  for _ in $(seq 60); do
+    if coder login "$CODER_URL" \
+         --first-user-email "$CODER_FIRST_USER_EMAIL" \
+         --first-user-username "$CODER_FIRST_USER_USERNAME" \
+         --first-user-password "$CODER_FIRST_USER_PASSWORD" \
+         --first-user-full-name "$CODER_FIRST_USER_FULL_NAME" \
+         --first-user-trial="$CODER_FIRST_USER_TRIAL" 2>/dev/null; then
+      echo "logged in to Coder at $CODER_URL as $CODER_FIRST_USER_USERNAME"
+      if coder whoami >/dev/null 2>&1; then
+        echo "server reachable"
+        exit 0
+      fi
+    fi
+    sleep 2
+  done
+  echo "coder server did not become reachable on 127.0.0.1:3000" >&2
+  exit 1
+'''
+
+[options]
+systems = ["aarch64-darwin"]

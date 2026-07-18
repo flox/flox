@@ -236,6 +236,40 @@ pub enum SandboxBackend {
     /// API identically from macOS and Linux, so `Native` means "the host can drive
     /// it", not "the workload runs on this OS".
     VercelSandbox,
+    /// Coder: a self-hostable control plane for remote development
+    /// environments, provisioned through Terraform. Like OpenShell, Coder is a
+    /// LOCAL control plane the host drives — but the workspace it launches runs
+    /// on the underlying runtime the template's Terraform provider selects
+    /// (the `docker` provider locally, `envbuilder`/`kubernetes` elsewhere).
+    /// flox bakes the environment into a lockfile-hash-tagged Docker-resident
+    /// OCI image (`<env>-coder:<hash12>`, with the OpenShell compat layer so a
+    /// `sandbox` user + `/bin/sh` exist), generates a minimal docker-provider
+    /// Terraform template whose `docker_container.image` is that baked image,
+    /// pushes the template to the local Coder server (`coder templates push`),
+    /// creates a workspace from it (`coder create`), and execs the activation
+    /// inside via `coder ssh <workspace> -- <entrypoint>`. The workspace
+    /// filesystem is the container's, so the host HOME and any host-only
+    /// secrets are invisible from inside — the boundary is the container the
+    /// docker provider runs.
+    ///
+    /// Enforcement is the container's (Linux namespaces); on macOS the
+    /// container runs in Docker Desktop's Linux VM, so `Native` on macOS would
+    /// be wrong — the workspace lands in Linux (`ViaLinuxVm`). Coder is a
+    /// control plane and delegates network enforcement to the underlying
+    /// runtime; the `docker` provider has NO native L7 domain-egress
+    /// vocabulary and Coder ships no egress proxy of its own, so a manifest
+    /// egress grant cannot be compiled into an enforced allowlist here and is
+    /// DECLINED rather than silently widened — `domain_egress` is honestly
+    /// false (the inexpressible-egress axis is the declared lossiness, the same
+    /// shape as `vercel-sandbox` but for a different reason: no egress
+    /// vocabulary in the provider, versus none in the launch SDK). Policy is
+    /// fixed when the template is pushed and the workspace created, so
+    /// redemption is a re-push / recreate, never a live per-request ask.
+    /// AGPL-3.0 open-source core, self-hostable with no API key: the server
+    /// runs locally (bootstrapped non-interactively with
+    /// `CODER_FIRST_USER_*`), and the whole loop is drivable on a laptop with
+    /// Docker running.
+    Coder,
     /// Embeddable micro-VM (libkrun): hypervisor isolation with a guest kernel
     /// via libkrunfw (Hypervisor.framework on macOS, KVM on Linux).
     Libkrun,
@@ -316,7 +350,7 @@ pub struct BackendCapabilities {
 
 impl SandboxBackend {
     /// Every backend on the roster, in spectrum order (weakest boundary first).
-    pub const ALL: [SandboxBackend; 16] = [
+    pub const ALL: [SandboxBackend; 17] = [
         SandboxBackend::Libsandbox,
         SandboxBackend::Nix,
         SandboxBackend::HostNative,
@@ -324,6 +358,7 @@ impl SandboxBackend {
         SandboxBackend::Cursor,
         SandboxBackend::Oci,
         SandboxBackend::Openshell,
+        SandboxBackend::Coder,
         SandboxBackend::Modal,
         SandboxBackend::DockerSbx,
         SandboxBackend::Ona,
@@ -471,6 +506,57 @@ impl SandboxBackend {
                 macos: ViaLinuxVm,
                 linux: Native,
                 status: Implemented,
+            },
+            SandboxBackend::Coder => BackendCapabilities {
+                backend: self,
+                // The workspace runs in the container the template's Terraform
+                // provider launches (the `docker` provider locally). Same
+                // container class as the `oci` / `openshell` backends; Coder is
+                // the control plane, the container is the boundary.
+                enforcement: Container,
+                enforces: true,
+                // The template + workspace network policy is fixed when the
+                // template is pushed and the workspace created; an out-of-policy
+                // access is redeemed by re-pushing the template and recreating
+                // the workspace, never adjudicated live.
+                live_ask: false,
+                // Coder is a control plane and delegates network enforcement to
+                // the underlying runtime. The `docker` provider has no native
+                // L7 domain-egress vocabulary and Coder ships no egress proxy of
+                // its own, so flox cannot compile a domain-egress policy onto
+                // this provider — a manifest egress grant is DECLINED rather
+                // than silently widened. That inexpressible-egress axis is the
+                // declared lossiness, and the reason `domain_egress` is honestly
+                // false here (unlike `openshell`, whose gateway ships an egress
+                // proxy with a native L7 policy).
+                domain_egress: false,
+                // No network allowlist and no per-path r/w/x grants: the
+                // workspace filesystem is the baked image plus the docker
+                // provider's mounts. Op-blind by the contract's meaning.
+                per_op: false,
+                // The workspace runs inside a Linux container (the docker
+                // provider), so it pays the virtualized-filesystem cost class
+                // rather than native host I/O.
+                fs_virtualized: true,
+                // macOS users land in a Linux container via Docker Desktop's
+                // Linux VM (same DX as the `oci` / `openshell` backends), so
+                // macOS is ViaLinuxVm, not Native.
+                macos: ViaLinuxVm,
+                linux: Native,
+                // Preflight (CLI + version gate + server reachability + Docker
+                // daemon), the bake, the docker-provider template generation,
+                // the template push, and the workspace create are all wired and
+                // verified end-to-end on a laptop with the local Coder server
+                // running (bootstrapped non-interactively via CODER_FIRST_USER_*)
+                // and Docker up — the workspace container starts from the baked
+                // flox image. The final `coder ssh` activation exec does NOT
+                // complete: Coder's stock workspace-agent init script assumes a
+                // POSIX userland (grep/head/wget) on the container PATH that the
+                // flox bake's compat layer does not provide, so the agent exits
+                // before registering and there is no connected agent to attach
+                // to. Honestly Scaffolded, not Implemented, until the bake grows
+                // a coreutils compat layer (see the `coder` backend module docs).
+                status: Scaffolded,
             },
             SandboxBackend::Modal => BackendCapabilities {
                 backend: self,
@@ -865,6 +951,7 @@ impl Display for SandboxBackend {
             SandboxBackend::Anjuna => "anjuna",
             SandboxBackend::Cursor => "cursor",
             SandboxBackend::VercelSandbox => "vercel-sandbox",
+            SandboxBackend::Coder => "coder",
             SandboxBackend::Libkrun => "libkrun",
         };
         write!(f, "{name}")
@@ -873,7 +960,7 @@ impl Display for SandboxBackend {
 
 #[derive(Debug, thiserror::Error)]
 #[error(
-    "'{0}' is not a valid sandbox backend. Expected one of: libsandbox, nix, host-native, srt, oci, openshell, modal, docker-sbx, ona, e2b, daytona, cognition-devin, vercel-sandbox, anjuna, cursor, libkrun."
+    "'{0}' is not a valid sandbox backend. Expected one of: libsandbox, nix, host-native, srt, oci, openshell, coder, modal, docker-sbx, ona, e2b, daytona, cognition-devin, vercel-sandbox, anjuna, cursor, libkrun."
 )]
 pub struct SandboxBackendParseError(String);
 
@@ -897,6 +984,7 @@ impl FromStr for SandboxBackend {
             "anjuna" => Ok(SandboxBackend::Anjuna),
             "cursor" => Ok(SandboxBackend::Cursor),
             "vercel-sandbox" => Ok(SandboxBackend::VercelSandbox),
+            "coder" => Ok(SandboxBackend::Coder),
             "libkrun" => Ok(SandboxBackend::Libkrun),
             other => Err(SandboxBackendParseError(other.to_string())),
         }
@@ -927,7 +1015,7 @@ mod tests {
         let err = "bogus".parse::<SandboxBackend>().unwrap_err();
         assert_eq!(
             err.to_string(),
-            "'bogus' is not a valid sandbox backend. Expected one of: libsandbox, nix, host-native, srt, oci, openshell, modal, docker-sbx, ona, e2b, daytona, cognition-devin, vercel-sandbox, anjuna, cursor, libkrun.",
+            "'bogus' is not a valid sandbox backend. Expected one of: libsandbox, nix, host-native, srt, oci, openshell, coder, modal, docker-sbx, ona, e2b, daytona, cognition-devin, vercel-sandbox, anjuna, cursor, libkrun.",
         );
     }
 
@@ -993,6 +1081,45 @@ mod tests {
         assert_eq!(json, "\"openshell\"");
         let parsed: SandboxBackend = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed, SandboxBackend::Openshell);
+    }
+
+    #[test]
+    fn coder_capabilities_row() {
+        let caps = SandboxBackend::Coder.capabilities();
+        assert_eq!(caps, BackendCapabilities {
+            backend: SandboxBackend::Coder,
+            enforcement: Enforcement::Container,
+            enforces: true,
+            live_ask: false,
+            // Coder delegates egress to the docker provider, which has no L7
+            // domain-egress vocabulary — grants are declined, so this is false.
+            domain_egress: false,
+            per_op: false,
+            fs_virtualized: true,
+            // Workspace runs in a Linux container; macOS lands in Docker's VM.
+            macos: PlatformSupport::ViaLinuxVm,
+            linux: PlatformSupport::Native,
+            // Bake + template push + workspace create are wired and verified;
+            // the `coder ssh` exec is blocked at the agent handshake on a
+            // flox-baked image (no coreutils on the container PATH). Scaffolded.
+            status: IntegrationStatus::Scaffolded,
+        });
+    }
+
+    #[test]
+    fn coder_display_and_parse_round_trip() {
+        let backend = SandboxBackend::Coder;
+        let s = backend.to_string();
+        assert_eq!(s, "coder");
+        assert_eq!(s.parse::<SandboxBackend>().unwrap(), backend);
+    }
+
+    #[test]
+    fn coder_serde_round_trip() {
+        let json = serde_json::to_string(&SandboxBackend::Coder).unwrap();
+        assert_eq!(json, "\"coder\"");
+        let parsed: SandboxBackend = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed, SandboxBackend::Coder);
     }
 
     #[test]

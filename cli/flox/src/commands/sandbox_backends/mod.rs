@@ -47,6 +47,7 @@
 
 pub mod anjuna;
 pub mod bake;
+pub mod coder;
 pub mod cognition_devin;
 pub mod cursor;
 pub mod daytona;
@@ -153,6 +154,7 @@ pub fn for_backend(
         SandboxBackend::Srt => Some(Box::new(srt::SrtBackend::new(ctx))),
         SandboxBackend::Oci => Some(Box::new(oci::OciBackend::new(ctx))),
         SandboxBackend::Openshell => Some(Box::new(openshell::OpenshellBackend::new(ctx))),
+        SandboxBackend::Coder => Some(Box::new(coder::CoderBackend::new(ctx))),
         SandboxBackend::Modal => Some(Box::new(modal::ModalBackend::new(ctx))),
         SandboxBackend::DockerSbx => Some(Box::new(docker_sbx::DockerSbxBackend::new(ctx))),
         SandboxBackend::Ona => Some(Box::new(ona::OnaBackend::new(ctx))),

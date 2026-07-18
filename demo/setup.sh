@@ -16,6 +16,7 @@ set -euo pipefail
 DEMO_DIR="${DEMO_DIR:-$HOME/sandbox-demo}"
 # Sandbox backend the manifest declares: "oci" (default; Apple Container /
 # podman), "openshell" (NVIDIA OpenShell — see demo/OPENSHELL.md),
+# "coder" (Coder self-hosted control plane — see demo/CODER.md),
 # "modal" (Modal Sandboxes, cloud-remote — see demo/MODAL.md),
 # "docker-sbx" (Docker Sandboxes local microVM — see demo/DOCKER-SBX.md),
 # "ona" (Ona control-plane CDE, formerly Gitpod — see demo/ONA.md),
@@ -62,6 +63,30 @@ case "$BACKEND" in
     fi
     if ! command -v docker >/dev/null 2>&1; then
       echo "WARNING: 'docker' not found on PATH (required by openshell)." >&2
+    fi
+    ;;
+  coder)
+    # The coder backend is a LOCAL control plane (Coder, AGPL-3.0): it bakes an
+    # image locally (Docker), generates a docker-provider Terraform template
+    # referencing it, pushes the template to a local `coder server`, creates a
+    # workspace, and execs the activation inside via `coder ssh` — a REAL launch
+    # path, like openshell. Check the CLI, a reachable server, and Docker up
+    # front so the first activation doesn't fail mid-demo. Coder is a control
+    # plane and delegates egress to the docker provider (no L7 vocabulary), so
+    # flox DECLINES network grants for this backend — the demo declares none.
+    if ! command -v coder >/dev/null 2>&1; then
+      echo "WARNING: 'coder' not found on PATH." >&2
+      echo "         Install: flox install coder (or start the coder-setup env)." >&2
+    elif ! coder whoami >/dev/null 2>&1; then
+      echo "WARNING: the Coder server is not reachable ('coder whoami' failed)." >&2
+      echo "         Start the setup env first:" >&2
+      echo "           flox activate -r djsauble/coder-setup" >&2
+    fi
+    if ! command -v docker >/dev/null 2>&1; then
+      echo "WARNING: 'docker' not found on PATH (required by coder's docker provider)." >&2
+    elif ! docker info >/dev/null 2>&1; then
+      echo "WARNING: the Docker daemon is not reachable ('docker info' failed)." >&2
+      echo "         Start Docker Desktop or the Docker service before baking." >&2
     fi
     ;;
   modal)
@@ -291,7 +316,7 @@ case "$BACKEND" in
     fi
     ;;
   *)
-    echo "ERROR: BACKEND='$BACKEND' is not a demo backend (oci|openshell|modal|docker-sbx|ona|e2b|daytona|cognition-devin|vercel-sandbox|anjuna|cursor)." >&2
+    echo "ERROR: BACKEND='$BACKEND' is not a demo backend (oci|openshell|coder|modal|docker-sbx|ona|e2b|daytona|cognition-devin|vercel-sandbox|anjuna|cursor)." >&2
     exit 1
     ;;
 esac
@@ -467,7 +492,8 @@ Then:
     cd $DEMO_DIR
 
 and follow demo/SCRIPT.md (backend "oci"), demo/OPENSHELL.md
-(backend "openshell"), demo/MODAL.md (backend "modal"),
+(backend "openshell"), demo/CODER.md (backend "coder"),
+demo/MODAL.md (backend "modal"),
 demo/DOCKER-SBX.md (backend "docker-sbx"), demo/ONA.md
 (backend "ona"), demo/E2B.md (backend "e2b"), demo/DAYTONA.md
 (backend "daytona"), demo/DEVIN.md (backend "cognition-devin"),
@@ -565,4 +591,25 @@ compiled policy needs Cursor's 'agent' CLI (curl
 https://cursor.com/install | bash) and a Cursor account
 (CURSOR_API_KEY). The 'agent' CLI is presence-detected, not required.
 See demo/CURSOR.md.
+
+NOTE (coder): the coder backend is a LOCAL control plane (Coder,
+AGPL-3.0 open-source core, self-hosted, no API key). It bakes the
+image locally, generates a docker-provider Terraform template
+referencing it, pushes it to a local 'coder server', and creates a
+workspace container from the baked image — verified end-to-end. Needs
+the coder CLI (flox install coder, 2.x), a reachable local server
+(start the coder-setup env: 'flox activate -r djsauble/coder-setup'),
+and Docker running (the workspace container runs in Docker's Linux VM).
+Status is "scaffolded", not "implemented": the final 'coder ssh'
+activation exec does NOT complete on a flox-baked image — Coder's stock
+workspace-agent init script assumes grep/head/wget on the container
+PATH, which the flox bake's compat layer (/bin/sh + sandbox user) does
+not provide, so the agent exits before registering and 'coder create'
+times out waiting for it. The fix is a coreutils compat layer in the
+bake (open question). Coder is also a control plane and delegates
+egress to the docker provider, which has NO L7 egress vocabulary, so
+flox DECLINES any network grant on this backend — that is why this
+backend's manifest declares none (like vercel-sandbox, for a different
+reason). For enforced per-endpoint egress, use the openshell backend.
+See demo/CODER.md.
 EOF
