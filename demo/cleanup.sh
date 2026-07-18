@@ -69,12 +69,22 @@ if command -v docker >/dev/null 2>&1; then
   # The openshell and modal backends both bake under the -openshell repo;
   # the modal backend additionally names its pushed registry image under the
   # -modal repo, which may have been retagged locally before a push; the
-  # docker-sbx backend bakes under the -docker-sbx repo.
+  # docker-sbx backend bakes under the -docker-sbx repo; the ona backend
+  # bakes under the -ona repo.
   docker image ls --format '{{.Repository}}:{{.Tag}}' 2>/dev/null | \
-    grep -E '^sandbox-demo-(openshell|modal|docker-sbx):' | \
+    grep -E '^sandbox-demo-(openshell|modal|docker-sbx|ona):' | \
     while read -r tag; do
       docker rmi "$tag" >/dev/null 2>&1 && echo "Removed Docker image: $tag"
     done || true
+fi
+
+# The ona backend writes a committed devcontainer hand-off at the repo root
+# (.devcontainer/devcontainer.json), not under .flox/cache. It is removed with
+# $DEMO_DIR above, but a demo run may have left a copy in the current project
+# if $DEMO_DIR was overridden — surface it rather than silently orphaning it.
+if [ -f "$DEMO_DIR/.devcontainer/devcontainer.json" ]; then
+  rm -rf "$DEMO_DIR/.devcontainer"
+  echo "Removed ona devcontainer hand-off under $DEMO_DIR/.devcontainer."
 fi
 
 # demo/host-env leftovers: the gateway-register service writes persistent

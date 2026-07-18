@@ -1,0 +1,85 @@
+schema-version = "1.13.0"
+
+# Ona (formerly Gitpod) is a control-plane / cloud CDE reached over its API, so
+# this setup env runs no local service and needs no provider daemon. The `ona`
+# backend generates a devcontainer hand-off from the baked image; the only
+# genuinely required host tool is Docker (to bake the image), installed
+# separately. The Ona CLI is presence-detected, not required — so this env
+# installs no provider CLI. No public `ona` CLI is available in the catalog on
+# this host; if one ships later, add it to [install].
+
+[vars]
+# Feature flags the demo needs in the presentation shell.
+FLOX_FEATURES_SANDBOX_ACTIVATE = "true"
+FLOX_FEATURES_AUTO_ACTIVATE = "true"
+# Planted for the token-isolation beat: visible on the host. On the Ona backend
+# the workspace is remote and shares no host env, so this simply never reaches
+# the workspace.
+GITHUB_TOKEN = "ghp-demo-FAKE"
+
+[hook]
+on-activate = '''
+  # Ona is control-plane/cloud — there is no local gateway to run as a service.
+  # The setup concern is the hand-off prerequisites, surfaced here so the
+  # operator learns of them before the first 'cd', not mid-demo.
+
+  # 1. Docker: the ona backend bakes the environment image locally before Ona
+  #    pulls it. Docker is the one required host tool.
+  if ! command -v docker >/dev/null 2>&1; then
+    echo "note: 'docker' not found on PATH — the ona backend needs it to bake" >&2
+    echo "      the image before Ona pulls it (see demo/ONA.md beat 0)." >&2
+  fi
+
+  # 2. CLI: the Ona CLI is presence-detected, not required. The devcontainer
+  #    hand-off is generated regardless; note its absence so the operator knows
+  #    the launch boundary will name the account wall.
+  if ! command -v ona >/dev/null 2>&1 && ! command -v gitpod >/dev/null 2>&1; then
+    echo "note: no 'ona' (or legacy 'gitpod') CLI on PATH. That is fine for the" >&2
+    echo "      local beats — flox generates the devcontainer hand-off anyway;" >&2
+    echo "      the workspace open itself needs an Ona account (see demo/ONA.md)." >&2
+  fi
+
+  # 3. Registry: Ona builds the workspace by pulling the image from a registry,
+  #    so the generated devcontainer's `image` field needs a registry prefix.
+  #    Default to a bare tag and let the operator override.
+  if [ -z "${FLOX_SANDBOX_ONA_REGISTRY:-}" ]; then
+    echo "note: FLOX_SANDBOX_ONA_REGISTRY is unset; the devcontainer will use a" >&2
+    echo "      bare image tag. Export it (e.g. docker.io/<user>) before the" >&2
+    echo "      workspace open." >&2
+  fi
+
+  # Demo fixture: a planted "secret" the workspace must never see (beat 2 of
+  # demo/ONA.md). On Ona the workspace is remote and has no view of the host
+  # filesystem at all, so this is unreachable by construction. Removed by
+  # profile.deactivate.
+  mkdir -p "$HOME/demo-secrets"
+  printf 'API_KEY=sk-demo-FAKE-do-not-use\n' > "$HOME/demo-secrets/.env"
+'''
+
+# Presentation-shell setup, so the walkthrough's manual export block
+# disappears. bash and zsh only — the demo script targets bash, and
+# `alias`/`export` syntax is not portable to fish/tcsh.
+[profile]
+bash = '''
+  if [ -n "${FLOX_BIN:-}" ]; then
+    alias flox='$FLOX_BIN'
+  fi
+  export FLOX_VERSION="$("${FLOX_BIN:-flox}" --version)"
+'''
+zsh = '''
+  if [ -n "${FLOX_BIN:-}" ]; then
+    alias flox='$FLOX_BIN'
+  fi
+  export FLOX_VERSION="$("${FLOX_BIN:-flox}" --version)"
+'''
+
+[profile.deactivate]
+common = '''
+  # Deactivating the demo cleans up after itself: remove the planted secret.
+  rm -rf "$HOME/demo-secrets"
+'''
+
+[options]
+# Ona is reached over its API from any host; the setup env installs no provider
+# CLI, so both dev systems are supported.
+systems = ["aarch64-darwin", "x86_64-linux"]

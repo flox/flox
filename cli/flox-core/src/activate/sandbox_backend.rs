@@ -77,6 +77,21 @@ pub enum SandboxBackend {
     /// macOS drives it via the sbx hypervisor rather than running the workload on
     /// the host.
     DockerSbx,
+    /// Ona (formerly Gitpod): a control-plane / gateway CDE. flox bakes the
+    /// environment into a lockfile-hash-tagged OCI image and generates the
+    /// devcontainer hand-off artifact (`.devcontainer/devcontainer.json`) that
+    /// wraps the baked image; an Ona workspace built from that image opens with
+    /// the locked toolchain already present. Enforcement (workspace isolation,
+    /// network policy) stays entirely on Ona's side — no local enforcement ever
+    /// runs on the laptop, so host assertions are preflight-only and the threat
+    /// model inverts (host fs is unreachable, code and secrets leave the
+    /// laptop). Manifest network grants compile into the devcontainer as
+    /// `containerEnv` proxy hints plus documented policy expectations; the
+    /// grant's per-binary / read-write scoping is recorded but not enforceable
+    /// through the devcontainer contract, a declared lossiness. Ona is an
+    /// enterprise product reached over its API from any host, so `Native` here
+    /// means "the host can drive it", not "the workload runs on this OS".
+    Ona,
     /// Embeddable micro-VM (libkrun): hypervisor isolation with a guest kernel
     /// via libkrunfw (Hypervisor.framework on macOS, KVM on Linux).
     Libkrun,
@@ -157,7 +172,7 @@ pub struct BackendCapabilities {
 
 impl SandboxBackend {
     /// Every backend on the roster, in spectrum order (weakest boundary first).
-    pub const ALL: [SandboxBackend; 9] = [
+    pub const ALL: [SandboxBackend; 10] = [
         SandboxBackend::Libsandbox,
         SandboxBackend::Nix,
         SandboxBackend::HostNative,
@@ -166,6 +181,7 @@ impl SandboxBackend {
         SandboxBackend::Openshell,
         SandboxBackend::Modal,
         SandboxBackend::DockerSbx,
+        SandboxBackend::Ona,
         SandboxBackend::Libkrun,
     ];
 
@@ -342,6 +358,49 @@ impl SandboxBackend {
                 // does not yet produce. Honestly Scaffolded, not Implemented.
                 status: Scaffolded,
             },
+            SandboxBackend::Ona => BackendCapabilities {
+                backend: self,
+                // Ona runs the workload inside a control-plane-managed CDE
+                // (dev-container/microVM class); the boundary is Ona's, the
+                // policy surface (a devcontainer image plus a workspace network
+                // policy) clusters with the other container-class backends.
+                enforcement: Container,
+                enforces: true,
+                // Workspace policy is fixed when the environment is created from
+                // the devcontainer/image; an out-of-policy access is redeemed by
+                // recreating the workspace with a wider policy, never live.
+                live_ask: false,
+                // Ona governs egress by domain at its gateway/control plane, but
+                // the devcontainer hand-off flox produces expresses grants only
+                // as documented policy expectations and proxy hints — the
+                // enterprise network policy that actually enforces them is
+                // configured on Ona's side. Declared as domain-capable with that
+                // lossiness noted in the module docs.
+                domain_egress: true,
+                // The devcontainer/workspace policy is endpoint-scoped; it
+                // carries no read/write method distinction and no per-binary
+                // attribution, and the workspace filesystem is the baked image
+                // plus the cloned repo rather than per-path r/w/x grants.
+                // Op-blind by the contract's meaning.
+                per_op: false,
+                // The workload runs in a remote Ona CDE, so it pays the
+                // virtualized-filesystem cost class rather than native host I/O.
+                fs_virtualized: true,
+                // Control-plane/cloud: the workspace is reached over Ona's API,
+                // so the hand-off path is identical from macOS and Linux —
+                // nothing runs on the host. `Native` here means "the host can
+                // drive it", not "the workload runs on this OS".
+                macos: Native,
+                linux: Native,
+                // The launch boundary needs an Ona account and (post-OpenAI
+                // acquisition) an enterprise workspace/partnership: Ona builds
+                // the workspace from a devcontainer in a git repo, and there is
+                // no public no-account image-launch API on this host. Preflight,
+                // bake, policy compilation, and devcontainer-artifact generation
+                // are wired; the final workspace open is not, so this is
+                // honestly Scaffolded, not Implemented.
+                status: Scaffolded,
+            },
             SandboxBackend::Libkrun => BackendCapabilities {
                 backend: self,
                 enforcement: Hypervisor,
@@ -369,6 +428,7 @@ impl Display for SandboxBackend {
             SandboxBackend::Openshell => "openshell",
             SandboxBackend::Modal => "modal",
             SandboxBackend::DockerSbx => "docker-sbx",
+            SandboxBackend::Ona => "ona",
             SandboxBackend::Libkrun => "libkrun",
         };
         write!(f, "{name}")
@@ -377,7 +437,7 @@ impl Display for SandboxBackend {
 
 #[derive(Debug, thiserror::Error)]
 #[error(
-    "'{0}' is not a valid sandbox backend. Expected one of: libsandbox, nix, host-native, srt, oci, openshell, modal, docker-sbx, libkrun."
+    "'{0}' is not a valid sandbox backend. Expected one of: libsandbox, nix, host-native, srt, oci, openshell, modal, docker-sbx, ona, libkrun."
 )]
 pub struct SandboxBackendParseError(String);
 
@@ -394,6 +454,7 @@ impl FromStr for SandboxBackend {
             "openshell" => Ok(SandboxBackend::Openshell),
             "modal" => Ok(SandboxBackend::Modal),
             "docker-sbx" => Ok(SandboxBackend::DockerSbx),
+            "ona" => Ok(SandboxBackend::Ona),
             "libkrun" => Ok(SandboxBackend::Libkrun),
             other => Err(SandboxBackendParseError(other.to_string())),
         }
@@ -424,7 +485,7 @@ mod tests {
         let err = "bogus".parse::<SandboxBackend>().unwrap_err();
         assert_eq!(
             err.to_string(),
-            "'bogus' is not a valid sandbox backend. Expected one of: libsandbox, nix, host-native, srt, oci, openshell, modal, docker-sbx, libkrun.",
+            "'bogus' is not a valid sandbox backend. Expected one of: libsandbox, nix, host-native, srt, oci, openshell, modal, docker-sbx, ona, libkrun.",
         );
     }
 
@@ -556,6 +617,39 @@ mod tests {
         assert_eq!(json, "\"docker-sbx\"");
         let parsed: SandboxBackend = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed, SandboxBackend::DockerSbx);
+    }
+
+    #[test]
+    fn ona_capabilities_row() {
+        let caps = SandboxBackend::Ona.capabilities();
+        assert_eq!(caps, BackendCapabilities {
+            backend: SandboxBackend::Ona,
+            enforcement: Enforcement::Container,
+            enforces: true,
+            live_ask: false,
+            domain_egress: true,
+            per_op: false,
+            fs_virtualized: true,
+            macos: PlatformSupport::Native,
+            linux: PlatformSupport::Native,
+            status: IntegrationStatus::Scaffolded,
+        });
+    }
+
+    #[test]
+    fn ona_display_and_parse_round_trip() {
+        let backend = SandboxBackend::Ona;
+        let s = backend.to_string();
+        assert_eq!(s, "ona");
+        assert_eq!(s.parse::<SandboxBackend>().unwrap(), backend);
+    }
+
+    #[test]
+    fn ona_serde_round_trip() {
+        let json = serde_json::to_string(&SandboxBackend::Ona).unwrap();
+        assert_eq!(json, "\"ona\"");
+        let parsed: SandboxBackend = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed, SandboxBackend::Ona);
     }
 
     #[test]

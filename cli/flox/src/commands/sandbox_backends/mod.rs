@@ -39,6 +39,7 @@ pub mod docker_sbx;
 pub mod host_native;
 pub mod modal;
 pub mod oci;
+pub mod ona;
 pub mod openshell;
 pub mod preflight;
 pub mod srt;
@@ -136,6 +137,7 @@ pub fn for_backend(
         SandboxBackend::Openshell => Some(Box::new(openshell::OpenshellBackend::new(ctx))),
         SandboxBackend::Modal => Some(Box::new(modal::ModalBackend::new(ctx))),
         SandboxBackend::DockerSbx => Some(Box::new(docker_sbx::DockerSbxBackend::new(ctx))),
+        SandboxBackend::Ona => Some(Box::new(ona::OnaBackend::new(ctx))),
         // Libsandbox is the default in-process path; no wrapper object.
         // All other variants keep the "not yet wired" bail in activate.rs.
         _ => None,

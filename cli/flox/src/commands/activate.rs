@@ -1569,6 +1569,7 @@ mod tests {
             SandboxBackend::Srt,
             SandboxBackend::Oci,
             SandboxBackend::DockerSbx,
+            SandboxBackend::Ona,
             SandboxBackend::Libkrun,
         ];
         for backend in enforcing {

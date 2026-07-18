@@ -1421,6 +1421,11 @@
           "type": "string"
         },
         {
+          "const": "ona",
+          "description": "Ona (formerly Gitpod): a control-plane / gateway CDE. flox bakes the\nenvironment into a lockfile-hash-tagged OCI image and generates the\ndevcontainer hand-off artifact (`.devcontainer/devcontainer.json`) that\nwraps the baked image; an Ona workspace built from that image opens with\nthe locked toolchain already present. Enforcement (workspace isolation,\nnetwork policy) stays entirely on Ona's side — no local enforcement ever\nruns on the laptop, so host assertions are preflight-only and the threat\nmodel inverts (host fs is unreachable, code and secrets leave the\nlaptop). Manifest network grants compile into the devcontainer as\n`containerEnv` proxy hints plus documented policy expectations; the\ngrant's per-binary / read-write scoping is recorded but not enforceable\nthrough the devcontainer contract, a declared lossiness. Ona is an\nenterprise product reached over its API from any host, so `Native` here\nmeans \"the host can drive it\", not \"the workload runs on this OS\".",
+          "type": "string"
+        },
+        {
           "const": "libkrun",
           "description": "Embeddable micro-VM (libkrun): hypervisor isolation with a guest kernel\nvia libkrunfw (Hypervisor.framework on macOS, KVM on Linux).",
           "type": "string"
