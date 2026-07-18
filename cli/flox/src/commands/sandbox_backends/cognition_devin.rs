@@ -87,7 +87,7 @@ use flox_manifest::lockfile::Lockfile;
 use flox_rust_sdk::providers::container_builder::ContainerBuilderParams;
 use tracing::debug;
 
-use super::handoff::{ensure_local_image, manifest_network_rules};
+use super::handoff::{ensure_local_image, manifest_network_rules, yaml_str_list};
 use super::preflight::{first_on_path, split_endpoint};
 use super::{ActivationSandbox, SandboxLaunchCtx};
 use crate::commands::sandbox_backends::oci::lockfile_hash12;
@@ -275,24 +275,6 @@ pub(crate) struct BlueprintParams<'a> {
     pub image_ref: &'a str,
     /// Compiled egress policy.
     pub network: &'a DevinNetworkPolicy,
-}
-
-/// Render a YAML flow-sequence of double-quoted scalars, e.g.
-/// `["a.com", "b.com"]`.
-///
-/// YAML double-quoted scalars escape backslash and double-quote; the
-/// `split_endpoint` charset check already forbids both in hosts, but the
-/// escaping is the belt-and-suspenders guard the artifact depends on.
-pub(crate) fn yaml_str_list(items: &[String]) -> String {
-    let inner = items
-        .iter()
-        .map(|s| {
-            let escaped = s.replace('\\', "\\\\").replace('"', "\\\"");
-            format!("\"{escaped}\"")
-        })
-        .collect::<Vec<_>>()
-        .join(", ");
-    format!("[{inner}]")
 }
 
 /// Render the Devin blueprint hand-off artifact (pure function, no I/O).
@@ -515,18 +497,6 @@ mod tests {
             devin_image_ref("myenv-cognition-devin", "abc123", Some("docker.io/user/")),
             "docker.io/user/myenv-cognition-devin:abc123"
         );
-    }
-
-    // ── yaml_str_list ─────────────────────────────────────────────────────────
-
-    #[test]
-    fn yaml_str_list_quotes_and_escapes() {
-        assert_eq!(yaml_str_list(&[]), "[]");
-        assert_eq!(
-            yaml_str_list(&["api.github.com".to_string(), "*.anthropic.com".to_string()]),
-            "[\"api.github.com\", \"*.anthropic.com\"]"
-        );
-        assert_eq!(yaml_str_list(&["a\"b".to_string()]), "[\"a\\\"b\"]");
     }
 
     // ── compile_devin_network_policy ──────────────────────────────────────────

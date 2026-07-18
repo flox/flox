@@ -101,7 +101,7 @@ use flox_manifest::lockfile::Lockfile;
 use flox_rust_sdk::providers::container_builder::ContainerBuilderParams;
 use tracing::debug;
 
-use super::handoff::{ensure_local_image, manifest_network_rules};
+use super::handoff::{ensure_local_image, manifest_network_rules, yaml_str_list};
 use super::preflight::{first_on_path, split_endpoint};
 use super::{ActivationSandbox, SandboxLaunchCtx};
 use crate::commands::sandbox_backends::oci::lockfile_hash12;
@@ -290,26 +290,6 @@ pub(crate) fn compile_anjuna_network_policy(
 }
 
 // ── Enclave-config artifact generation ─────────────────────────────────────────
-
-/// Render a YAML flow-sequence of double-quoted scalars, e.g.
-/// `["a.com", "b.com"]`.
-///
-/// YAML double-quoted scalars escape backslash and double-quote; the
-/// `split_endpoint` charset check already forbids both in hosts, but the
-/// escaping is the belt-and-suspenders guard the artifact depends on. Kept local
-/// to this module — the enclave config is YAML, a per-provider serialization
-/// shape the shared `toml_str_*` / `json_str_*` helpers do not cover.
-pub(crate) fn yaml_str_list(items: &[String]) -> String {
-    let inner = items
-        .iter()
-        .map(|s| {
-            let escaped = s.replace('\\', "\\\\").replace('"', "\\\"");
-            format!("\"{escaped}\"")
-        })
-        .collect::<Vec<_>>()
-        .join(", ");
-    format!("[{inner}]")
-}
 
 /// Inputs to [`render_enclave_config`] and [`render_build_script`].
 pub(crate) struct AnjunaHandoffParams<'a> {
@@ -601,18 +581,6 @@ mod tests {
             anjuna_image_ref("myenv-anjuna", "abc123", Some("docker.io/user/")),
             "docker.io/user/myenv-anjuna:abc123"
         );
-    }
-
-    // ── yaml_str_list ─────────────────────────────────────────────────────────
-
-    #[test]
-    fn yaml_str_list_quotes_and_escapes() {
-        assert_eq!(yaml_str_list(&[]), "[]");
-        assert_eq!(
-            yaml_str_list(&["api.github.com".to_string(), "*.anthropic.com".to_string()]),
-            "[\"api.github.com\", \"*.anthropic.com\"]"
-        );
-        assert_eq!(yaml_str_list(&["a\"b".to_string()]), "[\"a\\\"b\"]");
     }
 
     // ── compile_anjuna_network_policy ─────────────────────────────────────────

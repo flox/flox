@@ -17,8 +17,9 @@
 //!   copies; the only per-backend difference was the human-readable image label
 //!   in the prompt / fail-fast messages, now a parameter).
 //! - The string-literal escaping helpers ([`py_str_lit`] / [`py_str_list`],
-//!   [`toml_str_lit`] / [`toml_str_list`], [`json_str_lit`] / [`json_str_list`])
-//!   used to guard single- and double-quote injection in rendered artifacts.
+//!   [`toml_str_lit`] / [`toml_str_list`], [`json_str_lit`] / [`json_str_list`],
+//!   [`yaml_str_lit`] / [`yaml_str_list`]) used to guard single- and
+//!   double-quote injection in rendered artifacts.
 //!
 //! # Not shared: the artifact writers
 //!
@@ -217,6 +218,28 @@ pub(crate) fn json_str_list(items: &[String]) -> String {
     format!("[{inner}]")
 }
 
+/// Render a YAML double-quoted flow scalar, escaping backslashes and double
+/// quotes so arbitrary hosts are safe to embed.
+///
+/// YAML double-quoted scalars share the JSON escape set, so the output matches
+/// [`json_str_lit`] / [`toml_str_lit`]; the distinct name marks the YAML
+/// artifacts (enclave config, blueprint) that reach for it.
+pub(crate) fn yaml_str_lit(s: &str) -> String {
+    let escaped = s.replace('\\', "\\\\").replace('"', "\\\"");
+    format!("\"{escaped}\"")
+}
+
+/// Render a YAML flow-sequence of double-quoted scalars, e.g.
+/// `["a.com", "b.com"]`.
+pub(crate) fn yaml_str_list(items: &[String]) -> String {
+    let inner = items
+        .iter()
+        .map(|s| yaml_str_lit(s))
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!("[{inner}]")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -273,5 +296,24 @@ mod tests {
             json_str_list(&["api.github.com".to_string(), "*.anthropic.com".to_string()]),
             "[\"api.github.com\", \"*.anthropic.com\"]"
         );
+    }
+
+    // ── yaml_str_lit / yaml_str_list ──────────────────────────────────────────
+
+    #[test]
+    fn yaml_str_lit_escapes_double_quotes_and_backslashes() {
+        assert_eq!(yaml_str_lit("plain"), "\"plain\"");
+        assert_eq!(yaml_str_lit("a\"b"), "\"a\\\"b\"");
+        assert_eq!(yaml_str_lit("a\\b"), "\"a\\\\b\"");
+    }
+
+    #[test]
+    fn yaml_str_list_joins_escaped_literals() {
+        assert_eq!(yaml_str_list(&[]), "[]");
+        assert_eq!(
+            yaml_str_list(&["api.github.com".to_string(), "*.anthropic.com".to_string()]),
+            "[\"api.github.com\", \"*.anthropic.com\"]"
+        );
+        assert_eq!(yaml_str_list(&["a\"b".to_string()]), "[\"a\\\"b\"]");
     }
 }
