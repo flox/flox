@@ -1136,7 +1136,10 @@ pub mod test_helpers {
         assert!(output.status.success(), "hashing base_dir failed");
         let hash = String::from_utf8(output.stdout).expect("hash output should be utf8");
 
-        Path::new(&tmpdir).join(hash).join(pname).join("catalog.lock")
+        Path::new(&tmpdir)
+            .join(hash)
+            .join(pname)
+            .join("catalog.lock")
     }
 
     /// Runs a build and asserts that the `ExitStatus` matches `expect_status`.
@@ -1525,15 +1528,11 @@ mod tests {
 
         let (flox, _temp_dir_handle) = flox_instance();
         let mut env = new_path_environment(&flox, &manifest);
+        let expression_ref = NixFlakeref::from_path(env.dot_flox_path()).unwrap();
 
         // Manifest builds resolve no catalog inputs, so the lock goal emits
         // an empty map without building anything.
-        let lock_results = lock_with_nix_expr(
-            &flox,
-            &mut env,
-            &NixFlakeref::from_path(env.dot_flox_path()).unwrap(),
-            &package_name,
-        );
+        let lock_results = lock_with_nix_expr(&flox, &mut env, &expression_ref, &package_name);
         assert_eq!(lock_results.len(), 1);
         assert_eq!(lock_results[0].system, flox.system);
         assert!(lock_results[0].direct_catalog_inputs.is_empty());
