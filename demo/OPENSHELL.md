@@ -21,10 +21,23 @@ OpenShell 0.0.82):
 
 - Beats 1–5 verified 2026-07-13/14; full end-to-end run including
   beat 4's live agent on 2026-07-16.
-- Not yet rehearsed (2026-07-17 changes): the resequencing that
-  starts the log tail in beat 2 (confirm `--tail` doesn't replay
-  old events), and the manifest-declared agent grants that replace
-  beat 3's manual Anthropic `policy update`.
+- Re-verified exec-mode 2026-07-17 end-to-end: the beat 2 log-tail
+  resequencing, the demo-secrets probe, the manifest-declared agent
+  grants (the proxy identified `.claude-wrapped` by store path and
+  allowed api.anthropic.com per the manifest rule while denying its
+  ungranted Datadog telemetry endpoint), the beat 3 hot-reload flip,
+  and `--no-keep` teardown. Note `--tail` *replays* recent events —
+  starting it a beat late still shows the deny.
+- **Known issue until the builder pin is bumped:** in-guest
+  `flox services status` (beat 1) fails to parse the project
+  lockfile — the pinned guest flox predates the
+  `options.sandbox.network` field. The services themselves start
+  and serve fine. Fix: push the branch, bump the openshell
+  `FROZEN_FALLBACK_REV` to the pushed head, re-dispatch the
+  frozen-builder-cache workflow, rebake.
+- Still needing a live interactive rehearsal: the full `cd` +
+  consent + interactive-session flow and beat 4's real agent run
+  (needs the pre-seeded token).
 - Grant-follows-binary confirmed in the allow direction: `claude`
   (scoped grant) reached its API through the proxy while `curl` in
   the same session stayed denied against ungranted endpoints. A
@@ -201,9 +214,9 @@ wiring."**
 
 ## 2 · Prove the boundary is intact
 
-*(verified 2026-07-13; log tail moved up from beat 3 on 2026-07-17
-— not yet rehearsed in this order; confirm `--tail` doesn't replay
-old events)*
+*(verified 2026-07-13; resequenced tail flow re-verified exec-mode
+2026-07-17 — `--tail` replays recent events, so starting it late
+still shows the deny)*
 
 **"My filesystem is invisible, my credentials don't cross, and only
 my project is live."**
@@ -246,7 +259,7 @@ curl: (7) CONNECT tunnel failed, response 403
 The tail prints the denial as it happens:
 
 ```
-# [ocsf] NET:OPEN [MED] DENIED /nix/store/…-curl-8.x.x/bin/curl(…) -> api.github.com:443 [reason:network connections not allowed by policy]
+# [ocsf] NET:OPEN [MED] DENIED /nix/store/…-curl-8.x.x/bin/curl(…) -> api.github.com:443 [policy:- engine:opa] [reason:endpoint api.github.com:443 is not allowed by any policy]
 ```
 
 **"flox generated this policy for the activation — Nix store
@@ -262,7 +275,7 @@ be denied."**
 ## 3 · Hot-reload a network policy — no restart
 
 *(hot-reload and the binary-scoped GET verified 2026-07-13,
-re-verified 2026-07-14)*
+re-verified 2026-07-14 and exec-mode 2026-07-17)*
 
 > **Do not demo write-denial:** on 0.0.82 a `read-only:rest` grant
 > still lets POST/DELETE through (logged ALLOWED). Stick to
@@ -359,7 +372,10 @@ Give it real work:
 ```
 
 Claude edits `app.py` and commits — no per-action prompts. Anything
-it tries outside the policy is denied and lands in the log tail.
+it tries outside the policy is denied and lands in the log tail —
+in rehearsal the agent's own Datadog telemetry endpoint showed up
+DENIED while its granted API traffic flowed, which makes a nice
+closing line.
 
 ---
 
