@@ -1,0 +1,96 @@
+{
+  "lockfile-version": 1,
+  "manifest": {
+    "schema-version": "1.13.0",
+    "install": {
+      "nodejs": {
+        "pkg-path": "nodejs"
+      }
+    },
+    "vars": {
+      "FLOX_FEATURES_AUTO_ACTIVATE": "true",
+      "FLOX_FEATURES_SANDBOX_ACTIVATE": "true",
+      "GITHUB_TOKEN": "ghp-demo-FAKE"
+    },
+    "hook": {
+      "on-activate": "  # E2B is cloud-remote — there is no local gateway to run as a service. The\n  # setup concern is the launch prerequisites, surfaced here so the operator\n  # learns of them before the first 'cd', not mid-demo.\n\n  # 1. Docker: the e2b backend bakes the environment image locally before E2B's\n  #    builder pulls it. Docker is one of the two required host tools.\n  if ! command -v docker >/dev/null 2>&1; then\n    echo \"note: 'docker' not found on PATH — the e2b backend needs it to bake\" >&2\n    echo \"      the image before E2B builds the template (see demo/E2B.md beat 0).\" >&2\n  fi\n\n  # 2. CLI: the e2b CLI builds the template from the generated Dockerfile. It is\n  #    a Node package (@e2b/cli), not in the catalog, so install it via npm\n  #    (nodejs is installed by this env). Presence-detect and guide.\n  if ! command -v e2b >/dev/null 2>&1; then\n    echo \"note: 'e2b' CLI not found on PATH. Install it with:\" >&2\n    echo \"        npm install -g @e2b/cli\" >&2\n    echo \"      (nodejs/npm are provided by this env; see demo/E2B.md beat 0).\" >&2\n  elif ! e2b auth info >/dev/null 2>&1 && [ -z \"${E2B_API_KEY:-}\" ] \\\n       && [ -z \"${E2B_ACCESS_TOKEN:-}\" ]; then\n    # Non-interactive auth probe: never open a browser. `e2b auth info` reports\n    # the signed-in state; env-key presence is the SDK fallback signal.\n    echo \"note: the E2B CLI is present but not authenticated.\" >&2\n    echo \"      Run 'e2b auth login' before the launch beats (see demo/E2B.md\" >&2\n    echo \"      beat 0), or export E2B_API_KEY=<key> from the E2B dashboard.\" >&2\n  fi\n\n  # 3. Registry: E2B builds the template by pulling the image the Dockerfile's\n  #    FROM references, so the generated e2b.Dockerfile needs a registry prefix.\n  #    Default to a bare tag and let the operator override; flox reads\n  #    FLOX_SANDBOX_E2B_REGISTRY when it renders the Dockerfile.\n  if [ -z \"${FLOX_SANDBOX_E2B_REGISTRY:-}\" ]; then\n    echo \"note: FLOX_SANDBOX_E2B_REGISTRY is unset; the generated Dockerfile will\" >&2\n    echo \"      use a bare image tag. Export it (e.g. docker.io/<user>) before the\" >&2\n    echo \"      template build.\" >&2\n  fi\n\n  # Demo fixture: a planted \"secret\" the sandbox must never see (beat 4 of\n  # demo/E2B.md). On E2B the sandbox is remote and has no view of the host\n  # filesystem at all, so this is unreachable by construction. Removed by\n  # profile.deactivate.\n  mkdir -p \"$HOME/demo-secrets\"\n  printf 'API_KEY=sk-demo-FAKE-do-not-use\\n' > \"$HOME/demo-secrets/.env\"\n"
+    },
+    "profile": {
+      "bash": "  if [ -n \"${FLOX_BIN:-}\" ]; then\n    alias flox='$FLOX_BIN'\n  fi\n  export FLOX_VERSION=\"$(\"${FLOX_BIN:-flox}\" --version)\"\n",
+      "zsh": "  if [ -n \"${FLOX_BIN:-}\" ]; then\n    alias flox='$FLOX_BIN'\n  fi\n  export FLOX_VERSION=\"$(\"${FLOX_BIN:-flox}\" --version)\"\n",
+      "deactivate": {
+        "common": "  # Deactivating the demo cleans up after itself: remove the planted secret.\n  rm -rf \"$HOME/demo-secrets\"\n"
+      }
+    },
+    "options": {
+      "systems": [
+        "aarch64-darwin",
+        "x86_64-linux"
+      ]
+    }
+  },
+  "packages": [
+    {
+      "attr_path": "nodejs",
+      "broken": false,
+      "derivation": "/nix/store/cr8w869qmg1yb021mnpzgrfsy6hj2lxk-nodejs-24.18.0.drv",
+      "description": "Event-driven I/O framework for the V8 JavaScript engine",
+      "install_id": "nodejs",
+      "license": "MIT",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=753cc8a3a87467296ddd1fa93f0cc3e81120ee46",
+      "name": "nodejs-24.18.0",
+      "pname": "nodejs",
+      "rev": "753cc8a3a87467296ddd1fa93f0cc3e81120ee46",
+      "rev_count": 1035164,
+      "rev_date": "2026-07-15T13:07:34Z",
+      "scrape_date": "2026-07-17T04:52:57.866190Z",
+      "stabilities": [
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "24.18.0",
+      "outputs_to_install": [
+        "out",
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/a89rnfd3px0fxmjwd8km471ypxirs1am-nodejs-24.18.0"
+      },
+      "system": "aarch64-darwin",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "nodejs",
+      "broken": false,
+      "derivation": "/nix/store/54kmx1vzkr1g3j3xg4ja2wljihygqbba-nodejs-24.18.0.drv",
+      "description": "Event-driven I/O framework for the V8 JavaScript engine",
+      "install_id": "nodejs",
+      "license": "MIT",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=753cc8a3a87467296ddd1fa93f0cc3e81120ee46",
+      "name": "nodejs-24.18.0",
+      "pname": "nodejs",
+      "rev": "753cc8a3a87467296ddd1fa93f0cc3e81120ee46",
+      "rev_count": 1035164,
+      "rev_date": "2026-07-15T13:07:34Z",
+      "scrape_date": "2026-07-17T05:55:37.195038Z",
+      "stabilities": [
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "24.18.0",
+      "outputs_to_install": [
+        "out",
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/lnfxdsvvm1srsa9kk94s7jqw06yq1h2d-nodejs-24.18.0"
+      },
+      "system": "x86_64-linux",
+      "group": "toplevel",
+      "priority": 5
+    }
+  ]
+}

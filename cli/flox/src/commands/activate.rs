@@ -1570,6 +1570,7 @@ mod tests {
             SandboxBackend::Oci,
             SandboxBackend::DockerSbx,
             SandboxBackend::Ona,
+            SandboxBackend::E2b,
             SandboxBackend::Libkrun,
         ];
         for backend in enforcing {

@@ -17,8 +17,9 @@ DEMO_DIR="${DEMO_DIR:-$HOME/sandbox-demo}"
 # Sandbox backend the manifest declares: "oci" (default; Apple Container /
 # podman), "openshell" (NVIDIA OpenShell — see demo/OPENSHELL.md),
 # "modal" (Modal Sandboxes, cloud-remote — see demo/MODAL.md),
-# "docker-sbx" (Docker Sandboxes local microVM — see demo/DOCKER-SBX.md), or
-# "ona" (Ona control-plane CDE, formerly Gitpod — see demo/ONA.md).
+# "docker-sbx" (Docker Sandboxes local microVM — see demo/DOCKER-SBX.md),
+# "ona" (Ona control-plane CDE, formerly Gitpod — see demo/ONA.md), or
+# "e2b" (E2B cloud-API sandbox — see demo/E2B.md).
 BACKEND="${BACKEND:-oci}"
 # `|| true` so an empty result reaches the friendly preflight below
 # instead of aborting silently under `set -e`.
@@ -124,8 +125,37 @@ case "$BACKEND" in
       echo "      (e.g. docker.io/<user>) before pushing the image Ona pulls." >&2
     fi
     ;;
+  e2b)
+    # The e2b backend is cloud-API (E2B): it bakes an image locally (Docker),
+    # compiles the manifest network policy, and generates the E2B template
+    # hand-off (e2b.Dockerfile + e2b.toml), then stops at the launch boundary.
+    # Preflight requires Docker and the `e2b` CLI, and distinguishes CLI-missing
+    # from CLI-present-but-unauthenticated. The template build and sandbox
+    # launch need an E2B account/API key and a registry E2B can pull from;
+    # neither is set up by this script (see demo/E2B.md).
+    if ! command -v docker >/dev/null 2>&1; then
+      echo "WARNING: 'docker' not found on PATH (required to bake the image)." >&2
+    elif ! docker info >/dev/null 2>&1; then
+      echo "WARNING: the Docker daemon is not reachable ('docker info' failed)." >&2
+      echo "         Start Docker Desktop or the Docker service before baking." >&2
+    fi
+    if ! command -v e2b >/dev/null 2>&1; then
+      echo "WARNING: 'e2b' CLI not found on PATH." >&2
+      echo "         Install: npm install -g @e2b/cli (nodejs from the e2b-setup env)" >&2
+    elif ! e2b auth info >/dev/null 2>&1 && [ -z "${E2B_API_KEY:-}" ] \
+         && [ -z "${E2B_ACCESS_TOKEN:-}" ]; then
+      echo "NOTE: the E2B CLI is present but not authenticated." >&2
+      echo "      That is expected for the local beats; the launch needs" >&2
+      echo "      'e2b auth login' or E2B_API_KEY (see demo/E2B.md beat 0)." >&2
+    fi
+    if [ -z "${FLOX_SANDBOX_E2B_REGISTRY:-}" ]; then
+      echo "NOTE: FLOX_SANDBOX_E2B_REGISTRY is unset; the generated Dockerfile" >&2
+      echo "      will use a bare image tag. Set it to your registry prefix" >&2
+      echo "      (e.g. docker.io/<user>) before the template build." >&2
+    fi
+    ;;
   *)
-    echo "ERROR: BACKEND='$BACKEND' is not a demo backend (oci|openshell|modal|docker-sbx|ona)." >&2
+    echo "ERROR: BACKEND='$BACKEND' is not a demo backend (oci|openshell|modal|docker-sbx|ona|e2b)." >&2
     exit 1
     ;;
 esac
@@ -203,7 +233,7 @@ command = "python3 -m http.server 8080"
 sandbox = f'''[options.sandbox]
 backend = "{backend}"
 '''
-if backend in ("openshell", "modal", "docker-sbx", "ona"):
+if backend in ("openshell", "modal", "docker-sbx", "ona", "e2b"):
     # Grant the coding agent its API endpoints. On openshell the grant is
     # scoped to the exact claude binary (`binary` resolves to the locked
     # store path via the lockfile) and enforced at L7. On modal the host of
@@ -212,9 +242,12 @@ if backend in ("openshell", "modal", "docker-sbx", "ona"):
     # kit's `network.allowedDomains` (HTTP/HTTPS domains); on ona each :443
     # host compiles into the devcontainer's `flox.sandbox.network.allow`
     # allowlist (the expectation an operator wires into Ona's enterprise
-    # network policy). In the cloud/microVM/control-plane cases the
-    # binary/access/protocol scoping is recorded but not enforceable, a
-    # declared lossiness. Either way, everything else stays deny-by-default.
+    # network policy); on e2b each :443/:80 host compiles into the e2b.toml
+    # `allowed_hosts` list, and flox forces `allow_internet_access = false`
+    # because E2B's own default is open (default-OPEN). In the
+    # cloud/microVM/control-plane cases the binary/access/protocol scoping is
+    # recorded but not enforceable, a declared lossiness. Either way,
+    # everything else stays deny-by-default.
     sandbox += '''
 [[options.sandbox.network]]
 endpoint = "api.anthropic.com:443"
@@ -282,14 +315,14 @@ Then:
 
 and follow demo/SCRIPT.md (backend "oci"), demo/OPENSHELL.md
 (backend "openshell"), demo/MODAL.md (backend "modal"),
-demo/DOCKER-SBX.md (backend "docker-sbx"), or demo/ONA.md
-(backend "ona").
+demo/DOCKER-SBX.md (backend "docker-sbx"), demo/ONA.md
+(backend "ona"), or demo/E2B.md (backend "e2b").
 Afterwards: bash demo/cleanup.sh
 
 NOTE: the manifest already declares [options.sandbox]
 backend = "$BACKEND", an auto-starting web service, and (openshell,
-modal, docker-sbx, and ona) [[options.sandbox.network]] grants for
-the agent's Anthropic endpoints, so the first 'cd' auto-activates
+modal, docker-sbx, ona, and e2b) [[options.sandbox.network]] grants
+for the agent's Anthropic endpoints, so the first 'cd' auto-activates
 straight into the sandbox. The first-ever bake
 takes ~5-15 min (the builder VM compiles the pinned flox rev; later
 bakes reuse its cache, ~2-5 min); to pre-bake off-camera, run:
@@ -307,4 +340,11 @@ hand-off (.devcontainer/devcontainer.json), but the workspace open
 needs an Ona account + an enterprise workspace/partnership and a
 registry Ona can pull from (export FLOX_SANDBOX_ONA_REGISTRY=<prefix>).
 See demo/ONA.md.
+
+NOTE (e2b): the e2b backend is cloud-API (E2B). It bakes the image
+locally and generates the E2B template hand-off (e2b.Dockerfile +
+e2b.toml), but the template build + sandbox launch need an E2B
+account/API key (e2b auth login or E2B_API_KEY) and a registry E2B
+can pull from (export FLOX_SANDBOX_E2B_REGISTRY=<prefix>). The e2b
+CLI is 'npm install -g @e2b/cli'. See demo/E2B.md.
 EOF

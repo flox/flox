@@ -70,9 +70,9 @@ if command -v docker >/dev/null 2>&1; then
   # the modal backend additionally names its pushed registry image under the
   # -modal repo, which may have been retagged locally before a push; the
   # docker-sbx backend bakes under the -docker-sbx repo; the ona backend
-  # bakes under the -ona repo.
+  # bakes under the -ona repo; the e2b backend bakes under the -e2b repo.
   docker image ls --format '{{.Repository}}:{{.Tag}}' 2>/dev/null | \
-    grep -E '^sandbox-demo-(openshell|modal|docker-sbx|ona):' | \
+    grep -E '^sandbox-demo-(openshell|modal|docker-sbx|ona|e2b):' | \
     while read -r tag; do
       docker rmi "$tag" >/dev/null 2>&1 && echo "Removed Docker image: $tag"
     done || true
@@ -86,6 +86,16 @@ if [ -f "$DEMO_DIR/.devcontainer/devcontainer.json" ]; then
   rm -rf "$DEMO_DIR/.devcontainer"
   echo "Removed ona devcontainer hand-off under $DEMO_DIR/.devcontainer."
 fi
+
+# The e2b backend writes its template hand-off (e2b.Dockerfile + e2b.toml) at
+# the project root, not under .flox/cache. Removed with $DEMO_DIR above, but a
+# demo run may have left copies if $DEMO_DIR was overridden.
+for f in "$DEMO_DIR/e2b.Dockerfile" "$DEMO_DIR/e2b.toml"; do
+  if [ -f "$f" ]; then
+    rm -f "$f"
+    echo "Removed e2b template artifact: $f"
+  fi
+done
 
 # demo/host-env leftovers: the gateway-register service writes persistent
 # CLI state under ~/.config/openshell (and may have switched the active

@@ -77,6 +77,25 @@ pub enum SandboxBackend {
     /// macOS drives it via the sbx hypervisor rather than running the workload on
     /// the host.
     DockerSbx,
+    /// E2B: a cloud-API code-execution sandbox provider. flox bakes the
+    /// environment into a lockfile-hash-tagged OCI image, then generates the
+    /// E2B template hand-off — an `e2b.Dockerfile` whose `FROM` is the baked
+    /// image plus an `e2b.toml` template config — that `e2b template build`
+    /// turns into a sandbox template; a sandbox launched from that template
+    /// (SDK/CLI) runs the locked toolchain. Cloud-remote: nothing runs on the
+    /// host, so host assertions are preflight-only and the threat model inverts
+    /// (host fs unreachable, code and secrets leave the laptop). Egress is
+    /// default-OPEN on E2B (`allowInternetAccess=true`), so flox's policy
+    /// compile ALWAYS emits an explicit deny posture and only then adds the
+    /// manifest's `:443`/`:80` host allowlist; E2B's host/SNI filtering covers
+    /// ports 80/443 only and does not filter QUIC/UDP, a declared lossiness.
+    /// Policy is applied at sandbox creation, but E2B exposes a live
+    /// `updateNetwork` (replace-not-merge) on a running sandbox — the one true
+    /// live network-grant redemption in the cloud tier — which is an
+    /// operator-initiated policy replacement, not a per-request ask, so
+    /// `live_ask` stays false. Reached over the API identically from macOS and
+    /// Linux.
+    E2b,
     /// Ona (formerly Gitpod): a control-plane / gateway CDE. flox bakes the
     /// environment into a lockfile-hash-tagged OCI image and generates the
     /// devcontainer hand-off artifact (`.devcontainer/devcontainer.json`) that
@@ -172,7 +191,7 @@ pub struct BackendCapabilities {
 
 impl SandboxBackend {
     /// Every backend on the roster, in spectrum order (weakest boundary first).
-    pub const ALL: [SandboxBackend; 10] = [
+    pub const ALL: [SandboxBackend; 11] = [
         SandboxBackend::Libsandbox,
         SandboxBackend::Nix,
         SandboxBackend::HostNative,
@@ -182,6 +201,7 @@ impl SandboxBackend {
         SandboxBackend::Modal,
         SandboxBackend::DockerSbx,
         SandboxBackend::Ona,
+        SandboxBackend::E2b,
         SandboxBackend::Libkrun,
     ];
 
@@ -401,6 +421,55 @@ impl SandboxBackend {
                 // honestly Scaffolded, not Implemented.
                 status: Scaffolded,
             },
+            SandboxBackend::E2b => BackendCapabilities {
+                backend: self,
+                // E2B runs the workload in a cloud microVM (Firecracker-class);
+                // the boundary is E2B's, and the policy surface (a template
+                // image plus a sandbox network config) clusters with the other
+                // container-class cloud backends.
+                enforcement: Container,
+                enforces: true,
+                // Network policy is applied at sandbox creation. E2B does
+                // expose a live `updateNetwork` (replace-not-merge) on a
+                // running sandbox — a genuine live network-grant redemption —
+                // but that is an operator-initiated policy replacement, not a
+                // per-request adjudication of a specific out-of-policy access.
+                // The contract's `live_ask` means the latter, so it stays
+                // false; the live-update capability is documented in the module
+                // docs as the one true live network redemption in the cloud
+                // tier.
+                live_ask: false,
+                // E2B filters egress by host/SNI, but only on ports 80 and 443;
+                // QUIC/UDP is not filtered. That HTTP(S)-only ceiling is a
+                // declared lossiness, not a reason to claim no domain egress.
+                // Critically, E2B's default is `allowInternetAccess=true`, so
+                // flox always compiles an explicit deny posture first and adds
+                // only the manifest's allowlist on top.
+                domain_egress: true,
+                // The sandbox network config is endpoint-scoped (host
+                // allowlist); it carries no read/write method distinction and
+                // no per-binary attribution, and the guest filesystem is the
+                // baked template image rather than per-path r/w/x grants.
+                // Op-blind by the contract's meaning.
+                per_op: false,
+                // The workload runs in a remote E2B microVM, so it pays the
+                // virtualized-filesystem cost class rather than native host I/O.
+                fs_virtualized: true,
+                // Cloud-remote: the sandbox is reached over the E2B API, so the
+                // launch path is identical from macOS and Linux — nothing runs
+                // on the host. `Native` here means "the host can drive it", not
+                // "the workload runs on this OS".
+                macos: Native,
+                linux: Native,
+                // The launch boundary needs an E2B account/API key and a
+                // template built from the baked image (E2B ingests images as
+                // the `FROM` base of an `e2b.Dockerfile`, built via
+                // `e2b template build` against E2B's builder). Preflight, bake,
+                // policy compilation, and template-artifact generation are
+                // wired; the final template build and remote launch are not, so
+                // this is honestly Scaffolded, not Implemented.
+                status: Scaffolded,
+            },
             SandboxBackend::Libkrun => BackendCapabilities {
                 backend: self,
                 enforcement: Hypervisor,
@@ -429,6 +498,7 @@ impl Display for SandboxBackend {
             SandboxBackend::Modal => "modal",
             SandboxBackend::DockerSbx => "docker-sbx",
             SandboxBackend::Ona => "ona",
+            SandboxBackend::E2b => "e2b",
             SandboxBackend::Libkrun => "libkrun",
         };
         write!(f, "{name}")
@@ -437,7 +507,7 @@ impl Display for SandboxBackend {
 
 #[derive(Debug, thiserror::Error)]
 #[error(
-    "'{0}' is not a valid sandbox backend. Expected one of: libsandbox, nix, host-native, srt, oci, openshell, modal, docker-sbx, ona, libkrun."
+    "'{0}' is not a valid sandbox backend. Expected one of: libsandbox, nix, host-native, srt, oci, openshell, modal, docker-sbx, ona, e2b, libkrun."
 )]
 pub struct SandboxBackendParseError(String);
 
@@ -455,6 +525,7 @@ impl FromStr for SandboxBackend {
             "modal" => Ok(SandboxBackend::Modal),
             "docker-sbx" => Ok(SandboxBackend::DockerSbx),
             "ona" => Ok(SandboxBackend::Ona),
+            "e2b" => Ok(SandboxBackend::E2b),
             "libkrun" => Ok(SandboxBackend::Libkrun),
             other => Err(SandboxBackendParseError(other.to_string())),
         }
@@ -485,7 +556,7 @@ mod tests {
         let err = "bogus".parse::<SandboxBackend>().unwrap_err();
         assert_eq!(
             err.to_string(),
-            "'bogus' is not a valid sandbox backend. Expected one of: libsandbox, nix, host-native, srt, oci, openshell, modal, docker-sbx, ona, libkrun.",
+            "'bogus' is not a valid sandbox backend. Expected one of: libsandbox, nix, host-native, srt, oci, openshell, modal, docker-sbx, ona, e2b, libkrun.",
         );
     }
 
@@ -650,6 +721,39 @@ mod tests {
         assert_eq!(json, "\"ona\"");
         let parsed: SandboxBackend = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed, SandboxBackend::Ona);
+    }
+
+    #[test]
+    fn e2b_capabilities_row() {
+        let caps = SandboxBackend::E2b.capabilities();
+        assert_eq!(caps, BackendCapabilities {
+            backend: SandboxBackend::E2b,
+            enforcement: Enforcement::Container,
+            enforces: true,
+            live_ask: false,
+            domain_egress: true,
+            per_op: false,
+            fs_virtualized: true,
+            macos: PlatformSupport::Native,
+            linux: PlatformSupport::Native,
+            status: IntegrationStatus::Scaffolded,
+        });
+    }
+
+    #[test]
+    fn e2b_display_and_parse_round_trip() {
+        let backend = SandboxBackend::E2b;
+        let s = backend.to_string();
+        assert_eq!(s, "e2b");
+        assert_eq!(s.parse::<SandboxBackend>().unwrap(), backend);
+    }
+
+    #[test]
+    fn e2b_serde_round_trip() {
+        let json = serde_json::to_string(&SandboxBackend::E2b).unwrap();
+        assert_eq!(json, "\"e2b\"");
+        let parsed: SandboxBackend = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed, SandboxBackend::E2b);
     }
 
     #[test]

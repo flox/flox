@@ -1,0 +1,100 @@
+schema-version = "1.13.0"
+
+# E2B is a cloud-API sandbox provider reached over its API, so this setup env
+# runs no local service. The `e2b` backend generates an E2B template hand-off
+# (e2b.Dockerfile + e2b.toml) from the baked image; the genuinely required host
+# tools are Docker (to bake the image) and the `e2b` CLI (to build the template
+# from the Dockerfile). The `@e2b/cli` package is a Node CLI and is NOT in the
+# flox catalog / nixpkgs (only the Python SDK, python3xxPackages.e2b, is), so
+# this env installs `nodejs` to provide `npm` and the operator runs
+# `npm install -g @e2b/cli`. Auth (e2b auth login / E2B_API_KEY) is the wall.
+
+[install]
+# nodejs provides npm so the operator can install the E2B CLI:
+#   npm install -g @e2b/cli
+# The CLI itself is not packaged in the catalog; npm is the supported path.
+nodejs.pkg-path = "nodejs"
+
+[vars]
+# Feature flags the demo needs in the presentation shell.
+FLOX_FEATURES_SANDBOX_ACTIVATE = "true"
+FLOX_FEATURES_AUTO_ACTIVATE = "true"
+# Planted for the token-isolation beat: visible on the host. On the E2B backend
+# the sandbox is remote and shares no host env, so this simply never reaches the
+# sandbox.
+GITHUB_TOKEN = "ghp-demo-FAKE"
+
+[hook]
+on-activate = '''
+  # E2B is cloud-remote — there is no local gateway to run as a service. The
+  # setup concern is the launch prerequisites, surfaced here so the operator
+  # learns of them before the first 'cd', not mid-demo.
+
+  # 1. Docker: the e2b backend bakes the environment image locally before E2B's
+  #    builder pulls it. Docker is one of the two required host tools.
+  if ! command -v docker >/dev/null 2>&1; then
+    echo "note: 'docker' not found on PATH — the e2b backend needs it to bake" >&2
+    echo "      the image before E2B builds the template (see demo/E2B.md beat 0)." >&2
+  fi
+
+  # 2. CLI: the e2b CLI builds the template from the generated Dockerfile. It is
+  #    a Node package (@e2b/cli), not in the catalog, so install it via npm
+  #    (nodejs is installed by this env). Presence-detect and guide.
+  if ! command -v e2b >/dev/null 2>&1; then
+    echo "note: 'e2b' CLI not found on PATH. Install it with:" >&2
+    echo "        npm install -g @e2b/cli" >&2
+    echo "      (nodejs/npm are provided by this env; see demo/E2B.md beat 0)." >&2
+  elif ! e2b auth info >/dev/null 2>&1 && [ -z "${E2B_API_KEY:-}" ] \
+       && [ -z "${E2B_ACCESS_TOKEN:-}" ]; then
+    # Non-interactive auth probe: never open a browser. `e2b auth info` reports
+    # the signed-in state; env-key presence is the SDK fallback signal.
+    echo "note: the E2B CLI is present but not authenticated." >&2
+    echo "      Run 'e2b auth login' before the launch beats (see demo/E2B.md" >&2
+    echo "      beat 0), or export E2B_API_KEY=<key> from the E2B dashboard." >&2
+  fi
+
+  # 3. Registry: E2B builds the template by pulling the image the Dockerfile's
+  #    FROM references, so the generated e2b.Dockerfile needs a registry prefix.
+  #    Default to a bare tag and let the operator override; flox reads
+  #    FLOX_SANDBOX_E2B_REGISTRY when it renders the Dockerfile.
+  if [ -z "${FLOX_SANDBOX_E2B_REGISTRY:-}" ]; then
+    echo "note: FLOX_SANDBOX_E2B_REGISTRY is unset; the generated Dockerfile will" >&2
+    echo "      use a bare image tag. Export it (e.g. docker.io/<user>) before the" >&2
+    echo "      template build." >&2
+  fi
+
+  # Demo fixture: a planted "secret" the sandbox must never see (beat 4 of
+  # demo/E2B.md). On E2B the sandbox is remote and has no view of the host
+  # filesystem at all, so this is unreachable by construction. Removed by
+  # profile.deactivate.
+  mkdir -p "$HOME/demo-secrets"
+  printf 'API_KEY=sk-demo-FAKE-do-not-use\n' > "$HOME/demo-secrets/.env"
+'''
+
+# Presentation-shell setup, so the walkthrough's manual export block
+# disappears. bash and zsh only — the demo script targets bash, and
+# `alias`/`export` syntax is not portable to fish/tcsh.
+[profile]
+bash = '''
+  if [ -n "${FLOX_BIN:-}" ]; then
+    alias flox='$FLOX_BIN'
+  fi
+  export FLOX_VERSION="$("${FLOX_BIN:-flox}" --version)"
+'''
+zsh = '''
+  if [ -n "${FLOX_BIN:-}" ]; then
+    alias flox='$FLOX_BIN'
+  fi
+  export FLOX_VERSION="$("${FLOX_BIN:-flox}" --version)"
+'''
+
+[profile.deactivate]
+common = '''
+  # Deactivating the demo cleans up after itself: remove the planted secret.
+  rm -rf "$HOME/demo-secrets"
+'''
+
+[options]
+# E2B is reached over its API from any host; the setup env itself only needs to
+# provide nodejs/npm (to install the CLI), so both dev systems are supported.
+systems = ["aarch64-darwin", "x86_64-linux"]

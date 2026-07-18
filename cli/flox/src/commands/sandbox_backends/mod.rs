@@ -36,6 +36,7 @@
 
 pub mod bake;
 pub mod docker_sbx;
+pub mod e2b;
 pub mod host_native;
 pub mod modal;
 pub mod oci;
@@ -138,6 +139,7 @@ pub fn for_backend(
         SandboxBackend::Modal => Some(Box::new(modal::ModalBackend::new(ctx))),
         SandboxBackend::DockerSbx => Some(Box::new(docker_sbx::DockerSbxBackend::new(ctx))),
         SandboxBackend::Ona => Some(Box::new(ona::OnaBackend::new(ctx))),
+        SandboxBackend::E2b => Some(Box::new(e2b::E2bBackend::new(ctx))),
         // Libsandbox is the default in-process path; no wrapper object.
         // All other variants keep the "not yet wired" bail in activate.rs.
         _ => None,
