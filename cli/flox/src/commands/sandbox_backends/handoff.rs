@@ -11,11 +11,17 @@
 //! byte-identical copies live here:
 //!
 //! - [`manifest_network_rules`] — read `[[options.sandbox.network]]` from the
-//!   lockfile (was four verbatim copies).
+//!   lockfile (was a verbatim copy in every backend).
 //! - [`ensure_local_image`] — the resolve-state → `should_bake_oci` →
-//!   `{RunStale | Bake | Prompt | FailFast}` ladder (was four near-identical
-//!   copies; the only per-backend difference was the human-readable image label
-//!   in the prompt / fail-fast messages, now a parameter).
+//!   `{RunStale | Bake | Prompt | FailFast}` ladder (was a near-identical copy
+//!   in every backend; the only per-backend difference was the human-readable
+//!   image label in the prompt / fail-fast messages, now a parameter).
+//! - [`registry_image_ref`] — build `<prefix>/<repo>:<hash12>` (or the bare
+//!   `<repo>:<hash12>` placeholder) from the backend's registry knob.
+//! - [`flox_sanitized_name`] — the `flox-`-prefixed lowercase/dash slug the
+//!   cloud backends use as their app / template / snapshot / workspace name.
+//! - [`sandbox_activation_command`] — map an `InvocationType` to the argv the
+//!   hand-off artifact runs inside the sandbox.
 //! - The string-literal escaping helpers ([`py_str_lit`] / [`py_str_list`],
 //!   [`toml_str_lit`] / [`toml_str_list`], [`json_str_lit`] / [`json_str_list`],
 //!   [`yaml_str_lit`] / [`yaml_str_list`]) used to guard single- and
@@ -23,19 +29,25 @@
 //!
 //! # Not shared: the artifact writers
 //!
-//! The four backends' generated-artifact writers are *not* congruent, so they
-//! stay in their own modules rather than forcing a shared abstraction:
+//! The backends' generated-artifact writers are *not* congruent, so they stay
+//! in their own modules rather than forcing a shared abstraction:
 //!
 //! - `modal` writes a single script under `.flox/cache/modal-launch.py`.
 //! - `docker-sbx` writes `.flox/cache/docker-sbx-kit/spec.yaml` (a kit *dir*).
+//! - `daytona` writes a single script under `.flox/cache/daytona-launch.py`.
+//! - `anjuna` writes a *pair* (`enclave-config.yaml` + `build-enclave.sh`)
+//!   under `.flox/cache/anjuna/` — build inputs an operator regenerates.
 //! - `ona` writes `<project>/.devcontainer/devcontainer.json` (committed to the
 //!   repo root, not `.flox/cache`).
 //! - `e2b` writes a *pair* (`<project>/e2b.Dockerfile` + `e2b.toml`) at the
 //!   project root.
+//! - `cognition-devin` writes `<project>/.devin/blueprint.yaml` (committed to
+//!   the repo root, like the ona devcontainer).
 //!
-//! They diverge on root (`.flox/cache` vs project), on cardinality (one file vs
-//! a pair vs a dir), and on the "generated: <path>" message shape, so there is
-//! no common core worth extracting beyond the escaping helpers above.
+//! They diverge on root (`.flox/cache` vs committed project root), on
+//! cardinality (one file vs a pair vs a dir), and on the "generated: <path>"
+//! message shape, so there is no common core worth extracting beyond the
+//! escaping helpers above.
 
 use std::path::Path;
 

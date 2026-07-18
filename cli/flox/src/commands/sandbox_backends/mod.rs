@@ -40,10 +40,13 @@
 //!   `cognition-devin`, `anjuna`): `manifest_network_rules` (read the
 //!   egress grants from the lockfile), `ensure_local_image` (the
 //!   resolve-state → bake-decision ladder, parameterized by the image label
-//!   used in prompts), and the `py_str_*` / `toml_str_*` / `json_str_*`
-//!   quote-escaping helpers the rendered artifacts embed hosts through. The
-//!   per-backend artifact *writers* are deliberately not shared — they diverge
-//!   on output root and cardinality (see the `handoff` module docs).
+//!   used in prompts), the `registry_image_ref` / `flox_sanitized_name` /
+//!   `sandbox_activation_command` pure helpers the cloud backends derive
+//!   their image ref, provider slug, and sandbox argv from, and the
+//!   `py_str_*` / `toml_str_*` / `json_str_*` / `yaml_str_*` quote-escaping
+//!   helpers the rendered artifacts embed hosts through. The per-backend
+//!   artifact *writers* are deliberately not shared — they diverge on output
+//!   root and cardinality (see the `handoff` module docs).
 
 pub mod anjuna;
 pub mod bake;
