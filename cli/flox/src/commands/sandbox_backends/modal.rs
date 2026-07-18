@@ -1,9 +1,10 @@
 //! The `modal` sandbox backend: run the environment in a remote Modal Sandbox.
 //!
 //! Modal is a cloud-API provider: unlike every other backend, nothing runs on
-//! the host. flox bakes the environment's OCI image (reusing the openshell
-//! backend's lockfile-hash-tagged Docker bake), then hands that image to Modal,
-//! which pulls it, wraps it in a `modal.Image`, and launches a remote
+//! the host. flox bakes the environment's OCI image via the shared
+//! lockfile-hash-tagged Docker bake (`super::bake`), under Modal's own
+//! `<env>-modal:<hash12>` tag namespace, then hands that image to Modal, which
+//! pulls it, wraps it in a `modal.Image`, and launches a remote
 //! `modal.Sandbox` running the activation. The threat model inverts relative to
 //! the host-local backends: the host filesystem is unreachable from the remote
 //! sandbox, but the code and any injected secrets leave the laptop.
@@ -75,14 +76,11 @@ use flox_rust_sdk::providers::container_builder::ContainerBuilderParams;
 use semver::Version;
 use tracing::debug;
 
+use super::bake::{bake_image, resolve_docker_image_state};
+use super::preflight::{CliVersionCheck, check_cli_version, first_on_path, split_endpoint};
 use super::{ActivationSandbox, SandboxLaunchCtx};
 use crate::commands::sandbox_backends::oci::lockfile_hash12;
-use crate::commands::sandbox_backends::openshell::{
-    bake_openshell_image,
-    openshell_guest_system,
-    openshell_repo,
-    resolve_docker_image_state,
-};
+use crate::commands::sandbox_backends::openshell::openshell_guest_system;
 
 /// Registry prefix the launcher's `from_registry` ref is built from. When set
 /// (e.g. `docker.io/myuser`), the generated artifact references
@@ -90,10 +88,9 @@ use crate::commands::sandbox_backends::openshell::{
 /// hand-edit the registry ref before pushing and running.
 pub(crate) const FLOX_SANDBOX_MODAL_REGISTRY_VAR: &str = "FLOX_SANDBOX_MODAL_REGISTRY";
 
-/// Repository suffix used to name the pushed registry image for the Modal
-/// backend. The image is *baked* under the openshell tag namespace
-/// (`<env>-openshell:<hash12>`, sharing the compat layer), but the launcher's
-/// registry reference is named `<env>-modal:<hash12>` so the pushed artifact is
+/// Repository suffix for the Modal backend's image tags. The image is baked
+/// under `<env>-modal:<hash12>` (with the shared compat layer) and the
+/// launcher's registry reference reuses that name, so the pushed artifact is
 /// recognizable as Modal's and never collides with the other backends' tags on
 /// a shared registry.
 const MODAL_REPO_SUFFIX: &str = "-modal";
@@ -178,65 +175,19 @@ impl ActivationSandbox for ModalBackend<'_> {
     }
 }
 
-/// Resolve the first executable named `name` on `PATH`.
-fn first_on_path(name: &str) -> Option<PathBuf> {
-    std::env::var_os("PATH").and_then(|paths| {
-        std::env::split_paths(&paths)
-            .map(|dir| dir.join(name))
-            .find(|candidate| candidate.is_file())
-    })
-}
-
 /// Verify the resolved Modal CLI meets [`MODAL_MIN_VERSION`].
 ///
 /// A too-old client would surface as an unexpected-keyword error deep inside
-/// `Sandbox.create`; the gate turns that into an actionable message. A failed
-/// or unparseable `--version` invocation skips the gate (logged at debug)
-/// rather than blocking on an unknown output format.
+/// `Sandbox.create`; the shared gate turns that into an actionable message and
+/// tolerates a failed or unparseable `--version` (logged at debug). The hint
+/// here carries the Modal-specific upgrade instructions.
 fn check_modal_version(modal_path: &Path) -> Result<()> {
-    let output = std::process::Command::new(modal_path)
-        .arg("--version")
-        .output();
-    let raw = match output {
-        Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).into_owned(),
-        _ => {
-            debug!(
-                path = %modal_path.display(),
-                "could not run 'modal --version'; skipping version gate"
-            );
-            return Ok(());
-        },
-    };
-    let Some(version) = parse_modal_version(&raw) else {
-        debug!(
-            path = %modal_path.display(),
-            output = raw.trim(),
-            "unparseable 'modal --version' output; skipping version gate"
-        );
-        return Ok(());
-    };
-    if version < MODAL_MIN_VERSION {
-        bail!(
-            "Modal CLI version {version} is too old for the 'modal' sandbox backend (needs {MODAL_MIN_VERSION} or newer).\n\
-             Resolved binary: {path}\n\
-             Upgrade with 'flox install python313Packages.modal' or 'pip install --upgrade modal', then re-run.",
-            path = modal_path.display()
-        );
-    }
-    debug!(%version, "modal CLI version meets the minimum");
-    Ok(())
-}
-
-/// Parse the version from `modal --version` output (e.g. `modal client version: 1.4.2`
-/// or a bare `1.4.2`).
-///
-/// Returns `None` when no whitespace/colon-separated token parses as a semver
-/// version (an optional leading `v` is tolerated).
-pub(crate) fn parse_modal_version(output: &str) -> Option<Version> {
-    output
-        .split(|c: char| c.is_whitespace() || c == ':')
-        .filter(|t| !t.is_empty())
-        .find_map(|token| Version::parse(token.strip_prefix('v').unwrap_or(token)).ok())
+    check_cli_version(modal_path, &CliVersionCheck {
+        tool_name: "Modal",
+        backend_id: "modal",
+        min_version: MODAL_MIN_VERSION,
+        upgrade_hint: "Upgrade with 'flox install python313Packages.modal' or 'pip install --upgrade modal', then re-run.",
+    })
 }
 
 /// Return the `<env>-modal` repository name used for Docker image tagging.
@@ -318,29 +269,6 @@ pub(crate) fn compile_modal_network_policy(
         block_network: false,
         domain_allowlist: domains,
     })
-}
-
-/// Split a `<HOST>:<PORT>` endpoint and validate both halves.
-///
-/// The host charset is restricted to hostname characters plus a leading-label
-/// wildcard (`*`), which also guarantees the host is safe to embed in the
-/// single-quoted Python string literals the launcher artifact emits.
-fn split_endpoint(endpoint: &str) -> Result<(String, u16)> {
-    let invalid = || {
-        anyhow::anyhow!(
-            "Invalid sandbox network endpoint '{endpoint}'.\nWrite the endpoint as <HOST>:<PORT>, e.g. 'api.github.com:443'."
-        )
-    };
-    let (host, port) = endpoint.rsplit_once(':').ok_or_else(invalid)?;
-    let host_ok = !host.is_empty()
-        && host
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '*'));
-    if !host_ok {
-        return Err(invalid());
-    }
-    let port: u16 = port.parse().map_err(|_| invalid())?;
-    Ok((host.to_string(), port))
 }
 
 // ── Launcher artifact generation ───────────────────────────────────────────────
@@ -517,19 +445,18 @@ fn wrap_modal(
         std::fs::canonicalize(dot_flox_path).unwrap_or_else(|_| dot_flox_path.to_path_buf());
     let project = dot_flox.parent().unwrap_or(&dot_flox).to_path_buf();
 
-    // The image is baked under the openshell tag namespace (shared compat
-    // layer); the registry image is *named* under the modal namespace so the
-    // pushed artifact is recognizable and collision-free.
-    let bake_repo = openshell_repo(env_name);
-    let registry_repo = modal_repo(env_name);
+    // Bake and tag the image under Modal's own namespace (`<env>-modal`), with
+    // the shared compat layer. The pushed artifact is recognizable as Modal's
+    // and never collides with the other backends' tags on a shared registry.
+    let repo = modal_repo(env_name);
     let hash12 = lockfile_hash12(lockfile);
 
-    // Ensure the local hash-tagged image exists (reusing the openshell bake,
-    // which produces an image with the compat layer). The Modal launch needs
-    // this image pushed to a registry, but baking it locally first is the same
-    // content-addressed step every OCI-ingesting provider shares.
+    // Ensure the local hash-tagged image exists (baking with the shared compat
+    // layer if absent). The Modal launch pushes this image to a registry, but
+    // baking it locally first is the same content-addressed step every
+    // OCI-ingesting provider shares.
     ensure_local_image(
-        &bake_repo,
+        &repo,
         env_name,
         dot_flox_path,
         lockfile,
@@ -548,7 +475,7 @@ fn wrap_modal(
     let registry_prefix = std::env::var(FLOX_SANDBOX_MODAL_REGISTRY_VAR)
         .ok()
         .filter(|v| !v.is_empty());
-    let image_ref = modal_image_ref(&registry_repo, &hash12, registry_prefix.as_deref());
+    let image_ref = modal_image_ref(&repo, &hash12, registry_prefix.as_deref());
     let app_name = modal_app_name(env_name);
     let cwd = std::env::current_dir().unwrap_or_else(|_| project.clone());
     let workdir = if cwd.starts_with(&project) {
@@ -575,16 +502,16 @@ fn wrap_modal(
     let registry_hint = match &registry_prefix {
         Some(prefix) => {
             let prefix = prefix.trim_end_matches('/');
-            format!("tag and push it as '{prefix}/{registry_repo}:{hash12}'")
+            format!("tag and push it as '{prefix}/{repo}:{hash12}'")
         },
         None => format!(
-            "set {FLOX_SANDBOX_MODAL_REGISTRY_VAR}=<registry-prefix> and re-run, then push '<prefix>/{registry_repo}:{hash12}'"
+            "set {FLOX_SANDBOX_MODAL_REGISTRY_VAR}=<registry-prefix> and re-run, then push '<prefix>/{repo}:{hash12}'"
         ),
     };
     bail!(
         "The 'modal' sandbox backend launches a remote Modal Sandbox, which requires two \
          prerequisites this host cannot satisfy automatically:\n  \
-         1. Push the baked image '{bake_repo}:{hash12}' to a registry Modal can pull \
+         1. Push the baked image '{repo}:{hash12}' to a registry Modal can pull \
          ({registry_hint}).\n  \
          2. A Modal account and token (preflight confirmed the CLI; the launch itself \
          calls the Modal API).\n\
@@ -622,13 +549,13 @@ fn write_modal_launcher(dot_flox_path: &Path, launcher: &str) -> Result<PathBuf>
 }
 
 /// Ensure the `<repo>:<hash12>` image exists in the local Docker store, baking
-/// it (with the openshell compat layer) if absent.
+/// it (with the shared compat layer) if absent.
 ///
 /// The Modal launch pushes this image to a registry; baking it locally first is
 /// the content-addressed bake every OCI-ingesting provider shares. When the
 /// image is already present (cache hit), this is a no-op.
 fn ensure_local_image(
-    bake_repo: &str,
+    repo: &str,
     env_name: &str,
     dot_flox_path: &Path,
     lockfile: &Lockfile,
@@ -644,7 +571,7 @@ fn ensure_local_image(
         should_bake_oci,
     };
 
-    let state = resolve_docker_image_state(bake_repo, lockfile);
+    let state = resolve_docker_image_state(repo, lockfile);
     match state {
         OciImageState::Explicit(_) | OciImageState::Present { .. } => Ok(()),
         OciImageState::Stale {
@@ -668,7 +595,8 @@ fn ensure_local_image(
                 // Running a stale image is acceptable — the operator pushes
                 // whatever is present; a fresh bake is not forced here.
                 OciBakeDecision::RunStale(_) => Ok(()),
-                OciBakeDecision::Bake => bake_openshell_image(
+                OciBakeDecision::Bake => bake_image(
+                    repo,
                     env_name,
                     dot_flox_path,
                     container_builder_params,
@@ -684,7 +612,8 @@ fn ensure_local_image(
                         .prompt()
                         .unwrap_or(false);
                     if confirmed {
-                        bake_openshell_image(
+                        bake_image(
+                            repo,
                             env_name,
                             dot_flox_path,
                             container_builder_params,
@@ -715,35 +644,6 @@ mod tests {
     use flox_core::activate::sandbox_policy::SandboxNetworkAccess;
 
     use super::*;
-
-    // ── parse_modal_version ───────────────────────────────────────────────────
-
-    #[test]
-    fn version_parses_plain_output() {
-        assert_eq!(parse_modal_version("1.4.2"), Some(Version::new(1, 4, 2)));
-    }
-
-    #[test]
-    fn version_parses_labeled_output() {
-        assert_eq!(
-            parse_modal_version("modal client version: 1.4.2"),
-            Some(Version::new(1, 4, 2))
-        );
-    }
-
-    #[test]
-    fn version_parses_v_prefixed() {
-        assert_eq!(
-            parse_modal_version("modal v1.0.0"),
-            Some(Version::new(1, 0, 0))
-        );
-    }
-
-    #[test]
-    fn version_unparseable_returns_none() {
-        assert_eq!(parse_modal_version("not a version"), None);
-        assert_eq!(parse_modal_version(""), None);
-    }
 
     // ── modal_app_name ────────────────────────────────────────────────────────
 

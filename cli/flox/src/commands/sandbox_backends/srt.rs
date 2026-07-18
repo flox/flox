@@ -18,6 +18,7 @@ use std::path::{Path, PathBuf};
 use anyhow::Result;
 use flox_core::activate::sandbox_backend::SandboxBackend;
 
+use super::preflight::binary_on_path;
 use super::{ActivationSandbox, SandboxLaunchCtx, WRAPPED_MARKER_VAR};
 
 pub struct SrtBackend {
@@ -118,10 +119,4 @@ fn srt_settings_json(home: &Path, project: &Path) -> String {
         },
     });
     serde_json::to_string_pretty(&settings).expect("serializing a literal JSON value cannot fail")
-}
-
-/// `true` if an executable named `name` is on `PATH`.
-fn binary_on_path(name: &str) -> bool {
-    std::env::var_os("PATH")
-        .is_some_and(|paths| std::env::split_paths(&paths).any(|dir| dir.join(name).is_file()))
 }

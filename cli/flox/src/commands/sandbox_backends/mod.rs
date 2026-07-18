@@ -18,11 +18,28 @@
 //!    in `cli/flox-core/src/activate/sandbox_backend.rs`.
 //! 2. Add a module in this directory implementing `ActivationSandbox`.
 //! 3. Add a `for_backend` arm returning `Some(Box::new(YourBackend::new(ctx)))`.
+//!
+//! # Shared toolkit
+//!
+//! Two modules hold the plumbing every backend reuses — reach for these
+//! before writing a bespoke copy:
+//!
+//! - [`preflight`] — `first_on_path` / `binary_on_path` for locating a
+//!   required CLI, `check_cli_version` (+ `parse_cli_version`) for a
+//!   minimum-version gate with an actionable message, and `split_endpoint`
+//!   for parsing `<HOST>:<PORT>` network grants.
+//! - [`bake`] — the Docker-resident OCI bake pipeline: `bake_image`
+//!   (parameterized by the destination `<env>-<backend>` repo),
+//!   `resolve_docker_image_state`, and the Docker inspection helpers. A
+//!   Docker-ingesting backend bakes under the repo it owns rather than
+//!   borrowing a peer's tags.
 
+pub mod bake;
 pub mod host_native;
 pub mod modal;
 pub mod oci;
 pub mod openshell;
+pub mod preflight;
 pub mod srt;
 
 use std::convert::Infallible;

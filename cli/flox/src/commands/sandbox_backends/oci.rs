@@ -23,6 +23,7 @@ use flox_manifest::lockfile::Lockfile;
 use flox_rust_sdk::providers::container_builder::ContainerBuilderParams;
 use tracing::debug;
 
+use super::preflight::binary_on_path;
 use super::{ActivationSandbox, SandboxLaunchCtx};
 
 /// Environment variable that bypasses all staleness logic and uses the
@@ -125,12 +126,6 @@ fn platform_runtime() -> &'static str {
     {
         "podman"
     }
-}
-
-/// `true` if an executable named `name` is on `PATH`.
-fn binary_on_path(name: &str) -> bool {
-    std::env::var_os("PATH")
-        .is_some_and(|paths| std::env::split_paths(&paths).any(|dir| dir.join(name).is_file()))
 }
 
 /// Run the activation inside an OCI container, then never return.

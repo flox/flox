@@ -68,21 +68,28 @@ use semver::Version;
 use serde_json::json;
 use tracing::debug;
 
+use super::bake::{
+    bake_image,
+    docker_image_entrypoint,
+    docker_image_env,
+    resolve_docker_image_state,
+    stale_ref_for_state,
+};
+use super::preflight::{CliVersionCheck, check_cli_version, first_on_path, split_endpoint};
 use super::{ActivationSandbox, SandboxLaunchCtx};
 use crate::commands::sandbox_backends::oci::{
     FLOX_SANDBOX_OCI_ALLOW_STALE_VAR,
     FLOX_SANDBOX_OCI_AUTOBAKE_VAR,
-    FLOX_SANDBOX_OCI_IMAGE_VAR,
     OciBakeDecision,
     OciImageState,
-    classify_oci_image_state,
     lockfile_hash12,
     should_bake_oci,
 };
 
 /// Marker env var that requests the OpenShell compat layer in `mkContainer.nix`
-/// (sandbox user/group, iproute2, /bin/sh). Set by [`bake_openshell_image`]
-/// and forwarded into the macOS builder VM by `ContainerizeProxy`.
+/// (sandbox user/group, iproute2, /bin/sh). Set by the shared bake pipeline
+/// (`super::bake::bake_image`) and forwarded into the macOS builder VM by
+/// `ContainerizeProxy`.
 pub(crate) const OPENSHELL_COMPAT_ENV: &str = "_FLOX_CONTAINERIZE_OPENSHELL_COMPAT";
 
 /// Tag repository suffix used for the OpenShell backend. Appended to `env_name`
@@ -105,8 +112,8 @@ pub struct OpenshellBackend<'a> {
     lockfile: &'a Lockfile,
     /// Whether to auto-bake without prompting. Consumed by `wrap_openshell`.
     sandbox_oci_autobake: bool,
-    /// Narrow context for the container builder pipeline. Consumed by
-    /// `bake_openshell_image`.
+    /// Narrow context for the container builder pipeline. Consumed by the
+    /// shared bake pipeline (`super::bake::bake_image`).
     container_builder_params: ContainerBuilderParams,
 }
 
@@ -175,65 +182,21 @@ impl ActivationSandbox for OpenshellBackend<'_> {
     }
 }
 
-/// Resolve the first executable named `name` on `PATH`.
-fn first_on_path(name: &str) -> Option<PathBuf> {
-    std::env::var_os("PATH").and_then(|paths| {
-        std::env::split_paths(&paths)
-            .map(|dir| dir.join(name))
-            .find(|candidate| candidate.is_file())
-    })
-}
-
 /// Verify the resolved OpenShell CLI meets [`OPENSHELL_MIN_VERSION`].
 ///
 /// A too-old CLI would otherwise surface as a raw `unexpected argument
-/// '--env'` usage error from `sandbox create`. A failed or unparseable
-/// `--version` invocation skips the gate (logged at debug) rather than
-/// blocking on an unknown output format.
+/// '--env'` usage error from `sandbox create`. The shared gate tolerates a
+/// failed or unparseable `--version` (logged at debug); the message here
+/// carries the OpenShell-specific shadowing and install guidance.
 fn check_openshell_version(openshell_path: &Path) -> Result<()> {
-    let output = std::process::Command::new(openshell_path)
-        .arg("--version")
-        .output();
-    let raw = match output {
-        Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).into_owned(),
-        _ => {
-            debug!(
-                path = %openshell_path.display(),
-                "could not run 'openshell --version'; skipping version gate"
-            );
-            return Ok(());
-        },
-    };
-    let Some(version) = parse_openshell_version(&raw) else {
-        debug!(
-            path = %openshell_path.display(),
-            output = raw.trim(),
-            "unparseable 'openshell --version' output; skipping version gate"
-        );
-        return Ok(());
-    };
-    if version < OPENSHELL_MIN_VERSION {
-        bail!(
-            "OpenShell CLI version {version} is too old for the 'openshell' sandbox backend (needs {OPENSHELL_MIN_VERSION} or newer).\n\
-             Resolved binary: {path}\n\
-             A Flox environment providing 'openshell' may be shadowing a newer install.\n\
+    check_cli_version(openshell_path, &CliVersionCheck {
+        tool_name: "OpenShell",
+        backend_id: "openshell",
+        min_version: OPENSHELL_MIN_VERSION,
+        upgrade_hint: "A Flox environment providing 'openshell' may be shadowing a newer install.\n\
              If one is installed elsewhere, put its directory earlier on PATH.\n\
              Otherwise install the latest release from https://github.com/NVIDIA/OpenShell#install, then re-run.",
-            path = openshell_path.display()
-        );
-    }
-    debug!(%version, "openshell CLI version meets the minimum");
-    Ok(())
-}
-
-/// Parse the version from `openshell --version` output (e.g. `openshell 0.0.82`).
-///
-/// Returns `None` when no whitespace-separated token parses as a semver
-/// version (an optional leading `v` is tolerated).
-pub(crate) fn parse_openshell_version(output: &str) -> Option<Version> {
-    output
-        .split_whitespace()
-        .find_map(|token| Version::parse(token.strip_prefix('v').unwrap_or(token)).ok())
+    })
 }
 
 /// Return the `<env>-openshell` repository name used for Docker image tagging.
@@ -302,7 +265,8 @@ fn wrap_openshell(
                     run_ref.clone()
                 },
                 OciBakeDecision::Bake => {
-                    bake_openshell_image(
+                    bake_image(
+                        &repo,
                         env_name,
                         dot_flox_path,
                         container_builder_params,
@@ -330,7 +294,8 @@ fn wrap_openshell(
                         .prompt()
                         .unwrap_or(false);
                     if confirmed {
-                        bake_openshell_image(
+                        bake_image(
+                            &repo,
                             env_name,
                             dot_flox_path,
                             container_builder_params,
@@ -396,156 +361,6 @@ fn wrap_openshell(
     Err(anyhow::anyhow!(
         "Failed to launch the openshell sandbox: {err}."
     ))
-}
-
-/// Extract the stale ref string from a `OciImageState::Stale` variant, or
-/// `None` for any other variant.
-fn stale_ref_for_state(state: &OciImageState) -> Option<&str> {
-    match state {
-        OciImageState::Stale { stale_ref, .. } => Some(stale_ref.as_str()),
-        _ => None,
-    }
-}
-
-// ── Docker image state resolution ─────────────────────────────────────────────
-
-/// Resolve the Docker image state for a Docker-resident backend image.
-///
-/// Mirrors [`oci::resolve_oci_image_state`] but always uses `docker` for
-/// image inspection. The `repo` argument selects the tag namespace
-/// (`<env>-openshell` for this backend, `<env>-modal` for the Modal backend
-/// which reuses the same compat-layer image bake), so the resolver is shared
-/// across Docker-ingesting backends.
-pub(crate) fn resolve_docker_image_state(repo: &str, lockfile: &Lockfile) -> OciImageState {
-    let explicit = std::env::var(FLOX_SANDBOX_OCI_IMAGE_VAR)
-        .ok()
-        .filter(|v| !v.is_empty());
-
-    let hash12 = lockfile_hash12(lockfile);
-    let expected_ref = format!("{repo}:{hash12}");
-
-    let expected_present = explicit.is_none() && docker_image_present(&expected_ref);
-    let existing_tags = if explicit.is_none() && !expected_present {
-        docker_list_repo_tags(repo)
-    } else {
-        Vec::new()
-    };
-
-    classify_oci_image_state(explicit, expected_present, repo, &hash12, &existing_tags)
-}
-
-/// Probe whether an image reference exists in the local Docker store.
-fn docker_image_present(image_ref: &str) -> bool {
-    std::process::Command::new("docker")
-        .args(["image", "inspect", "--format", "{{.Id}}", image_ref])
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .status()
-        .map(|s| s.success())
-        .unwrap_or(false)
-}
-
-/// List all tags for `<repo>:*` in the local Docker store.
-///
-/// Returns the tag strings (the part after `:`).
-fn docker_list_repo_tags(repo: &str) -> Vec<String> {
-    let output = std::process::Command::new("docker")
-        .args(["image", "ls", "--format", "{{.Repository}}:{{.Tag}}", repo])
-        .output();
-    let stdout = match output {
-        Ok(o) if o.status.success() => o.stdout,
-        _ => return Vec::new(),
-    };
-    String::from_utf8_lossy(&stdout)
-        .lines()
-        .filter_map(|line| line.rsplit_once(':').map(|(_, tag)| tag.to_string()))
-        .collect()
-}
-
-// ── Docker image inspection ───────────────────────────────────────────────────
-
-/// Read the image ENTRYPOINT from Docker image inspect output.
-///
-/// Returns the entrypoint as a `Vec<String>` (the JSON array from
-/// `Config.Entrypoint`). Returns an empty vec when the image has no
-/// configured entrypoint.
-pub(crate) fn docker_image_entrypoint(image_ref: &str) -> Result<Vec<String>> {
-    let output = std::process::Command::new("docker")
-        .args([
-            "image",
-            "inspect",
-            "--format",
-            "{{json .Config.Entrypoint}}",
-            image_ref,
-        ])
-        .output()
-        .with_context(|| format!("failed to run 'docker image inspect' for '{image_ref}'"))?;
-    if !output.status.success() {
-        bail!(
-            "'docker image inspect' for '{image_ref}' failed: {}",
-            String::from_utf8_lossy(&output.stderr).trim()
-        );
-    }
-    let raw = String::from_utf8_lossy(&output.stdout);
-    let raw = raw.trim();
-    if raw == "null" || raw.is_empty() {
-        return Ok(Vec::new());
-    }
-    let parsed: Vec<String> = serde_json::from_str(raw)
-        .with_context(|| format!("failed to parse Entrypoint JSON from '{image_ref}': {raw}"))?;
-    Ok(parsed)
-}
-
-/// Read the image `Config.Env` from Docker image inspect output.
-///
-/// Returns the entries as `Vec<String>` in `KEY=VALUE` format. Entries that
-/// do not match the `[A-Za-z_][A-Za-z0-9_]*` name pattern required by
-/// OpenShell, or that begin with the reserved `OPENSHELL_` prefix, are
-/// silently dropped.
-pub(crate) fn docker_image_env(image_ref: &str) -> Result<Vec<String>> {
-    let output = std::process::Command::new("docker")
-        .args([
-            "image",
-            "inspect",
-            "--format",
-            "{{json .Config.Env}}",
-            image_ref,
-        ])
-        .output()
-        .with_context(|| format!("failed to run 'docker image inspect' for '{image_ref}'"))?;
-    if !output.status.success() {
-        bail!(
-            "'docker image inspect' (Env) for '{image_ref}' failed: {}",
-            String::from_utf8_lossy(&output.stderr).trim()
-        );
-    }
-    let raw = String::from_utf8_lossy(&output.stdout);
-    let raw = raw.trim();
-    if raw == "null" || raw.is_empty() {
-        return Ok(Vec::new());
-    }
-    let all: Vec<String> = serde_json::from_str(raw)
-        .with_context(|| format!("failed to parse Env JSON from '{image_ref}': {raw}"))?;
-    Ok(all.into_iter().filter(|e| env_entry_valid(e)).collect())
-}
-
-/// Return `true` when an env entry has a valid name for OpenShell.
-///
-/// OpenShell rejects env names that do not match `[A-Za-z_][A-Za-z0-9_]*`
-/// and reserves the `OPENSHELL_` prefix.
-pub(crate) fn env_entry_valid(entry: &str) -> bool {
-    let name = match entry.split_once('=') {
-        Some((name, _)) => name,
-        None => entry,
-    };
-    if name.starts_with("OPENSHELL_") {
-        return false;
-    }
-    let mut chars = name.chars();
-    let first_ok = chars
-        .next()
-        .is_some_and(|c| c.is_ascii_alphabetic() || c == '_');
-    first_ok && chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
 }
 
 // ── Policy YAML ───────────────────────────────────────────────────────────────
@@ -685,28 +500,6 @@ pub(crate) fn resolve_network_rules(
         });
     }
     Ok(resolved)
-}
-
-/// Split a `<HOST>:<PORT>` endpoint and validate both halves.
-fn split_endpoint(endpoint: &str) -> Result<(String, u16)> {
-    let invalid = || {
-        anyhow::anyhow!(
-            "Invalid sandbox network endpoint '{endpoint}'.\nWrite the endpoint as <HOST>:<PORT>, e.g. 'api.github.com:443'."
-        )
-    };
-    let (host, port) = endpoint.rsplit_once(':').ok_or_else(invalid)?;
-    // Restrict the host to hostname characters plus OpenShell's first-label
-    // wildcards; this doubles as YAML-injection protection for the rendered
-    // (single-quoted) scalar.
-    let host_ok = !host.is_empty()
-        && host
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '*'));
-    if !host_ok {
-        return Err(invalid());
-    }
-    let port: u16 = port.parse().map_err(|_| invalid())?;
-    Ok((host.to_string(), port))
 }
 
 /// Resolve a rule's `binary` spec to an absolute path inside the guest.
@@ -984,235 +777,14 @@ fn append_workdir_wrapper(
     argv.extend(extra_cmd.iter().cloned());
 }
 
-// ── Bake implementation ───────────────────────────────────────────────────────
-
-/// Bake an OCI image for the OpenShell backend, with the compat layer applied.
-///
-/// The image is loaded into Docker's image store (not Apple Container or
-/// Podman). The compat layer (`_FLOX_CONTAINERIZE_OPENSHELL_COMPAT=1`) causes
-/// `mkContainer.nix` to add the `sandbox` user/group, `iproute2`, and
-/// `/bin/sh`, which the OpenShell supervisor requires.
-///
-/// Tag scheme: `<env>-openshell:<hash12>` (distinct from the `oci` backend's
-/// `<env>:<hash12>` — the image contents differ, so they must not share tags).
-pub(crate) fn bake_openshell_image(
-    env_name: &str,
-    dot_flox_path: &Path,
-    builder_params: &ContainerBuilderParams,
-    lockfile: &Lockfile,
-) -> Result<()> {
-    use flox_rust_sdk::providers::container_builder::ContainerBuilder;
-
-    use crate::commands::containerize::Runtime;
-    use crate::commands::containerize::macos_containerize_proxy::ContainerizeProxy;
-
-    let repo = openshell_repo(env_name);
-    let hash12 = lockfile_hash12(lockfile);
-    let hash_tag = format!("{repo}:{hash12}");
-
-    // Pin the builder to a rev on this branch that contains the
-    // openshell compat layer (mkContainer openshellCompat + the
-    // _FLOX_CONTAINERIZE_OPENSHELL_COMPAT marker plumbing) AND the
-    // [[options.sandbox.network]] manifest schema — the baked guest
-    // flox parses the live-mounted project lockfile, so a pre-schema
-    // guest breaks in-guest commands like 'flox services status'.
-    // The oci backend keeps its own, older pin — the compat layer is
-    // gated off there and its builder does not need it.
-    const FROZEN_FALLBACK_REV: &str = "525741aacf2659a5b88834fe601e59cb143723d4";
-
-    let flake_ref = crate::commands::sandbox_backends::oci::oci_builder_flake_ref(
-        lockfile,
-        FROZEN_FALLBACK_REV,
-    )?;
-    let ref_or_rev = flake_ref
-        .strip_prefix("github:flox/flox/")
-        .unwrap_or(&flake_ref)
-        .to_string();
-
-    // No released flox contains the OpenShell compat layer, so a bake routed
-    // to a release tag produces an image whose sandbox crashes at create
-    // (missing `sandbox` user, iproute2, /var/run). A plain release version
-    // — e.g. a flox built with `cargo build` instead of `just build`, which
-    // drops the `-g<sha>` suffix — routes there silently; fail loudly
-    // instead of baking a doomed image.
-    if ref_or_rev.starts_with('v')
-        && std::env::var_os("_FLOX_CONTAINERIZE_FLAKE_REF_OR_REV").is_none()
-    {
-        bail!(
-            "The openshell bake would use the release builder '{ref_or_rev}', which lacks the OpenShell compat layer.\nThis flox reports a plain release version; rebuild it with 'just build' so the version carries a '-g<sha>' suffix, or set _FLOX_CONTAINERIZE_FLAKE_REF_OR_REV to a rev containing the compat layer."
-        );
-    }
-
-    eprintln!("⚙️  Baking OpenShell image '{hash_tag}' (builder pin: {ref_or_rev})…");
-    eprintln!(
-        "   First bake: ~2–5 min (downloads builder + cross-compiles). \
-         Later bakes reuse layers."
-    );
-
-    let env_path = {
-        let dot_flox =
-            std::fs::canonicalize(dot_flox_path).unwrap_or_else(|_| dot_flox_path.to_path_buf());
-        dot_flox.parent().unwrap_or(&dot_flox).to_path_buf()
-    };
-
-    // Use Docker for image loading (openshell requires Docker, not
-    // Apple Container or Podman).
-    let container_runtime = Runtime::Docker;
-
-    // Sanitize the project view (strip prototype-only manifest keys).
-    let sanitized_view = crate::commands::sandbox_backends::oci::sanitized_project_view(&env_path)
-        .context("failed to prepare sanitized builder view")?;
-    let builder_project = match &sanitized_view {
-        Some((_, mount_path)) => {
-            debug!(
-                view = %mount_path.display(),
-                "mounting sanitized builder view (prototype-only options stripped)"
-            );
-            mount_path.clone()
-        },
-        None => env_path,
-    };
-
-    // include_guest_flox = true: bake a real flox into the guest so `flox
-    // list` works inside the sandboxed session.
-    // flake_ref_override = Some(ref_or_rev): pass the computed builder pin
-    // as an explicit constructor argument so the proxy embeds it directly
-    // without touching the process environment.
-    // openshell_compat = true: add the sandbox user/group and iproute2.
-    let proxy = ContainerizeProxy::new_with_openshell_compat(
-        builder_project.clone(),
-        container_runtime.clone(),
-        vec![],
-        None,
-        true,
-        Some(ref_or_rev),
-        true,
-    );
-    // NOTE: create_container_source ignores the `name` argument — the inner
-    // `flox containerize` derives the image name from the environment directory
-    // name, so the archive always loads as `<env_name>:<hash12>`. After loading
-    // we retag to `<env_name>-openshell:<hash12>` and remove the bare tag so
-    // resolve_docker_image_state can find the image under the suffixed repo.
-    let container_source = proxy.create_container_source(builder_params, &repo, &hash12)?;
-
-    let mut sink = container_runtime.to_writer()?;
-    container_source.stream_container(&mut sink)?;
-    {
-        use tracing::info_span;
-        let _span = info_span!(
-            "load_image",
-            progress = "[3/3] Loading image into Docker store"
-        )
-        .entered();
-        sink.wait()?;
-    }
-
-    // The inner builder derives the image name from the environment directory,
-    // so the image loads as `<dir_name>:<hash12>` rather than the suffixed
-    // repo. Retag it into `<env_name>-openshell:<hash12>` and remove the bare
-    // tag to keep the oci namespace clean.
-    let bare_name = builder_project
-        .file_name()
-        .map(|n| n.to_string_lossy().into_owned())
-        .unwrap_or_else(|| env_name.to_string());
-    let bare_tag = format!("{bare_name}:{hash12}");
-    docker_retag_openshell_image(&bare_tag, &hash_tag)
-        .with_context(|| format!("failed to retag '{bare_tag}' → '{hash_tag}'"))?;
-
-    eprintln!("✅  Image '{hash_tag}' loaded into Docker store.");
-    Ok(())
-}
-
-// ── Post-load retag ───────────────────────────────────────────────────────────
-
-/// Retag a loaded Docker image from its builder-assigned name into the
-/// `-openshell` suffixed repository, then remove the bare tag.
-///
-/// The inner `flox containerize` builder derives the image name from the
-/// environment directory name and has no way to set it to the suffixed repo.
-/// After `docker load` completes the image sits at `<env>:<hash12>`; this
-/// function moves it to `<env>-openshell:<hash12>` so that
-/// [`resolve_docker_image_state`] can find it.
-///
-/// `docker tag` failure is fatal — without the retag, the image is effectively
-/// invisible to the openshell backend. `docker rmi` failure is non-fatal
-/// (the bare tag may already be absent or shared with another image); a debug
-/// log is emitted instead of propagating the error.
-pub(crate) fn docker_retag_openshell_image(bare_tag: &str, suffixed_tag: &str) -> Result<()> {
-    // Step 1: tag into the suffixed repo.
-    let status = std::process::Command::new("docker")
-        .args(["tag", bare_tag, suffixed_tag])
-        .status()
-        .with_context(|| format!("failed to run 'docker tag {bare_tag} {suffixed_tag}'"))?;
-    if !status.success() {
-        bail!(
-            "'docker tag {bare_tag} {suffixed_tag}' exited with {status}; \
-             the source tag may be missing or Docker is unavailable"
-        );
-    }
-    debug!(
-        from = bare_tag,
-        to = suffixed_tag,
-        "retagged openshell image"
-    );
-
-    // Step 2: unlink the bare tag (best-effort; ignore if already gone).
-    let rmi_status = std::process::Command::new("docker")
-        .args(["rmi", bare_tag])
-        .status();
-    match rmi_status {
-        Ok(s) if s.success() => {
-            debug!(tag = bare_tag, "removed bare openshell image tag");
-        },
-        Ok(s) => {
-            debug!(
-                tag = bare_tag,
-                exit_status = %s,
-                "docker rmi of bare tag failed (non-fatal)"
-            );
-        },
-        Err(e) => {
-            debug!(
-                tag = bare_tag,
-                err = %e,
-                "docker rmi of bare tag errored (non-fatal)"
-            );
-        },
-    }
-    Ok(())
-}
-
 // ── Unit tests ────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
 mod tests {
     use std::path::Path;
 
+    use super::super::bake::env_entry_valid;
     use super::*;
-
-    // ── parse_openshell_version ───────────────────────────────────────────────
-
-    #[test]
-    fn version_parses_plain_cli_output() {
-        assert_eq!(
-            parse_openshell_version("openshell 0.0.82"),
-            Some(Version::new(0, 0, 82))
-        );
-    }
-
-    #[test]
-    fn version_parses_v_prefixed_output() {
-        assert_eq!(
-            parse_openshell_version("openshell v0.0.62"),
-            Some(Version::new(0, 0, 62))
-        );
-    }
-
-    #[test]
-    fn version_unparseable_output_returns_none() {
-        assert_eq!(parse_openshell_version("not a version"), None);
-        assert_eq!(parse_openshell_version(""), None);
-    }
 
     // ── openshell_sandbox_name ────────────────────────────────────────────────
 
@@ -1231,43 +803,6 @@ mod tests {
     fn sandbox_name_sanitizes_special_chars() {
         let name = openshell_sandbox_name("my.env-v2 beta");
         assert!(name.starts_with("flox-my-env-v2-beta-"), "got: {name}");
-    }
-
-    // ── env_entry_valid ───────────────────────────────────────────────────────
-
-    #[test]
-    fn valid_env_entries_are_accepted() {
-        for entry in [
-            "HOME=/home/flox",
-            "XDG_RUNTIME_DIR=/run/flox/runtime",
-            "_FLOX_SERVICES_SOCKET_OVERRIDE=/run/flox/runtime/services.sock",
-            "PATH=/usr/bin:/bin",
-            "A=1",
-        ] {
-            assert!(env_entry_valid(entry), "should be valid: {entry}");
-        }
-    }
-
-    #[test]
-    fn invalid_name_starts_with_digit_rejected() {
-        assert!(!env_entry_valid("1INVALID=val"));
-    }
-
-    #[test]
-    fn openshell_prefix_rejected() {
-        assert!(!env_entry_valid("OPENSHELL_TOKEN=secret"));
-        assert!(!env_entry_valid("OPENSHELL_=val"));
-    }
-
-    #[test]
-    fn name_with_dash_rejected() {
-        // Dashes are not in [A-Za-z0-9_]
-        assert!(!env_entry_valid("MY-VAR=val"));
-    }
-
-    #[test]
-    fn empty_name_rejected() {
-        assert!(!env_entry_valid("=val"));
     }
 
     // ── policy YAML ───────────────────────────────────────────────────────────
