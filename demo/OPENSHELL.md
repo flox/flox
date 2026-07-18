@@ -36,8 +36,10 @@ OpenShell 0.0.82):
   `FROZEN_FALLBACK_REV` to the pushed head, re-dispatch the
   frozen-builder-cache workflow, rebake.
 - Still needing a live interactive rehearsal: the full `cd` +
-  consent + interactive-session flow and beat 4's real agent run
-  (needs the pre-seeded token).
+  consent + interactive-session flow, beat 4's real agent run
+  (needs the pre-seeded token), and the one-command control-plane
+  setup (`djsauble/sandbox-demo-host`, published 2026-07-18 —
+  untestable on a host whose gateway already owns port 17670).
 - Grant-follows-binary confirmed in the allow direction: `claude`
   (scoped grant) reached its API through the proxy while `curl` in
   the same session stayed denied against ungranted endpoints. A
@@ -55,17 +57,37 @@ OpenShell 0.0.82):
 ### One-time host prerequisites
 
 1. **Docker Desktop** (or Docker Engine ≥ 28) running.
-2. **OpenShell CLI + gateway** ≥ 0.0.62 (0.0.82 tested):
-   `curl -LsSf https://raw.githubusercontent.com/NVIDIA/OpenShell/main/install.sh | sh`
-   — or install the release tarballs and provision the gateway
-   manually (generate-certs + `gateway add`; the openshell.rb
-   formula has the exact recipe).
+2. **OpenShell control plane** — one command, in its own terminal:
 
-   > **PATH pitfall:** the Flox catalog's own `openshell` (0.0.36)
-   > is far too old. If any active flox environment installs it, it
-   > shadows a newer install and preflight fails with "OpenShell
-   > CLI version … is too old". Check `which openshell`.
-3. **Gateway config** — in `~/.config/openshell/gateway.toml`:
+   ```bash
+   flox activate -r djsauble/sandbox-demo-host
+   ```
+
+   The environment installs `djsauble/openshell` (0.0.86,
+   repackaged release binaries), generates gateway TLS into its
+   env cache, renders a gateway config (docker driver, bind
+   mounts), runs `openshell-gateway` as a flox service, and
+   registers it as gateway `flox-demo`. Keep the activation
+   running for the whole demo — the gateway lives exactly as long
+   as it does. Confirm:
+
+   ```bash
+   openshell status        # Status: Connected
+   ```
+
+   > ⚠️ Not yet rehearsed end-to-end (it cannot run beside an
+   > already-provisioned gateway — both want port 17670), and
+   > registration writes `~/.config/openshell/gateways/flox-demo`
+   > and may switch your active gateway (`openshell gateway
+   > select <name>` switches back; `demo/cleanup.sh` removes the
+   > registration). The env is private to djsauble; the in-repo
+   > definition is `demo/host-env/`. On a machine with a working
+   > manual setup, skip this and use that gateway.
+
+   **Manual alternative** (the path every prior verification
+   used): install OpenShell ≥ 0.0.62 (0.0.82 tested) via
+   `curl -LsSf https://raw.githubusercontent.com/NVIDIA/OpenShell/main/install.sh | sh`,
+   then in `~/.config/openshell/gateway.toml`:
 
    ```toml
    [openshell.gateway]
@@ -75,19 +97,18 @@ OpenShell 0.0.82):
    enable_bind_mounts = true
    ```
 
-   Restart the gateway after editing, then confirm:
+   and restart the gateway; `openshell status` should report
+   Connected.
 
-   ```bash
-   openshell status        # Status: Connected
-   ```
+   > **PATH pitfall** (either path): the Flox catalog's own
+   > `openshell` (0.0.36) is far too old. If any active flox
+   > environment installs it, it shadows a newer install and
+   > preflight fails with "OpenShell CLI version … is too old".
+   > Check `which openshell`.
 
    > `enable_bind_mounts` live-mounts the project into the sandbox
    > at its real path — an isolation tradeoff scoped to exactly the
    > one directory you're asking the agent to work on.
-
-   > Experimental alternative: `demo/host-env` provisions steps 2–3
-   > as a flox environment (gateway as a service) — read its README
-   > warnings before use.
 
 ### Demo environment
 

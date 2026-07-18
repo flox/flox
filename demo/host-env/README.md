@@ -1,9 +1,22 @@
 # Demo host environment (EXPERIMENTAL — not yet rehearsed)
 
 A host-side Flox environment that provisions the OpenShell control
-plane for the sandbox demo, replacing setup steps 2 and 3 of
-`demo/OPENSHELL.md` §0 (OpenShell install, gateway provisioning,
-gateway config):
+plane for the sandbox demo, replacing the manual OpenShell
+install/provisioning/config steps of `demo/OPENSHELL.md` §0.
+
+Published to FloxHub as `djsauble/sandbox-demo-host` (private to
+djsauble) — activate it from any machine with:
+
+```bash
+flox activate -r djsauble/sandbox-demo-host
+```
+
+This directory is the versioned source of truth; after editing the
+manifest here, republish by copying it over a pulled copy
+(`flox pull djsauble/sandbox-demo-host`, overwrite
+`.flox/env/manifest.toml`, `flox edit -f`, `flox push`).
+
+What it does:
 
 - installs `djsauble/openshell` (0.0.86, repackaged release
   binaries — the catalog's own `openshell` 0.0.36 is far too old);
