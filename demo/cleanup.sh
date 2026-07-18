@@ -73,6 +73,6 @@ if [ -d "$HOME/.config/openshell/gateways/flox-demo" ]; then
   echo "If it was your active gateway, re-select the previous one:"
   echo "  openshell gateway select <name>"
 fi
-rm -rf "$(dirname "$0")/host-env/.flox/cache/openshell" 2>/dev/null || true
+rm -rf "$(dirname "$0")/openshell-setup/.flox/cache/openshell" 2>/dev/null || true
 
 echo "Demo artifacts removed (env, grants, journal, fixtures, images)."

@@ -37,9 +37,10 @@ OpenShell 0.0.82):
   frozen-builder-cache workflow, rebake.
 - Still needing a live interactive rehearsal: the full `cd` +
   consent + interactive-session flow, beat 4's real agent run
-  (needs the pre-seeded token), and the one-command control-plane
-  setup (`djsauble/sandbox-demo-host`, published 2026-07-18 —
-  untestable on a host whose gateway already owns port 17670).
+  (needs the pre-seeded token), and the layered one-command setup
+  (`djsauble/openshell-setup`, published 2026-07-18, including its
+  profile/deactivate handlers — untestable on a host whose gateway
+  already owns port 17670).
 - Grant-follows-binary confirmed in the allow direction: `claude`
   (scoped grant) reached its API through the proxy while `curl` in
   the same session stayed denied against ungranted endpoints. A
@@ -57,19 +58,24 @@ OpenShell 0.0.82):
 ### One-time host prerequisites
 
 1. **Docker Desktop** (or Docker Engine ≥ 28) running.
-2. **OpenShell control plane** — one command, in its own terminal:
+2. **OpenShell control plane + presentation shell** — one command,
+   in your presentation shell (export `FLOX_BIN` from the dev
+   shell first):
 
    ```bash
-   flox activate -r djsauble/sandbox-demo-host
+   flox activate -r djsauble/openshell-setup
    ```
 
-   The environment installs `djsauble/openshell` (0.0.86,
-   repackaged release binaries), generates gateway TLS into its
-   env cache, renders a gateway config (docker driver, bind
-   mounts), runs `openshell-gateway` as a flox service, and
-   registers it as gateway `flox-demo`. Keep the activation
-   running for the whole demo — the gateway lives exactly as long
-   as it does. Confirm:
+   This is the demo's *outer layer* — one setup env per sandbox
+   backend is the plan. It installs `djsauble/openshell` (0.0.86),
+   generates gateway TLS, renders a gateway config (docker driver,
+   bind mounts), runs `openshell-gateway` as a flox service,
+   registers it as gateway `flox-demo` — and configures the shell:
+   feature flags and the planted `GITHUB_TOKEN` (`[vars]`),
+   `FLOX_VERSION` plus a `flox` alias from `$FLOX_BIN`
+   (`[profile]`), and the `~/demo-secrets` fixture. Deactivating
+   removes the planted secret (`[profile.deactivate]`). Stay in
+   this activation for the whole demo; confirm:
 
    ```bash
    openshell status        # Status: Connected
@@ -81,8 +87,8 @@ OpenShell 0.0.82):
    > and may switch your active gateway (`openshell gateway
    > select <name>` switches back; `demo/cleanup.sh` removes the
    > registration). The env is private to djsauble; the in-repo
-   > definition is `demo/host-env/`. On a machine with a working
-   > manual setup, skip this and use that gateway.
+   > definition is `demo/openshell-setup/`. On a machine with a
+   > working manual setup, skip this and use that gateway.
 
    **Manual alternative** (the path every prior verification
    used): install OpenShell ≥ 0.0.62 (0.0.82 tested) via
@@ -136,7 +142,18 @@ resolving `binary` to the locked store path for the guest. Policy
 edits never rebake the image — the image tag ignores
 `[options.sandbox]`.
 
-Then, in your presentation shell:
+If you used the setup env (prerequisite 2), your shell is already
+configured — just make sure the prompt hook is in your shell's RC:
+
+```bash
+eval "$(flox hook-env --shell bash --shell-pid $$)"
+```
+
+The session is *layered*: the setup env is the outer layer, and
+beat 1's `cd` activates the project env on top of it. Cleanup is
+symmetric — deactivate the sandbox, then the setup env.
+
+On the manual path, configure the presentation shell by hand:
 
 ```bash
 alias flox='$FLOX_BIN'                 # the prototype binary
@@ -144,12 +161,6 @@ export FLOX_FEATURES_SANDBOX_ACTIVATE=true
 export FLOX_FEATURES_AUTO_ACTIVATE=true
 export GITHUB_TOKEN=ghp-demo-FAKE      # for the token-isolation beat
 export FLOX_VERSION=`flox --version`
-```
-
-Ensure the prompt hook is in your shell's RC:
-
-```bash
-eval "$(flox hook-env --shell bash --shell-pid $$)"
 ```
 
 > `FLOX_VERSION` routes the bake: a `-g<sha>` version pins the
@@ -242,8 +253,8 @@ still shows the deny)*
 **"My filesystem is invisible, my credentials don't cross, and only
 my project is live."**
 
-In the **host terminal** — a real (planted) secret, seeded by
-setup.sh:
+In the **host terminal** — a real (planted) secret, seeded by the
+setup layer (and by setup.sh on the manual path):
 
 ```bash
 ls -a ~/demo-secrets/
@@ -426,12 +437,16 @@ session out, nothing left running."**
 
 ## 6 · Reset
 
+Deactivate the setup layer (its `profile.deactivate` removes the
+planted secret and its exit stops the gateway service), then:
+
 ```bash
 bash demo/cleanup.sh
 ```
 
 Removes the env, fixtures, Docker-side `sandbox-demo-openshell:*`
-images, and any lingering demo sandboxes.
+images, any lingering demo sandboxes, and the `flox-demo` gateway
+registration.
 
 > Integration notes for the NVIDIA conversation (image
 > requirements, policy compilation, released-vs-docs gaps):

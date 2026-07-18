@@ -3,6 +3,14 @@ schema-version = "1.13.0"
 [install]
 openshell.pkg-path = "djsauble/openshell"
 
+[vars]
+# Feature flags the demo needs in the presentation shell.
+FLOX_FEATURES_SANDBOX_ACTIVATE = "true"
+FLOX_FEATURES_AUTO_ACTIVATE = "true"
+# Planted for the token-isolation beat: visible on the host, absent
+# in the guest.
+GITHUB_TOKEN = "ghp-demo-FAKE"
+
 [hook]
 on-activate = '''
   # One-time TLS material for the local gateway, kept in the env cache.
@@ -30,6 +38,36 @@ enable_bind_mounts = true
 EOF
   fi
   export OPENSHELL_GATEWAY_CONFIG="$config"
+
+  # Demo fixture: a planted "secret" the guest must never see
+  # (beat 2 of demo/OPENSHELL.md). Removed by profile.deactivate.
+  mkdir -p "$HOME/demo-secrets"
+  printf 'API_KEY=sk-demo-FAKE-do-not-use\n' > "$HOME/demo-secrets/.env"
+'''
+
+# Presentation-shell setup, so the walkthrough's manual export block
+# disappears. bash and zsh only — the demo script targets bash, and
+# `alias`/`export` syntax is not portable to fish/tcsh.
+[profile]
+bash = '''
+  if [ -n "${FLOX_BIN:-}" ]; then
+    alias flox='$FLOX_BIN'
+  fi
+  export FLOX_VERSION="$("${FLOX_BIN:-flox}" --version)"
+'''
+zsh = '''
+  if [ -n "${FLOX_BIN:-}" ]; then
+    alias flox='$FLOX_BIN'
+  fi
+  export FLOX_VERSION="$("${FLOX_BIN:-flox}" --version)"
+'''
+
+[profile.deactivate]
+common = '''
+  # Deactivating the demo cleans up after itself: remove the planted
+  # secret. Gateway registration persists across sessions by design —
+  # demo/cleanup.sh removes it.
+  rm -rf "$HOME/demo-secrets"
 '''
 
 [services]
