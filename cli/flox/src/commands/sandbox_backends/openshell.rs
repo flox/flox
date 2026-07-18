@@ -1023,6 +1023,20 @@ fn bake_openshell_image(
         .unwrap_or(&flake_ref)
         .to_string();
 
+    // No released flox contains the OpenShell compat layer, so a bake routed
+    // to a release tag produces an image whose sandbox crashes at create
+    // (missing `sandbox` user, iproute2, /var/run). A plain release version
+    // — e.g. a flox built with `cargo build` instead of `just build`, which
+    // drops the `-g<sha>` suffix — routes there silently; fail loudly
+    // instead of baking a doomed image.
+    if ref_or_rev.starts_with('v')
+        && std::env::var_os("_FLOX_CONTAINERIZE_FLAKE_REF_OR_REV").is_none()
+    {
+        bail!(
+            "The openshell bake would use the release builder '{ref_or_rev}', which lacks the OpenShell compat layer.\nThis flox reports a plain release version; rebuild it with 'just build' so the version carries a '-g<sha>' suffix, or set _FLOX_CONTAINERIZE_FLAKE_REF_OR_REV to a rev containing the compat layer."
+        );
+    }
+
     eprintln!("⚙️  Baking OpenShell image '{hash_tag}' (builder pin: {ref_or_rev})…");
     eprintln!(
         "   First bake: ~2–5 min (downloads builder + cross-compiles). \
