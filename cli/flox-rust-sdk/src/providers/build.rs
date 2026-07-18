@@ -142,6 +142,9 @@ pub enum ManifestBuilderError {
     // whole process group).
     #[error("Build failed")]
     BuildFailure { status: ExitStatus },
+
+    #[error("Lock failed")]
+    LockFailure,
 }
 
 #[derive(Debug, PartialEq, Deserialize, Default, derive_more::Deref)]
@@ -722,7 +725,7 @@ impl ManifestBuilder for FloxBuildMk<'_> {
             .map_err(ManifestBuilderError::CallBuilderError)?;
 
         if !status.success() {
-            return Err(ManifestBuilderError::BuildFailure { status });
+            return Err(ManifestBuilderError::LockFailure);
         }
 
         let lock_results = std::fs::read_to_string(&lock_result_path)
