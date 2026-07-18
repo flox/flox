@@ -475,8 +475,7 @@ pub(crate) enum OciBakeDecision {
 /// their existing tags.
 pub(crate) fn lockfile_hash12(lockfile: &Lockfile) -> String {
     let normalized = lockfile.without_sandbox_options();
-    let json =
-        serde_json::to_vec(&normalized).expect("serializing a Lockfile to JSON cannot fail");
+    let json = serde_json::to_vec(&normalized).expect("serializing a Lockfile to JSON cannot fail");
     let mut hex = blake3::hash(&json).to_hex();
     hex.truncate(OCI_HASH_TAG_LEN);
     hex.to_string()
@@ -1348,8 +1347,7 @@ mod tests {
                         "network": [{"endpoint": "api.github.com:443"}],
                     }),
                 );
-            let with_sandbox: Lockfile =
-                serde_json::to_string(&value).unwrap().parse().unwrap();
+            let with_sandbox: Lockfile = serde_json::to_string(&value).unwrap().parse().unwrap();
             assert_eq!(lockfile_hash12(&base), lockfile_hash12(&with_sandbox));
         }
 

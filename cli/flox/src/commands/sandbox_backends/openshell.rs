@@ -1336,8 +1336,12 @@ mod tests {
     #[test]
     fn network_rule_defaults_are_full_rest_unscoped() {
         let lockfile = fixture_lockfile("hello");
-        let resolved =
-            resolve_network_rules(&[network_rule("example.com:8080", None)], &lockfile, "aarch64-linux").unwrap();
+        let resolved = resolve_network_rules(
+            &[network_rule("example.com:8080", None)],
+            &lockfile,
+            "aarch64-linux",
+        )
+        .unwrap();
         assert_eq!(resolved, vec![ResolvedNetworkRule {
             key: "allow_example_com_8080".to_string(),
             host: "example.com".to_string(),
@@ -1365,8 +1369,12 @@ mod tests {
     #[test]
     fn endpoint_without_port_is_rejected() {
         let lockfile = fixture_lockfile("hello");
-        let err = resolve_network_rules(&[network_rule("example.com", None)], &lockfile, "aarch64-linux")
-            .unwrap_err();
+        let err = resolve_network_rules(
+            &[network_rule("example.com", None)],
+            &lockfile,
+            "aarch64-linux",
+        )
+        .unwrap_err();
         assert!(err.to_string().contains("<HOST>:<PORT>"), "got: {err}");
     }
 
@@ -1379,7 +1387,10 @@ mod tests {
             "aarch64-linux",
         )
         .unwrap_err();
-        assert!(err.to_string().contains("Invalid sandbox network endpoint"), "got: {err}");
+        assert!(
+            err.to_string().contains("Invalid sandbox network endpoint"),
+            "got: {err}"
+        );
     }
 
     #[test]
@@ -1395,7 +1406,8 @@ mod tests {
     #[test]
     fn binary_id_slash_exe_form_overrides_executable_name() {
         let lockfile = fixture_lockfile("hello");
-        let path = resolve_policy_binary(&lockfile, "aarch64-linux", "hello/.hello-wrapped").unwrap();
+        let path =
+            resolve_policy_binary(&lockfile, "aarch64-linux", "hello/.hello-wrapped").unwrap();
         assert_eq!(
             path,
             "/nix/store/g383j16f2lxz4zzs967i9hjgvivy6q7h-hello-2.12.3/bin/.hello-wrapped"
@@ -1412,9 +1424,12 @@ mod tests {
     #[test]
     fn wildcard_host_renders_single_quoted() {
         let lockfile = fixture_lockfile("hello");
-        let resolved =
-            resolve_network_rules(&[network_rule("*.github.com:443", None)], &lockfile, "aarch64-linux")
-                .unwrap();
+        let resolved = resolve_network_rules(
+            &[network_rule("*.github.com:443", None)],
+            &lockfile,
+            "aarch64-linux",
+        )
+        .unwrap();
         let yaml = render_network_policies(&resolved);
         // Unquoted, `*.github.com` is a YAML alias token and the whole
         // policy fails to parse.
@@ -1438,7 +1453,10 @@ mod tests {
         let lockfile = fixture_lockfile("hello");
         let err = resolve_policy_binary(&lockfile, "aarch64-linux", "curl").unwrap_err();
         let msg = err.to_string();
-        assert!(msg.contains("not locked for system 'aarch64-linux'"), "got: {msg}");
+        assert!(
+            msg.contains("not locked for system 'aarch64-linux'"),
+            "got: {msg}"
+        );
         assert!(msg.contains("[install]"), "got: {msg}");
     }
 
