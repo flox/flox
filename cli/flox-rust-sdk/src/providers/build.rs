@@ -1563,10 +1563,10 @@ mod tests {
 
         let (flox, _temp_dir_handle) = flox_instance();
         let mut env = new_path_environment(&flox, &manifest);
+        let expression_ref = NixFlakeref::from_path(env.dot_flox_path()).unwrap();
 
         // Manifest builds resolve no catalog inputs, so the lock goal emits
         // an empty map without building anything.
-        let expression_ref = NixFlakeref::from_path(env.dot_flox_path()).unwrap();
         let lock_results = lock_with_nix_expr(&flox, &mut env, &expression_ref, &package_name);
         assert_eq!(lock_results.len(), 1);
         assert_eq!(lock_results[0].system, flox.system);
