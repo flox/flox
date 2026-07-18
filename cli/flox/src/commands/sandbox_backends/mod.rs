@@ -48,6 +48,7 @@
 pub mod anjuna;
 pub mod bake;
 pub mod cognition_devin;
+pub mod cursor;
 pub mod daytona;
 pub mod docker_sbx;
 pub mod e2b;
@@ -160,6 +161,7 @@ pub fn for_backend(
             Some(Box::new(cognition_devin::CognitionDevinBackend::new(ctx)))
         },
         SandboxBackend::Anjuna => Some(Box::new(anjuna::AnjunaBackend::new(ctx))),
+        SandboxBackend::Cursor => Some(Box::new(cursor::CursorBackend::new(ctx))),
         // Libsandbox is the default in-process path; no wrapper object.
         // All other variants keep the "not yet wired" bail in activate.rs.
         _ => None,

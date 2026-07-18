@@ -187,6 +187,34 @@ pub enum SandboxBackend {
     /// hardware, so `Native` here means "the host can drive the bake +
     /// conversion-config generation", not "the workload runs on this OS".
     Anjuna,
+    /// Cursor (agent sandbox): a local policy-layer alignment backend. Cursor's
+    /// coding-agent CLI (`agent`) runs its own sandbox that re-skins the
+    /// host-native class (Seatbelt on macOS, Landlock on Linux) with a product
+    /// policy layer configured through a settings file — not a programmatic
+    /// launch API. Unlike the OCI-ingesting cloud backends, nothing is baked and
+    /// nothing leaves the laptop: this is a LOCAL, host-kernel backend, so
+    /// `fs_virtualized` is false and the threat model is the host-local one (the
+    /// agent runs on this machine, confined by the OS sandbox Cursor drives).
+    /// The honest seam is policy-layer alignment: flox compiles the manifest
+    /// grants into Cursor's project-scoped permission config
+    /// (`<project>/.cursor/cli.json`: `permissions.allow` / `permissions.deny`
+    /// tokens — `Read`/`Write`/`Shell`/`WebFetch`/`Mcp`) so Flox's environment +
+    /// policy source of truth and Cursor's enforcement stack instead of
+    /// conflicting. Network grants compile onto `WebFetch(<host>)` allow entries:
+    /// domain-scoped, the agent's web-fetch tool only, and port-blind (the
+    /// grant's port is dropped) — a declared lossiness, since the project config
+    /// has no `<host>:<port>` egress vocabulary and the `sandbox.networkAccess`
+    /// knob that would gate all egress is global-only (not project-scoped), so
+    /// flox cannot set it here. The grant's per-binary / read-write / protocol
+    /// scoping is likewise not expressible through `WebFetch` and is recorded but
+    /// not enforced. There is no public launch API that ingests a config path and
+    /// execs the agent under it (`agent` reads `<project>/.cursor/cli.json`
+    /// implicitly; `sandbox.mode` is global), so flox writes the config and bails
+    /// at the launch boundary naming the missing programmatic hook — a
+    /// credentialed operator with the `agent` CLI runs it in the project to pick
+    /// up the compiled policy. Reachable on macOS and Linux (Cursor's local
+    /// sandbox runs on both).
+    Cursor,
     /// Embeddable micro-VM (libkrun): hypervisor isolation with a guest kernel
     /// via libkrunfw (Hypervisor.framework on macOS, KVM on Linux).
     Libkrun,
@@ -267,11 +295,12 @@ pub struct BackendCapabilities {
 
 impl SandboxBackend {
     /// Every backend on the roster, in spectrum order (weakest boundary first).
-    pub const ALL: [SandboxBackend; 14] = [
+    pub const ALL: [SandboxBackend; 15] = [
         SandboxBackend::Libsandbox,
         SandboxBackend::Nix,
         SandboxBackend::HostNative,
         SandboxBackend::Srt,
+        SandboxBackend::Cursor,
         SandboxBackend::Oci,
         SandboxBackend::Openshell,
         SandboxBackend::Modal,
@@ -351,6 +380,47 @@ impl SandboxBackend {
                 macos: Native,
                 linux: Native,
                 status: Implemented,
+            },
+            SandboxBackend::Cursor => BackendCapabilities {
+                backend: self,
+                // Cursor's agent sandbox re-skins the host-native OS boundary
+                // (Seatbelt on macOS, Landlock on Linux) with a product policy
+                // layer. Same kernel-enforced class as `host-native` / `srt`.
+                enforcement: HostKernel,
+                enforces: true,
+                // Permissions are read from the project config when the agent
+                // starts; an out-of-policy access is redeemed by editing the
+                // config and restarting the agent, never adjudicated live. Cursor
+                // does prompt interactively for un-allowlisted operations, but
+                // that is the agent's own approval UI, not a flox-driven
+                // per-request ask over the compiled policy, so `live_ask` stays
+                // false (matching the contract's meaning).
+                live_ask: false,
+                // `WebFetch(<domain>)` is a native domain allowlist for the
+                // agent's web-fetch tool. It governs that tool's egress by domain
+                // (wildcards supported) but not arbitrary sockets, and carries no
+                // port — a declared lossiness, not a reason to claim no domain
+                // egress.
+                domain_egress: true,
+                // The permission tokens distinguish Read / Write / Shell (and
+                // WebFetch / Mcp) — genuinely per-operation, unlike the
+                // endpoint-scoped cloud backends whose allowlists are op-blind.
+                per_op: true,
+                // Local host-native re-skin: the agent runs on the host against
+                // the real filesystem, so there is no virtio-fs I/O penalty.
+                fs_virtualized: false,
+                // Cursor's local sandbox runs on macOS and Linux, and flox drives
+                // it (config generation + the boundary bail) identically on both.
+                macos: Native,
+                linux: Native,
+                // Preflight (CLI detection, version gate, non-interactive auth
+                // probe) and the project-config policy compilation are wired, but
+                // the launch itself is not: there is no public API that ingests a
+                // config path and execs `agent` under a specific sandbox — the CLI
+                // reads `<project>/.cursor/cli.json` implicitly and `sandbox.mode`
+                // is global-only. flox writes the config and bails naming that
+                // missing hook, so this is honestly Scaffolded, not Implemented.
+                status: Scaffolded,
             },
             SandboxBackend::Oci => BackendCapabilities {
                 backend: self,
@@ -727,6 +797,7 @@ impl Display for SandboxBackend {
             SandboxBackend::Daytona => "daytona",
             SandboxBackend::CognitionDevin => "cognition-devin",
             SandboxBackend::Anjuna => "anjuna",
+            SandboxBackend::Cursor => "cursor",
             SandboxBackend::Libkrun => "libkrun",
         };
         write!(f, "{name}")
@@ -735,7 +806,7 @@ impl Display for SandboxBackend {
 
 #[derive(Debug, thiserror::Error)]
 #[error(
-    "'{0}' is not a valid sandbox backend. Expected one of: libsandbox, nix, host-native, srt, oci, openshell, modal, docker-sbx, ona, e2b, daytona, cognition-devin, anjuna, libkrun."
+    "'{0}' is not a valid sandbox backend. Expected one of: libsandbox, nix, host-native, srt, oci, openshell, modal, docker-sbx, ona, e2b, daytona, cognition-devin, anjuna, cursor, libkrun."
 )]
 pub struct SandboxBackendParseError(String);
 
@@ -757,6 +828,7 @@ impl FromStr for SandboxBackend {
             "daytona" => Ok(SandboxBackend::Daytona),
             "cognition-devin" => Ok(SandboxBackend::CognitionDevin),
             "anjuna" => Ok(SandboxBackend::Anjuna),
+            "cursor" => Ok(SandboxBackend::Cursor),
             "libkrun" => Ok(SandboxBackend::Libkrun),
             other => Err(SandboxBackendParseError(other.to_string())),
         }
@@ -787,7 +859,7 @@ mod tests {
         let err = "bogus".parse::<SandboxBackend>().unwrap_err();
         assert_eq!(
             err.to_string(),
-            "'bogus' is not a valid sandbox backend. Expected one of: libsandbox, nix, host-native, srt, oci, openshell, modal, docker-sbx, ona, e2b, daytona, cognition-devin, anjuna, libkrun.",
+            "'bogus' is not a valid sandbox backend. Expected one of: libsandbox, nix, host-native, srt, oci, openshell, modal, docker-sbx, ona, e2b, daytona, cognition-devin, anjuna, cursor, libkrun.",
         );
     }
 
@@ -1085,6 +1157,41 @@ mod tests {
         assert_eq!(json, "\"anjuna\"");
         let parsed: SandboxBackend = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed, SandboxBackend::Anjuna);
+    }
+
+    #[test]
+    fn cursor_capabilities_row() {
+        let caps = SandboxBackend::Cursor.capabilities();
+        assert_eq!(caps, BackendCapabilities {
+            backend: SandboxBackend::Cursor,
+            // Host-kernel re-skin (Seatbelt/Landlock), like host-native and srt.
+            enforcement: Enforcement::HostKernel,
+            enforces: true,
+            live_ask: false,
+            domain_egress: true,
+            per_op: true,
+            // Local backend: runs on the host, no virtualized filesystem.
+            fs_virtualized: false,
+            macos: PlatformSupport::Native,
+            linux: PlatformSupport::Native,
+            status: IntegrationStatus::Scaffolded,
+        });
+    }
+
+    #[test]
+    fn cursor_display_and_parse_round_trip() {
+        let backend = SandboxBackend::Cursor;
+        let s = backend.to_string();
+        assert_eq!(s, "cursor");
+        assert_eq!(s.parse::<SandboxBackend>().unwrap(), backend);
+    }
+
+    #[test]
+    fn cursor_serde_round_trip() {
+        let json = serde_json::to_string(&SandboxBackend::Cursor).unwrap();
+        assert_eq!(json, "\"cursor\"");
+        let parsed: SandboxBackend = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed, SandboxBackend::Cursor);
     }
 
     #[test]

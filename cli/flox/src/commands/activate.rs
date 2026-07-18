@@ -1567,6 +1567,7 @@ mod tests {
             SandboxBackend::Nix,
             SandboxBackend::HostNative,
             SandboxBackend::Srt,
+            SandboxBackend::Cursor,
             SandboxBackend::Oci,
             SandboxBackend::DockerSbx,
             SandboxBackend::Ona,

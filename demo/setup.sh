@@ -213,6 +213,25 @@ case "$BACKEND" in
       echo "      prefix (e.g. docker.io/<user>) before the snapshot build." >&2
     fi
     ;;
+  cursor)
+    # The cursor backend is a LOCAL policy layer (Cursor's agent sandbox,
+    # host-kernel re-skin — Seatbelt/Landlock). Nothing is baked and nothing
+    # leaves the laptop, so there is no Docker step. flox compiles the manifest
+    # grants into Cursor's project permission config (<project>/.cursor/cli.json)
+    # and stops at the launch boundary: Cursor exposes no launch API that runs
+    # the agent under a config path. Preflight requires Cursor's `agent` CLI and
+    # distinguishes CLI-missing from CLI-present-but-unauthenticated. Running the
+    # agent under the compiled policy needs the `agent` CLI and a Cursor account;
+    # neither is set up by this script (see demo/CURSOR.md).
+    if ! command -v agent >/dev/null 2>&1; then
+      echo "WARNING: Cursor's 'agent' CLI not found on PATH." >&2
+      echo "         Install: curl https://cursor.com/install -fsS | bash" >&2
+    elif [ -z "${CURSOR_API_KEY:-}" ]; then
+      echo "NOTE: Cursor's 'agent' CLI is present but CURSOR_API_KEY is unset." >&2
+      echo "      That is expected for the local beats; running the agent needs" >&2
+      echo "      a Cursor account (see demo/CURSOR.md beat 0)." >&2
+    fi
+    ;;
   anjuna)
     # The anjuna backend is partner-handoff/TEE (Anjuna Security's
     # confidential-computing runtime): it bakes the converter's input image
@@ -242,7 +261,7 @@ case "$BACKEND" in
     fi
     ;;
   *)
-    echo "ERROR: BACKEND='$BACKEND' is not a demo backend (oci|openshell|modal|docker-sbx|ona|e2b|daytona|cognition-devin|anjuna)." >&2
+    echo "ERROR: BACKEND='$BACKEND' is not a demo backend (oci|openshell|modal|docker-sbx|ona|e2b|daytona|cognition-devin|anjuna|cursor)." >&2
     exit 1
     ;;
 esac
@@ -321,7 +340,7 @@ sandbox = f'''[options.sandbox]
 backend = "{backend}"
 '''
 if backend in ("openshell", "modal", "docker-sbx", "ona", "e2b", "daytona",
-               "cognition-devin", "anjuna"):
+               "cognition-devin", "anjuna", "cursor"):
     # Grant the coding agent its API endpoints. On openshell the grant is
     # scoped to the exact claude binary (`binary` resolves to the locked
     # store path via the lockfile) and enforced at L7. On modal the host of
@@ -340,10 +359,13 @@ if backend in ("openshell", "modal", "docker-sbx", "ona", "e2b", "daytona",
     # per-port); on anjuna each :443 host compiles into the enclave config's
     # `egress.allowed_hosts` (the anjuna-nitro-netd proxy allowlists per-host,
     # not per-port, so the :443 is dropped), and flox additionally binds the
-    # expected enclave attestation measurement to the lockfile hash. In the
-    # cloud/microVM/control-plane/TEE cases the binary/access/protocol scoping is
-    # recorded but not enforceable, a declared lossiness. Either way, everything
-    # else stays deny-by-default.
+    # expected enclave attestation measurement to the lockfile hash. On cursor
+    # (the one LOCAL backend here) each :443 host compiles into the project
+    # config's `WebFetch(<host>)` allow token (the agent's web-fetch tool only,
+    # per-domain not per-port, so the :443 is dropped). In the
+    # cloud/microVM/control-plane/TEE cases and on cursor the binary/access/
+    # protocol scoping is recorded but not enforceable, a declared lossiness.
+    # Either way, everything else stays deny-by-default.
     sandbox += '''
 [[options.sandbox.network]]
 endpoint = "api.anthropic.com:443"
@@ -413,8 +435,9 @@ and follow demo/SCRIPT.md (backend "oci"), demo/OPENSHELL.md
 (backend "openshell"), demo/MODAL.md (backend "modal"),
 demo/DOCKER-SBX.md (backend "docker-sbx"), demo/ONA.md
 (backend "ona"), demo/E2B.md (backend "e2b"), demo/DAYTONA.md
-(backend "daytona"), demo/DEVIN.md (backend "cognition-devin"), or
-demo/ANJUNA.md (backend "anjuna").
+(backend "daytona"), demo/DEVIN.md (backend "cognition-devin"),
+demo/ANJUNA.md (backend "anjuna"), or demo/CURSOR.md
+(backend "cursor").
 Afterwards: bash demo/cleanup.sh
 
 NOTE: the manifest already declares [options.sandbox]
@@ -479,4 +502,17 @@ registry Anjuna can pull from (export
 FLOX_SANDBOX_ANJUNA_REGISTRY=<prefix>). The anjuna-nitro-cli is
 presence-detected, not required, and is not in the Flox catalog
 (license-gated). See demo/ANJUNA.md.
+
+NOTE (cursor): the cursor backend is the one LOCAL backend here
+(Cursor's agent sandbox, a host-kernel re-skin of Seatbelt/Landlock).
+Nothing is baked and nothing leaves the laptop, so there is no Docker
+step and no registry. flox compiles the manifest grants into Cursor's
+project permission config (<project>/.cursor/cli.json:
+permissions.allow/deny tokens; :443 grants become WebFetch(<host>)),
+then stops at the launch boundary — Cursor exposes no launch API that
+runs the agent under a config path. Running the agent under the
+compiled policy needs Cursor's 'agent' CLI (curl
+https://cursor.com/install | bash) and a Cursor account
+(CURSOR_API_KEY). The 'agent' CLI is presence-detected, not required.
+See demo/CURSOR.md.
 EOF

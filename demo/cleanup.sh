@@ -109,6 +109,16 @@ if [ -f "$DEMO_DIR/.devin/blueprint.yaml" ]; then
   echo "Removed cognition-devin blueprint hand-off under $DEMO_DIR/.devin."
 fi
 
+# The cursor backend writes its project permission config at the project root
+# (.cursor/cli.json), not under .flox/cache. Cursor is local — there is no image
+# or remote workspace to reap. Removed with $DEMO_DIR above, but a demo run may
+# have left a copy if $DEMO_DIR was overridden — surface it rather than silently
+# orphaning it.
+if [ -f "$DEMO_DIR/.cursor/cli.json" ]; then
+  rm -rf "$DEMO_DIR/.cursor"
+  echo "Removed cursor permission config under $DEMO_DIR/.cursor."
+fi
+
 # demo/host-env leftovers: the gateway-register service writes persistent
 # CLI state under ~/.config/openshell (and may have switched the active
 # gateway selection). The gateway's own TLS/config live in the env cache

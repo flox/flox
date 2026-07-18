@@ -1843,6 +1843,11 @@
               "type": "string"
             },
             {
+              "const": "cursor",
+              "description": "Cursor (agent sandbox): a local policy-layer alignment backend. Cursor's\ncoding-agent CLI (`agent`) runs its own sandbox that re-skins the\nhost-native class (Seatbelt on macOS, Landlock on Linux) with a product\npolicy layer configured through a settings file — not a programmatic\nlaunch API. Unlike the OCI-ingesting cloud backends, nothing is baked and\nnothing leaves the laptop: this is a LOCAL, host-kernel backend, so\n`fs_virtualized` is false and the threat model is the host-local one (the\nagent runs on this machine, confined by the OS sandbox Cursor drives).\nThe honest seam is policy-layer alignment: flox compiles the manifest\ngrants into Cursor's project-scoped permission config\n(`<project>/.cursor/cli.json`: `permissions.allow` / `permissions.deny`\ntokens — `Read`/`Write`/`Shell`/`WebFetch`/`Mcp`) so Flox's environment +\npolicy source of truth and Cursor's enforcement stack instead of\nconflicting. Network grants compile onto `WebFetch(<host>)` allow entries:\ndomain-scoped, the agent's web-fetch tool only, and port-blind (the\ngrant's port is dropped) — a declared lossiness, since the project config\nhas no `<host>:<port>` egress vocabulary and the `sandbox.networkAccess`\nknob that would gate all egress is global-only (not project-scoped), so\nflox cannot set it here. The grant's per-binary / read-write / protocol\nscoping is likewise not expressible through `WebFetch` and is recorded but\nnot enforced. There is no public launch API that ingests a config path and\nexecs the agent under it (`agent` reads `<project>/.cursor/cli.json`\nimplicitly; `sandbox.mode` is global), so flox writes the config and bails\nat the launch boundary naming the missing programmatic hook — a\ncredentialed operator with the `agent` CLI runs it in the project to pick\nup the compiled policy. Reachable on macOS and Linux (Cursor's local\nsandbox runs on both).",
+              "type": "string"
+            },
+            {
               "const": "libkrun",
               "description": "Embeddable micro-VM (libkrun): hypervisor isolation with a guest kernel\nvia libkrunfw (Hypervisor.framework on macOS, KVM on Linux).",
               "type": "string"

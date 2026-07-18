@@ -1,0 +1,80 @@
+schema-version = "1.13.0"
+
+# Cursor's agent sandbox is a LOCAL policy layer: the coding agent runs on this
+# machine, confined by the OS sandbox Cursor re-skins (Seatbelt on macOS,
+# Landlock on Linux). Nothing is baked and nothing leaves the laptop, so this
+# setup env runs no local service and needs no provider daemon — unlike the
+# cloud backends, there is no Docker bake step either. The `cursor` backend
+# generates a project permission config (<project>/.cursor/cli.json) from the
+# manifest grants; the only external tool is Cursor's `agent` CLI, which installs
+# via 'curl https://cursor.com/install | bash' (not the Flox catalog). The CLI is
+# presence-detected by preflight, not installed here — so [install] stays empty.
+
+[vars]
+# Feature flags the demo needs in the presentation shell.
+FLOX_FEATURES_SANDBOX_ACTIVATE = "true"
+FLOX_FEATURES_AUTO_ACTIVATE = "true"
+# Planted for the token-isolation beat: visible on the host. The `cursor` backend
+# compiles a deny rule for .env/*.key files into the project config, so the agent
+# cannot read this even inside the project it is working on.
+GITHUB_TOKEN = "ghp-demo-FAKE"
+
+[hook]
+on-activate = '''
+  # Cursor is a local policy layer — there is no daemon to run as a service. The
+  # setup concern is the alignment prerequisites, surfaced here so the operator
+  # learns of them before the first 'cd', not mid-demo.
+
+  # 1. CLI: the `cursor` backend needs Cursor's agent CLI ('agent') to run the
+  #    agent under the compiled policy. Presence-detected, not installed here.
+  if ! command -v agent >/dev/null 2>&1; then
+    echo "note: Cursor's 'agent' CLI is not on PATH. Install it with" >&2
+    echo "      'curl https://cursor.com/install -fsS | bash' (see demo/CURSOR.md" >&2
+    echo "      beat 0). flox generates the permission config regardless; the" >&2
+    echo "      launch boundary names the CLI wall." >&2
+  fi
+
+  # 2. Auth: the agent needs a Cursor account. flox probes CURSOR_API_KEY
+  #    non-interactively (never a browser login). Note its absence so the
+  #    operator knows the launch boundary will name the auth wall.
+  if [ -z "${CURSOR_API_KEY:-}" ]; then
+    echo "note: CURSOR_API_KEY is unset. That is fine for config generation —" >&2
+    echo "      flox writes <project>/.cursor/cli.json anyway; running the agent" >&2
+    echo "      itself needs a Cursor account (see demo/CURSOR.md beat 0)." >&2
+  fi
+
+  # Demo fixture: a planted "secret" that must stay unreadable to the agent (beat
+  # 2 of demo/CURSOR.md). Cursor is LOCAL, so unlike the cloud backends the host
+  # filesystem IS reachable — the protection is the compiled Read/Write deny on
+  # .env files, not remoteness. Removed by profile.deactivate.
+  mkdir -p "$HOME/demo-secrets"
+  printf 'API_KEY=sk-demo-FAKE-do-not-use\n' > "$HOME/demo-secrets/.env"
+'''
+
+# Presentation-shell setup, so the walkthrough's manual export block disappears.
+# bash and zsh only — the demo script targets bash, and `alias`/`export` syntax
+# is not portable to fish/tcsh.
+[profile]
+bash = '''
+  if [ -n "${FLOX_BIN:-}" ]; then
+    alias flox='$FLOX_BIN'
+  fi
+  export FLOX_VERSION="$("${FLOX_BIN:-flox}" --version)"
+'''
+zsh = '''
+  if [ -n "${FLOX_BIN:-}" ]; then
+    alias flox='$FLOX_BIN'
+  fi
+  export FLOX_VERSION="$("${FLOX_BIN:-flox}" --version)"
+'''
+
+[profile.deactivate]
+common = '''
+  # Deactivating the demo cleans up after itself: remove the planted secret.
+  rm -rf "$HOME/demo-secrets"
+'''
+
+[options]
+# Cursor's local sandbox runs on macOS and Linux; the setup env installs no
+# provider CLI, so both dev systems are supported.
+systems = ["aarch64-darwin", "x86_64-linux"]
