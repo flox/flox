@@ -16,10 +16,11 @@ name: "Frozen builder cache"
 #
 #   gh workflow run frozen-builder-cache.yml --ref <branch>
 #
-# First dispatch on a branch where the workflow has never existed on the
-# default branch may need the REST form:
-#
-#   gh api repos/flox/flox/actions/workflows/frozen-builder-cache.yml/dispatches -f ref=<branch>
+# workflow_dispatch only registers once the file exists on the default
+# branch; until then, GitHub 404s every dispatch attempt. The push
+# trigger below (filtered to this file's own path) covers that case:
+# editing this file — e.g. bumping the default revs after a pin bump —
+# starts a run on push.
 #
 # KEEP THE PINS FETCHABLE: rebases strip the pinned revs from the
 # prototype branch, leaving them reachable only via backup branches.
@@ -29,6 +30,11 @@ name: "Frozen builder cache"
 #   git push origin <rev>:refs/tags/frozen-builder/<rev12>
 
 on:
+  push:
+    branches:
+      - "prototype/sandboxed-activation"
+    paths:
+      - ".github/workflows/frozen-builder-cache.yml"
   workflow_dispatch:
     inputs:
       revs:
@@ -70,7 +76,9 @@ jobs:
 
       - name: "Prebuild pins and push to cache"
         env:
-          REVS: "${{ inputs.revs }}"
+          # push events carry no inputs; fall back to the current pins
+          # (keep in sync with the workflow_dispatch default above).
+          REVS: "${{ inputs.revs || '3c374021c8df69441895a04be9c3c59da4bddec7 525741aacf2659a5b88834fe601e59cb143723d4' }}"
           NIX_SUBSTITUTER: "${{ vars.MANAGED_CACHE_PUBLIC_S3_BUCKET }}"
           NIX_SUBSTITUTER_KEY: "${{ secrets.MANAGED_CACHE_PUBLIC_SECRET_KEY }}"
         run: |
