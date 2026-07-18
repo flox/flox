@@ -1,0 +1,93 @@
+schema-version = "1.13.0"
+
+# Anjuna Security's confidential runtime is commercially licensed and requires
+# TEE hardware, so this setup env runs no local service and needs no provider
+# daemon. The `anjuna` backend generates an enclave-converter config
+# (.flox/cache/anjuna/enclave-config.yaml) + a `build-enclave` invocation from
+# the baked image; the only genuinely required host tool is Docker (to bake the
+# converter's input image), installed separately. The anjuna-nitro-cli is
+# presence-detected, not required — and it is license-gated, distributed through
+# Anjuna's private repository, so it is NOT in the Flox catalog. This env
+# installs no provider CLI. If Anjuna ever ships a freely downloadable
+# evaluation CLI that lands in the catalog, add it to [install].
+
+[vars]
+# Feature flags the demo needs in the presentation shell.
+FLOX_FEATURES_SANDBOX_ACTIVATE = "true"
+FLOX_FEATURES_AUTO_ACTIVATE = "true"
+# Planted for the token-isolation beat: visible on the host. On the anjuna
+# backend the runtime is a hardware enclave with no view of the host env, so
+# this simply never reaches the enclave.
+GITHUB_TOKEN = "ghp-demo-FAKE"
+
+[hook]
+on-activate = '''
+  # Anjuna is a license-gated, hardware-TEE runtime — there is no local gateway
+  # to run as a service. The setup concern is the hand-off prerequisites,
+  # surfaced here so the operator learns of them before the first 'cd', not
+  # mid-demo.
+
+  # 1. Docker: the anjuna backend bakes the converter's input image locally
+  #    before Anjuna's build-enclave can consume it. Docker is the one required
+  #    host tool.
+  if ! command -v docker >/dev/null 2>&1; then
+    echo "note: 'docker' not found on PATH — the anjuna backend needs it to" >&2
+    echo "      bake the converter's input image (see demo/ANJUNA.md beat 0)." >&2
+  fi
+
+  # 2. CLI: the anjuna-nitro-cli is presence-detected, not required, and is
+  #    commercially licensed (not in the Flox catalog). The converter-config
+  #    hand-off is generated regardless; note its absence so the operator knows
+  #    the launch boundary will name the license + hardware walls.
+  if ! command -v anjuna-nitro-cli >/dev/null 2>&1; then
+    echo "note: no 'anjuna-nitro-cli' on PATH. That is fine for the local beats" >&2
+    echo "      — flox generates the enclave-converter config anyway; the" >&2
+    echo "      enclave build itself needs an Anjuna license and TEE hardware" >&2
+    echo "      (see demo/ANJUNA.md)." >&2
+  fi
+
+  # 3. Registry: Anjuna's build-enclave pulls the substrate image the config
+  #    references, so the generated --docker-uri needs a registry prefix.
+  #    Default to a bare tag and let the operator override.
+  if [ -z "${FLOX_SANDBOX_ANJUNA_REGISTRY:-}" ]; then
+    echo "note: FLOX_SANDBOX_ANJUNA_REGISTRY is unset; the build invocation will" >&2
+    echo "      use a bare image tag. Export it (e.g. docker.io/<user>) before" >&2
+    echo "      the enclave build." >&2
+  fi
+
+  # Demo fixture: a planted "secret" the runtime must never see (beat 4 of
+  # demo/ANJUNA.md). On Anjuna the enclave is memory-encrypted against the host
+  # itself, so this is unreachable by construction. Removed by
+  # profile.deactivate.
+  mkdir -p "$HOME/demo-secrets"
+  printf 'API_KEY=sk-demo-FAKE-do-not-use\n' > "$HOME/demo-secrets/.env"
+'''
+
+# Presentation-shell setup, so the walkthrough's manual export block
+# disappears. bash and zsh only — the demo script targets bash, and
+# `alias`/`export` syntax is not portable to fish/tcsh.
+[profile]
+bash = '''
+  if [ -n "${FLOX_BIN:-}" ]; then
+    alias flox='$FLOX_BIN'
+  fi
+  export FLOX_VERSION="$("${FLOX_BIN:-flox}" --version)"
+'''
+zsh = '''
+  if [ -n "${FLOX_BIN:-}" ]; then
+    alias flox='$FLOX_BIN'
+  fi
+  export FLOX_VERSION="$("${FLOX_BIN:-flox}" --version)"
+'''
+
+[profile.deactivate]
+common = '''
+  # Deactivating the demo cleans up after itself: remove the planted secret.
+  rm -rf "$HOME/demo-secrets"
+'''
+
+[options]
+# Anjuna is driven over a host CLI (bake + converter-config generation from any
+# host); the setup env installs no provider CLI, so both dev systems are
+# supported.
+systems = ["aarch64-darwin", "x86_64-linux"]

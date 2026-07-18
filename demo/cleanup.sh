@@ -72,9 +72,10 @@ if command -v docker >/dev/null 2>&1; then
   # docker-sbx backend bakes under the -docker-sbx repo; the ona backend
   # bakes under the -ona repo; the e2b backend bakes under the -e2b repo;
   # the daytona backend bakes under the -daytona repo; the cognition-devin
-  # backend bakes under the -cognition-devin repo.
+  # backend bakes under the -cognition-devin repo; the anjuna backend bakes
+  # under the -anjuna repo.
   docker image ls --format '{{.Repository}}:{{.Tag}}' 2>/dev/null | \
-    grep -E '^sandbox-demo-(openshell|modal|docker-sbx|ona|e2b|daytona|cognition-devin):' | \
+    grep -E '^sandbox-demo-(openshell|modal|docker-sbx|ona|e2b|daytona|cognition-devin|anjuna):' | \
     while read -r tag; do
       docker rmi "$tag" >/dev/null 2>&1 && echo "Removed Docker image: $tag"
     done || true

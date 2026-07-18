@@ -158,6 +158,35 @@ pub enum SandboxBackend {
     /// subscription product reached over its API from any host, so `Native` here
     /// means "the host can drive it", not "the workload runs on this OS".
     CognitionDevin,
+    /// Anjuna Security: a Trusted-Execution-Environment (TEE) partner-handoff
+    /// backend. Anjuna's runtime converts a container image into an *enclave
+    /// image* (AWS Nitro Enclaves, AMD SEV-SNP, or Intel SGX) that runs
+    /// hardware-isolated inside a confidential-computing TEE. flox bakes the
+    /// environment into a lockfile-hash-tagged OCI image and generates the
+    /// Anjuna hand-off — an `anjuna-nitro-cli` enclave-config YAML plus the
+    /// `build-enclave` invocation that feeds the baked image (`--docker-uri`)
+    /// through Anjuna's converter — together with an attestation-binding note
+    /// tying the expected enclave measurement (PCR/attestation report) to the
+    /// lockfile hash. This introduces an *attestation axis* the seam has not
+    /// met before: the enclave's measurement is the identity a relying party
+    /// verifies, and flox binds it to the reproducible closure.
+    /// Hypervisor-class isolation (a hardware TEE is the strongest boundary on
+    /// the roster). Cloud-remote and hardware-gated: the TEE requires a Linux
+    /// cloud instance with SGX/SEV-SNP or an AWS Nitro parent, so host
+    /// assertions are preflight-only and the threat model inverts (the code and
+    /// secrets run inside the enclave, unreachable from the host, but they leave
+    /// the laptop; the enclave's confidentiality is the point). Egress from a
+    /// Nitro enclave traverses the parent's `anjuna-nitro-netd` vsock↔network
+    /// proxy; flox compiles the manifest's `<host>:443` grants into the enclave
+    /// config's egress allowlist, a declared lossiness — the per-binary /
+    /// read-write / port scoping and non-443 endpoints are not expressible
+    /// through the converter config, and the enforcing proxy config lives on
+    /// Anjuna's side. Policy is fixed when the enclave image is built, so
+    /// redemption is a rebuild. Anjuna's CLI and runtime are commercially
+    /// licensed (not open source); this host has neither the CLI nor TEE
+    /// hardware, so `Native` here means "the host can drive the bake +
+    /// conversion-config generation", not "the workload runs on this OS".
+    Anjuna,
     /// Embeddable micro-VM (libkrun): hypervisor isolation with a guest kernel
     /// via libkrunfw (Hypervisor.framework on macOS, KVM on Linux).
     Libkrun,
@@ -238,7 +267,7 @@ pub struct BackendCapabilities {
 
 impl SandboxBackend {
     /// Every backend on the roster, in spectrum order (weakest boundary first).
-    pub const ALL: [SandboxBackend; 13] = [
+    pub const ALL: [SandboxBackend; 14] = [
         SandboxBackend::Libsandbox,
         SandboxBackend::Nix,
         SandboxBackend::HostNative,
@@ -251,6 +280,7 @@ impl SandboxBackend {
         SandboxBackend::E2b,
         SandboxBackend::Daytona,
         SandboxBackend::CognitionDevin,
+        SandboxBackend::Anjuna,
         SandboxBackend::Libkrun,
     ];
 
@@ -615,6 +645,56 @@ impl SandboxBackend {
                 // honestly Scaffolded, not Implemented.
                 status: Scaffolded,
             },
+            SandboxBackend::Anjuna => BackendCapabilities {
+                backend: self,
+                // A hardware Trusted Execution Environment (AWS Nitro Enclaves,
+                // AMD SEV-SNP, Intel SGX) — the strongest boundary on the
+                // roster, memory-encrypted and attestable. Anjuna's runtime is
+                // the converter and the in-enclave supervisor.
+                enforcement: Hypervisor,
+                enforces: true,
+                // The enclave's network/egress policy is fixed when the enclave
+                // image is built from the converter config; an out-of-policy
+                // access is redeemed by editing the config and rebuilding the
+                // enclave image, never adjudicated live. No per-request ask API.
+                live_ask: false,
+                // Egress from a Nitro enclave traverses the parent's
+                // `anjuna-nitro-netd` vsock↔network proxy, which can allowlist
+                // egress by host. flox compiles the manifest's `<host>:443`
+                // grants into the enclave config's egress allowlist. The
+                // per-domain (not per-port) granularity, the non-443 decline,
+                // and the fact that the enforcing proxy config lives on Anjuna's
+                // side are declared lossiness, not a reason to claim no domain
+                // egress.
+                domain_egress: true,
+                // The enclave config's egress allowlist is endpoint-scoped; it
+                // carries no read/write method distinction and no per-binary
+                // attribution, and the enclave filesystem is the converted image
+                // rather than per-path r/w/x grants. Op-blind by the contract's
+                // meaning.
+                per_op: false,
+                // The workload runs inside a hardware-isolated enclave with its
+                // own memory-encrypted filesystem view, so it pays the
+                // virtualized-filesystem cost class rather than native host I/O.
+                fs_virtualized: true,
+                // Partner-handoff/TEE: the bake and the converter-config
+                // generation run on the host, but the enclave build + launch
+                // need the licensed `anjuna-nitro-cli` and TEE hardware on a
+                // cloud Linux instance. `Native` here means "the host can drive
+                // the bake + conversion-config generation", not "the workload
+                // runs on this OS".
+                macos: Native,
+                linux: Native,
+                // The launch boundary needs an Anjuna commercial license (the
+                // CLI and runtime are not open source and are absent on this
+                // host) and TEE hardware (SGX/SEV-SNP or an AWS Nitro parent
+                // instance) that macOS arm64 does not have. Preflight, bake,
+                // policy compilation, and converter-config + build-invocation
+                // generation (with the attestation-binding note) are wired; the
+                // final enclave build and launch are not, so this is honestly
+                // Scaffolded, not Implemented.
+                status: Scaffolded,
+            },
             SandboxBackend::Libkrun => BackendCapabilities {
                 backend: self,
                 enforcement: Hypervisor,
@@ -646,6 +726,7 @@ impl Display for SandboxBackend {
             SandboxBackend::E2b => "e2b",
             SandboxBackend::Daytona => "daytona",
             SandboxBackend::CognitionDevin => "cognition-devin",
+            SandboxBackend::Anjuna => "anjuna",
             SandboxBackend::Libkrun => "libkrun",
         };
         write!(f, "{name}")
@@ -654,7 +735,7 @@ impl Display for SandboxBackend {
 
 #[derive(Debug, thiserror::Error)]
 #[error(
-    "'{0}' is not a valid sandbox backend. Expected one of: libsandbox, nix, host-native, srt, oci, openshell, modal, docker-sbx, ona, e2b, daytona, cognition-devin, libkrun."
+    "'{0}' is not a valid sandbox backend. Expected one of: libsandbox, nix, host-native, srt, oci, openshell, modal, docker-sbx, ona, e2b, daytona, cognition-devin, anjuna, libkrun."
 )]
 pub struct SandboxBackendParseError(String);
 
@@ -675,6 +756,7 @@ impl FromStr for SandboxBackend {
             "e2b" => Ok(SandboxBackend::E2b),
             "daytona" => Ok(SandboxBackend::Daytona),
             "cognition-devin" => Ok(SandboxBackend::CognitionDevin),
+            "anjuna" => Ok(SandboxBackend::Anjuna),
             "libkrun" => Ok(SandboxBackend::Libkrun),
             other => Err(SandboxBackendParseError(other.to_string())),
         }
@@ -705,7 +787,7 @@ mod tests {
         let err = "bogus".parse::<SandboxBackend>().unwrap_err();
         assert_eq!(
             err.to_string(),
-            "'bogus' is not a valid sandbox backend. Expected one of: libsandbox, nix, host-native, srt, oci, openshell, modal, docker-sbx, ona, e2b, daytona, cognition-devin, libkrun.",
+            "'bogus' is not a valid sandbox backend. Expected one of: libsandbox, nix, host-native, srt, oci, openshell, modal, docker-sbx, ona, e2b, daytona, cognition-devin, anjuna, libkrun.",
         );
     }
 
@@ -969,6 +1051,40 @@ mod tests {
         assert_eq!(json, "\"cognition-devin\"");
         let parsed: SandboxBackend = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed, SandboxBackend::CognitionDevin);
+    }
+
+    #[test]
+    fn anjuna_capabilities_row() {
+        let caps = SandboxBackend::Anjuna.capabilities();
+        assert_eq!(caps, BackendCapabilities {
+            backend: SandboxBackend::Anjuna,
+            // A hardware TEE is the strongest boundary on the roster.
+            enforcement: Enforcement::Hypervisor,
+            enforces: true,
+            live_ask: false,
+            domain_egress: true,
+            per_op: false,
+            fs_virtualized: true,
+            macos: PlatformSupport::Native,
+            linux: PlatformSupport::Native,
+            status: IntegrationStatus::Scaffolded,
+        });
+    }
+
+    #[test]
+    fn anjuna_display_and_parse_round_trip() {
+        let backend = SandboxBackend::Anjuna;
+        let s = backend.to_string();
+        assert_eq!(s, "anjuna");
+        assert_eq!(s.parse::<SandboxBackend>().unwrap(), backend);
+    }
+
+    #[test]
+    fn anjuna_serde_round_trip() {
+        let json = serde_json::to_string(&SandboxBackend::Anjuna).unwrap();
+        assert_eq!(json, "\"anjuna\"");
+        let parsed: SandboxBackend = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed, SandboxBackend::Anjuna);
     }
 
     #[test]

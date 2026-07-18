@@ -35,8 +35,9 @@
 //!   `resolve_docker_image_state`, and the Docker inspection helpers. A
 //!   Docker-ingesting backend bakes under the repo it owns rather than
 //!   borrowing a peer's tags.
-//! - [`handoff`] — plumbing shared by the OCI-handoff cloud/microVM backends
-//!   (`modal`, `ona`, `docker-sbx`, `e2b`): `manifest_network_rules` (read the
+//! - [`handoff`] — plumbing shared by the OCI-handoff cloud/microVM/TEE
+//!   backends (`modal`, `ona`, `docker-sbx`, `e2b`, `daytona`,
+//!   `cognition-devin`, `anjuna`): `manifest_network_rules` (read the
 //!   egress grants from the lockfile), `ensure_local_image` (the
 //!   resolve-state → bake-decision ladder, parameterized by the image label
 //!   used in prompts), and the `py_str_*` / `toml_str_*` / `json_str_*`
@@ -44,6 +45,7 @@
 //!   per-backend artifact *writers* are deliberately not shared — they diverge
 //!   on output root and cardinality (see the `handoff` module docs).
 
+pub mod anjuna;
 pub mod bake;
 pub mod cognition_devin;
 pub mod daytona;
@@ -157,6 +159,7 @@ pub fn for_backend(
         SandboxBackend::CognitionDevin => {
             Some(Box::new(cognition_devin::CognitionDevinBackend::new(ctx)))
         },
+        SandboxBackend::Anjuna => Some(Box::new(anjuna::AnjunaBackend::new(ctx))),
         // Libsandbox is the default in-process path; no wrapper object.
         // All other variants keep the "not yet wired" bail in activate.rs.
         _ => None,

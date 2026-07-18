@@ -1,13 +1,14 @@
 //! Shared plumbing for the OCI-handoff sandbox backends (`modal`, `ona`,
-//! `docker-sbx`, `e2b`).
+//! `docker-sbx`, `e2b`, `daytona`, `cognition-devin`, `anjuna`).
 //!
-//! These four backends all follow the same shape: bake the environment into a
+//! These backends all follow the same shape: bake the environment into a
 //! `<repo>:<hash12>` OCI image, read the manifest's egress grants, compile them
 //! into a provider-specific vocabulary, render a hand-off artifact (a launcher
-//! script, devcontainer, kit manifest, or template), and bail at the launch
-//! boundary. The parts that genuinely differ per backend — which vocabulary,
-//! which artifact shape, where it is written — stay in the backend module. The
-//! parts that were byte-identical copies live here:
+//! script, devcontainer, kit manifest, template, blueprint, or
+//! enclave-converter config), and bail at the launch boundary. The parts that
+//! genuinely differ per backend — which vocabulary, which artifact shape, where
+//! it is written — stay in the backend module. The parts that were
+//! byte-identical copies live here:
 //!
 //! - [`manifest_network_rules`] — read `[[options.sandbox.network]]` from the
 //!   lockfile (was four verbatim copies).

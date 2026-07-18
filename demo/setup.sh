@@ -20,8 +20,9 @@ DEMO_DIR="${DEMO_DIR:-$HOME/sandbox-demo}"
 # "docker-sbx" (Docker Sandboxes local microVM — see demo/DOCKER-SBX.md),
 # "ona" (Ona control-plane CDE, formerly Gitpod — see demo/ONA.md),
 # "e2b" (E2B cloud-API sandbox — see demo/E2B.md),
-# "daytona" (Daytona cloud-API sandbox — see demo/DAYTONA.md), or
-# "cognition-devin" (Cognition/Devin partner runtime — see demo/DEVIN.md).
+# "daytona" (Daytona cloud-API sandbox — see demo/DAYTONA.md),
+# "cognition-devin" (Cognition/Devin partner runtime — see demo/DEVIN.md), or
+# "anjuna" (Anjuna Security TEE partner runtime — see demo/ANJUNA.md).
 BACKEND="${BACKEND:-oci}"
 # `|| true` so an empty result reaches the friendly preflight below
 # instead of aborting silently under `set -e`.
@@ -212,8 +213,36 @@ case "$BACKEND" in
       echo "      prefix (e.g. docker.io/<user>) before the snapshot build." >&2
     fi
     ;;
+  anjuna)
+    # The anjuna backend is partner-handoff/TEE (Anjuna Security's
+    # confidential-computing runtime): it bakes the converter's input image
+    # locally (Docker), compiles the manifest network policy, and generates the
+    # enclave-converter config + build-enclave invocation + attestation-binding
+    # note (.flox/cache/anjuna/), then stops at the launch boundary. Preflight
+    # requires only Docker; the anjuna-nitro-cli is presence-detected, not
+    # required. Anjuna CONVERTS the image into an enclave image via its licensed
+    # anjuna-nitro-cli — there is no public image-launch API — so the enclave
+    # build + run need an Anjuna license, TEE hardware, and a registry Anjuna can
+    # pull from; none is set up by this script (see demo/ANJUNA.md).
+    if ! command -v docker >/dev/null 2>&1; then
+      echo "WARNING: 'docker' not found on PATH (required to bake the image)." >&2
+    elif ! docker info >/dev/null 2>&1; then
+      echo "WARNING: the Docker daemon is not reachable ('docker info' failed)." >&2
+      echo "         Start Docker Desktop or the Docker service before baking." >&2
+    fi
+    if ! command -v anjuna-nitro-cli >/dev/null 2>&1; then
+      echo "NOTE: no 'anjuna-nitro-cli' on PATH (it is commercially licensed)." >&2
+      echo "      That is expected for the local beats; the converter-config" >&2
+      echo "      hand-off is generated regardless (see demo/ANJUNA.md)." >&2
+    fi
+    if [ -z "${FLOX_SANDBOX_ANJUNA_REGISTRY:-}" ]; then
+      echo "NOTE: FLOX_SANDBOX_ANJUNA_REGISTRY is unset; the generated" >&2
+      echo "      build invocation will use a bare image tag. Set it to your" >&2
+      echo "      registry prefix (e.g. docker.io/<user>) before the enclave build." >&2
+    fi
+    ;;
   *)
-    echo "ERROR: BACKEND='$BACKEND' is not a demo backend (oci|openshell|modal|docker-sbx|ona|e2b|daytona|cognition-devin)." >&2
+    echo "ERROR: BACKEND='$BACKEND' is not a demo backend (oci|openshell|modal|docker-sbx|ona|e2b|daytona|cognition-devin|anjuna)." >&2
     exit 1
     ;;
 esac
@@ -292,7 +321,7 @@ sandbox = f'''[options.sandbox]
 backend = "{backend}"
 '''
 if backend in ("openshell", "modal", "docker-sbx", "ona", "e2b", "daytona",
-               "cognition-devin"):
+               "cognition-devin", "anjuna"):
     # Grant the coding agent its API endpoints. On openshell the grant is
     # scoped to the exact claude binary (`binary` resolves to the locked
     # store path via the lockfile) and enforced at L7. On modal the host of
@@ -308,9 +337,13 @@ if backend in ("openshell", "modal", "docker-sbx", "ona", "e2b", "daytona",
     # the :443 is dropped), mutually exclusive with the CIDR list; on
     # cognition-devin each :443 host compiles into the blueprint's
     # `sandbox.allowed_domains` (Devin's CLI-sandbox allowlist; per-domain, not
-    # per-port). In the cloud/microVM/control-plane cases the
-    # binary/access/protocol scoping is recorded but not enforceable, a declared
-    # lossiness. Either way, everything else stays deny-by-default.
+    # per-port); on anjuna each :443 host compiles into the enclave config's
+    # `egress.allowed_hosts` (the anjuna-nitro-netd proxy allowlists per-host,
+    # not per-port, so the :443 is dropped), and flox additionally binds the
+    # expected enclave attestation measurement to the lockfile hash. In the
+    # cloud/microVM/control-plane/TEE cases the binary/access/protocol scoping is
+    # recorded but not enforceable, a declared lossiness. Either way, everything
+    # else stays deny-by-default.
     sandbox += '''
 [[options.sandbox.network]]
 endpoint = "api.anthropic.com:443"
@@ -380,12 +413,13 @@ and follow demo/SCRIPT.md (backend "oci"), demo/OPENSHELL.md
 (backend "openshell"), demo/MODAL.md (backend "modal"),
 demo/DOCKER-SBX.md (backend "docker-sbx"), demo/ONA.md
 (backend "ona"), demo/E2B.md (backend "e2b"), demo/DAYTONA.md
-(backend "daytona"), or demo/DEVIN.md (backend "cognition-devin").
+(backend "daytona"), demo/DEVIN.md (backend "cognition-devin"), or
+demo/ANJUNA.md (backend "anjuna").
 Afterwards: bash demo/cleanup.sh
 
 NOTE: the manifest already declares [options.sandbox]
 backend = "$BACKEND", an auto-starting web service, and (openshell,
-modal, docker-sbx, ona, e2b, daytona, and cognition-devin)
+modal, docker-sbx, ona, e2b, daytona, cognition-devin, and anjuna)
 [[options.sandbox.network]] grants for the agent's Anthropic
 endpoints, so the first 'cd' auto-activates straight into the
 sandbox. The first-ever bake
@@ -431,4 +465,18 @@ build + session need a Devin subscription/partnership and a registry
 Devin can pull from (export
 FLOX_SANDBOX_COGNITION_DEVIN_REGISTRY=<prefix>). The devin CLI is
 presence-detected, not required. See demo/DEVIN.md.
+
+NOTE (anjuna): the anjuna backend is partner-handoff/TEE (Anjuna
+Security's confidential-computing runtime). It bakes the converter's
+input image locally and generates an enclave-converter config +
+build-enclave invocation (.flox/cache/anjuna/), binding the expected
+enclave attestation measurement to the lockfile hash, but Anjuna
+CONVERTS the image into an enclave image via its licensed
+anjuna-nitro-cli — there is no public image-launch API. The enclave
+build + run need an Anjuna commercial license, TEE hardware
+(SGX/SEV-SNP or an AWS Nitro instance; macOS arm64 has none), and a
+registry Anjuna can pull from (export
+FLOX_SANDBOX_ANJUNA_REGISTRY=<prefix>). The anjuna-nitro-cli is
+presence-detected, not required, and is not in the Flox catalog
+(license-gated). See demo/ANJUNA.md.
 EOF
