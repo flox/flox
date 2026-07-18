@@ -214,7 +214,7 @@ usage:
 # actually building.
 .PHONY: $(PROJECT_TMPDIR)/check-build-prerequisites
 $(PROJECT_TMPDIR)/check-build-prerequisites:
-	@# Exactly one of BUILD_RESULT_FILE or LOCK_RESULT_FILE must be defined.
+	@# At least one of BUILD_RESULT_FILE or LOCK_RESULT_FILE must be defined.
 	$(if $(or $(BUILD_RESULT_FILE),$(LOCK_RESULT_FILE)),, \
 	  $(error neither BUILD_RESULT_FILE nor LOCK_RESULT_FILE defined))
 	$(if $(BUILD_RESULT_FILE),$(if $(wildcard $(BUILD_RESULT_FILE)),, \

@@ -645,8 +645,8 @@ impl ManifestBuilder for FloxBuildMk<'_> {
         command.arg(format!("NIX_EXPRESSION_REF={expression_ref}"));
 
         // Add the list of packages to be locked by passing a space-delimited
-        // list of pnames in the PACKAGES variable. If no packages are
-        // specified then the makefile will lock all packages by default.
+        // list of pnames in the PACKAGES variable. PACKAGES must be
+        // non-empty; the makefile errors if it is not defined or empty.
         command.arg(format!(
             "PACKAGES={}",
             packages.iter().map(|name| name.as_ref()).join(" ")
@@ -659,7 +659,7 @@ impl ManifestBuilder for FloxBuildMk<'_> {
         // SAFETY: according to the docs, this is fallible on _Windows_
         let lock_result_path = lock_result_path
             .keep()
-            .expect("failed to keep lock result fifo");
+            .expect("failed to keep lock result file");
 
         command.arg(format!("LOCK_RESULT_FILE={}", lock_result_path.display()));
 
@@ -692,7 +692,7 @@ impl ManifestBuilder for FloxBuildMk<'_> {
             let stderr = child
                 .stderr
                 .take()
-                .expect("STDERR is piped when stdout_buffer is provided");
+                .expect("STDERR is piped when stderr_buffer is provided");
             let tap = stderr.tap_lines(|_| {});
             (tap, buffer)
         });
