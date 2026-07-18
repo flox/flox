@@ -66,12 +66,11 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, bail};
 use flox_core::activate::sandbox_backend::SandboxBackend;
 use flox_core::activate::sandbox_policy::SandboxNetworkRule;
-use flox_manifest::interfaces::AsLatestSchema;
 use flox_manifest::lockfile::Lockfile;
 use flox_rust_sdk::providers::container_builder::ContainerBuilderParams;
 use tracing::debug;
 
-use super::bake::{bake_image, resolve_docker_image_state};
+use super::handoff::{ensure_local_image, json_str_list, manifest_network_rules};
 use super::preflight::{first_on_path, split_endpoint};
 use super::{ActivationSandbox, SandboxLaunchCtx};
 use crate::commands::sandbox_backends::oci::lockfile_hash12;
@@ -296,7 +295,10 @@ pub(crate) fn render_devcontainer(params: &DevcontainerParams<'_>) -> String {
     let policy_summary = if params.network.deny_all {
         "deny-all (no grants declared)".to_string()
     } else {
-        format!("HTTPS/443 allowed: {}", params.network.allowed_hosts.join(", "))
+        format!(
+            "HTTPS/443 allowed: {}",
+            params.network.allowed_hosts.join(", ")
+        )
     };
     // image_ref and workspace_name come from validated sources (repo + hash12
     // tag, sanitized name), so the double-quoted JSON literals are injection
@@ -344,23 +346,6 @@ pub(crate) fn render_devcontainer(params: &DevcontainerParams<'_>) -> String {
     }
 }
 
-/// Render a JSON double-quoted string literal, escaping backslashes and double
-/// quotes so arbitrary hosts are safe to embed.
-fn json_str_lit(s: &str) -> String {
-    let escaped = s.replace('\\', "\\\\").replace('"', "\\\"");
-    format!("\"{escaped}\"")
-}
-
-/// Render a JSON array of double-quoted string literals.
-fn json_str_list(items: &[String]) -> String {
-    let inner = items
-        .iter()
-        .map(|s| json_str_lit(s))
-        .collect::<Vec<_>>()
-        .join(", ");
-    format!("[{inner}]")
-}
-
 // ── Launch path ────────────────────────────────────────────────────────────────
 
 /// Bake the image, compile the policy, generate the devcontainer artifact, then
@@ -393,6 +378,7 @@ fn wrap_ona(
         lockfile,
         autobake,
         container_builder_params,
+        "Ona image",
     )?;
 
     // Compile the manifest network policy into Ona's egress expectation.
@@ -441,20 +427,6 @@ fn wrap_ona(
     )
 }
 
-/// Read the manifest's `[[options.sandbox.network]]` rules from the lockfile.
-fn manifest_network_rules(lockfile: &Lockfile) -> Result<Vec<SandboxNetworkRule>> {
-    let manifest = lockfile
-        .migrated_manifest()
-        .context("failed to migrate the manifest for sandbox policy generation")?;
-    Ok(manifest
-        .as_latest_schema()
-        .options
-        .sandbox
-        .as_ref()
-        .and_then(|sandbox| sandbox.network.clone())
-        .unwrap_or_default())
-}
-
 /// Write the generated devcontainer artifact to `<project>/.devcontainer/
 /// devcontainer.json` and return its path.
 ///
@@ -476,95 +448,6 @@ fn write_devcontainer(project: &Path, devcontainer: &str) -> Result<PathBuf> {
     })?;
     debug!(path = %artifact_path.display(), "wrote ona devcontainer artifact");
     Ok(artifact_path)
-}
-
-/// Ensure the `<repo>:<hash12>` image exists in the local Docker store, baking
-/// it (with the shared compat layer) if absent.
-///
-/// Ona builds the workspace by pulling this image from a registry; baking it
-/// locally first is the content-addressed bake every OCI-ingesting provider
-/// shares. When the image is already present (cache hit), this is a no-op.
-fn ensure_local_image(
-    repo: &str,
-    env_name: &str,
-    dot_flox_path: &Path,
-    lockfile: &Lockfile,
-    autobake: bool,
-    container_builder_params: &ContainerBuilderParams,
-) -> Result<()> {
-    use std::io::IsTerminal;
-
-    use crate::commands::sandbox_backends::oci::{
-        FLOX_SANDBOX_OCI_ALLOW_STALE_VAR,
-        OciBakeDecision,
-        OciImageState,
-        should_bake_oci,
-    };
-
-    let state = resolve_docker_image_state(repo, lockfile);
-    match state {
-        OciImageState::Explicit(_) | OciImageState::Present { .. } => Ok(()),
-        OciImageState::Stale {
-            ref expected_ref, ..
-        }
-        | OciImageState::Missing { ref expected_ref } => {
-            let is_missing = matches!(state, OciImageState::Missing { .. });
-            let allow_stale = std::env::var(FLOX_SANDBOX_OCI_ALLOW_STALE_VAR)
-                .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-                .unwrap_or(false);
-            let is_tty = std::io::stdin().is_terminal();
-            let decision = should_bake_oci(
-                is_missing,
-                allow_stale,
-                autobake,
-                is_tty,
-                expected_ref,
-                None,
-            );
-            match decision {
-                // Running a stale image is acceptable — the operator pushes
-                // whatever is present; a fresh bake is not forced here.
-                OciBakeDecision::RunStale(_) => Ok(()),
-                OciBakeDecision::Bake => bake_image(
-                    repo,
-                    env_name,
-                    dot_flox_path,
-                    container_builder_params,
-                    lockfile,
-                ),
-                OciBakeDecision::Prompt => {
-                    let msg = format!(
-                        "Ona image '{expected_ref}' is not baked locally.\n\
-                         Bake now? (~2–5 min on first bake; later bakes reuse layers)"
-                    );
-                    let confirmed = inquire::Confirm::new(&msg)
-                        .with_default(true)
-                        .prompt()
-                        .unwrap_or(false);
-                    if confirmed {
-                        bake_image(
-                            repo,
-                            env_name,
-                            dot_flox_path,
-                            container_builder_params,
-                            lockfile,
-                        )
-                    } else {
-                        bail!(
-                            "Bake declined. To build the image manually, set \
-                             FLOX_SANDBOX_OCI_AUTOBAKE=true and re-run."
-                        );
-                    }
-                },
-                OciBakeDecision::FailFast { expected_ref, .. } => {
-                    bail!(
-                        "Ona image '{expected_ref}' not found in the local Docker image store.\n\
-                         To bake it automatically, set FLOX_SANDBOX_OCI_AUTOBAKE=true or run on an interactive terminal."
-                    );
-                },
-            }
-        },
-    }
 }
 
 // ── Unit tests ────────────────────────────────────────────────────────────────
@@ -607,7 +490,10 @@ mod tests {
 
     #[test]
     fn image_ref_without_registry_is_bare_tag() {
-        assert_eq!(ona_image_ref("myenv-ona", "abc123", None), "myenv-ona:abc123");
+        assert_eq!(
+            ona_image_ref("myenv-ona", "abc123", None),
+            "myenv-ona:abc123"
+        );
     }
 
     #[test]
@@ -725,7 +611,10 @@ mod tests {
             network: &deny_all_policy(),
         });
         assert!(doc.contains("\"name\": \"flox-myenv\""), "got:\n{doc}");
-        assert!(doc.contains("\"image\": \"myenv-ona:abc123\""), "got:\n{doc}");
+        assert!(
+            doc.contains("\"image\": \"myenv-ona:abc123\""),
+            "got:\n{doc}"
+        );
         assert!(doc.contains("\"default\": \"deny\""), "got:\n{doc}");
         assert!(doc.contains("\"allow\": []"), "got:\n{doc}");
         assert!(

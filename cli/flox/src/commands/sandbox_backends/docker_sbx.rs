@@ -83,14 +83,19 @@ use anyhow::{Context, Result, bail};
 use flox_core::activate::context::InvocationType;
 use flox_core::activate::sandbox_backend::SandboxBackend;
 use flox_core::activate::sandbox_policy::SandboxNetworkRule;
-use flox_manifest::interfaces::AsLatestSchema;
 use flox_manifest::lockfile::Lockfile;
 use flox_rust_sdk::providers::container_builder::ContainerBuilderParams;
 use semver::Version;
 use tracing::debug;
 
-use super::bake::{bake_image, resolve_docker_image_state};
-use super::preflight::{binary_on_path, first_on_path, parse_cli_version, split_endpoint};
+use super::handoff::{ensure_local_image, manifest_network_rules};
+use super::preflight::{
+    CliVersionCheck,
+    binary_on_path,
+    check_cli_version,
+    first_on_path,
+    split_endpoint,
+};
 use super::{ActivationSandbox, SandboxLaunchCtx};
 use crate::commands::sandbox_backends::oci::lockfile_hash12;
 
@@ -194,46 +199,20 @@ impl ActivationSandbox for DockerSbxBackend<'_> {
 ///
 /// Unlike the openshell/modal CLIs, `sbx` has no `--version` flag: the version
 /// is exposed via the `version` subcommand (output shape
-/// `sbx version: v0.34.0 <sha>`). The shared `check_cli_version` gate is
-/// `--version`-only, so this backend runs `sbx version` directly and reuses the
-/// shared [`parse_cli_version`] parser (which strips the leading `v` and the
-/// trailing sha). A too-old CLI would reject the generated `kind: sandbox` kit's
-/// `sandbox:` block with a schema error; a failed or unparseable `version`
-/// invocation tolerates the gate (logged at debug) rather than blocking on an
-/// unknown output format.
+/// `sbx version: v0.34.0 <sha>`). The shared version gate takes the query
+/// arguments as a field, so `version_args: &["version"]` drives it through the
+/// subcommand while reusing the shared parser (which strips the leading `v` and
+/// the trailing sha) and the tolerate-unparseable-at-debug semantics. A too-old
+/// CLI would reject the generated `kind: sandbox` kit's `sandbox:` block with a
+/// schema error.
 fn check_docker_sbx_version(sbx_path: &Path) -> Result<()> {
-    let output = std::process::Command::new(sbx_path)
-        .arg("version")
-        .output();
-    let raw = match output {
-        Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).into_owned(),
-        _ => {
-            debug!(
-                path = %sbx_path.display(),
-                "could not run 'sbx version'; skipping version gate"
-            );
-            return Ok(());
-        },
-    };
-    let Some(version) = parse_cli_version(&raw) else {
-        debug!(
-            path = %sbx_path.display(),
-            output = raw.trim(),
-            "unparseable 'sbx version' output; skipping version gate"
-        );
-        return Ok(());
-    };
-    if version < DOCKER_SBX_MIN_VERSION {
-        bail!(
-            "Docker Sandboxes (sbx) CLI version {version} is too old for the 'docker-sbx' sandbox backend (needs {min} or newer).\n\
-             Resolved binary: {path}\n\
-             Upgrade with 'brew upgrade sbx' (macOS) or your platform's package manager, then re-run.",
-            min = DOCKER_SBX_MIN_VERSION,
-            path = sbx_path.display(),
-        );
-    }
-    debug!(%version, "sbx CLI version meets the minimum");
-    Ok(())
+    check_cli_version(sbx_path, &CliVersionCheck {
+        tool_name: "Docker Sandboxes (sbx)",
+        backend_id: "docker-sbx",
+        min_version: DOCKER_SBX_MIN_VERSION,
+        upgrade_hint: "Upgrade with 'brew upgrade sbx' (macOS) or your platform's package manager, then re-run.",
+        version_args: &["version"],
+    })
 }
 
 /// Probe whether the Docker daemon is reachable via `docker info`.
@@ -431,6 +410,7 @@ fn wrap_docker_sbx(
         lockfile,
         autobake,
         container_builder_params,
+        "Docker Sandboxes image",
     )?;
 
     // Compile the manifest network policy into sbx's kit egress vocabulary.
@@ -465,20 +445,6 @@ fn wrap_docker_sbx(
     )
 }
 
-/// Read the manifest's `[[options.sandbox.network]]` rules from the lockfile.
-fn manifest_network_rules(lockfile: &Lockfile) -> Result<Vec<SandboxNetworkRule>> {
-    let manifest = lockfile
-        .migrated_manifest()
-        .context("failed to migrate the manifest for sandbox policy generation")?;
-    Ok(manifest
-        .as_latest_schema()
-        .options
-        .sandbox
-        .as_ref()
-        .and_then(|sandbox| sandbox.network.clone())
-        .unwrap_or_default())
-}
-
 /// Write the generated kit under `.flox/cache/docker-sbx-kit/` and return the
 /// kit directory and its `spec.yaml` path.
 fn write_docker_sbx_kit(dot_flox_path: &Path, kit: &str) -> Result<(PathBuf, PathBuf)> {
@@ -492,94 +458,13 @@ fn write_docker_sbx_kit(dot_flox_path: &Path, kit: &str) -> Result<(PathBuf, Pat
     Ok((kit_dir, spec_path))
 }
 
-/// Ensure the `<repo>:<hash12>` image exists in the local Docker store, baking
-/// it (with the shared compat layer) if absent.
-///
-/// The sbx launch uses this image as the kit's base image; baking it locally
-/// first is the content-addressed bake every OCI-ingesting provider shares. When
-/// the image is already present (cache hit), this is a no-op.
-fn ensure_local_image(
-    repo: &str,
-    env_name: &str,
-    dot_flox_path: &Path,
-    lockfile: &Lockfile,
-    autobake: bool,
-    container_builder_params: &ContainerBuilderParams,
-) -> Result<()> {
-    use std::io::IsTerminal;
-
-    use crate::commands::sandbox_backends::oci::{
-        FLOX_SANDBOX_OCI_ALLOW_STALE_VAR,
-        OciBakeDecision,
-        OciImageState,
-        should_bake_oci,
-    };
-
-    let state = resolve_docker_image_state(repo, lockfile);
-    match state {
-        OciImageState::Explicit(_) | OciImageState::Present { .. } => Ok(()),
-        OciImageState::Stale {
-            ref expected_ref, ..
-        }
-        | OciImageState::Missing { ref expected_ref } => {
-            let is_missing = matches!(state, OciImageState::Missing { .. });
-            let allow_stale = std::env::var(FLOX_SANDBOX_OCI_ALLOW_STALE_VAR)
-                .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-                .unwrap_or(false);
-            let is_tty = std::io::stdin().is_terminal();
-            let decision = should_bake_oci(is_missing, allow_stale, autobake, is_tty, expected_ref, None);
-            match decision {
-                // Running a stale image is acceptable — the operator adapts
-                // whatever is present; a fresh bake is not forced here.
-                OciBakeDecision::RunStale(_) => Ok(()),
-                OciBakeDecision::Bake => bake_image(
-                    repo,
-                    env_name,
-                    dot_flox_path,
-                    container_builder_params,
-                    lockfile,
-                ),
-                OciBakeDecision::Prompt => {
-                    let msg = format!(
-                        "Docker Sandboxes image '{expected_ref}' is not baked locally.\n\
-                         Bake now? (~2–5 min on first bake; later bakes reuse layers)"
-                    );
-                    let confirmed = inquire::Confirm::new(&msg)
-                        .with_default(true)
-                        .prompt()
-                        .unwrap_or(false);
-                    if confirmed {
-                        bake_image(
-                            repo,
-                            env_name,
-                            dot_flox_path,
-                            container_builder_params,
-                            lockfile,
-                        )
-                    } else {
-                        bail!(
-                            "Bake declined. To build the image manually, set \
-                             FLOX_SANDBOX_OCI_AUTOBAKE=true and re-run."
-                        );
-                    }
-                },
-                OciBakeDecision::FailFast { expected_ref, .. } => {
-                    bail!(
-                        "Docker Sandboxes image '{expected_ref}' not found in the local Docker image store.\n\
-                         To bake it automatically, set FLOX_SANDBOX_OCI_AUTOBAKE=true or run on an interactive terminal."
-                    );
-                },
-            }
-        },
-    }
-}
-
 // ── Unit tests ────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
 mod tests {
     use flox_core::activate::sandbox_policy::SandboxNetworkAccess;
 
+    use super::super::preflight::parse_cli_version;
     use super::*;
 
     // ── version parsing (sbx `version` subcommand, not `--version`) ───────────
@@ -680,7 +565,9 @@ mod tests {
     #[test]
     fn http_port_80_is_allowed() {
         let policy = compile_docker_sbx_network_policy(&[rule("cache.example.com:80")]).unwrap();
-        assert_eq!(policy.allowed_domains, vec!["cache.example.com".to_string()]);
+        assert_eq!(policy.allowed_domains, vec![
+            "cache.example.com".to_string()
+        ]);
     }
 
     #[test]
@@ -729,8 +616,7 @@ mod tests {
 
     #[test]
     fn endpoint_with_invalid_host_is_rejected() {
-        let err =
-            compile_docker_sbx_network_policy(&[rule("bad host\nhost:443")]).unwrap_err();
+        let err = compile_docker_sbx_network_policy(&[rule("bad host\nhost:443")]).unwrap_err();
         assert!(
             err.to_string().contains("Invalid sandbox network endpoint"),
             "got: {err}"

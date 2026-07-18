@@ -75,7 +75,13 @@ use super::bake::{
     resolve_docker_image_state,
     stale_ref_for_state,
 };
-use super::preflight::{CliVersionCheck, check_cli_version, first_on_path, split_endpoint};
+use super::preflight::{
+    CliVersionCheck,
+    DEFAULT_VERSION_ARGS,
+    check_cli_version,
+    first_on_path,
+    split_endpoint,
+};
 use super::{ActivationSandbox, SandboxLaunchCtx};
 use crate::commands::sandbox_backends::oci::{
     FLOX_SANDBOX_OCI_ALLOW_STALE_VAR,
@@ -196,6 +202,7 @@ fn check_openshell_version(openshell_path: &Path) -> Result<()> {
         upgrade_hint: "A Flox environment providing 'openshell' may be shadowing a newer install.\n\
              If one is installed elsewhere, put its directory earlier on PATH.\n\
              Otherwise install the latest release from https://github.com/NVIDIA/OpenShell#install, then re-run.",
+        version_args: DEFAULT_VERSION_ARGS,
     })
 }
 

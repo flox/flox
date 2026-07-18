@@ -21,22 +21,33 @@
 //!
 //! # Shared toolkit
 //!
-//! Two modules hold the plumbing every backend reuses — reach for these
+//! Three modules hold the plumbing every backend reuses — reach for these
 //! before writing a bespoke copy:
 //!
 //! - [`preflight`] — `first_on_path` / `binary_on_path` for locating a
 //!   required CLI, `check_cli_version` (+ `parse_cli_version`) for a
-//!   minimum-version gate with an actionable message, and `split_endpoint`
-//!   for parsing `<HOST>:<PORT>` network grants.
+//!   minimum-version gate with an actionable message (the `CliVersionCheck`
+//!   `version_args` field lets a CLI without a `--version` flag query via a
+//!   subcommand instead), and `split_endpoint` for parsing `<HOST>:<PORT>`
+//!   network grants.
 //! - [`bake`] — the Docker-resident OCI bake pipeline: `bake_image`
 //!   (parameterized by the destination `<env>-<backend>` repo),
 //!   `resolve_docker_image_state`, and the Docker inspection helpers. A
 //!   Docker-ingesting backend bakes under the repo it owns rather than
 //!   borrowing a peer's tags.
+//! - [`handoff`] — plumbing shared by the OCI-handoff cloud/microVM backends
+//!   (`modal`, `ona`, `docker-sbx`, `e2b`): `manifest_network_rules` (read the
+//!   egress grants from the lockfile), `ensure_local_image` (the
+//!   resolve-state → bake-decision ladder, parameterized by the image label
+//!   used in prompts), and the `py_str_*` / `toml_str_*` / `json_str_*`
+//!   quote-escaping helpers the rendered artifacts embed hosts through. The
+//!   per-backend artifact *writers* are deliberately not shared — they diverge
+//!   on output root and cardinality (see the `handoff` module docs).
 
 pub mod bake;
 pub mod docker_sbx;
 pub mod e2b;
+pub mod handoff;
 pub mod host_native;
 pub mod modal;
 pub mod oci;

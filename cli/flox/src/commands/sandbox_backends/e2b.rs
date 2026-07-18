@@ -84,14 +84,19 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, bail};
 use flox_core::activate::sandbox_backend::SandboxBackend;
 use flox_core::activate::sandbox_policy::SandboxNetworkRule;
-use flox_manifest::interfaces::AsLatestSchema;
 use flox_manifest::lockfile::Lockfile;
 use flox_rust_sdk::providers::container_builder::ContainerBuilderParams;
 use semver::Version;
 use tracing::debug;
 
-use super::bake::{bake_image, resolve_docker_image_state};
-use super::preflight::{CliVersionCheck, check_cli_version, first_on_path, split_endpoint};
+use super::handoff::{ensure_local_image, manifest_network_rules, toml_str_list, toml_str_lit};
+use super::preflight::{
+    CliVersionCheck,
+    DEFAULT_VERSION_ARGS,
+    check_cli_version,
+    first_on_path,
+    split_endpoint,
+};
 use super::{ActivationSandbox, SandboxLaunchCtx};
 use crate::commands::sandbox_backends::oci::lockfile_hash12;
 
@@ -134,15 +139,13 @@ const E2B_TOML_NAME: &str = "e2b.toml";
 /// The `@e2b/cli` package is not in the Flox Catalog (only the Python SDK,
 /// `python3xxPackages.e2b`, is), so the only supported path is npm — with
 /// `nodejs` from the catalog supplying `npm`.
-const E2B_CLI_INSTALL_HINT: &str =
-    "The '@e2b/cli' package is not in the Flox Catalog (only the Python SDK is), so \
+const E2B_CLI_INSTALL_HINT: &str = "The '@e2b/cli' package is not in the Flox Catalog (only the Python SDK is), so \
      install it with npm: 'flox install nodejs' to provide npm, then \
      'npm install -g @e2b/cli'. Run 'e2b auth login' to authenticate.";
 
 /// Upgrade guidance for a too-old E2B CLI. npm-only for the same reason as
 /// [`E2B_CLI_INSTALL_HINT`].
-const E2B_CLI_UPGRADE_HINT: &str =
-    "Upgrade with npm: 'npm install -g @e2b/cli@latest' (the '@e2b/cli' package is not \
+const E2B_CLI_UPGRADE_HINT: &str = "Upgrade with npm: 'npm install -g @e2b/cli@latest' (the '@e2b/cli' package is not \
      in the Flox Catalog), then re-run.";
 
 pub struct E2bBackend<'a> {
@@ -229,6 +232,7 @@ fn check_e2b_version(e2b_path: &Path) -> Result<()> {
         backend_id: "e2b",
         min_version: E2B_MIN_VERSION,
         upgrade_hint: E2B_CLI_UPGRADE_HINT,
+        version_args: DEFAULT_VERSION_ARGS,
     })
 }
 
@@ -446,23 +450,6 @@ pub(crate) fn render_e2b_toml(params: &TemplateParams<'_>) -> String {
     }
 }
 
-/// Render a TOML basic-string literal, escaping backslashes and double quotes
-/// so arbitrary hosts are safe to embed.
-fn toml_str_lit(s: &str) -> String {
-    let escaped = s.replace('\\', "\\\\").replace('"', "\\\"");
-    format!("\"{escaped}\"")
-}
-
-/// Render a TOML array of double-quoted string literals.
-fn toml_str_list(items: &[String]) -> String {
-    let inner = items
-        .iter()
-        .map(|s| toml_str_lit(s))
-        .collect::<Vec<_>>()
-        .join(", ");
-    format!("[{inner}]")
-}
-
 // ── Launch path ────────────────────────────────────────────────────────────────
 
 /// Bake the image, compile the policy, generate the template artifacts, then
@@ -495,6 +482,7 @@ fn wrap_e2b(
         lockfile,
         autobake,
         container_builder_params,
+        "E2B image",
     )?;
 
     // Compile the manifest network policy into E2B's egress vocabulary. This
@@ -546,20 +534,6 @@ fn wrap_e2b(
     )
 }
 
-/// Read the manifest's `[[options.sandbox.network]]` rules from the lockfile.
-fn manifest_network_rules(lockfile: &Lockfile) -> Result<Vec<SandboxNetworkRule>> {
-    let manifest = lockfile
-        .migrated_manifest()
-        .context("failed to migrate the manifest for sandbox policy generation")?;
-    Ok(manifest
-        .as_latest_schema()
-        .options
-        .sandbox
-        .as_ref()
-        .and_then(|sandbox| sandbox.network.clone())
-        .unwrap_or_default())
-}
-
 /// Write the generated template artifacts (`e2b.Dockerfile` + `e2b.toml`) to
 /// the project root and return their paths.
 ///
@@ -583,97 +557,6 @@ fn write_e2b_template(project: &Path, dockerfile: &str, toml: &str) -> Result<(P
         "wrote e2b template artifacts"
     );
     Ok((dockerfile_path, toml_path))
-}
-
-/// Ensure the `<repo>:<hash12>` image exists in the local Docker store, baking
-/// it (with the shared compat layer) if absent.
-///
-/// E2B builds the template by pulling this image from a registry; baking it
-/// locally first is the content-addressed bake every OCI-ingesting provider
-/// shares. When the image is already present (cache hit), this is a no-op.
-// TODO: candidate for shared bake:: helper — ona/modal/docker-sbx carry a
-// near-identical copy of this decision ladder.
-fn ensure_local_image(
-    repo: &str,
-    env_name: &str,
-    dot_flox_path: &Path,
-    lockfile: &Lockfile,
-    autobake: bool,
-    container_builder_params: &ContainerBuilderParams,
-) -> Result<()> {
-    use std::io::IsTerminal;
-
-    use crate::commands::sandbox_backends::oci::{
-        FLOX_SANDBOX_OCI_ALLOW_STALE_VAR,
-        OciBakeDecision,
-        OciImageState,
-        should_bake_oci,
-    };
-
-    let state = resolve_docker_image_state(repo, lockfile);
-    match state {
-        OciImageState::Explicit(_) | OciImageState::Present { .. } => Ok(()),
-        OciImageState::Stale {
-            ref expected_ref, ..
-        }
-        | OciImageState::Missing { ref expected_ref } => {
-            let is_missing = matches!(state, OciImageState::Missing { .. });
-            let allow_stale = std::env::var(FLOX_SANDBOX_OCI_ALLOW_STALE_VAR)
-                .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-                .unwrap_or(false);
-            let is_tty = std::io::stdin().is_terminal();
-            let decision = should_bake_oci(
-                is_missing,
-                allow_stale,
-                autobake,
-                is_tty,
-                expected_ref,
-                None,
-            );
-            match decision {
-                // Running a stale image is acceptable — the operator pushes
-                // whatever is present; a fresh bake is not forced here.
-                OciBakeDecision::RunStale(_) => Ok(()),
-                OciBakeDecision::Bake => bake_image(
-                    repo,
-                    env_name,
-                    dot_flox_path,
-                    container_builder_params,
-                    lockfile,
-                ),
-                OciBakeDecision::Prompt => {
-                    let msg = format!(
-                        "E2B image '{expected_ref}' is not baked locally.\n\
-                         Bake now? (~2–5 min on first bake; later bakes reuse layers)"
-                    );
-                    let confirmed = inquire::Confirm::new(&msg)
-                        .with_default(true)
-                        .prompt()
-                        .unwrap_or(false);
-                    if confirmed {
-                        bake_image(
-                            repo,
-                            env_name,
-                            dot_flox_path,
-                            container_builder_params,
-                            lockfile,
-                        )
-                    } else {
-                        bail!(
-                            "Bake declined. To build the image manually, set \
-                             FLOX_SANDBOX_OCI_AUTOBAKE=true and re-run."
-                        );
-                    }
-                },
-                OciBakeDecision::FailFast { expected_ref, .. } => {
-                    bail!(
-                        "E2B image '{expected_ref}' not found in the local Docker image store.\n\
-                         To bake it automatically, set FLOX_SANDBOX_OCI_AUTOBAKE=true or run on an interactive terminal."
-                    );
-                },
-            }
-        },
-    }
 }
 
 // ── Unit tests ────────────────────────────────────────────────────────────────

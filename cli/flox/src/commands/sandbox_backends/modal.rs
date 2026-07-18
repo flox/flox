@@ -70,14 +70,19 @@ use anyhow::{Context, Result, bail};
 use flox_core::activate::context::InvocationType;
 use flox_core::activate::sandbox_backend::SandboxBackend;
 use flox_core::activate::sandbox_policy::SandboxNetworkRule;
-use flox_manifest::interfaces::AsLatestSchema;
 use flox_manifest::lockfile::Lockfile;
 use flox_rust_sdk::providers::container_builder::ContainerBuilderParams;
 use semver::Version;
 use tracing::debug;
 
-use super::bake::{bake_image, resolve_docker_image_state};
-use super::preflight::{CliVersionCheck, check_cli_version, first_on_path, split_endpoint};
+use super::handoff::{ensure_local_image, manifest_network_rules, py_str_list, py_str_lit};
+use super::preflight::{
+    CliVersionCheck,
+    DEFAULT_VERSION_ARGS,
+    check_cli_version,
+    first_on_path,
+    split_endpoint,
+};
 use super::{ActivationSandbox, SandboxLaunchCtx};
 use crate::commands::sandbox_backends::oci::lockfile_hash12;
 use crate::commands::sandbox_backends::openshell::openshell_guest_system;
@@ -187,6 +192,7 @@ fn check_modal_version(modal_path: &Path) -> Result<()> {
         backend_id: "modal",
         min_version: MODAL_MIN_VERSION,
         upgrade_hint: "Upgrade with 'flox install python313Packages.modal' or 'pip install --upgrade modal', then re-run.",
+        version_args: DEFAULT_VERSION_ARGS,
     })
 }
 
@@ -366,23 +372,6 @@ pub(crate) fn render_modal_launcher(params: &LauncherParams<'_>) -> String {
     }
 }
 
-/// Render a Python single-quoted string literal, escaping backslashes and
-/// single quotes so arbitrary argv members are safe to embed.
-fn py_str_lit(s: &str) -> String {
-    let escaped = s.replace('\\', "\\\\").replace('\'', "\\'");
-    format!("'{escaped}'")
-}
-
-/// Render a Python list of single-quoted string literals.
-fn py_str_list(items: &[String]) -> String {
-    let inner = items
-        .iter()
-        .map(|s| py_str_lit(s))
-        .collect::<Vec<_>>()
-        .join(", ");
-    format!("[{inner}]")
-}
-
 /// Build the activation command argv for the sandbox CMD.
 ///
 /// The baked image's entrypoint starts the activated shell; the command wraps
@@ -462,6 +451,7 @@ fn wrap_modal(
         lockfile,
         autobake,
         container_builder_params,
+        "Modal image",
     )?;
 
     // Compile the manifest network policy into Modal's egress vocabulary.
@@ -521,20 +511,6 @@ fn wrap_modal(
     )
 }
 
-/// Read the manifest's `[[options.sandbox.network]]` rules from the lockfile.
-fn manifest_network_rules(lockfile: &Lockfile) -> Result<Vec<SandboxNetworkRule>> {
-    let manifest = lockfile
-        .migrated_manifest()
-        .context("failed to migrate the manifest for sandbox policy generation")?;
-    Ok(manifest
-        .as_latest_schema()
-        .options
-        .sandbox
-        .as_ref()
-        .and_then(|sandbox| sandbox.network.clone())
-        .unwrap_or_default())
-}
-
 /// Write the generated launcher program under `.flox/cache/` and return its
 /// path.
 fn write_modal_launcher(dot_flox_path: &Path, launcher: &str) -> Result<PathBuf> {
@@ -546,95 +522,6 @@ fn write_modal_launcher(dot_flox_path: &Path, launcher: &str) -> Result<PathBuf>
         .with_context(|| format!("failed to write launcher to '{}'", artifact_path.display()))?;
     debug!(path = %artifact_path.display(), "wrote modal launcher artifact");
     Ok(artifact_path)
-}
-
-/// Ensure the `<repo>:<hash12>` image exists in the local Docker store, baking
-/// it (with the shared compat layer) if absent.
-///
-/// The Modal launch pushes this image to a registry; baking it locally first is
-/// the content-addressed bake every OCI-ingesting provider shares. When the
-/// image is already present (cache hit), this is a no-op.
-fn ensure_local_image(
-    repo: &str,
-    env_name: &str,
-    dot_flox_path: &Path,
-    lockfile: &Lockfile,
-    autobake: bool,
-    container_builder_params: &ContainerBuilderParams,
-) -> Result<()> {
-    use std::io::IsTerminal;
-
-    use crate::commands::sandbox_backends::oci::{
-        FLOX_SANDBOX_OCI_ALLOW_STALE_VAR,
-        OciBakeDecision,
-        OciImageState,
-        should_bake_oci,
-    };
-
-    let state = resolve_docker_image_state(repo, lockfile);
-    match state {
-        OciImageState::Explicit(_) | OciImageState::Present { .. } => Ok(()),
-        OciImageState::Stale {
-            ref expected_ref, ..
-        }
-        | OciImageState::Missing { ref expected_ref } => {
-            let is_missing = matches!(state, OciImageState::Missing { .. });
-            let allow_stale = std::env::var(FLOX_SANDBOX_OCI_ALLOW_STALE_VAR)
-                .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-                .unwrap_or(false);
-            let is_tty = std::io::stdin().is_terminal();
-            let decision = should_bake_oci(
-                is_missing,
-                allow_stale,
-                autobake,
-                is_tty,
-                expected_ref,
-                None,
-            );
-            match decision {
-                // Running a stale image is acceptable — the operator pushes
-                // whatever is present; a fresh bake is not forced here.
-                OciBakeDecision::RunStale(_) => Ok(()),
-                OciBakeDecision::Bake => bake_image(
-                    repo,
-                    env_name,
-                    dot_flox_path,
-                    container_builder_params,
-                    lockfile,
-                ),
-                OciBakeDecision::Prompt => {
-                    let msg = format!(
-                        "Modal image '{expected_ref}' is not baked locally.\n\
-                         Bake now? (~2–5 min on first bake; later bakes reuse layers)"
-                    );
-                    let confirmed = inquire::Confirm::new(&msg)
-                        .with_default(true)
-                        .prompt()
-                        .unwrap_or(false);
-                    if confirmed {
-                        bake_image(
-                            repo,
-                            env_name,
-                            dot_flox_path,
-                            container_builder_params,
-                            lockfile,
-                        )
-                    } else {
-                        bail!(
-                            "Bake declined. To build the image manually, set \
-                             FLOX_SANDBOX_OCI_AUTOBAKE=true and re-run."
-                        );
-                    }
-                },
-                OciBakeDecision::FailFast { expected_ref, .. } => {
-                    bail!(
-                        "Modal image '{expected_ref}' not found in the local Docker image store.\n\
-                         To bake it automatically, set FLOX_SANDBOX_OCI_AUTOBAKE=true or run on an interactive terminal."
-                    );
-                },
-            }
-        },
-    }
 }
 
 // ── Unit tests ────────────────────────────────────────────────────────────────
