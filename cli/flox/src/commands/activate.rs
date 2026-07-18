@@ -1571,6 +1571,7 @@ mod tests {
             SandboxBackend::DockerSbx,
             SandboxBackend::Ona,
             SandboxBackend::E2b,
+            SandboxBackend::Daytona,
             SandboxBackend::Libkrun,
         ];
         for backend in enforcing {

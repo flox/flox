@@ -1,0 +1,94 @@
+{
+  "lockfile-version": 1,
+  "manifest": {
+    "schema-version": "1.13.0",
+    "install": {
+      "daytona-bin": {
+        "pkg-path": "daytona-bin"
+      }
+    },
+    "vars": {
+      "FLOX_FEATURES_AUTO_ACTIVATE": "true",
+      "FLOX_FEATURES_SANDBOX_ACTIVATE": "true",
+      "GITHUB_TOKEN": "ghp-demo-FAKE"
+    },
+    "hook": {
+      "on-activate": "  # Daytona is cloud-remote — there is no local gateway to run as a service. The\n  # setup concern is the launch prerequisites, surfaced here so the operator\n  # learns of them before the first 'cd', not mid-demo.\n\n  # 1. Docker: the daytona backend bakes the environment image locally before\n  #    Daytona registers it as a snapshot. Docker is one of the two required\n  #    host tools.\n  if ! command -v docker >/dev/null 2>&1; then\n    echo \"note: 'docker' not found on PATH — the daytona backend needs it to bake\" >&2\n    echo \"      the image before Daytona registers the snapshot (see demo/DAYTONA.md beat 0).\" >&2\n  fi\n\n  # 2. CLI: the daytona CLI registers the snapshot from the baked image and\n  #    drives the launch. It is installed by this env (daytona-bin). Verify it\n  #    resolved, then probe auth non-interactively.\n  if ! command -v daytona >/dev/null 2>&1; then\n    echo \"note: 'daytona' CLI not found on PATH even though this env installs\" >&2\n    echo \"      daytona-bin — re-run 'flox activate' or check the lock.\" >&2\n  elif [ -z \"${DAYTONA_API_KEY:-}\" ] && ! daytona whoami >/dev/null 2>&1; then\n    # Non-interactive auth probe: never open a browser. `daytona whoami` reports\n    # the signed-in state; env-key presence is the SDK/REST fallback signal.\n    echo \"note: the Daytona CLI is present but not authenticated.\" >&2\n    echo \"      Run 'daytona login' before the launch beats (see demo/DAYTONA.md\" >&2\n    echo \"      beat 0), or export DAYTONA_API_KEY=<key> from the dashboard.\" >&2\n  fi\n\n  # 3. Registry: Daytona registers the snapshot by pulling the image the\n  #    launcher's Image.base references, so the generated launcher needs a\n  #    registry prefix. Default to a bare tag and let the operator override;\n  #    flox reads FLOX_SANDBOX_DAYTONA_REGISTRY when it renders the launcher.\n  if [ -z \"${FLOX_SANDBOX_DAYTONA_REGISTRY:-}\" ]; then\n    echo \"note: FLOX_SANDBOX_DAYTONA_REGISTRY is unset; the generated launcher will\" >&2\n    echo \"      use a bare image tag. Export it (e.g. docker.io/<user>) before the\" >&2\n    echo \"      snapshot registration.\" >&2\n  fi\n\n  # Demo fixture: a planted \"secret\" the sandbox must never see (beat 4 of\n  # demo/DAYTONA.md). On Daytona the sandbox is remote and has no view of the\n  # host filesystem at all, so this is unreachable by construction. Removed by\n  # profile.deactivate.\n  mkdir -p \"$HOME/demo-secrets\"\n  printf 'API_KEY=sk-demo-FAKE-do-not-use\\n' > \"$HOME/demo-secrets/.env\"\n"
+    },
+    "profile": {
+      "bash": "  if [ -n \"${FLOX_BIN:-}\" ]; then\n    alias flox='$FLOX_BIN'\n  fi\n  export FLOX_VERSION=\"$(\"${FLOX_BIN:-flox}\" --version)\"\n",
+      "zsh": "  if [ -n \"${FLOX_BIN:-}\" ]; then\n    alias flox='$FLOX_BIN'\n  fi\n  export FLOX_VERSION=\"$(\"${FLOX_BIN:-flox}\" --version)\"\n",
+      "deactivate": {
+        "common": "  # Deactivating the demo cleans up after itself: remove the planted secret.\n  rm -rf \"$HOME/demo-secrets\"\n"
+      }
+    },
+    "options": {
+      "systems": [
+        "aarch64-darwin",
+        "x86_64-linux"
+      ]
+    }
+  },
+  "packages": [
+    {
+      "attr_path": "daytona-bin",
+      "broken": false,
+      "derivation": "/nix/store/5h864p699x90jar8hyf02y4r1k668bvj-daytona-bin-0.12.0.drv",
+      "description": "Open Source Dev Environment Manager",
+      "install_id": "daytona-bin",
+      "license": "Apache-2.0",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=62e0f05ede1da0d54515d4ea8ce9c733f12d9f08",
+      "name": "daytona-bin-0.12.0",
+      "pname": "daytona-bin",
+      "rev": "62e0f05ede1da0d54515d4ea8ce9c733f12d9f08",
+      "rev_count": 830073,
+      "rev_date": "2025-07-14T08:06:13Z",
+      "scrape_date": "2025-07-16T00:32:20.041469Z",
+      "stabilities": [
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "0.12.0",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/ywbm6ra6xak7s1qpm0axq5b11b7702qn-daytona-bin-0.12.0"
+      },
+      "system": "aarch64-darwin",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "daytona-bin",
+      "broken": false,
+      "derivation": "/nix/store/dr6wbw3dk13iqayffk366vpkf7bsvkjx-daytona-bin-0.12.0.drv",
+      "description": "Open Source Dev Environment Manager",
+      "install_id": "daytona-bin",
+      "license": "Apache-2.0",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=62e0f05ede1da0d54515d4ea8ce9c733f12d9f08",
+      "name": "daytona-bin-0.12.0",
+      "pname": "daytona-bin",
+      "rev": "62e0f05ede1da0d54515d4ea8ce9c733f12d9f08",
+      "rev_count": 830073,
+      "rev_date": "2025-07-14T08:06:13Z",
+      "scrape_date": "2025-07-16T01:45:05.041412Z",
+      "stabilities": [
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "0.12.0",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/va3adylvkj4ks2490pcan6bc1imv7v6n-daytona-bin-0.12.0"
+      },
+      "system": "x86_64-linux",
+      "group": "toplevel",
+      "priority": 5
+    }
+  ]
+}

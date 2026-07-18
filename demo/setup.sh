@@ -18,8 +18,9 @@ DEMO_DIR="${DEMO_DIR:-$HOME/sandbox-demo}"
 # podman), "openshell" (NVIDIA OpenShell — see demo/OPENSHELL.md),
 # "modal" (Modal Sandboxes, cloud-remote — see demo/MODAL.md),
 # "docker-sbx" (Docker Sandboxes local microVM — see demo/DOCKER-SBX.md),
-# "ona" (Ona control-plane CDE, formerly Gitpod — see demo/ONA.md), or
-# "e2b" (E2B cloud-API sandbox — see demo/E2B.md).
+# "ona" (Ona control-plane CDE, formerly Gitpod — see demo/ONA.md),
+# "e2b" (E2B cloud-API sandbox — see demo/E2B.md), or
+# "daytona" (Daytona cloud-API sandbox — see demo/DAYTONA.md).
 BACKEND="${BACKEND:-oci}"
 # `|| true` so an empty result reaches the friendly preflight below
 # instead of aborting silently under `set -e`.
@@ -154,8 +155,37 @@ case "$BACKEND" in
       echo "      (e.g. docker.io/<user>) before the template build." >&2
     fi
     ;;
+  daytona)
+    # The daytona backend is cloud-API (Daytona): it bakes an image locally
+    # (Docker), compiles the manifest network policy, and generates the Daytona
+    # launch program (.flox/cache/daytona-launch.py), then stops at the launch
+    # boundary. Preflight requires Docker and the `daytona` CLI, and
+    # distinguishes CLI-missing from CLI-present-but-unauthenticated. The
+    # snapshot registration and sandbox launch need a Daytona account/API key
+    # and a registry Daytona can pull from; neither is set up by this script
+    # (see demo/DAYTONA.md).
+    if ! command -v docker >/dev/null 2>&1; then
+      echo "WARNING: 'docker' not found on PATH (required to bake the image)." >&2
+    elif ! docker info >/dev/null 2>&1; then
+      echo "WARNING: the Docker daemon is not reachable ('docker info' failed)." >&2
+      echo "         Start Docker Desktop or the Docker service before baking." >&2
+    fi
+    if ! command -v daytona >/dev/null 2>&1; then
+      echo "WARNING: 'daytona' CLI not found on PATH." >&2
+      echo "         Install: flox install daytona-bin (binary name 'daytona')" >&2
+    elif [ -z "${DAYTONA_API_KEY:-}" ] && ! daytona whoami >/dev/null 2>&1; then
+      echo "NOTE: the Daytona CLI is present but not authenticated." >&2
+      echo "      That is expected for the local beats; the launch needs" >&2
+      echo "      'daytona login' or DAYTONA_API_KEY (see demo/DAYTONA.md beat 0)." >&2
+    fi
+    if [ -z "${FLOX_SANDBOX_DAYTONA_REGISTRY:-}" ]; then
+      echo "NOTE: FLOX_SANDBOX_DAYTONA_REGISTRY is unset; the generated launcher" >&2
+      echo "      will use a bare image tag. Set it to your registry prefix" >&2
+      echo "      (e.g. docker.io/<user>) before the snapshot registration." >&2
+    fi
+    ;;
   *)
-    echo "ERROR: BACKEND='$BACKEND' is not a demo backend (oci|openshell|modal|docker-sbx|ona|e2b)." >&2
+    echo "ERROR: BACKEND='$BACKEND' is not a demo backend (oci|openshell|modal|docker-sbx|ona|e2b|daytona)." >&2
     exit 1
     ;;
 esac
@@ -233,7 +263,7 @@ command = "python3 -m http.server 8080"
 sandbox = f'''[options.sandbox]
 backend = "{backend}"
 '''
-if backend in ("openshell", "modal", "docker-sbx", "ona", "e2b"):
+if backend in ("openshell", "modal", "docker-sbx", "ona", "e2b", "daytona"):
     # Grant the coding agent its API endpoints. On openshell the grant is
     # scoped to the exact claude binary (`binary` resolves to the locked
     # store path via the lockfile) and enforced at L7. On modal the host of
@@ -244,7 +274,9 @@ if backend in ("openshell", "modal", "docker-sbx", "ona", "e2b"):
     # allowlist (the expectation an operator wires into Ona's enterprise
     # network policy); on e2b each :443/:80 host compiles into the e2b.toml
     # `allowed_hosts` list, and flox forces `allow_internet_access = false`
-    # because E2B's own default is open (default-OPEN). In the
+    # because E2B's own default is open (default-OPEN); on daytona each host
+    # compiles into the native `domainAllowList` (per-domain, not per-port, so
+    # the :443 is dropped), mutually exclusive with the CIDR list. In the
     # cloud/microVM/control-plane cases the binary/access/protocol scoping is
     # recorded but not enforceable, a declared lossiness. Either way,
     # everything else stays deny-by-default.
@@ -316,14 +348,15 @@ Then:
 and follow demo/SCRIPT.md (backend "oci"), demo/OPENSHELL.md
 (backend "openshell"), demo/MODAL.md (backend "modal"),
 demo/DOCKER-SBX.md (backend "docker-sbx"), demo/ONA.md
-(backend "ona"), or demo/E2B.md (backend "e2b").
+(backend "ona"), demo/E2B.md (backend "e2b"), or demo/DAYTONA.md
+(backend "daytona").
 Afterwards: bash demo/cleanup.sh
 
 NOTE: the manifest already declares [options.sandbox]
 backend = "$BACKEND", an auto-starting web service, and (openshell,
-modal, docker-sbx, ona, and e2b) [[options.sandbox.network]] grants
-for the agent's Anthropic endpoints, so the first 'cd' auto-activates
-straight into the sandbox. The first-ever bake
+modal, docker-sbx, ona, e2b, and daytona) [[options.sandbox.network]]
+grants for the agent's Anthropic endpoints, so the first 'cd'
+auto-activates straight into the sandbox. The first-ever bake
 takes ~5-15 min (the builder VM compiles the pinned flox rev; later
 bakes reuse its cache, ~2-5 min); to pre-bake off-camera, run:
 
@@ -347,4 +380,12 @@ e2b.toml), but the template build + sandbox launch need an E2B
 account/API key (e2b auth login or E2B_API_KEY) and a registry E2B
 can pull from (export FLOX_SANDBOX_E2B_REGISTRY=<prefix>). The e2b
 CLI is 'npm install -g @e2b/cli'. See demo/E2B.md.
+
+NOTE (daytona): the daytona backend is cloud-API (Daytona). It bakes
+the image locally and generates the Daytona launch program
+(.flox/cache/daytona-launch.py), but the snapshot registration +
+sandbox launch need a Daytona account/API key (daytona login or
+DAYTONA_API_KEY) and a registry Daytona can pull from (export
+FLOX_SANDBOX_DAYTONA_REGISTRY=<prefix>). The daytona CLI is in the
+catalog: 'flox install daytona-bin'. See demo/DAYTONA.md.
 EOF

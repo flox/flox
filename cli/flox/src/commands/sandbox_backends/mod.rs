@@ -45,6 +45,7 @@
 //!   on output root and cardinality (see the `handoff` module docs).
 
 pub mod bake;
+pub mod daytona;
 pub mod docker_sbx;
 pub mod e2b;
 pub mod handoff;
@@ -151,6 +152,7 @@ pub fn for_backend(
         SandboxBackend::DockerSbx => Some(Box::new(docker_sbx::DockerSbxBackend::new(ctx))),
         SandboxBackend::Ona => Some(Box::new(ona::OnaBackend::new(ctx))),
         SandboxBackend::E2b => Some(Box::new(e2b::E2bBackend::new(ctx))),
+        SandboxBackend::Daytona => Some(Box::new(daytona::DaytonaBackend::new(ctx))),
         // Libsandbox is the default in-process path; no wrapper object.
         // All other variants keep the "not yet wired" bail in activate.rs.
         _ => None,

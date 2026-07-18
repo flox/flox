@@ -1828,6 +1828,11 @@
               "type": "string"
             },
             {
+              "const": "daytona",
+              "description": "Daytona: a cloud-API sandbox provider. flox bakes the environment into a\nlockfile-hash-tagged OCI image and generates the Daytona hand-off — a\nPython launcher that registers the baked image as a Daytona *snapshot*\n(`Image.base(<ref>)` via the declarative builder) and creates a sandbox\nfrom it with the compiled network policy. Cloud-remote: nothing runs on\nthe host, so host assertions are preflight-only and the threat model\ninverts (host fs unreachable, code and secrets leave the laptop).\nDaytona's per-sandbox egress vocabulary is three mutually exclusive\nparameters — `domainAllowList` (domains + wildcards), `networkAllowList`\n(IPv4 CIDR ranges), and `networkBlockAll` (deny-all) — of which at most\none may be set. flox's manifest grants are host-scoped, so they compile\nonto `domainAllowList` (native, faithful at the domain level); the\nendpoint's port is dropped because Daytona filters per-domain, not\nper-port — a declared lossiness. A CIDR-shaped grant cannot be combined\nwith a domain grant (the parameters are exclusive) and is declined rather\nthan silently widened. No grants compiles to `networkBlockAll`. Network\nsettings are chosen at sandbox creation; Daytona exposes a live\nupdate-network on a running sandbox (an operator-initiated replacement,\nnot a per-request ask, so `live_ask` stays false). Note the ceiling:\non Tier 1/2 organizations the org-level network policy overrides\nsandbox-level settings entirely — another declared lossiness. Reached\nover the API identically from macOS and Linux.",
+              "type": "string"
+            },
+            {
               "const": "libkrun",
               "description": "Embeddable micro-VM (libkrun): hypervisor isolation with a guest kernel\nvia libkrunfw (Hypervisor.framework on macOS, KVM on Linux).",
               "type": "string"

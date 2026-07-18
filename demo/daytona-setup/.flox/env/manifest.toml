@@ -1,0 +1,97 @@
+schema-version = "1.13.0"
+
+# Daytona is a cloud-API sandbox provider reached over its API, so this setup
+# env runs no local service. The `daytona` backend generates a Daytona launcher
+# program (.flox/cache/daytona-launch.py) from the baked image; the genuinely
+# required host tools are Docker (to bake the image) and the `daytona` CLI (to
+# register the snapshot and drive the launch). Unlike the E2B CLI, the Daytona
+# CLI IS in the catalog as `daytona-bin` (binary name `daytona`), so this env
+# installs it directly. Auth (daytona login / DAYTONA_API_KEY) is the wall.
+
+[install]
+# The Daytona CLI (binary name `daytona`); resolves in the catalog as
+# daytona-bin. The operator authenticates with `daytona login` or DAYTONA_API_KEY.
+daytona-bin.pkg-path = "daytona-bin"
+
+[vars]
+# Feature flags the demo needs in the presentation shell.
+FLOX_FEATURES_SANDBOX_ACTIVATE = "true"
+FLOX_FEATURES_AUTO_ACTIVATE = "true"
+# Planted for the token-isolation beat: visible on the host. On the Daytona
+# backend the sandbox is remote and shares no host env, so this simply never
+# reaches the sandbox.
+GITHUB_TOKEN = "ghp-demo-FAKE"
+
+[hook]
+on-activate = '''
+  # Daytona is cloud-remote — there is no local gateway to run as a service. The
+  # setup concern is the launch prerequisites, surfaced here so the operator
+  # learns of them before the first 'cd', not mid-demo.
+
+  # 1. Docker: the daytona backend bakes the environment image locally before
+  #    Daytona registers it as a snapshot. Docker is one of the two required
+  #    host tools.
+  if ! command -v docker >/dev/null 2>&1; then
+    echo "note: 'docker' not found on PATH — the daytona backend needs it to bake" >&2
+    echo "      the image before Daytona registers the snapshot (see demo/DAYTONA.md beat 0)." >&2
+  fi
+
+  # 2. CLI: the daytona CLI registers the snapshot from the baked image and
+  #    drives the launch. It is installed by this env (daytona-bin). Verify it
+  #    resolved, then probe auth non-interactively.
+  if ! command -v daytona >/dev/null 2>&1; then
+    echo "note: 'daytona' CLI not found on PATH even though this env installs" >&2
+    echo "      daytona-bin — re-run 'flox activate' or check the lock." >&2
+  elif [ -z "${DAYTONA_API_KEY:-}" ] && ! daytona whoami >/dev/null 2>&1; then
+    # Non-interactive auth probe: never open a browser. `daytona whoami` reports
+    # the signed-in state; env-key presence is the SDK/REST fallback signal.
+    echo "note: the Daytona CLI is present but not authenticated." >&2
+    echo "      Run 'daytona login' before the launch beats (see demo/DAYTONA.md" >&2
+    echo "      beat 0), or export DAYTONA_API_KEY=<key> from the dashboard." >&2
+  fi
+
+  # 3. Registry: Daytona registers the snapshot by pulling the image the
+  #    launcher's Image.base references, so the generated launcher needs a
+  #    registry prefix. Default to a bare tag and let the operator override;
+  #    flox reads FLOX_SANDBOX_DAYTONA_REGISTRY when it renders the launcher.
+  if [ -z "${FLOX_SANDBOX_DAYTONA_REGISTRY:-}" ]; then
+    echo "note: FLOX_SANDBOX_DAYTONA_REGISTRY is unset; the generated launcher will" >&2
+    echo "      use a bare image tag. Export it (e.g. docker.io/<user>) before the" >&2
+    echo "      snapshot registration." >&2
+  fi
+
+  # Demo fixture: a planted "secret" the sandbox must never see (beat 4 of
+  # demo/DAYTONA.md). On Daytona the sandbox is remote and has no view of the
+  # host filesystem at all, so this is unreachable by construction. Removed by
+  # profile.deactivate.
+  mkdir -p "$HOME/demo-secrets"
+  printf 'API_KEY=sk-demo-FAKE-do-not-use\n' > "$HOME/demo-secrets/.env"
+'''
+
+# Presentation-shell setup, so the walkthrough's manual export block
+# disappears. bash and zsh only — the demo script targets bash, and
+# `alias`/`export` syntax is not portable to fish/tcsh.
+[profile]
+bash = '''
+  if [ -n "${FLOX_BIN:-}" ]; then
+    alias flox='$FLOX_BIN'
+  fi
+  export FLOX_VERSION="$("${FLOX_BIN:-flox}" --version)"
+'''
+zsh = '''
+  if [ -n "${FLOX_BIN:-}" ]; then
+    alias flox='$FLOX_BIN'
+  fi
+  export FLOX_VERSION="$("${FLOX_BIN:-flox}" --version)"
+'''
+
+[profile.deactivate]
+common = '''
+  # Deactivating the demo cleans up after itself: remove the planted secret.
+  rm -rf "$HOME/demo-secrets"
+'''
+
+[options]
+# Daytona is reached over its API from any host; the setup env itself only needs
+# to provide the daytona CLI, so both dev systems are supported.
+systems = ["aarch64-darwin", "x86_64-linux"]

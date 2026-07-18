@@ -111,6 +111,29 @@ pub enum SandboxBackend {
     /// enterprise product reached over its API from any host, so `Native` here
     /// means "the host can drive it", not "the workload runs on this OS".
     Ona,
+    /// Daytona: a cloud-API sandbox provider. flox bakes the environment into a
+    /// lockfile-hash-tagged OCI image and generates the Daytona hand-off — a
+    /// Python launcher that registers the baked image as a Daytona *snapshot*
+    /// (`Image.base(<ref>)` via the declarative builder) and creates a sandbox
+    /// from it with the compiled network policy. Cloud-remote: nothing runs on
+    /// the host, so host assertions are preflight-only and the threat model
+    /// inverts (host fs unreachable, code and secrets leave the laptop).
+    /// Daytona's per-sandbox egress vocabulary is three mutually exclusive
+    /// parameters — `domainAllowList` (domains + wildcards), `networkAllowList`
+    /// (IPv4 CIDR ranges), and `networkBlockAll` (deny-all) — of which at most
+    /// one may be set. flox's manifest grants are host-scoped, so they compile
+    /// onto `domainAllowList` (native, faithful at the domain level); the
+    /// endpoint's port is dropped because Daytona filters per-domain, not
+    /// per-port — a declared lossiness. A CIDR-shaped grant cannot be combined
+    /// with a domain grant (the parameters are exclusive) and is declined rather
+    /// than silently widened. No grants compiles to `networkBlockAll`. Network
+    /// settings are chosen at sandbox creation; Daytona exposes a live
+    /// update-network on a running sandbox (an operator-initiated replacement,
+    /// not a per-request ask, so `live_ask` stays false). Note the ceiling:
+    /// on Tier 1/2 organizations the org-level network policy overrides
+    /// sandbox-level settings entirely — another declared lossiness. Reached
+    /// over the API identically from macOS and Linux.
+    Daytona,
     /// Embeddable micro-VM (libkrun): hypervisor isolation with a guest kernel
     /// via libkrunfw (Hypervisor.framework on macOS, KVM on Linux).
     Libkrun,
@@ -191,7 +214,7 @@ pub struct BackendCapabilities {
 
 impl SandboxBackend {
     /// Every backend on the roster, in spectrum order (weakest boundary first).
-    pub const ALL: [SandboxBackend; 11] = [
+    pub const ALL: [SandboxBackend; 12] = [
         SandboxBackend::Libsandbox,
         SandboxBackend::Nix,
         SandboxBackend::HostNative,
@@ -202,6 +225,7 @@ impl SandboxBackend {
         SandboxBackend::DockerSbx,
         SandboxBackend::Ona,
         SandboxBackend::E2b,
+        SandboxBackend::Daytona,
         SandboxBackend::Libkrun,
     ];
 
@@ -470,6 +494,51 @@ impl SandboxBackend {
                 // this is honestly Scaffolded, not Implemented.
                 status: Scaffolded,
             },
+            SandboxBackend::Daytona => BackendCapabilities {
+                backend: self,
+                // Daytona runs the workload in a cloud sandbox (container class
+                // by default; VM/GPU classes also exist). The boundary is
+                // Daytona's, and the policy surface (a snapshot image plus a
+                // per-sandbox network config) clusters with the other
+                // container-class cloud backends.
+                enforcement: Container,
+                enforces: true,
+                // Network settings are chosen at sandbox creation. Daytona does
+                // expose a live update-network on a running sandbox, but that is
+                // an operator-initiated policy replacement, not a per-request
+                // adjudication of a specific out-of-policy access — which is what
+                // the contract's `live_ask` means, so it stays false.
+                live_ask: false,
+                // `domainAllowList` is a native domain allowlist (domains and
+                // wildcard domains). It filters per-domain rather than per-port
+                // (the grant's port is dropped) and is mutually exclusive with
+                // the CIDR list; on Tier 1/2 orgs the org policy overrides it
+                // entirely. Those are declared lossiness, not a reason to claim
+                // no domain egress.
+                domain_egress: true,
+                // The network config is endpoint-scoped (domain / CIDR); it
+                // carries no read/write method distinction and no per-binary
+                // attribution, and the guest filesystem is the baked snapshot
+                // image rather than per-path r/w/x grants. Op-blind by the
+                // contract's meaning.
+                per_op: false,
+                // The workload runs in a remote Daytona sandbox, so it pays the
+                // virtualized-filesystem cost class rather than native host I/O.
+                fs_virtualized: true,
+                // Cloud-remote: the sandbox is reached over the Daytona API, so
+                // the launch path is identical from macOS and Linux — nothing
+                // runs on the host. `Native` here means "the host can drive it",
+                // not "the workload runs on this OS".
+                macos: Native,
+                linux: Native,
+                // The launch boundary needs a Daytona account/API key and the
+                // baked image registered as a snapshot (Daytona ingests images
+                // as a snapshot base via the declarative builder). Preflight,
+                // bake, policy compilation, and launcher-artifact generation are
+                // wired; the final snapshot registration and remote launch are
+                // not, so this is honestly Scaffolded, not Implemented.
+                status: Scaffolded,
+            },
             SandboxBackend::Libkrun => BackendCapabilities {
                 backend: self,
                 enforcement: Hypervisor,
@@ -499,6 +568,7 @@ impl Display for SandboxBackend {
             SandboxBackend::DockerSbx => "docker-sbx",
             SandboxBackend::Ona => "ona",
             SandboxBackend::E2b => "e2b",
+            SandboxBackend::Daytona => "daytona",
             SandboxBackend::Libkrun => "libkrun",
         };
         write!(f, "{name}")
@@ -507,7 +577,7 @@ impl Display for SandboxBackend {
 
 #[derive(Debug, thiserror::Error)]
 #[error(
-    "'{0}' is not a valid sandbox backend. Expected one of: libsandbox, nix, host-native, srt, oci, openshell, modal, docker-sbx, ona, e2b, libkrun."
+    "'{0}' is not a valid sandbox backend. Expected one of: libsandbox, nix, host-native, srt, oci, openshell, modal, docker-sbx, ona, e2b, daytona, libkrun."
 )]
 pub struct SandboxBackendParseError(String);
 
@@ -526,6 +596,7 @@ impl FromStr for SandboxBackend {
             "docker-sbx" => Ok(SandboxBackend::DockerSbx),
             "ona" => Ok(SandboxBackend::Ona),
             "e2b" => Ok(SandboxBackend::E2b),
+            "daytona" => Ok(SandboxBackend::Daytona),
             "libkrun" => Ok(SandboxBackend::Libkrun),
             other => Err(SandboxBackendParseError(other.to_string())),
         }
@@ -556,7 +627,7 @@ mod tests {
         let err = "bogus".parse::<SandboxBackend>().unwrap_err();
         assert_eq!(
             err.to_string(),
-            "'bogus' is not a valid sandbox backend. Expected one of: libsandbox, nix, host-native, srt, oci, openshell, modal, docker-sbx, ona, e2b, libkrun.",
+            "'bogus' is not a valid sandbox backend. Expected one of: libsandbox, nix, host-native, srt, oci, openshell, modal, docker-sbx, ona, e2b, daytona, libkrun.",
         );
     }
 
@@ -754,6 +825,39 @@ mod tests {
         assert_eq!(json, "\"e2b\"");
         let parsed: SandboxBackend = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed, SandboxBackend::E2b);
+    }
+
+    #[test]
+    fn daytona_capabilities_row() {
+        let caps = SandboxBackend::Daytona.capabilities();
+        assert_eq!(caps, BackendCapabilities {
+            backend: SandboxBackend::Daytona,
+            enforcement: Enforcement::Container,
+            enforces: true,
+            live_ask: false,
+            domain_egress: true,
+            per_op: false,
+            fs_virtualized: true,
+            macos: PlatformSupport::Native,
+            linux: PlatformSupport::Native,
+            status: IntegrationStatus::Scaffolded,
+        });
+    }
+
+    #[test]
+    fn daytona_display_and_parse_round_trip() {
+        let backend = SandboxBackend::Daytona;
+        let s = backend.to_string();
+        assert_eq!(s, "daytona");
+        assert_eq!(s.parse::<SandboxBackend>().unwrap(), backend);
+    }
+
+    #[test]
+    fn daytona_serde_round_trip() {
+        let json = serde_json::to_string(&SandboxBackend::Daytona).unwrap();
+        assert_eq!(json, "\"daytona\"");
+        let parsed: SandboxBackend = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed, SandboxBackend::Daytona);
     }
 
     #[test]

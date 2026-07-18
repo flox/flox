@@ -70,9 +70,10 @@ if command -v docker >/dev/null 2>&1; then
   # the modal backend additionally names its pushed registry image under the
   # -modal repo, which may have been retagged locally before a push; the
   # docker-sbx backend bakes under the -docker-sbx repo; the ona backend
-  # bakes under the -ona repo; the e2b backend bakes under the -e2b repo.
+  # bakes under the -ona repo; the e2b backend bakes under the -e2b repo;
+  # the daytona backend bakes under the -daytona repo.
   docker image ls --format '{{.Repository}}:{{.Tag}}' 2>/dev/null | \
-    grep -E '^sandbox-demo-(openshell|modal|docker-sbx|ona|e2b):' | \
+    grep -E '^sandbox-demo-(openshell|modal|docker-sbx|ona|e2b|daytona):' | \
     while read -r tag; do
       docker rmi "$tag" >/dev/null 2>&1 && echo "Removed Docker image: $tag"
     done || true
