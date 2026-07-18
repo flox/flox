@@ -34,7 +34,7 @@ on:
       revs:
         description: "Space-separated flox revs to prebuild (default: the current frozen builder pins)"
         required: false
-        default: "3c374021c8df69441895a04be9c3c59da4bddec7 fd6b40219bb7761926fcc8fd393cf8483615c5e8"
+        default: "3c374021c8df69441895a04be9c3c59da4bddec7 525741aacf2659a5b88834fe601e59cb143723d4"
 
 jobs:
   prebuild:

@@ -1009,10 +1009,13 @@ fn bake_openshell_image(
 
     // Pin the builder to a rev on this branch that contains the
     // openshell compat layer (mkContainer openshellCompat + the
-    // _FLOX_CONTAINERIZE_OPENSHELL_COMPAT marker plumbing). The oci
-    // backend keeps its own, older pin — the compat layer is gated off
-    // there and its builder does not need it.
-    const FROZEN_FALLBACK_REV: &str = "fd6b40219bb7761926fcc8fd393cf8483615c5e8";
+    // _FLOX_CONTAINERIZE_OPENSHELL_COMPAT marker plumbing) AND the
+    // [[options.sandbox.network]] manifest schema — the baked guest
+    // flox parses the live-mounted project lockfile, so a pre-schema
+    // guest breaks in-guest commands like 'flox services status'.
+    // The oci backend keeps its own, older pin — the compat layer is
+    // gated off there and its builder does not need it.
+    const FROZEN_FALLBACK_REV: &str = "525741aacf2659a5b88834fe601e59cb143723d4";
 
     let flake_ref = crate::commands::sandbox_backends::oci::oci_builder_flake_ref(
         lockfile,
