@@ -394,6 +394,11 @@ impl ManifestBuilder for FloxBuildMk<'_> {
         // lock.
         if reuse_catalog_lock {
             command.arg("FLOX_REUSE_CATALOG_LOCK=1");
+        } else {
+            // A command-line assignment overrides a same-named exported
+            // environment variable in GNU make, so this shields a fresh
+            // lock from a stray exported FLOX_REUSE_CATALOG_LOCK.
+            command.arg("FLOX_REUSE_CATALOG_LOCK=");
         }
 
         command.arg(format!(
@@ -606,6 +611,11 @@ impl ManifestBuilder for FloxBuildMk<'_> {
     ) -> Result<LockResults, ManifestBuilderError> {
         let mut command = self.base_command(self.base_dir);
         command.arg("lock");
+        // The lock goal always computes a fresh catalog lock. A command-line
+        // assignment overrides a same-named exported environment variable in
+        // GNU make, so this shields it from a stray exported
+        // FLOX_REUSE_CATALOG_LOCK.
+        command.arg("FLOX_REUSE_CATALOG_LOCK=");
         command.arg(format!("BUILDTIME_NIXPKGS_URL={}", &*COMMON_NIXPKGS_URL));
 
         // The stability used to resolve NEF catalog build inputs. Only passed
