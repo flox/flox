@@ -20,6 +20,7 @@
 //! 3. Add a `for_backend` arm returning `Some(Box::new(YourBackend::new(ctx)))`.
 
 pub mod host_native;
+pub mod modal;
 pub mod oci;
 pub mod openshell;
 pub mod srt;
@@ -115,6 +116,7 @@ pub fn for_backend(
         SandboxBackend::Srt => Some(Box::new(srt::SrtBackend::new(ctx))),
         SandboxBackend::Oci => Some(Box::new(oci::OciBackend::new(ctx))),
         SandboxBackend::Openshell => Some(Box::new(openshell::OpenshellBackend::new(ctx))),
+        SandboxBackend::Modal => Some(Box::new(modal::ModalBackend::new(ctx))),
         // Libsandbox is the default in-process path; no wrapper object.
         // All other variants keep the "not yet wired" bail in activate.rs.
         _ => None,

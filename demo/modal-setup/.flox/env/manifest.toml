@@ -1,0 +1,81 @@
+schema-version = "1.13.0"
+
+# The Modal client ships the `modal` CLI (auth checks, `modal run`) and the
+# `modal` Python SDK the generated launcher imports. Install needs no account;
+# only the remote launch does.
+[install]
+modal.pkg-path = "python313Packages.modal"
+
+[vars]
+# Feature flags the demo needs in the presentation shell.
+FLOX_FEATURES_SANDBOX_ACTIVATE = "true"
+FLOX_FEATURES_AUTO_ACTIVATE = "true"
+# Planted for the token-isolation beat: visible on the host. On the Modal
+# backend the guest is remote and shares no host env, so this simply never
+# reaches the sandbox.
+GITHUB_TOKEN = "ghp-demo-FAKE"
+
+[hook]
+on-activate = '''
+  # Modal is cloud-remote — there is no local gateway to run as a service.
+  # The one setup concern is the launch prerequisites, surfaced here so the
+  # operator learns of them before the first 'cd', not mid-demo.
+
+  # 1. Auth: distinguish CLI-present-but-unauthenticated from ready without
+  #    triggering the interactive browser flow. `modal token info` is a cheap,
+  #    non-interactive probe.
+  if command -v modal >/dev/null 2>&1; then
+    if ! modal token info >/dev/null 2>&1; then
+      echo "note: the Modal CLI is present but not authenticated." >&2
+      echo "      Run 'modal token new' before the remote-launch beats" >&2
+      echo "      (see demo/MODAL.md beat 0). The local beats work without it." >&2
+    fi
+  else
+    echo "note: 'modal' not found on PATH after install — check the catalog pin." >&2
+  fi
+
+  # 2. Registry: Modal ingests images by registry reference only, so the
+  #    generated launcher needs a registry prefix. Default to a placeholder and
+  #    let the operator override; flox reads FLOX_SANDBOX_MODAL_REGISTRY when it
+  #    renders the launcher.
+  if [ -z "${FLOX_SANDBOX_MODAL_REGISTRY:-}" ]; then
+    echo "note: FLOX_SANDBOX_MODAL_REGISTRY is unset; the launcher will use a" >&2
+    echo "      bare image tag. Export it (e.g. docker.io/<user>) for the" >&2
+    echo "      remote launch." >&2
+  fi
+
+  # Demo fixture: a planted "secret" the guest must never see (beat 2 of
+  # demo/MODAL.md). On Modal the guest is remote and has no view of the host
+  # filesystem at all, so this is unreachable by construction. Removed by
+  # profile.deactivate.
+  mkdir -p "$HOME/demo-secrets"
+  printf 'API_KEY=sk-demo-FAKE-do-not-use\n' > "$HOME/demo-secrets/.env"
+'''
+
+# Presentation-shell setup, so the walkthrough's manual export block
+# disappears. bash and zsh only — the demo script targets bash, and
+# `alias`/`export` syntax is not portable to fish/tcsh.
+[profile]
+bash = '''
+  if [ -n "${FLOX_BIN:-}" ]; then
+    alias flox='$FLOX_BIN'
+  fi
+  export FLOX_VERSION="$("${FLOX_BIN:-flox}" --version)"
+'''
+zsh = '''
+  if [ -n "${FLOX_BIN:-}" ]; then
+    alias flox='$FLOX_BIN'
+  fi
+  export FLOX_VERSION="$("${FLOX_BIN:-flox}" --version)"
+'''
+
+[profile.deactivate]
+common = '''
+  # Deactivating the demo cleans up after itself: remove the planted secret.
+  rm -rf "$HOME/demo-secrets"
+'''
+
+[options]
+# Modal is reached over its API from any host; the setup env itself only needs
+# to provide the CLI/SDK, so both dev systems are supported.
+systems = ["aarch64-darwin", "x86_64-linux"]

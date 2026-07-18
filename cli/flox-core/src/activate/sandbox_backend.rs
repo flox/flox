@@ -54,6 +54,15 @@ pub enum SandboxBackend {
     /// OpenShell's egress proxy. Linux-native; macOS requires a Linux VM
     /// (provided by the gateway's Docker compute driver).
     Openshell,
+    /// Modal Sandboxes: bakes the environment into a lockfile-hash-tagged OCI
+    /// image and launches a remote `modal.Sandbox` from it via the Modal Python
+    /// SDK. Cloud-remote — nothing runs on the host, so host-filesystem
+    /// assertions are preflight-only and the threat model inverts (host fs is
+    /// unreachable, but code and secrets leave the laptop). Egress is
+    /// deny-by-default with a native domain allowlist (TLS/443 only) plus
+    /// CIDR ranges; policy is fixed at sandbox creation, so redemption is
+    /// recreation. Reachable identically from macOS and Linux via the API.
+    Modal,
     /// Embeddable micro-VM (libkrun): hypervisor isolation with a guest kernel
     /// via libkrunfw (Hypervisor.framework on macOS, KVM on Linux).
     Libkrun,
@@ -134,13 +143,14 @@ pub struct BackendCapabilities {
 
 impl SandboxBackend {
     /// Every backend on the roster, in spectrum order (weakest boundary first).
-    pub const ALL: [SandboxBackend; 7] = [
+    pub const ALL: [SandboxBackend; 8] = [
         SandboxBackend::Libsandbox,
         SandboxBackend::Nix,
         SandboxBackend::HostNative,
         SandboxBackend::Srt,
         SandboxBackend::Oci,
         SandboxBackend::Openshell,
+        SandboxBackend::Modal,
         SandboxBackend::Libkrun,
     ];
 
@@ -240,6 +250,41 @@ impl SandboxBackend {
                 linux: Native,
                 status: Implemented,
             },
+            SandboxBackend::Modal => BackendCapabilities {
+                backend: self,
+                enforcement: Container,
+                enforces: true,
+                // Policy (network allowlists, mounts) is fixed at
+                // `Sandbox.create`; an out-of-policy access is redeemed only by
+                // recreating the sandbox with a wider policy, never live.
+                live_ask: false,
+                // `outbound_domain_allowlist` is a native domain allowlist, but
+                // it governs TLS/443 only — non-443 and non-TLS egress falls to
+                // the CIDR allowlist. That 443-only ceiling is a declared
+                // lossiness, not a reason to claim no domain egress.
+                domain_egress: true,
+                // The allowlists are endpoint-scoped (domain / CIDR); they carry
+                // no read/write method distinction and no per-binary attribution,
+                // and the remote filesystem is the baked image plus mounts rather
+                // than per-path r/w/x grants. Op-blind by the contract's meaning.
+                per_op: false,
+                // The workload runs in a remote Modal VM, so it pays the
+                // virtualized-filesystem cost class rather than native host I/O.
+                fs_virtualized: true,
+                // Cloud-remote: the sandbox is reached over the Modal API, so the
+                // launch path is identical from macOS and Linux — nothing runs on
+                // the host. `Native` here means "the host can drive it", not
+                // "the workload runs on this OS".
+                macos: Native,
+                linux: Native,
+                // The launch boundary needs a Modal account/token and an OCI
+                // image pushed to a registry Modal can pull (the SDK ingests
+                // images by registry ref, not from a local Docker daemon).
+                // Preflight, bake, policy compilation, and launcher-artifact
+                // generation are wired; the final remote launch is not, so this
+                // is honestly Scaffolded, not Implemented.
+                status: Scaffolded,
+            },
             SandboxBackend::Libkrun => BackendCapabilities {
                 backend: self,
                 enforcement: Hypervisor,
@@ -265,6 +310,7 @@ impl Display for SandboxBackend {
             SandboxBackend::Srt => "srt",
             SandboxBackend::Oci => "oci",
             SandboxBackend::Openshell => "openshell",
+            SandboxBackend::Modal => "modal",
             SandboxBackend::Libkrun => "libkrun",
         };
         write!(f, "{name}")
@@ -273,7 +319,7 @@ impl Display for SandboxBackend {
 
 #[derive(Debug, thiserror::Error)]
 #[error(
-    "'{0}' is not a valid sandbox backend. Expected one of: libsandbox, nix, host-native, srt, oci, openshell, libkrun."
+    "'{0}' is not a valid sandbox backend. Expected one of: libsandbox, nix, host-native, srt, oci, openshell, modal, libkrun."
 )]
 pub struct SandboxBackendParseError(String);
 
@@ -288,6 +334,7 @@ impl FromStr for SandboxBackend {
             "srt" => Ok(SandboxBackend::Srt),
             "oci" => Ok(SandboxBackend::Oci),
             "openshell" => Ok(SandboxBackend::Openshell),
+            "modal" => Ok(SandboxBackend::Modal),
             "libkrun" => Ok(SandboxBackend::Libkrun),
             other => Err(SandboxBackendParseError(other.to_string())),
         }
@@ -318,7 +365,7 @@ mod tests {
         let err = "bogus".parse::<SandboxBackend>().unwrap_err();
         assert_eq!(
             err.to_string(),
-            "'bogus' is not a valid sandbox backend. Expected one of: libsandbox, nix, host-native, srt, oci, openshell, libkrun.",
+            "'bogus' is not a valid sandbox backend. Expected one of: libsandbox, nix, host-native, srt, oci, openshell, modal, libkrun.",
         );
     }
 
@@ -384,6 +431,39 @@ mod tests {
         assert_eq!(json, "\"openshell\"");
         let parsed: SandboxBackend = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed, SandboxBackend::Openshell);
+    }
+
+    #[test]
+    fn modal_capabilities_row() {
+        let caps = SandboxBackend::Modal.capabilities();
+        assert_eq!(caps, BackendCapabilities {
+            backend: SandboxBackend::Modal,
+            enforcement: Enforcement::Container,
+            enforces: true,
+            live_ask: false,
+            domain_egress: true,
+            per_op: false,
+            fs_virtualized: true,
+            macos: PlatformSupport::Native,
+            linux: PlatformSupport::Native,
+            status: IntegrationStatus::Scaffolded,
+        });
+    }
+
+    #[test]
+    fn modal_display_and_parse_round_trip() {
+        let backend = SandboxBackend::Modal;
+        let s = backend.to_string();
+        assert_eq!(s, "modal");
+        assert_eq!(s.parse::<SandboxBackend>().unwrap(), backend);
+    }
+
+    #[test]
+    fn modal_serde_round_trip() {
+        let json = serde_json::to_string(&SandboxBackend::Modal).unwrap();
+        assert_eq!(json, "\"modal\"");
+        let parsed: SandboxBackend = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed, SandboxBackend::Modal);
     }
 
     #[test]

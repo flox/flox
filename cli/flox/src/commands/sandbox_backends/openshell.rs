@@ -237,7 +237,7 @@ pub(crate) fn parse_openshell_version(output: &str) -> Option<Version> {
 }
 
 /// Return the `<env>-openshell` repository name used for Docker image tagging.
-fn openshell_repo(env_name: &str) -> String {
+pub(crate) fn openshell_repo(env_name: &str) -> String {
     format!("{env_name}{OPENSHELL_REPO_SUFFIX}")
 }
 
@@ -409,11 +409,14 @@ fn stale_ref_for_state(state: &OciImageState) -> Option<&str> {
 
 // ── Docker image state resolution ─────────────────────────────────────────────
 
-/// Resolve the Docker image state for the openshell backend.
+/// Resolve the Docker image state for a Docker-resident backend image.
 ///
 /// Mirrors [`oci::resolve_oci_image_state`] but always uses `docker` for
-/// image inspection, and uses the `<env>-openshell:<hash12>` tag namespace.
-fn resolve_docker_image_state(repo: &str, lockfile: &Lockfile) -> OciImageState {
+/// image inspection. The `repo` argument selects the tag namespace
+/// (`<env>-openshell` for this backend, `<env>-modal` for the Modal backend
+/// which reuses the same compat-layer image bake), so the resolver is shared
+/// across Docker-ingesting backends.
+pub(crate) fn resolve_docker_image_state(repo: &str, lockfile: &Lockfile) -> OciImageState {
     let explicit = std::env::var(FLOX_SANDBOX_OCI_IMAGE_VAR)
         .ok()
         .filter(|v| !v.is_empty());
@@ -992,7 +995,7 @@ fn append_workdir_wrapper(
 ///
 /// Tag scheme: `<env>-openshell:<hash12>` (distinct from the `oci` backend's
 /// `<env>:<hash12>` — the image contents differ, so they must not share tags).
-fn bake_openshell_image(
+pub(crate) fn bake_openshell_image(
     env_name: &str,
     dot_flox_path: &Path,
     builder_params: &ContainerBuilderParams,

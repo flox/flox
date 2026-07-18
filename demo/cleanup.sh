@@ -56,8 +56,11 @@ for sb in sandboxes:
 " 2>/dev/null || true
 fi
 if command -v docker >/dev/null 2>&1; then
+  # The openshell and modal backends both bake under the -openshell repo;
+  # the modal backend additionally names its pushed registry image under the
+  # -modal repo, which may have been retagged locally before a push.
   docker image ls --format '{{.Repository}}:{{.Tag}}' 2>/dev/null | \
-    grep '^sandbox-demo-openshell:' | \
+    grep -E '^sandbox-demo-(openshell|modal):' | \
     while read -r tag; do
       docker rmi "$tag" >/dev/null 2>&1 && echo "Removed Docker image: $tag"
     done || true

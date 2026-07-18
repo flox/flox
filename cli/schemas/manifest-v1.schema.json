@@ -1411,6 +1411,11 @@
           "type": "string"
         },
         {
+          "const": "modal",
+          "description": "Modal Sandboxes: bakes the environment into a lockfile-hash-tagged OCI\nimage and launches a remote `modal.Sandbox` from it via the Modal Python\nSDK. Cloud-remote — nothing runs on the host, so host-filesystem\nassertions are preflight-only and the threat model inverts (host fs is\nunreachable, but code and secrets leave the laptop). Egress is\ndeny-by-default with a native domain allowlist (TLS/443 only) plus\nCIDR ranges; policy is fixed at sandbox creation, so redemption is\nrecreation. Reachable identically from macOS and Linux via the API.",
+          "type": "string"
+        },
+        {
           "const": "libkrun",
           "description": "Embeddable micro-VM (libkrun): hypervisor isolation with a guest kernel\nvia libkrunfw (Hypervisor.framework on macOS, KVM on Linux).",
           "type": "string"

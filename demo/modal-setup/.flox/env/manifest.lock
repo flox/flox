@@ -1,0 +1,96 @@
+{
+  "lockfile-version": 1,
+  "manifest": {
+    "schema-version": "1.13.0",
+    "install": {
+      "modal": {
+        "pkg-path": "python313Packages.modal"
+      }
+    },
+    "vars": {
+      "FLOX_FEATURES_AUTO_ACTIVATE": "true",
+      "FLOX_FEATURES_SANDBOX_ACTIVATE": "true",
+      "GITHUB_TOKEN": "ghp-demo-FAKE"
+    },
+    "hook": {
+      "on-activate": "  # Modal is cloud-remote — there is no local gateway to run as a service.\n  # The one setup concern is the launch prerequisites, surfaced here so the\n  # operator learns of them before the first 'cd', not mid-demo.\n\n  # 1. Auth: distinguish CLI-present-but-unauthenticated from ready without\n  #    triggering the interactive browser flow. `modal token info` is a cheap,\n  #    non-interactive probe.\n  if command -v modal >/dev/null 2>&1; then\n    if ! modal token info >/dev/null 2>&1; then\n      echo \"note: the Modal CLI is present but not authenticated.\" >&2\n      echo \"      Run 'modal token new' before the remote-launch beats\" >&2\n      echo \"      (see demo/MODAL.md beat 0). The local beats work without it.\" >&2\n    fi\n  else\n    echo \"note: 'modal' not found on PATH after install — check the catalog pin.\" >&2\n  fi\n\n  # 2. Registry: Modal ingests images by registry reference only, so the\n  #    generated launcher needs a registry prefix. Default to a placeholder and\n  #    let the operator override; flox reads FLOX_SANDBOX_MODAL_REGISTRY when it\n  #    renders the launcher.\n  if [ -z \"${FLOX_SANDBOX_MODAL_REGISTRY:-}\" ]; then\n    echo \"note: FLOX_SANDBOX_MODAL_REGISTRY is unset; the launcher will use a\" >&2\n    echo \"      bare image tag. Export it (e.g. docker.io/<user>) for the\" >&2\n    echo \"      remote launch.\" >&2\n  fi\n\n  # Demo fixture: a planted \"secret\" the guest must never see (beat 2 of\n  # demo/MODAL.md). On Modal the guest is remote and has no view of the host\n  # filesystem at all, so this is unreachable by construction. Removed by\n  # profile.deactivate.\n  mkdir -p \"$HOME/demo-secrets\"\n  printf 'API_KEY=sk-demo-FAKE-do-not-use\\n' > \"$HOME/demo-secrets/.env\"\n"
+    },
+    "profile": {
+      "bash": "  if [ -n \"${FLOX_BIN:-}\" ]; then\n    alias flox='$FLOX_BIN'\n  fi\n  export FLOX_VERSION=\"$(\"${FLOX_BIN:-flox}\" --version)\"\n",
+      "zsh": "  if [ -n \"${FLOX_BIN:-}\" ]; then\n    alias flox='$FLOX_BIN'\n  fi\n  export FLOX_VERSION=\"$(\"${FLOX_BIN:-flox}\" --version)\"\n",
+      "deactivate": {
+        "common": "  # Deactivating the demo cleans up after itself: remove the planted secret.\n  rm -rf \"$HOME/demo-secrets\"\n"
+      }
+    },
+    "options": {
+      "systems": [
+        "aarch64-darwin",
+        "x86_64-linux"
+      ]
+    }
+  },
+  "packages": [
+    {
+      "attr_path": "python313Packages.modal",
+      "broken": false,
+      "derivation": "/nix/store/z9ndsnd2d87l1xivn9xnh6y554pnx9m5-python3.13-modal-1.4.2.drv",
+      "description": "Python client library for Modal (serverless compute provider)",
+      "install_id": "modal",
+      "license": "Apache-2.0",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=753cc8a3a87467296ddd1fa93f0cc3e81120ee46",
+      "name": "python3.13-modal-1.4.2",
+      "pname": "modal",
+      "rev": "753cc8a3a87467296ddd1fa93f0cc3e81120ee46",
+      "rev_count": 1035164,
+      "rev_date": "2026-07-15T13:07:34Z",
+      "scrape_date": "2026-07-17T04:53:24.116695Z",
+      "stabilities": [
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "1.4.2",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "dist": "/nix/store/sj0d9k51kilgm1aihsra7plgk88minn4-python3.13-modal-1.4.2-dist",
+        "out": "/nix/store/wjgwfys2xxljf1zp8isjz1amwjjwl6al-python3.13-modal-1.4.2"
+      },
+      "system": "aarch64-darwin",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "python313Packages.modal",
+      "broken": false,
+      "derivation": "/nix/store/68n9ip8pb53x0ak03669h8744rydn66x-python3.13-modal-1.4.2.drv",
+      "description": "Python client library for Modal (serverless compute provider)",
+      "install_id": "modal",
+      "license": "Apache-2.0",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=753cc8a3a87467296ddd1fa93f0cc3e81120ee46",
+      "name": "python3.13-modal-1.4.2",
+      "pname": "modal",
+      "rev": "753cc8a3a87467296ddd1fa93f0cc3e81120ee46",
+      "rev_count": 1035164,
+      "rev_date": "2026-07-15T13:07:34Z",
+      "scrape_date": "2026-07-17T05:56:12.410069Z",
+      "stabilities": [
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "1.4.2",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "dist": "/nix/store/izb2cc9p1bfcvskdfbnbgs2sn76lsm8v-python3.13-modal-1.4.2-dist",
+        "out": "/nix/store/lnm1i4dsy6ap0aq9qxwmv21ws73ydgd6-python3.13-modal-1.4.2"
+      },
+      "system": "x86_64-linux",
+      "group": "toplevel",
+      "priority": 5
+    }
+  ]
+}

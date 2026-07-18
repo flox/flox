@@ -15,7 +15,8 @@ set -euo pipefail
 
 DEMO_DIR="${DEMO_DIR:-$HOME/sandbox-demo}"
 # Sandbox backend the manifest declares: "oci" (default; Apple Container /
-# podman) or "openshell" (NVIDIA OpenShell — see demo/OPENSHELL.md).
+# podman), "openshell" (NVIDIA OpenShell — see demo/OPENSHELL.md), or
+# "modal" (Modal Sandboxes, cloud-remote — see demo/MODAL.md).
 BACKEND="${BACKEND:-oci}"
 # `|| true` so an empty result reaches the friendly preflight below
 # instead of aborting silently under `set -e`.
@@ -55,8 +56,31 @@ case "$BACKEND" in
       echo "WARNING: 'docker' not found on PATH (required by openshell)." >&2
     fi
     ;;
+  modal)
+    # The modal backend is cloud-remote: it bakes an image locally (Docker),
+    # then generates a Modal launch program. Preflight distinguishes
+    # CLI-missing from CLI-present-but-unauthenticated. The remote launch
+    # needs a Modal account + a registry Modal can pull from; neither is set
+    # up by this script (see demo/MODAL.md beats 2+).
+    if ! command -v modal >/dev/null 2>&1; then
+      echo "WARNING: 'modal' not found on PATH." >&2
+      echo "         Install: flox install python313Packages.modal (or pip install modal)" >&2
+    elif ! modal token info >/dev/null 2>&1; then
+      echo "NOTE: the Modal CLI is present but not authenticated." >&2
+      echo "      That is expected for the local beats; the remote launch" >&2
+      echo "      needs 'modal token new' (see demo/MODAL.md beat 0)." >&2
+    fi
+    if ! command -v docker >/dev/null 2>&1; then
+      echo "WARNING: 'docker' not found on PATH (required to bake the image)." >&2
+    fi
+    if [ -z "${FLOX_SANDBOX_MODAL_REGISTRY:-}" ]; then
+      echo "NOTE: FLOX_SANDBOX_MODAL_REGISTRY is unset; the generated launcher" >&2
+      echo "      will use a bare image tag. Set it to your registry prefix" >&2
+      echo "      (e.g. docker.io/<user>) before the remote launch." >&2
+    fi
+    ;;
   *)
-    echo "ERROR: BACKEND='$BACKEND' is not a demo backend (oci|openshell)." >&2
+    echo "ERROR: BACKEND='$BACKEND' is not a demo backend (oci|openshell|modal)." >&2
     exit 1
     ;;
 esac
@@ -134,11 +158,14 @@ command = "python3 -m http.server 8080"
 sandbox = f'''[options.sandbox]
 backend = "{backend}"
 '''
-if backend == "openshell":
-    # Grant the coding agent its API endpoints, scoped to the exact
-    # claude binary the environment ships (`binary` resolves to the
-    # locked store path via the lockfile). Compiled into the OpenShell
-    # policy at sandbox create; everything else stays deny-by-default.
+if backend in ("openshell", "modal"):
+    # Grant the coding agent its API endpoints. On openshell the grant is
+    # scoped to the exact claude binary (`binary` resolves to the locked
+    # store path via the lockfile) and enforced at L7. On modal the host of
+    # each :443 endpoint compiles into the native domain allowlist
+    # (TLS/443-only); the binary/access/protocol scoping is recorded but not
+    # enforceable, a declared lossiness. Either way, everything else stays
+    # deny-by-default.
     sandbox += '''
 [[options.sandbox.network]]
 endpoint = "api.anthropic.com:443"
@@ -204,16 +231,22 @@ Then:
 
     cd $DEMO_DIR
 
-and follow demo/SCRIPT.md (backend "oci") or demo/OPENSHELL.md
-(backend "openshell"). Afterwards: bash demo/cleanup.sh
+and follow demo/SCRIPT.md (backend "oci"), demo/OPENSHELL.md
+(backend "openshell"), or demo/MODAL.md (backend "modal").
+Afterwards: bash demo/cleanup.sh
 
 NOTE: the manifest already declares [options.sandbox]
-backend = "$BACKEND", an auto-starting web service, and (openshell)
-[[options.sandbox.network]] grants for the agent's Anthropic
-endpoints, so the first 'cd' auto-activates straight into the
-sandbox. The first-ever bake
+backend = "$BACKEND", an auto-starting web service, and (openshell
+and modal) [[options.sandbox.network]] grants for the agent's
+Anthropic endpoints, so the first 'cd' auto-activates straight into
+the sandbox. The first-ever bake
 takes ~5-15 min (the builder VM compiles the pinned flox rev; later
 bakes reuse its cache, ~2-5 min); to pre-bake off-camera, run:
 
     FLOX_SANDBOX_OCI_AUTOBAKE=true flox activate -- true
+
+NOTE (modal): the modal backend is cloud-remote. It bakes the image
+locally and generates a launch program, but the remote launch needs
+a Modal account (modal token new) and a registry Modal can pull from
+(export FLOX_SANDBOX_MODAL_REGISTRY=<prefix>). See demo/MODAL.md.
 EOF
