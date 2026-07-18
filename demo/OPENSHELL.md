@@ -35,12 +35,13 @@ OpenShell 0.0.82):
   and serve fine. Fix: push the branch, bump the openshell
   `FROZEN_FALLBACK_REV` to the pushed head, re-dispatch the
   frozen-builder-cache workflow, rebake.
+- One-command setup (`djsauble/openshell-setup`) verified
+  exec-mode 2026-07-18: gateway service + registration +
+  deactivate cleanup all fire; port-conflict and CA-drift failure
+  modes now fail loudly / self-heal.
 - Still needing a live interactive rehearsal: the full `cd` +
-  consent + interactive-session flow, beat 4's real agent run
-  (needs the pre-seeded token), and the layered one-command setup
-  (`djsauble/openshell-setup`, published 2026-07-18, including its
-  profile/deactivate handlers — untestable on a host whose gateway
-  already owns port 17670).
+  consent + interactive-session flow (layered on the setup env)
+  and beat 4's real agent run (needs the pre-seeded token).
 - Grant-follows-binary confirmed in the allow direction: `claude`
   (scoped grant) reached its API through the proxy while `curl` in
   the same session stayed denied against ungranted endpoints. A
@@ -81,14 +82,21 @@ OpenShell 0.0.82):
    openshell status        # Status: Connected
    ```
 
-   > ⚠️ Not yet rehearsed end-to-end (it cannot run beside an
-   > already-provisioned gateway — both want port 17670), and
-   > registration writes `~/.config/openshell/gateways/flox-demo`
-   > and may switch your active gateway (`openshell gateway
-   > select <name>` switches back; `demo/cleanup.sh` removes the
-   > registration). The env is private to djsauble; the in-repo
-   > definition is `demo/openshell-setup/`. On a machine with a
-   > working manual setup, skip this and use that gateway.
+   > Verified exec-mode 2026-07-18: gateway up and Connected
+   > (0.0.86), registration self-heals on CA drift, and
+   > deactivation stops the gateway and removes the planted
+   > secret. Registration writes
+   > `~/.config/openshell/gateways/flox-demo` and may switch your
+   > active gateway (`openshell gateway select <name>` switches
+   > back; `demo/cleanup.sh` removes the registration). It cannot
+   > run beside another gateway — the service fails loudly if
+   > port 17670 is taken (a leftover launchd gateway from an old
+   > manual install is the classic culprit; `BadSignature` from
+   > `openshell status` is its signature — evict it with
+   > `launchctl bootout gui/$(id -u)/homebrew.mxcl.openshell` and
+   > remove the plist from `~/Library/LaunchAgents`). The env is
+   > private to djsauble; the in-repo definition is
+   > `demo/openshell-setup/`.
 
    **Manual alternative** (the path every prior verification
    used): install OpenShell ≥ 0.0.62 (0.0.82 tested) via

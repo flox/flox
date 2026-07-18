@@ -1,4 +1,25 @@
-# openshell-setup (EXPERIMENTAL — not yet rehearsed)
+# openshell-setup
+
+Verified exec-mode 2026-07-18 (gateway Connected on 0.0.86,
+registration self-healing, deactivate cleanup); the interactive
+layered flow is still unrehearsed.
+
+## Troubleshooting
+
+`openshell status` failing with `invalid peer certificate:
+BadSignature` means the CLI's stored CA doesn't match what the
+gateway on port 17670 is serving. Two causes:
+
+- **A stale gateway owns the port** (classic: a leftover launchd
+  agent from an old manual/brew install keeps running after
+  uninstall). The gateway service now refuses to start and prints
+  the offender; evict it:
+  `launchctl bootout gui/$(id -u)/homebrew.mxcl.openshell` and
+  remove `~/Library/LaunchAgents/homebrew.mxcl.openshell.plist`,
+  then kill the surviving `openshell-gateway` process if any.
+- **A stale registration** (CA rotated, e.g. the env cache was
+  recreated): the register service now detects the mismatch and
+  re-registers automatically.
 
 The outer layer of the sandbox demo: a Flox environment that
 provisions the OpenShell control plane *and* the presentation

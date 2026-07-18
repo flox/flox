@@ -75,23 +75,47 @@ auto-start = true
 
 # The gateway is a plain foreground process (the brew formula wraps the
 # same exec in launchd); as a flox service it lives exactly as long as
-# the activation.
+# the activation. The port preflight fails LOUDLY when something else
+# owns 17670 (e.g. a leftover launchd gateway from a previous manual
+# install) — without it the bind failure is silent and the CLI ends up
+# talking to the stale gateway with mismatched TLS (BadSignature).
 [services.gateway]
-command = 'exec openshell-gateway --config "$OPENSHELL_GATEWAY_CONFIG"'
+command = '''
+  if lsof -nP -iTCP:17670 -sTCP:LISTEN >/dev/null 2>&1; then
+    echo "ERROR: something else already listens on 127.0.0.1:17670:" >&2
+    lsof -nP -iTCP:17670 -sTCP:LISTEN >&2
+    echo "Likely a leftover gateway from a previous install. Stop it, e.g.:" >&2
+    echo "  launchctl bootout gui/\$(id -u)/homebrew.mxcl.openshell" >&2
+    echo "  rm ~/Library/LaunchAgents/homebrew.mxcl.openshell.plist" >&2
+    exit 1
+  fi
+  exec openshell-gateway --config "$OPENSHELL_GATEWAY_CONFIG"
+'''
 
-# One-shot registration: wait for the gateway to answer, then register
-# it with the CLI under a demo-scoped name. Guarded so re-activations
-# are no-ops. NOTE: writes ~/.config/openshell (see ../README.md).
+# One-shot registration under a demo-scoped name. Re-registers when the
+# stored CA differs from this environment's CA (stale registrations
+# otherwise fail with BadSignature), and verifies reachability after
+# adding. NOTE: writes ~/.config/openshell (see ../README.md).
 [services.gateway-register]
 command = '''
-  if [ -d "$HOME/.config/openshell/gateways/flox-demo" ]; then
-    echo "gateway 'flox-demo' already registered"
+  reg="$HOME/.config/openshell/gateways/flox-demo"
+  if [ -d "$reg" ] && cmp -s "$reg/mtls/ca.crt" "$OPENSHELL_LOCAL_TLS_DIR/ca.crt"; then
+    echo "gateway 'flox-demo' already registered (CA matches)"
     exit 0
+  fi
+  if [ -d "$reg" ]; then
+    echo "re-registering 'flox-demo': stored CA does not match this environment's"
+    openshell gateway remove flox-demo 2>/dev/null || rm -rf "$reg"
   fi
   for _ in $(seq 60); do
     if openshell gateway add https://127.0.0.1:17670 --local --name flox-demo 2>/dev/null; then
       echo "registered gateway 'flox-demo'"
-      exit 0
+      if openshell status >/dev/null 2>&1; then
+        echo "gateway reachable"
+        exit 0
+      fi
+      echo "registered but unreachable — is a stale gateway holding port 17670? (lsof -nP -iTCP:17670)" >&2
+      exit 1
     fi
     sleep 2
   done

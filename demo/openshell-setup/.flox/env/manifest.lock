@@ -30,10 +30,10 @@
     "services": {
       "auto-start": true,
       "gateway": {
-        "command": "exec openshell-gateway --config \"$OPENSHELL_GATEWAY_CONFIG\""
+        "command": "  if lsof -nP -iTCP:17670 -sTCP:LISTEN >/dev/null 2>&1; then\n    echo \"ERROR: something else already listens on 127.0.0.1:17670:\" >&2\n    lsof -nP -iTCP:17670 -sTCP:LISTEN >&2\n    echo \"Likely a leftover gateway from a previous install. Stop it, e.g.:\" >&2\n    echo \"  launchctl bootout gui/\\$(id -u)/homebrew.mxcl.openshell\" >&2\n    echo \"  rm ~/Library/LaunchAgents/homebrew.mxcl.openshell.plist\" >&2\n    exit 1\n  fi\n  exec openshell-gateway --config \"$OPENSHELL_GATEWAY_CONFIG\"\n"
       },
       "gateway-register": {
-        "command": "  if [ -d \"$HOME/.config/openshell/gateways/flox-demo\" ]; then\n    echo \"gateway 'flox-demo' already registered\"\n    exit 0\n  fi\n  for _ in $(seq 60); do\n    if openshell gateway add https://127.0.0.1:17670 --local --name flox-demo 2>/dev/null; then\n      echo \"registered gateway 'flox-demo'\"\n      exit 0\n    fi\n    sleep 2\n  done\n  echo \"gateway did not become reachable on 127.0.0.1:17670\" >&2\n  exit 1\n"
+        "command": "  reg=\"$HOME/.config/openshell/gateways/flox-demo\"\n  if [ -d \"$reg\" ] && cmp -s \"$reg/mtls/ca.crt\" \"$OPENSHELL_LOCAL_TLS_DIR/ca.crt\"; then\n    echo \"gateway 'flox-demo' already registered (CA matches)\"\n    exit 0\n  fi\n  if [ -d \"$reg\" ]; then\n    echo \"re-registering 'flox-demo': stored CA does not match this environment's\"\n    openshell gateway remove flox-demo 2>/dev/null || rm -rf \"$reg\"\n  fi\n  for _ in $(seq 60); do\n    if openshell gateway add https://127.0.0.1:17670 --local --name flox-demo 2>/dev/null; then\n      echo \"registered gateway 'flox-demo'\"\n      if openshell status >/dev/null 2>&1; then\n        echo \"gateway reachable\"\n        exit 0\n      fi\n      echo \"registered but unreachable — is a stale gateway holding port 17670? (lsof -nP -iTCP:17670)\" >&2\n      exit 1\n    fi\n    sleep 2\n  done\n  echo \"gateway did not become reachable on 127.0.0.1:17670\" >&2\n  exit 1\n"
       }
     }
   },
