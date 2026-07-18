@@ -87,7 +87,12 @@ use flox_manifest::lockfile::Lockfile;
 use flox_rust_sdk::providers::container_builder::ContainerBuilderParams;
 use tracing::debug;
 
-use super::handoff::{ensure_local_image, manifest_network_rules, yaml_str_list};
+use super::handoff::{
+    ensure_local_image,
+    manifest_network_rules,
+    registry_image_ref,
+    yaml_str_list,
+};
 use super::preflight::{first_on_path, split_endpoint};
 use super::{ActivationSandbox, SandboxLaunchCtx};
 use crate::commands::sandbox_backends::oci::lockfile_hash12;
@@ -185,23 +190,6 @@ impl ActivationSandbox for CognitionDevinBackend<'_> {
 /// tagging.
 fn devin_repo(env_name: &str) -> String {
     format!("{env_name}{DEVIN_REPO_SUFFIX}")
-}
-
-/// Build the registry image reference the blueprint's `initialize` step
-/// references.
-///
-/// When `FLOX_SANDBOX_COGNITION_DEVIN_REGISTRY` is set, the ref is
-/// `<prefix>/<repo>:<hash12>`; otherwise the bare local `<repo>:<hash12>` tag is
-/// used as a placeholder (the operator must retag/push before the snapshot
-/// build).
-pub(crate) fn devin_image_ref(repo: &str, hash12: &str, registry_prefix: Option<&str>) -> String {
-    match registry_prefix {
-        Some(prefix) => {
-            let prefix = prefix.trim_end_matches('/');
-            format!("{prefix}/{repo}:{hash12}")
-        },
-        None => format!("{repo}:{hash12}"),
-    }
 }
 
 // ── Network policy compilation ─────────────────────────────────────────────────
@@ -386,7 +374,7 @@ fn wrap_cognition_devin(
     let registry_prefix = std::env::var(FLOX_SANDBOX_COGNITION_DEVIN_REGISTRY_VAR)
         .ok()
         .filter(|v| !v.is_empty());
-    let image_ref = devin_image_ref(&repo, &hash12, registry_prefix.as_deref());
+    let image_ref = registry_image_ref(&repo, &hash12, registry_prefix.as_deref());
     let blueprint = render_blueprint(&BlueprintParams {
         image_ref: &image_ref,
         network: &network,
@@ -475,28 +463,6 @@ mod tests {
         assert_ne!(devin, oci);
         assert_ne!(devin, ona);
         assert_ne!(devin, daytona);
-    }
-
-    // ── devin_image_ref ───────────────────────────────────────────────────────
-
-    #[test]
-    fn image_ref_without_registry_is_bare_tag() {
-        assert_eq!(
-            devin_image_ref("myenv-cognition-devin", "abc123", None),
-            "myenv-cognition-devin:abc123"
-        );
-    }
-
-    #[test]
-    fn image_ref_with_registry_prefixes_and_trims_slash() {
-        assert_eq!(
-            devin_image_ref("myenv-cognition-devin", "abc123", Some("docker.io/user")),
-            "docker.io/user/myenv-cognition-devin:abc123"
-        );
-        assert_eq!(
-            devin_image_ref("myenv-cognition-devin", "abc123", Some("docker.io/user/")),
-            "docker.io/user/myenv-cognition-devin:abc123"
-        );
     }
 
     // ── compile_devin_network_policy ──────────────────────────────────────────

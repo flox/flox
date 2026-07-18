@@ -101,7 +101,12 @@ use flox_manifest::lockfile::Lockfile;
 use flox_rust_sdk::providers::container_builder::ContainerBuilderParams;
 use tracing::debug;
 
-use super::handoff::{ensure_local_image, manifest_network_rules, yaml_str_list};
+use super::handoff::{
+    ensure_local_image,
+    manifest_network_rules,
+    registry_image_ref,
+    yaml_str_list,
+};
 use super::preflight::{first_on_path, split_endpoint};
 use super::{ActivationSandbox, SandboxLaunchCtx};
 use crate::commands::sandbox_backends::oci::lockfile_hash12;
@@ -209,22 +214,6 @@ impl ActivationSandbox for AnjunaBackend<'_> {
 /// Return the `<env>-anjuna` repository name used for Docker image tagging.
 fn anjuna_repo(env_name: &str) -> String {
     format!("{env_name}{ANJUNA_REPO_SUFFIX}")
-}
-
-/// Build the registry image reference the `build-enclave --docker-uri`
-/// references.
-///
-/// When `FLOX_SANDBOX_ANJUNA_REGISTRY` is set, the ref is
-/// `<prefix>/<repo>:<hash12>`; otherwise the bare local `<repo>:<hash12>` tag is
-/// used as a placeholder (the operator must retag/push before the conversion).
-pub(crate) fn anjuna_image_ref(repo: &str, hash12: &str, registry_prefix: Option<&str>) -> String {
-    match registry_prefix {
-        Some(prefix) => {
-            let prefix = prefix.trim_end_matches('/');
-            format!("{prefix}/{repo}:{hash12}")
-        },
-        None => format!("{repo}:{hash12}"),
-    }
 }
 
 // ── Network policy compilation ─────────────────────────────────────────────────
@@ -444,7 +433,7 @@ fn wrap_anjuna(
     let registry_prefix = std::env::var(FLOX_SANDBOX_ANJUNA_REGISTRY_VAR)
         .ok()
         .filter(|v| !v.is_empty());
-    let image_ref = anjuna_image_ref(&repo, &hash12, registry_prefix.as_deref());
+    let image_ref = registry_image_ref(&repo, &hash12, registry_prefix.as_deref());
     let params = AnjunaHandoffParams {
         image_ref: &image_ref,
         lockfile_hash: &hash12,
@@ -559,28 +548,6 @@ mod tests {
         assert_ne!(anjuna, ona);
         assert_ne!(anjuna, daytona);
         assert_ne!(anjuna, devin);
-    }
-
-    // ── anjuna_image_ref ──────────────────────────────────────────────────────
-
-    #[test]
-    fn image_ref_without_registry_is_bare_tag() {
-        assert_eq!(
-            anjuna_image_ref("myenv-anjuna", "abc123", None),
-            "myenv-anjuna:abc123"
-        );
-    }
-
-    #[test]
-    fn image_ref_with_registry_prefixes_and_trims_slash() {
-        assert_eq!(
-            anjuna_image_ref("myenv-anjuna", "abc123", Some("docker.io/user")),
-            "docker.io/user/myenv-anjuna:abc123"
-        );
-        assert_eq!(
-            anjuna_image_ref("myenv-anjuna", "abc123", Some("docker.io/user/")),
-            "docker.io/user/myenv-anjuna:abc123"
-        );
     }
 
     // ── compile_anjuna_network_policy ─────────────────────────────────────────

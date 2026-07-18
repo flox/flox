@@ -93,7 +93,15 @@ use flox_rust_sdk::providers::container_builder::ContainerBuilderParams;
 use semver::Version;
 use tracing::debug;
 
-use super::handoff::{ensure_local_image, manifest_network_rules, py_str_list, py_str_lit};
+use super::handoff::{
+    ensure_local_image,
+    flox_sanitized_name,
+    manifest_network_rules,
+    py_str_list,
+    py_str_lit,
+    registry_image_ref,
+    sandbox_activation_command,
+};
 use super::preflight::{
     CliVersionCheck,
     DEFAULT_VERSION_ARGS,
@@ -261,21 +269,6 @@ fn daytona_authenticated(daytona_path: &Path) -> bool {
 /// Return the `<env>-daytona` repository name used for Docker image tagging.
 fn daytona_repo(env_name: &str) -> String {
     format!("{env_name}{DAYTONA_REPO_SUFFIX}")
-}
-
-/// Generate a Daytona snapshot name from the environment name.
-///
-/// Daytona snapshot names are lowercased and restricted to `[a-z0-9-]`; this
-/// sanitizes the env name the same way the other cloud backends do and prefixes
-/// `flox-` so the snapshot is recognizable in the Daytona dashboard. No PID
-/// suffix: the name is stable so repeated launches describe the same snapshot.
-pub(crate) fn daytona_snapshot_name(env_name: &str) -> String {
-    let sanitized: String = env_name
-        .to_ascii_lowercase()
-        .chars()
-        .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
-        .collect();
-    format!("flox-{sanitized}")
 }
 
 /// The remote sandbox runs on Linux; lockfile lookups for guest paths use the
@@ -471,53 +464,6 @@ pub(crate) fn render_daytona_launcher(params: &LauncherParams<'_>) -> String {
     }
 }
 
-/// Build the activation command argv for the sandbox.
-///
-/// The baked image's entrypoint starts the activated shell; the command wraps
-/// the effective working directory and any user command the same way the modal
-/// backend does, flattened here because the launcher passes it to
-/// `process.exec`.
-pub(crate) fn daytona_activation_command(
-    invocation: &InvocationType,
-    entrypoint: &[String],
-) -> Vec<String> {
-    match invocation {
-        InvocationType::Interactive => entrypoint.to_vec(),
-        InvocationType::ExecCommand(cmd) => {
-            let mut v = entrypoint.to_vec();
-            v.extend(cmd.iter().cloned());
-            v
-        },
-        InvocationType::ShellCommand(shell_cmd) => {
-            let mut v = entrypoint.to_vec();
-            v.extend(["sh".to_string(), "-c".to_string(), shell_cmd.clone()]);
-            v
-        },
-        InvocationType::InPlace => {
-            unreachable!(
-                "in-place invocation cannot reach the daytona backend (blocked by \
-                 ensure_sandbox_not_in_place)"
-            );
-        },
-    }
-}
-
-/// Build the registry image reference the launcher's snapshot base uses.
-///
-/// When `FLOX_SANDBOX_DAYTONA_REGISTRY` is set, the ref is
-/// `<prefix>/<repo>:<hash12>`; otherwise the bare local `<repo>:<hash12>` tag is
-/// used as a placeholder (the operator must retag/push before registering the
-/// snapshot).
-pub(crate) fn daytona_image_ref(repo: &str, hash12: &str, registry_prefix: Option<&str>) -> String {
-    match registry_prefix {
-        Some(prefix) => {
-            let prefix = prefix.trim_end_matches('/');
-            format!("{prefix}/{repo}:{hash12}")
-        },
-        None => format!("{repo}:{hash12}"),
-    }
-}
-
 // ── Launch path ────────────────────────────────────────────────────────────────
 
 /// Bake the image, compile the policy, generate the launcher artifact, then
@@ -566,8 +512,8 @@ fn wrap_daytona(
     let registry_prefix = std::env::var(FLOX_SANDBOX_DAYTONA_REGISTRY_VAR)
         .ok()
         .filter(|v| !v.is_empty());
-    let image_ref = daytona_image_ref(&repo, &hash12, registry_prefix.as_deref());
-    let snapshot_name = daytona_snapshot_name(env_name);
+    let image_ref = registry_image_ref(&repo, &hash12, registry_prefix.as_deref());
+    let snapshot_name = flox_sanitized_name(env_name);
     let cwd = std::env::current_dir().unwrap_or_else(|_| project.clone());
     let workdir = if cwd.starts_with(&project) {
         cwd.display().to_string()
@@ -578,7 +524,7 @@ fn wrap_daytona(
     // snapshot; on this host it is unknown, so the launcher runs the image's own
     // entrypoint by passing an empty explicit command.
     let entrypoint: Vec<String> = Vec::new();
-    let command = daytona_activation_command(invocation, &entrypoint);
+    let command = sandbox_activation_command(invocation, &entrypoint, "daytona");
     let launcher = render_daytona_launcher(&LauncherParams {
         snapshot_name: &snapshot_name,
         image_ref: &image_ref,
@@ -648,17 +594,6 @@ mod tests {
         );
     }
 
-    // ── daytona_snapshot_name ─────────────────────────────────────────────────
-
-    #[test]
-    fn snapshot_name_prefix_and_sanitization() {
-        assert_eq!(daytona_snapshot_name("MyEnv"), "flox-myenv");
-        assert_eq!(
-            daytona_snapshot_name("my.env-v2 beta"),
-            "flox-my-env-v2-beta"
-        );
-    }
-
     // ── daytona_repo ──────────────────────────────────────────────────────────
 
     #[test]
@@ -679,28 +614,6 @@ mod tests {
         assert_ne!(daytona, openshell);
         assert_ne!(daytona, modal);
         assert_ne!(daytona, e2b);
-    }
-
-    // ── daytona_image_ref ─────────────────────────────────────────────────────
-
-    #[test]
-    fn image_ref_without_registry_is_bare_tag() {
-        assert_eq!(
-            daytona_image_ref("myenv-daytona", "abc123", None),
-            "myenv-daytona:abc123"
-        );
-    }
-
-    #[test]
-    fn image_ref_with_registry_prefixes_and_trims_slash() {
-        assert_eq!(
-            daytona_image_ref("myenv-daytona", "abc123", Some("docker.io/user")),
-            "docker.io/user/myenv-daytona:abc123"
-        );
-        assert_eq!(
-            daytona_image_ref("myenv-daytona", "abc123", Some("docker.io/user/")),
-            "docker.io/user/myenv-daytona:abc123"
-        );
     }
 
     // ── is_cidr_endpoint ──────────────────────────────────────────────────────
@@ -801,40 +714,6 @@ mod tests {
             err.to_string().contains("Invalid sandbox network endpoint"),
             "got: {err}"
         );
-    }
-
-    // ── daytona_activation_command ────────────────────────────────────────────
-
-    #[test]
-    fn interactive_command_is_entrypoint_only() {
-        let entry = vec!["/entry".to_string(), "activate".to_string()];
-        let cmd = daytona_activation_command(&InvocationType::Interactive, &entry);
-        assert_eq!(cmd, entry);
-    }
-
-    #[test]
-    fn exec_command_appends_user_command() {
-        let entry = vec!["/entry".to_string()];
-        let inv = InvocationType::ExecCommand(vec!["ls".to_string(), "-la".to_string()]);
-        let cmd = daytona_activation_command(&inv, &entry);
-        assert_eq!(cmd, vec![
-            "/entry".to_string(),
-            "ls".to_string(),
-            "-la".to_string()
-        ]);
-    }
-
-    #[test]
-    fn shell_command_wraps_in_sh_c() {
-        let entry = vec!["/entry".to_string()];
-        let inv = InvocationType::ShellCommand("echo hi | cat".to_string());
-        let cmd = daytona_activation_command(&inv, &entry);
-        assert_eq!(cmd, vec![
-            "/entry".to_string(),
-            "sh".to_string(),
-            "-c".to_string(),
-            "echo hi | cat".to_string(),
-        ]);
     }
 
     // ── render_daytona_launcher ───────────────────────────────────────────────

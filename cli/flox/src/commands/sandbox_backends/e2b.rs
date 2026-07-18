@@ -89,7 +89,14 @@ use flox_rust_sdk::providers::container_builder::ContainerBuilderParams;
 use semver::Version;
 use tracing::debug;
 
-use super::handoff::{ensure_local_image, manifest_network_rules, toml_str_list, toml_str_lit};
+use super::handoff::{
+    ensure_local_image,
+    flox_sanitized_name,
+    manifest_network_rules,
+    registry_image_ref,
+    toml_str_list,
+    toml_str_lit,
+};
 use super::preflight::{
     CliVersionCheck,
     DEFAULT_VERSION_ARGS,
@@ -266,37 +273,6 @@ fn e2b_authenticated(e2b_path: &Path) -> bool {
 /// Return the `<env>-e2b` repository name used for Docker image tagging.
 fn e2b_repo(env_name: &str) -> String {
     format!("{env_name}{E2B_REPO_SUFFIX}")
-}
-
-/// Generate an E2B template name from the environment name.
-///
-/// E2B template names are lowercased and restricted to `[a-z0-9-]`; this
-/// sanitizes the env name the same way the other cloud backends do and prefixes
-/// `flox-` so the template is recognizable in the E2B dashboard. No PID suffix:
-/// the template name is stable so repeated hand-offs describe the same template.
-pub(crate) fn e2b_template_name(env_name: &str) -> String {
-    let sanitized: String = env_name
-        .to_ascii_lowercase()
-        .chars()
-        .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
-        .collect();
-    format!("flox-{sanitized}")
-}
-
-/// Build the image reference the generated Dockerfile's `FROM` uses.
-///
-/// When `FLOX_SANDBOX_E2B_REGISTRY` is set, the ref is
-/// `<prefix>/<repo>:<hash12>`; otherwise the bare local `<repo>:<hash12>` tag is
-/// used as a placeholder (the operator must retag/push before building the
-/// template).
-pub(crate) fn e2b_image_ref(repo: &str, hash12: &str, registry_prefix: Option<&str>) -> String {
-    match registry_prefix {
-        Some(prefix) => {
-            let prefix = prefix.trim_end_matches('/');
-            format!("{prefix}/{repo}:{hash12}")
-        },
-        None => format!("{repo}:{hash12}"),
-    }
 }
 
 // ── Network policy compilation ─────────────────────────────────────────────────
@@ -494,8 +470,8 @@ fn wrap_e2b(
     let registry_prefix = std::env::var(FLOX_SANDBOX_E2B_REGISTRY_VAR)
         .ok()
         .filter(|v| !v.is_empty());
-    let image_ref = e2b_image_ref(&repo, &hash12, registry_prefix.as_deref());
-    let template_name = e2b_template_name(env_name);
+    let image_ref = registry_image_ref(&repo, &hash12, registry_prefix.as_deref());
+    let template_name = flox_sanitized_name(env_name);
     let params = TemplateParams {
         template_name: &template_name,
         image_ref: &image_ref,
@@ -600,14 +576,6 @@ mod tests {
         );
     }
 
-    // ── e2b_template_name ─────────────────────────────────────────────────────
-
-    #[test]
-    fn template_name_prefix_and_sanitization() {
-        assert_eq!(e2b_template_name("MyEnv"), "flox-myenv");
-        assert_eq!(e2b_template_name("my.env-v2 beta"), "flox-my-env-v2-beta");
-    }
-
     // ── e2b_repo ──────────────────────────────────────────────────────────────
 
     #[test]
@@ -630,28 +598,6 @@ mod tests {
         assert_ne!(e2b, modal);
         assert_ne!(e2b, ona);
         assert_ne!(e2b, docker_sbx);
-    }
-
-    // ── e2b_image_ref ─────────────────────────────────────────────────────────
-
-    #[test]
-    fn image_ref_without_registry_is_bare_tag() {
-        assert_eq!(
-            e2b_image_ref("myenv-e2b", "abc123", None),
-            "myenv-e2b:abc123"
-        );
-    }
-
-    #[test]
-    fn image_ref_with_registry_prefixes_and_trims_slash() {
-        assert_eq!(
-            e2b_image_ref("myenv-e2b", "abc123", Some("docker.io/user")),
-            "docker.io/user/myenv-e2b:abc123"
-        );
-        assert_eq!(
-            e2b_image_ref("myenv-e2b", "abc123", Some("docker.io/user/")),
-            "docker.io/user/myenv-e2b:abc123"
-        );
     }
 
     // ── compile_e2b_network_policy ────────────────────────────────────────────

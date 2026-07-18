@@ -70,7 +70,13 @@ use flox_manifest::lockfile::Lockfile;
 use flox_rust_sdk::providers::container_builder::ContainerBuilderParams;
 use tracing::debug;
 
-use super::handoff::{ensure_local_image, json_str_list, manifest_network_rules};
+use super::handoff::{
+    ensure_local_image,
+    flox_sanitized_name,
+    json_str_list,
+    manifest_network_rules,
+    registry_image_ref,
+};
 use super::preflight::{first_on_path, split_endpoint};
 use super::{ActivationSandbox, SandboxLaunchCtx};
 use crate::commands::sandbox_backends::oci::lockfile_hash12;
@@ -175,38 +181,6 @@ pub(crate) fn detect_ona_cli() -> Option<(&'static str, PathBuf)> {
 /// Return the `<env>-ona` repository name used for Docker image tagging.
 fn ona_repo(env_name: &str) -> String {
     format!("{env_name}{ONA_REPO_SUFFIX}")
-}
-
-/// Generate an Ona workspace name from the environment name.
-///
-/// Ona/devcontainer workspace names are lowercased and restricted to
-/// `[a-z0-9-]`; this sanitizes the env name the same way the other cloud
-/// backends do and prefixes `flox-` so the workspace is recognizable in the Ona
-/// dashboard. No PID suffix: the devcontainer name is stable so repeated
-/// hand-offs describe the same workspace.
-pub(crate) fn ona_workspace_name(env_name: &str) -> String {
-    let sanitized: String = env_name
-        .to_ascii_lowercase()
-        .chars()
-        .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
-        .collect();
-    format!("flox-{sanitized}")
-}
-
-/// Build the registry image reference the devcontainer's `image` field uses.
-///
-/// When `FLOX_SANDBOX_ONA_REGISTRY` is set, the ref is
-/// `<prefix>/<repo>:<hash12>`; otherwise the bare local `<repo>:<hash12>` tag is
-/// used as a placeholder (the operator must retag/push before opening a
-/// workspace).
-pub(crate) fn ona_image_ref(repo: &str, hash12: &str, registry_prefix: Option<&str>) -> String {
-    match registry_prefix {
-        Some(prefix) => {
-            let prefix = prefix.trim_end_matches('/');
-            format!("{prefix}/{repo}:{hash12}")
-        },
-        None => format!("{repo}:{hash12}"),
-    }
 }
 
 // ── Network policy compilation ─────────────────────────────────────────────────
@@ -389,8 +363,8 @@ fn wrap_ona(
     let registry_prefix = std::env::var(FLOX_SANDBOX_ONA_REGISTRY_VAR)
         .ok()
         .filter(|v| !v.is_empty());
-    let image_ref = ona_image_ref(&repo, &hash12, registry_prefix.as_deref());
-    let workspace_name = ona_workspace_name(env_name);
+    let image_ref = registry_image_ref(&repo, &hash12, registry_prefix.as_deref());
+    let workspace_name = flox_sanitized_name(env_name);
     let devcontainer = render_devcontainer(&DevcontainerParams {
         workspace_name: &workspace_name,
         image_ref: &image_ref,
@@ -458,14 +432,6 @@ mod tests {
 
     use super::*;
 
-    // ── ona_workspace_name ────────────────────────────────────────────────────
-
-    #[test]
-    fn workspace_name_prefix_and_sanitization() {
-        assert_eq!(ona_workspace_name("MyEnv"), "flox-myenv");
-        assert_eq!(ona_workspace_name("my.env-v2 beta"), "flox-my-env-v2-beta");
-    }
-
     // ── ona_repo ──────────────────────────────────────────────────────────────
 
     #[test]
@@ -484,28 +450,6 @@ mod tests {
         assert_ne!(ona, oci);
         assert_ne!(ona, openshell);
         assert_ne!(ona, modal);
-    }
-
-    // ── ona_image_ref ─────────────────────────────────────────────────────────
-
-    #[test]
-    fn image_ref_without_registry_is_bare_tag() {
-        assert_eq!(
-            ona_image_ref("myenv-ona", "abc123", None),
-            "myenv-ona:abc123"
-        );
-    }
-
-    #[test]
-    fn image_ref_with_registry_prefixes_and_trims_slash() {
-        assert_eq!(
-            ona_image_ref("myenv-ona", "abc123", Some("docker.io/user")),
-            "docker.io/user/myenv-ona:abc123"
-        );
-        assert_eq!(
-            ona_image_ref("myenv-ona", "abc123", Some("docker.io/user/")),
-            "docker.io/user/myenv-ona:abc123"
-        );
     }
 
     // ── compile_ona_network_policy ────────────────────────────────────────────

@@ -75,7 +75,15 @@ use flox_rust_sdk::providers::container_builder::ContainerBuilderParams;
 use semver::Version;
 use tracing::debug;
 
-use super::handoff::{ensure_local_image, manifest_network_rules, py_str_list, py_str_lit};
+use super::handoff::{
+    ensure_local_image,
+    flox_sanitized_name,
+    manifest_network_rules,
+    py_str_list,
+    py_str_lit,
+    registry_image_ref,
+    sandbox_activation_command,
+};
 use super::preflight::{
     CliVersionCheck,
     DEFAULT_VERSION_ARGS,
@@ -201,23 +209,8 @@ fn modal_repo(env_name: &str) -> String {
     format!("{env_name}{MODAL_REPO_SUFFIX}")
 }
 
-/// Generate a Modal app name from the environment name.
+/// Resolve the guest system for the remote Linux sandbox.
 ///
-/// Modal app/sandbox names must be non-empty; this lowercases the env name and
-/// replaces any character outside `[a-z0-9-]` with a dash, then prefixes
-/// `flox-` so the app is recognizable in the Modal dashboard. Unlike the
-/// openshell sandbox name, no PID suffix is added: the app is looked up with
-/// `create_if_missing=True`, so a stable name lets repeated activations reuse
-/// one app.
-pub(crate) fn modal_app_name(env_name: &str) -> String {
-    let sanitized: String = env_name
-        .to_ascii_lowercase()
-        .chars()
-        .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
-        .collect();
-    format!("flox-{sanitized}")
-}
-
 /// The remote sandbox runs on Linux; lockfile lookups for guest paths use the
 /// Linux system for the host's architecture, mirroring the openshell backend.
 fn modal_guest_system() -> &'static str {
@@ -372,52 +365,6 @@ pub(crate) fn render_modal_launcher(params: &LauncherParams<'_>) -> String {
     }
 }
 
-/// Build the activation command argv for the sandbox CMD.
-///
-/// The baked image's entrypoint starts the activated shell; the command wraps
-/// the effective working directory and any user command the same way the
-/// openshell backend does, but flattened here because the launcher passes it as
-/// the sandbox CMD.
-pub(crate) fn modal_activation_command(
-    invocation: &InvocationType,
-    entrypoint: &[String],
-) -> Vec<String> {
-    match invocation {
-        InvocationType::Interactive => entrypoint.to_vec(),
-        InvocationType::ExecCommand(cmd) => {
-            let mut v = entrypoint.to_vec();
-            v.extend(cmd.iter().cloned());
-            v
-        },
-        InvocationType::ShellCommand(shell_cmd) => {
-            let mut v = entrypoint.to_vec();
-            v.extend(["sh".to_string(), "-c".to_string(), shell_cmd.clone()]);
-            v
-        },
-        InvocationType::InPlace => {
-            unreachable!(
-                "in-place invocation cannot reach the modal backend (blocked by \
-                 ensure_sandbox_not_in_place)"
-            );
-        },
-    }
-}
-
-/// Build the registry image reference the launcher's `from_registry` uses.
-///
-/// When `FLOX_SANDBOX_MODAL_REGISTRY` is set, the ref is
-/// `<prefix>/<repo>:<hash12>`; otherwise the bare local `<repo>:<hash12>` tag is
-/// used as a placeholder (the operator must retag/push before running).
-pub(crate) fn modal_image_ref(repo: &str, hash12: &str, registry_prefix: Option<&str>) -> String {
-    match registry_prefix {
-        Some(prefix) => {
-            let prefix = prefix.trim_end_matches('/');
-            format!("{prefix}/{repo}:{hash12}")
-        },
-        None => format!("{repo}:{hash12}"),
-    }
-}
-
 // ── Launch path ────────────────────────────────────────────────────────────────
 
 /// Bake the image, compile the policy, generate the launcher artifact, then
@@ -465,8 +412,8 @@ fn wrap_modal(
     let registry_prefix = std::env::var(FLOX_SANDBOX_MODAL_REGISTRY_VAR)
         .ok()
         .filter(|v| !v.is_empty());
-    let image_ref = modal_image_ref(&repo, &hash12, registry_prefix.as_deref());
-    let app_name = modal_app_name(env_name);
+    let image_ref = registry_image_ref(&repo, &hash12, registry_prefix.as_deref());
+    let app_name = flox_sanitized_name(env_name);
     let cwd = std::env::current_dir().unwrap_or_else(|_| project.clone());
     let workdir = if cwd.starts_with(&project) {
         cwd.display().to_string()
@@ -477,7 +424,7 @@ fn wrap_modal(
     // this host it is unknown, so the launcher runs the image's own CMD by
     // passing an empty explicit command (Modal falls back to the image CMD).
     let entrypoint: Vec<String> = Vec::new();
-    let command = modal_activation_command(invocation, &entrypoint);
+    let command = sandbox_activation_command(invocation, &entrypoint, "modal");
     let launcher = render_modal_launcher(&LauncherParams {
         app_name: &app_name,
         image_ref: &image_ref,
@@ -532,14 +479,6 @@ mod tests {
 
     use super::*;
 
-    // ── modal_app_name ────────────────────────────────────────────────────────
-
-    #[test]
-    fn app_name_prefix_and_sanitization() {
-        assert_eq!(modal_app_name("MyEnv"), "flox-myenv");
-        assert_eq!(modal_app_name("my.env-v2 beta"), "flox-my-env-v2-beta");
-    }
-
     // ── modal_repo ────────────────────────────────────────────────────────────
 
     #[test]
@@ -556,28 +495,6 @@ mod tests {
         let modal = format!("{}:{hash}", modal_repo(env));
         assert_ne!(modal, oci);
         assert_ne!(modal, openshell);
-    }
-
-    // ── modal_image_ref ───────────────────────────────────────────────────────
-
-    #[test]
-    fn image_ref_without_registry_is_bare_tag() {
-        assert_eq!(
-            modal_image_ref("myenv-modal", "abc123", None),
-            "myenv-modal:abc123"
-        );
-    }
-
-    #[test]
-    fn image_ref_with_registry_prefixes_and_trims_slash() {
-        assert_eq!(
-            modal_image_ref("myenv-modal", "abc123", Some("docker.io/user")),
-            "docker.io/user/myenv-modal:abc123"
-        );
-        assert_eq!(
-            modal_image_ref("myenv-modal", "abc123", Some("docker.io/user/")),
-            "docker.io/user/myenv-modal:abc123"
-        );
     }
 
     // ── compile_modal_network_policy ──────────────────────────────────────────
@@ -664,40 +581,6 @@ mod tests {
             err.to_string().contains("Invalid sandbox network endpoint"),
             "got: {err}"
         );
-    }
-
-    // ── modal_activation_command ──────────────────────────────────────────────
-
-    #[test]
-    fn interactive_command_is_entrypoint_only() {
-        let entry = vec!["/entry".to_string(), "activate".to_string()];
-        let cmd = modal_activation_command(&InvocationType::Interactive, &entry);
-        assert_eq!(cmd, entry);
-    }
-
-    #[test]
-    fn exec_command_appends_user_command() {
-        let entry = vec!["/entry".to_string()];
-        let inv = InvocationType::ExecCommand(vec!["ls".to_string(), "-la".to_string()]);
-        let cmd = modal_activation_command(&inv, &entry);
-        assert_eq!(cmd, vec![
-            "/entry".to_string(),
-            "ls".to_string(),
-            "-la".to_string()
-        ]);
-    }
-
-    #[test]
-    fn shell_command_wraps_in_sh_c() {
-        let entry = vec!["/entry".to_string()];
-        let inv = InvocationType::ShellCommand("echo hi | cat".to_string());
-        let cmd = modal_activation_command(&inv, &entry);
-        assert_eq!(cmd, vec![
-            "/entry".to_string(),
-            "sh".to_string(),
-            "-c".to_string(),
-            "echo hi | cat".to_string(),
-        ]);
     }
 
     // ── render_modal_launcher ─────────────────────────────────────────────────

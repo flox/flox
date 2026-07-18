@@ -40,6 +40,7 @@
 use std::path::Path;
 
 use anyhow::{Context, Result, bail};
+use flox_core::activate::context::InvocationType;
 use flox_core::activate::sandbox_policy::SandboxNetworkRule;
 use flox_manifest::interfaces::AsLatestSchema;
 use flox_manifest::lockfile::Lockfile;
@@ -159,6 +160,77 @@ pub(crate) fn ensure_local_image(
     }
 }
 
+/// Build the registry image reference the hand-off artifact pulls / references.
+///
+/// When `registry_prefix` is set (from the backend's `FLOX_SANDBOX_<X>_REGISTRY`
+/// knob), the ref is `<prefix>/<repo>:<hash12>`; otherwise the bare local
+/// `<repo>:<hash12>` tag is used as a placeholder (the operator retags / pushes
+/// before running). Every OCI-handoff backend derives the same ref this way.
+pub(crate) fn registry_image_ref(
+    repo: &str,
+    hash12: &str,
+    registry_prefix: Option<&str>,
+) -> String {
+    match registry_prefix {
+        Some(prefix) => {
+            let prefix = prefix.trim_end_matches('/');
+            format!("{prefix}/{repo}:{hash12}")
+        },
+        None => format!("{repo}:{hash12}"),
+    }
+}
+
+/// Sanitize an environment name into a `flox-`-prefixed slug safe as a
+/// provider-side app / template / snapshot / workspace identifier.
+///
+/// Lowercases, replaces every non-alphanumeric ASCII character with `-`, and
+/// prefixes `flox-`. The provider-side noun (app, template, snapshot,
+/// workspace) is backend vocabulary; the transformation is identical.
+pub(crate) fn flox_sanitized_name(env_name: &str) -> String {
+    let sanitized: String = env_name
+        .to_ascii_lowercase()
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
+        .collect();
+    format!("flox-{sanitized}")
+}
+
+/// Map an [`InvocationType`] to the argv the hand-off artifact runs inside the
+/// sandbox, appended to the environment's activation `entrypoint`.
+///
+/// - `Interactive` — the entrypoint alone (drops into the activated shell).
+/// - `ExecCommand` — entrypoint plus the user's command tokens.
+/// - `ShellCommand` — entrypoint plus `sh -c <shell_cmd>`.
+/// - `InPlace` — unreachable; blocked upstream by `ensure_sandbox_not_in_place`.
+///
+/// `backend` names the backend in the unreachable-arm panic so a
+/// contract-violation panic points at the right module.
+pub(crate) fn sandbox_activation_command(
+    invocation: &InvocationType,
+    entrypoint: &[String],
+    backend: &str,
+) -> Vec<String> {
+    match invocation {
+        InvocationType::Interactive => entrypoint.to_vec(),
+        InvocationType::ExecCommand(cmd) => {
+            let mut v = entrypoint.to_vec();
+            v.extend(cmd.iter().cloned());
+            v
+        },
+        InvocationType::ShellCommand(shell_cmd) => {
+            let mut v = entrypoint.to_vec();
+            v.extend(["sh".to_string(), "-c".to_string(), shell_cmd.clone()]);
+            v
+        },
+        InvocationType::InPlace => {
+            unreachable!(
+                "in-place invocation cannot reach the {backend} backend (blocked by \
+                 ensure_sandbox_not_in_place)"
+            );
+        },
+    }
+}
+
 // ── String-literal escaping helpers ─────────────────────────────────────────────
 //
 // Each rendered artifact embeds arbitrary hosts / argv members in a quoted
@@ -243,6 +315,72 @@ pub(crate) fn yaml_str_list(items: &[String]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ── registry_image_ref ────────────────────────────────────────────────────
+
+    #[test]
+    fn image_ref_without_registry_is_bare_tag() {
+        assert_eq!(
+            registry_image_ref("myenv-modal", "abc123", None),
+            "myenv-modal:abc123"
+        );
+    }
+
+    #[test]
+    fn image_ref_with_registry_prefixes_and_trims_slash() {
+        assert_eq!(
+            registry_image_ref("myenv-modal", "abc123", Some("docker.io/user")),
+            "docker.io/user/myenv-modal:abc123"
+        );
+        assert_eq!(
+            registry_image_ref("myenv-modal", "abc123", Some("docker.io/user/")),
+            "docker.io/user/myenv-modal:abc123"
+        );
+    }
+
+    // ── flox_sanitized_name ───────────────────────────────────────────────────
+
+    #[test]
+    fn sanitized_name_prefixes_and_replaces_non_alphanumeric() {
+        assert_eq!(flox_sanitized_name("MyEnv"), "flox-myenv");
+        assert_eq!(flox_sanitized_name("my.env-v2 beta"), "flox-my-env-v2-beta");
+    }
+
+    // ── sandbox_activation_command ────────────────────────────────────────────
+
+    #[test]
+    fn activation_command_interactive_is_entrypoint() {
+        let entry = vec!["flox".to_string(), "activate".to_string()];
+        let cmd = sandbox_activation_command(&InvocationType::Interactive, &entry, "modal");
+        assert_eq!(cmd, entry);
+    }
+
+    #[test]
+    fn activation_command_exec_appends_user_command() {
+        let entry = vec!["flox".to_string(), "activate".to_string()];
+        let inv = InvocationType::ExecCommand(vec!["echo".to_string(), "hi".to_string()]);
+        let cmd = sandbox_activation_command(&inv, &entry, "modal");
+        assert_eq!(cmd, vec![
+            "flox".to_string(),
+            "activate".to_string(),
+            "echo".to_string(),
+            "hi".to_string(),
+        ]);
+    }
+
+    #[test]
+    fn activation_command_shell_wraps_in_sh_c() {
+        let entry = vec!["flox".to_string(), "activate".to_string()];
+        let inv = InvocationType::ShellCommand("echo hi".to_string());
+        let cmd = sandbox_activation_command(&inv, &entry, "modal");
+        assert_eq!(cmd, vec![
+            "flox".to_string(),
+            "activate".to_string(),
+            "sh".to_string(),
+            "-c".to_string(),
+            "echo hi".to_string(),
+        ]);
+    }
 
     // ── py_str_lit / py_str_list ──────────────────────────────────────────────
 
