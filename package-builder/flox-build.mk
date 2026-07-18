@@ -686,7 +686,7 @@ define MANIFEST_BUILD_template =
   $($(_pvarname)_lockJSON): $(PROJECT_TMPDIR)/check-build-prerequisites
 	$(_V_) $(_mkdir) -p $$(@D)
 	$(_V_) $(_jq) -n --arg system '$(NIX_SYSTEM)' \
-	  '{ system: $$system, direct_catalog_inputs: {} }' > $$@
+	  '{ system: $$$$system, direct_catalog_inputs: {} }' > $$@
 
   # By the time this rule will be evaluated all of its package dependencies
   # will have been added to the set of rule prerequisites in $^, using their
@@ -863,7 +863,7 @@ define NIX_EXPRESSION_BUILD_template =
 	$(_V_) $(_mkdir) -p $$(@D)
 	$(_V_) $(_jq) -n --arg system '$(NIX_SYSTEM)' \
 	  --slurpfile lock '$$<' \
-	  '{ system: $$system, direct_catalog_inputs: $$lock[0].direct_catalog_inputs }' > $$@
+	  '{ system: $$$$system, direct_catalog_inputs: $$$$lock[0].direct_catalog_inputs }' > $$@
 
   # Continue by evaluating the build
   $($(_pvarname)_evalJSON): $($(_pvarname)_catalogLockfile)
