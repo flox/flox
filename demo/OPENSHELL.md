@@ -16,42 +16,6 @@ brings the reproducible environment, OpenShell brings supervised
 isolation with L7 egress policy. Same manifest, one word changed:
 `backend = "openshell"`.
 
-**Verification status** (macOS arm64, Docker Desktop 28.5.1,
-OpenShell 0.0.82):
-
-- Beats 1–5 verified 2026-07-13/14; full end-to-end run including
-  beat 4's live agent on 2026-07-16.
-- Re-verified exec-mode 2026-07-17 end-to-end: the beat 2 log-tail
-  resequencing, the demo-secrets probe, the manifest-declared agent
-  grants (the proxy identified `.claude-wrapped` by store path and
-  allowed api.anthropic.com per the manifest rule while denying its
-  ungranted Datadog telemetry endpoint), the beat 3 hot-reload flip,
-  and `--no-keep` teardown. Note `--tail` *replays* recent events —
-  starting it a beat late still shows the deny.
-- **Known issue until the builder pin is bumped:** in-guest
-  `flox services status` (beat 1) fails to parse the project
-  lockfile — the pinned guest flox predates the
-  `options.sandbox.network` field. The services themselves start
-  and serve fine. Fix: push the branch, bump the openshell
-  `FROZEN_FALLBACK_REV` to the pushed head, re-dispatch the
-  frozen-builder-cache workflow, rebake.
-- One-command setup (`djsauble/openshell-setup`) verified
-  exec-mode 2026-07-18: gateway service + registration +
-  deactivate cleanup all fire; port-conflict and CA-drift failure
-  modes now fail loudly / self-heal.
-- Still needing a live interactive rehearsal: the full `cd` +
-  consent + interactive-session flow (layered on the setup env)
-  and beat 4's real agent run (needs the pre-seeded token).
-- Grant-follows-binary confirmed in the allow direction: `claude`
-  (scoped grant) reached its API through the proxy while `curl` in
-  the same session stayed denied against ungranted endpoints. A
-  binary-mismatch denial against a *granted* endpoint has not been
-  staged.
-- `read-only` does **not** block write methods on 0.0.82 — keep
-  write-denial out of the talk track (see beat 3).
-- In-guest `claude` login is a dead end (the OAuth URL can't be
-  copied out); beat 4 pre-seeds a token instead.
-
 ---
 
 ## 0 · Setup
@@ -82,47 +46,13 @@ OpenShell 0.0.82):
    openshell status        # Status: Connected
    ```
 
-   > Verified exec-mode 2026-07-18: gateway up and Connected
-   > (0.0.86), registration self-heals on CA drift, and
-   > deactivation stops the gateway and removes the planted
-   > secret. Registration writes
-   > `~/.config/openshell/gateways/flox-demo` and may switch your
-   > active gateway (`openshell gateway select <name>` switches
-   > back; `demo/cleanup.sh` removes the registration). It cannot
-   > run beside another gateway — the service fails loudly if
-   > port 17670 is taken (a leftover launchd gateway from an old
-   > manual install is the classic culprit; `BadSignature` from
-   > `openshell status` is its signature — evict it with
-   > `launchctl bootout gui/$(id -u)/homebrew.mxcl.openshell` and
-   > remove the plist from `~/Library/LaunchAgents`). The env is
-   > private to djsauble; the in-repo definition is
-   > `demo/openshell-setup/`.
+   > Details, caveats, and troubleshooting:
+   > `demo/openshell-setup/README.md`.
 
-   **Manual alternative** (the path every prior verification
-   used): install OpenShell ≥ 0.0.62 (0.0.82 tested) via
-   `curl -LsSf https://raw.githubusercontent.com/NVIDIA/OpenShell/main/install.sh | sh`,
-   then in `~/.config/openshell/gateway.toml`:
-
-   ```toml
-   [openshell.gateway]
-   compute_drivers = ["docker"]
-
-   [openshell.drivers.docker]
-   enable_bind_mounts = true
-   ```
-
-   and restart the gateway; `openshell status` should report
-   Connected.
-
-   > **PATH pitfall** (either path): the Flox catalog's own
-   > `openshell` (0.0.36) is far too old. If any active flox
-   > environment installs it, it shadows a newer install and
-   > preflight fails with "OpenShell CLI version … is too old".
-   > Check `which openshell`.
-
-   > `enable_bind_mounts` live-mounts the project into the sandbox
-   > at its real path — an isolation tradeoff scoped to exactly the
-   > one directory you're asking the agent to work on.
+   > The gateway config enables bind mounts, which live-mount the
+   > project into the sandbox at its real path — an isolation
+   > tradeoff scoped to exactly the one directory you're asking
+   > the agent to work on.
 
 ### Demo environment
 
@@ -150,8 +80,8 @@ resolving `binary` to the locked store path for the guest. Policy
 edits never rebake the image — the image tag ignores
 `[options.sandbox]`.
 
-If you used the setup env (prerequisite 2), your shell is already
-configured — just make sure the prompt hook is in your shell's RC:
+The setup env already configured your shell — just make sure the
+prompt hook is in your shell's RC:
 
 ```bash
 eval "$(flox hook-env --shell bash --shell-pid $$)"
@@ -160,21 +90,6 @@ eval "$(flox hook-env --shell bash --shell-pid $$)"
 The session is *layered*: the setup env is the outer layer, and
 beat 1's `cd` activates the project env on top of it. Cleanup is
 symmetric — deactivate the sandbox, then the setup env.
-
-On the manual path, configure the presentation shell by hand:
-
-```bash
-alias flox='$FLOX_BIN'                 # the prototype binary
-export FLOX_FEATURES_SANDBOX_ACTIVATE=true
-export FLOX_FEATURES_AUTO_ACTIVATE=true
-export GITHUB_TOKEN=ghp-demo-FAKE      # for the token-isolation beat
-export FLOX_VERSION=`flox --version`
-```
-
-> `FLOX_VERSION` routes the bake: a `-g<sha>` version pins the
-> in-VM builder to this branch's frozen rev; a plain release
-> version routes to the release builder, which lacks the OpenShell
-> compat layer.
 
 **Pre-bake off-camera.** The first bake takes ~5–15 min on a
 machine that has to compile the pinned flox rev in-VM, or ~2–5 min
@@ -193,8 +108,6 @@ environment actually changes.
 ---
 
 ## 1 · Auto-activate into an OpenShell sandbox
-
-*(verified 2026-07-13)*
 
 **"One `cd`, one `Y`, and I'm inside an OpenShell-supervised
 sandbox with my project mounted and my service already running."**
@@ -243,7 +156,7 @@ it's the control plane for beats 2 and 3):
 ```bash
 openshell sandbox list
 NAME                     CREATED              PHASE
-flox-sandbox-demo-#####  2026-07-13 ...       Ready
+flox-sandbox-demo-#####  2026-07-18 ...       Ready
 ```
 
 **"That's flox's sandbox on OpenShell's control plane — logs,
@@ -253,10 +166,6 @@ wiring."**
 ---
 
 ## 2 · Prove the boundary is intact
-
-*(verified 2026-07-13; resequenced tail flow re-verified exec-mode
-2026-07-17 — `--tail` replays recent events, so starting it late
-still shows the deny)*
 
 **"My filesystem is invisible, my credentials don't cross, and only
 my project is live."**
@@ -283,7 +192,8 @@ flox [sandbox-demo] bash-5.3$
 audit event. Watch live:"**
 
 In a **third host terminal** (or split pane — beat 3 needs the
-control terminal free), tail verdicts and leave it running:
+control terminal free), tail verdicts and leave it running (the
+tail replays recent events, so a late start still shows the deny):
 
 ```bash
 openshell logs flox-sandbox-demo-##### --tail
@@ -313,9 +223,6 @@ be denied."**
 ---
 
 ## 3 · Hot-reload a network policy — no restart
-
-*(hot-reload and the binary-scoped GET verified 2026-07-13,
-re-verified 2026-07-14 and exec-mode 2026-07-17)*
 
 > **Do not demo write-denial:** on 0.0.82 a `read-only:rest` grant
 > still lets POST/DELETE through (logged ALLOWED). Stick to
@@ -370,10 +277,6 @@ is*; OpenShell governs *what it's allowed to do* — live."**
 
 ## 4 · Run a coding agent, at full autonomy
 
-*(verified end-to-end 2026-07-16 with manual Anthropic grants;
-the manifest-declared grants that replace them are not yet
-rehearsed. Agent flow identical to demo/SCRIPT.md §3.)*
-
 **"A coding agent with no permission prompts, that I don't have to
 trust — the sandbox, not the agent, is the boundary."**
 
@@ -413,15 +316,13 @@ Give it real work:
 
 Claude edits `app.py` and commits — no per-action prompts. Anything
 it tries outside the policy is denied and lands in the log tail —
-in rehearsal the agent's own Datadog telemetry endpoint showed up
-DENIED while its granted API traffic flowed, which makes a nice
+watch for the agent's own Datadog telemetry endpoint showing up
+DENIED while its granted API traffic flows, which makes a nice
 closing line.
 
 ---
 
 ## 5 · Exit the sandbox — the work persists, the sandbox doesn't
-
-*(verified 2026-07-13)*
 
 ```bash
 flox [sandbox-demo] bash-5.3$ flox deactivate
