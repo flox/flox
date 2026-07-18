@@ -242,10 +242,7 @@ const SECRET_DENY_TOKENS: [&str; 4] = [
 /// (filesystem tokens first, then the network allowlist in declaration order) so
 /// the rendered config is stable across runs.
 pub(crate) fn cursor_allow_tokens(network: &CursorNetworkPolicy) -> Vec<String> {
-    let mut tokens = vec![
-        "Read(**)".to_string(),
-        "Write(**)".to_string(),
-    ];
+    let mut tokens = vec!["Read(**)".to_string(), "Write(**)".to_string()];
     tokens.extend(
         network
             .fetch_domains
@@ -283,8 +280,7 @@ pub(crate) fn render_cursor_config(network: &CursorNetworkPolicy) -> String {
             "deny": deny,
         },
     });
-    serde_json::to_string_pretty(&config)
-        .expect("serializing a literal JSON value cannot fail")
+    serde_json::to_string_pretty(&config).expect("serializing a literal JSON value cannot fail")
 }
 
 // ── Launch path ────────────────────────────────────────────────────────────────

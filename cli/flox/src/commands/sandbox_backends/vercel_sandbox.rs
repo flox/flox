@@ -330,7 +330,10 @@ pub(crate) fn vercel_sandbox_name(env_name: &str) -> String {
 /// invocation shapes map onto `flox activate -r <ref>` variants; the flox binary
 /// is on PATH inside the sandbox after the installer runs. `InPlace` cannot reach
 /// this backend (blocked upstream by `ensure_sandbox_not_in_place`).
-pub(crate) fn bootstrap_activation_command(invocation: &InvocationType, floxhub_ref: &str) -> String {
+pub(crate) fn bootstrap_activation_command(
+    invocation: &InvocationType,
+    floxhub_ref: &str,
+) -> String {
     match invocation {
         InvocationType::Interactive => format!("flox activate -r {floxhub_ref}"),
         InvocationType::ExecCommand(cmd) => {
@@ -344,7 +347,10 @@ pub(crate) fn bootstrap_activation_command(invocation: &InvocationType, floxhub_
             format!("flox activate -r {floxhub_ref} -- {joined}")
         },
         InvocationType::ShellCommand(shell_cmd) => {
-            format!("flox activate -r {floxhub_ref} -- sh -c {}", sh_single_quote(shell_cmd))
+            format!(
+                "flox activate -r {floxhub_ref} -- sh -c {}",
+                sh_single_quote(shell_cmd)
+            )
         },
         InvocationType::InPlace => {
             unreachable!(
@@ -693,7 +699,10 @@ mod tests {
 
     #[test]
     fn floxhub_ref_uses_override_when_set() {
-        assert_eq!(floxhub_ref("myenv", Some("djsauble/myenv")), "djsauble/myenv");
+        assert_eq!(
+            floxhub_ref("myenv", Some("djsauble/myenv")),
+            "djsauble/myenv"
+        );
         // Whitespace-only override falls back to the placeholder.
         assert_eq!(floxhub_ref("myenv", Some("  ")), "<owner>/myenv");
     }
@@ -752,7 +761,10 @@ mod tests {
     fn shell_command_is_wrapped_in_sh_c() {
         let inv = InvocationType::ShellCommand("echo hi | cat".to_string());
         let cmd = bootstrap_activation_command(&inv, "djsauble/env");
-        assert_eq!(cmd, "flox activate -r djsauble/env -- sh -c 'echo hi | cat'");
+        assert_eq!(
+            cmd,
+            "flox activate -r djsauble/env -- sh -c 'echo hi | cat'"
+        );
     }
 
     #[test]
@@ -770,7 +782,10 @@ mod tests {
     fn bootstrap_installs_flox_and_activates_remote() {
         let cmd = bootstrap_activation_command(&InvocationType::Interactive, "djsauble/env");
         let script = render_bootstrap("djsauble/env", &cmd);
-        assert!(script.starts_with("#!/usr/bin/env bash\n"), "got:\n{script}");
+        assert!(
+            script.starts_with("#!/usr/bin/env bash\n"),
+            "got:\n{script}"
+        );
         assert!(
             script.contains("install.flox.dev/install.sh"),
             "bootstrap must install Flox:\n{script}"
@@ -807,7 +822,10 @@ mod tests {
     #[test]
     fn launcher_uses_the_sdk_and_fixed_runtime() {
         let script = sample_launcher("node24");
-        assert!(script.starts_with("#!/usr/bin/env node\n"), "got:\n{script}");
+        assert!(
+            script.starts_with("#!/usr/bin/env node\n"),
+            "got:\n{script}"
+        );
         assert!(
             script.contains("import { Sandbox } from \"@vercel/sandbox\";"),
             "got:\n{script}"
