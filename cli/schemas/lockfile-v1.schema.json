@@ -1813,6 +1813,11 @@
               "type": "string"
             },
             {
+              "const": "docker-sbx",
+              "description": "Docker Sandboxes (`sbx`): bakes the environment into a lockfile-hash-tagged\nOCI image and hands it to Docker's `sbx` CLI as a `kind: sandbox` kit's\nbase image, launched into a local microVM (private in-VM dockerd, own\nfilesystem and network). Egress is deny-by-default through the host-side\nHTTP/HTTPS proxy: manifest grants compile into the kit's `allowedDomains`\n(domain/wildcard, HTTP/HTTPS only), a declared lossiness — non-HTTP or\nnon-standard-port endpoints cannot be expressed as domain rules and are\ndeclined rather than silently widened. Credentials are injected as\nsentinel values by the proxy (the real value never enters the microVM).\nPolicy is declared before the run and applied at creation, so there is no\nper-request ask API — redemption is a restart. The microVM runs Linux, so\nmacOS drives it via the sbx hypervisor rather than running the workload on\nthe host.",
+              "type": "string"
+            },
+            {
               "const": "libkrun",
               "description": "Embeddable micro-VM (libkrun): hypervisor isolation with a guest kernel\nvia libkrunfw (Hypervisor.framework on macOS, KVM on Linux).",
               "type": "string"

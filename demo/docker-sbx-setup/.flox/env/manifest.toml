@@ -1,0 +1,81 @@
+schema-version = "1.13.0"
+
+# Docker Sandboxes ships the `sbx` CLI (login, run, policy, secret, kit).
+# The catalog carries it as `docker-sbx`; installing needs no Docker account,
+# only the microVM launch (`sbx run`) does. `sbx` drives its own hypervisor, so
+# no Docker Desktop is required for the CLI itself.
+[install]
+docker-sbx.pkg-path = "docker-sbx"
+
+[vars]
+# Feature flags the demo needs in the presentation shell.
+FLOX_FEATURES_SANDBOX_ACTIVATE = "true"
+FLOX_FEATURES_AUTO_ACTIVATE = "true"
+# Planted for the token-isolation beat: visible on the host. The microVM shares
+# no host env, so this never reaches the sandbox.
+GITHUB_TOKEN = "ghp-demo-FAKE"
+
+[hook]
+on-activate = '''
+  # Docker Sandboxes runs a local microVM through the `sbx` CLI — there is no
+  # long-running gateway to run as a service. The setup concerns are the launch
+  # prerequisites, surfaced here so the operator learns of them before the first
+  # 'cd', not mid-demo.
+
+  # 1. The `sbx` CLI. Installed from the catalog above; confirm it resolved.
+  #    `sbx login` is a browser OAuth flow, so only probe presence
+  #    non-interactively — never trigger the login flow here.
+  if command -v sbx >/dev/null 2>&1; then
+    echo "note: run 'sbx login' once before the launch beats (browser OAuth;" >&2
+    echo "      the free CLI tier suffices). The local beats — bake, policy" >&2
+    echo "      compilation, kit generation — work without it." >&2
+  else
+    echo "note: 'sbx' not found on PATH after install — check the catalog pin." >&2
+    echo "      Alternatively install it with 'brew install docker/tap/sbx'." >&2
+  fi
+
+  # 2. A running Docker daemon. Baking and loading the environment image go
+  #    through the classic Docker daemon (distinct from the `sbx` hypervisor).
+  if command -v docker >/dev/null 2>&1; then
+    if ! docker info >/dev/null 2>&1; then
+      echo "note: the Docker daemon is not reachable ('docker info' failed)." >&2
+      echo "      Start Docker Desktop or the Docker service before baking." >&2
+    fi
+  else
+    echo "note: 'docker' not found on PATH; the image bake needs a Docker daemon." >&2
+  fi
+
+  # Demo fixture: a planted "secret" the guest must never see. The microVM only
+  # mounts the project workspace, so $HOME/demo-secrets is unreachable by
+  # construction. Removed by profile.deactivate.
+  mkdir -p "$HOME/demo-secrets"
+  printf 'API_KEY=sk-demo-FAKE-do-not-use\n' > "$HOME/demo-secrets/.env"
+'''
+
+# Presentation-shell setup, so the walkthrough's manual export block
+# disappears. bash and zsh only — the demo script targets bash, and
+# `alias`/`export` syntax is not portable to fish/tcsh.
+[profile]
+bash = '''
+  if [ -n "${FLOX_BIN:-}" ]; then
+    alias flox='$FLOX_BIN'
+  fi
+  export FLOX_VERSION="$("${FLOX_BIN:-flox}" --version)"
+'''
+zsh = '''
+  if [ -n "${FLOX_BIN:-}" ]; then
+    alias flox='$FLOX_BIN'
+  fi
+  export FLOX_VERSION="$("${FLOX_BIN:-flox}" --version)"
+'''
+
+[profile.deactivate]
+common = '''
+  # Deactivating the demo cleans up after itself: remove the planted secret.
+  rm -rf "$HOME/demo-secrets"
+'''
+
+[options]
+# `docker-sbx` resolves for both dev systems; the setup env only needs to put
+# the `sbx` CLI on PATH.
+systems = ["aarch64-darwin", "x86_64-linux"]

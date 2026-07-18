@@ -15,8 +15,9 @@ set -euo pipefail
 
 DEMO_DIR="${DEMO_DIR:-$HOME/sandbox-demo}"
 # Sandbox backend the manifest declares: "oci" (default; Apple Container /
-# podman), "openshell" (NVIDIA OpenShell — see demo/OPENSHELL.md), or
-# "modal" (Modal Sandboxes, cloud-remote — see demo/MODAL.md).
+# podman), "openshell" (NVIDIA OpenShell — see demo/OPENSHELL.md),
+# "modal" (Modal Sandboxes, cloud-remote — see demo/MODAL.md), or
+# "docker-sbx" (Docker Sandboxes local microVM — see demo/DOCKER-SBX.md).
 BACKEND="${BACKEND:-oci}"
 # `|| true` so an empty result reaches the friendly preflight below
 # instead of aborting silently under `set -e`.
@@ -79,8 +80,26 @@ case "$BACKEND" in
       echo "      (e.g. docker.io/<user>) before the remote launch." >&2
     fi
     ;;
+  docker-sbx)
+    # The docker-sbx backend bakes an image locally (Docker), compiles the
+    # manifest network policy into an `sbx` kit, and stops at the launch
+    # boundary. Preflight distinguishes sbx-missing / daemon-down / too-old.
+    # The microVM launch needs the `sbx` CLI (signed in) and a base image
+    # adapted to sbx's kit contract; neither is set up by this script (see
+    # demo/DOCKER-SBX.md).
+    if ! command -v sbx >/dev/null 2>&1; then
+      echo "WARNING: 'sbx' not found on PATH." >&2
+      echo "         Install: flox install docker-sbx (or brew install docker/tap/sbx)" >&2
+    fi
+    if ! command -v docker >/dev/null 2>&1; then
+      echo "WARNING: 'docker' not found on PATH (required to bake the image)." >&2
+    elif ! docker info >/dev/null 2>&1; then
+      echo "WARNING: the Docker daemon is not reachable ('docker info' failed)." >&2
+      echo "         Start Docker Desktop or the Docker service before baking." >&2
+    fi
+    ;;
   *)
-    echo "ERROR: BACKEND='$BACKEND' is not a demo backend (oci|openshell|modal)." >&2
+    echo "ERROR: BACKEND='$BACKEND' is not a demo backend (oci|openshell|modal|docker-sbx)." >&2
     exit 1
     ;;
 esac
@@ -158,12 +177,14 @@ command = "python3 -m http.server 8080"
 sandbox = f'''[options.sandbox]
 backend = "{backend}"
 '''
-if backend in ("openshell", "modal"):
+if backend in ("openshell", "modal", "docker-sbx"):
     # Grant the coding agent its API endpoints. On openshell the grant is
     # scoped to the exact claude binary (`binary` resolves to the locked
     # store path via the lockfile) and enforced at L7. On modal the host of
     # each :443 endpoint compiles into the native domain allowlist
-    # (TLS/443-only); the binary/access/protocol scoping is recorded but not
+    # (TLS/443-only); on docker-sbx each :443 host compiles into the sbx
+    # kit's `network.allowedDomains` (HTTP/HTTPS domains). In both cloud/
+    # microVM cases the binary/access/protocol scoping is recorded but not
     # enforceable, a declared lossiness. Either way, everything else stays
     # deny-by-default.
     sandbox += '''
@@ -232,7 +253,8 @@ Then:
     cd $DEMO_DIR
 
 and follow demo/SCRIPT.md (backend "oci"), demo/OPENSHELL.md
-(backend "openshell"), or demo/MODAL.md (backend "modal").
+(backend "openshell"), demo/MODAL.md (backend "modal"), or
+demo/DOCKER-SBX.md (backend "docker-sbx").
 Afterwards: bash demo/cleanup.sh
 
 NOTE: the manifest already declares [options.sandbox]

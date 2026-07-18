@@ -1,0 +1,94 @@
+{
+  "lockfile-version": 1,
+  "manifest": {
+    "schema-version": "1.13.0",
+    "install": {
+      "docker-sbx": {
+        "pkg-path": "docker-sbx"
+      }
+    },
+    "vars": {
+      "FLOX_FEATURES_AUTO_ACTIVATE": "true",
+      "FLOX_FEATURES_SANDBOX_ACTIVATE": "true",
+      "GITHUB_TOKEN": "ghp-demo-FAKE"
+    },
+    "hook": {
+      "on-activate": "  # Docker Sandboxes runs a local microVM through the `sbx` CLI — there is no\n  # long-running gateway to run as a service. The setup concerns are the launch\n  # prerequisites, surfaced here so the operator learns of them before the first\n  # 'cd', not mid-demo.\n\n  # 1. The `sbx` CLI. Installed from the catalog above; confirm it resolved.\n  #    `sbx login` is a browser OAuth flow, so only probe presence\n  #    non-interactively — never trigger the login flow here.\n  if command -v sbx >/dev/null 2>&1; then\n    echo \"note: run 'sbx login' once before the launch beats (browser OAuth;\" >&2\n    echo \"      the free CLI tier suffices). The local beats — bake, policy\" >&2\n    echo \"      compilation, kit generation — work without it.\" >&2\n  else\n    echo \"note: 'sbx' not found on PATH after install — check the catalog pin.\" >&2\n    echo \"      Alternatively install it with 'brew install docker/tap/sbx'.\" >&2\n  fi\n\n  # 2. A running Docker daemon. Baking and loading the environment image go\n  #    through the classic Docker daemon (distinct from the `sbx` hypervisor).\n  if command -v docker >/dev/null 2>&1; then\n    if ! docker info >/dev/null 2>&1; then\n      echo \"note: the Docker daemon is not reachable ('docker info' failed).\" >&2\n      echo \"      Start Docker Desktop or the Docker service before baking.\" >&2\n    fi\n  else\n    echo \"note: 'docker' not found on PATH; the image bake needs a Docker daemon.\" >&2\n  fi\n\n  # Demo fixture: a planted \"secret\" the guest must never see. The microVM only\n  # mounts the project workspace, so $HOME/demo-secrets is unreachable by\n  # construction. Removed by profile.deactivate.\n  mkdir -p \"$HOME/demo-secrets\"\n  printf 'API_KEY=sk-demo-FAKE-do-not-use\\n' > \"$HOME/demo-secrets/.env\"\n"
+    },
+    "profile": {
+      "bash": "  if [ -n \"${FLOX_BIN:-}\" ]; then\n    alias flox='$FLOX_BIN'\n  fi\n  export FLOX_VERSION=\"$(\"${FLOX_BIN:-flox}\" --version)\"\n",
+      "zsh": "  if [ -n \"${FLOX_BIN:-}\" ]; then\n    alias flox='$FLOX_BIN'\n  fi\n  export FLOX_VERSION=\"$(\"${FLOX_BIN:-flox}\" --version)\"\n",
+      "deactivate": {
+        "common": "  # Deactivating the demo cleans up after itself: remove the planted secret.\n  rm -rf \"$HOME/demo-secrets\"\n"
+      }
+    },
+    "options": {
+      "systems": [
+        "aarch64-darwin",
+        "x86_64-linux"
+      ]
+    }
+  },
+  "packages": [
+    {
+      "attr_path": "docker-sbx",
+      "broken": false,
+      "derivation": "/nix/store/vdp8ryfydmn8zqd6ihpzrmhvp449kxy0-docker-sbx-0.34.0.drv",
+      "description": "Safe environments for agents",
+      "install_id": "docker-sbx",
+      "license": "Unfree",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=753cc8a3a87467296ddd1fa93f0cc3e81120ee46",
+      "name": "docker-sbx-0.34.0",
+      "pname": "docker-sbx",
+      "rev": "753cc8a3a87467296ddd1fa93f0cc3e81120ee46",
+      "rev_count": 1035164,
+      "rev_date": "2026-07-15T13:07:34Z",
+      "scrape_date": "2026-07-17T04:52:32.952042Z",
+      "stabilities": [
+        "staging",
+        "unstable"
+      ],
+      "unfree": true,
+      "version": "0.34.0",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/kpsg3qyz5qjknd14k31m489yjjng4qyg-docker-sbx-0.34.0"
+      },
+      "system": "aarch64-darwin",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "docker-sbx",
+      "broken": false,
+      "derivation": "/nix/store/xc1g07cgh5si0si23hpvhki5c82wsnyy-docker-sbx-0.34.0.drv",
+      "description": "Safe environments for agents",
+      "install_id": "docker-sbx",
+      "license": "Unfree",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=753cc8a3a87467296ddd1fa93f0cc3e81120ee46",
+      "name": "docker-sbx-0.34.0",
+      "pname": "docker-sbx",
+      "rev": "753cc8a3a87467296ddd1fa93f0cc3e81120ee46",
+      "rev_count": 1035164,
+      "rev_date": "2026-07-15T13:07:34Z",
+      "scrape_date": "2026-07-17T05:54:55.948975Z",
+      "stabilities": [
+        "staging",
+        "unstable"
+      ],
+      "unfree": true,
+      "version": "0.34.0",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/i8jh464jkyxv6yvaqqzcixb87mdbpss6-docker-sbx-0.34.0"
+      },
+      "system": "x86_64-linux",
+      "group": "toplevel",
+      "priority": 5
+    }
+  ]
+}

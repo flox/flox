@@ -55,12 +55,23 @@ for sb in sandboxes:
     print(f'Removed OpenShell sandbox: {name}')
 " 2>/dev/null || true
 fi
+# The docker-sbx backend launches local microVMs via the `sbx` CLI. Any
+# lingering demo sandbox (normally removed on `sbx rm`) is cleaned up here.
+if command -v sbx >/dev/null 2>&1; then
+  sbx ls 2>/dev/null | awk 'NR>1 {print $1}' | \
+    grep -E '^flox-sandbox-demo' | \
+    while read -r name; do
+      sbx rm --force "$name" >/dev/null 2>&1 && echo "Removed sbx sandbox: $name"
+    done || true
+fi
+
 if command -v docker >/dev/null 2>&1; then
   # The openshell and modal backends both bake under the -openshell repo;
   # the modal backend additionally names its pushed registry image under the
-  # -modal repo, which may have been retagged locally before a push.
+  # -modal repo, which may have been retagged locally before a push; the
+  # docker-sbx backend bakes under the -docker-sbx repo.
   docker image ls --format '{{.Repository}}:{{.Tag}}' 2>/dev/null | \
-    grep -E '^sandbox-demo-(openshell|modal):' | \
+    grep -E '^sandbox-demo-(openshell|modal|docker-sbx):' | \
     while read -r tag; do
       docker rmi "$tag" >/dev/null 2>&1 && echo "Removed Docker image: $tag"
     done || true

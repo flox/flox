@@ -63,6 +63,20 @@ pub enum SandboxBackend {
     /// CIDR ranges; policy is fixed at sandbox creation, so redemption is
     /// recreation. Reachable identically from macOS and Linux via the API.
     Modal,
+    /// Docker Sandboxes (`sbx`): bakes the environment into a lockfile-hash-tagged
+    /// OCI image and hands it to Docker's `sbx` CLI as a `kind: sandbox` kit's
+    /// base image, launched into a local microVM (private in-VM dockerd, own
+    /// filesystem and network). Egress is deny-by-default through the host-side
+    /// HTTP/HTTPS proxy: manifest grants compile into the kit's `allowedDomains`
+    /// (domain/wildcard, HTTP/HTTPS only), a declared lossiness — non-HTTP or
+    /// non-standard-port endpoints cannot be expressed as domain rules and are
+    /// declined rather than silently widened. Credentials are injected as
+    /// sentinel values by the proxy (the real value never enters the microVM).
+    /// Policy is declared before the run and applied at creation, so there is no
+    /// per-request ask API — redemption is a restart. The microVM runs Linux, so
+    /// macOS drives it via the sbx hypervisor rather than running the workload on
+    /// the host.
+    DockerSbx,
     /// Embeddable micro-VM (libkrun): hypervisor isolation with a guest kernel
     /// via libkrunfw (Hypervisor.framework on macOS, KVM on Linux).
     Libkrun,
@@ -143,7 +157,7 @@ pub struct BackendCapabilities {
 
 impl SandboxBackend {
     /// Every backend on the roster, in spectrum order (weakest boundary first).
-    pub const ALL: [SandboxBackend; 8] = [
+    pub const ALL: [SandboxBackend; 9] = [
         SandboxBackend::Libsandbox,
         SandboxBackend::Nix,
         SandboxBackend::HostNative,
@@ -151,6 +165,7 @@ impl SandboxBackend {
         SandboxBackend::Oci,
         SandboxBackend::Openshell,
         SandboxBackend::Modal,
+        SandboxBackend::DockerSbx,
         SandboxBackend::Libkrun,
     ];
 
@@ -285,6 +300,48 @@ impl SandboxBackend {
                 // is honestly Scaffolded, not Implemented.
                 status: Scaffolded,
             },
+            SandboxBackend::DockerSbx => BackendCapabilities {
+                backend: self,
+                // A per-sandbox microVM with a private in-VM dockerd. The
+                // boundary is hypervisor-class, but the policy surface (a
+                // host-side egress proxy plus a workspace bind mount) matches
+                // the other container backends, so it clusters with them here.
+                enforcement: Container,
+                enforces: true,
+                // Network and filesystem policy is chosen before the run and
+                // applied at sandbox creation; an out-of-policy access is
+                // redeemed only by editing the policy and restarting, never
+                // adjudicated live. No per-request ask API exists.
+                live_ask: false,
+                // The host-side proxy governs egress by domain (`allowedDomains`
+                // supports wildcards), but only for HTTP/HTTPS. Non-HTTP TCP is
+                // reachable solely by IP:port rules and UDP/ICMP are blocked
+                // outright — that HTTP-only ceiling is a declared lossiness, not
+                // a reason to claim no domain egress.
+                domain_egress: true,
+                // The allowlist is endpoint-scoped (domain / IP:port); it carries
+                // no read/write method distinction and no per-binary attribution,
+                // and the guest filesystem is the baked image plus the workspace
+                // mount rather than per-path r/w/x grants. Op-blind by the
+                // contract's meaning.
+                per_op: false,
+                // The workload runs inside a Linux microVM, so it pays the
+                // virtualized-filesystem cost class rather than native host I/O.
+                fs_virtualized: true,
+                // Local microVM reached through the `sbx` CLI: the launch path is
+                // identical from macOS and Linux (the CLI drives its own
+                // hypervisor). `Native` here means "the host can drive it", not
+                // "the workload runs on this OS".
+                macos: Native,
+                linux: Native,
+                // Preflight, bake, policy compilation, and kit-manifest
+                // generation are wired, but the final `sbx run` needs the `sbx`
+                // CLI (absent on this host) and a baked image that satisfies sbx's
+                // base-image contract (non-root `agent` user at uid 1000,
+                // passwordless sudo, preserved proxy env) — which the flox bake
+                // does not yet produce. Honestly Scaffolded, not Implemented.
+                status: Scaffolded,
+            },
             SandboxBackend::Libkrun => BackendCapabilities {
                 backend: self,
                 enforcement: Hypervisor,
@@ -311,6 +368,7 @@ impl Display for SandboxBackend {
             SandboxBackend::Oci => "oci",
             SandboxBackend::Openshell => "openshell",
             SandboxBackend::Modal => "modal",
+            SandboxBackend::DockerSbx => "docker-sbx",
             SandboxBackend::Libkrun => "libkrun",
         };
         write!(f, "{name}")
@@ -319,7 +377,7 @@ impl Display for SandboxBackend {
 
 #[derive(Debug, thiserror::Error)]
 #[error(
-    "'{0}' is not a valid sandbox backend. Expected one of: libsandbox, nix, host-native, srt, oci, openshell, modal, libkrun."
+    "'{0}' is not a valid sandbox backend. Expected one of: libsandbox, nix, host-native, srt, oci, openshell, modal, docker-sbx, libkrun."
 )]
 pub struct SandboxBackendParseError(String);
 
@@ -335,6 +393,7 @@ impl FromStr for SandboxBackend {
             "oci" => Ok(SandboxBackend::Oci),
             "openshell" => Ok(SandboxBackend::Openshell),
             "modal" => Ok(SandboxBackend::Modal),
+            "docker-sbx" => Ok(SandboxBackend::DockerSbx),
             "libkrun" => Ok(SandboxBackend::Libkrun),
             other => Err(SandboxBackendParseError(other.to_string())),
         }
@@ -365,7 +424,7 @@ mod tests {
         let err = "bogus".parse::<SandboxBackend>().unwrap_err();
         assert_eq!(
             err.to_string(),
-            "'bogus' is not a valid sandbox backend. Expected one of: libsandbox, nix, host-native, srt, oci, openshell, modal, libkrun.",
+            "'bogus' is not a valid sandbox backend. Expected one of: libsandbox, nix, host-native, srt, oci, openshell, modal, docker-sbx, libkrun.",
         );
     }
 
@@ -464,6 +523,39 @@ mod tests {
         assert_eq!(json, "\"modal\"");
         let parsed: SandboxBackend = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed, SandboxBackend::Modal);
+    }
+
+    #[test]
+    fn docker_sbx_capabilities_row() {
+        let caps = SandboxBackend::DockerSbx.capabilities();
+        assert_eq!(caps, BackendCapabilities {
+            backend: SandboxBackend::DockerSbx,
+            enforcement: Enforcement::Container,
+            enforces: true,
+            live_ask: false,
+            domain_egress: true,
+            per_op: false,
+            fs_virtualized: true,
+            macos: PlatformSupport::Native,
+            linux: PlatformSupport::Native,
+            status: IntegrationStatus::Scaffolded,
+        });
+    }
+
+    #[test]
+    fn docker_sbx_display_and_parse_round_trip() {
+        let backend = SandboxBackend::DockerSbx;
+        let s = backend.to_string();
+        assert_eq!(s, "docker-sbx");
+        assert_eq!(s.parse::<SandboxBackend>().unwrap(), backend);
+    }
+
+    #[test]
+    fn docker_sbx_serde_round_trip() {
+        let json = serde_json::to_string(&SandboxBackend::DockerSbx).unwrap();
+        assert_eq!(json, "\"docker-sbx\"");
+        let parsed: SandboxBackend = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed, SandboxBackend::DockerSbx);
     }
 
     #[test]

@@ -35,6 +35,7 @@
 //!   borrowing a peer's tags.
 
 pub mod bake;
+pub mod docker_sbx;
 pub mod host_native;
 pub mod modal;
 pub mod oci;
@@ -134,6 +135,7 @@ pub fn for_backend(
         SandboxBackend::Oci => Some(Box::new(oci::OciBackend::new(ctx))),
         SandboxBackend::Openshell => Some(Box::new(openshell::OpenshellBackend::new(ctx))),
         SandboxBackend::Modal => Some(Box::new(modal::ModalBackend::new(ctx))),
+        SandboxBackend::DockerSbx => Some(Box::new(docker_sbx::DockerSbxBackend::new(ctx))),
         // Libsandbox is the default in-process path; no wrapper object.
         // All other variants keep the "not yet wired" bail in activate.rs.
         _ => None,
