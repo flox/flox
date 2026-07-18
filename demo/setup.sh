@@ -19,8 +19,9 @@ DEMO_DIR="${DEMO_DIR:-$HOME/sandbox-demo}"
 # "modal" (Modal Sandboxes, cloud-remote — see demo/MODAL.md),
 # "docker-sbx" (Docker Sandboxes local microVM — see demo/DOCKER-SBX.md),
 # "ona" (Ona control-plane CDE, formerly Gitpod — see demo/ONA.md),
-# "e2b" (E2B cloud-API sandbox — see demo/E2B.md), or
-# "daytona" (Daytona cloud-API sandbox — see demo/DAYTONA.md).
+# "e2b" (E2B cloud-API sandbox — see demo/E2B.md),
+# "daytona" (Daytona cloud-API sandbox — see demo/DAYTONA.md), or
+# "cognition-devin" (Cognition/Devin partner runtime — see demo/DEVIN.md).
 BACKEND="${BACKEND:-oci}"
 # `|| true` so an empty result reaches the friendly preflight below
 # instead of aborting silently under `set -e`.
@@ -184,8 +185,35 @@ case "$BACKEND" in
       echo "      (e.g. docker.io/<user>) before the snapshot registration." >&2
     fi
     ;;
+  cognition-devin)
+    # The cognition-devin backend is partner-handoff/cloud (Cognition's Devin
+    # runtime): it bakes the substrate image locally (Docker), compiles the
+    # manifest network policy, and generates the git-backed blueprint hand-off
+    # (.devin/blueprint.yaml), then stops at the launch boundary. Preflight
+    # requires only Docker; the Devin CLI is presence-detected, not required.
+    # Devin builds a snapshot from the blueprint through its own builder — there
+    # is no public image-launch API — so the snapshot build + session need a
+    # Devin subscription/partnership and a registry Devin can pull from; neither
+    # is set up by this script (see demo/DEVIN.md).
+    if ! command -v docker >/dev/null 2>&1; then
+      echo "WARNING: 'docker' not found on PATH (required to bake the image)." >&2
+    elif ! docker info >/dev/null 2>&1; then
+      echo "WARNING: the Docker daemon is not reachable ('docker info' failed)." >&2
+      echo "         Start Docker Desktop or the Docker service before baking." >&2
+    fi
+    if ! command -v devin >/dev/null 2>&1; then
+      echo "NOTE: no 'devin' CLI on PATH." >&2
+      echo "      That is expected for the local beats; the blueprint hand-off" >&2
+      echo "      is generated regardless (see demo/DEVIN.md)." >&2
+    fi
+    if [ -z "${FLOX_SANDBOX_COGNITION_DEVIN_REGISTRY:-}" ]; then
+      echo "NOTE: FLOX_SANDBOX_COGNITION_DEVIN_REGISTRY is unset; the generated" >&2
+      echo "      blueprint will use a bare image tag. Set it to your registry" >&2
+      echo "      prefix (e.g. docker.io/<user>) before the snapshot build." >&2
+    fi
+    ;;
   *)
-    echo "ERROR: BACKEND='$BACKEND' is not a demo backend (oci|openshell|modal|docker-sbx|ona|e2b|daytona)." >&2
+    echo "ERROR: BACKEND='$BACKEND' is not a demo backend (oci|openshell|modal|docker-sbx|ona|e2b|daytona|cognition-devin)." >&2
     exit 1
     ;;
 esac
@@ -263,7 +291,8 @@ command = "python3 -m http.server 8080"
 sandbox = f'''[options.sandbox]
 backend = "{backend}"
 '''
-if backend in ("openshell", "modal", "docker-sbx", "ona", "e2b", "daytona"):
+if backend in ("openshell", "modal", "docker-sbx", "ona", "e2b", "daytona",
+               "cognition-devin"):
     # Grant the coding agent its API endpoints. On openshell the grant is
     # scoped to the exact claude binary (`binary` resolves to the locked
     # store path via the lockfile) and enforced at L7. On modal the host of
@@ -276,10 +305,12 @@ if backend in ("openshell", "modal", "docker-sbx", "ona", "e2b", "daytona"):
     # `allowed_hosts` list, and flox forces `allow_internet_access = false`
     # because E2B's own default is open (default-OPEN); on daytona each host
     # compiles into the native `domainAllowList` (per-domain, not per-port, so
-    # the :443 is dropped), mutually exclusive with the CIDR list. In the
-    # cloud/microVM/control-plane cases the binary/access/protocol scoping is
-    # recorded but not enforceable, a declared lossiness. Either way,
-    # everything else stays deny-by-default.
+    # the :443 is dropped), mutually exclusive with the CIDR list; on
+    # cognition-devin each :443 host compiles into the blueprint's
+    # `sandbox.allowed_domains` (Devin's CLI-sandbox allowlist; per-domain, not
+    # per-port). In the cloud/microVM/control-plane cases the
+    # binary/access/protocol scoping is recorded but not enforceable, a declared
+    # lossiness. Either way, everything else stays deny-by-default.
     sandbox += '''
 [[options.sandbox.network]]
 endpoint = "api.anthropic.com:443"
@@ -348,15 +379,16 @@ Then:
 and follow demo/SCRIPT.md (backend "oci"), demo/OPENSHELL.md
 (backend "openshell"), demo/MODAL.md (backend "modal"),
 demo/DOCKER-SBX.md (backend "docker-sbx"), demo/ONA.md
-(backend "ona"), demo/E2B.md (backend "e2b"), or demo/DAYTONA.md
-(backend "daytona").
+(backend "ona"), demo/E2B.md (backend "e2b"), demo/DAYTONA.md
+(backend "daytona"), or demo/DEVIN.md (backend "cognition-devin").
 Afterwards: bash demo/cleanup.sh
 
 NOTE: the manifest already declares [options.sandbox]
 backend = "$BACKEND", an auto-starting web service, and (openshell,
-modal, docker-sbx, ona, e2b, and daytona) [[options.sandbox.network]]
-grants for the agent's Anthropic endpoints, so the first 'cd'
-auto-activates straight into the sandbox. The first-ever bake
+modal, docker-sbx, ona, e2b, daytona, and cognition-devin)
+[[options.sandbox.network]] grants for the agent's Anthropic
+endpoints, so the first 'cd' auto-activates straight into the
+sandbox. The first-ever bake
 takes ~5-15 min (the builder VM compiles the pinned flox rev; later
 bakes reuse its cache, ~2-5 min); to pre-bake off-camera, run:
 
@@ -388,4 +420,15 @@ sandbox launch need a Daytona account/API key (daytona login or
 DAYTONA_API_KEY) and a registry Daytona can pull from (export
 FLOX_SANDBOX_DAYTONA_REGISTRY=<prefix>). The daytona CLI is in the
 catalog: 'flox install daytona-bin'. See demo/DAYTONA.md.
+
+NOTE (cognition-devin): the cognition-devin backend is
+partner-handoff/cloud (Cognition's Devin runtime). It bakes the
+substrate image locally and generates a git-backed blueprint
+(.devin/blueprint.yaml) whose initialize step reproduces the
+closure, but Devin builds the snapshot from that blueprint through
+its own builder — there is no public image-launch API. The snapshot
+build + session need a Devin subscription/partnership and a registry
+Devin can pull from (export
+FLOX_SANDBOX_COGNITION_DEVIN_REGISTRY=<prefix>). The devin CLI is
+presence-detected, not required. See demo/DEVIN.md.
 EOF

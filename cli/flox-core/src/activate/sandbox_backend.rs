@@ -134,6 +134,30 @@ pub enum SandboxBackend {
     /// sandbox-level settings entirely — another declared lossiness. Reached
     /// over the API identically from macOS and Linux.
     Daytona,
+    /// Cognition (Devin runtime): a partner-handoff backend for Devin's agent
+    /// runtime. Unlike the OCI-ingesting cloud backends, Devin does not consume
+    /// an image — a Devin session boots from a *snapshot* that Devin's own
+    /// builder produces from a YAML *blueprint* (blueprint ≈ Dockerfile, build ≈
+    /// `docker build`, snapshot ≈ image, per Devin's own docs). There is no
+    /// public sandbox/runtime-launch API that ingests an arbitrary image, so the
+    /// integration is inverted: Flox supplies the environment definition Devin
+    /// runs inside, and Devin's runtime enforces. flox bakes the environment
+    /// into a lockfile-hash-tagged OCI image (the reproducible substrate a
+    /// credentialed operator can `docker load`) and generates the Devin hand-off
+    /// — a git-backed `.devin/blueprint.yaml` whose `initialize` step installs
+    /// Flox and activates the locked environment, plus the compiled network
+    /// policy recorded as a `sandbox` config block. Enforcement (snapshot
+    /// isolation, the CLI sandbox's loopback egress proxy) stays entirely on
+    /// Devin's side; no local enforcement ever runs on the laptop, so host
+    /// assertions are preflight-only and the threat model inverts (host fs is
+    /// unreachable, code and secrets run in Devin's runtime). Manifest network
+    /// grants compile into Devin's CLI-sandbox `allowed_domains` allowlist
+    /// (allowlist mode, HTTP/HTTPS via the loopback proxy); the grant's
+    /// per-binary / read-write / port scoping is recorded but not enforceable
+    /// through the blueprint contract, a declared lossiness. Devin is a
+    /// subscription product reached over its API from any host, so `Native` here
+    /// means "the host can drive it", not "the workload runs on this OS".
+    CognitionDevin,
     /// Embeddable micro-VM (libkrun): hypervisor isolation with a guest kernel
     /// via libkrunfw (Hypervisor.framework on macOS, KVM on Linux).
     Libkrun,
@@ -214,7 +238,7 @@ pub struct BackendCapabilities {
 
 impl SandboxBackend {
     /// Every backend on the roster, in spectrum order (weakest boundary first).
-    pub const ALL: [SandboxBackend; 12] = [
+    pub const ALL: [SandboxBackend; 13] = [
         SandboxBackend::Libsandbox,
         SandboxBackend::Nix,
         SandboxBackend::HostNative,
@@ -226,6 +250,7 @@ impl SandboxBackend {
         SandboxBackend::Ona,
         SandboxBackend::E2b,
         SandboxBackend::Daytona,
+        SandboxBackend::CognitionDevin,
         SandboxBackend::Libkrun,
     ];
 
@@ -539,6 +564,57 @@ impl SandboxBackend {
                 // not, so this is honestly Scaffolded, not Implemented.
                 status: Scaffolded,
             },
+            SandboxBackend::CognitionDevin => BackendCapabilities {
+                backend: self,
+                // Devin runs the workload in its own managed runtime (a
+                // snapshot-booted VM/container per session). The boundary is
+                // Devin's; the policy surface (a blueprint that builds the
+                // snapshot plus the CLI sandbox's domain egress filter) clusters
+                // with the other control-plane cloud backends.
+                enforcement: Container,
+                // `enforces` and `domain_egress` describe DEVIN'S runtime, not
+                // any flox-observable behavior on this host: nothing runs
+                // locally, and no Devin account exists here to verify against.
+                // The basis is Devin's published docs (CLI sandbox: a loopback
+                // egress proxy with allowlist-mode `allowed_domains`; sessions
+                // boot from an isolated per-session snapshot), read 2026-07-18.
+                enforces: true,
+                // The snapshot's network policy is fixed when the blueprint
+                // builds it; an out-of-policy access is redeemed by editing the
+                // blueprint and rebuilding the snapshot, never adjudicated live.
+                live_ask: false,
+                // Devin's CLI sandbox filters egress by domain through a
+                // loopback proxy: `allowed_domains` is an allowlist (only
+                // matching domains pass) and `denied_domains` always blocks.
+                // Domain-capable, HTTP/HTTPS-oriented; the per-domain (not
+                // per-port) granularity is a declared lossiness noted in the
+                // module docs, not a reason to claim no domain egress.
+                domain_egress: true,
+                // The blueprint/snapshot policy is endpoint-scoped; it carries
+                // no read/write method distinction and no per-binary
+                // attribution, and the runtime filesystem is the built snapshot
+                // rather than per-path r/w/x grants. Op-blind by the contract's
+                // meaning. (`network_mode` toggles GET/HEAD/OPTIONS vs all HTTP
+                // methods globally — not a per-grant read/write axis.)
+                per_op: false,
+                // The workload runs in Devin's remote runtime, so it pays the
+                // virtualized-filesystem cost class rather than native host I/O.
+                fs_virtualized: true,
+                // Partner-handoff/cloud: the snapshot is reached over Devin's
+                // API, so the hand-off path is identical from macOS and Linux —
+                // nothing runs on the host. `Native` here means "the host can
+                // drive it", not "the workload runs on this OS".
+                macos: Native,
+                linux: Native,
+                // The launch boundary needs a Devin subscription and a
+                // partnership: Devin builds the snapshot from a blueprint through
+                // its own builder, and there is no public no-account
+                // image-launch API on this host. Preflight, bake, policy
+                // compilation, and blueprint-artifact generation are wired; the
+                // final snapshot build and session launch are not, so this is
+                // honestly Scaffolded, not Implemented.
+                status: Scaffolded,
+            },
             SandboxBackend::Libkrun => BackendCapabilities {
                 backend: self,
                 enforcement: Hypervisor,
@@ -569,6 +645,7 @@ impl Display for SandboxBackend {
             SandboxBackend::Ona => "ona",
             SandboxBackend::E2b => "e2b",
             SandboxBackend::Daytona => "daytona",
+            SandboxBackend::CognitionDevin => "cognition-devin",
             SandboxBackend::Libkrun => "libkrun",
         };
         write!(f, "{name}")
@@ -577,7 +654,7 @@ impl Display for SandboxBackend {
 
 #[derive(Debug, thiserror::Error)]
 #[error(
-    "'{0}' is not a valid sandbox backend. Expected one of: libsandbox, nix, host-native, srt, oci, openshell, modal, docker-sbx, ona, e2b, daytona, libkrun."
+    "'{0}' is not a valid sandbox backend. Expected one of: libsandbox, nix, host-native, srt, oci, openshell, modal, docker-sbx, ona, e2b, daytona, cognition-devin, libkrun."
 )]
 pub struct SandboxBackendParseError(String);
 
@@ -597,6 +674,7 @@ impl FromStr for SandboxBackend {
             "ona" => Ok(SandboxBackend::Ona),
             "e2b" => Ok(SandboxBackend::E2b),
             "daytona" => Ok(SandboxBackend::Daytona),
+            "cognition-devin" => Ok(SandboxBackend::CognitionDevin),
             "libkrun" => Ok(SandboxBackend::Libkrun),
             other => Err(SandboxBackendParseError(other.to_string())),
         }
@@ -627,7 +705,7 @@ mod tests {
         let err = "bogus".parse::<SandboxBackend>().unwrap_err();
         assert_eq!(
             err.to_string(),
-            "'bogus' is not a valid sandbox backend. Expected one of: libsandbox, nix, host-native, srt, oci, openshell, modal, docker-sbx, ona, e2b, daytona, libkrun.",
+            "'bogus' is not a valid sandbox backend. Expected one of: libsandbox, nix, host-native, srt, oci, openshell, modal, docker-sbx, ona, e2b, daytona, cognition-devin, libkrun.",
         );
     }
 
@@ -858,6 +936,39 @@ mod tests {
         assert_eq!(json, "\"daytona\"");
         let parsed: SandboxBackend = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed, SandboxBackend::Daytona);
+    }
+
+    #[test]
+    fn cognition_devin_capabilities_row() {
+        let caps = SandboxBackend::CognitionDevin.capabilities();
+        assert_eq!(caps, BackendCapabilities {
+            backend: SandboxBackend::CognitionDevin,
+            enforcement: Enforcement::Container,
+            enforces: true,
+            live_ask: false,
+            domain_egress: true,
+            per_op: false,
+            fs_virtualized: true,
+            macos: PlatformSupport::Native,
+            linux: PlatformSupport::Native,
+            status: IntegrationStatus::Scaffolded,
+        });
+    }
+
+    #[test]
+    fn cognition_devin_display_and_parse_round_trip() {
+        let backend = SandboxBackend::CognitionDevin;
+        let s = backend.to_string();
+        assert_eq!(s, "cognition-devin");
+        assert_eq!(s.parse::<SandboxBackend>().unwrap(), backend);
+    }
+
+    #[test]
+    fn cognition_devin_serde_round_trip() {
+        let json = serde_json::to_string(&SandboxBackend::CognitionDevin).unwrap();
+        assert_eq!(json, "\"cognition-devin\"");
+        let parsed: SandboxBackend = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed, SandboxBackend::CognitionDevin);
     }
 
     #[test]

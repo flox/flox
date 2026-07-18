@@ -1,0 +1,28 @@
+{
+  "lockfile-version": 1,
+  "manifest": {
+    "schema-version": "1.13.0",
+    "vars": {
+      "FLOX_FEATURES_AUTO_ACTIVATE": "true",
+      "FLOX_FEATURES_SANDBOX_ACTIVATE": "true",
+      "GITHUB_TOKEN": "ghp-demo-FAKE"
+    },
+    "hook": {
+      "on-activate": "  # Devin is a subscription/cloud runtime — there is no local gateway to run as\n  # a service. The setup concern is the hand-off prerequisites, surfaced here so\n  # the operator learns of them before the first 'cd', not mid-demo.\n\n  # 1. Docker: the cognition-devin backend bakes the reproducible substrate\n  #    image locally before Devin's build can pull it. Docker is the one\n  #    required host tool.\n  if ! command -v docker >/dev/null 2>&1; then\n    echo \"note: 'docker' not found on PATH — the cognition-devin backend needs\" >&2\n    echo \"      it to bake the substrate image (see demo/DEVIN.md beat 0).\" >&2\n  fi\n\n  # 2. CLI: the Devin CLI is presence-detected, not required. The blueprint\n  #    hand-off is generated regardless; note its absence so the operator knows\n  #    the launch boundary will name the subscription/partnership wall.\n  if ! command -v devin >/dev/null 2>&1; then\n    echo \"note: no 'devin' CLI on PATH. That is fine for the local beats —\" >&2\n    echo \"      flox generates the .devin/blueprint.yaml hand-off anyway; the\" >&2\n    echo \"      snapshot build itself needs a Devin subscription and a\" >&2\n    echo \"      partnership (see demo/DEVIN.md).\" >&2\n  fi\n\n  # 3. Registry: Devin's build pulls the substrate image the blueprint\n  #    references, so the generated blueprint's image ref needs a registry\n  #    prefix. Default to a bare tag and let the operator override.\n  if [ -z \"${FLOX_SANDBOX_COGNITION_DEVIN_REGISTRY:-}\" ]; then\n    echo \"note: FLOX_SANDBOX_COGNITION_DEVIN_REGISTRY is unset; the blueprint\" >&2\n    echo \"      will use a bare image tag. Export it (e.g. docker.io/<user>)\" >&2\n    echo \"      before the snapshot build.\" >&2\n  fi\n\n  # Demo fixture: a planted \"secret\" the runtime must never see (beat 4 of\n  # demo/DEVIN.md). On Devin the runtime is remote and has no view of the host\n  # filesystem at all, so this is unreachable by construction. Removed by\n  # profile.deactivate.\n  mkdir -p \"$HOME/demo-secrets\"\n  printf 'API_KEY=sk-demo-FAKE-do-not-use\\n' > \"$HOME/demo-secrets/.env\"\n"
+    },
+    "profile": {
+      "bash": "  if [ -n \"${FLOX_BIN:-}\" ]; then\n    alias flox='$FLOX_BIN'\n  fi\n  export FLOX_VERSION=\"$(\"${FLOX_BIN:-flox}\" --version)\"\n",
+      "zsh": "  if [ -n \"${FLOX_BIN:-}\" ]; then\n    alias flox='$FLOX_BIN'\n  fi\n  export FLOX_VERSION=\"$(\"${FLOX_BIN:-flox}\" --version)\"\n",
+      "deactivate": {
+        "common": "  # Deactivating the demo cleans up after itself: remove the planted secret.\n  rm -rf \"$HOME/demo-secrets\"\n"
+      }
+    },
+    "options": {
+      "systems": [
+        "aarch64-darwin",
+        "x86_64-linux"
+      ]
+    }
+  },
+  "packages": []
+}

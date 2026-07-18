@@ -1436,6 +1436,11 @@
           "type": "string"
         },
         {
+          "const": "cognition-devin",
+          "description": "Cognition (Devin runtime): a partner-handoff backend for Devin's agent\nruntime. Unlike the OCI-ingesting cloud backends, Devin does not consume\nan image — a Devin session boots from a *snapshot* that Devin's own\nbuilder produces from a YAML *blueprint* (blueprint ≈ Dockerfile, build ≈\n`docker build`, snapshot ≈ image, per Devin's own docs). There is no\npublic sandbox/runtime-launch API that ingests an arbitrary image, so the\nintegration is inverted: Flox supplies the environment definition Devin\nruns inside, and Devin's runtime enforces. flox bakes the environment\ninto a lockfile-hash-tagged OCI image (the reproducible substrate a\ncredentialed operator can `docker load`) and generates the Devin hand-off\n— a git-backed `.devin/blueprint.yaml` whose `initialize` step installs\nFlox and activates the locked environment, plus the compiled network\npolicy recorded as a `sandbox` config block. Enforcement (snapshot\nisolation, the CLI sandbox's loopback egress proxy) stays entirely on\nDevin's side; no local enforcement ever runs on the laptop, so host\nassertions are preflight-only and the threat model inverts (host fs is\nunreachable, code and secrets run in Devin's runtime). Manifest network\ngrants compile into Devin's CLI-sandbox `allowed_domains` allowlist\n(allowlist mode, HTTP/HTTPS via the loopback proxy); the grant's\nper-binary / read-write / port scoping is recorded but not enforceable\nthrough the blueprint contract, a declared lossiness. Devin is a\nsubscription product reached over its API from any host, so `Native` here\nmeans \"the host can drive it\", not \"the workload runs on this OS\".",
+          "type": "string"
+        },
+        {
           "const": "libkrun",
           "description": "Embeddable micro-VM (libkrun): hypervisor isolation with a guest kernel\nvia libkrunfw (Hypervisor.framework on macOS, KVM on Linux).",
           "type": "string"

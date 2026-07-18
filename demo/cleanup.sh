@@ -71,9 +71,10 @@ if command -v docker >/dev/null 2>&1; then
   # -modal repo, which may have been retagged locally before a push; the
   # docker-sbx backend bakes under the -docker-sbx repo; the ona backend
   # bakes under the -ona repo; the e2b backend bakes under the -e2b repo;
-  # the daytona backend bakes under the -daytona repo.
+  # the daytona backend bakes under the -daytona repo; the cognition-devin
+  # backend bakes under the -cognition-devin repo.
   docker image ls --format '{{.Repository}}:{{.Tag}}' 2>/dev/null | \
-    grep -E '^sandbox-demo-(openshell|modal|docker-sbx|ona|e2b|daytona):' | \
+    grep -E '^sandbox-demo-(openshell|modal|docker-sbx|ona|e2b|daytona|cognition-devin):' | \
     while read -r tag; do
       docker rmi "$tag" >/dev/null 2>&1 && echo "Removed Docker image: $tag"
     done || true
@@ -97,6 +98,15 @@ for f in "$DEMO_DIR/e2b.Dockerfile" "$DEMO_DIR/e2b.toml"; do
     echo "Removed e2b template artifact: $f"
   fi
 done
+
+# The cognition-devin backend writes a committed git-backed blueprint hand-off
+# at the repo root (.devin/blueprint.yaml), not under .flox/cache. Removed with
+# $DEMO_DIR above, but a demo run may have left a copy if $DEMO_DIR was
+# overridden — surface it rather than silently orphaning it.
+if [ -f "$DEMO_DIR/.devin/blueprint.yaml" ]; then
+  rm -rf "$DEMO_DIR/.devin"
+  echo "Removed cognition-devin blueprint hand-off under $DEMO_DIR/.devin."
+fi
 
 # demo/host-env leftovers: the gateway-register service writes persistent
 # CLI state under ~/.config/openshell (and may have switched the active
