@@ -1,4 +1,4 @@
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fmt::{self, Display};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -190,10 +190,17 @@ pub fn scan_package_with_roots(
                 .to_string_lossy()
                 .into_owned();
             let dir = path.parent();
-            let mut visited = HashSet::new();
+            let mut visited = HashMap::new();
             db.insert(
                 stem,
-                analyze_file_at(&content, roots, dir, &mut visited, Some(path))?,
+                analyze_file_at(
+                    &content,
+                    roots,
+                    dir,
+                    &mut visited,
+                    Some(path),
+                    &identity_origins(roots),
+                )?,
             );
         }
         db
@@ -313,14 +320,19 @@ fn line_col(content: &str, offset: usize) -> (usize, usize) {
 ///
 /// `roots` are the lambda parameters treated as catalog roots (e.g. `catalogs`).
 /// When `file_dir` is `Some`, `import` calls forwarding a root are followed into
-/// the imported file; `visited` guards against import cycles. `path` is the
-/// file's location, used only for verbose reference reporting.
+/// the imported file; `visited` maps each drained target file to the top-level
+/// forwardings already scanned for it (see the drain below). `path` is the
+/// file's location, used only for verbose reference reporting. `root_origins`
+/// maps each root to the top-level root it stands for — the identity map at
+/// the entry file, and the composition of the forwarding chain in imported
+/// files.
 fn analyze_file_at(
     content: &str,
     roots: &HashSet<String>,
     file_dir: Option<&Path>,
-    visited: &mut HashSet<PathBuf>,
+    visited: &mut HashMap<PathBuf, HashSet<BTreeMap<String, String>>>,
     path: Option<&Path>,
+    root_origins: &BTreeMap<String, String>,
 ) -> Result<FileInfo, ScanError> {
     if let Some(path) = path {
         debug!(file = %path.display(), "reading NEF expression");
@@ -405,8 +417,7 @@ fn analyze_file_at(
     } = walker;
 
     // Imports are IO: the walker only records facts, the drain here reads and
-    // recurses. Relative paths resolve against the importing file's directory;
-    // `visited` guards against import cycles.
+    // recurses. Relative paths resolve against the importing file's directory.
     if let Some(dir) = file_dir {
         for pending in pending_imports {
             let target = dir.join(&pending.path);
@@ -420,9 +431,6 @@ fn analyze_file_at(
             } else {
                 target
             };
-            if !visited.insert(target.clone()) {
-                continue;
-            }
             let Ok(imported_content) = fs::read_to_string(&target) else {
                 // The refs the imported file would contribute cannot be
                 // discovered, so fail rather than silently under-lock.
@@ -453,6 +461,27 @@ fn analyze_file_at(
                     },
                 },
             };
+            // The same file imported under a different forwarding contributes
+            // different refs and is scanned again; only a repeat with the
+            // same forwarding — including a true import cycle — is skipped.
+            // The forwarding is composed down to the top-level roots before
+            // being stored: two chains whose immediate maps look identical can
+            // still stand for different top-level roots, and only an identical
+            // composition contributes identical refs.
+            let child_origins: BTreeMap<String, String> = rewrites
+                .iter()
+                .map(|(child, parent)| {
+                    let origin = root_origins.get(parent).unwrap_or(parent);
+                    (child.clone(), origin.clone())
+                })
+                .collect();
+            if !visited
+                .entry(target.clone())
+                .or_default()
+                .insert(child_origins.clone())
+            {
+                continue;
+            }
             let child_roots: HashSet<String> = rewrites.keys().cloned().collect();
             let import_dir = target.parent().map(Path::to_path_buf);
             let imported = analyze_file_at(
@@ -461,6 +490,7 @@ fn analyze_file_at(
                 import_dir.as_deref(),
                 visited,
                 Some(&target),
+                &child_origins,
             )?;
             refs.extend(
                 imported
@@ -497,6 +527,15 @@ fn analyze_file_at(
     }
 
     Ok(FileInfo { refs, deps })
+}
+
+/// The identity `root_origins` map for an entry file, whose roots are the
+/// top-level roots themselves (see [analyze_file_at]).
+fn identity_origins(roots: &HashSet<String>) -> BTreeMap<String, String> {
+    roots
+        .iter()
+        .map(|root| (root.clone(), root.clone()))
+        .collect()
 }
 
 /// The root component of a dotted reference (`catalogs.a.b` → `catalogs`).
@@ -1947,8 +1986,9 @@ fn read_and_analyze(path: &Path, roots: &HashSet<String>) -> Result<Option<FileI
         &content,
         roots,
         path.parent(),
-        &mut HashSet::new(),
+        &mut HashMap::new(),
         Some(path),
+        &identity_origins(roots),
     )
     .map(Some)
 }
@@ -1962,8 +2002,15 @@ mod tests {
     }
 
     fn analyze_file(content: &str, roots: &HashSet<String>) -> FileInfo {
-        analyze_file_at(content, roots, None, &mut HashSet::new(), None)
-            .expect("scan should succeed")
+        analyze_file_at(
+            content,
+            roots,
+            None,
+            &mut HashMap::new(),
+            None,
+            &identity_origins(roots),
+        )
+        .expect("scan should succeed")
     }
 
     fn refs(content: &str, roots: &HashSet<String>) -> BTreeSet<String> {
@@ -1971,27 +2018,48 @@ mod tests {
     }
 
     fn scan_err(content: &str, roots: &HashSet<String>) -> ScanError {
-        analyze_file_at(content, roots, None, &mut HashSet::new(), None)
-            .expect_err("scan should fail")
+        analyze_file_at(
+            content,
+            roots,
+            None,
+            &mut HashMap::new(),
+            None,
+            &identity_origins(roots),
+        )
+        .expect_err("scan should fail")
     }
 
     fn refs_at(path: &str, roots: &HashSet<String>) -> BTreeSet<String> {
         let path = Path::new(path);
         let content = fs::read_to_string(path).expect("test fixture missing");
         let dir = path.parent();
-        let mut visited = HashSet::new();
-        analyze_file_at(&content, roots, dir, &mut visited, Some(path))
-            .expect("scan should succeed")
-            .refs
+        let mut visited = HashMap::new();
+        analyze_file_at(
+            &content,
+            roots,
+            dir,
+            &mut visited,
+            Some(path),
+            &identity_origins(roots),
+        )
+        .expect("scan should succeed")
+        .refs
     }
 
     fn scan_err_at(path: &str, roots: &HashSet<String>) -> ScanError {
         let path = Path::new(path);
         let content = fs::read_to_string(path).expect("test fixture missing");
         let dir = path.parent();
-        let mut visited = HashSet::new();
-        analyze_file_at(&content, roots, dir, &mut visited, Some(path))
-            .expect_err("scan should fail")
+        let mut visited = HashMap::new();
+        analyze_file_at(
+            &content,
+            roots,
+            dir,
+            &mut visited,
+            Some(path),
+            &identity_origins(roots),
+        )
+        .expect_err("scan should fail")
     }
 
     fn set(items: &[&str]) -> BTreeSet<String> {
@@ -3205,6 +3273,45 @@ mod tests {
     }
 
     #[test]
+    fn import_same_file_under_different_forwards_scans_both() {
+        let got = refs_at(
+            "test_data/catalog_refs/diamond-import/entry.nix",
+            &roots(&["catalogs", "inputs"]),
+        );
+        assert_eq!(
+            got,
+            set(&["catalogs.somepkg.someattr", "inputs.somepkg.someattr"])
+        );
+    }
+
+    #[test]
+    fn import_same_file_under_composed_forwards_scans_both() {
+        // The two chains reach common.nix with textually identical immediate
+        // forwardings (`{ ns = cats; }`) that compose to different top-level
+        // roots; both compositions must be scanned.
+        let got = refs_at(
+            "test_data/catalog_refs/deep-diamond/entry.nix",
+            &roots(&["catalogs", "inputs"]),
+        );
+        assert_eq!(
+            got,
+            set(&["catalogs.somepkg.someattr", "inputs.somepkg.someattr"])
+        );
+    }
+
+    #[test]
+    fn import_cycle_terminates_and_collects_refs() {
+        let got = refs_at(
+            "test_data/catalog_refs/import-cycle/entry.nix",
+            &roots(&["catalogs"]),
+        );
+        assert_eq!(
+            got,
+            set(&["catalogs.myorg.cycle-pkg", "catalogs.myorg.entry-pkg"])
+        );
+    }
+
+    #[test]
     fn import_unreadable_target_fails_scan() {
         // The import target cannot be read, so the refs it would contribute
         // through the forwarded namespaces cannot be discovered; the scan
@@ -3364,8 +3471,9 @@ mod tests {
             &content,
             &roots(&["catalogs"]),
             path.parent(),
-            &mut HashSet::new(),
+            &mut HashMap::new(),
             Some(path),
+            &identity_origins(&roots(&["catalogs"])),
         )
         .expect_err("scan should fail");
         assert_eq!(err, ScanError::UndeclaredRoot {
