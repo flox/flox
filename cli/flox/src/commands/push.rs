@@ -99,7 +99,7 @@ impl Push {
                 cant_change_owner_error(remote_environment.pointer(), owner)?
             },
             (ConcreteEnvironment::Path(path_environment), owner) => {
-                handle_path_environment_push(&flox, path_environment, owner, self.force)?
+                handle_path_environment_push(&flox, path_environment, owner, self.force).await?
             },
             (ConcreteEnvironment::Managed(managed_environment), None) => {
                 handle_managed_environment_push(&flox, managed_environment, self.force)?
@@ -113,7 +113,7 @@ impl Push {
     }
 }
 
-fn handle_path_environment_push(
+async fn handle_path_environment_push(
     flox: &Flox,
     path_environment: PathEnvironment,
     owner: Option<EnvironmentOwner>,
@@ -125,6 +125,7 @@ fn handle_path_environment_push(
         EnvironmentOwner::from_str(
             &flox
                 .get_identity()
+                .await
                 .ok()
                 .flatten()
                 .map(|identity| identity.handle)

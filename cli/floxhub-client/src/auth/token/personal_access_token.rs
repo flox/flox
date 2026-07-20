@@ -56,7 +56,7 @@ mod tests {
         let token = PersonalAccessToken::new("flox_pat_handle-cache-test".to_string());
         assert_eq!(token.handle(), None, "handle is unknown before resolution");
 
-        identity::resolve_and_cache(token.secret(), |_| Ok(test_identity("testuser"))).unwrap();
+        identity::cache_identity(token.secret(), &test_identity("testuser"));
         assert_eq!(token.handle(), Some("testuser".to_string()));
     }
 

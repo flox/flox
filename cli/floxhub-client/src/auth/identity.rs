@@ -69,25 +69,12 @@ pub(crate) fn cached_identity(secret: &str) -> Option<UserIdentity> {
         .cloned()
 }
 
-/// Return the cached identity for `secret`, running `resolve` to fill the
-/// cache when it has not been resolved yet. A failed resolution is returned
-/// but not cached.
-///
-/// The lock is not held while resolving — the request can take seconds and
-/// must not block concurrent readers of the cache.
-pub(crate) fn resolve_and_cache(
-    secret: &str,
-    resolve: impl FnOnce(&str) -> Result<UserIdentity, IdentityError>,
-) -> Result<UserIdentity, IdentityError> {
-    if let Some(identity) = cached_identity(secret) {
-        return Ok(identity);
-    }
-    let identity = resolve(secret)?;
+/// Cache a successfully resolved identity for `secret`.
+pub(crate) fn cache_identity(secret: &str, identity: &UserIdentity) {
     RESOLVED_IDENTITIES
         .lock()
         .expect("identity cache is never poisoned")
         .insert(secret.to_string(), identity.clone());
-    Ok(identity)
 }
 
 /// Test fixtures for identity resolution.
@@ -106,8 +93,6 @@ pub mod test_helpers {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::atomic::{AtomicUsize, Ordering};
-
     use super::test_helpers::test_identity;
     use super::*;
 
@@ -115,50 +100,14 @@ mod tests {
     // binary — each test must use a unique secret.
 
     #[test]
-    fn identity_resolves_and_caches_per_secret() {
-        let calls = AtomicUsize::new(0);
-        let resolve = |_: &str| {
-            calls.fetch_add(1, Ordering::SeqCst);
-            Ok(test_identity("testuser"))
-        };
+    fn identity_cache_round_trips_per_secret() {
+        assert_eq!(cached_identity("flox_pat_cache-round-trip-test"), None);
 
-        resolve_and_cache("flox_pat_success-cache-test", resolve).unwrap();
-        resolve_and_cache("flox_pat_success-cache-test", resolve).unwrap();
+        cache_identity("flox_pat_cache-round-trip-test", &test_identity("testuser"));
 
-        assert_eq!(calls.load(Ordering::SeqCst), 1);
         assert_eq!(
-            cached_identity("flox_pat_success-cache-test").unwrap(),
+            cached_identity("flox_pat_cache-round-trip-test").unwrap(),
             test_identity("testuser")
         );
-    }
-
-    #[test]
-    fn identity_resolution_failures_are_retried() {
-        let calls = AtomicUsize::new(0);
-
-        resolve_and_cache("flox_pat_retry-test", |_: &str| {
-            calls.fetch_add(1, Ordering::SeqCst);
-            Err(IdentityError::Other("server unreachable".to_string()))
-        })
-        .expect_err("an unreachable server should fail resolution");
-        assert_eq!(
-            cached_identity("flox_pat_retry-test"),
-            None,
-            "a failure is not cached"
-        );
-
-        // The next call retries — and its success is cached.
-        resolve_and_cache("flox_pat_retry-test", |_: &str| {
-            calls.fetch_add(1, Ordering::SeqCst);
-            Ok(test_identity("testuser"))
-        })
-        .unwrap();
-        resolve_and_cache("flox_pat_retry-test", |_: &str| {
-            calls.fetch_add(1, Ordering::SeqCst);
-            Ok(test_identity("testuser"))
-        })
-        .unwrap();
-
-        assert_eq!(calls.load(Ordering::SeqCst), 2);
     }
 }

@@ -142,7 +142,8 @@ impl Pull {
                         progress = start_message.as_str());
                 let _guard = span.entered();
 
-                Self::pull_new_environment(&flox, dir, remote, copy, self.force, generation)?;
+                Self::pull_new_environment(&flox, dir, remote, copy, self.force, generation)
+                    .await?;
             },
             PullSelect::RemoteUpdate { environment, copy } => {
                 let environment = environment
@@ -298,7 +299,7 @@ impl Pull {
     ///
     /// If the directory already exists, this will fail early.
     /// If opening the environment fails, the .flox/ directory will be cleaned up.
-    fn pull_new_environment(
+    async fn pull_new_environment(
         flox: &Flox,
         env_path: PathBuf,
         env_ref: RemoteEnvironmentRef,
@@ -350,8 +351,10 @@ impl Pull {
         fs::write(pointer_path, pointer_content).context("Could not write pointer")?;
 
         let mut env = {
-            let result = ManagedEnvironment::open(flox, pointer, &dot_flox_path, None)
-                .map_err(|err| Self::handle_open_error_during_pull_new(flox, err));
+            let result = match ManagedEnvironment::open(flox, pointer, &dot_flox_path, None) {
+                Ok(env) => Ok(env),
+                Err(err) => Err(Self::handle_open_error_during_pull_new(flox, err).await),
+            };
             match result {
                 Err(err) => {
                     fs::remove_dir_all(&dot_flox_path)
@@ -633,7 +636,10 @@ impl Pull {
     //    in errors.rs.
     // 3. [UpstreamNotFound] is slightly different but could be folded into a generic message as well,
     //    inlined into the caller.
-    fn handle_open_error_during_pull_new(flox: &Flox, err: EnvironmentError) -> anyhow::Error {
+    async fn handle_open_error_during_pull_new(
+        flox: &Flox,
+        err: EnvironmentError,
+    ) -> anyhow::Error {
         if let EnvironmentError::ManagedEnvironment(managed_err) = err {
             match managed_err {
                 ManagedEnvironmentError::AccessDenied => {
@@ -646,12 +652,12 @@ impl Pull {
                         upstream: _,
                         user,
                     },
-                ) => Self::format_upstream_not_found_error(flox, &env_ref, user.as_deref()),
+                ) => Self::format_upstream_not_found_error(flox, &env_ref, user.as_deref()).await,
                 ManagedEnvironmentError::UpstreamNotFound {
                     env_ref,
                     upstream: _,
                     user,
-                } => Self::format_upstream_not_found_error(flox, &env_ref, user.as_deref()),
+                } => Self::format_upstream_not_found_error(flox, &env_ref, user.as_deref()).await,
                 _ => managed_err.into(),
             }
         } else {
@@ -664,7 +670,7 @@ impl Pull {
     /// When the user is pulling their own environment with an expired token,
     /// suggests re-authentication since the "not found" error is likely due
     /// to authentication failure, not because the environment doesn't exist.
-    fn format_upstream_not_found_error(
+    async fn format_upstream_not_found_error(
         flox: &Flox,
         env_ref: &RemoteEnvironmentRef,
         user: Option<&str>,
@@ -675,7 +681,7 @@ impl Pull {
 
         // Check if the token is expired (resolving a personal access token's
         // identity if needed) - this might be why authentication failed.
-        let token_expired = match flox.get_identity() {
+        let token_expired = match flox.get_identity().await {
             Ok(Some(identity)) => identity.is_expired(),
             // An unknown identity is not "expired".
             Ok(None) => false,

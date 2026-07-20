@@ -97,9 +97,9 @@ impl Flox {
 
     /// The identity behind the current credential — the one uniform way to
     /// answer "who is authenticated": JWT claims for Auth0, `GET
-    /// /api/v1/accounts/me` for a personal access token (blocking; a
-    /// successful resolution is cached for the process), and the principal
-    /// for Kerberos.
+    /// /api/v1/accounts/me` for a personal access token (a successful
+    /// resolution is cached for the process), and the principal for
+    /// Kerberos.
     ///
     /// - `Ok(Some(identity))` — authenticated. Expiry is reported *in* the
     ///   identity ([`UserIdentity::is_expired`]), not as a failure — what
@@ -113,14 +113,14 @@ impl Flox {
     ///   ([`AuthFailure::NotLoggedIn`]), no Kerberos ticket
     ///   ([`AuthFailure::NoKerberosTicket`]), or the server rejected the
     ///   token ([`AuthFailure::TokenExpired`]).
-    pub fn get_identity(&self) -> Result<Option<UserIdentity>, AuthFailure> {
+    pub async fn get_identity(&self) -> Result<Option<UserIdentity>, AuthFailure> {
         match &self.auth_context {
             AuthContext::Auth0(Some(token)) => Ok(Some(UserIdentity {
                 handle: token.handle().to_string(),
                 expires_at: Some(token.expires_at()),
             })),
             AuthContext::Auth0(None) => Err(AuthFailure::NotLoggedIn),
-            AuthContext::Pat(token) => match self.floxhub_client.resolve_identity(token) {
+            AuthContext::Pat(token) => match self.floxhub_client.resolve_identity(token).await {
                 Ok(identity) => Ok(Some(identity)),
                 Err(IdentityError::Unauthorized) => Err(AuthFailure::TokenExpired),
                 Err(_) => Ok(None),
@@ -322,21 +322,24 @@ pub mod tests {
         );
     }
 
-    #[test]
-    fn get_identity_without_token_is_not_logged_in() {
+    #[tokio::test]
+    async fn get_identity_without_token_is_not_logged_in() {
         let (flox, _temp_dir) = flox_instance();
-        assert!(matches!(flox.get_identity(), Err(AuthFailure::NotLoggedIn)));
+        assert!(matches!(
+            flox.get_identity().await,
+            Err(AuthFailure::NotLoggedIn)
+        ));
     }
 
-    #[test]
-    fn get_identity_derives_jwt_identity_from_claims() {
+    #[tokio::test]
+    async fn get_identity_derives_jwt_identity_from_claims() {
         let (mut flox, _temp_dir) = flox_instance();
         let token: FloxhubToken = FAKE_TOKEN.parse().unwrap();
         let expires_at = token.expires_at();
         let _ = flox.set_auth_context(AuthContext::Auth0(Some(token)));
 
         assert_eq!(
-            flox.get_identity().unwrap(),
+            flox.get_identity().await.unwrap(),
             Some(UserIdentity {
                 handle: "test".to_string(),
                 expires_at: Some(expires_at),
@@ -344,14 +347,14 @@ pub mod tests {
         );
     }
 
-    #[test]
-    fn get_identity_reports_expiry_in_the_identity() {
+    #[tokio::test]
+    async fn get_identity_reports_expiry_in_the_identity() {
         let (mut flox, _temp_dir) = flox_instance();
         let _ = flox.set_auth_context(AuthContext::Auth0(Some(
             FAKE_EXPIRED_TOKEN.parse().unwrap(),
         )));
 
-        let identity = flox.get_identity().unwrap().unwrap();
+        let identity = flox.get_identity().await.unwrap().unwrap();
         assert_eq!(identity.handle, "test");
         assert!(identity.is_expired(), "expiry is data, not an error");
     }

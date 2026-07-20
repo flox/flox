@@ -1722,7 +1722,7 @@ pub(super) async fn ensure_auth(flox: &mut Flox) -> Result<String> {
 
     // Gating authentication is the caller that treats an expired identity
     // as a failure.
-    let identity = match flox.get_identity() {
+    let identity = match flox.get_identity().await {
         Ok(Some(identity)) if identity.is_expired() => Err(AuthFailure::TokenExpired),
         other => other,
     };
@@ -1790,7 +1790,7 @@ async fn ensure_auth_allowing_expired(flox: &mut Flox) -> Result<String> {
     // An expired identity still carries its handle; only a missing identity
     // (not logged in, no ticket, or a server-rejected token) falls back to
     // the recovery flow.
-    match flox.get_identity() {
+    match flox.get_identity().await {
         Ok(Some(identity)) => Ok(identity.handle),
         // Identity unknown: proceed under the UNKNOWN display handle.
         Ok(None) => Ok(floxhub_client::UNKNOWN_HANDLE.to_string()),

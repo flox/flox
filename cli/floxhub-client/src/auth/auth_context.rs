@@ -224,9 +224,7 @@ mod tests {
     #[test]
     fn pat_handle_reads_the_cached_identity() {
         let token = PersonalAccessToken::new("flox_pat_context-handle-test".to_string());
-        let _ = crate::auth::identity::resolve_and_cache(token.secret(), |_| {
-            Ok(test_identity("testuser"))
-        });
+        crate::auth::identity::cache_identity(token.secret(), &test_identity("testuser"));
         let auth = AuthContext::Pat(token);
 
         assert_eq!(auth.handle(), Some("testuser".to_string()));

@@ -288,7 +288,8 @@ impl Auth {
                             insecure_storage,
                             once,
                             config.flox.floxhub_token_storage,
-                        )?;
+                        )
+                        .await?;
                     },
                     None => {
                         login_flox(
@@ -551,7 +552,7 @@ fn print_login_success(handle: &str) {
 ///
 /// The token may be an Auth0 JWT or a `flox_pat_` personal access token;
 /// [AuthContext::new_from_token] routes by the token's form.
-pub fn login_with_token_file(
+pub async fn login_with_token_file(
     flox: &mut Flox,
     token_file: &Path,
     insecure_storage: bool,
@@ -575,12 +576,12 @@ pub fn login_with_token_file(
         .context("The provided token is not a valid FloxHub token.")?;
     let _ = flox.set_auth_context(auth_context.clone());
 
-    // Validates locally for a JWT; via /me for a personal access token
-    // (blocking), where a 401 covers expired and revoked tokens alike.
+    // Validates locally for a JWT; via /me for a personal access token,
+    // where a 401 covers expired and revoked tokens alike.
     // Elsewhere an unresolvable identity degrades to the UNKNOWN handle, but
     // login exists to verify-and-store the credential — an unverifiable
     // token is a failure here, not a success.
-    let handle = match flox.get_identity() {
+    let handle = match flox.get_identity().await {
         Ok(Some(identity)) if identity.is_expired() => bail!(indoc! {"
             The provided token is expired.
             Obtain a fresh token from FloxHub and try again."
@@ -624,9 +625,9 @@ mod tests {
     /// A token-file login persists through the credential stores like an
     /// interactive one: with the OS keyring disabled it falls back to the
     /// plaintext config file rather than writing plain text unconditionally.
-    #[test]
-    fn login_with_token_file_stores_valid_token() {
-        temp_env::with_var("_FLOX_DISABLE_KEYRING", Some("true"), || {
+    #[tokio::test]
+    async fn login_with_token_file_stores_valid_token() {
+        temp_env::async_with_vars([("_FLOX_DISABLE_KEYRING", Some("true"))], async {
             let (mut flox, _temp_dir) = flox_instance();
             let token = create_test_token("test-user");
             let token_file = flox.temp_dir.join("token");
@@ -639,6 +640,7 @@ mod tests {
                 false,
                 TokenStorageMode::Keyring,
             )
+            .await
             .unwrap();
 
             assert_eq!(handle, "test-user");
@@ -654,16 +656,18 @@ mod tests {
                 panic!("expected an Auth0 auth context with a token");
             };
             assert_eq!(stored.secret(), token.secret());
-        });
+        })
+        .await;
     }
 
-    #[test]
-    fn login_with_token_file_rejects_missing_file() {
+    #[tokio::test]
+    async fn login_with_token_file_rejects_missing_file() {
         let (mut flox, _temp_dir) = flox_instance();
         let missing = flox.temp_dir.join("nonexistent");
 
         let err =
             login_with_token_file(&mut flox, &missing, false, false, TokenStorageMode::Keyring)
+                .await
                 .unwrap_err();
 
         assert_eq!(
@@ -673,8 +677,8 @@ mod tests {
         assert!(!flox.config_dir.join(FLOX_CONFIG_FILE).exists());
     }
 
-    #[test]
-    fn login_with_token_file_rejects_malformed_token() {
+    #[tokio::test]
+    async fn login_with_token_file_rejects_malformed_token() {
         let (mut flox, _temp_dir) = flox_instance();
         let token_file = flox.temp_dir.join("token");
         fs::write(&token_file, "not-a-jwt").unwrap();
@@ -686,6 +690,7 @@ mod tests {
             false,
             TokenStorageMode::Keyring,
         )
+        .await
         .unwrap_err();
 
         assert_eq!(
@@ -695,8 +700,8 @@ mod tests {
         assert!(!flox.config_dir.join(FLOX_CONFIG_FILE).exists());
     }
 
-    #[test]
-    fn login_with_token_file_stores_pat_and_resolves_handle() {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn login_with_token_file_stores_pat_and_resolves_handle() {
         let server = MockServer::start();
         server.mock(|when, then| {
             when.method(httpmock::Method::GET)
@@ -721,6 +726,7 @@ mod tests {
             false,
             TokenStorageMode::Keyring,
         )
+        .await
         .unwrap();
 
         assert_eq!(handle, "pat-user");
@@ -734,8 +740,8 @@ mod tests {
         assert!(matches!(&flox.auth_context, AuthContext::Pat(_)));
     }
 
-    #[test]
-    fn login_with_token_file_rejects_unverifiable_pat() {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn login_with_token_file_rejects_unverifiable_pat() {
         let server = MockServer::start();
         server.mock(|when, then| {
             when.method(httpmock::Method::GET)
@@ -748,7 +754,9 @@ mod tests {
         let token_file = flox.temp_dir.join("token");
         fs::write(&token_file, "flox_pat_unverifiable").unwrap();
 
-        let err = login_with_token_file(&mut flox, &token_file).unwrap_err();
+        let err = login_with_token_file(&mut flox, &token_file)
+            .await
+            .unwrap_err();
 
         assert_eq!(
             err.to_string(),
@@ -757,8 +765,8 @@ mod tests {
         assert!(!flox.config_dir.join(FLOX_CONFIG_FILE).exists());
     }
 
-    #[test]
-    fn login_with_token_file_rejects_revoked_pat() {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn login_with_token_file_rejects_revoked_pat() {
         let server = MockServer::start();
         server.mock(|when, then| {
             when.method(httpmock::Method::GET)
@@ -778,6 +786,7 @@ mod tests {
             false,
             TokenStorageMode::Keyring,
         )
+        .await
         .unwrap_err();
 
         assert_eq!(
@@ -787,8 +796,8 @@ mod tests {
         assert!(!flox.config_dir.join(FLOX_CONFIG_FILE).exists());
     }
 
-    #[test]
-    fn login_with_token_file_rejects_expired_token() {
+    #[tokio::test]
+    async fn login_with_token_file_rejects_expired_token() {
         let (mut flox, _temp_dir) = flox_instance();
         let token_file = flox.temp_dir.join("token");
         fs::write(&token_file, FAKE_EXPIRED_TOKEN).unwrap();
@@ -800,6 +809,7 @@ mod tests {
             false,
             TokenStorageMode::Keyring,
         )
+        .await
         .unwrap_err();
 
         assert_eq!(

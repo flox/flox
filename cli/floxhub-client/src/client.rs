@@ -30,7 +30,7 @@ use url::Url;
 
 use crate::MapApiErrorExt;
 use crate::accounts::{AccountsApiClient, MeError};
-use crate::auth::{AuthContext, IdentityError, PersonalAccessToken, UserIdentity};
+use crate::auth::{AuthContext, IdentityError, PersonalAccessToken, UserIdentity, identity};
 use crate::config::FloxhubClientConfig;
 use crate::error::{FloxhubClientError, ResolveError, SearchError, VersionsError};
 use crate::mock::MockGuard;
@@ -781,44 +781,32 @@ where
 
 impl FloxhubClient {
     /// Resolve the identity behind a personal access token from
-    /// `GET /api/v1/accounts/me`, blocking the calling thread. A successful
-    /// resolution is cached for the process; failures are returned but not
-    /// cached, so a later call retries.
+    /// `GET /api/v1/accounts/me`. A successful resolution is cached for the
+    /// process; failures are returned but not cached, so a later call
+    /// retries.
     ///
     /// This is the only auth operation that needs a client; every other
     /// credential kind derives its identity locally. Callers holding a
     /// [`Flox`] should use its uniform `Flox::get_identity` instead.
-    pub fn resolve_identity(
+    pub async fn resolve_identity(
         &self,
         token: &PersonalAccessToken,
     ) -> Result<UserIdentity, IdentityError> {
-        crate::auth::identity::resolve_and_cache(token.secret(), |secret| {
-            fetch_me_blocking(self, secret).map_err(|err| match err {
+        if let Some(identity) = identity::cached_identity(token.secret()) {
+            return Ok(identity);
+        }
+        let identity = self
+            .accounts()
+            .me(token.secret())
+            .await
+            .map_err(|err| match err {
                 MeError::Unauthorized => IdentityError::Unauthorized,
                 other => IdentityError::Other(other.to_string()),
             })
-        })
-        .inspect_err(|err| debug!(%err, "could not resolve identity"))
+            .inspect_err(|err| debug!(%err, "could not resolve identity"))?;
+        identity::cache_identity(token.secret(), &identity);
+        Ok(identity)
     }
-}
-
-/// Fetch the identity behind `token` from `/me`, blocking the calling thread.
-///
-/// The request runs on its own thread with its own runtime so that it can
-/// block safely from both sync and async (tokio) callers.
-fn fetch_me_blocking(client: &FloxhubClient, token: &str) -> Result<UserIdentity, MeError> {
-    std::thread::scope(|scope| {
-        scope
-            .spawn(|| {
-                tokio::runtime::Builder::new_current_thread()
-                    .enable_all()
-                    .build()
-                    .expect("failed to build runtime for /me request")
-                    .block_on(client.accounts().me(token))
-            })
-            .join()
-            .expect("/me request thread panicked")
-    })
 }
 
 // ---------------------------------------------------------------------------
@@ -970,8 +958,8 @@ pub mod tests {
     use super::*;
     const SENTRY_TRACE_HEADER: &str = "sentry-trace";
 
-    #[test]
-    fn resolve_identity_fetches_and_caches_via_me() {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn resolve_identity_fetches_and_caches_via_me() {
         let server = MockServer::start();
         let mock = server.mock(|when, then| {
             when.method(httpmock::Method::GET)
@@ -987,15 +975,15 @@ pub mod tests {
         let client = FloxhubClient::new(client_config(&server.base_url())).unwrap();
         let token = PersonalAccessToken::new("flox_pat_client-cache-test".to_string());
 
-        let identity = client.resolve_identity(&token).unwrap();
+        let identity = client.resolve_identity(&token).await.unwrap();
         assert_eq!(identity.handle, "testuser");
         // A second resolve reads the cache instead of the server.
-        client.resolve_identity(&token).unwrap();
+        client.resolve_identity(&token).await.unwrap();
         mock.assert_calls(1);
     }
 
-    #[test]
-    fn resolve_identity_maps_401_to_unauthorized() {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn resolve_identity_maps_401_to_unauthorized() {
         let server = MockServer::start();
         server.mock(|when, then| {
             when.method(httpmock::Method::GET)
@@ -1008,15 +996,15 @@ pub mod tests {
         let token = PersonalAccessToken::new("flox_pat_client-401-test".to_string());
 
         assert!(matches!(
-            client.resolve_identity(&token),
+            client.resolve_identity(&token).await,
             Err(IdentityError::Unauthorized)
         ));
     }
 
-    #[test]
-    fn resolve_identity_maps_other_failures_to_other() {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn resolve_identity_does_not_cache_failures() {
         let server = MockServer::start();
-        server.mock(|when, then| {
+        let mock = server.mock(|when, then| {
             when.method(httpmock::Method::GET)
                 .path("/api/v1/accounts/me");
             then.status(500);
@@ -1026,9 +1014,15 @@ pub mod tests {
         let token = PersonalAccessToken::new("flox_pat_client-500-test".to_string());
 
         assert!(matches!(
-            client.resolve_identity(&token),
+            client.resolve_identity(&token).await,
             Err(IdentityError::Other(_))
         ));
+        // The failure is not cached: a second resolve retries the server.
+        assert!(matches!(
+            client.resolve_identity(&token).await,
+            Err(IdentityError::Other(_))
+        ));
+        mock.assert_calls(2);
     }
 
     #[tokio::test]
