@@ -2752,6 +2752,51 @@ EOF
   assert_success
 }
 
+# Fabricate and install a package whose profile.d script registers an
+# extra PATH dir with flox_prepend_path, for the tests below.
+_install_prepend_path_pkg() {
+  mkdir -p "$BATS_TEST_TMPDIR/pkg/etc/profile.d" "$BATS_TEST_TMPDIR/pkg/extra-bin"
+  touch "$BATS_TEST_TMPDIR/pkg/extra-bin/.keep"
+  cat > "$BATS_TEST_TMPDIR/pkg/etc/profile.d/0900_prepend-path.sh" <<'EOF'
+flox_prepend_path "$FLOX_ENV/extra-bin"
+EOF
+  pkg_store_path="$(nix --extra-experimental-features nix-command \
+    store add --name prepend-path-test-pkg "$BATS_TEST_TMPDIR/pkg")"
+  run "$FLOX_BIN" install "$pkg_store_path"
+  assert_success
+}
+
+# PATH dirs registered with flox_prepend_path must survive the PATH
+# re-ordering performed at the end of in-place activation, staying ahead
+# of the registering environment's own bin directory.
+@test "profile.d: flox_prepend_path additions survive PATH re-ordering" {
+  project_setup
+  PROJECT_DIR="$(realpath "$PROJECT_DIR")"
+  _install_prepend_path_pkg
+
+  rendered="$PROJECT_DIR/.flox/run/${NIX_SYSTEM}.${PROJECT_NAME}-dev"
+  run bash -c 'eval "$("$FLOX_BIN" activate)"; echo "$PATH"'
+  assert_success
+  assert_line --partial "$rendered/extra-bin:$rendered/bin:$rendered/sbin"
+}
+
+# When environments are layered, a registered prepend stays with the layer
+# of the environment that registered it: environments activated later still
+# take precedence over it.
+@test "profile.d: flox_prepend_path additions are replayed at their environment's layer" {
+  project_setup
+  PROJECT_DIR="$(realpath "$PROJECT_DIR")"
+  _install_prepend_path_pkg
+  "$FLOX_BIN" init -d inner
+
+  outer="$PROJECT_DIR/.flox/run/${NIX_SYSTEM}.${PROJECT_NAME}-dev"
+  inner="$PROJECT_DIR/inner/.flox/run/${NIX_SYSTEM}.inner-dev"
+  run "$FLOX_BIN" activate -- \
+    "$FLOX_BIN" activate --dir inner -- bash -c 'echo "$PATH"'
+  assert_success
+  assert_line --partial "$inner/bin:$inner/sbin:$outer/extra-bin:$outer/bin:$outer/sbin"
+}
+
 @test "activate works with fish 3.2.2" {
   if [ "$NIX_SYSTEM" == aarch64-linux ]; then
     # running fish at all on aarch64-linux throws:

@@ -195,7 +195,7 @@ if [ "$_command_mode" = "true" ]; then
   # shellcheck disable=SC1090
   source <("$_flox_activations" set-env-dirs --shell bash --flox-env "$_FLOX_ENV" --env-dirs "${FLOX_ENV_DIRS:-}")
   # shellcheck disable=SC1090
-  source <("$_flox_activations" fix-paths --shell bash --env-dirs "$FLOX_ENV_DIRS" --path "$PATH" --manpath "${MANPATH:-}")
+  source <("$_flox_activations" fix-paths --shell bash --env-dirs "$FLOX_ENV_DIRS" --path "$PATH" --manpath "${MANPATH:-}" --path-prepends "${_FLOX_ENV_PATH_PREPENDS:-}")
 fi
 
 if [ "$_command_mode" = "false" ]; then

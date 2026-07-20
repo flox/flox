@@ -426,6 +426,9 @@ fn fixed_vars_to_export(
     let new_path = fix_path_var(
         &new_flox_env_dirs,
         &vars_from_environment.path.unwrap_or("".to_string()),
+        &vars_from_environment
+            .path_prepends
+            .unwrap_or("".to_string()),
     );
     let new_manpath = fix_manpath_var(
         &new_flox_env_dirs,

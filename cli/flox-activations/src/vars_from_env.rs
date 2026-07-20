@@ -4,12 +4,15 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
 use crate::attach_diff::FLOX_ENV_DIRS_VAR;
+use crate::cli::fix_paths::FLOX_ENV_PATH_PREPENDS_VAR;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct VarsFromEnvironment {
     pub flox_env_dirs: Option<String>,
     pub path: Option<String>,
     pub manpath: Option<String>,
+    #[serde(default)]
+    pub path_prepends: Option<String>,
     /// Full environment snapshot for activation diff computation.
     /// Populated by [`VarsFromEnvironment::get_with_snapshot`].
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -21,11 +24,13 @@ impl VarsFromEnvironment {
         let flox_env_dirs = std::env::var(FLOX_ENV_DIRS_VAR).ok();
         let path = std::env::var("PATH").ok();
         let manpath = std::env::var("MANPATH").ok();
+        let path_prepends = std::env::var(FLOX_ENV_PATH_PREPENDS_VAR).ok();
 
         Ok(Self {
             flox_env_dirs,
             path,
             manpath,
+            path_prepends,
             full_env: None,
         })
     }
@@ -41,6 +46,7 @@ impl VarsFromEnvironment {
             flox_env_dirs: all_vars.get(FLOX_ENV_DIRS_VAR).cloned(),
             path: all_vars.get("PATH").cloned(),
             manpath: all_vars.get("MANPATH").cloned(),
+            path_prepends: all_vars.get(FLOX_ENV_PATH_PREPENDS_VAR).cloned(),
             full_env: Some(all_vars),
         })
     }
