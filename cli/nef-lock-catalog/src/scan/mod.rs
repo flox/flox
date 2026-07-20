@@ -341,8 +341,11 @@ fn analyze_file_at(
     let parse = rnix::Root::parse(content);
     let root = parse.tree();
 
+    // Dependency arguments come from the eventual package function: wrappers
+    // around it (`let … in`, `with …;`, parentheses) do not change which
+    // lambda NEF calls, so they are looked through.
     let mut dep_names = HashSet::new();
-    if let Some(rnix::ast::Expr::Lambda(lambda)) = root.expr()
+    if let Some(lambda) = top_level_lambda(&root)
         && let Some(rnix::ast::Param::Pattern(pat)) = lambda.param()
     {
         for entry in pat.pat_entries() {
@@ -359,9 +362,9 @@ fn analyze_file_at(
     // arguments are supplied when NEF calls the file (callPackage semantics),
     // so a root referenced without being declared can never resolve; that is
     // reported as [ScanError::UndeclaredRoot] after the walk. `None` fails
-    // open: a file whose top level is not a plain lambda (e.g. a let-wrapped
-    // lambda) hides its parameters from the scanner, and the lenient seeding
-    // below is kept without the declaration check.
+    // open: the check applies only to a plain top-level lambda, because a
+    // wrapper's own bindings could satisfy names the check would call
+    // undeclared, and the lenient seeding below is kept without it.
     let declared_params: Option<HashSet<String>> = match root.expr() {
         Some(ast::Expr::Lambda(lambda)) => match lambda.param() {
             Some(ast::Param::IdentParam(param)) => Some(
@@ -1837,6 +1840,22 @@ fn is_root_binding(binding: &Binding) -> bool {
     matches!(binding, Binding::Path(path) if path.len() == 1)
 }
 
+/// The file's package function: the top-level lambda, looked for through
+/// wrappers (`let … in`, `with …;`, parentheses) that do not change which
+/// function the file evaluates to.
+fn top_level_lambda(root: &rnix::Root) -> Option<ast::Lambda> {
+    let mut expr = root.expr()?;
+    loop {
+        match expr {
+            ast::Expr::Lambda(lambda) => return Some(lambda),
+            ast::Expr::LetIn(let_in) => expr = let_in.body()?,
+            ast::Expr::With(with_expr) => expr = with_expr.body()?,
+            ast::Expr::Paren(paren) => expr = paren.expr()?,
+            _ => return None,
+        }
+    }
+}
+
 /// The name of a file's top-level plain lambda parameter (`cats: …`), if any.
 fn top_ident_param(content: &str) -> Option<String> {
     let root = rnix::Root::parse(content).tree();
@@ -2356,6 +2375,53 @@ mod tests {
             set(&[
                 "inputs.nixpkgs.lib",
                 "inputs.devtools-flake.packages.default",
+            ])
+        );
+    }
+
+    #[test]
+    fn dep_arguments_collected_through_wrapped_lambda() {
+        // The dependency arguments come from the eventual package function,
+        // regardless of the wrappers around it.
+        let cases: &[(&str, &[&[&str]])] = &[
+            ("{ catalogs, somedep }: catalogs.myorg.pkg", &[&["somedep"]]),
+            (
+                "let x = 1; in { catalogs, somedep }: catalogs.myorg.pkg",
+                &[&["somedep"]],
+            ),
+            (
+                "with builtins; { catalogs, somedep }: catalogs.myorg.pkg",
+                &[&["somedep"]],
+            ),
+            ("({ catalogs, somedep }: catalogs.myorg.pkg)", &[&[
+                "somedep",
+            ]]),
+        ];
+        for (content, expected) in cases {
+            let expected: Vec<Vec<String>> = expected
+                .iter()
+                .map(|dep| dep.iter().map(|s| s.to_string()).collect())
+                .collect();
+            assert_eq!(
+                analyze_file(content, &roots(&["catalogs"])).deps,
+                expected,
+                "content: {content}"
+            );
+        }
+    }
+
+    #[test]
+    fn scan_package_follows_dep_of_wrapped_lambda() {
+        let base_dir = Path::new("test_data/catalog_refs");
+        // dep-entry-wrapped.nix wraps the package function in `let … in`; the
+        // `dep-helper` dependency argument must still pull the sibling's refs
+        // into the closure.
+        let got = scan_package(base_dir, Path::new("dep-entry-wrapped.nix")).unwrap();
+        assert_eq!(
+            got,
+            refset(&[
+                "catalogs.myorg.toolkit.readVersion",
+                "catalogs.myorg.python3Packages.alpha-lib",
             ])
         );
     }
