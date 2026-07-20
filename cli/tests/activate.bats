@@ -2809,6 +2809,37 @@ EOF
   assert_line --partial "$inner/bin:$inner/sbin:$outer/extra-bin:$outer/bin:$outer/sbin"
 }
 
+# A shell attaching to an already-running activation computes PATH from the
+# replayed activation state rather than by running profile.d scripts again;
+# the registered prepend must survive there too.
+# bats test_tags=activate,activate:attach
+@test "profile.d: flox_prepend_path additions survive attach" {
+  project_setup
+  PROJECT_DIR="$(realpath "$PROJECT_DIR")"
+  _install_prepend_path_pkg
+
+  mkfifo activate_started_fifo
+  # Will get cat'ed in teardown
+  TEARDOWN_FIFO="$PROJECT_DIR/teardown_activate"
+  mkfifo "$TEARDOWN_FIFO"
+
+  # Start an activation and keep it running.
+  "$FLOX_BIN" activate -c "bash -c \"echo > activate_started_fifo && echo > $TEARDOWN_FIFO\"" >> output 2>&1 &
+  cat activate_started_fifo
+
+  rendered="$PROJECT_DIR/.flox/run/${NIX_SYSTEM}.${PROJECT_NAME}-dev"
+
+  # Command-mode attach.
+  run --separate-stderr "$FLOX_BIN" activate -- bash -c 'echo "$PATH"'
+  assert_success
+  assert_line --partial "$rendered/extra-bin:$rendered/bin:$rendered/sbin"
+
+  # In-place attach.
+  run bash -c 'eval "$("$FLOX_BIN" activate)"; echo "$PATH"'
+  assert_success
+  assert_line --partial "$rendered/extra-bin:$rendered/bin:$rendered/sbin"
+}
+
 @test "activate works with fish 3.2.2" {
   if [ "$NIX_SYSTEM" == aarch64-linux ]; then
     # running fish at all on aarch64-linux throws:
