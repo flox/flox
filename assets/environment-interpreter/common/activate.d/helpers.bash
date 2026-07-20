@@ -46,6 +46,8 @@ function source_profile_d {
 #
 # <dir> must not contain ':' (illegal in PATH anyway) or '=' — entries
 # are stored as colon-separated "<env>=<dir>" pairs without escaping.
+# The same holds for the environment's own path; a mangled entry never
+# matches at replay and is dropped with a debug-level diagnostic.
 function flox_prepend_path {
   local _dir="${1?}"
   local _env="${FLOX_ENV?}"

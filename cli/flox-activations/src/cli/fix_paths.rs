@@ -148,6 +148,19 @@ pub fn prepend_dirs_to_pathlike_var(
             }
         }
     }
+    // Deactivated environments' registrations are dropped as a matter of
+    // course, but an entry that never matches is otherwise silent and hard
+    // to debug — e.g. an environment path containing '=' mangled by the
+    // unescaped "<env>=<dir>" encoding.
+    for (env_dir, prepend_dir) in per_env_prepends {
+        if !flox_env_dirs.contains(env_dir) {
+            debug!(
+                env_dir = %env_dir.display(),
+                prepend_dir = %prepend_dir.display(),
+                "dropping PATH prepend registered against an environment not in FLOX_ENV_DIRS"
+            );
+        }
+    }
     // This is an empty string caused by splitting on a leading ':' or by
     // splitting a '::' (as found in MANPATH). We don't want to dedup these.
     let empty = PathBuf::from("");
