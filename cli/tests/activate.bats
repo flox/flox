@@ -2752,12 +2752,16 @@ EOF
   assert_success
 }
 
-# Fabricate and install a package whose profile.d script registers an
-# extra PATH dir with flox_prepend_path, for the tests below.
+# Fabricate and install a package whose profile.d scripts register an
+# extra PATH dir with flox_prepend_path, for the tests below. Two scripts
+# register the same dir to cover the helper's idempotency.
 _install_prepend_path_pkg() {
   mkdir -p "$BATS_TEST_TMPDIR/pkg/etc/profile.d" "$BATS_TEST_TMPDIR/pkg/extra-bin"
   touch "$BATS_TEST_TMPDIR/pkg/extra-bin/.keep"
   cat > "$BATS_TEST_TMPDIR/pkg/etc/profile.d/0900_prepend-path.sh" <<'EOF'
+flox_prepend_path "$FLOX_ENV/extra-bin"
+EOF
+  cat > "$BATS_TEST_TMPDIR/pkg/etc/profile.d/0901_prepend-path-again.sh" <<'EOF'
 flox_prepend_path "$FLOX_ENV/extra-bin"
 EOF
   pkg_store_path="$(nix --extra-experimental-features nix-command \
@@ -2778,6 +2782,14 @@ EOF
   run bash -c 'eval "$("$FLOX_BIN" activate)"; echo "$PATH"'
   assert_success
   assert_line --partial "$rendered/extra-bin:$rendered/bin:$rendered/sbin"
+
+  # Command mode runs fix-paths before profile.d and has no trailing
+  # re-order to dedup PATH, so the helper itself must be idempotent when
+  # two scripts register the same dir.
+  run --separate-stderr "$FLOX_BIN" activate -- bash -c 'echo "$PATH"'
+  assert_success
+  occurrences="$(echo "$output" | tr ':' '\n' | grep -cx "$rendered/extra-bin")"
+  assert_equal "$occurrences" 1
 }
 
 # When environments are layered, a registered prepend stays with the layer

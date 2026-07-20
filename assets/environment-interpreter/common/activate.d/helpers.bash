@@ -47,15 +47,19 @@ function flox_prepend_path {
   local _dir="${1?}"
   local _env="${2:-${FLOX_ENV?}}"
   case ":${_FLOX_ENV_PATH_PREPENDS:-}:" in
-    *":$_env=$_dir:"*) : ;; # already registered
+    # Already registered: within an activation a registration is always
+    # accompanied by its PATH entry (set together below, or inherited
+    # along with the PATH that already contains the dir), so skip the
+    # prepend as well to keep repeated calls from duplicating it.
+    *":$_env=$_dir:"*) : ;;
     *)
       export _FLOX_ENV_PATH_PREPENDS="$_env=$_dir${_FLOX_ENV_PATH_PREPENDS:+:$_FLOX_ENV_PATH_PREPENDS}"
+      # Take effect immediately in this shell; subsequent fix-paths
+      # invocations keep the dir ordered with its environment's layer.
+      PATH="$_dir:$PATH"
+      export PATH
       ;;
   esac
-  # Take effect immediately in this shell; subsequent fix-paths
-  # invocations keep the dir ordered with its environment's layer.
-  PATH="$_dir:$PATH"
-  export PATH
 }
 
 # set_manifest_vars <flox_env>
