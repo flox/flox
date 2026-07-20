@@ -228,7 +228,9 @@ impl From<v1_12_0::Services> for ProcessComposeConfig {
             .into_iter()
             .map(|(name, service)| {
                 let command = service.command;
-                let environment = service.vars.map(|vars| vars.inner().clone());
+                let environment = service
+                    .vars
+                    .map(|vars| vars.into_inner().into_iter().collect());
                 (name, ProcessConfig {
                     command,
                     vars: environment,

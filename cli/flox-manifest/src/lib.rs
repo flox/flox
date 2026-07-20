@@ -712,6 +712,35 @@ impl JsonSchema for Manifest<TypedOnly> {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use pretty_assertions::assert_eq;
+
+    use crate::Manifest;
+    use crate::interfaces::AsLatestSchema;
+    use crate::parsed::Inner;
+    use crate::parsed::common::KnownSchemaVersion;
+
+    #[test]
+    fn parse_json_preserves_vars_order() {
+        let json = format!(
+            r#"{{"schema-version": "{}", "vars": {{"zebra": "stripes", "apple": "fruit", "mango": "tropical"}}}}"#,
+            KnownSchemaVersion::latest()
+        );
+
+        let manifest = Manifest::parse_json(&json).unwrap();
+        let migrated = manifest.migrate_typed_only(None).unwrap();
+        let keys = migrated
+            .as_latest_schema()
+            .vars
+            .inner()
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>();
+        assert_eq!(keys, ["zebra", "apple", "mango"]);
+    }
+}
+
 #[cfg(any(test, feature = "tests"))]
 pub mod test_helpers {
     use indoc::formatdoc;

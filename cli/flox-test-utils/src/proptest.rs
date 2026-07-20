@@ -1,5 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
+use indexmap::IndexMap;
 use prop::option;
 use proptest::collection::{btree_map, btree_set as prop_btree_set, vec as prop_vec};
 use proptest::prelude::*;
@@ -68,6 +69,16 @@ pub fn btree_map_strategy<T: Arbitrary>(
     max_keys: usize,
 ) -> impl Strategy<Value = BTreeMap<String, T>> {
     btree_map(alphanum_string(key_max_size), any::<T>(), 0..max_keys)
+}
+
+/// Produces insertion-ordered maps whose keys are strings that only contain
+/// alphanumeric characters, in a randomized (not sorted) order.
+pub fn index_map_strategy<T: Arbitrary>(
+    key_max_size: usize,
+    max_keys: usize,
+) -> impl Strategy<Value = IndexMap<String, T>> {
+    prop_vec((alphanum_string(key_max_size), any::<T>()), 0..max_keys)
+        .prop_map(|pairs| pairs.into_iter().collect())
 }
 
 /// Produces optional maps with limited sizes for performance reasons

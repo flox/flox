@@ -1080,6 +1080,23 @@ EOF
   assert_output --partial "baz"
 }
 
+# bats test_tags=activate,activate:envVar
+@test "activate renders vars in manifest order so entries can reference earlier entries" {
+  project_setup
+  ORDERED_VARS=$(
+    cat <<EOF
+[vars]
+zzz_base = "base"
+aaa_derived = "\${zzz_base}-derived"
+EOF
+  )
+  sed -i -e "s/^\[vars\]/${ORDERED_VARS//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
+
+  FLOX_SHELL="bash" NO_COLOR=1 run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -c 'echo "$aaa_derived"'
+  assert_success
+  assert_output --partial "base-derived"
+}
+
 # ---------------------------------------------------------------------------- #
 
 # bats test_tags=activate,activate:envVar-before-hook
