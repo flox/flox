@@ -109,10 +109,7 @@ impl Pull {
                 // detail directly from the `RemoteRef` to match the
                 // legacy `managed_environment = remote.to_string()`
                 // extra above (spec AC #2).
-                let env_detail = EnvDetail {
-                    env_kind: "managed".to_string(),
-                    env_ref_or_name: remote.to_string(),
-                };
+                let env_detail = EnvDetail::new("managed", remote.to_string());
                 if let Err(err) = EventsHub::global().record_event(EventKind::CliEnvironmentPull(
                     CliEnvironmentPayload::new(env_detail),
                 )) {

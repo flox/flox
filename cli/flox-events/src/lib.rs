@@ -190,23 +190,23 @@ pub struct CommandPayload {
     /// Subcommand name derived from the parsed bpaf command (e.g. `install`,
     /// `activate`, or nested `services::start` using the `parent::child`
     /// join encoding).
-    pub subcommand: String,
+    subcommand: String,
     /// Flox CLI version string.
-    pub flox_version: String,
+    flox_version: String,
     /// Coarse operating system family (e.g. `Mac OS`, `Linux`).
-    pub os_family: Option<String>,
+    os_family: Option<String>,
     /// OS family release version.
-    pub os_family_release: Option<String>,
+    os_family_release: Option<String>,
     /// Linux distribution id (e.g. `ubuntu`); `None` outside Linux.
-    pub os: Option<String>,
+    os: Option<String>,
     /// Linux distribution version (e.g. `22.04`); `None` outside Linux.
-    pub os_version: Option<String>,
+    os_version: Option<String>,
     /// CLI flags that were observed empty on this invocation. Reserved for
     /// the per-command instrumentation PRs.
-    pub empty_flags: Vec<String>,
+    empty_flags: Vec<String>,
     /// Tokens describing how this CLI invocation was launched (shell, prompt,
     /// service runner, etc.). Mirrors the legacy `INVOCATION_SOURCES`.
-    pub invocation_sources: Vec<String>,
+    invocation_sources: Vec<String>,
 }
 
 /// Static slice of [`CommandPayload`] that is constant for the duration of
@@ -257,7 +257,7 @@ impl SharedMetadataTemplate {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CliCommandRunPayload {
     #[serde(flatten)]
-    pub command: CommandPayload,
+    command: CommandPayload,
 }
 
 impl CliCommandRunPayload {
@@ -291,12 +291,12 @@ pub struct LifecycleFields {
 /// `cli.command_run` event, joinable by `invocation_id`.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CliCommandCompletedPayload {
-    pub subcommand: String,
+    subcommand: String,
     /// The dispatch lifecycle (exit code, duration, error kind). `Option` so
     /// the wire shape stays field-additive for any client that predates
     /// lifecycle reporting.
     #[serde(flatten)]
-    pub lifecycle: Option<LifecycleFields>,
+    lifecycle: Option<LifecycleFields>,
 }
 
 impl CliCommandCompletedPayload {
@@ -317,11 +317,20 @@ pub struct EnvDetail {
     /// the command operated on. `"managed"` is also used for `flox pull`'s
     /// `NewAbbreviated` branch, where only the remote ref is known at
     /// emission time.
-    pub env_kind: String,
+    env_kind: String,
     /// The environment's identifier — the result of `env_ref().to_string()`
     /// for remote and managed environments, and `Environment::name(...)`
     /// for path environments. Matches the value the legacy macros emit.
-    pub env_ref_or_name: String,
+    env_ref_or_name: String,
+}
+
+impl EnvDetail {
+    pub fn new(env_kind: impl Into<String>, env_ref_or_name: impl Into<String>) -> Self {
+        Self {
+            env_kind: env_kind.into(),
+            env_ref_or_name: env_ref_or_name.into(),
+        }
+    }
 }
 
 /// Payload shared by every environment event that carries env detail and
@@ -332,7 +341,7 @@ pub struct EnvDetail {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CliEnvironmentPayload {
     #[serde(flatten)]
-    pub env_detail: EnvDetail,
+    env_detail: EnvDetail,
 }
 
 impl CliEnvironmentPayload {
@@ -349,17 +358,17 @@ impl CliEnvironmentPayload {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CliEnvironmentActivatePayload {
     #[serde(flatten)]
-    pub env_detail: EnvDetail,
+    env_detail: EnvDetail,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub start_services: Option<bool>,
+    start_services: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub mode: Option<String>,
+    mode: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub has_includes: Option<bool>,
+    has_includes: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub lockfile_version: Option<String>,
+    lockfile_version: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub shell: Option<String>,
+    shell: Option<String>,
 }
 
 impl CliEnvironmentActivatePayload {
@@ -433,8 +442,8 @@ pub enum PackageOutcome {
 pub struct CliPackagePayload {
     /// Per-package identifier matching what the legacy `failed_packages`
     /// string packed (catalog `pkg_path`, flake URL, or store path).
-    pub package: String,
-    pub outcome: PackageOutcome,
+    package: String,
+    outcome: PackageOutcome,
 }
 
 impl CliPackagePayload {
@@ -454,12 +463,12 @@ impl CliPackagePayload {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CliEnvironmentEditPayload {
     #[serde(flatten)]
-    pub env_detail: EnvDetail,
+    env_detail: EnvDetail,
     /// `true` when the edit produced a change to one of the included
     /// environments referenced by the manifest. `None` on the eager
     /// env-detail emit; `Some(bool)` on the result-known emit.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub edited_includes: Option<bool>,
+    edited_includes: Option<bool>,
 }
 
 impl CliEnvironmentEditPayload {
@@ -481,15 +490,15 @@ impl CliEnvironmentEditPayload {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CliEnvironmentPublishPayload {
     #[serde(flatten)]
-    pub env_detail: EnvDetail,
+    env_detail: EnvDetail,
     /// `true` when the manifest uses an `expression` build kind for
     /// the published package; `None` on the eager env-detail emit.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub has_expression_build: Option<bool>,
+    has_expression_build: Option<bool>,
     /// `true` when the manifest uses a `manifest` build kind for the
     /// published package; `None` on the eager env-detail emit.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub has_manifest_build: Option<bool>,
+    has_manifest_build: Option<bool>,
 }
 
 impl CliEnvironmentPublishPayload {
@@ -518,10 +527,10 @@ impl CliEnvironmentPublishPayload {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CliEnvironmentGenerationsListPayload {
     #[serde(flatten)]
-    pub env_detail: EnvDetail,
+    env_detail: EnvDetail,
     /// `true` when invoked with `--tree`.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub request_tree: Option<bool>,
+    request_tree: Option<bool>,
 }
 
 impl CliEnvironmentGenerationsListPayload {
@@ -546,8 +555,8 @@ impl CliEnvironmentGenerationsListPayload {
 /// per-invocation build-kind detection flags.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CliBuildPayload {
-    pub has_expression_build: bool,
-    pub has_manifest_build: bool,
+    has_expression_build: bool,
+    has_manifest_build: bool,
 }
 
 impl CliBuildPayload {
@@ -564,7 +573,7 @@ impl CliBuildPayload {
 /// "search", "search_term" = …)` extras.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CliSearchPayload {
-    pub search_term: String,
+    search_term: String,
 }
 
 impl CliSearchPayload {
