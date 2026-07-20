@@ -505,7 +505,7 @@ pub async fn get_base_nixpkgs_url(
 }
 
 pub mod test_helpers {
-    use floxhub_client::{AuthContext, AuthnMode, DEFAULT_CATALOG_URL};
+    use floxhub_client::{AuthContext, DEFAULT_CATALOG_URL};
     use pollster::FutureExt;
 
     use super::*;
@@ -583,8 +583,7 @@ pub mod test_helpers {
             base_url: "https://not_used".to_string(),
             extra_headers: Default::default(),
             mock_mode: FloxhubMockMode::Replay(path.as_ref().to_path_buf()),
-            auth_context: AuthContext::from_mode(&AuthnMode::Auth0, None)
-                .expect("no token to parse"),
+            auth_context: AuthContext::new_from_token(None).expect("no token to parse"),
             user_agent: None,
             // Replays the mk_data-generated cassette store
             // (test_data/generated/resolve/*.yaml), recorded without a
@@ -866,7 +865,7 @@ pub mod test_helpers {
             base_url: base_url.to_string(),
             extra_headers: Default::default(),
             mock_mode: FloxhubMockMode::None,
-            auth_context: AuthContext::from_mode(&AuthnMode::Auth0, Some(admin_token)),
+            auth_context: AuthContext::Auth0(Some(admin_token)),
             user_agent: None,
             stability: None,
         };

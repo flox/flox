@@ -2,9 +2,9 @@
 //!
 //! [`AuthContext`] is the central credential type threaded through the CLI:
 //! it captures both the *kind* of authentication in use (Auth0 / PAT /
-//! Kerberos) and the material available for that kind. It is built from the
-//! configured [`AuthnMode`] and the stored token via
-//! [`AuthContext::from_mode`].
+//! Kerberos) and the material available for that kind. It is built via
+//! [`AuthContext::new_from_token`] (routing by the token's form) or
+//! [`AuthContext::new_kerberos`].
 //!
 //! This module carries no transport: the identity behind an opaque token is
 //! resolved at the point of use through `FloxhubClient::resolve_identity`
@@ -12,7 +12,6 @@
 //!
 //! One file per type:
 //! - [`auth_context`]: [`AuthContext`] and its failure types
-//! - [`authn_mode`]: the configured [`AuthnMode`]
 //! - [`identity`]: [`UserIdentity`] and its resolution errors
 //! - [`token`]: [`FloxhubToken`] (decoded Auth0 JWT) and
 //!   [`PersonalAccessToken`] (opaque `flox_pat_` token with lazy identity
@@ -20,13 +19,11 @@
 //! - [`kerberos`]: [`KerberosMaterial`] and SPNEGO token generation
 
 mod auth_context;
-mod authn_mode;
 pub(crate) mod identity;
 mod kerberos;
 mod token;
 
 pub use auth_context::{AuthContext, AuthFailure, AuthHeaderError};
-pub use authn_mode::AuthnMode;
 pub use identity::{IdentityError, UNKNOWN_HANDLE, UserIdentity};
 pub use kerberos::{KerberosMaterial, TokenGenerator};
 pub use token::{FloxhubToken, FloxhubTokenError, PersonalAccessToken};

@@ -8,7 +8,6 @@ use flox_core::vars::FLOX_VERSION_STRING;
 pub use floxhub_client::{
     AuthContext,
     AuthFailure,
-    AuthnMode,
     FloxhubToken,
     FloxhubTokenError,
     PersonalAccessToken,
@@ -267,8 +266,7 @@ pub mod test_helpers {
             Url::from_directory_path(mock_floxhub_git_dir).unwrap()
         });
 
-        let auth_context =
-            AuthContext::from_mode(&AuthnMode::default(), None).expect("no token to parse");
+        let auth_context = AuthContext::new_from_token(None).expect("no token to parse");
 
         let flox = Flox {
             system: env!("NIX_TARGET_SYSTEM").to_string(),

@@ -935,8 +935,7 @@ pub mod test_helpers {
             base_url: url.to_string(),
             extra_headers: Default::default(),
             mock_mode: Default::default(),
-            auth_context: AuthContext::from_mode(&Default::default(), None)
-                .expect("no token to parse"),
+            auth_context: AuthContext::new_from_token(None).expect("no token to parse"),
             user_agent: None,
             stability: None,
         }

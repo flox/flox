@@ -10,7 +10,6 @@ use flox_core::floxhub::{DEFAULT_FLOXHUB_URL, Floxhub};
 use flox_core::util::message::format_error;
 use floxhub_client::{
     AuthContext,
-    AuthnMode,
     BaseCatalogInfo,
     FloxhubClient,
     FloxhubClientConfig,
@@ -196,10 +195,10 @@ fn build_client(config: &Config, floxhub_token: Option<String>) -> Result<Floxhu
         "configured catalog client",
     );
 
-    let auth_context = AuthContext::from_mode(
-        &effective_authn_mode(&config.flox.floxhub_authn_mode),
-        floxhub_token.as_deref(),
-    )?;
+    let auth_context = match config.flox.floxhub_authn_mode {
+        Some(flox_config::AuthnMode::Kerberos) => AuthContext::new_kerberos(),
+        _ => AuthContext::new_from_token(floxhub_token.as_deref())?,
+    };
 
     let config = FloxhubClientConfig {
         base_url: catalog_url,
@@ -214,16 +213,6 @@ fn build_client(config: &Config, floxhub_token: Option<String>) -> Result<Floxhu
     };
 
     Ok(FloxhubClient::new(config)?)
-}
-
-/// Resolve the configured authn mode to the client's, applying the default
-/// when unset.
-fn effective_authn_mode(mode: &Option<flox_config::AuthnMode>) -> AuthnMode {
-    match mode {
-        None => AuthnMode::default(),
-        Some(flox_config::AuthnMode::Token) => AuthnMode::Auth0,
-        Some(flox_config::AuthnMode::Kerberos) => AuthnMode::Kerberos,
-    }
 }
 
 /// Render an authentication-related catalog failure with a token-aware hint.

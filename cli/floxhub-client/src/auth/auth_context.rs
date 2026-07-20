@@ -12,7 +12,6 @@
 
 use url::Url;
 
-use crate::auth::authn_mode::AuthnMode;
 use crate::auth::kerberos::KerberosMaterial;
 use crate::auth::token::{FloxhubToken, FloxhubTokenError, PAT_PREFIX, PersonalAccessToken};
 
@@ -40,8 +39,8 @@ pub struct AuthHeaderError(pub String);
 
 /// Authentication context threaded through the CLI.
 ///
-/// Each variant corresponds to a configured [`AuthnMode`](super::AuthnMode)
-/// and wraps an `Option` of the material for that mode:
+/// Each variant corresponds to a kind of authentication and wraps an
+/// `Option` of the material for that kind:
 ///
 /// - `Auth0(Some(token))` — logged in via Auth0, token may or may not be
 ///   expired (checked lazily).
@@ -130,28 +129,28 @@ impl AuthContext {
         }
     }
 
-    /// Create an [`AuthContext`] from the configured [`AuthnMode`] and the
-    /// stored token, both of which are needed to pick the right material:
+    /// Create an [`AuthContext`] from a stored token, routing by the
+    /// token's form:
     ///
-    /// - Auth0 + `flox_pat_` token: [`AuthContext::Pat`] — the token stays
-    ///   opaque; its identity is resolved at the point of use.
-    /// - Auth0 + any other token: must decode as a JWT →
-    ///   [`AuthContext::Auth0`].
-    /// - Auth0 + no token: `Auth0(None)` (not logged in).
-    /// - Kerberos: resolves the principal and embeds a SPNEGO token
-    ///   generator; returns `Kerberos(None)` (with a warning log) if the
-    ///   ticket cannot be resolved. The token is not consumed.
-    pub fn from_mode(mode: &AuthnMode, token: Option<&str>) -> Result<Self, FloxhubTokenError> {
-        match mode {
-            AuthnMode::Auth0 => match token {
-                Some(token) if token.starts_with(PAT_PREFIX) => Ok(AuthContext::Pat(
-                    PersonalAccessToken::new(token.to_string()),
-                )),
-                Some(token) => Ok(AuthContext::Auth0(Some(token.parse()?))),
-                None => Ok(AuthContext::Auth0(None)),
-            },
-            AuthnMode::Kerberos => Ok(crate::auth::kerberos::kerberos_credential()),
+    /// - `flox_pat_` token: [`AuthContext::Pat`] — the token stays opaque;
+    ///   its identity is resolved at the point of use.
+    /// - Any other token: must decode as a JWT → [`AuthContext::Auth0`].
+    /// - No token: `Auth0(None)` (not logged in).
+    pub fn new_from_token(token: Option<&str>) -> Result<Self, FloxhubTokenError> {
+        match token {
+            Some(token) if token.starts_with(PAT_PREFIX) => Ok(AuthContext::Pat(
+                PersonalAccessToken::new(token.to_string()),
+            )),
+            Some(token) => Ok(AuthContext::Auth0(Some(token.parse()?))),
+            None => Ok(AuthContext::Auth0(None)),
         }
+    }
+
+    /// Create a Kerberos [`AuthContext`]: resolves the principal and embeds
+    /// a SPNEGO token generator; returns `Kerberos(None)` (with a warning
+    /// log) if the ticket cannot be resolved. FloxHub tokens are not used.
+    pub fn new_kerberos() -> Self {
+        crate::auth::kerberos::kerberos_credential()
     }
 }
 
@@ -257,8 +256,8 @@ mod tests {
     }
 
     #[test]
-    fn from_mode_routes_pat_prefix_to_pat() {
-        let auth = AuthContext::from_mode(&AuthnMode::Auth0, Some("flox_pat_abc123")).unwrap();
+    fn new_from_token_routes_pat_prefix_to_pat() {
+        let auth = AuthContext::new_from_token(Some("flox_pat_abc123")).unwrap();
         let AuthContext::Pat(token) = auth else {
             panic!("expected Pat, got {auth:?}");
         };
@@ -266,8 +265,8 @@ mod tests {
     }
 
     #[test]
-    fn from_mode_routes_jwt_to_auth0() {
-        let auth = AuthContext::from_mode(&AuthnMode::Auth0, Some(FAKE_TOKEN)).unwrap();
+    fn new_from_token_routes_jwt_to_auth0() {
+        let auth = AuthContext::new_from_token(Some(FAKE_TOKEN)).unwrap();
         let AuthContext::Auth0(Some(token)) = auth else {
             panic!("expected Auth0, got {auth:?}");
         };
@@ -275,13 +274,13 @@ mod tests {
     }
 
     #[test]
-    fn from_mode_without_token_is_not_logged_in() {
-        let auth = AuthContext::from_mode(&AuthnMode::Auth0, None).unwrap();
+    fn new_from_token_without_token_is_not_logged_in() {
+        let auth = AuthContext::new_from_token(None).unwrap();
         assert!(matches!(auth, AuthContext::Auth0(None)));
     }
 
     #[test]
-    fn from_mode_rejects_garbage() {
-        AuthContext::from_mode(&AuthnMode::Auth0, Some("not-a-token")).unwrap_err();
+    fn new_from_token_rejects_garbage() {
+        AuthContext::new_from_token(Some("not-a-token")).unwrap_err();
     }
 }

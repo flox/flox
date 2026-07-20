@@ -22,7 +22,7 @@
 //!     base_url: "https://api.flox.dev".to_string(),
 //!     extra_headers: BTreeMap::new(),
 //!     mock_mode: FloxhubMockMode::None,
-//!     auth_context: AuthContext::from_mode(&Default::default(), floxhub_token)?,
+//!     auth_context: AuthContext::new_from_token(floxhub_token)?,
 //!     user_agent: Some("flox-cli/1.0".to_string()),
 //!     stability: FloxhubClientConfig::stability_from_env(),
 //! };

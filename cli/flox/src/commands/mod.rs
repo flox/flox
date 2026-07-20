@@ -43,7 +43,7 @@ use flox_core::floxhub::{DEFAULT_FLOXHUB_URL, Floxhub};
 use flox_core::vars::FLOX_DISABLE_METRICS_VAR;
 use flox_manifest::interfaces::AsLatestSchema;
 use flox_manifest::{Manifest, TypedOnly};
-use flox_rust_sdk::flox::{AuthContext, AuthnMode, FLOX_VERSION, Flox, FloxhubTokenError};
+use flox_rust_sdk::flox::{AuthContext, FLOX_VERSION, Flox, FloxhubTokenError};
 use flox_rust_sdk::models::env_registry;
 use flox_rust_sdk::models::env_registry::{ENV_REGISTRY_FILENAME, EnvRegistry};
 use flox_rust_sdk::models::environment::generations::GenerationId;
@@ -320,12 +320,10 @@ impl FloxArgs {
 
         let floxhub = Floxhub::new(floxhub_url, api_url_override, git_url_override)?;
 
-        let authn_mode = effective_authn_mode(&config);
-
         // Resolve the token string once, upstream: opportunistically migrate an
         // existing plaintext token into the OS keyring, then — when the merged
         // config supplied no token — populate it from the keyring so the loud
-        // `resolve_floxhub_token`, the silent `init_floxhub_client`, and the
+        // `resolve_auth_context`, the silent `init_floxhub_client`, and the
         // v2-events client's `auth_subject` snapshot all see the keyring
         // value. This block must stay ahead of the token resolution and the
         // events-client install below.
@@ -334,14 +332,17 @@ impl FloxArgs {
         // flow: in other modes (e.g. Kerberos) the token is not used for
         // authentication, so a legacy `floxhub_token` must not be silently
         // moved or read, and the prompt/hook flow must do no keyring I/O.
-        // `resolve_floxhub_token` is deliberately not behind this gate — it
+        // `resolve_auth_context` is deliberately not behind this gate — it
         // still runs in the hook flow (returning the token, suppressing
         // messages) and gates on the auth mode alone. Consequently, hook-flow
         // invocations by keyring-storage users emit with `auth_subject`
         // absent — an accepted gap; a prompt hook must never trigger a
         // keyring unlock.
         let stores = CredentialStores::new(floxhub.base_url(), &config.flox.config_dir);
-        let is_auth0 = matches!(authn_mode, AuthnMode::Auth0);
+        let is_auth0 = !matches!(
+            config.flox.floxhub_authn_mode,
+            Some(flox_config::AuthnMode::Kerberos)
+        );
         let should_store_credentials = is_auth0 && !self.is_prompt_hook_flow();
         if should_store_credentials {
             match stores.resolve_into(&mut config) {
@@ -356,7 +357,7 @@ impl FloxArgs {
             }
         }
 
-        let credential = self.resolve_auth_context(&config, &authn_mode, &stores);
+        let credential = self.resolve_auth_context(&config, &stores);
 
         if let Some(events_client) = build_events_client(
             &config,
@@ -538,19 +539,20 @@ impl FloxArgs {
     /// A `flox_pat_` token is opaque: it is never parsed, never wiped as
     /// invalid, and its expiry is unknown until it is lazily resolved via
     /// /me — so no startup warning applies to it.
-    fn resolve_auth_context(
-        &self,
-        config: &Config,
-        authn_mode: &AuthnMode,
-        stores: &CredentialStores,
-    ) -> AuthContext {
+    fn resolve_auth_context(&self, config: &Config, stores: &CredentialStores) -> AuthContext {
+        // Kerberos does not use FloxHub tokens; the stored token is not
+        // consumed (and none of the token warnings below apply).
+        if let Some(flox_config::AuthnMode::Kerberos) = config.flox.floxhub_authn_mode {
+            return AuthContext::new_kerberos();
+        }
+
         let raw = config
             .flox
             .floxhub_token
             .as_deref()
             .filter(|s| !s.is_empty());
 
-        match AuthContext::from_mode(authn_mode, raw) {
+        match AuthContext::new_from_token(raw) {
             Err(FloxhubTokenError::InvalidToken(token_error)) => {
                 // The prompt hook must neither print nor rewrite the user's
                 // config; the next user-invoked command surfaces and removes
@@ -598,16 +600,6 @@ impl FloxArgs {
                 auth_context
             },
         }
-    }
-}
-
-/// Resolve the configured authn mode to the client's, applying the default
-/// when unset.
-fn effective_authn_mode(config: &Config) -> AuthnMode {
-    match config.flox.floxhub_authn_mode {
-        None => AuthnMode::default(),
-        Some(flox_config::AuthnMode::Token) => AuthnMode::Auth0,
-        Some(flox_config::AuthnMode::Kerberos) => AuthnMode::Kerberos,
     }
 }
 

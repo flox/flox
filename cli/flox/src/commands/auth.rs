@@ -7,7 +7,7 @@ use chrono::offset::Utc;
 use chrono::{DateTime, Duration};
 use flox_config::{Config, FLOX_CONFIG_FILE, TokenStorageMode};
 use flox_rust_sdk::flox::{FLOX_VERSION, Flox, FloxhubToken};
-use floxhub_client::{AuthContext, AuthnMode};
+use floxhub_client::AuthContext;
 use indoc::{formatdoc, indoc};
 use oauth2::basic::{
     BasicClient,
@@ -550,7 +550,7 @@ fn print_login_success(handle: &str) {
 /// * updates the auth context of the [Flox] instance
 ///
 /// The token may be an Auth0 JWT or a `flox_pat_` personal access token;
-/// [AuthContext::from_mode] routes by the token's form.
+/// [AuthContext::new_from_token] routes by the token's form.
 pub fn login_with_token_file(
     flox: &mut Flox,
     token_file: &Path,
@@ -571,7 +571,7 @@ pub fn login_with_token_file(
 
     let secret = contents.trim();
 
-    let auth_context = AuthContext::from_mode(&AuthnMode::Auth0, Some(secret))
+    let auth_context = AuthContext::new_from_token(Some(secret))
         .context("The provided token is not a valid FloxHub token.")?;
     let _ = flox.set_auth_context(auth_context.clone());
 
