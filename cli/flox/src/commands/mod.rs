@@ -37,7 +37,7 @@ use std::{env, fmt, mem};
 
 use anyhow::{Context, Result, anyhow, bail};
 use bpaf::{Args, Bpaf, ParseFailure, Parser, ShellComp};
-use flox_config::{Config, EnvironmentTrust, FLOX_DIR_NAME};
+use flox_config::{Config, EnvironmentTrust, FLOX_DIR_NAME, TokenStorageMode};
 use flox_core::data::environment_ref::{self, DEFAULT_NAME, RemoteEnvironmentRef};
 use flox_core::floxhub::{DEFAULT_FLOXHUB_URL, Floxhub};
 use flox_core::vars::FLOX_DISABLE_METRICS_VAR;
@@ -1676,8 +1676,13 @@ pub(super) async fn ensure_auth(flox: &mut Flox) -> Result<String> {
                 AuthFailure::NotLoggedIn => "You are not logged in to FloxHub.",
                 _ => unreachable!(),
             }));
-            // Implicit re-authentication uses the secure default store.
-            auth::login_flox(flox, false).await
+            // Implicit re-authentication stores to the secure default (keyring).
+            // The standing storage preference is not threaded through the many
+            // `ensure_auth` call sites, so an implicit re-login does not honor a
+            // `plaintext` preference; an explicit `flox auth login` does. This is
+            // an accepted limitation; see
+            // docs/superpowers/specs/2026-06-22-implicit-reauth-token-storage-followup.md.
+            auth::login_flox(flox, false, false, TokenStorageMode::Keyring).await
         },
         Err(failure) => {
             let message = match failure {

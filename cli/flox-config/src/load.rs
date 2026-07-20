@@ -203,6 +203,7 @@ mod tests {
     use toml_edit::Key;
 
     use super::*;
+    use crate::config::TokenStorageMode;
 
     // TODO: update the `xdg` crate and build `BaseDirectories` by hand with known (test) paths
     fn mock_flox_dirs() -> BaseDirectories {
@@ -270,6 +271,42 @@ mod tests {
         assert_eq!(config.flox.floxhub_url, Some(floxhub_url.parse().unwrap()));
         assert!(config.flox.disable_metrics);
         assert_eq!(config.flox.search_limit, Some(search_limit));
+    }
+
+    #[test]
+    fn floxhub_token_storage_parses_and_defaults() {
+        let user_config_dir = tempfile::tempdir().unwrap();
+        let system_config_dir = tempfile::tempdir().unwrap();
+        fs::write(system_config_dir.path().join(FLOX_CONFIG_FILE), "").unwrap();
+
+        // Absent → defaults to keyring.
+        fs::write(user_config_dir.path().join(FLOX_CONFIG_FILE), "").unwrap();
+        let config = Config::parse_with(
+            &mock_flox_dirs(),
+            user_config_dir.path(),
+            Some(system_config_dir.path()),
+            [],
+        )
+        .unwrap();
+        assert_eq!(config.flox.floxhub_token_storage, TokenStorageMode::Keyring);
+
+        // Explicit plaintext → parsed.
+        fs::write(
+            user_config_dir.path().join(FLOX_CONFIG_FILE),
+            "floxhub_token_storage = \"plaintext\"\n",
+        )
+        .unwrap();
+        let config = Config::parse_with(
+            &mock_flox_dirs(),
+            user_config_dir.path(),
+            Some(system_config_dir.path()),
+            [],
+        )
+        .unwrap();
+        assert_eq!(
+            config.flox.floxhub_token_storage,
+            TokenStorageMode::Plaintext
+        );
     }
 
     #[test]

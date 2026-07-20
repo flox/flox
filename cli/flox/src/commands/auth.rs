@@ -5,7 +5,7 @@ use anyhow::{Context, Result, bail};
 use bpaf::Bpaf;
 use chrono::offset::Utc;
 use chrono::{DateTime, Duration};
-use flox_config::Config;
+use flox_config::{Config, FLOX_CONFIG_FILE, TokenStorageMode};
 use flox_rust_sdk::flox::{FLOX_VERSION, Flox, FloxhubToken};
 use floxhub_client::{AuthContext, AuthnMode};
 use indoc::{formatdoc, indoc};
@@ -35,6 +35,7 @@ use serde::Serialize;
 use tracing::{debug, instrument};
 use url::Url;
 
+use crate::commands::general::update_config;
 use crate::utils::credential_store::{CredentialSource, CredentialStores, TokenStorage};
 use crate::utils::dialog::{Checkpoint, Dialog, WaitResult};
 use crate::utils::message;
@@ -240,6 +241,10 @@ pub enum Auth {
         /// Store the token in plain text in flox.toml instead of the OS keyring
         #[bpaf(long("insecure-storage"))]
         insecure_storage: bool,
+        /// With --insecure-storage, store plain text only for this login without
+        /// changing the saved storage preference
+        #[bpaf(long("once"))]
+        once: bool,
     },
 
     /// Logout from FloxHub
@@ -264,15 +269,35 @@ impl Auth {
             Auth::Login {
                 token_file,
                 insecure_storage,
+                once,
             } => {
                 let span = tracing::info_span!("login");
                 let _guard = span.enter();
+                // `--once` only modulates whether `--insecure-storage` persists
+                // the plain-text preference, so it is meaningless on its own.
+                // Reject the combination rather than silently ignoring it
+                // (mirrors '--generation' requiring '--copy' in 'flox pull').
+                if once && !insecure_storage {
+                    bail!("'--once' has no effect without '--insecure-storage'.");
+                }
                 match token_file {
                     Some(path) => {
-                        login_with_token_file(&mut flox, &path, insecure_storage)?;
+                        login_with_token_file(
+                            &mut flox,
+                            &path,
+                            insecure_storage,
+                            once,
+                            config.flox.floxhub_token_storage,
+                        )?;
                     },
                     None => {
-                        login_flox(&mut flox, insecure_storage).await?;
+                        login_flox(
+                            &mut flox,
+                            insecure_storage,
+                            once,
+                            config.flox.floxhub_token_storage,
+                        )
+                        .await?;
                     },
                 }
                 Ok(())
@@ -341,6 +366,19 @@ impl Auth {
                     None => {},
                 }
 
+                if config.flox.floxhub_token_storage == TokenStorageMode::Plaintext {
+                    message::plain("Token storage preference is set to plain text.");
+                    // Suggest the revert only when the preference actually
+                    // lives in the user's own flox.toml — 'flox config
+                    // --delete' cannot remove a value supplied by the
+                    // environment or the system config.
+                    if user_config_sets_token_storage(&flox.config_dir) {
+                        message::plain(
+                            "To use the keyring again, run 'flox config --delete floxhub_token_storage'.",
+                        );
+                    }
+                }
+
                 Ok(())
             },
             Auth::Token => {
@@ -367,7 +405,12 @@ impl Auth {
 // to handle different auth methods — for Kerberos, it should print a warning
 // that login is not needed (Kerberos authentication is handled externally via
 // `kinit`).
-pub async fn login_flox(flox: &mut Flox, insecure_storage: bool) -> Result<String> {
+pub async fn login_flox(
+    flox: &mut Flox,
+    insecure_storage: bool,
+    once: bool,
+    storage_pref: TokenStorageMode,
+) -> Result<String> {
     let client = create_oauth_client()?;
     let cred = authorize(client, flox.floxhub.base_url())
         .await
@@ -379,20 +422,53 @@ pub async fn login_flox(flox: &mut Flox, insecure_storage: bool) -> Result<Strin
     // set the token in the runtime config
     let token = FloxhubToken::new(cred.token)?;
 
-    complete_login(flox, token, insecure_storage)
+    complete_login(flox, token, insecure_storage, once, storage_pref)
 }
 
 /// Finish a login with a fresh, validated token, shared by the interactive
 /// and token-file flows: store the token in the OS keyring (falling back to
 /// the plaintext config file, or forced there by `--insecure-storage`), set
 /// the auth context, and report where the credential landed.
-fn complete_login(flox: &mut Flox, token: FloxhubToken, insecure_storage: bool) -> Result<String> {
+fn complete_login(
+    flox: &mut Flox,
+    token: FloxhubToken,
+    insecure_storage: bool,
+    once: bool,
+    storage_pref: TokenStorageMode,
+) -> Result<String> {
     let handle = token.handle().to_string();
 
+    // `--insecure-storage` forces plain text for this login; otherwise honor the
+    // standing storage preference.
+    let target = if insecure_storage {
+        TokenStorageMode::Plaintext
+    } else {
+        storage_pref
+    };
+
+    // Store the token where `target` says: the OS keyring (with a plaintext
+    // fallback and warning on keyring failure) or the plaintext config file
+    // (explicit 0600).
     let stores = CredentialStores::from_flox(flox);
     let storage = stores
-        .persist_login_token(token.secret(), insecure_storage)
+        .persist_login_token(token.secret(), target)
         .context("Could not store token")?;
+
+    // Persist the plain-text choice as a standing preference only when
+    // `--insecure-storage` is given without `--once`. `--once` stores plain text
+    // this one time without changing where future tokens go, so the token is
+    // re-secured to the keyring once the keyring is available again.
+    // Written only after the token store succeeded: a failed login must not
+    // leave a stale plaintext preference behind, which would also suppress the
+    // migration that re-secures an existing plain-text token.
+    if insecure_storage && !once {
+        update_config(
+            &flox.config_dir,
+            "floxhub_token_storage",
+            Some(TokenStorageMode::Plaintext),
+        )
+        .context("Could not save the token-storage preference")?;
+    }
 
     let auth_context = AuthContext::from_mode(&AuthnMode::Auth0, Some(token));
     let _ = flox.set_auth_context(auth_context);
@@ -400,14 +476,49 @@ fn complete_login(flox: &mut Flox, token: FloxhubToken, insecure_storage: bool) 
     print_login_success(&handle);
 
     if storage == TokenStorage::Plaintext {
-        message::warning(formatdoc! {"
-            {notice}
-            No OS keyring is available, or '--insecure-storage' was passed.",
-            notice = CredentialSource::plaintext_notice(&stores.plaintext_path())
-        });
+        let notice = CredentialSource::plaintext_notice(&stores.plaintext_path());
+        // Suggest a next step only where one exists: 'flox config --delete'
+        // only works when the preference is in the user's own flox.toml, and
+        // the re-secure note only holds while the standing preference is
+        // still the keyring.
+        if target != TokenStorageMode::Plaintext {
+            // The keyring was the target but storing fell back to plain text.
+            message::warning(formatdoc! {"
+                {notice}
+                No OS keyring is available."});
+        } else if user_config_sets_token_storage(&flox.config_dir) {
+            message::warning(formatdoc! {"
+                {notice}
+                To use the keyring instead, run 'flox config --delete floxhub_token_storage'."});
+        } else if storage_pref == TokenStorageMode::Keyring {
+            // Reached via '--insecure-storage --once': the standing
+            // preference is untouched, so the next command re-secures the
+            // token to the keyring.
+            message::warning(formatdoc! {"
+                {notice}
+                The token will be moved to the OS keyring on the next command."});
+        } else {
+            // Plain-text preference supplied by the environment or the system
+            // config: 'flox config --delete' cannot remove it, and no
+            // migration will run while it stands.
+            message::warning(notice);
+        }
     }
 
     Ok(handle)
+}
+
+/// Whether the user's own `flox.toml` sets `floxhub_token_storage`.
+///
+/// The merged [Config] cannot distinguish where the preference came from, and
+/// the revert suggestion in `flox auth status` is only actionable when the key
+/// is in the user file: `flox config --delete` cannot remove a value supplied
+/// by the environment or the system config.
+fn user_config_sets_token_storage(config_dir: &Path) -> bool {
+    std::fs::read_to_string(config_dir.join(FLOX_CONFIG_FILE))
+        .ok()
+        .and_then(|contents| contents.parse::<toml_edit::DocumentMut>().ok())
+        .is_some_and(|document| document.get("floxhub_token_storage").is_some())
 }
 
 /// Print the success message shared by all login flows.
@@ -427,6 +538,8 @@ pub fn login_with_token_file(
     flox: &mut Flox,
     token_file: &Path,
     insecure_storage: bool,
+    once: bool,
+    storage_pref: TokenStorageMode,
 ) -> Result<String> {
     let contents = if token_file == Path::new("-") {
         let mut contents = String::new();
@@ -446,7 +559,7 @@ pub fn login_with_token_file(
         bail!("The provided token is expired.\nObtain a fresh token from FloxHub and try again.");
     }
 
-    complete_login(flox, token, insecure_storage)
+    complete_login(flox, token, insecure_storage, once, storage_pref)
 }
 
 #[cfg(test)]
@@ -470,7 +583,14 @@ mod tests {
             let token_file = flox.temp_dir.join("token");
             fs::write(&token_file, format!("{}\n", token.secret())).unwrap();
 
-            let handle = login_with_token_file(&mut flox, &token_file, false).unwrap();
+            let handle = login_with_token_file(
+                &mut flox,
+                &token_file,
+                false,
+                false,
+                TokenStorageMode::Keyring,
+            )
+            .unwrap();
 
             assert_eq!(handle, "test-user");
             let config_contents =
@@ -491,7 +611,9 @@ mod tests {
         let (mut flox, _temp_dir) = flox_instance();
         let missing = flox.temp_dir.join("nonexistent");
 
-        let err = login_with_token_file(&mut flox, &missing, false).unwrap_err();
+        let err =
+            login_with_token_file(&mut flox, &missing, false, false, TokenStorageMode::Keyring)
+                .unwrap_err();
 
         assert_eq!(
             err.to_string(),
@@ -506,7 +628,14 @@ mod tests {
         let token_file = flox.temp_dir.join("token");
         fs::write(&token_file, "not-a-jwt").unwrap();
 
-        let err = login_with_token_file(&mut flox, &token_file, false).unwrap_err();
+        let err = login_with_token_file(
+            &mut flox,
+            &token_file,
+            false,
+            false,
+            TokenStorageMode::Keyring,
+        )
+        .unwrap_err();
 
         assert_eq!(
             err.to_string(),
@@ -521,7 +650,14 @@ mod tests {
         let token_file = flox.temp_dir.join("token");
         fs::write(&token_file, FAKE_EXPIRED_TOKEN).unwrap();
 
-        let err = login_with_token_file(&mut flox, &token_file, false).unwrap_err();
+        let err = login_with_token_file(
+            &mut flox,
+            &token_file,
+            false,
+            false,
+            TokenStorageMode::Keyring,
+        )
+        .unwrap_err();
 
         assert_eq!(
             err.to_string(),

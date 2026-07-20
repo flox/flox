@@ -21,5 +21,6 @@ pub use config::{
     InstallerChannel,
     PublishConfig,
     SearchLimit,
+    TokenStorageMode,
 };
 pub use write::ReadWriteError;
