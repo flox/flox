@@ -185,6 +185,10 @@ flox_cli_vars_setup() {
   unset FLOX_PROMPT_ENVIRONMENTS _FLOX_ACTIVE_ENVIRONMENTS
   export FLOX_DISABLE_METRICS='true'
   export _FLOX_TESTING_DISABLE_BG_SIDE_EFFECTS='true'
+  # Keep tests off the developer's global OS keyring (keyed by FloxHub URL, not
+  # isolated by FLOX_CONFIG_DIR), so e.g. auth logout / invalid-token migration
+  # cannot read or clobber the real hub.flox.dev credential.
+  export _FLOX_DISABLE_KEYRING='true'
 }
 
 # ---------------------------------------------------------------------------- #
