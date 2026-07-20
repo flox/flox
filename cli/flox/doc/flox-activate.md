@@ -94,6 +94,13 @@ the registering environment's own `bin` directory each time `PATH` is
 re-ordered,
 preserving their position as environments are activated, layered,
 and attached to.
+An environment activated later still takes precedence over an earlier
+environment's registered directories,
+just as it does over the earlier environment's `bin` directory.
+Registered directories must not contain `:` or `=` characters.
+Because activations in "run" mode do not source package-provided startup
+scripts,
+`flox_prepend_path` has no effect in that mode.
 
 To reverse activation,
 run [`flox-deactivate(1)`](./flox-deactivate.md).

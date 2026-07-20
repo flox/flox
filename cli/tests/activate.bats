@@ -2773,19 +2773,75 @@ EOF
 # PATH dirs registered with flox_prepend_path must survive the PATH
 # re-ordering performed at the end of in-place activation, staying ahead
 # of the registering environment's own bin directory.
-@test "profile.d: flox_prepend_path additions survive PATH re-ordering" {
+_prepend_path_survives_in_place() {
+  shell="${1?}"
   project_setup
   PROJECT_DIR="$(realpath "$PROJECT_DIR")"
   _install_prepend_path_pkg
 
   rendered="$PROJECT_DIR/.flox/run/${NIX_SYSTEM}.${PROJECT_NAME}-dev"
-  run bash -c 'eval "$("$FLOX_BIN" activate)"; echo "$PATH"'
+  if [ "$shell" == "tcsh" ]; then
+    run "$shell" -c 'eval "`"$FLOX_BIN" activate`"; echo "$PATH"'
+  else
+    run "$shell" -c 'eval "$("$FLOX_BIN" activate)"; echo "$PATH"'
+  fi
   assert_success
+  # fish joins quoted expansions of path variables with ':' like the rest.
   assert_line --partial "$rendered/extra-bin:$rendered/bin:$rendered/sbin"
+}
 
-  # Command mode runs fix-paths before profile.d and has no trailing
-  # re-order to dedup PATH, so the helper itself must be idempotent when
-  # two scripts register the same dir.
+@test "bash: profile.d: flox_prepend_path additions survive PATH re-ordering" {
+  _prepend_path_survives_in_place bash
+
+  # Registrations are restored along with the rest of the environment on
+  # deactivation; the variable must not outlive the activation.
+  FLOX_SHELL="bash" run --separate-stderr bash -c '
+    eval "$($FLOX_BIN activate --print-script)"
+    eval "$($FLOX_BIN deactivate --print-script "$_FLOX_INVOCATION_TYPES")"
+    if [ -z "${_FLOX_ENV_PATH_PREPENDS+x}" ]; then
+      echo "after:unset"
+    fi
+  '
+  assert_success
+  assert_line "after:unset"
+}
+
+@test "fish: profile.d: flox_prepend_path additions survive PATH re-ordering" {
+  _prepend_path_survives_in_place fish
+}
+
+@test "tcsh: profile.d: flox_prepend_path additions survive PATH re-ordering" {
+  _prepend_path_survives_in_place tcsh
+
+  # The tcsh rc guards the possibly-unset variable with an "empty"
+  # sentinel; confirm neither the sentinel nor a registration outlives
+  # the activation.
+  SHELL="$(which tcsh)" run --separate-stderr tcsh -c '
+    eval "`$FLOX_BIN activate --print-script`"
+    setenv _FLOX_INVOCATION_TYPES_WIRE $_FLOX_INVOCATION_TYPES:q
+    eval "`$FLOX_BIN deactivate --print-script-from-env`"
+    unsetenv _FLOX_INVOCATION_TYPES_WIRE
+    if ( ! $?_FLOX_ENV_PATH_PREPENDS ) then
+      echo "after:unset"
+    endif
+  '
+  assert_success
+  assert_line "after:unset"
+}
+
+@test "zsh: profile.d: flox_prepend_path additions survive PATH re-ordering" {
+  _prepend_path_survives_in_place zsh
+}
+
+# Command mode runs fix-paths before profile.d and has no trailing
+# re-order to dedup PATH, so the helper itself must be idempotent when
+# two scripts register the same dir.
+@test "profile.d: flox_prepend_path is idempotent across scripts" {
+  project_setup
+  PROJECT_DIR="$(realpath "$PROJECT_DIR")"
+  _install_prepend_path_pkg
+
+  rendered="$PROJECT_DIR/.flox/run/${NIX_SYSTEM}.${PROJECT_NAME}-dev"
   run --separate-stderr "$FLOX_BIN" activate -- bash -c 'echo "$PATH"'
   assert_success
   occurrences="$(echo "$output" | tr ':' '\n' | grep -cx "$rendered/extra-bin")"

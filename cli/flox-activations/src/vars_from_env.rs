@@ -11,7 +11,7 @@ pub struct VarsFromEnvironment {
     pub flox_env_dirs: Option<String>,
     pub path: Option<String>,
     pub manpath: Option<String>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub path_prepends: Option<String>,
     /// Full environment snapshot for activation diff computation.
     /// Populated by [`VarsFromEnvironment::get_with_snapshot`].

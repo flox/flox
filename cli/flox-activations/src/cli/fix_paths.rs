@@ -80,6 +80,13 @@ impl FixPathsArgs {
 /// Splits the contents of _FLOX_ENV_PATH_PREPENDS into
 /// (environment dir, prepend dir) pairs.
 /// Entries without a '=' or with an empty half are ignored.
+///
+/// Entries are never pruned from the variable itself: registrations for
+/// deactivated environments accumulate there and are filtered out at
+/// replay time by `prepend_dirs_to_pathlike_var`, which drops entries
+/// whose environment is not in FLOX_ENV_DIRS. Deactivation restores the
+/// variable to its pre-activation value via the recorded env diff, so
+/// accumulation is bounded by the depth of the activation stack.
 fn separate_prepends_list(joined: &str) -> Vec<(PathBuf, PathBuf)> {
     let joined = if joined == "empty" { "" } else { joined };
     joined
@@ -422,5 +429,41 @@ mod test {
         let fixed = fix_path_var(env_dirs, path, prepends);
         let fixed_again = fix_path_var(env_dirs, &fixed, prepends);
         assert_eq!(fixed, fixed_again);
+    }
+
+    #[test]
+    fn same_dir_registered_by_two_envs_keeps_innermost_position() {
+        let env_dirs = "/env1:/env2";
+        let path = "/foo";
+        let prepends = "/env2=/shared:/env1=/shared";
+        let fixed = fix_path_var(env_dirs, path, prepends);
+        // A dir registered by multiple active environments is deduped to
+        // the outermost registering environment's layer: it keeps the
+        // position it already held when the inner environment layered on
+        // top, exactly as an inherited PATH entry would.
+        assert_eq!(
+            fixed,
+            "/env1/bin:/env1/sbin:/shared:/env2/bin:/env2/sbin:/foo"
+        );
+    }
+
+    #[test]
+    fn prepend_equal_to_own_bin_dir_is_deduped() {
+        let env_dirs = "/env1";
+        let path = "/foo";
+        let prepends = "/env1=/env1/bin";
+        let fixed = fix_path_var(env_dirs, path, prepends);
+        // bin/sbin are pushed before prepends are considered, so the
+        // registration dedups away rather than duplicating the entry.
+        assert_eq!(fixed, "/env1/bin:/env1/sbin:/foo");
+    }
+
+    #[test]
+    fn prepend_dirs_containing_spaces_are_preserved() {
+        let env_dirs = "/env one";
+        let path = "/foo";
+        let prepends = "/env one=/env one/extra bin";
+        let fixed = fix_path_var(env_dirs, path, prepends);
+        assert_eq!(fixed, "/env one/extra bin:/env one/bin:/env one/sbin:/foo");
     }
 }

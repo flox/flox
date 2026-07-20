@@ -35,17 +35,20 @@ function source_profile_d {
   unset -f setup_cmake
 }
 
-# flox_prepend_path <dir> [<flox_env>]
+# flox_prepend_path <dir>
 #
-# Prepend <dir> to PATH and register it against <flox_env> (default:
-# $FLOX_ENV) in _FLOX_ENV_PATH_PREPENDS so that later invocations of
+# Prepend <dir> to PATH and register it against $FLOX_ENV in
+# _FLOX_ENV_PATH_PREPENDS so that later invocations of
 # 'flox-activations fix-paths' replay the prepend at that environment's
 # position in the layered PATH rather than demoting it behind the
 # activated environments' bin directories. Intended for use by
 # etc/profile.d scripts.
+#
+# <dir> must not contain ':' (illegal in PATH anyway) or '=' — entries
+# are stored as colon-separated "<env>=<dir>" pairs without escaping.
 function flox_prepend_path {
   local _dir="${1?}"
-  local _env="${2:-${FLOX_ENV?}}"
+  local _env="${FLOX_ENV?}"
   case ":${_FLOX_ENV_PATH_PREPENDS:-}:" in
     # Already registered: within an activation a registration is always
     # accompanied by its PATH entry (set together below, or inherited
