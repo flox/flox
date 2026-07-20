@@ -3,7 +3,7 @@
 use crate::auth::identity;
 
 /// Prefix identifying a FloxHub personal access token.
-pub const PAT_PREFIX: &str = "flox_pat_";
+pub(crate) const PAT_PREFIX: &str = "flox_pat_";
 
 /// An opaque token (`flox_pat_…` personal access token) authenticating a user
 /// with FloxHub.

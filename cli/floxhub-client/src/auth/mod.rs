@@ -25,16 +25,14 @@ pub(crate) mod identity;
 mod kerberos;
 mod token;
 
-pub use auth_context::{AuthContext, AuthFailure, AuthHeaderError, UNKNOWN_HANDLE};
+pub use auth_context::{AuthContext, AuthFailure, AuthHeaderError};
 pub use authn_mode::AuthnMode;
-pub use identity::{IdentityError, UserIdentity};
+pub use identity::{IdentityError, UNKNOWN_HANDLE, UserIdentity};
 pub use kerberos::{KerberosMaterial, TokenGenerator};
-pub use token::{FloxhubToken, FloxhubTokenError, PAT_PREFIX, PersonalAccessToken};
+pub use token::{FloxhubToken, FloxhubTokenError, PersonalAccessToken};
 
 /// Test fixtures, re-exported from each type's own module.
-///
-/// Intentionally not behind `#[cfg(test)]` so that other crates' (also
-/// non-gated) test helpers can use them without enabling a feature.
+#[cfg(any(test, feature = "tests"))]
 pub mod test_helpers {
     pub use crate::auth::identity::test_helpers::*;
     pub use crate::auth::token::test_helpers::*;

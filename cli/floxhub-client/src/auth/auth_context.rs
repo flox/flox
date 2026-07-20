@@ -33,11 +33,6 @@ pub enum AuthFailure {
     NoKerberosTicket,
 }
 
-/// Placeholder handle for an opaque token whose identity has not been
-/// resolved. The server is the authority for authn/authz, so an unknown
-/// handle is a display concern, never an access decision.
-pub const UNKNOWN_HANDLE: &str = "UNKNOWN";
-
 /// Error from producing an authorization header (e.g. SPNEGO token generation).
 #[derive(Debug, Clone, thiserror::Error)]
 #[error("{0}")]
@@ -134,9 +129,7 @@ impl AuthContext {
             AuthContext::Kerberos(_) => None,
         }
     }
-}
 
-impl AuthContext {
     /// Create an [`AuthContext`] from the configured [`AuthnMode`] and the
     /// stored token, both of which are needed to pick the right material:
     ///

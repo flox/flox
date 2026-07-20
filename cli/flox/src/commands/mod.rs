@@ -1728,18 +1728,18 @@ pub(super) async fn ensure_environment_trust(
 pub(super) async fn ensure_auth(flox: &mut Flox) -> Result<String> {
     use floxhub_client::AuthFailure;
 
-    // Gating authentication: classify a missing or expired identity into
-    // the failure it presents to the user.
-    let identity = match (flox.get_identity(), &flox.auth_context) {
-        (Some(identity), _) if identity.is_expired() => Err(AuthFailure::TokenExpired),
-        (Some(identity), _) => Ok(identity),
-        // A personal access token with no identity was rejected by the server.
-        (None, AuthContext::Pat(_)) => Err(AuthFailure::TokenExpired),
-        (None, AuthContext::Auth0(_)) => Err(AuthFailure::NotLoggedIn),
-        (None, AuthContext::Kerberos(_)) => Err(AuthFailure::NoKerberosTicket),
+    // Gating authentication is the caller that treats an expired identity
+    // as a failure.
+    let identity = match flox.get_identity() {
+        Ok(Some(identity)) if identity.is_expired() => Err(AuthFailure::TokenExpired),
+        other => other,
     };
     match identity {
-        Ok(identity) => Ok(identity.handle),
+        Ok(Some(identity)) => Ok(identity.handle),
+        // Identity unknown (e.g. FloxHub unreachable): proceed under the
+        // UNKNOWN display handle — the server stays the authority for
+        // authn/authz.
+        Ok(None) => Ok(floxhub_client::UNKNOWN_HANDLE.to_string()),
         Err(ref failure @ (AuthFailure::TokenExpired | AuthFailure::NotLoggedIn))
             if Dialog::can_prompt() =>
         {
@@ -1799,8 +1799,10 @@ async fn ensure_auth_allowing_expired(flox: &mut Flox) -> Result<String> {
     // (not logged in, no ticket, or a server-rejected token) falls back to
     // the recovery flow.
     match flox.get_identity() {
-        Some(identity) => Ok(identity.handle),
-        None => ensure_auth(flox).await,
+        Ok(Some(identity)) => Ok(identity.handle),
+        // Identity unknown: proceed under the UNKNOWN display handle.
+        Ok(None) => Ok(floxhub_client::UNKNOWN_HANDLE.to_string()),
+        Err(_) => ensure_auth(flox).await,
     }
 }
 

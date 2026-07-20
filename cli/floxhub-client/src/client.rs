@@ -806,7 +806,7 @@ impl FloxhubClient {
 ///
 /// The request runs on its own thread with its own runtime so that it can
 /// block safely from both sync and async (tokio) callers.
-pub fn fetch_me_blocking(client: &FloxhubClient, token: &str) -> Result<UserIdentity, MeError> {
+fn fetch_me_blocking(client: &FloxhubClient, token: &str) -> Result<UserIdentity, MeError> {
     std::thread::scope(|scope| {
         scope
             .spawn(|| {

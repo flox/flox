@@ -113,9 +113,8 @@ pub enum FloxhubTokenError {
 
 /// Test fixtures for [FloxhubToken].
 ///
-/// Intentionally not behind `#[cfg(test)]` so that other crates' (also
-/// non-gated) test helpers can use them without enabling a feature.
 /// Nothing here should be used in production code.
+#[cfg(any(test, feature = "tests"))]
 pub mod test_helpers {
     /// A fake FloxHub token
     ///

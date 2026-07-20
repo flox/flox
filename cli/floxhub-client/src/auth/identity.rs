@@ -13,6 +13,11 @@ use chrono::{DateTime, Utc};
 use serde::Deserialize;
 use thiserror::Error;
 
+/// Placeholder handle shown when a credential could not be verified (e.g.
+/// FloxHub was unreachable). The server is the authority for authn/authz,
+/// so an unknown handle is a display concern, never an access decision.
+pub const UNKNOWN_HANDLE: &str = "UNKNOWN";
+
 /// The identity behind a credential.
 ///
 /// Uniform across credential kinds: derived from JWT claims for Auth0,
@@ -86,10 +91,7 @@ pub(crate) fn resolve_and_cache(
 }
 
 /// Test fixtures for identity resolution.
-///
-/// Intentionally not behind `#[cfg(test)]` so that other crates' (also
-/// non-gated) test helpers can use them without enabling a feature.
-/// Nothing here should be used in production code.
+#[cfg(any(test, feature = "tests"))]
 pub mod test_helpers {
     use super::*;
 

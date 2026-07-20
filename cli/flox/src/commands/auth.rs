@@ -7,8 +7,8 @@ use chrono::offset::Utc;
 use chrono::{DateTime, Duration};
 use flox_config::{Config, FLOX_CONFIG_FILE, TokenStorageMode};
 use flox_rust_sdk::flox::{FLOX_VERSION, Flox, FloxhubToken};
-use floxhub_client::{AuthContext, AuthnMode, UNKNOWN_HANDLE};
-use indoc::formatdoc;
+use floxhub_client::{AuthContext, AuthnMode};
+use indoc::{formatdoc, indoc};
 use oauth2::basic::{
     BasicClient,
     BasicErrorResponse,
@@ -581,16 +581,22 @@ pub fn login_with_token_file(
     // login exists to verify-and-store the credential — an unverifiable
     // token is a failure here, not a success.
     let handle = match flox.get_identity() {
-        Some(identity) if identity.handle == UNKNOWN_HANDLE => {
-            bail!("Could not reach FloxHub to verify the token.\nTry again.");
-        },
-        Some(identity) if !identity.is_expired() => identity.handle,
-        // An expired identity, or no identity at all — which here can only
-        // mean the server rejected the token, since the context was just
-        // built from a parsed one.
-        _ => bail!(
-            "The provided token is expired.\nObtain a fresh token from FloxHub and try again."
-        ),
+        Ok(Some(identity)) if identity.is_expired() => bail!(indoc! {"
+            The provided token is expired.
+            Obtain a fresh token from FloxHub and try again."
+        }),
+        Ok(Some(identity)) => identity.handle,
+        // Login exists to verify-and-store the credential — an unknown
+        // identity is a failure here, not a success.
+        Ok(None) => bail!(indoc! {"
+            Could not reach FloxHub to verify the token.
+            Try again."
+        }),
+        // The server rejected the token — expired and revoked alike.
+        Err(_) => bail!(indoc! {"
+            The provided token is expired.
+            Obtain a fresh token from FloxHub and try again."
+        }),
     };
 
     complete_login(flox, auth_context, handle, insecure_storage, once, storage_pref)
@@ -638,9 +644,11 @@ mod tests {
             assert_eq!(handle, "test-user");
             let config_contents =
                 fs::read_to_string(flox.config_dir.join(FLOX_CONFIG_FILE)).unwrap();
+            let config: toml::Table = toml::from_str(&config_contents).unwrap();
             assert_eq!(
-                config_contents,
-                format!("floxhub_token = \"{}\"\n", token.secret())
+                config["floxhub_token"].as_str(),
+                Some(token.secret()),
+                "the config stores exactly the provided token"
             );
             let AuthContext::Auth0(Some(stored)) = &flox.auth_context else {
                 panic!("expected an Auth0 auth context with a token");
@@ -717,7 +725,12 @@ mod tests {
 
         assert_eq!(handle, "pat-user");
         let config_contents = fs::read_to_string(flox.config_dir.join(FLOX_CONFIG_FILE)).unwrap();
-        assert_eq!(config_contents, "floxhub_token = \"flox_pat_secret\"\n");
+        let config: toml::Table = toml::from_str(&config_contents).unwrap();
+        assert_eq!(
+            config["floxhub_token"].as_str(),
+            Some("flox_pat_secret"),
+            "the config stores exactly the provided token"
+        );
         assert!(matches!(&flox.auth_context, AuthContext::Pat(_)));
     }
 

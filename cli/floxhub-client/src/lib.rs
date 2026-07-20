@@ -68,7 +68,6 @@ pub use client::{
     CatalogClientTrait,
     CheckBuildQuery,
     FloxhubClient,
-    fetch_me_blocking,
     str_to_catalog_name,
     str_to_package_name,
 };
