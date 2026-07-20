@@ -64,25 +64,54 @@ pub enum ScanError {
         /// 1-based `(line, column)` of the root's first use, when recorded.
         position: Option<(usize, usize)>,
     },
+
+    /// An import that forwards catalog namespaces names a target file that
+    /// cannot be read. The refs the imported file would contribute through
+    /// the forwarded namespaces cannot be discovered, so the scan fails
+    /// rather than silently under-locking.
+    #[error("{}", unreadable_import_message(target, file.as_deref(), *position))]
+    UnreadableImport {
+        target: PathBuf,
+        file: Option<PathBuf>,
+        /// 1-based `(line, column)` of the import application.
+        position: (usize, usize),
+    },
 }
 
-/// Render [ScanError::UndeclaredRoot] for the user; location parts are
-/// best-effort (unit scans have no file, forwarded-only uses may lack a
-/// position).
+/// Render a source location as a message suffix; the parts are best-effort
+/// (unit scans have no file, forwarded-only uses may lack a position).
+fn location_suffix(file: Option<&Path>, position: Option<(usize, usize)>) -> String {
+    match (file, position) {
+        (Some(file), Some((line, column))) => format!(" at {}:{line}:{column}", file.display()),
+        (Some(file), None) => format!(" in {}", file.display()),
+        (None, Some((line, column))) => format!(" at {line}:{column}"),
+        (None, None) => String::new(),
+    }
+}
+
+/// Render [ScanError::UndeclaredRoot] for the user.
 fn undeclared_root_message(
     root: &str,
     file: Option<&Path>,
     position: Option<(usize, usize)>,
 ) -> String {
-    let location = match (file, position) {
-        (Some(file), Some((line, column))) => format!(" at {}:{line}:{column}", file.display()),
-        (Some(file), None) => format!(" in {}", file.display()),
-        (None, Some((line, column))) => format!(" at {line}:{column}"),
-        (None, None) => String::new(),
-    };
+    let location = location_suffix(file, position);
     formatdoc! {"
         '{root}' is referenced{location} but is not declared in the function arguments.
         Add '{root}' to the function arguments, e.g. '{{ {root}, ... }}:'."}
+}
+
+/// Render [ScanError::UnreadableImport] for the user.
+fn unreadable_import_message(
+    target: &Path,
+    file: Option<&Path>,
+    position: (usize, usize),
+) -> String {
+    let target = target.display();
+    let location = location_suffix(file, Some(position));
+    formatdoc! {"
+        '{target}' is imported{location} but cannot be read.
+        Check that the imported file exists and is readable."}
 }
 
 /// Catalog references and dependency attr-paths extracted from one file.
@@ -381,7 +410,10 @@ fn analyze_file_at(
     if let Some(dir) = file_dir {
         for pending in pending_imports {
             let target = dir.join(&pending.path);
-            let target = fs::canonicalize(&target).unwrap_or(target);
+            // The fallback for an uncanonicalizable (missing) target still
+            // normalizes `.` components so errors show a clean path.
+            let target =
+                fs::canonicalize(&target).unwrap_or_else(|_| target.components().collect());
             // `import ./dir` means `./dir/default.nix`.
             let target = if target.is_dir() {
                 target.join("default.nix")
@@ -391,18 +423,20 @@ fn analyze_file_at(
             if !visited.insert(target.clone()) {
                 continue;
             }
-            let Ok(content) = fs::read_to_string(&target) else {
-                warn!(
-                    file = %target.display(),
-                    "cannot read imported file; its catalog references are not scanned",
-                );
-                continue;
+            let Ok(imported_content) = fs::read_to_string(&target) else {
+                // The refs the imported file would contribute cannot be
+                // discovered, so fail rather than silently under-lock.
+                return Err(ScanError::UnreadableImport {
+                    target,
+                    file: path.map(Path::to_path_buf),
+                    position: line_col(content, pending.offset),
+                });
             };
             // The child is scanned with its own parameter names as roots;
             // its refs are rewritten back into the parent's namespace.
             let rewrites: HashMap<String, String> = match pending.arg {
                 ImportArg::Set(forwards) => forwards,
-                ImportArg::Root(parent_root) => match top_ident_param(&content) {
+                ImportArg::Root(parent_root) => match top_ident_param(&imported_content) {
                     Some(param) => HashMap::from([(param, parent_root)]),
                     None => {
                         // A pattern parameter destructures the namespace into
@@ -422,7 +456,7 @@ fn analyze_file_at(
             let child_roots: HashSet<String> = rewrites.keys().cloned().collect();
             let import_dir = target.parent().map(Path::to_path_buf);
             let imported = analyze_file_at(
-                &content,
+                &imported_content,
                 &child_roots,
                 import_dir.as_deref(),
                 visited,
@@ -585,6 +619,9 @@ struct PendingImport {
     path: String,
     /// How the imported file receives the catalog namespaces.
     arg: ImportArg,
+    /// Byte offset of the import application, for locating an
+    /// unreadable-target error.
+    offset: usize,
 }
 
 /// The catalog-forwarding shape of an import's argument.
@@ -1045,7 +1082,7 @@ impl Walker<'_> {
         }
         match extract_import(apply) {
             Some((Some(path), arg)) => {
-                if self.apply_import(path, &arg, env) {
+                if self.apply_import(offset_of(apply.syntax()), path, &arg, env) {
                     return;
                 }
             },
@@ -1063,7 +1100,7 @@ impl Walker<'_> {
                 // like a direct application.
                 Some(Binding::Import(path)) => {
                     if let Some(argument) = apply.argument()
-                        && self.apply_import(path, &argument, env)
+                        && self.apply_import(offset_of(apply.syntax()), path, &argument, env)
                     {
                         self.walk_consumed_source(&fn_expr, env);
                         return;
@@ -1091,7 +1128,9 @@ impl Walker<'_> {
     /// Handle the application of `import <path>` to `arg` — direct or through
     /// a bound name. Records the pending import and consumes the argument
     /// when its forwarding shape is recognized; returns whether it was.
-    fn apply_import(&mut self, path: String, arg: &ast::Expr, env: &Env) -> bool {
+    /// `offset` is the import application's byte offset, for locating a drain
+    /// failure at the import site.
+    fn apply_import(&mut self, offset: usize, path: String, arg: &ast::Expr, env: &Env) -> bool {
         match arg {
             ast::Expr::AttrSet(attrset) => {
                 let forwards = self.import_forwards(attrset, env);
@@ -1099,13 +1138,14 @@ impl Walker<'_> {
                 if !forwards.is_empty() {
                     // Forwarding is a use of each parent root: refs surfacing
                     // from the import trace back to this argument.
-                    let offset = offset_of(attrset.syntax());
+                    let arg_offset = offset_of(attrset.syntax());
                     for parent_root in forwards.values() {
-                        self.note_root_use(offset, parent_root);
+                        self.note_root_use(arg_offset, parent_root);
                     }
                     self.pending_imports.push(PendingImport {
                         path,
                         arg: ImportArg::Set(forwards),
+                        offset,
                     });
                 }
                 true
@@ -1120,6 +1160,7 @@ impl Walker<'_> {
                     self.pending_imports.push(PendingImport {
                         path,
                         arg: ImportArg::Root(root.clone()),
+                        offset,
                     });
                     return true;
                 }
@@ -1944,6 +1985,15 @@ mod tests {
             .refs
     }
 
+    fn scan_err_at(path: &str, roots: &HashSet<String>) -> ScanError {
+        let path = Path::new(path);
+        let content = fs::read_to_string(path).expect("test fixture missing");
+        let dir = path.parent();
+        let mut visited = HashSet::new();
+        analyze_file_at(&content, roots, dir, &mut visited, Some(path))
+            .expect_err("scan should fail")
+    }
+
     fn set(items: &[&str]) -> BTreeSet<String> {
         items.iter().map(|s| s.to_string()).collect()
     }
@@ -2335,7 +2385,12 @@ mod tests {
                 continue;
             }
             let rel = path.file_name().expect("fixture file name");
-            for reference in scan_package(dir, Path::new(rel)).unwrap() {
+            // Some fixtures pin scan *errors* (unreadable imports,
+            // undeclared roots); they emit no refs to check.
+            let Ok(references) = scan_package(dir, Path::new(rel)) else {
+                continue;
+            };
+            for reference in references {
                 scanned += 1;
                 let reference = reference.as_str();
                 let post_root = reference.split('.').count() - 1;
@@ -3147,6 +3202,45 @@ mod tests {
             &roots(&["catalogs"]),
         );
         assert_eq!(got, set(&["catalogs.*"]));
+    }
+
+    #[test]
+    fn import_unreadable_target_fails_scan() {
+        // The import target cannot be read, so the refs it would contribute
+        // through the forwarded namespaces cannot be discovered; the scan
+        // fails rather than silently under-locking — for both forwarding
+        // shapes.
+        let cases = [
+            ("test_data/catalog_refs/import-entry-unreadable.nix", (4, 1)),
+            (
+                "test_data/catalog_refs/import-entry-unreadable-whole.nix",
+                (5, 1),
+            ),
+        ];
+        for (path, position) in cases {
+            let err = scan_err_at(path, &roots(&["catalogs"]));
+            assert_eq!(
+                err,
+                ScanError::UnreadableImport {
+                    target: PathBuf::from("test_data/catalog_refs/no-such-helper.nix"),
+                    file: Some(PathBuf::from(path)),
+                    position,
+                },
+                "fixture: {path}"
+            );
+        }
+    }
+
+    #[test]
+    fn unreadable_import_error_message_points_at_the_import() {
+        let err = ScanError::UnreadableImport {
+            target: PathBuf::from("pkgs/helper.nix"),
+            file: Some(PathBuf::from("pkgs/foo.nix")),
+            position: (4, 1),
+        };
+        assert_eq!(err.to_string(), indoc::indoc! {"
+                'pkgs/helper.nix' is imported at pkgs/foo.nix:4:1 but cannot be read.
+                Check that the imported file exists and is readable."});
     }
 
     #[test]
