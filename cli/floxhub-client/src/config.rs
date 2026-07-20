@@ -29,7 +29,7 @@ pub struct FloxhubClientConfig {
 impl FloxhubClientConfig {
     /// Read the test/regen-only stability pin from
     /// [`crate::FLOX_RESOLVE_STABILITY_VAR`]. Empty string is treated as
-    /// unset, matching [`FloxhubMockMode::default_from_env`].
+    /// unset.
     ///
     /// Call this once at client construction time and store the result on
     /// the config's `stability` field; `resolve()` applies it to every
