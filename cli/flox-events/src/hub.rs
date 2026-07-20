@@ -1,7 +1,7 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, LazyLock, Mutex};
 
-use anyhow::Result;
+use anyhow::{Result, bail};
 use tracing::{debug, trace};
 
 use crate::client::EventsClient;
@@ -101,9 +101,18 @@ impl EventsHub {
     }
 
     /// Return an [`EventsGuard`] that flushes this hub's client on drop —
-    /// the counterpart of the legacy `Hub::try_guard`.
-    pub fn guard(&self) -> EventsGuard {
-        EventsGuard::from_hub(self.clone())
+    /// the counterpart of the legacy `Hub::try_guard`. Errors if a guard is
+    /// already active for this hub, so at most one guard flushes per process.
+    ///
+    /// The `strong_count` probe is a faithful live-guard count only because
+    /// `try_guard` is the sole site that clones an [`EventsHub`] (hence its
+    /// `client` `Arc`). Keep it that way if you add hub clones elsewhere, or
+    /// the check will report spurious "guard already active" errors.
+    pub fn try_guard(&self) -> Result<EventsGuard> {
+        if Arc::strong_count(&self.client) > 1 {
+            bail!("A guard is already active, there can only be one guard at a time")
+        }
+        Ok(EventsGuard::from_hub(self.clone()))
     }
 
     fn with_client<T>(&self, f: impl FnOnce(&mut Option<EventsClient>) -> T) -> T {

@@ -1434,6 +1434,26 @@ mod pipeline_tests {
         assert_eq!(buffered.lines().count(), 1, "event stays buffered on disk");
     }
 
+    /// A hub hands out at most one live guard, mirroring the legacy
+    /// `Hub::try_guard` invariant. Uses a local hub so it neither touches nor
+    /// races the global one.
+    #[test]
+    fn try_guard_rejects_a_second_active_guard() {
+        let hub = EventsHub::new();
+        let guard = hub.try_guard().expect("first guard is granted");
+        // only one guard at a time
+        assert!(
+            hub.try_guard().is_err(),
+            "a second guard must be refused while the first is live"
+        );
+        // dropping the first frees the slot
+        drop(guard);
+        assert!(
+            hub.try_guard().is_ok(),
+            "a guard is available again once the previous one is dropped"
+        );
+    }
+
     #[test]
     fn events_hub_record_command_run_stamps_subcommand_and_shared_metadata() {
         let tempdir = tempfile::tempdir().expect("tempdir");

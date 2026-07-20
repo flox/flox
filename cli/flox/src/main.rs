@@ -121,7 +121,7 @@ fn main() -> ExitCode {
     // https://docs.sentry.io/platforms/rust/#async-main-function
     let _sentry_guard = metrics_uuid.map(|uuid| init_sentry("flox-cli", uuid));
     let _metrics_guard = Hub::global().try_guard().ok();
-    let _v2_events_guard = EventsHub::global().guard();
+    let _v2_events_guard = EventsHub::global().try_guard().ok();
 
     // Pass down the verbosity level to all sub-processes
     unsafe {

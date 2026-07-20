@@ -11,8 +11,15 @@ pub struct EventsGuard {
 }
 
 impl EventsGuard {
+    /// Install a guard on the global hub. Panics if a guard is already active
+    /// — there can only be one at a time (see [`EventsHub::try_guard`]). This
+    /// is the convenience path for the single guard `main` holds; call sites
+    /// that must tolerate an existing guard should use
+    /// [`EventsHub::try_guard`] directly and handle the error.
     pub fn new() -> Self {
-        EventsHub::global().guard()
+        EventsHub::global()
+            .try_guard()
+            .expect("an EventsGuard is already active for the global hub")
     }
 
     pub(crate) fn from_hub(hub: EventsHub) -> Self {
