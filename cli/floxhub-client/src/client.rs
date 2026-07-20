@@ -950,7 +950,11 @@ pub mod tests {
                 .json_body(json!({
                     "items": [{
                         "descriptors": [],
-                        "name": "group",
+                        "name": "group-one",
+                        "stability": "lts",
+                    }, {
+                        "descriptors": [],
+                        "name": "group-two",
                         "stability": "lts",
                     }]
                 }));
@@ -963,10 +967,16 @@ pub mod tests {
         };
         let client = FloxhubClient::new(config).unwrap();
         client
-            .resolve(vec![PackageGroup {
-                name: "group".to_string(),
-                descriptors: vec![],
-            }])
+            .resolve(vec![
+                PackageGroup {
+                    name: "group-one".to_string(),
+                    descriptors: vec![],
+                },
+                PackageGroup {
+                    name: "group-two".to_string(),
+                    descriptors: vec![],
+                },
+            ])
             .await
             .unwrap();
         mock.assert();
