@@ -477,16 +477,31 @@ fn complete_login(
 
     if storage == TokenStorage::Plaintext {
         let notice = CredentialSource::plaintext_notice(&stores.plaintext_path());
-        // Distinguish a chosen plain-text store (point at how to switch back)
-        // from a keyring-unavailable fallback (no actionable next step).
-        if target == TokenStorageMode::Plaintext {
-            message::warning(formatdoc! {"
-                {notice}
-                To use the keyring instead, run 'flox config --delete floxhub_token_storage'."});
-        } else {
+        // Suggest a next step only where one exists: 'flox config --delete'
+        // only works when the preference is in the user's own flox.toml, and
+        // the re-secure note only holds while the standing preference is
+        // still the keyring.
+        if target != TokenStorageMode::Plaintext {
+            // The keyring was the target but storing fell back to plain text.
             message::warning(formatdoc! {"
                 {notice}
                 No OS keyring is available."});
+        } else if user_config_sets_token_storage(&flox.config_dir) {
+            message::warning(formatdoc! {"
+                {notice}
+                To use the keyring instead, run 'flox config --delete floxhub_token_storage'."});
+        } else if storage_pref == TokenStorageMode::Keyring {
+            // Reached via '--insecure-storage --once': the standing
+            // preference is untouched, so the next command re-secures the
+            // token to the keyring.
+            message::warning(formatdoc! {"
+                {notice}
+                The token will be moved to the OS keyring on the next command."});
+        } else {
+            // Plain-text preference supplied by the environment or the system
+            // config: 'flox config --delete' cannot remove it, and no
+            // migration will run while it stands.
+            message::warning(notice);
         }
     }
 
