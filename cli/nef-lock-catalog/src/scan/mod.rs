@@ -352,32 +352,9 @@ fn analyze_file_at(
     collect_dep_member_paths(root.syntax(), &dep_names, &mut deps);
 
     let ctx = ScanCtx { path, content };
-    let mut walker = Walker {
-        roots,
-        declared_params: declared_params.as_ref(),
-        ctx,
-        refs: BTreeSet::new(),
-        pending_imports: Vec::new(),
-        first_root_use: HashMap::new(),
-    };
-
-    // Seed the environment with the catalog roots. Lambda parameters —
-    // including the top-level package function's — keep root-named names
-    // rooted and shadow everything else (see [Walker::walk_lambda]).
-    let env: Env = roots
-        .iter()
-        .map(|root| (root.clone(), Binding::Path(vec![root.clone()])))
-        .collect();
-    if let Some(expr) = root.expr() {
-        walker.walk(expr.syntax(), &env);
-    }
-
-    let Walker {
-        mut refs,
-        pending_imports,
-        first_root_use,
-        ..
-    } = walker;
+    let mut walker = Walker::new(roots, declared_params.as_ref(), ctx);
+    walker.walk_root(&root);
+    let (mut refs, pending_imports, first_root_use) = walker.finish();
 
     // Imports are IO: the walker only records facts, the drain here reads and
     // recurses. Relative paths resolve against the importing file's directory.
@@ -671,7 +648,46 @@ struct Walker<'a> {
     first_root_use: HashMap<String, usize>,
 }
 
-impl Walker<'_> {
+impl<'a> Walker<'a> {
+    /// Create a walker over `roots` with empty results. [Self::walk_root]
+    /// performs the walk and [Self::finish] extracts the collected facts.
+    fn new(
+        roots: &'a HashSet<String>,
+        declared_params: Option<&'a HashSet<String>>,
+        ctx: ScanCtx<'a>,
+    ) -> Self {
+        Self {
+            roots,
+            declared_params,
+            ctx,
+            refs: BTreeSet::new(),
+            pending_imports: Vec::new(),
+            first_root_use: HashMap::new(),
+        }
+    }
+
+    /// Walk the file's top-level expression, seeding the environment with the
+    /// catalog roots. Lambda parameters — including the top-level package
+    /// function's — keep root-named names rooted and shadow everything else
+    /// (see [Self::walk_lambda]).
+    fn walk_root(&mut self, root: &rnix::Root) {
+        let env: Env = self
+            .roots
+            .iter()
+            .map(|root| (root.clone(), Binding::Path(vec![root.clone()])))
+            .collect();
+        if let Some(expr) = root.expr() {
+            self.walk(expr.syntax(), &env);
+        }
+    }
+
+    /// Consume the walker, returning its collected facts as
+    /// `(refs, pending imports, first-use offsets)` for the IO drain in
+    /// [analyze_file_at].
+    fn finish(self) -> (BTreeSet<String>, Vec<PendingImport>, HashMap<String, usize>) {
+        (self.refs, self.pending_imports, self.first_root_use)
+    }
+
     fn emit(&mut self, offset: usize, reference: String) {
         self.ctx.report(offset, &reference);
         self.note_root_use(offset, &reference);
