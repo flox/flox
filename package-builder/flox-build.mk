@@ -682,7 +682,9 @@ define MANIFEST_BUILD_template =
 
   # Manifest builds resolve no catalog inputs, so the lock JSON is a
   # build-free constant emission consistent with the empty
-  # direct_catalog_inputs manifest builds already record at build time.
+  # direct_catalog_inputs manifest builds already record at build time. No
+  # `catalog_lockfile` is emitted: there is no catalog lock to reuse, so the
+  # field is absent (parsed as null) and FLOX_REUSE_CATALOG_LOCK is a no-op.
   $($(_pvarname)_lockJSON): $(PROJECT_TMPDIR)/check-build-prerequisites
 	$(_V_) $(_mkdir) -p $$(@D)
 	$(_V_) $(_jq) -n --arg system '$(NIX_SYSTEM)' \
@@ -856,14 +858,19 @@ define NIX_EXPRESSION_BUILD_template =
 	    --out '$$@'; \
 	fi
 
-  # Project the catalog lock into the {system, direct_catalog_inputs} shape
-  # consumed by the `lock` goal's LOCK_RESULT_FILE, mirroring build-meta.json's
-  # equivalent fields.
+  # Project the catalog lock into the
+  # {system, catalog_lockfile, direct_catalog_inputs} shape consumed by the
+  # `lock` goal's LOCK_RESULT_FILE, mirroring build-meta.json's equivalent
+  # fields. `catalog_lockfile` is the authoritative on-disk path of the catalog
+  # lock this goal wrote (`$<`, the same file a following `build` with
+  # FLOX_REUSE_CATALOG_LOCK reuses), so the reuse path is provenance-checked
+  # against a concrete artifact rather than trusted by call ordering alone.
   $($(_pvarname)_lockJSON): $($(_pvarname)_catalogLockfile)
 	$(_V_) $(_mkdir) -p $$(@D)
 	$(_V_) $(_jq) -n --arg system '$(NIX_SYSTEM)' \
+	  --arg catalog_lockfile '$$<' \
 	  --slurpfile lock '$$<' \
-	  '{ system: $$$$system, direct_catalog_inputs: $$$$lock[0].direct_catalog_inputs }' > $$@
+	  '{ system: $$$$system, catalog_lockfile: $$$$catalog_lockfile, direct_catalog_inputs: $$$$lock[0].direct_catalog_inputs }' > $$@
 
   # Continue by evaluating the build
   $($(_pvarname)_evalJSON): $($(_pvarname)_catalogLockfile)
