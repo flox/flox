@@ -25,7 +25,7 @@ that specifies activation behavior.
 - [Listing, removing, upgrading](#listing-removing-upgrading)
 - [Activation modes](#activation-modes)
 - [Reserved names](#reserved-names)
-- [GitHub Enterprise host override](#github-enterprise-host-override)
+- [GitHub Enterprise](#github-enterprise)
 - [Enabling extensions](#enabling-extensions)
 - [See also](#see-also)
 
@@ -59,11 +59,10 @@ is `hello-script` and is invoked as `flox hello-script`. The
 $ flox extension install <owner>/<repo>
 ```
 
-The repo name is normalized — if you pass `acme/hello`
-or `acme/flox-hello`, both resolve to the
-`acme/flox-hello` repo and install as the `hello`
-extension. Flox auto-prefixes with `flox-` when the segment does
-not already start with it.
+The spec must be exactly `<owner>/<repo>` (full URLs are not
+accepted), and the repo must already begin with `flox-`. So
+`acme/flox-hello` installs as the `hello` extension; `acme/hello`
+is rejected — there is no auto-prefixing.
 
 The installer picks a source strategy based on the repo:
 
@@ -257,13 +256,16 @@ behavior ever changes.
 Current reserved names:
 
 - `init`, `envs`, `delete`
-- `activate`, `services`
+- `activate`, `deactivate`, `run`, `services`
 - `search`, `show`
 - `install`, `i`, `list`, `l`, `edit`, `include`, `upgrade`,
   `uninstall`, `generations`
 - `build`, `publish`, `push`, `pull`, `containerize`
 - `auth`, `config`, `gc`
-- `extension`, `help`
+- `extension`, `help`, `beta-enabled`, `factory`
+
+The last two (`beta-enabled`, `factory`) plus `extension` and
+`help` are hidden commands that do not appear in `flox --help`.
 
 If you try to install `flox-install`, for example, the installer
 returns a clear error and exits non-zero.
@@ -272,23 +274,17 @@ The authoritative list lives at
 `cli/beta/src/extensions/reserved.rs` in the
 Flox repo.
 
-## GitHub Enterprise host override
+## GitHub Enterprise
 
-Flox talks to `api.github.com` and clones from
-`github.com` by default. To point at a GitHub Enterprise host,
-export these variables before running `flox extension
-install`:
+GitHub Enterprise is **not currently supported**. Flox talks to
+`api.github.com` for metadata and clones from `https://github.com`;
+the clone host is hardcoded and there is no configuration to point
+it elsewhere.
 
-```console
-$ export FLOX_EXTENSIONS_GITHUB_BASE_URL=https://ghe.example.com/api/v3
-$ export FLOX_EXTENSIONS_GITHUB_CLONE_HOST=ghe.example.com
-$ flox extension install myorg/flox-internal-tool
-```
-
-Both variables must be set when targeting GHE. The API base is
-used for metadata (releases, default branch, commits, search);
-the clone host is used when assembling the `git clone` URL for
-script-kind installs.
+There is one override, `FLOX_EXTENSIONS_GITHUB_BASE_URL`, but it is
+**test-only** — it redirects the API client at a mock server for
+the integration tests and does not change the `git clone` host, so
+it cannot be used to install from a GHE instance.
 
 ## Enabling extensions
 

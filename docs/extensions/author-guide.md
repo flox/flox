@@ -49,9 +49,12 @@ explicitly. See [release-asset naming](#release-asset-naming).
 
 ## The `flox-extension.toml` manifest
 
-A `flox-extension.toml` at the repo root is optional for
-script-kind extensions and required for binary-kind extensions
-(to map assets to host platforms).
+A `flox-extension.toml` at the repo root is optional. A
+binary-kind extension installs without one as long as its release
+assets follow the substring naming convention (see
+[Release-asset naming](#release-asset-naming)); a manifest is only
+needed if you want to record a `sha256` for verification or an
+`[environment]` stanza.
 
 Minimal manifest:
 
@@ -88,8 +91,8 @@ inside = "error"
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `name` | string | yes | Extension name. Must match the repo `<name>` segment (repo `flox-<name>`). Lowercased, `[a-z0-9][a-z0-9_-]*`. |
-| `description` | string | no | Short human description. Shown in `flox extension list` / `search` output. |
+| `name` | string | yes | Extension name. Should match the repo `<name>` segment (repo `flox-<name>`). Lowercased, `[a-z0-9][a-z0-9_-]*`. For GitHub installs the name is derived from the repo and this field is not compared against it; only local (`--from-path`) installs check that the manifest name matches the directory. |
+| `description` | string | no | Short human description. Not currently surfaced by `flox extension list` (which has no description column); `flox extension search` shows the GitHub repository's description, not this field. |
 
 ### `[extension.binary]` table
 
@@ -98,8 +101,8 @@ Present only for binary-kind extensions.
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `source` | string | yes | Currently only `"github-release"` is supported. |
-| `asset` | string | yes | Asset-name template. Placeholders `{name}`, `{os}`, `{arch}`, `{ext}` are expanded at resolution time. `{ext}` defaults to `tar.gz` (or `zip` on Windows). |
-| `sha256` | string | no | Expected digest; reserved for future verification. |
+| `asset` | string | no | Asset-name template with `{name}`/`{os}`/`{arch}`/`{ext}` placeholders. **Not currently consulted by `install`/`upgrade`** (they select by substring match — see [Release-asset naming](#release-asset-naming)); setting it has no effect on selection today. |
+| `sha256` | string | no | Expected hex digest of the downloaded asset. **This is verified** at install time — the download's SHA-256 is compared against it and a mismatch aborts the install. |
 
 ### `[environment]` table
 
@@ -125,34 +128,12 @@ Always `"1"` for the current schema version.
 
 ## Release-asset naming
 
-For binary-kind extensions, Flox picks a release asset using this
-priority order:
+For binary-kind extensions, Flox selects a release asset by
+**substring-matching** platform tokens against the release's
+asset names, with a Rosetta fallback:
 
-1. **Manifest template match.** If `flox-extension.toml` has
-   `[extension.binary].asset`, Flox renders it for the host
-   platform and looks for an exact asset-name match. Supported
-   placeholders:
-   - `{name}` — extension name (from `[extension].name`)
-   - `{os}` — Rust's `std::env::consts::OS` for the host:
-     `"macos"`, `"linux"`, or `"windows"`. Note this is
-     **`macos`, not `darwin`** — the value is substituted
-     verbatim, so a template rendering `…-darwin-…` will not
-     match on a Mac.
-   - `{arch}` — Rust's `std::env::consts::ARCH`:
-     `"x86_64"` or `"aarch64"`
-   - `{ext}` — `"tar.gz"` (default) or `"zip"` on Windows
-
-   Only `{ext}` is computed; the rest are substituted verbatim
-   from the host's values. If the rendered name does not match a
-   release asset exactly, resolution falls through to the
-   substring match below, which accepts both `darwin` and
-   `macos` — so a `darwin`-named asset can still install, just
-   not via this step.
-
-2. **Substring match.** If the template isn't set or doesn't
-   match, Flox falls back to a substring match against a list of
-   platform tokens derived from the host. The tokens Flox looks
-   for, in order:
+1. **Substring match.** Flox looks for an asset whose name
+   contains one of the platform tokens for the host, in order:
    - On Linux x86_64: `linux-x86_64`, `linux-amd64`
    - On Linux aarch64: `linux-aarch64`, `linux-arm64`
    - On macOS x86_64: `darwin-x86_64`, `darwin-amd64`,
@@ -160,13 +141,27 @@ priority order:
    - On macOS aarch64: `darwin-aarch64`, `darwin-arm64`,
      `macos-aarch64`, `macos-arm64`
 
-3. **Rosetta fallback.** On Apple Silicon (`darwin-aarch64`), if
-   no arm64 asset matches, Flox retries with the `x86_64`
-   matchers and uses that asset under Rosetta. A
-   `tracing::info!` line is logged when this happens.
+   Both `darwin` and `macos` are accepted on macOS, so an asset
+   named either way installs.
 
-If no asset matches any of the above, `flox extension install`
-fails with a clear error naming the platform it tried to match.
+2. **Rosetta fallback.** On Apple Silicon, if no arm64 asset
+   matches, Flox retries with the `x86_64` tokens and uses that
+   asset under Rosetta. A `tracing::info!` line is logged.
+
+If no asset matches, `flox extension install` fails with an
+error naming the platform it tried to match.
+
+> **Note — the `[extension.binary].asset` template is not
+> currently used for selection.** The resolver *can* render an
+> `asset` template (`{name}`/`{os}`/`{arch}`/`{ext}` placeholders)
+> and match it exactly, but `install` and `upgrade` call the
+> resolver **without** the manifest, so only the substring match
+> above runs. Setting `asset` has no effect on which asset is
+> chosen today. (The manifest is still read afterward — its
+> `sha256`, if present, is verified against the download; see
+> [the manifest section](#the-flox-extensiontoml-manifest).)
+> Name your assets along the substring tokens above and the
+> template is unnecessary.
 
 ### Recommended naming
 
@@ -182,8 +177,11 @@ flox-deploy-darwin-x86_64.tar.gz
 flox-deploy-darwin-aarch64.tar.gz
 ```
 
-If your existing release pipeline uses a different naming
-scheme, set `[extension.binary].asset` in the manifest to map it.
+If your existing release pipeline uses a different naming scheme,
+rename the assets to include one of the platform tokens above —
+the `[extension.binary].asset` template is not consulted by the
+installer today, so it cannot be used to map a non-conforming
+scheme.
 
 ## Environment stanza
 

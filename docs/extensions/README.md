@@ -5,7 +5,7 @@ describe installing, authoring, and distributing Flox
 extensions.
 
 - [**User guide**](./user-guide.md) — install, list, remove,
-  upgrade; pinning; activation modes; opting out.
+  upgrade; pinning; activation modes; enabling the beta feature.
 - [**Author guide**](./author-guide.md) — repo naming,
   `flox-extension.toml` schema, release-asset naming, local dev
   loop, example extensions.
