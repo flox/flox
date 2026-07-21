@@ -2752,17 +2752,24 @@ EOF
   assert_success
 }
 
-# Fabricate and install a package whose profile.d scripts register an
-# extra PATH dir with flox_prepend_path, for the tests below. Two scripts
-# register the same dir to cover the helper's idempotency.
+# Fabricate and install a package whose profile.d scripts register extra
+# PATH dirs with flox_prepend_path, for the tests below. Two scripts
+# register the same dir to cover the helper's idempotency, and a third
+# registers a second dir so that _FLOX_ENV_PATH_PREPENDS holds a
+# multi-entry (colon-containing) value, exercising its transport through
+# each shell's variable handling.
 _install_prepend_path_pkg() {
-  mkdir -p "$BATS_TEST_TMPDIR/pkg/etc/profile.d" "$BATS_TEST_TMPDIR/pkg/extra-bin"
-  touch "$BATS_TEST_TMPDIR/pkg/extra-bin/.keep"
+  mkdir -p "$BATS_TEST_TMPDIR/pkg/etc/profile.d" \
+    "$BATS_TEST_TMPDIR/pkg/extra-bin" "$BATS_TEST_TMPDIR/pkg/extra-bin2"
+  touch "$BATS_TEST_TMPDIR/pkg/extra-bin/.keep" "$BATS_TEST_TMPDIR/pkg/extra-bin2/.keep"
   cat > "$BATS_TEST_TMPDIR/pkg/etc/profile.d/0900_prepend-path.sh" <<'EOF'
 flox_prepend_path "$FLOX_ENV/extra-bin"
 EOF
   cat > "$BATS_TEST_TMPDIR/pkg/etc/profile.d/0901_prepend-path-again.sh" <<'EOF'
 flox_prepend_path "$FLOX_ENV/extra-bin"
+EOF
+  cat > "$BATS_TEST_TMPDIR/pkg/etc/profile.d/0902_prepend-path-second.sh" <<'EOF'
+flox_prepend_path "$FLOX_ENV/extra-bin2"
 EOF
   pkg_store_path="$(nix --extra-experimental-features nix-command \
     store add --name prepend-path-test-pkg "$BATS_TEST_TMPDIR/pkg")"
@@ -2787,7 +2794,7 @@ _prepend_path_survives_in_place() {
   fi
   assert_success
   # fish joins quoted expansions of path variables with ':' like the rest.
-  assert_line --partial "$rendered/extra-bin:$rendered/bin:$rendered/sbin"
+  assert_line --partial "$rendered/extra-bin2:$rendered/extra-bin:$rendered/bin:$rendered/sbin"
 }
 
 @test "bash: profile.d: flox_prepend_path additions survive PATH re-ordering" {
@@ -2844,8 +2851,10 @@ _prepend_path_survives_in_place() {
   rendered="$PROJECT_DIR/.flox/run/${NIX_SYSTEM}.${PROJECT_NAME}-dev"
   run --separate-stderr "$FLOX_BIN" activate -- bash -c 'echo "$PATH"'
   assert_success
-  occurrences="$(echo "$output" | tr ':' '\n' | grep -cx "$rendered/extra-bin")"
-  assert_equal "$occurrences" 1
+  for dir in extra-bin extra-bin2; do
+    occurrences="$(echo "$output" | tr ':' '\n' | grep -cx "$rendered/$dir")"
+    assert_equal "$occurrences" 1
+  done
 }
 
 # When environments are layered, a registered prepend stays with the layer
@@ -2862,7 +2871,7 @@ _prepend_path_survives_in_place() {
   run "$FLOX_BIN" activate -- \
     "$FLOX_BIN" activate --dir inner -- bash -c 'echo "$PATH"'
   assert_success
-  assert_line --partial "$inner/bin:$inner/sbin:$outer/extra-bin:$outer/bin:$outer/sbin"
+  assert_line --partial "$inner/bin:$inner/sbin:$outer/extra-bin2:$outer/extra-bin:$outer/bin:$outer/sbin"
 }
 
 # A shell attaching to an already-running activation computes PATH from the
@@ -2888,12 +2897,12 @@ _prepend_path_survives_in_place() {
   # Command-mode attach.
   run --separate-stderr "$FLOX_BIN" activate -- bash -c 'echo "$PATH"'
   assert_success
-  assert_line --partial "$rendered/extra-bin:$rendered/bin:$rendered/sbin"
+  assert_line --partial "$rendered/extra-bin2:$rendered/extra-bin:$rendered/bin:$rendered/sbin"
 
   # In-place attach.
   run bash -c 'eval "$("$FLOX_BIN" activate)"; echo "$PATH"'
   assert_success
-  assert_line --partial "$rendered/extra-bin:$rendered/bin:$rendered/sbin"
+  assert_line --partial "$rendered/extra-bin2:$rendered/extra-bin:$rendered/bin:$rendered/sbin"
 }
 
 @test "activate works with fish 3.2.2" {

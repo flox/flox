@@ -12,6 +12,10 @@ use super::{join_dir_list, separate_dir_list};
 /// `etc/profile.d` scripts via the `flox_prepend_path` helper.
 /// The value is a colon-separated list of `<env_dir>=<prepend_dir>` pairs,
 /// most recent registration first.
+///
+/// The name must NOT end in `PATH`: fish auto-treats variables named
+/// `*PATH` as path-list variables (colon-split on import, re-joined on
+/// expansion), which would corrupt the multi-entry value in transit.
 pub const FLOX_ENV_PATH_PREPENDS_VAR: &str = "_FLOX_ENV_PATH_PREPENDS";
 
 #[derive(Debug, Args)]
