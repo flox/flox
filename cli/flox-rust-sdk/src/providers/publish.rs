@@ -34,6 +34,7 @@ use url::Url;
 
 use super::build::{
     BuildResult,
+    CatalogLock,
     FloxBuildMk,
     ManifestBuilder,
     ManifestBuilderError,
@@ -933,6 +934,11 @@ pub fn render_build_source(
 pub struct LockedBuildInputs {
     pub system: PackageSystem,
     pub direct_catalog_inputs: HashMap<String, LockedInputEntry>,
+    /// Authoritative path of the catalog lock this lock phase wrote, threaded
+    /// to a following [`check_build_metadata`] so its build reuses exactly
+    /// this lock (via [`CatalogLock::Reuse`]). [`None`] for manifest builds,
+    /// which resolve no catalog inputs and so have no catalog lock to reuse.
+    pub catalog_lockfile: Option<PathBuf>,
 }
 
 /// Compute the catalog lock for `pkg` against the already-rendered
@@ -971,6 +977,7 @@ pub fn lock_build_inputs(
             PublishError::UnsupportedEnvironmentState("Invalid system".to_string())
         })?,
         direct_catalog_inputs: lock_result.direct_catalog_inputs.clone(),
+        catalog_lockfile: lock_result.catalog_lockfile.clone(),
     })
 }
 
@@ -984,6 +991,11 @@ pub fn lock_build_inputs(
 /// [`lock_build_inputs`] call against the same `rendered` source shares its
 /// working directory, letting this build reuse that lock phase's catalog
 /// lock instead of recomputing it.
+///
+/// `catalog_lock` selects that reuse: pass [`CatalogLock::Reuse`] with the
+/// [`LockedBuildInputs::catalog_lockfile`] from the preceding
+/// [`lock_build_inputs`] call, or [`CatalogLock::Fresh`] when no lock phase
+/// preceded this build (e.g. a standalone check with no dedup pre-pass).
 pub fn check_build_metadata(
     flox: &Flox,
     base_nixpkgs_url: &BaseCatalogUrl,
@@ -991,6 +1003,7 @@ pub fn check_build_metadata(
     rendered: &RenderedSource,
     pkg: &PackageTarget,
     nef_stability: Option<String>,
+    catalog_lock: CatalogLock,
 ) -> Result<CheckedBuildMetadata, PublishError> {
     let builder = FloxBuildMk::new(
         flox,
@@ -1009,12 +1022,7 @@ pub fn check_build_metadata(
         nef_stability,
         Some(false),
         system_override,
-        // Reuse the catalog lock a preceding `lock_build_inputs` call against
-        // this same `rendered` source already computed. Safe even when no
-        // lock phase preceded this call (e.g. these unit tests): the
-        // Makefile recipe falls through to computing a fresh lock when none
-        // exists yet.
-        true,
+        catalog_lock,
     )?;
 
     if build_results.len() != 1 {
@@ -1673,6 +1681,7 @@ pub mod tests {
             &rendered,
             &EXAMPLE_MANIFEST_PACKAGE_TARGET,
             None,
+            CatalogLock::Fresh,
         )
         .unwrap();
 
@@ -1726,6 +1735,7 @@ pub mod tests {
             &rendered,
             &EXAMPLE_MANIFEST_PACKAGE_TARGET_MISSING_FIELDS,
             None,
+            CatalogLock::Fresh,
         )
         .unwrap();
 
@@ -1784,6 +1794,7 @@ pub mod tests {
             &rendered,
             &pure_pkg,
             None,
+            CatalogLock::Fresh,
         )
         .unwrap();
 
@@ -1891,6 +1902,7 @@ pub mod tests {
             &rendered,
             &package_metadata.package,
             None,
+            CatalogLock::Fresh,
         )
         .unwrap();
 
@@ -1955,6 +1967,7 @@ pub mod tests {
             &rendered,
             &package_metadata.package,
             None,
+            CatalogLock::Fresh,
         )
         .unwrap();
 
@@ -2306,6 +2319,7 @@ pub mod tests {
             &rendered,
             &package_metadata.package,
             None,
+            CatalogLock::Fresh,
         )
         .unwrap();
 

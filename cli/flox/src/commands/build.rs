@@ -17,6 +17,7 @@ use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment};
 use flox_rust_sdk::providers::build::{
     COMMON_NIXPKGS_URL,
+    CatalogLock,
     FloxBuildMk,
     ManifestBuilder,
     ManifestBuilderError,
@@ -351,7 +352,9 @@ impl Build {
             nef_stability,
             None,
             system_override,
-            false,
+            // `flox build` always resolves a fresh catalog lock; it never
+            // reuses a lock from a preceding phase.
+            CatalogLock::Fresh,
         );
         let build_duration_ms = duration_to_ms(build_start.elapsed());
 
