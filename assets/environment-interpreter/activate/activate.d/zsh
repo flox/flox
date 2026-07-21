@@ -34,10 +34,19 @@ old_fpath="$FPATH"
 # dotfiles may have changed them, so finish by doing this again.
 # We need to restore FLOX_ENV_DIRS before fixing fpath since fpath uses
 # FLOX_ENV_DIRS.
+# _FLOX_ADD_SBIN is exported by flox-activations for the activation being
+# started, so each nested layer's startup passes its own value here.
+_add_sbin_arg=""
+if [ "${_FLOX_ADD_SBIN:-}" = "true" ]; then
+  _add_sbin_arg="--add-sbin"
+fi
+# $_add_sbin_arg is deliberately unquoted: zsh removes an empty unquoted
+# scalar from the argument list, so it expands to no argument when empty.
+# shellcheck disable=SC1090,SC2086
+source <("$_flox_activations" set-env-dirs --shell zsh --flox-env "$FLOX_ENV" --env-dirs "${FLOX_ENV_DIRS:-}" --sbin-dirs "${_FLOX_ENV_DIRS_ADD_SBIN:-}" $_add_sbin_arg)
+unset _add_sbin_arg
 # shellcheck disable=SC1090
-source <("$_flox_activations" set-env-dirs --shell zsh --flox-env "$FLOX_ENV" --env-dirs "${FLOX_ENV_DIRS:-}")
-# shellcheck disable=SC1090
-source <("$_flox_activations" fix-paths --shell zsh --env-dirs "$FLOX_ENV_DIRS" --path "$PATH" --manpath "${MANPATH:-}")
+source <("$_flox_activations" fix-paths --shell zsh --env-dirs "$FLOX_ENV_DIRS" --sbin-dirs "${_FLOX_ENV_DIRS_ADD_SBIN:-}" --path "$PATH" --manpath "${MANPATH:-}")
 
 # We use `FPATH` as input here so we can re-use machinery for rearranging
 # PATH-like variables, but we actually output code to set `fpath` instead.

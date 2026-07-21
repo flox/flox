@@ -13,8 +13,12 @@ pub use crate::parsed::v1_11_0::MinimumCliVersion;
 // BuildSandbox is version-specific from V1_13_0 on (it adds `warn`/`enforce`),
 // so the latest schema re-exports that copy rather than common's.
 pub use crate::parsed::v1_13_0::BuildSandbox;
+// Options and ActivateOptions are version-specific from V1_14_0 on (they add
+// `activate.add-sbin`), so the latest schema re-exports those copies rather
+// than common's.
+pub use crate::parsed::v1_14_0::{ActivateOptions, Options};
 use crate::{Manifest, ManifestError, TypedOnly};
-pub type ManifestLatest = crate::parsed::v1_13_0::ManifestV1_13_0;
+pub type ManifestLatest = crate::parsed::v1_14_0::ManifestV1_14_0;
 
 impl ManifestLatest {
     /// Try to return a manifest in its original schema
@@ -67,6 +71,15 @@ impl ManifestLatest {
                 untyped
             },
             KnownSchemaVersion::V1_13_0 => {
+                let mut untyped =
+                    serde_json::to_value(self).map_err(ManifestError::SerializeJson)?;
+                let map = untyped
+                    .as_object_mut()
+                    .expect("all valid manifests should serialize to JSON objects");
+                map.insert("schema-version".into(), "1.13.0".into());
+                untyped
+            },
+            KnownSchemaVersion::V1_14_0 => {
                 return Ok(Some(self.as_typed_only()));
             },
         };
@@ -215,6 +228,72 @@ mod tests {
     }
 
     #[test]
+    fn add_sbin_rejected_by_v1_13_0_schema() {
+        let manifest = with_schema(KnownSchemaVersion::V1_13_0, indoc! {r#"
+            [options.activate]
+            add-sbin = true
+        "#});
+
+        let err = Manifest::parse_toml_typed(&manifest)
+            .expect_err("'options.activate.add-sbin' should be rejected by the v1.13.0 schema");
+
+        let ManifestError::Invalid(err) = err else {
+            panic!("expected ManifestError::Invalid, got: {err:?}");
+        };
+        assert!(
+            err.message()
+                .starts_with("unknown field `add-sbin`, expected"),
+            "unexpected error message: {err}",
+        );
+    }
+
+    #[test]
+    fn add_sbin_parses_with_latest_schema() {
+        let manifest = with_latest_schema(indoc! {r#"
+            [options.activate]
+            add-sbin = true
+        "#});
+
+        let parsed = toml_edit::de::from_str::<ManifestLatest>(&manifest).unwrap();
+
+        assert_eq!(parsed.options.activate, ActivateOptions {
+            mode: None,
+            add_sbin: Some(true),
+        });
+    }
+
+    #[test]
+    fn downgrades_to_v1_13_0_when_add_sbin_unused() {
+        let manifest = ManifestLatest::default();
+
+        let compat = manifest
+            .as_maybe_backwards_compatible(KnownSchemaVersion::V1_13_0, None)
+            .unwrap();
+
+        assert_eq!(compat.get_schema_version(), KnownSchemaVersion::V1_13_0);
+    }
+
+    #[test]
+    fn stays_latest_schema_when_add_sbin_used() {
+        let manifest = ManifestLatest {
+            options: Options {
+                activate: ActivateOptions {
+                    mode: None,
+                    add_sbin: Some(true),
+                },
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let compat = manifest
+            .as_maybe_backwards_compatible(KnownSchemaVersion::V1_13_0, None)
+            .unwrap();
+
+        assert_eq!(compat.get_schema_version(), KnownSchemaVersion::V1_14_0);
+    }
+
+    #[test]
     fn downgrades_to_v1_12_0_when_deactivate_unused() {
         let manifest = ManifestLatest {
             profile: Some(Profile {
@@ -249,7 +328,7 @@ mod tests {
             .as_maybe_backwards_compatible(KnownSchemaVersion::V1_12_0, None)
             .unwrap();
 
-        assert_eq!(compat.get_schema_version(), KnownSchemaVersion::V1_13_0);
+        assert_eq!(compat.get_schema_version(), KnownSchemaVersion::latest());
     }
 
     // FIXME

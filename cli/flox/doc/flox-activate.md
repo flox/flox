@@ -16,6 +16,7 @@ flox [<general-options>] activate
      [-t]
      [--print-script]
      [--start-services | --no-start-services]
+     [--add-sbin]
      [-m=(dev|run)]
      [-g=<generation>]
      [-c=<shell command> | -- <exec command>...]
@@ -196,6 +197,18 @@ options.
 
 `--no-start-services`
 :  Don't start services even if configured in the manifest with `auto-start = true`.
+
+`--add-sbin`
+:  Add the environment's `sbin` directory to `PATH`, in addition to `bin`.
+   By default only `bin` is added, so that administrative tools in one
+   package's `sbin` directory don't shadow another package's binaries.
+
+   To enable this by default for an environment, set
+   `options.activate.add-sbin = true` in the manifest.
+
+   When environments are layered, only the environments activated with this
+   flag (or with the manifest option set) get their `sbin` directory on
+   `PATH`.
 
 `-m (dev|run)`, `--mode (dev|run)`
 :  Activate the environment in either "dev" or "run" mode.

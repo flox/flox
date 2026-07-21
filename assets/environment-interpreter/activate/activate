@@ -46,14 +46,16 @@ env-project:,\
 mode:,\
 start-state-dir:,\
 skip-hook-on-activate,\
-cuda-detection"
+cuda-detection,\
+add-sbin"
 USAGE="Usage: $0 [-c \"<cmd> <args>\"] \
 [(-e|--env) <env>] \
 [--env-project <path>] \
 [(-m|--mode) (dev|run|build)] \
 [--start-state-dir <path>] \
 [--skip-hook-on-activate] \
-[--cuda-detection]"
+[--cuda-detection] \
+[--add-sbin]"
 
 if ! PARSED=$("$_getopt" --options="$OPTIONS" --longoptions="$LONGOPTS" --name "$0" -- "$@"); then
   echo "Failed to parse options." >&2
@@ -68,6 +70,7 @@ eval set -- "$PARSED"
 FLOX_CMD=""
 _FLOX_ENV_ACTIVATION_MODE="dev"
 _skip_hook_on_activate="false"
+export _FLOX_ADD_SBIN="${_FLOX_ADD_SBIN:-false}"
 while true; do
   case "$1" in
     -c | --command)
@@ -131,6 +134,10 @@ while true; do
       _FLOX_ENV_CUDA_DETECTION_V2="1"
       shift
       ;;
+    --add-sbin)
+      export _FLOX_ADD_SBIN="true"
+      shift
+      ;;
     --)
       shift
       break
@@ -192,10 +199,16 @@ if [ "$_command_mode" = "true" ]; then
     fi
   done
 
+  _add_sbin_arg=""
+  if [ "$_FLOX_ADD_SBIN" = "true" ]; then
+    _add_sbin_arg="--add-sbin"
+  fi
+  # $_add_sbin_arg is deliberately unquoted so that it expands to no argument
+  # at all when empty.
+  # shellcheck disable=SC1090,SC2086
+  source <("$_flox_activations" set-env-dirs --shell bash --flox-env "$_FLOX_ENV" --env-dirs "${FLOX_ENV_DIRS:-}" --sbin-dirs "${_FLOX_ENV_DIRS_ADD_SBIN:-}" $_add_sbin_arg)
   # shellcheck disable=SC1090
-  source <("$_flox_activations" set-env-dirs --shell bash --flox-env "$_FLOX_ENV" --env-dirs "${FLOX_ENV_DIRS:-}")
-  # shellcheck disable=SC1090
-  source <("$_flox_activations" fix-paths --shell bash --env-dirs "$FLOX_ENV_DIRS" --path "$PATH" --manpath "${MANPATH:-}")
+  source <("$_flox_activations" fix-paths --shell bash --env-dirs "$FLOX_ENV_DIRS" --sbin-dirs "${_FLOX_ENV_DIRS_ADD_SBIN:-}" --path "$PATH" --manpath "${MANPATH:-}")
 fi
 
 if [ "$_command_mode" = "false" ]; then

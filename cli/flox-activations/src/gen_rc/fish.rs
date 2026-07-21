@@ -17,6 +17,8 @@ pub struct FishStartupArgs {
     pub flox_activate_tracelevel: u32,
     pub activate_d: PathBuf,
     pub flox_env: PathBuf,
+    /// Whether this activation puts the environment's sbin directory on PATH.
+    pub add_sbin: bool,
     pub invocation_type: InvocationType,
     /// The activated environment's pointer as serialized in
     /// `_FLOX_ACTIVE_ENVIRONMENTS`, used to key its `_FLOX_INVOCATION_TYPES`
@@ -160,11 +162,16 @@ pub fn generate_fish_profile_commands(
             );
 
             stmts.push(
+                r#"set -gx _FLOX_ENV_DIRS_ADD_SBIN (if set -q _FLOX_ENV_DIRS_ADD_SBIN; echo "$_FLOX_ENV_DIRS_ADD_SBIN"; else; echo empty; end);"#.to_stmt()
+            );
+
+            stmts.push(
                 format!(
-                    r#"{} set-env-dirs --shell {} --flox-env "{}" --env-dirs "$FLOX_ENV_DIRS" | source;"#,
+                    r#"{} set-env-dirs --shell {} --flox-env "{}" --env-dirs "$FLOX_ENV_DIRS" --sbin-dirs "$_FLOX_ENV_DIRS_ADD_SBIN"{} | source;"#,
                     args.flox_activations.display(),
                     Shell::Fish,
-                    args.flox_env.display()
+                    args.flox_env.display(),
+                    if args.add_sbin { " --add-sbin" } else { "" },
                 )
                 .to_stmt(),
             );
@@ -175,7 +182,7 @@ pub fn generate_fish_profile_commands(
             );
 
             stmts.push(format!(
-                r#"{} fix-paths --shell {} --env-dirs "$FLOX_ENV_DIRS" --path "$PATH" --manpath "$MANPATH" | source;"#,
+                r#"{} fix-paths --shell {} --env-dirs "$FLOX_ENV_DIRS" --sbin-dirs "$_FLOX_ENV_DIRS_ADD_SBIN" --path "$PATH" --manpath "$MANPATH" | source;"#,
                 args.flox_activations.display(),
                 Shell::Fish,
             ).to_stmt());
@@ -342,9 +349,10 @@ mod tests {
             set -g _FLOX_INVOCATION_TYPES ('/flox_activations' push-invocation-type --invocation-type interactive --env '{"name":"test_env","type":"path"}' --current "$_FLOX_INVOCATION_TYPES");
             if isatty 1; source '/interpreter/activate.d/set-prompt.fish'; end;
             set -gx FLOX_ENV_DIRS (if set -q FLOX_ENV_DIRS; echo "$FLOX_ENV_DIRS"; else; echo empty; end);
-            /flox_activations set-env-dirs --shell fish --flox-env "/flox_env" --env-dirs "$FLOX_ENV_DIRS" | source;
+            set -gx _FLOX_ENV_DIRS_ADD_SBIN (if set -q _FLOX_ENV_DIRS_ADD_SBIN; echo "$_FLOX_ENV_DIRS_ADD_SBIN"; else; echo empty; end);
+            /flox_activations set-env-dirs --shell fish --flox-env "/flox_env" --env-dirs "$FLOX_ENV_DIRS" --sbin-dirs "$_FLOX_ENV_DIRS_ADD_SBIN" | source;
             set -gx MANPATH (if set -q MANPATH; echo "$MANPATH"; else; echo empty; end);
-            /flox_activations fix-paths --shell fish --env-dirs "$FLOX_ENV_DIRS" --path "$PATH" --manpath "$MANPATH" | source;
+            /flox_activations fix-paths --shell fish --env-dirs "$FLOX_ENV_DIRS" --sbin-dirs "$_FLOX_ENV_DIRS_ADD_SBIN" --path "$PATH" --manpath "$MANPATH" | source;
             set -g  _FLOX_SOURCED_PROFILE_SCRIPTS (if set -q _FLOX_SOURCED_PROFILE_SCRIPTS; echo "$_FLOX_SOURCED_PROFILE_SCRIPTS"; else; echo ""; end);
             /flox_activations profile-scripts --shell fish --already-sourced-env-dirs  "$_FLOX_SOURCED_PROFILE_SCRIPTS" --env-dirs "$FLOX_ENV_DIRS" | source;
             set -gx fish_trace 0;
@@ -399,9 +407,10 @@ mod tests {
             set -g _FLOX_INVOCATION_TYPES ('/flox_activations' push-invocation-type --invocation-type inplace --env '{"name":"test_env","type":"path"}' --current "$_FLOX_INVOCATION_TYPES");
             if isatty 1; source '/interpreter/activate.d/set-prompt.fish'; end;
             set -gx FLOX_ENV_DIRS (if set -q FLOX_ENV_DIRS; echo "$FLOX_ENV_DIRS"; else; echo empty; end);
-            /flox_activations set-env-dirs --shell fish --flox-env "/flox_env" --env-dirs "$FLOX_ENV_DIRS" | source;
+            set -gx _FLOX_ENV_DIRS_ADD_SBIN (if set -q _FLOX_ENV_DIRS_ADD_SBIN; echo "$_FLOX_ENV_DIRS_ADD_SBIN"; else; echo empty; end);
+            /flox_activations set-env-dirs --shell fish --flox-env "/flox_env" --env-dirs "$FLOX_ENV_DIRS" --sbin-dirs "$_FLOX_ENV_DIRS_ADD_SBIN" | source;
             set -gx MANPATH (if set -q MANPATH; echo "$MANPATH"; else; echo empty; end);
-            /flox_activations fix-paths --shell fish --env-dirs "$FLOX_ENV_DIRS" --path "$PATH" --manpath "$MANPATH" | source;
+            /flox_activations fix-paths --shell fish --env-dirs "$FLOX_ENV_DIRS" --sbin-dirs "$_FLOX_ENV_DIRS_ADD_SBIN" --path "$PATH" --manpath "$MANPATH" | source;
             set -g  _FLOX_SOURCED_PROFILE_SCRIPTS (if set -q _FLOX_SOURCED_PROFILE_SCRIPTS; echo "$_FLOX_SOURCED_PROFILE_SCRIPTS"; else; echo ""; end);
             /flox_activations profile-scripts --shell fish --already-sourced-env-dirs  "$_FLOX_SOURCED_PROFILE_SCRIPTS" --env-dirs "$FLOX_ENV_DIRS" | source;
             set -gx fish_trace 0;
@@ -450,6 +459,8 @@ mod tests {
             set -e PATH;
             set -e QUOTED_VAR;
             set -e _FLOX_ACTIVE_ENVIRONMENTS;
+            set -e _FLOX_ADD_SBIN;
+            set -e _FLOX_ENV_DIRS_ADD_SBIN;
             set -e _FLOX_HOOK_DIFF;
             set -e _flox_activations;
             set -gx MODIFIED_VAR MODIFIED_ORIGINAL;
