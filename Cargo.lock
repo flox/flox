@@ -1578,7 +1578,6 @@ dependencies = [
  "indoc",
  "inquire",
  "itertools 0.14.0",
- "jsonwebtoken",
  "keyring-core",
  "minus",
  "nef-lock-catalog",

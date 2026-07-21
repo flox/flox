@@ -14,7 +14,6 @@ pub mod didyoumean;
 pub mod errors;
 pub mod events;
 pub mod init;
-pub mod jwt;
 pub mod message;
 pub mod metrics;
 pub mod openers;

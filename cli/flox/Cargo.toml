@@ -26,7 +26,6 @@ indicatif.workspace = true
 indoc.workspace = true
 inquire.workspace = true
 itertools.workspace = true
-jsonwebtoken.workspace = true
 keyring-core.workspace = true
 nix.workspace = true
 oauth2.workspace = true
