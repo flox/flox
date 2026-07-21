@@ -532,6 +532,7 @@ mod tests {
                 vars: None,
                 is_daemon: None,
                 shutdown: None,
+                depends_on: None,
                 systemd: None,
                 systems: Some(vec!["another-system".to_string()]),
             });
@@ -569,6 +570,7 @@ mod tests {
                 vars: None,
                 is_daemon: None,
                 shutdown: None,
+                depends_on: None,
                 systemd: None,
                 systems: Some(vec!["system".to_string()]),
             });

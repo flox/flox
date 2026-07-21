@@ -93,7 +93,7 @@ impl<'a> From<ServiceUnitContext<'a>> for ServiceUnit {
             .map(|cmd| wrap_command(ctx.env_ref, &cmd));
         let exec_stop = base_service
             .exec_stop
-            .or_else(|| descriptor.shutdown.as_ref().map(|s| s.command.clone()))
+            .or_else(|| descriptor.shutdown.as_ref().and_then(|s| s.command.clone()))
             .map(|cmd| wrap_command(ctx.env_ref, &cmd));
 
         let exec_start_pre = base_service
@@ -232,6 +232,7 @@ mod tests {
             vars: None,
             is_daemon: None,
             shutdown: None,
+            depends_on: None,
             systemd: None,
             systems: None,
         };
@@ -265,8 +266,11 @@ mod tests {
             vars: Some(Vars::from_map(vars.clone())),
             is_daemon: Some(true),
             shutdown: Some(ServiceShutdown {
-                command: "stop-command".to_string(),
+                command: Some("stop-command".to_string()),
+                timeout_seconds: None,
+                signal: None,
             }),
+            depends_on: None,
             systemd: None,
             systems: None,
         };
@@ -307,8 +311,11 @@ mod tests {
             is_daemon: Some(true),
             shutdown: Some(ServiceShutdown {
                 // overridden by systemd.service.exec_start_post
-                command: "stop-descriptor".to_string(),
+                command: Some("stop-descriptor".to_string()),
+                timeout_seconds: None,
+                signal: None,
             }),
+            depends_on: None,
             systemd: Some(ServiceUnit {
                 unit: Some(Unit {
                     description: Some("some service".to_string()),
