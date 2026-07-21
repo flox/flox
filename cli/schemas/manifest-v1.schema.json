@@ -1696,6 +1696,20 @@
       },
       "type": "object"
     },
+    "ServiceDependency": {
+      "additionalProperties": false,
+      "description": "A single `depends-on` edge for a service: wait for `condition` on the named\nservice before starting.",
+      "properties": {
+        "condition": {
+          "$ref": "#/$defs/ServiceStartCondition",
+          "description": "The state the depended-on service must reach before this service starts."
+        }
+      },
+      "required": [
+        "condition"
+      ],
+      "type": "object"
+    },
     "ServiceDescriptor": {
       "additionalProperties": false,
       "description": "The definition of a service in a manifest",
@@ -1703,6 +1717,16 @@
         "command": {
           "description": "The command to run to start the service",
           "type": "string"
+        },
+        "depends-on": {
+          "additionalProperties": {
+            "$ref": "#/$defs/ServiceDependency"
+          },
+          "description": "Other services that must reach a given state before this service starts.\n\nMaps the name of a depended-on service to the condition that must be\nsatisfied before this service is started. Passed straight through to\nprocess-compose's `depends_on`.",
+          "type": [
+            "object",
+            "null"
+          ]
         },
         "is-daemon": {
           "description": "Whether the service spawns a background process (daemon)",
@@ -1764,14 +1788,51 @@
       "additionalProperties": false,
       "properties": {
         "command": {
-          "description": "What command to run to shut down the service",
-          "type": "string"
+          "description": "What command to run to shut down the service instead of delivering a\nsignal. Required when `is-daemon` is `true`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "signal": {
+          "description": "The signal number to send to shut the service down (for example `15`\nfor `SIGTERM`, `2` for `SIGINT`). Ignored when a shutdown `command` is\ngiven.",
+          "format": "int32",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "timeout-seconds": {
+          "description": "How long to wait, in seconds, for the service to shut down before\nprocess-compose forcibly kills its process group with `SIGKILL`.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
         }
       },
-      "required": [
-        "command"
-      ],
       "type": "object"
+    },
+    "ServiceStartCondition": {
+      "description": "The state a depended-on service must reach before a dependent service is\nallowed to start.\n\nSerializes to the literal condition strings that process-compose expects in\na `depends_on.<name>.condition` field.",
+      "oneOf": [
+        {
+          "const": "process_started",
+          "description": "The depended-on service's process has been started.",
+          "type": "string"
+        },
+        {
+          "const": "process_completed",
+          "description": "The depended-on service's process has exited, with any status.",
+          "type": "string"
+        },
+        {
+          "const": "process_completed_successfully",
+          "description": "The depended-on service's process has exited successfully (status 0).",
+          "type": "string"
+        }
+      ]
     },
     "ServiceType": {
       "enum": [
