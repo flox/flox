@@ -154,7 +154,7 @@ pub struct FloxConfig {
     pub keep_tempdir: Option<bool>,
 
     /// Whether to automatically activate environments.
-    /// Possible values: `prompt` (default), `allowed`.
+    /// Possible values: `prompt` (default), `allowlist`, `disabled`.
     pub auto_activate: Option<AutoActivate>,
 
     /// Controls how the fish shell hook responds to directory changes.
@@ -215,11 +215,15 @@ pub enum AutoActivate {
     /// Only auto-activate environments the user has already allowed (via the
     /// prompt or `flox activate allow`). Walking past an unregistered `.flox`
     /// does nothing — no prompt.
-    Allowed,
+    #[serde(alias = "allowed")]
+    Allowlist,
     /// Auto-activate allowed environments, and prompt before activating an
     /// environment that has not yet been allowed or denied.
     #[default]
     Prompt,
+    /// Auto-activation off entirely: never activate (not even allowed
+    /// environments) and never prompt.
+    Disabled,
 }
 
 /// Auto-activation preference for a specific directory
