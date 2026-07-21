@@ -11,10 +11,20 @@ pub struct EventsGuard {
 }
 
 impl EventsGuard {
+    /// Install a guard on the global hub. Panics if a guard is already active
+    /// — there can only be one at a time (see [`EventsHub::try_guard`]).
+    /// `main` deliberately does *not* use this: it installs its guard with
+    /// `EventsHub::global().try_guard().ok()`, tolerating an already-active
+    /// guard instead of panicking. Reach for [`EventsHub::try_guard`] wherever
+    /// a panic on an existing guard would be wrong.
     pub fn new() -> Self {
-        Self {
-            hub: EventsHub::global().clone(),
-        }
+        EventsHub::global()
+            .try_guard()
+            .expect("an EventsGuard is already active for the global hub")
+    }
+
+    pub(crate) fn from_hub(hub: EventsHub) -> Self {
+        Self { hub }
     }
 }
 

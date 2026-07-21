@@ -1,6 +1,6 @@
 use anyhow::{Result, bail};
 use bpaf::Bpaf;
-use flox_events::EventsHub;
+use flox_events::{CliEnvironmentPayload, EventKind, EventsHub};
 use flox_manifest::interfaces::AsLatestSchema;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::providers::services::process_compose::{
@@ -41,9 +41,9 @@ impl Logs {
         let env =
             ServicesEnvironment::from_environment_selection(&mut flox, &self.environment).await?;
         environment_subcommand_metric!("services::logs", env.environment);
-        if let Err(err) = EventsHub::global()
-            .record_environment_services_logs(env_detail_from_concrete(&env.environment))
-        {
+        if let Err(err) = EventsHub::global().record_event(EventKind::CliEnvironmentServicesLogs(
+            CliEnvironmentPayload::new(env_detail_from_concrete(&env.environment)),
+        )) {
             debug!(error = %err, "Failed to record v2 event");
         }
         guard_service_commands_available(&env, &flox.system)?;

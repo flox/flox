@@ -130,17 +130,14 @@ pub fn build_events_client(config: &Config, invocation_id: Uuid) -> Option<Event
 /// per-kind match is not duplicated.
 pub fn env_detail_from_concrete(env: &ConcreteEnvironment) -> EnvDetail {
     match env {
-        ConcreteEnvironment::Remote(environment) => EnvDetail {
-            env_kind: "remote".to_string(),
-            env_ref_or_name: environment.env_ref().to_string(),
+        ConcreteEnvironment::Remote(environment) => {
+            EnvDetail::new("remote", environment.env_ref().to_string())
         },
-        ConcreteEnvironment::Managed(environment) => EnvDetail {
-            env_kind: "managed".to_string(),
-            env_ref_or_name: environment.env_ref().to_string(),
+        ConcreteEnvironment::Managed(environment) => {
+            EnvDetail::new("managed", environment.env_ref().to_string())
         },
-        ConcreteEnvironment::Path(environment) => EnvDetail {
-            env_kind: "path".to_string(),
-            env_ref_or_name: Environment::name(environment).to_string(),
+        ConcreteEnvironment::Path(environment) => {
+            EnvDetail::new("path", Environment::name(environment).to_string())
         },
     }
 }

@@ -20,7 +20,7 @@ use flox_core::activations::activation_state_dir_path;
 use flox_core::data::System;
 use flox_core::data::environment_ref::DEFAULT_NAME;
 use flox_core::traceable_path;
-use flox_events::{EventsHub, LifecycleFields};
+use flox_events::{CliEnvironmentActivatePayload, EventKind, EventsHub, LifecycleFields};
 use flox_manifest::interfaces::{AsLatestSchema, AsWritableManifest, WriteManifest};
 use flox_manifest::parsed::Inner;
 use flox_manifest::parsed::common::IncludeDescriptor;
@@ -240,10 +240,11 @@ impl Activate {
             .clone()
             .unwrap_or(ActivateMode::Dev)
             .to_string();
-        if let Err(err) = EventsHub::global().record_environment_activate_with(v2_env_detail, |p| {
-            p.with_start_services(options.start_services)
-                .with_mode(v2_mode)
-        }) {
+        if let Err(err) = EventsHub::global().record_event(EventKind::CliEnvironmentActivate(
+            CliEnvironmentActivatePayload::new(v2_env_detail)
+                .with_start_services(options.start_services)
+                .with_mode(v2_mode),
+        )) {
             debug!(error = %err, "Failed to record v2 event");
         }
 
@@ -414,10 +415,10 @@ impl ActivateOptions {
         let has_includes = lockfile.compose.is_some();
         subcommand_metric!("activate", "has_includes" = has_includes);
 
-        if let Err(err) = EventsHub::global().record_environment_activate_with(
-            env_detail_from_concrete(&concrete_environment),
-            |p| p.with_has_includes(has_includes),
-        ) {
+        if let Err(err) = EventsHub::global().record_event(EventKind::CliEnvironmentActivate(
+            CliEnvironmentActivatePayload::new(env_detail_from_concrete(&concrete_environment))
+                .with_has_includes(has_includes),
+        )) {
             debug!(error = %err, "Failed to record v2 event");
         }
 
@@ -450,10 +451,10 @@ impl ActivateOptions {
         // The new pipeline drops the legacy `activate#version` pseudo-
         // subcommand (per spec AC #4) and rides `lockfile_version` on a
         // real `cli.environment.activate` event instead.
-        if let Err(err) = EventsHub::global().record_environment_activate_with(
-            env_detail_from_concrete(&concrete_environment),
-            |p| p.with_lockfile_version(lockfile_version.to_string()),
-        ) {
+        if let Err(err) = EventsHub::global().record_event(EventKind::CliEnvironmentActivate(
+            CliEnvironmentActivatePayload::new(env_detail_from_concrete(&concrete_environment))
+                .with_lockfile_version(lockfile_version.to_string()),
+        )) {
             debug!(error = %err, "Failed to record v2 event");
         }
 
@@ -572,10 +573,10 @@ impl ActivateOptions {
         // Runs before `command.exec()`, so the buffered event is flushed
         // synchronously by the pre-exec emit + flush block below
         // (spec AC #5).
-        if let Err(err) = EventsHub::global().record_environment_activate_with(
-            env_detail_from_concrete(&concrete_environment),
-            |p| p.with_shell(shell.to_string()),
-        ) {
+        if let Err(err) = EventsHub::global().record_event(EventKind::CliEnvironmentActivate(
+            CliEnvironmentActivatePayload::new(env_detail_from_concrete(&concrete_environment))
+                .with_shell(shell.to_string()),
+        )) {
             debug!(error = %err, "Failed to record v2 event");
         }
 

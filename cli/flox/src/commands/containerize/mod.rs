@@ -9,7 +9,7 @@ use std::{fs, io};
 use anyhow::{Context, Result, anyhow, bail};
 use bpaf::Bpaf;
 use flox_core::activate::context::ActivateMode;
-use flox_events::EventsHub;
+use flox_events::{CliEnvironmentPayload, EventKind, EventsHub};
 use flox_manifest::interfaces::AsLatestSchema;
 use flox_manifest::lockfile::Lockfile;
 use flox_manifest::parsed::common::ContainerizeConfig;
@@ -70,9 +70,9 @@ impl Containerize {
             .detect_concrete_environment(&mut flox, "Containerize")
             .await?;
         environment_subcommand_metric!("containerize", env);
-        if let Err(err) =
-            EventsHub::global().record_environment_containerize(env_detail_from_concrete(&env))
-        {
+        if let Err(err) = EventsHub::global().record_event(EventKind::CliEnvironmentContainerize(
+            CliEnvironmentPayload::new(env_detail_from_concrete(&env)),
+        )) {
             debug!(error = %err, "Failed to record v2 event");
         }
 

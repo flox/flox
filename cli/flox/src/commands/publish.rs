@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use anyhow::{Context, Result, bail};
 use bpaf::Bpaf;
 use flox_config::Config;
-use flox_events::EventsHub;
+use flox_events::{CliEnvironmentPublishPayload, EventKind, EventsHub};
 use flox_manifest::{Manifest, MigratedTypedOnly};
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment};
@@ -138,9 +138,9 @@ impl Publish {
             .environment
             .detect_concrete_environment(&mut flox, "Publish")?;
         environment_subcommand_metric!("publish", env);
-        if let Err(err) =
-            EventsHub::global().record_environment_publish(env_detail_from_concrete(&env))
-        {
+        if let Err(err) = EventsHub::global().record_event(EventKind::CliEnvironmentPublish(
+            CliEnvironmentPublishPayload::new(env_detail_from_concrete(&env)),
+        )) {
             debug!(error = %err, "Failed to record v2 event");
         }
 
@@ -278,9 +278,10 @@ impl Publish {
             "has_expression_build" = has_expression_build,
             "has_manifest_build" = has_manifest_build
         );
-        if let Err(err) = EventsHub::global().record_environment_publish_with(env_detail, |p| {
-            p.with_build_kinds(has_expression_build, has_manifest_build)
-        }) {
+        if let Err(err) = EventsHub::global().record_event(EventKind::CliEnvironmentPublish(
+            CliEnvironmentPublishPayload::new(env_detail)
+                .with_build_kinds(has_expression_build, has_manifest_build),
+        )) {
             debug!(error = %err, "Failed to record v2 event");
         }
 

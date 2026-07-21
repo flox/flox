@@ -1,6 +1,6 @@
 use anyhow::Result;
 use bpaf::Bpaf;
-use flox_events::EventsHub;
+use flox_events::{CliEnvironmentPayload, EventKind, EventsHub};
 use flox_manifest::interfaces::AsLatestSchema;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::providers::services::process_compose::{ProcessStates, stop_services};
@@ -28,9 +28,9 @@ impl Stop {
         let env =
             ServicesEnvironment::from_environment_selection(&mut flox, &self.environment).await?;
         environment_subcommand_metric!("services::stop", env.environment);
-        if let Err(err) = EventsHub::global()
-            .record_environment_services_stop(env_detail_from_concrete(&env.environment))
-        {
+        if let Err(err) = EventsHub::global().record_event(EventKind::CliEnvironmentServicesStop(
+            CliEnvironmentPayload::new(env_detail_from_concrete(&env.environment)),
+        )) {
             debug!(error = %err, "Failed to record v2 event");
         }
         guard_service_commands_available(&env, &flox.system)?;

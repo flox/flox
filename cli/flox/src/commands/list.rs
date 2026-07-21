@@ -3,7 +3,7 @@ use std::str::FromStr;
 
 use anyhow::{Result, bail};
 use bpaf::Bpaf;
-use flox_events::EventsHub;
+use flox_events::{CliEnvironmentPayload, EventKind, EventsHub};
 use flox_manifest::interfaces::{AsWritableManifest, WriteManifest};
 use flox_manifest::lockfile::{LockedInstallable, LockedPackageFlake, Lockfile, PackageToList};
 use flox_rust_sdk::flox::Flox;
@@ -68,9 +68,9 @@ impl List {
             .detect_concrete_environment(&mut flox, "List using")
             .await?;
         environment_subcommand_metric!("list", env);
-        if let Err(err) =
-            EventsHub::global().record_environment_list(env_detail_from_concrete(&env))
-        {
+        if let Err(err) = EventsHub::global().record_event(EventKind::CliEnvironmentList(
+            CliEnvironmentPayload::new(env_detail_from_concrete(&env)),
+        )) {
             debug!(error = %err, "Failed to record v2 event");
         }
 

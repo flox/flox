@@ -1,7 +1,7 @@
 use anyhow::Result;
 use bpaf::Bpaf;
 use crossterm::style::Stylize;
-use flox_events::{EventsHub, PackageOutcome};
+use flox_events::{CliEnvironmentPayload, CliPackagePayload, EventKind, EventsHub, PackageOutcome};
 use flox_manifest::lockfile::LockedPackage;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::{Environment, SingleSystemUpgradeDiff};
@@ -52,9 +52,9 @@ impl Upgrade {
             .detect_concrete_environment(&mut flox, "Upgrade")
             .await?;
         environment_subcommand_metric!("upgrade", concrete_environment);
-        if let Err(err) = EventsHub::global()
-            .record_environment_upgrade(env_detail_from_concrete(&concrete_environment))
-        {
+        if let Err(err) = EventsHub::global().record_event(EventKind::CliEnvironmentUpgrade(
+            CliEnvironmentPayload::new(env_detail_from_concrete(&concrete_environment)),
+        )) {
             debug!(error = %err, "Failed to record v2 event");
         }
 
@@ -158,9 +158,9 @@ impl Upgrade {
 
         let hub = EventsHub::global();
         for (_, (before, _)) in diff_for_system.iter() {
-            if let Err(err) =
-                hub.record_package_upgrade(before.install_id().to_string(), PackageOutcome::Success)
-            {
+            if let Err(err) = hub.record_event(EventKind::CliPackageUpgrade(
+                CliPackagePayload::new(before.install_id().to_string(), PackageOutcome::Success),
+            )) {
                 debug!(error = %err, "Failed to record v2 event");
             }
         }

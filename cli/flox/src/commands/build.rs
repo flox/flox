@@ -5,7 +5,7 @@ use std::process::Stdio;
 use anyhow::{Context, Result, bail};
 use bpaf::Bpaf;
 use flox_core::data::CanonicalPath;
-use flox_events::EventsHub;
+use flox_events::{CliBuildPayload, EventKind, EventsHub};
 use flox_manifest::lockfile::Lockfile;
 use flox_manifest::{Manifest, MigratedTypedOnly};
 use flox_rust_sdk::flox::Flox;
@@ -312,8 +312,9 @@ impl Build {
             "has_expression_build" = has_expression_build,
             "has_manifest_build" = has_manifest_build
         );
-        if let Err(err) = EventsHub::global().record_build(has_expression_build, has_manifest_build)
-        {
+        if let Err(err) = EventsHub::global().record_event(EventKind::CliBuild(
+            CliBuildPayload::new(has_expression_build, has_manifest_build),
+        )) {
             debug!(error = %err, "Failed to record v2 event");
         }
 

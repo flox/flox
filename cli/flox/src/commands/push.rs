@@ -3,7 +3,7 @@ use std::str::FromStr;
 use anyhow::{Context, Result, bail};
 use bpaf::Bpaf;
 use flox_core::data::environment_ref::EnvironmentOwner;
-use flox_events::EventsHub;
+use flox_events::{CliEnvironmentPayload, EventKind, EventsHub};
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::managed_environment::{
     ManagedEnvironment,
@@ -85,9 +85,9 @@ impl Push {
 
         environment_subcommand_metric!("push", env);
 
-        if let Err(err) =
-            EventsHub::global().record_environment_push(env_detail_from_concrete(&env))
-        {
+        if let Err(err) = EventsHub::global().record_event(EventKind::CliEnvironmentPush(
+            CliEnvironmentPayload::new(env_detail_from_concrete(&env)),
+        )) {
             debug!(error = %err, "Failed to record v2 event");
         }
 

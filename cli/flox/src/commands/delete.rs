@@ -1,6 +1,6 @@
 use anyhow::{Result, bail};
 use bpaf::Bpaf;
-use flox_events::EventsHub;
+use flox_events::{CliEnvironmentPayload, EventKind, EventsHub};
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment};
 use indoc::formatdoc;
@@ -33,9 +33,9 @@ impl Delete {
             .detect_concrete_environment(&mut flox, "Delete")?;
 
         environment_subcommand_metric!("delete", environment);
-        if let Err(err) =
-            EventsHub::global().record_environment_delete(env_detail_from_concrete(&environment))
-        {
+        if let Err(err) = EventsHub::global().record_event(EventKind::CliEnvironmentDelete(
+            CliEnvironmentPayload::new(env_detail_from_concrete(&environment)),
+        )) {
             debug!(error = %err, "Failed to record v2 event");
         }
 

@@ -1,6 +1,6 @@
 use anyhow::Result;
 use bpaf::Bpaf;
-use flox_events::{EventsHub, PackageOutcome};
+use flox_events::{CliEnvironmentPayload, CliPackagePayload, EventKind, EventsHub, PackageOutcome};
 use flox_manifest::parsed::latest::SelectedOutputs;
 use flox_manifest::raw::PackageModification;
 use flox_rust_sdk::flox::Flox;
@@ -71,9 +71,9 @@ impl Uninstall {
             Err(e) => Err(e)?,
         };
         environment_subcommand_metric!("uninstall", concrete_environment);
-        if let Err(err) = EventsHub::global()
-            .record_environment_uninstall(env_detail_from_concrete(&concrete_environment))
-        {
+        if let Err(err) = EventsHub::global().record_event(EventKind::CliEnvironmentUninstall(
+            CliEnvironmentPayload::new(env_detail_from_concrete(&concrete_environment)),
+        )) {
             debug!(error = %err, "Failed to record v2 event");
         }
 
@@ -136,9 +136,9 @@ impl Uninstall {
             if !matches!(modification.modification, PackageModification::Remove) {
                 continue;
             }
-            if let Err(err) = hub
-                .record_package_uninstall(modification.install_id.clone(), PackageOutcome::Success)
-            {
+            if let Err(err) = hub.record_event(EventKind::CliPackageUninstall(
+                CliPackagePayload::new(modification.install_id.clone(), PackageOutcome::Success),
+            )) {
                 debug!(error = %err, "Failed to record v2 event");
             }
         }

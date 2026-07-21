@@ -18,7 +18,7 @@ use commands::{
 use flox_config::Config;
 use flox_core::sentry::init_sentry;
 use flox_core::vars::{FLOX_VERSION_STRING, FLOX_VERSION_VAR};
-use flox_events::{EventsGuard, LifecycleFields};
+use flox_events::{EventsHub, LifecycleFields};
 use flox_rust_sdk::flox::FLOX_VERSION;
 use flox_rust_sdk::models::environment::EnvironmentError;
 use flox_rust_sdk::models::environment::managed_environment::ManagedEnvironmentError;
@@ -121,7 +121,7 @@ fn main() -> ExitCode {
     // https://docs.sentry.io/platforms/rust/#async-main-function
     let _sentry_guard = metrics_uuid.map(|uuid| init_sentry("flox-cli", uuid));
     let _metrics_guard = Hub::global().try_guard().ok();
-    let _v2_events_guard = EventsGuard::new();
+    let _v2_events_guard = EventsHub::global().try_guard().ok();
 
     // Pass down the verbosity level to all sub-processes
     unsafe {
