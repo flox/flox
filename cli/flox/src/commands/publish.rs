@@ -7,7 +7,7 @@ use flox_events::EventsHub;
 use flox_manifest::{Manifest, MigratedTypedOnly};
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment};
-use flox_rust_sdk::providers::build::{COMMON_NIXPKGS_URL, PackageTarget};
+use flox_rust_sdk::providers::build::{COMMON_NIXPKGS_URL, CatalogLock, PackageTarget};
 use flox_rust_sdk::providers::nix_auth::NixAuth;
 use flox_rust_sdk::providers::publish::{
     PublishProvider,
@@ -362,7 +362,8 @@ impl Publish {
 
         // New (or check failed): perform the full build. This reuses the
         // catalog lock the lock phase above already computed instead of
-        // recomputing it.
+        // recomputing it, keyed on the authoritative lock artifact that phase
+        // emitted so a broken render->lock->build invariant fails loudly.
         let build_metadata = check_build_metadata(
             &flox,
             &selected_base_nixpkgs_url,
@@ -370,6 +371,9 @@ impl Publish {
             &rendered,
             &publish_provider.package_metadata.package,
             nef_stability,
+            CatalogLock::Reuse {
+                lockfile: locked.catalog_lockfile.clone(),
+            },
         )?;
 
         // CLI args take precedence over config
