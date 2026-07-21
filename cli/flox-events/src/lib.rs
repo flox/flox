@@ -254,6 +254,14 @@ impl SharedMetadataTemplate {
 /// parent's invocation id and emit their own `cli.command_run`. The
 /// parent's run row is always the earliest-timestamped one for the
 /// invocation — consumers joining for command context must use it.
+///
+/// The command-context join is best-effort under buffer overflow: the on-disk
+/// buffer caps at 1000 events and evicts oldest-first, so a
+/// `cli.command_completed` (or other domain) row can outlive the
+/// `cli.command_run` it would join to. A single invocation pushes its run row
+/// and its remaining events adjacently, so eviction drops whole invocations
+/// rather than splitting a pair — but a consumer must tolerate a completed row
+/// with no joinable run row.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CliCommandRunPayload {
     #[serde(flatten)]
