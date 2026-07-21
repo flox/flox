@@ -57,10 +57,10 @@ pub enum ScanError {
     /// declare it as a parameter. NEF supplies only declared arguments
     /// (callPackage semantics), so every reference through the root is
     /// guaranteed to fail evaluation as an undefined variable.
-    #[error("{}", undeclared_root_message(root, file.as_deref(), *position))]
+    #[error("{}", undeclared_root_message(root, file, *position))]
     UndeclaredRoot {
         root: String,
-        file: Option<PathBuf>,
+        file: PathBuf,
         /// 1-based `(line, column)` of the root's first use, when recorded.
         position: Option<(usize, usize)>,
     },
@@ -69,32 +69,26 @@ pub enum ScanError {
     /// cannot be read. The refs the imported file would contribute through
     /// the forwarded namespaces cannot be discovered, so the scan fails
     /// rather than silently under-locking.
-    #[error("{}", unreadable_import_message(target, file.as_deref(), *position))]
+    #[error("{}", unreadable_import_message(target, file, *position))]
     UnreadableImport {
         target: PathBuf,
-        file: Option<PathBuf>,
+        file: PathBuf,
         /// 1-based `(line, column)` of the import application.
         position: (usize, usize),
     },
 }
 
-/// Render a source location as a message suffix; the parts are best-effort
-/// (unit scans have no file, forwarded-only uses may lack a position).
-fn location_suffix(file: Option<&Path>, position: Option<(usize, usize)>) -> String {
-    match (file, position) {
-        (Some(file), Some((line, column))) => format!(" at {}:{line}:{column}", file.display()),
-        (Some(file), None) => format!(" in {}", file.display()),
-        (None, Some((line, column))) => format!(" at {line}:{column}"),
-        (None, None) => String::new(),
+/// Render a source location as a message suffix; the position is best-effort
+/// (forwarded-only uses may lack one).
+fn location_suffix(file: &Path, position: Option<(usize, usize)>) -> String {
+    match position {
+        Some((line, column)) => format!(" at {}:{line}:{column}", file.display()),
+        None => format!(" in {}", file.display()),
     }
 }
 
 /// Render [ScanError::UndeclaredRoot] for the user.
-fn undeclared_root_message(
-    root: &str,
-    file: Option<&Path>,
-    position: Option<(usize, usize)>,
-) -> String {
+fn undeclared_root_message(root: &str, file: &Path, position: Option<(usize, usize)>) -> String {
     let location = location_suffix(file, position);
     formatdoc! {"
         '{root}' is referenced{location} but is not declared in the function arguments.
@@ -102,11 +96,7 @@ fn undeclared_root_message(
 }
 
 /// Render [ScanError::UnreadableImport] for the user.
-fn unreadable_import_message(
-    target: &Path,
-    file: Option<&Path>,
-    position: (usize, usize),
-) -> String {
+fn unreadable_import_message(target: &Path, file: &Path, position: (usize, usize)) -> String {
     let target = target.display();
     let location = location_suffix(file, Some(position));
     formatdoc! {"
@@ -198,7 +188,7 @@ pub fn scan_package_with_roots(
                     roots,
                     dir,
                     &mut visited,
-                    Some(path),
+                    path,
                     &identity_origins(roots),
                 )?,
             );
@@ -214,11 +204,11 @@ pub fn scan_package_with_roots(
 }
 
 /// Source context for verbose reference reporting: the file a reference was
-/// found in (when known) plus its text, used to turn a byte offset into a
+/// found in plus its text, used to turn a byte offset into a
 /// 1-based `line:column`.
 #[derive(Clone, Debug)]
 struct ScanCtx<'a> {
-    path: Option<&'a Path>,
+    path: &'a Path,
     content: &'a str,
 }
 
@@ -227,73 +217,45 @@ impl ScanCtx<'_> {
     /// byte offset into the file). Surfaced by `lock --verbose`.
     fn report(&self, offset: usize, reference: &str) {
         let (line, column) = line_col(self.content, offset);
-        match self.path {
-            Some(path) => {
-                debug!(reference, file = %path.display(), line, column, "catalog reference")
-            },
-            None => debug!(reference, line, column, "catalog reference"),
-        }
+        debug!(reference, file = %self.path.display(), line, column, "catalog reference");
     }
 
     /// Warn that an import with a dynamic path forwards a catalog namespace
     /// the scanner cannot follow.
     fn warn_dynamic_import(&self, offset: usize) {
         let (line, column) = line_col(self.content, offset);
-        match self.path {
-            Some(path) => warn!(
-                file = %path.display(),
-                line,
-                column,
-                "import path is not statically known; the imported file is not scanned for catalog references",
-            ),
-            None => warn!(
-                line,
-                column,
-                "import path is not statically known; the imported file is not scanned for catalog references",
-            ),
-        }
+        warn!(
+            file = %self.path.display(),
+            line,
+            column,
+            "import path is not statically known; the imported file is not scanned for catalog references",
+        );
     }
 
     /// Warn that an import argument names a catalog root without forwarding
     /// it, so the imported file is not scanned through that name.
     fn warn_unfollowed_import(&self, offset: usize, name: &str) {
         let (line, column) = line_col(self.content, offset);
-        match self.path {
-            Some(path) => warn!(
-                name,
-                file = %path.display(),
-                line,
-                column,
-                "import argument is not the catalog namespace; the imported file is not scanned through it",
-            ),
-            None => warn!(
-                name,
-                line,
-                column,
-                "import argument is not the catalog namespace; the imported file is not scanned through it",
-            ),
-        }
+        warn!(
+            name,
+            file = %self.path.display(),
+            line,
+            column,
+            "import argument is not the catalog namespace; the imported file is not scanned through it",
+        );
     }
 
     /// Warn that a catalog namespace escapes static analysis at `offset`,
     /// widening to `reference`.
     fn warn_escape(&self, offset: usize, reference: &str) {
         let (line, column) = line_col(self.content, offset);
-        match self.path {
-            Some(path) => warn!(
-                reference,
-                file = %path.display(),
-                line,
-                column,
-                "catalog namespace escapes static analysis; locking the whole subtree",
-            ),
-            None => warn!(
-                reference,
-                line,
-                column,
-                "catalog namespace escapes static analysis; locking the whole subtree",
-            ),
-        }
+        warn!(
+            reference,
+            file = %self.path.display(),
+            line,
+            column,
+            "catalog namespace escapes static analysis; locking the whole subtree",
+        );
     }
 }
 
@@ -322,21 +284,19 @@ fn line_col(content: &str, offset: usize) -> (usize, usize) {
 /// When `file_dir` is `Some`, `import` calls forwarding a root are followed into
 /// the imported file; `visited` maps each drained target file to the top-level
 /// forwardings already scanned for it (see the drain below). `path` is the
-/// file's location, used only for verbose reference reporting. `root_origins`
-/// maps each root to the top-level root it stands for — the identity map at
-/// the entry file, and the composition of the forwarding chain in imported
-/// files.
+/// file's location, recorded in scan errors and used for verbose reference
+/// reporting. `root_origins` maps each root to the top-level root it stands
+/// for — the identity map at the entry file, and the composition of the
+/// forwarding chain in imported files.
 fn analyze_file_at(
     content: &str,
     roots: &HashSet<String>,
     file_dir: Option<&Path>,
     visited: &mut HashMap<PathBuf, HashSet<BTreeMap<String, String>>>,
-    path: Option<&Path>,
+    path: &Path,
     root_origins: &BTreeMap<String, String>,
 ) -> Result<FileInfo, ScanError> {
-    if let Some(path) = path {
-        debug!(file = %path.display(), "reading NEF expression");
-    }
+    debug!(file = %path.display(), "reading NEF expression");
 
     let parse = rnix::Root::parse(content);
     let root = parse.tree();
@@ -439,7 +399,7 @@ fn analyze_file_at(
                 // discovered, so fail rather than silently under-lock.
                 return Err(ScanError::UnreadableImport {
                     target,
-                    file: path.map(Path::to_path_buf),
+                    file: path.to_path_buf(),
                     position: line_col(content, pending.offset),
                 });
             };
@@ -492,7 +452,7 @@ fn analyze_file_at(
                 &child_roots,
                 import_dir.as_deref(),
                 visited,
-                Some(&target),
+                &target,
                 &child_origins,
             )?;
             refs.extend(
@@ -520,7 +480,7 @@ fn analyze_file_at(
             {
                 return Err(ScanError::UndeclaredRoot {
                     root: root.clone(),
-                    file: path.map(Path::to_path_buf),
+                    file: path.to_path_buf(),
                     position: first_root_use
                         .get(root)
                         .map(|&offset| line_col(content, offset)),
@@ -2006,7 +1966,7 @@ fn read_and_analyze(path: &Path, roots: &HashSet<String>) -> Result<Option<FileI
         roots,
         path.parent(),
         &mut HashMap::new(),
-        Some(path),
+        path,
         &identity_origins(roots),
     )
     .map(Some)
@@ -2026,7 +1986,7 @@ mod tests {
             roots,
             None,
             &mut HashMap::new(),
-            None,
+            Path::new("test.nix"),
             &identity_origins(roots),
         )
         .expect("scan should succeed")
@@ -2042,7 +2002,7 @@ mod tests {
             roots,
             None,
             &mut HashMap::new(),
-            None,
+            Path::new("test.nix"),
             &identity_origins(roots),
         )
         .expect_err("scan should fail")
@@ -2058,7 +2018,7 @@ mod tests {
             roots,
             dir,
             &mut visited,
-            Some(path),
+            path,
             &identity_origins(roots),
         )
         .expect("scan should succeed")
@@ -2075,7 +2035,7 @@ mod tests {
             roots,
             dir,
             &mut visited,
-            Some(path),
+            path,
             &identity_origins(roots),
         )
         .expect_err("scan should fail")
@@ -3396,7 +3356,7 @@ mod tests {
                 err,
                 ScanError::UnreadableImport {
                     target: PathBuf::from("test_data/catalog_refs/no-such-helper.nix"),
-                    file: Some(PathBuf::from(path)),
+                    file: PathBuf::from(path),
                     position,
                 },
                 "fixture: {path}"
@@ -3408,7 +3368,7 @@ mod tests {
     fn unreadable_import_error_message_points_at_the_import() {
         let err = ScanError::UnreadableImport {
             target: PathBuf::from("pkgs/helper.nix"),
-            file: Some(PathBuf::from("pkgs/foo.nix")),
+            file: PathBuf::from("pkgs/foo.nix"),
             position: (4, 1),
         };
         assert_eq!(err.to_string(), indoc::indoc! {"
@@ -3472,7 +3432,7 @@ mod tests {
                 scan_err(content, &roots(&["catalogs"])),
                 ScanError::UndeclaredRoot {
                     root: "catalogs".to_string(),
-                    file: None,
+                    file: PathBuf::from("test.nix"),
                     position: Some(position),
                 },
                 "{label}",
@@ -3538,13 +3498,13 @@ mod tests {
             &roots(&["catalogs"]),
             path.parent(),
             &mut HashMap::new(),
-            Some(path),
+            path,
             &identity_origins(&roots(&["catalogs"])),
         )
         .expect_err("scan should fail");
         assert_eq!(err, ScanError::UndeclaredRoot {
             root: "catalogs".to_string(),
-            file: Some(path.to_path_buf()),
+            file: path.to_path_buf(),
             position: Some((6, 35)),
         });
     }
@@ -3553,7 +3513,7 @@ mod tests {
     fn undeclared_root_error_message_points_at_the_arguments() {
         let err = ScanError::UndeclaredRoot {
             root: "catalogs".to_string(),
-            file: Some(PathBuf::from("pkgs/foo.nix")),
+            file: PathBuf::from("pkgs/foo.nix"),
             position: Some((4, 13)),
         };
         assert_eq!(err.to_string(), indoc::indoc! {"
