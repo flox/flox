@@ -5061,10 +5061,14 @@ nested_activation_get_output() {
 # process, namely that PATH and MANPATH have been repaired properly.
 #
 # In this context, "repaired" means that both the outer and default environments
-# are present in PATH, and the outer environment appears first.
+# are present in PATH, and the outer environment appears first. `sbin` is
+# excluded by default: only `bin` subdirectories are prepended.
 nested_activation_assertions() {
   # Check that PATH is repaired
-  assert_output --partial "$outer_stub/bin:$outer_stub/sbin:$default_stub/bin:$default_stub/sbin:before_path"
+  assert_output --partial "$outer_stub/bin:$default_stub/bin:before_path"
+  # Ensure `sbin` is NOT silently prepended
+  refute_output --partial "$outer_stub/sbin"
+  refute_output --partial "$default_stub/sbin"
   # Check that MANPATH is repaired
   assert_output --partial "$outer_stub/share/man:$default_stub/share/man"
 }
@@ -5123,6 +5127,200 @@ check_nested_activation_repairs_path_and_manpath() {
 # bats test_tags=activate:fish,activate:nested
 @test "fish: in-place: nested activation repairs (MAN)PATH" {
   check_nested_activation_repairs_path_and_manpath fish eval
+}
+
+# ---------------------------------------------------------------------------- #
+# `flox activate --add-sbin`
+#
+# sbin is excluded from PATH by default so that e.g. BusyBox's sbin/ifconfig
+# doesn't shadow a dedicated networking package's bin/ifconfig. The CLI flag
+# `--add-sbin` opts back in, per activation.
+# ---------------------------------------------------------------------------- #
+
+# bats test_tags=activate,activate:sbin
+@test "activate: excludes sbin from PATH by default" {
+  project_setup
+  run "$FLOX_BIN" activate -- sh -c 'echo "$PATH"'
+  assert_success
+  local env_dir="$(realpath "$PROJECT_DIR")/.flox/run/$NIX_SYSTEM.$PROJECT_NAME-dev"
+  # The `bin` entry for this env must be present.
+  assert_output --partial "$env_dir/bin"
+  # The `sbin` entry for this env must NOT be present.
+  refute_output --partial "$env_dir/sbin"
+}
+
+# bats test_tags=activate,activate:sbin
+@test "activate: --add-sbin prepends sbin to PATH" {
+  project_setup
+  run "$FLOX_BIN" activate --add-sbin -- sh -c 'echo "$PATH"'
+  assert_success
+  local env_dir="$(realpath "$PROJECT_DIR")/.flox/run/$NIX_SYSTEM.$PROJECT_NAME-dev"
+  assert_output --partial "$env_dir/bin:$env_dir/sbin"
+}
+
+# bats test_tags=activate,activate:sbin
+@test "activate: nested activation only adds sbin for opted-in activations" {
+  project_setup
+  # The inner env is activated with `--add-sbin`; the outer (project) env is
+  # activated without it.
+  "$FLOX_BIN" init -d inner
+
+  run "$FLOX_BIN" activate --add-sbin -d inner -- \
+    "$FLOX_BIN" activate -- sh -c 'echo "$PATH"'
+  assert_success
+  local outer_env="$(realpath "$PROJECT_DIR")/.flox/run/$NIX_SYSTEM.$PROJECT_NAME-dev"
+  local inner_env="$(realpath "$PROJECT_DIR")/inner/.flox/run/$NIX_SYSTEM.inner-dev"
+  # Most-recently-activated env comes first; only the opted-in activation
+  # gets sbin.
+  assert_output --partial "$outer_env/bin:$inner_env/bin:$inner_env/sbin"
+  refute_output --partial "$outer_env/sbin"
+}
+
+# bats test_tags=activate,activate:sbin,activate:inplace-reactivate
+@test "bash: 'flox activate --add-sbin' keeps sbin on PATH when already activated" {
+  project_setup
+  _bash="$(command -v bash)"
+  FLOX_SHELL="bash" run -- \
+    "$FLOX_BIN" activate --add-sbin -c \
+    "$_bash -c \"source <($FLOX_BIN activate); $_bash $TESTS_DIR/activate/verify_PATH_with_sbin.bash\""
+  assert_success
+}
+
+# bats test_tags=activate,activate:sbin,activate:inplace-reactivate
+@test "zsh: 'flox activate --add-sbin' keeps sbin on PATH when already activated" {
+  project_setup
+  _bash="$(command -v bash)"
+  _zsh="$(command -v zsh)"
+  FLOX_SHELL="zsh" run -- \
+    "$FLOX_BIN" activate --add-sbin -c \
+    "$_zsh -c \"source =($FLOX_BIN activate); $_bash $TESTS_DIR/activate/verify_PATH_with_sbin.bash\""
+  assert_success
+}
+
+# A first in-place activation has no spawned shell to receive _FLOX_ADD_SBIN,
+# so the generated zsh startup commands must set it themselves before sourcing
+# activate.d/zsh.
+# bats test_tags=activate,activate:sbin
+@test "zsh: first in-place activation honors --add-sbin" {
+  project_setup
+  _bash="$(command -v bash)"
+  _zsh="$(command -v zsh)"
+  run "$_zsh" -c "eval \"\$(FLOX_SHELL=zsh '$FLOX_BIN' activate --add-sbin)\"; $_bash $TESTS_DIR/activate/verify_PATH_with_sbin.bash"
+  assert_success
+}
+
+# bats test_tags=activate,activate:sbin
+@test "zsh: nested in-place activation does not inherit --add-sbin" {
+  project_setup
+  "$FLOX_BIN" init -d inner
+  _zsh="$(command -v zsh)"
+  # The outer activation opts in; the nested in-place activation of a
+  # different env does not, and must not inherit the opt-in from the
+  # ambient _FLOX_ADD_SBIN.
+  FLOX_SHELL="zsh" run -- \
+    "$FLOX_BIN" activate --add-sbin -c \
+    "$_zsh -c 'eval \"\$(FLOX_SHELL=zsh \"$FLOX_BIN\" activate -d inner)\"; echo \"PATH=\$PATH\"'"
+  assert_success
+  local outer_env="$(realpath "$PROJECT_DIR")/.flox/run/$NIX_SYSTEM.$PROJECT_NAME-dev"
+  local inner_env="$(realpath "$PROJECT_DIR")/inner/.flox/run/$NIX_SYSTEM.inner-dev"
+  # The inner env is on PATH, but without its sbin.
+  assert_output --partial "$inner_env/bin"
+  refute_output --partial "$inner_env/sbin"
+  # The outer env keeps its sbin.
+  assert_output --partial "$outer_env/bin:$outer_env/sbin"
+}
+
+# Every variable an activation is expected to add to the environment, on any
+# platform. If a test below fails naming a variable missing from this list,
+# either the variable is an accidental leak (a bug — e.g. the transient
+# `_FLOX_ADD_SBIN` signal must never appear here) or it is a new intentional
+# addition and belongs in this list.
+activation_added_vars_allowlist() {
+  cat <<'EOF'
+ACLOCAL_PATH
+BUILDENV_NIX
+CMAKE_PREFIX_PATH
+CPATH
+DYLD_FALLBACK_LIBRARY_PATH
+FLOX_ACTIVATE_START_SERVICES
+FLOX_CONFIG_DIR
+FLOX_ENV
+FLOX_ENV_CACHE
+FLOX_ENV_DESCRIPTION
+FLOX_ENV_DIRS
+FLOX_ENV_PROJECT
+FLOX_PROMPT_COLOR_1
+FLOX_PROMPT_COLOR_2
+FLOX_PROMPT_ENVIRONMENTS
+GLIBC_TUNABLES
+INFOPATH
+LD_AUDIT
+LD_LIBRARY_PATH
+LIBRARY_PATH
+LOCALE_ARCHIVE
+MANPATH
+NIX_SSL_CERT_FILE
+OLDPWD
+PATH_LOCALE
+PKG_CONFIG_PATH
+PWD
+SHLVL
+SSL_CERT_DIR
+SSL_CERT_FILE
+XDG_DATA_DIRS
+_
+_FLOX_ACTIVATIONS_VERBOSITY
+_FLOX_ACTIVE_ENVIRONMENTS
+_FLOX_ENV_DIRS_ADD_SBIN
+_FLOX_HOOK_DIFF
+_FLOX_HOOK_SAVE_COMPINIT_DUMPFILE
+_FLOX_HOOK_SAVE_FPATH
+_FLOX_PROMPT_HOOK_VERSION
+_FLOX_SUBSYSTEM_VERBOSITY
+_activate_d
+_flox_activate_tracelevel
+_flox_activate_tracer
+_flox_activations
+EOF
+}
+
+# Assert that the variables present in `$2` but not `$1` (files of sorted
+# variable names) are all in the allowlist above.
+assert_only_expected_added_vars() {
+  local before="$1" after="$2"
+  # Guard against a vacuous pass: both captures must have produced data, and
+  # the post-activation capture must show the activation actually happened.
+  assert [ -s "$before" ]
+  assert grep -qx "FLOX_ENV" "$after"
+  local unexpected
+  unexpected="$(LC_ALL=C comm -13 "$before" "$after" | grep -vxF -f <(activation_added_vars_allowlist) || true)"
+  assert_equal "$unexpected" ""
+}
+
+# Null-delimited so that variable values containing newlines (exported
+# functions, the `_FLOX_HOOK_DIFF` snapshot) can't masquerade as names.
+# Absolute tool paths: the capture also runs in shells whose rc files have
+# reset PATH to a GNU-less system PATH (see the dotfile fixtures above).
+# LC_ALL=C: activation changes the locale context (PATH_LOCALE,
+# LOCALE_ARCHIVE), and `comm` silently mis-diffs inputs sorted under
+# disagreeing collations — pin bytewise collation on every sort and the comm.
+ENV_VAR_NAMES="$(command -v env) -0 | $(command -v cut) -zd= -f1 | $(command -v tr) '\0' '\n' | LC_ALL=C $(command -v sort) -u"
+
+# bats test_tags=activate,activate:sbin
+@test "activate: adds only expected variables to the command environment" {
+  project_setup
+  eval "$ENV_VAR_NAMES" > "$PROJECT_DIR/before_vars"
+  "$FLOX_BIN" activate --add-sbin -- sh -c "$ENV_VAR_NAMES" > "$PROJECT_DIR/after_vars"
+  assert_only_expected_added_vars "$PROJECT_DIR/before_vars" "$PROJECT_DIR/after_vars"
+}
+
+# bats test_tags=activate,activate:sbin
+@test "zsh: in-place activation adds only expected variables" {
+  project_setup
+  _zsh="$(command -v zsh)"
+  run "$_zsh" -c "$ENV_VAR_NAMES > '$PROJECT_DIR/before_vars'; eval \"\$(FLOX_SHELL=zsh '$FLOX_BIN' activate --add-sbin)\"; $ENV_VAR_NAMES > '$PROJECT_DIR/after_vars'"
+  assert_success
+  assert_only_expected_added_vars "$PROJECT_DIR/before_vars" "$PROJECT_DIR/after_vars"
 }
 
 # With an in-place activation in dotfiles, an interactive activation should only

@@ -415,6 +415,7 @@ pub async fn start_services_with_new_process_compose(
         print_script: false,
         start_services: true,
         no_start_services: false,
+        add_sbin: false,
         mode: Some(activate_mode),
         generation,
         // this isn't actually used because we pass invocation type below
