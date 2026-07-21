@@ -482,7 +482,7 @@
             "required": true,
             "schema": {
               "type": "string",
-              "pattern": "[a-zA-Z0-9\\-_]{3,64}",
+              "pattern": "^[a-zA-Z0-9\\-_]{3,63}$",
               "title": "Catalog Name",
               "name": "catalog_name",
               "example": "mycatalog"
@@ -546,7 +546,7 @@
             "required": true,
             "schema": {
               "type": "string",
-              "pattern": "[a-zA-Z0-9\\-_]{3,64}",
+              "pattern": "^[a-zA-Z0-9\\-_]{3,63}$",
               "title": "Catalog Name",
               "name": "catalog_name",
               "example": "mycatalog"
@@ -608,7 +608,7 @@
             "required": true,
             "schema": {
               "type": "string",
-              "pattern": "[a-zA-Z0-9\\-_]{3,64}",
+              "pattern": "^[a-zA-Z0-9\\-_]{3,63}$",
               "title": "Catalog Name",
               "name": "catalog_name",
               "example": "mycatalog"
@@ -670,7 +670,7 @@
             "required": true,
             "schema": {
               "type": "string",
-              "pattern": "[a-zA-Z0-9\\-_]{3,64}",
+              "pattern": "^[a-zA-Z0-9\\-_]{3,63}$",
               "title": "Catalog Name",
               "name": "catalog_name",
               "example": "mycatalog"
@@ -774,7 +774,7 @@
             "required": true,
             "schema": {
               "type": "string",
-              "pattern": "[a-zA-Z0-9\\-_]{3,64}",
+              "pattern": "^[a-zA-Z0-9\\-_]{3,63}$",
               "title": "Catalog Name",
               "name": "catalog_name",
               "example": "mycatalog"
@@ -838,7 +838,7 @@
             "required": true,
             "schema": {
               "type": "string",
-              "pattern": "[a-zA-Z0-9\\-_]{3,64}",
+              "pattern": "^[a-zA-Z0-9\\-_]{3,63}$",
               "title": "Catalog Name",
               "name": "catalog_name",
               "example": "mycatalog"
@@ -914,7 +914,7 @@
             "required": true,
             "schema": {
               "type": "string",
-              "pattern": "[a-zA-Z0-9\\-_]{3,64}",
+              "pattern": "^[a-zA-Z0-9\\-_]{3,63}$",
               "title": "Catalog Name",
               "name": "catalog_name",
               "example": "mycatalog"
@@ -1010,7 +1010,7 @@
             "required": true,
             "schema": {
               "type": "string",
-              "pattern": "[a-zA-Z0-9\\-_]{3,64}",
+              "pattern": "^[a-zA-Z0-9\\-_]{3,63}$",
               "title": "Catalog Name",
               "name": "catalog_name",
               "example": "mycatalog"
@@ -1114,7 +1114,7 @@
             "required": true,
             "schema": {
               "type": "string",
-              "pattern": "[a-zA-Z0-9\\-_]{3,64}",
+              "pattern": "^[a-zA-Z0-9\\-_]{3,63}$",
               "title": "Catalog Name",
               "name": "catalog_name",
               "example": "mycatalog"
@@ -1218,7 +1218,7 @@
             "required": true,
             "schema": {
               "type": "string",
-              "pattern": "[a-zA-Z0-9\\-_]{3,64}",
+              "pattern": "^[a-zA-Z0-9\\-_]{3,63}$",
               "title": "Catalog Name",
               "name": "catalog_name",
               "example": "mycatalog"
@@ -1294,7 +1294,7 @@
             "required": true,
             "schema": {
               "type": "string",
-              "pattern": "[a-zA-Z0-9\\-_]{3,64}",
+              "pattern": "^[a-zA-Z0-9\\-_]{3,63}$",
               "title": "Catalog Name",
               "name": "catalog_name",
               "example": "mycatalog"
@@ -1380,7 +1380,7 @@
             "required": true,
             "schema": {
               "type": "string",
-              "pattern": "[a-zA-Z0-9\\-_]{3,64}",
+              "pattern": "^[a-zA-Z0-9\\-_]{3,63}$",
               "title": "Catalog Name",
               "name": "catalog_name",
               "example": "mycatalog"
@@ -1464,7 +1464,7 @@
             "required": true,
             "schema": {
               "type": "string",
-              "pattern": "[a-zA-Z0-9\\-_]{3,64}",
+              "pattern": "^[a-zA-Z0-9\\-_]{3,63}$",
               "title": "Catalog Name",
               "name": "catalog_name",
               "example": "mycatalog"
@@ -1526,7 +1526,7 @@
             "required": true,
             "schema": {
               "type": "string",
-              "pattern": "[a-zA-Z0-9\\-_]{3,64}",
+              "pattern": "^[a-zA-Z0-9\\-_]{3,63}$",
               "title": "Catalog Name",
               "name": "catalog_name",
               "example": "mycatalog"

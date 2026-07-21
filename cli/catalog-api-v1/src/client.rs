@@ -377,7 +377,7 @@ manifest packages were built via the traditional flox manifest workflow.*/
     ///    "mycatalog"
     ///  ],
     ///  "type": "string",
-    ///  "pattern": "[a-zA-Z0-9\\-_]{3,64}"
+    ///  "pattern": "^[a-zA-Z0-9\\-_]{3,63}$"
     ///}
     /// ```
     /// </details>
@@ -406,9 +406,9 @@ manifest packages were built via the traditional flox manifest workflow.*/
             value: &str,
         ) -> ::std::result::Result<Self, self::error::ConversionError> {
             static PATTERN: ::std::sync::LazyLock<::regress::Regex> = ::std::sync::LazyLock::new(||
-            { ::regress::Regex::new("[a-zA-Z0-9\\-_]{3,64}").unwrap() });
+            { ::regress::Regex::new("^[a-zA-Z0-9\\-_]{3,63}$").unwrap() });
             if PATTERN.find(value).is_none() {
-                return Err("doesn't match pattern \"[a-zA-Z0-9\\-_]{3,64}\"".into());
+                return Err("doesn't match pattern \"^[a-zA-Z0-9\\-_]{3,63}$\"".into());
             }
             Ok(Self(value.to_string()))
         }
