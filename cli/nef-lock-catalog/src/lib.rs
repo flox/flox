@@ -27,4 +27,4 @@ pub use lock::build_lock::{BuildLock, render_lock, write_lock};
 pub use lock::flakeref::NixFlakeref;
 pub use lock::lookup::{LockError, lock_references};
 pub use lock::render::render_unresolvable;
-pub use scan::{CatalogRef, scan_package, scan_package_with_roots};
+pub use scan::{CatalogRef, ScanError, scan_package, scan_package_with_roots};

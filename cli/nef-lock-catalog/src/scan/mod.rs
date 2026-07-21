@@ -1,13 +1,14 @@
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fmt::{self, Display};
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use indoc::formatdoc;
 use rnix::ast;
-use rnix::ast::HasEntry as _;
+use rnix::ast::HasEntry;
 use rowan::ast::AstNode;
 use serde::{Deserialize, Serialize};
-use tracing::{debug, instrument};
+use tracing::{debug, instrument, warn};
 
 /// A single catalog attribute-path reference discovered by the scanner,
 /// e.g. `catalogs.myorg.toolkit.readVersion`. A dynamic component collapses
@@ -49,6 +50,60 @@ impl Display for CatalogRef {
     }
 }
 
+/// A scan failure that must stop locking.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum ScanError {
+    /// A catalog root is referenced by a file whose top-level lambda does not
+    /// declare it as a parameter. NEF supplies only declared arguments
+    /// (callPackage semantics), so every reference through the root is
+    /// guaranteed to fail evaluation as an undefined variable.
+    #[error("{}", undeclared_root_message(root, file, *position))]
+    UndeclaredRoot {
+        root: String,
+        file: PathBuf,
+        /// 1-based `(line, column)` of the root's first use, when recorded.
+        position: Option<(usize, usize)>,
+    },
+
+    /// An import that forwards catalog namespaces names a target file that
+    /// cannot be read. The refs the imported file would contribute through
+    /// the forwarded namespaces cannot be discovered, so the scan fails
+    /// rather than silently under-locking.
+    #[error("{}", unreadable_import_message(target, file, *position))]
+    UnreadableImport {
+        target: PathBuf,
+        file: PathBuf,
+        /// 1-based `(line, column)` of the import application.
+        position: (usize, usize),
+    },
+}
+
+/// Render a source location as a message suffix; the position is best-effort
+/// (forwarded-only uses may lack one).
+fn location_suffix(file: &Path, position: Option<(usize, usize)>) -> String {
+    match position {
+        Some((line, column)) => format!(" at {}:{line}:{column}", file.display()),
+        None => format!(" in {}", file.display()),
+    }
+}
+
+/// Render [ScanError::UndeclaredRoot] for the user.
+fn undeclared_root_message(root: &str, file: &Path, position: Option<(usize, usize)>) -> String {
+    let location = location_suffix(file, position);
+    formatdoc! {"
+        '{root}' is referenced{location} but is not declared in the function arguments.
+        Add '{root}' to the function arguments, e.g. '{{ {root}, ... }}:'."}
+}
+
+/// Render [ScanError::UnreadableImport] for the user.
+fn unreadable_import_message(target: &Path, file: &Path, position: (usize, usize)) -> String {
+    let target = target.display();
+    let location = location_suffix(file, Some(position));
+    formatdoc! {"
+        '{target}' is imported{location} but cannot be read.
+        Check that the imported file exists and is readable."}
+}
+
 /// Catalog references and dependency attr-paths extracted from one file.
 #[derive(Debug)]
 struct FileInfo {
@@ -82,11 +137,14 @@ const DEFAULT_ROOTS: &[&str] = &["catalogs"];
 /// it (`<name>.<member>`) is resolved as a member of a sibling attribute set,
 /// descending namespace directories under `base_dir`.
 ///
+/// Fails when a scanned file references a catalog root it does not declare in
+/// its function arguments (see [ScanError::UndeclaredRoot]).
+///
 /// Uses the default `catalogs` root; see [scan_package_with_roots] to override.
 pub fn scan_package(
     base_dir: impl AsRef<Path>,
     rel_file: impl AsRef<Path>,
-) -> BTreeSet<CatalogRef> {
+) -> Result<BTreeSet<CatalogRef>, ScanError> {
     scan_package_with_roots(base_dir, rel_file, DEFAULT_ROOTS.iter().copied())
 }
 
@@ -106,7 +164,7 @@ pub fn scan_package_with_roots(
     base_dir: impl AsRef<Path>,
     rel_file: impl AsRef<Path>,
     roots: impl IntoIterator<Item = impl Into<String>>,
-) -> BTreeSet<CatalogRef> {
+) -> Result<BTreeSet<CatalogRef>, ScanError> {
     let roots: HashSet<String> = roots.into_iter().map(Into::into).collect();
     let roots = &roots;
 
@@ -122,28 +180,35 @@ pub fn scan_package_with_roots(
                 .to_string_lossy()
                 .into_owned();
             let dir = path.parent();
-            let mut visited = HashSet::new();
+            let mut visited = HashMap::new();
             db.insert(
                 stem,
-                analyze_file_at(&content, roots, dir, &mut visited, Some(path)),
+                analyze_file_at(
+                    &content,
+                    roots,
+                    dir,
+                    &mut visited,
+                    path,
+                    &identity_origins(roots),
+                )?,
             );
         }
         db
     };
-    let references: BTreeSet<CatalogRef> = collect_transitive(db, base_dir.as_ref(), roots)
+    let references: BTreeSet<CatalogRef> = collect_transitive(db, base_dir.as_ref(), roots)?
         .into_iter()
         .map(CatalogRef)
         .collect();
     debug!(references = references.len(), "scanned catalog references");
-    references
+    Ok(references)
 }
 
 /// Source context for verbose reference reporting: the file a reference was
-/// found in (when known) plus its text, used to turn a byte offset into a
+/// found in plus its text, used to turn a byte offset into a
 /// 1-based `line:column`.
 #[derive(Clone, Debug)]
 struct ScanCtx<'a> {
-    path: Option<&'a Path>,
+    path: &'a Path,
     content: &'a str,
 }
 
@@ -152,12 +217,45 @@ impl ScanCtx<'_> {
     /// byte offset into the file). Surfaced by `lock --verbose`.
     fn report(&self, offset: usize, reference: &str) {
         let (line, column) = line_col(self.content, offset);
-        match self.path {
-            Some(path) => {
-                debug!(reference, file = %path.display(), line, column, "catalog reference")
-            },
-            None => debug!(reference, line, column, "catalog reference"),
-        }
+        debug!(reference, file = %self.path.display(), line, column, "catalog reference");
+    }
+
+    /// Warn that an import with a dynamic path forwards a catalog namespace
+    /// the scanner cannot follow.
+    fn warn_dynamic_import(&self, offset: usize) {
+        let (line, column) = line_col(self.content, offset);
+        warn!(
+            file = %self.path.display(),
+            line,
+            column,
+            "import path is not statically known; the imported file is not scanned for catalog references",
+        );
+    }
+
+    /// Warn that an import argument names a catalog root without forwarding
+    /// it, so the imported file is not scanned through that name.
+    fn warn_unfollowed_import(&self, offset: usize, name: &str) {
+        let (line, column) = line_col(self.content, offset);
+        warn!(
+            name,
+            file = %self.path.display(),
+            line,
+            column,
+            "import argument is not the catalog namespace; the imported file is not scanned through it",
+        );
+    }
+
+    /// Warn that a catalog namespace escapes static analysis at `offset`,
+    /// widening to `reference`.
+    fn warn_escape(&self, offset: usize, reference: &str) {
+        let (line, column) = line_col(self.content, offset);
+        warn!(
+            reference,
+            file = %self.path.display(),
+            line,
+            column,
+            "catalog namespace escapes static analysis; locking the whole subtree",
+        );
     }
 }
 
@@ -184,26 +282,30 @@ fn line_col(content: &str, offset: usize) -> (usize, usize) {
 ///
 /// `roots` are the lambda parameters treated as catalog roots (e.g. `catalogs`).
 /// When `file_dir` is `Some`, `import` calls forwarding a root are followed into
-/// the imported file; `visited` guards against import cycles. `path` is the
-/// file's location, used only for verbose reference reporting.
+/// the imported file; `visited` maps each drained target file to the top-level
+/// forwardings already scanned for it (see the drain below). `path` is the
+/// file's location, recorded in scan errors and used for verbose reference
+/// reporting. `root_origins` maps each root to the top-level root it stands
+/// for — the identity map at the entry file, and the composition of the
+/// forwarding chain in imported files.
 fn analyze_file_at(
     content: &str,
     roots: &HashSet<String>,
     file_dir: Option<&Path>,
-    visited: &mut HashSet<PathBuf>,
-    path: Option<&Path>,
-) -> FileInfo {
-    if let Some(path) = path {
-        debug!(file = %path.display(), "reading NEF expression");
-    }
+    visited: &mut HashMap<PathBuf, HashSet<BTreeMap<String, String>>>,
+    path: &Path,
+    root_origins: &BTreeMap<String, String>,
+) -> Result<FileInfo, ScanError> {
+    debug!(file = %path.display(), "reading NEF expression");
 
     let parse = rnix::Root::parse(content);
     let root = parse.tree();
 
-    let mut refs = BTreeSet::new();
-
+    // Dependency arguments come from the eventual package function: wrappers
+    // around it (`let … in`, `with …;`, parentheses) do not change which
+    // lambda NEF calls, so they are looked through.
     let mut dep_names = HashSet::new();
-    if let Some(rnix::ast::Expr::Lambda(lambda)) = root.expr()
+    if let Some(lambda) = top_level_lambda(&root)
         && let Some(rnix::ast::Param::Pattern(pat)) = lambda.param()
     {
         for entry in pat.pat_entries() {
@@ -216,21 +318,169 @@ fn analyze_file_at(
         }
     }
 
+    // The parameter names the top-level lambda declares. Only declared
+    // arguments are supplied when NEF calls the file (callPackage semantics),
+    // so a root referenced without being declared can never resolve; that is
+    // reported as [ScanError::UndeclaredRoot] after the walk. `None` fails
+    // open: the check applies only to a plain top-level lambda, because a
+    // wrapper's own bindings could satisfy names the check would call
+    // undeclared, and the lenient seeding below is kept without it.
+    let declared_params: Option<HashSet<String>> = match root.expr() {
+        Some(ast::Expr::Lambda(lambda)) => match lambda.param() {
+            Some(ast::Param::IdentParam(param)) => Some(
+                param
+                    .ident()
+                    .as_ref()
+                    .and_then(ident_name)
+                    .into_iter()
+                    .collect(),
+            ),
+            Some(ast::Param::Pattern(pat)) => Some(
+                pat.pat_entries()
+                    .filter_map(|entry| entry.ident().as_ref().and_then(ident_name))
+                    .collect(),
+            ),
+            None => None,
+        },
+        _ => None,
+    };
+
     // Each dependency argument resolves as a whole sibling package (single
     // component). Members selected on an argument add longer attr-paths, e.g.
     // `python3Packages.isdr-zk-client`, resolved as sibling attribute sets.
     let mut deps: Vec<Vec<String>> = dep_names.iter().map(|name| vec![name.clone()]).collect();
     collect_dep_member_paths(root.syntax(), &dep_names, &mut deps);
 
-    let aliases = collect_aliases(root.syntax(), roots);
     let ctx = ScanCtx { path, content };
-    collect_refs(root.syntax(), &mut refs, roots, &aliases, &ctx);
+    let mut walker = Walker::new(roots, declared_params.as_ref(), ctx);
+    walker.walk_root(&root);
+    let (mut refs, pending_imports, first_root_use) = walker.finish();
 
+    // Imports are IO: the walker only records facts, the drain here reads and
+    // recurses. Relative paths resolve against the importing file's directory.
     if let Some(dir) = file_dir {
-        follow_imports(root.syntax(), roots, &aliases, dir, visited, &mut refs);
+        for pending in pending_imports {
+            let target = dir.join(&pending.path);
+            // The fallback for an uncanonicalizable (missing) target still
+            // normalizes `.` components so errors show a clean path.
+            let target =
+                fs::canonicalize(&target).unwrap_or_else(|_| target.components().collect());
+            // `import ./dir` means `./dir/default.nix`.
+            let target = if target.is_dir() {
+                target.join("default.nix")
+            } else {
+                target
+            };
+            let Ok(imported_content) = fs::read_to_string(&target) else {
+                // The refs the imported file would contribute cannot be
+                // discovered, so fail rather than silently under-lock.
+                return Err(ScanError::UnreadableImport {
+                    target,
+                    file: path.to_path_buf(),
+                    position: line_col(content, pending.offset),
+                });
+            };
+            // The child is scanned with its own parameter names as roots;
+            // its refs are rewritten back into the parent's namespace.
+            let rewrites: HashMap<String, String> = match pending.arg {
+                ImportArg::Set(forwards) => forwards,
+                ImportArg::Root(parent_root) => match top_ident_param(&imported_content) {
+                    Some(param) => HashMap::from([(param, parent_root)]),
+                    None => {
+                        // A pattern parameter destructures the namespace into
+                        // names the scanner cannot statically bind, so
+                        // anything under the root may be referenced: it
+                        // escapes whole rather than being dropped.
+                        warn!(
+                            file = %target.display(),
+                            root = %parent_root,
+                            "imported file does not take the namespace as a plain parameter; locking the whole root",
+                        );
+                        refs.insert(format!("{parent_root}.*"));
+                        continue;
+                    },
+                },
+            };
+            // The same file imported under a different forwarding contributes
+            // different refs and is scanned again; only a repeat with the
+            // same forwarding — including a true import cycle — is skipped.
+            // The forwarding is composed down to the top-level roots before
+            // being stored: two chains whose immediate maps look identical can
+            // still stand for different top-level roots, and only an identical
+            // composition contributes identical refs.
+            let child_origins: BTreeMap<String, String> = rewrites
+                .iter()
+                .map(|(child, parent)| {
+                    let origin = root_origins.get(parent).unwrap_or(parent);
+                    (child.clone(), origin.clone())
+                })
+                .collect();
+            if !visited
+                .entry(target.clone())
+                .or_default()
+                .insert(child_origins.clone())
+            {
+                continue;
+            }
+            let child_roots: HashSet<String> = rewrites.keys().cloned().collect();
+            let import_dir = target.parent().map(Path::to_path_buf);
+            let imported = analyze_file_at(
+                &imported_content,
+                &child_roots,
+                import_dir.as_deref(),
+                visited,
+                &target,
+                &child_origins,
+            )?;
+            refs.extend(
+                imported
+                    .refs
+                    .into_iter()
+                    .map(|reference| rewrite_root(reference, &rewrites)),
+            );
+        }
     }
 
-    FileInfo { refs, deps }
+    // With the refs complete (imports included), reject any that resolve
+    // through a root the top-level lambda does not declare — they could never
+    // evaluate. Roots are checked in sorted order for a deterministic error.
+    if let Some(declared) = &declared_params {
+        let mut undeclared: Vec<&String> = roots
+            .iter()
+            .filter(|root| !declared.contains(root.as_str()))
+            .collect();
+        undeclared.sort();
+        for root in undeclared {
+            if refs
+                .iter()
+                .any(|reference| reference_root(reference) == root)
+            {
+                return Err(ScanError::UndeclaredRoot {
+                    root: root.clone(),
+                    file: path.to_path_buf(),
+                    position: first_root_use
+                        .get(root)
+                        .map(|&offset| line_col(content, offset)),
+                });
+            }
+        }
+    }
+
+    Ok(FileInfo { refs, deps })
+}
+
+/// The identity `root_origins` map for an entry file, whose roots are the
+/// top-level roots themselves (see [analyze_file_at]).
+fn identity_origins(roots: &HashSet<String>) -> BTreeMap<String, String> {
+    roots
+        .iter()
+        .map(|root| (root.clone(), root.clone()))
+        .collect()
+}
+
+/// The root component of a dotted reference (`catalogs.a.b` → `catalogs`).
+fn reference_root(reference: &str) -> &str {
+    reference.split('.').next().unwrap_or(reference)
 }
 
 /// Collect the static attr-paths selected on dependency arguments.
@@ -251,9 +501,10 @@ fn collect_dep_member_paths(
         let mut path = vec![base_name];
         if let Some(attrpath) = select.attrpath() {
             for attr in attrpath.attrs() {
-                let ast::Attr::Ident(id) = attr else { break };
-                let Some(token) = id.ident_token() else { break };
-                path.push(token.text().to_string());
+                let Some(name) = attr_static_name(&attr) else {
+                    break;
+                };
+                path.push(name);
             }
         }
         if path.len() > 1 {
@@ -277,7 +528,7 @@ fn collect_transitive(
     mut db: HashMap<String, FileInfo>,
     dir: &Path,
     roots: &HashSet<String>,
-) -> BTreeSet<String> {
+) -> Result<BTreeSet<String>, ScanError> {
     let mut visited: HashSet<String> = HashSet::new();
     let mut result: BTreeSet<String> = BTreeSet::new();
     let mut queue: Vec<Vec<String>> = db
@@ -291,7 +542,7 @@ fn collect_transitive(
             continue;
         }
         if !db.contains_key(&key)
-            && let Some(info) = resolve_dep(dir, &path, roots)
+            && let Some(info) = resolve_dep(dir, &path, roots)?
         {
             db.insert(key.clone(), info);
         }
@@ -305,124 +556,1304 @@ fn collect_transitive(
         }
     }
 
-    result
+    Ok(result)
 }
 
-/// Build the map of `let` bindings that alias a catalog path.
+/// A name's meaning in the lexical environment threaded through the walk.
+#[derive(Clone, Debug, PartialEq)]
+enum Binding {
+    /// The name resolves to a catalog attr-path: a root itself
+    /// (`catalogs` = `Path(["catalogs"])`) or an alias of one. A path may end
+    /// in `"*"` when a dynamic component collapsed it.
+    Path(Vec<String>),
+    /// The name resolves to one of several attr-paths (a conditional alias);
+    /// every path is locked so the expression works whichever branch is
+    /// taken.
+    Paths(BTreeSet<Vec<String>>),
+    /// The name is bound to an attrset literal; selecting a member continues
+    /// resolution with that member's binding. Members the scanner cannot
+    /// model are absent.
+    Set(HashMap<String, Binding>),
+    /// The name is bound to a lambda defined in this file, carrying its
+    /// parameter names. Applying it to a namespace whose name the lambda
+    /// binds is not an escape — the body was walked with that binding.
+    Lambda(HashSet<String>),
+    /// The name is bound to an unapplied `import <static-path>`; applying it
+    /// follows the import like a direct `import <path> <arg>`.
+    Import(String),
+    /// The name is bound to something the scanner cannot model; selects on it
+    /// produce no refs.
+    Opaque,
+}
+
+/// Lexical environment: what each in-scope name is known to be.
+type Env = HashMap<String, Binding>;
+
+/// An `import <path> …` application forwarding catalog namespaces, recorded
+/// by the walker and resolved by the IO drain loop in [analyze_file_at].
+#[derive(Debug)]
+struct PendingImport {
+    /// Import path as written (relative paths resolve against the importing
+    /// file's directory).
+    path: String,
+    /// How the imported file receives the catalog namespaces.
+    arg: ImportArg,
+    /// Byte offset of the import application, for locating an
+    /// unreadable-target error.
+    offset: usize,
+}
+
+/// The catalog-forwarding shape of an import's argument.
+#[derive(Debug)]
+enum ImportArg {
+    /// An attrset argument: child parameter name → parent root it is bound
+    /// to (`{ inherit catalogs; }`, `{ cats = catalogs; }`).
+    Set(HashMap<String, String>),
+    /// The whole argument is a root namespace (`import ./h.nix catalogs`);
+    /// the child's lambda parameter binds this parent root.
+    Root(String),
+}
+
+/// What consumes an attrset appearing in value position, deciding which of
+/// its entries are accounted for elsewhere rather than escaping as values
+/// (see [Walker::walk_attrset]).
+#[derive(Debug)]
+enum AttrsetConsumer<'a> {
+    /// Nothing: an ordinary value attrset.
+    None,
+    /// An `import` application: names forwarded into the imported file (per
+    /// [Walker::import_forwards]) are scanned through it; a root-named entry
+    /// that does not forward is warned about.
+    Import(&'a HashMap<String, String>),
+    /// A lambda defined in this file: an entry binding a root under a
+    /// parameter of the same name was already walked in the body.
+    Lambda(&'a HashSet<String>),
+}
+
+/// Syntax-tree walker threading the lexical environment.
 ///
-/// Repeats passes until no new alias is found, so bindings may reference
-/// earlier aliases regardless of source order.
-fn collect_aliases(root: &rnix::SyntaxNode, roots: &HashSet<String>) -> HashMap<String, String> {
-    let mut aliases: HashMap<String, String> = HashMap::new();
-    let mut changed = true;
-    while changed {
-        changed = false;
-        gather_let_aliases(root, roots, &mut aliases, &mut changed);
-    }
-    aliases
+/// The walker emits refs for use sites resolved through the environment
+/// (selects, `inherit (…)`, `with`, `getAttr`) and records `import`
+/// applications as [PendingImport] facts; it performs no IO itself.
+struct Walker<'a> {
+    roots: &'a HashSet<String>,
+    /// The top-level lambda's parameter names; `None` when the file's shape
+    /// hides them (see the declaration check in [analyze_file_at]).
+    declared_params: Option<&'a HashSet<String>>,
+    ctx: ScanCtx<'a>,
+    refs: BTreeSet<String>,
+    pending_imports: Vec<PendingImport>,
+    /// Byte offset of the first use of each root, for locating an
+    /// undeclared-root error after the walk.
+    first_root_use: HashMap<String, usize>,
 }
 
-/// Single pass over `let` bindings, recording any that resolve to a catalog
-/// path and setting `changed` when a new alias is added.
-fn gather_let_aliases(
-    node: &rnix::SyntaxNode,
-    roots: &HashSet<String>,
-    aliases: &mut HashMap<String, String>,
-    changed: &mut bool,
-) {
-    if let Some(let_in) = ast::LetIn::cast(node.clone()) {
-        for entry in let_in.attrpath_values() {
-            let Some(lhs) = entry.attrpath() else {
+impl<'a> Walker<'a> {
+    /// Create a walker over `roots` with empty results. [Self::walk_root]
+    /// performs the walk and [Self::finish] extracts the collected facts.
+    fn new(
+        roots: &'a HashSet<String>,
+        declared_params: Option<&'a HashSet<String>>,
+        ctx: ScanCtx<'a>,
+    ) -> Self {
+        Self {
+            roots,
+            declared_params,
+            ctx,
+            refs: BTreeSet::new(),
+            pending_imports: Vec::new(),
+            first_root_use: HashMap::new(),
+        }
+    }
+
+    /// Walk the file's top-level expression, seeding the environment with the
+    /// catalog roots. Lambda parameters — including the top-level package
+    /// function's — keep root-named names rooted and shadow everything else
+    /// (see [Self::walk_lambda]).
+    fn walk_root(&mut self, root: &rnix::Root) {
+        let env: Env = self
+            .roots
+            .iter()
+            .map(|root| (root.clone(), Binding::Path(vec![root.clone()])))
+            .collect();
+        if let Some(expr) = root.expr() {
+            self.walk(expr.syntax(), &env);
+        }
+    }
+
+    /// Consume the walker, returning its collected facts as
+    /// `(refs, pending imports, first-use offsets)` for the IO drain in
+    /// [analyze_file_at].
+    fn finish(self) -> (BTreeSet<String>, Vec<PendingImport>, HashMap<String, usize>) {
+        (self.refs, self.pending_imports, self.first_root_use)
+    }
+
+    fn emit(&mut self, offset: usize, reference: String) {
+        self.ctx.report(offset, &reference);
+        self.note_root_use(offset, &reference);
+        self.refs.insert(reference);
+    }
+
+    /// Record where a root was first used (`reference` may be the bare root
+    /// name or a dotted path under it).
+    fn note_root_use(&mut self, offset: usize, reference: &str) {
+        let root = reference_root(reference);
+        if !self.first_root_use.contains_key(root) {
+            self.first_root_use.insert(root.to_string(), offset);
+        }
+    }
+
+    fn walk(&mut self, node: &rnix::SyntaxNode, env: &Env) {
+        if let Some(attrpath) = ast::Attrpath::cast(node.clone()) {
+            // Reached generically from attrset keys and `?` operands: only the
+            // dynamic components are expressions, static names are not uses.
+            return self.walk_attrpath_dynamics(&attrpath, env);
+        }
+        if let Some(inherit) = ast::Inherit::cast(node.clone()) {
+            return self.walk_value_inherit(&inherit, &AttrsetConsumer::None, env);
+        }
+        let Some(expr) = ast::Expr::cast(node.clone()) else {
+            return self.walk_children(node, env);
+        };
+        match expr {
+            ast::Expr::Lambda(lambda) => self.walk_lambda(&lambda, env),
+            ast::Expr::LetIn(let_in) => self.walk_let_in(&let_in, env),
+            ast::Expr::With(with_expr) => self.walk_with(&with_expr, env),
+            // `rec { }` scopes like `let` — members see each other — but a
+            // set reached here is in value position, so its entries escape
+            // like a plain set's; alias suppression only applies where the
+            // set is consumed as a binding (see [Self::walk_binding_rhs]).
+            ast::Expr::AttrSet(attrset) if attrset.rec_token().is_some() => {
+                let inner = recursive_scope_env(&attrset, env);
+                self.walk_attrset(&attrset, &AttrsetConsumer::None, &inner);
+            },
+            ast::Expr::AttrSet(attrset) => self.walk_attrset(&attrset, &AttrsetConsumer::None, env),
+            ast::Expr::Apply(apply) => self.walk_apply(&apply, env),
+            ast::Expr::Select(select) => self.walk_select(&select, env),
+            ast::Expr::Ident(ident) => self.walk_ident(&ident, env),
+            _ => self.walk_children(node, env),
+        }
+    }
+
+    fn walk_children(&mut self, node: &rnix::SyntaxNode, env: &Env) {
+        for child in node.children() {
+            self.walk(&child, env);
+        }
+    }
+
+    /// A bare ident in a value position: using an alias uses the package(s)
+    /// it names.
+    fn walk_ident(&mut self, ident: &ast::Ident, env: &Env) {
+        let Some(name) = ident_name(ident) else {
+            return;
+        };
+        let Some(binding) = env.get(&name) else {
+            return;
+        };
+        self.emit_value_binding(offset_of(ident.syntax()), binding);
+    }
+
+    /// Emit the refs for a binding used as a plain value. An alias emits its
+    /// paths; a modeled set escaping into unknown code emits every path
+    /// reachable through its members.
+    fn emit_value_binding(&mut self, offset: usize, binding: &Binding) {
+        let paths = escaping_paths_of(binding);
+        if !paths.is_empty() {
+            self.emit_value_paths(offset, paths);
+        }
+    }
+
+    /// Emit refs for paths used as plain values (bare idents, from-less
+    /// inherits). A package-deep path is an exact ref; a whole catalog or the
+    /// root escaping into unknown code widens to a sentinel with a warning,
+    /// since anything under it may be accessed.
+    fn emit_value_paths(&mut self, offset: usize, paths: BTreeSet<Vec<String>>) {
+        for path in paths {
+            if path.len() >= 3 || path.last().map(String::as_str) == Some("*") {
+                self.emit(offset, join_path(&path));
+            } else {
+                let reference = join_path(&append_star(path));
+                self.ctx.warn_escape(offset, &reference);
+                self.note_root_use(offset, &reference);
+                self.refs.insert(reference);
+            }
+        }
+    }
+
+    /// [Self::emit_value_paths] restricted to package-deep paths, for
+    /// positions where shallow paths are consumed rather than escaping.
+    fn emit_deep_paths(&mut self, offset: usize, paths: BTreeSet<Vec<String>>) {
+        for path in paths {
+            if path.len() >= 3 || path.last().map(String::as_str) == Some("*") {
+                self.emit(offset, join_path(&path));
+            }
+        }
+    }
+
+    /// Lambda parameters shadow the outer scope. A parameter named like a
+    /// receivable catalog root keeps its root meaning (see
+    /// [Self::param_binding]): such lambdas are (almost always) applied to
+    /// the namespace itself, and assuming so can only produce spurious refs
+    /// that fail loudly, while assuming the opposite drops real refs
+    /// silently. Every other parameter is opaque — the scanner cannot know
+    /// what it will be applied to.
+    fn walk_lambda(&mut self, lambda: &ast::Lambda, env: &Env) {
+        let mut inner = env.clone();
+        match lambda.param() {
+            Some(ast::Param::IdentParam(param)) => {
+                if let Some(name) = param.ident().as_ref().and_then(ident_name) {
+                    let binding = self.param_binding(&name);
+                    inner.insert(name, binding);
+                }
+            },
+            Some(ast::Param::Pattern(pat)) => {
+                for entry in pat.pat_entries() {
+                    if let Some(name) = entry.ident().as_ref().and_then(ident_name) {
+                        let binding = self.param_binding(&name);
+                        inner.insert(name, binding);
+                    }
+                }
+                // The @-name is the whole argument set: members named in the
+                // pattern resolve like the parameters themselves, so
+                // `args.catalogs.<org>…` stays rooted.
+                if let Some(name) = pat
+                    .pat_bind()
+                    .and_then(|bind| bind.ident())
+                    .as_ref()
+                    .and_then(ident_name)
+                {
+                    let members: HashMap<String, Binding> = pat
+                        .pat_entries()
+                        .filter_map(|entry| entry.ident().as_ref().and_then(ident_name))
+                        .map(|entry_name| {
+                            let binding = self.param_binding(&entry_name);
+                            (entry_name, binding)
+                        })
+                        .collect();
+                    inner.insert(name, Binding::Set(members));
+                }
+                for entry in pat.pat_entries() {
+                    if let Some(default) = entry.default() {
+                        self.walk(default.syntax(), &inner);
+                    }
+                }
+            },
+            None => {},
+        }
+        if let Some(body) = lambda.body() {
+            self.walk(body.syntax(), &inner);
+        }
+    }
+
+    /// What a lambda parameter of this name means (see [Self::walk_lambda]).
+    ///
+    /// A root-named parameter keeps its root meaning only when the file's
+    /// top level can receive that root: a root the file never declares
+    /// cannot flow to an inner lambda, so there the name is just a name.
+    /// An unrecognized top-level shape fails open and keeps the heuristic.
+    fn param_binding(&self, name: &str) -> Binding {
+        let receivable = self
+            .declared_params
+            .is_none_or(|declared| declared.contains(name));
+        if receivable && self.roots.contains(name) {
+            Binding::Path(vec![name.to_string()])
+        } else {
+            Binding::Opaque
+        }
+    }
+
+    fn walk_let_in(&mut self, let_in: &ast::LetIn, env: &Env) {
+        let inner = recursive_scope_env(let_in, env);
+        self.walk_binding_entries(let_in, &inner);
+        if let Some(body) = let_in.body() {
+            self.walk(body.syntax(), &inner);
+        }
+    }
+
+    /// Walk the entries of a binding scope (`let`, `rec { }`, or an attrset
+    /// literal consumed as a binding): an entry that models as a binding
+    /// walks in binding mode (see [Self::walk_binding_rhs]), everything else
+    /// is a value position.
+    fn walk_binding_entries(&mut self, scope: &impl HasEntry, env: &Env) {
+        for entry in scope.attrpath_values() {
+            let attrs: Vec<ast::Attr> = entry
+                .attrpath()
+                .map(|attrpath| attrpath.attrs().collect())
+                .unwrap_or_default();
+            if let Some(attrpath) = entry.attrpath() {
+                self.walk_attrpath_dynamics(&attrpath, env);
+            }
+            let Some(value) = entry.value() else { continue };
+            let consumed = attrs.len() == 1
+                && attrs.first().and_then(attr_static_name).is_some()
+                && resolve_binding(&value, env).is_some();
+            if consumed {
+                self.walk_binding_rhs(&value, env);
+            } else {
+                self.walk(value.syntax(), env);
+            }
+        }
+        for inherit in scope.inherits() {
+            self.walk_binding_inherit(&inherit, env);
+        }
+    }
+
+    /// `inherit (<source>) a b c;` in a binding scope (`let`, `rec { }`,
+    /// consumed set literal) — each name only becomes an alias (use sites
+    /// drive the refs, like an alias binding's RHS: only package-deep
+    /// members are refs of their own). A name the catalog cannot contain
+    /// (dotted quoted attr) collapses to a sentinel at the source. A
+    /// from-less `inherit x;` only rebinds the outer name.
+    fn walk_binding_inherit(&mut self, inherit: &ast::Inherit, env: &Env) {
+        let Some(from_expr) = inherit.from().and_then(|from| from.expr()) else {
+            return;
+        };
+        let Some(source) = resolve_expr_binding(&from_expr, env) else {
+            self.walk(from_expr.syntax(), env);
+            return;
+        };
+        self.walk_consumed_source(&from_expr, env);
+        match paths_of(source.clone()) {
+            Some(bases) => {
+                for attr in inherit.attrs() {
+                    let name = attr_static_name(&attr);
+                    let paths: BTreeSet<Vec<String>> = bases
+                        .iter()
+                        .map(|base| match &name {
+                            Some(name) => append_component(base.clone(), name.clone()),
+                            None => append_star(base.clone()),
+                        })
+                        .collect();
+                    self.emit_deep_paths(offset_of(attr.syntax()), paths);
+                }
+            },
+            None => {
+                for attr in inherit.attrs() {
+                    let paths = attr_static_name(&attr)
+                        .and_then(|name| member_binding(&source, &name))
+                        .and_then(paths_of);
+                    if let Some(paths) = paths {
+                        self.emit_deep_paths(offset_of(attr.syntax()), paths);
+                    }
+                }
+            },
+        }
+    }
+
+    /// Walk an attrset in value position. An entry the `consumer` accounts
+    /// for elsewhere is consumed — it is not an escape — and every other
+    /// entry is an ordinary value position.
+    fn walk_attrset(&mut self, attrset: &ast::AttrSet, consumer: &AttrsetConsumer, env: &Env) {
+        for entry in attrset.attrpath_values() {
+            if let Some(attrpath) = entry.attrpath() {
+                self.walk_attrpath_dynamics(&attrpath, env);
+            }
+            let Some(value) = entry.value() else { continue };
+            let attrs: Vec<ast::Attr> = entry
+                .attrpath()
+                .map(|attrpath| attrpath.attrs().collect())
+                .unwrap_or_default();
+            let name = (attrs.len() == 1)
+                .then(|| attrs.first().and_then(attr_static_name))
+                .flatten();
+            if let Some(name) = &name {
+                let binding = resolve_expr_binding(&value, env);
+                if self.consumed_by(consumer, name, binding.as_ref()) {
+                    self.walk_consumed_source(&value, env);
+                    continue;
+                }
+                self.warn_unforwarded_root(consumer, name, || {
+                    entry
+                        .attrpath()
+                        .map(|attrpath| offset_of(attrpath.syntax()))
+                        .unwrap_or_else(|| offset_of(value.syntax()))
+                });
+            }
+            self.walk(value.syntax(), env);
+        }
+        for inherit in attrset.inherits() {
+            self.walk_value_inherit(&inherit, consumer, env);
+        }
+    }
+
+    /// One `inherit` inside a value attrset: each name not consumed by the
+    /// `consumer` is a value use of the inherited binding.
+    fn walk_value_inherit(
+        &mut self,
+        inherit: &ast::Inherit,
+        consumer: &AttrsetConsumer,
+        env: &Env,
+    ) {
+        let from_expr = inherit.from().and_then(|from| from.expr());
+        let from_binding = from_expr
+            .as_ref()
+            .and_then(|from_expr| resolve_expr_binding(from_expr, env));
+        if let Some(from_expr) = &from_expr {
+            match &from_binding {
+                Some(_) => self.walk_consumed_source(from_expr, env),
+                None => self.walk(from_expr.syntax(), env),
+            }
+        }
+        for attr in inherit.attrs() {
+            let offset = offset_of(attr.syntax());
+            let Some(name) = attr_static_name(&attr) else {
+                // A name the catalog cannot contain (dotted quoted attr)
+                // collapses to a sentinel at the source.
+                if let Some(source) = &from_binding {
+                    let paths: BTreeSet<Vec<String>> = escaping_paths_of(source)
+                        .into_iter()
+                        .map(append_star)
+                        .collect();
+                    self.emit_value_paths(offset, paths);
+                }
                 continue;
             };
-            let attrs: Vec<ast::Attr> = lhs.attrs().collect();
+            let binding = match (from_expr.is_some(), &from_binding) {
+                (false, _) => env.get(&name).cloned(),
+                (true, Some(source)) => member_binding(source, &name),
+                (true, None) => None,
+            };
+            if self.consumed_by(consumer, &name, binding.as_ref()) {
+                continue;
+            }
+            self.warn_unforwarded_root(consumer, &name, || offset);
+            if let Some(binding) = binding {
+                self.emit_value_binding(offset, &binding);
+            }
+        }
+    }
+
+    /// Whether the `consumer` accounts for binding `name` to `binding`
+    /// elsewhere, making the entry a consumed forward rather than a value.
+    fn consumed_by(
+        &self,
+        consumer: &AttrsetConsumer,
+        name: &str,
+        binding: Option<&Binding>,
+    ) -> bool {
+        match consumer {
+            AttrsetConsumer::None => false,
+            AttrsetConsumer::Import(forwards) => forwards.contains_key(name),
+            AttrsetConsumer::Lambda(params) => {
+                params.contains(name)
+                    && self.roots.contains(name)
+                    && matches!(binding, Some(Binding::Path(path)) if path.len() == 1 && path[0] == name)
+            },
+        }
+    }
+
+    /// Warn when an import argument names a root without forwarding it — the
+    /// imported file is not scanned through that name.
+    fn warn_unforwarded_root(
+        &self,
+        consumer: &AttrsetConsumer,
+        name: &str,
+        offset: impl FnOnce() -> usize,
+    ) {
+        if matches!(consumer, AttrsetConsumer::Import(_)) && self.roots.contains(name) {
+            self.ctx.warn_unfollowed_import(offset(), name);
+        }
+    }
+
+    fn walk_with(&mut self, with_expr: &ast::With, env: &Env) {
+        if let Some(ns) = with_expr.namespace()
+            && let Some(paths) = resolve_expr_paths(&ns, env)
+        {
+            for path in paths {
+                self.emit(offset_of(with_expr.syntax()), join_path(&append_star(path)));
+            }
+            self.walk_consumed_source(&ns, env);
+            if let Some(body) = with_expr.body() {
+                self.walk(body.syntax(), env);
+            }
+            return;
+        }
+        for child in with_expr.syntax().children() {
+            self.walk(&child, env);
+        }
+    }
+
+    fn walk_apply(&mut self, apply: &ast::Apply, env: &Env) {
+        // `getAttr <key> <target>`: the resolved target is consumed, the key
+        // subexpression is still scanned for refs of its own.
+        if let Some(inner) = inner_apply(apply)
+            && inner.lambda().is_some_and(|f| is_get_attr_fn(&f))
+            && let Some(target) = apply.argument()
+            && let Some(target_paths) = resolve_expr_paths(&target, env)
+        {
+            let key = inner.argument();
+            for target_path in target_paths {
+                let path = match key.as_ref().and_then(static_str) {
+                    Some(key) => append_component(target_path, key),
+                    None => append_star(target_path),
+                };
+                self.emit(
+                    offset_of(apply.syntax()),
+                    join_path(&widen_if_catalog_level(path)),
+                );
+            }
+            self.walk_consumed_source(&target, env);
+            if let Some(key) = key {
+                self.walk(key.syntax(), env);
+            }
+            return;
+        }
+        match extract_import(apply) {
+            Some((Some(path), arg)) => {
+                if self.apply_import(offset_of(apply.syntax()), path, &arg, env) {
+                    return;
+                }
+            },
+            // A dynamic import path cannot be followed; when the argument
+            // would forward a namespace, say so rather than failing silently
+            // (the argument then escapes analysis as a value below).
+            Some((None, arg)) if self.forwards_any_root(&arg, env) => {
+                self.ctx.warn_dynamic_import(offset_of(apply.syntax()));
+            },
+            Some((None, _)) | None => {},
+        }
+        if let Some(fn_expr) = apply.lambda() {
+            match resolve_expr_binding(&fn_expr, env) {
+                // Applying a let-bound `import ./file` follows the import
+                // like a direct application.
+                Some(Binding::Import(path)) => {
+                    if let Some(argument) = apply.argument()
+                        && self.apply_import(offset_of(apply.syntax()), path, &argument, env)
+                    {
+                        self.walk_consumed_source(&fn_expr, env);
+                        return;
+                    }
+                },
+                // Applying a lambda defined in this file: an argument that
+                // binds a root under the parameter name the lambda declares
+                // for it was already accounted for when the body was walked,
+                // so it is consumed rather than escaping.
+                Some(Binding::Lambda(params)) => {
+                    self.walk_consumed_source(&fn_expr, env);
+                    if let Some(argument) = apply.argument() {
+                        self.walk_known_lambda_arg(&argument, &params, env);
+                    }
+                    return;
+                },
+                _ => {},
+            }
+        }
+        for child in apply.syntax().children() {
+            self.walk(&child, env);
+        }
+    }
+
+    /// Handle the application of `import <path>` to `arg` — direct or through
+    /// a bound name. Records the pending import and consumes the argument
+    /// when its forwarding shape is recognized; returns whether it was.
+    /// `offset` is the import application's byte offset, for locating a drain
+    /// failure at the import site.
+    fn apply_import(&mut self, offset: usize, path: String, arg: &ast::Expr, env: &Env) -> bool {
+        match arg {
+            ast::Expr::AttrSet(attrset) => {
+                let forwards = self.import_forwards(attrset, env);
+                self.walk_attrset(attrset, &AttrsetConsumer::Import(&forwards), env);
+                if !forwards.is_empty() {
+                    // Forwarding is a use of each parent root: refs surfacing
+                    // from the import trace back to this argument.
+                    let arg_offset = offset_of(attrset.syntax());
+                    for parent_root in forwards.values() {
+                        self.note_root_use(arg_offset, parent_root);
+                    }
+                    self.pending_imports.push(PendingImport {
+                        path,
+                        arg: ImportArg::Set(forwards),
+                        offset,
+                    });
+                }
+                true
+            },
+            other => {
+                // `import ./h.nix catalogs` — the whole namespace is the
+                // argument, consumed by following the import.
+                if let Some(Binding::Path(root_path)) = resolve_expr_binding(other, env)
+                    && let [root] = root_path.as_slice()
+                {
+                    self.note_root_use(offset_of(other.syntax()), root);
+                    self.pending_imports.push(PendingImport {
+                        path,
+                        arg: ImportArg::Root(root.clone()),
+                        offset,
+                    });
+                    return true;
+                }
+                false
+            },
+        }
+    }
+
+    /// Walk the argument of an application whose callee is a known lambda
+    /// with parameter names `params`. A binding is covered — and therefore
+    /// consumed — when the lambda body saw the same root under the same name;
+    /// everything else is an ordinary value position.
+    fn walk_known_lambda_arg(&mut self, argument: &ast::Expr, params: &HashSet<String>, env: &Env) {
+        let consumer = AttrsetConsumer::Lambda(params);
+        match argument {
+            // `mkPkg catalogs` where the lambda's plain parameter is the
+            // root's own name.
+            ast::Expr::Ident(ident) => {
+                if let Some(name) = ident_name(ident) {
+                    if self.consumed_by(&consumer, &name, env.get(&name)) {
+                        return;
+                    }
+                    // A modeled set passed whole (`mkPkg args`): members the
+                    // lambda binds under the same root name were walked in
+                    // the body; only the rest escapes.
+                    if let Some(Binding::Set(members)) = env.get(&name) {
+                        let uncovered: BTreeSet<Vec<String>> = members
+                            .iter()
+                            .filter(|(member, binding)| {
+                                !self.consumed_by(&consumer, member, Some(binding))
+                            })
+                            .flat_map(|(_, binding)| escaping_paths_of(binding))
+                            .collect();
+                        if !uncovered.is_empty() {
+                            self.emit_value_paths(offset_of(ident.syntax()), uncovered);
+                        }
+                        return;
+                    }
+                }
+                self.walk(argument.syntax(), env);
+            },
+            ast::Expr::AttrSet(attrset) => {
+                let scope = if attrset.rec_token().is_some() {
+                    recursive_scope_env(attrset, env)
+                } else {
+                    env.clone()
+                };
+                self.walk_attrset(attrset, &consumer, &scope);
+            },
+            other => self.walk(other.syntax(), env),
+        }
+    }
+
+    /// Whether an import argument would forward a whole root namespace.
+    fn forwards_any_root(&self, arg: &ast::Expr, env: &Env) -> bool {
+        match arg {
+            ast::Expr::AttrSet(attrset) => {
+                attrset.attrpath_values().any(|entry| {
+                    entry
+                        .value()
+                        .and_then(|value| resolve_expr_binding(&value, env))
+                        .is_some_and(|binding| is_root_binding(&binding))
+                }) || attrset.inherits().any(|inherit| {
+                    inherit.from().is_none()
+                        && inherit.attrs().any(|attr| {
+                            attr_static_name(&attr)
+                                .and_then(|name| env.get(&name))
+                                .is_some_and(is_root_binding)
+                        })
+                })
+            },
+            other => {
+                resolve_expr_binding(other, env).is_some_and(|binding| is_root_binding(&binding))
+            },
+        }
+    }
+
+    /// Resolve which names an import's argument attrset forwards a whole
+    /// root under (`inherit catalogs;`, `catalogs = catalogs;`,
+    /// `cats = catalogs;`). A binding that *names* a root but is bound to
+    /// something else is not forwarded; [Self::walk_import_arg] warns about
+    /// it — the imported file will not be scanned through it.
+    fn import_forwards(&self, arg: &ast::AttrSet, env: &Env) -> HashMap<String, String> {
+        let mut forwards = HashMap::new();
+        for entry in arg.attrpath_values() {
+            let Some(attrpath) = entry.attrpath() else {
+                continue;
+            };
+            let attrs: Vec<ast::Attr> = attrpath.attrs().collect();
             if attrs.len() != 1 {
                 continue;
             }
-            let ast::Attr::Ident(ref id) = attrs[0] else {
+            let Some(name) = attrs.first().and_then(attr_static_name) else {
                 continue;
             };
-            let Some(name) = id.ident_token().map(|t| t.text().to_string()) else {
-                continue;
-            };
-            if aliases.contains_key(&name) {
-                continue;
+            let Some(value) = entry.value() else { continue };
+            if let Some(Binding::Path(path)) = resolve_expr_binding(&value, env)
+                && let [root] = path.as_slice()
+            {
+                forwards.insert(name, root.clone());
             }
-            let Some(ast::Expr::Select(select)) = entry.value() else {
-                continue;
-            };
-            if let Some(path) = extract_ref_path(&select, roots, aliases) {
-                aliases.insert(name, path);
-                *changed = true;
+        }
+        for inherit in arg.inherits() {
+            let from_binding = inherit
+                .from()
+                .and_then(|from| from.expr())
+                .and_then(|from_expr| resolve_expr_binding(&from_expr, env));
+            for attr in inherit.attrs() {
+                let Some(name) = attr_static_name(&attr) else {
+                    continue;
+                };
+                let binding = match (inherit.from().is_some(), &from_binding) {
+                    (false, _) => env.get(&name).cloned(),
+                    (true, Some(Binding::Set(members))) => members.get(&name).cloned(),
+                    (true, _) => None,
+                };
+                if let Some(Binding::Path(path)) = binding
+                    && let [root] = path.as_slice()
+                {
+                    forwards.insert(name, root.clone());
+                }
+            }
+        }
+        forwards
+    }
+
+    fn walk_select(&mut self, select: &ast::Select, env: &Env) {
+        match resolve_expr_binding(&ast::Expr::Select(select.clone()), env) {
+            Some(binding) => {
+                match paths_of(binding.clone()) {
+                    Some(paths) => {
+                        for path in paths {
+                            self.emit(
+                                offset_of(select.syntax()),
+                                join_path(&widen_if_catalog_level(path)),
+                            );
+                        }
+                    },
+                    // The select reaches a modeled set (`t.sub`) used as a
+                    // value: its members escape.
+                    None => self.emit_value_binding(offset_of(select.syntax()), &binding),
+                }
+                if let Some(base) = select.expr() {
+                    self.walk_consumed_source(&base, env);
+                }
+            },
+            None => self.walk_unresolved_select(select, env),
+        }
+        self.walk_select_parts(select, env);
+    }
+
+    /// Walk a select whose path did not resolve. A base that is a modeled
+    /// set is consumed when the path is static — selecting an unknown member
+    /// cannot leak the other members — while a dynamic component may select
+    /// any member, so the set's paths escape (collapsed). Any other base is
+    /// an ordinary value position.
+    fn walk_unresolved_select(&mut self, select: &ast::Select, env: &Env) {
+        let Some(base) = select.expr() else { return };
+        match resolve_expr_binding(&base, env) {
+            Some(binding @ Binding::Set(_)) => {
+                let dynamic = select.attrpath().is_some_and(|attrpath| {
+                    attrpath
+                        .attrs()
+                        .any(|attr| attr_static_name(&attr).is_none())
+                });
+                if dynamic {
+                    let paths: BTreeSet<Vec<String>> = escaping_paths_of(&binding)
+                        .into_iter()
+                        .map(append_star)
+                        .collect();
+                    if !paths.is_empty() {
+                        self.emit_value_paths(offset_of(select.syntax()), paths);
+                    }
+                }
+                self.walk_consumed_source(&base, env);
+            },
+            _ => self.walk(base.syntax(), env),
+        }
+    }
+
+    /// Scan the non-consumed subtrees of a select: dynamic attr components and
+    /// the `or` default.
+    fn walk_select_parts(&mut self, select: &ast::Select, env: &Env) {
+        if let Some(attrpath) = select.attrpath() {
+            self.walk_attrpath_dynamics(&attrpath, env);
+        }
+        if let Some(default) = select.default_expr() {
+            self.walk(default.syntax(), env);
+        }
+    }
+
+    /// A resolved (consumed) source expression — an inherit source, `with`
+    /// namespace, `getAttr` target, or select base — may still contain
+    /// dynamic components with refs of their own
+    /// (`inherit (catalogs.${catalogs.a.name}) x;`); scan those.
+    fn walk_consumed_source(&mut self, expr: &ast::Expr, env: &Env) {
+        match expr {
+            ast::Expr::Select(select) => {
+                if let Some(base) = select.expr() {
+                    self.walk_consumed_source(&base, env);
+                }
+                self.walk_select_parts(select, env);
+            },
+            ast::Expr::Paren(paren) => {
+                if let Some(inner) = paren.expr() {
+                    self.walk_consumed_source(&inner, env);
+                }
+            },
+            _ => {},
+        }
+    }
+
+    /// Walk the right-hand side of a binding consumed as a catalog alias.
+    ///
+    /// A deep RHS (two or more components past the root) is a package ref of
+    /// its own and still emits; a catalog-level RHS is suppressed entirely —
+    /// it only defines the alias, and the alias's use sites drive the refs.
+    fn walk_binding_rhs(&mut self, value: &ast::Expr, env: &Env) {
+        match value {
+            ast::Expr::Select(select) => {
+                match resolve_select_paths(select, env) {
+                    Some(paths) => {
+                        for path in paths {
+                            if path.len() >= 3 {
+                                self.emit(offset_of(select.syntax()), join_path(&path));
+                            }
+                        }
+                        if let Some(base) = select.expr() {
+                            self.walk_consumed_source(&base, env);
+                        }
+                    },
+                    None => self.walk_unresolved_select(select, env),
+                }
+                self.walk_select_parts(select, env);
+            },
+            // Branches of a conditional alias are themselves binding
+            // positions; the condition is an ordinary value.
+            ast::Expr::IfElse(if_else) => {
+                if let Some(condition) = if_else.condition() {
+                    self.walk(condition.syntax(), env);
+                }
+                for branch in [if_else.body(), if_else.else_body()].into_iter().flatten() {
+                    self.walk_binding_rhs(&branch, env);
+                }
+            },
+            ast::Expr::Ident(_) => {},
+            ast::Expr::Paren(paren) => {
+                if let Some(inner) = paren.expr() {
+                    self.walk_binding_rhs(&inner, env);
+                }
+            },
+            // An attrset literal consumed as a binding: its members follow
+            // the binding policy too (`s = { org = catalogs.myorg; }` only
+            // defines aliases reachable through `s`).
+            ast::Expr::AttrSet(attrset) => {
+                let scope = if attrset.rec_token().is_some() {
+                    recursive_scope_env(attrset, env)
+                } else {
+                    env.clone()
+                };
+                self.walk_binding_entries(attrset, &scope);
+            },
+            _ => self.walk(value.syntax(), env),
+        }
+    }
+
+    /// Scan the expression components of an attr path: dynamic attrs and
+    /// string interpolations. Static names are not value uses.
+    fn walk_attrpath_dynamics(&mut self, attrpath: &ast::Attrpath, env: &Env) {
+        for attr in attrpath.attrs() {
+            match attr {
+                ast::Attr::Dynamic(dynamic) => {
+                    if let Some(expr) = dynamic.expr() {
+                        self.walk(expr.syntax(), env);
+                    }
+                },
+                ast::Attr::Str(s) => self.walk(s.syntax(), env),
+                ast::Attr::Ident(_) => {},
             }
         }
     }
-    for child in node.children() {
-        gather_let_aliases(&child, roots, aliases, changed);
-    }
 }
 
-/// Walk the tree for `import ./file { <root> = …; }` calls and merge the refs
-/// found in each imported file into `refs`.
-fn follow_imports(
-    node: &rnix::SyntaxNode,
-    roots: &HashSet<String>,
-    aliases: &HashMap<String, String>,
-    file_dir: &Path,
-    visited: &mut HashSet<PathBuf>,
-    refs: &mut BTreeSet<String>,
-) {
-    if let Some(apply) = ast::Apply::cast(node.clone())
-        && let Some((path_str, import_roots)) = try_extract_import(&apply, roots, aliases)
-    {
-        let target = file_dir.join(&path_str);
-        let target = fs::canonicalize(&target).unwrap_or(target);
-        if !visited.contains(&target) {
-            visited.insert(target.clone());
-            if let Ok(content) = fs::read_to_string(&target) {
-                let import_dir = target.parent().map(Path::to_path_buf);
-                let imported = analyze_file_at(
-                    &content,
-                    &import_roots,
-                    import_dir.as_deref(),
-                    visited,
-                    Some(&target),
-                );
-                refs.extend(imported.refs);
-            }
+/// Environment for a recursive binding scope: `let … in` or `rec { }`.
+///
+/// Every bound name shadows the outer scope. Both constructs are recursive,
+/// so bindings that alias catalog paths are resolved to a fixpoint: a pass
+/// may enable another binding regardless of source order, and names that
+/// never resolve stay opaque (which is what makes `let catalogs = …;` shadow
+/// a root).
+fn recursive_scope_env(scope: &impl HasEntry, outer: &Env) -> Env {
+    let mut env = outer.clone();
+
+    let mut values: Vec<(String, ast::Expr)> = Vec::new();
+    for entry in scope.attrpath_values() {
+        let Some(attrpath) = entry.attrpath() else {
+            continue;
+        };
+        let attrs: Vec<ast::Attr> = attrpath.attrs().collect();
+        let Some(name) = attrs.first().and_then(attr_static_name) else {
+            continue;
+        };
+        env.insert(name.clone(), Binding::Opaque);
+        if attrs.len() == 1
+            && let Some(value) = entry.value()
+        {
+            values.push((name, value));
         }
     }
-    for child in node.children() {
-        follow_imports(&child, roots, aliases, file_dir, visited, refs);
+    for inherit in scope.inherits() {
+        for attr in inherit.attrs() {
+            let Some(name) = attr_static_name(&attr) else {
+                continue;
+            };
+            // `inherit x;` (no source) rebinds the outer x under the same name.
+            let binding = match inherit.from() {
+                None => outer.get(&name).cloned().unwrap_or(Binding::Opaque),
+                Some(_) => Binding::Opaque,
+            };
+            env.insert(name, binding);
+        }
+    }
+
+    // Bindings are re-resolved every pass, including ones already resolved:
+    // a `Paths` or `Set` resolved early may reference names that only
+    // resolve on a later pass. A self-referential binding
+    // (`a = if c then a.sub else catalogs.x`) could otherwise grow its path
+    // set forever, so passes are capped at the number of bindings — enough
+    // for any acyclic reference chain to settle.
+    let inherit_count: usize = scope
+        .inherits()
+        .map(|inherit| inherit.attrs().count())
+        .sum();
+    let max_passes = values.len() + inherit_count + 1;
+    for _ in 0..max_passes {
+        let mut changed = false;
+        for (name, value) in &values {
+            let Some(binding) = resolve_binding(value, &env) else {
+                continue;
+            };
+            if env.get(name) != Some(&binding) {
+                env.insert(name.clone(), binding);
+                changed = true;
+            }
+        }
+        for inherit in scope.inherits() {
+            let Some(from_expr) = inherit.from().and_then(|from| from.expr()) else {
+                continue;
+            };
+            let Some(source) = resolve_expr_binding(&from_expr, &env) else {
+                continue;
+            };
+            for attr in inherit.attrs() {
+                let Some(name) = attr_static_name(&attr) else {
+                    continue;
+                };
+                let Some(binding) = member_binding(&source, &name) else {
+                    continue;
+                };
+                if env.get(&name) != Some(&binding) {
+                    env.insert(name, binding);
+                    changed = true;
+                }
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
+    env
+}
+
+/// Resolve a binding's right-hand side to what the bound name will mean.
+fn resolve_binding(expr: &ast::Expr, env: &Env) -> Option<Binding> {
+    match expr {
+        ast::Expr::AttrSet(attrset) => Some(attr_set_binding(attrset, env)),
+        ast::Expr::Lambda(lambda) => Some(Binding::Lambda(lambda_param_names(lambda))),
+        _ => resolve_expr_binding(expr, env),
     }
 }
 
-/// Recognize an `import <path> { … }` application that forwards at least one
-/// catalog root, returning the import path and the roots passed to it.
-fn try_extract_import(
-    apply: &ast::Apply,
-    roots: &HashSet<String>,
-    aliases: &HashMap<String, String>,
-) -> Option<(String, HashSet<String>)> {
-    let inner = match apply.lambda()? {
-        ast::Expr::Apply(a) => a,
-        _ => return None,
+/// The names a lambda's parameter binds (a plain parameter or the entries of
+/// a pattern).
+fn lambda_param_names(lambda: &ast::Lambda) -> HashSet<String> {
+    let mut names = HashSet::new();
+    match lambda.param() {
+        Some(ast::Param::IdentParam(param)) => {
+            names.extend(param.ident().as_ref().and_then(ident_name));
+        },
+        Some(ast::Param::Pattern(pat)) => {
+            for entry in pat.pat_entries() {
+                names.extend(entry.ident().as_ref().and_then(ident_name));
+            }
+        },
+        None => {},
+    }
+    names
+}
+
+/// Model an attrset literal as a [Binding::Set] of its statically-known
+/// members. A `rec { }` literal resolves its members in its own scope.
+fn attr_set_binding(attrset: &ast::AttrSet, env: &Env) -> Binding {
+    let scope = if attrset.rec_token().is_some() {
+        recursive_scope_env(attrset, env)
+    } else {
+        env.clone()
     };
+    let mut members: HashMap<String, Binding> = HashMap::new();
+    for entry in attrset.attrpath_values() {
+        let Some(attrpath) = entry.attrpath() else {
+            continue;
+        };
+        let attrs: Vec<ast::Attr> = attrpath.attrs().collect();
+        if attrs.len() != 1 {
+            continue;
+        }
+        let Some(name) = attrs.first().and_then(attr_static_name) else {
+            continue;
+        };
+        let Some(value) = entry.value() else { continue };
+        if let Some(binding) = resolve_binding(&value, &scope) {
+            members.insert(name, binding);
+        }
+    }
+    for inherit in attrset.inherits() {
+        match inherit.from().and_then(|from| from.expr()) {
+            Some(from_expr) => {
+                if let Some(source) = resolve_expr_binding(&from_expr, &scope) {
+                    for attr in inherit.attrs() {
+                        if let Some(name) = attr_static_name(&attr)
+                            && let Some(binding) = member_binding(&source, &name)
+                        {
+                            members.insert(name, binding);
+                        }
+                    }
+                }
+            },
+            None => {
+                for attr in inherit.attrs() {
+                    if let Some(name) = attr_static_name(&attr)
+                        && let Some(binding) = scope.get(&name)
+                    {
+                        members.insert(name, binding.clone());
+                    }
+                }
+            },
+        }
+    }
+    Binding::Set(members)
+}
+
+/// Resolve an expression to its binding, following the environment for idents
+/// and stepping through attrset members for selects. `None` when the
+/// expression does not reach anything the scanner can model.
+fn resolve_expr_binding(expr: &ast::Expr, env: &Env) -> Option<Binding> {
+    match expr {
+        ast::Expr::Ident(ident) => match env.get(&ident_name(ident)?)? {
+            Binding::Opaque => None,
+            binding => Some(binding.clone()),
+        },
+        ast::Expr::Select(select) => {
+            let mut current = resolve_expr_binding(&select.expr()?, env)?;
+            for attr in select.attrpath()?.attrs() {
+                current = match (current, attr_static_name(&attr)) {
+                    (Binding::Path(path), Some(name)) => {
+                        Binding::Path(append_component(path, name))
+                    },
+                    // A dynamic component collapses the path and consumes
+                    // whatever follows.
+                    (Binding::Path(path), None) => return Some(Binding::Path(append_star(path))),
+                    (Binding::Paths(paths), Some(name)) => Binding::Paths(
+                        paths
+                            .into_iter()
+                            .map(|path| append_component(path, name.clone()))
+                            .collect(),
+                    ),
+                    (Binding::Paths(paths), None) => {
+                        return Some(Binding::Paths(paths.into_iter().map(append_star).collect()));
+                    },
+                    (Binding::Set(members), Some(name)) => members.get(&name)?.clone(),
+                    (Binding::Set(_), None) => return None,
+                    (Binding::Lambda(_) | Binding::Import(_), _) => return None,
+                    (Binding::Opaque, _) => return None,
+                };
+            }
+            match current {
+                Binding::Opaque => None,
+                binding => Some(binding),
+            }
+        },
+        // An unapplied `import <static-path>` — applying the bound name later
+        // follows the import.
+        ast::Expr::Apply(apply) => {
+            let ast::Expr::Ident(import_fn) = apply.lambda()? else {
+                return None;
+            };
+            if import_fn.ident_token()?.text() != "import" {
+                return None;
+            }
+            static_path_str(&apply.argument()?).map(Binding::Import)
+        },
+        // A conditional resolves to whichever branches the scanner can model;
+        // all of them must be locked.
+        ast::Expr::IfElse(if_else) => {
+            let mut paths: BTreeSet<Vec<String>> = BTreeSet::new();
+            for branch in [if_else.body(), if_else.else_body()].into_iter().flatten() {
+                match resolve_expr_binding(&branch, env) {
+                    Some(Binding::Path(path)) => {
+                        paths.insert(path);
+                    },
+                    Some(Binding::Paths(more)) => paths.extend(more),
+                    _ => {},
+                }
+            }
+            (!paths.is_empty()).then_some(Binding::Paths(paths))
+        },
+        ast::Expr::Paren(paren) => resolve_expr_binding(&paren.expr()?, env),
+        _ => None,
+    }
+}
+
+/// The attr-paths a binding denotes: one for an alias, several for a
+/// conditional alias, none for sets and opaque bindings.
+fn paths_of(binding: Binding) -> Option<BTreeSet<Vec<String>>> {
+    match binding {
+        Binding::Path(path) => Some(BTreeSet::from([path])),
+        Binding::Paths(paths) => Some(paths),
+        _ => None,
+    }
+}
+
+/// The attr-paths reachable through a binding when its value escapes into
+/// code the scanner cannot follow: an alias's own paths, or every path
+/// reachable through the members of a modeled set (recursively). Bindings
+/// that carry no catalog paths contribute nothing.
+fn escaping_paths_of(binding: &Binding) -> BTreeSet<Vec<String>> {
+    match binding {
+        Binding::Path(path) => BTreeSet::from([path.clone()]),
+        Binding::Paths(paths) => paths.clone(),
+        Binding::Set(members) => members.values().flat_map(escaping_paths_of).collect(),
+        _ => BTreeSet::new(),
+    }
+}
+
+/// Resolve an expression to the set of attr-paths it may denote.
+fn resolve_expr_paths(expr: &ast::Expr, env: &Env) -> Option<BTreeSet<Vec<String>>> {
+    paths_of(resolve_expr_binding(expr, env)?)
+}
+
+/// [resolve_expr_paths] for a select node.
+fn resolve_select_paths(select: &ast::Select, env: &Env) -> Option<BTreeSet<Vec<String>>> {
+    paths_of(resolve_expr_binding(
+        &ast::Expr::Select(select.clone()),
+        env,
+    )?)
+}
+
+/// Append one component; a path already collapsed to `*` absorbs it.
+fn append_component(mut path: Vec<String>, name: String) -> Vec<String> {
+    if path.last().map(String::as_str) != Some("*") {
+        path.push(name);
+    }
+    path
+}
+
+/// Collapse the path's tail to a `*` sentinel (idempotent).
+fn append_star(path: Vec<String>) -> Vec<String> {
+    append_component(path, "*".to_string())
+}
+
+/// The binding `inherit (<source>) <name>;` produces for `name`, given the
+/// source's binding: one more component on an attr-path, or a member of a
+/// modeled set.
+fn member_binding(source: &Binding, name: &str) -> Option<Binding> {
+    match source {
+        Binding::Path(base) => Some(Binding::Path(append_component(
+            base.clone(),
+            name.to_string(),
+        ))),
+        Binding::Paths(bases) => Some(Binding::Paths(
+            bases
+                .iter()
+                .cloned()
+                .map(|base| append_component(base, name.to_string()))
+                .collect(),
+        )),
+        Binding::Set(members) => members.get(name).cloned(),
+        _ => None,
+    }
+}
+
+/// Widen a path that names a whole catalog or the root itself (fewer than two
+/// components past the root) to a `.*` sentinel: the server's resolution floor
+/// is catalog + one component, so such an exact ref can never resolve.
+fn widen_if_catalog_level(path: Vec<String>) -> Vec<String> {
+    if path.len() < 3 {
+        append_star(path)
+    } else {
+        path
+    }
+}
+
+fn join_path(path: &[String]) -> String {
+    path.join(".")
+}
+
+fn ident_name(ident: &ast::Ident) -> Option<String> {
+    Some(ident.ident_token()?.text().to_string())
+}
+
+/// The inner application of a two-argument call `f a b`, i.e. `f a`.
+fn inner_apply(apply: &ast::Apply) -> Option<ast::Apply> {
+    match apply.lambda()? {
+        ast::Expr::Apply(inner) => Some(inner),
+        _ => None,
+    }
+}
+
+/// Recognize an `import <path> <arg>` application, returning the import path
+/// (`None` when it is not statically known) and the argument expression.
+fn extract_import(apply: &ast::Apply) -> Option<(Option<String>, ast::Expr)> {
+    let inner = inner_apply(apply)?;
     let ast::Expr::Ident(import_fn) = inner.lambda()? else {
         return None;
     };
     if import_fn.ident_token()?.text() != "import" {
         return None;
     }
-    let path_str = static_path_str(&inner.argument()?)?;
-    let ast::Expr::AttrSet(attrset) = apply.argument()? else {
+    let path = static_path_str(&inner.argument()?);
+    Some((path, apply.argument()?))
+}
+
+/// Whether a binding is a whole catalog root.
+fn is_root_binding(binding: &Binding) -> bool {
+    matches!(binding, Binding::Path(path) if path.len() == 1)
+}
+
+/// The file's package function: the top-level lambda, looked for through
+/// wrappers (`let … in`, `with …;`, parentheses) that do not change which
+/// function the file evaluates to.
+fn top_level_lambda(root: &rnix::Root) -> Option<ast::Lambda> {
+    let mut expr = root.expr()?;
+    loop {
+        match expr {
+            ast::Expr::Lambda(lambda) => return Some(lambda),
+            ast::Expr::LetIn(let_in) => expr = let_in.body()?,
+            ast::Expr::With(with_expr) => expr = with_expr.body()?,
+            ast::Expr::Paren(paren) => expr = paren.expr()?,
+            _ => return None,
+        }
+    }
+}
+
+/// The name of a file's top-level plain lambda parameter (`cats: …`), if any.
+fn top_ident_param(content: &str) -> Option<String> {
+    let root = rnix::Root::parse(content).tree();
+    let Some(ast::Expr::Lambda(lambda)) = root.expr() else {
         return None;
     };
-    let passed = roots_passed_to_import(&attrset, roots, aliases);
-    if passed.is_empty() {
+    let Some(ast::Param::IdentParam(param)) = lambda.param() else {
         return None;
+    };
+    param.ident().as_ref().and_then(ident_name)
+}
+
+/// Rewrite a child-rooted reference back to the parent's namespace using the
+/// child-name → parent-root map of the import that forwarded it.
+fn rewrite_root(reference: String, rewrites: &HashMap<String, String>) -> String {
+    match reference.split_once('.') {
+        Some((root, rest)) => match rewrites.get(root) {
+            Some(parent) => format!("{parent}.{rest}"),
+            None => reference,
+        },
+        None => reference,
     }
-    Some((path_str, passed))
 }
 
 /// Extract a statically-known path or string literal as a string, or `None`
@@ -436,140 +1867,9 @@ fn static_path_str(expr: &ast::Expr) -> Option<String> {
     }
 }
 
-/// Collect the catalog roots forwarded into an import's argument attrset,
-/// via either `inherit` or `<root> = <root>;` bindings.
-fn roots_passed_to_import(
-    attrset: &ast::AttrSet,
-    roots: &HashSet<String>,
-    _aliases: &HashMap<String, String>,
-) -> HashSet<String> {
-    let mut passed = HashSet::new();
-    for inherit in attrset.inherits() {
-        if inherit.from().is_some() {
-            continue;
-        }
-        for attr in inherit.attrs() {
-            if let ast::Attr::Ident(id) = attr
-                && let Some(name) = id.ident_token().map(|t| t.text().to_string())
-                && roots.contains(name.as_str())
-            {
-                passed.insert(name);
-            }
-        }
-    }
-    for apv in attrset.attrpath_values() {
-        let Some(lhs) = apv.attrpath() else { continue };
-        let attrs: Vec<ast::Attr> = lhs.attrs().collect();
-        if attrs.len() != 1 {
-            continue;
-        }
-        if let ast::Attr::Ident(id) = &attrs[0]
-            && let Some(name) = id.ident_token().map(|t| t.text().to_string())
-            && roots.contains(name.as_str())
-        {
-            passed.insert(name);
-        }
-    }
-    passed
-}
-
-/// Recursively walk the syntax tree, inserting every catalog attr-path
-/// reference into `refs`.
-///
-/// Handles `inherit (…)`, `with`, `builtins.getAttr`, and plain selects;
-/// dynamic attrs collapse to a `<path>.*` sentinel.
-fn collect_refs(
-    node: &rnix::SyntaxNode,
-    refs: &mut BTreeSet<String>,
-    roots: &HashSet<String>,
-    aliases: &HashMap<String, String>,
-    ctx: &ScanCtx,
-) {
-    if let Some(inherit) = ast::Inherit::cast(node.clone())
-        && try_handle_inherit(&inherit, refs, roots, aliases, ctx)
-    {
-        return;
-    }
-
-    if let Some(with_expr) = ast::With::cast(node.clone())
-        && let Some(ns) = with_expr.namespace()
-        && let Some(path) = namespace_path(&ns, roots, aliases)
-    {
-        let reference = format!("{}.*", path);
-        ctx.report(offset_of(with_expr.syntax()), &reference);
-        refs.insert(reference);
-        if let Some(body) = with_expr.body() {
-            collect_refs(body.syntax(), refs, roots, aliases, ctx);
-        }
-        return;
-    }
-
-    if let Some(apply) = ast::Apply::cast(node.clone())
-        && let Some(path) = try_handle_get_attr(&apply, roots, aliases)
-    {
-        ctx.report(offset_of(apply.syntax()), &path);
-        refs.insert(path);
-        return;
-    }
-
-    if let Some(select) = ast::Select::cast(node.clone())
-        && let Some(path) = extract_ref_path(&select, roots, aliases)
-    {
-        ctx.report(offset_of(select.syntax()), &path);
-        refs.insert(path);
-        return;
-    }
-
-    for child in node.children() {
-        collect_refs(&child, refs, roots, aliases, ctx);
-    }
-}
-
 /// Byte offset of a syntax node's start, for [`ScanCtx::report`].
 fn offset_of(node: &rnix::SyntaxNode) -> usize {
     u32::from(node.text_range().start()) as usize
-}
-
-/// Resolve an expression used as a namespace (in `with` or `getAttr`) to its
-/// catalog path, following aliases.
-fn namespace_path(
-    expr: &ast::Expr,
-    roots: &HashSet<String>,
-    aliases: &HashMap<String, String>,
-) -> Option<String> {
-    match expr {
-        ast::Expr::Select(select) => extract_ref_path(select, roots, aliases),
-        ast::Expr::Ident(ident) => {
-            let name = ident.ident_token()?.text().to_string();
-            if roots.contains(name.as_str()) {
-                Some(name)
-            } else {
-                aliases.get(&name).cloned()
-            }
-        },
-        _ => None,
-    }
-}
-
-/// Resolve a `getAttr "key" <root>` application to a `<path>.key` reference,
-/// or a `<path>.*` sentinel when the key is dynamic.
-fn try_handle_get_attr(
-    apply: &ast::Apply,
-    roots: &HashSet<String>,
-    aliases: &HashMap<String, String>,
-) -> Option<String> {
-    let inner = match apply.lambda()? {
-        ast::Expr::Apply(a) => a,
-        _ => return None,
-    };
-    if !is_get_attr_fn(&inner.lambda()?) {
-        return None;
-    }
-    let base_path = namespace_path(&apply.argument()?, roots, aliases)?;
-    match static_str(&inner.argument()?) {
-        Some(key) => Some(format!("{}.{}", base_path, key)),
-        None => Some(format!("{}.*", base_path)),
-    }
 }
 
 /// Whether an expression is the `getAttr` builtin, named either bare
@@ -599,6 +1899,11 @@ fn is_get_attr_fn(expr: &ast::Expr) -> bool {
 /// Extract the contents of a string literal with no interpolation, or `None`.
 fn static_str(expr: &ast::Expr) -> Option<String> {
     let ast::Expr::Str(s) = expr else { return None };
+    static_str_content(s)
+}
+
+/// Extract a string node's contents when it has no interpolation, or `None`.
+fn static_str_content(s: &ast::Str) -> Option<String> {
     if s.syntax().children().next().is_some() {
         return None;
     }
@@ -612,75 +1917,21 @@ fn static_str(expr: &ast::Expr) -> Option<String> {
     })
 }
 
-/// Handle `inherit (<root-path>) a b c;`, emitting one `<path>.<name>`
-/// reference per inherited name. Returns whether the inherit was rooted.
-fn try_handle_inherit(
-    inherit: &ast::Inherit,
-    refs: &mut BTreeSet<String>,
-    roots: &HashSet<String>,
-    aliases: &HashMap<String, String>,
-    ctx: &ScanCtx,
-) -> bool {
-    let Some(from) = inherit.from() else {
-        return false;
-    };
-    let Some(from_expr) = from.expr() else {
-        return false;
-    };
-    let ast::Expr::Select(select) = from_expr else {
-        return false;
-    };
-    let Some(base_path) = extract_ref_path(&select, roots, aliases) else {
-        return false;
-    };
-
-    for attr in inherit.attrs() {
-        if let ast::Attr::Ident(id) = attr
-            && let Some(token) = id.ident_token()
-        {
-            let reference = format!("{}.{}", base_path, token.text());
-            ctx.report(u32::from(token.text_range().start()) as usize, &reference);
-            refs.insert(reference);
-        }
+/// Resolve an attribute to its statically-known component name: a plain
+/// identifier, or a non-interpolated string literal that is a valid catalog
+/// component name. Returns `None` for dynamic attrs and for quoted names the
+/// catalog cannot contain (`.`, `"`, `\` are rejected by the server's name
+/// validators), which callers collapse to a `*` sentinel.
+fn attr_static_name(attr: &ast::Attr) -> Option<String> {
+    match attr {
+        ast::Attr::Ident(id) => Some(id.ident_token()?.text().to_string()),
+        ast::Attr::Str(s) => {
+            let name = static_str_content(s)?;
+            let valid = !name.is_empty() && !name.contains(['.', '"', '\\']);
+            valid.then_some(name)
+        },
+        ast::Attr::Dynamic(_) => None,
     }
-    true
-}
-
-/// Build the dotted catalog path for a `select` expression rooted at a catalog
-/// root or alias. A dynamic component collapses the path to end in `*`.
-fn extract_ref_path(
-    select: &ast::Select,
-    roots: &HashSet<String>,
-    aliases: &HashMap<String, String>,
-) -> Option<String> {
-    let expr = select.expr()?;
-    let ast::Expr::Ident(base) = expr else {
-        return None;
-    };
-    let base_name = base.ident_token()?.text().to_string();
-
-    let base_path = if roots.contains(base_name.as_str()) {
-        base_name
-    } else if let Some(alias) = aliases.get(&base_name) {
-        alias.clone()
-    } else {
-        return None;
-    };
-
-    let attrpath = select.attrpath()?;
-    let mut parts = vec![base_path];
-    for attr in attrpath.attrs() {
-        match attr {
-            ast::Attr::Ident(id) => {
-                parts.push(id.ident_token()?.text().to_string());
-            },
-            _ => {
-                parts.push("*".to_string());
-                break;
-            },
-        }
-    }
-    Some(parts.join("."))
 }
 
 /// Resolve a dependency attr-path to the package file it names and analyze it.
@@ -692,7 +1943,11 @@ fn extract_ref_path(
 /// directory); a `<comp>/default.nix` is a package directory; a directory with
 /// no `default.nix` is an attribute set that is descended into. Components past
 /// the package file are attributes within it and are ignored.
-fn resolve_dep(dir: &Path, components: &[String], roots: &HashSet<String>) -> Option<FileInfo> {
+fn resolve_dep(
+    dir: &Path,
+    components: &[String],
+    roots: &HashSet<String>,
+) -> Result<Option<FileInfo>, ScanError> {
     let mut cur = dir.to_path_buf();
     for comp in components {
         let file = cur.join(format!("{comp}.nix"));
@@ -708,24 +1963,29 @@ fn resolve_dep(dir: &Path, components: &[String], roots: &HashSet<String>) -> Op
             cur = sub;
             continue;
         }
-        return None;
+        return Ok(None);
     }
-    None
+    Ok(None)
 }
 
 /// Read and analyze a resolved package file.
 ///
 /// Relative imports in the file resolve against its own directory, so the
-/// file's parent is passed as the import base.
-fn read_and_analyze(path: &Path, roots: &HashSet<String>) -> Option<FileInfo> {
-    let content = fs::read_to_string(path).ok()?;
-    Some(analyze_file_at(
+/// file's parent is passed as the import base. An unreadable file resolves to
+/// `Ok(None)`; only scan failures are errors.
+fn read_and_analyze(path: &Path, roots: &HashSet<String>) -> Result<Option<FileInfo>, ScanError> {
+    let Ok(content) = fs::read_to_string(path) else {
+        return Ok(None);
+    };
+    analyze_file_at(
         &content,
         roots,
         path.parent(),
-        &mut HashSet::new(),
-        Some(path),
-    ))
+        &mut HashMap::new(),
+        path,
+        &identity_origins(roots),
+    )
+    .map(Some)
 }
 
 #[cfg(test)]
@@ -737,19 +1997,64 @@ mod tests {
     }
 
     fn analyze_file(content: &str, roots: &HashSet<String>) -> FileInfo {
-        analyze_file_at(content, roots, None, &mut HashSet::new(), None)
+        analyze_file_at(
+            content,
+            roots,
+            None,
+            &mut HashMap::new(),
+            Path::new("test.nix"),
+            &identity_origins(roots),
+        )
+        .expect("scan should succeed")
     }
 
     fn refs(content: &str, roots: &HashSet<String>) -> BTreeSet<String> {
         analyze_file(content, roots).refs
     }
 
+    fn scan_err(content: &str, roots: &HashSet<String>) -> ScanError {
+        analyze_file_at(
+            content,
+            roots,
+            None,
+            &mut HashMap::new(),
+            Path::new("test.nix"),
+            &identity_origins(roots),
+        )
+        .expect_err("scan should fail")
+    }
+
     fn refs_at(path: &str, roots: &HashSet<String>) -> BTreeSet<String> {
         let path = Path::new(path);
         let content = fs::read_to_string(path).expect("test fixture missing");
         let dir = path.parent();
-        let mut visited = HashSet::new();
-        analyze_file_at(&content, roots, dir, &mut visited, Some(path)).refs
+        let mut visited = HashMap::new();
+        analyze_file_at(
+            &content,
+            roots,
+            dir,
+            &mut visited,
+            path,
+            &identity_origins(roots),
+        )
+        .expect("scan should succeed")
+        .refs
+    }
+
+    fn scan_err_at(path: &str, roots: &HashSet<String>) -> ScanError {
+        let path = Path::new(path);
+        let content = fs::read_to_string(path).expect("test fixture missing");
+        let dir = path.parent();
+        let mut visited = HashMap::new();
+        analyze_file_at(
+            &content,
+            roots,
+            dir,
+            &mut visited,
+            path,
+            &identity_origins(roots),
+        )
+        .expect_err("scan should fail")
     }
 
     fn set(items: &[&str]) -> BTreeSet<String> {
@@ -871,7 +2176,16 @@ mod tests {
             include_str!("../../test_data/catalog_refs/inherit-subattrset.nix"),
             &roots(&["catalogs"]),
         );
-        assert_eq!(got, set(&["catalogs.myorg.toolkit"]));
+        // `toolkit` is inherited (an exact depth-2 ref) and then used as an
+        // alias in the body (`toolkit.buildGoModule`); the deeper use-site ref
+        // canonicalizes to the same package server-side.
+        assert_eq!(
+            got,
+            set(&[
+                "catalogs.myorg.toolkit",
+                "catalogs.myorg.toolkit.buildGoModule"
+            ])
+        );
     }
 
     #[test]
@@ -915,12 +2229,16 @@ mod tests {
             include_str!("../../test_data/catalog_refs/inputs-only.nix"),
             &roots(&["inputs"]),
         );
+        // `inputs.self` is used at catalog depth in value positions
+        // (`src = inputs.self;`, `"${inputs.self}/VERSION"`), so it widens to
+        // a sentinel rather than an unresolvable exact ref.
         assert_eq!(
             got,
             set(&[
                 "inputs.nixpkgs.lib",
+                "inputs.nixpkgs.lib.fileContents",
                 "inputs.devtools-flake.packages.default",
-                "inputs.self",
+                "inputs.self.*",
             ])
         );
     }
@@ -959,6 +2277,7 @@ mod tests {
             got,
             set(&[
                 "inputs.nixpkgs.lib",
+                "inputs.nixpkgs.lib.fakeStr",
                 "inputs.devtools-flake.packages.default",
             ])
         );
@@ -976,6 +2295,7 @@ mod tests {
                 "catalogs.myorg.toolkit.readVersion",
                 "catalogs.myorg.python3Packages.alpha-lib",
                 "inputs.nixpkgs.lib",
+                "inputs.nixpkgs.lib.fakeStr",
                 "inputs.devtools-flake.packages.default",
             ])
         );
@@ -991,7 +2311,7 @@ mod tests {
         db.insert("alpha-lib".to_string(), analyze_file(file_a, &r));
         db.insert("beta-client".to_string(), analyze_file(file_b, &r));
 
-        let got = collect_transitive(db, Path::new("."), &r);
+        let got = collect_transitive(db, Path::new("."), &r).unwrap();
         assert_eq!(
             got,
             set(&[
@@ -1011,7 +2331,7 @@ mod tests {
         db.insert("pkg-a".to_string(), analyze_file(file_a, &r));
         db.insert("pkg-b".to_string(), analyze_file(file_b, &r));
 
-        let got = collect_transitive(db, Path::new("."), &r);
+        let got = collect_transitive(db, Path::new("."), &r).unwrap();
         assert_eq!(got, set(&["catalogs.myorg.x", "catalogs.myorg.y"]));
     }
 
@@ -1025,7 +2345,7 @@ mod tests {
         db.insert("main-pkg".to_string(), analyze_file(file_a, &r));
         db.insert("dep-pkg".to_string(), analyze_file(file_b, &r));
 
-        let got = collect_transitive(db, Path::new("."), &r);
+        let got = collect_transitive(db, Path::new("."), &r).unwrap();
         assert_eq!(
             got,
             set(&[
@@ -1036,12 +2356,59 @@ mod tests {
     }
 
     #[test]
+    fn dep_arguments_collected_through_wrapped_lambda() {
+        // The dependency arguments come from the eventual package function,
+        // regardless of the wrappers around it.
+        let cases: &[(&str, &[&[&str]])] = &[
+            ("{ catalogs, somedep }: catalogs.myorg.pkg", &[&["somedep"]]),
+            (
+                "let x = 1; in { catalogs, somedep }: catalogs.myorg.pkg",
+                &[&["somedep"]],
+            ),
+            (
+                "with builtins; { catalogs, somedep }: catalogs.myorg.pkg",
+                &[&["somedep"]],
+            ),
+            ("({ catalogs, somedep }: catalogs.myorg.pkg)", &[&[
+                "somedep",
+            ]]),
+        ];
+        for (content, expected) in cases {
+            let expected: Vec<Vec<String>> = expected
+                .iter()
+                .map(|dep| dep.iter().map(|s| s.to_string()).collect())
+                .collect();
+            assert_eq!(
+                analyze_file(content, &roots(&["catalogs"])).deps,
+                expected,
+                "content: {content}"
+            );
+        }
+    }
+
+    #[test]
+    fn scan_package_follows_dep_of_wrapped_lambda() {
+        let base_dir = Path::new("test_data/catalog_refs");
+        // dep-entry-wrapped.nix wraps the package function in `let … in`; the
+        // `dep-helper` dependency argument must still pull the sibling's refs
+        // into the closure.
+        let got = scan_package(base_dir, Path::new("dep-entry-wrapped.nix")).unwrap();
+        assert_eq!(
+            got,
+            refset(&[
+                "catalogs.myorg.toolkit.readVersion",
+                "catalogs.myorg.python3Packages.alpha-lib",
+            ])
+        );
+    }
+
+    #[test]
     fn scan_package_unions_target_and_sibling_dep_refs() {
         let base_dir = Path::new("test_data/catalog_refs");
         // dep-entry.nix references one catalog path and pulls in a `dep-helper`
         // dependency argument; dep-helper.nix (its sibling under base_dir)
         // references another. The closure is the union of both.
-        let got = scan_package(base_dir, Path::new("dep-entry.nix"));
+        let got = scan_package(base_dir, Path::new("dep-entry.nix")).unwrap();
         assert_eq!(
             got,
             refset(&[
@@ -1060,7 +2427,7 @@ mod tests {
     #[test]
     fn scan_package_dep_subdir_default_follows_relative_import() {
         let base_dir = Path::new("test_data/catalog_refs/depdir-import");
-        let got = scan_package(base_dir, Path::new("entry.nix"));
+        let got = scan_package(base_dir, Path::new("entry.nix")).unwrap();
         assert_eq!(
             got,
             refset(&["catalogs.myorg.direct", "catalogs.myorg.helper-ref"]),
@@ -1078,7 +2445,7 @@ mod tests {
     #[test]
     fn scan_package_follows_alias_to_pkgset_member() {
         let base_dir = Path::new("test_data/catalog_refs/pkgset-member-alias");
-        let got = scan_package(base_dir, Path::new("isdr-zk-client.nix"));
+        let got = scan_package(base_dir, Path::new("isdr-zk-client.nix")).unwrap();
         assert_eq!(got, refset(&["catalogs.myorg.toolkit.readVersion"]));
     }
 
@@ -1090,7 +2457,7 @@ mod tests {
     #[test]
     fn scan_package_nested_target_resolves_deps_at_root() {
         let base_dir = Path::new("test_data/catalog_refs/nested-target-access");
-        let got = scan_package(base_dir, Path::new("foo/bar.nix"));
+        let got = scan_package(base_dir, Path::new("foo/bar.nix")).unwrap();
         assert_eq!(
             got,
             refset(&["catalogs.myorg.bar-own", "catalogs.myorg.top-src"]),
@@ -1106,11 +2473,44 @@ mod tests {
     #[test]
     fn scan_package_follows_pkgset_member_transitive_deps() {
         let base_dir = Path::new("test_data/catalog_refs/pkgset-member-transitive");
-        let got = scan_package(base_dir, Path::new("top.nix"));
+        let got = scan_package(base_dir, Path::new("top.nix")).unwrap();
         assert_eq!(
             got,
             refset(&["catalogs.myorg.widget-src", "catalogs.myorg.helper-lib-src"]),
         );
+    }
+
+    /// Invariant over every fixture: an emitted ref is either a sentinel
+    /// (`….*`) or an exact ref with at least two components past the root —
+    /// anything shallower can never resolve (the server's floor is catalog +
+    /// one component) and would fail the whole lock.
+    #[test]
+    fn all_fixture_refs_are_lockable_shapes() {
+        let dir = Path::new("test_data/catalog_refs");
+        let mut scanned = 0;
+        let mut violations: Vec<String> = Vec::new();
+        for entry in fs::read_dir(dir).expect("fixture dir") {
+            let path = entry.expect("fixture entry").path();
+            if path.extension().and_then(|ext| ext.to_str()) != Some("nix") {
+                continue;
+            }
+            let rel = path.file_name().expect("fixture file name");
+            // Some fixtures pin scan *errors* (unreadable imports,
+            // undeclared roots); they emit no refs to check.
+            let Ok(references) = scan_package(dir, Path::new(rel)) else {
+                continue;
+            };
+            for reference in references {
+                scanned += 1;
+                let reference = reference.as_str();
+                let post_root = reference.split('.').count() - 1;
+                if !reference.ends_with(".*") && post_root < 2 {
+                    violations.push(reference.to_string());
+                }
+            }
+        }
+        assert_eq!(violations, Vec::<String>::new());
+        assert!(scanned > 0, "no fixture refs scanned");
     }
 
     #[test]
@@ -1160,11 +2560,13 @@ mod tests {
 
     #[test]
     fn aliased_select_single_level() {
+        // The alias RHS names a whole catalog, which can never resolve as an
+        // exact ref; only the use site drives the ref.
         let got = refs(
             "{ catalogs }: let org = catalogs.myorg; in org.toolkit",
             &roots(&["catalogs"]),
         );
-        assert_eq!(got, set(&["catalogs.myorg", "catalogs.myorg.toolkit"]));
+        assert_eq!(got, set(&["catalogs.myorg.toolkit"]));
     }
 
     #[test]
@@ -1176,7 +2578,6 @@ mod tests {
         assert_eq!(
             got,
             set(&[
-                "catalogs.myorg",
                 "catalogs.myorg.toolkit",
                 "catalogs.myorg.toolkit.readVersion",
             ])
@@ -1189,7 +2590,499 @@ mod tests {
             "{ catalogs }: let b = a.hello; a = catalogs.myorg; in b",
             &roots(&["catalogs"]),
         );
-        assert_eq!(got, set(&["catalogs.myorg", "catalogs.myorg.hello"]));
+        assert_eq!(got, set(&["catalogs.myorg.hello"]));
+    }
+
+    #[test]
+    fn alias_rebound_as_lambda_param_not_emitted() {
+        // `org` inside `g` is the lambda's own parameter, not the outer alias,
+        // and the outer alias is never used in a value position.
+        let got = refs(
+            "{ catalogs, x }: let org = catalogs.myorg; g = org: org.other; in g x",
+            &roots(&["catalogs"]),
+        );
+        assert_eq!(got, BTreeSet::new());
+    }
+
+    #[test]
+    fn rec_attrset_members_alias_each_other() {
+        // `rec { }` scopes like `let`: `org` is visible to `pkg`. The set is
+        // the file's value, so the catalog-level member also escapes.
+        let got = refs(
+            "{ catalogs }: rec { org = catalogs.myorg; pkg = org.toolkit; }",
+            &roots(&["catalogs"]),
+        );
+        assert_eq!(got, set(&["catalogs.myorg.*", "catalogs.myorg.toolkit"]));
+    }
+
+    #[test]
+    fn recursive_scope_resolves_forward_references() {
+        let cases: &[(&str, &[&str])] = &[
+            // A conditional branch referencing a later binding still unions
+            // that branch.
+            (
+                "{ catalogs, x }: let org = if x then catalogs.a else other; other = catalogs.b; in org.pkg",
+                &["catalogs.a.pkg", "catalogs.b.pkg"],
+            ),
+            // A set member referencing a later binding resolves through it.
+            (
+                "{ catalogs }: let s = { helper = other; }; other = catalogs.othercat; in s.helper.pkg",
+                &["catalogs.othercat.pkg"],
+            ),
+            // An inherit whose source is a modeled set binds the member as an
+            // alias; the use site drives the ref.
+            (
+                "{ catalogs }: let s = { org = catalogs.myorg; }; inherit (s) org; in org.pkg",
+                &["catalogs.myorg.pkg"],
+            ),
+            // The same stepping works for a set literal's own inherits.
+            (
+                "{ catalogs }: let s = { org = catalogs.myorg; }; t = { inherit (s) org; }; in t.org.pkg",
+                &["catalogs.myorg.pkg"],
+            ),
+        ];
+        for (content, expected) in cases {
+            assert_eq!(
+                refs(content, &roots(&["catalogs"])),
+                set(expected),
+                "content: {content}"
+            );
+        }
+    }
+
+    #[test]
+    fn self_referential_alias_terminates() {
+        // `a` can only evaluate through the else branch (forcing the then
+        // branch recurses forever in Nix too). The property under test is
+        // that resolution terminates with the base ref locked; the exact
+        // tail refs past it depend on the resolution pass cap.
+        let got = refs(
+            "{ catalogs, x }: let a = if x then a.sub else catalogs.b.pkg; in a",
+            &roots(&["catalogs"]),
+        );
+        assert!(got.contains("catalogs.b.pkg"), "got: {got:?}");
+    }
+
+    #[test]
+    fn attrset_member_alias_resolves_through_select() {
+        let got = refs(
+            "{ catalogs }: let s = { org = catalogs.myorg; }; in s.org.toolkit",
+            &roots(&["catalogs"]),
+        );
+        assert_eq!(got, set(&["catalogs.myorg.toolkit"]));
+    }
+
+    #[test]
+    fn conditional_alias_unions_resolvable_branches() {
+        let cases: &[(&str, &[&str])] = &[
+            // The alias may be either catalog at runtime; lock both.
+            (
+                "{ catalogs, x }: let org = if x then catalogs.a else catalogs.b; in org.pkg",
+                &["catalogs.a.pkg", "catalogs.b.pkg"],
+            ),
+            // A branch the scanner cannot model contributes nothing.
+            (
+                "{ catalogs, x, y }: let org = if x then catalogs.a else y; in org.pkg",
+                &["catalogs.a.pkg"],
+            ),
+        ];
+        for (content, expected) in cases {
+            assert_eq!(
+                refs(content, &roots(&["catalogs"])),
+                set(expected),
+                "content: {content}"
+            );
+        }
+    }
+
+    #[test]
+    fn escaping_namespaces_emit_sentinels() {
+        let cases: &[(&str, &[&str])] = &[
+            // The whole root escapes into an opaque function: anything under
+            // it may be accessed.
+            ("{ catalogs, f }: f catalogs", &["catalogs.*"]),
+            // A whole catalog escapes through an alias.
+            ("{ catalogs, f }: let org = catalogs.myorg; in f org", &[
+                "catalogs.myorg.*",
+            ]),
+            // Escape positions other than function arguments.
+            ("{ catalogs }: [ catalogs ]", &["catalogs.*"]),
+            ("{ catalogs, f }: f { inherit catalogs; }", &["catalogs.*"]),
+            // Helper-lambda indirection: the lambda parameter is opaque, so
+            // the refs inside it are invisible; the escaping root covers them.
+            (
+                "{ catalogs }: let f = c: c.myorg.toolkit; in f catalogs",
+                &["catalogs.*"],
+            ),
+            // A modeled set escapes through every path reachable from its
+            // members.
+            (
+                "{ catalogs, f }: let s = { org = catalogs.myorg; }; in f s",
+                &["catalogs.myorg.*"],
+            ),
+            (
+                "{ catalogs, f }: let s = { org = catalogs.myorg; }; in f { inherit s; }",
+                &["catalogs.myorg.*"],
+            ),
+            // A `rec { }` literal in value position escapes like a plain set;
+            // its members still resolve against each other.
+            ("{ catalogs, f }: f rec { org = catalogs.myorg; }", &[
+                "catalogs.myorg.*",
+            ]),
+            (
+                "{ catalogs, f }: f rec { org = catalogs.myorg; pkg = org.tool; }",
+                &["catalogs.myorg.*", "catalogs.myorg.tool"],
+            ),
+            ("{ catalogs }: rec { org = catalogs.myorg; }", &[
+                "catalogs.myorg.*",
+            ]),
+            // The @-name carries the root, so passing it whole escapes the
+            // root like `f catalogs` does.
+            ("args@{ catalogs, f, ... }: f args", &["catalogs.*"]),
+            // A select reaching a nested modeled set escapes its members.
+            (
+                "{ catalogs, f }: let t = { sub = { org = catalogs.myorg; }; }; in f t.sub",
+                &["catalogs.myorg.*"],
+            ),
+            // `with` over a modeled set: the body's names are not statically
+            // bound, but the escaping members cover them.
+            (
+                "{ catalogs }: let s = { org = catalogs.myorg; }; in with s; org.pkg",
+                &["catalogs.myorg.*"],
+            ),
+            // A dynamic member of a modeled set may be any member.
+            (
+                "{ catalogs, x }: let s = { org = catalogs.myorg; }; in s.${x}.pkg",
+                &["catalogs.myorg.*"],
+            ),
+        ];
+        for (content, expected) in cases {
+            assert_eq!(
+                refs(content, &roots(&["catalogs"])),
+                set(expected),
+                "content: {content}"
+            );
+        }
+    }
+
+    #[test]
+    fn unresolved_member_select_on_modeled_set_is_consumed() {
+        let cases: &[(&str, &[&str])] = &[
+            // Selecting an unknown member cannot leak the other members.
+            (
+                "{ catalogs }: let s = { org = catalogs.myorg; }; in s.unknown",
+                &[],
+            ),
+            // The common `args.pname`-style access with an @-pattern.
+            ("args@{ catalogs, ... }: args.pname", &[]),
+        ];
+        for (content, expected) in cases {
+            assert_eq!(
+                refs(content, &roots(&["catalogs"])),
+                set(expected),
+                "content: {content}"
+            );
+        }
+    }
+
+    #[test]
+    fn at_pattern_passed_to_known_lambda_escapes_only_uncovered_roots() {
+        let cases: &[(&str, &[&str])] = &[
+            // The lambda binds the root under the same name, so the body was
+            // walked with it and the whole-set argument is consumed.
+            (
+                "args@{ catalogs, ... }: let mkPkg = { catalogs }: catalogs.myorg.inner; in mkPkg args",
+                &["catalogs.myorg.inner"],
+            ),
+            // A lambda that binds the namespace under a different name
+            // cannot be matched to the set's root member (and its body is
+            // walked with an opaque parameter): the root escapes.
+            (
+                "args@{ catalogs, ... }: let mkPkg = { cats }: cats.myorg.inner; in mkPkg args",
+                &["catalogs.*"],
+            ),
+        ];
+        for (content, expected) in cases {
+            assert_eq!(
+                refs(content, &roots(&["catalogs"])),
+                set(expected),
+                "content: {content}"
+            );
+        }
+    }
+
+    #[test]
+    fn known_lambda_inherit_from_wrapper_is_consumed() {
+        // `inherit (wrapper) catalogs;` binds the root under the lambda's own
+        // `catalogs` parameter, so the body was walked with it: the argument
+        // is consumed, not an escape.
+        let got = refs(
+            "{ catalogs }: let wrapper = { inherit catalogs; }; mkPkg = { catalogs }: catalogs.myorg.viaWrapper; in mkPkg { inherit (wrapper) catalogs; }",
+            &roots(&["catalogs"]),
+        );
+        assert_eq!(got, set(&["catalogs.myorg.viaWrapper"]));
+    }
+
+    #[test]
+    fn catalog_level_value_use_emits_sentinel() {
+        // Passing a whole catalog to a function makes every member reachable;
+        // an exact `catalogs.myorg` ref would be unresolvable.
+        let got = refs(
+            "{ catalogs }: builtins.attrValues catalogs.myorg",
+            &roots(&["catalogs"]),
+        );
+        assert_eq!(got, set(&["catalogs.myorg.*"]));
+    }
+
+    #[test]
+    fn select_or_default_scans_both_arms() {
+        let got = refs(
+            "{ catalogs }: catalogs.a.b or catalogs.c.d",
+            &roots(&["catalogs"]),
+        );
+        assert_eq!(got, set(&["catalogs.a.b", "catalogs.c.d"]));
+    }
+
+    #[test]
+    fn get_attr_key_subexpression_scanned() {
+        let got = refs(
+            "{ catalogs, f }: builtins.getAttr (f catalogs.a.key) catalogs.myorg",
+            &roots(&["catalogs"]),
+        );
+        assert_eq!(got, set(&["catalogs.a.key", "catalogs.myorg.*"]));
+    }
+
+    #[test]
+    fn dynamic_attr_interpolation_scanned() {
+        let got = refs(
+            "{ catalogs }: catalogs.myorg.${catalogs.a.name}",
+            &roots(&["catalogs"]),
+        );
+        assert_eq!(got, set(&["catalogs.a.name", "catalogs.myorg.*"]));
+    }
+
+    #[test]
+    fn ident_aliases_resolve_through_scope() {
+        let cases: &[(&str, &[&str])] = &[
+            // A whole-root alias: uses through it are ordinary refs.
+            ("{ catalogs }: let c = catalogs; in c.myorg.pkg", &[
+                "catalogs.myorg.pkg",
+            ]),
+            // An alias of an alias resolves transitively.
+            ("{ catalogs }: let c = catalogs; d = c; in d.myorg.pkg", &[
+                "catalogs.myorg.pkg",
+            ]),
+        ];
+        for (content, expected) in cases {
+            assert_eq!(
+                refs(content, &roots(&["catalogs"])),
+                set(expected),
+                "content: {content}"
+            );
+        }
+    }
+
+    #[test]
+    fn inherit_from_root_and_alias_ident() {
+        let cases: &[(&str, &[&str])] = &[
+            // Inheriting a member of the bare root names a whole catalog,
+            // which can never resolve as an exact ref — widen to a sentinel.
+            ("{ catalogs }: { inherit (catalogs) myorg; }", &[
+                "catalogs.myorg.*",
+            ]),
+            // The inherit source may be an alias ident, not just a select.
+            (
+                "{ catalogs }: let org = catalogs.myorg; in { inherit (org) toolkit; }",
+                &["catalogs.myorg.toolkit"],
+            ),
+        ];
+        for (content, expected) in cases {
+            assert_eq!(
+                refs(content, &roots(&["catalogs"])),
+                set(expected),
+                "content: {content}"
+            );
+        }
+    }
+
+    #[test]
+    fn binding_inherit_of_catalog_member_acts_as_alias() {
+        let cases: &[(&str, &[&str])] = &[
+            // A catalog-level member inherited in a binding scope only
+            // defines an alias, like `let myorg = catalogs.myorg;` — the
+            // alias's use sites drive the refs.
+            (
+                "{ catalogs }: let inherit (catalogs) myorg; in myorg.pkg",
+                &["catalogs.myorg.pkg"],
+            ),
+            // An unused inherit binding is never evaluated and locks
+            // nothing, like an unused alias binding.
+            ("{ catalogs }: let inherit (catalogs) myorg; in null", &[]),
+            // A quoted name the catalog cannot contain still collapses to a
+            // sentinel at the source.
+            (
+                "{ catalogs }: let inherit (catalogs.myorg) \"a.b\"; in null",
+                &["catalogs.myorg.*"],
+            ),
+        ];
+        for (content, expected) in cases {
+            assert_eq!(
+                refs(content, &roots(&["catalogs"])),
+                set(expected),
+                "content: {content}"
+            );
+        }
+    }
+
+    #[test]
+    fn inherit_bound_name_acts_as_alias() {
+        let got = refs(
+            "{ catalogs }: let inherit (catalogs.myorg) toolkit; in toolkit.readVersion",
+            &roots(&["catalogs"]),
+        );
+        assert_eq!(
+            got,
+            set(&[
+                "catalogs.myorg.toolkit",
+                "catalogs.myorg.toolkit.readVersion"
+            ])
+        );
+    }
+
+    #[test]
+    fn shadowed_root_names_do_not_emit() {
+        // A let binding shadows a root for its whole scope.
+        let got = refs(
+            "{ catalogs }: let catalogs = { other.pkg = null; }; in catalogs.other.pkg",
+            &roots(&["catalogs"]),
+        );
+        assert_eq!(got, BTreeSet::new());
+    }
+
+    #[test]
+    fn root_named_lambda_params_stay_rooted() {
+        let cases: &[(&str, &[&str])] = &[
+            // A helper lambda taking the namespace under the root's name and
+            // applied to it: its body refs are real and must be locked.
+            (
+                "{ catalogs }: let mkPkg = { catalogs }: catalogs.myorg.helper-used; in mkPkg { inherit catalogs; }",
+                &["catalogs.myorg.helper-used"],
+            ),
+            // A `rec { }` argument classifies its entries like a plain set:
+            // the forwarded root is consumed, not an escape.
+            (
+                "{ catalogs }: let mkPkg = { catalogs }: catalogs.myorg.helper-used; in mkPkg rec { inherit catalogs; version = \"1\"; }",
+                &["catalogs.myorg.helper-used"],
+            ),
+            // Even when the application passes something else, assuming the
+            // parameter is the namespace can only add refs that fail loudly;
+            // assuming the opposite would under-lock silently.
+            (
+                "{ catalogs }: let f = catalogs: catalogs.other.pkg; in f {}",
+                &["catalogs.other.pkg"],
+            ),
+        ];
+        for (content, expected) in cases {
+            assert_eq!(
+                refs(content, &roots(&["catalogs"])),
+                set(expected),
+                "content: {content}"
+            );
+        }
+    }
+
+    #[test]
+    fn at_pattern_bind_carries_the_pattern_entries() {
+        let cases: &[(&str, &[&str])] = &[
+            // The @-name is the whole argument set; the root member keeps its
+            // root meaning through it.
+            ("args@{ catalogs, ... }: args.catalogs.myorg.pkg", &[
+                "catalogs.myorg.pkg",
+            ]),
+            // The bind may appear on either side of the pattern.
+            ("{ catalogs, ... }@args: args.catalogs.myorg.pkg", &[
+                "catalogs.myorg.pkg",
+            ]),
+            // A non-root member stays opaque.
+            ("args@{ catalogs, pkgs, ... }: args.pkgs.foo", &[]),
+        ];
+        for (content, expected) in cases {
+            assert_eq!(
+                refs(content, &roots(&["catalogs"])),
+                set(expected),
+                "content: {content}"
+            );
+        }
+    }
+
+    #[test]
+    fn conditional_branch_refs_both_collected() {
+        let got = refs(
+            "{ catalogs, x }: if x then catalogs.a.p else catalogs.b.q",
+            &roots(&["catalogs"]),
+        );
+        assert_eq!(got, set(&["catalogs.a.p", "catalogs.b.q"]));
+    }
+
+    #[test]
+    fn nested_lambda_body_refs_collected() {
+        let got = refs("{ catalogs }: x: catalogs.myorg.pkg", &roots(&["catalogs"]));
+        assert_eq!(got, set(&["catalogs.myorg.pkg"]));
+    }
+
+    #[test]
+    fn consumed_source_dynamic_components_scanned() {
+        let cases: &[(&str, &[&str])] = &[
+            // The inherit source is consumed, but the dynamic component
+            // inside it holds a ref of its own.
+            (
+                "{ catalogs }: { inherit (catalogs.myorg.${catalogs.a.name}) x; }",
+                &["catalogs.a.name", "catalogs.myorg.*"],
+            ),
+            (
+                "{ catalogs }: with catalogs.${catalogs.a.name}; toolkit",
+                &["catalogs.*", "catalogs.a.name"],
+            ),
+            (
+                "{ catalogs }: builtins.getAttr \"k\" catalogs.myorg.${catalogs.a.name}",
+                &["catalogs.a.name", "catalogs.myorg.*"],
+            ),
+        ];
+        for (content, expected) in cases {
+            assert_eq!(
+                refs(content, &roots(&["catalogs"])),
+                set(expected),
+                "content: {content}"
+            );
+        }
+    }
+
+    #[test]
+    fn quoted_attrs_static_when_valid_names() {
+        let cases: &[(&str, &[&str])] = &[
+            // A non-interpolated string attr that is a valid catalog component
+            // name is an ordinary static component.
+            (r#"{ catalogs }: catalogs.myorg."with-dash".x"#, &[
+                "catalogs.myorg.with-dash.x",
+            ]),
+            // A quoted attr containing `.` cannot exist as a catalog component
+            // (server rejects dotted names), so it collapses to a sentinel.
+            (r#"{ catalogs }: catalogs.myorg."foo.bar""#, &[
+                "catalogs.myorg.*",
+            ]),
+            // Quoted inherit names are components too, not silently dropped.
+            (
+                r#"{ catalogs }: { inherit (catalogs.myorg) "with-dash" baz; }"#,
+                &["catalogs.myorg.baz", "catalogs.myorg.with-dash"],
+            ),
+        ];
+        for (content, expected) in cases {
+            assert_eq!(
+                refs(content, &roots(&["catalogs"])),
+                set(expected),
+                "content: {content}"
+            );
+        }
     }
 
     #[test]
@@ -1220,6 +3113,18 @@ mod tests {
     }
 
     #[test]
+    fn dynamic_attr_at_set_depth_emits_set_sentinel() {
+        // The sentinel keeps the full static prefix: a dynamic member of a
+        // package set widens to the set (`<catalog>.<set>.*`), not the whole
+        // catalog.
+        let got = refs(
+            "{ catalogs, name }: catalogs.myorg.pythonPackages.${name}",
+            &roots(&["catalogs"]),
+        );
+        assert_eq!(got, set(&["catalogs.myorg.pythonPackages.*"]));
+    }
+
+    #[test]
     fn get_attr_static_key_qualified() {
         let got = refs(
             "{ catalogs }: builtins.getAttr \"hello\" catalogs.myorg",
@@ -1231,7 +3136,7 @@ mod tests {
     #[test]
     fn get_attr_static_key_bare() {
         let got = refs(
-            "{ catalogs }: getAttr \"hello\" catalogs.myorg",
+            "{ catalogs }: with builtins; getAttr \"hello\" catalogs.myorg",
             &roots(&["catalogs"]),
         );
         assert_eq!(got, set(&["catalogs.myorg.hello"]));
@@ -1252,13 +3157,13 @@ mod tests {
             "{ catalogs, name }: let org = catalogs.myorg; in builtins.getAttr \"hello\" org",
             &roots(&["catalogs"]),
         );
-        assert_eq!(got, set(&["catalogs.myorg", "catalogs.myorg.hello"]));
+        assert_eq!(got, set(&["catalogs.myorg.hello"]));
     }
 
     #[test]
     fn get_attr_non_rooted_target_ignored() {
         let got = refs(
-            "{ catalogs }: builtins.getAttr \"hello\" someOtherAttrset",
+            "{ catalogs, someOtherAttrset }: builtins.getAttr \"hello\" someOtherAttrset",
             &roots(&["catalogs"]),
         );
         assert_eq!(got, BTreeSet::new());
@@ -1292,6 +3197,211 @@ mod tests {
     }
 
     #[test]
+    fn import_renamed_root_followed_and_rewritten() {
+        let got = refs_at(
+            "test_data/catalog_refs/import-entry-renamed.nix",
+            &roots(&["catalogs"]),
+        );
+        assert_eq!(got, set(&["catalogs.myorg.toolkit.readVersion"]));
+    }
+
+    #[test]
+    fn import_arg_namespace_not_forwarded_escapes() {
+        let cases: &[(&str, &[&str])] = &[
+            // A catalog-level alias as an import argument is not forwarded
+            // (only whole roots are), so the child uses the namespace where
+            // the scanner cannot see it: it escapes.
+            (
+                "{ catalogs }: let org = catalogs.myorg; in import ./x.nix { dep = org; }",
+                &["catalogs.myorg.*"],
+            ),
+            (
+                "{ catalogs }: let org = catalogs.myorg; in import ./x.nix { inherit org; }",
+                &["catalogs.myorg.*"],
+            ),
+            // A modeled set argument escapes through its members.
+            (
+                "{ catalogs }: let s = { org = catalogs.myorg; }; in import ./x.nix { arg = s; }",
+                &["catalogs.myorg.*"],
+            ),
+            // A package-deep value is an exact ref, not an escape.
+            (
+                "{ catalogs }: import ./x.nix { dep = catalogs.myorg.pkg; }",
+                &["catalogs.myorg.pkg"],
+            ),
+            (
+                "{ catalogs }: let pkg = catalogs.myorg.pkg; in import ./x.nix { inherit pkg; }",
+                &["catalogs.myorg.pkg"],
+            ),
+        ];
+        for (content, expected) in cases {
+            assert_eq!(
+                refs(content, &roots(&["catalogs"])),
+                set(expected),
+                "content: {content}"
+            );
+        }
+    }
+
+    #[test]
+    fn import_arg_forwarded_namespaces_are_consumed() {
+        let cases: &[(&str, &[&str])] = &[
+            ("{ catalogs }: import ./x.nix { inherit catalogs; }", &[]),
+            ("{ catalogs }: import ./x.nix { cats = catalogs; }", &[]),
+            // Forwarding a root that lives in a member of a modeled set.
+            (
+                "{ catalogs }: let wrapper = { inherit catalogs; }; in import ./x.nix { inherit (wrapper) catalogs; }",
+                &[],
+            ),
+        ];
+        for (content, expected) in cases {
+            assert_eq!(
+                refs(content, &roots(&["catalogs"])),
+                set(expected),
+                "content: {content}"
+            );
+        }
+    }
+
+    #[test]
+    fn import_whole_root_argument_followed() {
+        let got = refs_at(
+            "test_data/catalog_refs/import-entry-whole.nix",
+            &roots(&["catalogs"]),
+        );
+        assert_eq!(got, set(&["catalogs.myorg.whole-pkg"]));
+    }
+
+    #[test]
+    fn import_whole_root_to_pattern_param_escapes() {
+        // The helper destructures the namespace with a pattern parameter;
+        // its entries are namespace members, not roots, so they cannot be
+        // bound statically and the whole root escapes rather than being
+        // dropped.
+        let got = refs_at(
+            "test_data/catalog_refs/import-entry-pattern.nix",
+            &roots(&["catalogs"]),
+        );
+        assert_eq!(got, set(&["catalogs.*"]));
+    }
+
+    #[test]
+    fn import_root_name_bound_to_other_value_not_followed() {
+        let got = refs_at(
+            "test_data/catalog_refs/import-entry-shadowed.nix",
+            &roots(&["catalogs"]),
+        );
+        assert_eq!(got, set(&["catalogs.myorg.direct-pkg"]));
+    }
+
+    #[test]
+    fn import_directory_target_resolves_default_nix() {
+        let got = refs_at(
+            "test_data/catalog_refs/import-entry-dir.nix",
+            &roots(&["catalogs"]),
+        );
+        assert_eq!(got, set(&["catalogs.myorg.dir-pkg"]));
+    }
+
+    #[test]
+    fn import_dynamic_path_forwarding_root_is_conservative() {
+        // The import target cannot be read, so the forwarded namespace
+        // escapes analysis (a warning points at the dynamic path).
+        let got = refs(
+            "{ catalogs, p }: import p { inherit catalogs; }",
+            &roots(&["catalogs"]),
+        );
+        assert_eq!(got, set(&["catalogs.*"]));
+    }
+
+    #[test]
+    fn import_same_file_under_different_forwards_scans_both() {
+        let got = refs_at(
+            "test_data/catalog_refs/diamond-import/entry.nix",
+            &roots(&["catalogs", "inputs"]),
+        );
+        assert_eq!(
+            got,
+            set(&["catalogs.somepkg.someattr", "inputs.somepkg.someattr"])
+        );
+    }
+
+    #[test]
+    fn import_same_file_under_composed_forwards_scans_both() {
+        // The two chains reach common.nix with textually identical immediate
+        // forwardings (`{ ns = cats; }`) that compose to different top-level
+        // roots; both compositions must be scanned.
+        let got = refs_at(
+            "test_data/catalog_refs/deep-diamond/entry.nix",
+            &roots(&["catalogs", "inputs"]),
+        );
+        assert_eq!(
+            got,
+            set(&["catalogs.somepkg.someattr", "inputs.somepkg.someattr"])
+        );
+    }
+
+    #[test]
+    fn import_cycle_terminates_and_collects_refs() {
+        let got = refs_at(
+            "test_data/catalog_refs/import-cycle/entry.nix",
+            &roots(&["catalogs"]),
+        );
+        assert_eq!(
+            got,
+            set(&["catalogs.myorg.cycle-pkg", "catalogs.myorg.entry-pkg"])
+        );
+    }
+
+    #[test]
+    fn import_unreadable_target_fails_scan() {
+        // The import target cannot be read, so the refs it would contribute
+        // through the forwarded namespaces cannot be discovered; the scan
+        // fails rather than silently under-locking — for both forwarding
+        // shapes.
+        let cases = [
+            ("test_data/catalog_refs/import-entry-unreadable.nix", (4, 1)),
+            (
+                "test_data/catalog_refs/import-entry-unreadable-whole.nix",
+                (5, 1),
+            ),
+        ];
+        for (path, position) in cases {
+            let err = scan_err_at(path, &roots(&["catalogs"]));
+            assert_eq!(
+                err,
+                ScanError::UnreadableImport {
+                    target: PathBuf::from("test_data/catalog_refs/no-such-helper.nix"),
+                    file: PathBuf::from(path),
+                    position,
+                },
+                "fixture: {path}"
+            );
+        }
+    }
+
+    #[test]
+    fn unreadable_import_error_message_points_at_the_import() {
+        let err = ScanError::UnreadableImport {
+            target: PathBuf::from("pkgs/helper.nix"),
+            file: PathBuf::from("pkgs/foo.nix"),
+            position: (4, 1),
+        };
+        assert_eq!(err.to_string(), indoc::indoc! {"
+                'pkgs/helper.nix' is imported at pkgs/foo.nix:4:1 but cannot be read.
+                Check that the imported file exists and is readable."});
+    }
+
+    #[test]
+    fn import_let_bound_function_followed() {
+        let got = refs_at(
+            "test_data/catalog_refs/import-entry-letbound.nix",
+            &roots(&["catalogs"]),
+        );
+        assert_eq!(got, set(&["catalogs.myorg.toolkit.readVersion"]));
+    }
+
+    #[test]
     fn import_direct_refs_in_entry_still_collected() {
         let got = refs_at(
             "test_data/catalog_refs/import-entry-with-direct-ref.nix",
@@ -1304,5 +3414,126 @@ mod tests {
                 "catalogs.myorg.toolkit.readVersion",
             ])
         );
+    }
+
+    #[test]
+    fn undeclared_root_reference_is_an_error() {
+        // Each case references `catalogs` through a different emit path while
+        // the top-level lambda does not declare it; the expected position is
+        // the first use.
+        let cases = [
+            (
+                "direct select",
+                "{ mkDerivation }:\nmkDerivation {\n  version = catalogs.myorg.toolkit.readVersion;\n}\n",
+                (3, 13),
+            ),
+            (
+                "namespace escaping as a value",
+                "{ mkDerivation }:\nmkDerivation {\n  passthru = catalogs;\n}\n",
+                (3, 14),
+            ),
+            (
+                "inherit from the namespace",
+                "{ mkDerivation }:\nlet\n  inherit (catalogs.myorg.toolkit) readVersion;\nin\nmkDerivation { version = readVersion; }\n",
+                (3, 36),
+            ),
+            (
+                "with over the namespace",
+                "{ mkDerivation }:\nwith catalogs;\nmkDerivation { }\n",
+                (2, 1),
+            ),
+        ];
+        for (label, content, position) in cases {
+            assert_eq!(
+                scan_err(content, &roots(&["catalogs"])),
+                ScanError::UndeclaredRoot {
+                    root: "catalogs".to_string(),
+                    file: PathBuf::from("test.nix"),
+                    position: Some(position),
+                },
+                "{label}",
+            );
+        }
+    }
+
+    #[test]
+    fn root_named_inner_param_only_rooted_when_file_can_receive_root() {
+        let cases: &[(&str, &[&str])] = &[
+            // The file's top level cannot receive `catalogs`, so an inner
+            // parameter of that name cannot be the namespace; its uses are
+            // not refs and must not trip the undeclared-root rejection.
+            (
+                "{ mkDerivation }: let f = catalogs: catalogs.version; in mkDerivation { v = f { version = \"1\"; }; }",
+                &[],
+            ),
+            // An unrecognized top-level shape fails open: the parameter
+            // keeps its root meaning.
+            ("let f = catalogs: catalogs.other.pkg; in f {}", &[
+                "catalogs.other.pkg",
+            ]),
+        ];
+        for (content, expected) in cases {
+            assert_eq!(
+                refs(content, &roots(&["catalogs"])),
+                set(expected),
+                "content: {content}"
+            );
+        }
+    }
+
+    #[test]
+    fn undeclared_root_without_references_is_not_an_error() {
+        let content = "{ mkDerivation }: mkDerivation { pname = \"tool\"; }";
+        assert_eq!(refs(content, &roots(&["catalogs"])), BTreeSet::new());
+    }
+
+    #[test]
+    fn let_bound_root_name_shadows_without_error() {
+        let content = "{ config }:\nlet catalogs = config;\nin catalogs.myorg.toolkit.readVersion";
+        assert_eq!(refs(content, &roots(&["catalogs"])), BTreeSet::new());
+    }
+
+    #[test]
+    fn unrecognized_top_level_shape_scans_leniently() {
+        // A let-wrapped file still evaluates to a function, but the scanner
+        // cannot see its parameters; the declaration check fails open and the
+        // refs are kept.
+        let content = "let version = \"1.0\";\nin { mkDerivation }:\nmkDerivation { v = catalogs.myorg.pkg.readVersion; }";
+        assert_eq!(
+            refs(content, &roots(&["catalogs"])),
+            set(&["catalogs.myorg.pkg.readVersion"])
+        );
+    }
+
+    #[test]
+    fn undeclared_root_forwarded_to_import_errors_at_forward_site() {
+        let path = Path::new("test_data/catalog_refs/undeclared-forward/entry.nix");
+        let content = fs::read_to_string(path).expect("test fixture missing");
+        let err = analyze_file_at(
+            &content,
+            &roots(&["catalogs"]),
+            path.parent(),
+            &mut HashMap::new(),
+            path,
+            &identity_origins(&roots(&["catalogs"])),
+        )
+        .expect_err("scan should fail");
+        assert_eq!(err, ScanError::UndeclaredRoot {
+            root: "catalogs".to_string(),
+            file: path.to_path_buf(),
+            position: Some((6, 35)),
+        });
+    }
+
+    #[test]
+    fn undeclared_root_error_message_points_at_the_arguments() {
+        let err = ScanError::UndeclaredRoot {
+            root: "catalogs".to_string(),
+            file: PathBuf::from("pkgs/foo.nix"),
+            position: Some((4, 13)),
+        };
+        assert_eq!(err.to_string(), indoc::indoc! {"
+                'catalogs' is referenced at pkgs/foo.nix:4:13 but is not declared in the function arguments.
+                Add 'catalogs' to the function arguments, e.g. '{ catalogs, ... }:'."});
     }
 }

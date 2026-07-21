@@ -1,6 +1,8 @@
 # Pattern: `inherit (catalogs.myorg) toolkit;` — inheriting the toolkit
 # attrset itself from the top level of a catalog, then calling a method on it.
-# The ref is `catalogs.myorg.toolkit`, not `catalogs.myorg.toolkit.buildGoModule`.
+# The inherit yields the exact ref `catalogs.myorg.toolkit`; the use site adds
+# the deeper `catalogs.myorg.toolkit.buildGoModule`, which the server
+# canonicalizes to the same package.
 {
   catalogs,
   lib,

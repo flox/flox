@@ -128,11 +128,12 @@ async fn run(cli: Cli) -> Result<()> {
 
     // Union the catalog references discovered across every rel-path. Multiple
     // rel-paths model a manifest build aggregating its NEF dependencies.
-    let references: BTreeSet<CatalogRef> = cli
-        .rel_paths
-        .iter()
-        .flat_map(|rel| scan_package(&cli.base_dir, rel))
-        .collect();
+    // A scan failure (e.g. a catalog root referenced without being declared)
+    // aborts the lock: the build could never evaluate.
+    let mut references: BTreeSet<CatalogRef> = BTreeSet::new();
+    for rel in &cli.rel_paths {
+        references.extend(scan_package(&cli.base_dir, rel)?);
+    }
 
     // Render each failure to its message body at the boundary, while the
     // structured data is still in hand; `main` adds the `✘ ERROR:` decoration.
