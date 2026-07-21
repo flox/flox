@@ -896,10 +896,9 @@ mod tests {
 
     #[test]
     fn cli_environment_pull_envelope_golden() {
-        // The `NewAbbreviated` branch in `pull.rs:103` constructs the
-        // detail directly with `env_kind = "managed"`; assert that
-        // shape on the wire so a future drift in the wrapper trips
-        // this test.
+        // The `NewAbbreviated` branch of `flox pull` constructs the detail
+        // directly with `env_kind = "managed"`; assert that shape on the wire
+        // so a future drift in the wrapper trips this test.
         let payload = CliEnvironmentPayload::new(env_detail("managed", "alice/myenv"));
         let value = serde_json::to_value(fixed_event(EventKind::CliEnvironmentPull(payload)))
             .expect("event serializes");
