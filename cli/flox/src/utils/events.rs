@@ -5,6 +5,10 @@
 //! v2-events pipeline (this module + the [`flox_events`] crate). The two
 //! stacks share no code and write separate on-disk buffers.
 //! `config.flox.disable_metrics` silences both.
+//!
+//! Authenticated invocations additionally carry the FloxHub token's OIDC
+//! `sub` claim as `auth_subject` — see [`flox_events::EventsClient`] for
+//! the field's semantics and [`build_events_client`] for the gates.
 
 use std::env;
 use std::str::FromStr;
@@ -12,12 +16,14 @@ use std::sync::{LazyLock, OnceLock};
 
 use flox_config::Config;
 use flox_events::{EnvDetail, EventsClient, SharedMetadataTemplate};
-use flox_rust_sdk::flox::FLOX_VERSION;
+use flox_rust_sdk::flox::{AuthnMode, FLOX_VERSION, FloxhubToken};
 use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment};
 use flox_rust_sdk::utils::INVOCATION_SOURCES;
 use tracing::debug;
 use uuid::Uuid;
 
+use crate::commands::effective_authn_mode;
+use crate::utils::jwt::decode_jwt_sub;
 use crate::utils::metrics::read_metrics_uuid;
 
 /// Stores the invocation_id resolved by [`resolve_invocation_id`] so detached
@@ -100,6 +106,11 @@ fn shared_metadata_template() -> SharedMetadataTemplate {
 /// Returns `None` if
 /// a) metrics are disabled by config, or
 /// b) reading the metrics uuid fails.
+///
+/// Call *after* credential-store resolution has populated
+/// `config.flox.floxhub_token` — the returned client snapshots the token's
+/// `sub` claim as `auth_subject` at construction (see
+/// [`flox_events::EventsClient`] for the snapshot semantics).
 pub fn build_events_client(config: &Config, invocation_id: Uuid) -> Option<EventsClient> {
     if config.flox.disable_metrics {
         debug!("v2 events: disable_metrics is true; not installing client");
@@ -114,12 +125,32 @@ pub fn build_events_client(config: &Config, invocation_id: Uuid) -> Option<Event
         },
     };
 
+    // Stamp an identity only from a token flox itself accepts as a
+    // credential: Auth0 mode (mirroring the gate on `resolve_floxhub_token`
+    // — see the credential-resolution block in `FloxArgs::handle` for the
+    // rationale) AND structurally valid per the same `FloxhubToken` parse
+    // `resolve_floxhub_token` applies. A structurally invalid token is
+    // rejected and cleared by `resolve_floxhub_token`, so attribution must
+    // not disagree with that; an expired token still parses — expiry gates
+    // authentication, not identity.
+    let auth_subject = if matches!(effective_authn_mode(config), AuthnMode::Auth0) {
+        config
+            .flox
+            .floxhub_token
+            .as_deref()
+            .filter(|token| FloxhubToken::from_str(token).is_ok())
+            .and_then(decode_jwt_sub)
+    } else {
+        None
+    };
+
     Some(EventsClient::new(
         device_id,
         &config.flox.data_dir,
         METRICS_EVENTS_URL_V2.clone(),
         METRICS_EVENTS_API_KEY_V2.clone(),
         invocation_id,
+        auth_subject,
         shared_metadata_template(),
     ))
 }
@@ -154,6 +185,7 @@ mod tests {
     use tempfile::TempDir;
 
     use super::*;
+    use crate::utils::jwt::test_helpers::token_with_payload;
 
     /// A `Config` value pointing at a fresh tempdir, with metrics enabled
     /// and a pre-written metrics uuid so the wrapper has everything it
@@ -249,6 +281,87 @@ mod tests {
         assert_eq!(client.unwrap().device_id, uuid);
     }
 
+    /// A FloxHub-shaped JWT: `sub` plus the handle/exp claims a real token
+    /// carries (so it passes the credential-validity gate) and PII claims
+    /// the wrapper must not thread through.
+    fn token_with_sub(sub: &str) -> String {
+        token_with_payload(&serde_json::json!({
+            "sub": sub,
+            "email": "j@example.com",
+            "https://flox.dev/handle": "jane",
+            "exp": 9999999999u64,
+        }))
+    }
+
+    #[test]
+    #[serial(v2_events_wrapper_env)]
+    fn build_events_client_populates_auth_subject_when_token_present() {
+        let tempdir = tempfile::tempdir().expect("tempdir");
+        let mut config = test_config_with_uuid(&tempdir, Uuid::new_v4());
+        config.flox.floxhub_token = Some(token_with_sub("github|3670948"));
+
+        let client = build_events_client(&config, Uuid::new_v4()).expect("client installs");
+        assert_eq!(client.auth_subject.as_deref(), Some("github|3670948"));
+    }
+
+    #[test]
+    #[serial(v2_events_wrapper_env)]
+    fn build_events_client_leaves_auth_subject_none_when_token_absent() {
+        let tempdir = tempfile::tempdir().expect("tempdir");
+        let config = test_config_with_uuid(&tempdir, Uuid::new_v4());
+        assert_eq!(config.flox.floxhub_token, None, "test premise: anonymous");
+
+        let client = build_events_client(&config, Uuid::new_v4()).expect("client installs");
+        assert_eq!(client.auth_subject, None, "anonymous use stays anonymous");
+    }
+
+    #[test]
+    #[serial(v2_events_wrapper_env)]
+    fn build_events_client_leaves_auth_subject_none_when_token_not_a_floxhub_credential() {
+        let tempdir = tempfile::tempdir().expect("tempdir");
+        let mut config = test_config_with_uuid(&tempdir, Uuid::new_v4());
+        // A valid JWT with a `sub` but no FloxHub claims — e.g. a raw Auth0
+        // access token pasted into FLOX_FLOXHUB_TOKEN. `resolve_floxhub_token`
+        // rejects and clears such a token, so it must not attribute events.
+        config.flox.floxhub_token = Some(token_with_payload(&serde_json::json!({
+            "sub": "auth0|abcdef",
+            "email": "j@example.com",
+        })));
+
+        let client = build_events_client(&config, Uuid::new_v4()).expect("client installs");
+        assert_eq!(
+            client.auth_subject, None,
+            "a token flox rejects as a credential must not attribute events"
+        );
+    }
+
+    #[test]
+    #[serial(v2_events_wrapper_env)]
+    fn build_events_client_leaves_auth_subject_none_when_token_unparseable() {
+        let tempdir = tempfile::tempdir().expect("tempdir");
+        let mut config = test_config_with_uuid(&tempdir, Uuid::new_v4());
+        config.flox.floxhub_token = Some("not-a-jwt".to_string());
+
+        let client = build_events_client(&config, Uuid::new_v4())
+            .expect("a malformed token must not prevent the client install");
+        assert_eq!(client.auth_subject, None);
+    }
+
+    #[test]
+    #[serial(v2_events_wrapper_env)]
+    fn build_events_client_leaves_auth_subject_none_in_kerberos_mode() {
+        let tempdir = tempfile::tempdir().expect("tempdir");
+        let mut config = test_config_with_uuid(&tempdir, Uuid::new_v4());
+        config.flox.floxhub_token = Some(token_with_sub("github|3670948"));
+        config.flox.floxhub_authn_mode = Some(flox_config::AuthnMode::Kerberos);
+
+        let client = build_events_client(&config, Uuid::new_v4()).expect("client installs");
+        assert_eq!(
+            client.auth_subject, None,
+            "outside Auth0 mode a leftover token is not the authenticated identity"
+        );
+    }
+
     /// End-to-end: install a hub-owned client backed by a
     /// [`MockEventsConnection`], record run + completed for one invocation,
     /// and assert exactly one of each lands sharing one `invocation_id`.
@@ -273,6 +386,7 @@ mod tests {
             Uuid::new_v4(),
             tempdir.path(),
             invocation_id,
+            None,
             template,
             connection,
         );

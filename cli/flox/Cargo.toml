@@ -26,6 +26,7 @@ indicatif.workspace = true
 indoc.workspace = true
 inquire.workspace = true
 itertools.workspace = true
+jsonwebtoken.workspace = true
 keyring-core.workspace = true
 nix.workspace = true
 oauth2.workspace = true
@@ -80,6 +81,7 @@ apple-native-keyring-store.workspace = true
 zbus-secret-service-keyring-store.workspace = true
 
 [dev-dependencies]
+base64.workspace = true
 factory-api-v1.workspace = true
 flox-events = { workspace = true, features = ["tests"] }
 floxhub-client = { workspace = true, features = ["tests"] }

@@ -22,13 +22,24 @@ pub const BATCH_SIZE: usize = 100;
 /// them through an [`EventsConnection`].
 ///
 /// The connection owns the endpoint URL and credential; the client itself
-/// holds the per-invocation identity (`device_id`, `invocation_id`) and the
-/// static shared metadata template stamped onto every command event payload.
+/// holds the per-invocation identity (`device_id`, `invocation_id`,
+/// `auth_subject`) and the static shared metadata template stamped onto
+/// every command event payload.
+///
+/// `auth_subject` is the OIDC `sub` claim of the FloxHub auth token when
+/// one was present at client construction time — an opaque, pseudonymous
+/// subject identifier (e.g. `github|3670948`). It is never the user's
+/// email, handle, or display name; the caller is responsible for passing
+/// only the `sub` claim. Anonymous invocations pass `None` and every
+/// emitted [`Event`] then omits the field. Like `device_id` and
+/// `invocation_id`, the value is a per-process snapshot: a token change
+/// mid-invocation does not re-stamp events.
 #[derive(Debug)]
 pub struct EventsClient {
     pub device_id: Uuid,
     pub data_dir: PathBuf,
     pub invocation_id: Uuid,
+    pub auth_subject: Option<String>,
     pub max_age: Duration,
     pub connection: Box<dyn EventsConnection>,
     shared_metadata: SharedMetadataTemplate,
@@ -41,6 +52,7 @@ impl EventsClient {
         endpoint_url: impl Into<String>,
         api_key: impl Into<String>,
         invocation_id: Uuid,
+        auth_subject: Option<String>,
         shared_metadata: SharedMetadataTemplate,
     ) -> Self {
         let connection = EventsConnectionV2::new(endpoint_url, api_key);
@@ -48,6 +60,7 @@ impl EventsClient {
             device_id,
             data_dir,
             invocation_id,
+            auth_subject,
             shared_metadata,
             connection,
         )
@@ -57,6 +70,7 @@ impl EventsClient {
         device_id: Uuid,
         data_dir: impl AsRef<Path>,
         invocation_id: Uuid,
+        auth_subject: Option<String>,
         shared_metadata: SharedMetadataTemplate,
         connection: impl EventsConnection + 'static,
     ) -> Self {
@@ -64,6 +78,7 @@ impl EventsClient {
             device_id,
             data_dir: data_dir.as_ref().to_path_buf(),
             invocation_id,
+            auth_subject,
             max_age: DEFAULT_BUFFER_EXPIRY,
             connection: connection.boxed(),
             shared_metadata,
@@ -98,7 +113,7 @@ impl EventsClient {
             source: "cli",
             invocation_id: self.invocation_id,
             device_id: self.device_id,
-            auth_subject: None,
+            auth_subject: self.auth_subject.clone(),
             kind,
         };
 

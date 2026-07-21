@@ -1244,9 +1244,40 @@ mod pipeline_tests {
             DEVICE_ID,
             tempdir.path(),
             INVOCATION_ID,
+            None,
             shared_metadata(),
             connection,
         )
+    }
+
+    /// A client constructed with an `auth_subject` stamps it on every
+    /// recorded event; the anonymous helper above stamps `None`. Companion
+    /// to the wire-shape goldens (`auth_subject_serializes_when_present`):
+    /// this pins the *stamping* path from client state to envelope.
+    #[test]
+    fn client_stamps_auth_subject_on_recorded_events() {
+        let tempdir = tempfile::tempdir().expect("tempdir");
+        let client = EventsClient::new_with_connection(
+            DEVICE_ID,
+            tempdir.path(),
+            INVOCATION_ID,
+            Some("github|3670948".to_string()),
+            shared_metadata(),
+            MockEventsConnection::default(),
+        );
+
+        client
+            .record_event(command_run_kind())
+            .expect("record event");
+
+        let buffer = EventsBuffer::read(tempdir.path()).expect("read buffer");
+        let events: Vec<_> = buffer.iter().collect();
+        assert_eq!(events.len(), 1);
+        assert_eq!(
+            events[0].auth_subject.as_deref(),
+            Some("github|3670948"),
+            "client auth_subject must be stamped on the envelope"
+        );
     }
 
     #[test]
