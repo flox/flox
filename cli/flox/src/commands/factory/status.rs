@@ -46,8 +46,7 @@ impl Status {
 /// Render a single build as either raw JSON or a human-readable table.
 ///
 /// The JSON form is intentionally the bare [`BuildResponse`] object, with no
-/// surrounding envelope: a single build has no pagination to report, unlike the
-/// `list` verb whose JSON form carries the page envelope.
+/// surrounding envelope: a single build has no pagination to report.
 fn render(build: BuildResponse, json: bool) -> Result<String> {
     if json {
         Ok(format!("{}\n", serde_json::to_string_pretty(&build)?))
