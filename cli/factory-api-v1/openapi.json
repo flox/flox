@@ -135,7 +135,7 @@
           "builds"
         ],
         "summary": "List Builds",
-        "description": "Return a paginated list of builds.\n\nUse the `status` query parameter to filter:\n- ``undispatched``: builds with no task (task_id IS NULL)\n- Any other value: filters by tasks.status (e.g. ``running``)",
+        "description": "Return a paginated list of builds, newest first.\n\nThe ``status`` filter matches builds by an effective status derived\nfrom the build's lifecycle (never stored), drawn from a six-value\nvocabulary:\n\n- ``pending``: accepted but not yet dispatched to a builder.\n- ``running``: dispatched and building.\n- ``completed``: finished successfully.\n- ``failed``: finished unsuccessfully. Excludes timed-out builds,\n  which match ``timed_out``.\n- ``timed_out``: terminated for exceeding its time budget.\n- ``cancelled``: cancelled, whether before or after dispatch.\n\nThese six values are the filter vocabulary. Response bodies do not\nyet distinguish ``timed_out`` from ``failed``: a timed-out build\nmatches ``?status=timed_out`` but reports ``status: \"failed\"`` in\nthe response body.\n\nFilters:\n\n- ``status``: match one or more effective-status values.\n- ``system``: match system names exactly. Unknown names yield an\n  empty page, not an error.\n- ``attr_path``: match attr_path by prefix.\n- ``source_commit_sha``: match source commit SHA by prefix.\n- ``since``: return builds created at or after this time. Accepts a\n  relative duration matching ``[0-9]+[smhdwy]`` (e.g. ``7d``) or an\n  absolute ISO 8601 timestamp; a timestamp without a UTC offset is\n  read as UTC.\n\nFilters combine with AND across parameters and OR within a repeated\none: ``?status=running&status=failed`` matches either status, and\nadding ``&system=x86_64-linux`` further requires that system. Each\nrepeated parameter accepts at most 50 values.\n\n``cursor`` and ``sort`` are reserved for future use and have no\neffect in v1; results are always ordered newest-first.",
         "operationId": "list_builds_api_v1_factory_builds_get",
         "security": [
           {
@@ -151,10 +151,78 @@
             "in": "query",
             "required": false,
             "schema": {
+              "description": "Filter by effective status; repeatable, matched as OR. One of pending, running, completed, failed, timed_out, cancelled.",
               "title": "Status",
               "nullable": true,
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/EffectiveBuildStatus"
+              },
+              "maxItems": 50
+            },
+            "description": "Filter by effective status; repeatable, matched as OR. One of pending, running, completed, failed, timed_out, cancelled."
+          },
+          {
+            "name": "system",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "description": "Filter by system, matched exactly; repeatable, matched as OR. Unknown system names yield an empty page rather than an error.",
+              "title": "System",
+              "nullable": true,
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "maxItems": 50
+            },
+            "description": "Filter by system, matched exactly; repeatable, matched as OR. Unknown system names yield an empty page rather than an error."
+          },
+          {
+            "name": "attr_path",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "description": "Filter by attr_path prefix; repeatable, matched as OR. Values must be non-empty.",
+              "title": "Attr Path",
+              "nullable": true,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "maxItems": 50
+            },
+            "description": "Filter by attr_path prefix; repeatable, matched as OR. Values must be non-empty."
+          },
+          {
+            "name": "source_commit_sha",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "description": "Filter by source commit SHA prefix; repeatable, matched as OR. Values must be non-empty.",
+              "title": "Source Commit Sha",
+              "nullable": true,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "maxItems": 50
+            },
+            "description": "Filter by source commit SHA prefix; repeatable, matched as OR. Values must be non-empty."
+          },
+          {
+            "name": "since",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "description": "Return builds created at or after this time (inclusive). Either a relative duration matching [0-9]+[smhdwy] (e.g. '7d') or an absolute ISO 8601 timestamp; a timestamp without a UTC offset is read as UTC.",
+              "title": "Since",
+              "nullable": true,
               "type": "string"
-            }
+            },
+            "description": "Return builds created at or after this time (inclusive). Either a relative duration matching [0-9]+[smhdwy] (e.g. '7d') or an absolute ISO 8601 timestamp; a timestamp without a UTC offset is read as UTC."
           },
           {
             "name": "page",
@@ -162,6 +230,7 @@
             "required": false,
             "schema": {
               "type": "integer",
+              "maximum": 10737418,
               "minimum": 0,
               "default": 0,
               "title": "Page"
@@ -178,6 +247,30 @@
               "default": 50,
               "title": "Page Size"
             }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "description": "Reserved for future use; not implemented in v1 (results are always ordered newest-first).",
+              "title": "Cursor",
+              "nullable": true,
+              "type": "string"
+            },
+            "description": "Reserved for future use; not implemented in v1 (results are always ordered newest-first)."
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "description": "Reserved for future use; not implemented in v1 (results are always ordered newest-first).",
+              "title": "Sort",
+              "nullable": true,
+              "type": "string"
+            },
+            "description": "Reserved for future use; not implemented in v1 (results are always ordered newest-first)."
           }
         ],
         "responses": {
@@ -664,6 +757,19 @@
         ],
         "title": "BuildResponse",
         "description": "Build-specific details with optional task sub-object.\n\nThe task field is None for undispatched builds (task_id IS NULL\nin factory_builds).\n\nThe status field is the build's effective current status, computed\nserver-side from the freshest authoritative source:\n\n- Pre-dispatch (task_id IS NULL): computed from\n  factory_builds.cancelled_at \u2014 ``\"cancelled\"`` when set, else\n  ``\"pending\"``. Neither word is stored; the timestamp is the only\n  persisted pre-dispatch state.\n- Dispatched: tasks.status (``\"running\"``, ``\"completed\"``,\n  ``\"failed\"``, ``\"cancelled\"``).\n- On cancel responses: Build Coordinator's returned status, which\n  is fresher than the local row (which lags until BC's callback\n  lands), normalized into the task vocabulary above \u2014 BC's\n  ``timed_out`` is reported as ``failed``, exactly as the callback\n  path persists it. The field never carries a word outside the\n  union of the two sets above.\n\nStaleness: after handoff the field tracks tasks.status, which only\nadvances when Build Coordinator's terminal callback lands. When\ncallbacks are disabled (no callback base URL configured \u2014 a\nsupported worker configuration), the post-handoff status stays at\nthe last persisted value (typically ``\"running\"``) indefinitely;\na cancel response is then the only place a fresher\ncoordinator-reported status appears."
+      },
+      "EffectiveBuildStatus": {
+        "type": "string",
+        "enum": [
+          "pending",
+          "running",
+          "completed",
+          "failed",
+          "timed_out",
+          "cancelled"
+        ],
+        "title": "EffectiveBuildStatus",
+        "description": "The effective-status vocabulary of the Factory build read surface.\n\nThe six values the read surface can report; derived, never stored."
       },
       "ErrorResponse": {
         "properties": {
