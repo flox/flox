@@ -39,6 +39,7 @@ serde_json.workspace = true
 serde.workspace = true
 shell-escape.workspace = true
 slug.workspace = true
+strum.workspace = true
 supports-color.workspace = true
 sys-info.workspace = true
 sysinfo.workspace = true

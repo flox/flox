@@ -151,7 +151,7 @@ mod tests {
 
     use flox_config::FloxConfig;
     use flox_events::test_helpers::MockEventsConnection;
-    use flox_events::{EVENTS_BUFFER_FILE_NAME, EventsHub};
+    use flox_events::{EVENTS_BUFFER_FILE_NAME, EventsHub, LifecycleFields};
     use serial_test::serial;
     use temp_env::with_var;
     use tempfile::TempDir;
@@ -286,7 +286,11 @@ mod tests {
             .record_command_run("install".to_string())
             .expect("record run");
         EventsHub::global()
-            .record_command_completed("install".to_string())
+            .record_command_completed("install".to_string(), LifecycleFields {
+                exit_code: 0,
+                duration_ms: Some(1),
+                error_kind: None,
+            })
             .expect("record completed");
         EventsHub::global().flush(true).expect("flush");
 

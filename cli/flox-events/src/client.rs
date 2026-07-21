@@ -39,6 +39,7 @@ use crate::{
     EnvDetail,
     Event,
     EventKind,
+    LifecycleFields,
     PackageOutcome,
     SharedMetadataTemplate,
 };
@@ -104,10 +105,17 @@ impl EventsClient {
         self.record_event(EventKind::CliCommandRun(payload))
     }
 
-    /// Record a `cli.command_completed` event for `subcommand`.
-    pub fn record_command_completed(&self, subcommand: String) -> Result<()> {
-        let payload =
-            CliCommandCompletedPayload::new(self.shared_metadata.into_payload(subcommand));
+    /// Record a `cli.command_completed` event carrying the dispatch
+    /// lifecycle fields.
+    pub fn record_command_completed(
+        &self,
+        subcommand: String,
+        lifecycle: LifecycleFields,
+    ) -> Result<()> {
+        let payload = CliCommandCompletedPayload::new(
+            self.shared_metadata.into_payload(subcommand),
+            lifecycle,
+        );
         self.record_event(EventKind::CliCommandCompleted(payload))
     }
 

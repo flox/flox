@@ -35,7 +35,7 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use std::{env, fmt, mem};
 
-use anyhow::{Context, Result, anyhow, bail};
+use anyhow::{Context, Result, bail};
 use bpaf::{Args, Bpaf, ParseFailure, Parser, ShellComp};
 use flox_config::{Config, EnvironmentTrust, FLOX_DIR_NAME, TokenStorageMode};
 use flox_core::data::environment_ref::{self, DEFAULT_NAME, RemoteEnvironmentRef};
@@ -191,6 +191,17 @@ pub struct FloxArgs {
     command: Option<Commands>,
 }
 
+impl FloxArgs {
+    /// The v2 wire subcommand name for this invocation; `"help"` when no
+    /// subcommand was given.
+    pub fn subcommand_name(&self) -> &'static str {
+        self.command
+            .as_ref()
+            .map(Commands::subcommand_name)
+            .unwrap_or("help")
+    }
+}
+
 impl fmt::Debug for Commands {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Command")
@@ -221,6 +232,12 @@ impl Commands {
         }
     }
 }
+
+/// Ctrl-C ended the dispatch before it completed. Classified as
+/// `interrupted` by the telemetry emit in `main.rs`.
+#[derive(Debug, Error)]
+#[error("user interrupted process")]
+pub struct Interrupted;
 
 impl FloxArgs {
     /// Initialize the command line by creating an initial FloxBuilder
@@ -449,16 +466,6 @@ impl FloxArgs {
                 Err(e) => debug!("Failed to check for CLI update: {}", display_chain(&e)),
             }
 
-            // Emit the v2 `cli.command_completed`. When `activate.rs`
-            // has already recorded its own completion before `command.exec()`
-            // replaces the parent process, the hub's idempotent flag silently
-            // turns this call into a no-op.
-            if let Err(err) =
-                flox_events::EventsHub::global().record_command_completed(v2_subcommand.to_string())
-            {
-                debug!(error = %err, "Failed to record v2 cli.command_completed event");
-            }
-
             result
         };
 
@@ -467,22 +474,12 @@ impl FloxArgs {
             .run_until(async {
                 tokio::select! {
                     _ = tokio::task::spawn_local(signal_handler) => {
-                        // On Ctrl-C the `cli_worker` task is dropped before it
-                        // reaches its `record_command_completed`, so record it
-                        // here too — an interrupted invocation still ends, and
-                        // the hub's idempotent flag means at most one completion
-                        // is recorded per invocation.
-                        if let Err(err) = flox_events::EventsHub::global()
-                            .record_command_completed(v2_subcommand.to_string())
-                        {
-                            debug!(error = %err, "Failed to record v2 cli.command_completed event (interrupted)");
-                        }
                         // TODO:
                         // For now we rely on subprocesses to inherit `flox` process group
                         // and thus being sent ctrl_c signals in sync with flox itself.
                         // If we do need more control here,
                         // we can find process children and propagate signals manually.
-                        Err(anyhow!("user interrupted process"))
+                        Err(Interrupted.into())
                     }
                     result = tokio::task::spawn_local(cli_worker) => result?
                 }
@@ -1205,7 +1202,8 @@ pub enum DirEnvironmentSelect {
     Unspecified,
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, strum::IntoStaticStr)]
+#[strum(serialize_all = "snake_case", prefix = "env_select.")]
 pub enum EnvironmentSelectError {
     #[error(transparent)]
     EnvironmentError(#[from] EnvironmentError),
@@ -1217,6 +1215,30 @@ pub enum EnvironmentSelectError {
     RemoteNotSupported,
     #[error(transparent)]
     Anyhow(#[from] anyhow::Error),
+}
+
+/// A missing-environment error that also suggests `flox init`. It carries the
+/// hint in its own `Display`, so a command can surface it without the shared
+/// `EnvironmentError` / `EnvironmentSelectError` formatters rendering the hint
+/// on every occurrence.
+#[derive(Debug, Error, strum::IntoStaticStr)]
+#[strum(serialize_all = "snake_case", prefix = "no_environment.")]
+pub enum NoEnvironmentError {
+    #[error(
+        "Did not find an environment in the current directory.\n\nCreate an environment with 'flox init'"
+    )]
+    CurrentDirectory,
+    #[error(
+        "Did not find an environment in '{0}'\n\nCreate an environment with 'flox init --dir {0}'"
+    )]
+    Directory(String),
+    /// The `uninstall`-specific current-directory message — carries the packages
+    /// and the `--dir` alternative, so the hint travels with a typed error that
+    /// still classifies as `env_not_found` (the packages string is `.0`).
+    #[error(
+        "Did not find an environment in the current directory.\n\nCreate an environment with 'flox init' or uninstall packages from an environment found elsewhere with 'flox uninstall {0} --dir <path>'"
+    )]
+    CurrentDirectoryUninstall(String),
 }
 
 /// Emit a warning if the manifest specifies a minimum CLI version

@@ -46,7 +46,8 @@ pub static PROCESS_COMPOSE_BIN: LazyLock<String> = LazyLock::new(|| {
 });
 pub const DEFAULT_TAIL: usize = 15;
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, thiserror::Error, strum::IntoStaticStr)]
+#[strum(serialize_all = "snake_case", prefix = "service.")]
 pub enum ServiceError {
     #[error("failed to generate service config")]
     GenerateConfig(#[source] serde_yaml::Error),

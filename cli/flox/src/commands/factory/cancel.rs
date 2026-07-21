@@ -1,5 +1,4 @@
 use std::num::NonZeroU64;
-use std::process::ExitCode;
 
 use anyhow::Result;
 use bpaf::Bpaf;
@@ -63,7 +62,7 @@ impl Cancel {
                 // service contract violation, not a successful cancel.
                 CancelOutcome::Unexpected(message) => {
                     message::error(message);
-                    Err(Exit(ExitCode::from(1)).into())
+                    Err(Exit(1).into())
                 },
             },
             Err(err) => Err(self.fail(&err)),
@@ -75,7 +74,7 @@ impl Cancel {
     fn fail(&self, err: &FactoryClientError) -> anyhow::Error {
         let (message, code) = classify_error(err, self.id);
         message::error(message);
-        Exit(ExitCode::from(code)).into()
+        Exit(code).into()
     }
 }
 

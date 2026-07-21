@@ -20,7 +20,7 @@ use flox_core::activations::activation_state_dir_path;
 use flox_core::data::System;
 use flox_core::data::environment_ref::DEFAULT_NAME;
 use flox_core::traceable_path;
-use flox_events::EventsHub;
+use flox_events::{EventsHub, LifecycleFields};
 use flox_manifest::interfaces::{AsLatestSchema, AsWritableManifest, WriteManifest};
 use flox_manifest::parsed::Inner;
 use flox_manifest::parsed::common::IncludeDescriptor;
@@ -55,6 +55,7 @@ use crate::commands::general::update_config_with_query;
 use crate::commands::services::ServicesCommandsError;
 use crate::commands::{
     EnvironmentSelectError,
+    NoEnvironmentError,
     SHELL_COMPLETION_COMMAND,
     SHELL_COMPLETION_FILE,
     ensure_environment_trust,
@@ -202,12 +203,11 @@ impl Activate {
             .await
         {
             Ok(concrete_environment) => concrete_environment,
-            Err(e @ EnvironmentSelectError::EnvNotFoundInCurrentDirectory) => {
-                bail!(formatdoc! {"
-            {e}
-
-            Create an environment with 'flox init'"
-                })
+            // Dedicated hinted error: surfaces the `flox init` suggestion here
+            // (and classifies as env_not_found) without other commands' generic
+            // "no environment" output gaining the hint.
+            Err(EnvironmentSelectError::EnvNotFoundInCurrentDirectory) => {
+                Err(NoEnvironmentError::CurrentDirectory)?
             },
             Err(EnvironmentSelectError::Anyhow(e)) => Err(e)?,
             Err(e) => Err(e)?,
@@ -655,7 +655,7 @@ impl ActivateOptions {
                 // We might be able to just use Stdio::inherit above but I'm not
                 // 100% flox-activations will only print in the error case
                 eprint!("{}", String::from_utf8_lossy(&output.stderr));
-                Err(Exit(1.into()))?;
+                Err(Exit(1))?;
             }
             trace!(
                 "ephemeral activation stderr:\n{}",
@@ -666,10 +666,21 @@ impl ActivateOptions {
             debug!("running activation command: {:?}", command);
             // `command.exec()` replaces this process, so the dispatcher's
             // end-of-`cli_worker` `command_completed` emit will never run;
-            // record it here first. The buffered events are delivered by a
-            // later invocation unless a forced flush is requested.
+            // record it here first, with `exit_code = 0` for the successful
+            // handoff and no duration (the process becomes the shell rather
+            // than completing). `exec` returns only on failure, and by then
+            // this record has set the sticky flag, so the dispatcher's
+            // lifecycle emit is a no-op — that rare exec failure is recorded
+            // optimistically as this success. The buffered events are delivered
+            // by a later invocation unless a forced flush is requested.
             let hub = flox_events::EventsHub::global();
-            if let Err(err) = hub.record_command_completed("activate".to_string()) {
+            if let Err(err) =
+                hub.record_command_completed("activate".to_string(), LifecycleFields {
+                    exit_code: 0,
+                    duration_ms: None,
+                    error_kind: None,
+                })
+            {
                 debug!(
                     error = %err,
                     "Failed to record v2 cli.command_completed event before exec"

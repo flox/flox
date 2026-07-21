@@ -12,6 +12,7 @@ use crate::{
     CliEnvironmentPublishPayload,
     EnvDetail,
     EventKind,
+    LifecycleFields,
     PackageOutcome,
 };
 
@@ -85,11 +86,15 @@ impl EventsHub {
         })
     }
 
-    /// Record a `cli.command_completed` event for `subcommand`. No-op when
-    /// no client is installed. Subsequent calls against the same client
-    /// install are no-ops so the dispatcher and the `activate.rs` pre-exec
-    /// path cannot race-emit twice for one invocation.
-    pub fn record_command_completed(&self, subcommand: String) -> Result<()> {
+    /// Record a `cli.command_completed` event carrying the dispatch lifecycle
+    /// fields. No-op when no client is installed. The first record per client
+    /// install wins, so the dispatcher, the `activate.rs` pre-exec path, and
+    /// the interrupt handler cannot double-emit for one invocation.
+    pub fn record_command_completed(
+        &self,
+        subcommand: String,
+        lifecycle: LifecycleFields,
+    ) -> Result<()> {
         if self.completed_recorded.swap(true, Ordering::SeqCst) {
             debug!("command_completed already recorded for this client install, skipping");
             return Ok(());
@@ -99,7 +104,7 @@ impl EventsHub {
                 trace!("No v2 events client configured, skipping command_completed record");
                 return Ok(());
             };
-            client.record_command_completed(subcommand)
+            client.record_command_completed(subcommand, lifecycle)
         })
     }
 
