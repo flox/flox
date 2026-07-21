@@ -148,6 +148,12 @@ fn main() -> ExitCode {
                 return ExitCode::from(0);
             },
             bpaf::ParseFailure::Stderr(m) => {
+                // `flox <name>` may be an installed beta extension rather than a
+                // typo. Only reached once the parse has already failed, and a
+                // miss falls through to the unchanged error below.
+                if let Some(exit) = commands::extension::try_dispatch_external() {
+                    return exit;
+                }
                 message::error(format!("{m:80}"));
                 return ExitCode::from(1);
             },

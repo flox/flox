@@ -109,6 +109,7 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1"
 serde_with = { version = "3.16.1", features = ["time_0_3"] }
 serde_yaml = "0.9"
+sha2 = "0.10"
 shell-escape = "0.1.5"
 slug = "0.1"
 strum = { version = "0.27", features = ["derive"] }
@@ -136,6 +137,7 @@ url-escape = "0.1.1"
 uuid = { version = "1.16", features = ["serde", "v4"] }
 walkdir = "2"
 xdg = "3.0"
+zip = { version = "2", default-features = false, features = ["deflate"] }
 
 
 # dev dependencies
