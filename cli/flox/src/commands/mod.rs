@@ -9,6 +9,7 @@ mod deactivate;
 mod delete;
 mod edit;
 mod envs;
+pub mod extension;
 mod factory;
 mod gc;
 pub(crate) mod general;

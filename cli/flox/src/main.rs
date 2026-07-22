@@ -144,10 +144,25 @@ fn main() -> ExitCode {
     if let Some(parse_err) = args.as_ref().err() {
         match parse_err {
             bpaf::ParseFailure::Stdout(m, _) => {
+                // `flox <name> --help` lands here, not in the `Stderr` arm:
+                // bpaf treats `--help` as a global short-circuit that fires
+                // before it decides `<name>` is unknown, so the help text is
+                // produced instead of a parse error. Attempt dispatch first so
+                // an installed extension's own `--help` is shown; the reserved
+                // guard and a lookup miss both fall through to flox's help.
+                if let Some(exit) = commands::extension::try_dispatch_external() {
+                    return exit;
+                }
                 print!("{m:80}");
                 return ExitCode::from(0);
             },
             bpaf::ParseFailure::Stderr(m) => {
+                // `flox <name>` may be an installed beta extension rather than a
+                // typo. Only reached once the parse has already failed, and a
+                // miss falls through to the unchanged error below.
+                if let Some(exit) = commands::extension::try_dispatch_external() {
+                    return exit;
+                }
                 message::error(format!("{m:80}"));
                 return ExitCode::from(1);
             },
