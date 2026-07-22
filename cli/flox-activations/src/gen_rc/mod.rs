@@ -194,6 +194,7 @@ pub(crate) mod test_helpers {
             flox_env_dirs: None,
             path: None,
             manpath: None,
+            path_prepends: None,
             full_env: Some(full_env),
         };
         let rc_path = Some(PathBuf::from("/path/to/rc/file"));

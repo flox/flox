@@ -23,7 +23,7 @@ impl FixFpathArgs {
         let env_dirs = separate_dir_list(env_dirs_joined);
         let path_dirs = separate_dir_list(colon_separated_fpath);
         let suffixes = ["share/zsh/site-functions", "share/zsh/vendor-completions"];
-        let fixed_path_dirs = prepend_dirs_to_pathlike_var(&env_dirs, &suffixes, &path_dirs);
+        let fixed_path_dirs = prepend_dirs_to_pathlike_var(&env_dirs, &suffixes, &path_dirs, &[]);
         let as_strs = fixed_path_dirs
             .into_iter()
             .map(|s| s.to_string_lossy().to_string())

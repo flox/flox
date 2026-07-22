@@ -193,7 +193,7 @@ pub fn generate_bash_profile_commands(
                 args.flox_env.display()
             ).to_stmt());
             stmts.push(format!(
-                r#"eval "$('{}' fix-paths --shell {} --env-dirs "$FLOX_ENV_DIRS" --path "$PATH" --manpath "${{MANPATH:-}}")";"#,
+                r#"eval "$('{}' fix-paths --shell {} --env-dirs "$FLOX_ENV_DIRS" --path "$PATH" --manpath "${{MANPATH:-}}" --path-prepends "${{_FLOX_ENV_PATH_PREPENDS:-}}")";"#,
                 args.flox_activations.display(),
                 Shell::Bash,
             ).to_stmt());
@@ -394,7 +394,7 @@ mod tests {
             _FLOX_INVOCATION_TYPES="$('/flox_activations' push-invocation-type --invocation-type interactive --env '{"name":"test_env","type":"path"}' --current "${_FLOX_INVOCATION_TYPES:-}")";
             if [ -t 1 ]; then source '/interpreter/activate.d/set-prompt.bash'; fi;
             eval "$('/flox_activations' set-env-dirs --shell bash --flox-env "/flox_env" --env-dirs "${FLOX_ENV_DIRS:-}")";
-            eval "$('/flox_activations' fix-paths --shell bash --env-dirs "$FLOX_ENV_DIRS" --path "$PATH" --manpath "${MANPATH:-}")";
+            eval "$('/flox_activations' fix-paths --shell bash --env-dirs "$FLOX_ENV_DIRS" --path "$PATH" --manpath "${MANPATH:-}" --path-prepends "${_FLOX_ENV_PATH_PREPENDS:-}")";
             eval "$('/flox_activations' profile-scripts --shell bash --already-sourced-env-dirs "${_FLOX_SOURCED_PROFILE_SCRIPTS:-}" --env-dirs "${FLOX_ENV_DIRS:-}")";
             set +h
             set +x
@@ -443,7 +443,7 @@ mod tests {
             _FLOX_INVOCATION_TYPES="$('/flox_activations' push-invocation-type --invocation-type inplace --env '{"name":"test_env","type":"path"}' --current "${_FLOX_INVOCATION_TYPES:-}")";
             if [ -t 1 ]; then source '/interpreter/activate.d/set-prompt.bash'; fi;
             eval "$('/flox_activations' set-env-dirs --shell bash --flox-env "/flox_env" --env-dirs "${FLOX_ENV_DIRS:-}")";
-            eval "$('/flox_activations' fix-paths --shell bash --env-dirs "$FLOX_ENV_DIRS" --path "$PATH" --manpath "${MANPATH:-}")";
+            eval "$('/flox_activations' fix-paths --shell bash --env-dirs "$FLOX_ENV_DIRS" --path "$PATH" --manpath "${MANPATH:-}" --path-prepends "${_FLOX_ENV_PATH_PREPENDS:-}")";
             eval "$('/flox_activations' profile-scripts --shell bash --already-sourced-env-dirs "${_FLOX_SOURCED_PROFILE_SCRIPTS:-}" --env-dirs "${FLOX_ENV_DIRS:-}")";
             set +h
             set +x

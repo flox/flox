@@ -27,7 +27,7 @@ impl PrependAndDedupArgs {
         let env_dirs = separate_dir_list(env_dirs_joined);
         let path_dirs = separate_dir_list(path_like);
         let suffixes = suffixes.unwrap_or(&[]);
-        let fixed_path_dirs = prepend_dirs_to_pathlike_var(&env_dirs, suffixes, &path_dirs);
+        let fixed_path_dirs = prepend_dirs_to_pathlike_var(&env_dirs, suffixes, &path_dirs, &[]);
         join_dir_list(fixed_path_dirs)
     }
 }

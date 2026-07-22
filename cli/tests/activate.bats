@@ -2752,6 +2752,159 @@ EOF
   assert_success
 }
 
+# Fabricate and install a package whose profile.d scripts register extra
+# PATH dirs with flox_prepend_path, for the tests below. Two scripts
+# register the same dir to cover the helper's idempotency, and a third
+# registers a second dir so that _FLOX_ENV_PATH_PREPENDS holds a
+# multi-entry (colon-containing) value, exercising its transport through
+# each shell's variable handling.
+_install_prepend_path_pkg() {
+  mkdir -p "$BATS_TEST_TMPDIR/pkg/etc/profile.d" \
+    "$BATS_TEST_TMPDIR/pkg/extra-bin" "$BATS_TEST_TMPDIR/pkg/extra-bin2"
+  touch "$BATS_TEST_TMPDIR/pkg/extra-bin/.keep" "$BATS_TEST_TMPDIR/pkg/extra-bin2/.keep"
+  cat > "$BATS_TEST_TMPDIR/pkg/etc/profile.d/0900_prepend-path.sh" <<'EOF'
+flox_prepend_path "$FLOX_ENV/extra-bin"
+EOF
+  cat > "$BATS_TEST_TMPDIR/pkg/etc/profile.d/0901_prepend-path-again.sh" <<'EOF'
+flox_prepend_path "$FLOX_ENV/extra-bin"
+EOF
+  cat > "$BATS_TEST_TMPDIR/pkg/etc/profile.d/0902_prepend-path-second.sh" <<'EOF'
+flox_prepend_path "$FLOX_ENV/extra-bin2"
+EOF
+  pkg_store_path="$(nix --extra-experimental-features nix-command \
+    store add --name prepend-path-test-pkg "$BATS_TEST_TMPDIR/pkg")"
+  run "$FLOX_BIN" install "$pkg_store_path"
+  assert_success
+}
+
+# PATH dirs registered with flox_prepend_path must survive the PATH
+# re-ordering performed at the end of in-place activation, staying ahead
+# of the registering environment's own bin directory.
+_prepend_path_survives_in_place() {
+  shell="${1?}"
+  project_setup
+  PROJECT_DIR="$(realpath "$PROJECT_DIR")"
+  _install_prepend_path_pkg
+
+  rendered="$PROJECT_DIR/.flox/run/${NIX_SYSTEM}.${PROJECT_NAME}-dev"
+  if [ "$shell" == "tcsh" ]; then
+    run "$shell" -c 'eval "`"$FLOX_BIN" activate`"; echo "$PATH"'
+  else
+    run "$shell" -c 'eval "$("$FLOX_BIN" activate)"; echo "$PATH"'
+  fi
+  assert_success
+  # fish joins quoted expansions of path variables with ':' like the rest.
+  assert_line --partial "$rendered/extra-bin2:$rendered/extra-bin:$rendered/bin:$rendered/sbin"
+}
+
+@test "bash: profile.d: flox_prepend_path additions survive PATH re-ordering" {
+  _prepend_path_survives_in_place bash
+
+  # Registrations are restored along with the rest of the environment on
+  # deactivation; the variable must not outlive the activation.
+  FLOX_SHELL="bash" run --separate-stderr bash -c '
+    eval "$($FLOX_BIN activate --print-script)"
+    eval "$($FLOX_BIN deactivate --print-script "$_FLOX_INVOCATION_TYPES")"
+    if [ -z "${_FLOX_ENV_PATH_PREPENDS+x}" ]; then
+      echo "after:unset"
+    fi
+  '
+  assert_success
+  assert_line "after:unset"
+}
+
+@test "fish: profile.d: flox_prepend_path additions survive PATH re-ordering" {
+  _prepend_path_survives_in_place fish
+}
+
+@test "tcsh: profile.d: flox_prepend_path additions survive PATH re-ordering" {
+  _prepend_path_survives_in_place tcsh
+
+  # The tcsh rc guards the possibly-unset variable with an "empty"
+  # sentinel; confirm neither the sentinel nor a registration outlives
+  # the activation.
+  SHELL="$(which tcsh)" run --separate-stderr tcsh -c '
+    eval "`$FLOX_BIN activate --print-script`"
+    setenv _FLOX_INVOCATION_TYPES_WIRE $_FLOX_INVOCATION_TYPES:q
+    eval "`$FLOX_BIN deactivate --print-script-from-env`"
+    unsetenv _FLOX_INVOCATION_TYPES_WIRE
+    if ( ! $?_FLOX_ENV_PATH_PREPENDS ) then
+      echo "after:unset"
+    endif
+  '
+  assert_success
+  assert_line "after:unset"
+}
+
+@test "zsh: profile.d: flox_prepend_path additions survive PATH re-ordering" {
+  _prepend_path_survives_in_place zsh
+}
+
+# Command mode runs fix-paths before profile.d and has no trailing
+# re-order to dedup PATH, so the helper itself must be idempotent when
+# two scripts register the same dir.
+@test "profile.d: flox_prepend_path is idempotent across scripts" {
+  project_setup
+  PROJECT_DIR="$(realpath "$PROJECT_DIR")"
+  _install_prepend_path_pkg
+
+  rendered="$PROJECT_DIR/.flox/run/${NIX_SYSTEM}.${PROJECT_NAME}-dev"
+  run --separate-stderr "$FLOX_BIN" activate -- bash -c 'echo "$PATH"'
+  assert_success
+  for dir in extra-bin extra-bin2; do
+    occurrences="$(echo "$output" | tr ':' '\n' | grep -cx "$rendered/$dir")"
+    assert_equal "$occurrences" 1
+  done
+}
+
+# When environments are layered, a registered prepend stays with the layer
+# of the environment that registered it: environments activated later still
+# take precedence over it.
+@test "profile.d: flox_prepend_path additions are replayed at their environment's layer" {
+  project_setup
+  PROJECT_DIR="$(realpath "$PROJECT_DIR")"
+  _install_prepend_path_pkg
+  "$FLOX_BIN" init -d inner
+
+  outer="$PROJECT_DIR/.flox/run/${NIX_SYSTEM}.${PROJECT_NAME}-dev"
+  inner="$PROJECT_DIR/inner/.flox/run/${NIX_SYSTEM}.inner-dev"
+  run "$FLOX_BIN" activate -- \
+    "$FLOX_BIN" activate --dir inner -- bash -c 'echo "$PATH"'
+  assert_success
+  assert_line --partial "$inner/bin:$inner/sbin:$outer/extra-bin2:$outer/extra-bin:$outer/bin:$outer/sbin"
+}
+
+# A shell attaching to an already-running activation computes PATH from the
+# replayed activation state rather than by running profile.d scripts again;
+# the registered prepend must survive there too.
+# bats test_tags=activate,activate:attach
+@test "profile.d: flox_prepend_path additions survive attach" {
+  project_setup
+  PROJECT_DIR="$(realpath "$PROJECT_DIR")"
+  _install_prepend_path_pkg
+
+  mkfifo activate_started_fifo
+  # Will get cat'ed in teardown
+  TEARDOWN_FIFO="$PROJECT_DIR/teardown_activate"
+  mkfifo "$TEARDOWN_FIFO"
+
+  # Start an activation and keep it running.
+  "$FLOX_BIN" activate -c "bash -c \"echo > activate_started_fifo && echo > $TEARDOWN_FIFO\"" >> output 2>&1 &
+  cat activate_started_fifo
+
+  rendered="$PROJECT_DIR/.flox/run/${NIX_SYSTEM}.${PROJECT_NAME}-dev"
+
+  # Command-mode attach.
+  run --separate-stderr "$FLOX_BIN" activate -- bash -c 'echo "$PATH"'
+  assert_success
+  assert_line --partial "$rendered/extra-bin2:$rendered/extra-bin:$rendered/bin:$rendered/sbin"
+
+  # In-place attach.
+  run bash -c 'eval "$("$FLOX_BIN" activate)"; echo "$PATH"'
+  assert_success
+  assert_line --partial "$rendered/extra-bin2:$rendered/extra-bin:$rendered/bin:$rendered/sbin"
+}
+
 @test "activate works with fish 3.2.2" {
   if [ "$NIX_SYSTEM" == aarch64-linux ]; then
     # running fish at all on aarch64-linux throws:

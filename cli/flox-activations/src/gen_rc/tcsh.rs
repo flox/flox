@@ -204,11 +204,24 @@ pub fn generate_tcsh_profile_commands(
 
             stmts.push(r#"if (! $?MANPATH) setenv MANPATH "empty";"#.to_stmt());
 
+            stmts.push(
+                r#"if (! $?_FLOX_ENV_PATH_PREPENDS) setenv _FLOX_ENV_PATH_PREPENDS "empty";"#
+                    .to_stmt(),
+            );
+
             stmts.push(format!(
-                r#"eval "`'{}' fix-paths --shell {} --env-dirs $FLOX_ENV_DIRS:q --path $PATH:q --manpath $MANPATH:q`";"#,
+                r#"eval "`'{}' fix-paths --shell {} --env-dirs $FLOX_ENV_DIRS:q --path $PATH:q --manpath $MANPATH:q --path-prepends $_FLOX_ENV_PATH_PREPENDS:q`";"#,
                 args.flox_activations.display(),
                 Shell::Tcsh,
             ).to_stmt());
+
+            // Drop the sentinel again so it doesn't outlive the activation;
+            // real registrations never look like "empty" because every entry
+            // contains a '='.
+            stmts.push(
+                r#"if ($_FLOX_ENV_PATH_PREPENDS:q == "empty") unsetenv _FLOX_ENV_PATH_PREPENDS;"#
+                    .to_stmt(),
+            );
         },
         Action::Deactivate(_) => {
             // No-op: covered by environment restoration above
@@ -405,7 +418,9 @@ mod tests {
             if (! $?FLOX_ENV_DIRS) setenv FLOX_ENV_DIRS "empty";
             eval "`'/flox_activations' set-env-dirs --shell tcsh --flox-env '/flox_env' --env-dirs $FLOX_ENV_DIRS:q`";
             if (! $?MANPATH) setenv MANPATH "empty";
-            eval "`'/flox_activations' fix-paths --shell tcsh --env-dirs $FLOX_ENV_DIRS:q --path $PATH:q --manpath $MANPATH:q`";
+            if (! $?_FLOX_ENV_PATH_PREPENDS) setenv _FLOX_ENV_PATH_PREPENDS "empty";
+            eval "`'/flox_activations' fix-paths --shell tcsh --env-dirs $FLOX_ENV_DIRS:q --path $PATH:q --manpath $MANPATH:q --path-prepends $_FLOX_ENV_PATH_PREPENDS:q`";
+            if ($_FLOX_ENV_PATH_PREPENDS:q == "empty") unsetenv _FLOX_ENV_PATH_PREPENDS;
             set _already_sourced_args = ();
             if ($?_FLOX_SOURCED_PROFILE_SCRIPTS) set _already_sourced_args = ( --already-sourced-env-dirs `echo $_FLOX_SOURCED_PROFILE_SCRIPTS:q` );
             eval "`'/flox_activations' profile-scripts --shell tcsh --env-dirs $FLOX_ENV_DIRS:q $_already_sourced_args:q`";
@@ -449,7 +464,9 @@ mod tests {
             if (! $?FLOX_ENV_DIRS) setenv FLOX_ENV_DIRS "empty";
             eval "`'/flox_activations' set-env-dirs --shell tcsh --flox-env '/flox_env' --env-dirs $FLOX_ENV_DIRS:q`";
             if (! $?MANPATH) setenv MANPATH "empty";
-            eval "`'/flox_activations' fix-paths --shell tcsh --env-dirs $FLOX_ENV_DIRS:q --path $PATH:q --manpath $MANPATH:q`";
+            if (! $?_FLOX_ENV_PATH_PREPENDS) setenv _FLOX_ENV_PATH_PREPENDS "empty";
+            eval "`'/flox_activations' fix-paths --shell tcsh --env-dirs $FLOX_ENV_DIRS:q --path $PATH:q --manpath $MANPATH:q --path-prepends $_FLOX_ENV_PATH_PREPENDS:q`";
+            if ($_FLOX_ENV_PATH_PREPENDS:q == "empty") unsetenv _FLOX_ENV_PATH_PREPENDS;
             set _already_sourced_args = ();
             if ($?_FLOX_SOURCED_PROFILE_SCRIPTS) set _already_sourced_args = ( --already-sourced-env-dirs `echo $_FLOX_SOURCED_PROFILE_SCRIPTS:q` );
             eval "`'/flox_activations' profile-scripts --shell tcsh --env-dirs $FLOX_ENV_DIRS:q $_already_sourced_args:q`";

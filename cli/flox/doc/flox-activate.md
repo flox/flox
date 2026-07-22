@@ -80,6 +80,28 @@ These scripts run before the environment's `[hook]` and `[profile]` scripts.
 Activations in "run" mode source only the startup scripts provided by Flox,
 not those provided by packages.
 
+Startup scripts which add directories to `PATH` should use the
+`flox_prepend_path` shell function rather than modifying `PATH` directly:
+```bash
+flox_prepend_path "$FLOX_ENV/lib/node_modules/.bin"
+```
+Flox re-orders `PATH` at various points to keep each activated environment's
+`bin` and `sbin` directories foremost,
+which would demote a plain `PATH` assignment behind every
+activated environment.
+Directories registered with `flox_prepend_path` are instead replayed ahead of
+the registering environment's own `bin` directory each time `PATH` is
+re-ordered,
+preserving their position as environments are activated, layered,
+and attached to.
+An environment activated later still takes precedence over an earlier
+environment's registered directories,
+just as it does over the earlier environment's `bin` directory.
+Registered directories must not contain `:` or `=` characters.
+Because activations in "run" mode do not source package-provided startup
+scripts,
+`flox_prepend_path` has no effect in that mode.
+
 To reverse activation,
 run [`flox-deactivate(1)`](./flox-deactivate.md).
 Inside a `flox activate` subshell,

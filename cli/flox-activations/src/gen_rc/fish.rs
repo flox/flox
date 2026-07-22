@@ -175,7 +175,7 @@ pub fn generate_fish_profile_commands(
             );
 
             stmts.push(format!(
-                r#"{} fix-paths --shell {} --env-dirs "$FLOX_ENV_DIRS" --path "$PATH" --manpath "$MANPATH" | source;"#,
+                r#"{} fix-paths --shell {} --env-dirs "$FLOX_ENV_DIRS" --path "$PATH" --manpath "$MANPATH" --path-prepends "$_FLOX_ENV_PATH_PREPENDS" | source;"#,
                 args.flox_activations.display(),
                 Shell::Fish,
             ).to_stmt());
@@ -344,7 +344,7 @@ mod tests {
             set -gx FLOX_ENV_DIRS (if set -q FLOX_ENV_DIRS; echo "$FLOX_ENV_DIRS"; else; echo empty; end);
             /flox_activations set-env-dirs --shell fish --flox-env "/flox_env" --env-dirs "$FLOX_ENV_DIRS" | source;
             set -gx MANPATH (if set -q MANPATH; echo "$MANPATH"; else; echo empty; end);
-            /flox_activations fix-paths --shell fish --env-dirs "$FLOX_ENV_DIRS" --path "$PATH" --manpath "$MANPATH" | source;
+            /flox_activations fix-paths --shell fish --env-dirs "$FLOX_ENV_DIRS" --path "$PATH" --manpath "$MANPATH" --path-prepends "$_FLOX_ENV_PATH_PREPENDS" | source;
             set -g  _FLOX_SOURCED_PROFILE_SCRIPTS (if set -q _FLOX_SOURCED_PROFILE_SCRIPTS; echo "$_FLOX_SOURCED_PROFILE_SCRIPTS"; else; echo ""; end);
             /flox_activations profile-scripts --shell fish --already-sourced-env-dirs  "$_FLOX_SOURCED_PROFILE_SCRIPTS" --env-dirs "$FLOX_ENV_DIRS" | source;
             set -gx fish_trace 0;
@@ -401,7 +401,7 @@ mod tests {
             set -gx FLOX_ENV_DIRS (if set -q FLOX_ENV_DIRS; echo "$FLOX_ENV_DIRS"; else; echo empty; end);
             /flox_activations set-env-dirs --shell fish --flox-env "/flox_env" --env-dirs "$FLOX_ENV_DIRS" | source;
             set -gx MANPATH (if set -q MANPATH; echo "$MANPATH"; else; echo empty; end);
-            /flox_activations fix-paths --shell fish --env-dirs "$FLOX_ENV_DIRS" --path "$PATH" --manpath "$MANPATH" | source;
+            /flox_activations fix-paths --shell fish --env-dirs "$FLOX_ENV_DIRS" --path "$PATH" --manpath "$MANPATH" --path-prepends "$_FLOX_ENV_PATH_PREPENDS" | source;
             set -g  _FLOX_SOURCED_PROFILE_SCRIPTS (if set -q _FLOX_SOURCED_PROFILE_SCRIPTS; echo "$_FLOX_SOURCED_PROFILE_SCRIPTS"; else; echo ""; end);
             /flox_activations profile-scripts --shell fish --already-sourced-env-dirs  "$_FLOX_SOURCED_PROFILE_SCRIPTS" --env-dirs "$FLOX_ENV_DIRS" | source;
             set -gx fish_trace 0;

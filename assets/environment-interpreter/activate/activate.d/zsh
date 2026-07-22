@@ -37,7 +37,7 @@ old_fpath="$FPATH"
 # shellcheck disable=SC1090
 source <("$_flox_activations" set-env-dirs --shell zsh --flox-env "$FLOX_ENV" --env-dirs "${FLOX_ENV_DIRS:-}")
 # shellcheck disable=SC1090
-source <("$_flox_activations" fix-paths --shell zsh --env-dirs "$FLOX_ENV_DIRS" --path "$PATH" --manpath "${MANPATH:-}")
+source <("$_flox_activations" fix-paths --shell zsh --env-dirs "$FLOX_ENV_DIRS" --path "$PATH" --manpath "${MANPATH:-}" --path-prepends "${_FLOX_ENV_PATH_PREPENDS:-}")
 
 # We use `FPATH` as input here so we can re-use machinery for rearranging
 # PATH-like variables, but we actually output code to set `fpath` instead.
