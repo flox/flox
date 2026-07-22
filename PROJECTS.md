@@ -1397,6 +1397,11 @@ Two upstream changes since `0badcdf59` drove the rework:
 - Telemetry (still deferred from P07).
 - FloxHub source (P09) and richer UX (P10).
 
+**Linear tracking**: parent tracker **CLI-161** (the branch is the source of
+truth) with sub-issues **CLI-157** (nested-bundle install), **CLI-158**
+(config-vs-env dispatch; moved from closed flox/flox#4537), and **CLI-160**
+(reserved-command drift guard, this P11-T09).
+
 ### Tests & Tasks
 
 - [x] [P11-T01] Fast-forward local `main` to `origin/main` and create the
@@ -1427,10 +1432,11 @@ Two upstream changes since `0badcdf59` drove the rework:
 - [ ] [P11-TS03] `flox --help` does not list `extension`.
 - [ ] [P11-TS04] `just integ-tests extension.bats` passes with the
       converted gating.
-- [ ] [P11-T09] Decide whether to port the `extension_drift_tests` module
+- [>] [P11-T09] Decide whether to port the `extension_drift_tests` module
       (~80 lines in `cli/flox/src/commands/mod.rs`) that keeps
       `RESERVED_COMMAND_NAMES` in sync with the parser. Guards a real
       invariant, but adds test code to a heavily reviewed file.
+      Deferred; tracked in Linear CLI-160.
 - [x] [P11-T10] Dispatch an external extension for `flox <name> --help`.
       bpaf routes `--help` to `ParseFailure::Stdout` (its help short-circuit),
       which returned before the `Stderr` dispatch arm — so an installed
