@@ -55,3 +55,32 @@ fn unreadable_import_message(target: &Path, file: &Path, position: (usize, usize
         '{target}' is imported{location} but cannot be read.
         Check that the imported file exists and is readable."}
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn unreadable_import_error_message_points_at_the_import() {
+        let err = ScanError::UnreadableImport {
+            target: PathBuf::from("pkgs/helper.nix"),
+            file: PathBuf::from("pkgs/foo.nix"),
+            position: (4, 1),
+        };
+        assert_eq!(err.to_string(), indoc::indoc! {"
+                'pkgs/helper.nix' is imported at pkgs/foo.nix:4:1 but cannot be read.
+                Check that the imported file exists and is readable."});
+    }
+
+    #[test]
+    fn undeclared_root_error_message_points_at_the_arguments() {
+        let err = ScanError::UndeclaredRoot {
+            root: "catalogs".to_string(),
+            file: PathBuf::from("pkgs/foo.nix"),
+            position: Some((4, 13)),
+        };
+        assert_eq!(err.to_string(), indoc::indoc! {"
+                'catalogs' is referenced at pkgs/foo.nix:4:13 but is not declared in the function arguments.
+                Add 'catalogs' to the function arguments, e.g. '{ catalogs, ... }:'."});
+    }
+}
