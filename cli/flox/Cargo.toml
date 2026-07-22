@@ -80,7 +80,6 @@ apple-native-keyring-store.workspace = true
 zbus-secret-service-keyring-store.workspace = true
 
 [dev-dependencies]
-base64.workspace = true
 factory-api-v1.workspace = true
 flox-events = { workspace = true, features = ["tests"] }
 floxhub-client = { workspace = true, features = ["tests"] }

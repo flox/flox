@@ -87,6 +87,24 @@ impl AuthContext {
         }
     }
 
+    /// Return the pseudonymous subject identifier for telemetry
+    /// attribution, if one is available.
+    ///
+    /// Auth0 tokens carry the OIDC `sub` claim ([`FloxhubToken::sub`]) —
+    /// opaque and stable across the user's lifetime, so it remains valid
+    /// attribution even when the token has expired. Kerberos has no
+    /// pseudonymous equivalent today (the principal is directly
+    /// identifying), so kerberos-mode invocations return `None`.
+    ///
+    /// [`FloxhubToken::sub`]: crate::token::FloxhubToken::sub
+    pub fn user_subject(&self) -> Option<&str> {
+        match self {
+            AuthContext::Auth0(Some(token)) => token.sub(),
+            AuthContext::Auth0(None) => None,
+            AuthContext::Kerberos(_) => None,
+        }
+    }
+
     /// Return the user's handle if authenticated, or an [`AuthFailure`]
     /// describing why authentication failed.
     pub fn authenticated_handle(&self) -> Result<&str, AuthFailure> {
@@ -134,5 +152,47 @@ impl std::fmt::Debug for AuthContext {
                 .finish_non_exhaustive(),
             AuthContext::Kerberos(None) => f.write_str("Kerberos(None)"),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+
+    use super::*;
+    use crate::token::FloxhubToken;
+    use crate::token::test_helpers::{
+        FAKE_EXPIRED_TOKEN_WITH_SUB,
+        FAKE_TOKEN,
+        FAKE_TOKEN_WITH_SUB,
+    };
+
+    #[test]
+    fn user_subject_returns_sub_for_auth0_token() {
+        let token = FloxhubToken::from_str(FAKE_TOKEN_WITH_SUB).expect("token parses");
+        assert_eq!(
+            AuthContext::Auth0(Some(token)).user_subject(),
+            Some("github|424242")
+        );
+    }
+
+    /// Expiry gates authentication, not identity — an expired token's `sub`
+    /// is still the correct attribution.
+    #[test]
+    fn user_subject_returns_sub_for_expired_auth0_token() {
+        let token = FloxhubToken::from_str(FAKE_EXPIRED_TOKEN_WITH_SUB).expect("token parses");
+        assert!(token.is_expired(), "test premise: token is expired");
+        assert_eq!(
+            AuthContext::Auth0(Some(token)).user_subject(),
+            Some("github|424242")
+        );
+    }
+
+    #[test]
+    fn user_subject_is_none_without_sub_token_or_auth0() {
+        let token = FloxhubToken::from_str(FAKE_TOKEN).expect("token parses");
+        assert_eq!(AuthContext::Auth0(Some(token)).user_subject(), None);
+        assert_eq!(AuthContext::Auth0(None).user_subject(), None);
+        assert_eq!(AuthContext::Kerberos(None).user_subject(), None);
     }
 }

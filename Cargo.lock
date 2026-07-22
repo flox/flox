@@ -1552,7 +1552,6 @@ dependencies = [
  "anstream",
  "anyhow",
  "apple-native-keyring-store",
- "base64",
  "beta",
  "bpaf",
  "chrono",

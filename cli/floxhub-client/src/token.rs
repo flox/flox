@@ -162,6 +162,22 @@ pub mod test_helpers {
     /// .
     /// AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
     pub const FAKE_TOKEN_WITH_SUB: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3guZGV2L2hhbmRsZSI6InRlc3QiLCJleHAiOjk5OTk5OTk5OTksInN1YiI6ImdpdGh1Ynw0MjQyNDIiLCJlbWFpbCI6InRlc3RAZXhhbXBsZS5jb20iLCJuYW1lIjoiVGVzdCBVc2VyIn0.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+
+    /// An expired fake FloxHub token carrying an OIDC `sub` claim
+    ///
+    /// {
+    ///  "typ": "JWT",
+    ///  "alg": "HS256"
+    /// }
+    /// .
+    /// {
+    ///   "https://flox.dev/handle": "test",
+    ///   "exp": 1704063600,                // 2024-01-01T00:00:00+00:00
+    ///   "sub": "github|424242"
+    /// }
+    /// .
+    /// AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+    pub const FAKE_EXPIRED_TOKEN_WITH_SUB: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3guZGV2L2hhbmRsZSI6InRlc3QiLCJleHAiOjE3MDQwNjM2MDAsInN1YiI6ImdpdGh1Ynw0MjQyNDIifQ.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 }
 
 #[cfg(test)]
