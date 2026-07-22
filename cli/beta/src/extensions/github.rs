@@ -815,12 +815,27 @@ pub(crate) fn resolve_asset_for<'a>(
     })
 }
 
+/// Checksum / signature / provenance sidecars that sit next to a real
+/// release binary and must never be selected as the executable — they
+/// contain a platform substring too (e.g. `flox-x-linux-x86_64.tar.gz.sha256`).
+fn is_sidecar_asset(name: &str) -> bool {
+    const SIDECAR_SUFFIXES: &[&str] = &[
+        ".sha256", ".sha512", ".sha1", ".md5", ".sig", ".asc", ".pem", ".sbom",
+        ".intoto.jsonl",
+    ];
+    let lower = name.to_ascii_lowercase();
+    SIDECAR_SUFFIXES.iter().any(|s| lower.ends_with(s))
+}
+
 fn substring_match<'a>(
     assets: &'a [ReleaseAsset],
     matchers: &[String],
 ) -> Option<&'a ReleaseAsset> {
     for needle in matchers {
-        if let Some(a) = assets.iter().find(|a| a.name.contains(needle)) {
+        if let Some(a) = assets
+            .iter()
+            .find(|a| a.name.contains(needle) && !is_sidecar_asset(&a.name))
+        {
             return Some(a);
         }
     }
@@ -1309,6 +1324,27 @@ mod tests {
             "linux-x86_64".to_string(),
             "linux-amd64".to_string()
         ],);
+    }
+
+    #[test]
+    fn resolve_asset_skips_checksum_sidecar() {
+        // The sidecar sorts first and also contains the platform substring;
+        // selection must skip it and choose the real archive.
+        let assets = vec![
+            mk_asset("flox-hi-linux-x86_64.tar.gz.sha256"),
+            mk_asset("flox-hi-linux-x86_64.tar.gz"),
+        ];
+        let chosen = resolve_asset_for(&assets, None, "hi", "linux", "x86_64").unwrap();
+        assert_eq!(chosen.name, "flox-hi-linux-x86_64.tar.gz");
+    }
+
+    #[test]
+    fn is_sidecar_asset_matches_common_suffixes() {
+        assert!(is_sidecar_asset("x-linux-x86_64.tar.gz.sha256"));
+        assert!(is_sidecar_asset("x.sig"));
+        assert!(is_sidecar_asset("X.ASC"));
+        assert!(!is_sidecar_asset("flox-hi-linux-x86_64.tar.gz"));
+        assert!(!is_sidecar_asset("flox-hi-linux-x86_64"));
     }
 
     #[test]

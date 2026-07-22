@@ -47,7 +47,7 @@ impl Upgrade {
 
     async fn run_one(&self, flox: Flox) -> Result<()> {
         if self.dry_run {
-            match extensions::upgrade_dry_run(&flox, &self.name).await? {
+            match extensions::upgrade_dry_run(&flox, &self.name, self.force).await? {
                 DryRunStatus::WouldUpgrade { from, to } => {
                     message::info(format!(
                         "flox-{}: would upgrade {} -> {}",
@@ -103,7 +103,7 @@ impl Upgrade {
         println!("{}", super::format::render_header());
 
         if self.dry_run {
-            for result in extensions::upgrade_all_dry_run(&flox).await? {
+            for result in extensions::upgrade_all_dry_run(&flox, self.force).await? {
                 let ext = extensions_listed.iter().find(|e| e.name == result.name);
                 let mut row = match ext {
                     Some(e) => super::format::row_from_extension(e),

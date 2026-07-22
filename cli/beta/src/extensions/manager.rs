@@ -512,20 +512,39 @@ pub async fn install_github(
             let manifest = source
                 .fetch_author_manifest(&owner, &repo, manifest_ref)
                 .await?;
-            if let Some(asset) = try_resolve_asset(&assets, manifest.as_ref(), &name) {
-                let asset = asset.clone();
-                return install_github_binary(
-                    flox,
-                    &owner,
-                    &repo,
-                    &name,
-                    &resolved,
-                    &asset,
-                    pin.is_some(),
-                    &source,
-                    manifest.as_ref(),
-                )
-                .await;
+            match super::github::resolve_asset(&assets, manifest.as_ref(), &name) {
+                Ok(asset) => {
+                    let asset = asset.clone();
+                    return install_github_binary(
+                        flox,
+                        &owner,
+                        &repo,
+                        &name,
+                        &resolved,
+                        &asset,
+                        pin.is_some(),
+                        &source,
+                        manifest.as_ref(),
+                    )
+                    .await;
+                },
+                Err(e) => {
+                    // A release exists but no asset matches this host. If the
+                    // manifest declares a binary distribution, the author
+                    // intends a binary install, so surface a clear
+                    // NoMatchingAsset rather than falling through to a source
+                    // clone that would later fail with ExecutableMissing.
+                    if manifest
+                        .as_ref()
+                        .is_some_and(|m| m.extension.binary.is_some())
+                    {
+                        return Err(InstallError::NoMatchingAsset {
+                            owner: owner.clone(),
+                            repo: repo.clone(),
+                            platform: e.platform,
+                        });
+                    }
+                },
             }
         }
     }
@@ -632,17 +651,6 @@ pub async fn install_github(
     })
 }
 
-/// Try to resolve an asset using [`super::github::resolve_asset`]. Returns
-/// `None` when no asset matches (the caller then falls through to the
-/// clone-based flow).
-fn try_resolve_asset<'a>(
-    assets: &'a [super::github::ReleaseAsset],
-    manifest: Option<&AuthorManifest>,
-    name: &str,
-) -> Option<&'a super::github::ReleaseAsset> {
-    super::github::resolve_asset(assets, manifest, name).ok()
-}
-
 /// Install a precompiled binary extension: download the release asset,
 /// extract it (or copy it as-is for bare binaries), locate the
 /// `flox-<name>` executable, and write `state.toml` with
@@ -741,6 +749,15 @@ async fn populate_binary_staging(
 
     let staged_exe = staging.join(format!("flox-{name}"));
     if !is_executable(&staged_exe) {
+        return Err(InstallError::ExecutableMissing {
+            name: name.to_string(),
+            path: staged_exe,
+        });
+    }
+    // A zero-byte asset (e.g. an empty raw download) is +x but not a usable
+    // executable; reject it here rather than "installing" a binary that
+    // fails at exec.
+    if fs::metadata(&staged_exe).map(|m| m.len()).unwrap_or(0) == 0 {
         return Err(InstallError::ExecutableMissing {
             name: name.to_string(),
             path: staged_exe,
@@ -1066,7 +1083,11 @@ pub async fn upgrade_all(flox: &Flox, force: bool) -> Result<Vec<UpgradeResult>,
 /// - `state.pinned` → `DryRunStatus::Pinned` (no remote I/O).
 /// - `kind = binary` → `GitHubSource::resolve_latest`; compare tag.
 /// - `kind = script|git` → `git ls-remote <origin-url> <branch>`; compare sha.
-pub async fn upgrade_dry_run(flox: &Flox, name: &str) -> Result<DryRunStatus, UpgradeError> {
+pub async fn upgrade_dry_run(
+    flox: &Flox,
+    name: &str,
+    force: bool,
+) -> Result<DryRunStatus, UpgradeError> {
     let state_path = layout::state_path(flox, name);
     let state_str = fs::read_to_string(&state_path).map_err(|err| {
         if err.kind() == io::ErrorKind::NotFound {
@@ -1080,7 +1101,7 @@ pub async fn upgrade_dry_run(flox: &Flox, name: &str) -> Result<DryRunStatus, Up
     if state.kind == "local" {
         return Err(UpgradeError::LocalNotSupported);
     }
-    if state.pinned {
+    if state.pinned && !force {
         return Ok(DryRunStatus::Pinned);
     }
 
@@ -1151,11 +1172,14 @@ pub async fn upgrade_dry_run(flox: &Flox, name: &str) -> Result<DryRunStatus, Up
 /// `upgrade_all` analogue for dry-run mode. Mirrors `upgrade_all`'s
 /// `Result<Vec<...>, ListError>` shape so the outer `list` failure is
 /// propagated cleanly rather than swallowed per-item.
-pub async fn upgrade_all_dry_run(flox: &Flox) -> Result<Vec<DryRunResult>, ListError> {
+pub async fn upgrade_all_dry_run(
+    flox: &Flox,
+    force: bool,
+) -> Result<Vec<DryRunResult>, ListError> {
     let extensions = list(flox)?;
     let mut out = Vec::with_capacity(extensions.len());
     for ext in extensions {
-        let outcome = upgrade_dry_run(flox, &ext.name).await;
+        let outcome = upgrade_dry_run(flox, &ext.name, force).await;
         out.push(DryRunResult {
             name: ext.name,
             outcome,
@@ -1214,6 +1238,13 @@ fn parse_owner_repo(spec: &str) -> Result<(String, String), InstallError> {
     let trimmed = spec.trim();
     let parts: Vec<&str> = trimmed.split('/').collect();
     if parts.len() != 2 || parts[0].is_empty() || parts[1].is_empty() {
+        return Err(InstallError::InvalidSpec(spec.to_string()));
+    }
+    // Validate the owner charset so odd input (`owner /repo`, control
+    // characters) is rejected cleanly here rather than flowing into a clone
+    // URL / API path and producing a confusing downstream 404. The repo
+    // segment is validated separately by `extract_extension_name`.
+    if super::github::validate_owner(parts[0]).is_err() {
         return Err(InstallError::InvalidSpec(spec.to_string()));
     }
     Ok((parts[0].to_string(), parts[1].to_string()))
@@ -1754,6 +1785,16 @@ mod tests {
     }
 
     #[test]
+    fn parse_owner_repo_rejects_invalid_owner_and_shape() {
+        assert!(parse_owner_repo("good-owner/flox-hi").is_ok());
+        assert!(parse_owner_repo("owner /flox-hi").is_err());
+        assert!(parse_owner_repo("ow ner/flox-hi").is_err());
+        assert!(parse_owner_repo("a/b/c").is_err());
+        assert!(parse_owner_repo("/flox-hi").is_err());
+        assert!(parse_owner_repo("owner/").is_err());
+    }
+
+    #[test]
     fn extract_extension_name_rejects_no_prefix() {
         assert_eq!(extract_extension_name("hello"), None);
         assert_eq!(extract_extension_name("FLOX-hello"), None);
@@ -2197,7 +2238,7 @@ mod tests {
         fs::create_dir_all(state_path.parent().unwrap()).unwrap();
         fs::create_dir(&state_path).unwrap();
 
-        let err = upgrade_dry_run(&flox, "hello").await.unwrap_err();
+        let err = upgrade_dry_run(&flox, "hello", false).await.unwrap_err();
         assert!(
             matches!(err, UpgradeError::Io(_)),
             "expected Io, got {err:?}"
@@ -2406,7 +2447,7 @@ mod tests {
         let marker = install_dir.join("state.toml");
         let before = fs::metadata(&marker).unwrap().modified().unwrap();
 
-        let status = upgrade_dry_run(&flox, "hello").await.unwrap();
+        let status = upgrade_dry_run(&flox, "hello", false).await.unwrap();
         match status {
             DryRunStatus::WouldUpgrade { from, to } => {
                 assert_eq!(from, sha_v1);
@@ -2479,7 +2520,7 @@ mod tests {
 
         let err = temp_env::async_with_vars(
             [("FLOX_EXTENSIONS_GITHUB_BASE_URL", Some(server.base_url()))],
-            upgrade_dry_run(&flox, "hello"),
+            upgrade_dry_run(&flox, "hello", false),
         )
         .await
         .unwrap_err();
@@ -2509,7 +2550,7 @@ mod tests {
         )
         .unwrap();
 
-        let status = upgrade_dry_run(&flox, "hello").await.unwrap();
+        let status = upgrade_dry_run(&flox, "hello", false).await.unwrap();
         assert_eq!(status, DryRunStatus::Pinned);
     }
 

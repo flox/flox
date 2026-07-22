@@ -133,7 +133,16 @@ pub fn try_dispatch_external() -> Option<ExitCode> {
     debug!(extension = name_str, path = ?path, "dispatching to external extension");
 
     let install_dir = managed_install_dir(&path, &extensions_root);
-    let author_manifest = install_dir.as_deref().and_then(load_author_manifest);
+    let author_manifest = match install_dir.as_deref().map(load_author_manifest) {
+        None => None,
+        Some(Ok(m)) => m,
+        Some(Err(msg)) => {
+            // Fail closed: a present-but-unreadable manifest may declare a
+            // restrictive activation policy we must not silently ignore.
+            eprintln!("flox: {msg}");
+            return Some(ExitCode::from(1));
+        },
+    };
     let installed_state = install_dir.as_deref().and_then(load_installed_state);
 
     let mode = resolve_mode(
@@ -205,16 +214,24 @@ fn managed_install_dir(exe_path: &Path, extensions_root: &Path) -> Option<PathBu
     Some(parent.to_path_buf())
 }
 
-fn load_author_manifest(install_dir: &Path) -> Option<AuthorManifest> {
+/// Load the author manifest for dispatch.
+///
+/// `Ok(None)` means no manifest is present (no declared policy → the
+/// caller's default applies). `Err` means a manifest *is* present but
+/// could not be read or parsed: dispatch must fail closed rather than
+/// silently defaulting to `Inherit`, because the unreadable manifest may
+/// have declared `mode = "none"` (a scrubbed environment) or a pinned
+/// environment.
+fn load_author_manifest(install_dir: &Path) -> Result<Option<AuthorManifest>, String> {
     let path = install_dir.join("flox-extension.toml");
-    let contents = std::fs::read_to_string(&path).ok()?;
-    match parse_author_manifest(&contents) {
-        Ok(m) => Some(m),
-        Err(e) => {
-            warn!(path = %path.display(), error = %e, "failed to parse extension author manifest");
-            None
-        },
+    if !path.exists() {
+        return Ok(None);
     }
+    let contents = std::fs::read_to_string(&path)
+        .map_err(|e| format!("cannot read extension manifest {}: {e}", path.display()))?;
+    parse_author_manifest(&contents)
+        .map(Some)
+        .map_err(|e| format!("invalid extension manifest {}: {e}", path.display()))
 }
 
 fn load_installed_state(install_dir: &Path) -> Option<InstalledState> {
@@ -233,8 +250,12 @@ fn version_from_state(state: &InstalledState) -> String {
     if !state.tag.is_empty() {
         return state.tag.clone();
     }
-    if state.commit.len() >= 8 {
-        return state.commit[..8].to_string();
+    // Truncate by characters, not bytes: a byte slice at offset 8 can land
+    // inside a multibyte codepoint and panic on a non-ASCII (corrupt)
+    // commit value.
+    let short: String = state.commit.chars().take(8).collect();
+    if short.chars().count() == 8 {
+        return short;
     }
     "-".to_string()
 }
