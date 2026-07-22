@@ -1192,10 +1192,7 @@ pub async fn upgrade_dry_run(
 /// `upgrade_all` analogue for dry-run mode. Mirrors `upgrade_all`'s
 /// `Result<Vec<...>, ListError>` shape so the outer `list` failure is
 /// propagated cleanly rather than swallowed per-item.
-pub async fn upgrade_all_dry_run(
-    flox: &Flox,
-    force: bool,
-) -> Result<Vec<DryRunResult>, ListError> {
+pub async fn upgrade_all_dry_run(flox: &Flox, force: bool) -> Result<Vec<DryRunResult>, ListError> {
     let extensions = list(flox)?;
     let mut out = Vec::with_capacity(extensions.len());
     for ext in extensions {

@@ -842,7 +842,14 @@ pub(crate) fn resolve_asset_for<'a>(
 /// contain a platform substring too (e.g. `flox-x-linux-x86_64.tar.gz.sha256`).
 fn is_sidecar_asset(name: &str) -> bool {
     const SIDECAR_SUFFIXES: &[&str] = &[
-        ".sha256", ".sha512", ".sha1", ".md5", ".sig", ".asc", ".pem", ".sbom",
+        ".sha256",
+        ".sha512",
+        ".sha1",
+        ".md5",
+        ".sig",
+        ".asc",
+        ".pem",
+        ".sbom",
         ".intoto.jsonl",
     ];
     let lower = name.to_ascii_lowercase();
