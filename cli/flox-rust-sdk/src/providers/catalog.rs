@@ -794,7 +794,7 @@ pub mod test_helpers {
                     if e.status() == Some(StatusCode::SERVICE_UNAVAILABLE)
                         && attempt < max_attempts =>
                 {
-                    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                    std::thread::sleep(std::time::Duration::from_secs(2));
                     continue;
                 },
                 _ => break result,
