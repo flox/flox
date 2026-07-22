@@ -10,13 +10,13 @@ then:
   - name: server
     value: uvicorn
   - name: content-length
-    value: '74'
+    value: '115'
   - name: content-type
     value: application/json
-  body: '{"catalog":"publish_tests_read_write","name":"mypkg4","original_url":null}'
+  body: '{"catalog":"publish_tests_read_write","name":"publish_provider_creates_package_in_org_catalog","original_url":null}'
 ---
 when:
-  path: /api/v1/catalog/catalogs/publish_tests_read_write/packages/mypkg4/publish/info
+  path: /api/v1/catalog/catalogs/publish_tests_read_write/packages/publish_provider_creates_package_in_org_catalog/publish/info
   method: POST
   body: '{}'
 then:
@@ -33,7 +33,7 @@ then:
   body: '{"ingress_uri":null,"ingress_auth":null,"catalog_store_config":{"store_type":"meta-only"}}'
 ---
 when:
-  path: /api/v1/catalog/catalogs/publish_tests_read_write/packages/mypkg4/builds
+  path: /api/v1/catalog/catalogs/publish_tests_read_write/packages/publish_provider_creates_package_in_org_catalog/builds
   method: POST
   json_body_includes:
   - build_type: manifest
@@ -41,11 +41,11 @@ when:
       broken: false
       description: dummy
       drv_path: dummy
-      name: mypkg4
+      name: publish_provider_creates_package_in_org_catalog
       outputs:
       - name: out
         store_path: /nix/store/xfigz788kjqvyyxdnyvycs0bfc6cdjp3-cli-128-fixed-empty
-      pname: mypkg4
+      pname: publish_provider_creates_package_in_org_catalog
       system: x86_64-linux
       version: 1.0.0
     dot_flox_dir: ''
