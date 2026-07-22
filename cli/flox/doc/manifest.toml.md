@@ -50,6 +50,7 @@ Valid string values are:
 - `1.11.0`: introduced `minimum-cli-version`
 - `1.12.0`: introduced services `auto-start`
 - `1.13.0`: introduced `profile.deactivate` and build `sandbox-allow`
+- `1.14.0`: introduced services `shutdown.timeout-seconds`
 
 Existing manifest schemas, including the older `version = 1` format, are
 automatically forward-migrated when using features that require a newer schema
@@ -489,7 +490,8 @@ ServiceDescriptor ::= {
 }
 
 Shutdown ::= {
-  command = STRING
+  command         = STRING
+, timeout-seconds = null | INT
 }
 ```
 
@@ -529,6 +531,13 @@ Shutdown ::= {
     shutdown command to run instead of relying on the default behavior of
     sending a SIGTERM to the service. This field is required if the `is-daemon`
     field is `true`.
+
+`shutdown.timeout-seconds`
+:   How long to wait, in seconds, for the `shutdown.command` to complete before
+    the service manager gives up and sends a SIGKILL to the process it is
+    tracking. Defaults to 10 seconds when unset. Must be greater than zero.
+    Raise this when the shutdown command takes longer than the default, e.g.
+    a command that stops a collection of containers.
 
 `systems`
 :   An optional list of systems on which to run this service.

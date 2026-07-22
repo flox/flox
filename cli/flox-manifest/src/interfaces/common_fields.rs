@@ -7,23 +7,12 @@ use crate::parsed::common;
 /// We don't want to use it outside the crate because we should be operating on
 /// ManifestLatest outside the crate.
 pub(crate) trait CommonFields {
-    fn services(&self) -> &common::Services;
     fn options(&self) -> &common::Options;
     #[cfg(test)]
     fn options_mut(&mut self) -> &mut common::Options;
 }
 
 impl CommonFields for Parsed {
-    fn services(&self) -> &common::Services {
-        match self {
-            Parsed::V1(m) => &m.services,
-            Parsed::V1_10_0(m) => &m.services,
-            Parsed::V1_11_0(m) => &m.services,
-            Parsed::V1_12_0(m) => &m.services.service_map,
-            Parsed::V1_13_0(m) => &m.services.service_map,
-        }
-    }
-
     fn options(&self) -> &common::Options {
         match self {
             Parsed::V1(m) => &m.options,
@@ -31,6 +20,7 @@ impl CommonFields for Parsed {
             Parsed::V1_11_0(m) => &m.options,
             Parsed::V1_12_0(m) => &m.options,
             Parsed::V1_13_0(m) => &m.options,
+            Parsed::V1_14_0(m) => &m.options,
         }
     }
 
@@ -42,6 +32,7 @@ impl CommonFields for Parsed {
             Parsed::V1_11_0(m) => &mut m.options,
             Parsed::V1_12_0(m) => &mut m.options,
             Parsed::V1_13_0(m) => &mut m.options,
+            Parsed::V1_14_0(m) => &mut m.options,
         }
     }
 }

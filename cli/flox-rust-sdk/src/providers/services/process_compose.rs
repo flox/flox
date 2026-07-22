@@ -8,6 +8,7 @@
 use std::collections::BTreeMap;
 use std::env;
 use std::io::{BufRead, BufReader, Read};
+use std::num::NonZeroU32;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::LazyLock;
@@ -17,8 +18,8 @@ use flox_core::process_compose::PROCESS_NEVER_EXIT_NAME;
 use flox_core::traceable_path;
 use flox_manifest::interfaces::AsLatestSchema;
 use flox_manifest::lockfile::Lockfile;
-use flox_manifest::parsed::common::ServiceShutdown;
-use flox_manifest::parsed::{Inner, v1_12_0};
+use flox_manifest::parsed::v1_14_0::ServiceShutdown;
+use flox_manifest::parsed::{Inner, v1_14_0};
 #[cfg(test)]
 use flox_test_utils::proptest::alphanum_string;
 #[cfg(test)]
@@ -189,12 +190,17 @@ where
 pub struct ProcessShutdown {
     #[cfg_attr(test, proptest(strategy = "alphanum_string(5)"))]
     pub command: String,
+    /// How long to wait for the shutdown command before sending SIGKILL.
+    /// When unset, process-compose applies its own default of 10 seconds.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub timeout_seconds: Option<NonZeroU32>,
 }
 
 impl From<ServiceShutdown> for ProcessShutdown {
     fn from(value: ServiceShutdown) -> Self {
         Self {
             command: value.command,
+            timeout_seconds: value.timeout_seconds,
         }
     }
 }
@@ -221,8 +227,8 @@ pub fn generate_never_exit_process() -> ProcessConfig {
     }
 }
 
-impl From<v1_12_0::Services> for ProcessComposeConfig {
-    fn from(services: v1_12_0::Services) -> Self {
+impl From<v1_14_0::Services> for ProcessComposeConfig {
+    fn from(services: v1_14_0::Services) -> Self {
         let processes = services
             .into_inner()
             .into_iter()
@@ -1092,6 +1098,71 @@ mod tests {
                 command: {sleep} infinity
               foo:
                 command: bar
+        ", sleep = &*SLEEP_BIN });
+    }
+
+    #[test]
+    fn maps_manifest_shutdown_timeout_into_process_config() {
+        let mut services = v1_14_0::Services::default();
+        services
+            .inner_mut()
+            .insert("foo".to_string(), v1_14_0::ServiceDescriptor {
+                command: "bar".to_string(),
+                vars: None,
+                is_daemon: Some(true),
+                shutdown: Some(ServiceShutdown {
+                    command: "stop bar".to_string(),
+                    timeout_seconds: Some(NonZeroU32::new(30).unwrap()),
+                }),
+                systemd: None,
+                systems: None,
+            });
+
+        let config = ProcessComposeConfig::from(services);
+
+        assert_eq!(config, ProcessComposeConfig {
+            processes: BTreeMap::from([("foo".to_string(), ProcessConfig {
+                command: "bar".to_string(),
+                vars: None,
+                is_daemon: Some(true),
+                shutdown: Some(ProcessShutdown {
+                    command: "stop bar".to_string(),
+                    timeout_seconds: Some(NonZeroU32::new(30).unwrap()),
+                }),
+            })]),
+            ..Default::default()
+        });
+    }
+
+    #[test]
+    fn serializes_shutdown_with_timeout_seconds() {
+        let config_in = ProcessComposeConfig {
+            processes: BTreeMap::from([("foo".to_string(), ProcessConfig {
+                command: String::from("bar"),
+                vars: None,
+                is_daemon: Some(true),
+                shutdown: Some(ProcessShutdown {
+                    command: String::from("stop bar"),
+                    timeout_seconds: Some(NonZeroU32::new(30).unwrap()),
+                }),
+            })]),
+            ..Default::default()
+        };
+        let config_out = serde_yaml::to_string(&config_in).unwrap();
+        assert_eq!(config_out, formatdoc! { "
+            log_level: debug
+            log_configuration:
+              no_color: true
+            disable_env_expansion: true
+            processes:
+              flox_never_exit:
+                command: {sleep} infinity
+              foo:
+                command: bar
+                is_daemon: true
+                shutdown:
+                  command: stop bar
+                  timeout_seconds: 30
         ", sleep = &*SLEEP_BIN });
     }
 

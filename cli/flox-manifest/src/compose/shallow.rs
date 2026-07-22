@@ -24,7 +24,8 @@ use crate::parsed::common::{
 use crate::parsed::latest::{Install, ManifestLatest, MinimumCliVersion};
 // merge_build operates on the latest schema's Build (which carries
 // `sandbox-allow`), so composing environments preserves the field.
-use crate::parsed::v1_13_0::{Build, Profile, ProfileDeactivate, Services};
+use crate::parsed::v1_13_0::{Build, Profile, ProfileDeactivate};
+use crate::parsed::v1_14_0::Services;
 
 /// Merges two manifests by applying `manifest2` on top of `manifest1` and
 /// overwriting any conflicts for keys within the top-level of each `ManifestV1`
@@ -271,7 +272,7 @@ impl ShallowMerger {
         Ok((
             Services {
                 auto_start,
-                service_map: crate::parsed::common::Services(merged_map),
+                service_map: merged_map,
             },
             warnings,
         ))
@@ -402,10 +403,11 @@ mod tests {
     use proptest::prelude::*;
 
     use super::*;
-    use crate::parsed::common::{Allows, ContainerizeConfig, SemverOptions, ServiceDescriptor};
+    use crate::parsed::common::{Allows, ContainerizeConfig, SemverOptions};
     use crate::parsed::latest::ManifestPackageDescriptor;
     // Build merging operates on the latest schema's BuildDescriptor.
     use crate::parsed::v1_13_0::BuildDescriptor;
+    use crate::parsed::v1_14_0::ServiceDescriptor;
 
     proptest! {
         // Ensures that the vars unique to each manifest are present in the merged output,
@@ -463,11 +465,11 @@ mod tests {
         fn merges_services_section(maps in btree_maps_overlapping_keys::<ServiceDescriptor>(1, 3)) {
             let services1 = Services {
                 auto_start: None,
-                service_map: crate::parsed::common::Services(maps.map1.clone()),
+                service_map: maps.map1.clone(),
             };
             let services2 = Services {
                 auto_start: None,
-                service_map: crate::parsed::common::Services(maps.map2.clone()),
+                service_map: maps.map2.clone(),
             };
             let (merged, warnings) = ShallowMerger::merge_services(&services1, &services2).unwrap();
             prop_assert_eq!(merged.auto_start, None);
