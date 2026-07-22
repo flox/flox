@@ -223,6 +223,14 @@ pub fn locate_executable(staging: &Path, name: &str) -> Result<PathBuf, ArchiveE
     if path != root_exe {
         // Copy (not rename) so we don't disturb on-disk layout if authors
         // ship a bundle of support files alongside the binary.
+        //
+        // TODO(CLI-157): a bundled executable copied to the managed root is
+        // detached from its siblings — `$(dirname "$0")/…` and
+        // `$ORIGIN`-relative loads then resolve against the root, not the
+        // bundle directory, so multi-file bundles break. Single-file
+        // extensions are unaffected. The fix needs a layout/dispatch-contract
+        // decision, so it is deferred.
+        // https://linear.app/floxdotdev/issue/CLI-157
         fs::copy(&path, &root_exe)?;
         chmod_executable(&root_exe)?;
     }

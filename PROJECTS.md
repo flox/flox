@@ -1431,6 +1431,13 @@ Two upstream changes since `0badcdf59` drove the rework:
       (~80 lines in `cli/flox/src/commands/mod.rs`) that keeps
       `RESERVED_COMMAND_NAMES` in sync with the parser. Guards a real
       invariant, but adds test code to a heavily reviewed file.
+- [x] [P11-T10] Dispatch an external extension for `flox <name> --help`.
+      bpaf routes `--help` to `ParseFailure::Stdout` (its help short-circuit),
+      which returned before the `Stderr` dispatch arm — so an installed
+      extension's own `--help` was never shown. The `Stdout` arm now also
+      calls `try_dispatch_external()`; the reserved-name guard and a lookup
+      miss keep `flox --help`, built-ins, and uninstalled names unchanged.
+      Commit `9435415ed`.
 
 ### Known limitation
 
@@ -1438,7 +1445,17 @@ Two upstream changes since `0badcdf59` drove the rework:
 directly, because it runs in `main()` before the config system loads.
 `flox config --set features.beta true` therefore enables the
 `flox extension …` subcommands but **not** dispatch. Documented in the
-user guide; should be resolved before extensions leave beta.
+user guide; should be resolved before extensions leave beta. Tracked in
+flox/flox#4537.
+
+Nested-bundle extensions (an executable shipped inside a subdirectory
+alongside support files) lose their siblings on install: `locate_executable`
+copies only the executable to the managed root, so `$(dirname "$0")` and
+`$ORIGIN`-relative lookups resolve against the root, not the bundle dir.
+Single-file extensions are unaffected. Fixing it changes the
+layout/dispatch contract, so it is deferred pending a design decision.
+Tracked in Linear CLI-157; a `TODO(CLI-157)` sits at the `fs::copy` site in
+`cli/beta/src/extensions/archive.rs`.
 
 ### Automated Verification
 
