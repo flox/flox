@@ -8,6 +8,7 @@
 use std::collections::BTreeMap;
 use std::env;
 use std::io::{BufRead, BufReader, Read};
+use std::num::NonZeroU32;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::LazyLock;
@@ -17,8 +18,8 @@ use flox_core::process_compose::PROCESS_NEVER_EXIT_NAME;
 use flox_core::traceable_path;
 use flox_manifest::interfaces::AsLatestSchema;
 use flox_manifest::lockfile::Lockfile;
-use flox_manifest::parsed::common::ServiceShutdown;
-use flox_manifest::parsed::{Inner, v1_12_0};
+use flox_manifest::parsed::v1_14_0::ServiceShutdown;
+use flox_manifest::parsed::{Inner, v1_14_0};
 #[cfg(test)]
 use flox_test_utils::proptest::alphanum_string;
 #[cfg(test)]
@@ -192,8 +193,10 @@ pub struct ProcessShutdown {
     #[cfg_attr(test, proptest(strategy = "proptest::option::of(alphanum_string(5))"))]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub command: Option<String>,
+    /// How long to wait for the shutdown command before sending SIGKILL.
+    /// When unset, process-compose applies its own default of 10 seconds.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub timeout_seconds: Option<u64>,
+    pub timeout_seconds: Option<NonZeroU32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub signal: Option<i32>,
 }
@@ -252,8 +255,8 @@ pub fn generate_never_exit_process() -> ProcessConfig {
     }
 }
 
-impl From<v1_12_0::Services> for ProcessComposeConfig {
-    fn from(services: v1_12_0::Services) -> Self {
+impl From<v1_14_0::Services> for ProcessComposeConfig {
+    fn from(services: v1_14_0::Services) -> Self {
         let processes = services
             .into_inner()
             .into_iter()
@@ -366,7 +369,14 @@ pub fn maybe_make_service_config_file(
     let services = &manifest.as_latest_schema().services;
     let service_config_path = if !services.inner().is_empty() {
         let config_path = service_config_write_location(&flox.temp_dir)?;
-        write_process_compose_config(&services.copy_for_system(&flox.system).into(), &config_path)?;
+        let services_for_system = services.copy_for_system(&flox.system);
+        // `systems` filtering can drop a service that another one depends on;
+        // reject the dangling edge here with a clear error rather than letting
+        // process-compose fail cryptically when the services are started.
+        services_for_system
+            .validate_depends_on(&flox.system)
+            .map_err(|err| ServiceError::Passthrough(err.to_string()))?;
+        write_process_compose_config(&services_for_system.into(), &config_path)?;
         tracing::debug!(path = traceable_path(&config_path), "wrote service config");
         Some(config_path)
     } else {
@@ -1149,7 +1159,7 @@ mod tests {
                     is_daemon: None,
                     shutdown: Some(ProcessShutdown {
                         command: Some("stop-db".to_string()),
-                        timeout_seconds: Some(30),
+                        timeout_seconds: Some(NonZeroU32::new(30).unwrap()),
                         signal: Some(2),
                     }),
                     depends_on: None,
@@ -1195,14 +1205,14 @@ mod tests {
     /// process-compose string.
     #[test]
     fn service_orchestration_converts_from_manifest() {
-        use flox_manifest::parsed::common::{
+        use flox_manifest::parsed::v1_14_0::{
             ServiceDependency,
             ServiceDescriptor,
             ServiceShutdown,
             ServiceStartCondition,
         };
 
-        let mut services = v1_12_0::Services::default();
+        let mut services = v1_14_0::Services::default();
         services
             .inner_mut()
             .insert("db".to_string(), ServiceDescriptor {
@@ -1211,7 +1221,7 @@ mod tests {
                 is_daemon: None,
                 shutdown: Some(ServiceShutdown {
                     command: Some("stop-db".to_string()),
-                    timeout_seconds: Some(30),
+                    timeout_seconds: Some(NonZeroU32::new(30).unwrap()),
                     signal: Some(2),
                 }),
                 depends_on: None,
@@ -1237,7 +1247,7 @@ mod tests {
         let db = &config.processes["db"];
         let shutdown = db.shutdown.as_ref().expect("db shutdown");
         assert_eq!(shutdown.command.as_deref(), Some("stop-db"));
-        assert_eq!(shutdown.timeout_seconds, Some(30));
+        assert_eq!(shutdown.timeout_seconds, NonZeroU32::new(30));
         assert_eq!(shutdown.signal, Some(2));
 
         let web = &config.processes["web"];

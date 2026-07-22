@@ -6,7 +6,7 @@ use flox_config::Config;
 use flox_core::data::System;
 use flox_events::EventsHub;
 use flox_manifest::interfaces::AsLatestSchema;
-use flox_manifest::parsed::common::Services;
+use flox_manifest::parsed::v1_14_0::Services;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::providers::services::process_compose::{
     LoggedError,

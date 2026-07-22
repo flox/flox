@@ -50,7 +50,8 @@ Valid string values are:
 - `1.11.0`: introduced `minimum-cli-version`
 - `1.12.0`: introduced services `auto-start`
 - `1.13.0`: introduced `profile.deactivate` and build `sandbox-allow`
-- `1.14.0`: introduced services `shutdown.timeout-seconds`
+- `1.14.0`: introduced services `depends-on` and
+  `shutdown.timeout-seconds` / `shutdown.signal`
 
 Existing manifest schemas, including the older `version = 1` format, are
 automatically forward-migrated when using features that require a newer schema
@@ -579,6 +580,13 @@ Dependency ::= {
 `systems`
 :   An optional list of systems on which to run this service.
     If omitted, the service is not restricted.
+
+**Note:** `depends-on`, `shutdown.timeout-seconds`, and `shutdown.signal` are
+honored by the process-compose service manager that backs `flox activate` and
+`flox services`. They have no effect on services materialized as systemd units
+by `flox services persist`; for those, set the equivalent options in the
+per-service `systemd` passthrough — `unit.after` / `unit.requires` for ordering
+and `service.timeout_stop_sec` for the shutdown timeout.
 
 ## `[include]`
 

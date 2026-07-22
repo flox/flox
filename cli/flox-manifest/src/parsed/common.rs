@@ -359,17 +359,6 @@ pub struct ServiceDescriptor {
     /// How to shut down the service
     pub shutdown: Option<ServiceShutdown>,
 
-    /// Other services that must reach a given state before this service starts.
-    ///
-    /// Maps the name of a depended-on service to the condition that must be
-    /// satisfied before this service is started. Passed straight through to
-    /// process-compose's `depends_on`.
-    #[cfg_attr(
-        any(test, feature = "tests"),
-        proptest(strategy = "optional_btree_map::<ServiceDependency>(5, 3)")
-    )]
-    pub depends_on: Option<BTreeMap<String, ServiceDependency>>,
-
     /// Additional manual config of the systemd service generated for persistent services
     #[cfg_attr(
         any(test, feature = "tests"),
@@ -390,10 +379,7 @@ impl Services {
         let mut bad_services = vec![];
         for (name, desc) in self.0.iter() {
             let daemonizes = desc.is_daemon.is_some_and(|_self| _self);
-            let has_shutdown_cmd = desc
-                .shutdown
-                .as_ref()
-                .is_some_and(|shutdown| shutdown.command.is_some());
+            let has_shutdown_cmd = desc.shutdown.is_some();
             if daemonizes && !has_shutdown_cmd {
                 bad_services.push(name.clone());
             }
@@ -435,73 +421,17 @@ impl Services {
     }
 }
 
-#[skip_serializing_none]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, JsonSchema)]
 #[cfg_attr(any(test, feature = "tests"), derive(proptest_derive::Arbitrary))]
 #[serde(rename_all = "kebab-case")]
 #[serde(deny_unknown_fields)]
 pub struct ServiceShutdown {
-    /// What command to run to shut down the service instead of delivering a
-    /// signal. Required when `is-daemon` is `true`.
+    /// What command to run to shut down the service
     #[cfg_attr(
         any(test, feature = "tests"),
-        proptest(strategy = "optional_string(3)")
+        proptest(strategy = "alphanum_string(3)")
     )]
-    pub command: Option<String>,
-    /// How long to wait, in seconds, for the service to shut down before
-    /// process-compose forcibly kills its process group with `SIGKILL`.
-    #[cfg_attr(
-        any(test, feature = "tests"),
-        proptest(strategy = "proptest::option::of(0..120u64)")
-    )]
-    pub timeout_seconds: Option<u64>,
-    /// The signal number to send to shut the service down (for example `15`
-    /// for `SIGTERM`, `2` for `SIGINT`). Ignored when a shutdown `command` is
-    /// given.
-    #[cfg_attr(
-        any(test, feature = "tests"),
-        proptest(strategy = "proptest::option::of(1..32i32)")
-    )]
-    pub signal: Option<i32>,
-}
-
-/// The state a depended-on service must reach before a dependent service is
-/// allowed to start.
-///
-/// Serializes to the literal condition strings that process-compose expects in
-/// a `depends_on.<name>.condition` field.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash, JsonSchema)]
-#[cfg_attr(any(test, feature = "tests"), derive(proptest_derive::Arbitrary))]
-#[serde(rename_all = "snake_case")]
-pub enum ServiceStartCondition {
-    /// The depended-on service's process has been started.
-    ProcessStarted,
-    /// The depended-on service's process has exited, with any status.
-    ProcessCompleted,
-    /// The depended-on service's process has exited successfully (status 0).
-    ProcessCompletedSuccessfully,
-}
-
-impl ServiceStartCondition {
-    /// The literal condition string process-compose expects for this variant.
-    pub fn as_process_compose_str(&self) -> &'static str {
-        match self {
-            ServiceStartCondition::ProcessStarted => "process_started",
-            ServiceStartCondition::ProcessCompleted => "process_completed",
-            ServiceStartCondition::ProcessCompletedSuccessfully => "process_completed_successfully",
-        }
-    }
-}
-
-/// A single `depends-on` edge for a service: wait for `condition` on the named
-/// service before starting.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash, JsonSchema)]
-#[cfg_attr(any(test, feature = "tests"), derive(proptest_derive::Arbitrary))]
-#[serde(rename_all = "kebab-case")]
-#[serde(deny_unknown_fields)]
-pub struct ServiceDependency {
-    /// The state the depended-on service must reach before this service starts.
-    pub condition: ServiceStartCondition,
+    pub command: String,
 }
 
 /// A map of package ids to package build descriptors
@@ -804,103 +734,6 @@ mod tests {
              When adding a new manifest schema, bump the VERSION file."
         );
     }
-
-    #[test]
-    fn start_condition_maps_to_process_compose_strings() {
-        assert_eq!(
-            ServiceStartCondition::ProcessStarted.as_process_compose_str(),
-            "process_started"
-        );
-        assert_eq!(
-            ServiceStartCondition::ProcessCompleted.as_process_compose_str(),
-            "process_completed"
-        );
-        assert_eq!(
-            ServiceStartCondition::ProcessCompletedSuccessfully.as_process_compose_str(),
-            "process_completed_successfully"
-        );
-    }
-
-    #[test]
-    fn service_descriptor_parses_depends_on_and_shutdown_knobs() {
-        let toml = indoc::indoc! {r#"
-            command = "run-web"
-            depends-on.db = { condition = "process_completed_successfully" }
-            shutdown = { command = "stop-web", timeout-seconds = 30, signal = 2 }
-        "#};
-        let desc: ServiceDescriptor = toml_edit::de::from_str(toml).unwrap();
-
-        let shutdown = desc.shutdown.expect("shutdown should parse");
-        assert_eq!(shutdown.command.as_deref(), Some("stop-web"));
-        assert_eq!(shutdown.timeout_seconds, Some(30));
-        assert_eq!(shutdown.signal, Some(2));
-
-        let deps = desc.depends_on.expect("depends-on should parse");
-        assert_eq!(
-            deps["db"].condition,
-            ServiceStartCondition::ProcessCompletedSuccessfully
-        );
-    }
-
-    #[test]
-    fn shutdown_timeout_only_needs_no_command() {
-        // A shutdown table may set just a timeout/signal without a command.
-        let toml = indoc::indoc! {r#"
-            command = "run-web"
-            shutdown = { timeout-seconds = 8 }
-        "#};
-        let desc: ServiceDescriptor = toml_edit::de::from_str(toml).unwrap();
-        let shutdown = desc.shutdown.expect("shutdown should parse");
-        assert_eq!(shutdown.command, None);
-        assert_eq!(shutdown.timeout_seconds, Some(8));
-    }
-
-    #[test]
-    fn process_healthy_condition_not_yet_supported() {
-        // `process_healthy` depends on readiness probes, which are a later
-        // stage; until those land the condition is intentionally rejected.
-        let toml = indoc::indoc! {r#"
-            command = "run-web"
-            depends-on.db = { condition = "process_healthy" }
-        "#};
-        assert!(toml_edit::de::from_str::<ServiceDescriptor>(toml).is_err());
-    }
-
-    #[test]
-    fn daemon_requires_shutdown_command_not_just_shutdown_table() {
-        // A daemon whose shutdown table only sets a timeout must still be
-        // rejected: the process manager cannot signal the daemon directly and
-        // needs an explicit command to stop it.
-        let timeout_only = Services(BTreeMap::from([("db".to_string(), ServiceDescriptor {
-            command: "run".to_string(),
-            vars: None,
-            is_daemon: Some(true),
-            shutdown: Some(ServiceShutdown {
-                command: None,
-                timeout_seconds: Some(8),
-                signal: None,
-            }),
-            depends_on: None,
-            systemd: None,
-            systems: None,
-        })]));
-        assert!(timeout_only.validate().is_err());
-
-        let with_command = Services(BTreeMap::from([("db".to_string(), ServiceDescriptor {
-            command: "run".to_string(),
-            vars: None,
-            is_daemon: Some(true),
-            shutdown: Some(ServiceShutdown {
-                command: Some("stop".to_string()),
-                timeout_seconds: Some(8),
-                signal: None,
-            }),
-            depends_on: None,
-            systemd: None,
-            systems: None,
-        })]));
-        assert!(with_command.validate().is_ok());
-    }
 }
 
 #[cfg(any(test, feature = "tests"))]
@@ -910,7 +743,7 @@ pub mod test_helpers {
     /// Generate a single ServiceUnit with just enough fields to test `skip_serializing_none`
     /// Generating more than 1(!) value with proptest,
     /// increases the runtime of `proptest!`s to the point that we exhausted our stack space in CI
-    pub(super) fn service_unit_with_none_fields() -> impl Strategy<Value = Option<ServiceUnit>> {
+    pub(crate) fn service_unit_with_none_fields() -> impl Strategy<Value = Option<ServiceUnit>> {
         Just(Some(ServiceUnit {
             unit: Some(systemd::unit::Unit {
                 ..Default::default()
