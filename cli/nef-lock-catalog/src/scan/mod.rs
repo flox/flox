@@ -108,10 +108,11 @@ fn unreadable_import_message(target: &Path, file: &Path, position: (usize, usize
 #[derive(Debug)]
 struct FileInfo {
     /// Fully-qualified catalog attr-paths referenced by the file
-    /// (e.g. `catalogs.myorg.toolkit.readVersion`).
-    refs: BTreeSet<String>,
+    /// (e.g. `catalogs.myorg.toolkit.readVersion`). Tracked as [CatalogRef]
+    /// from the scan result onward; the walker builds them as strings.
+    refs: BTreeSet<CatalogRef>,
     /// Attr-paths of the packages this file depends on, resolved by
-    /// [collect_transitive]. The first component is the dependency argument;
+    /// [PackageGraph::expand_closure]. The first component is the dependency argument;
     /// any further components are members selected on it (a sibling attribute
     /// set), e.g. `["python3Packages", "isdr-zk-client"]` for
     /// `python3Packages.isdr-zk-client`. A bare argument is a single component.
@@ -166,40 +167,12 @@ pub fn scan_package_with_roots(
     root_attributes: impl IntoIterator<Item = impl Into<String>>,
 ) -> Result<BTreeSet<CatalogRef>, ScanError> {
     let root_attributes: HashSet<String> = root_attributes.into_iter().map(Into::into).collect();
-    let root_attributes = &root_attributes;
 
-    // Imports in the target resolve relative to its own directory; dependency
-    // arguments resolve as siblings under base_dir.
-    let db = {
-        let path: &Path = &base_dir.as_ref().join(rel_file.as_ref());
-        let mut db = HashMap::new();
-        if let Ok(content) = fs::read_to_string(path) {
-            let stem = path
-                .file_stem()
-                .unwrap_or_default()
-                .to_string_lossy()
-                .into_owned();
-            let dir = path.parent();
-            let mut visited = HashMap::new();
-            db.insert(
-                stem,
-                analyze_file_at(
-                    &content,
-                    root_attributes,
-                    dir,
-                    &mut visited,
-                    path,
-                    &identity_origins(root_attributes),
-                )?,
-            );
-        }
-        db
-    };
-    let references: BTreeSet<CatalogRef> =
-        collect_transitive(db, base_dir.as_ref(), root_attributes)?
-            .into_iter()
-            .map(CatalogRef)
-            .collect();
+    let mut graph = PackageGraph::new(base_dir, root_attributes);
+    graph.add_root(rel_file)?;
+    graph.expand_closure()?;
+    let references = graph.references();
+
     debug!(references = references.len(), "scanned catalog references");
     Ok(references)
 }
@@ -440,7 +413,7 @@ fn analyze_file_at(
                 imported
                     .refs
                     .into_iter()
-                    .map(|reference| rewrite_root(reference, &rewrites)),
+                    .map(|reference| rewrite_root(reference.into(), &rewrites)),
             );
         }
     }
@@ -471,7 +444,7 @@ fn analyze_file_at(
     }
 
     Ok(FileInfo {
-        refs,
+        refs: refs.into_iter().map(CatalogRef).collect(),
         dependency_args,
     })
 }
@@ -524,46 +497,107 @@ fn collect_dependency_selections(
     }
 }
 
-/// Resolve the transitive closure of catalog refs across a set of files.
+/// The NEF package files analyzed during closure resolution, keyed by package
+/// key.
 ///
-/// Starting from the files in `db`, follow each file's `dependency_args` to sibling
-/// packages (loaded on demand from `dir` via [try_resolve_dependency_argument]) and union their
-/// refs. A dep is an attr-path: a bare argument resolves as a sibling file, a
-/// longer path as a member of a sibling attribute set. Cycles are handled by
-/// tracking visited attr-paths.
-fn collect_transitive(
-    mut db: HashMap<String, FileInfo>,
-    dir: &Path,
-    root_attributes: &HashSet<String>,
-) -> Result<BTreeSet<String>, ScanError> {
-    let mut visited: HashSet<String> = HashSet::new();
-    let mut result: BTreeSet<String> = BTreeSet::new();
-    let mut queue: Vec<Vec<String>> = db
-        .keys()
-        .map(|key| key.split('/').map(str::to_string).collect())
-        .collect();
+/// A package key is a dependency attr-path joined with `/`
+/// (`python3Packages/isdr-zk-client`) — the same shape
+/// [try_resolve_dependency_argument] uses to locate the file under `base_dir`.
+/// Entry packages are added with [Self::add_root]; [Self::expand_closure] then
+/// resolves each reachable dependency argument once and caches it in `scans`,
+/// so a package shared by several dependents is analyzed a single time.
+struct PackageGraph {
+    base_dir: PathBuf,
+    /// Catalog root parameter names every package is scanned against.
+    root_attributes: HashSet<String>,
+    scans: HashMap<String, FileInfo>,
+}
 
-    while let Some(path) = queue.pop() {
-        let key = path.join("/");
-        if !visited.insert(key.clone()) {
-            continue;
-        }
-        if !db.contains_key(&key)
-            && let Some(info) = try_resolve_dependency_argument(dir, &path, root_attributes)?
-        {
-            db.insert(key.clone(), info);
-        }
-        let Some(info) = db.get(&key) else { continue };
-        result.extend(info.refs.iter().cloned());
-        let dependency_args: Vec<Vec<String>> = info.dependency_args.clone();
-        for dep in dependency_args {
-            if !visited.contains(&dep.join("/")) {
-                queue.push(dep);
-            }
+impl PackageGraph {
+    /// An empty graph resolving packages under `base_dir` and scanning each
+    /// against `root_attributes` (the catalog root parameter names).
+    fn new(base_dir: impl AsRef<Path>, root_attributes: HashSet<String>) -> Self {
+        Self {
+            base_dir: base_dir.as_ref().to_path_buf(),
+            root_attributes,
+            scans: HashMap::new(),
         }
     }
 
-    Ok(result)
+    /// Add an entry package by its path relative to `base_dir`, reading and
+    /// analyzing it. Imports resolve against the entry's own directory. An
+    /// unreadable entry is a no-op. Callable more than once.
+    fn add_root(&mut self, rel_file: impl AsRef<Path>) -> Result<(), ScanError> {
+        let path = self.base_dir.join(rel_file.as_ref());
+        let Ok(content) = fs::read_to_string(&path) else {
+            return Ok(());
+        };
+        let stem = path
+            .file_stem()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .into_owned();
+        let scan = analyze_file_at(
+            &content,
+            &self.root_attributes,
+            path.parent(),
+            &mut HashMap::new(),
+            &path,
+            &identity_origins(&self.root_attributes),
+        )?;
+        self.scans.insert(stem, scan);
+        Ok(())
+    }
+
+    /// Grow the graph to the transitive closure of the dependency arguments
+    /// reachable from the roots. Each argument is resolved once via
+    /// [try_resolve_dependency_argument] and cached; an argument that names
+    /// nothing on disk is skipped. A dependency argument is an attr-path: a
+    /// bare argument resolves as a sibling file, a longer path as a member of
+    /// a sibling attribute set. Cycles are handled by tracking visited
+    /// attr-paths.
+    fn expand_closure(&mut self) -> Result<(), ScanError> {
+        let mut visited: HashSet<String> = HashSet::new();
+        let mut queue: Vec<Vec<String>> = self
+            .scans
+            .keys()
+            .map(|key| key.split('/').map(str::to_string).collect())
+            .collect();
+
+        while let Some(path) = queue.pop() {
+            let key = path.join("/");
+            if !visited.insert(key.clone()) {
+                continue;
+            }
+            if !self.scans.contains_key(&key)
+                && let Some(scan) =
+                    try_resolve_dependency_argument(&self.base_dir, &path, &self.root_attributes)?
+            {
+                self.scans.insert(key.clone(), scan);
+            }
+            let Some(scan) = self.scans.get(&key) else {
+                continue;
+            };
+            for dep in scan.dependency_args.clone() {
+                if !visited.contains(&dep.join("/")) {
+                    queue.push(dep);
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Every catalog reference contributed by a package in the graph. Valid
+    /// once [Self::expand_closure] has run: the graph then holds exactly the
+    /// reachable packages, since only reachable arguments are ever resolved
+    /// into it.
+    fn references(&self) -> BTreeSet<CatalogRef> {
+        self.scans
+            .values()
+            .flat_map(|scan| scan.refs.iter().cloned())
+            .collect()
+    }
 }
 
 /// A name's meaning in the lexical environment threaded through the walk.
@@ -2018,7 +2052,7 @@ mod tests {
         .expect("scan should succeed")
     }
 
-    fn refs(content: &str, root_attributes: &HashSet<String>) -> BTreeSet<String> {
+    fn refs(content: &str, root_attributes: &HashSet<String>) -> BTreeSet<CatalogRef> {
         analyze_file(content, root_attributes).refs
     }
 
@@ -2034,7 +2068,7 @@ mod tests {
         .expect_err("scan should fail")
     }
 
-    fn refs_at(path: &str, root_attributes: &HashSet<String>) -> BTreeSet<String> {
+    fn refs_at(path: &str, root_attributes: &HashSet<String>) -> BTreeSet<CatalogRef> {
         let path = Path::new(path);
         let content = fs::read_to_string(path).expect("test fixture missing");
         let dir = path.parent();
@@ -2067,11 +2101,7 @@ mod tests {
         .expect_err("scan should fail")
     }
 
-    fn set(items: &[&str]) -> BTreeSet<String> {
-        items.iter().map(|s| s.to_string()).collect()
-    }
-
-    fn refset(items: &[&str]) -> BTreeSet<CatalogRef> {
+    fn set(items: &[&str]) -> BTreeSet<CatalogRef> {
         items.iter().map(|s| CatalogRef::from(*s)).collect()
     }
 
@@ -2165,8 +2195,8 @@ mod tests {
             include_str!("../../test_data/catalog_refs/multi-attr-inherit.nix"),
             &root_attributes(&["catalogs"]),
         );
-        assert!(!got.contains("catalogs.myorg.python3Packages"));
-        assert!(!got.contains("catalogs.myorg.toolkit"));
+        assert!(!got.contains(&CatalogRef::from("catalogs.myorg.python3Packages")));
+        assert!(!got.contains(&CatalogRef::from("catalogs.myorg.toolkit")));
     }
 
     #[test]
@@ -2318,50 +2348,26 @@ mod tests {
     }
 
     #[test]
-    fn transitive_follows_intra_dir_dep_args() {
-        let r = root_attributes(&["catalogs"]);
-        let file_a = "{ catalogs, beta-client }: catalogs.myorg.toolkit.readVersion";
-        let file_b = "{ catalogs }: catalogs.myorg.python3Packages.gamma-service";
-
-        let mut db = HashMap::new();
-        db.insert("alpha-lib".to_string(), analyze_file(file_a, &r));
-        db.insert("beta-client".to_string(), analyze_file(file_b, &r));
-
-        let got = collect_transitive(db, Path::new("."), &r).unwrap();
+    fn transitive_cycle_safe() {
+        // A dependency-argument cycle (pkg-a <-> pkg-b) must terminate and
+        // still union both packages' refs.
+        let base_dir = Path::new("test_data/catalog_refs/dep-cycle");
+        let got = scan_package(base_dir, Path::new("pkg-a.nix")).unwrap();
         assert_eq!(
             got,
             set(&[
                 "catalogs.myorg.toolkit.readVersion",
-                "catalogs.myorg.python3Packages.gamma-service",
+                "catalogs.myorg.python3Packages.alpha-lib",
             ])
         );
     }
 
     #[test]
-    fn transitive_cycle_safe() {
-        let r = root_attributes(&["catalogs"]);
-        let file_a = "{ catalogs, pkg-b }: catalogs.myorg.x";
-        let file_b = "{ catalogs, pkg-a }: catalogs.myorg.y";
-
-        let mut db = HashMap::new();
-        db.insert("pkg-a".to_string(), analyze_file(file_a, &r));
-        db.insert("pkg-b".to_string(), analyze_file(file_b, &r));
-
-        let got = collect_transitive(db, Path::new("."), &r).unwrap();
-        assert_eq!(got, set(&["catalogs.myorg.x", "catalogs.myorg.y"]));
-    }
-
-    #[test]
     fn transitive_inputs_root() {
-        let r = root_attributes(&["inputs"]);
-        let file_a = "{ inputs, dep-pkg }: inputs.nixpkgs.lib";
-        let file_b = "{ inputs }: inputs.devtools-flake.packages.default";
-
-        let mut db = HashMap::new();
-        db.insert("main-pkg".to_string(), analyze_file(file_a, &r));
-        db.insert("dep-pkg".to_string(), analyze_file(file_b, &r));
-
-        let got = collect_transitive(db, Path::new("."), &r).unwrap();
+        // Transitive closure under a non-default root: `main` pulls in the
+        // `dep-pkg` sibling, whose `inputs.*` refs join the closure.
+        let base_dir = Path::new("test_data/catalog_refs/inputs-transitive");
+        let got = scan_package_with_roots(base_dir, Path::new("main.nix"), ["inputs"]).unwrap();
         assert_eq!(
             got,
             set(&[
@@ -2411,7 +2417,7 @@ mod tests {
         let got = scan_package(base_dir, Path::new("dep-entry-wrapped.nix")).unwrap();
         assert_eq!(
             got,
-            refset(&[
+            set(&[
                 "catalogs.myorg.toolkit.readVersion",
                 "catalogs.myorg.python3Packages.alpha-lib",
             ])
@@ -2427,7 +2433,7 @@ mod tests {
         let got = scan_package(base_dir, Path::new("dep-entry.nix")).unwrap();
         assert_eq!(
             got,
-            refset(&[
+            set(&[
                 "catalogs.myorg.toolkit.readVersion",
                 "catalogs.myorg.python3Packages.alpha-lib",
             ])
@@ -2446,7 +2452,7 @@ mod tests {
         let got = scan_package(base_dir, Path::new("entry.nix")).unwrap();
         assert_eq!(
             got,
-            refset(&["catalogs.myorg.direct", "catalogs.myorg.helper-ref"]),
+            set(&["catalogs.myorg.direct", "catalogs.myorg.helper-ref"]),
         );
     }
 
@@ -2462,7 +2468,7 @@ mod tests {
     fn scan_package_follows_alias_to_pkgset_member() {
         let base_dir = Path::new("test_data/catalog_refs/pkgset-member-alias");
         let got = scan_package(base_dir, Path::new("isdr-zk-client.nix")).unwrap();
-        assert_eq!(got, refset(&["catalogs.myorg.toolkit.readVersion"]));
+        assert_eq!(got, set(&["catalogs.myorg.toolkit.readVersion"]));
     }
 
     /// A nested file as the scan target resolves dependency_args against the root.
@@ -2476,7 +2482,7 @@ mod tests {
         let got = scan_package(base_dir, Path::new("foo/bar.nix")).unwrap();
         assert_eq!(
             got,
-            refset(&["catalogs.myorg.bar-own", "catalogs.myorg.top-src"]),
+            set(&["catalogs.myorg.bar-own", "catalogs.myorg.top-src"]),
         );
     }
 
@@ -2492,7 +2498,7 @@ mod tests {
         let got = scan_package(base_dir, Path::new("top.nix")).unwrap();
         assert_eq!(
             got,
-            refset(&["catalogs.myorg.widget-src", "catalogs.myorg.helper-lib-src"]),
+            set(&["catalogs.myorg.widget-src", "catalogs.myorg.helper-lib-src"]),
         );
     }
 
@@ -2544,7 +2550,7 @@ mod tests {
             include_str!("../../test_data/catalog_refs/with-namespace.nix"),
             &root_attributes(&["catalogs"]),
         );
-        assert!(!got.contains("catalogs.myorg"));
+        assert!(!got.contains(&CatalogRef::from("catalogs.myorg")));
     }
 
     #[test]
@@ -2553,7 +2559,10 @@ mod tests {
             "{ catalogs }: let org = catalogs.myorg; in with org; toolkit",
             &root_attributes(&["catalogs"]),
         );
-        assert!(got.contains("catalogs.myorg.*"), "got: {:?}", got);
+        assert!(
+            got.contains(&CatalogRef::from("catalogs.myorg.*")),
+            "got: {got:?}"
+        );
     }
 
     #[test]
@@ -2676,7 +2685,10 @@ mod tests {
             "{ catalogs, x }: let a = if x then a.sub else catalogs.b.pkg; in a",
             &root_attributes(&["catalogs"]),
         );
-        assert!(got.contains("catalogs.b.pkg"), "got: {got:?}");
+        assert!(
+            got.contains(&CatalogRef::from("catalogs.b.pkg")),
+            "got: {got:?}"
+        );
     }
 
     #[test]
