@@ -178,13 +178,29 @@ pub mod test_helpers {
     /// .
     /// AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
     pub const FAKE_EXPIRED_TOKEN_WITH_SUB: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3guZGV2L2hhbmRsZSI6InRlc3QiLCJleHAiOjE3MDQwNjM2MDAsInN1YiI6ImdpdGh1Ynw0MjQyNDIifQ.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+
+    /// A fake FloxHub token whose `sub` claim is present but empty
+    ///
+    /// {
+    ///  "typ": "JWT",
+    ///  "alg": "HS256"
+    /// }
+    /// .
+    /// {
+    ///   "https://flox.dev/handle": "test",
+    ///   "exp": 9999999999,                // 2286-11-20T17:46:39+00:00
+    ///   "sub": ""
+    /// }
+    /// .
+    /// AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+    pub const FAKE_TOKEN_WITH_EMPTY_SUB: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3guZGV2L2hhbmRsZSI6InRlc3QiLCJleHAiOjk5OTk5OTk5OTksInN1YiI6IiJ9.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 }
 
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;
 
-    use super::test_helpers::{FAKE_TOKEN, FAKE_TOKEN_WITH_SUB};
+    use super::test_helpers::{FAKE_TOKEN, FAKE_TOKEN_WITH_EMPTY_SUB, FAKE_TOKEN_WITH_SUB};
     use super::*;
 
     /// The accessor returns exactly the `sub` claim — never the handle,
@@ -196,6 +212,14 @@ mod tests {
         assert_eq!(sub, "github|424242");
         assert!(!sub.contains('@'), "must never be an email");
         assert_ne!(sub, token.handle(), "must never be the handle");
+    }
+
+    /// A present-but-empty `sub` normalizes to `None` — an empty
+    /// `auth_subject` must never reach the wire.
+    #[test]
+    fn sub_is_none_when_claim_empty() {
+        let token = FloxhubToken::from_str(FAKE_TOKEN_WITH_EMPTY_SUB).expect("token parses");
+        assert_eq!(token.sub(), None);
     }
 
     /// Tokens predating the `sub` claim still parse; the accessor just
