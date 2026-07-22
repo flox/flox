@@ -2752,6 +2752,111 @@ EOF
   assert_success
 }
 
+# The following tests exercise the [plugins] manifest section end to end
+# with a minimal plugin package built on the fly: a package whose profile.d
+# script reads its own [plugins.test-plugin] table via the flox_plugin_data
+# activation helper and exports it verbatim.
+
+# Build and install a minimal test-plugin package into the current project.
+setup_test_plugin() {
+  mkdir -p "$BATS_TEST_TMPDIR/test-plugin/etc/profile.d"
+  cat > "$BATS_TEST_TMPDIR/test-plugin/etc/profile.d/0900_test-plugin.sh" <<'EOF'
+# shellcheck shell=bash
+_test_plugin_data="$(flox_plugin_data test-plugin)"
+export TEST_PLUGIN_DATA="$_test_plugin_data"
+EOF
+  pkg_store_path="$(nix --extra-experimental-features nix-command \
+    store add --name test-plugin "$BATS_TEST_TMPDIR/test-plugin")"
+  run "$FLOX_BIN" install "$pkg_store_path"
+  assert_success
+}
+
+# bats test_tags=activate,activate:plugins
+@test "plugins: profile.d script reads its [plugins] data via flox_plugin_data" {
+  project_setup
+  setup_test_plugin
+
+  {
+    cat "$PROJECT_DIR/.flox/env/manifest.toml"
+    echo
+    echo '[plugins.test-plugin]'
+    echo 'MY_VALUE = "hello-plugins"'
+  } | "$FLOX_BIN" edit -f -
+
+  run "$FLOX_BIN" activate -c \
+    "bash -c 'echo TEST_PLUGIN_DATA is: \${TEST_PLUGIN_DATA:-unset}'"
+  assert_success
+  assert_output --partial 'TEST_PLUGIN_DATA is: {"MY_VALUE":"hello-plugins"}'
+}
+
+# bats test_tags=activate,activate:plugins
+@test "plugins: a failing plugin script blocks activation" {
+  project_setup
+  setup_test_plugin
+
+  # No [plugins.test-plugin] table in the manifest: flox_plugin_data errors,
+  # and the failure of the plugin's profile.d script fails the activation.
+  run "$FLOX_BIN" activate -c \
+    "bash -c 'echo TEST_PLUGIN_DATA is: \${TEST_PLUGIN_DATA:-unset}'"
+  assert_failure
+  assert_output --partial "no [plugins.test-plugin] data"
+}
+
+# bats test_tags=activate,activate:plugins
+@test "plugins: vars exported by plugin scripts are visible in hook.on-activate" {
+  project_setup
+  setup_test_plugin
+
+  # The init template already declares a [hook] table, so write a complete
+  # manifest rather than appending a duplicate one.
+  "$FLOX_BIN" edit -f - <<< "$(with_latest_schema "$(cat <<EOF
+[install]
+test-plugin.store-path = "$pkg_store_path"
+
+[plugins.test-plugin]
+MY_VALUE = "hello-plugins"
+
+[hook]
+on-activate = "echo hook sees: \$TEST_PLUGIN_DATA"
+EOF
+  )")"
+
+  run "$FLOX_BIN" activate -c "true"
+  assert_success
+  assert_output --partial 'hook sees: {"MY_VALUE":"hello-plugins"}'
+}
+
+# bats test_tags=activate,activate:plugins
+@test "plugins: flox_plugin_data works in build mode" {
+  project_setup
+  setup_test_plugin
+
+  # Install hello so the build derives its nixpkgs from the toplevel group
+  # instead of querying the catalog for base catalog information.
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
+    "$FLOX_BIN" edit -f - <<< "$(with_latest_schema "$(cat <<EOF
+[install]
+hello.pkg-path = "hello"
+test-plugin.store-path = "$pkg_store_path"
+
+[plugins.test-plugin]
+MY_VALUE = "hello-plugins"
+
+[build.echo-plugin-data]
+command = '''
+  mkdir -p \$out
+  echo "\$TEST_PLUGIN_DATA" > \$out/data
+'''
+EOF
+  )")"
+
+  run "$FLOX_BIN" build echo-plugin-data
+  assert_success
+  run cat "result-echo-plugin-data/data"
+  assert_success
+  assert_output '{"MY_VALUE":"hello-plugins"}'
+}
+
 @test "activate works with fish 3.2.2" {
   if [ "$NIX_SYSTEM" == aarch64-linux ]; then
     # running fish at all on aarch64-linux throws:
