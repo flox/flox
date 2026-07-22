@@ -336,6 +336,20 @@ pub struct EnvDetail {
     /// for remote and managed environments, and `Environment::name(...)`
     /// for path environments. Matches the value the legacy macros emit.
     env_ref_or_name: String,
+    /// The environment's stable id from its `env.json`, when it has one.
+    /// Absent for environments created before the id existed and for
+    /// remote environments, whose cached pointer is rewritten per
+    /// invocation.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    environment_id: Option<Uuid>,
+    /// Current generation the command started from. Absent for path
+    /// environments, which have no generations.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    generation_number: Option<u64>,
+    /// Number of packages locked for the invoking system (the `flox list`
+    /// count) when the command started. Absent when no lockfile exists.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    package_count: Option<u64>,
 }
 
 impl EnvDetail {
@@ -343,7 +357,25 @@ impl EnvDetail {
         Self {
             env_kind: env_kind.into(),
             env_ref_or_name: env_ref_or_name.into(),
+            environment_id: None,
+            generation_number: None,
+            package_count: None,
         }
+    }
+
+    pub fn with_environment_id(mut self, environment_id: Uuid) -> Self {
+        self.environment_id = Some(environment_id);
+        self
+    }
+
+    pub fn with_generation_number(mut self, generation_number: u64) -> Self {
+        self.generation_number = Some(generation_number);
+        self
+    }
+
+    pub fn with_package_count(mut self, package_count: u64) -> Self {
+        self.package_count = Some(package_count);
+        self
     }
 }
 
@@ -852,10 +884,7 @@ mod tests {
     }
 
     fn env_detail(kind: &str, ref_or_name: &str) -> EnvDetail {
-        EnvDetail {
-            env_kind: kind.to_string(),
-            env_ref_or_name: ref_or_name.to_string(),
-        }
+        EnvDetail::new(kind, ref_or_name)
     }
 
     fn activate_envelope_json(payload: serde_json::Value) -> serde_json::Value {
@@ -898,6 +927,90 @@ mod tests {
             "has_includes": true,
         }));
         assert_eq!(value, expected);
+    }
+
+    #[test]
+    fn cli_environment_activate_managed_identity_fields_envelope_golden() {
+        let environment_id = Uuid::from_u128(0x11111111_1111_1111_1111_111111111111);
+        let detail = env_detail("managed", "alice/myenv")
+            .with_environment_id(environment_id)
+            .with_generation_number(3)
+            .with_package_count(7);
+        let payload = CliEnvironmentActivatePayload::new(detail);
+        let value = serde_json::to_value(fixed_event(EventKind::CliEnvironmentActivate(payload)))
+            .expect("event serializes");
+        let expected = activate_envelope_json(json!({
+            "env_kind": "managed",
+            "env_ref_or_name": "alice/myenv",
+            "environment_id": "11111111-1111-1111-1111-111111111111",
+            "generation_number": 3,
+            "package_count": 7,
+        }));
+        assert_eq!(value, expected);
+    }
+
+    /// Path environments have no generations: `generation_number` stays
+    /// absent while the other identity fields ride.
+    #[test]
+    fn cli_environment_path_identity_fields_envelope_golden() {
+        let environment_id = Uuid::from_u128(0x11111111_1111_1111_1111_111111111111);
+        let detail = env_detail("path", "myenv")
+            .with_environment_id(environment_id)
+            .with_package_count(2);
+        let payload = CliEnvironmentPayload::new(detail);
+        let value = serde_json::to_value(fixed_event(EventKind::CliEnvironmentList(payload)))
+            .expect("event serializes");
+        let expected = json!({
+            "event_id": "00000000-0000-0000-0000-000000000000",
+            "event_timestamp": EPOCH_UNIX_MS,
+            "source": "cli",
+            "invocation_id": "00000000-0000-0000-0000-000000000000",
+            "device_id": "00000000-0000-0000-0000-000000000000",
+            "event_type": "cli.environment.list",
+            "payload": {
+                "env_kind": "path",
+                "env_ref_or_name": "myenv",
+                "environment_id": "11111111-1111-1111-1111-111111111111",
+                "package_count": 2,
+            },
+        });
+        assert_eq!(value, expected);
+    }
+
+    /// Remote environments carry no `environment_id` (their cached
+    /// pointer is rewritten per invocation) but do have generations and
+    /// a lockfile.
+    #[test]
+    fn cli_environment_remote_identity_fields_envelope_golden() {
+        let detail = env_detail("remote", "alice/myenv")
+            .with_generation_number(5)
+            .with_package_count(4);
+        let payload = CliEnvironmentActivatePayload::new(detail);
+        let value = serde_json::to_value(fixed_event(EventKind::CliEnvironmentActivate(payload)))
+            .expect("event serializes");
+        let expected = activate_envelope_json(json!({
+            "env_kind": "remote",
+            "env_ref_or_name": "alice/myenv",
+            "generation_number": 5,
+            "package_count": 4,
+        }));
+        assert_eq!(value, expected);
+    }
+
+    /// A buffered environment-event row recorded by a binary that predates
+    /// the identity fields must deserialize and re-serialize unchanged —
+    /// absent fields stay absent, nothing is fabricated.
+    #[test]
+    fn environment_row_without_identity_fields_round_trips() {
+        let old_row = env_envelope_json("cli.environment.delete");
+        let event: Event =
+            serde_json::from_value(old_row.clone()).expect("old-shape row deserializes");
+        let EventKind::CliEnvironmentDelete(ref payload) = event.kind else {
+            panic!("expected cli.environment.delete");
+        };
+        assert_eq!(payload, &CliEnvironmentPayload::new(managed_env_detail()));
+        let reserialized = serde_json::to_value(event).expect("event re-serializes");
+        assert_eq!(reserialized, old_row);
     }
 
     #[test]
@@ -1825,10 +1938,7 @@ mod pipeline_tests {
         let hub = EventsHub::new();
         hub.set_client(client_with_connection(&tempdir, connection));
 
-        let env_detail = EnvDetail {
-            env_kind: "path".to_string(),
-            env_ref_or_name: "myenv".to_string(),
-        };
+        let env_detail = EnvDetail::new("path", "myenv");
 
         hub.record_event(EventKind::CliEnvironmentEdit(
             CliEnvironmentEditPayload::new(env_detail.clone()),
