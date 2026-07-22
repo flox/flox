@@ -1446,7 +1446,7 @@ directly, because it runs in `main()` before the config system loads.
 `flox config --set features.beta true` therefore enables the
 `flox extension …` subcommands but **not** dispatch. Documented in the
 user guide; should be resolved before extensions leave beta. Tracked in
-flox/flox#4537.
+Linear CLI-158.
 
 Nested-bundle extensions (an executable shipped inside a subdirectory
 alongside support files) lose their siblings on install: `locate_executable`

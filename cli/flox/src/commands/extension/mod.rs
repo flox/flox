@@ -92,12 +92,13 @@ impl ExtensionCommands {
 /// `FLOX_FEATURES_BETA=true` for dispatch to work. This is documented in
 /// the user guide.
 pub fn try_dispatch_external() -> Option<ExitCode> {
-    // TODO(flox/flox#4537): dispatch runs before config loads, so it reads
+    // TODO(CLI-158): dispatch runs before config loads, so it reads
     // FLOX_FEATURES_BETA and reconstructs the extensions root from XDG
     // instead of the resolved `features.beta` / `flox.data_dir`. This
     // diverges from the `flox extension …` subcommands (config-enabled beta
     // and a config-set data_dir are not honored here). Fix deferred; load
     // the effective config lazily on this path. See the issue for repros.
+    // https://linear.app/floxdotdev/issue/CLI-158
     if !beta_enabled_from_env() {
         return None;
     }
