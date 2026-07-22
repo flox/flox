@@ -25,6 +25,7 @@ use crate::parsed::latest::{Install, ManifestLatest, MinimumCliVersion};
 // merge_build operates on the latest schema's Build (which carries
 // `sandbox-allow`), so composing environments preserves the field.
 use crate::parsed::v1_13_0::{Build, Profile, ProfileDeactivate, Services};
+use crate::parsed::v1_14_0::Plugins;
 
 /// Merges two manifests by applying `manifest2` on top of `manifest1` and
 /// overwriting any conflicts for keys within the top-level of each `ManifestV1`
@@ -290,6 +291,23 @@ impl ShallowMerger {
         Ok((Build(merged), warnings))
     }
 
+    /// Merges plugin data whole-table per plugin name: the higher priority
+    /// manifest's table for a given plugin wins outright rather than being
+    /// merged key-by-key, since plugin data is opaque to Flox and partial
+    /// merges could produce a table the plugin never intended.
+    #[instrument(skip_all)]
+    fn merge_plugins(
+        low_priority: &Plugins,
+        high_priority: &Plugins,
+    ) -> Result<(Plugins, Vec<Warning>), MergeError> {
+        let (merged, warnings) = map_union(
+            KeyPath::from_iter(["plugins"]),
+            low_priority.inner(),
+            high_priority.inner(),
+        );
+        Ok((Plugins(merged), warnings))
+    }
+
     #[instrument(skip_all)]
     fn merge_containerize(
         low_priority: Option<&Containerize>,
@@ -361,6 +379,10 @@ impl ManifestMergeTrait for ShallowMerger {
             high_priority.containerize.as_ref(),
         )?;
 
+        trace!(section = "plugins", "merging manifest section");
+        let (plugins, plugins_warnings) =
+            Self::merge_plugins(&low_priority.plugins, &high_priority.plugins)?;
+
         debug!("manifest pair merged successfully");
 
         let warnings = [
@@ -371,6 +393,7 @@ impl ManifestMergeTrait for ShallowMerger {
             services_warnings,
             build_warnings,
             containerize_warnings,
+            plugins_warnings,
         ]
         .into_iter()
         .flatten()
@@ -388,6 +411,7 @@ impl ManifestMergeTrait for ShallowMerger {
             build,
             containerize,
             include: Include::default(),
+            plugins,
         };
 
         Ok((merged_manifest, warnings))
@@ -396,6 +420,7 @@ impl ManifestMergeTrait for ShallowMerger {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
 
     use flox_test_utils::proptest::btree_maps_overlapping_keys;
     use pretty_assertions::assert_eq;
@@ -948,5 +973,63 @@ mod tests {
     #[test]
     fn merges_profile_sections_both_outer_none() {
         assert_eq!(ShallowMerger::merge_profile(None, None).unwrap(), None);
+    }
+
+    #[test]
+    fn merges_plugins_section_disjoint_names_union() {
+        let low_priority = Plugins(BTreeMap::from([(
+            "plugin-a".to_string(),
+            serde_json::json!({"TOKEN": "path/a"}),
+        )]));
+        let high_priority = Plugins(BTreeMap::from([(
+            "plugin-b".to_string(),
+            serde_json::json!({"TOKEN": "path/b"}),
+        )]));
+
+        let (merged, warnings) =
+            ShallowMerger::merge_plugins(&low_priority, &high_priority).unwrap();
+
+        assert_eq!(
+            merged.inner(),
+            &BTreeMap::from([
+                (
+                    "plugin-a".to_string(),
+                    serde_json::json!({"TOKEN": "path/a"})
+                ),
+                (
+                    "plugin-b".to_string(),
+                    serde_json::json!({"TOKEN": "path/b"})
+                ),
+            ])
+        );
+        assert!(warnings.is_empty());
+    }
+
+    #[test]
+    fn merges_plugins_section_overlapping_name_high_priority_wins_whole_table() {
+        let low_priority = Plugins(BTreeMap::from([(
+            "plugin-a".to_string(),
+            serde_json::json!({"TOKEN": "low/path", "OTHER": "low/other"}),
+        )]));
+        let high_priority = Plugins(BTreeMap::from([(
+            "plugin-a".to_string(),
+            serde_json::json!({"TOKEN": "high/path"}),
+        )]));
+
+        let (merged, warnings) =
+            ShallowMerger::merge_plugins(&low_priority, &high_priority).unwrap();
+
+        // The whole low-priority table for "plugin-a" is replaced, not
+        // merged key-by-key: "OTHER" does not survive.
+        assert_eq!(
+            merged.inner(),
+            &BTreeMap::from([(
+                "plugin-a".to_string(),
+                serde_json::json!({"TOKEN": "high/path"}),
+            )])
+        );
+        assert_eq!(warnings, vec![Warning::Overriding(KeyPath::from_iter([
+            "plugins", "plugin-a"
+        ]))]);
     }
 }
