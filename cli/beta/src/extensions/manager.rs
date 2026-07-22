@@ -1125,6 +1125,26 @@ pub async fn upgrade_dry_run(
                 repo: state.repo.clone(),
             });
         }
+        // Verify the new release actually has a host-matching asset, so the
+        // dry-run doesn't report "would upgrade" for a release the real
+        // upgrade would abort on with NoMatchingAsset.
+        let assets = source
+            .list_release_assets(&state.owner, &state.repo, &new_tag)
+            .await
+            .map_err(|err| UpgradeError::Install(Box::new(InstallError::GitHub(err))))?;
+        let manifest = source
+            .fetch_author_manifest(&state.owner, &state.repo, &new_tag)
+            .await
+            .map_err(|err| UpgradeError::Install(Box::new(InstallError::GitHub(err))))?;
+        if let Err(e) = super::github::resolve_asset(&assets, manifest.as_ref(), name) {
+            return Err(UpgradeError::Install(Box::new(
+                InstallError::NoMatchingAsset {
+                    owner: state.owner.clone(),
+                    repo: state.repo.clone(),
+                    platform: e.platform,
+                },
+            )));
+        }
         let from = if !state.tag.is_empty() {
             state.tag.clone()
         } else {

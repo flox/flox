@@ -119,6 +119,18 @@ pub fn try_dispatch_external() -> Option<ExitCode> {
     let name = name?;
     let name_str = name.to_str()?;
 
+    // Never let the external fallback shadow a built-in command. If the
+    // first token names a reserved (built-in) command, the parse failure
+    // was a bad invocation of that command — e.g. `flox init --badflag` —
+    // not an extension. Fall through to the parser's error instead of
+    // exec'ing a `flox-init` that happens to be on $PATH.
+    if beta::extensions::RESERVED_COMMAND_NAMES
+        .iter()
+        .any(|r| r.eq_ignore_ascii_case(name_str))
+    {
+        return None;
+    }
+
     let extensions_root = extensions_root();
     let path_env = std::env::var_os("PATH");
     let path = match dispatch::find(name_str, &extensions_root, path_env.as_deref()) {

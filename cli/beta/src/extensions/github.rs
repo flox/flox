@@ -98,6 +98,8 @@ pub enum GitHubError {
     Http(#[from] reqwest::Error),
     #[error("github resource not found: {0}")]
     NotFound(String),
+    #[error("invalid git ref '{0}': contains characters not allowed in a ref")]
+    InvalidRef(String),
     #[error("malformed github response from {url}: {detail}")]
     Malformed { url: String, detail: String },
     #[error("failed to write asset to {path}: {source}")]
@@ -232,6 +234,20 @@ impl GitHubSource {
         self
     }
 
+    /// A GET builder for a GitHub **API** URL, carrying
+    /// `Authorization: Bearer <token>` when one is configured. This lifts
+    /// the anonymous rate limit and allows private repos.
+    ///
+    /// It is deliberately NOT used for asset downloads: the token must not
+    /// ride a redirect to an off-`api.github.com` CDN host.
+    fn api_get(&self, url: &str) -> reqwest::RequestBuilder {
+        let req = self.client.get(url);
+        match self.auth_token.as_deref() {
+            Some(token) => req.bearer_auth(token),
+            None => req,
+        }
+    }
+
     /// Clone `https://github.com/<owner>/<repo>.git` into `dest` at
     /// `branch_or_ref` (single-branch, no tags). The clone URL ignores
     /// `base_url` because that override only applies to the API; for
@@ -284,7 +300,7 @@ impl GitHubSource {
         repo: &str,
     ) -> Result<ResolvedRef, GitHubError> {
         let url = format!("{}/repos/{owner}/{repo}/releases/latest", self.base_url);
-        let resp = self.client.get(&url).send().await?;
+        let resp = self.api_get(&url).send().await?;
         let status = resp.status();
         if status.is_success() {
             let body: ReleaseBody = resp.json().await.map_err(|e| GitHubError::Malformed {
@@ -306,7 +322,7 @@ impl GitHubSource {
 
         // Fallback: default branch HEAD.
         let repo_url = format!("{}/repos/{owner}/{repo}", self.base_url);
-        let resp = self.client.get(&repo_url).send().await?;
+        let resp = self.api_get(&repo_url).send().await?;
         let status = resp.status();
         if !status.is_success() {
             if status.as_u16() == 404 {
@@ -338,9 +354,16 @@ impl GitHubSource {
         if pin.is_empty() {
             return Err(GitHubError::NotFound(pin.to_string()));
         }
+        // The pin is interpolated into API URL paths/queries; reject any ref
+        // with characters that could alter the URL structure (spaces, `#`,
+        // `?`, `&`, `%`, control chars) rather than encode them. Real tags,
+        // branches, and SHAs only use `[A-Za-z0-9._/-]`.
+        if !is_url_safe_ref(pin) {
+            return Err(GitHubError::InvalidRef(pin.to_string()));
+        }
         if looks_like_tag(pin) {
             let url = format!("{}/repos/{owner}/{repo}/releases/tags/{pin}", self.base_url);
-            let resp = self.client.get(&url).send().await?;
+            let resp = self.api_get(&url).send().await?;
             let status = resp.status();
             if status.as_u16() == 404 {
                 return Err(GitHubError::NotFound(format!(
@@ -392,7 +415,7 @@ impl GitHubSource {
     /// `GET /repos/:owner/:repo` and extract `default_branch`.
     async fn fetch_default_branch(&self, owner: &str, repo: &str) -> Result<String, GitHubError> {
         let url = format!("{}/repos/{owner}/{repo}", self.base_url);
-        let resp = self.client.get(&url).send().await?;
+        let resp = self.api_get(&url).send().await?;
         let status = resp.status();
         if status.as_u16() == 404 {
             return Err(GitHubError::NotFound(format!("{owner}/{repo}")));
@@ -417,7 +440,7 @@ impl GitHubSource {
         tag: &str,
     ) -> Result<Vec<ReleaseAsset>, GitHubError> {
         let url = format!("{}/repos/{owner}/{repo}/releases/tags/{tag}", self.base_url);
-        let resp = self.client.get(&url).send().await?;
+        let resp = self.api_get(&url).send().await?;
         let status = resp.status();
         if status.as_u16() == 404 {
             return Err(GitHubError::NotFound(format!(
@@ -575,7 +598,7 @@ impl GitHubSource {
         r#ref: &str,
     ) -> Result<String, GitHubError> {
         let url = format!("{}/repos/{owner}/{repo}/commits/{}", self.base_url, r#ref);
-        let resp = self.client.get(&url).send().await?;
+        let resp = self.api_get(&url).send().await?;
         let status = resp.status();
         if status.as_u16() == 404 {
             return Err(GitHubError::NotFound(format!(
@@ -615,8 +638,7 @@ impl GitHubSource {
             self.base_url, r#ref
         );
         let resp = self
-            .client
-            .get(&url)
+            .api_get(&url)
             .header("Accept", "application/vnd.github.raw")
             .send()
             .await?;
@@ -914,6 +936,16 @@ fn looks_like_tag(s: &str) -> bool {
         return chars.next().is_some_and(|c| c.is_ascii_digit());
     }
     first.is_ascii_digit() && s.contains('.')
+}
+
+/// True if `r` contains only characters safe to interpolate into a URL
+/// path or query without encoding: `[A-Za-z0-9._/-]`. Real tags, branches,
+/// and SHAs stay within this set; anything else (spaces, `#`, `?`, `&`,
+/// `%`, control characters) is rejected rather than encoded.
+fn is_url_safe_ref(r: &str) -> bool {
+    !r.is_empty()
+        && r.chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '/' | '-'))
 }
 
 #[cfg(test)]
@@ -1345,6 +1377,56 @@ mod tests {
         assert!(is_sidecar_asset("X.ASC"));
         assert!(!is_sidecar_asset("flox-hi-linux-x86_64.tar.gz"));
         assert!(!is_sidecar_asset("flox-hi-linux-x86_64"));
+    }
+
+    #[test]
+    fn is_url_safe_ref_classifications() {
+        for ok in ["v1.2.3", "main", "feature/x", "abc1234", "v2-rc.1", "1.0.0"] {
+            assert!(is_url_safe_ref(ok), "expected safe: {ok:?}");
+        }
+        for bad in ["", "v1#rc1", "a?b", "a&b", "a b", "a%20b", "a\tb", "a\nb"] {
+            assert!(!is_url_safe_ref(bad), "expected unsafe: {bad:?}");
+        }
+    }
+
+    #[tokio::test]
+    async fn resolve_pin_rejects_url_unsafe_ref() {
+        // No server needed: the ref is rejected before any HTTP call.
+        let source = GitHubSource::new(reqwest::Client::new(), "http://127.0.0.1:1/".to_string());
+        let err = source
+            .resolve_pin("owner", "flox-hi", "v1#rc1")
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(err, GitHubError::InvalidRef(_)),
+            "expected InvalidRef, got {err:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn resolve_latest_sends_authorization_header_when_token_set() {
+        // Proves the token is attached to non-search API calls, not just
+        // search. Both requests (releases/latest and commits/<tag>) must
+        // carry the header, so the mocks require it.
+        let server = MockServer::start_async().await;
+        let _release = server.mock(|when, then| {
+            when.method(GET)
+                .path("/repos/o/r/releases/latest")
+                .header("authorization", "Bearer tok-123");
+            then.status(200)
+                .json_body(json!({ "tag_name": "v1.0.0", "target_commitish": "main" }));
+        });
+        let _commit = server.mock(|when, then| {
+            when.method(GET)
+                .path("/repos/o/r/commits/v1.0.0")
+                .header("authorization", "Bearer tok-123");
+            then.status(200).json_body(json!({
+                "sha": "abc1234567890abcdef1234567890abcdef123456"
+            }));
+        });
+        let source = fixture_source(&server).with_auth_token(Some("tok-123".to_string()));
+        let resolved = source.resolve_latest("o", "r").await.unwrap();
+        assert_eq!(resolved.tag.as_deref(), Some("v1.0.0"));
     }
 
     #[test]
