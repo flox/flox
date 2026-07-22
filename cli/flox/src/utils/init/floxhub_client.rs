@@ -11,6 +11,8 @@ use uuid::Uuid;
 /// - Reads the catalog URL from config (defaults to the production catalog URL)
 /// - Configures mock replay mode if `_FLOX_USE_CATALOG_MOCK` is set
 /// - Includes device UUID and invocation-source headers when available
+/// - Pins `resolve()` requests to a stability channel if
+///   `_FLOX_RESOLVE_STABILITY` is set (test/regen-only, not user-facing)
 ///
 /// `base_url` is the API base the generated client joins request paths onto
 /// (e.g. `<base>/api/v1/catalog/...`); pass [`flox_core::floxhub::Floxhub::api_url_str`]
@@ -41,6 +43,7 @@ pub fn init_floxhub_client(
         mock_mode,
         auth_context,
         user_agent: Some(format!("flox-cli/{}", &*FLOX_VERSION)),
+        stability: FloxhubClientConfig::stability_from_env(),
     };
 
     debug!("using catalog client with url: {}", client_config.base_url);

@@ -158,6 +158,37 @@ gen-unit-data-no-publish force="":
 
     set -euo pipefail
 
+    # `_FLOX_RESOLVE_STABILITY` / `FloxhubClientConfig::stability` (this PR)
+    # is mechanism only — NOT pinned yet, deliberately no export here. There
+    # are two committed cassette stores (`test_data/unit_test_generated/`,
+    # replayed by `auto_recording_client_inner`; and
+    # `test_data/generated/resolve/`, replayed by `catalog_replay_client`),
+    # and neither was recorded with a stability key. httpmock's playback
+    # matcher matches on the recorded `when` body, so setting this var
+    # anywhere it reaches a record or replay path before both stores are
+    # regenerated together would strand cassette matches in one direction
+    # or the other.
+    #
+    # The first LTS pin lands as a single atomic future change, gated on
+    # HUB-119 (flox/floxhub#1908) reaching production:
+    #   1. Set _FLOX_RESOLVE_STABILITY=lts here, in
+    #      test_data/config.toml [vars], and in the test-running/replay
+    #      contexts (unit-tests, ut, impure-tests).
+    #   2. Flip `catalog_replay_client` (cli/flox-rust-sdk/src/providers/
+    #      catalog.rs) from hardcoded `stability: None` to
+    #      `FloxhubClientConfig::stability_from_env()`.
+    #      `auto_recording_client_inner` already reads the env var and
+    #      needs no change.
+    #   3. Force-regenerate the mk_data store first (`just md -f`), then
+    #      unit_test_generated (`just gen-unit-data-no-publish force=true`).
+    #      Order matters: gen-unit-data-no-publish's test suite replays the
+    #      mk_data store via `catalog_replay_client`, which after step 2
+    #      sends `lts` — those replays fail unless the mk_data store is
+    #      already regenerated with a matching stability key. `just md`
+    #      (no `-f`) skips any cassette whose output file already exists,
+    #      so it would leave the store unpinned; `-f` is required.
+    #   4. Verify both replay suites are green.
+
     if [ "{{ force }}" = "true" ]; then
         export _FLOX_UNIT_TEST_RECORD="force"
 

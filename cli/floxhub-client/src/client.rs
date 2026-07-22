@@ -292,7 +292,17 @@ impl CatalogClientTrait for FloxhubClient {
             items: package_groups
                 .into_iter()
                 .map(TryInto::try_into)
-                .collect::<Result<Vec<_>, _>>()?,
+                .collect::<Result<Vec<api_types::PackageGroup>, _>>()?
+                .into_iter()
+                .map(|mut group| {
+                    // Fall back to the client's stability pin when a group
+                    // doesn't carry its own value. A per-group value (once
+                    // plumbed in) always wins over the config default.
+                    // Test/regen-only — see `FloxhubClientConfig::stability`.
+                    group.stability = group.stability.or_else(|| self.config.stability.clone());
+                    group
+                })
+                .collect(),
         };
 
         let response = self
@@ -852,6 +862,7 @@ pub mod test_helpers {
             mock_mode: Default::default(),
             auth_context: AuthContext::from_mode(&Default::default(), None),
             user_agent: None,
+            stability: None,
         }
     }
 
@@ -925,6 +936,77 @@ pub mod tests {
                 panic!();
             },
         };
+        mock.assert();
+    }
+
+    /// `resolve()` applies `FloxhubClientConfig::stability` to every
+    /// outgoing group, regardless of what (if anything) `TryFrom` set.
+    #[tokio::test]
+    async fn resolve_applies_config_stability_to_each_group() {
+        let server = MockServer::start_async().await;
+        let mock = server.mock(|when, then| {
+            when.method("POST")
+                .path("/api/v1/catalog/resolve")
+                .json_body(json!({
+                    "items": [{
+                        "descriptors": [],
+                        "name": "group-one",
+                        "stability": "lts",
+                    }, {
+                        "descriptors": [],
+                        "name": "group-two",
+                        "stability": "lts",
+                    }]
+                }));
+            then.status(200).json_body(json!({"items": []}));
+        });
+
+        let config = FloxhubClientConfig {
+            stability: Some("lts".to_string()),
+            ..client_config(&server.base_url())
+        };
+        let client = FloxhubClient::new(config).unwrap();
+        client
+            .resolve(vec![
+                PackageGroup {
+                    name: "group-one".to_string(),
+                    descriptors: vec![],
+                },
+                PackageGroup {
+                    name: "group-two".to_string(),
+                    descriptors: vec![],
+                },
+            ])
+            .await
+            .unwrap();
+        mock.assert();
+    }
+
+    /// When `FloxhubClientConfig::stability` is `None`, the outgoing group
+    /// carries no `stability` key at all (not a `null`).
+    #[tokio::test]
+    async fn resolve_omits_stability_when_config_unset() {
+        let server = MockServer::start_async().await;
+        let mock = server.mock(|when, then| {
+            when.method("POST")
+                .path("/api/v1/catalog/resolve")
+                .json_body(json!({
+                    "items": [{
+                        "descriptors": [],
+                        "name": "group",
+                    }]
+                }));
+            then.status(200).json_body(json!({"items": []}));
+        });
+
+        let client = FloxhubClient::new(client_config(server.base_url().as_str())).unwrap();
+        client
+            .resolve(vec![PackageGroup {
+                name: "group".to_string(),
+                descriptors: vec![],
+            }])
+            .await
+            .unwrap();
         mock.assert();
     }
 

@@ -585,6 +585,14 @@ pub mod test_helpers {
             mock_mode: FloxhubMockMode::Replay(path.as_ref().to_path_buf()),
             auth_context: AuthContext::from_mode(&AuthnMode::Auth0, None),
             user_agent: None,
+            // Replays the mk_data-generated cassette store
+            // (test_data/generated/resolve/*.yaml), recorded without a
+            // stability key. Stays hardcoded `None` until that store's
+            // first LTS force-regen; flip to
+            // `FloxhubClientConfig::stability_from_env()` in that same
+            // change (see the Justfile `gen-unit-data-no-publish` comment
+            // for the full atomic flip checklist).
+            stability: None,
         };
         FloxhubClient::new(catalog_config).expect("failed to create catalog client")
     }
@@ -676,6 +684,12 @@ pub mod test_helpers {
             mock_mode: mock_mode.clone(),
             auth_context: AuthContext::from_mode(&AuthnMode::Auth0, auth.token().cloned()),
             user_agent: None,
+            // Read at each client construction, symmetric with
+            // `init_floxhub_client`. A single call builds only the record or
+            // the replay client (the mode comes from `_FLOX_UNIT_TEST_RECORD`);
+            // since nothing mutates `_FLOX_RESOLVE_STABILITY` mid-process, the
+            // record and replay runs read the same value.
+            stability: FloxhubClientConfig::stability_from_env(),
         };
         let mut client =
             FloxhubClient::new(catalog_config).expect("failed to create catalog client");
