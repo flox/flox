@@ -196,6 +196,35 @@ mod tests {
         }
     }
 
+    /// Ties the SDK's detection-token vocabulary to the payload's typed
+    /// bools across the crate boundary: `flox-events` matches the
+    /// `"ci"` / `"containerd"` tokens by literal and does not depend on
+    /// `flox-rust-sdk`, so this is the only place a respelling on
+    /// either side can fail a test.
+    #[test]
+    #[serial(v2_events_wrapper_env)]
+    fn detection_tokens_drive_typed_payload_bools() {
+        temp_env::with_vars(
+            [("CI", Some("true")), ("FLOX_CONTAINERD", Some("1"))],
+            || {
+                let template = SharedMetadataTemplate {
+                    flox_version: "0.0.0-test".to_string(),
+                    os_family: None,
+                    os_family_release: None,
+                    os: None,
+                    os_version: None,
+                    empty_flags: vec![],
+                    invocation_sources:
+                        flox_rust_sdk::utils::invocation_sources::detect_invocation_sources(),
+                };
+                let payload = serde_json::to_value(template.into_payload("envs".to_string()))
+                    .expect("payload serializes");
+                assert_eq!(payload.get("in_ci"), Some(&serde_json::json!(true)));
+                assert_eq!(payload.get("containerd"), Some(&serde_json::json!(true)));
+            },
+        );
+    }
+
     #[test]
     #[serial(v2_events_wrapper_env)]
     fn resolve_invocation_id_returns_parent_id_when_env_set() {

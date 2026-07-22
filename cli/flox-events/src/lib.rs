@@ -197,6 +197,13 @@ pub struct CommandPayload {
     os_family: Option<String>,
     /// OS family release version.
     os_family_release: Option<String>,
+    /// Kernel version string from `sys_info::os_release()`; `None` when
+    /// `sys_info` failed. Deliberately the same value as
+    /// `os_family_release` at the producer — consumers derive two
+    /// distinct legacy fields from this one field and treat the
+    /// OS-family release as a separate concept.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    kernel_version: Option<String>,
     /// Linux distribution id (e.g. `ubuntu`); `None` outside Linux.
     os: Option<String>,
     /// Linux distribution version (e.g. `22.04`); `None` outside Linux.
@@ -207,6 +214,34 @@ pub struct CommandPayload {
     /// Tokens describing how this CLI invocation was launched (shell, prompt,
     /// service runner, etc.). Mirrors the legacy `INVOCATION_SOURCES`.
     invocation_sources: Vec<String>,
+    /// Whether `invocation_sources` carries the `"ci"` token or a
+    /// hierarchical sub-token of it (e.g. `"ci.github-actions"`).
+    /// Derived in [`SharedMetadataTemplate::into_payload`], so `Some`
+    /// on every emitted row; `None` only when reading back rows
+    /// buffered by binaries that predate the field, and omitted on
+    /// re-serialization so unknown stays unknown.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    in_ci: Option<bool>,
+    /// Whether `invocation_sources` carries the `"containerd"` token
+    /// (the `FLOX_CONTAINERD` marker exported by flox-built container
+    /// images — not generic container detection) or a sub-token of
+    /// it. Same `None` semantics as `in_ci`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    containerd: Option<bool>,
+}
+
+/// `true` when `sources` carries `root` itself or a hierarchical
+/// sub-token of it (`"ci.github-actions"` counts for `"ci"`;
+/// `"citrus"` does not). ASCII-case-insensitive, because explicit
+/// `FLOX_INVOCATION_SOURCE` tokens arrive verbatim.
+fn has_source_token(sources: &[String], root: &str) -> bool {
+    sources.iter().any(|source| {
+        let Some(prefix) = source.get(..root.len()) else {
+            return false;
+        };
+        prefix.eq_ignore_ascii_case(root)
+            && (source.len() == root.len() || source.as_bytes()[root.len()] == b'.')
+    })
 }
 
 /// Static slice of [`CommandPayload`] that is constant for the duration of
@@ -230,15 +265,22 @@ pub struct SharedMetadataTemplate {
 impl SharedMetadataTemplate {
     /// Merge the stored static fields with the supplied subcommand to produce
     /// a complete [`CommandPayload`] ready for serialization.
+    ///
+    /// `kernel_version` and the `in_ci` / `containerd` bools are derived
+    /// here from the template's own fields, so they cannot disagree with
+    /// the values they mirror.
     pub fn into_payload(&self, subcommand: String) -> CommandPayload {
         CommandPayload {
             subcommand,
             flox_version: self.flox_version.clone(),
             os_family: self.os_family.clone(),
             os_family_release: self.os_family_release.clone(),
+            kernel_version: self.os_family_release.clone(),
             os: self.os.clone(),
             os_version: self.os_version.clone(),
             empty_flags: self.empty_flags.clone(),
+            in_ci: Some(has_source_token(&self.invocation_sources, "ci")),
+            containerd: Some(has_source_token(&self.invocation_sources, "containerd")),
             invocation_sources: self.invocation_sources.clone(),
         }
     }
@@ -375,6 +417,11 @@ pub struct CliEnvironmentActivatePayload {
     has_includes: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     lockfile_version: Option<String>,
+    /// The locked manifest's declared schema version (`"1"`, `"1.10.0"`,
+    /// …) — distinct from `lockfile_version`, the lockfile's own schema
+    /// version. Absent on emits that precede the manifest load.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    manifest_version: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     shell: Option<String>,
 }
@@ -389,6 +436,7 @@ impl CliEnvironmentActivatePayload {
             mode: None,
             has_includes: None,
             lockfile_version: None,
+            manifest_version: None,
             shell: None,
         }
     }
@@ -410,6 +458,11 @@ impl CliEnvironmentActivatePayload {
 
     pub fn with_lockfile_version(mut self, value: impl Into<String>) -> Self {
         self.lockfile_version = Some(value.into());
+        self
+    }
+
+    pub fn with_manifest_version(mut self, value: impl Into<String>) -> Self {
+        self.manifest_version = Some(value.into());
         self
     }
 
@@ -477,6 +530,11 @@ pub struct CliEnvironmentEditPayload {
     /// env-detail emit; `Some(bool)` on the result-known emit.
     #[serde(skip_serializing_if = "Option::is_none")]
     edited_includes: Option<bool>,
+    /// The edited manifest's declared schema version (`"1"`, `"1.10.0"`,
+    /// …), from the post-edit lockfile. `None` on the eager emit — the
+    /// manifest has not been loaded yet at that site.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    manifest_version: Option<String>,
 }
 
 impl CliEnvironmentEditPayload {
@@ -484,11 +542,17 @@ impl CliEnvironmentEditPayload {
         Self {
             env_detail,
             edited_includes: None,
+            manifest_version: None,
         }
     }
 
     pub fn with_edited_includes(mut self, value: bool) -> Self {
         self.edited_includes = Some(value);
+        self
+    }
+
+    pub fn with_manifest_version(mut self, value: impl Into<String>) -> Self {
+        self.manifest_version = Some(value.into());
         self
     }
 }
@@ -507,6 +571,11 @@ pub struct CliEnvironmentPublishPayload {
     /// published package; `None` on the eager env-detail emit.
     #[serde(skip_serializing_if = "Option::is_none")]
     has_manifest_build: Option<bool>,
+    /// The published manifest's declared schema version (`"1"`,
+    /// `"1.10.0"`, …), from the locked environment. `None` on the eager
+    /// env-detail emit.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    manifest_version: Option<String>,
 }
 
 impl CliEnvironmentPublishPayload {
@@ -515,6 +584,7 @@ impl CliEnvironmentPublishPayload {
             env_detail,
             has_expression_build: None,
             has_manifest_build: None,
+            manifest_version: None,
         }
     }
 
@@ -525,6 +595,11 @@ impl CliEnvironmentPublishPayload {
     ) -> Self {
         self.has_expression_build = Some(has_expression_build);
         self.has_manifest_build = Some(has_manifest_build);
+        self
+    }
+
+    pub fn with_manifest_version(mut self, value: impl Into<String>) -> Self {
+        self.manifest_version = Some(value.into());
         self
     }
 }
@@ -620,10 +695,13 @@ mod tests {
             flox_version: "0.0.0-test".to_string(),
             os_family: Some("Linux".to_string()),
             os_family_release: Some("6.10.0".to_string()),
+            kernel_version: Some("6.10.0".to_string()),
             os: Some("ubuntu".to_string()),
             os_version: Some("24.04".to_string()),
             empty_flags: vec![],
             invocation_sources: vec!["shell".to_string()],
+            in_ci: Some(false),
+            containerd: Some(false),
         }
     }
 
@@ -633,10 +711,25 @@ mod tests {
             "flox_version": "0.0.0-test",
             "os_family": "Linux",
             "os_family_release": "6.10.0",
+            "kernel_version": "6.10.0",
             "os": "ubuntu",
             "os_version": "24.04",
             "empty_flags": [],
             "invocation_sources": ["shell"],
+            "in_ci": false,
+            "containerd": false,
+        })
+    }
+
+    fn command_run_envelope_json(payload: serde_json::Value) -> serde_json::Value {
+        json!({
+            "event_id": "00000000-0000-0000-0000-000000000000",
+            "event_timestamp": EPOCH_UNIX_MS,
+            "source": "cli",
+            "invocation_id": "00000000-0000-0000-0000-000000000000",
+            "device_id": "00000000-0000-0000-0000-000000000000",
+            "event_type": "cli.command_run",
+            "payload": payload,
         })
     }
 
@@ -646,15 +739,7 @@ mod tests {
             CliCommandRunPayload::new(command_payload("install")),
         )))
         .expect("event serializes");
-        let expected = json!({
-            "event_id": "00000000-0000-0000-0000-000000000000",
-            "event_timestamp": EPOCH_UNIX_MS,
-            "source": "cli",
-            "invocation_id": "00000000-0000-0000-0000-000000000000",
-            "device_id": "00000000-0000-0000-0000-000000000000",
-            "event_type": "cli.command_run",
-            "payload": expected_payload_json("install"),
-        });
+        let expected = command_run_envelope_json(expected_payload_json("install"));
         assert_eq!(value, expected);
     }
 
@@ -789,7 +874,16 @@ mod tests {
 
     #[test]
     fn shared_metadata_template_merges_subcommand_into_payload() {
-        let template = SharedMetadataTemplate {
+        let template = shared_metadata_for_payload_tests();
+        let payload = template.into_payload("activate".to_string());
+        assert_eq!(payload, command_payload("activate"));
+    }
+
+    /// Template fixture matching [`command_payload`]'s derived fields:
+    /// `kernel_version` mirrors `os_family_release`, and `["shell"]`
+    /// carries neither detection token.
+    fn shared_metadata_for_payload_tests() -> SharedMetadataTemplate {
+        SharedMetadataTemplate {
             flox_version: "0.0.0-test".to_string(),
             os_family: Some("Linux".to_string()),
             os_family_release: Some("6.10.0".to_string()),
@@ -797,9 +891,119 @@ mod tests {
             os_version: Some("24.04".to_string()),
             empty_flags: vec![],
             invocation_sources: vec!["shell".to_string()],
+        }
+    }
+
+    /// True-case sibling of the `false`/`false` shape in
+    /// [`command_run_serializes_to_v2_envelope`].
+    #[test]
+    fn command_run_typed_detection_bools_envelope_golden() {
+        let mut payload = command_payload("install");
+        payload.in_ci = Some(true);
+        payload.containerd = Some(true);
+        payload.invocation_sources = vec!["ci".to_string(), "containerd".to_string()];
+        let value = serde_json::to_value(fixed_event(EventKind::CliCommandRun(
+            CliCommandRunPayload::new(payload),
+        )))
+        .expect("event serializes");
+        let mut expected_payload = expected_payload_json("install");
+        let obj = expected_payload.as_object_mut().expect("payload object");
+        obj.insert("in_ci".to_string(), json!(true));
+        obj.insert("containerd".to_string(), json!(true));
+        obj.insert(
+            "invocation_sources".to_string(),
+            json!(["ci", "containerd"]),
+        );
+        let expected = command_run_envelope_json(expected_payload);
+        assert_eq!(value, expected);
+    }
+
+    /// A `cli.command_run` row buffered by a binary that predates the
+    /// parity fields must still deserialize (the buffer file outlives
+    /// binary upgrades, and one unreadable row poisons the whole
+    /// read-back) — and must re-serialize with the unknown fields
+    /// still absent, not fabricated.
+    #[test]
+    fn command_run_row_without_parity_fields_round_trips() {
+        let old_row = json!({
+            "event_id": "00000000-0000-0000-0000-000000000000",
+            "event_timestamp": EPOCH_UNIX_MS,
+            "source": "cli",
+            "invocation_id": "00000000-0000-0000-0000-000000000000",
+            "device_id": "00000000-0000-0000-0000-000000000000",
+            "event_type": "cli.command_run",
+            "payload": {
+                "subcommand": "install",
+                "flox_version": "0.0.0-test",
+                "os_family": "Linux",
+                "os_family_release": "6.10.0",
+                "os": "ubuntu",
+                "os_version": "24.04",
+                "empty_flags": [],
+                "invocation_sources": ["shell"],
+            },
+        });
+        let event: Event =
+            serde_json::from_value(old_row.clone()).expect("old-shape row deserializes");
+        let EventKind::CliCommandRun(ref payload) = event.kind else {
+            panic!("expected cli.command_run");
         };
-        let payload = template.into_payload("activate".to_string());
-        assert_eq!(payload, command_payload("activate"));
+        let mut expected = command_payload("install");
+        expected.kernel_version = None;
+        expected.in_ci = None;
+        expected.containerd = None;
+        assert_eq!(payload, &CliCommandRunPayload::new(expected));
+        // Round trip: the flush path re-serializes buffered rows, and a
+        // value the old binary never recorded must stay absent.
+        let reserialized = serde_json::to_value(event).expect("event re-serializes");
+        assert_eq!(reserialized, old_row);
+    }
+
+    /// The typed bools are derived from the token list when the payload
+    /// is built, counting hierarchical sub-tokens — an explicit
+    /// `"ci.github-actions"` override sets `in_ci` even when the bare
+    /// `"ci"` token is absent, while a lookalike token does not.
+    #[test]
+    fn into_payload_counts_hierarchical_source_tokens() {
+        let mut template = shared_metadata_for_payload_tests();
+        template.invocation_sources = vec!["ci.github-actions".to_string()];
+        let mut expected = command_payload("activate");
+        expected.invocation_sources = vec!["ci.github-actions".to_string()];
+        expected.in_ci = Some(true);
+        assert_eq!(template.into_payload("activate".to_string()), expected);
+
+        template.invocation_sources = vec!["citrus".to_string()];
+        let mut expected = command_payload("activate");
+        expected.invocation_sources = vec!["citrus".to_string()];
+        expected.in_ci = Some(false);
+        assert_eq!(template.into_payload("activate".to_string()), expected);
+
+        // Explicit overrides arrive verbatim; matching is
+        // case-insensitive.
+        template.invocation_sources = vec!["CI.jenkins".to_string()];
+        let mut expected = command_payload("activate");
+        expected.invocation_sources = vec!["CI.jenkins".to_string()];
+        expected.in_ci = Some(true);
+        assert_eq!(template.into_payload("activate".to_string()), expected);
+    }
+
+    /// `kernel_version` is omitted from the wire (not serialized as
+    /// `null`) when `sys_info` failed at the producer.
+    #[test]
+    fn command_run_omits_kernel_version_when_unavailable() {
+        let mut payload = command_payload("install");
+        payload.kernel_version = None;
+        let value = serde_json::to_value(fixed_event(EventKind::CliCommandRun(
+            CliCommandRunPayload::new(payload),
+        )))
+        .expect("event serializes");
+        let mut expected_payload = expected_payload_json("install");
+        expected_payload
+            .as_object_mut()
+            .expect("payload object")
+            .remove("kernel_version");
+        let expected = command_run_envelope_json(expected_payload);
+        assert_eq!(value, expected);
     }
 
     fn env_detail(kind: &str, ref_or_name: &str) -> EnvDetail {
@@ -853,6 +1057,27 @@ mod tests {
 
     #[test]
     fn cli_environment_activate_path_envelope_golden() {
+        let payload = CliEnvironmentActivatePayload::new(env_detail("path", "myenv"))
+            .with_lockfile_version("1")
+            .with_manifest_version("1")
+            .with_shell("bash");
+        let value = serde_json::to_value(fixed_event(EventKind::CliEnvironmentActivate(payload)))
+            .expect("event serializes");
+        let expected = activate_envelope_json(json!({
+            "env_kind": "path",
+            "env_ref_or_name": "myenv",
+            "lockfile_version": "1",
+            "manifest_version": "1",
+            "shell": "bash",
+        }));
+        assert_eq!(value, expected);
+    }
+
+    /// The result-emit shape binaries predating `manifest_version`
+    /// buffered (extras present, no `manifest_version`) must keep
+    /// re-serializing without the new key.
+    #[test]
+    fn cli_environment_activate_without_manifest_version_envelope_golden() {
         let payload = CliEnvironmentActivatePayload::new(env_detail("path", "myenv"))
             .with_lockfile_version("1")
             .with_shell("bash");
@@ -1083,6 +1308,26 @@ mod tests {
     /// consumer side recovers the full row.
     #[test]
     fn cli_environment_edit_result_envelope_golden() {
+        let payload = CliEnvironmentEditPayload::new(managed_env_detail())
+            .with_edited_includes(true)
+            .with_manifest_version("1");
+        let value = serde_json::to_value(fixed_event(EventKind::CliEnvironmentEdit(payload)))
+            .expect("event serializes");
+        let mut expected = env_envelope_json("cli.environment.edit");
+        let obj = expected
+            .get_mut("payload")
+            .and_then(|p| p.as_object_mut())
+            .expect("payload object");
+        obj.insert("edited_includes".to_string(), json!(true));
+        obj.insert("manifest_version".to_string(), json!("1"));
+        assert_eq!(value, expected);
+    }
+
+    /// The result-emit shape binaries predating `manifest_version`
+    /// buffered (extras present, no `manifest_version`) must keep
+    /// re-serializing without the new key.
+    #[test]
+    fn cli_environment_edit_result_without_manifest_version_envelope_golden() {
         let payload =
             CliEnvironmentEditPayload::new(managed_env_detail()).with_edited_includes(true);
         let value = serde_json::to_value(fixed_event(EventKind::CliEnvironmentEdit(payload)))
@@ -1096,12 +1341,22 @@ mod tests {
         assert_eq!(value, expected);
     }
 
-    /// `cli.environment.publish` result-known emit carries both
-    /// build-kind flags. The eager emit shape (extras omitted) is
-    /// covered by [`cli_environment_edit_eager_envelope_golden`]'s
-    /// pattern — they share the same `skip_serializing_if` behavior.
+    /// `cli.environment.publish` on the eager call site: every
+    /// Optional extra is omitted from the wire.
     #[test]
-    fn cli_environment_publish_with_build_kinds_envelope_golden() {
+    fn cli_environment_publish_eager_envelope_golden() {
+        let payload = CliEnvironmentPublishPayload::new(managed_env_detail());
+        let value = serde_json::to_value(fixed_event(EventKind::CliEnvironmentPublish(payload)))
+            .expect("event serializes");
+        let expected = env_envelope_json("cli.environment.publish");
+        assert_eq!(value, expected);
+    }
+
+    /// The result-emit shape binaries predating `manifest_version`
+    /// buffered (build kinds present, no `manifest_version`) must keep
+    /// re-serializing without the new key.
+    #[test]
+    fn cli_environment_publish_without_manifest_version_envelope_golden() {
         let payload =
             CliEnvironmentPublishPayload::new(managed_env_detail()).with_build_kinds(true, false);
         let value = serde_json::to_value(fixed_event(EventKind::CliEnvironmentPublish(payload)))
@@ -1113,6 +1368,26 @@ mod tests {
             .expect("payload object");
         obj.insert("has_expression_build".to_string(), json!(true));
         obj.insert("has_manifest_build".to_string(), json!(false));
+        assert_eq!(value, expected);
+    }
+
+    /// `cli.environment.publish` result-known emit carries both
+    /// build-kind flags.
+    #[test]
+    fn cli_environment_publish_with_build_kinds_envelope_golden() {
+        let payload = CliEnvironmentPublishPayload::new(managed_env_detail())
+            .with_build_kinds(true, false)
+            .with_manifest_version("1.10.0");
+        let value = serde_json::to_value(fixed_event(EventKind::CliEnvironmentPublish(payload)))
+            .expect("event serializes");
+        let mut expected = env_envelope_json("cli.environment.publish");
+        let obj = expected
+            .get_mut("payload")
+            .and_then(|p| p.as_object_mut())
+            .expect("payload object");
+        obj.insert("has_expression_build".to_string(), json!(true));
+        obj.insert("has_manifest_build".to_string(), json!(false));
+        obj.insert("manifest_version".to_string(), json!("1.10.0"));
         assert_eq!(value, expected);
     }
 
