@@ -115,7 +115,7 @@ struct FileInfo {
     /// any further components are members selected on it (a sibling attribute
     /// set), e.g. `["python3Packages", "isdr-zk-client"]` for
     /// `python3Packages.isdr-zk-client`. A bare argument is a single component.
-    deps: Vec<Vec<String>>,
+    dependency_args: Vec<Vec<String>>,
 }
 
 /// Catalog root parameter names assumed by [scan_package].
@@ -123,8 +123,8 @@ struct FileInfo {
 /// A NEF package receives the catalog namespace as the `catalogs` lambda
 /// parameter; attribute paths reached through it (`catalogs.<org>.<pkg>…`) are
 /// the references that must be locked. Use [scan_package_with_roots] to scan
-/// against a different set of roots.
-const DEFAULT_ROOTS: &[&str] = &["catalogs"];
+/// against a different set of root_attributes.
+const DEFAULT_ROOT_ATTRIBUTES: &[&str] = &["catalogs"];
 
 /// Resolve the catalog-reference closure of a single NEF package.
 ///
@@ -145,16 +145,16 @@ pub fn scan_package(
     base_dir: impl AsRef<Path>,
     rel_file: impl AsRef<Path>,
 ) -> Result<BTreeSet<CatalogRef>, ScanError> {
-    scan_package_with_roots(base_dir, rel_file, DEFAULT_ROOTS.iter().copied())
+    scan_package_with_roots(base_dir, rel_file, DEFAULT_ROOT_ATTRIBUTES.iter().copied())
 }
 
 /// [scan_package] generalized over the set of catalog root parameter names.
 ///
-/// `roots` are the lambda-parameter names treated as catalog namespaces; every
+/// `root_attributes` are the lambda-parameter names treated as catalog namespaces; every
 /// other parameter is a dependency argument followed to a sibling package.
 /// Any iterable of names is accepted; duplicates are harmless.
 #[instrument(
-    skip(roots),
+    skip(root_attributes),
     fields(
         base_dir = %base_dir.as_ref().display(),
         rel_file = %rel_file.as_ref().display(),
@@ -163,10 +163,10 @@ pub fn scan_package(
 pub fn scan_package_with_roots(
     base_dir: impl AsRef<Path>,
     rel_file: impl AsRef<Path>,
-    roots: impl IntoIterator<Item = impl Into<String>>,
+    root_attributes: impl IntoIterator<Item = impl Into<String>>,
 ) -> Result<BTreeSet<CatalogRef>, ScanError> {
-    let roots: HashSet<String> = roots.into_iter().map(Into::into).collect();
-    let roots = &roots;
+    let root_attributes: HashSet<String> = root_attributes.into_iter().map(Into::into).collect();
+    let root_attributes = &root_attributes;
 
     // Imports in the target resolve relative to its own directory; dependency
     // arguments resolve as siblings under base_dir.
@@ -185,20 +185,21 @@ pub fn scan_package_with_roots(
                 stem,
                 analyze_file_at(
                     &content,
-                    roots,
+                    root_attributes,
                     dir,
                     &mut visited,
                     path,
-                    &identity_origins(roots),
+                    &identity_origins(root_attributes),
                 )?,
             );
         }
         db
     };
-    let references: BTreeSet<CatalogRef> = collect_transitive(db, base_dir.as_ref(), roots)?
-        .into_iter()
-        .map(CatalogRef)
-        .collect();
+    let references: BTreeSet<CatalogRef> =
+        collect_transitive(db, base_dir.as_ref(), root_attributes)?
+            .into_iter()
+            .map(CatalogRef)
+            .collect();
     debug!(references = references.len(), "scanned catalog references");
     Ok(references)
 }
@@ -280,7 +281,7 @@ fn line_col(content: &str, offset: usize) -> (usize, usize) {
 /// Analyze one file's content, collecting catalog refs and the dependency
 /// arguments it pulls in.
 ///
-/// `roots` are the lambda parameters treated as catalog roots (e.g. `catalogs`).
+/// `root_attributes` are the lambda parameters treated as catalog root_attributes (e.g. `catalogs`).
 /// When `file_dir` is `Some`, `import` calls forwarding a root are followed into
 /// the imported file; `visited` maps each drained target file to the top-level
 /// forwardings already scanned for it (see the drain below). `path` is the
@@ -290,7 +291,7 @@ fn line_col(content: &str, offset: usize) -> (usize, usize) {
 /// forwarding chain in imported files.
 fn analyze_file_at(
     content: &str,
-    roots: &HashSet<String>,
+    root_attributes: &HashSet<String>,
     file_dir: Option<&Path>,
     visited: &mut HashMap<PathBuf, HashSet<BTreeMap<String, String>>>,
     path: &Path,
@@ -304,16 +305,16 @@ fn analyze_file_at(
     // Dependency arguments come from the eventual package function: wrappers
     // around it (`let … in`, `with …;`, parentheses) do not change which
     // lambda NEF calls, so they are looked through.
-    let mut dep_names = HashSet::new();
+    let mut dependency_arg_names = HashSet::new();
     if let Some(lambda) = top_level_lambda(&root)
         && let Some(rnix::ast::Param::Pattern(pat)) = lambda.param()
     {
         for entry in pat.pat_entries() {
             if let Some(ident) = entry.ident()
                 && let Some(name) = ident.ident_token().map(|t| t.text().to_string())
-                && !roots.contains(name.as_str())
+                && !root_attributes.contains(name.as_str())
             {
-                dep_names.insert(name);
+                dependency_arg_names.insert(name);
             }
         }
     }
@@ -348,11 +349,14 @@ fn analyze_file_at(
     // Each dependency argument resolves as a whole sibling package (single
     // component). Members selected on an argument add longer attr-paths, e.g.
     // `python3Packages.isdr-zk-client`, resolved as sibling attribute sets.
-    let mut deps: Vec<Vec<String>> = dep_names.iter().map(|name| vec![name.clone()]).collect();
-    collect_dep_member_paths(root.syntax(), &dep_names, &mut deps);
+    let mut dependency_args: Vec<Vec<String>> = dependency_arg_names
+        .iter()
+        .map(|name| vec![name.clone()])
+        .collect();
+    collect_dependency_selections(root.syntax(), &dependency_arg_names, &mut dependency_args);
 
     let ctx = ScanCtx { path, content };
-    let mut walker = Walker::new(roots, declared_params.as_ref(), ctx);
+    let mut walker = Walker::new(root_attributes, declared_params.as_ref(), ctx);
     walker.walk_root(&root);
     let (mut refs, pending_imports, first_root_use) = walker.finish();
 
@@ -380,7 +384,7 @@ fn analyze_file_at(
                     position: line_col(content, pending.offset),
                 });
             };
-            // The child is scanned with its own parameter names as roots;
+            // The child is scanned with its own parameter names as root_attributes;
             // its refs are rewritten back into the parent's namespace.
             let rewrites: HashMap<String, String> = match pending.arg {
                 ImportArg::Set(forwards) => forwards,
@@ -404,9 +408,9 @@ fn analyze_file_at(
             // The same file imported under a different forwarding contributes
             // different refs and is scanned again; only a repeat with the
             // same forwarding — including a true import cycle — is skipped.
-            // The forwarding is composed down to the top-level roots before
+            // The forwarding is composed down to the top-level root_attributes before
             // being stored: two chains whose immediate maps look identical can
-            // still stand for different top-level roots, and only an identical
+            // still stand for different top-level root_attributes, and only an identical
             // composition contributes identical refs.
             let child_origins: BTreeMap<String, String> = rewrites
                 .iter()
@@ -422,11 +426,11 @@ fn analyze_file_at(
             {
                 continue;
             }
-            let child_roots: HashSet<String> = rewrites.keys().cloned().collect();
+            let child_root_attributes: HashSet<String> = rewrites.keys().cloned().collect();
             let import_dir = target.parent().map(Path::to_path_buf);
             let imported = analyze_file_at(
                 &imported_content,
-                &child_roots,
+                &child_root_attributes,
                 import_dir.as_deref(),
                 visited,
                 &target,
@@ -445,7 +449,7 @@ fn analyze_file_at(
     // through a root the top-level lambda does not declare — they could never
     // evaluate. Roots are checked in sorted order for a deterministic error.
     if let Some(declared) = &declared_params {
-        let mut undeclared: Vec<&String> = roots
+        let mut undeclared: Vec<&String> = root_attributes
             .iter()
             .filter(|root| !declared.contains(root.as_str()))
             .collect();
@@ -466,13 +470,16 @@ fn analyze_file_at(
         }
     }
 
-    Ok(FileInfo { refs, deps })
+    Ok(FileInfo {
+        refs,
+        dependency_args,
+    })
 }
 
-/// The identity `root_origins` map for an entry file, whose roots are the
-/// top-level roots themselves (see [analyze_file_at]).
-fn identity_origins(roots: &HashSet<String>) -> BTreeMap<String, String> {
-    roots
+/// The identity `root_origins` map for an entry file, whose root_attributes are the
+/// top-level root_attributes themselves (see [analyze_file_at]).
+fn identity_origins(root_attributes: &HashSet<String>) -> BTreeMap<String, String> {
+    root_attributes
         .iter()
         .map(|root| (root.clone(), root.clone()))
         .collect()
@@ -486,17 +493,17 @@ fn reference_root(reference: &str) -> &str {
 /// Collect the static attr-paths selected on dependency arguments.
 ///
 /// For every `select` whose base identifier is a dependency argument in
-/// `dep_names`, record `[arg, member…]` up to the first dynamic component.
-/// These become sibling-attribute-set lookups in [resolve_dep].
-fn collect_dep_member_paths(
+/// `dependency_arg_names`, record `[arg, member…]` up to the first dynamic component.
+/// These become sibling-attribute-set lookups in [try_resolve_dependency_argument].
+fn collect_dependency_selections(
     node: &rnix::SyntaxNode,
-    dep_names: &HashSet<String>,
+    dependency_arg_names: &HashSet<String>,
     out: &mut Vec<Vec<String>>,
 ) {
     if let Some(select) = ast::Select::cast(node.clone())
         && let Some(ast::Expr::Ident(base)) = select.expr()
         && let Some(base_name) = base.ident_token().map(|t| t.text().to_string())
-        && dep_names.contains(&base_name)
+        && dependency_arg_names.contains(&base_name)
     {
         let mut path = vec![base_name];
         if let Some(attrpath) = select.attrpath() {
@@ -513,21 +520,21 @@ fn collect_dep_member_paths(
     }
 
     for child in node.children() {
-        collect_dep_member_paths(&child, dep_names, out);
+        collect_dependency_selections(&child, dependency_arg_names, out);
     }
 }
 
 /// Resolve the transitive closure of catalog refs across a set of files.
 ///
-/// Starting from the files in `db`, follow each file's `deps` to sibling
-/// packages (loaded on demand from `dir` via [resolve_dep]) and union their
+/// Starting from the files in `db`, follow each file's `dependency_args` to sibling
+/// packages (loaded on demand from `dir` via [try_resolve_dependency_argument]) and union their
 /// refs. A dep is an attr-path: a bare argument resolves as a sibling file, a
 /// longer path as a member of a sibling attribute set. Cycles are handled by
 /// tracking visited attr-paths.
 fn collect_transitive(
     mut db: HashMap<String, FileInfo>,
     dir: &Path,
-    roots: &HashSet<String>,
+    root_attributes: &HashSet<String>,
 ) -> Result<BTreeSet<String>, ScanError> {
     let mut visited: HashSet<String> = HashSet::new();
     let mut result: BTreeSet<String> = BTreeSet::new();
@@ -542,14 +549,14 @@ fn collect_transitive(
             continue;
         }
         if !db.contains_key(&key)
-            && let Some(info) = resolve_dep(dir, &path, roots)?
+            && let Some(info) = try_resolve_dependency_argument(dir, &path, root_attributes)?
         {
             db.insert(key.clone(), info);
         }
         let Some(info) = db.get(&key) else { continue };
         result.extend(info.refs.iter().cloned());
-        let deps: Vec<Vec<String>> = info.deps.clone();
-        for dep in deps {
+        let dependency_args: Vec<Vec<String>> = info.dependency_args.clone();
+        for dep in dependency_args {
             if !visited.contains(&dep.join("/")) {
                 queue.push(dep);
             }
@@ -636,7 +643,7 @@ enum AttrsetConsumer<'a> {
 /// (selects, `inherit (…)`, `with`, `getAttr`) and records `import`
 /// applications as [PendingImport] facts; it performs no IO itself.
 struct Walker<'a> {
-    roots: &'a HashSet<String>,
+    root_attributes: &'a HashSet<String>,
     /// The top-level lambda's parameter names; `None` when the file's shape
     /// hides them (see the declaration check in [analyze_file_at]).
     declared_params: Option<&'a HashSet<String>>,
@@ -649,15 +656,15 @@ struct Walker<'a> {
 }
 
 impl<'a> Walker<'a> {
-    /// Create a walker over `roots` with empty results. [Self::walk_root]
+    /// Create a walker over `root_attributes` with empty results. [Self::walk_root]
     /// performs the walk and [Self::finish] extracts the collected facts.
     fn new(
-        roots: &'a HashSet<String>,
+        root_attributes: &'a HashSet<String>,
         declared_params: Option<&'a HashSet<String>>,
         ctx: ScanCtx<'a>,
     ) -> Self {
         Self {
-            roots,
+            root_attributes,
             declared_params,
             ctx,
             refs: BTreeSet::new(),
@@ -667,12 +674,12 @@ impl<'a> Walker<'a> {
     }
 
     /// Walk the file's top-level expression, seeding the environment with the
-    /// catalog roots. Lambda parameters — including the top-level package
+    /// catalog root_attributes. Lambda parameters — including the top-level package
     /// function's — keep root-named names rooted and shadow everything else
     /// (see [Self::walk_lambda]).
     fn walk_root(&mut self, root: &rnix::Root) {
         let env: Env = self
-            .roots
+            .root_attributes
             .iter()
             .map(|root| (root.clone(), Binding::Path(vec![root.clone()])))
             .collect();
@@ -855,7 +862,7 @@ impl<'a> Walker<'a> {
         let receivable = self
             .declared_params
             .is_none_or(|declared| declared.contains(name));
-        if receivable && self.roots.contains(name) {
+        if receivable && self.root_attributes.contains(name) {
             Binding::Path(vec![name.to_string()])
         } else {
             Binding::Opaque
@@ -1036,7 +1043,7 @@ impl<'a> Walker<'a> {
             AttrsetConsumer::Import(forwards) => forwards.contains_key(name),
             AttrsetConsumer::Lambda(params) => {
                 params.contains(name)
-                    && self.roots.contains(name)
+                    && self.root_attributes.contains(name)
                     && matches!(binding, Some(Binding::Path(path)) if path.len() == 1 && path[0] == name)
             },
         }
@@ -1050,7 +1057,7 @@ impl<'a> Walker<'a> {
         name: &str,
         offset: impl FnOnce() -> usize,
     ) {
-        if matches!(consumer, AttrsetConsumer::Import(_)) && self.roots.contains(name) {
+        if matches!(consumer, AttrsetConsumer::Import(_)) && self.root_attributes.contains(name) {
             self.ctx.warn_unfollowed_import(offset(), name);
         }
     }
@@ -1943,21 +1950,21 @@ fn attr_static_name(attr: &ast::Attr) -> Option<String> {
 /// directory); a `<comp>/default.nix` is a package directory; a directory with
 /// no `default.nix` is an attribute set that is descended into. Components past
 /// the package file are attributes within it and are ignored.
-fn resolve_dep(
+fn try_resolve_dependency_argument(
     dir: &Path,
     components: &[String],
-    roots: &HashSet<String>,
+    root_attributes: &HashSet<String>,
 ) -> Result<Option<FileInfo>, ScanError> {
     let mut cur = dir.to_path_buf();
     for comp in components {
         let file = cur.join(format!("{comp}.nix"));
         if file.is_file() {
-            return read_and_analyze(&file, roots);
+            return read_and_analyze(&file, root_attributes);
         }
         let sub = cur.join(comp);
         let default = sub.join("default.nix");
         if default.is_file() {
-            return read_and_analyze(&default, roots);
+            return read_and_analyze(&default, root_attributes);
         }
         if sub.is_dir() {
             cur = sub;
@@ -1973,17 +1980,20 @@ fn resolve_dep(
 /// Relative imports in the file resolve against its own directory, so the
 /// file's parent is passed as the import base. An unreadable file resolves to
 /// `Ok(None)`; only scan failures are errors.
-fn read_and_analyze(path: &Path, roots: &HashSet<String>) -> Result<Option<FileInfo>, ScanError> {
+fn read_and_analyze(
+    path: &Path,
+    root_attributes: &HashSet<String>,
+) -> Result<Option<FileInfo>, ScanError> {
     let Ok(content) = fs::read_to_string(path) else {
         return Ok(None);
     };
     analyze_file_at(
         &content,
-        roots,
+        root_attributes,
         path.parent(),
         &mut HashMap::new(),
         path,
-        &identity_origins(roots),
+        &identity_origins(root_attributes),
     )
     .map(Some)
 }
@@ -1992,67 +2002,67 @@ fn read_and_analyze(path: &Path, roots: &HashSet<String>) -> Result<Option<FileI
 mod tests {
     use super::*;
 
-    fn roots(names: &[&str]) -> HashSet<String> {
+    fn root_attributes(names: &[&str]) -> HashSet<String> {
         names.iter().map(|s| s.to_string()).collect()
     }
 
-    fn analyze_file(content: &str, roots: &HashSet<String>) -> FileInfo {
+    fn analyze_file(content: &str, root_attributes: &HashSet<String>) -> FileInfo {
         analyze_file_at(
             content,
-            roots,
+            root_attributes,
             None,
             &mut HashMap::new(),
             Path::new("test.nix"),
-            &identity_origins(roots),
+            &identity_origins(root_attributes),
         )
         .expect("scan should succeed")
     }
 
-    fn refs(content: &str, roots: &HashSet<String>) -> BTreeSet<String> {
-        analyze_file(content, roots).refs
+    fn refs(content: &str, root_attributes: &HashSet<String>) -> BTreeSet<String> {
+        analyze_file(content, root_attributes).refs
     }
 
-    fn scan_err(content: &str, roots: &HashSet<String>) -> ScanError {
+    fn scan_err(content: &str, root_attributes: &HashSet<String>) -> ScanError {
         analyze_file_at(
             content,
-            roots,
+            root_attributes,
             None,
             &mut HashMap::new(),
             Path::new("test.nix"),
-            &identity_origins(roots),
+            &identity_origins(root_attributes),
         )
         .expect_err("scan should fail")
     }
 
-    fn refs_at(path: &str, roots: &HashSet<String>) -> BTreeSet<String> {
+    fn refs_at(path: &str, root_attributes: &HashSet<String>) -> BTreeSet<String> {
         let path = Path::new(path);
         let content = fs::read_to_string(path).expect("test fixture missing");
         let dir = path.parent();
         let mut visited = HashMap::new();
         analyze_file_at(
             &content,
-            roots,
+            root_attributes,
             dir,
             &mut visited,
             path,
-            &identity_origins(roots),
+            &identity_origins(root_attributes),
         )
         .expect("scan should succeed")
         .refs
     }
 
-    fn scan_err_at(path: &str, roots: &HashSet<String>) -> ScanError {
+    fn scan_err_at(path: &str, root_attributes: &HashSet<String>) -> ScanError {
         let path = Path::new(path);
         let content = fs::read_to_string(path).expect("test fixture missing");
         let dir = path.parent();
         let mut visited = HashMap::new();
         analyze_file_at(
             &content,
-            roots,
+            root_attributes,
             dir,
             &mut visited,
             path,
-            &identity_origins(roots),
+            &identity_origins(root_attributes),
         )
         .expect_err("scan should fail")
     }
@@ -2079,7 +2089,7 @@ mod tests {
     fn no_catalog_refs_fetchpypi() {
         let got = refs(
             include_str!("../../test_data/catalog_refs/no-catalog-refs.nix"),
-            &roots(&["catalogs"]),
+            &root_attributes(&["catalogs"]),
         );
         assert_eq!(got, BTreeSet::new());
     }
@@ -2088,7 +2098,7 @@ mod tests {
     fn no_catalog_refs_rust_package() {
         let got = refs(
             include_str!("../../test_data/catalog_refs/rust-no-catalog.nix"),
-            &roots(&["catalogs"]),
+            &root_attributes(&["catalogs"]),
         );
         assert_eq!(got, BTreeSet::new());
     }
@@ -2096,15 +2106,21 @@ mod tests {
     #[test]
     fn non_catalog_inherit_not_collected() {
         let content = include_str!("../../test_data/catalog_refs/non-catalog-inherit.nix");
-        assert_eq!(refs(content, &roots(&["catalogs"])), BTreeSet::new());
-        assert_eq!(refs(content, &roots(&["inputs"])), BTreeSet::new());
+        assert_eq!(
+            refs(content, &root_attributes(&["catalogs"])),
+            BTreeSet::new()
+        );
+        assert_eq!(
+            refs(content, &root_attributes(&["inputs"])),
+            BTreeSet::new()
+        );
     }
 
     #[test]
     fn single_inherit_helper() {
         let got = refs(
             include_str!("../../test_data/catalog_refs/single-inherit-helper.nix"),
-            &roots(&["catalogs"]),
+            &root_attributes(&["catalogs"]),
         );
         assert_eq!(got, set(&["catalogs.myorg.toolkit.readVersion"]));
     }
@@ -2113,7 +2129,7 @@ mod tests {
     fn two_inherits_toolkit_and_python_pkg() {
         let got = refs(
             include_str!("../../test_data/catalog_refs/two-inherits.nix"),
-            &roots(&["catalogs"]),
+            &root_attributes(&["catalogs"]),
         );
         assert_eq!(
             got,
@@ -2128,7 +2144,7 @@ mod tests {
     fn multi_attr_inherit_expands_all_names() {
         let got = refs(
             include_str!("../../test_data/catalog_refs/multi-attr-inherit.nix"),
-            &roots(&["catalogs"]),
+            &root_attributes(&["catalogs"]),
         );
         assert_eq!(
             got,
@@ -2147,7 +2163,7 @@ mod tests {
     fn multi_attr_inherit_no_bare_intermediate_path() {
         let got = refs(
             include_str!("../../test_data/catalog_refs/multi-attr-inherit.nix"),
-            &roots(&["catalogs"]),
+            &root_attributes(&["catalogs"]),
         );
         assert!(!got.contains("catalogs.myorg.python3Packages"));
         assert!(!got.contains("catalogs.myorg.toolkit"));
@@ -2157,7 +2173,7 @@ mod tests {
     fn direct_select_native_packages() {
         let got = refs(
             include_str!("../../test_data/catalog_refs/direct-select-native.nix"),
-            &roots(&["catalogs"]),
+            &root_attributes(&["catalogs"]),
         );
         assert_eq!(
             got,
@@ -2174,7 +2190,7 @@ mod tests {
     fn inherit_whole_subattrset() {
         let got = refs(
             include_str!("../../test_data/catalog_refs/inherit-subattrset.nix"),
-            &roots(&["catalogs"]),
+            &root_attributes(&["catalogs"]),
         );
         // `toolkit` is inherited (an exact depth-2 ref) and then used as an
         // alias in the body (`toolkit.buildGoModule`); the deeper use-site ref
@@ -2192,7 +2208,7 @@ mod tests {
     fn nested_inline_package_does_not_hide_outer_refs() {
         let got = refs(
             include_str!("../../test_data/catalog_refs/nested-inline-package.nix"),
-            &roots(&["catalogs"]),
+            &root_attributes(&["catalogs"]),
         );
         assert_eq!(
             got,
@@ -2209,7 +2225,7 @@ mod tests {
     fn passthru_src_access_via_alias() {
         let got = refs(
             include_str!("../../test_data/catalog_refs/passthru-src-access.nix"),
-            &roots(&["catalogs"]),
+            &root_attributes(&["catalogs"]),
         );
         assert_eq!(
             got,
@@ -2227,7 +2243,7 @@ mod tests {
     fn inputs_only_with_input_roots() {
         let got = refs(
             include_str!("../../test_data/catalog_refs/inputs-only.nix"),
-            &roots(&["inputs"]),
+            &root_attributes(&["inputs"]),
         );
         // `inputs.self` is used at catalog depth in value positions
         // (`src = inputs.self;`, `"${inputs.self}/VERSION"`), so it widens to
@@ -2247,7 +2263,7 @@ mod tests {
     fn inputs_only_with_catalog_roots_returns_nothing() {
         let got = refs(
             include_str!("../../test_data/catalog_refs/inputs-only.nix"),
-            &roots(&["catalogs"]),
+            &root_attributes(&["catalogs"]),
         );
         assert_eq!(got, BTreeSet::new());
     }
@@ -2256,7 +2272,7 @@ mod tests {
     fn mixed_roots_catalog_only() {
         let got = refs(
             include_str!("../../test_data/catalog_refs/mixed-roots.nix"),
-            &roots(&["catalogs"]),
+            &root_attributes(&["catalogs"]),
         );
         assert_eq!(
             got,
@@ -2271,7 +2287,7 @@ mod tests {
     fn mixed_roots_inputs_only() {
         let got = refs(
             include_str!("../../test_data/catalog_refs/mixed-roots.nix"),
-            &roots(&["inputs"]),
+            &root_attributes(&["inputs"]),
         );
         assert_eq!(
             got,
@@ -2287,7 +2303,7 @@ mod tests {
     fn mixed_roots_both() {
         let got = refs(
             include_str!("../../test_data/catalog_refs/mixed-roots.nix"),
-            &roots(&["catalogs", "inputs"]),
+            &root_attributes(&["catalogs", "inputs"]),
         );
         assert_eq!(
             got,
@@ -2303,7 +2319,7 @@ mod tests {
 
     #[test]
     fn transitive_follows_intra_dir_dep_args() {
-        let r = roots(&["catalogs"]);
+        let r = root_attributes(&["catalogs"]);
         let file_a = "{ catalogs, beta-client }: catalogs.myorg.toolkit.readVersion";
         let file_b = "{ catalogs }: catalogs.myorg.python3Packages.gamma-service";
 
@@ -2323,7 +2339,7 @@ mod tests {
 
     #[test]
     fn transitive_cycle_safe() {
-        let r = roots(&["catalogs"]);
+        let r = root_attributes(&["catalogs"]);
         let file_a = "{ catalogs, pkg-b }: catalogs.myorg.x";
         let file_b = "{ catalogs, pkg-a }: catalogs.myorg.y";
 
@@ -2337,7 +2353,7 @@ mod tests {
 
     #[test]
     fn transitive_inputs_root() {
-        let r = roots(&["inputs"]);
+        let r = root_attributes(&["inputs"]);
         let file_a = "{ inputs, dep-pkg }: inputs.nixpkgs.lib";
         let file_b = "{ inputs }: inputs.devtools-flake.packages.default";
 
@@ -2379,7 +2395,7 @@ mod tests {
                 .map(|dep| dep.iter().map(|s| s.to_string()).collect())
                 .collect();
             assert_eq!(
-                analyze_file(content, &roots(&["catalogs"])).deps,
+                analyze_file(content, &root_attributes(&["catalogs"])).dependency_args,
                 expected,
                 "content: {content}"
             );
@@ -2449,7 +2465,7 @@ mod tests {
         assert_eq!(got, refset(&["catalogs.myorg.toolkit.readVersion"]));
     }
 
-    /// A nested file as the scan target resolves deps against the root.
+    /// A nested file as the scan target resolves dependency_args against the root.
     ///
     /// Scanning `foo/bar.nix` directly must resolve its dependency arguments
     /// against the package-set root, not `foo/`, so a root-level package like
@@ -2496,7 +2512,7 @@ mod tests {
             }
             let rel = path.file_name().expect("fixture file name");
             // Some fixtures pin scan *errors* (unreadable imports,
-            // undeclared roots); they emit no refs to check.
+            // undeclared root_attributes); they emit no refs to check.
             let Ok(references) = scan_package(dir, Path::new(rel)) else {
                 continue;
             };
@@ -2517,7 +2533,7 @@ mod tests {
     fn with_direct_namespace_emits_sentinel() {
         let got = refs(
             include_str!("../../test_data/catalog_refs/with-namespace.nix"),
-            &roots(&["catalogs"]),
+            &root_attributes(&["catalogs"]),
         );
         assert_eq!(got, set(&["catalogs.myorg.*"]));
     }
@@ -2526,7 +2542,7 @@ mod tests {
     fn with_namespace_does_not_emit_bare_path() {
         let got = refs(
             include_str!("../../test_data/catalog_refs/with-namespace.nix"),
-            &roots(&["catalogs"]),
+            &root_attributes(&["catalogs"]),
         );
         assert!(!got.contains("catalogs.myorg"));
     }
@@ -2535,7 +2551,7 @@ mod tests {
     fn with_alias_namespace_emits_sentinel() {
         let got = refs(
             "{ catalogs }: let org = catalogs.myorg; in with org; toolkit",
-            &roots(&["catalogs"]),
+            &root_attributes(&["catalogs"]),
         );
         assert!(got.contains("catalogs.myorg.*"), "got: {:?}", got);
     }
@@ -2544,7 +2560,7 @@ mod tests {
     fn with_non_rooted_namespace_falls_through() {
         let got = refs(
             "{ catalogs }: with { x = 1; }; catalogs.myorg.pkg",
-            &roots(&["catalogs"]),
+            &root_attributes(&["catalogs"]),
         );
         assert_eq!(got, set(&["catalogs.myorg.pkg"]));
     }
@@ -2553,7 +2569,7 @@ mod tests {
     fn with_body_direct_refs_still_collected() {
         let got = refs(
             "{ catalogs }: with catalogs.myorg; catalogs.other.pkg",
-            &roots(&["catalogs"]),
+            &root_attributes(&["catalogs"]),
         );
         assert_eq!(got, set(&["catalogs.myorg.*", "catalogs.other.pkg"]));
     }
@@ -2564,7 +2580,7 @@ mod tests {
         // exact ref; only the use site drives the ref.
         let got = refs(
             "{ catalogs }: let org = catalogs.myorg; in org.toolkit",
-            &roots(&["catalogs"]),
+            &root_attributes(&["catalogs"]),
         );
         assert_eq!(got, set(&["catalogs.myorg.toolkit"]));
     }
@@ -2573,7 +2589,7 @@ mod tests {
     fn aliased_select_chained() {
         let got = refs(
             include_str!("../../test_data/catalog_refs/aliased-select.nix"),
-            &roots(&["catalogs"]),
+            &root_attributes(&["catalogs"]),
         );
         assert_eq!(
             got,
@@ -2588,7 +2604,7 @@ mod tests {
     fn aliased_select_order_independent() {
         let got = refs(
             "{ catalogs }: let b = a.hello; a = catalogs.myorg; in b",
-            &roots(&["catalogs"]),
+            &root_attributes(&["catalogs"]),
         );
         assert_eq!(got, set(&["catalogs.myorg.hello"]));
     }
@@ -2599,7 +2615,7 @@ mod tests {
         // and the outer alias is never used in a value position.
         let got = refs(
             "{ catalogs, x }: let org = catalogs.myorg; g = org: org.other; in g x",
-            &roots(&["catalogs"]),
+            &root_attributes(&["catalogs"]),
         );
         assert_eq!(got, BTreeSet::new());
     }
@@ -2610,7 +2626,7 @@ mod tests {
         // the file's value, so the catalog-level member also escapes.
         let got = refs(
             "{ catalogs }: rec { org = catalogs.myorg; pkg = org.toolkit; }",
-            &roots(&["catalogs"]),
+            &root_attributes(&["catalogs"]),
         );
         assert_eq!(got, set(&["catalogs.myorg.*", "catalogs.myorg.toolkit"]));
     }
@@ -2643,7 +2659,7 @@ mod tests {
         ];
         for (content, expected) in cases {
             assert_eq!(
-                refs(content, &roots(&["catalogs"])),
+                refs(content, &root_attributes(&["catalogs"])),
                 set(expected),
                 "content: {content}"
             );
@@ -2658,7 +2674,7 @@ mod tests {
         // tail refs past it depend on the resolution pass cap.
         let got = refs(
             "{ catalogs, x }: let a = if x then a.sub else catalogs.b.pkg; in a",
-            &roots(&["catalogs"]),
+            &root_attributes(&["catalogs"]),
         );
         assert!(got.contains("catalogs.b.pkg"), "got: {got:?}");
     }
@@ -2667,7 +2683,7 @@ mod tests {
     fn attrset_member_alias_resolves_through_select() {
         let got = refs(
             "{ catalogs }: let s = { org = catalogs.myorg; }; in s.org.toolkit",
-            &roots(&["catalogs"]),
+            &root_attributes(&["catalogs"]),
         );
         assert_eq!(got, set(&["catalogs.myorg.toolkit"]));
     }
@@ -2688,7 +2704,7 @@ mod tests {
         ];
         for (content, expected) in cases {
             assert_eq!(
-                refs(content, &roots(&["catalogs"])),
+                refs(content, &root_attributes(&["catalogs"])),
                 set(expected),
                 "content: {content}"
             );
@@ -2758,7 +2774,7 @@ mod tests {
         ];
         for (content, expected) in cases {
             assert_eq!(
-                refs(content, &roots(&["catalogs"])),
+                refs(content, &root_attributes(&["catalogs"])),
                 set(expected),
                 "content: {content}"
             );
@@ -2778,7 +2794,7 @@ mod tests {
         ];
         for (content, expected) in cases {
             assert_eq!(
-                refs(content, &roots(&["catalogs"])),
+                refs(content, &root_attributes(&["catalogs"])),
                 set(expected),
                 "content: {content}"
             );
@@ -2804,7 +2820,7 @@ mod tests {
         ];
         for (content, expected) in cases {
             assert_eq!(
-                refs(content, &roots(&["catalogs"])),
+                refs(content, &root_attributes(&["catalogs"])),
                 set(expected),
                 "content: {content}"
             );
@@ -2818,7 +2834,7 @@ mod tests {
         // is consumed, not an escape.
         let got = refs(
             "{ catalogs }: let wrapper = { inherit catalogs; }; mkPkg = { catalogs }: catalogs.myorg.viaWrapper; in mkPkg { inherit (wrapper) catalogs; }",
-            &roots(&["catalogs"]),
+            &root_attributes(&["catalogs"]),
         );
         assert_eq!(got, set(&["catalogs.myorg.viaWrapper"]));
     }
@@ -2829,7 +2845,7 @@ mod tests {
         // an exact `catalogs.myorg` ref would be unresolvable.
         let got = refs(
             "{ catalogs }: builtins.attrValues catalogs.myorg",
-            &roots(&["catalogs"]),
+            &root_attributes(&["catalogs"]),
         );
         assert_eq!(got, set(&["catalogs.myorg.*"]));
     }
@@ -2838,7 +2854,7 @@ mod tests {
     fn select_or_default_scans_both_arms() {
         let got = refs(
             "{ catalogs }: catalogs.a.b or catalogs.c.d",
-            &roots(&["catalogs"]),
+            &root_attributes(&["catalogs"]),
         );
         assert_eq!(got, set(&["catalogs.a.b", "catalogs.c.d"]));
     }
@@ -2847,7 +2863,7 @@ mod tests {
     fn get_attr_key_subexpression_scanned() {
         let got = refs(
             "{ catalogs, f }: builtins.getAttr (f catalogs.a.key) catalogs.myorg",
-            &roots(&["catalogs"]),
+            &root_attributes(&["catalogs"]),
         );
         assert_eq!(got, set(&["catalogs.a.key", "catalogs.myorg.*"]));
     }
@@ -2856,7 +2872,7 @@ mod tests {
     fn dynamic_attr_interpolation_scanned() {
         let got = refs(
             "{ catalogs }: catalogs.myorg.${catalogs.a.name}",
-            &roots(&["catalogs"]),
+            &root_attributes(&["catalogs"]),
         );
         assert_eq!(got, set(&["catalogs.a.name", "catalogs.myorg.*"]));
     }
@@ -2875,7 +2891,7 @@ mod tests {
         ];
         for (content, expected) in cases {
             assert_eq!(
-                refs(content, &roots(&["catalogs"])),
+                refs(content, &root_attributes(&["catalogs"])),
                 set(expected),
                 "content: {content}"
             );
@@ -2898,7 +2914,7 @@ mod tests {
         ];
         for (content, expected) in cases {
             assert_eq!(
-                refs(content, &roots(&["catalogs"])),
+                refs(content, &root_attributes(&["catalogs"])),
                 set(expected),
                 "content: {content}"
             );
@@ -2927,7 +2943,7 @@ mod tests {
         ];
         for (content, expected) in cases {
             assert_eq!(
-                refs(content, &roots(&["catalogs"])),
+                refs(content, &root_attributes(&["catalogs"])),
                 set(expected),
                 "content: {content}"
             );
@@ -2938,7 +2954,7 @@ mod tests {
     fn inherit_bound_name_acts_as_alias() {
         let got = refs(
             "{ catalogs }: let inherit (catalogs.myorg) toolkit; in toolkit.readVersion",
-            &roots(&["catalogs"]),
+            &root_attributes(&["catalogs"]),
         );
         assert_eq!(
             got,
@@ -2954,7 +2970,7 @@ mod tests {
         // A let binding shadows a root for its whole scope.
         let got = refs(
             "{ catalogs }: let catalogs = { other.pkg = null; }; in catalogs.other.pkg",
-            &roots(&["catalogs"]),
+            &root_attributes(&["catalogs"]),
         );
         assert_eq!(got, BTreeSet::new());
     }
@@ -2984,7 +3000,7 @@ mod tests {
         ];
         for (content, expected) in cases {
             assert_eq!(
-                refs(content, &roots(&["catalogs"])),
+                refs(content, &root_attributes(&["catalogs"])),
                 set(expected),
                 "content: {content}"
             );
@@ -3008,7 +3024,7 @@ mod tests {
         ];
         for (content, expected) in cases {
             assert_eq!(
-                refs(content, &roots(&["catalogs"])),
+                refs(content, &root_attributes(&["catalogs"])),
                 set(expected),
                 "content: {content}"
             );
@@ -3019,14 +3035,17 @@ mod tests {
     fn conditional_branch_refs_both_collected() {
         let got = refs(
             "{ catalogs, x }: if x then catalogs.a.p else catalogs.b.q",
-            &roots(&["catalogs"]),
+            &root_attributes(&["catalogs"]),
         );
         assert_eq!(got, set(&["catalogs.a.p", "catalogs.b.q"]));
     }
 
     #[test]
     fn nested_lambda_body_refs_collected() {
-        let got = refs("{ catalogs }: x: catalogs.myorg.pkg", &roots(&["catalogs"]));
+        let got = refs(
+            "{ catalogs }: x: catalogs.myorg.pkg",
+            &root_attributes(&["catalogs"]),
+        );
         assert_eq!(got, set(&["catalogs.myorg.pkg"]));
     }
 
@@ -3050,7 +3069,7 @@ mod tests {
         ];
         for (content, expected) in cases {
             assert_eq!(
-                refs(content, &roots(&["catalogs"])),
+                refs(content, &root_attributes(&["catalogs"])),
                 set(expected),
                 "content: {content}"
             );
@@ -3078,7 +3097,7 @@ mod tests {
         ];
         for (content, expected) in cases {
             assert_eq!(
-                refs(content, &roots(&["catalogs"])),
+                refs(content, &root_attributes(&["catalogs"])),
                 set(expected),
                 "content: {content}"
             );
@@ -3089,7 +3108,7 @@ mod tests {
     fn dynamic_attr_emits_sentinel() {
         let got = refs(
             "{ catalogs, name }: catalogs.myorg.${name}",
-            &roots(&["catalogs"]),
+            &root_attributes(&["catalogs"]),
         );
         assert_eq!(got, set(&["catalogs.myorg.*"]));
     }
@@ -3098,7 +3117,7 @@ mod tests {
     fn dynamic_attr_at_first_component_emits_root_sentinel() {
         let got = refs(
             "{ catalogs, org }: catalogs.${org}.pkg",
-            &roots(&["catalogs"]),
+            &root_attributes(&["catalogs"]),
         );
         assert_eq!(got, set(&["catalogs.*"]));
     }
@@ -3107,7 +3126,7 @@ mod tests {
     fn dynamic_attr_stops_at_first_dynamic_component() {
         let got = refs(
             "{ catalogs, name }: catalogs.myorg.${name}.subpkg",
-            &roots(&["catalogs"]),
+            &root_attributes(&["catalogs"]),
         );
         assert_eq!(got, set(&["catalogs.myorg.*"]));
     }
@@ -3119,7 +3138,7 @@ mod tests {
         // catalog.
         let got = refs(
             "{ catalogs, name }: catalogs.myorg.pythonPackages.${name}",
-            &roots(&["catalogs"]),
+            &root_attributes(&["catalogs"]),
         );
         assert_eq!(got, set(&["catalogs.myorg.pythonPackages.*"]));
     }
@@ -3128,7 +3147,7 @@ mod tests {
     fn get_attr_static_key_qualified() {
         let got = refs(
             "{ catalogs }: builtins.getAttr \"hello\" catalogs.myorg",
-            &roots(&["catalogs"]),
+            &root_attributes(&["catalogs"]),
         );
         assert_eq!(got, set(&["catalogs.myorg.hello"]));
     }
@@ -3137,7 +3156,7 @@ mod tests {
     fn get_attr_static_key_bare() {
         let got = refs(
             "{ catalogs }: with builtins; getAttr \"hello\" catalogs.myorg",
-            &roots(&["catalogs"]),
+            &root_attributes(&["catalogs"]),
         );
         assert_eq!(got, set(&["catalogs.myorg.hello"]));
     }
@@ -3146,7 +3165,7 @@ mod tests {
     fn get_attr_dynamic_key_emits_sentinel() {
         let got = refs(
             "{ catalogs, name }: builtins.getAttr name catalogs.myorg",
-            &roots(&["catalogs"]),
+            &root_attributes(&["catalogs"]),
         );
         assert_eq!(got, set(&["catalogs.myorg.*"]));
     }
@@ -3155,7 +3174,7 @@ mod tests {
     fn get_attr_with_alias_target() {
         let got = refs(
             "{ catalogs, name }: let org = catalogs.myorg; in builtins.getAttr \"hello\" org",
-            &roots(&["catalogs"]),
+            &root_attributes(&["catalogs"]),
         );
         assert_eq!(got, set(&["catalogs.myorg.hello"]));
     }
@@ -3164,7 +3183,7 @@ mod tests {
     fn get_attr_non_rooted_target_ignored() {
         let got = refs(
             "{ catalogs, someOtherAttrset }: builtins.getAttr \"hello\" someOtherAttrset",
-            &roots(&["catalogs"]),
+            &root_attributes(&["catalogs"]),
         );
         assert_eq!(got, BTreeSet::new());
     }
@@ -3173,7 +3192,7 @@ mod tests {
     fn import_inherit_catalogs_follows_into_helper() {
         let got = refs_at(
             "test_data/catalog_refs/import-entry.nix",
-            &roots(&["catalogs"]),
+            &root_attributes(&["catalogs"]),
         );
         assert_eq!(got, set(&["catalogs.myorg.toolkit.readVersion"]));
     }
@@ -3182,7 +3201,7 @@ mod tests {
     fn import_explicit_catalogs_arg_followed() {
         let got = refs_at(
             "test_data/catalog_refs/import-entry-explicit.nix",
-            &roots(&["catalogs"]),
+            &root_attributes(&["catalogs"]),
         );
         assert_eq!(got, set(&["catalogs.myorg.toolkit.readVersion"]));
     }
@@ -3191,7 +3210,7 @@ mod tests {
     fn import_without_catalogs_not_followed() {
         let got = refs(
             "{ catalogs }: let x = import ./import-helper.nix { foo = 1; }; in catalogs.myorg.pkg",
-            &roots(&["catalogs"]),
+            &root_attributes(&["catalogs"]),
         );
         assert_eq!(got, set(&["catalogs.myorg.pkg"]));
     }
@@ -3200,7 +3219,7 @@ mod tests {
     fn import_renamed_root_followed_and_rewritten() {
         let got = refs_at(
             "test_data/catalog_refs/import-entry-renamed.nix",
-            &roots(&["catalogs"]),
+            &root_attributes(&["catalogs"]),
         );
         assert_eq!(got, set(&["catalogs.myorg.toolkit.readVersion"]));
     }
@@ -3209,7 +3228,7 @@ mod tests {
     fn import_arg_namespace_not_forwarded_escapes() {
         let cases: &[(&str, &[&str])] = &[
             // A catalog-level alias as an import argument is not forwarded
-            // (only whole roots are), so the child uses the namespace where
+            // (only whole root_attributes are), so the child uses the namespace where
             // the scanner cannot see it: it escapes.
             (
                 "{ catalogs }: let org = catalogs.myorg; in import ./x.nix { dep = org; }",
@@ -3236,7 +3255,7 @@ mod tests {
         ];
         for (content, expected) in cases {
             assert_eq!(
-                refs(content, &roots(&["catalogs"])),
+                refs(content, &root_attributes(&["catalogs"])),
                 set(expected),
                 "content: {content}"
             );
@@ -3256,7 +3275,7 @@ mod tests {
         ];
         for (content, expected) in cases {
             assert_eq!(
-                refs(content, &roots(&["catalogs"])),
+                refs(content, &root_attributes(&["catalogs"])),
                 set(expected),
                 "content: {content}"
             );
@@ -3267,7 +3286,7 @@ mod tests {
     fn import_whole_root_argument_followed() {
         let got = refs_at(
             "test_data/catalog_refs/import-entry-whole.nix",
-            &roots(&["catalogs"]),
+            &root_attributes(&["catalogs"]),
         );
         assert_eq!(got, set(&["catalogs.myorg.whole-pkg"]));
     }
@@ -3275,12 +3294,12 @@ mod tests {
     #[test]
     fn import_whole_root_to_pattern_param_escapes() {
         // The helper destructures the namespace with a pattern parameter;
-        // its entries are namespace members, not roots, so they cannot be
+        // its entries are namespace members, not root_attributes, so they cannot be
         // bound statically and the whole root escapes rather than being
         // dropped.
         let got = refs_at(
             "test_data/catalog_refs/import-entry-pattern.nix",
-            &roots(&["catalogs"]),
+            &root_attributes(&["catalogs"]),
         );
         assert_eq!(got, set(&["catalogs.*"]));
     }
@@ -3289,7 +3308,7 @@ mod tests {
     fn import_root_name_bound_to_other_value_not_followed() {
         let got = refs_at(
             "test_data/catalog_refs/import-entry-shadowed.nix",
-            &roots(&["catalogs"]),
+            &root_attributes(&["catalogs"]),
         );
         assert_eq!(got, set(&["catalogs.myorg.direct-pkg"]));
     }
@@ -3298,7 +3317,7 @@ mod tests {
     fn import_directory_target_resolves_default_nix() {
         let got = refs_at(
             "test_data/catalog_refs/import-entry-dir.nix",
-            &roots(&["catalogs"]),
+            &root_attributes(&["catalogs"]),
         );
         assert_eq!(got, set(&["catalogs.myorg.dir-pkg"]));
     }
@@ -3309,7 +3328,7 @@ mod tests {
         // escapes analysis (a warning points at the dynamic path).
         let got = refs(
             "{ catalogs, p }: import p { inherit catalogs; }",
-            &roots(&["catalogs"]),
+            &root_attributes(&["catalogs"]),
         );
         assert_eq!(got, set(&["catalogs.*"]));
     }
@@ -3318,7 +3337,7 @@ mod tests {
     fn import_same_file_under_different_forwards_scans_both() {
         let got = refs_at(
             "test_data/catalog_refs/diamond-import/entry.nix",
-            &roots(&["catalogs", "inputs"]),
+            &root_attributes(&["catalogs", "inputs"]),
         );
         assert_eq!(
             got,
@@ -3330,10 +3349,10 @@ mod tests {
     fn import_same_file_under_composed_forwards_scans_both() {
         // The two chains reach common.nix with textually identical immediate
         // forwardings (`{ ns = cats; }`) that compose to different top-level
-        // roots; both compositions must be scanned.
+        // root_attributes; both compositions must be scanned.
         let got = refs_at(
             "test_data/catalog_refs/deep-diamond/entry.nix",
-            &roots(&["catalogs", "inputs"]),
+            &root_attributes(&["catalogs", "inputs"]),
         );
         assert_eq!(
             got,
@@ -3345,7 +3364,7 @@ mod tests {
     fn import_cycle_terminates_and_collects_refs() {
         let got = refs_at(
             "test_data/catalog_refs/import-cycle/entry.nix",
-            &roots(&["catalogs"]),
+            &root_attributes(&["catalogs"]),
         );
         assert_eq!(
             got,
@@ -3367,7 +3386,7 @@ mod tests {
             ),
         ];
         for (path, position) in cases {
-            let err = scan_err_at(path, &roots(&["catalogs"]));
+            let err = scan_err_at(path, &root_attributes(&["catalogs"]));
             assert_eq!(
                 err,
                 ScanError::UnreadableImport {
@@ -3396,7 +3415,7 @@ mod tests {
     fn import_let_bound_function_followed() {
         let got = refs_at(
             "test_data/catalog_refs/import-entry-letbound.nix",
-            &roots(&["catalogs"]),
+            &root_attributes(&["catalogs"]),
         );
         assert_eq!(got, set(&["catalogs.myorg.toolkit.readVersion"]));
     }
@@ -3405,7 +3424,7 @@ mod tests {
     fn import_direct_refs_in_entry_still_collected() {
         let got = refs_at(
             "test_data/catalog_refs/import-entry-with-direct-ref.nix",
-            &roots(&["catalogs"]),
+            &root_attributes(&["catalogs"]),
         );
         assert_eq!(
             got,
@@ -3445,7 +3464,7 @@ mod tests {
         ];
         for (label, content, position) in cases {
             assert_eq!(
-                scan_err(content, &roots(&["catalogs"])),
+                scan_err(content, &root_attributes(&["catalogs"])),
                 ScanError::UndeclaredRoot {
                     root: "catalogs".to_string(),
                     file: PathBuf::from("test.nix"),
@@ -3474,7 +3493,7 @@ mod tests {
         ];
         for (content, expected) in cases {
             assert_eq!(
-                refs(content, &roots(&["catalogs"])),
+                refs(content, &root_attributes(&["catalogs"])),
                 set(expected),
                 "content: {content}"
             );
@@ -3484,13 +3503,19 @@ mod tests {
     #[test]
     fn undeclared_root_without_references_is_not_an_error() {
         let content = "{ mkDerivation }: mkDerivation { pname = \"tool\"; }";
-        assert_eq!(refs(content, &roots(&["catalogs"])), BTreeSet::new());
+        assert_eq!(
+            refs(content, &root_attributes(&["catalogs"])),
+            BTreeSet::new()
+        );
     }
 
     #[test]
     fn let_bound_root_name_shadows_without_error() {
         let content = "{ config }:\nlet catalogs = config;\nin catalogs.myorg.toolkit.readVersion";
-        assert_eq!(refs(content, &roots(&["catalogs"])), BTreeSet::new());
+        assert_eq!(
+            refs(content, &root_attributes(&["catalogs"])),
+            BTreeSet::new()
+        );
     }
 
     #[test]
@@ -3500,7 +3525,7 @@ mod tests {
         // refs are kept.
         let content = "let version = \"1.0\";\nin { mkDerivation }:\nmkDerivation { v = catalogs.myorg.pkg.readVersion; }";
         assert_eq!(
-            refs(content, &roots(&["catalogs"])),
+            refs(content, &root_attributes(&["catalogs"])),
             set(&["catalogs.myorg.pkg.readVersion"])
         );
     }
@@ -3511,11 +3536,11 @@ mod tests {
         let content = fs::read_to_string(path).expect("test fixture missing");
         let err = analyze_file_at(
             &content,
-            &roots(&["catalogs"]),
+            &root_attributes(&["catalogs"]),
             path.parent(),
             &mut HashMap::new(),
             path,
-            &identity_origins(&roots(&["catalogs"])),
+            &identity_origins(&root_attributes(&["catalogs"])),
         )
         .expect_err("scan should fail");
         assert_eq!(err, ScanError::UndeclaredRoot {
