@@ -2,7 +2,8 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use super::{CatalogRef, FileInfo, ScanError, analyze_file_at, identity_origins};
+use super::analyze::{FileInfo, analyze_file_at, identity_origins};
+use super::{CatalogRef, ScanError};
 
 /// The NEF package files analyzed during closure resolution, keyed by package
 /// key.
