@@ -503,26 +503,30 @@ pub async fn install_github(
             Err(super::github::GitHubError::NotFound(_)) => Vec::new(),
             Err(err) => return Err(err.into()),
         };
-        if !assets.is_empty()
-            && let Some(asset) = try_resolve_asset(&assets, None, &name)
-        {
-            let asset = asset.clone();
+        if !assets.is_empty() {
+            // Fetch the author manifest *before* asset resolution so the
+            // `[extension.binary].asset` template can influence selection —
+            // otherwise the template is dead code and selection is
+            // substring-only.
             let manifest_ref = resolved.tag.as_deref().unwrap_or(&resolved.commit);
             let manifest = source
                 .fetch_author_manifest(&owner, &repo, manifest_ref)
                 .await?;
-            return install_github_binary(
-                flox,
-                &owner,
-                &repo,
-                &name,
-                &resolved,
-                &asset,
-                pin.is_some(),
-                &source,
-                manifest.as_ref(),
-            )
-            .await;
+            if let Some(asset) = try_resolve_asset(&assets, manifest.as_ref(), &name) {
+                let asset = asset.clone();
+                return install_github_binary(
+                    flox,
+                    &owner,
+                    &repo,
+                    &name,
+                    &resolved,
+                    &asset,
+                    pin.is_some(),
+                    &source,
+                    manifest.as_ref(),
+                )
+                .await;
+            }
         }
     }
 
@@ -762,6 +766,16 @@ async fn populate_binary_staging(
     };
     let state_str = render_installed_state(&state)?;
     fs::write(staging.join("state.toml"), state_str)?;
+
+    // Persist the fetched author manifest so dispatch can honor the
+    // extension's [environment] / [on_active] policy. A binary extension's
+    // archive usually contains only the executable, so without this the
+    // manifest would be lost and dispatch would default to Inherit.
+    if let Some(manifest) = manifest {
+        let manifest_str = super::manifest::render_author_manifest(manifest)?;
+        fs::write(staging.join("flox-extension.toml"), manifest_str)?;
+    }
+
     Ok(state)
 }
 
@@ -796,6 +810,11 @@ fn extract_asset(
 /// reset shells out to `git -C <dir> reset --hard FETCH_HEAD` because no
 /// trait wrapper exists for `reset` (P02-D2 precedent).
 pub async fn upgrade(flox: &Flox, name: &str, force: bool) -> Result<UpgradeStatus, UpgradeError> {
+    // Reject path-traversal / invalid names before composing any path
+    // (upgrade builds `flox-<name>` for the install dir and state path).
+    if !is_valid_extension_name(name) {
+        return Err(UpgradeError::NotInstalled(name.to_string()));
+    }
     // Acquire the lock BEFORE reading state.toml so a concurrent `install`
     // / `remove` / `upgrade` can't swap the file between the read here and
     // any subsequent write. The `local` / pinned early-returns stay, but
@@ -826,7 +845,19 @@ pub async fn upgrade(flox: &Flox, name: &str, force: bool) -> Result<UpgradeStat
     }
 
     if state.branch.is_empty() {
-        return Err(UpgradeError::NoBranch(name.to_string()));
+        // No tracked branch. A source extension installed from a release
+        // tag records a tag but no branch; upgrade it by re-resolving and
+        // re-cloning at the newest tag (mirrors the binary path). Only a
+        // genuinely branchless *and* tagless install is unupgradeable.
+        if state.tag.is_empty() {
+            return Err(UpgradeError::NoBranch(name.to_string()));
+        }
+        // Release the lock before delegating: `install_github` re-acquires
+        // it, and `LockGuard` is non-reentrant. `install_github` is
+        // self-contained (re-resolves and force-installs atomically under
+        // its own lock), so nothing here needs protecting across the gap.
+        drop(_guard);
+        return upgrade_source_tag(flox, &state).await;
     }
 
     let git = flox_rust_sdk::providers::git::GitCommandProvider::open(&install_dir)
@@ -927,7 +958,16 @@ async fn upgrade_binary(
         .list_release_assets(&state.owner, &state.repo, tag_for_lookup)
         .await
         .map_err(|err| UpgradeError::Install(Box::new(InstallError::GitHub(err))))?;
-    let asset = match super::github::resolve_asset(&assets, None, name) {
+
+    // Fetch the manifest before resolving the asset so its `asset` template
+    // can influence selection (see the matching reorder in `install_github`).
+    let manifest_ref = resolved.tag.as_deref().unwrap_or(&resolved.commit);
+    let manifest = source
+        .fetch_author_manifest(&state.owner, &state.repo, manifest_ref)
+        .await
+        .map_err(|err| UpgradeError::Install(Box::new(InstallError::GitHub(err))))?;
+
+    let asset = match super::github::resolve_asset(&assets, manifest.as_ref(), name) {
         Ok(a) => a.clone(),
         Err(err) => {
             return Err(UpgradeError::Install(Box::new(
@@ -945,12 +985,6 @@ async fn upgrade_binary(
     } else {
         state.commit.clone()
     };
-
-    let manifest_ref = resolved.tag.as_deref().unwrap_or(&resolved.commit);
-    let manifest = source
-        .fetch_author_manifest(&state.owner, &state.repo, manifest_ref)
-        .await
-        .map_err(|err| UpgradeError::Install(Box::new(InstallError::GitHub(err))))?;
 
     install_github_binary(
         flox,
@@ -972,6 +1006,36 @@ async fn upgrade_binary(
         new_tag
     };
     Ok(UpgradeStatus::Upgraded { from, to })
+}
+
+/// Upgrade a source (`script`/`git`) extension that was installed from a
+/// release tag and therefore has no tracked branch: re-resolve the latest
+/// tag and, if it advanced, re-clone at it via the install flow.
+async fn upgrade_source_tag(
+    flox: &Flox,
+    state: &InstalledState,
+) -> Result<UpgradeStatus, UpgradeError> {
+    let source = super::github::GitHubSource::from_env();
+    let resolved = source
+        .resolve_latest(&state.owner, &state.repo)
+        .await
+        .map_err(|err| UpgradeError::Install(Box::new(InstallError::GitHub(err))))?;
+    let new_tag = resolved.tag.clone().unwrap_or_default();
+    if new_tag.is_empty() || new_tag == state.tag {
+        return Ok(UpgradeStatus::AlreadyCurrent);
+    }
+
+    // Re-clone at the newest tag. `install_github` re-resolves latest and
+    // overwrites the existing install under `force`.
+    let spec = format!("{}/{}", state.owner, state.repo);
+    install_github(flox, &spec, None, true)
+        .await
+        .map_err(|err| UpgradeError::Install(Box::new(err)))?;
+
+    Ok(UpgradeStatus::Upgraded {
+        from: state.tag.clone(),
+        to: new_tag,
+    })
 }
 
 /// Upgrade every installed extension, collecting per-item results.
@@ -1157,6 +1221,13 @@ fn parse_owner_repo(spec: &str) -> Result<(String, String), InstallError> {
 
 /// Remove an installed extension by name.
 pub fn remove(flox: &Flox, name: &str) -> Result<(), RemoveError> {
+    // Reject path-traversal / invalid names before composing any path.
+    // Without this, `remove "x/../../../dir"` would build
+    // `<root>/flox-x/../../../dir` and `remove_dir_all` a directory outside
+    // the extensions root.
+    if !is_valid_extension_name(name) {
+        return Err(RemoveError::NotFound(name.to_string()));
+    }
     let install_dir = layout::install_dir(flox, name);
     if !install_dir.exists() {
         return Err(RemoveError::NotFound(name.to_string()));
@@ -1314,6 +1385,18 @@ pub fn check_not_reserved(name: &str) -> Result<(), InstallError> {
         return Err(InstallError::ReservedName(name.to_string()));
     }
     Ok(())
+}
+
+/// Whether `name` is a syntactically valid extension name — the same
+/// `[a-z0-9][a-z0-9_-]*` rule install enforces via [`extract_extension_name`].
+///
+/// This is the guard `remove` and `upgrade` use before composing a
+/// `flox-<name>` path. A name containing `/`, a path separator, or `..`
+/// fails the charset check, which is what prevents those operations from
+/// building a path that escapes the extensions root and, in `remove`'s
+/// case, recursively deleting it.
+pub fn is_valid_extension_name(name: &str) -> bool {
+    extract_extension_name(&format!("flox-{name}")) == Some(name)
 }
 
 fn git_head_commit(source: &Path) -> Option<String> {
@@ -1622,6 +1705,43 @@ mod tests {
         let (flox, _tempdir) = flox_instance();
         let err = remove(&flox, "missing").unwrap_err();
         assert!(matches!(err, RemoveError::NotFound(ref n) if n == "missing"));
+    }
+
+    #[test]
+    fn is_valid_extension_name_rejects_traversal_and_separators() {
+        assert!(is_valid_extension_name("hello"));
+        assert!(is_valid_extension_name("hello-world"));
+        assert!(is_valid_extension_name("h"));
+        assert!(!is_valid_extension_name(""));
+        assert!(!is_valid_extension_name("a/b"));
+        assert!(!is_valid_extension_name("hello/../../../etc"));
+        assert!(!is_valid_extension_name("../victim"));
+        assert!(!is_valid_extension_name("a b"));
+        assert!(!is_valid_extension_name("Hello"));
+    }
+
+    #[test]
+    fn remove_rejects_traversal_name_without_deleting_outside() {
+        let (flox, _tempdir) = flox_instance();
+        let src_root = TempDir::new().unwrap();
+        let src = make_source(src_root.path(), "hello");
+        install_local(&flox, &src, false).unwrap();
+
+        // A directory just outside the extensions root that a naive
+        // `flox-{name}` join + remove_dir_all could otherwise reach.
+        let victim = layout::extensions_root(&flox)
+            .parent()
+            .unwrap()
+            .join("victim");
+        fs::create_dir_all(&victim).unwrap();
+
+        let err = remove(&flox, "hello/../../victim").unwrap_err();
+        assert!(matches!(err, RemoveError::NotFound(_)));
+        assert!(
+            victim.exists(),
+            "a traversal name must not delete a directory outside the extensions root"
+        );
+        assert!(layout::install_dir(&flox, "hello").exists());
     }
 
     #[test]

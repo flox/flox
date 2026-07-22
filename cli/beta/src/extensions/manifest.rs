@@ -120,6 +120,10 @@ pub fn render_installed_state(state: &InstalledState) -> Result<String, Manifest
     Ok(toml::to_string(state)?)
 }
 
+pub fn render_author_manifest(manifest: &AuthorManifest) -> Result<String, ManifestError> {
+    Ok(toml::to_string(manifest)?)
+}
+
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;
