@@ -20,6 +20,8 @@ struct FloxTokenClaims {
     exp: usize,
     /// The OIDC subject identifier — an opaque, pseudonymous id
     /// (e.g. `github|3670948`) stable across the user's lifetime.
+    /// Declaring the claim here means a non-string `sub` fails the whole
+    /// token parse — deliberate, since OIDC requires `sub` to be a string.
     sub: Option<String>,
 }
 

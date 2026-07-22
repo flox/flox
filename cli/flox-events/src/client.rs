@@ -26,14 +26,16 @@ pub const BATCH_SIZE: usize = 100;
 /// `auth_subject`) and the static shared metadata template stamped onto
 /// every command event payload.
 ///
-/// `auth_subject` is the OIDC `sub` claim of the FloxHub auth token when
-/// one was present at client construction time — an opaque, pseudonymous
-/// subject identifier (e.g. `github|3670948`). It is never the user's
-/// email, handle, or display name; the caller is responsible for passing
-/// only the `sub` claim. Anonymous invocations pass `None` and every
-/// emitted [`Event`] then omits the field. Like `device_id` and
-/// `invocation_id`, the value is a per-process snapshot: a token change
-/// mid-invocation does not re-stamp events.
+/// `auth_subject` is an opaque, pseudonymous subject identifier
+/// (e.g. `github|3670948`). It is never the user's email, handle, or
+/// display name.
+/// Setting this is the caller's responsibility. In practice we use the
+/// OIDC `sub` field. Invocations using PAT machine tokens or kerberos,
+/// or that aren't logged in yet, pass `None`, causing every emitted
+/// [`Event`] to omit the field.
+///
+/// Like `device_id` and `invocation_id`, the value is a per-process
+/// snapshot: a token change mid-invocation does not re-stamp events.
 #[derive(Debug)]
 pub struct EventsClient {
     pub device_id: Uuid,
