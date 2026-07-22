@@ -216,3 +216,46 @@ To apply these changes, run upgrade without the '--dry-run' flag."
   assert_success
   assert_output "No upgrades available for the specified packages in 'test'."
 }
+
+# ---------------------------------------------------------------------------- #
+# Regression tests for schema migration bugs
+# ---------------------------------------------------------------------------- #
+
+# bats test_tags=upgrade,regression
+@test "upgrade keeps manifest and lockfile schemas in sync" {
+  # Init environment, then overwrite with pre-built v1 fixtures
+  # (created by flox v1.9.1 with curl+hello installed).
+  "$FLOX_BIN" init
+  cp "$GENERATED_DATA/envs/v1_curl_hello/manifest.toml" "$MANIFEST_PATH"
+  cp "$GENERATED_DATA/envs/v1_curl_hello/manifest.lock" "$LOCK_PATH"
+
+  # Confirm starting state: manifest is v1
+  run grep -c '^version = 1' "$MANIFEST_PATH"
+  assert_success
+
+  # The mock resolves the same package versions the fixture lockfile
+  # already contains, so this upgrade is a no-op.
+  # A no-op upgrade must not persist anything: in particular it must not
+  # migrate the on-disk manifest while skipping the lockfile write
+  # (the inverse of the CLI-4 divergence).
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/curl_hello.yaml" \
+    run "$FLOX_BIN" upgrade
+  assert_success
+  assert_output --partial "No upgrades available"
+
+  # The on-disk manifest is untouched.
+  run grep -c '^version = 1' "$MANIFEST_PATH"
+  assert_success
+
+  # Whatever the outcome of an upgrade, the schema of the on-disk manifest
+  # and the schema of the manifest embedded in the lockfile must match.
+  # Don't assert a specific version: the invariant is that the two never
+  # diverge, not that they land on any particular schema.
+  manifest_schema=$(sed -n 's/^schema-version = "\(.*\)"/\1/p; s/^version = \(.*\)/\1/p' "$MANIFEST_PATH" | head -1)
+  lockfile_schema=$(jq -r '
+    if .manifest["schema-version"]
+    then .manifest["schema-version"]
+    else (.manifest.version | tostring)
+    end' "$LOCK_PATH")
+  assert_equal "$manifest_schema" "$lockfile_schema"
+}

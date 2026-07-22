@@ -550,6 +550,9 @@ impl CoreEnvironment<ReadOnly> {
         out_link_prefix: Option<&Path>,
     ) -> Result<UpgradeResult, EnvironmentError> {
         tracing::debug!(to_upgrade = groups_or_iids.join(","), "upgrading");
+        let manifest_without_migrating = self.manifest_without_migrating()?;
+        let original_schema = manifest_without_migrating.get_schema_version();
+
         let manifest = self.manifest(flox)?;
 
         Self::ensure_valid_upgrade(groups_or_iids, &manifest)?;
@@ -557,20 +560,31 @@ impl CoreEnvironment<ReadOnly> {
 
         let mut result = self.upgrade_with_catalog_client(flox, groups_or_iids, &manifest)?;
 
-        // SAFETY: serde_json::to_string_pretty is only documented to fail if
-        // the "Serialize decides to fail, or if T contains a map with non-string keys",
-        // neither of which should happen here.
-        let lockfile_contents = serde_json::to_string_pretty(&result.new_lockfile).unwrap();
-
         if write_lockfile {
             if result.diff().is_empty() {
                 return Ok(result);
             }
 
+            // If the merged manifest required a newer schema than the on-disk
+            // manifest (e.g. due to outputs migration), migrate the on-disk
+            // manifest to match.
+            // This must happen after the empty-diff early return above so that
+            // a no-op upgrade leaves both the manifest and the lockfile
+            // untouched; migrating the manifest without also writing the
+            // lockfile would leave the two at diverged schemas.
+            self.ensure_manifest_schemas_match(original_schema, &mut result.new_lockfile)?;
+
+            // SAFETY: serde_json::to_string_pretty is only documented to fail if
+            // the "Serialize decides to fail, or if T contains a map with non-string keys",
+            // neither of which should happen here.
+            let lockfile_contents = serde_json::to_string_pretty(&result.new_lockfile).unwrap();
+
             let store_path =
                 self.transact_with_lockfile_contents(lockfile_contents, flox, out_link_prefix)?;
             result.store_path = Some(store_path);
         } else {
+            // SAFETY: see above
+            let lockfile_contents = serde_json::to_string_pretty(&result.new_lockfile).unwrap();
             let tmp_lockfile = tempfile::NamedTempFile::new_in(&flox.temp_dir)
                 .map_err(CoreEnvironmentError::WriteLockfile)?;
             fs::write(&tmp_lockfile, lockfile_contents)
