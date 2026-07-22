@@ -201,7 +201,10 @@ pub struct CommandPayload {
     /// `sys_info` failed. Deliberately the same value as
     /// `os_family_release` at the producer — consumers derive two
     /// distinct legacy fields from this one field and treat the
-    /// OS-family release as a separate concept.
+    /// OS-family release as a separate concept. Unlike
+    /// `os_family_release` (serialized as `null` when absent), this
+    /// field is omitted from the wire so rows buffered by binaries that
+    /// predate it round-trip unchanged.
     #[serde(skip_serializing_if = "Option::is_none")]
     kernel_version: Option<String>,
     /// Linux distribution id (e.g. `ubuntu`); `None` outside Linux.
@@ -267,8 +270,11 @@ impl SharedMetadataTemplate {
     /// a complete [`CommandPayload`] ready for serialization.
     ///
     /// `kernel_version` and the `in_ci` / `containerd` bools are derived
-    /// here from the template's own fields, so they cannot disagree with
-    /// the values they mirror.
+    /// here from the template's own fields. This is the only production
+    /// constructor of [`CommandPayload`] (its fields are private), so
+    /// every *emitted* payload agrees with the values it mirrors.
+    /// Deserialization is exempt on purpose: rows buffered by older
+    /// binaries reload with the derived fields absent.
     pub fn into_payload(&self, subcommand: String) -> CommandPayload {
         CommandPayload {
             subcommand,
@@ -419,7 +425,8 @@ pub struct CliEnvironmentActivatePayload {
     lockfile_version: Option<String>,
     /// The locked manifest's declared schema version (`"1"`, `"1.10.0"`,
     /// …) — distinct from `lockfile_version`, the lockfile's own schema
-    /// version. Absent on emits that precede the manifest load.
+    /// version. Absent on the eager emits; populated only on the
+    /// result-known emit.
     #[serde(skip_serializing_if = "Option::is_none")]
     manifest_version: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -984,6 +991,20 @@ mod tests {
         let mut expected = command_payload("activate");
         expected.invocation_sources = vec!["CI.jenkins".to_string()];
         expected.in_ci = Some(true);
+        assert_eq!(template.into_payload("activate".to_string()), expected);
+
+        // Bare exact-match root token.
+        template.invocation_sources = vec!["ci".to_string()];
+        let mut expected = command_payload("activate");
+        expected.invocation_sources = vec!["ci".to_string()];
+        expected.in_ci = Some(true);
+        assert_eq!(template.into_payload("activate".to_string()), expected);
+
+        // The containerd root follows the same hierarchy rule.
+        template.invocation_sources = vec!["containerd.foo".to_string()];
+        let mut expected = command_payload("activate");
+        expected.invocation_sources = vec!["containerd.foo".to_string()];
+        expected.containerd = Some(true);
         assert_eq!(template.into_payload("activate".to_string()), expected);
     }
 

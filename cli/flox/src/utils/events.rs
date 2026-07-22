@@ -221,6 +221,10 @@ mod tests {
                     .expect("payload serializes");
                 assert_eq!(payload.get("in_ci"), Some(&serde_json::json!(true)));
                 assert_eq!(payload.get("containerd"), Some(&serde_json::json!(true)));
+                // The template above has `os_family_release: None`, so
+                // the derived `kernel_version` must be absent — not
+                // fabricated.
+                assert_eq!(payload.get("kernel_version"), None);
             },
         );
     }
