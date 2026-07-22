@@ -44,6 +44,12 @@ impl EventsHub {
         self.with_client(Option::take)
     }
 
+    /// Whether a client is installed. Callers use this to skip work that
+    /// only feeds event payloads when recording would be a no-op anyway.
+    pub fn has_client(&self) -> bool {
+        self.with_client(|client| client.is_some())
+    }
+
     pub fn flush(&self, force: bool) -> Result<()> {
         self.with_client(|client| {
             if let Some(client) = client {
