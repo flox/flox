@@ -5,6 +5,11 @@
 //! v2-events pipeline (this module + the [`flox_events`] crate). The two
 //! stacks share no code and write separate on-disk buffers.
 //! `config.flox.disable_metrics` silences both.
+//!
+//! Authenticated invocations additionally carry a pseudonymous subject
+//! identifier as `auth_subject`, resolved by the caller from the auth
+//! context (`AuthContext::user_subject`) — see
+//! [`flox_events::EventsClient`] for the field's semantics.
 
 use std::env;
 use std::str::FromStr;
@@ -100,7 +105,16 @@ fn shared_metadata_template() -> SharedMetadataTemplate {
 /// Returns `None` if
 /// a) metrics are disabled by config, or
 /// b) reading the metrics uuid fails.
-pub fn build_events_client(config: &Config, invocation_id: Uuid) -> Option<EventsClient> {
+///
+/// `auth_subject` is the caller-resolved pseudonymous subject identifier
+/// (`AuthContext::user_subject`) — the returned client snapshots it at
+/// construction (see [`flox_events::EventsClient`] for the snapshot
+/// semantics).
+pub fn build_events_client(
+    config: &Config,
+    invocation_id: Uuid,
+    auth_subject: Option<String>,
+) -> Option<EventsClient> {
     if config.flox.disable_metrics {
         debug!("v2 events: disable_metrics is true; not installing client");
         return None;
@@ -120,6 +134,7 @@ pub fn build_events_client(config: &Config, invocation_id: Uuid) -> Option<Event
         METRICS_EVENTS_URL_V2.clone(),
         METRICS_EVENTS_API_KEY_V2.clone(),
         invocation_id,
+        auth_subject,
         shared_metadata_template(),
     ))
 }
@@ -220,7 +235,7 @@ mod tests {
             /* disable_metrics */ true,
         );
 
-        let client = build_events_client(&config, Uuid::new_v4());
+        let client = build_events_client(&config, Uuid::new_v4(), None);
         assert!(client.is_none(), "disable_metrics must take priority");
     }
 
@@ -233,7 +248,7 @@ mod tests {
         // No metrics-uuid file written: read_metrics_uuid errors.
         let config = test_config(&tempdir, data_dir, /* disable_metrics */ false);
 
-        let client = build_events_client(&config, Uuid::new_v4());
+        let client = build_events_client(&config, Uuid::new_v4(), None);
         assert!(client.is_none(), "missing uuid must short-circuit");
     }
 
@@ -244,9 +259,27 @@ mod tests {
         let uuid = Uuid::new_v4();
         let config = test_config_with_uuid(&tempdir, uuid);
 
-        let client = build_events_client(&config, Uuid::new_v4());
+        let client = build_events_client(&config, Uuid::new_v4(), None);
         assert!(client.is_some(), "v2 is enabled by default");
         assert_eq!(client.unwrap().device_id, uuid);
+    }
+
+    /// The wrapper stamps whatever subject the caller resolved — which
+    /// subjects resolve for which auth states is pinned where that logic
+    /// lives (`AuthContext::user_subject` / `FloxhubToken::sub`).
+    #[test]
+    #[serial(v2_events_wrapper_env)]
+    fn build_events_client_stamps_provided_auth_subject() {
+        let tempdir = tempfile::tempdir().expect("tempdir");
+        let config = test_config_with_uuid(&tempdir, Uuid::new_v4());
+
+        let client =
+            build_events_client(&config, Uuid::new_v4(), Some("github|3670948".to_string()))
+                .expect("client installs");
+        assert_eq!(client.auth_subject.as_deref(), Some("github|3670948"));
+
+        let client = build_events_client(&config, Uuid::new_v4(), None).expect("client installs");
+        assert_eq!(client.auth_subject, None, "anonymous use stays anonymous");
     }
 
     /// End-to-end: install a hub-owned client backed by a
@@ -273,6 +306,7 @@ mod tests {
             Uuid::new_v4(),
             tempdir.path(),
             invocation_id,
+            None,
             template,
             connection,
         );

@@ -302,24 +302,6 @@ impl FloxArgs {
             }
         }
 
-        if let Some(events_client) = build_events_client(&config, resolve_invocation_id()) {
-            flox_events::EventsHub::global().set_client(events_client);
-        }
-
-        // Emit the v2 `cli.command_run` once at dispatch start. The matching
-        // `cli.command_completed` is emitted when the dispatch finishes (or by
-        // `activate` before it replaces the process); the hub deduplicates.
-        let v2_subcommand: &'static str = self
-            .command
-            .as_ref()
-            .map(Commands::subcommand_name)
-            .unwrap_or("help");
-        if let Err(err) =
-            flox_events::EventsHub::global().record_command_run(v2_subcommand.to_string())
-        {
-            debug!(error = %err, "Failed to record v2 cli.command_run event");
-        }
-
         // Explicit floxhub_url override via CLI flag, on top of config.
         let floxhub_url = self
             .floxhub_url
@@ -349,9 +331,11 @@ impl FloxArgs {
 
         // Resolve the token string once, upstream: opportunistically migrate an
         // existing plaintext token into the OS keyring, then — when the merged
-        // config supplied no token — populate it from the keyring so both the
-        // loud `resolve_floxhub_token` and the silent `init_floxhub_client` see
-        // the keyring value.
+        // config supplied no token — populate it from the keyring so the loud
+        // `resolve_floxhub_token`, the silent `init_floxhub_client`, and the
+        // v2-events client's `auth_subject` snapshot all see the keyring
+        // value. This block must stay ahead of the token resolution and the
+        // events-client install below.
         //
         // Store credentials only in Auth0 mode and outside the prompt/hook
         // flow: in other modes (e.g. Kerberos) the token is not used for
@@ -359,7 +343,10 @@ impl FloxArgs {
         // moved or read, and the prompt/hook flow must do no keyring I/O.
         // `resolve_floxhub_token` is deliberately not behind this gate — it
         // still runs in the hook flow (returning the token, suppressing
-        // messages) and gates on the auth mode alone.
+        // messages) and gates on the auth mode alone. Consequently, hook-flow
+        // invocations by keyring-storage users emit with `auth_subject`
+        // absent — an accepted gap; a prompt hook must never trigger a
+        // keyring unlock.
         let stores = CredentialStores::new(floxhub.base_url(), &config.flox.config_dir);
         let is_auth0 = matches!(authn_mode, AuthnMode::Auth0);
         let should_store_credentials = is_auth0 && !self.is_prompt_hook_flow();
@@ -377,12 +364,43 @@ impl FloxArgs {
         }
 
         let floxhub_token = self.resolve_floxhub_token(&config, &authn_mode, &stores);
+        let credential = AuthContext::from_mode(&authn_mode, floxhub_token.clone());
+
+        if let Some(events_client) = build_events_client(
+            &config,
+            resolve_invocation_id(),
+            credential.user_subject().map(String::from),
+        ) {
+            flox_events::EventsHub::global().set_client(events_client);
+        }
+
+        // Emit the v2 `cli.command_run` once at dispatch start. The matching
+        // `cli.command_completed` is emitted when the dispatch finishes (or by
+        // `activate` before it replaces the process); the hub deduplicates.
+        //
+        // "Dispatch start" sits after credential resolution so the event
+        // carries `auth_subject` (see the block above). The cost: an
+        // invocation that dies upstream — on the fallible FloxHub-URL
+        // construction, killed while `resolve_into` waits on an OS keyring
+        // unlock, or killed during credential resolution (e.g. kerberos
+        // ticket I/O) — records neither `cli.command_run` nor the matching
+        // `cli.command_completed` (no client installs, so the invocation is
+        // invisible to v2 telemetry). Accepted: such an invocation errors
+        // out or is aborted before doing any work.
+        let v2_subcommand: &'static str = self
+            .command
+            .as_ref()
+            .map(Commands::subcommand_name)
+            .unwrap_or("help");
+        if let Err(err) =
+            flox_events::EventsHub::global().record_command_run(v2_subcommand.to_string())
+        {
+            debug!(error = %err, "Failed to record v2 cli.command_run event");
+        }
 
         let metrics_device_uuid = (!config.flox.disable_metrics)
             .then(|| read_metrics_uuid(&config).ok())
             .flatten();
-
-        let credential = AuthContext::from_mode(&authn_mode, floxhub_token.clone());
 
         let floxhub_client = init_floxhub_client(
             floxhub.api_url_str(),
