@@ -289,6 +289,16 @@ impl RemoteEnvironment {
         self.inner.pointer()
     }
 
+    /// See [ManagedEnvironment::generation].
+    pub fn generation(&self) -> Option<GenerationId> {
+        self.inner.generation()
+    }
+
+    /// See [ManagedEnvironment::existing_lockfile_without_checkout].
+    pub fn existing_lockfile_without_checkout(&self) -> Result<Option<Lockfile>, EnvironmentError> {
+        self.inner.existing_lockfile_without_checkout()
+    }
+
     /// Push local changes to FloxHub for this remote environment
     ///
     /// This pushes any local changes made to the cached remote environment back to FloxHub.

@@ -270,7 +270,7 @@ impl Edit {
                 let edited_includes = old_includes != new_includes;
                 subcommand_metric!("edit", "edited_includes" = edited_includes);
                 if let Err(err) = EventsHub::global().record_event(EventKind::CliEnvironmentEdit(
-                    CliEnvironmentEditPayload::new(env_detail_from_concrete(&flox, environment))
+                    CliEnvironmentEditPayload::new(env_detail_from_concrete(flox, environment))
                         .with_edited_includes(edited_includes)
                         .with_manifest_version(new_lockfile.manifest_schema_version().to_string()),
                 )) {
