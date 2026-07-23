@@ -158,7 +158,14 @@ common_file_setup() {
 setup_file() { common_file_setup; }
 
 # Added for consistency with `teardown' routines.
-common_test_setup() { :; }
+common_test_setup() {
+  # Auto-activation is on by default. Default the whole suite to `allowlist`
+  # mode so that walking past a discovered `.flox` never auto-activates or
+  # prompts unless a test explicitly allows it. This keeps tests hermetic and
+  # independent of the developer's own shell/config leaking in. Files that
+  # exercise `prompt`-mode behaviour override this to `prompt` file-wide.
+  export FLOX_AUTO_ACTIVATE=allowlist
+}
 setup() { common_test_setup; }
 
 # ---------------------------------------------------------------------------- #

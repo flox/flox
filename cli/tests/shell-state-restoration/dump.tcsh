@@ -23,7 +23,6 @@
 # helper.
 
 setenv LC_ALL C
-setenv FLOX_FEATURES_AUTO_ACTIVATE true
 setenv FLOX_SHELL `which tcsh`
 
 # tcsh-internal volatiles and this script's own helpers, filtered from

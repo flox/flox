@@ -116,6 +116,10 @@ setup_file() {
 
 setup() {
   common_test_setup
+  # This file exercises `prompt`-mode auto-activation (consent prompts and the
+  # default first-encounter behaviour), so override the suite-wide `allowlist`
+  # default back to `prompt` for every test here.
+  export FLOX_AUTO_ACTIVATE=prompt
   setup_isolated_flox
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.yaml"
 }
@@ -137,23 +141,6 @@ teardown() {
 }
 
 # ---------------------------------------------------------------------------- #
-# hook-env: feature flag gating
-# ---------------------------------------------------------------------------- #
-
-# Deactivate-action handling in hook-env is not gated, but the auto-activation
-# logic still is: without the flag the hook emits nothing, even with a
-# discoverable environment in the working directory.
-# TODO: Remove this test when the auto_activate feature flag is removed.
-# bats test_tags=hook:hook-env
-@test "'flox hook-env' succeeds without auto_activate feature flag but doesn't auto-activate" {
-  project_setup
-  unset FLOX_FEATURES_AUTO_ACTIVATE
-  run --separate-stderr "$FLOX_BIN" hook-env --shell bash --shell-pid "$$"
-  assert_success
-  assert_output ""
-}
-
-# ---------------------------------------------------------------------------- #
 # hook-env / deactivate: advisory preamble output is suppressed
 # ---------------------------------------------------------------------------- #
 
@@ -169,8 +156,6 @@ EXPIRED_FLOXHUB_TOKEN="eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3gu
 # would be eval'd by the shell.
 # bats test_tags=hook:hook-env
 @test "'flox hook-env' suppresses advisory preamble output" {
-  # With the flag set, hook-env legitimately emits an export to stdout.
-  unset FLOX_FEATURES_AUTO_ACTIVATE
   _FLOX_FLOXHUB_GIT_URL="https://git.example.invalid/" \
     FLOX_FLOXHUB_TOKEN="$EXPIRED_FLOXHUB_TOKEN" \
     run --separate-stderr "$FLOX_BIN" hook-env --shell bash --shell-pid "$$"
@@ -278,12 +263,10 @@ EXPIRED_FLOXHUB_TOKEN="eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3gu
 @test "bash: hook auto-activates a discovered environment on cd" {
   project_setup
   project2_setup
-  export FLOX_FEATURES_AUTO_ACTIVATE=true
   # Auto-activation is opt-in; allow the target before entering it.
   "$FLOX_BIN" activate allow -d "$PROJECT2_DIR"
 
   run --separate-stderr bash -c "
-    export FLOX_FEATURES_AUTO_ACTIVATE=true
     export FLOX_SHELL=\$(which bash)
     eval \"\$($FLOX_BIN activate -d $PROJECT_DIR)\"
     cd $PROJECT2_DIR
@@ -300,12 +283,10 @@ EXPIRED_FLOXHUB_TOKEN="eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3gu
 @test "zsh: hook auto-activates a discovered environment on cd" {
   project_setup
   project2_setup
-  export FLOX_FEATURES_AUTO_ACTIVATE=true
   # Auto-activation is opt-in; allow the target before entering it.
   "$FLOX_BIN" activate allow -d "$PROJECT2_DIR"
 
   run --separate-stderr zsh -c "
-    export FLOX_FEATURES_AUTO_ACTIVATE=true
     export FLOX_SHELL=\$(which zsh)
     eval \"\$($FLOX_BIN activate -d $PROJECT_DIR)\"
     cd $PROJECT2_DIR
@@ -322,12 +303,10 @@ EXPIRED_FLOXHUB_TOKEN="eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3gu
 @test "fish: hook auto-activates a discovered environment on cd" {
   project_setup
   project2_setup
-  export FLOX_FEATURES_AUTO_ACTIVATE=true
   # Auto-activation is opt-in; allow the target before entering it.
   "$FLOX_BIN" activate allow -d "$PROJECT2_DIR"
 
   run --separate-stderr fish -c "
-    set -gx FLOX_FEATURES_AUTO_ACTIVATE true
     eval ($FLOX_BIN activate -d $PROJECT_DIR)
     cd $PROJECT2_DIR
     _flox_hook
@@ -343,7 +322,6 @@ EXPIRED_FLOXHUB_TOKEN="eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3gu
 @test "fish: hook auto-activation sets the prompt" {
   project_setup
   project2_setup
-  export FLOX_FEATURES_AUTO_ACTIVATE=true
   # Mirror the reported scenario: the hook-registering outer activation is the
   # 'default' env, which is hidden from FLOX_PROMPT_ENVIRONMENTS, so the outer
   # activation defines no prompt variables at the top level. (An unscoped fish
@@ -359,7 +337,6 @@ EXPIRED_FLOXHUB_TOKEN="eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3gu
   # A known fish_prompt is defined up front because non-interactive fish has
   # no prompt function for set-prompt.fish to save and wrap.
   run unbuffer fish -c '
-    set -gx FLOX_FEATURES_AUTO_ACTIVATE true
     set -gx NO_COLOR 1
     function fish_prompt; echo -n "knownPrompt> "; end
     eval ("$FLOX_BIN" activate -d "$PROJECT_DIR")
@@ -376,12 +353,10 @@ EXPIRED_FLOXHUB_TOKEN="eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3gu
 @test "tcsh: hook auto-activates a discovered environment on cd" {
   project_setup
   project2_setup
-  export FLOX_FEATURES_AUTO_ACTIVATE=true
   # Auto-activation is opt-in; allow the target before entering it.
   "$FLOX_BIN" activate allow -d "$PROJECT2_DIR"
 
   run --separate-stderr tcsh -c "
-    setenv FLOX_FEATURES_AUTO_ACTIVATE true
     eval \"\`$FLOX_BIN activate -d $PROJECT_DIR\`\"
     cd $PROJECT2_DIR
     precmd
@@ -401,12 +376,10 @@ EXPIRED_FLOXHUB_TOKEN="eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3gu
 @test "bash: auto-activated environment deactivates after leaving its directory" {
   project_setup
   project2_setup
-  export FLOX_FEATURES_AUTO_ACTIVATE=true
   # Auto-activation is opt-in; allow the target before entering it.
   "$FLOX_BIN" activate allow -d "$PROJECT2_DIR"
 
   run --separate-stderr bash -c "
-    export FLOX_FEATURES_AUTO_ACTIVATE=true
     export FLOX_SHELL=\$(which bash)
     eval \"\$($FLOX_BIN activate -d $PROJECT_DIR)\"
     cd $PROJECT2_DIR
@@ -458,11 +431,9 @@ EXPIRED_FLOXHUB_TOKEN="eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3gu
 # bats test_tags=hook:auto-deactivate:manual
 @test "bash: manually activated environment is not deactivated on leaving" {
   project_setup
-  export FLOX_FEATURES_AUTO_ACTIVATE=true
   set_vars_manifest "$PROJECT_DIR" TEST_VAR manual
 
   run --separate-stderr bash -c "
-    export FLOX_FEATURES_AUTO_ACTIVATE=true
     export FLOX_SHELL=\$(which bash)
     eval \"\$($FLOX_BIN activate -d $PROJECT_DIR)\"
     cd $BATS_TEST_TMPDIR
@@ -477,12 +448,10 @@ EXPIRED_FLOXHUB_TOKEN="eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3gu
 @test "bash: re-entering a project after leaving re-activates it" {
   project_setup
   project2_setup
-  export FLOX_FEATURES_AUTO_ACTIVATE=true
   # Auto-activation is opt-in; allow the target before entering it.
   "$FLOX_BIN" activate allow -d "$PROJECT2_DIR"
 
   run --separate-stderr bash -c "
-    export FLOX_FEATURES_AUTO_ACTIVATE=true
     export FLOX_SHELL=\$(which bash)
     eval \"\$($FLOX_BIN activate -d $PROJECT_DIR)\"
     cd $PROJECT2_DIR
@@ -509,13 +478,11 @@ EXPIRED_FLOXHUB_TOKEN="eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3gu
   project_setup
   project2_setup
   project3_setup
-  export FLOX_FEATURES_AUTO_ACTIVATE=true
   # Auto-activation is opt-in; allow both layers of the nested stack.
   "$FLOX_BIN" activate allow -d "$PROJECT2_DIR"
   "$FLOX_BIN" activate allow -d "$PROJECT3_DIR"
 
   run --separate-stderr bash -c "
-    export FLOX_FEATURES_AUTO_ACTIVATE=true
     export FLOX_SHELL=\$(which bash)
     eval \"\$($FLOX_BIN activate -d $PROJECT_DIR)\"
     cd $PROJECT3_DIR
@@ -542,12 +509,10 @@ EXPIRED_FLOXHUB_TOKEN="eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3gu
 @test "bash: 'flox deactivate' suppresses re-activation until the directory is left" {
   project_setup
   project2_setup
-  export FLOX_FEATURES_AUTO_ACTIVATE=true
   # Auto-activation is opt-in; allow the target before entering it.
   "$FLOX_BIN" activate allow -d "$PROJECT2_DIR"
 
   run --separate-stderr bash -c "
-    export FLOX_FEATURES_AUTO_ACTIVATE=true
     export FLOX_SHELL=\$(which bash)
     eval \"\$($FLOX_BIN activate -d $PROJECT_DIR)\"
     cd $PROJECT2_DIR
@@ -584,13 +549,11 @@ EXPIRED_FLOXHUB_TOKEN="eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3gu
 @test "bash: hook does not auto-activate an environment denied via 'flox activate deny'" {
   project_setup
   project2_setup
-  export FLOX_FEATURES_AUTO_ACTIVATE=true
 
   # Record the deny preference for the second project before entering it.
   "$FLOX_BIN" activate deny -d "$PROJECT2_DIR"
 
   run --separate-stderr bash -c "
-    export FLOX_FEATURES_AUTO_ACTIVATE=true
     export FLOX_SHELL=\$(which bash)
     eval \"\$($FLOX_BIN activate -d $PROJECT_DIR)\"
     cd $PROJECT2_DIR
@@ -612,13 +575,11 @@ EXPIRED_FLOXHUB_TOKEN="eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3gu
 @test "bash: unregistered environment is not auto-activated without consent" {
   project_setup
   project2_setup
-  export FLOX_FEATURES_AUTO_ACTIVATE=true
   # No allow/deny recorded, so the default 'prompt' mode applies. This run is
   # non-interactive (no controlling terminal), so the hook cannot prompt and
   # must leave the environment unregistered rather than auto-activating it.
 
   run --separate-stderr bash -c "
-    export FLOX_FEATURES_AUTO_ACTIVATE=true
     export FLOX_SHELL=\$(which bash)
     eval \"\$($FLOX_BIN activate -d $PROJECT_DIR)\"
     cd $PROJECT2_DIR
@@ -635,7 +596,6 @@ EXPIRED_FLOXHUB_TOKEN="eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3gu
 @test "bash: answering the consent prompt with 'y' auto-activates the environment" {
   project_setup
   project2_setup
-  export FLOX_FEATURES_AUTO_ACTIVATE=true
 
   # Set up a .bashrc so the interactive shell has a known prompt
   export KNOWN_PROMPT="hooktest> "
@@ -654,7 +614,6 @@ EOF
 @test "bash: declining the consent prompt does not auto-activate the environment" {
   project_setup
   project2_setup
-  export FLOX_FEATURES_AUTO_ACTIVATE=true
 
   # Set up a .bashrc so the interactive shell has a known prompt
   export KNOWN_PROMPT="hooktest> "
@@ -674,7 +633,6 @@ EOF
   project_setup
   project2_setup
   project3_setup
-  export FLOX_FEATURES_AUTO_ACTIVATE=true
 
   # Set up a .bashrc so the interactive shell has a known prompt
   export KNOWN_PROMPT="hooktest> "
@@ -698,7 +656,6 @@ EOF
   project_setup
   project2_setup
   project3_setup
-  export FLOX_FEATURES_AUTO_ACTIVATE=true
 
   # Set up a .bashrc so the interactive shell has a known prompt
   export KNOWN_PROMPT="hooktest> "
@@ -726,7 +683,6 @@ EOF
 @test "bash: hook auto-activates via PROMPT_COMMAND in interactive shell" {
   project_setup
   project2_setup
-  export FLOX_FEATURES_AUTO_ACTIVATE=true
   # Auto-activation is opt-in; allow the target so the hook activates it
   # without prompting.
   "$FLOX_BIN" activate allow -d "$PROJECT2_DIR"
@@ -750,7 +706,6 @@ EOF
   project2_setup
   project3_setup
   projectz_setup
-  export FLOX_FEATURES_AUTO_ACTIVATE=true
   # Auto-activation is opt-in; allow every environment the run activates so the
   # hook does not prompt.
   "$FLOX_BIN" activate allow -d "$PROJECT2_DIR"
@@ -1041,14 +996,12 @@ EOF
 # bats test_tags=hook:reinsert:bash
 @test "bash: re-allowing a denied mid-stack env re-inserts it in ancestor order" {
   nested_chain_setup
-  export FLOX_FEATURES_AUTO_ACTIVATE=true
   # Allow outer and inner; deny the middle so the initial stack skips it.
   "$FLOX_BIN" activate allow -d "$NEST_OUTER_DIR"
   "$FLOX_BIN" activate allow -d "$NEST_INNER_DIR"
   "$FLOX_BIN" activate deny -d "$NEST_MID_DIR"
 
   run --separate-stderr bash -c "
-    export FLOX_FEATURES_AUTO_ACTIVATE=true
     export FLOX_SHELL=\$(which bash)
     cd $NEST_INNER_DIR
     eval \"\$($FLOX_BIN activate -d $NEST_OUTER_DIR)\"
@@ -1074,13 +1027,11 @@ EOF
 # bats test_tags=hook:reinsert:fish
 @test "fish: re-allowing a denied mid-stack env re-inserts it in ancestor order" {
   nested_chain_setup
-  export FLOX_FEATURES_AUTO_ACTIVATE=true
   "$FLOX_BIN" activate allow -d "$NEST_OUTER_DIR"
   "$FLOX_BIN" activate allow -d "$NEST_INNER_DIR"
   "$FLOX_BIN" activate deny -d "$NEST_MID_DIR"
 
   run --separate-stderr fish -c "
-    set -gx FLOX_FEATURES_AUTO_ACTIVATE true
     set -gx FLOX_SHELL (which fish)
     cd $NEST_INNER_DIR
     eval \"\$($FLOX_BIN activate -d $NEST_OUTER_DIR)\"
@@ -1098,14 +1049,12 @@ EOF
 # bats test_tags=hook:reinsert:manual-fallback
 @test "bash: re-allow activates on top when a manual env is layered above the target" {
   nested_chain_setup
-  export FLOX_FEATURES_AUTO_ACTIVATE=true
   # Allow only outer; deny the middle. Inner is manually activated (never
   # allowed), so it sits above the middle as a non-poppable layer.
   "$FLOX_BIN" activate allow -d "$NEST_OUTER_DIR"
   "$FLOX_BIN" activate deny -d "$NEST_MID_DIR"
 
   run --separate-stderr bash -c "
-    export FLOX_FEATURES_AUTO_ACTIVATE=true
     export FLOX_SHELL=\$(which bash)
     cd $NEST_INNER_DIR
     eval \"\$($FLOX_BIN activate -d $NEST_OUTER_DIR)\"

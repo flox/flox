@@ -18,10 +18,6 @@ flox [<general-options>] activate allow
 
 # DESCRIPTION
 
-```{.include}
-./include/auto-activate-experimental.md
-```
-
 Permits the selected environment to be auto-activated.
 
 Once an environment is allowed,

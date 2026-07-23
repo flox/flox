@@ -132,20 +132,6 @@ impl HookEnv {
             }
         }
 
-        // The deactivate-action handling above runs unconditionally; the
-        // auto-activation logic below stays gated behind the auto_activate
-        // feature flag.
-        if !flox.features.auto_activate {
-            // Only record a metric when this run actually does something;
-            // `hook-env` runs on every shell prompt, and recording the common
-            // nothing-to-do case would be noise.
-            if !actions.is_empty() {
-                subcommand_metric!("hook-env");
-            }
-            writer.flush()?;
-            return Ok(());
-        }
-
         let ctx = gather_auto_activate_context(&config, !actions.is_empty())?;
         let plan = plan_auto_activation(&ctx);
 

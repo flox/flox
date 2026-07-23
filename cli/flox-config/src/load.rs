@@ -178,7 +178,7 @@ fn raw_config_from_parts(
 /// The returned source splits on `#` (not `_`), so the config crate parses it,
 /// case insensitively, as `{ <prefix>: { something_nested: () } }`
 /// extracting one level of nesting, with the leaf key keeping its own underscores
-/// (`FLOX_FEATURES_AUTO_ACTIVATE` -> `features.auto_activate`).
+/// (`FLOX_FEATURES_SOME_FLAG` -> `features.some_flag`).
 fn mk_environment(envs: &mut Vec<(String, String)>, prefix: &str) -> Environment {
     let (prefixed_envs, flox_envs): (HashMap<String, String>, Vec<(String, String)>) = envs
         .iter()

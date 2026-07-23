@@ -326,17 +326,6 @@ impl Activate {
         config: Config,
         mut flox: Flox,
     ) -> Result<()> {
-        if !flox.features.auto_activate {
-            let cmd_name = match subcommand {
-                AutoActivate::Allow => "allow",
-                AutoActivate::Deny => "deny",
-            };
-            bail!(
-                "'{}' requires the auto_activate feature flag. Set FLOX_FEATURES_AUTO_ACTIVATE=true.",
-                cmd_name
-            );
-        }
-
         let concrete_environment = self
             .environment
             .to_concrete_environment(&mut flox, None)
@@ -360,6 +349,16 @@ impl Activate {
         message::updated(formatdoc! {"
             Auto-activation {verb} for {description}.
         "});
+
+        // The decision is recorded, but auto-activation relies on the prompt
+        // hook to act on it. Warn if the hook is disabled so the user isn't
+        // surprised that nothing auto-activates.
+        if config.flox.disable_hook.unwrap_or(false) {
+            message::warning(formatdoc! {"
+                The Flox prompt hook is disabled ('disable_hook = true'), so auto-activation will not run.
+                Re-enable it with 'flox config --delete disable_hook'.
+            "});
+        }
 
         Ok(())
     }

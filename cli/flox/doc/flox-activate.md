@@ -87,10 +87,6 @@ Inside a `flox activate` subshell,
 
 # AUTO-ACTIVATION
 
-```{.include}
-./include/auto-activate-experimental.md
-```
-
 Auto-activation activates an environment automatically when you enter a
 directory that contains it,
 and deactivates it when you leave,
@@ -98,21 +94,19 @@ so you do not have to run `flox activate` or `flox deactivate` by hand.
 
 ## Enabling auto-activation
 
-Two things are required:
+Auto-activation is on by default and only requires the Flox prompt hook to be
+installed in your shell.
+The hook is installed by any in-place activation,
+so add a line such as `eval "$(flox activate -D)"` to your shell's startup
+file (for example `~/.bashrc`, `~/.zshrc`, `~/.config/fish/config.fish`, or
+`~/.tcshrc`).
+If you already activate a default or other environment in-place at startup,
+the hook is already installed.
 
-1. The Flox prompt hook must be installed in your shell.
-   The hook is installed by any in-place activation,
-   so add a line such as `eval "$(flox activate -D)"` to your shell's startup
-   file (for example `~/.bashrc`, `~/.zshrc`, `~/.config/fish/config.fish`, or
-   `~/.tcshrc`).
-   If you already activate a default or other environment in-place at startup,
-   the hook is already installed.
-   The hook ships with Flox and stays dormant until the feature flag below is
-   set.
-   Run `flox config --set disable_hook true` to opt out of the hook entirely.
-2. The `auto_activate` feature flag must be enabled,
-   either with `FLOX_FEATURES_AUTO_ACTIVATE=true` in your environment
-   or with `flox config --set features.auto_activate true`.
+Run `flox config --set disable_hook true` to opt out of the hook entirely,
+which both disables auto-activation and other features like `flox deactivate`.
+To keep the hook but stop auto-activating environments you have not explicitly
+allowed, set `auto_activate` to `allowlist`.
 
 ## How it works
 

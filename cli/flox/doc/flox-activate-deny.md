@@ -18,10 +18,6 @@ flox [<general-options>] activate deny
 
 # DESCRIPTION
 
-```{.include}
-./include/auto-activate-experimental.md
-```
-
 Prevents the selected environment from being auto-activated.
 
 Once an environment is denied,

@@ -20,7 +20,6 @@
 # can't silently rot.
 
 set +e
-export FLOX_FEATURES_AUTO_ACTIVATE=true
 export FLOX_SHELL=$(command -v bash)
 
 # Stable ordering across platforms — macOS's default locale and Linux's

@@ -20,7 +20,6 @@ emulate -L zsh
 unsetopt verbose xtrace
 set -u
 export LC_ALL=C
-export FLOX_FEATURES_AUTO_ACTIVATE=true
 export FLOX_SHELL=$(command -v zsh)
 
 # Pre-initialize compinit so the pre snapshot already contains the

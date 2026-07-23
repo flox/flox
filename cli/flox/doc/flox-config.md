@@ -71,8 +71,7 @@ flox config --set 'trusted_environments."owner/name"' trust
 # SUPPORTED CONFIGURATION OPTIONS
 
 `auto_activate`
-:   How auto-activation treats environments you have not yet allowed or denied,
-    when the `auto_activate` feature flag is enabled.
+:   How auto-activation treats environments you have not yet allowed or denied.
     Possible values are `prompt` (default), `allowlist`, and `disabled`.
     `prompt` asks before auto-activating an environment the first time you enter
     its directory.
@@ -121,12 +120,6 @@ flox config --set 'trusted_environments."owner/name"' trust
 
 `disable_metrics`
 :   Disable collecting and sending usage metrics.
-
-`features.auto_activate`
-:   Feature flag to enable auto-activation, which is experimental
-    (default: false).
-    May also be set with `FLOX_FEATURES_AUTO_ACTIVATE=true`.
-    See the *AUTO-ACTIVATION* section of [`flox-activate(1)`](./flox-activate.md).
 
 `floxhub_token`
 :   Token to authenticate on FloxHub.
@@ -188,8 +181,3 @@ flox config --set 'trusted_environments."owner/name"' trust
 :   Variable for disabling the collection/sending of metrics data.
     If set to `true`, prevents Flox from submitting basic metrics information
     such as a unique token and the subcommand issued.
-
-`$FLOX_FEATURES_AUTO_ACTIVATE`
-:   Set to `true` to enable auto-activation, which is experimental.
-    Equivalent to setting `features.auto_activate = true`.
-    See the *AUTO-ACTIVATION* section of [`flox-activate(1)`](./flox-activate.md).
