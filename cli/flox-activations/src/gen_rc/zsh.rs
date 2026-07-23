@@ -461,6 +461,8 @@ mod tests {
             unset PATH;
             unset QUOTED_VAR;
             unset _FLOX_ACTIVE_ENVIRONMENTS;
+            unset _FLOX_ADD_SBIN;
+            unset _FLOX_ENV_DIRS_ADD_SBIN;
             unset _FLOX_HOOK_DIFF;
             unset _flox_activations;
             export MODIFIED_VAR=MODIFIED_ORIGINAL;

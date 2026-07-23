@@ -14,21 +14,28 @@ IFS=: read -ra path_array <<< "$PATH"
   echo "ERROR: first PATH element not $FLOX_ENV/bin" >&2;
   exit 1;
 }
-# 2) does not contain "$FLOX_ENV/sbin" (sbin is only added with
-#    'flox activate --add-sbin' or 'options.activate.add-sbin = true')
-# 3) does not contain "$FLOX_ENV/bin" more than once
+# 2) contains "$FLOX_ENV/sbin" as its second element (activated with sbin
+#    enabled via 'flox activate --add-sbin' or 'options.activate.add-sbin')
+[ "${path_array[1]}" = "$FLOX_ENV/sbin" ] || {
+  echo "ERROR: second PATH element not $FLOX_ENV/sbin" >&2;
+  exit 1;
+}
+# 3) contains neither of the above more than once
 declare seen_bin=""
+declare seen_sbin=""
 for p in "${path_array[@]}"; do
     if [ "$p" = "$FLOX_ENV/bin" ]; then
         if [ -n "$seen_bin" ]; then
-            echo "ERROR: PATH contains $FLOX_ENV/bin more than once" >&2
             exit 1
         else
             seen_bin=1
         fi
     fi
     if [ "$p" = "$FLOX_ENV/sbin" ]; then
-        echo "ERROR: PATH contains $FLOX_ENV/sbin without --add-sbin" >&2
-        exit 1
+        if [ -n "$seen_sbin" ]; then
+            exit 1
+        else
+            seen_sbin=1
+        fi
     fi
 done

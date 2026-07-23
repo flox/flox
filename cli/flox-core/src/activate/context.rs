@@ -39,6 +39,12 @@ pub struct AttachCtx {
     /// CUDA detection enabled
     pub flox_env_cuda_detection: String,
 
+    /// Whether this activation puts the environment's sbin directory on PATH.
+    /// Defaults to false when deserializing contexts serialized by older
+    /// versions (e.g. containerize payloads).
+    #[serde(default)]
+    pub add_sbin: bool,
+
     /// Path to the interpreter (activate scripts)
     pub interpreter_path: PathBuf,
 }

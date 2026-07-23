@@ -15,7 +15,7 @@ use tracing::debug;
 
 use crate::attach_diff::diff_serializer::{DiffSerializer, FLOX_HOOK_DIFF_VAR};
 use crate::cli::fix_paths::{fix_manpath_var, fix_path_var};
-use crate::cli::set_env_dirs::fix_env_dirs_var;
+use crate::cli::set_env_dirs::{fix_env_dirs_var, fix_sbin_dirs_var};
 use crate::env_diff::EnvDiff;
 use crate::start_diff::StartDiff;
 use crate::vars_from_env::VarsFromEnvironment;
@@ -23,6 +23,8 @@ pub const FLOX_PROMPT_ENVIRONMENTS_VAR: &str = "FLOX_PROMPT_ENVIRONMENTS";
 
 pub const FLOX_ACTIVATE_START_SERVICES_VAR: &str = "FLOX_ACTIVATE_START_SERVICES";
 pub const FLOX_ENV_DIRS_VAR: &str = "FLOX_ENV_DIRS";
+pub const FLOX_ENV_DIRS_ADD_SBIN_VAR: &str = "_FLOX_ENV_DIRS_ADD_SBIN";
+pub const FLOX_ADD_SBIN_VAR: &str = "_FLOX_ADD_SBIN";
 
 pub(super) fn assemble_activate_command(
     context: &ActivateCtx,
@@ -124,6 +126,8 @@ impl AttachDiff {
                 // rather than unconditionally unsetting it.
                 HashSet::from([
                     FLOX_ENV_DIRS_VAR.to_string(),
+                    FLOX_ENV_DIRS_ADD_SBIN_VAR.to_string(),
+                    FLOX_ADD_SBIN_VAR.to_string(),
                     "PATH".to_string(),
                     "MANPATH".to_string(),
                     FLOX_HOOK_DIFF_VAR.to_string(),
@@ -383,6 +387,10 @@ fn add_activate_script_options(
     if context.attach_ctx.flox_env_cuda_detection == "1" {
         command.arg("--cuda-detection");
     }
+
+    if context.attach_ctx.add_sbin {
+        command.arg("--add-sbin");
+    }
 }
 
 /// _flox_activate_tracelevel, _flox_activate_tracer, and _activate_d still need some cleanup
@@ -408,13 +416,18 @@ pub fn non_in_place_exports(
                 .to_string(),
         ),
     ]);
-    exports.extend(fixed_vars_to_export(&context.env, vars_from_environment));
+    exports.extend(fixed_vars_to_export(
+        &context.env,
+        context.add_sbin,
+        vars_from_environment,
+    ));
     exports
 }
 
-/// Calculate values for FLOX_ENV_DIRS, PATH, and MANPATH
+/// Calculate values for FLOX_ENV_DIRS, _FLOX_ENV_DIRS_ADD_SBIN, PATH, and MANPATH
 fn fixed_vars_to_export(
     flox_env: impl AsRef<str>,
+    add_sbin: bool,
     vars_from_environment: VarsFromEnvironment,
 ) -> HashMap<&'static str, String> {
     let new_flox_env_dirs = fix_env_dirs_var(
@@ -423,8 +436,16 @@ fn fixed_vars_to_export(
             .flox_env_dirs
             .unwrap_or("".to_string()),
     );
+    let new_sbin_dirs = fix_sbin_dirs_var(
+        flox_env.as_ref(),
+        add_sbin,
+        vars_from_environment
+            .sbin_env_dirs
+            .unwrap_or("".to_string()),
+    );
     let new_path = fix_path_var(
         &new_flox_env_dirs,
+        &new_sbin_dirs,
         &vars_from_environment.path.unwrap_or("".to_string()),
     );
     let new_manpath = fix_manpath_var(
@@ -433,6 +454,8 @@ fn fixed_vars_to_export(
     );
     HashMap::from([
         (FLOX_ENV_DIRS_VAR, new_flox_env_dirs),
+        (FLOX_ENV_DIRS_ADD_SBIN_VAR, new_sbin_dirs),
+        (FLOX_ADD_SBIN_VAR, add_sbin.to_string()),
         ("PATH", new_path),
         ("MANPATH", new_manpath),
     ])

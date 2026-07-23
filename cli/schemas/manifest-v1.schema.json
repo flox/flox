@@ -23,6 +23,30 @@
       },
       "type": "object"
     },
+    "ActivateOptions2": {
+      "additionalProperties": false,
+      "description": "V1_14_0-local `ActivateOptions`: adds `add-sbin` alongside `mode`.\n\nThe `mode` field continues to reference the shared\n`flox_core::activate::mode::ActivateMode` enum.",
+      "properties": {
+        "add-sbin": {
+          "description": "Whether to include the environment's `sbin` directory in PATH when\nactivating. Defaults to `None` (treated as `false`) so that `sbin`\nbinaries don't shadow binaries from other packages.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "mode": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ActivateMode"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "type": "object"
+    },
     "AllSentinel": {
       "enum": [
         "all"
@@ -866,6 +890,87 @@
       ],
       "type": "object"
     },
+    "ManifestV1_14_0": {
+      "additionalProperties": false,
+      "description": "Not meant for writing manifest files, only for reading them.\nModifications should be made using `manifest::raw`.",
+      "properties": {
+        "build": {
+          "$ref": "#/$defs/Build2",
+          "description": "Package build definitions"
+        },
+        "containerize": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Containerize"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "hook": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Hook"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Hooks that are run at various times during the lifecycle of the manifest\nin a known shell environment."
+        },
+        "include": {
+          "$ref": "#/$defs/Include"
+        },
+        "install": {
+          "$ref": "#/$defs/Install2",
+          "description": "The packages to install in the form of a map from install_id\nto package descriptor."
+        },
+        "minimum-cli-version": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MinimumCliVersion"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The minimum CLI version that can activate this environment."
+        },
+        "options": {
+          "$ref": "#/$defs/Options2",
+          "default": {},
+          "description": "Options that control the behavior of the manifest."
+        },
+        "profile": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Profile2"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Profile scripts that are run in the user's shell upon activation\n(and, optionally, upon deactivation)."
+        },
+        "schema-version": {
+          "description": "Which schema version this manifest adheres to.\n\nMust be a valid Flox CLI version listed in [`KnownSchemaVersion`].",
+          "type": "string"
+        },
+        "services": {
+          "$ref": "#/$defs/Services2",
+          "description": "Service definitions"
+        },
+        "vars": {
+          "$ref": "#/$defs/Vars",
+          "description": "Variables that are exported to the shell environment upon activation."
+        }
+      },
+      "required": [
+        "schema-version"
+      ],
+      "type": "object"
+    },
     "ManifestVersion": {
       "format": "uint8",
       "maximum": 255,
@@ -900,6 +1005,42 @@
       "properties": {
         "activate": {
           "$ref": "#/$defs/ActivateOptions",
+          "description": "Options that control the behavior of activations."
+        },
+        "allow": {
+          "$ref": "#/$defs/Allows",
+          "description": "Options that control what types of packages are allowed."
+        },
+        "cuda-detection": {
+          "description": "Whether to detect CUDA devices and libs during activation.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "semver": {
+          "$ref": "#/$defs/SemverOptions",
+          "description": "Options that control how semver versions are resolved."
+        },
+        "systems": {
+          "description": "A list of systems that each package is resolved for.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "Options2": {
+      "additionalProperties": false,
+      "description": "V1_14_0-local `Options`: duplicates `parsed::common::Options` but uses the\nV1_14_0-local `ActivateOptions` (which adds `add-sbin`). All other leaf\ntypes (`Allows`, `SemverOptions`) continue to be imported from\n`parsed::common`.\n\nThis is duplicated (rather than flattened) because `common::Options`\ncarries `#[serde(deny_unknown_fields)]`, which conflicts with\n`#[serde(flatten)]`.",
+      "properties": {
+        "activate": {
+          "$ref": "#/$defs/ActivateOptions2",
           "description": "Options that control the behavior of activations."
         },
         "allow": {
@@ -1916,6 +2057,9 @@
     },
     {
       "$ref": "#/$defs/ManifestV1_13_0"
+    },
+    {
+      "$ref": "#/$defs/ManifestV1_14_0"
     }
   ],
   "description": "A validated, typed manifest with a known schema.",

@@ -149,6 +149,7 @@ pub(crate) mod test_helpers {
             flox_prompt_environments: "prompt_envs".to_string(),
             set_prompt: true,
             flox_env_cuda_detection: "0".to_string(),
+            add_sbin: false,
             interpreter_path: PathBuf::from("/interpreter"),
         };
         let project_ctx = Some(AttachProjectCtx {
@@ -192,6 +193,7 @@ pub(crate) mod test_helpers {
         ]);
         let vars_from_env = VarsFromEnvironment {
             flox_env_dirs: None,
+            sbin_env_dirs: None,
             path: None,
             manpath: None,
             full_env: Some(full_env),

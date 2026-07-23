@@ -159,6 +159,11 @@ pub struct ActivateOptions {
     #[bpaf(long)]
     pub no_start_services: bool,
 
+    /// Add the environment's sbin directory to PATH.
+    /// Also enabled by the "options.activate.add-sbin" setting in the manifest.
+    #[bpaf(long("add-sbin"))]
+    pub add_sbin: bool,
+
     /// Activate the environment in either "dev" or "run" mode.
     /// Overrides the "options.activate.mode" setting in the manifest.
     #[bpaf(short, long)]
@@ -550,6 +555,16 @@ impl ActivateOptions {
             _ => "1",           // default to enabling CUDA
         };
 
+        // The CLI flag enables sbin for this activation even when the
+        // manifest doesn't opt in.
+        let add_sbin = self.add_sbin
+            || manifest
+                .as_latest_schema()
+                .options
+                .activate
+                .add_sbin
+                .unwrap_or(false);
+
         // Determine services to start with a new process-compose
         let is_ephemeral = !services_for_ephemeral_activation.is_empty();
         let services_to_start = if is_ephemeral {
@@ -593,6 +608,7 @@ impl ActivateOptions {
             flox_prompt_environments,
             set_prompt,
             flox_env_cuda_detection: flox_env_cuda_detection.to_string(),
+            add_sbin,
             interpreter_path,
         };
 
@@ -1096,6 +1112,7 @@ mod tests {
             print_script: false,
             start_services,
             no_start_services,
+            add_sbin: false,
             mode: None,
             generation: None,
             command: None,

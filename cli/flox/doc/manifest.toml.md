@@ -50,6 +50,7 @@ Valid string values are:
 - `1.11.0`: introduced `minimum-cli-version`
 - `1.12.0`: introduced services `auto-start`
 - `1.13.0`: introduced `profile.deactivate` and build `sandbox-allow`
+- `1.14.0`: introduced `options.activate.add-sbin`
 
 Existing manifest schemas, including the older `version = 1` format, are
 automatically forward-migrated when using features that require a newer schema
@@ -775,7 +776,8 @@ Options ::= {
 }
 
 Activate ::= {
-  mode = null | 'dev' | 'run'
+  mode     = null | 'dev' | 'run'
+, add-sbin = null | <BOOL>
 }
 
 Allows ::= {
@@ -813,6 +815,17 @@ Semver ::= {
     their man pages made available).  This behavior is more in line with what
     you would expect from a system-wide package manager like `apt`, `yum`, or
     `brew`.
+
+`activate.add-sbin`
+:   Whether to add the environment's `sbin` directory to `PATH` when
+    activating, in addition to `bin`.
+    The default is `false`, so that administrative tools in one package's
+    `sbin` directory don't shadow another package's binaries.
+    The same behavior can be enabled for a single activation with
+    `flox activate --add-sbin`.
+    When environments are layered, only the environments that enable this
+    option get their `sbin` directory on `PATH`.
+    Requires manifest schema version `1.14.0`.
 
 `allow.unfree`
 :   Allows packages with unfree licenses to be installed and appear in search

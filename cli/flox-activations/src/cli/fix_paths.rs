@@ -16,6 +16,9 @@ pub struct FixPathsArgs {
     #[arg(help = "The contents of FLOX_ENV_DIRS.")]
     #[arg(short, long, value_name = "STRING")]
     pub env_dirs: String,
+    #[arg(help = "The contents of _FLOX_ENV_DIRS_ADD_SBIN (which may be unset or empty).")]
+    #[arg(long, value_name = "STRING", default_value = "")]
+    pub sbin_dirs: String,
     #[arg(help = "The contents of PATH.")]
     #[arg(short, long, value_name = "STRING")]
     pub path: String,
@@ -30,7 +33,7 @@ impl FixPathsArgs {
             "Preparing to fix path vars, FLOX_ENV_DIRS={}",
             self.env_dirs
         );
-        let new_path = fix_path_var(&self.env_dirs, &self.path);
+        let new_path = fix_path_var(&self.env_dirs, &self.sbin_dirs, &self.path);
         let new_manpath = fix_manpath_var(&self.env_dirs, &self.manpath);
         let sourceable_commands = match self.shell.as_ref() {
             "bash" => {
@@ -121,11 +124,26 @@ pub fn prepend_dirs_to_pathlike_var(
 }
 
 /// Calculate the new PATH variable from FLOX_ENV_DIRS and the existing PATH.
-pub fn fix_path_var(flox_env_dirs_var: &str, path_var: &str) -> String {
+///
+/// Every environment gets its `bin` directory on PATH. An environment's `sbin`
+/// directory is only added if the environment is listed in
+/// `_FLOX_ENV_DIRS_ADD_SBIN` (i.e. it was activated with `--add-sbin` or has
+/// `options.activate.add-sbin` set in its manifest).
+pub fn fix_path_var(flox_env_dirs_var: &str, sbin_dirs_var: &str, path_var: &str) -> String {
     let path_dirs = separate_dir_list(path_var);
     let flox_env_dirs = separate_dir_list(flox_env_dirs_var);
-    let suffixes = ["bin", "sbin"];
-    let fixed_path_dirs = prepend_dirs_to_pathlike_var(&flox_env_dirs, &suffixes, &path_dirs);
+    let sbin_dirs: HashSet<PathBuf> = separate_dir_list(sbin_dirs_var).into_iter().collect();
+    let expanded_dirs = flox_env_dirs
+        .iter()
+        .flat_map(|dir| {
+            if sbin_dirs.contains(dir) {
+                vec![dir.join("bin"), dir.join("sbin")]
+            } else {
+                vec![dir.join("bin")]
+            }
+        })
+        .collect::<Vec<_>>();
+    let fixed_path_dirs = prepend_dirs_to_pathlike_var(&expanded_dirs, &[] as &[&str], &path_dirs);
     join_dir_list(fixed_path_dirs)
 }
 
@@ -267,6 +285,7 @@ mod test {
             FixPathsArgs {
                 shell: shell.to_string(),
                 env_dirs: env_dirs.to_string(),
+                sbin_dirs: String::new(),
                 path: path.to_string(),
                 manpath: manpath.to_string(),
             }
@@ -280,18 +299,53 @@ mod test {
 
     #[test]
     fn flox_envs_moved_to_front() {
-        let suffixes = ["bin", "sbin"];
-        let flox_env_dirs = [PathBuf::from_str("/flox_env1").unwrap()];
-        let path_dirs = [
-            PathBuf::from_str("/path1").unwrap(),
-            PathBuf::from_str("/flox_env1/bin").unwrap(),
-        ];
-        let new_dirs = prepend_dirs_to_pathlike_var(&flox_env_dirs, &suffixes, &path_dirs);
-        assert_eq!(new_dirs, vec![
-            PathBuf::from_str("/flox_env1/bin").unwrap(),
-            PathBuf::from_str("/flox_env1/sbin").unwrap(),
-            PathBuf::from_str("/path1").unwrap(),
-        ]);
+        let env_dirs = "/flox_env1";
+        let path = "/path1:/flox_env1/bin";
+        let fixed = fix_path_var(env_dirs, "", path);
+        assert_eq!(fixed, "/flox_env1/bin:/path1");
+    }
+
+    #[test]
+    fn sbin_excluded_by_default() {
+        let env_dirs = "/env1:/env2";
+        let path = "/foo:/bar";
+        let fixed = fix_path_var(env_dirs, "", path);
+        assert_eq!(fixed, "/env1/bin:/env2/bin:/foo:/bar");
+    }
+
+    #[test]
+    fn sbin_included_for_enabled_dirs() {
+        let env_dirs = "/env1:/env2";
+        let path = "/foo:/bar";
+        let fixed = fix_path_var(env_dirs, "/env1:/env2", path);
+        assert_eq!(fixed, "/env1/bin:/env1/sbin:/env2/bin:/env2/sbin:/foo:/bar");
+    }
+
+    #[test]
+    fn sbin_only_for_enabled_dirs_when_mixed() {
+        let env_dirs = "/env1:/env2";
+        let path = "/foo:/bar";
+        let fixed = fix_path_var(env_dirs, "/env2", path);
+        assert_eq!(fixed, "/env1/bin:/env2/bin:/env2/sbin:/foo:/bar");
+    }
+
+    #[test]
+    fn existing_sbin_entries_are_preserved() {
+        // fix-paths never removes entries from an existing PATH, so an sbin
+        // entry added by an earlier activation survives even when sbin is
+        // disabled for the environment.
+        let env_dirs = "/env1";
+        let path = "/env1/bin:/env1/sbin:/foo";
+        let fixed = fix_path_var(env_dirs, "", path);
+        assert_eq!(fixed, "/env1/bin:/env1/sbin:/foo");
+    }
+
+    #[test]
+    fn handles_empty_sbin_dirs_sentinel() {
+        let env_dirs = "/env1";
+        let path = "/foo";
+        let fixed = fix_path_var(env_dirs, "empty", path);
+        assert_eq!(fixed, "/env1/bin:/foo");
     }
 
     #[test]
@@ -313,11 +367,12 @@ mod test {
     #[test]
     fn fixing_paths_is_idempotent() {
         let env_dirs = "/env1:/env2";
+        let sbin_dirs = "/env2";
         let path = "/foo:/bar";
         let manpath = "/baz:/qux";
-        let fixed_path = fix_path_var(env_dirs, path);
+        let fixed_path = fix_path_var(env_dirs, sbin_dirs, path);
         let fixed_manpath = fix_manpath_var(env_dirs, manpath);
-        let fixed_path_again = fix_path_var(env_dirs, &fixed_path);
+        let fixed_path_again = fix_path_var(env_dirs, sbin_dirs, &fixed_path);
         let fixed_manpath_again = fix_manpath_var(env_dirs, &fixed_manpath);
         assert_eq!(fixed_path, fixed_path_again);
         assert_eq!(fixed_manpath, fixed_manpath_again);

@@ -17,6 +17,8 @@ pub struct BashStartupArgs {
     pub flox_activate_tracelevel: u32,
     pub activate_d: PathBuf,
     pub flox_env: PathBuf,
+    /// Whether this activation puts the environment's sbin directory on PATH.
+    pub add_sbin: bool,
     pub invocation_type: InvocationType,
     /// The activated environment's pointer as serialized in
     /// `_FLOX_ACTIVE_ENVIRONMENTS`, used to key its `_FLOX_INVOCATION_TYPES`
@@ -187,13 +189,14 @@ pub fn generate_bash_profile_commands(
     match action {
         Action::Activate { args, .. } => {
             stmts.push(format!(
-                r#"eval "$('{}' set-env-dirs --shell {} --flox-env "{}" --env-dirs "${{FLOX_ENV_DIRS:-}}")";"#,
+                r#"eval "$('{}' set-env-dirs --shell {} --flox-env "{}" --env-dirs "${{FLOX_ENV_DIRS:-}}" --sbin-dirs "${{_FLOX_ENV_DIRS_ADD_SBIN:-}}"{})";"#,
                 args.flox_activations.display(),
                 Shell::Bash,
-                args.flox_env.display()
+                args.flox_env.display(),
+                if args.add_sbin { " --add-sbin" } else { "" },
             ).to_stmt());
             stmts.push(format!(
-                r#"eval "$('{}' fix-paths --shell {} --env-dirs "$FLOX_ENV_DIRS" --path "$PATH" --manpath "${{MANPATH:-}}")";"#,
+                r#"eval "$('{}' fix-paths --shell {} --env-dirs "$FLOX_ENV_DIRS" --sbin-dirs "${{_FLOX_ENV_DIRS_ADD_SBIN:-}}" --path "$PATH" --manpath "${{MANPATH:-}}")";"#,
                 args.flox_activations.display(),
                 Shell::Bash,
             ).to_stmt());
@@ -393,8 +396,8 @@ mod tests {
             export _flox_activate_tracer=TRACER;
             _FLOX_INVOCATION_TYPES="$('/flox_activations' push-invocation-type --invocation-type interactive --env '{"name":"test_env","type":"path"}' --current "${_FLOX_INVOCATION_TYPES:-}")";
             if [ -t 1 ]; then source '/interpreter/activate.d/set-prompt.bash'; fi;
-            eval "$('/flox_activations' set-env-dirs --shell bash --flox-env "/flox_env" --env-dirs "${FLOX_ENV_DIRS:-}")";
-            eval "$('/flox_activations' fix-paths --shell bash --env-dirs "$FLOX_ENV_DIRS" --path "$PATH" --manpath "${MANPATH:-}")";
+            eval "$('/flox_activations' set-env-dirs --shell bash --flox-env "/flox_env" --env-dirs "${FLOX_ENV_DIRS:-}" --sbin-dirs "${_FLOX_ENV_DIRS_ADD_SBIN:-}")";
+            eval "$('/flox_activations' fix-paths --shell bash --env-dirs "$FLOX_ENV_DIRS" --sbin-dirs "${_FLOX_ENV_DIRS_ADD_SBIN:-}" --path "$PATH" --manpath "${MANPATH:-}")";
             eval "$('/flox_activations' profile-scripts --shell bash --already-sourced-env-dirs "${_FLOX_SOURCED_PROFILE_SCRIPTS:-}" --env-dirs "${FLOX_ENV_DIRS:-}")";
             set +h
             set +x
@@ -442,8 +445,8 @@ mod tests {
             export _flox_activate_tracer=TRACER;
             _FLOX_INVOCATION_TYPES="$('/flox_activations' push-invocation-type --invocation-type inplace --env '{"name":"test_env","type":"path"}' --current "${_FLOX_INVOCATION_TYPES:-}")";
             if [ -t 1 ]; then source '/interpreter/activate.d/set-prompt.bash'; fi;
-            eval "$('/flox_activations' set-env-dirs --shell bash --flox-env "/flox_env" --env-dirs "${FLOX_ENV_DIRS:-}")";
-            eval "$('/flox_activations' fix-paths --shell bash --env-dirs "$FLOX_ENV_DIRS" --path "$PATH" --manpath "${MANPATH:-}")";
+            eval "$('/flox_activations' set-env-dirs --shell bash --flox-env "/flox_env" --env-dirs "${FLOX_ENV_DIRS:-}" --sbin-dirs "${_FLOX_ENV_DIRS_ADD_SBIN:-}")";
+            eval "$('/flox_activations' fix-paths --shell bash --env-dirs "$FLOX_ENV_DIRS" --sbin-dirs "${_FLOX_ENV_DIRS_ADD_SBIN:-}" --path "$PATH" --manpath "${MANPATH:-}")";
             eval "$('/flox_activations' profile-scripts --shell bash --already-sourced-env-dirs "${_FLOX_SOURCED_PROFILE_SCRIPTS:-}" --env-dirs "${FLOX_ENV_DIRS:-}")";
             set +h
             set +x
@@ -486,6 +489,8 @@ mod tests {
             unset PATH;
             unset QUOTED_VAR;
             unset _FLOX_ACTIVE_ENVIRONMENTS;
+            unset _FLOX_ADD_SBIN;
+            unset _FLOX_ENV_DIRS_ADD_SBIN;
             unset _FLOX_HOOK_DIFF;
             unset _flox_activations;
             export MODIFIED_VAR=MODIFIED_ORIGINAL;

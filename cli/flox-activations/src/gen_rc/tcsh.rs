@@ -22,6 +22,8 @@ pub struct TcshStartupArgs {
     pub flox_activate_tracelevel: u32,
     pub activate_d: PathBuf,
     pub flox_env: PathBuf,
+    /// Whether this activation puts the environment's sbin directory on PATH.
+    pub add_sbin: bool,
     pub invocation_type: InvocationType,
     /// The activated environment's pointer as serialized in
     /// `_FLOX_ACTIVE_ENVIRONMENTS`, used to key its `_FLOX_INVOCATION_TYPES`
@@ -195,17 +197,23 @@ pub fn generate_tcsh_profile_commands(
         Action::Activate { args, .. } => {
             stmts.push(r#"if (! $?FLOX_ENV_DIRS) setenv FLOX_ENV_DIRS "empty";"#.to_stmt());
 
+            stmts.push(
+                r#"if (! $?_FLOX_ENV_DIRS_ADD_SBIN) setenv _FLOX_ENV_DIRS_ADD_SBIN "empty";"#
+                    .to_stmt(),
+            );
+
             stmts.push(format!(
-                r#"eval "`'{}' set-env-dirs --shell {} --flox-env '{}' --env-dirs $FLOX_ENV_DIRS:q`";"#,
+                r#"eval "`'{}' set-env-dirs --shell {} --flox-env '{}' --env-dirs $FLOX_ENV_DIRS:q --sbin-dirs $_FLOX_ENV_DIRS_ADD_SBIN:q{}`";"#,
                 args.flox_activations.display(),
                 Shell::Tcsh,
                 args.flox_env.display(),
+                if args.add_sbin { " --add-sbin" } else { "" },
             ).to_stmt());
 
             stmts.push(r#"if (! $?MANPATH) setenv MANPATH "empty";"#.to_stmt());
 
             stmts.push(format!(
-                r#"eval "`'{}' fix-paths --shell {} --env-dirs $FLOX_ENV_DIRS:q --path $PATH:q --manpath $MANPATH:q`";"#,
+                r#"eval "`'{}' fix-paths --shell {} --env-dirs $FLOX_ENV_DIRS:q --sbin-dirs $_FLOX_ENV_DIRS_ADD_SBIN:q --path $PATH:q --manpath $MANPATH:q`";"#,
                 args.flox_activations.display(),
                 Shell::Tcsh,
             ).to_stmt());
@@ -403,9 +411,10 @@ mod tests {
             unsetenv _FLOX_INVOCATION_TYPES_PUSH_ENV;
             if ( $?tty ) then; source '/interpreter/activate.d/set-prompt.tcsh'; endif;
             if (! $?FLOX_ENV_DIRS) setenv FLOX_ENV_DIRS "empty";
-            eval "`'/flox_activations' set-env-dirs --shell tcsh --flox-env '/flox_env' --env-dirs $FLOX_ENV_DIRS:q`";
+            if (! $?_FLOX_ENV_DIRS_ADD_SBIN) setenv _FLOX_ENV_DIRS_ADD_SBIN "empty";
+            eval "`'/flox_activations' set-env-dirs --shell tcsh --flox-env '/flox_env' --env-dirs $FLOX_ENV_DIRS:q --sbin-dirs $_FLOX_ENV_DIRS_ADD_SBIN:q`";
             if (! $?MANPATH) setenv MANPATH "empty";
-            eval "`'/flox_activations' fix-paths --shell tcsh --env-dirs $FLOX_ENV_DIRS:q --path $PATH:q --manpath $MANPATH:q`";
+            eval "`'/flox_activations' fix-paths --shell tcsh --env-dirs $FLOX_ENV_DIRS:q --sbin-dirs $_FLOX_ENV_DIRS_ADD_SBIN:q --path $PATH:q --manpath $MANPATH:q`";
             set _already_sourced_args = ();
             if ($?_FLOX_SOURCED_PROFILE_SCRIPTS) set _already_sourced_args = ( --already-sourced-env-dirs `echo $_FLOX_SOURCED_PROFILE_SCRIPTS:q` );
             eval "`'/flox_activations' profile-scripts --shell tcsh --env-dirs $FLOX_ENV_DIRS:q $_already_sourced_args:q`";
@@ -447,9 +456,10 @@ mod tests {
             unsetenv _FLOX_INVOCATION_TYPES_PUSH_ENV;
             if ( $?tty ) then; source '/interpreter/activate.d/set-prompt.tcsh'; endif;
             if (! $?FLOX_ENV_DIRS) setenv FLOX_ENV_DIRS "empty";
-            eval "`'/flox_activations' set-env-dirs --shell tcsh --flox-env '/flox_env' --env-dirs $FLOX_ENV_DIRS:q`";
+            if (! $?_FLOX_ENV_DIRS_ADD_SBIN) setenv _FLOX_ENV_DIRS_ADD_SBIN "empty";
+            eval "`'/flox_activations' set-env-dirs --shell tcsh --flox-env '/flox_env' --env-dirs $FLOX_ENV_DIRS:q --sbin-dirs $_FLOX_ENV_DIRS_ADD_SBIN:q`";
             if (! $?MANPATH) setenv MANPATH "empty";
-            eval "`'/flox_activations' fix-paths --shell tcsh --env-dirs $FLOX_ENV_DIRS:q --path $PATH:q --manpath $MANPATH:q`";
+            eval "`'/flox_activations' fix-paths --shell tcsh --env-dirs $FLOX_ENV_DIRS:q --sbin-dirs $_FLOX_ENV_DIRS_ADD_SBIN:q --path $PATH:q --manpath $MANPATH:q`";
             set _already_sourced_args = ();
             if ($?_FLOX_SOURCED_PROFILE_SCRIPTS) set _already_sourced_args = ( --already-sourced-env-dirs `echo $_FLOX_SOURCED_PROFILE_SCRIPTS:q` );
             eval "`'/flox_activations' profile-scripts --shell tcsh --env-dirs $FLOX_ENV_DIRS:q $_already_sourced_args:q`";
@@ -480,6 +490,8 @@ mod tests {
             unsetenv PATH;
             unsetenv QUOTED_VAR;
             unsetenv _FLOX_ACTIVE_ENVIRONMENTS;
+            unsetenv _FLOX_ADD_SBIN;
+            unsetenv _FLOX_ENV_DIRS_ADD_SBIN;
             unsetenv _FLOX_HOOK_DIFF;
             unsetenv _flox_activations;
             setenv MODIFIED_VAR MODIFIED_ORIGINAL;

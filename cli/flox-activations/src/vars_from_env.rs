@@ -3,11 +3,14 @@ use std::collections::HashMap;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
-use crate::attach_diff::FLOX_ENV_DIRS_VAR;
+use crate::attach_diff::{FLOX_ENV_DIRS_ADD_SBIN_VAR, FLOX_ENV_DIRS_VAR};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct VarsFromEnvironment {
     pub flox_env_dirs: Option<String>,
+    /// The subset of `flox_env_dirs` whose environments add sbin to PATH.
+    #[serde(default)]
+    pub sbin_env_dirs: Option<String>,
     pub path: Option<String>,
     pub manpath: Option<String>,
     /// Full environment snapshot for activation diff computation.
@@ -19,11 +22,13 @@ pub struct VarsFromEnvironment {
 impl VarsFromEnvironment {
     pub fn get() -> Result<Self> {
         let flox_env_dirs = std::env::var(FLOX_ENV_DIRS_VAR).ok();
+        let sbin_env_dirs = std::env::var(FLOX_ENV_DIRS_ADD_SBIN_VAR).ok();
         let path = std::env::var("PATH").ok();
         let manpath = std::env::var("MANPATH").ok();
 
         Ok(Self {
             flox_env_dirs,
+            sbin_env_dirs,
             path,
             manpath,
             full_env: None,
@@ -39,6 +44,7 @@ impl VarsFromEnvironment {
         let all_vars: HashMap<String, String> = std::env::vars().collect();
         Ok(Self {
             flox_env_dirs: all_vars.get(FLOX_ENV_DIRS_VAR).cloned(),
+            sbin_env_dirs: all_vars.get(FLOX_ENV_DIRS_ADD_SBIN_VAR).cloned(),
             path: all_vars.get("PATH").cloned(),
             manpath: all_vars.get("MANPATH").cloned(),
             full_env: Some(all_vars),

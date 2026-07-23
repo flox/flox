@@ -4956,10 +4956,14 @@ nested_activation_get_output() {
 # process, namely that PATH and MANPATH have been repaired properly.
 #
 # In this context, "repaired" means that both the outer and default environments
-# are present in PATH, and the outer environment appears first.
+# are present in PATH, and the outer environment appears first. `sbin` is
+# excluded by default: only `bin` subdirectories are prepended.
 nested_activation_assertions() {
   # Check that PATH is repaired
-  assert_output --partial "$outer_stub/bin:$outer_stub/sbin:$default_stub/bin:$default_stub/sbin:before_path"
+  assert_output --partial "$outer_stub/bin:$default_stub/bin:before_path"
+  # Ensure `sbin` is NOT silently prepended
+  refute_output --partial "$outer_stub/sbin"
+  refute_output --partial "$default_stub/sbin"
   # Check that MANPATH is repaired
   assert_output --partial "$outer_stub/share/man:$default_stub/share/man"
 }
@@ -5018,6 +5022,92 @@ check_nested_activation_repairs_path_and_manpath() {
 # bats test_tags=activate:fish,activate:nested
 @test "fish: in-place: nested activation repairs (MAN)PATH" {
   check_nested_activation_repairs_path_and_manpath fish eval
+}
+
+# ---------------------------------------------------------------------------- #
+# `flox activate --add-sbin` / `options.activate.add-sbin`
+#
+# sbin is excluded from PATH by default so that e.g. BusyBox's sbin/ifconfig
+# doesn't shadow a dedicated networking package's bin/ifconfig. The CLI flag
+# `--add-sbin` and the manifest setting `options.activate.add-sbin = true`
+# opt back in, per environment.
+# ---------------------------------------------------------------------------- #
+
+# bats test_tags=activate,activate:sbin
+@test "activate: excludes sbin from PATH by default" {
+  project_setup
+  run "$FLOX_BIN" activate -- sh -c 'echo "$PATH"'
+  assert_success
+  local env_dir="$(realpath "$PROJECT_DIR")/.flox/run/$NIX_SYSTEM.$PROJECT_NAME-dev"
+  # The `bin` entry for this env must be present.
+  assert_output --partial "$env_dir/bin"
+  # The `sbin` entry for this env must NOT be present.
+  refute_output --partial "$env_dir/sbin"
+}
+
+# bats test_tags=activate,activate:sbin
+@test "activate: --add-sbin prepends sbin to PATH" {
+  project_setup
+  run "$FLOX_BIN" activate --add-sbin -- sh -c 'echo "$PATH"'
+  assert_success
+  local env_dir="$(realpath "$PROJECT_DIR")/.flox/run/$NIX_SYSTEM.$PROJECT_NAME-dev"
+  assert_output --partial "$env_dir/bin:$env_dir/sbin"
+}
+
+# bats test_tags=activate,activate:sbin
+@test "activate: options.activate.add-sbin = true prepends sbin to PATH" {
+  project_setup
+  with_latest_schema "$(cat <<'EOF'
+[options.activate]
+add-sbin = true
+EOF
+  )" | "$FLOX_BIN" edit -f -
+  run "$FLOX_BIN" activate -- sh -c 'echo "$PATH"'
+  assert_success
+  local env_dir="$(realpath "$PROJECT_DIR")/.flox/run/$NIX_SYSTEM.$PROJECT_NAME-dev"
+  assert_output --partial "$env_dir/bin:$env_dir/sbin"
+}
+
+# bats test_tags=activate,activate:sbin
+@test "activate: nested activation only adds sbin for opted-in environments" {
+  project_setup
+  # The inner env opts into sbin via its manifest; the outer (project) env
+  # does not.
+  "$FLOX_BIN" init -d inner
+  with_latest_schema "$(cat <<'EOF'
+[options.activate]
+add-sbin = true
+EOF
+  )" | "$FLOX_BIN" edit -d inner -f -
+
+  run "$FLOX_BIN" activate -d inner -- "$FLOX_BIN" activate -- sh -c 'echo "$PATH"'
+  assert_success
+  local outer_env="$(realpath "$PROJECT_DIR")/.flox/run/$NIX_SYSTEM.$PROJECT_NAME-dev"
+  local inner_env="$(realpath "$PROJECT_DIR")/inner/.flox/run/$NIX_SYSTEM.inner-dev"
+  # Most-recently-activated env comes first; only the opted-in env gets sbin.
+  assert_output --partial "$outer_env/bin:$inner_env/bin:$inner_env/sbin"
+  refute_output --partial "$outer_env/sbin"
+}
+
+# bats test_tags=activate,activate:sbin,activate:inplace-reactivate
+@test "bash: 'flox activate --add-sbin' keeps sbin on PATH when already activated" {
+  project_setup
+  _bash="$(command -v bash)"
+  FLOX_SHELL="bash" run -- \
+    "$FLOX_BIN" activate --add-sbin -c \
+    "$_bash -c \"source <($FLOX_BIN activate); $_bash $TESTS_DIR/activate/verify_PATH_with_sbin.bash\""
+  assert_success
+}
+
+# bats test_tags=activate,activate:sbin,activate:inplace-reactivate
+@test "zsh: 'flox activate --add-sbin' keeps sbin on PATH when already activated" {
+  project_setup
+  _bash="$(command -v bash)"
+  _zsh="$(command -v zsh)"
+  FLOX_SHELL="zsh" run -- \
+    "$FLOX_BIN" activate --add-sbin -c \
+    "$_zsh -c \"source =($FLOX_BIN activate); $_bash $TESTS_DIR/activate/verify_PATH_with_sbin.bash\""
+  assert_success
 }
 
 # With an in-place activation in dotfiles, an interactive activation should only
