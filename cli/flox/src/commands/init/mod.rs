@@ -11,7 +11,12 @@ use flox_rust_sdk::data::AttrPath;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::path_environment::{InitCustomization, PathEnvironment};
 use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironment;
-use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment, PathPointer};
+use flox_rust_sdk::models::environment::{
+    ConcreteEnvironment,
+    Environment,
+    EnvironmentPointer,
+    PathPointer,
+};
 use flox_rust_sdk::providers::catalog::ALL_SYSTEMS;
 use flox_rust_sdk::providers::git::{GitCommandProvider, GitProvider};
 use flox_rust_sdk::providers::manifest_init::ManifestInitializer;
@@ -226,7 +231,8 @@ async fn init_local_environment(
         customization.activate_mode = Some(ActivateMode::Run);
     }
 
-    let path_pointer = PathPointer::new(name.clone());
+    let mut path_pointer = PathPointer::new(name.clone());
+    path_pointer.id = EnvironmentPointer::new_id(flox);
     let env = if customization.packages.is_some() {
         info_span!(
             "init_with_suggested_packages",

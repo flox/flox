@@ -1270,6 +1270,7 @@ impl ManagedEnvironment {
         // path of the original .flox directory
         let dot_flox_path = path_environment.path.clone();
         let name = path_environment.name();
+        let pointer_id = path_environment.pointer.id;
 
         let mut core_environment = path_environment.into_core_environment()?;
 
@@ -1288,10 +1289,14 @@ impl ManagedEnvironment {
         // Ensure that the environment does not include other local environments
         check_for_local_includes(&lockfile)?;
 
+        let mut pointer = ManagedPointer::new(owner, name, &flox.floxhub);
+        // Carry the path environment's id through the conversion, minting
+        // one if it never had one (the file is rewritten anyway).
+        pointer.id = pointer_id.or_else(|| EnvironmentPointer::new_id(flox));
+
         Self::push_new_without_building(
             flox,
-            owner,
-            name,
+            pointer,
             force,
             initializing,
             dot_flox_path,
@@ -1310,15 +1315,12 @@ impl ManagedEnvironment {
     /// [HistoryKind::Initialize] for environments that are (virtually) created on FloxHub.
     fn push_new_without_building(
         flox: &Flox,
-        owner: EnvironmentOwner,
-        name: EnvironmentName,
+        pointer: ManagedPointer,
         force: bool,
         initializing: bool,
         dot_flox_path: CanonicalPath,
         mut core_environment: CoreEnvironment,
     ) -> Result<Self, EnvironmentError> {
-        let pointer = ManagedPointer::new(owner.clone(), name.clone(), &flox.floxhub);
-
         let checkedout_floxmeta_path = tempfile::tempdir_in(&flox.temp_dir).unwrap().keep();
         let temp_floxmeta_path = tempfile::tempdir_in(&flox.temp_dir).unwrap().keep();
 
@@ -1339,7 +1341,7 @@ impl ManagedEnvironment {
             checkedout_floxmeta_path,
             temp_floxmeta_path,
             remote_branch_name(&pointer),
-            &name,
+            &pointer.name,
         )
         .map_err(ManagedEnvironmentError::InitializeFloxmeta)?;
 
@@ -1385,7 +1387,10 @@ impl ManagedEnvironment {
             // we also need to catch this success.
             Err(GitRemoteCommandError::Diverged) | Ok(PushFlag::UptoDate) => {
                 Err(ManagedEnvironmentError::UpstreamAlreadyExists {
-                    env_ref: RemoteEnvironmentRef::new_from_parts(owner, name),
+                    env_ref: RemoteEnvironmentRef::new_from_parts(
+                        pointer.owner.clone(),
+                        pointer.name.clone(),
+                    ),
                     upstream: flox.floxhub.base_url().to_string(),
                 })?
             },
@@ -1615,8 +1620,9 @@ impl ManagedEnvironment {
             &EnvironmentPointer::Managed(self.pointer.clone()),
         )?;
 
-        // create the metadata for a path environment
-        let path_pointer = PathPointer::new(self.pointer.name);
+        // create the metadata for a path environment, keeping the id
+        let mut path_pointer = PathPointer::new(self.pointer.name);
+        path_pointer.id = self.pointer.id;
         fs::write(
             self.path.join(ENVIRONMENT_POINTER_FILENAME),
             serde_json::to_string(&path_pointer)
@@ -1691,8 +1697,7 @@ pub mod test_helpers {
     ) -> ManagedEnvironment {
         ManagedEnvironment::push_new_without_building(
             flox,
-            owner,
-            "name".parse().unwrap(),
+            ManagedPointer::new(owner, "name".parse().unwrap(), &flox.floxhub),
             false,
             false,
             CanonicalPath::new(tempdir_in(&flox.temp_dir).unwrap().keep()).unwrap(),
@@ -1759,6 +1764,7 @@ mod test {
         mock_managed_environment_unlocked,
     };
     use url::Url;
+    use uuid::Uuid;
 
     use super::test_helpers::mock_managed_environment_in;
     use super::*;
@@ -1775,8 +1781,70 @@ mod test {
     };
     use crate::models::floxmeta::floxmeta_dir;
     use crate::providers::catalog::test_helpers::catalog_replay_client;
+    use crate::models::environment::path_environment::test_helpers::new_named_path_environment_in;
     use crate::providers::git::GitCommandProvider;
     use crate::providers::git::tests::{commit_file, test_git_options};
+
+    /// Pushing a path environment carries its pointer id into the managed
+    /// pointer, mints one when it never had one (metrics enabled), and
+    /// leaves it unset when metrics are disabled.
+    #[test]
+    fn push_new_carries_or_mints_pointer_id() {
+        let owner = EnvironmentOwner::from_str("owner").unwrap();
+        let (mut flox, _temp_dir_handle) = flox_instance_with_optional_floxhub(Some(&owner));
+        flox.metrics_device_uuid = Some(Uuid::new_v4());
+
+        let manifest = toml_edit::ser::to_string_pretty(&Manifest::default()).unwrap();
+        let push = |flox: &Flox, name: &str, pointer_id: Option<Uuid>| {
+            let dir = tempfile::tempdir_in(&flox.temp_dir).unwrap().keep();
+            let mut path_env = new_named_path_environment_in(flox, &manifest, &dir, name);
+            path_env.pointer.id = pointer_id;
+            let dot_flox_path = path_env.path.clone();
+            let env =
+                ManagedEnvironment::push_new(flox, path_env, owner.clone(), false, false).unwrap();
+            let written: EnvironmentPointer = serde_json::from_str(
+                &fs::read_to_string(dot_flox_path.join(ENVIRONMENT_POINTER_FILENAME)).unwrap(),
+            )
+            .unwrap();
+            let EnvironmentPointer::Managed(written) = written else {
+                panic!("expected managed pointer");
+            };
+            assert_eq!(written.id, env.pointer.id, "in-memory and on-disk id agree");
+            written.id
+        };
+
+        let carried = Uuid::new_v4();
+        assert_eq!(push(&flox, "carried", Some(carried)), Some(carried));
+        assert!(push(&flox, "minted", None).is_some());
+
+        flox.metrics_device_uuid = None;
+        assert_eq!(push(&flox, "optedout", None), None);
+    }
+
+    /// Converting a managed environment back to a path environment
+    /// (`flox pull --copy`) keeps the pointer id.
+    #[test]
+    fn into_path_environment_preserves_pointer_id() {
+        let owner = EnvironmentOwner::from_str("owner").unwrap();
+        let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub(Some(&owner));
+
+        let id = Uuid::new_v4();
+        let manifest = toml_edit::ser::to_string_pretty(&Manifest::default()).unwrap();
+        let mut managed_env = mock_managed_environment_unlocked(&flox, &manifest, owner);
+        managed_env.pointer.id = Some(id);
+
+        let path_env = managed_env.into_path_environment(&flox).unwrap();
+        assert_eq!(path_env.pointer.id, Some(id));
+
+        let written: EnvironmentPointer = serde_json::from_str(
+            &fs::read_to_string(path_env.path.join(ENVIRONMENT_POINTER_FILENAME)).unwrap(),
+        )
+        .unwrap();
+        let EnvironmentPointer::Path(written) = written else {
+            panic!("expected path pointer");
+        };
+        assert_eq!(written.id, Some(id));
+    }
 
     /// Create a [ManagedPointer] for testing with mock owner and name data
     /// as well as an override for the floxhub git url to fetch from local
@@ -1785,6 +1853,7 @@ mod test {
         ManagedPointer {
             owner: EnvironmentOwner::from_str("owner").unwrap(),
             name: EnvironmentName::from_str("name").unwrap(),
+            id: None,
             floxhub_base_url: Url::from_str("https://hub.flox.dev").unwrap(),
             floxhub_git_url_override: Some(
                 Url::from_directory_path(mock_floxhub_git_path).unwrap(),

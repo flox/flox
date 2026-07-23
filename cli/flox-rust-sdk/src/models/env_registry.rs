@@ -365,8 +365,8 @@ mod test {
 
     use super::*;
     use crate::flox::test_helpers::flox_instance;
-    use crate::models::environment::ManagedPointer;
     use crate::models::environment::path_environment::test_helpers::new_path_environment;
+    use crate::models::environment::{ManagedPointer, PathPointer};
 
     impl Arbitrary for RegistryEntry {
         type Parameters = ();
@@ -396,6 +396,32 @@ mod test {
                 })
                 .boxed()
         }
+    }
+
+    /// Registry entries persisted before pointer ids existed must keep
+    /// matching (and deregistering) the same environment once its pointer
+    /// carries an id.
+    #[test]
+    fn registry_matching_ignores_pointer_id() {
+        let legacy_pointer = EnvironmentPointer::Path(PathPointer::new("name".parse().unwrap()));
+        let mut entry = RegistryEntry {
+            path_hash: path_hash(Path::new("/some/path")).to_string(),
+            path: PathBuf::from("/some/path"),
+            envs: vec![RegisteredEnv {
+                created_at: 0,
+                pointer: legacy_pointer.clone(),
+            }],
+        };
+
+        let EnvironmentPointer::Path(mut with_id_pointer) = legacy_pointer else {
+            panic!("expected path pointer");
+        };
+        with_id_pointer.id = Some(uuid::Uuid::new_v4());
+        let with_id = EnvironmentPointer::Path(with_id_pointer);
+
+        assert!(entry.is_same_as_latest_env(&with_id));
+        assert!(entry.deregister_env(&with_id).is_some());
+        assert!(entry.envs.is_empty());
     }
 
     proptest! {
