@@ -295,8 +295,12 @@ impl RemoteEnvironment {
     }
 
     /// See [ManagedEnvironment::existing_lockfile_without_checkout].
-    pub fn existing_lockfile_without_checkout(&self) -> Result<Option<Lockfile>, EnvironmentError> {
-        self.inner.existing_lockfile_without_checkout()
+    pub fn existing_lockfile_without_checkout(
+        &self,
+        current_generation: Option<GenerationId>,
+    ) -> Result<Option<Lockfile>, EnvironmentError> {
+        self.inner
+            .existing_lockfile_without_checkout(current_generation)
     }
 
     /// Push local changes to FloxHub for this remote environment

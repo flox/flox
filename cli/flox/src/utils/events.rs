@@ -13,13 +13,14 @@
 
 use std::env;
 use std::str::FromStr;
-use std::sync::{LazyLock, OnceLock};
+use std::sync::{LazyLock, Mutex, OnceLock};
 
 use flox_config::Config;
 use flox_events::{EnvDetail, EventsClient, EventsHub, SharedMetadataTemplate};
+use flox_manifest::lockfile::Lockfile;
 use flox_rust_sdk::flox::{FLOX_VERSION, Flox};
-use flox_rust_sdk::models::environment::generations::GenerationsExt;
-use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment};
+use flox_rust_sdk::models::environment::generations::{GenerationId, GenerationsExt};
+use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment, EnvironmentError};
 use flox_rust_sdk::utils::INVOCATION_SOURCES;
 use tracing::debug;
 use uuid::Uuid;
@@ -151,12 +152,18 @@ struct EnvIdentityFields {
     package_count: Option<u64>,
 }
 
-/// Process-global; never resets within a test binary, so tests that install
-/// a client must use distinct environments.
-static ENV_IDENTITY_FIELDS: OnceLock<(String, EnvIdentityFields)> = OnceLock::new();
+/// Process-global; resets only via [`reset_env_identity_fields`] in tests.
+static ENV_IDENTITY_FIELDS: Mutex<Option<(String, EnvIdentityFields)>> = Mutex::new(None);
+
+/// Clear the per-invocation cache so tests are isolated from each other.
+#[cfg(test)]
+fn reset_env_identity_fields() {
+    *ENV_IDENTITY_FIELDS.lock().unwrap() = None;
+}
 
 /// Read the identity fields for `env`. Every read is best-effort: a failure
-/// leaves the field absent, never fails the command.
+/// leaves the field absent, never fails the command. At most one
+/// generations-metadata read and one lockfile read happen here.
 fn read_env_identity_fields(flox: &Flox, env: &ConcreteEnvironment) -> EnvIdentityFields {
     let environment_id = match env {
         ConcreteEnvironment::Path(environment) => environment.pointer.id,
@@ -166,83 +173,86 @@ fn read_env_identity_fields(flox: &Flox, env: &ConcreteEnvironment) -> EnvIdenti
         ConcreteEnvironment::Remote(_) => None,
     };
     // A command opened at a pinned generation acts on that generation;
-    // only unpinned managed/remote environments read the branch tip.
-    let generation_number = match env {
-        ConcreteEnvironment::Managed(environment) => environment
-            .generation()
-            .map(|generation| *generation as u64)
-            .or_else(|| current_generation_number(environment)),
-        ConcreteEnvironment::Remote(environment) => environment
-            .generation()
-            .map(|generation| *generation as u64)
-            .or_else(|| current_generation_number(environment)),
-        // Path environments have no generations.
-        ConcreteEnvironment::Path(_) => None,
+    // only unpinned managed/remote environments read the branch tip. The
+    // resolved generation feeds the lockfile read so the metadata isn't
+    // read twice.
+    let (generation_number, package_count) = match env {
+        ConcreteEnvironment::Path(environment) => (
+            None,
+            count_packages(flox, environment.existing_lockfile(flox)),
+        ),
+        ConcreteEnvironment::Managed(environment) => {
+            let generation = environment
+                .generation()
+                .or_else(|| current_generation(environment));
+            (
+                generation.map(|generation| *generation as u64),
+                count_packages(
+                    flox,
+                    environment.existing_lockfile_without_checkout(generation),
+                ),
+            )
+        },
+        ConcreteEnvironment::Remote(environment) => {
+            let generation = environment
+                .generation()
+                .or_else(|| current_generation(environment));
+            (
+                generation.map(|generation| *generation as u64),
+                count_packages(
+                    flox,
+                    environment.existing_lockfile_without_checkout(generation),
+                ),
+            )
+        },
     };
 
     EnvIdentityFields {
         environment_id,
         generation_number,
-        package_count: package_count(flox, env),
+        package_count,
     }
 }
 
-fn current_generation_number(env: &impl GenerationsExt) -> Option<u64> {
+fn current_generation(env: &impl GenerationsExt) -> Option<GenerationId> {
     env.generations_metadata()
         .map_err(|err| debug!(error = %err, "could not read generations metadata for event"))
         .ok()
         .and_then(|metadata| metadata.current_gen())
-        .map(|generation| *generation as u64)
 }
 
-/// Packages locked for the invoking system (the `flox list` count), read
-/// without locking, building, materializing a checkout, or touching the
-/// network.
-fn package_count(flox: &Flox, env: &ConcreteEnvironment) -> Option<u64> {
-    let lockfile = match env {
-        ConcreteEnvironment::Path(environment) => environment.existing_lockfile(flox),
-        // `Environment::existing_lockfile` may materialize the local
-        // checkout for managed/remote environments; these reads must not.
-        ConcreteEnvironment::Managed(environment) => {
-            environment.existing_lockfile_without_checkout()
-        },
-        ConcreteEnvironment::Remote(environment) => {
-            environment.existing_lockfile_without_checkout()
-        },
-    };
+/// Packages locked for the invoking system (the `flox list` count), counted
+/// without cloning the package list.
+fn count_packages(
+    flox: &Flox,
+    lockfile: Result<Option<Lockfile>, EnvironmentError>,
+) -> Option<u64> {
     lockfile
         .map_err(|err| debug!(error = %err, "could not read lockfile for event"))
         .ok()
         .flatten()
-        .and_then(|lockfile| {
+        .map(|lockfile| {
             lockfile
-                .list_packages(&flox.system)
-                .map_err(|err| debug!(error = %err, "could not list packages for event"))
-                .ok()
+                .packages
+                .iter()
+                .filter(|package| package.system() == &flox.system)
+                .count() as u64
         })
-        .map(|packages| packages.len() as u64)
 }
 
 /// Identity fields for `env`, computed once per invocation (keyed by the
-/// environment's kind and `.flox` path) and skipped entirely when no events
-/// client is installed.
-fn env_identity_fields(
-    flox: &Flox,
-    env: &ConcreteEnvironment,
-    key: &str,
-) -> Option<EnvIdentityFields> {
-    if !EventsHub::global().has_client() {
-        return None;
-    }
-    match ENV_IDENTITY_FIELDS.get() {
-        Some((cached_key, fields)) if cached_key == key => Some(*fields),
+/// environment's kind and `.flox` path).
+fn env_identity_fields(flox: &Flox, env: &ConcreteEnvironment, key: &str) -> EnvIdentityFields {
+    let mut cached = ENV_IDENTITY_FIELDS.lock().unwrap();
+    match cached.as_ref() {
+        Some((cached_key, fields)) if cached_key == key => *fields,
         // A second environment in the same process is computed fresh but
         // not cached; commands operate on one environment.
-        Some(_) => Some(read_env_identity_fields(flox, env)),
+        Some(_) => read_env_identity_fields(flox, env),
         None => {
             let fields = read_env_identity_fields(flox, env);
-            let _ = ENV_IDENTITY_FIELDS.set((key.to_string(), fields));
-            Some(fields)
+            *cached = Some((key.to_string(), fields));
+            fields
         },
     }
 }
@@ -250,7 +260,8 @@ fn env_identity_fields(
 /// Build an [`EnvDetail`] for the supplied [`ConcreteEnvironment`], using the
 /// same env-kind / env-ref mapping as the legacy
 /// `environment_subcommand_metric!` macro. Shared across call sites so the
-/// per-kind match is not duplicated.
+/// per-kind match is not duplicated. The identity fields are skipped
+/// entirely when no events client is installed.
 pub fn env_detail_from_concrete(flox: &Flox, env: &ConcreteEnvironment) -> EnvDetail {
     let (env_kind, env_ref_or_name) = match env {
         ConcreteEnvironment::Remote(environment) => ("remote", environment.env_ref().to_string()),
@@ -259,9 +270,10 @@ pub fn env_detail_from_concrete(flox: &Flox, env: &ConcreteEnvironment) -> EnvDe
             ("path", Environment::name(environment).to_string())
         },
     };
-    let cache_key = format!("{env_kind}:{}", env.dot_flox_path().display());
     let mut detail = EnvDetail::new(env_kind, env_ref_or_name);
-    if let Some(fields) = env_identity_fields(flox, env, &cache_key) {
+    if EventsHub::global().has_client() {
+        let cache_key = format!("{env_kind}:{}", env.dot_flox_path().display());
+        let fields = env_identity_fields(flox, env, &cache_key);
         if let Some(environment_id) = fields.environment_id {
             detail = detail.with_environment_id(environment_id);
         }
@@ -284,7 +296,6 @@ mod tests {
     use flox_events::test_helpers::MockEventsConnection;
     use flox_events::{EVENTS_BUFFER_FILE_NAME, EventsHub, LifecycleFields};
     use flox_rust_sdk::flox::test_helpers::{flox_instance, flox_instance_with_optional_floxhub};
-    use flox_rust_sdk::models::environment::generations::GenerationId;
     use flox_rust_sdk::models::environment::managed_environment::test_helpers::{
         mock_managed_environment_in,
         mock_managed_environment_unlocked,
@@ -446,6 +457,7 @@ mod tests {
     #[test]
     #[serial(global_events_client)]
     fn env_detail_carries_identity_fields_for_path_env() {
+        reset_env_identity_fields();
         let (flox, _temp_dir_handle) = flox_instance();
         let mut env = new_path_environment(&flox, "version = 1\n");
         let environment_id = Uuid::new_v4();
@@ -489,6 +501,7 @@ mod tests {
     #[test]
     #[serial(global_events_client)]
     fn env_detail_carries_identity_fields_for_managed_env() {
+        reset_env_identity_fields();
         let owner: EnvironmentOwner = "owner".parse().unwrap();
         let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub(Some(&owner));
         let environment_id = Uuid::new_v4();

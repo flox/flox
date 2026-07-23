@@ -1,5 +1,5 @@
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, anyhow, bail};
 use bpaf::Bpaf;
@@ -31,6 +31,7 @@ use flox_rust_sdk::models::environment::{
 use flox_rust_sdk::providers::buildenv::BuildEnvError;
 use indoc::{formatdoc, indoc};
 use tracing::{debug, info_span, instrument};
+use uuid::Uuid;
 
 use super::services::warn_manifest_changes_for_services;
 use super::{ConcreteEnvironment, open_path};
@@ -89,6 +90,20 @@ pub struct Pull {
 struct QueryFunctions {
     query_add_system: fn(&str) -> Result<bool>,
     query_ignore_build_errors: fn() -> Result<bool>,
+}
+
+/// The pointer id to carry through a force re-pull: kept only when the
+/// existing checkout is the same environment being pulled.
+fn existing_pointer_id(env_path: &Path, env_ref: &RemoteEnvironmentRef) -> Option<Uuid> {
+    let dot_flox = DotFlox::open_in(env_path).ok()?;
+    match dot_flox.pointer {
+        EnvironmentPointer::Managed(pointer)
+            if pointer.owner == *env_ref.owner() && pointer.name == *env_ref.name() =>
+        {
+            pointer.id
+        },
+        _ => None,
+    }
 }
 
 impl Pull {
@@ -310,17 +325,12 @@ impl Pull {
         generation: Option<GenerationId>,
     ) -> Result<()> {
         let dot_flox_path = env_path.join(DOT_FLOX);
-        // A force re-pull replaces the checkout but is still the same
-        // environment: keep its pointer id if it has one.
+        // A force re-pull of the same environment replaces the checkout but
+        // keeps its pointer id; replacing a different environment does not.
         let mut existing_id = None;
         if dot_flox_path.exists() {
             if force {
-                existing_id = DotFlox::open_in(&env_path)
-                    .ok()
-                    .and_then(|dot_flox| match dot_flox.pointer {
-                        EnvironmentPointer::Managed(pointer) => pointer.id,
-                        EnvironmentPointer::Path(pointer) => pointer.id,
-                    });
+                existing_id = existing_pointer_id(&env_path, &env_ref);
                 match open_path(flox, &dot_flox_path, None) {
                     Ok(concrete_env) => match concrete_env {
                         ConcreteEnvironment::Path(env) => {
@@ -747,7 +757,9 @@ enum PullResultResolutionContext {
 
 #[cfg(test)]
 mod tests {
+    use flox_core::floxhub::{DEFAULT_FLOXHUB_URL, Floxhub};
     use flox_rust_sdk::flox::test_helpers::{flox_instance, flox_instance_with_optional_floxhub};
+    use flox_rust_sdk::models::environment::PathPointer;
     use flox_rust_sdk::models::environment::managed_environment::test_helpers::{
         mock_managed_environment_unlocked,
         unusable_mock_managed_environment,
@@ -757,6 +769,54 @@ mod tests {
     use tempfile::tempdir_in;
 
     use super::*;
+
+    /// A force re-pull keeps the existing pointer id only when the checkout
+    /// holds the same environment being pulled.
+    #[test]
+    fn existing_pointer_id_carries_only_for_the_same_environment() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let env_path = tempdir.path();
+        fs::create_dir_all(env_path.join(DOT_FLOX)).unwrap();
+        let id = Uuid::new_v4();
+        let env_ref: RemoteEnvironmentRef = "owner/name".parse().unwrap();
+
+        let write_pointer = |pointer: &EnvironmentPointer| {
+            fs::write(
+                env_path.join(DOT_FLOX).join(ENVIRONMENT_POINTER_FILENAME),
+                serde_json::to_string(pointer).unwrap(),
+            )
+            .unwrap();
+        };
+
+        let floxhub = Floxhub::new(DEFAULT_FLOXHUB_URL.clone(), None, None).unwrap();
+        let mut same_env =
+            ManagedPointer::new(env_ref.owner().clone(), env_ref.name().clone(), &floxhub);
+        same_env.id = Some(id);
+        write_pointer(&EnvironmentPointer::Managed(same_env));
+        assert_eq!(existing_pointer_id(env_path, &env_ref), Some(id));
+
+        let mut other_env = ManagedPointer::new(
+            "otherowner".parse().unwrap(),
+            env_ref.name().clone(),
+            &floxhub,
+        );
+        other_env.id = Some(id);
+        write_pointer(&EnvironmentPointer::Managed(other_env));
+        assert_eq!(
+            existing_pointer_id(env_path, &env_ref),
+            None,
+            "a different environment's id must not carry over"
+        );
+
+        let mut path_env = PathPointer::new("name".parse().unwrap());
+        path_env.id = Some(id);
+        write_pointer(&EnvironmentPointer::Path(path_env));
+        assert_eq!(
+            existing_pointer_id(env_path, &env_ref),
+            None,
+            "a path environment's id must not carry onto a pulled environment"
+        );
+    }
 
     fn incompatible_system_result() -> Result<(), EnvironmentError> {
         Err(EnvironmentError::Core(CoreEnvironmentError::BuildEnv(
