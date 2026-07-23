@@ -195,18 +195,10 @@ pub struct CommandPayload {
     flox_version: String,
     /// Coarse operating system family (e.g. `Mac OS`, `Linux`).
     os_family: Option<String>,
-    /// OS family release version.
+    /// OS family release version (the kernel version from
+    /// `sys_info::os_release()`) — consumers derive every
+    /// kernel-version-shaped legacy field from this one value.
     os_family_release: Option<String>,
-    /// Kernel version string from `sys_info::os_release()`; `None` when
-    /// `sys_info` failed. Deliberately the same value as
-    /// `os_family_release` at the producer — consumers derive two
-    /// distinct legacy fields from this one field and treat the
-    /// OS-family release as a separate concept. Unlike
-    /// `os_family_release` (serialized as `null` when absent), this
-    /// field is omitted from the wire so rows buffered by binaries that
-    /// predate it round-trip unchanged.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    kernel_version: Option<String>,
     /// Linux distribution id (e.g. `ubuntu`); `None` outside Linux.
     os: Option<String>,
     /// Linux distribution version (e.g. `22.04`); `None` outside Linux.
@@ -244,19 +236,12 @@ pub struct SharedMetadataTemplate {
 impl SharedMetadataTemplate {
     /// Merge the stored static fields with the supplied subcommand to produce
     /// a complete [`CommandPayload`] ready for serialization.
-    ///
-    /// `kernel_version` is derived here from the template's own fields.
-    /// This is the only production constructor of [`CommandPayload`]
-    /// (its fields are private), so every *emitted* payload agrees with
-    /// the value it mirrors. Deserialization is exempt on purpose: rows
-    /// buffered by older binaries reload with the derived field absent.
     pub fn into_payload(&self, subcommand: String) -> CommandPayload {
         CommandPayload {
             subcommand,
             flox_version: self.flox_version.clone(),
             os_family: self.os_family.clone(),
             os_family_release: self.os_family_release.clone(),
-            kernel_version: self.os_family_release.clone(),
             os: self.os.clone(),
             os_version: self.os_version.clone(),
             empty_flags: self.empty_flags.clone(),
@@ -675,7 +660,6 @@ mod tests {
             flox_version: "0.0.0-test".to_string(),
             os_family: Some("Linux".to_string()),
             os_family_release: Some("6.10.0".to_string()),
-            kernel_version: Some("6.10.0".to_string()),
             os: Some("ubuntu".to_string()),
             os_version: Some("24.04".to_string()),
             empty_flags: vec![],
@@ -689,7 +673,6 @@ mod tests {
             "flox_version": "0.0.0-test",
             "os_family": "Linux",
             "os_family_release": "6.10.0",
-            "kernel_version": "6.10.0",
             "os": "ubuntu",
             "os_version": "24.04",
             "empty_flags": [],
@@ -855,8 +838,7 @@ mod tests {
         assert_eq!(payload, command_payload("activate"));
     }
 
-    /// Template fixture matching [`command_payload`]'s derived field:
-    /// `kernel_version` mirrors `os_family_release`.
+    /// Template fixture matching [`command_payload`].
     fn shared_metadata_for_payload_tests() -> SharedMetadataTemplate {
         SharedMetadataTemplate {
             flox_version: "0.0.0-test".to_string(),
@@ -867,64 +849,6 @@ mod tests {
             empty_flags: vec![],
             invocation_sources: vec!["shell".to_string()],
         }
-    }
-
-    /// A `cli.command_run` row buffered by a binary that predates the
-    /// parity fields must still deserialize (the buffer file outlives
-    /// binary upgrades, and one unreadable row poisons the whole
-    /// read-back) — and must re-serialize with the unknown fields
-    /// still absent, not fabricated.
-    #[test]
-    fn command_run_row_without_parity_fields_round_trips() {
-        let old_row = json!({
-            "event_id": "00000000-0000-0000-0000-000000000000",
-            "event_timestamp": EPOCH_UNIX_MS,
-            "source": "cli",
-            "invocation_id": "00000000-0000-0000-0000-000000000000",
-            "device_id": "00000000-0000-0000-0000-000000000000",
-            "event_type": "cli.command_run",
-            "payload": {
-                "subcommand": "install",
-                "flox_version": "0.0.0-test",
-                "os_family": "Linux",
-                "os_family_release": "6.10.0",
-                "os": "ubuntu",
-                "os_version": "24.04",
-                "empty_flags": [],
-                "invocation_sources": ["shell"],
-            },
-        });
-        let event: Event =
-            serde_json::from_value(old_row.clone()).expect("old-shape row deserializes");
-        let EventKind::CliCommandRun(ref payload) = event.kind else {
-            panic!("expected cli.command_run");
-        };
-        let mut expected = command_payload("install");
-        expected.kernel_version = None;
-        assert_eq!(payload, &CliCommandRunPayload::new(expected));
-        // Round trip: the flush path re-serializes buffered rows, and a
-        // value the old binary never recorded must stay absent.
-        let reserialized = serde_json::to_value(event).expect("event re-serializes");
-        assert_eq!(reserialized, old_row);
-    }
-
-    /// `kernel_version` is omitted from the wire (not serialized as
-    /// `null`) when `sys_info` failed at the producer.
-    #[test]
-    fn command_run_omits_kernel_version_when_unavailable() {
-        let mut payload = command_payload("install");
-        payload.kernel_version = None;
-        let value = serde_json::to_value(fixed_event(EventKind::CliCommandRun(
-            CliCommandRunPayload::new(payload),
-        )))
-        .expect("event serializes");
-        let mut expected_payload = expected_payload_json("install");
-        expected_payload
-            .as_object_mut()
-            .expect("payload object")
-            .remove("kernel_version");
-        let expected = command_run_envelope_json(expected_payload);
-        assert_eq!(value, expected);
     }
 
     fn env_detail(kind: &str, ref_or_name: &str) -> EnvDetail {
