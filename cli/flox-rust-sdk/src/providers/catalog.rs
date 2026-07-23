@@ -842,6 +842,13 @@ pub mod test_helpers {
     /// as `test_catalog_admin` configures `publish_tests_read_only` — that
     /// user holds Writer rights on that catalog while `test1` is Reader-only
     /// by design.
+    ///
+    /// Safe to call concurrently, and to call when the catalogs already exist.
+    /// Every step is idempotent: catalog creation passes `exists_ok`, so a 409
+    /// from a racing creation falls through to the store-config PUT, and that
+    /// PUT sets the config to the same value no matter how many times it runs.
+    /// It also only runs while recording mocks — replay-mode `cargo test`, the
+    /// everyday case, never reaches it.
     pub async fn ensure_test_catalogs_exist(client: &FloxhubClient, base_url: &str) {
         let config = CatalogStoreConfig::MetaOnly;
         create_catalog_with_config(client, TEST_READ_WRITE_CATALOG_NAME, &config, true)
