@@ -3133,3 +3133,104 @@ mod materialise_retry_tests {
         );
     }
 }
+
+#[cfg(test)]
+mod symlink_cleanup_tests {
+    use std::collections::HashMap;
+    use std::os::unix::fs::symlink;
+    use std::path::PathBuf;
+
+    use tempfile::tempdir;
+
+    use super::*;
+
+    fn build_outputs_with_builds(keys: &[&str]) -> BuildEnvOutputs {
+        BuildEnvOutputs {
+            dev: BuiltStorePath(PathBuf::from("/nix/store/fake-dev")),
+            run: BuiltStorePath(PathBuf::from("/nix/store/fake-run")),
+            manifest_build_runtimes: keys
+                .iter()
+                .map(|k| {
+                    (
+                        k.to_string(),
+                        BuiltStorePath(PathBuf::from("/nix/store/fake")),
+                    )
+                })
+                .collect::<HashMap<_, _>>(),
+        }
+    }
+
+    /// `remove_build_output_symlinks` deletes each `<prefix>-<key>` symlink
+    /// and leaves other files in the directory untouched.
+    #[test]
+    fn remove_build_output_symlinks_deletes_build_symlinks() {
+        let dir = tempdir().unwrap();
+        let prefix = dir.path().join("x86_64-linux.myenv");
+
+        let build_link = dir.path().join("x86_64-linux.myenv-build-hello");
+        let unrelated = dir.path().join("x86_64-linux.myenv-dev");
+        symlink("/nix/store/fake-build", &build_link).unwrap();
+        symlink("/nix/store/fake-dev", &unrelated).unwrap();
+
+        let outputs = build_outputs_with_builds(&["build-hello"]);
+        remove_build_output_symlinks(Some(&prefix), &outputs);
+
+        assert!(!build_link.exists() && !build_link.is_symlink());
+        assert!(
+            unrelated.is_symlink(),
+            "unrelated symlink must be untouched"
+        );
+    }
+
+    /// When `out_link_prefix` is `None`, `remove_build_output_symlinks` is a no-op.
+    #[test]
+    fn remove_build_output_symlinks_noop_when_no_prefix() {
+        let dir = tempdir().unwrap();
+        let link = dir.path().join("x86_64-linux.myenv-build-hello");
+        symlink("/nix/store/fake-build", &link).unwrap();
+
+        let outputs = build_outputs_with_builds(&["build-hello"]);
+        remove_build_output_symlinks(None, &outputs);
+
+        assert!(
+            link.is_symlink(),
+            "symlink must survive when prefix is None"
+        );
+    }
+
+    /// `remove_build_output_symlinks_by_scan` removes all symlinks in the
+    /// parent directory whose names start with `<prefix_filename>-build-`.
+    #[test]
+    fn remove_build_output_symlinks_by_scan_deletes_matching_symlinks() {
+        let dir = tempdir().unwrap();
+        let prefix = dir.path().join("x86_64-linux.myenv");
+
+        let build_hello = dir.path().join("x86_64-linux.myenv-build-hello");
+        let build_foo = dir.path().join("x86_64-linux.myenv-build-foo");
+        let dev_link = dir.path().join("x86_64-linux.myenv-dev");
+        symlink("/nix/store/fake-build-hello", &build_hello).unwrap();
+        symlink("/nix/store/fake-build-foo", &build_foo).unwrap();
+        symlink("/nix/store/fake-dev", &dev_link).unwrap();
+
+        remove_build_output_symlinks_by_scan(Some(&prefix));
+
+        assert!(!build_hello.exists() && !build_hello.is_symlink());
+        assert!(!build_foo.exists() && !build_foo.is_symlink());
+        assert!(dev_link.is_symlink(), "-dev symlink must be untouched");
+    }
+
+    /// When `out_link_prefix` is `None`, `remove_build_output_symlinks_by_scan` is a no-op.
+    #[test]
+    fn remove_build_output_symlinks_by_scan_noop_when_no_prefix() {
+        let dir = tempdir().unwrap();
+        let link = dir.path().join("x86_64-linux.myenv-build-hello");
+        symlink("/nix/store/fake-build", &link).unwrap();
+
+        remove_build_output_symlinks_by_scan(None);
+
+        assert!(
+            link.is_symlink(),
+            "symlink must survive when prefix is None"
+        );
+    }
+}
