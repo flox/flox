@@ -50,6 +50,8 @@ Valid string values are:
 - `1.11.0`: introduced `minimum-cli-version`
 - `1.12.0`: introduced services `auto-start`
 - `1.13.0`: introduced `profile.deactivate` and build `sandbox-allow`
+- `1.14.0`: introduced services `depends-on` and
+  `shutdown.timeout-seconds` / `shutdown.signal`
 
 Existing manifest schemas, including the older `version = 1` format, are
 automatically forward-migrated when using features that require a newer schema
@@ -485,11 +487,20 @@ ServiceDescriptor ::= {
 , vars       = null | Map[STRING, STRING]
 , is-daemon  = null | BOOL
 , shutdown   = null | Shutdown
+, depends-on = null | Map[STRING, Dependency]
 , systems    = null | [<STRING>, ...]
 }
 
 Shutdown ::= {
-  command = STRING
+  command         = null | STRING
+, timeout-seconds = null | INT
+, signal          = null | INT
+}
+
+Dependency ::= {
+  condition = ( "process_started"
+              | "process_completed"
+              | "process_completed_successfully" )
 }
 ```
 
@@ -530,9 +541,52 @@ Shutdown ::= {
     sending a SIGTERM to the service. This field is required if the `is-daemon`
     field is `true`.
 
+`shutdown.timeout-seconds`
+:   How long, in seconds, to wait for the service to shut down before it is
+    forcibly killed with `SIGKILL`. Increase this for services that need more
+    time to flush state and exit cleanly (for example a database that would
+    otherwise be killed mid-write and forced into crash recovery on the next
+    start). If omitted, the process manager's default timeout applies.
+
+`shutdown.signal`
+:   The signal number to send to shut the service down, for example `15` for
+    `SIGTERM` or `2` for `SIGINT`. This is ignored when `shutdown.command` is
+    set. If omitted, the process manager's default (`SIGTERM`) is used.
+
+`depends-on`
+:   A table describing other services that must reach a given state before this
+    service is started. Each key is the name of another service, and each value
+    is a table with a `condition` field selecting one of:
+
+    - `process_started`: wait until the depended-on service's process has been
+      started.
+    - `process_completed`: wait until the depended-on service's process has
+      exited, with any status.
+    - `process_completed_successfully`: wait until the depended-on service's
+      process has exited successfully (status `0`).
+
+    For example, to start `web` only after the `migrations` service has finished
+    successfully:
+
+    ```toml
+    [services.migrations]
+    command = "run-migrations"
+
+    [services.web]
+    command = "run-web"
+    depends-on.migrations = { condition = "process_completed_successfully" }
+    ```
+
 `systems`
 :   An optional list of systems on which to run this service.
     If omitted, the service is not restricted.
+
+**Note:** `depends-on`, `shutdown.timeout-seconds`, and `shutdown.signal` are
+honored by the process-compose service manager that backs `flox activate` and
+`flox services`. They have no effect on services materialized as systemd units
+by `flox services persist`; for those, set the equivalent options in the
+per-service `systemd` passthrough — `unit.after` / `unit.requires` for ordering
+and `service.timeout_stop_sec` for the shutdown timeout.
 
 ## `[include]`
 

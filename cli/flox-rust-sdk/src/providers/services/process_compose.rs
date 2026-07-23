@@ -8,6 +8,7 @@
 use std::collections::BTreeMap;
 use std::env;
 use std::io::{BufRead, BufReader, Read};
+use std::num::NonZeroU32;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::LazyLock;
@@ -17,8 +18,8 @@ use flox_core::process_compose::PROCESS_NEVER_EXIT_NAME;
 use flox_core::traceable_path;
 use flox_manifest::interfaces::AsLatestSchema;
 use flox_manifest::lockfile::Lockfile;
-use flox_manifest::parsed::common::ServiceShutdown;
-use flox_manifest::parsed::{Inner, v1_12_0};
+use flox_manifest::parsed::v1_14_0::ServiceShutdown;
+use flox_manifest::parsed::{Inner, v1_14_0};
 #[cfg(test)]
 use flox_test_utils::proptest::alphanum_string;
 #[cfg(test)]
@@ -145,6 +146,9 @@ pub struct ProcessConfig {
     pub is_daemon: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub shutdown: Option<ProcessShutdown>,
+    #[cfg_attr(test, proptest(strategy = "arbitrary_process_depends_on()"))]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub depends_on: Option<BTreeMap<String, ProcessDependsOn>>,
 }
 
 // process-compose expects environment variables as a list of "key=value" strings
@@ -187,16 +191,34 @@ where
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct ProcessShutdown {
-    #[cfg_attr(test, proptest(strategy = "alphanum_string(5)"))]
-    pub command: String,
+    #[cfg_attr(test, proptest(strategy = "proptest::option::of(alphanum_string(5))"))]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub command: Option<String>,
+    /// How long to wait for the shutdown command before sending SIGKILL.
+    /// When unset, process-compose applies its own default of 10 seconds.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timeout_seconds: Option<NonZeroU32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub signal: Option<i32>,
 }
 
 impl From<ServiceShutdown> for ProcessShutdown {
     fn from(value: ServiceShutdown) -> Self {
         Self {
             command: value.command,
+            timeout_seconds: value.timeout_seconds,
+            signal: value.signal,
         }
     }
+}
+
+/// A `depends_on` edge in a process-compose config: the dependent service waits
+/// for `condition` on the depended-on service before it is started.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+pub struct ProcessDependsOn {
+    #[cfg_attr(test, proptest(strategy = "alphanum_string(20)"))]
+    pub condition: String,
 }
 
 #[cfg(test)]
@@ -211,6 +233,18 @@ fn arbitrary_process_config_environment()
     ))
 }
 
+#[cfg(test)]
+fn arbitrary_process_depends_on()
+-> impl proptest::strategy::Strategy<Value = Option<BTreeMap<String, ProcessDependsOn>>> {
+    use flox_test_utils::proptest::alphanum_string;
+
+    proptest::option::of(proptest::collection::btree_map(
+        alphanum_string(4),
+        any::<ProcessDependsOn>(),
+        0..=3,
+    ))
+}
+
 /// Cre
 pub fn generate_never_exit_process() -> ProcessConfig {
     ProcessConfig {
@@ -218,22 +252,33 @@ pub fn generate_never_exit_process() -> ProcessConfig {
         vars: None,
         is_daemon: None,
         shutdown: None,
+        depends_on: None,
     }
 }
 
-impl From<v1_12_0::Services> for ProcessComposeConfig {
-    fn from(services: v1_12_0::Services) -> Self {
+impl From<v1_14_0::Services> for ProcessComposeConfig {
+    fn from(services: v1_14_0::Services) -> Self {
         let processes = services
             .into_inner()
             .into_iter()
             .map(|(name, service)| {
                 let command = service.command;
                 let environment = service.vars.map(|vars| vars.inner().clone());
+                let depends_on = service.depends_on.map(|deps| {
+                    deps.into_iter()
+                        .map(|(dep_name, dep)| {
+                            (dep_name, ProcessDependsOn {
+                                condition: dep.condition.as_process_compose_str().to_string(),
+                            })
+                        })
+                        .collect()
+                });
                 (name, ProcessConfig {
                     command,
                     vars: environment,
                     is_daemon: service.is_daemon,
                     shutdown: service.shutdown.map(|s| s.into()),
+                    depends_on,
                 })
             })
             .collect();
@@ -325,7 +370,14 @@ pub fn maybe_make_service_config_file(
     let services = &manifest.as_latest_schema().services;
     let service_config_path = if !services.inner().is_empty() {
         let config_path = service_config_write_location(&flox.temp_dir)?;
-        write_process_compose_config(&services.copy_for_system(&flox.system).into(), &config_path)?;
+        let services_for_system = services.copy_for_system(&flox.system);
+        // `systems` filtering can drop a service that another one depends on;
+        // reject the dangling edge here with a clear error rather than letting
+        // process-compose fail cryptically when the services are started.
+        services_for_system
+            .validate_depends_on(&flox.system)
+            .map_err(|err| ServiceError::Passthrough(err.to_string()))?;
+        write_process_compose_config(&services_for_system.into(), &config_path)?;
         tracing::debug!(path = traceable_path(&config_path), "wrote service config");
         Some(config_path)
     } else {
@@ -1078,6 +1130,7 @@ mod tests {
                 vars: None,
                 is_daemon: None,
                 shutdown: None,
+                depends_on: None,
             })]),
             ..Default::default()
         };
@@ -1095,6 +1148,114 @@ mod tests {
         ", sleep = &*SLEEP_BIN });
     }
 
+    /// The `depends_on` and `shutdown.{timeout_seconds,signal}` fields must
+    /// serialize under exactly the keys process-compose expects in its config.
+    #[test]
+    fn service_orchestration_serializes_to_process_compose_schema() {
+        let config = ProcessComposeConfig {
+            processes: BTreeMap::from([
+                ("db".to_string(), ProcessConfig {
+                    command: "run-db".to_string(),
+                    vars: None,
+                    is_daemon: None,
+                    shutdown: Some(ProcessShutdown {
+                        command: Some("stop-db".to_string()),
+                        timeout_seconds: Some(NonZeroU32::new(30).unwrap()),
+                        signal: Some(2),
+                    }),
+                    depends_on: None,
+                }),
+                ("web".to_string(), ProcessConfig {
+                    command: "run-web".to_string(),
+                    vars: None,
+                    is_daemon: None,
+                    shutdown: None,
+                    depends_on: Some(BTreeMap::from([("db".to_string(), ProcessDependsOn {
+                        condition: "process_completed_successfully".to_string(),
+                    })])),
+                }),
+            ]),
+            ..Default::default()
+        };
+
+        let yaml = serde_yaml::to_string(&config).unwrap();
+        assert_eq!(yaml, formatdoc! { "
+            log_level: debug
+            log_configuration:
+              no_color: true
+            disable_env_expansion: true
+            processes:
+              db:
+                command: run-db
+                shutdown:
+                  command: stop-db
+                  timeout_seconds: 30
+                  signal: 2
+              flox_never_exit:
+                command: {sleep} infinity
+              web:
+                command: run-web
+                depends_on:
+                  db:
+                    condition: process_completed_successfully
+        ", sleep = &*SLEEP_BIN });
+    }
+
+    /// The manifest orchestration fields convert straight through to the
+    /// process-compose config, mapping each start condition to its literal
+    /// process-compose string.
+    #[test]
+    fn service_orchestration_converts_from_manifest() {
+        use flox_manifest::parsed::v1_14_0::{
+            ServiceDependency,
+            ServiceDescriptor,
+            ServiceShutdown,
+            ServiceStartCondition,
+        };
+
+        let mut services = v1_14_0::Services::default();
+        services
+            .inner_mut()
+            .insert("db".to_string(), ServiceDescriptor {
+                command: "run-db".to_string(),
+                vars: None,
+                is_daemon: None,
+                shutdown: Some(ServiceShutdown {
+                    command: Some("stop-db".to_string()),
+                    timeout_seconds: Some(NonZeroU32::new(30).unwrap()),
+                    signal: Some(2),
+                }),
+                depends_on: None,
+                systemd: None,
+                systems: None,
+            });
+        services
+            .inner_mut()
+            .insert("web".to_string(), ServiceDescriptor {
+                command: "run-web".to_string(),
+                vars: None,
+                is_daemon: None,
+                shutdown: None,
+                depends_on: Some(BTreeMap::from([("db".to_string(), ServiceDependency {
+                    condition: ServiceStartCondition::ProcessCompletedSuccessfully,
+                })])),
+                systemd: None,
+                systems: None,
+            });
+
+        let config: ProcessComposeConfig = services.into();
+
+        let db = &config.processes["db"];
+        let shutdown = db.shutdown.as_ref().expect("db shutdown");
+        assert_eq!(shutdown.command.as_deref(), Some("stop-db"));
+        assert_eq!(shutdown.timeout_seconds, NonZeroU32::new(30));
+        assert_eq!(shutdown.signal, Some(2));
+
+        let web = &config.processes["web"];
+        let deps = web.depends_on.as_ref().expect("web depends_on");
+        assert_eq!(deps["db"].condition, "process_completed_successfully");
+    }
+
     /// Test that [ProcessComposeLogReader] reads logs in order and sends them to the receiver.
     #[test]
     fn test_single_process_logs_received_in_order() {
@@ -1106,6 +1267,7 @@ mod tests {
                 vars: None,
                 is_daemon: None,
                 shutdown: None,
+                depends_on: None,
             })]
             .into(),
             ..Default::default()
@@ -1139,6 +1301,7 @@ mod tests {
                 vars: None,
                 is_daemon: None,
                 shutdown: None,
+                depends_on: None,
             })]
             .into(),
             ..Default::default()
@@ -1166,6 +1329,7 @@ mod tests {
                 vars: None,
                 is_daemon: None,
                 shutdown: None,
+                depends_on: None,
             })]
             .into(),
             ..Default::default()
@@ -1196,6 +1360,7 @@ mod tests {
                 vars: None,
                 is_daemon: None,
                 shutdown: None,
+                depends_on: None,
             })]
             .into(),
             ..Default::default()
@@ -1225,6 +1390,7 @@ mod tests {
                 vars: None,
                 is_daemon: None,
                 shutdown: None,
+                depends_on: None,
             })]
             .into(),
             ..Default::default()
@@ -1255,6 +1421,7 @@ mod tests {
                 vars: None,
                 is_daemon: None,
                 shutdown: None,
+                depends_on: None,
             })]
             .into(),
             ..Default::default()
@@ -1286,6 +1453,7 @@ mod tests {
                     vars: None,
                     is_daemon: None,
                     shutdown: None,
+                    depends_on: None,
                 }),
                 ("bar".to_string(), ProcessConfig {
                     command: "i=0; while true; do i=$((i+1)); echo \"$((i))\"; sleep 0.1; done"
@@ -1293,6 +1461,7 @@ mod tests {
                     vars: None,
                     is_daemon: None,
                     shutdown: None,
+                    depends_on: None,
                 }),
             ]
             .into(),
@@ -1335,6 +1504,7 @@ mod tests {
                 vars: None,
                 is_daemon: None,
                 shutdown: None,
+                depends_on: None,
             })]
             .into(),
             ..Default::default()
@@ -1376,18 +1546,21 @@ mod tests {
                     vars: None,
                     is_daemon: None,
                     shutdown: None,
+                    depends_on: None,
                 }),
                 ("bar".to_string(), ProcessConfig {
                     command: String::from("true"),
                     vars: None,
                     is_daemon: None,
                     shutdown: None,
+                    depends_on: None,
                 }),
                 ("baz".to_string(), ProcessConfig {
                     command: String::from("false"),
                     vars: None,
                     is_daemon: None,
                     shutdown: None,
+                    depends_on: None,
                 }),
             ]
             .into(),
@@ -1410,18 +1583,21 @@ mod tests {
                     vars: None,
                     is_daemon: None,
                     shutdown: None,
+                    depends_on: None,
                 }),
                 ("bar".to_string(), ProcessConfig {
                     command: String::from("true"),
                     vars: None,
                     is_daemon: None,
                     shutdown: None,
+                    depends_on: None,
                 }),
                 ("baz".to_string(), ProcessConfig {
                     command: String::from("false"),
                     vars: None,
                     is_daemon: None,
                     shutdown: None,
+                    depends_on: None,
                 }),
             ]
             .into(),
