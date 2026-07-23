@@ -221,8 +221,9 @@ fn current_generation(env: &impl GenerationsExt) -> Option<GenerationId> {
         .and_then(|metadata| metadata.current_gen())
 }
 
-/// Packages locked for the invoking system (the `flox list` count), counted
-/// without cloning the package list.
+/// Packages locked for the invoking system — the same system filter as
+/// [`Lockfile::list_packages`] (the `flox list` view), counted directly so
+/// nothing is cloned and a manifest-join failure can't lose the count.
 fn count_packages(
     flox: &Flox,
     lockfile: Result<Option<Lockfile>, EnvironmentError>,

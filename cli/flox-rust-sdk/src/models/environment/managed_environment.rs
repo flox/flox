@@ -1188,12 +1188,11 @@ impl ManagedEnvironment {
     ) -> Result<Option<Lockfile>, EnvironmentError> {
         if let Some(generation) = self.generation {
             // Validated: a user-supplied pin may not exist.
-            let lockfile_contents = self
+            return self
                 .generations()
-                .lockfile_contents(*generation)
-                .map_err(ManagedEnvironmentError::Generations)?;
-            return Lockfile::from_str(&lockfile_contents)
-                .map_err(EnvironmentError::Lockfile)
+                .lockfile(*generation)
+                .map_err(ManagedEnvironmentError::Generations)
+                .map_err(EnvironmentError::from)
                 .map(Some);
         }
 
@@ -1208,12 +1207,10 @@ impl ManagedEnvironment {
             return Ok(None);
         };
         // Unchecked: the caller took the generation from the metadata.
-        let lockfile_contents = self
-            .generations()
-            .lockfile_contents_unchecked(*generation)
-            .map_err(ManagedEnvironmentError::Generations)?;
-        Lockfile::from_str(&lockfile_contents)
-            .map_err(EnvironmentError::Lockfile)
+        self.generations()
+            .lockfile_unchecked(*generation)
+            .map_err(ManagedEnvironmentError::Generations)
+            .map_err(EnvironmentError::from)
             .map(Some)
     }
 

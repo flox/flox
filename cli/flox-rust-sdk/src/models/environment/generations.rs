@@ -149,6 +149,16 @@ impl<S> Generations<S> {
         Lockfile::from_str(contents.as_str()).map_err(GenerationsError::Lockfile)
     }
 
+    /// Like [Generations::lockfile] but without confirming the generation
+    /// exists — for callers that already read the metadata.
+    pub(crate) fn lockfile_unchecked(
+        &self,
+        generation: usize,
+    ) -> Result<Lockfile, GenerationsError> {
+        let contents = self.lockfile_contents_unchecked(generation)?;
+        Lockfile::from_str(contents.as_str()).map_err(GenerationsError::Lockfile)
+    }
+
     /// Read the lockfile of a given generation and return its contents as a string.
     pub fn lockfile_contents(&self, generation: usize) -> Result<String, GenerationsError> {
         let metadata = self.metadata()?;
