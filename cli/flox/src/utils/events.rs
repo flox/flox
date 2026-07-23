@@ -141,10 +141,7 @@ pub fn build_events_client(
     ))
 }
 
-/// The identity fields for the environment the current invocation operates
-/// on, read once at the first environment event and reused by later emits of
-/// the same command so the generation and lockfile reads don't repeat on
-/// multi-emit paths like `activate`.
+/// Identity fields for the environment the current invocation operates on.
 #[derive(Debug, Clone, Copy)]
 struct EnvIdentityFields {
     environment_id: Option<Uuid>,
@@ -162,20 +159,13 @@ fn reset_env_identity_fields() {
 }
 
 /// Read the identity fields for `env`. Every read is best-effort: a failure
-/// leaves the field absent, never fails the command. At most one
-/// generations-metadata read and one lockfile read happen here.
+/// leaves the field absent, never fails the command.
 fn read_env_identity_fields(flox: &Flox, env: &ConcreteEnvironment) -> EnvIdentityFields {
     let environment_id = match env {
         ConcreteEnvironment::Path(environment) => environment.pointer.id,
         ConcreteEnvironment::Managed(environment) => environment.pointer().id,
-        // The cached pointer of a remote environment is rewritten on every
-        // invocation, so it carries no stable id.
         ConcreteEnvironment::Remote(_) => None,
     };
-    // A command opened at a pinned generation acts on that generation;
-    // only unpinned managed/remote environments read the branch tip. The
-    // resolved generation feeds the lockfile read so the metadata isn't
-    // read twice.
     let (generation_number, package_count) = match env {
         ConcreteEnvironment::Path(environment) => (
             None,
@@ -216,20 +206,18 @@ fn read_env_identity_fields(flox: &Flox, env: &ConcreteEnvironment) -> EnvIdenti
 
 fn current_generation(env: &impl GenerationsExt) -> Option<GenerationId> {
     env.generations_metadata()
-        .map_err(|err| debug!(error = %err, "could not read generations metadata for event"))
+        .map_err(|err| debug!(error = %err, "v2 events: could not read generations metadata"))
         .ok()
         .and_then(|metadata| metadata.current_gen())
 }
 
-/// Packages locked for the invoking system — the same system filter as
-/// [`Lockfile::list_packages`] (the `flox list` view), counted directly so
-/// nothing is cloned and a manifest-join failure can't lose the count.
+/// Packages locked for the invoking system — the `flox list` count.
 fn count_packages(
     flox: &Flox,
     lockfile: Result<Option<Lockfile>, EnvironmentError>,
 ) -> Option<u64> {
     lockfile
-        .map_err(|err| debug!(error = %err, "could not read lockfile for event"))
+        .map_err(|err| debug!(error = %err, "v2 events: could not read lockfile"))
         .ok()
         .flatten()
         .map(|lockfile| {

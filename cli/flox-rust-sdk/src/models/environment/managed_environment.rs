@@ -1176,18 +1176,14 @@ impl ManagedEnvironment {
         self.generation
     }
 
-    /// The lockfile this environment resolves to, read without
-    /// materializing the local checkout: the pinned generation's lockfile
-    /// when a generation is pinned, the local checkout's lockfile when one
-    /// exists on disk, and `current_generation`'s lockfile otherwise.
-    /// Callers that already read the generations metadata pass the current
-    /// generation so this read doesn't repeat it.
+    /// The lockfile this environment resolves to, read without materializing
+    /// the local checkout. Callers that already read the generations metadata
+    /// pass `current_generation` to avoid a second read.
     pub fn existing_lockfile_without_checkout(
         &self,
         current_generation: Option<GenerationId>,
     ) -> Result<Option<Lockfile>, EnvironmentError> {
         if let Some(generation) = self.generation {
-            // Validated: a user-supplied pin may not exist.
             return self
                 .generations()
                 .lockfile(*generation)
@@ -1206,7 +1202,6 @@ impl ManagedEnvironment {
         let Some(generation) = current_generation else {
             return Ok(None);
         };
-        // Unchecked: the caller took the generation from the metadata.
         self.generations()
             .lockfile_unchecked(*generation)
             .map_err(ManagedEnvironmentError::Generations)
@@ -1327,8 +1322,6 @@ impl ManagedEnvironment {
         check_for_local_includes(&lockfile)?;
 
         let mut pointer = ManagedPointer::new(owner, name, &flox.floxhub);
-        // Carry the path environment's id through the conversion, minting
-        // one if it never had one (the file is rewritten anyway).
         pointer.id = pointer_id.or_else(|| EnvironmentPointer::new_id(flox));
 
         Self::push_new_without_building(
@@ -1657,7 +1650,7 @@ impl ManagedEnvironment {
             &EnvironmentPointer::Managed(self.pointer.clone()),
         )?;
 
-        // create the metadata for a path environment, keeping the id
+        // create the metadata for a path environment
         let mut path_pointer = PathPointer::new(self.pointer.name);
         path_pointer.id = self.pointer.id;
         fs::write(

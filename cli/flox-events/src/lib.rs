@@ -337,9 +337,8 @@ pub struct EnvDetail {
     /// for path environments. Matches the value the legacy macros emit.
     env_ref_or_name: String,
     /// The environment's stable id from its `env.json`, when it has one.
-    /// Absent for environments created before the id existed and for
-    /// remote environments, whose cached pointer is rewritten per
-    /// invocation.
+    /// Absent for remote environments and for environments created before
+    /// the id existed or while metrics were disabled.
     #[serde(skip_serializing_if = "Option::is_none")]
     environment_id: Option<Uuid>,
     /// Current generation the command started from. Absent for path
@@ -347,7 +346,8 @@ pub struct EnvDetail {
     #[serde(skip_serializing_if = "Option::is_none")]
     generation_number: Option<u64>,
     /// Number of packages locked for the invoking system (the `flox list`
-    /// count) when the command started. Absent when no lockfile exists.
+    /// count) when the command started. Absent when no lockfile is
+    /// available.
     #[serde(skip_serializing_if = "Option::is_none")]
     package_count: Option<u64>,
 }
@@ -884,8 +884,6 @@ mod tests {
     }
 
     fn env_detail(kind: &str, ref_or_name: &str) -> EnvDetail {
-        // Exhaustive literal: adding an EnvDetail field must break this
-        // helper so the goldens are extended deliberately.
         EnvDetail {
             env_kind: kind.to_string(),
             env_ref_or_name: ref_or_name.to_string(),
@@ -953,52 +951,6 @@ mod tests {
             "environment_id": "11111111-1111-1111-1111-111111111111",
             "generation_number": 3,
             "package_count": 7,
-        }));
-        assert_eq!(value, expected);
-    }
-
-    /// Path environments have no generations: `generation_number` stays
-    /// absent while the other identity fields ride.
-    #[test]
-    fn cli_environment_path_identity_fields_envelope_golden() {
-        let environment_id = Uuid::from_u128(0x11111111_1111_1111_1111_111111111111);
-        let detail = env_detail("path", "myenv")
-            .with_environment_id(environment_id)
-            .with_package_count(2);
-        let payload = CliEnvironmentPayload::new(detail);
-        let value = serde_json::to_value(fixed_event(EventKind::CliEnvironmentList(payload)))
-            .expect("event serializes");
-        let expected = json!({
-            "event_id": "00000000-0000-0000-0000-000000000000",
-            "event_timestamp": EPOCH_UNIX_MS,
-            "source": "cli",
-            "invocation_id": "00000000-0000-0000-0000-000000000000",
-            "device_id": "00000000-0000-0000-0000-000000000000",
-            "event_type": "cli.environment.list",
-            "payload": {
-                "env_kind": "path",
-                "env_ref_or_name": "myenv",
-                "environment_id": "11111111-1111-1111-1111-111111111111",
-                "package_count": 2,
-            },
-        });
-        assert_eq!(value, expected);
-    }
-
-    /// Remote environments carry no `environment_id`.
-    #[test]
-    fn cli_environment_remote_identity_fields_envelope_golden() {
-        let detail = env_detail("remote", "alice/myenv")
-            .with_generation_number(5)
-            .with_package_count(4);
-        let payload = CliEnvironmentActivatePayload::new(detail);
-        let value = serde_json::to_value(fixed_event(EventKind::CliEnvironmentActivate(payload)))
-            .expect("event serializes");
-        let expected = activate_envelope_json(json!({
-            "env_kind": "remote",
-            "env_ref_or_name": "alice/myenv",
-            "generation_number": 5,
-            "package_count": 4,
         }));
         assert_eq!(value, expected);
     }

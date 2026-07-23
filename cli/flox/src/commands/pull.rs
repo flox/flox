@@ -325,8 +325,6 @@ impl Pull {
         generation: Option<GenerationId>,
     ) -> Result<()> {
         let dot_flox_path = env_path.join(DOT_FLOX);
-        // A force re-pull of the same environment replaces the checkout but
-        // keeps its pointer id; replacing a different environment does not.
         let mut existing_id = None;
         if dot_flox_path.exists() {
             if force {

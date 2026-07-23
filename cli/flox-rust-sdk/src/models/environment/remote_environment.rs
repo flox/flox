@@ -291,7 +291,7 @@ impl RemoteEnvironment {
 
     /// See [ManagedEnvironment::generation].
     pub fn generation(&self) -> Option<GenerationId> {
-        self.inner.generation()
+        self.generation
     }
 
     /// See [ManagedEnvironment::existing_lockfile_without_checkout].
