@@ -139,7 +139,7 @@ impl Publish {
             .detect_concrete_environment(&mut flox, "Publish")?;
         environment_subcommand_metric!("publish", env);
         if let Err(err) = EventsHub::global().record_event(EventKind::CliEnvironmentPublish(
-            CliEnvironmentPublishPayload::new(env_detail_from_concrete(&env)),
+            CliEnvironmentPublishPayload::new(env_detail_from_concrete(&flox, &env)),
         )) {
             debug!(error = %err, "Failed to record v2 event");
         }
@@ -185,7 +185,7 @@ impl Publish {
         let handle = ensure_auth(&mut flox).await?;
         let catalog_name = publish_config.cache_args.org.clone().unwrap_or(handle);
 
-        let env_detail = env_detail_from_concrete(&env);
+        let env_detail = env_detail_from_concrete(&flox, &env);
         let path_env = match env {
             ConcreteEnvironment::Path(path_env) => path_env,
             ConcreteEnvironment::Managed(_) => {
