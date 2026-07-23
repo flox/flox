@@ -33,7 +33,6 @@ mod upgrade;
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::path::PathBuf;
-use std::str::FromStr;
 use std::{env, fmt, mem};
 
 use anyhow::{Context, Result, bail};
@@ -44,14 +43,7 @@ use flox_core::floxhub::{DEFAULT_FLOXHUB_URL, Floxhub};
 use flox_core::vars::FLOX_DISABLE_METRICS_VAR;
 use flox_manifest::interfaces::AsLatestSchema;
 use flox_manifest::{Manifest, TypedOnly};
-use flox_rust_sdk::flox::{
-    AuthContext,
-    AuthnMode,
-    FLOX_VERSION,
-    Flox,
-    FloxhubToken,
-    FloxhubTokenError,
-};
+use flox_rust_sdk::flox::{AuthContext, FLOX_VERSION, Flox, FloxhubTokenError};
 use flox_rust_sdk::models::env_registry;
 use flox_rust_sdk::models::env_registry::{ENV_REGISTRY_FILENAME, EnvRegistry};
 use flox_rust_sdk::models::environment::generations::GenerationId;
@@ -328,12 +320,10 @@ impl FloxArgs {
 
         let floxhub = Floxhub::new(floxhub_url, api_url_override, git_url_override)?;
 
-        let authn_mode = effective_authn_mode(&config);
-
         // Resolve the token string once, upstream: opportunistically migrate an
         // existing plaintext token into the OS keyring, then — when the merged
         // config supplied no token — populate it from the keyring so the loud
-        // `resolve_floxhub_token`, the silent `init_floxhub_client`, and the
+        // `resolve_auth_context`, the silent `init_floxhub_client`, and the
         // v2-events client's `auth_subject` snapshot all see the keyring
         // value. This block must stay ahead of the token resolution and the
         // events-client install below.
@@ -342,14 +332,17 @@ impl FloxArgs {
         // flow: in other modes (e.g. Kerberos) the token is not used for
         // authentication, so a legacy `floxhub_token` must not be silently
         // moved or read, and the prompt/hook flow must do no keyring I/O.
-        // `resolve_floxhub_token` is deliberately not behind this gate — it
+        // `resolve_auth_context` is deliberately not behind this gate — it
         // still runs in the hook flow (returning the token, suppressing
         // messages) and gates on the auth mode alone. Consequently, hook-flow
         // invocations by keyring-storage users emit with `auth_subject`
         // absent — an accepted gap; a prompt hook must never trigger a
         // keyring unlock.
         let stores = CredentialStores::new(floxhub.base_url(), &config.flox.config_dir);
-        let is_auth0 = matches!(authn_mode, AuthnMode::Auth0);
+        let is_auth0 = !matches!(
+            config.flox.floxhub_authn_mode,
+            Some(flox_config::AuthnMode::Kerberos)
+        );
         let should_store_credentials = is_auth0 && !self.is_prompt_hook_flow();
         if should_store_credentials {
             match stores.resolve_into(&mut config) {
@@ -364,8 +357,7 @@ impl FloxArgs {
             }
         }
 
-        let floxhub_token = self.resolve_floxhub_token(&config, &authn_mode, &stores);
-        let credential = AuthContext::from_mode(&authn_mode, floxhub_token.clone());
+        let credential = self.resolve_auth_context(&config, &stores);
 
         if let Some(events_client) = build_events_client(
             &config,
@@ -534,46 +526,39 @@ impl FloxArgs {
         )
     }
 
-    /// Parse and validate the configured `floxhub_token`, returning `None` and
-    /// emitting any user-facing warnings as a side effect.
+    /// Parse and validate the configured `floxhub_token`, building the
+    /// [AuthContext] and emitting any user-facing warnings as a side effect.
     ///
-    /// Returns `None` immediately when the configured authn mode does not use
-    /// the token (e.g. Kerberos) — in that case the token in `flox.toml` is
-    /// not consumed by the auth pipeline, so warning about its state — or
-    /// rewriting the user's config — would be misleading.
+    /// The token is not consumed when the configured authn mode does not use
+    /// it (e.g. Kerberos) — construction cannot fail there, so warning about
+    /// the token's state — or rewriting the user's config — never happens.
     ///
     /// For `flox hook-env` the token state is reported by the next
     /// user-invoked command instead; see [Self::is_prompt_hook_flow].
-    fn resolve_floxhub_token(
-        &self,
-        config: &Config,
-        authn_mode: &AuthnMode,
-        stores: &CredentialStores,
-    ) -> Option<FloxhubToken> {
-        if !matches!(authn_mode, AuthnMode::Auth0) {
-            return None;
+    ///
+    /// A `flox_pat_` token is opaque: it is never parsed, never wiped as
+    /// invalid, and its expiry is unknown until it is lazily resolved via
+    /// /me — so no startup warning applies to it.
+    fn resolve_auth_context(&self, config: &Config, stores: &CredentialStores) -> AuthContext {
+        // Kerberos does not use FloxHub tokens; the stored token is not
+        // consumed (and none of the token warnings below apply).
+        if let Some(flox_config::AuthnMode::Kerberos) = config.flox.floxhub_authn_mode {
+            return AuthContext::new_kerberos();
         }
 
-        let parsed = config
+        let raw = config
             .flox
             .floxhub_token
             .as_deref()
-            .and_then(|s| {
-                if s.is_empty() {
-                    None
-                } else {
-                    Some(FloxhubToken::from_str(s))
-                }
-            })
-            .transpose();
+            .filter(|s| !s.is_empty());
 
-        match parsed {
+        match AuthContext::new_from_token(raw) {
             Err(FloxhubTokenError::InvalidToken(token_error)) => {
                 // The prompt hook must neither print nor rewrite the user's
                 // config; the next user-invoked command surfaces and removes
                 // the invalid token.
                 if self.is_prompt_hook_flow() {
-                    return None;
+                    return AuthContext::Auth0(None);
                 }
                 message::error(formatdoc! {"
                     Your FloxHub token is invalid: {token_error}
@@ -585,43 +570,36 @@ impl FloxArgs {
                 // credential.
                 let source = stores.probe_source(config);
                 stores.clear_invalid(source);
-                None
+                AuthContext::Auth0(None)
             },
-            Ok(Some(token)) if token.is_expired() => {
-                let reauthenticating = matches!(
-                    self.command,
-                    Some(Commands::Admin(AdminCommands::Auth(
-                        auth::Auth::Login { .. }
-                    )))
-                );
-                // The token is account-global, so the reminder only needs to
-                // appear once per shell session. The outermost activation
-                // surfaces it; any `flox` invocation already running inside an
-                // activation — a nested `flox activate`, or a command in an
-                // activated shell whose rc re-activates an environment — stays
-                // quiet. Activations export `_FLOX_ACTIVE_ENVIRONMENTS` into the
-                // shell, including in-place `eval "$(flox activate)"` ones, so
-                // it is a reliable signal even across the parent shell.
-                let nested = activated_environments().last_active().is_some();
-                if !reauthenticating && !self.is_prompt_hook_flow() && !nested {
-                    message::warning(
-                        "Your FloxHub token has expired. Run 'flox auth login' to re-authenticate.",
+            Ok(auth_context) => {
+                if let AuthContext::Auth0(Some(token)) = &auth_context
+                    && token.is_expired()
+                {
+                    let reauthenticating = matches!(
+                        self.command,
+                        Some(Commands::Admin(AdminCommands::Auth(
+                            auth::Auth::Login { .. }
+                        )))
                     );
+                    // The token is account-global, so the reminder only needs to
+                    // appear once per shell session. The outermost activation
+                    // surfaces it; any `flox` invocation already running inside an
+                    // activation — a nested `flox activate`, or a command in an
+                    // activated shell whose rc re-activates an environment — stays
+                    // quiet. Activations export `_FLOX_ACTIVE_ENVIRONMENTS` into the
+                    // shell, including in-place `eval "$(flox activate)"` ones, so
+                    // it is a reliable signal even across the parent shell.
+                    let nested = activated_environments().last_active().is_some();
+                    if !reauthenticating && !self.is_prompt_hook_flow() && !nested {
+                        message::warning(
+                            "Your FloxHub token has expired. Run 'flox auth login' to re-authenticate.",
+                        );
+                    }
                 }
-                Some(token)
+                auth_context
             },
-            Ok(token) => token,
         }
-    }
-}
-
-/// Resolve the configured authn mode to the client's, applying the default
-/// when unset.
-fn effective_authn_mode(config: &Config) -> AuthnMode {
-    match config.flox.floxhub_authn_mode {
-        None => AuthnMode::default(),
-        Some(flox_config::AuthnMode::Token) => AuthnMode::Auth0,
-        Some(flox_config::AuthnMode::Kerberos) => AuthnMode::Kerberos,
     }
 }
 
@@ -1604,7 +1582,7 @@ pub(super) async fn ensure_environment_trust(
     }
 
     let handle = flox.auth_context.handle();
-    if handle == Some(env_ref.owner().as_str()) {
+    if handle.as_deref() == Some(env_ref.owner().as_str()) {
         debug!("{env_prefixed_name} is trusted by auth handle");
         return Ok(());
     }
@@ -1742,8 +1720,31 @@ pub(super) async fn ensure_environment_trust(
 pub(super) async fn ensure_auth(flox: &mut Flox) -> Result<String> {
     use floxhub_client::AuthFailure;
 
-    match flox.auth_context.authenticated_handle() {
-        Ok(handle) => Ok(handle.to_string()),
+    // Gating authentication is the caller that treats an expired identity
+    // as a failure.
+    let identity = match flox.get_identity().await {
+        Ok(Some(identity)) if identity.is_expired() => Err(AuthFailure::TokenExpired),
+        other => other,
+    };
+    match identity {
+        Ok(Some(identity)) => Ok(identity.handle),
+        // Identity unknown (e.g. FloxHub unreachable): proceed under the
+        // UNKNOWN display handle — the server stays the authority for
+        // authn/authz.
+        Ok(None) => Ok(floxhub_client::UNKNOWN_HANDLE.to_string()),
+        // A personal access token that fails identity resolution never
+        // blocks the operation either: /me verification can be down or
+        // misconfigured server-side, and re-authenticating interactively
+        // cannot mint a new PAT anyway. Warn and let the actual request be
+        // the authority.
+        Err(AuthFailure::TokenExpired)
+            if matches!(flox.auth_context, AuthContext::AccessToken(_)) =>
+        {
+            message::warning(
+                "Your FloxHub token could not be verified and may be expired or revoked.",
+            );
+            Ok(floxhub_client::UNKNOWN_HANDLE.to_string())
+        },
         Err(ref failure @ (AuthFailure::TokenExpired | AuthFailure::NotLoggedIn))
             if Dialog::can_prompt() =>
         {
@@ -1793,14 +1794,19 @@ pub(super) async fn ensure_auth(flox: &mut Flox) -> Result<String> {
 /// the user's handle.
 ///
 /// Unlike [`ensure_auth`], an expired Auth0 token is not a hard failure: the
-/// handle is still readable from the token, and [`FloxArgs::resolve_floxhub_token`]
+/// handle is still readable from the token, and [`FloxArgs::resolve_auth_context`]
 /// has already warned about the expiry, so activation proceeds with the handle
 /// rather than blocking. FloxHub still validates the token on the actual
 /// request. Missing credentials (not logged in / no Kerberos ticket) fall back
 /// to [`ensure_auth`] and its recovery flow.
 async fn ensure_auth_allowing_expired(flox: &mut Flox) -> Result<String> {
-    match flox.auth_context.authenticated_handle_allowing_expired() {
-        Ok(handle) => Ok(handle.to_string()),
+    // An expired identity still carries its handle; only a missing identity
+    // (not logged in, no ticket, or a server-rejected token) falls back to
+    // the recovery flow.
+    match flox.get_identity().await {
+        Ok(Some(identity)) => Ok(identity.handle),
+        // Identity unknown: proceed under the UNKNOWN display handle.
+        Ok(None) => Ok(floxhub_client::UNKNOWN_HANDLE.to_string()),
         Err(_) => ensure_auth(flox).await,
     }
 }

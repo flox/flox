@@ -26,8 +26,8 @@ pub type SearchLimit = NonZeroU8;
 
 /// Authentication mode for FloxHub.
 ///
-/// Mirrors `floxhub_client::AuthnMode` and is converted to it at consumer
-/// boundaries.
+/// Consumers match on this directly to build an `AuthContext` via
+/// `AuthContext::new_from_token` / `AuthContext::new_kerberos`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum AuthnMode {

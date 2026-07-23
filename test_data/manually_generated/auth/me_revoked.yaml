@@ -1,0 +1,9 @@
+when:
+  method: GET
+  path: /accounts/api/v1/accounts/me
+then:
+  status: 401
+  header:
+  - name: content-type
+    value: application/json
+  body: '{"detail":"Unauthorized"}'

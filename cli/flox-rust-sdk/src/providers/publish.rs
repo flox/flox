@@ -1376,7 +1376,8 @@ pub mod tests {
         let cache_url = format!("file://{}", temp_dir.path().display());
         let parsed_cache_url = Url::parse(&cache_url).unwrap();
         let key_file_path = temp_key_file.path().to_path_buf();
-        let auth_file = write_floxhub_netrc(temp_dir.path(), token).unwrap();
+        let auth_file =
+            write_floxhub_netrc(temp_dir.path(), &AuthContext::Auth0(Some(token.clone()))).unwrap();
         let catalog_store = ClientSideCatalogStoreConfig::NixCopy {
             ingress_uri: parsed_cache_url.clone(),
             egress_uri: parsed_cache_url.clone(),
@@ -2355,7 +2356,11 @@ pub mod tests {
         let token = create_test_token("test");
 
         let (flox, _temp_dir_handle) = flox_instance();
-        let auth_file = write_floxhub_netrc(flox.temp_dir.as_path(), &token).unwrap();
+        let auth_file = write_floxhub_netrc(
+            flox.temp_dir.as_path(),
+            &AuthContext::Auth0(Some(token.clone())),
+        )
+        .unwrap();
 
         // The known_store_path includes `/bin/nix`.
         let store_path = {
@@ -2431,13 +2436,13 @@ pub mod tests {
         let user_handle = flox.auth_context.handle().unwrap();
         let publish_provider = PublishProvider::new(env_meta, pkg_meta, auth);
         let packaged_created_guard = publish_provider
-            .create_package_and_possibly_user_catalog(&flox.floxhub_client, user_handle)
+            .create_package_and_possibly_user_catalog(&flox.floxhub_client, &user_handle)
             .await
             .unwrap();
         publish_provider
             .publish(
                 &flox.floxhub_client,
-                user_handle,
+                &user_handle,
                 packaged_created_guard,
                 &build_meta,
                 None,
@@ -2580,7 +2585,7 @@ pub mod tests {
         let res = publish_provider
             .publish(
                 &flox.floxhub_client,
-                flox.auth_context.handle().unwrap(),
+                &flox.auth_context.handle().unwrap(),
                 PackageCreatedGuard { _private: () },
                 &build_meta,
                 None,

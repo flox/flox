@@ -1,5 +1,4 @@
-//! Kerberos credential creation
-
+//! Kerberos credential acquisition and SPNEGO token generation via GSSAPI.
 use std::sync::Arc;
 
 use base64::Engine as _;
@@ -10,7 +9,15 @@ use libgssapi::oid::{GSS_MECH_KRB5, GSS_NT_HOSTBASED_SERVICE};
 use tracing::debug;
 use url::Url;
 
-use crate::auth::{AuthContext, AuthError, AuthHeaderError, KerberosMaterial};
+use super::KerberosMaterial;
+use crate::auth::auth_context::{AuthContext, AuthHeaderError};
+
+/// Errors from Kerberos credential acquisition.
+#[derive(Debug, Clone, thiserror::Error)]
+enum AuthError {
+    #[error("{0}")]
+    NotAuthenticated(String),
+}
 
 /// Create a Kerberos credential by resolving the principal from the ccache.
 ///
@@ -21,7 +28,7 @@ use crate::auth::{AuthContext, AuthError, AuthHeaderError, KerberosMaterial};
 /// Returns `AuthContext::Kerberos(Some)` with a SPNEGO token generator on
 /// success, or `AuthContext::Kerberos(None)` if the principal cannot be
 /// resolved.
-pub(super) fn kerberos_credential() -> AuthContext {
+pub(crate) fn kerberos_credential() -> AuthContext {
     match acquire_credential() {
         Ok((principal, cred)) => AuthContext::Kerberos(Some(KerberosMaterial {
             principal,

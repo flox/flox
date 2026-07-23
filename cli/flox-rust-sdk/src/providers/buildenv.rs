@@ -609,7 +609,7 @@ where
         // because the thread-safety (specifically, the lack of it) of the auth
         // provider makes it a real pain to pass it into other threads. It makes
         // life *much* easier to do some of this ahead of time.
-        let no_netrc_is_error = self.auth.token().is_none();
+        let no_netrc_is_error = !self.auth.has_credential();
         // Hold the TempPath alive for the duration of the build; dropping it
         // would delete the underlying file before nix copy can read it.
         let netrc_guard = self.auth.try_create_netrc();
@@ -1556,6 +1556,7 @@ fn join_realise_results(
 #[cfg(test)]
 mod test_helpers {
     pub(super) use flox_test_utils::init_tracing;
+    use floxhub_client::AuthContext;
     use tempfile::TempDir;
 
     use super::*;
@@ -1563,7 +1564,8 @@ mod test_helpers {
 
     pub(super) fn buildenv_instance() -> BuildEnvNix<NixAuth> {
         init_tracing();
-        let auth = NixAuth::from_tempdir_and_token(TempDir::new().unwrap(), None);
+        let auth =
+            NixAuth::from_tempdir_and_context(TempDir::new().unwrap(), AuthContext::Auth0(None));
         BuildEnvNix::new(auth)
     }
 

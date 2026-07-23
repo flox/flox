@@ -332,7 +332,7 @@ impl CredentialStores {
     /// supplied no token.
     ///
     /// This is the single upstream resolution step (Q8, Option C): both the loud
-    /// `resolve_floxhub_token` and the silent `init_floxhub_client` read the same
+    /// `resolve_auth_context` and the silent `init_floxhub_client` read the same
     /// field, so resolving it once here lets both see the keyring value with no
     /// change to their internals.
     ///

@@ -505,9 +505,8 @@ pub async fn get_base_nixpkgs_url(
 }
 
 pub mod test_helpers {
-    use floxhub_client::{AuthContext, AuthnMode, DEFAULT_CATALOG_URL};
+    use floxhub_client::{AuthContext, DEFAULT_CATALOG_URL};
     use pollster::FutureExt;
-    use tempfile::TempDir;
 
     use super::*;
     use crate::flox::Flox;
@@ -517,7 +516,7 @@ pub mod test_helpers {
         test_token_for_handle,
         test_token_from_floxhub_test_users_file,
     };
-    use crate::providers::nix_auth::{AuthProvider, NixAuth};
+    use crate::providers::nix_auth::NixAuth;
 
     pub static UNIT_TEST_GENERATED: LazyLock<PathBuf> =
         LazyLock::new(|| PathBuf::from(std::env::var("UNIT_TEST_GENERATED").unwrap()));
@@ -584,7 +583,7 @@ pub mod test_helpers {
             base_url: "https://not_used".to_string(),
             extra_headers: Default::default(),
             mock_mode: FloxhubMockMode::Replay(path.as_ref().to_path_buf()),
-            auth_context: AuthContext::from_mode(&AuthnMode::Auth0, None),
+            auth_context: AuthContext::new_from_token(None).expect("no token to parse"),
             user_agent: None,
             // Replays the mk_data-generated cassette store
             // (test_data/generated/resolve/*.yaml), recorded without a
@@ -604,13 +603,12 @@ pub mod test_helpers {
     /// Tests must be run with `#[tokio::test(flavor = "multi_thread")]` to
     /// allow the `MockServer` to run in another thread.
     pub fn auto_recording_catalog_client(filename: &str) -> FloxhubClient {
-        let auth = NixAuth::from_tempdir_and_token(TempDir::new().unwrap(), None);
         let record = get_record_directive();
         auto_recording_client_inner(
             filename,
             DEFAULT_CATALOG_URL,
             PublishTestUser::NoCatalogs,
-            &auth,
+            &AuthContext::Auth0(None),
             record,
         )
     }
@@ -632,7 +630,8 @@ pub mod test_helpers {
         set_test_token(&mut flox, token);
         let auth = NixAuth::from_flox(&flox).unwrap();
         let base_url = "http://localhost:8010";
-        let client = auto_recording_client_inner(filename, base_url, user, &auth, record);
+        let client =
+            auto_recording_client_inner(filename, base_url, user, &flox.auth_context, record);
         flox.floxhub_client = client;
 
         (flox, auth)
@@ -643,7 +642,7 @@ pub mod test_helpers {
         filename: &str,
         base_url: &str,
         user: PublishTestUser,
-        auth: &NixAuth,
+        auth_context: &AuthContext,
         record: RecordMockData,
     ) -> FloxhubClient {
         let mut path = UNIT_TEST_GENERATED.join(filename);
@@ -683,7 +682,7 @@ pub mod test_helpers {
             base_url: base_url_str.clone(),
             extra_headers: Default::default(),
             mock_mode: mock_mode.clone(),
-            auth_context: AuthContext::from_mode(&AuthnMode::Auth0, auth.token().cloned()),
+            auth_context: auth_context.clone(),
             user_agent: None,
             // Read at each client construction, symmetric with
             // `init_floxhub_client`. A single call builds only the record or
@@ -866,7 +865,7 @@ pub mod test_helpers {
             base_url: base_url.to_string(),
             extra_headers: Default::default(),
             mock_mode: FloxhubMockMode::None,
-            auth_context: AuthContext::from_mode(&AuthnMode::Auth0, Some(admin_token)),
+            auth_context: AuthContext::Auth0(Some(admin_token)),
             user_agent: None,
             stability: None,
         };
