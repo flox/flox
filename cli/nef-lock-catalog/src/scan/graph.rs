@@ -37,23 +37,14 @@ impl PackageGraph {
     /// unreadable entry is a no-op. Callable more than once.
     pub(super) fn add_root(&mut self, rel_file: impl AsRef<Path>) -> Result<(), ScanError> {
         let path = self.base_dir.join(rel_file.as_ref());
-        let Ok(content) = fs::read_to_string(&path) else {
-            return Ok(());
-        };
         let stem = path
             .file_stem()
             .unwrap_or_default()
             .to_string_lossy()
             .into_owned();
-        let scan = analyze_file_at(
-            &content,
-            &self.root_attributes,
-            path.parent(),
-            &mut HashMap::new(),
-            &path,
-            &identity_origins(&self.root_attributes),
-        )?;
-        self.scans.insert(stem, scan);
+        if let Some(scan) = read_and_analyze(&path, &self.root_attributes)? {
+            self.scans.insert(stem, scan);
+        }
         Ok(())
     }
 
@@ -142,15 +133,18 @@ fn try_resolve_dependency_argument(
     Ok(None)
 }
 
-/// Read and analyze a resolved package file.
+/// Read and analyze one resolved package file.
 ///
 /// Relative imports in the file resolve against its own directory, so the
-/// file's parent is passed as the import base. An unreadable file resolves to
-/// `Ok(None)`; only scan failures are errors.
+/// file's parent is passed as the import base. Shared by [PackageGraph::add_root]
+/// (entry packages) and [try_resolve_dependency_argument] (dependencies).
 fn read_and_analyze(
     path: &Path,
     root_attributes: &HashSet<String>,
 ) -> Result<Option<FileInfo>, ScanError> {
+    // TODO(ECO-133): an unreadable file silently resolves to `None`, which
+    // drops the package and its refs from the closure. This should probably be
+    // a hard error rather than a silent skip.
     let Ok(content) = fs::read_to_string(path) else {
         return Ok(None);
     };
