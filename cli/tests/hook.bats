@@ -423,6 +423,62 @@ EXPIRED_FLOXHUB_TOKEN="eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3gu
   assert_output --partial "tracked:unset"
 }
 
+# An out-of-sync prompt hook (registered by an incompatible version of Flox, or
+# with a lost marker) can't trust the diffs the sweep would decode. `hook-env`
+# runs on every prompt, so it warns and skips the auto-activation work rather
+# than failing; the environment stays active and tracked until a shell restart.
+# bats test_tags=hook:auto-deactivate:stale-version
+@test "bash: stale prompt-hook version skips auto-deactivation with a warning" {
+  project_setup
+  project2_setup
+  export FLOX_FEATURES_AUTO_ACTIVATE=true
+  "$FLOX_BIN" activate allow -d "$PROJECT2_DIR"
+
+  run bash -c "
+    export FLOX_FEATURES_AUTO_ACTIVATE=true
+    export FLOX_SHELL=\$(which bash)
+    eval \"\$($FLOX_BIN activate -d $PROJECT_DIR)\"
+    cd $PROJECT2_DIR
+    _flox_hook
+    echo \"during:\$TEST_VAR2\"
+    cd $BATS_TEST_TMPDIR
+    export _FLOX_PROMPT_HOOK_VERSION=99
+    _flox_hook
+    echo \"after:\${TEST_VAR2:-unset}\"
+    echo \"tracked:\${_FLOX_AUTO_ACTIVATED_ENVIRONMENTS:-unset}\"
+  "
+  assert_success
+  assert_output --partial "during:auto2"
+  assert_output --partial "out of sync with the running Flox"
+  # The sweep was skipped, so PROJECT2 stays active and tracked.
+  assert_output --partial "after:auto2"
+  refute_output --partial "tracked:unset"
+}
+
+# The stale-version guard warns only when there is auto-activation work; a shell
+# sitting inside its active environment with nothing to do stays quiet.
+# bats test_tags=hook:auto-deactivate:stale-version-idle
+@test "bash: stale prompt-hook version stays quiet with nothing to auto-activate" {
+  project_setup
+  project2_setup
+  export FLOX_FEATURES_AUTO_ACTIVATE=true
+  "$FLOX_BIN" activate allow -d "$PROJECT2_DIR"
+
+  run bash -c "
+    export FLOX_FEATURES_AUTO_ACTIVATE=true
+    export FLOX_SHELL=\$(which bash)
+    eval \"\$($FLOX_BIN activate -d $PROJECT_DIR)\"
+    cd $PROJECT2_DIR
+    _flox_hook
+    export _FLOX_PROMPT_HOOK_VERSION=99
+    _flox_hook
+    echo done
+  "
+  assert_success
+  assert_output --partial "done"
+  refute_output --partial "out of sync"
+}
+
 # bats test_tags=hook:auto-deactivate:manual
 @test "bash: manually activated environment is not deactivated on leaving" {
   project_setup

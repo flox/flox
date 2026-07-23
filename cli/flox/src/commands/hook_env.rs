@@ -13,7 +13,12 @@ use flox_core::activate::vars::{
     FLOX_INVOCATION_TYPES_WIRE_VAR,
     FLOX_SUPPRESSED_ENVIRONMENTS_VAR,
 };
-use flox_core::hook_actions::{HookAction, take_hook_actions};
+use flox_core::hook_actions::{
+    HookAction,
+    PROMPT_HOOK_VERSION_ENV,
+    prompt_hook_version_mismatched,
+    take_hook_actions,
+};
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::find_all_dot_flox;
 use indoc::formatdoc;
@@ -69,6 +74,11 @@ pub struct HookEnv {
 impl HookEnv {
     pub async fn handle(self, config: Config, flox: Flox) -> Result<()> {
         let mut writer = BufWriter::new(stdout());
+
+        // Read the shell's exported prompt-hook version once and thread it
+        // into every deactivation script emitted below; each checks it before
+        // decoding any diff.
+        let prompt_hook_version = std::env::var(PROMPT_HOOK_VERSION_ENV).ok();
 
         // The shell's invocation-type map holds one entry per activation the
         // shell performed, keyed by environment pointer. Every deactivation
@@ -129,6 +139,7 @@ impl HookEnv {
                         activation_state_dir,
                         flox_env,
                         flox_activate_tracelevel(),
+                        prompt_hook_version.as_deref(),
                         None,
                         &mut writer,
                     )?;
@@ -152,6 +163,21 @@ impl HookEnv {
 
         let ctx = gather_auto_activate_context(&config, !actions.is_empty())?;
         let plan = plan_auto_activation(&ctx);
+
+        // The prompt hook the shell registered is out of sync with this binary
+        // (an older hook after a version bump, or a lost marker). The diffs the
+        // deactivate sweep decodes, and the protocol a fresh activation assumes,
+        // can't be trusted, so do no auto-activation work this run. `hook-env`
+        // runs on every prompt; warn only when there is work to do so an idle
+        // shell stays quiet, and skip both the emission and the tracking
+        // writeback so no half-applied state is recorded.
+        let prompt_hook_current = prompt_hook_version.is_some()
+            && !prompt_hook_version_mismatched(prompt_hook_version.as_deref());
+        if !prompt_hook_current && plan.has_auto_activation_work() {
+            bail!(formatdoc! {"
+                This shell's Flox prompt hook is out of sync with the running Flox.
+                Restart your shell to pick up the current version."});
+        }
 
         // Whether the deactivate sweep popped every planned layer. A re-insertion
         // or buried-leaver teardown plans survivors in `plan.reactivate` that are
@@ -236,6 +262,7 @@ impl HookEnv {
                     &target.activation_state_dir,
                     &target.flox_env,
                     flox_activate_tracelevel(),
+                    prompt_hook_version.as_deref(),
                     Some(&diff),
                     &mut writer,
                 )?;
@@ -511,6 +538,19 @@ struct AutoActivatePlan {
     auto_activated: Vec<PathBuf>,
     /// New value for [`FLOX_SUPPRESSED_ENVIRONMENTS_VAR`].
     suppressed: Vec<PathBuf>,
+}
+
+impl AutoActivatePlan {
+    /// Whether this plan would activate, deactivate, prompt for, or abandon any
+    /// environment this run.
+    fn has_auto_activation_work(&self) -> bool {
+        !self.deactivate.is_empty()
+            || !self.activate.is_empty()
+            || !self.prompt.is_empty()
+            || !self.reactivate.is_empty()
+            || self.reinsert.is_some()
+            || !self.abandoned.is_empty()
+    }
 }
 
 /// Decide what the prompt hook should do given the shell's current location
@@ -1047,6 +1087,27 @@ mod tests {
     fn nothing_to_do_in_plain_directory() {
         let ctx = empty_ctx("/home/user/plain");
         assert_eq!(plan_auto_activation(&ctx), noop_plan());
+    }
+
+    #[test]
+    fn has_auto_activation_work_detects_each_action() {
+        assert!(!noop_plan().has_auto_activation_work());
+
+        let with = |mutate: fn(&mut AutoActivatePlan)| {
+            let mut plan = noop_plan();
+            mutate(&mut plan);
+            plan.has_auto_activation_work()
+        };
+        assert!(with(|p| p.activate = paths(&["/a"])));
+        assert!(with(|p| p.deactivate = paths(&["/a"])));
+        assert!(with(|p| p.prompt = paths(&["/a"])));
+        assert!(with(|p| p.reactivate = paths(&["/a"])));
+        assert!(with(|p| p.reinsert = Some(PathBuf::from("/a"))));
+        assert!(with(|p| p.abandoned = paths(&["/a"])));
+        // Tracking-only fields are downstream of the actions above, not work in
+        // their own right, so they do not by themselves make a plan warn.
+        assert!(!with(|p| p.auto_activated = paths(&["/a"])));
+        assert!(!with(|p| p.suppressed = paths(&["/a"])));
     }
 
     #[test]
