@@ -155,6 +155,15 @@ impl<S> Generations<S> {
         if !metadata.generations().contains_key(&generation.into()) {
             return Err(GenerationsError::GenerationNotFound(generation));
         }
+        self.lockfile_contents_unchecked(generation)
+    }
+
+    /// Like [Generations::lockfile_contents] but without confirming the
+    /// generation exists — for callers that already read the metadata.
+    pub(crate) fn lockfile_contents_unchecked(
+        &self,
+        generation: usize,
+    ) -> Result<String, GenerationsError> {
         let lockfile_osstr = self
             .repo
             .show(&format!(

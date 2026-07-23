@@ -220,7 +220,7 @@ impl Environment for ManagedEnvironment {
     /// Returns the lockfile if it already exists.
     fn existing_lockfile(&self, flox: &Flox) -> Result<Option<Lockfile>, EnvironmentError> {
         if self.generation.is_some() {
-            return self.existing_lockfile_without_checkout();
+            return self.existing_lockfile_without_checkout(None);
         }
 
         self.local_env_or_copy_current_generation(flox)?
@@ -1179,10 +1179,22 @@ impl ManagedEnvironment {
     /// The lockfile this environment resolves to, read without
     /// materializing the local checkout: the pinned generation's lockfile
     /// when a generation is pinned, the local checkout's lockfile when one
-    /// exists on disk, and the current generation's lockfile otherwise.
-    pub fn existing_lockfile_without_checkout(&self) -> Result<Option<Lockfile>, EnvironmentError> {
+    /// exists on disk, and `current_generation`'s lockfile otherwise.
+    /// Callers that already read the generations metadata pass the current
+    /// generation so this read doesn't repeat it.
+    pub fn existing_lockfile_without_checkout(
+        &self,
+        current_generation: Option<GenerationId>,
+    ) -> Result<Option<Lockfile>, EnvironmentError> {
         if let Some(generation) = self.generation {
-            return self.generation_lockfile(*generation);
+            // Validated: a user-supplied pin may not exist.
+            let lockfile_contents = self
+                .generations()
+                .lockfile_contents(*generation)
+                .map_err(ManagedEnvironmentError::Generations)?;
+            return Lockfile::from_str(&lockfile_contents)
+                .map_err(EnvironmentError::Lockfile)
+                .map(Some);
         }
 
         let env_dir = self.path.join(ENV_DIR_NAME);
@@ -1192,23 +1204,14 @@ impl ManagedEnvironment {
                 .map_err(EnvironmentError::Core);
         }
 
-        let Some(generation) = self
-            .generations_metadata()
-            .map_err(ManagedEnvironmentError::Generations)?
-            .current_gen()
-        else {
+        let Some(generation) = current_generation else {
             return Ok(None);
         };
-        self.generation_lockfile(*generation)
-    }
-
-    /// Read `generation`'s lockfile from the floxmeta branch.
-    fn generation_lockfile(&self, generation: usize) -> Result<Option<Lockfile>, EnvironmentError> {
+        // Unchecked: the caller took the generation from the metadata.
         let lockfile_contents = self
             .generations()
-            .lockfile_contents(generation)
+            .lockfile_contents_unchecked(*generation)
             .map_err(ManagedEnvironmentError::Generations)?;
-
         Lockfile::from_str(&lockfile_contents)
             .map_err(EnvironmentError::Lockfile)
             .map(Some)
@@ -1806,6 +1809,7 @@ mod test {
 
     use flox_core::Version;
     use flox_manifest::interfaces::{AsLatestSchema, AsTypedOnlyManifest};
+    use flox_manifest::lockfile::LockedPackage;
     use flox_manifest::lockfile::test_helpers::fake_catalog_package_lock;
     use flox_manifest::parsed::Inner;
     use flox_manifest::parsed::latest::{self, ManifestLatest};
@@ -1883,7 +1887,12 @@ mod test {
         let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub(Some(&owner));
 
         let manifest = toml_edit::ser::to_string_pretty(&Manifest::default()).unwrap();
-        let lockfile = serde_json::to_string(&Lockfile::default()).unwrap();
+        let (_install_id, _descriptor, locked_package) = fake_catalog_package_lock("hello", None);
+        let generation_lockfile = Lockfile {
+            packages: vec![LockedPackage::Catalog(locked_package)],
+            ..Lockfile::default()
+        };
+        let lockfile_contents = serde_json::to_string(&generation_lockfile).unwrap();
         let dot_flox_path =
             CanonicalPath::new(tempfile::tempdir_in(&flox.temp_dir).unwrap().keep()).unwrap();
         let mut managed_env = ManagedEnvironment::push_new_without_building(
@@ -1892,15 +1901,21 @@ mod test {
             false,
             false,
             dot_flox_path,
-            new_core_environment_with_lockfile(&flox, &manifest, &lockfile),
+            new_core_environment_with_lockfile(&flox, &manifest, &lockfile_contents),
         )
         .unwrap();
         assert_eq!(managed_env.generation(), None);
 
+        // Unpinned with no local checkout: the caller supplies the current
+        // generation it read from the metadata.
+        let current_gen = managed_env.generations_metadata().unwrap().current_gen();
+        assert_eq!(current_gen, Some(GenerationId::from(1_usize)));
         assert_eq!(
-            managed_env.existing_lockfile_without_checkout().unwrap(),
-            Some(Lockfile::default()),
-            "the current generation's lockfile is read from floxmeta"
+            managed_env
+                .existing_lockfile_without_checkout(current_gen)
+                .unwrap(),
+            Some(generation_lockfile.clone()),
+            "the current generation's non-empty lockfile is read from floxmeta"
         );
         assert!(
             !managed_env.path.join(ENV_DIR_NAME).exists(),
@@ -1910,8 +1925,10 @@ mod test {
         managed_env.generation = Some(GenerationId::from(1_usize));
         assert_eq!(managed_env.generation(), Some(GenerationId::from(1_usize)));
         assert_eq!(
-            managed_env.existing_lockfile_without_checkout().unwrap(),
-            Some(Lockfile::default()),
+            managed_env
+                .existing_lockfile_without_checkout(None)
+                .unwrap(),
+            Some(generation_lockfile),
             "the pinned generation's lockfile is read from floxmeta"
         );
     }
