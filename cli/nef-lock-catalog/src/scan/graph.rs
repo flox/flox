@@ -37,23 +37,10 @@ impl PackageGraph {
     /// unreadable entry is a no-op. Callable more than once.
     pub(super) fn add_root(&mut self, rel_file: impl AsRef<Path>) -> Result<(), ScanError> {
         let path = self.base_dir.join(rel_file.as_ref());
-        let Ok(content) = fs::read_to_string(&path) else {
-            return Ok(());
-        };
-        let stem = path
-            .file_stem()
-            .unwrap_or_default()
-            .to_string_lossy()
-            .into_owned();
-        let scan = analyze_file_at(
-            &content,
-            &self.root_attributes,
-            path.parent(),
-            &mut HashMap::new(),
-            &path,
-            &identity_origins(&self.root_attributes),
-        )?;
-        self.scans.insert(stem, scan);
+        let key = package_key(rel_file.as_ref());
+        if let Some(scan) = read_and_analyze(&path, &self.root_attributes)? {
+            self.scans.insert(key, scan);
+        }
         Ok(())
     }
 
@@ -108,6 +95,29 @@ impl PackageGraph {
     }
 }
 
+/// The package key naming `rel_file`, a path relative to `base_dir`.
+///
+/// Keys are attr-paths, so an entry package is keyed by its own path with the
+/// extension dropped: `a/foo.nix` keys as `a/foo`, the attr-path
+/// [try_resolve_dependency_argument] resolves back to that same file. Keying by
+/// the bare file name instead would let two entries under different directories
+/// overwrite each other, and would let an entry shadow the different file a
+/// same-named dependency argument resolves to.
+///
+/// A `default.nix` names its directory, so its trailing component is dropped:
+/// `foo/default.nix` keys as `foo`, the key the dependency argument `foo`
+/// resolves to. A `default.nix` directly under `base_dir` has no directory to
+/// name and keeps its own name.
+fn package_key(rel_file: &Path) -> String {
+    let key = match (rel_file.file_name(), rel_file.parent()) {
+        (Some(name), Some(parent)) if name == "default.nix" && !parent.as_os_str().is_empty() => {
+            parent
+        },
+        _ => &rel_file.with_extension(""),
+    };
+    key.to_string_lossy().into_owned()
+}
+
 /// Resolve a dependency attr-path to the package file it names and analyze it.
 ///
 /// `components` is the dependency's attr-path: the first element is the
@@ -142,15 +152,18 @@ fn try_resolve_dependency_argument(
     Ok(None)
 }
 
-/// Read and analyze a resolved package file.
+/// Read and analyze one resolved package file.
 ///
 /// Relative imports in the file resolve against its own directory, so the
-/// file's parent is passed as the import base. An unreadable file resolves to
-/// `Ok(None)`; only scan failures are errors.
+/// file's parent is passed as the import base. Shared by [PackageGraph::add_root]
+/// (entry packages) and [try_resolve_dependency_argument] (dependencies).
 fn read_and_analyze(
     path: &Path,
     root_attributes: &HashSet<String>,
 ) -> Result<Option<FileInfo>, ScanError> {
+    // TODO(ECO-133): an unreadable file silently resolves to `None`, which
+    // drops the package and its refs from the closure. This should probably be
+    // a hard error rather than a silent skip.
     let Ok(content) = fs::read_to_string(path) else {
         return Ok(None);
     };
