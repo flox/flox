@@ -23,7 +23,8 @@ use indoc::formatdoc;
 use managed_environment::ManagedEnvironment;
 use path_environment::PathEnvironment;
 use remote_environment::RemoteEnvironment;
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Serialize};
+use serde_with::{DefaultOnError, serde_as};
 use thiserror::Error;
 use tracing::debug;
 use uninstall::UninstallSpec;
@@ -446,23 +447,10 @@ pub enum EnvironmentPointer {
     Path(PathPointer),
 }
 
-/// Deserialize a pointer `id`, treating a malformed value as absent.
-/// The id only feeds metrics, so it must never make an `env.json` (which a
-/// user may hand-edit) fail to parse.
-fn pointer_id_or_none<'de, D>(deserializer: D) -> Result<Option<Uuid>, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    let raw = Option::<serde_json::Value>::deserialize(deserializer)?;
-    Ok(raw
-        .as_ref()
-        .and_then(serde_json::Value::as_str)
-        .and_then(|id| Uuid::parse_str(id).ok()))
-}
-
 /// The identifier for a project environment.
 ///
 /// This is serialized to `env.json` inside the `.flox` directory
+#[serde_as]
 #[derive(Debug, Clone, Serialize, Deserialize, Eq)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct PathPointer {
@@ -470,11 +458,10 @@ pub struct PathPointer {
     /// Stable identifier minted when the environment is created and
     /// carried through renames and conversions. `None` for environments
     /// created before the field existed or with metrics disabled.
-    #[serde(
-        default,
-        skip_serializing_if = "Option::is_none",
-        deserialize_with = "pointer_id_or_none"
-    )]
+    /// `DefaultOnError`: a malformed id must never make an `env.json`
+    /// (which a user may hand-edit) fail to parse.
+    #[serde_as(deserialize_as = "DefaultOnError")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(test, proptest(value = "None"))]
     pub id: Option<Uuid>,
     version: Version<1>,
@@ -527,6 +514,7 @@ impl Ord for PathPointer {
 /// points to an environment owner and the name of the environment.
 ///
 /// This is serialized to an `env.json` inside the `.flox` directory.
+#[serde_as]
 #[derive(Debug, Serialize, Clone, Deserialize, Eq)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct ManagedPointer {
@@ -535,11 +523,9 @@ pub struct ManagedPointer {
     /// Stable identifier carried over from the path environment this was
     /// pushed from (or minted at pull). `None` for environments created
     /// before the field existed or with metrics disabled.
-    #[serde(
-        default,
-        skip_serializing_if = "Option::is_none",
-        deserialize_with = "pointer_id_or_none"
-    )]
+    /// `DefaultOnError`: see [PathPointer::id].
+    #[serde_as(deserialize_as = "DefaultOnError")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(test, proptest(value = "None"))]
     pub id: Option<Uuid>,
     #[serde(rename = "floxhub_url")]
