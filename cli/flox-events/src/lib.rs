@@ -977,9 +977,7 @@ mod tests {
         assert_eq!(value, expected);
     }
 
-    /// Remote environments carry no `environment_id` (their cached
-    /// pointer is rewritten per invocation) but do have generations and
-    /// a lockfile.
+    /// Remote environments carry no `environment_id`.
     #[test]
     fn cli_environment_remote_identity_fields_envelope_golden() {
         let detail = env_detail("remote", "alice/myenv")

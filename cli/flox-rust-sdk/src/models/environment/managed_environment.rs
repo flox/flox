@@ -219,15 +219,8 @@ impl Environment for ManagedEnvironment {
 
     /// Returns the lockfile if it already exists.
     fn existing_lockfile(&self, flox: &Flox) -> Result<Option<Lockfile>, EnvironmentError> {
-        if let Some(generation) = self.generation {
-            let lockfile_contents = self
-                .generations()
-                .lockfile_contents(*generation)
-                .map_err(ManagedEnvironmentError::Generations)?;
-
-            return Lockfile::from_str(&lockfile_contents)
-                .map_err(EnvironmentError::Lockfile)
-                .map(Some);
+        if self.generation.is_some() {
+            return self.existing_lockfile_without_checkout();
         }
 
         self.local_env_or_copy_current_generation(flox)?
@@ -1177,6 +1170,37 @@ impl ManagedEnvironment {
         &self.pointer
     }
 
+    /// The generation this environment was opened at when pinned
+    /// (e.g. `flox activate --generation`), otherwise `None`.
+    pub fn generation(&self) -> Option<GenerationId> {
+        self.generation
+    }
+
+    /// The lockfile this environment resolves to, read without
+    /// materializing the local checkout: the pinned generation's lockfile
+    /// when a generation is pinned, otherwise the local checkout's
+    /// lockfile if one exists on disk.
+    pub fn existing_lockfile_without_checkout(&self) -> Result<Option<Lockfile>, EnvironmentError> {
+        if let Some(generation) = self.generation {
+            let lockfile_contents = self
+                .generations()
+                .lockfile_contents(*generation)
+                .map_err(ManagedEnvironmentError::Generations)?;
+
+            return Lockfile::from_str(&lockfile_contents)
+                .map_err(EnvironmentError::Lockfile)
+                .map(Some);
+        }
+
+        let lockfile_path = self.path.join(ENV_DIR_NAME).join(LOCKFILE_FILENAME);
+        let Ok(lockfile_path) = CanonicalPath::new(lockfile_path) else {
+            return Ok(None);
+        };
+        Lockfile::read_from_file(&lockfile_path)
+            .map(Some)
+            .map_err(EnvironmentError::Lockfile)
+    }
+
     pub(crate) fn generations(&self) -> Generations {
         self.floxmeta_branch.generations()
     }
@@ -1775,13 +1799,13 @@ mod test {
         read_environment_registry,
     };
     use crate::models::environment::DOT_FLOX;
+    use crate::models::environment::path_environment::test_helpers::new_named_path_environment_in;
     use crate::models::environment::test_helpers::{
         new_core_environment,
         new_core_environment_with_lockfile,
     };
     use crate::models::floxmeta::floxmeta_dir;
     use crate::providers::catalog::test_helpers::catalog_replay_client;
-    use crate::models::environment::path_environment::test_helpers::new_named_path_environment_in;
     use crate::providers::git::GitCommandProvider;
     use crate::providers::git::tests::{commit_file, test_git_options};
 
@@ -1819,6 +1843,31 @@ mod test {
 
         flox.metrics_device_uuid = None;
         assert_eq!(push(&flox, "optedout", None), None);
+    }
+
+    /// The checkout-free lockfile read reports absence rather than
+    /// materializing a local checkout, and the generation accessor
+    /// reports the pin.
+    #[test]
+    fn existing_lockfile_without_checkout_never_materializes() {
+        let owner = EnvironmentOwner::from_str("owner").unwrap();
+        let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub(Some(&owner));
+
+        let manifest = toml_edit::ser::to_string_pretty(&Manifest::default()).unwrap();
+        let mut managed_env = mock_managed_environment_unlocked(&flox, &manifest, owner);
+        assert_eq!(managed_env.generation(), None);
+
+        assert_eq!(
+            managed_env.existing_lockfile_without_checkout().unwrap(),
+            None
+        );
+        assert!(
+            !managed_env.path.join(ENV_DIR_NAME).exists(),
+            "reading the lockfile must not materialize the checkout"
+        );
+
+        managed_env.generation = Some(GenerationId::from(1_usize));
+        assert_eq!(managed_env.generation(), Some(GenerationId::from(1_usize)));
     }
 
     /// Converting a managed environment back to a path environment

@@ -478,7 +478,7 @@ impl PathPointer {
 /// it existed (registry entries, active-environment values) keep matching.
 impl PartialEq for PathPointer {
     fn eq(&self, other: &Self) -> bool {
-        (&self.name, &self.version) == (&other.name, &other.version)
+        self.cmp(other) == Ordering::Equal
     }
 }
 
