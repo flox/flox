@@ -11,34 +11,22 @@ mod status;
 use anyhow::{Result, anyhow};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
-use floxhub_client::{BuildResponse, FactoryClientError};
+use floxhub_client::{BuildResponse, EffectiveBuildStatus, FactoryClientError};
 use indoc::indoc;
 use tracing::instrument;
 
 use crate::commands::display_help;
 
-/// The label shown for an undispatched build's effective status.
+/// Compute the effective status label for a build from its server-computed
+/// `status`.
 ///
-/// A build with no task has never been dispatched to Build Coordinator, so it
-/// has no task lifecycle status. `pending` is synthesized by the CLI — it is
-/// NOT a value of the API `Status` enum (`queued`, `dispatching`, `running`,
-/// `completed`, `failed`, `timed_out`, `cancelled`), so the "(not dispatched)"
-/// suffix keeps a user from typing it as a `--status` filter and getting an
-/// empty result or 422.
-const UNDISPATCHED_STATUS_LABEL: &str = "pending (not dispatched)";
-
-/// Compute the effective status string for a build.
-///
-/// Returns the task's lifecycle status when the build has been dispatched
-/// (a task exists), otherwise the synthesized undispatched label. An
-/// undispatched build always reads as pending — never as a terminal status —
-/// because no task lifecycle has begun.
+/// An unrecognized future status renders as `unknown: <value>` rather than
+/// blanking the row; every other status renders as its wire word.
 fn effective_status(build: &BuildResponse) -> String {
-    build
-        .task
-        .as_ref()
-        .map(|task| task.status.clone())
-        .unwrap_or_else(|| UNDISPATCHED_STATUS_LABEL.to_string())
+    match &build.status {
+        EffectiveBuildStatus::Unknown(value) => format!("unknown: {value}"),
+        status => status.to_string(),
+    }
 }
 
 /// Compute the effective "last updated" timestamp for a build, as an RFC 3339
@@ -129,12 +117,16 @@ impl FactoryCommands {
 pub(crate) mod test_helpers {
     //! Shared test fixtures for the factory verb handler tests.
 
+    use std::sync::Mutex;
     use std::sync::atomic::{AtomicBool, Ordering};
 
     use chrono::TimeZone;
-    use factory_api_v1::types::TaskResponse;
+    use factory_api_v1::types::{TaskErrorClass, TaskResponse, TaskStatus};
     use floxhub_client::{
+        BuildFilters,
+        BuildId,
         BuildResponse,
+        EffectiveBuildStatus,
         FactoryApiError,
         FactoryByteStream,
         FactoryClientError,
@@ -142,32 +134,48 @@ pub(crate) mod test_helpers {
         FactoryErrorResponse,
     };
 
-    /// Construct a `BuildResponse` fixture. A `Some(task_status)` attaches a
-    /// dispatch task with that lifecycle status; `None` leaves the build
-    /// undispatched (no task).
+    /// Construct a `BuildResponse` fixture whose effective `status` is the given
+    /// value, defaulting to pre-dispatch `pending` for `None`.
+    ///
+    /// The attached task mirrors the server's persisted shape: a pending or
+    /// pre-dispatch-cancelled build carries no task; a timed-out build is
+    /// persisted as a failed task carrying the `timeout` error class; the other
+    /// dispatched states carry the matching task lifecycle status.
     pub fn make_build(
         id: i64,
         system: &str,
         attr_path: &str,
-        task_status: Option<&str>,
+        status: Option<EffectiveBuildStatus>,
     ) -> BuildResponse {
-        let task = task_status.map(|s| TaskResponse {
+        let status = status.unwrap_or(EffectiveBuildStatus::Pending);
+
+        let task_footprint = match &status {
+            EffectiveBuildStatus::Running => Some((TaskStatus::Running, None)),
+            EffectiveBuildStatus::Completed => Some((TaskStatus::Completed, None)),
+            EffectiveBuildStatus::Failed => Some((TaskStatus::Failed, None)),
+            EffectiveBuildStatus::TimedOut => {
+                Some((TaskStatus::Failed, Some(TaskErrorClass::Timeout)))
+            },
+            EffectiveBuildStatus::Pending
+            | EffectiveBuildStatus::Cancelled
+            | EffectiveBuildStatus::Unknown(_) => None,
+        };
+
+        let task = task_footprint.map(|(task_status, error_class)| TaskResponse {
             task_id: id,
             task_type: "dispatch_build".to_string(),
-            status: s.to_string(),
+            status: task_status,
             created_at: chrono::Utc.with_ymd_and_hms(2025, 1, 1, 0, 0, 0).unwrap(),
             updated_at: chrono::Utc.with_ymd_and_hms(2025, 1, 1, 0, 0, 1).unwrap(),
             completed_at: None,
-            error_class: None,
+            error_class,
             error_message: None,
             started_at: None,
         });
 
         BuildResponse {
             build_id: id,
-            // Mirrors the server's effective status: the task lifecycle status
-            // when dispatched, else the pre-dispatch default of "pending".
-            status: task_status.unwrap_or("pending").to_string(),
+            status,
             system: system.to_string(),
             attr_path: attr_path.to_string(),
             catalog_name: "my-catalog".to_string(),
@@ -190,8 +198,8 @@ pub(crate) mod test_helpers {
     /// transport path is covered by the pure classifier tests instead.
     #[derive(Clone)]
     pub enum StubResult {
-        /// Return a build whose top-level `status` is this string.
-        Build(String),
+        /// Return a build whose effective `status` is this value.
+        Build(EffectiveBuildStatus),
         /// Return [`FactoryClientError::NotFound`].
         NotFound,
         /// Return [`FactoryClientError::AuthRejected`].
@@ -203,11 +211,11 @@ pub(crate) mod test_helpers {
     impl StubResult {
         fn realize(&self) -> Result<BuildResponse, FactoryClientError> {
             match self {
-                // Build the fixture coherently: `Some(status)` sets both the
-                // task lifecycle status and the top-level status, preserving
-                // `make_build`'s invariant rather than mutating after the fact.
+                // Build the fixture coherently from the effective status,
+                // preserving `make_build`'s server-shaped invariant rather than
+                // mutating after the fact.
                 StubResult::Build(status) => {
-                    Ok(make_build(1, "x86_64-linux", "hello", Some(status)))
+                    Ok(make_build(1, "x86_64-linux", "hello", Some(status.clone())))
                 },
                 StubResult::NotFound => Err(FactoryClientError::NotFound),
                 StubResult::AuthRejected => Err(FactoryClientError::AuthRejected(stub_api_error())),
@@ -228,13 +236,15 @@ pub(crate) mod test_helpers {
     /// In-test stub implementing [`FactoryClientTrait`].
     ///
     /// Drives `get_build` (the `status` lookup) and `cancel_build` (the DELETE)
-    /// to independent [`StubResult`] outcomes, and records whether the DELETE was
-    /// issued so a cancel test can assert the range guard short-circuits before
-    /// it.
+    /// to independent [`StubResult`] outcomes, records whether the DELETE was
+    /// issued, and captures the last [`BuildFilters`] passed to `list_builds`
+    /// so a list test can assert the CLI's filter translation without a mock
+    /// server.
     pub struct StubFactoryClient {
         get_build: StubResult,
         cancel_build: StubResult,
         cancel_called: AtomicBool,
+        last_filters: Mutex<Option<BuildFilters>>,
     }
 
     impl StubFactoryClient {
@@ -250,6 +260,7 @@ pub(crate) mod test_helpers {
                 get_build,
                 cancel_build,
                 cancel_called: AtomicBool::new(false),
+                last_filters: Mutex::new(None),
             }
         }
 
@@ -263,13 +274,19 @@ pub(crate) mod test_helpers {
         pub fn cancel_was_called(&self) -> bool {
             self.cancel_called.load(Ordering::SeqCst)
         }
+
+        /// The [`BuildFilters`] from the most recent `list_builds` call, if any.
+        pub fn last_filters(&self) -> Option<BuildFilters> {
+            self.last_filters.lock().unwrap().clone()
+        }
     }
 
     impl FactoryClientTrait for StubFactoryClient {
         async fn list_builds(
             &self,
-            _status: Option<&str>,
+            filters: &BuildFilters,
         ) -> Result<floxhub_client::ResultsPage<BuildResponse>, FactoryClientError> {
+            *self.last_filters.lock().unwrap() = Some(filters.clone());
             // Mirror the get_build outcome's error, if any, so a not-found stub
             // stays not-found across endpoints; otherwise an empty page.
             self.get_build.realize()?;
@@ -279,18 +296,21 @@ pub(crate) mod test_helpers {
             })
         }
 
-        async fn get_build(&self, _build_id: i64) -> Result<BuildResponse, FactoryClientError> {
+        async fn get_build(&self, _build_id: BuildId) -> Result<BuildResponse, FactoryClientError> {
             self.get_build.realize()
         }
 
-        async fn cancel_build(&self, _build_id: i64) -> Result<BuildResponse, FactoryClientError> {
+        async fn cancel_build(
+            &self,
+            _build_id: BuildId,
+        ) -> Result<BuildResponse, FactoryClientError> {
             self.cancel_called.store(true, Ordering::SeqCst);
             self.cancel_build.realize()
         }
 
         async fn get_build_logs(
             &self,
-            _build_id: i64,
+            _build_id: BuildId,
         ) -> Result<FactoryByteStream, FactoryClientError> {
             // Mirror the get_build outcome's error, if any, so a not-found stub
             // stays not-found across endpoints; otherwise serve the canned stream.
