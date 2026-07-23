@@ -13,7 +13,7 @@
 use url::Url;
 
 use crate::auth::kerberos::KerberosMaterial;
-use crate::auth::token::{FloxhubToken, FloxhubTokenError, PAT_PREFIX, PersonalAccessToken};
+use crate::auth::token::{ACCESS_TOKEN_PREFIX, AccessToken, FloxhubToken, FloxhubTokenError};
 
 /// Describes why authentication failed.
 ///
@@ -45,8 +45,9 @@ pub struct AuthHeaderError(pub String);
 /// - `Auth0(Some(token))` — logged in via Auth0, token may or may not be
 ///   expired (checked lazily).
 /// - `Auth0(None)` — Auth0 mode but no token yet (not logged in).
-/// - `Pat(token)` — personal access token (`flox_pat_…`); identity is
-///   resolved at the point of use and cached on the token.
+/// - `AccessToken(token)` — opaque access token (`flox_…`, e.g. a
+///   `flox_pat_` personal access token); identity is resolved at the point
+///   of use and cached process-wide.
 /// - `Kerberos(Some(material))` — Kerberos mode with a resolved principal
 ///   and SPNEGO token generator.
 /// - `Kerberos(None)` — Kerberos mode but no ticket available (`kinit`
@@ -61,10 +62,10 @@ pub struct AuthHeaderError(pub String);
 pub enum AuthContext {
     /// Auth0 authentication — may or may not have a token.
     Auth0(Option<FloxhubToken>),
-    /// Personal access token (`flox_pat_…`) — opaque; identity is resolved
-    /// lazily and cached process-wide. No `Option`: "Auth0 mode with no
-    /// token" remains `Auth0(None)`.
-    Pat(PersonalAccessToken),
+    /// Opaque access token (`flox_…`) — identity is resolved lazily and
+    /// cached process-wide. No `Option`: "Auth0 mode with no token" remains
+    /// `Auth0(None)`.
+    AccessToken(AccessToken),
     /// Kerberos authentication — may or may not have a ticket/principal.
     Kerberos(Option<KerberosMaterial>),
 }
@@ -78,7 +79,7 @@ impl AuthContext {
         match self {
             AuthContext::Auth0(Some(token)) => Some(token.handle().to_string()),
             AuthContext::Auth0(None) => None,
-            AuthContext::Pat(token) => token.handle(),
+            AuthContext::AccessToken(token) => token.handle(),
             AuthContext::Kerberos(Some(material)) => Some(material.principal.clone()),
             AuthContext::Kerberos(None) => None,
         }
@@ -93,13 +94,13 @@ impl AuthContext {
     /// pseudonymous equivalent today (the principal is directly
     /// identifying), so kerberos-mode invocations return `None`.
     ///
-    /// [`FloxhubToken::sub`]: crate::token::FloxhubToken::sub
+    /// [`FloxhubToken::sub`]: crate::auth::token::FloxhubToken::sub
     pub fn user_subject(&self) -> Option<&str> {
         match self {
             AuthContext::Auth0(Some(token)) => token.sub(),
             AuthContext::Auth0(None) => None,
             // An opaque token carries no locally readable subject.
-            AuthContext::Pat(_) => None,
+            AuthContext::AccessToken(_) => None,
             AuthContext::Kerberos(_) => None,
         }
     }
@@ -107,7 +108,7 @@ impl AuthContext {
     /// Produce the value for an HTTP Authorization header targeting the given URL.
     pub fn authorization_header(&self, url: &Url) -> Option<Result<String, AuthHeaderError>> {
         match self {
-            AuthContext::Auth0(_) | AuthContext::Pat(_) => self
+            AuthContext::Auth0(_) | AuthContext::AccessToken(_) => self
                 .token_secret()
                 .map(|secret| Ok(format!("bearer {secret}"))),
             AuthContext::Kerberos(Some(material)) => {
@@ -124,7 +125,7 @@ impl AuthContext {
         match self {
             AuthContext::Auth0(Some(token)) => Some(token.secret()),
             AuthContext::Auth0(None) => None,
-            AuthContext::Pat(token) => Some(token.secret()),
+            AuthContext::AccessToken(token) => Some(token.secret()),
             AuthContext::Kerberos(_) => None,
         }
     }
@@ -132,14 +133,14 @@ impl AuthContext {
     /// Create an [`AuthContext`] from a stored token, routing by the
     /// token's form:
     ///
-    /// - `flox_pat_` token: [`AuthContext::Pat`] — the token stays opaque;
-    ///   its identity is resolved at the point of use.
+    /// - `flox_`-prefixed token: [`AuthContext::AccessToken`] — the token
+    ///   stays opaque; its identity is resolved at the point of use.
     /// - Any other token: must decode as a JWT → [`AuthContext::Auth0`].
     /// - No token: `Auth0(None)` (not logged in).
     pub fn new_from_token(token: Option<&str>) -> Result<Self, FloxhubTokenError> {
         match token {
-            Some(token) if token.starts_with(PAT_PREFIX) => Ok(AuthContext::Pat(
-                PersonalAccessToken::new(token.to_string()),
+            Some(token) if token.starts_with(ACCESS_TOKEN_PREFIX) => Ok(AuthContext::AccessToken(
+                AccessToken::new(token.to_string()),
             )),
             Some(token) => Ok(AuthContext::Auth0(Some(token.parse()?))),
             None => Ok(AuthContext::Auth0(None)),
@@ -159,7 +160,7 @@ impl std::fmt::Debug for AuthContext {
         match self {
             AuthContext::Auth0(Some(_)) => f.debug_tuple("Auth0").field(&"<token>").finish(),
             AuthContext::Auth0(None) => f.write_str("Auth0(None)"),
-            AuthContext::Pat(token) => f.debug_tuple("Pat").field(&token).finish(),
+            AuthContext::AccessToken(token) => f.debug_tuple("AccessToken").field(&token).finish(),
             AuthContext::Kerberos(Some(material)) => f
                 .debug_struct("Kerberos")
                 .field("principal", &material.principal)
@@ -175,12 +176,12 @@ mod tests {
 
     use super::*;
     use crate::auth::identity::test_helpers::test_identity;
+    use crate::auth::token::FloxhubToken;
     use crate::auth::token::test_helpers::{
         FAKE_EXPIRED_TOKEN_WITH_SUB,
         FAKE_TOKEN,
         FAKE_TOKEN_WITH_SUB,
     };
-    use crate::auth::token::FloxhubToken;
 
     #[test]
     fn user_subject_returns_sub_for_auth0_token() {
@@ -212,7 +213,7 @@ mod tests {
     }
 
     fn pat_unresolved() -> AuthContext {
-        AuthContext::Pat(PersonalAccessToken::new("flox_pat_secret".to_string()))
+        AuthContext::AccessToken(AccessToken::new("flox_pat_secret".to_string()))
     }
 
     #[test]
@@ -223,9 +224,9 @@ mod tests {
 
     #[test]
     fn pat_handle_reads_the_cached_identity() {
-        let token = PersonalAccessToken::new("flox_pat_context-handle-test".to_string());
+        let token = AccessToken::new("flox_pat_context-handle-test".to_string());
         crate::auth::identity::cache_identity(token.secret(), &test_identity("testuser"));
-        let auth = AuthContext::Pat(token);
+        let auth = AuthContext::AccessToken(token);
 
         assert_eq!(auth.handle(), Some("testuser".to_string()));
     }
@@ -254,12 +255,16 @@ mod tests {
     }
 
     #[test]
-    fn new_from_token_routes_pat_prefix_to_pat() {
-        let auth = AuthContext::new_from_token(Some("flox_pat_abc123")).unwrap();
-        let AuthContext::Pat(token) = auth else {
-            panic!("expected Pat, got {auth:?}");
-        };
-        assert_eq!(token.secret(), "flox_pat_abc123");
+    fn new_from_token_routes_flox_prefix_to_access_token() {
+        // Any flox_-prefixed token is an opaque access token: personal
+        // access tokens today, service account tokens to come.
+        for secret in ["flox_pat_abc123", "flox_sat_abc123"] {
+            let auth = AuthContext::new_from_token(Some(secret)).unwrap();
+            let AuthContext::AccessToken(token) = auth else {
+                panic!("expected AccessToken, got {auth:?}");
+            };
+            assert_eq!(token.secret(), secret);
+        }
     }
 
     #[test]

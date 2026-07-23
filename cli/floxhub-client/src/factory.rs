@@ -293,12 +293,12 @@ pub mod tests {
 
     use super::*;
     use crate::client::test_helpers::client_config;
-    use crate::{AuthContext, FloxhubClientConfig, FloxhubMockMode, PersonalAccessToken};
+    use crate::{AccessToken, AuthContext, FloxhubClientConfig, FloxhubMockMode};
 
     /// Build a bearer credential for tests. A personal access token is just a
     /// string, so no JWT construction is needed to test header handling.
     fn make_test_auth(secret: &str) -> AuthContext {
-        AuthContext::Pat(PersonalAccessToken::new(secret.to_string()))
+        AuthContext::AccessToken(AccessToken::new(secret.to_string()))
     }
 
     /// Exercise `list_builds` against a mock server, asserting:

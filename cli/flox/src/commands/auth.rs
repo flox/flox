@@ -7,7 +7,7 @@ use chrono::offset::Utc;
 use chrono::{DateTime, Duration};
 use flox_config::{Config, FLOX_CONFIG_FILE, TokenStorageMode};
 use flox_rust_sdk::flox::{FLOX_VERSION, Flox, FloxhubToken};
-use floxhub_client::AuthContext;
+use floxhub_client::{AuthContext, AuthFailure};
 use indoc::{formatdoc, indoc};
 use oauth2::basic::{
     BasicClient,
@@ -333,27 +333,37 @@ impl Auth {
 
                 Ok(())
             },
-            // TODO(ENT-105): handle Kerberos — show principal instead of
-            // "not logged in", and explain that bearer tokens don't apply.
             Auth::Status => {
                 let span = tracing::info_span!("status");
                 let _guard = span.enter();
-
-                // Check login state before probing the credential source. The
-                // startup resolver may already have read the keyring; this guard
-                // avoids an *additional* keyring read (and a possible unlock
-                // prompt) during source probing when the user is not logged in.
-                let AuthContext::Auth0(Some(token)) = &flox.auth_context else {
-                    message::warning("You are not currently logged in to FloxHub.");
-                    return Err(Exit(1).into());
-                };
-
-                let handle = token.handle();
-
-                message::plain(format!(
-                    "You are logged in as {handle} on {}",
-                    flox.floxhub.base_url()
-                ));
+                // Resolve the identity before probing the credential source.
+                // The startup resolver may already have read the keyring; this
+                // guard avoids an *additional* keyring read (and a possible
+                // unlock prompt) during source probing when the user is not
+                // logged in.
+                match flox.get_identity().await {
+                    Ok(Some(identity)) => {
+                        message::plain(format!(
+                            "You are logged in as {} on {}",
+                            identity.handle,
+                            flox.floxhub.base_url()
+                        ));
+                    },
+                    Ok(None) => {
+                        message::warning(
+                            "Found a FloxHub token but could not reach FloxHub to verify it.",
+                        );
+                        return Err(Exit(1).into());
+                    },
+                    Err(AuthFailure::TokenExpired) => {
+                        message::warning("Your FloxHub token is expired or has been revoked.");
+                        return Err(Exit(1).into());
+                    },
+                    Err(_) => {
+                        message::warning("You are not currently logged in to FloxHub.");
+                        return Err(Exit(1).into());
+                    },
+                }
 
                 let stores = CredentialStores::from_flox(&flox);
                 let source = stores.probe_source(&config);
@@ -600,7 +610,14 @@ pub async fn login_with_token_file(
         }),
     };
 
-    complete_login(flox, auth_context, handle, insecure_storage, once, storage_pref)
+    complete_login(
+        flox,
+        auth_context,
+        handle,
+        insecure_storage,
+        once,
+        storage_pref,
+    )
 }
 
 #[cfg(test)]
@@ -702,42 +719,46 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn login_with_token_file_stores_pat_and_resolves_handle() {
-        let server = MockServer::start();
-        server.mock(|when, then| {
-            when.method(httpmock::Method::GET)
-                .path("/api/v1/accounts/me")
-                .header("authorization", "bearer flox_pat_secret");
-            then.status(200).json_body(serde_json::json!({
-                "user_id": "pat|1",
-                "handle": "pat-user",
-                "expires_at": null,
-            }));
-        });
+        temp_env::async_with_vars([("_FLOX_DISABLE_KEYRING", Some("true"))], async {
+            let server = MockServer::start();
+            server.mock(|when, then| {
+                when.method(httpmock::Method::GET)
+                    .path("/accounts/api/v1/accounts/me")
+                    .header("authorization", "bearer flox_pat_secret");
+                then.status(200).json_body(serde_json::json!({
+                    "user_id": "pat|1",
+                    "handle": "pat-user",
+                    "expires_at": null,
+                }));
+            });
 
-        let (mut flox, _temp_dir) = flox_instance();
-        override_client(&mut flox, &server);
-        let token_file = flox.temp_dir.join("token");
-        fs::write(&token_file, "flox_pat_secret\n").unwrap();
+            let (mut flox, _temp_dir) = flox_instance();
+            override_client(&mut flox, &server);
+            let token_file = flox.temp_dir.join("token");
+            fs::write(&token_file, "flox_pat_secret\n").unwrap();
 
-        let handle = login_with_token_file(
-            &mut flox,
-            &token_file,
-            false,
-            false,
-            TokenStorageMode::Keyring,
-        )
-        .await
-        .unwrap();
+            let handle = login_with_token_file(
+                &mut flox,
+                &token_file,
+                false,
+                false,
+                TokenStorageMode::Keyring,
+            )
+            .await
+            .unwrap();
 
-        assert_eq!(handle, "pat-user");
-        let config_contents = fs::read_to_string(flox.config_dir.join(FLOX_CONFIG_FILE)).unwrap();
-        let config: toml::Table = toml::from_str(&config_contents).unwrap();
-        assert_eq!(
-            config["floxhub_token"].as_str(),
-            Some("flox_pat_secret"),
-            "the config stores exactly the provided token"
-        );
-        assert!(matches!(&flox.auth_context, AuthContext::Pat(_)));
+            assert_eq!(handle, "pat-user");
+            let config_contents =
+                fs::read_to_string(flox.config_dir.join(FLOX_CONFIG_FILE)).unwrap();
+            let config: toml::Table = toml::from_str(&config_contents).unwrap();
+            assert_eq!(
+                config["floxhub_token"].as_str(),
+                Some("flox_pat_secret"),
+                "the config stores exactly the provided token"
+            );
+            assert!(matches!(&flox.auth_context, AuthContext::AccessToken(_)));
+        })
+        .await;
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -745,7 +766,7 @@ mod tests {
         let server = MockServer::start();
         server.mock(|when, then| {
             when.method(httpmock::Method::GET)
-                .path("/api/v1/accounts/me");
+                .path("/accounts/api/v1/accounts/me");
             then.status(500);
         });
 
@@ -754,9 +775,15 @@ mod tests {
         let token_file = flox.temp_dir.join("token");
         fs::write(&token_file, "flox_pat_unverifiable").unwrap();
 
-        let err = login_with_token_file(&mut flox, &token_file)
-            .await
-            .unwrap_err();
+        let err = login_with_token_file(
+            &mut flox,
+            &token_file,
+            false,
+            false,
+            TokenStorageMode::Keyring,
+        )
+        .await
+        .unwrap_err();
 
         assert_eq!(
             err.to_string(),
@@ -770,7 +797,7 @@ mod tests {
         let server = MockServer::start();
         server.mock(|when, then| {
             when.method(httpmock::Method::GET)
-                .path("/api/v1/accounts/me");
+                .path("/accounts/api/v1/accounts/me");
             then.status(401);
         });
 

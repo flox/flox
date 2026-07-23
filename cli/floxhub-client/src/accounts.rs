@@ -40,12 +40,20 @@ impl AccountsApiClient {
         }
     }
 
-    /// Fetch the identity behind `token` from `GET /api/v1/accounts/me`.
+    /// Fetch the identity behind `token` from the accounts service's
+    /// `GET /api/v1/accounts/me`.
+    ///
+    /// The public API gateway exposes the accounts service under the
+    /// `/accounts` prefix and forwards the service's native path, so the
+    /// public URL is `{base}/accounts/api/v1/accounts/me`.
     ///
     /// The credential being verified is an explicit input rather than
     /// ambient client state, so this works without any configured auth.
     pub async fn me(&self, token: &str) -> Result<UserIdentity, MeError> {
-        let url = format!("{}/api/v1/accounts/me", self.base_url.trim_end_matches('/'));
+        let url = format!(
+            "{}/accounts/api/v1/accounts/me",
+            self.base_url.trim_end_matches('/')
+        );
         let response = self
             .http_client
             .get(url)
@@ -71,7 +79,7 @@ mod tests {
         let server = MockServer::start();
         let mock = server.mock(|when, then| {
             when.method(httpmock::Method::GET)
-                .path("/api/v1/accounts/me")
+                .path("/accounts/api/v1/accounts/me")
                 .header("authorization", "bearer flox_pat_secret");
             then.status(200).json_body(serde_json::json!({
                 "user_id": "auth0|123",

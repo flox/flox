@@ -1,6 +1,6 @@
 when:
   method: GET
-  path: /api/v1/accounts/me
+  path: /accounts/api/v1/accounts/me
   header:
   - name: authorization
     value: bearer flox_pat_test-secret

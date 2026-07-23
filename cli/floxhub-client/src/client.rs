@@ -30,7 +30,7 @@ use url::Url;
 
 use crate::MapApiErrorExt;
 use crate::accounts::{AccountsApiClient, MeError};
-use crate::auth::{AuthContext, IdentityError, PersonalAccessToken, UserIdentity, identity};
+use crate::auth::{AccessToken, AuthContext, IdentityError, UserIdentity, identity};
 use crate::config::FloxhubClientConfig;
 use crate::error::{FloxhubClientError, ResolveError, SearchError, VersionsError};
 use crate::mock::MockGuard;
@@ -790,7 +790,7 @@ impl FloxhubClient {
     /// [`Flox`] should use its uniform `Flox::get_identity` instead.
     pub async fn resolve_identity(
         &self,
-        token: &PersonalAccessToken,
+        token: &AccessToken,
     ) -> Result<UserIdentity, IdentityError> {
         if let Some(identity) = identity::cached_identity(token.secret()) {
             return Ok(identity);
@@ -963,7 +963,7 @@ pub mod tests {
         let server = MockServer::start();
         let mock = server.mock(|when, then| {
             when.method(httpmock::Method::GET)
-                .path("/api/v1/accounts/me")
+                .path("/accounts/api/v1/accounts/me")
                 .header("authorization", "bearer flox_pat_client-cache-test");
             then.status(200).json_body(json!({
                 "user_id": "pat|test",
@@ -973,7 +973,7 @@ pub mod tests {
         });
 
         let client = FloxhubClient::new(client_config(&server.base_url())).unwrap();
-        let token = PersonalAccessToken::new("flox_pat_client-cache-test".to_string());
+        let token = AccessToken::new("flox_pat_client-cache-test".to_string());
 
         let identity = client.resolve_identity(&token).await.unwrap();
         assert_eq!(identity.handle, "testuser");
@@ -987,13 +987,13 @@ pub mod tests {
         let server = MockServer::start();
         server.mock(|when, then| {
             when.method(httpmock::Method::GET)
-                .path("/api/v1/accounts/me");
+                .path("/accounts/api/v1/accounts/me");
             then.status(401)
                 .json_body(json!({"detail": "unauthorized"}));
         });
 
         let client = FloxhubClient::new(client_config(&server.base_url())).unwrap();
-        let token = PersonalAccessToken::new("flox_pat_client-401-test".to_string());
+        let token = AccessToken::new("flox_pat_client-401-test".to_string());
 
         assert!(matches!(
             client.resolve_identity(&token).await,
@@ -1006,12 +1006,12 @@ pub mod tests {
         let server = MockServer::start();
         let mock = server.mock(|when, then| {
             when.method(httpmock::Method::GET)
-                .path("/api/v1/accounts/me");
+                .path("/accounts/api/v1/accounts/me");
             then.status(500);
         });
 
         let client = FloxhubClient::new(client_config(&server.base_url())).unwrap();
-        let token = PersonalAccessToken::new("flox_pat_client-500-test".to_string());
+        let token = AccessToken::new("flox_pat_client-500-test".to_string());
 
         assert!(matches!(
             client.resolve_identity(&token).await,

@@ -14,7 +14,7 @@
 //! - [`auth_context`]: [`AuthContext`] and its failure types
 //! - [`identity`]: [`UserIdentity`] and its resolution errors
 //! - [`token`]: [`FloxhubToken`] (decoded Auth0 JWT) and
-//!   [`PersonalAccessToken`] (opaque `flox_pat_` token with lazy identity
+//!   [`AccessToken`] (opaque `flox_`-prefixed token with lazy identity
 //!   resolution)
 //! - [`kerberos`]: [`KerberosMaterial`] and SPNEGO token generation
 
@@ -26,7 +26,7 @@ mod token;
 pub use auth_context::{AuthContext, AuthFailure, AuthHeaderError};
 pub use identity::{IdentityError, UNKNOWN_HANDLE, UserIdentity};
 pub use kerberos::{KerberosMaterial, TokenGenerator};
-pub use token::{FloxhubToken, FloxhubTokenError, PersonalAccessToken};
+pub use token::{AccessToken, FloxhubToken, FloxhubTokenError};
 
 /// Test fixtures, re-exported from each type's own module.
 #[cfg(any(test, feature = "tests"))]

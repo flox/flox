@@ -129,7 +129,9 @@ async fn handle_path_environment_push(
                 .ok()
                 .flatten()
                 .map(|identity| identity.handle)
-                .context("Need to be logged in")?,
+                .context(
+                    "Could not determine the FloxHub owner for this environment.\nLog in with 'flox auth login' or specify 'flox push --owner <OWNER>'.",
+                )?,
         )?
     };
 

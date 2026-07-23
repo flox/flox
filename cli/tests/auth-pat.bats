@@ -5,7 +5,7 @@
 # Test authentication with `flox_pat_` personal access tokens.
 #
 # A PAT is opaque: the CLI never parses it, and resolves the identity behind
-# it lazily from `GET /api/v1/accounts/me`. These tests serve `/me` with the
+# it lazily from `GET /accounts/api/v1/accounts/me`. These tests serve `/me` with the
 # usual catalog record/replay mechanism (_FLOX_USE_CATALOG_MOCK) using the
 # hand-written fixtures in test_data/manually_generated/auth; push/pull
 # traffic goes to the usual file-based floxhub.
@@ -83,28 +83,27 @@ teardown() {
 }
 
 # bats test_tags=auth:pat:unauthorized
-@test "pat: a rejected pat surfaces re-auth guidance" {
+@test "pat: a rejected pat warns but does not block push" {
   export FLOX_FLOXHUB_TOKEN="flox_pat_revoked-secret"
   export _FLOX_USE_CATALOG_MOCK="$MANUALLY_GENERATED/auth/me_revoked.yaml"
 
-  "$FLOX_BIN" init
-  # Redirect stdin from /dev/null to ensure non-interactive mode
-  run "$FLOX_BIN" push < /dev/null
-  assert_failure
-  assert_output --partial "Your FloxHub token has expired."
-  assert_output --partial "To re-authenticate you can either"
+  "$FLOX_BIN" init --name "test"
+  # The push itself goes to the file-based floxhub; the server stays the
+  # authority for whether the token actually authenticates.
+  run "$FLOX_BIN" push --owner "owner" < /dev/null
+  assert_success
+  assert_output --partial "could not be verified"
 }
 
 # bats test_tags=auth:pat:expired
-@test "pat: an expired pat surfaces re-auth guidance from the /me expiry" {
+@test "pat: an expired pat warns but does not block push" {
   export FLOX_FLOXHUB_TOKEN="flox_pat_test-secret"
   export _FLOX_USE_CATALOG_MOCK="$MANUALLY_GENERATED/auth/me_expired.yaml"
 
-  "$FLOX_BIN" init
-  # Redirect stdin from /dev/null to ensure non-interactive mode
-  run "$FLOX_BIN" push < /dev/null
-  assert_failure
-  assert_output --partial "Your FloxHub token has expired."
+  "$FLOX_BIN" init --name "test"
+  run "$FLOX_BIN" push --owner "owner" < /dev/null
+  assert_success
+  assert_output --partial "could not be verified"
 }
 
 # bats test_tags=auth:pat:degraded
@@ -120,6 +119,16 @@ teardown() {
   run "$FLOX_BIN" push --owner "owner"
   assert_success
   assert_output --partial "owner/test"
+}
+
+# bats test_tags=auth:pat:status
+@test "pat: auth status reports the handle from /me" {
+  export FLOX_FLOXHUB_TOKEN="flox_pat_test-secret"
+  export _FLOX_USE_CATALOG_MOCK="$MANUALLY_GENERATED/auth/me_valid.yaml"
+
+  run "$FLOX_BIN" auth status
+  assert_success
+  assert_output --partial "You are logged in as owner"
 }
 
 # bats test_tags=auth:pat:login

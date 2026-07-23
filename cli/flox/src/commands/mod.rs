@@ -1732,6 +1732,19 @@ pub(super) async fn ensure_auth(flox: &mut Flox) -> Result<String> {
         // UNKNOWN display handle — the server stays the authority for
         // authn/authz.
         Ok(None) => Ok(floxhub_client::UNKNOWN_HANDLE.to_string()),
+        // A personal access token that fails identity resolution never
+        // blocks the operation either: /me verification can be down or
+        // misconfigured server-side, and re-authenticating interactively
+        // cannot mint a new PAT anyway. Warn and let the actual request be
+        // the authority.
+        Err(AuthFailure::TokenExpired)
+            if matches!(flox.auth_context, AuthContext::AccessToken(_)) =>
+        {
+            message::warning(
+                "Your FloxHub token could not be verified and may be expired or revoked.",
+            );
+            Ok(floxhub_client::UNKNOWN_HANDLE.to_string())
+        },
         Err(ref failure @ (AuthFailure::TokenExpired | AuthFailure::NotLoggedIn))
             if Dialog::can_prompt() =>
         {

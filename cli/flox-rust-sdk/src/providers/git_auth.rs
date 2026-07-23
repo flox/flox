@@ -45,7 +45,7 @@ impl GitCommandOptionsExt for GitCommandOptions {
                     ),
                 );
             },
-            AuthContext::Pat(token) => {
+            AuthContext::AccessToken(token) => {
                 tracing::debug!("using FloxHub personal access token");
                 self.add_env_var(FLOXHUB_TOKEN_ENV_VAR, token.secret());
                 self.add_config_flag(
@@ -120,8 +120,8 @@ mod tests {
 
     #[test]
     fn pat_sets_credential_helper_with_secret() {
-        let token = floxhub_client::PersonalAccessToken::new("flox_pat_secret".to_string());
-        let auth = AuthContext::Pat(token.clone());
+        let token = floxhub_client::AccessToken::new("flox_pat_secret".to_string());
+        let auth = AuthContext::AccessToken(token.clone());
         let mut options = GitCommandOptions::default();
 
         let mut expected = GitCommandOptions::default();

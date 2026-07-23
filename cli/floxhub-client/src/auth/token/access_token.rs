@@ -1,12 +1,15 @@
-//! [`PersonalAccessToken`] — an opaque `flox_pat_` token.
+//! [`AccessToken`] — an opaque `flox_`-prefixed token.
 
 use crate::auth::identity;
 
-/// Prefix identifying a FloxHub personal access token.
-pub(crate) const PAT_PREFIX: &str = "flox_pat_";
+/// Prefix identifying an opaque FloxHub access token. Individual kinds carry
+/// a longer prefix (`flox_pat_` personal access tokens, service account
+/// tokens to come), but the CLI treats them uniformly and never parses them.
+pub(crate) const ACCESS_TOKEN_PREFIX: &str = "flox_";
 
-/// An opaque token (`flox_pat_…` personal access token) authenticating a user
-/// with FloxHub.
+/// An opaque access token (`flox_…`) authenticating a caller with FloxHub —
+/// a `flox_pat_` personal access token today; service account tokens to
+/// come.
 ///
 /// The CLI cannot decode identity from an opaque token; it is resolved via
 /// `GET /api/v1/accounts/me` (`FloxhubClient::resolve_identity`) and cached
@@ -14,15 +17,15 @@ pub(crate) const PAT_PREFIX: &str = "flox_pat_";
 /// [`Self::handle`] returns `None` — the server's 401 is the authoritative
 /// backstop.
 #[derive(Clone)]
-pub struct PersonalAccessToken {
+pub struct AccessToken {
     /// The entire token as a string.
     token: String,
 }
 
-impl PersonalAccessToken {
+impl AccessToken {
     /// Create an opaque token from a string; nothing is parsed or validated.
     pub fn new(token: String) -> Self {
-        PersonalAccessToken { token }
+        AccessToken { token }
     }
 
     /// Return the token as a string.
@@ -38,9 +41,9 @@ impl PersonalAccessToken {
     }
 }
 
-impl std::fmt::Debug for PersonalAccessToken {
+impl std::fmt::Debug for AccessToken {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("PersonalAccessToken")
+        f.debug_struct("AccessToken")
             .field("identity", &identity::cached_identity(&self.token))
             .finish_non_exhaustive()
     }
@@ -53,7 +56,7 @@ mod tests {
 
     #[test]
     fn opaque_token_handle_reads_the_identity_cache() {
-        let token = PersonalAccessToken::new("flox_pat_handle-cache-test".to_string());
+        let token = AccessToken::new("flox_pat_handle-cache-test".to_string());
         assert_eq!(token.handle(), None, "handle is unknown before resolution");
 
         identity::cache_identity(token.secret(), &test_identity("testuser"));
@@ -62,7 +65,7 @@ mod tests {
 
     #[test]
     fn opaque_token_debug_redacts_the_secret() {
-        let token = PersonalAccessToken::new("flox_pat_debug-test".to_string());
+        let token = AccessToken::new("flox_pat_debug-test".to_string());
         assert!(!format!("{token:?}").contains("flox_pat_debug-test"));
     }
 }

@@ -6,11 +6,11 @@ use flox_core::features::Features;
 use flox_core::floxhub::Floxhub;
 use flox_core::vars::FLOX_VERSION_STRING;
 pub use floxhub_client::{
+    AccessToken,
     AuthContext,
     AuthFailure,
     FloxhubToken,
     FloxhubTokenError,
-    PersonalAccessToken,
     UserIdentity,
 };
 use floxhub_client::{FloxhubClient, FloxhubClientError, IdentityError};
@@ -120,10 +120,12 @@ impl Flox {
                 expires_at: Some(token.expires_at()),
             })),
             AuthContext::Auth0(None) => Err(AuthFailure::NotLoggedIn),
-            AuthContext::Pat(token) => match self.floxhub_client.resolve_identity(token).await {
-                Ok(identity) => Ok(Some(identity)),
-                Err(IdentityError::Unauthorized) => Err(AuthFailure::TokenExpired),
-                Err(_) => Ok(None),
+            AuthContext::AccessToken(token) => {
+                match self.floxhub_client.resolve_identity(token).await {
+                    Ok(identity) => Ok(Some(identity)),
+                    Err(IdentityError::Unauthorized) => Err(AuthFailure::TokenExpired),
+                    Err(_) => Ok(None),
+                }
             },
             AuthContext::Kerberos(Some(material)) => Ok(Some(UserIdentity {
                 handle: material.principal.clone(),

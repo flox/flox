@@ -93,7 +93,7 @@ impl NixAuth {
     /// Construct a new auth provider from a Flox instance
     pub fn from_flox(flox: &Flox) -> Result<Self, AuthError> {
         let netrc_tempdir = match &flox.auth_context {
-            AuthContext::Auth0(_) | AuthContext::Pat(_) => {
+            AuthContext::Auth0(_) | AuthContext::AccessToken(_) => {
                 Some(tempdir_in(&flox.temp_dir).map_err(AuthError::CreateTempDir)?)
             },
             AuthContext::Kerberos(_) => None,
