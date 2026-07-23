@@ -115,6 +115,21 @@ $ cz commit
 
 to make conforming commits interactively.
 
+-----
+
+**The pull request title must also follow the conventional commits format.**
+
+Pull requests are squash-merged (see [Merges](#merges)), and GitHub uses the
+pull request title as the message of the resulting squashed commit on `main`.
+That commit message is validated the same way individual commits are, so a PR
+whose commits are all correctly formatted can still fail at merge time if the
+title itself does not conform.
+
+```
+❌ Add support for parsing arrays
+✅ feat(parser): add support for parsing arrays
+```
+
 ## Development
 
 ```console
@@ -558,3 +573,7 @@ Merges to `main` should be squashed and *ff-only* back to `main` using GitHub
 PRs.  Or, if they represent multiple bigger changes, squashed into multiple
 distinct change sets.  Also be sure to run all tests before creating a mergeable
 PR (See [above](#testing)).
+
+Because the squashed commit takes its message from the pull request title, that
+title must follow the [conventional commits](#commits) format just like an
+individual commit — otherwise the merge fails validation.
