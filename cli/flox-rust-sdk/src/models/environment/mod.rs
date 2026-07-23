@@ -1,3 +1,4 @@
+use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::{fs, io};
@@ -27,6 +28,7 @@ use thiserror::Error;
 use tracing::debug;
 use uninstall::UninstallSpec;
 use url::{ParseError, Url};
+use uuid::Uuid;
 use walkdir::WalkDir;
 
 use self::managed_environment::ManagedEnvironmentError;
@@ -447,10 +449,16 @@ pub enum EnvironmentPointer {
 /// The identifier for a project environment.
 ///
 /// This is serialized to `env.json` inside the `.flox` directory
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Serialize, Deserialize, Eq)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct PathPointer {
     pub name: EnvironmentName,
+    /// Stable identifier minted when the environment is created and
+    /// carried through renames and conversions. `None` for environments
+    /// created before the field existed or with metrics disabled.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(test, proptest(value = "None"))]
+    pub id: Option<Uuid>,
     version: Version<1>,
 }
 
@@ -459,8 +467,30 @@ impl PathPointer {
     pub fn new(name: EnvironmentName) -> Self {
         Self {
             name,
+            id: None,
             version: Version::<1>,
         }
+    }
+}
+
+/// Compares everything except `id`: the id identifies an environment in
+/// metrics but is not part of pointer identity, so records written before
+/// it existed (registry entries, active-environment values) keep matching.
+impl PartialEq for PathPointer {
+    fn eq(&self, other: &Self) -> bool {
+        (&self.name, &self.version) == (&other.name, &other.version)
+    }
+}
+
+impl PartialOrd for PathPointer {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for PathPointer {
+    fn cmp(&self, other: &Self) -> Ordering {
+        (&self.name, &self.version).cmp(&(&other.name, &other.version))
     }
 }
 
@@ -468,11 +498,17 @@ impl PathPointer {
 /// points to an environment owner and the name of the environment.
 ///
 /// This is serialized to an `env.json` inside the `.flox` directory.
-#[derive(Debug, Serialize, Clone, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Serialize, Clone, Deserialize, Eq)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct ManagedPointer {
     pub owner: EnvironmentOwner,
     pub name: EnvironmentName,
+    /// Stable identifier carried over from the path environment this was
+    /// pushed from (or minted at pull). `None` for environments created
+    /// before the field existed or with metrics disabled.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(test, proptest(value = "None"))]
+    pub id: Option<Uuid>,
     #[serde(rename = "floxhub_url")]
     #[cfg_attr(
         test,
@@ -491,6 +527,7 @@ impl ManagedPointer {
         Self {
             name,
             owner,
+            id: None,
             floxhub_base_url: floxhub.base_url().clone(),
             floxhub_git_url_override: floxhub.git_url_override().cloned(),
             version: Version::<1>,
@@ -504,6 +541,38 @@ impl ManagedPointer {
     }
 }
 
+/// Compares everything except `id` — see the [PathPointer] impl.
+impl PartialEq for ManagedPointer {
+    fn eq(&self, other: &Self) -> bool {
+        self.cmp(other) == Ordering::Equal
+    }
+}
+
+impl PartialOrd for ManagedPointer {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for ManagedPointer {
+    fn cmp(&self, other: &Self) -> Ordering {
+        (
+            &self.owner,
+            &self.name,
+            &self.floxhub_base_url,
+            &self.floxhub_git_url_override,
+            &self.version,
+        )
+            .cmp(&(
+                &other.owner,
+                &other.name,
+                &other.floxhub_base_url,
+                &other.floxhub_git_url_override,
+                &other.version,
+            ))
+    }
+}
+
 impl From<ManagedPointer> for RemoteEnvironmentRef {
     fn from(pointer: ManagedPointer) -> Self {
         RemoteEnvironmentRef::from_parts(pointer.owner, pointer.name)
@@ -511,6 +580,13 @@ impl From<ManagedPointer> for RemoteEnvironmentRef {
 }
 
 impl EnvironmentPointer {
+    /// A fresh pointer `id` for an environment being created, or `None`
+    /// when metrics are disabled — the id identifies environments in
+    /// metrics, so none is minted or persisted for opted-out users.
+    pub fn new_id(flox: &Flox) -> Option<Uuid> {
+        flox.metrics_device_uuid.is_some().then(Uuid::new_v4)
+    }
+
     /// Attempt to read an environment pointer file ([ENVIRONMENT_POINTER_FILENAME])
     /// in the specified `.flox` directory.
     ///
@@ -1164,6 +1240,7 @@ mod test {
         EnvironmentPointer::Managed(ManagedPointer {
             name: EnvironmentName::from_str("name").unwrap(),
             owner: EnvironmentOwner::from_str("owner").unwrap(),
+            id: None,
             floxhub_base_url: DEFAULT_FLOXHUB_URL.clone(),
             floxhub_git_url_override: None,
             version: Version::<1> {},
@@ -1175,6 +1252,7 @@ mod test {
         let managed_pointer = EnvironmentPointer::Managed(ManagedPointer {
             name: EnvironmentName::from_str("name").unwrap(),
             owner: EnvironmentOwner::from_str("owner").unwrap(),
+            id: None,
             floxhub_base_url: DEFAULT_FLOXHUB_URL.clone(),
             floxhub_git_url_override: None,
             version: Version::<1> {},
@@ -1197,6 +1275,7 @@ mod test {
     fn serializes_path_environment_pointer() {
         let path_pointer = EnvironmentPointer::Path(PathPointer {
             name: EnvironmentName::from_str("name").unwrap(),
+            id: None,
             version: Version::<1> {},
         });
 
@@ -1214,6 +1293,7 @@ mod test {
             path_pointer,
             EnvironmentPointer::Path(PathPointer {
                 name: EnvironmentName::from_str("name").unwrap(),
+                id: None,
                 version: Version::<1> {},
             })
         );
@@ -1224,6 +1304,7 @@ mod test {
         let mut managed_pointer = ManagedPointer {
             name: EnvironmentName::from_str("name").unwrap(),
             owner: EnvironmentOwner::from_str("owner").unwrap(),
+            id: None,
             floxhub_base_url: Url::from_str("https://example.com/").unwrap(),
             floxhub_git_url_override: None,
             version: Version::<1> {},
@@ -1240,6 +1321,80 @@ mod test {
             "https://example.com/base/owner/name",
             "should respect additional paths in the base URL",
         );
+    }
+
+    #[test]
+    fn pointer_id_round_trips_for_both_variants() {
+        let id = Uuid::from_u128(0x11111111_1111_1111_1111_111111111111);
+
+        let mut path_pointer = PathPointer::new(EnvironmentName::from_str("name").unwrap());
+        path_pointer.id = Some(id);
+        let json = serde_json::to_value(EnvironmentPointer::Path(path_pointer.clone())).unwrap();
+        assert_eq!(
+            json,
+            serde_json::json!({
+                "name": "name",
+                "id": "11111111-1111-1111-1111-111111111111",
+                "version": 1,
+            })
+        );
+        let reparsed: EnvironmentPointer = serde_json::from_value(json).unwrap();
+        let EnvironmentPointer::Path(reparsed) = reparsed else {
+            panic!("expected path pointer");
+        };
+        assert_eq!(reparsed.id, Some(id));
+
+        let mut managed_pointer = ManagedPointer {
+            name: EnvironmentName::from_str("name").unwrap(),
+            owner: EnvironmentOwner::from_str("owner").unwrap(),
+            id: Some(id),
+            floxhub_base_url: DEFAULT_FLOXHUB_URL.clone(),
+            floxhub_git_url_override: None,
+            version: Version::<1> {},
+        };
+        let json =
+            serde_json::to_value(EnvironmentPointer::Managed(managed_pointer.clone())).unwrap();
+        assert_eq!(
+            json.get("id").and_then(|v| v.as_str()),
+            Some("11111111-1111-1111-1111-111111111111")
+        );
+        let reparsed: EnvironmentPointer = serde_json::from_value(json).unwrap();
+        let EnvironmentPointer::Managed(reparsed) = reparsed else {
+            panic!("expected managed pointer");
+        };
+        assert_eq!(reparsed.id, Some(id));
+        managed_pointer.id = None;
+        assert_eq!(reparsed, managed_pointer, "id is not part of equality");
+    }
+
+    /// Pointers written before the `id` field existed (registry entries,
+    /// serialized active environments) must compare equal to the same
+    /// pointer carrying an id, in both equality and ordering.
+    #[test]
+    fn pointer_comparisons_ignore_id() {
+        let mut with_id = PathPointer::new(EnvironmentName::from_str("name").unwrap());
+        with_id.id = Some(Uuid::new_v4());
+        let without_id = PathPointer::new(EnvironmentName::from_str("name").unwrap());
+        assert_eq!(with_id, without_id);
+        assert_eq!(with_id.cmp(&without_id), std::cmp::Ordering::Equal);
+
+        let EnvironmentPointer::Managed(managed) = MANAGED_ENV_POINTER.clone() else {
+            panic!("expected managed pointer");
+        };
+        let mut managed_with_id = managed.clone();
+        managed_with_id.id = Some(Uuid::new_v4());
+        assert_eq!(managed_with_id, managed);
+        assert_eq!(managed_with_id.cmp(&managed), std::cmp::Ordering::Equal);
+    }
+
+    #[test]
+    fn pointer_id_minted_only_when_metrics_enabled() {
+        let (mut flox, _temp_dir_handle) = flox_instance();
+        flox.metrics_device_uuid = None;
+        assert_eq!(EnvironmentPointer::new_id(&flox), None);
+
+        flox.metrics_device_uuid = Some(Uuid::new_v4());
+        assert!(EnvironmentPointer::new_id(&flox).is_some());
     }
 
     #[test]

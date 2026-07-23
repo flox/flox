@@ -23,6 +23,7 @@ use flox_rust_sdk::models::environment::{
     ENVIRONMENT_POINTER_FILENAME,
     Environment,
     EnvironmentError,
+    EnvironmentPointer,
     ManagedPointer,
     create_dot_flox_gitignore,
 };
@@ -157,7 +158,7 @@ impl Pull {
                 // contract). Outcome rides on `cli.command_completed`
                 // (exit_code), so emitting before the bail is intentional.
                 if let Err(err) = EventsHub::global().record_event(EventKind::CliEnvironmentPull(
-                    CliEnvironmentPayload::new(env_detail_from_concrete(&environment)),
+                    CliEnvironmentPayload::new(env_detail_from_concrete(&flox, &environment)),
                 )) {
                     debug!(error = %err, "Failed to record v2 event");
                 }
@@ -337,11 +338,12 @@ impl Pull {
         }
 
         // region: write pointer
-        let pointer = ManagedPointer::new(
+        let mut pointer = ManagedPointer::new(
             env_ref.owner().clone(),
             env_ref.name().clone(),
             &flox.floxhub,
         );
+        pointer.id = EnvironmentPointer::new_id(flox);
         let mut pointer_content =
             serde_json::to_string_pretty(&pointer).context("Could not serialize pointer")?;
         pointer_content.push('\n');

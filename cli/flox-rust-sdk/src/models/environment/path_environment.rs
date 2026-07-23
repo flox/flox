@@ -805,6 +805,40 @@ pub mod tests {
         })
     }
 
+    /// Renaming rewrites `env.json` and must keep the pointer id, and
+    /// merely opening an id-less environment must not modify `env.json`.
+    #[test]
+    fn rename_preserves_pointer_id_and_open_does_not_backfill() {
+        let (flox, temp_dir) = flox_instance();
+        let environment_temp_dir = tempfile::tempdir_in(&temp_dir).unwrap();
+        let id = uuid::Uuid::new_v4();
+        let mut pointer = PathPointer::new("test".parse().unwrap());
+        pointer.id = Some(id);
+
+        let mut env = PathEnvironment::init(
+            pointer,
+            environment_temp_dir.path(),
+            &InitCustomization::default(),
+            &flox,
+        )
+        .unwrap();
+        let pointer_path = env.path.join(ENVIRONMENT_POINTER_FILENAME);
+
+        env.rename("renamed".parse().unwrap()).unwrap();
+        let written: PathPointer =
+            serde_json::from_str(&fs::read_to_string(&pointer_path).unwrap()).unwrap();
+        assert_eq!(written.id, Some(id));
+        assert_eq!(written.name.to_string(), "renamed");
+
+        // An environment written without an id (an older binary's output)
+        // stays untouched by read paths.
+        fs::write(&pointer_path, r#"{"name": "renamed", "version": 1}"#).unwrap();
+        let before = fs::read_to_string(&pointer_path).unwrap();
+        let opened = DotFlox::open_in(environment_temp_dir.path()).unwrap();
+        assert_eq!(opened.pointer.name().to_string(), "renamed");
+        assert_eq!(fs::read_to_string(&pointer_path).unwrap(), before);
+    }
+
     #[test]
     fn create_env() {
         let (flox, temp_dir) = flox_instance();
