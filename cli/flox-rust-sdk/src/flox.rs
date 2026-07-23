@@ -149,11 +149,10 @@ pub mod test_helpers {
         NoCatalogs,
     }
 
-    pub fn test_token_from_floxhub_test_users_file(user: PublishTestUser) -> FloxhubToken {
-        let idx = match user {
-            PublishTestUser::WithCatalogs => 0,
-            PublishTestUser::NoCatalogs => 1,
-        };
+    /// Look up a token from the test-users file by handle.
+    ///
+    /// Panics if the handle is not found or the file cannot be read.
+    pub fn test_token_for_handle(handle: &str) -> FloxhubToken {
         let test_user_file_path = UNIT_TEST_GENERATED
             .parent()
             .unwrap()
@@ -162,15 +161,30 @@ pub mod test_helpers {
             std::fs::read_to_string(test_user_file_path).expect("couldn't open test user file");
         let json: serde_json::Value =
             serde_json::from_str(&contents).expect("couldn't parse test user file");
-        let token = json
-            .get(idx)
-            .and_then(|obj| obj.get("token"))
-            .expect("couldn't extract token from test user file")
+        let user = json
+            .as_array()
+            .expect("test user file is not an array")
+            .iter()
+            .find(|obj| obj.get("handle").and_then(|h| h.as_str()) == Some(handle))
+            .unwrap_or_else(|| panic!("handle '{handle}' not found in test user file"));
+        // Distinguish a missing handle from a found handle that lacks a token
+        // rather than reporting both as "not found".
+        let token = user
+            .get("token")
+            .unwrap_or_else(|| panic!("test user '{handle}' has no 'token' field"))
             .as_str()
-            .unwrap()
+            .expect("test user token is not a string")
             .to_string();
         // Parse the token to extract claims (including exp) from the JWT
         FloxhubToken::from_str(&token).expect("couldn't parse test user token")
+    }
+
+    pub fn test_token_from_floxhub_test_users_file(user: PublishTestUser) -> FloxhubToken {
+        let handle = match user {
+            PublishTestUser::WithCatalogs => "test1",
+            PublishTestUser::NoCatalogs => "test_user_no_catalogs",
+        };
+        test_token_for_handle(handle)
     }
 
     pub fn flox_instance() -> (Flox, TempDir) {

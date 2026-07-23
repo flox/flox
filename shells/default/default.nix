@@ -20,6 +20,7 @@
   procps,
   pstree,
   shfmt,
+  system,
   treefmt,
   writeShellScript,
   yamlfmt,
@@ -27,6 +28,13 @@
   ci ? false,
 }:
 let
+  # Byte-stable fixed-output derivation that publish unit tests use as a real
+  # store path. Realised as part of the dev shell so the tests can rely on it
+  # being present instead of building it themselves.
+  fixedTestStorePath = import ../../test_data/manually_generated/cli-128-fixed-empty.nix {
+    inherit system;
+  };
+
   # For use in GitHub Actions and local development.
   ciPackages = [ ] ++ flox-nix-plugins.ciPackages;
 
@@ -145,6 +153,7 @@ mkShell (
       define_dev_env_var UNIT_TEST_GENERATED "''${REPO_ROOT}/test_data/unit_test_generated";
       define_dev_env_var GENERATED_DATA "''${REPO_ROOT}/test_data/generated";
       define_dev_env_var MANUALLY_GENERATED "''${REPO_ROOT}/test_data/manually_generated";
+      define_dev_env_var FLOX_TEST_FIXED_STORE_PATH "${fixedTestStorePath}";
 
       # Add all internal rust crates to the PATH.
       # That's `flox` itself as well as the `flox-activations` subsystem.

@@ -3,48 +3,14 @@ when:
   method: POST
   body: '{"original_url":"https://git.example.com/test/repo.git"}'
 then:
-  status: 200
+  status: 403
   header:
   - name: date
-    value: Mon, 16 Mar 2026 15:54:11 GMT
+    value: Thu, 09 Jul 2026 21:56:21 GMT
   - name: server
     value: uvicorn
   - name: content-length
-    value: '73'
+    value: '60'
   - name: content-type
     value: application/json
-  body: '{"catalog":"publish_tests_read_only","name":"mypkg5","original_url":null}'
----
-when:
-  path: /api/v1/catalog/catalogs/publish_tests_read_only/packages/mypkg5/publish/info
-  method: POST
-  body: '{}'
-then:
-  status: 200
-  header:
-  - name: date
-    value: Mon, 16 Mar 2026 15:54:11 GMT
-  - name: server
-    value: uvicorn
-  - name: content-length
-    value: '85'
-  - name: content-type
-    value: application/json
-  body: '{"ingress_uri":null,"ingress_auth":null,"catalog_store_config":{"store_type":"null"}}'
----
-when:
-  path: /api/v1/catalog/catalogs/publish_tests_read_only/packages/mypkg5/builds
-  method: POST
-  body: '{"build_type":"manifest","derivation":{"broken":false,"description":"dummy","drv_path":"dummy","name":"mypkg5","outputs":[{"name":"out","store_path":"/nix/store/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA-foo"}],"pname":"mypkg5","system":"x86_64-linux","version":"1.0.0"},"dot_flox_dir":"","locked_base_catalog_url":"https://github.com/flox/nixpkgs?rev=5e0ca22929f3342b19569b21b2f3462f053e497b","locked_inputs":{},"ref":"dummy","rev":"dummy","rev_count":0,"rev_date":"2025-01-01T12:00:00Z","url":"https://git.example.com/test/repo.git"}'
-then:
-  status: 200
-  header:
-  - name: date
-    value: Mon, 16 Mar 2026 15:54:11 GMT
-  - name: server
-    value: uvicorn
-  - name: content-length
-    value: '2'
-  - name: content-type
-    value: application/json
-  body: '{}'
+  body: '{"detail":"You are not permitted to write to this catalog."}'

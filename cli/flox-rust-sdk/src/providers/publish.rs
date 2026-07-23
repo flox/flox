@@ -1866,6 +1866,46 @@ pub mod tests {
         );
     }
 
+    /// Store path of the fixed-output derivation used in publish mock tests.
+    ///
+    /// This is a content-addressed, empty-closure derivation (`echo cli128 > $out`)
+    /// with a content hash of sha256-bu6MtKc2APyhK/ltUbl1StrFDn2ZfBHWnbtm3whPSn8=
+    /// built in flat-output mode. Because fixed-output derivations are addressed
+    /// by their content hash rather than by their inputs, the store path is
+    /// byte-stable across machines and nixpkgs revisions. It has no references,
+    /// so `nix path-info --recursive` on it returns exactly one entry.
+    ///
+    /// The path must exist in the local Nix store for both replay and recording:
+    /// replay-mode publish collects narinfos via `nix path-info` locally (this
+    /// is not an HTTP exchange and is not covered by mock recordings). The dev
+    /// shell realises the derivation and exports the path as
+    /// `FLOX_TEST_FIXED_STORE_PATH`, so it is already present for anyone
+    /// running the tests the supported way.
+    const FIXED_TEST_STORE_PATH: &str =
+        "/nix/store/xfigz788kjqvyyxdnyvycs0bfc6cdjp3-cli-128-fixed-empty";
+
+    /// Check that the store path the dev shell provides is the one baked into
+    /// the recorded mock bodies.
+    ///
+    /// This guards against the two ways the dev shell and the recordings can
+    /// drift apart: the derivation changing without the mocks being
+    /// re-recorded, and the path having been garbage collected since the shell
+    /// was entered.
+    fn ensure_fixed_test_store_path() {
+        let from_dev_shell = std::env::var("FLOX_TEST_FIXED_STORE_PATH").expect(
+            "FLOX_TEST_FIXED_STORE_PATH is not set. Run the unit tests from the dev shell.",
+        );
+        assert_eq!(
+            from_dev_shell, FIXED_TEST_STORE_PATH,
+            "the dev shell's fixed test store path differs from the one recorded in the publish mocks; \
+             re-enter the dev shell, and re-record the mocks if the derivation changed"
+        );
+        assert!(
+            std::path::Path::new(FIXED_TEST_STORE_PATH).exists(),
+            "{FIXED_TEST_STORE_PATH} is missing from the local Nix store; re-enter the dev shell to realise it"
+        );
+    }
+
     /// Generate dummy CheckedBuildMetadata and CheckedEnvironmentMetadata that
     /// can be passed to publish()
     ///
@@ -1877,6 +1917,8 @@ pub mod tests {
         CheckedEnvironmentMetadata,
         PackageMetadata,
     ) {
+        ensure_fixed_test_store_path();
+
         // A bare revision is written to this file when generating the mocks.
         let nixpkgs_rev =
             std::fs::read_to_string(UNIT_TEST_GENERATED.join("latest_dev_catalog_rev.txt"))
@@ -1891,7 +1933,7 @@ pub mod tests {
             pname: pkg_name.to_string(),
             outputs: vec![PackageOutput {
                 name: "out".to_string(),
-                store_path: "/nix/store/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA-foo".to_string(),
+                store_path: FIXED_TEST_STORE_PATH.to_string(),
             }]
             .into(),
             outputs_to_install: None,
@@ -2399,7 +2441,8 @@ pub mod tests {
                 packaged_created_guard,
                 &build_meta,
                 None,
-                // Server returns Null store config so no narinfo collection
+                // Server returns meta-only store config; narinfo collected
+                // from FIXED_TEST_STORE_PATH in the local daemon store.
                 false,
             )
             .await
@@ -2435,27 +2478,21 @@ pub mod tests {
                 packaged_created_guard,
                 &build_meta,
                 None,
-                // Server returns Null store config so no narinfo collection
+                // Server returns meta-only store config; narinfo collected
+                // from FIXED_TEST_STORE_PATH in the local daemon store.
                 false,
             )
             .await
             .expect("failed to do publish");
     }
 
-    // This test was intended to ensure that a user gets an error if they try to
-    // publish to a catalog that exists but that they don't have write access to.
-    // However, ownership (the user targeting their personal catalog) takes precedence
-    // over roles, and so the user WILL be able to publish.
-    // To properly test this, we would need two user, one to create the catalog,
-    // and another to try and publish to it where they have only READER access.
-    // The mocks currently do not support this.
-    //
-    // Additionally, this is covered by the service and integration tests.
-    // For now we can leave this with a should_panic attribute.
+    // The read-only catalog is configured by the `test_catalog_admin` fixture
+    // user during recording setup while `test1` holds Reader-only access, so
+    // the server rejects package creation with 403. The recording contains
+    // exactly that exchange.
     #[tokio::test(flavor = "multi_thread")]
-    #[should_panic]
     async fn error_publishing_to_read_only_catalog() {
-        let (build_meta, env_meta, pkg_meta) = dummy_publish_metadata("mypkg5");
+        let (_build_meta, env_meta, pkg_meta) = dummy_publish_metadata("mypkg5");
         let (flox, _tmpdir) = flox_instance();
         let (flox, auth) = auto_recording_catalog_client_for_authed_local_services(
             flox,
@@ -2463,27 +2500,17 @@ pub mod tests {
             "publish_provider_error_when_user_only_has_read_access_to_catalog",
         );
         let publish_provider = PublishProvider::new(env_meta, pkg_meta, auth);
-        let guard = publish_provider
+        let err = publish_provider
             .create_package_and_possibly_user_catalog(
                 &flox.floxhub_client,
-                // This catalog name matches one that the test user has read-only
-                // access to as defined in _FLOXHUB_TEST_USERS.json from the floxhub repo.
                 TEST_READ_ONLY_CATALOG_NAME,
             )
             .await
-            .unwrap();
-        let res = publish_provider
-            .publish(
-                &flox.floxhub_client,
-                TEST_READ_ONLY_CATALOG_NAME,
-                guard,
-                &build_meta,
-                None,
-                // Server returns Null store config so no narinfo collection
-                false,
-            )
-            .await;
-        assert!(res.is_err());
+            .unwrap_err();
+        assert!(
+            matches!(err, PublishError::CatalogError(_)),
+            "expected CatalogError for 403 rejection, got: {err}"
+        );
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -2513,7 +2540,8 @@ pub mod tests {
                 packaged_created_guard,
                 &build_meta,
                 None,
-                // Server returns Null store config so no narinfo collection
+                // Server returns meta-only store config; narinfo collected
+                // from FIXED_TEST_STORE_PATH in the local daemon store.
                 false,
             )
             .await
@@ -2527,7 +2555,8 @@ pub mod tests {
                 PackageCreatedGuard { _private: () },
                 &build_meta,
                 None,
-                // Server returns Null store config so no narinfo collection
+                // Server returns meta-only store config; narinfo collected
+                // from FIXED_TEST_STORE_PATH in the local daemon store.
                 false,
             )
             .await
@@ -2555,7 +2584,8 @@ pub mod tests {
                 PackageCreatedGuard { _private: () },
                 &build_meta,
                 None,
-                // Server returns Null store config so no narinfo collection
+                // Server returns meta-only store config; narinfo collected
+                // from FIXED_TEST_STORE_PATH in the local daemon store.
                 false,
             )
             .await;

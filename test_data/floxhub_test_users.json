@@ -25,5 +25,12 @@
     "token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJleHAiOjk5OTk5OTk5OTksImh0dHBzOi8vZmxveC5kZXYvaGFuZGxlIjoidGVzdDQifQ.hvQ7XSF_XDbpU2BteHCmmzPjQ8LPJ3wDXK9Li8mVOm0",
     "handle": "test4",
     "roles": {}
+  },
+  {
+    "token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJleHAiOjk5OTk5OTk5OTksImh0dHBzOi8vZmxveC5kZXYvaGFuZGxlIjoidGVzdF9jYXRhbG9nX2FkbWluIn0.iJSHa1W3spinqEYIBS0KTVk0V1pyrmUBBQMaE500sCM",
+    "handle": "test_catalog_admin",
+    "roles": {
+      "publish_tests_read_only": ["Reader", "Writer"]
+    }
   }
 ]
