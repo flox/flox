@@ -33,6 +33,7 @@ tables:
 - [`[include]`](#include)
 - [`[build]`](#build)
 - [`[options]`](#options)
+- [`[plugins]`](#plugins) - experimental, see below
 - [`containerize`] - see [`flox-containerize(1)`](./flox-containerize.md)
 
 ## `schema-version`
@@ -50,6 +51,7 @@ Valid string values are:
 - `1.11.0`: introduced `minimum-cli-version`
 - `1.12.0`: introduced services `auto-start`
 - `1.13.0`: introduced `profile.deactivate` and build `sandbox-allow`
+- `1.14.0`: introduced `plugins`
 
 Existing manifest schemas, including the older `version = 1` format, are
 automatically forward-migrated when using features that require a newer schema
@@ -840,6 +842,33 @@ Semver ::= {
     The default is `true`.
     When enabled, Flox will detect if you have an Nvidia device and attempt to
     locate `libcuda` in well-known paths.
+
+## `[plugins]`
+
+**Experimental: the `[plugins]` section is under active development and
+its behavior may change.** It requires `schema-version = "1.14.0"`.
+
+The `[plugins]` section accepts arbitrary keys with arbitrary values.
+
+To install a plugin `foo` provided by a package `foo` that accepts a
+configuration variable `var`, add the following to your manifest:
+```
+[install]
+foo.pkg-path = "foo"
+
+[plugins.foo]
+var = "value"
+```
+
+Flox plugins work by convention:
+- Flox does not validate plugins listed in `[plugins]` are actually provided by a package.
+  A user must install a package in the `[install]` section that provides the plugin.
+- The plugin name does not need to match the install ID of a package or the
+  `pkg-path` of a package (although it's recommended to match `pkg-path`).
+- Plugins have access to the entire manifest.
+  By convention, plugins should only access data under `[plugins.<plugin name>]`,
+  but Flox does not enforce this.
+
 
 # SEE ALSO
 [`flox-init(1)`](./flox-init.md),

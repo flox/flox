@@ -1,3 +1,39 @@
+# jq for flox_plugin_data below. Neither the activate script's `$_jq` nor
+# any PATH lookup is guaranteed here: the wrapper (build-mode) context never
+# sets `$_jq`, and this file is sourced before PATH is finalized in both
+# contexts. Substituted at build time, like the other tool paths used across
+# activate.d.
+_jq="@jq@/bin/jq"
+
+# flox_plugin_data <plugin-package-name>
+#
+# Print the named plugin's manifest data ([plugins.<pkg-name>]) as compact
+# JSON, read from the activating environment's manifest.lock. Errors (and
+# thereby blocks activation, which runs under `set -e`) when the lockfile
+# is missing or holds no data for the plugin: a plugin script calling this
+# expects its table to exist, and activating without it would only defer
+# the failure to first use.
+function flox_plugin_data {
+  local _plugin_name="${1?}"
+  local _lockfile="$FLOX_ENV/manifest.lock"
+  if [ ! -f "$_lockfile" ]; then
+    echo "flox_plugin_data: no lockfile at '$_lockfile'." >&2
+    return 1
+  fi
+  local _data
+  # shellcheck disable=SC2016 # $plugin is a jq variable, not shell expansion
+  if ! _data="$("$_jq" -c --arg plugin "$_plugin_name" \
+    '.manifest.plugins[$plugin] // empty' "$_lockfile")"; then
+    echo "flox_plugin_data: could not read plugin data from '$_lockfile'." >&2
+    return 1
+  fi
+  if [ -z "$_data" ]; then
+    echo "flox_plugin_data: no [plugins.$_plugin_name] data in '$_lockfile'." >&2
+    return 1
+  fi
+  printf '%s\n' "$_data"
+}
+
 # source_profile_d <profile.d directory> <profile variable mode> <FLOX_ENV_DIRS>
 #
 # source all scripts in <profile.d directory>

@@ -14,7 +14,7 @@ pub use crate::parsed::v1_11_0::MinimumCliVersion;
 // so the latest schema re-exports that copy rather than common's.
 pub use crate::parsed::v1_13_0::BuildSandbox;
 use crate::{Manifest, ManifestError, TypedOnly};
-pub type ManifestLatest = crate::parsed::v1_13_0::ManifestV1_13_0;
+pub type ManifestLatest = crate::parsed::v1_14_0::ManifestV1_14_0;
 
 impl ManifestLatest {
     /// Try to return a manifest in its original schema
@@ -67,6 +67,15 @@ impl ManifestLatest {
                 untyped
             },
             KnownSchemaVersion::V1_13_0 => {
+                let mut untyped =
+                    serde_json::to_value(self).map_err(ManifestError::SerializeJson)?;
+                let map = untyped
+                    .as_object_mut()
+                    .expect("all valid manifests should serialize to JSON objects");
+                map.insert("schema-version".into(), "1.13.0".into());
+                untyped
+            },
+            KnownSchemaVersion::V1_14_0 => {
                 return Ok(Some(self.as_typed_only()));
             },
         };
@@ -125,6 +134,7 @@ mod tests {
     // ManifestLatest's build section is the version-specific Build (with
     // `sandbox-allow`), so build assertions use the latest schema's types.
     use crate::parsed::v1_13_0::{Build, BuildDescriptor, Profile, ProfileDeactivate};
+    use crate::parsed::v1_14_0::Plugins;
     use crate::test_helpers::{with_latest_schema, with_schema};
 
     #[test]
@@ -249,7 +259,7 @@ mod tests {
             .as_maybe_backwards_compatible(KnownSchemaVersion::V1_12_0, None)
             .unwrap();
 
-        assert_eq!(compat.get_schema_version(), KnownSchemaVersion::V1_13_0);
+        assert_eq!(compat.get_schema_version(), KnownSchemaVersion::latest());
     }
 
     // FIXME
@@ -520,6 +530,90 @@ mod tests {
                 generation: None,
             },
         ]);
+    }
+
+    #[test]
+    fn parses_plugins_section_manifest() {
+        let manifest = with_latest_schema(indoc! {r#"
+            [plugins.my-plugin]
+            MY_TOKEN = "demo/my-token"
+            nested.value = 1
+        "#});
+        let parsed = toml_edit::de::from_str::<ManifestLatest>(&manifest).unwrap();
+
+        assert_eq!(
+            parsed.plugins.inner().get("my-plugin"),
+            Some(&serde_json::json!({
+                "MY_TOKEN": "demo/my-token",
+                "nested": {"value": 1},
+            }))
+        );
+    }
+
+    #[test]
+    fn plugins_section_omitted_when_absent() {
+        let manifest = ManifestLatest::default();
+
+        let serialized = toml_edit::ser::to_string_pretty(&manifest).unwrap();
+
+        assert!(!serialized.contains("[plugins"));
+    }
+
+    #[test]
+    fn plugins_rejected_by_v1_13_0_schema() {
+        let manifest = with_schema(KnownSchemaVersion::V1_13_0, indoc! {r#"
+            [plugins.my-plugin]
+            MY_TOKEN = "demo/my-token"
+        "#});
+
+        let err = Manifest::parse_toml_typed(&manifest)
+            .expect_err("'plugins' should be rejected by the v1.13.0 schema");
+
+        let ManifestError::Invalid(err) = err else {
+            panic!("expected ManifestError::Invalid, got: {err:?}");
+        };
+        assert!(
+            err.message()
+                .starts_with("unknown field `plugins`, expected one of"),
+            "unexpected error message: {err}",
+        );
+    }
+
+    #[test]
+    fn downgrades_to_v1_13_0_when_plugins_unused() {
+        let manifest = ManifestLatest {
+            profile: Some(Profile {
+                bash: Some("FOO=bar".to_string()),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+
+        let compat = manifest
+            .as_maybe_backwards_compatible(KnownSchemaVersion::V1_13_0, None)
+            .unwrap();
+
+        assert_eq!(compat.get_schema_version(), KnownSchemaVersion::V1_13_0);
+    }
+
+    #[test]
+    fn stays_latest_schema_when_plugins_used() {
+        let manifest = ManifestLatest {
+            plugins: Plugins(
+                [(
+                    "my-plugin".to_string(),
+                    serde_json::json!({"MY_TOKEN": "demo/my-token"}),
+                )]
+                .into(),
+            ),
+            ..Default::default()
+        };
+
+        let compat = manifest
+            .as_maybe_backwards_compatible(KnownSchemaVersion::V1_13_0, None)
+            .unwrap();
+
+        assert_eq!(compat.get_schema_version(), KnownSchemaVersion::latest());
     }
 
     /// Generates a mock `TypedManifest` for testing purposes.
