@@ -495,7 +495,6 @@ impl PartialOrd for PathPointer {
 
 impl Ord for PathPointer {
     fn cmp(&self, other: &Self) -> Ordering {
-        // Destructured exhaustively so a future field can't be forgotten.
         let Self {
             name,
             id: _,
@@ -575,7 +574,6 @@ impl PartialOrd for ManagedPointer {
 
 impl Ord for ManagedPointer {
     fn cmp(&self, other: &Self) -> Ordering {
-        // Destructured exhaustively so a future field can't be forgotten.
         let Self {
             owner,
             name,
@@ -616,9 +614,8 @@ impl From<ManagedPointer> for RemoteEnvironmentRef {
 }
 
 impl EnvironmentPointer {
-    /// A fresh pointer `id` for an environment being created, or `None`
-    /// when metrics are disabled — the id identifies environments in
-    /// metrics, so none is minted or persisted for opted-out users.
+    /// A fresh pointer id, or `None` when metrics are disabled — no id
+    /// is minted or persisted for opted-out users.
     pub fn new_id(flox: &Flox) -> Option<Uuid> {
         flox.metrics_device_uuid.is_some().then(Uuid::new_v4)
     }
@@ -1380,7 +1377,7 @@ mod test {
         };
         assert_eq!(reparsed.id, Some(id));
 
-        let mut managed_pointer = ManagedPointer {
+        let managed_pointer = ManagedPointer {
             name: EnvironmentName::from_str("name").unwrap(),
             owner: EnvironmentOwner::from_str("owner").unwrap(),
             id: Some(id),
@@ -1405,8 +1402,6 @@ mod test {
             panic!("expected managed pointer");
         };
         assert_eq!(reparsed.id, Some(id));
-        managed_pointer.id = None;
-        assert_eq!(reparsed, managed_pointer, "id is not part of equality");
     }
 
     /// A malformed `id` in `env.json` must not fail opening the
@@ -1454,6 +1449,10 @@ mod test {
         managed_with_id.id = Some(Uuid::new_v4());
         assert_eq!(managed_with_id, managed);
         assert_eq!(managed_with_id.cmp(&managed), std::cmp::Ordering::Equal);
+        assert_eq!(
+            EnvironmentPointer::Managed(managed_with_id),
+            EnvironmentPointer::Managed(managed)
+        );
     }
 
     #[test]
