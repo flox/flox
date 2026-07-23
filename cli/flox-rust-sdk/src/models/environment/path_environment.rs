@@ -649,6 +649,7 @@ pub mod test_helpers {
                 .unwrap()
                 .parse()
                 .unwrap(),
+            None,
         );
         let manifest = Manifest::parse_toml_typed(contents).unwrap();
         PathEnvironment::write_new_unchecked(flox, pointer, path, &manifest.as_writable()).unwrap()
@@ -660,7 +661,7 @@ pub mod test_helpers {
         path: impl AsRef<Path>,
         name: &str,
     ) -> PathEnvironment {
-        let pointer = PathPointer::new(name.parse().unwrap());
+        let pointer = PathPointer::new(name.parse().unwrap(), None);
         let manifest = Manifest::parse_toml_typed(contents).unwrap();
         PathEnvironment::write_new_unchecked(flox, pointer, path, &manifest.as_writable()).unwrap()
     }
@@ -720,6 +721,7 @@ pub mod test_helpers {
             })
             .parse()
             .unwrap(),
+            None,
         );
         PathEnvironment::write_new_unchecked(
             flox,
@@ -812,7 +814,7 @@ pub mod tests {
         let (flox, temp_dir) = flox_instance();
         let environment_temp_dir = tempfile::tempdir_in(&temp_dir).unwrap();
         let id = uuid::Uuid::new_v4();
-        let mut pointer = PathPointer::new("test".parse().unwrap());
+        let mut pointer = PathPointer::new("test".parse().unwrap(), None);
         pointer.id = Some(id);
 
         let mut env = PathEnvironment::init(
@@ -843,7 +845,7 @@ pub mod tests {
     fn create_env() {
         let (flox, temp_dir) = flox_instance();
         let environment_temp_dir = tempfile::tempdir_in(&temp_dir).unwrap();
-        let pointer = PathPointer::new("test".parse().unwrap());
+        let pointer = PathPointer::new("test".parse().unwrap(), None);
 
         let actual = PathEnvironment::init(
             pointer,
@@ -854,7 +856,7 @@ pub mod tests {
         .unwrap();
 
         let expected = PathEnvironment::new(
-            PathPointer::new("test".parse().unwrap()),
+            PathPointer::new("test".parse().unwrap(), None),
             CanonicalPath::new(environment_temp_dir.path().join(DOT_FLOX)).unwrap(),
             &flox.system,
         )
@@ -879,7 +881,7 @@ pub mod tests {
         let (flox, temp_dir) = flox_instance();
 
         let environment_temp_dir = tempfile::tempdir_in(&temp_dir).unwrap();
-        let pointer = PathPointer::new("test".parse().unwrap());
+        let pointer = PathPointer::new("test".parse().unwrap(), None);
 
         let env = PathEnvironment::init(
             pointer,
@@ -913,7 +915,7 @@ pub mod tests {
     fn registers_on_init() {
         let (flox, tmp_dir) = flox_instance();
         let environment_temp_dir = tempfile::tempdir_in(&tmp_dir).unwrap();
-        let ptr = PathPointer::new("test".parse().unwrap());
+        let ptr = PathPointer::new("test".parse().unwrap(), None);
         let _env = PathEnvironment::init(
             ptr,
             environment_temp_dir.path(),
@@ -935,7 +937,7 @@ pub mod tests {
         let (flox, tmp_dir) = flox_instance();
         let environment_temp_dir = tempfile::tempdir_in(&tmp_dir).unwrap();
         // Create an environment so that the .flox directory is populated and we can open it later
-        let ptr = PathPointer::new("test".parse().unwrap());
+        let ptr = PathPointer::new("test".parse().unwrap(), None);
         let env = PathEnvironment::init(
             ptr.clone(),
             environment_temp_dir.path(),
@@ -960,7 +962,7 @@ pub mod tests {
         let (flox, tmp_dir) = flox_instance();
         let environment_temp_dir = tempfile::tempdir_in(&tmp_dir).unwrap();
         // Create an environment so that the .flox directory is populated and we can open it later
-        let ptr = PathPointer::new("test".parse().unwrap());
+        let ptr = PathPointer::new("test".parse().unwrap(), None);
         let env = PathEnvironment::init(
             ptr.clone(),
             environment_temp_dir.path(),

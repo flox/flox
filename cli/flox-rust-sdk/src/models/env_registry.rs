@@ -533,6 +533,7 @@ mod test {
         let pointer = ManagedPointer::new(
             "owner".parse().unwrap(),
             "name".parse().unwrap(),
+            None,
             &flox.floxhub,
         );
         let path = flox.temp_dir.join("deleted").join(".flox");

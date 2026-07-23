@@ -220,7 +220,7 @@ impl Environment for ManagedEnvironment {
     /// Returns the lockfile if it already exists.
     fn existing_lockfile(&self, flox: &Flox) -> Result<Option<Lockfile>, EnvironmentError> {
         if self.generation.is_some() {
-            return self.existing_lockfile_without_checkout(None);
+            return self.existing_lockfile_without_checkout();
         }
 
         self.local_env_or_copy_current_generation(flox)?
@@ -1170,19 +1170,22 @@ impl ManagedEnvironment {
         &self.pointer
     }
 
-    /// The generation this environment was opened at when pinned
-    /// (e.g. `flox activate --generation`), otherwise `None`.
-    pub fn generation(&self) -> Option<GenerationId> {
-        self.generation
+    /// The generation this environment operates on: the pinned generation
+    /// when opened at one (e.g. `flox activate --generation`), otherwise
+    /// the current generation.
+    pub fn generation(&self) -> Result<Option<GenerationId>, EnvironmentError> {
+        if let Some(generation) = self.generation {
+            return Ok(Some(generation));
+        }
+        Ok(self
+            .generations_metadata()
+            .map_err(ManagedEnvironmentError::Generations)?
+            .current_gen())
     }
 
     /// The lockfile this environment resolves to, read without materializing
-    /// the local checkout. Callers that already read the generations metadata
-    /// pass `current_generation` to avoid a second read.
-    pub fn existing_lockfile_without_checkout(
-        &self,
-        current_generation: Option<GenerationId>,
-    ) -> Result<Option<Lockfile>, EnvironmentError> {
+    /// the local checkout.
+    pub fn existing_lockfile_without_checkout(&self) -> Result<Option<Lockfile>, EnvironmentError> {
         if let Some(generation) = self.generation {
             return self
                 .generations()
@@ -1193,20 +1196,12 @@ impl ManagedEnvironment {
         }
 
         let env_dir = self.path.join(ENV_DIR_NAME);
-        if env_dir.exists() {
-            return CoreEnvironment::new(env_dir, self.include_fetcher.clone())
-                .existing_lockfile()
-                .map_err(EnvironmentError::Core);
-        }
-
-        let Some(generation) = current_generation else {
+        if !env_dir.exists() {
             return Ok(None);
-        };
-        self.generations()
-            .lockfile_unchecked(*generation)
-            .map_err(ManagedEnvironmentError::Generations)
-            .map_err(EnvironmentError::from)
-            .map(Some)
+        }
+        CoreEnvironment::new(env_dir, self.include_fetcher.clone())
+            .existing_lockfile()
+            .map_err(EnvironmentError::Core)
     }
 
     pub(crate) fn generations(&self) -> Generations {
@@ -1321,8 +1316,7 @@ impl ManagedEnvironment {
         // Ensure that the environment does not include other local environments
         check_for_local_includes(&lockfile)?;
 
-        let mut pointer = ManagedPointer::new(owner, name, &flox.floxhub);
-        pointer.id = pointer_id.or_else(|| EnvironmentPointer::new_id(flox));
+        let pointer = ManagedPointer::new(owner, name, pointer_id, &flox.floxhub);
 
         Self::push_new_without_building(
             flox,
@@ -1651,8 +1645,7 @@ impl ManagedEnvironment {
         )?;
 
         // create the metadata for a path environment
-        let mut path_pointer = PathPointer::new(self.pointer.name);
-        path_pointer.id = self.pointer.id;
+        let path_pointer = PathPointer::new(self.pointer.name, self.pointer.id);
         fs::write(
             self.path.join(ENVIRONMENT_POINTER_FILENAME),
             serde_json::to_string(&path_pointer)
@@ -1676,7 +1669,6 @@ pub mod test_helpers {
 
     use flox_core::floxhub::{DEFAULT_FLOXHUB_URL, Floxhub};
     use tempfile::tempdir_in;
-    use uuid::Uuid;
 
     use super::*;
     use crate::models::environment::fetcher::test_helpers::mock_include_fetcher;
@@ -1701,18 +1693,13 @@ pub mod test_helpers {
             pointer: ManagedPointer::new(
                 "owner".parse().unwrap(),
                 "test".parse().unwrap(),
+                None,
                 &floxhub,
             ),
             floxmeta_branch,
             include_fetcher: mock_include_fetcher(),
             generation: None,
         }
-    }
-
-    /// Set the pointer id on a mock environment, as a pull would have.
-    pub fn with_pointer_id(mut env: ManagedEnvironment, id: Uuid) -> ManagedEnvironment {
-        env.pointer.id = Some(id);
-        env
     }
 
     /// Pin `env` to a generation, as `flox activate --generation` would.
@@ -1743,7 +1730,7 @@ pub mod test_helpers {
     ) -> ManagedEnvironment {
         ManagedEnvironment::push_new_without_building(
             flox,
-            ManagedPointer::new(owner, "name".parse().unwrap(), &flox.floxhub),
+            ManagedPointer::new(owner, "name".parse().unwrap(), None, &flox.floxhub),
             false,
             false,
             CanonicalPath::new(tempdir_in(&flox.temp_dir).unwrap().keep()).unwrap(),
@@ -1833,13 +1820,11 @@ mod test {
     use crate::providers::git::tests::{commit_file, test_git_options};
 
     /// Pushing a path environment carries its pointer id into the managed
-    /// pointer, mints one when it never had one (metrics enabled), and
-    /// leaves it unset when metrics are disabled.
+    /// pointer; an environment without one stays without one.
     #[test]
-    fn push_new_carries_or_mints_pointer_id() {
+    fn push_new_carries_pointer_id() {
         let owner = EnvironmentOwner::from_str("owner").unwrap();
-        let (mut flox, _temp_dir_handle) = flox_instance_with_optional_floxhub(Some(&owner));
-        flox.metrics_device_uuid = Some(Uuid::new_v4());
+        let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub(Some(&owner));
 
         let manifest = toml_edit::ser::to_string_pretty(&Manifest::default()).unwrap();
         let push = |flox: &Flox, name: &str, pointer_id: Option<Uuid>| {
@@ -1862,15 +1847,12 @@ mod test {
 
         let carried = Uuid::new_v4();
         assert_eq!(push(&flox, "carried", Some(carried)), Some(carried));
-        assert!(push(&flox, "minted", None).is_some());
-
-        flox.metrics_device_uuid = None;
-        assert_eq!(push(&flox, "optedout", None), None);
+        assert_eq!(push(&flox, "unset", None), None);
     }
 
-    /// The checkout-free lockfile read resolves generation lockfiles from
-    /// floxmeta rather than materializing a local checkout, and the
-    /// generation accessor reports the pin.
+    /// The checkout-free lockfile read reads the pinned generation's
+    /// lockfile from floxmeta and otherwise only the local checkout —
+    /// never materializing one.
     #[test]
     fn existing_lockfile_without_checkout_never_materializes() {
         let owner = EnvironmentOwner::from_str("owner").unwrap();
@@ -1887,25 +1869,23 @@ mod test {
             CanonicalPath::new(tempfile::tempdir_in(&flox.temp_dir).unwrap().keep()).unwrap();
         let mut managed_env = ManagedEnvironment::push_new_without_building(
             &flox,
-            ManagedPointer::new(owner, "name".parse().unwrap(), &flox.floxhub),
+            ManagedPointer::new(owner, "name".parse().unwrap(), None, &flox.floxhub),
             false,
             false,
             dot_flox_path,
             new_core_environment_with_lockfile(&flox, &manifest, &lockfile_contents),
         )
         .unwrap();
-        assert_eq!(managed_env.generation(), None);
 
-        // Unpinned with no local checkout: the caller supplies the current
-        // generation it read from the metadata.
-        let current_gen = managed_env.generations_metadata().unwrap().current_gen();
-        assert_eq!(current_gen, Some(GenerationId::from(1_usize)));
         assert_eq!(
-            managed_env
-                .existing_lockfile_without_checkout(current_gen)
-                .unwrap(),
-            Some(generation_lockfile.clone()),
-            "the current generation's non-empty lockfile is read from floxmeta"
+            managed_env.generation().unwrap(),
+            Some(GenerationId::from(1_usize)),
+            "unpinned resolves to the current generation"
+        );
+        assert_eq!(
+            managed_env.existing_lockfile_without_checkout().unwrap(),
+            None,
+            "no local checkout, nothing to read"
         );
         assert!(
             !managed_env.path.join(ENV_DIR_NAME).exists(),
@@ -1913,11 +1893,12 @@ mod test {
         );
 
         managed_env.generation = Some(GenerationId::from(1_usize));
-        assert_eq!(managed_env.generation(), Some(GenerationId::from(1_usize)));
         assert_eq!(
-            managed_env
-                .existing_lockfile_without_checkout(None)
-                .unwrap(),
+            managed_env.generation().unwrap(),
+            Some(GenerationId::from(1_usize))
+        );
+        assert_eq!(
+            managed_env.existing_lockfile_without_checkout().unwrap(),
             Some(generation_lockfile),
             "the pinned generation's lockfile is read from floxmeta"
         );

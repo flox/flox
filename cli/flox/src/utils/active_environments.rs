@@ -204,6 +204,7 @@ mod tests {
             path: PathBuf::new(),
             pointer: EnvironmentPointer::Path(PathPointer::new(
                 EnvironmentName::from_str(name).unwrap(),
+                None,
             )),
         })
     }

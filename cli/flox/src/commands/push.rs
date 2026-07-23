@@ -64,6 +64,7 @@ impl Push {
             let pointer = ManagedPointer::new(
                 env_ref.owner().clone(),
                 env_ref.name().clone(),
+                None,
                 &flox.floxhub,
             );
 
@@ -125,7 +126,7 @@ fn handle_path_environment_push(
         EnvironmentOwner::from_str(flox.auth_context.handle().context("Need to be logged in")?)?
     };
 
-    let pointer = ManagedPointer::new(owner.clone(), path_environment.name(), &flox.floxhub);
+    let pointer = ManagedPointer::new(owner.clone(), path_environment.name(), None, &flox.floxhub);
 
     let managed_environment =
         ManagedEnvironment::push_new(flox, path_environment, owner, force, false)
@@ -444,7 +445,8 @@ mod tests {
         env.push(&flox, false).unwrap();
 
         // Now open it as a remote environment (this will cache it)
-        let pointer = ManagedPointer::new(owner.clone(), name.parse().unwrap(), &flox.floxhub);
+        let pointer =
+            ManagedPointer::new(owner.clone(), name.parse().unwrap(), None, &flox.floxhub);
         let mut remote_env = RemoteEnvironment::new(&flox, pointer, None).unwrap();
 
         // Make changes to the cached remote environment
@@ -499,7 +501,8 @@ mod tests {
         env.push(&flox, false).unwrap();
 
         // Now open it as a remote environment (this will cache it)
-        let pointer = ManagedPointer::new(owner.clone(), name.parse().unwrap(), &flox.floxhub);
+        let pointer =
+            ManagedPointer::new(owner.clone(), name.parse().unwrap(), None, &flox.floxhub);
         let remote_env = RemoteEnvironment::new(&flox, pointer, None).unwrap();
 
         // Push the remote environment without making changes using -r

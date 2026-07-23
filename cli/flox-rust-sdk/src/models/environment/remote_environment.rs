@@ -290,17 +290,13 @@ impl RemoteEnvironment {
     }
 
     /// See [ManagedEnvironment::generation].
-    pub fn generation(&self) -> Option<GenerationId> {
-        self.generation
+    pub fn generation(&self) -> Result<Option<GenerationId>, EnvironmentError> {
+        self.inner.generation()
     }
 
     /// See [ManagedEnvironment::existing_lockfile_without_checkout].
-    pub fn existing_lockfile_without_checkout(
-        &self,
-        current_generation: Option<GenerationId>,
-    ) -> Result<Option<Lockfile>, EnvironmentError> {
-        self.inner
-            .existing_lockfile_without_checkout(current_generation)
+    pub fn existing_lockfile_without_checkout(&self) -> Result<Option<Lockfile>, EnvironmentError> {
+        self.inner.existing_lockfile_without_checkout()
     }
 
     /// Push local changes to FloxHub for this remote environment
@@ -341,7 +337,7 @@ impl RemoteEnvironment {
         let temp_env_dir = tempfile::TempDir::new_in(&flox.temp_dir)
             .map_err(RemoteEnvironmentError::CreateTempDotFlox)?;
 
-        let path_pointer = PathPointer::new(env_ref.name().clone());
+        let path_pointer = PathPointer::new(env_ref.name().clone(), None);
 
         let path_environment = if bare {
             PathEnvironment::init_bare(path_pointer, temp_env_dir.path(), flox)?
@@ -716,9 +712,12 @@ mod tests {
         let (flox, _tempdir_handle) = flox_instance_with_optional_floxhub(Some(&owner));
         RemoteEnvironment::init_floxhub_environment(&flox, env_ref.clone(), true).unwrap();
 
-        let env =
-            RemoteEnvironment::new(&flox, ManagedPointer::new(owner, name, &flox.floxhub), None)
-                .expect("find initialized remote environment");
+        let env = RemoteEnvironment::new(
+            &flox,
+            ManagedPointer::new(owner, name, None, &flox.floxhub),
+            None,
+        )
+        .expect("find initialized remote environment");
 
         // TODO: should be changed to version 2 once released!
         assert_eq!(
@@ -765,9 +764,12 @@ mod tests {
         let (flox, _tempdir_handle) = flox_instance_with_optional_floxhub(Some(&owner));
         RemoteEnvironment::init_floxhub_environment(&flox, env_ref.clone(), true).unwrap();
 
-        let env =
-            RemoteEnvironment::new(&flox, ManagedPointer::new(owner, name, &flox.floxhub), None)
-                .expect("find initialized remote environment");
+        let env = RemoteEnvironment::new(
+            &flox,
+            ManagedPointer::new(owner, name, None, &flox.floxhub),
+            None,
+        )
+        .expect("find initialized remote environment");
 
         let generation_metadata = env.generations_metadata().unwrap();
         let history = generation_metadata.history();

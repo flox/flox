@@ -468,11 +468,11 @@ pub struct PathPointer {
 }
 
 impl PathPointer {
-    /// Create a new [PathPointer] with the given name.
-    pub fn new(name: EnvironmentName) -> Self {
+    /// Create a new [PathPointer] with the given name and id.
+    pub fn new(name: EnvironmentName, id: Option<Uuid>) -> Self {
         Self {
             name,
-            id: None,
+            id,
             version: Version::<1>,
         }
     }
@@ -540,12 +540,17 @@ pub struct ManagedPointer {
 }
 
 impl ManagedPointer {
-    /// Create a new [ManagedPointer] with the given owner and name.
-    pub fn new(owner: EnvironmentOwner, name: EnvironmentName, floxhub: &Floxhub) -> Self {
+    /// Create a new [ManagedPointer] with the given owner, name, and id.
+    pub fn new(
+        owner: EnvironmentOwner,
+        name: EnvironmentName,
+        id: Option<Uuid>,
+        floxhub: &Floxhub,
+    ) -> Self {
         Self {
             name,
             owner,
-            id: None,
+            id,
             floxhub_base_url: floxhub.base_url().clone(),
             floxhub_git_url_override: floxhub.git_url_override().cloned(),
             version: Version::<1>,
@@ -614,12 +619,6 @@ impl From<ManagedPointer> for RemoteEnvironmentRef {
 }
 
 impl EnvironmentPointer {
-    /// A fresh pointer id, or `None` when metrics are disabled — no id
-    /// is minted or persisted for opted-out users.
-    pub fn new_id(flox: &Flox) -> Option<Uuid> {
-        flox.metrics_device_uuid.is_some().then(Uuid::new_v4)
-    }
-
     /// Attempt to read an environment pointer file ([ENVIRONMENT_POINTER_FILENAME])
     /// in the specified `.flox` directory.
     ///
@@ -1360,7 +1359,7 @@ mod test {
     fn pointer_id_round_trips_for_both_variants() {
         let id = Uuid::from_u128(0x11111111_1111_1111_1111_111111111111);
 
-        let mut path_pointer = PathPointer::new(EnvironmentName::from_str("name").unwrap());
+        let mut path_pointer = PathPointer::new(EnvironmentName::from_str("name").unwrap(), None);
         path_pointer.id = Some(id);
         let json = serde_json::to_value(EnvironmentPointer::Path(path_pointer.clone())).unwrap();
         assert_eq!(
@@ -1436,9 +1435,9 @@ mod test {
     /// pointer carrying an id, in both equality and ordering.
     #[test]
     fn pointer_comparisons_ignore_id() {
-        let mut with_id = PathPointer::new(EnvironmentName::from_str("name").unwrap());
+        let mut with_id = PathPointer::new(EnvironmentName::from_str("name").unwrap(), None);
         with_id.id = Some(Uuid::new_v4());
-        let without_id = PathPointer::new(EnvironmentName::from_str("name").unwrap());
+        let without_id = PathPointer::new(EnvironmentName::from_str("name").unwrap(), None);
         assert_eq!(with_id, without_id);
         assert_eq!(with_id.cmp(&without_id), std::cmp::Ordering::Equal);
 
@@ -1453,16 +1452,6 @@ mod test {
             EnvironmentPointer::Managed(managed_with_id),
             EnvironmentPointer::Managed(managed)
         );
-    }
-
-    #[test]
-    fn pointer_id_minted_only_when_metrics_enabled() {
-        let (mut flox, _temp_dir_handle) = flox_instance();
-        flox.metrics_device_uuid = None;
-        assert_eq!(EnvironmentPointer::new_id(&flox), None);
-
-        flox.metrics_device_uuid = Some(Uuid::new_v4());
-        assert!(EnvironmentPointer::new_id(&flox).is_some());
     }
 
     #[test]

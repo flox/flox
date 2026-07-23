@@ -11,12 +11,7 @@ use flox_rust_sdk::data::AttrPath;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::path_environment::{InitCustomization, PathEnvironment};
 use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironment;
-use flox_rust_sdk::models::environment::{
-    ConcreteEnvironment,
-    Environment,
-    EnvironmentPointer,
-    PathPointer,
-};
+use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment, PathPointer};
 use flox_rust_sdk::providers::catalog::ALL_SYSTEMS;
 use flox_rust_sdk::providers::git::{GitCommandProvider, GitProvider};
 use flox_rust_sdk::providers::manifest_init::ManifestInitializer;
@@ -28,6 +23,7 @@ use tracing::{debug, info_span, instrument};
 use crate::commands::{SHELL_COMPLETION_DIR, ensure_auth, environment_description};
 use crate::subcommand_metric;
 use crate::utils::dialog::Dialog;
+use crate::utils::events::new_environment_pointer_id;
 use crate::utils::message;
 
 mod go;
@@ -231,8 +227,7 @@ async fn init_local_environment(
         customization.activate_mode = Some(ActivateMode::Run);
     }
 
-    let mut path_pointer = PathPointer::new(name.clone());
-    path_pointer.id = EnvironmentPointer::new_id(flox);
+    let path_pointer = PathPointer::new(name.clone(), new_environment_pointer_id(flox));
     let env = if customization.packages.is_some() {
         info_span!(
             "init_with_suggested_packages",
@@ -983,7 +978,11 @@ mod tests {
                 .contains("Add environment variables and shell hooks")
         );
 
-        RemoteEnvironment::new(&flox, ManagedPointer::new(owner, name, &flox.floxhub), None)
-            .expect("find initialized remote environment");
+        RemoteEnvironment::new(
+            &flox,
+            ManagedPointer::new(owner, name, None, &flox.floxhub),
+            None,
+        )
+        .expect("find initialized remote environment");
     }
 }
