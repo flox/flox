@@ -47,14 +47,23 @@ pub enum HookAction {
     },
 }
 
-/// The current prompt-hook protocol version.
+/// The single version for the auto-activate/prompt-hook protocol: the shell
+/// hook, the on-disk [`HookActionsFile`], and the `_FLOX_HOOK_DIFF` wire
+/// payload are one protocol with one source of truth, not three independently
+/// versioned formats.
 ///
-/// This is the single source of truth shared by both sides of the protocol, so
-/// they can't drift: it is the `version` of the on-disk [`HookActionsFile`] *and*
-/// the value the shell hook exports as [`PROMPT_HOOK_VERSION_ENV`]. Before
-/// writing a file the hook must read, `flox deactivate` checks the exported
-/// value against this. Bump it (and follow the version-compatibility note on
-/// [`HookActionsFile`]) on any shape change to the file or the protocol.
+/// It is the `version` of the on-disk [`HookActionsFile`] and the value the
+/// shell hook exports as [`PROMPT_HOOK_VERSION_ENV`]. The `_FLOX_HOOK_DIFF`
+/// payload carries no version of its own: `flox deactivate` and the
+/// `flox hook-env` sweep both funnel through one chokepoint
+/// (`emit_deactivate_script` in the `flox` crate) that checks the exported
+/// value before decoding any diff, and `flox deactivate` checks it again
+/// before writing an action file the hook must read.
+///
+/// Bump on ANY breaking change to ANY part of the protocol, even if only one
+/// sub-format changed. A bump invalidates all three payload kinds together,
+/// so one version number for one protocol stays simpler to reason about than
+/// tracking which sub-format changed on each bump.
 pub const PROMPT_HOOK_VERSION: u8 = 1;
 
 /// Environment variable the shell hook exports to advertise that a prompt hook
@@ -65,6 +74,16 @@ pub const PROMPT_HOOK_VERSION: u8 = 1;
 /// compatible before writing an action file the hook would otherwise never
 /// consume.
 pub const PROMPT_HOOK_VERSION_ENV: &str = "_FLOX_PROMPT_HOOK_VERSION";
+
+/// Whether `prompt_hook_version` (the shell's exported
+/// [`PROMPT_HOOK_VERSION_ENV`]) is set to anything other than the compiled
+/// [`PROMPT_HOOK_VERSION`]: a different number, or a value that does not parse
+/// as the current one. Both mean the marker does not match this binary's
+/// protocol, so both fail closed; only an unset marker (no hook) is not a
+/// mismatch.
+pub fn prompt_hook_version_mismatched(prompt_hook_version: Option<&str>) -> bool {
+    prompt_hook_version.is_some_and(|value| value.parse::<u8>().ok() != Some(PROMPT_HOOK_VERSION))
+}
 
 /// Versioned on-disk form of the prompt-hook action file.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -208,6 +227,22 @@ mod tests {
     use super::*;
 
     const PID: i32 = 1234;
+
+    #[test]
+    fn version_mismatch_fails_closed_on_set_but_unparseable_marker() {
+        // Unset (no hook) is the only value that is not a mismatch.
+        assert!(!prompt_hook_version_mismatched(None));
+        assert!(!prompt_hook_version_mismatched(Some(
+            &PROMPT_HOOK_VERSION.to_string()
+        )));
+        // A different version, and anything that does not parse as the current
+        // version -- empty, non-numeric, or out of `u8` range -- all fail
+        // closed rather than being read as compatible.
+        assert!(prompt_hook_version_mismatched(Some("0")));
+        assert!(prompt_hook_version_mismatched(Some("")));
+        assert!(prompt_hook_version_mismatched(Some("abc")));
+        assert!(prompt_hook_version_mismatched(Some("999")));
+    }
 
     #[test]
     fn hook_actions_file_serializes_with_version_and_tagged_action() {

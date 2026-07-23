@@ -396,6 +396,58 @@ EXPIRED_FLOXHUB_TOKEN="eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3gu
   assert_output --partial "tracked:unset"
 }
 
+# An out-of-sync prompt hook (registered by an incompatible version of Flox,
+# or with a lost marker) can't trust the diffs the sweep would decode, so
+# `hook-env` errors instead of doing any auto-activation work. `_flox_hook`
+# preserves the previous command's exit code by design, so the sweep is
+# invoked directly to observe the failure.
+# bats test_tags=hook:auto-deactivate:stale-version
+@test "bash: stale prompt-hook version fails the sweep" {
+  project_setup
+  project2_setup
+  export FLOX_FEATURES_AUTO_ACTIVATE=true
+  "$FLOX_BIN" activate allow -d "$PROJECT2_DIR"
+
+  run bash -c "
+    export FLOX_FEATURES_AUTO_ACTIVATE=true
+    export FLOX_SHELL=\$(which bash)
+    eval \"\$($FLOX_BIN activate -d $PROJECT_DIR)\"
+    cd $PROJECT2_DIR
+    _flox_hook
+    echo \"during:\$TEST_VAR2\"
+    cd $BATS_TEST_TMPDIR
+    export _FLOX_PROMPT_HOOK_VERSION=99
+    $FLOX_BIN hook-env --shell bash --shell-pid \$\$
+  "
+  assert_failure
+  assert_output --partial "during:auto2"
+  assert_output --partial "out of sync with the running Flox"
+}
+
+# The stale-version guard warns only when there is auto-activation work; a shell
+# sitting inside its active environment with nothing to do stays quiet.
+# bats test_tags=hook:auto-deactivate:stale-version-idle
+@test "bash: stale prompt-hook version stays quiet with nothing to auto-activate" {
+  project_setup
+  project2_setup
+  export FLOX_FEATURES_AUTO_ACTIVATE=true
+  "$FLOX_BIN" activate allow -d "$PROJECT2_DIR"
+
+  run bash -c "
+    export FLOX_FEATURES_AUTO_ACTIVATE=true
+    export FLOX_SHELL=\$(which bash)
+    eval \"\$($FLOX_BIN activate -d $PROJECT_DIR)\"
+    cd $PROJECT2_DIR
+    _flox_hook
+    export _FLOX_PROMPT_HOOK_VERSION=99
+    _flox_hook
+    echo done
+  "
+  assert_success
+  assert_output --partial "done"
+  refute_output --partial "out of sync"
+}
+
 # Deleting a project directory while its environment is auto-activated (e.g.
 # removing a git worktree with tooling that cd's back to the main checkout)
 # must still tear the environment down; the deactivation data is recovered
@@ -972,6 +1024,36 @@ EOF
   "
   assert_failure
   assert_output --partial "incompatible version of Flox"
+}
+
+# bats test_tags=hook:activate:incompatible
+@test "'flox activate' errors when the prompt hook version is incompatible" {
+  project_setup
+
+  run bash -c "
+    export FLOX_SHELL=\$(which bash)
+    eval \"\$($FLOX_BIN activate -d $PROJECT_DIR)\"
+    export _FLOX_PROMPT_HOOK_VERSION=99
+    $FLOX_BIN activate -d $PROJECT_DIR
+  "
+  assert_failure
+  assert_output --partial "incompatible version of Flox"
+  # The error names the environments active in the stale shell.
+  assert_output --partial "Active environments: project-${BATS_TEST_NUMBER}"
+}
+
+# bats test_tags=hook:activate:no-marker
+@test "'flox activate' proceeds normally when the prompt hook marker is unset" {
+  project_setup
+
+  run bash -c "
+    export FLOX_SHELL=\$(which bash)
+    unset _FLOX_PROMPT_HOOK_VERSION
+    eval \"\$($FLOX_BIN activate -d $PROJECT_DIR)\"
+    echo done
+  "
+  assert_success
+  assert_output --partial "done"
 }
 
 # bats test_tags=hook:deactivate:disabled
