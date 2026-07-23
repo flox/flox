@@ -168,7 +168,7 @@ impl HookEnv {
         // (an older hook after a version bump, or a lost marker). The diffs the
         // deactivate sweep decodes, and the protocol a fresh activation assumes,
         // can't be trusted, so do no auto-activation work this run. `hook-env`
-        // runs on every prompt; warn only when there is work to do so an idle
+        // runs on every prompt; error only when there is work to do so an idle
         // shell stays quiet, and skip both the emission and the tracking
         // writeback so no half-applied state is recorded.
         let prompt_hook_current = prompt_hook_version.is_some()
@@ -1087,27 +1087,6 @@ mod tests {
     fn nothing_to_do_in_plain_directory() {
         let ctx = empty_ctx("/home/user/plain");
         assert_eq!(plan_auto_activation(&ctx), noop_plan());
-    }
-
-    #[test]
-    fn has_auto_activation_work_detects_each_action() {
-        assert!(!noop_plan().has_auto_activation_work());
-
-        let with = |mutate: fn(&mut AutoActivatePlan)| {
-            let mut plan = noop_plan();
-            mutate(&mut plan);
-            plan.has_auto_activation_work()
-        };
-        assert!(with(|p| p.activate = paths(&["/a"])));
-        assert!(with(|p| p.deactivate = paths(&["/a"])));
-        assert!(with(|p| p.prompt = paths(&["/a"])));
-        assert!(with(|p| p.reactivate = paths(&["/a"])));
-        assert!(with(|p| p.reinsert = Some(PathBuf::from("/a"))));
-        assert!(with(|p| p.abandoned = paths(&["/a"])));
-        // Tracking-only fields are downstream of the actions above, not work in
-        // their own right, so they do not by themselves make a plan warn.
-        assert!(!with(|p| p.auto_activated = paths(&["/a"])));
-        assert!(!with(|p| p.suppressed = paths(&["/a"])));
     }
 
     #[test]

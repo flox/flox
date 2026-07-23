@@ -423,12 +423,13 @@ EXPIRED_FLOXHUB_TOKEN="eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3gu
   assert_output --partial "tracked:unset"
 }
 
-# An out-of-sync prompt hook (registered by an incompatible version of Flox, or
-# with a lost marker) can't trust the diffs the sweep would decode. `hook-env`
-# runs on every prompt, so it warns and skips the auto-activation work rather
-# than failing; the environment stays active and tracked until a shell restart.
+# An out-of-sync prompt hook (registered by an incompatible version of Flox,
+# or with a lost marker) can't trust the diffs the sweep would decode, so
+# `hook-env` errors instead of doing any auto-activation work. `_flox_hook`
+# preserves the previous command's exit code by design, so the sweep is
+# invoked directly to observe the failure.
 # bats test_tags=hook:auto-deactivate:stale-version
-@test "bash: stale prompt-hook version skips auto-deactivation with a warning" {
+@test "bash: stale prompt-hook version fails the sweep" {
   project_setup
   project2_setup
   export FLOX_FEATURES_AUTO_ACTIVATE=true
@@ -443,16 +444,11 @@ EXPIRED_FLOXHUB_TOKEN="eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3gu
     echo \"during:\$TEST_VAR2\"
     cd $BATS_TEST_TMPDIR
     export _FLOX_PROMPT_HOOK_VERSION=99
-    _flox_hook
-    echo \"after:\${TEST_VAR2:-unset}\"
-    echo \"tracked:\${_FLOX_AUTO_ACTIVATED_ENVIRONMENTS:-unset}\"
+    $FLOX_BIN hook-env --shell bash --shell-pid \$\$
   "
-  assert_success
+  assert_failure
   assert_output --partial "during:auto2"
   assert_output --partial "out of sync with the running Flox"
-  # The sweep was skipped, so PROJECT2 stays active and tracked.
-  assert_output --partial "after:auto2"
-  refute_output --partial "tracked:unset"
 }
 
 # The stale-version guard warns only when there is auto-activation work; a shell
@@ -1016,6 +1012,36 @@ EOF
   "
   assert_failure
   assert_output --partial "incompatible version of Flox"
+}
+
+# bats test_tags=hook:activate:incompatible
+@test "'flox activate' errors when the prompt hook version is incompatible" {
+  project_setup
+
+  run bash -c "
+    export FLOX_SHELL=\$(which bash)
+    eval \"\$($FLOX_BIN activate -d $PROJECT_DIR)\"
+    export _FLOX_PROMPT_HOOK_VERSION=99
+    $FLOX_BIN activate -d $PROJECT_DIR
+  "
+  assert_failure
+  assert_output --partial "incompatible version of Flox"
+  # The error names the environments active in the stale shell.
+  assert_output --partial "Active environments: project-${BATS_TEST_NUMBER}"
+}
+
+# bats test_tags=hook:activate:no-marker
+@test "'flox activate' proceeds normally when the prompt hook marker is unset" {
+  project_setup
+
+  run bash -c "
+    export FLOX_SHELL=\$(which bash)
+    unset _FLOX_PROMPT_HOOK_VERSION
+    eval \"\$($FLOX_BIN activate -d $PROJECT_DIR)\"
+    echo done
+  "
+  assert_success
+  assert_output --partial "done"
 }
 
 # bats test_tags=hook:deactivate:disabled

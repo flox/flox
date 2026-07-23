@@ -151,6 +151,8 @@ impl Deactivate {
         let target = open_deactivation_target(&flox, active)?;
         // TODO: if disable_hook = true, we'll error later on when we
         // find PROMPT_HOOK_VERSION is not set
+        // We'd hit this case if someone has an environment in their RC files, upgrades, and then runs `flox deactivate --in-place ...`
+        // We could maybe figure out a way to handle that case, but because that's hidden, ignore for now
         let prompt_hook_version = std::env::var(PROMPT_HOOK_VERSION_ENV).ok();
 
         let mut writer = BufWriter::new(stdout());

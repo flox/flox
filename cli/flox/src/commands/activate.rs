@@ -19,6 +19,7 @@ use flox_core::activate::vars::{FLOX_ACTIVATIONS_BIN, FLOX_ACTIVATIONS_VERBOSITY
 use flox_core::activations::activation_state_dir_path;
 use flox_core::data::System;
 use flox_core::data::environment_ref::DEFAULT_NAME;
+use flox_core::hook_actions::{PROMPT_HOOK_VERSION_ENV, prompt_hook_version_mismatched};
 use flox_core::traceable_path;
 use flox_events::{CliEnvironmentActivatePayload, EventKind, EventsHub, LifecycleFields};
 use flox_manifest::interfaces::{AsLatestSchema, AsWritableManifest, WriteManifest};
@@ -383,6 +384,8 @@ impl ActivateOptions {
         invocation_type: InvocationType,
         services_for_ephemeral_activation: Vec<String>,
     ) -> Result<()> {
+        ensure_prompt_hook_version_compatible_for_activate()?;
+
         let now_active = UninitializedEnvironment::from_concrete_environment(&concrete_environment);
 
         let lockfile = match concrete_environment.lockfile(&flox)? {
@@ -777,6 +780,41 @@ impl ActivateOptions {
 
         prompt_envs.join(" ")
     }
+}
+
+/// Fail closed rather than stack an activation from a different Flox version
+/// on top of a shell that already carries `_FLOX_PROMPT_HOOK_VERSION`: the
+/// shell's activation layers would otherwise speak two versions of the
+/// hook/diff protocol.
+///
+/// An unset marker (fresh shell -- registration sets it) or one that matches
+/// are both safe to proceed on; only a marker that is set and different means
+/// this shell was set up by another version of Flox. The error lists the
+/// environments active in this shell so the user knows which ones to
+/// re-activate after restarting.
+///
+/// `flox-activations activate` has its own fail-closed check for invocations
+/// that don't go through the flox binary (e.g. container entrypoints).
+fn ensure_prompt_hook_version_compatible_for_activate() -> Result<()> {
+    let prompt_hook_version = env::var(PROMPT_HOOK_VERSION_ENV).ok();
+    if prompt_hook_version_mismatched(prompt_hook_version.as_deref()) {
+        let active_environment_names = activated_environments()
+            .iter()
+            .map(|env| env.bare_description())
+            .collect::<Vec<_>>()
+            .join(", ");
+        let active_environments_line = if active_environment_names.is_empty() {
+            String::new()
+        } else {
+            format!("Active environments: {active_environment_names}\n")
+        };
+        bail!(formatdoc! {"
+            This shell has activated environments from an incompatible version of Flox.
+            {active_environments_line}Restart your shell, then activate again.
+        "});
+    }
+
+    Ok(())
 }
 
 /// Notify the user of available upgrades
