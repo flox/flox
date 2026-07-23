@@ -38,7 +38,7 @@ use super::{ConcreteEnvironment, open_path};
 use crate::commands::{EnvironmentSelect, environment_description, environment_select};
 use crate::utils::dialog::{Dialog, Select};
 use crate::utils::errors::{display_chain, format_core_error};
-use crate::utils::events::env_detail_from_concrete;
+use crate::utils::events::{env_detail_from_concrete, new_environment_pointer_id};
 use crate::utils::message;
 use crate::{environment_subcommand_metric, subcommand_metric};
 
@@ -356,12 +356,12 @@ impl Pull {
         }
 
         // region: write pointer
-        let mut pointer = ManagedPointer::new(
+        let pointer = ManagedPointer::new(
             env_ref.owner().clone(),
             env_ref.name().clone(),
+            existing_id.or_else(|| new_environment_pointer_id(flox)),
             &flox.floxhub,
         );
-        pointer.id = existing_id.or_else(|| EnvironmentPointer::new_id(flox));
         let mut pointer_content =
             serde_json::to_string_pretty(&pointer).context("Could not serialize pointer")?;
         pointer_content.push('\n');
@@ -787,8 +787,12 @@ mod tests {
         };
 
         let floxhub = Floxhub::new(DEFAULT_FLOXHUB_URL.clone(), None, None).unwrap();
-        let mut same_env =
-            ManagedPointer::new(env_ref.owner().clone(), env_ref.name().clone(), &floxhub);
+        let mut same_env = ManagedPointer::new(
+            env_ref.owner().clone(),
+            env_ref.name().clone(),
+            None,
+            &floxhub,
+        );
         same_env.id = Some(id);
         write_pointer(&EnvironmentPointer::Managed(same_env));
         assert_eq!(existing_pointer_id(env_path, &env_ref), Some(id));
@@ -796,6 +800,7 @@ mod tests {
         let mut other_env = ManagedPointer::new(
             "otherowner".parse().unwrap(),
             env_ref.name().clone(),
+            None,
             &floxhub,
         );
         other_env.id = Some(id);
@@ -806,7 +811,7 @@ mod tests {
             "a different environment's id must not carry over"
         );
 
-        let mut path_env = PathPointer::new("name".parse().unwrap());
+        let mut path_env = PathPointer::new("name".parse().unwrap(), None);
         path_env.id = Some(id);
         write_pointer(&EnvironmentPointer::Path(path_env));
         assert_eq!(

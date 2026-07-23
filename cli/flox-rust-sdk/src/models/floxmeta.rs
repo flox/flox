@@ -396,6 +396,7 @@ mod tests {
         let pointer = ManagedPointer::new(
             "floxtest".parse().unwrap(),
             "test".parse().unwrap(),
+            None,
             &floxhub,
         );
 

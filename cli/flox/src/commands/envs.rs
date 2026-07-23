@@ -261,6 +261,7 @@ mod tests {
             path: PathBuf::from("/envs/path/.flox"),
             pointer: EnvironmentPointer::Path(PathPointer::new(
                 EnvironmentName::from_str("name_path").unwrap(),
+                None,
             )),
         });
 
@@ -269,6 +270,7 @@ mod tests {
             pointer: EnvironmentPointer::Managed(ManagedPointer::new(
                 owner.clone(),
                 EnvironmentName::from_str("name_managed").unwrap(),
+                None,
                 &floxhub,
             )),
         });
@@ -276,6 +278,7 @@ mod tests {
         let remote_env = UninitializedEnvironment::Remote(ManagedPointer::new(
             owner.clone(),
             EnvironmentName::from_str("name_remote").unwrap(),
+            None,
             &floxhub,
         ));
 

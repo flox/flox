@@ -665,7 +665,7 @@ async fn try_create_default_environment_interactive(
             .parse()
             .expect("'default' is a known accepted name");
 
-        let pointer = ManagedPointer::new(owner, name, &flox.floxhub);
+        let pointer = ManagedPointer::new(owner, name, None, &flox.floxhub);
 
         match RemoteEnvironment::new(flox, pointer, None) {
             Ok(existing_env) => {
