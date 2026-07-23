@@ -11,5 +11,11 @@
 
 mod client;
 pub mod hooks;
+mod status;
 pub use client::*;
 pub use hooks::RequestHooks;
+
+pub mod types {
+    pub use crate::client::types::*;
+    pub use crate::status::EffectiveBuildStatus;
+}
