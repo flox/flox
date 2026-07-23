@@ -1300,7 +1300,7 @@ pub mod tests {
 
     use chrono::Utc;
     use flox_manifest::interfaces::{AsWritableManifest, WriteManifest};
-    use flox_test_utils::{GENERATED_DATA, MANUALLY_GENERATED};
+    use flox_test_utils::GENERATED_DATA;
     use floxhub_client::AuthContext;
     use pretty_assertions::assert_eq;
 
@@ -1877,35 +1877,32 @@ pub mod tests {
     ///
     /// The path must exist in the local Nix store for both replay and recording:
     /// replay-mode publish collects narinfos via `nix path-info` locally (this
-    /// is not an HTTP exchange and is not covered by mock recordings).
-    /// `ensure_fixed_test_store_path()` builds the derivation on demand so the
-    /// path is always present before tests use it.
+    /// is not an HTTP exchange and is not covered by mock recordings). The dev
+    /// shell realises the derivation and exports the path as
+    /// `FLOX_TEST_FIXED_STORE_PATH`, so it is already present for anyone
+    /// running the tests the supported way.
     const FIXED_TEST_STORE_PATH: &str =
         "/nix/store/xfigz788kjqvyyxdnyvycs0bfc6cdjp3-cli-128-fixed-empty";
 
-    /// Ensure [`FIXED_TEST_STORE_PATH`] exists in the local Nix store, building
-    /// it from the canonical .nix file if absent.
+    /// Check that the store path the dev shell provides is the one baked into
+    /// the recorded mock bodies.
     ///
-    /// The exists() check makes repeated calls near-free. Concurrent nix-build
-    /// invocations for the same derivation are safe (Nix locks the build).
+    /// This guards against the two ways the dev shell and the recordings can
+    /// drift apart: the derivation changing without the mocks being
+    /// re-recorded, and the path having been garbage collected since the shell
+    /// was entered.
     fn ensure_fixed_test_store_path() {
-        if std::path::Path::new(FIXED_TEST_STORE_PATH).exists() {
-            return;
-        }
-        let nix_file = MANUALLY_GENERATED.join("cli-128-fixed-empty.nix");
-        let output = std::process::Command::new("nix-build")
-            .args(["--no-out-link", nix_file.to_str().unwrap()])
-            .output()
-            .expect("failed to run nix-build for fixed test store path");
-        assert!(
-            output.status.success(),
-            "nix-build failed for fixed test store path: {}",
-            String::from_utf8_lossy(&output.stderr)
+        let from_dev_shell = std::env::var("FLOX_TEST_FIXED_STORE_PATH").expect(
+            "FLOX_TEST_FIXED_STORE_PATH is not set. Run the unit tests from the dev shell.",
         );
-        let built = String::from_utf8_lossy(&output.stdout).trim().to_string();
         assert_eq!(
-            built, FIXED_TEST_STORE_PATH,
-            "nix-build produced a path that does not match FIXED_TEST_STORE_PATH"
+            from_dev_shell, FIXED_TEST_STORE_PATH,
+            "the dev shell's fixed test store path differs from the one recorded in the publish mocks; \
+             re-enter the dev shell, and re-record the mocks if the derivation changed"
+        );
+        assert!(
+            std::path::Path::new(FIXED_TEST_STORE_PATH).exists(),
+            "{FIXED_TEST_STORE_PATH} is missing from the local Nix store; re-enter the dev shell to realise it"
         );
     }
 
