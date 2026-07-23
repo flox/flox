@@ -22,11 +22,7 @@ use tracing::debug;
 
 use super::activate::write_auto_activation_preference;
 use super::activated_environments;
-use super::deactivate::{
-    emit_deactivate_script,
-    flox_activate_tracelevel,
-    open_deactivation_target,
-};
+use super::deactivate::{deactivation_target, emit_deactivate_script, flox_activate_tracelevel};
 use crate::subcommand_metric;
 use crate::utils::active_environments::ActiveEnvironment;
 use crate::utils::dialog::{Confirm, Dialog};
@@ -206,7 +202,7 @@ impl HookEnv {
                     popped_all = false;
                     break;
                 };
-                let target = open_deactivation_target(&flox, layer.clone())?;
+                let target = deactivation_target(&flox, layer);
                 // Auto-activations are always in-place, so the matching
                 // deactivation restores in place either way; this layer's
                 // map entry only decides whether to detach. A non-in-place

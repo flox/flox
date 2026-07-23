@@ -358,11 +358,9 @@ enum Ready {
 
 /// Information about the activated environment.
 ///
-/// `dot_flox_path` is only intended for humans to debug the serialized state
-/// and should be promoted to the top-level if it is later needed
-/// programmatically. `flox_env` is read programmatically via
-/// [ActivationState::flox_env] to tear down an activation whose environment
-/// directory no longer exists.
+/// This is only intended for humans to debug the serialized state.
+/// Fields should be promoted to the top-level if they are later needed
+/// programmatically.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 struct EnvironmentInfo {
     /// Path to the activated environment's .flox directory (None for containers)
@@ -446,16 +444,6 @@ impl ActivationState {
     /// Returns the current activation mode
     pub fn mode(&self) -> &ActivateMode {
         &self.mode
-    }
-
-    /// Returns the rendered environment path (`$FLOX_ENV`) recorded when the
-    /// activation started.
-    ///
-    /// This is what lets an activation be torn down after its environment
-    /// directory has been deleted, when the path can no longer be derived by
-    /// opening the environment.
-    pub fn flox_env(&self) -> &Path {
-        &self.info.flox_env
     }
 
     /// Check if the activation state has running processes.
