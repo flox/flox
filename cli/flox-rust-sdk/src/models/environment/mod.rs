@@ -23,7 +23,7 @@ use indoc::formatdoc;
 use managed_environment::ManagedEnvironment;
 use path_environment::PathEnvironment;
 use remote_environment::RemoteEnvironment;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use thiserror::Error;
 use tracing::debug;
 use uninstall::UninstallSpec;
@@ -446,6 +446,20 @@ pub enum EnvironmentPointer {
     Path(PathPointer),
 }
 
+/// Deserialize a pointer `id`, treating a malformed value as absent.
+/// The id only feeds metrics, so it must never make an `env.json` (which a
+/// user may hand-edit) fail to parse.
+fn pointer_id_or_none<'de, D>(deserializer: D) -> Result<Option<Uuid>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let raw = Option::<serde_json::Value>::deserialize(deserializer)?;
+    Ok(raw
+        .as_ref()
+        .and_then(serde_json::Value::as_str)
+        .and_then(|id| Uuid::parse_str(id).ok()))
+}
+
 /// The identifier for a project environment.
 ///
 /// This is serialized to `env.json` inside the `.flox` directory
@@ -456,7 +470,11 @@ pub struct PathPointer {
     /// Stable identifier minted when the environment is created and
     /// carried through renames and conversions. `None` for environments
     /// created before the field existed or with metrics disabled.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "pointer_id_or_none"
+    )]
     #[cfg_attr(test, proptest(value = "None"))]
     pub id: Option<Uuid>,
     version: Version<1>,
@@ -490,7 +508,18 @@ impl PartialOrd for PathPointer {
 
 impl Ord for PathPointer {
     fn cmp(&self, other: &Self) -> Ordering {
-        (&self.name, &self.version).cmp(&(&other.name, &other.version))
+        // Destructured exhaustively so a future field can't be forgotten.
+        let Self {
+            name,
+            id: _,
+            version,
+        } = self;
+        let Self {
+            name: other_name,
+            id: _,
+            version: other_version,
+        } = other;
+        (name, version).cmp(&(other_name, other_version))
     }
 }
 
@@ -506,7 +535,11 @@ pub struct ManagedPointer {
     /// Stable identifier carried over from the path environment this was
     /// pushed from (or minted at pull). `None` for environments created
     /// before the field existed or with metrics disabled.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "pointer_id_or_none"
+    )]
     #[cfg_attr(test, proptest(value = "None"))]
     pub id: Option<Uuid>,
     #[serde(rename = "floxhub_url")]
@@ -556,19 +589,36 @@ impl PartialOrd for ManagedPointer {
 
 impl Ord for ManagedPointer {
     fn cmp(&self, other: &Self) -> Ordering {
+        // Destructured exhaustively so a future field can't be forgotten.
+        let Self {
+            owner,
+            name,
+            id: _,
+            floxhub_base_url,
+            floxhub_git_url_override,
+            version,
+        } = self;
+        let Self {
+            owner: other_owner,
+            name: other_name,
+            id: _,
+            floxhub_base_url: other_floxhub_base_url,
+            floxhub_git_url_override: other_floxhub_git_url_override,
+            version: other_version,
+        } = other;
         (
-            &self.owner,
-            &self.name,
-            &self.floxhub_base_url,
-            &self.floxhub_git_url_override,
-            &self.version,
+            owner,
+            name,
+            floxhub_base_url,
+            floxhub_git_url_override,
+            version,
         )
             .cmp(&(
-                &other.owner,
-                &other.name,
-                &other.floxhub_base_url,
-                &other.floxhub_git_url_override,
-                &other.version,
+                other_owner,
+                other_name,
+                other_floxhub_base_url,
+                other_floxhub_git_url_override,
+                other_version,
             ))
     }
 }
@@ -1355,8 +1405,14 @@ mod test {
         let json =
             serde_json::to_value(EnvironmentPointer::Managed(managed_pointer.clone())).unwrap();
         assert_eq!(
-            json.get("id").and_then(|v| v.as_str()),
-            Some("11111111-1111-1111-1111-111111111111")
+            json,
+            serde_json::json!({
+                "name": "name",
+                "owner": "owner",
+                "id": "11111111-1111-1111-1111-111111111111",
+                "floxhub_url": DEFAULT_FLOXHUB_URL.as_str(),
+                "version": 1,
+            })
         );
         let reparsed: EnvironmentPointer = serde_json::from_value(json).unwrap();
         let EnvironmentPointer::Managed(reparsed) = reparsed else {
@@ -1365,6 +1421,33 @@ mod test {
         assert_eq!(reparsed.id, Some(id));
         managed_pointer.id = None;
         assert_eq!(reparsed, managed_pointer, "id is not part of equality");
+    }
+
+    /// A malformed `id` in `env.json` must not fail opening the
+    /// environment — the id feeds metrics only, so it parses as absent.
+    #[test]
+    fn malformed_pointer_id_parses_as_absent() {
+        let path_pointer: EnvironmentPointer =
+            serde_json::from_str(r#"{"name": "name", "id": "not-a-uuid", "version": 1}"#).unwrap();
+        let EnvironmentPointer::Path(path_pointer) = path_pointer else {
+            panic!("expected path pointer");
+        };
+        assert_eq!(path_pointer.id, None);
+
+        let managed_pointer: EnvironmentPointer = serde_json::from_str(
+            r#"{
+                "name": "name",
+                "owner": "owner",
+                "id": 42,
+                "floxhub_url": "https://hub.flox.dev/",
+                "version": 1
+            }"#,
+        )
+        .unwrap();
+        let EnvironmentPointer::Managed(managed_pointer) = managed_pointer else {
+            panic!("expected managed pointer");
+        };
+        assert_eq!(managed_pointer.id, None);
     }
 
     /// Pointers written before the `id` field existed (registry entries,

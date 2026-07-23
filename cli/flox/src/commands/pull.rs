@@ -20,6 +20,7 @@ use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironment;
 use flox_rust_sdk::models::environment::{
     CoreEnvironmentError,
     DOT_FLOX,
+    DotFlox,
     ENVIRONMENT_POINTER_FILENAME,
     Environment,
     EnvironmentError,
@@ -309,8 +310,17 @@ impl Pull {
         generation: Option<GenerationId>,
     ) -> Result<()> {
         let dot_flox_path = env_path.join(DOT_FLOX);
+        // A force re-pull replaces the checkout but is still the same
+        // environment: keep its pointer id if it has one.
+        let mut existing_id = None;
         if dot_flox_path.exists() {
             if force {
+                existing_id = DotFlox::open_in(&env_path)
+                    .ok()
+                    .and_then(|dot_flox| match dot_flox.pointer {
+                        EnvironmentPointer::Managed(pointer) => pointer.id,
+                        EnvironmentPointer::Path(pointer) => pointer.id,
+                    });
                 match open_path(flox, &dot_flox_path, None) {
                     Ok(concrete_env) => match concrete_env {
                         ConcreteEnvironment::Path(env) => {
@@ -343,7 +353,7 @@ impl Pull {
             env_ref.name().clone(),
             &flox.floxhub,
         );
-        pointer.id = EnvironmentPointer::new_id(flox);
+        pointer.id = existing_id.or_else(|| EnvironmentPointer::new_id(flox));
         let mut pointer_content =
             serde_json::to_string_pretty(&pointer).context("Could not serialize pointer")?;
         pointer_content.push('\n');

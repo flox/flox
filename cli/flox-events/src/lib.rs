@@ -884,7 +884,15 @@ mod tests {
     }
 
     fn env_detail(kind: &str, ref_or_name: &str) -> EnvDetail {
-        EnvDetail::new(kind, ref_or_name)
+        // Exhaustive literal: adding an EnvDetail field must break this
+        // helper so the goldens are extended deliberately.
+        EnvDetail {
+            env_kind: kind.to_string(),
+            env_ref_or_name: ref_or_name.to_string(),
+            environment_id: None,
+            generation_number: None,
+            package_count: None,
+        }
     }
 
     fn activate_envelope_json(payload: serde_json::Value) -> serde_json::Value {
@@ -1936,7 +1944,13 @@ mod pipeline_tests {
         let hub = EventsHub::new();
         hub.set_client(client_with_connection(&tempdir, connection));
 
-        let env_detail = EnvDetail::new("path", "myenv");
+        let env_detail = EnvDetail {
+            env_kind: "path".to_string(),
+            env_ref_or_name: "myenv".to_string(),
+            environment_id: None,
+            generation_number: None,
+            package_count: None,
+        };
 
         hub.record_event(EventKind::CliEnvironmentEdit(
             CliEnvironmentEditPayload::new(env_detail.clone()),
