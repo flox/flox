@@ -28,7 +28,7 @@
 //!
 //! let client = FloxhubClient::new(config)?;
 //! let results = client.search("curl", system, None).await?;
-//! let builds = client.list_builds(None).await?;
+//! let builds = client.list_builds(&Default::default()).await?;
 //! ```
 
 mod auth;
@@ -68,14 +68,19 @@ pub use config::{FloxhubClientConfig, FloxhubMockMode};
 pub use error::*;
 // Re-export factory types so consumers depend only on floxhub-client.
 pub use factory::{
+    BuildFilters,
     FactoryClientError,
     FactoryClientTrait,
     MapApiErrorExt as FactoryMapApiErrorExt,
 };
 pub use factory_api_v1::types::{
+    AttrPathItem,
     BuildResponse,
+    EffectiveBuildStatus,
     ErrorResponse as FactoryErrorResponse,
-    Status as FactoryStatus,
+    Since,
+    SourceCommitShaItem,
+    SystemItem,
 };
 // Re-export factory-api-v1 types for consumers.
 pub use factory_api_v1::{

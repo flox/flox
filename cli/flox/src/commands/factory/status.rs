@@ -1,5 +1,3 @@
-use std::num::NonZeroU64;
-
 use anyhow::Result;
 use bpaf::Bpaf;
 use floxhub_client::{BuildResponse, FactoryClientTrait};
@@ -7,7 +5,7 @@ use indoc::formatdoc;
 use serde::Serialize;
 use tracing::instrument;
 
-use super::effective_status;
+use super::{BuildId, effective_status};
 use crate::subcommand_metric;
 
 /// Show the status of a single Flox Factory build.
@@ -19,7 +17,7 @@ pub struct Status {
 
     /// Build ID to query
     #[bpaf(positional("ID"))]
-    pub id: NonZeroU64,
+    pub id: BuildId,
 }
 
 impl Status {
@@ -27,16 +25,16 @@ impl Status {
     pub async fn handle(self, client: &impl FactoryClientTrait) -> Result<()> {
         subcommand_metric!("factory::status");
 
-        let build = client.get_build(self.id.get() as i64).await.map_err(|e| {
-            super::user_facing_error(
-                e,
-                Some(formatdoc! {"
-                    No Flox Factory build found with ID {id}.
-                    Use 'flox factory list' to see existing builds.",
-                    id = self.id,
-                }),
-            )
-        })?;
+        let not_found = formatdoc! {"
+            No Flox Factory build found with ID {id}.
+            Use 'flox factory list' to see existing builds.",
+            id = self.id,
+        };
+
+        let build = client
+            .get_build(self.id.get())
+            .await
+            .map_err(|e| super::user_facing_error(e, Some(not_found)))?;
 
         print!("{}", render(build, self.json)?);
         Ok(())
@@ -95,8 +93,7 @@ impl std::fmt::Display for BuildStatusDisplay {
 
 #[cfg(test)]
 mod tests {
-    use std::num::NonZeroU64;
-
+    use floxhub_client::EffectiveBuildStatus;
     use indoc::indoc;
     use pretty_assertions::assert_eq;
 
@@ -107,7 +104,7 @@ mod tests {
     async fn status_renders_not_found_message() {
         let client = StubFactoryClient::with_not_found();
         let args = Status {
-            id: NonZeroU64::new(42).unwrap(),
+            id: "42".parse().unwrap(),
             json: false,
         };
 
@@ -118,8 +115,13 @@ mod tests {
     }
 
     #[test]
-    fn status_table_uses_task_status_when_dispatched() {
-        let build = make_build(42, "x86_64-linux", "hello", Some("running"));
+    fn status_table_shows_effective_status_when_dispatched() {
+        let build = make_build(
+            42,
+            "x86_64-linux",
+            "hello",
+            Some(EffectiveBuildStatus::Running),
+        );
         assert_eq!(render(build, false).unwrap(), indoc! {"
             Build ID:      42
             System:        x86_64-linux

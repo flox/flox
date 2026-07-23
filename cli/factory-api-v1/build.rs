@@ -39,6 +39,14 @@ fn main() {
 fn generator() -> progenitor::Generator {
     let mut settings = progenitor::GenerationSettings::default();
     settings.with_derive("PartialEq");
+    // Splice in the hand-written tolerant status enum for both the response
+    // body and the `status` query-param filter, so an unrecognized status
+    // renders as `unknown: <value>` instead of failing deserialization.
+    settings.with_replacement(
+        "EffectiveBuildStatus",
+        "crate::status::EffectiveBuildStatus",
+        vec![].into_iter(),
+    );
     settings.with_inner_type(parse_quote! { crate::hooks::RequestHooks });
     progenitor::Generator::new(&settings)
 }

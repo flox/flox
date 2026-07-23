@@ -1,9 +1,9 @@
 use std::fmt;
-use std::str::FromStr;
 
 use anyhow::Result;
 use bpaf::Bpaf;
-use floxhub_client::{BuildResponse, FactoryClientTrait, FactoryStatus};
+use floxhub_client::{BuildFilters, BuildResponse, EffectiveBuildStatus, FactoryClientTrait};
+use itertools::Itertools;
 use serde::Serialize;
 use tracing::instrument;
 
@@ -11,57 +11,35 @@ use super::{effective_status, effective_updated_at};
 use crate::subcommand_metric;
 use crate::utils::message::page_output;
 
-/// CLI-boundary filter for `--status`, extending the seven wire `Status`
-/// values with the server-side keyword `undispatched` (builds where
-/// `task_id IS NULL`).
-///
-/// `undispatched` is accepted by the GET /builds query parameter but is NOT
-/// a value of the `Status` enum. It is the mechanism for filtering builds
-/// the CLI renders as "pending (not dispatched)". The richer list-query
-/// contract — including effective-status matching semantics and what
-/// `undispatched` precisely means — is owned by ECO-97.
-#[derive(Debug, Clone, PartialEq)]
-pub enum StatusFilter {
-    /// One of the seven task lifecycle statuses on the wire.
-    Status(FactoryStatus),
-    /// Server-side keyword: builds with no dispatched task (`task_id IS NULL`).
-    Undispatched,
-}
-
-impl FromStr for StatusFilter {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if s == "undispatched" {
-            return Ok(StatusFilter::Undispatched);
-        }
-        FactoryStatus::from_str(s)
-            .map(StatusFilter::Status)
-            .map_err(|_| {
-                format!("Invalid status '{s}'; valid values are: queued, dispatching, running, completed, failed, timed_out, cancelled, undispatched.")
-            })
-    }
-}
-
-impl fmt::Display for StatusFilter {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            StatusFilter::Status(s) => fmt::Display::fmt(s, f),
-            StatusFilter::Undispatched => f.write_str("undispatched"),
-        }
-    }
+/// Parse one `--status` value into a typed [`EffectiveBuildStatus`], rejecting
+/// any word outside the known vocabulary at the CLI boundary. The status
+/// vocabulary is pinned by the vendored schema, so an invalid value is a
+/// definite user error rather than something only the server can judge.
+fn parse_status(s: String) -> Result<EffectiveBuildStatus, String> {
+    EffectiveBuildStatus::KNOWN
+        .iter()
+        .find(|status| status.as_str() == s)
+        .cloned()
+        .ok_or_else(|| {
+            let valid = EffectiveBuildStatus::KNOWN
+                .iter()
+                .map(EffectiveBuildStatus::as_str)
+                .join(", ");
+            format!("Invalid status '{s}'; valid values are: {valid}.")
+        })
 }
 
 /// List Flox Factory builds.
+///
+/// Each filter is repeatable and ORs its values; different filters AND together.
+/// An unfiltered invocation lists every build.
 #[derive(Debug, Clone, PartialEq, Bpaf)]
 pub struct List {
-    /// Filter by build status.
-    /// Valid values: queued, dispatching, running, completed, failed,
-    /// timed_out, cancelled, undispatched.
-    /// Use "undispatched" to show builds that have not yet been sent
-    /// to Build Coordinator (displayed as "pending (not dispatched)").
-    #[bpaf(long)]
-    pub status: Option<StatusFilter>,
+    /// Filter by build status; repeat to match any of several.
+    /// Valid values: pending, running, completed, failed, timed_out,
+    /// cancelled.
+    #[bpaf(long, argument::<String>("STATUS"), parse(parse_status), many)]
+    pub status: Vec<EffectiveBuildStatus>,
 
     /// Display output as JSON
     #[bpaf(long)]
@@ -77,16 +55,16 @@ impl List {
     pub async fn handle(self, client: &impl FactoryClientTrait) -> Result<()> {
         subcommand_metric!("factory::list");
 
-        // Convert the validated filter to its wire string. The seven Status
-        // values use their own Display ("running", etc.); "undispatched" is
-        // forwarded as the literal keyword the server accepts.
-        let status_str = self.status.as_ref().map(|f| f.to_string());
+        let filters = BuildFilters {
+            status: self.status,
+            ..Default::default()
+        };
 
         // Depage the full result set, mirroring `flox generations list`: the
         // operator sees every matching build at once and scrolls with the
         // pager, rather than stepping server-side pages by hand.
         let builds = client
-            .list_builds(status_str.as_deref())
+            .list_builds(&filters)
             .await
             .map_err(|e| super::user_facing_error(e, None))?;
 
@@ -203,33 +181,24 @@ impl fmt::Display for BuildListDisplay {
 
 #[cfg(test)]
 mod tests {
+    use bpaf::Parser;
     use indoc::indoc;
     use pretty_assertions::assert_eq;
 
     use super::*;
-    use crate::commands::factory::test_helpers::make_build;
-
-    #[test]
-    fn status_filter_parses_undispatched_keyword() {
-        let f: StatusFilter = "undispatched".parse().unwrap();
-        assert_eq!(f, StatusFilter::Undispatched);
-    }
-
-    #[test]
-    fn status_filter_rejects_invalid_value_with_named_values() {
-        let err = "garbage".parse::<StatusFilter>().unwrap_err();
-        assert_eq!(
-            err,
-            "Invalid status 'garbage'; valid values are: queued, dispatching, running, completed, failed, timed_out, cancelled, undispatched."
-        );
-    }
+    use crate::commands::factory::test_helpers::{StubFactoryClient, StubResult, make_build};
 
     #[test]
     fn list_display_renders_table_exactly() {
         // A dispatched build shows its task's updated_at; an undispatched build
         // has no task, so UPDATED falls back to the build's created_at.
         let builds = vec![
-            make_build(1, "x86_64-linux", "hello", Some("running")),
+            make_build(
+                1,
+                "x86_64-linux",
+                "hello",
+                Some(EffectiveBuildStatus::Running),
+            ),
             make_build(2, "aarch64-darwin", "ripgrep", None),
         ];
         let display = BuildListDisplay::from(builds);
@@ -238,5 +207,87 @@ mod tests {
             1         hello      x86_64-linux    running                   2025-01-01T00:00:01+00:00
             2         ripgrep    aarch64-darwin  pending (not dispatched)  2025-01-01T00:00:00+00:00
         "});
+    }
+
+    #[test]
+    fn list_display_renders_new_status_labels() {
+        // The labels introduced with the typed status: a timed-out build reads
+        // `timed_out` (not `failed`), a pre-dispatch cancel reads `cancelled`
+        // (not undispatched), and an unrecognized status renders tolerantly as
+        // `unknown: <value>` rather than blanking the row.
+        let builds = vec![
+            make_build(
+                3,
+                "x86_64-linux",
+                "curl",
+                Some(EffectiveBuildStatus::TimedOut),
+            ),
+            make_build(
+                4,
+                "aarch64-darwin",
+                "jq",
+                Some(EffectiveBuildStatus::Cancelled),
+            ),
+            make_build(
+                5,
+                "x86_64-linux",
+                "wget",
+                Some(EffectiveBuildStatus::Unknown("frobnicated".to_string())),
+            ),
+        ];
+        let display = BuildListDisplay::from(builds);
+        assert_eq!(display.to_string(), indoc! {"
+            BUILD ID  ATTR PATH  SYSTEM          STATUS                UPDATED
+            3         curl       x86_64-linux    timed_out             2025-01-01T00:00:01+00:00
+            4         jq         aarch64-darwin  cancelled             2025-01-01T00:00:00+00:00
+            5         wget       x86_64-linux    unknown: frobnicated  2025-01-01T00:00:00+00:00
+        "});
+    }
+
+    #[tokio::test]
+    async fn list_handler_forwards_status_filters() {
+        let client = StubFactoryClient::with_outcomes(
+            StubResult::Build(EffectiveBuildStatus::Completed),
+            StubResult::NotFound,
+        );
+        let args = List {
+            status: vec![EffectiveBuildStatus::Running, EffectiveBuildStatus::Failed],
+            json: false,
+            no_pager: true,
+        };
+
+        args.handle(&client).await.unwrap();
+
+        assert_eq!(
+            client.last_filters(),
+            Some(BuildFilters {
+                status: vec![EffectiveBuildStatus::Running, EffectiveBuildStatus::Failed],
+                ..Default::default()
+            })
+        );
+    }
+
+    #[test]
+    fn unknown_status_is_rejected_at_parse_time() {
+        // The status vocabulary is pinned by the vendored schema, so an unknown
+        // value is a definite user error caught at the flag boundary, and the
+        // failure names the accepted values.
+        let failure = list()
+            .to_options()
+            .run_inner(&["--status", "garbage"][..])
+            .expect_err("expected an unknown --status to fail parsing");
+        // bpaf line-wraps the rendered failure, so compare with newlines
+        // collapsed to spaces.
+        let message = failure.unwrap_stderr().replace('\n', " ");
+        assert!(
+            message.contains("Invalid status 'garbage'"),
+            "unexpected parse failure: {message}"
+        );
+        assert!(
+            message.contains(
+                "valid values are: pending, running, completed, failed, timed_out, cancelled"
+            ),
+            "unexpected parse failure: {message}"
+        );
     }
 }

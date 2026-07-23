@@ -109,4 +109,26 @@ mod tests {
             "weird",
         );
     }
+
+    /// Pins the hand-written [`EffectiveBuildStatus::KNOWN`] set to the schema
+    /// the client is generated from. If the server adds or reorders a status,
+    /// this fails loudly so the enum is updated deliberately rather than the
+    /// new value silently falling into `Unknown`.
+    #[test]
+    fn known_matches_openapi_schema() {
+        let spec: serde_json::Value =
+            serde_json::from_str(include_str!("../openapi.json")).unwrap();
+        let schema_values: Vec<&str> = spec["components"]["schemas"]["EffectiveBuildStatus"]
+            ["enum"]
+            .as_array()
+            .expect("EffectiveBuildStatus.enum is an array")
+            .iter()
+            .map(|value| value.as_str().expect("enum value is a string"))
+            .collect();
+        let known: Vec<&str> = EffectiveBuildStatus::KNOWN
+            .iter()
+            .map(EffectiveBuildStatus::as_str)
+            .collect();
+        assert_eq!(schema_values, known);
+    }
 }
