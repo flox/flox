@@ -423,6 +423,38 @@ EXPIRED_FLOXHUB_TOKEN="eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3gu
   assert_output --partial "tracked:unset"
 }
 
+# Deleting a project directory while its environment is auto-activated (e.g.
+# removing a git worktree with tooling that cd's back to the main checkout)
+# must still tear the environment down; the deactivation data is recovered
+# from the activation state rather than the deleted directory.
+# bats test_tags=hook:auto-deactivate:deleted-dir
+@test "bash: auto-deactivates an environment whose directory was deleted" {
+  project_setup
+  project2_setup
+  export FLOX_FEATURES_AUTO_ACTIVATE=true
+  # Auto-activation is opt-in; allow the target before entering it.
+  "$FLOX_BIN" activate allow -d "$PROJECT2_DIR"
+
+  run --separate-stderr bash -c "
+    export FLOX_FEATURES_AUTO_ACTIVATE=true
+    export FLOX_SHELL=\$(which bash)
+    eval \"\$($FLOX_BIN activate -d $PROJECT_DIR)\"
+    cd $PROJECT2_DIR
+    _flox_hook
+    echo \"during:\$TEST_VAR2\"
+    cd $PROJECT_DIR
+    rm -rf $PROJECT2_DIR
+    _flox_hook
+    echo \"after:\${TEST_VAR2:-unset}\"
+    echo \"tracked:\${_FLOX_AUTO_ACTIVATED_ENVIRONMENTS:-unset}\"
+  "
+  assert_success
+  assert_output --partial "during:auto2"
+  assert_output --partial "after:unset"
+  assert_output --partial "tracked:unset"
+  refute_regex "$stderr" "Did not find an environment"
+}
+
 # bats test_tags=hook:auto-deactivate:manual
 @test "bash: manually activated environment is not deactivated on leaving" {
   project_setup
@@ -772,6 +804,31 @@ set_test_var_manifest() {
   assert_success
   assert_output --partial "during:modified"
   assert_output --partial "after:original"
+}
+
+# Plain 'flox deactivate' must work even after the active environment's
+# directory was deleted (e.g. a removed git worktree); the deactivation data
+# is recovered from the activation state rather than the deleted directory.
+# bats test_tags=hook:deactivate:deleted-dir
+@test "bash: plain 'flox deactivate' tears down an environment whose directory was deleted" {
+  project_setup
+  project2_setup
+
+  run --separate-stderr bash -c "
+    export FLOX_SHELL=\$(which bash)
+    cd $PROJECT2_DIR
+    eval \"\$($FLOX_BIN activate -d $PROJECT2_DIR)\"
+    echo \"during:\$TEST_VAR2\"
+    cd $BATS_TEST_TMPDIR
+    rm -rf $PROJECT2_DIR
+    $FLOX_BIN deactivate
+    _flox_hook
+    echo \"after:\${TEST_VAR2:-unset}\"
+  "
+  assert_success
+  assert_output --partial "during:auto2"
+  assert_output --partial "after:unset"
+  refute_regex "$stderr" "Did not find an environment"
 }
 
 # bats test_tags=hook:deactivate:zsh

@@ -97,34 +97,34 @@ pub struct RemoteEnvironment {
 }
 
 impl RemoteEnvironment {
-    /// Check if a remote environment is already cached locally.
-    /// I.e. whether there is a backing managed environment in the cache.
-    pub fn is_cached(flox: &Flox, pointer: &ManagedPointer) -> bool {
-        let path = flox
-            .cache_dir
+    /// The directory in `flox.cache_dir` that `pointer`'s environment is
+    /// checked out into (its `.flox` lives directly inside).
+    ///
+    /// A pure path computation — the checkout may not exist yet, which is
+    /// what lets deactivation locate it without opening the environment.
+    pub fn checkout_path(flox: &Flox, pointer: &ManagedPointer) -> PathBuf {
+        flox.cache_dir
             .join(REMOTE_ENVIRONMENT_BASE_DIR)
             .join(pointer.owner.as_ref())
             .join(pointer.name.as_ref())
-            .join(DOT_FLOX);
-        path.exists()
+    }
+
+    /// Check if a remote environment is already cached locally.
+    /// I.e. whether there is a backing managed environment in the cache.
+    pub fn is_cached(flox: &Flox, pointer: &ManagedPointer) -> bool {
+        Self::checkout_path(flox, pointer).join(DOT_FLOX).exists()
     }
 
     /// Pull a remote environment into a flox-provided managed environment
-    /// in `<FLOX_CACHE_DIR>/remote/<owner>/<name>`
+    /// at [RemoteEnvironment::checkout_path].
     ///
-    /// This function provides the sensible default directory to [RemoteEnvironment::new_in].
     /// The directory will be created by [RemoteEnvironment::new_in].
     pub fn new(
         flox: &Flox,
         pointer: ManagedPointer,
         generation: Option<GenerationId>,
     ) -> Result<Self, RemoteEnvironmentError> {
-        let path = flox
-            .cache_dir
-            .join(REMOTE_ENVIRONMENT_BASE_DIR)
-            .join(pointer.owner.as_ref())
-            .join(pointer.name.as_ref());
-
+        let path = Self::checkout_path(flox, &pointer);
         Self::new_in(flox, path, pointer, generation)
     }
 
