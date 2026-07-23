@@ -1,10 +1,9 @@
 use std::io::{BufWriter, Write};
-use std::num::NonZeroU64;
 
 use anstream::adapter::StripBytes;
 use anyhow::Result;
 use bpaf::Bpaf;
-use floxhub_client::{FactoryClientError, FactoryClientTrait};
+use floxhub_client::{BuildId, FactoryClientError, FactoryClientTrait};
 use futures::StreamExt;
 use tracing::instrument;
 
@@ -20,7 +19,7 @@ pub struct Logs {
 
     /// Build ID to fetch logs for
     #[bpaf(positional("ID"))]
-    pub id: NonZeroU64,
+    pub id: BuildId,
 }
 
 impl Logs {
@@ -28,7 +27,7 @@ impl Logs {
     pub async fn handle(self, client: &impl FactoryClientTrait) -> Result<()> {
         subcommand_metric!("factory::logs");
 
-        let mut stream = match client.get_build_logs(self.id.get() as i64).await {
+        let mut stream = match client.get_build_logs(self.id).await {
             Ok(stream) => stream,
             Err(FactoryClientError::NotFound) => {
                 message::error(format!("No logs available for build {}.", self.id));
@@ -95,8 +94,6 @@ impl<W: Write> LogWriter<W> {
 
 #[cfg(test)]
 mod tests {
-    use std::num::NonZeroU64;
-
     use flox_rust_sdk::utils::logging::test_helpers::test_subscriber_message_only;
     use pretty_assertions::assert_eq;
     use tracing::instrument::WithSubscriber;
@@ -187,7 +184,7 @@ mod tests {
         let client = StubFactoryClient::with_not_found();
         let args = Logs {
             raw: false,
-            id: NonZeroU64::new(42).unwrap(),
+            id: "42".parse().unwrap(),
         };
 
         let (subscriber, writer) = test_subscriber_message_only();
