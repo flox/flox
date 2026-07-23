@@ -278,6 +278,16 @@ EOF
   assert_success
 }
 
+# bats test_tags=remote,activate,trust,remote:activate:trust-config
+@test "m10.2: 'activate --reference' succeeds if owner org is trusted by wildcard config" {
+  make_empty_remote_env
+
+  run "$FLOX_BIN" config --set "trusted_environments.$OWNER/*" "trust"
+  run "$FLOX_BIN" activate --reference "$OWNER/test" -- true
+  assert_success
+}
+
+
 # bats test_tags=remote,activate,trust,remote:activate:trust-current-user
 #
 # If the remotely accessed environment is owned by the currently logged in user,
