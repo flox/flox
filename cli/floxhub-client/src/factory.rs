@@ -8,9 +8,19 @@
 //! is implemented for [`FloxhubClient`]. Callers construct a [`FloxhubClient`]
 //! and use it for both catalog and factory operations.
 
+use std::fmt;
 use std::num::{NonZeroU32, NonZeroU64};
+use std::str::FromStr;
 
-use factory_api_v1::types::{BuildResponse, ErrorResponse};
+use chrono::{DateTime, Utc};
+use factory_api_v1::types::{
+    AttrPathItem,
+    BuildResponse,
+    EffectiveBuildStatus,
+    ErrorResponse,
+    SourceCommitShaItem,
+    SystemItem,
+};
 use factory_api_v1::{ByteStream, Error as APIError, ResponseValue};
 
 use crate::client::{collect_all_results, make_depaging_stream};
@@ -173,6 +183,80 @@ fn classify_build_error(err: FactoryClientError) -> FactoryClientError {
 }
 
 // ---------------------------------------------------------------------------
+// BuildId
+// ---------------------------------------------------------------------------
+
+/// A Flox Factory build ID.
+///
+/// Server build IDs are positive `i64`. Parsing rejects zero, negative,
+/// non-numeric, and out-of-range values, so a holder only ever carries an ID
+/// the server could have assigned.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct BuildId(i64);
+
+impl From<BuildId> for i64 {
+    fn from(id: BuildId) -> Self {
+        id.0
+    }
+}
+
+/// Rejection of a string that does not name a possible build ID.
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+#[error("Invalid build ID '{0}'; expected a positive integer.")]
+pub struct ParseBuildIdError(String);
+
+impl FromStr for BuildId {
+    type Err = ParseBuildIdError;
+
+    /// Accept only a positive `i64`. Parsing as `i64` first rejects values
+    /// above `i64::MAX` as overflow rather than wrapping them onto the wire.
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.parse::<i64>() {
+            Ok(id) if id >= 1 => Ok(BuildId(id)),
+            _ => Err(ParseBuildIdError(s.to_string())),
+        }
+    }
+}
+
+impl fmt::Display for BuildId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// BuildFilters
+// ---------------------------------------------------------------------------
+
+/// Server-side filters for [`FactoryClientTrait::list_builds`], one field per
+/// query parameter.
+///
+/// Every field holds an already-parsed value: the prefix and system fields are
+/// the generated newtypes, which the schema pins as non-empty, while the status
+/// vocabulary and the `since` instant are parsed at the CLI flag boundary.
+/// Empty collections and `None` mean "no
+/// filter": a default `BuildFilters` requests every build, and the emitted
+/// request omits the filter parameters entirely, so it is byte-identical to an
+/// unfiltered call. The server ORs the values within a field (any match) and
+/// ANDs across fields (all must match).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct BuildFilters {
+    /// Match builds whose effective status is any of these.
+    pub status: Vec<EffectiveBuildStatus>,
+    /// Match builds for any of these systems, compared exactly. The server owns
+    /// the system vocabulary and rejects a name outside it.
+    pub system: Vec<SystemItem>,
+    /// Match builds whose attribute path starts with any of these prefixes.
+    pub attr_path: Vec<AttrPathItem>,
+    /// Match builds whose source commit SHA starts with any of these prefixes.
+    pub source_commit_sha: Vec<SourceCommitShaItem>,
+    /// Restrict to builds created at or after this instant. Resolving a time
+    /// expression to an instant is the caller's job, so every page of one
+    /// listing is evaluated against the same bound.
+    pub since: Option<DateTime<Utc>>,
+}
+
+// ---------------------------------------------------------------------------
 // FactoryClientTrait
 // ---------------------------------------------------------------------------
 
@@ -183,24 +267,24 @@ fn classify_build_error(err: FactoryClientError) -> FactoryClientError {
 /// HTTP types contained within the `floxhub-client` crate.
 #[allow(async_fn_in_trait)]
 pub trait FactoryClientTrait {
-    /// Return all builds across pages, optionally filtered by status.
+    /// Return all builds across pages, narrowed by `filters`.
     async fn list_builds(
         &self,
-        status: Option<&str>,
+        filters: &BuildFilters,
     ) -> Result<ResultsPage<BuildResponse>, FactoryClientError>;
 
-    /// Fetch a single build by its numeric ID.
-    async fn get_build(&self, build_id: i64) -> Result<BuildResponse, FactoryClientError>;
+    /// Fetch a single build by its ID.
+    async fn get_build(&self, build_id: BuildId) -> Result<BuildResponse, FactoryClientError>;
 
-    /// Cancel a single build by its numeric ID (DELETE).
+    /// Cancel a single build by its ID (DELETE).
     ///
     /// Idempotent: a satisfied-intent cancel returns the build with its
     /// effective `status`; the caller reads that field to distinguish a
     /// just-initiated cancellation from an already-terminal build.
-    async fn cancel_build(&self, build_id: i64) -> Result<BuildResponse, FactoryClientError>;
+    async fn cancel_build(&self, build_id: BuildId) -> Result<BuildResponse, FactoryClientError>;
 
     /// Proxy the raw log stream for a build.
-    async fn get_build_logs(&self, build_id: i64) -> Result<ByteStream, FactoryClientError>;
+    async fn get_build_logs(&self, build_id: BuildId) -> Result<ByteStream, FactoryClientError>;
 }
 
 // ---------------------------------------------------------------------------
@@ -210,16 +294,32 @@ pub trait FactoryClientTrait {
 impl FactoryClientTrait for crate::FloxhubClient {
     async fn list_builds(
         &self,
-        status: Option<&str>,
+        filters: &BuildFilters,
     ) -> Result<ResultsPage<BuildResponse>, FactoryClientError> {
+        // Map empty collections to None so an unfiltered call omits the query
+        // parameter entirely. These references are Copy, so the per-page
+        // closure reuses them each call.
+        let status = (!filters.status.is_empty()).then_some(&filters.status);
+        let system = (!filters.system.is_empty()).then_some(&filters.system);
+        let attr_path = (!filters.attr_path.is_empty()).then_some(&filters.attr_path);
+        let source_commit_sha =
+            (!filters.source_commit_sha.is_empty()).then_some(&filters.source_commit_sha);
+        let since = filters.since.as_ref();
+
         let stream = make_depaging_stream(
             |page_number, page_size| async move {
                 let response = self
                     .factory
                     .list_builds_api_v1_factory_builds_get(
-                        Some(page_number as u64),
+                        attr_path,
+                        None,
+                        Some(page_number),
                         NonZeroU64::new(page_size as u64),
+                        since,
+                        None,
+                        source_commit_sha,
                         status,
+                        system,
                     )
                     .await
                     .map_api_error()
@@ -235,13 +335,13 @@ impl FactoryClientTrait for crate::FloxhubClient {
         Ok(ResultsPage { results, count })
     }
 
-    async fn get_build(&self, build_id: i64) -> Result<BuildResponse, FactoryClientError> {
+    async fn get_build(&self, build_id: BuildId) -> Result<BuildResponse, FactoryClientError> {
         // A 404 on this resource-specific endpoint means the build ID does not
         // exist; reclassify it so the `status` verb can report it as such. Other
         // endpoints leave a 404 as the underlying API error.
         Ok(self
             .factory
-            .get_build_api_v1_factory_builds_build_id_get(build_id)
+            .get_build_api_v1_factory_builds_build_id_get(build_id.into())
             .await
             .map_api_error()
             .await
@@ -249,13 +349,13 @@ impl FactoryClientTrait for crate::FloxhubClient {
             .into_inner())
     }
 
-    async fn cancel_build(&self, build_id: i64) -> Result<BuildResponse, FactoryClientError> {
+    async fn cancel_build(&self, build_id: BuildId) -> Result<BuildResponse, FactoryClientError> {
         // The slice's one destructive call. Every HTTP and transport outcome is
         // classified here so the verb can map each to a distinct exit code
         // without re-inspecting raw responses at the call site.
         Ok(self
             .factory
-            .cancel_build_api_v1_factory_builds_build_id_delete(build_id)
+            .cancel_build_api_v1_factory_builds_build_id_delete(build_id.into())
             .await
             .map_api_error()
             .await
@@ -263,14 +363,14 @@ impl FactoryClientTrait for crate::FloxhubClient {
             .into_inner())
     }
 
-    async fn get_build_logs(&self, build_id: i64) -> Result<ByteStream, FactoryClientError> {
+    async fn get_build_logs(&self, build_id: BuildId) -> Result<ByteStream, FactoryClientError> {
         // A 404 on this resource-specific endpoint means there are no logs to
         // serve — the build does not exist, was never dispatched, or its
         // coordinator counterpart is gone. Reclassify it so the caller can say
         // so. Other endpoints leave a 404 as the underlying API error.
         Ok(self
             .factory
-            .get_build_logs_api_v1_factory_builds_build_id_logs_get(build_id)
+            .get_build_logs_api_v1_factory_builds_build_id_logs_get(build_id.into())
             .await
             .map_api_error()
             .await
@@ -295,10 +395,32 @@ pub mod tests {
     use crate::client::test_helpers::client_config;
     use crate::{AccessToken, AuthContext, FloxhubClientConfig, FloxhubMockMode};
 
+    /// A `since` bound, spelled as both the parsed filter value and the query
+    /// param it is expected to reach the wire as. Using one string for both
+    /// pins the serialization the server's `format: date-time` requires.
+    const SINCE: &str = "2026-07-17T12:00:00Z";
+
     /// Build a bearer credential for tests. A personal access token is just a
     /// string, so no JWT construction is needed to test header handling.
     fn make_test_auth(secret: &str) -> AuthContext {
         AuthContext::AccessToken(AccessToken::new(secret.to_string()))
+    }
+
+    #[test]
+    fn build_id_accepts_the_positive_i64_range() {
+        assert_eq!("1".parse::<BuildId>().map(i64::from), Ok(1));
+        assert_eq!(
+            i64::MAX.to_string().parse::<BuildId>().map(i64::from),
+            Ok(i64::MAX)
+        );
+    }
+
+    #[test]
+    fn build_id_rejects_zero_negative_overflow_and_garbage() {
+        assert!("0".parse::<BuildId>().is_err());
+        assert!("-1".parse::<BuildId>().is_err());
+        assert!(u64::MAX.to_string().parse::<BuildId>().is_err());
+        assert!("abc".parse::<BuildId>().is_err());
     }
 
     /// Exercise `list_builds` against a mock server, asserting:
@@ -329,7 +451,7 @@ pub mod tests {
             ..client_config(&server.base_url())
         };
         let client = crate::FloxhubClient::new(config).unwrap();
-        let result = client.list_builds(None).await.unwrap();
+        let result = client.list_builds(&BuildFilters::default()).await.unwrap();
 
         mock.assert();
         assert_eq!(result, ResultsPage {
@@ -338,7 +460,8 @@ pub mod tests {
         });
     }
 
-    /// Verify `list_builds` forwards the `status` filter as a query param.
+    /// Verify `list_builds` forwards each status as a repeated `status` query
+    /// param; the server ORs them.
     #[tokio::test]
     async fn list_builds_forwards_status_filter() {
         let server = MockServer::start_async().await;
@@ -346,7 +469,8 @@ pub mod tests {
         let mock = server.mock(|when, then| {
             when.method("GET")
                 .path("/api/v1/factory/builds")
-                .query_param("status", "running");
+                .query_param("status", "running")
+                .query_param("status", "failed");
             then.status(200).json_body(json!({
                 "builds": [],
                 "page": 0,
@@ -360,7 +484,159 @@ pub mod tests {
             ..client_config(&server.base_url())
         };
         let client = crate::FloxhubClient::new(config).unwrap();
-        let result = client.list_builds(Some("running")).await.unwrap();
+        let filters = BuildFilters {
+            status: vec![EffectiveBuildStatus::Running, EffectiveBuildStatus::Failed],
+            ..Default::default()
+        };
+        let result = client.list_builds(&filters).await.unwrap();
+
+        mock.assert();
+        assert_eq!(result, ResultsPage {
+            results: vec![],
+            count: Some(0),
+        });
+    }
+
+    /// Verify `list_builds` forwards the system, attr_path, source_commit_sha,
+    /// and since filters as query params.
+    #[tokio::test]
+    async fn list_builds_forwards_remaining_filter_params() {
+        let server = MockServer::start_async().await;
+
+        let mock = server.mock(|when, then| {
+            when.method("GET")
+                .path("/api/v1/factory/builds")
+                .query_param("system", "aarch64-darwin")
+                .query_param("attr_path", "hello")
+                .query_param("source_commit_sha", "abc123")
+                .query_param("since", SINCE);
+            then.status(200).json_body(json!({
+                "builds": [],
+                "page": 0,
+                "page_size": 50,
+                "total": 0
+            }));
+        });
+
+        let config = FloxhubClientConfig {
+            base_url: server.base_url(),
+            ..client_config(&server.base_url())
+        };
+        let client = crate::FloxhubClient::new(config).unwrap();
+        let filters = BuildFilters {
+            system: vec!["aarch64-darwin".parse().unwrap()],
+            attr_path: vec!["hello".parse().unwrap()],
+            source_commit_sha: vec!["abc123".parse().unwrap()],
+            since: Some(SINCE.parse().unwrap()),
+            ..Default::default()
+        };
+        let result = client.list_builds(&filters).await.unwrap();
+
+        mock.assert();
+        assert_eq!(result, ResultsPage {
+            results: vec![],
+            count: Some(0),
+        });
+    }
+
+    /// The filters are re-sent on every page, not just the first. The depaging
+    /// loop holds them across iterations, so a change that dropped them after
+    /// page one would return unfiltered builds presented as matches: a wrong
+    /// answer with no error to signal it.
+    #[tokio::test]
+    async fn list_builds_forwards_filters_on_every_page() {
+        let server = MockServer::start_async().await;
+
+        // A full page is what makes the loop ask for a second one, and the
+        // total must exceed one page so it does not stop on the count check.
+        let full_page: Vec<serde_json::Value> = (0..200)
+            .map(|_| valid_build_json(EffectiveBuildStatus::Completed))
+            .collect();
+
+        let page_zero = server.mock(|when, then| {
+            when.method("GET")
+                .path("/api/v1/factory/builds")
+                .query_param("page", "0")
+                .query_param("status", "running")
+                .query_param("system", "aarch64-darwin")
+                .query_param("attr_path", "hello")
+                .query_param("source_commit_sha", "abc123")
+                .query_param("since", SINCE);
+            then.status(200).json_body(json!({
+                "builds": full_page,
+                "page": 0,
+                "page_size": 200,
+                "total": 201
+            }));
+        });
+
+        let page_one = server.mock(|when, then| {
+            when.method("GET")
+                .path("/api/v1/factory/builds")
+                .query_param("page", "1")
+                .query_param("status", "running")
+                .query_param("system", "aarch64-darwin")
+                .query_param("attr_path", "hello")
+                .query_param("source_commit_sha", "abc123")
+                .query_param("since", SINCE);
+            then.status(200).json_body(json!({
+                "builds": [valid_build_json(EffectiveBuildStatus::Completed)],
+                "page": 1,
+                "page_size": 200,
+                "total": 201
+            }));
+        });
+
+        let config = FloxhubClientConfig {
+            base_url: server.base_url(),
+            ..client_config(&server.base_url())
+        };
+        let client = crate::FloxhubClient::new(config).unwrap();
+        let filters = BuildFilters {
+            status: vec![EffectiveBuildStatus::Running],
+            system: vec!["aarch64-darwin".parse().unwrap()],
+            attr_path: vec!["hello".parse().unwrap()],
+            source_commit_sha: vec!["abc123".parse().unwrap()],
+            since: Some(SINCE.parse().unwrap()),
+        };
+        let result = client.list_builds(&filters).await.unwrap();
+
+        // The second mock only matches a request carrying the filters, so both
+        // assertions passing is what proves they survived the page boundary.
+        page_zero.assert();
+        page_one.assert();
+        assert_eq!(result.count, Some(201));
+        assert_eq!(result.results.len(), 201);
+    }
+
+    /// A default (empty) `BuildFilters` sends no filter query params, so the
+    /// request is byte-identical to an unfiltered call.
+    #[tokio::test]
+    async fn list_builds_empty_filters_send_no_filter_params() {
+        let server = MockServer::start_async().await;
+
+        let mock = server.mock(|when, then| {
+            when.method("GET")
+                .path("/api/v1/factory/builds")
+                .query_param_missing("status")
+                .query_param_missing("system")
+                .query_param_missing("attr_path")
+                .query_param_missing("source_commit_sha")
+                .query_param_missing("since");
+            then.status(200).json_body(json!({
+                "builds": [],
+                "page": 0,
+                "page_size": 50,
+                "total": 0
+            }));
+        });
+
+        let config = FloxhubClientConfig {
+            base_url: server.base_url(),
+            ..client_config(&server.base_url())
+        };
+        let client = crate::FloxhubClient::new(config).unwrap();
+        let result = client.list_builds(&BuildFilters::default()).await.unwrap();
 
         mock.assert();
         assert_eq!(result, ResultsPage {
@@ -394,7 +670,7 @@ pub mod tests {
         };
 
         let client = crate::FloxhubClient::new(config).unwrap();
-        let _ = client.list_builds(None).await;
+        let _ = client.list_builds(&BuildFilters::default()).await;
         mock.assert();
     }
 
@@ -544,7 +820,7 @@ pub mod tests {
             ..client_config(&server.base_url())
         };
         let client = crate::FloxhubClient::new(config).unwrap();
-        let err = client.get_build(BUILD_ID).await.unwrap_err();
+        let err = client.get_build(BuildId(BUILD_ID)).await.unwrap_err();
 
         mock.assert();
         assert!(
@@ -568,7 +844,7 @@ pub mod tests {
     /// from the typed `BuildResponse` and serialized so the wire fixture fails
     /// loudly if a required field is added or changed, rather than silently
     /// omitting it and parsing a degenerate body.
-    fn valid_build_json(status: &str) -> serde_json::Value {
+    fn valid_build_json(status: EffectiveBuildStatus) -> serde_json::Value {
         serde_json::to_value(BuildResponse {
             attr_path: "hello".to_string(),
             build_id: BUILD_ID,
@@ -579,7 +855,7 @@ pub mod tests {
             nixpkgs_revision: "deadbeef1234567890deadbeef1234567890dead".to_string(),
             source_commit_sha: "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2".to_string(),
             source_repo_url: "https://github.com/example/repo".to_string(),
-            status: status.to_string(),
+            status,
             system: "x86_64-linux".to_string(),
             task: None,
         })
@@ -604,7 +880,7 @@ pub mod tests {
             ..client_config(&server.base_url())
         };
         let client = crate::FloxhubClient::new(config).unwrap();
-        let result = client.cancel_build(BUILD_ID).await;
+        let result = client.cancel_build(BuildId(BUILD_ID)).await;
 
         mock.assert();
         result
@@ -614,9 +890,10 @@ pub mod tests {
     async fn cancel_build_returns_build_on_200() {
         // A satisfied cancel returns the build; the caller reads the effective
         // `status` to tell a fresh cancellation from an already-terminal build.
-        let build = cancel_build_against_mock(200, valid_build_json("cancelled"))
-            .await
-            .unwrap();
+        let build =
+            cancel_build_against_mock(200, valid_build_json(EffectiveBuildStatus::Cancelled))
+                .await
+                .unwrap();
         let expected = BuildResponse {
             attr_path: "hello".to_string(),
             build_id: BUILD_ID,
@@ -627,7 +904,7 @@ pub mod tests {
             nixpkgs_revision: "deadbeef1234567890deadbeef1234567890dead".to_string(),
             source_commit_sha: "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2".to_string(),
             source_repo_url: "https://github.com/example/repo".to_string(),
-            status: "cancelled".to_string(),
+            status: EffectiveBuildStatus::Cancelled,
             system: "x86_64-linux".to_string(),
             task: None,
         };
@@ -719,7 +996,7 @@ pub mod tests {
             ..client_config("http://127.0.0.1:0")
         };
         let client = crate::FloxhubClient::new(config).unwrap();
-        let err = client.cancel_build(7).await.unwrap_err();
+        let err = client.cancel_build(BuildId(7)).await.unwrap_err();
         assert!(
             matches!(err, FactoryClientError::Transport(_)),
             "expected Transport, got {err:?}"
@@ -745,7 +1022,7 @@ pub mod tests {
         };
         let client = crate::FloxhubClient::new(config).unwrap();
         // `ByteStream` is not `Debug`, so destructure rather than `unwrap_err`.
-        let Err(err) = client.get_build_logs(7).await else {
+        let Err(err) = client.get_build_logs(BuildId(7)).await else {
             panic!("expected an error, got an Ok stream");
         };
 
@@ -772,7 +1049,10 @@ pub mod tests {
             ..client_config(&server.base_url())
         };
         let client = crate::FloxhubClient::new(config).unwrap();
-        let err = client.list_builds(None).await.unwrap_err();
+        let err = client
+            .list_builds(&BuildFilters::default())
+            .await
+            .unwrap_err();
 
         assert!(
             matches!(err, FactoryClientError::APIError(_)),
@@ -819,7 +1099,7 @@ pub mod tests {
                 ..client_config(&server.base_url())
             };
             let client = crate::FloxhubClient::new(config).unwrap();
-            let result = client.list_builds(None).await.unwrap();
+            let result = client.list_builds(&BuildFilters::default()).await.unwrap();
             assert_eq!(result, ResultsPage {
                 results: vec![],
                 count: Some(0),
@@ -843,7 +1123,7 @@ pub mod tests {
                 ..client_config("http://localhost:0")
             };
             let client = crate::FloxhubClient::new(config).unwrap();
-            let result = client.list_builds(None).await.unwrap();
+            let result = client.list_builds(&BuildFilters::default()).await.unwrap();
             assert_eq!(result, ResultsPage {
                 results: vec![],
                 count: Some(0),

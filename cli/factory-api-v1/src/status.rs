@@ -107,6 +107,8 @@ fn unknown_status(s: &str) -> ParseStatusError {
 
 #[cfg(test)]
 mod tests {
+    use strum::IntoEnumIterator;
+
     use super::*;
 
     #[test]
@@ -155,5 +157,31 @@ mod tests {
             "Invalid status 'queued'; valid values are: pending, running, completed, failed, timed_out, cancelled."
         );
         assert!("".parse::<EffectiveBuildStatus>().is_err());
+    }
+
+    /// Pins the known variants to the schema the client is generated from. If
+    /// the server adds or reorders a status, this fails loudly so the enum is
+    /// updated deliberately rather than the new value silently falling into
+    /// `Unknown`.
+    #[test]
+    fn known_matches_openapi_schema() {
+        let spec: serde_json::Value =
+            serde_json::from_str(include_str!("../openapi.json")).unwrap();
+        let schema_values: Vec<String> = spec["components"]["schemas"]["EffectiveBuildStatus"]
+            ["enum"]
+            .as_array()
+            .expect("EffectiveBuildStatus.enum is an array")
+            .iter()
+            .map(|value| {
+                value
+                    .as_str()
+                    .expect("enum value is a string")
+                    .to_string()
+            })
+            .collect();
+        let known: Vec<String> = EffectiveBuildStatus::iter()
+            .map(|status| status.to_string())
+            .collect();
+        assert_eq!(schema_values, known);
     }
 }
