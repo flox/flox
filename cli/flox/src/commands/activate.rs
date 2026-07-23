@@ -449,11 +449,12 @@ impl ActivateOptions {
         subcommand_metric!("activate#version", lockfile_version = lockfile_version);
 
         // The new pipeline drops the legacy `activate#version` pseudo-
-        // subcommand (per spec AC #4) and rides `lockfile_version` on a
-        // real `cli.environment.activate` event instead.
+        // subcommand and rides `lockfile_version` on a real
+        // `cli.environment.activate` event instead.
         if let Err(err) = EventsHub::global().record_event(EventKind::CliEnvironmentActivate(
             CliEnvironmentActivatePayload::new(env_detail_from_concrete(&concrete_environment))
-                .with_lockfile_version(lockfile_version.to_string()),
+                .with_lockfile_version(lockfile_version.to_string())
+                .with_manifest_version(lockfile.manifest_schema_version().to_string()),
         )) {
             debug!(error = %err, "Failed to record v2 event");
         }

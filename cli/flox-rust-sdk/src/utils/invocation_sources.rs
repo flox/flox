@@ -6,7 +6,8 @@ use std::sync::LazyLock;
 /// Each entry: (env_var_name, expected_value_or_none, invocation_source_tag)
 /// Use None for expected_value to check env var presence only
 const INFERENCE_HEURISTICS: &[(&str, Option<&str>, &str)] = &[
-    // CI and containerd contexts
+    // CI and containerd contexts. Consumers derive CI / container
+    // membership from these tags — renaming them changes what they see.
     ("CI", None, "ci"),
     ("FLOX_CONTAINERD", None, "containerd"),
     // Terminal programs

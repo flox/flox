@@ -280,7 +280,14 @@ impl Publish {
         );
         if let Err(err) = EventsHub::global().record_event(EventKind::CliEnvironmentPublish(
             CliEnvironmentPublishPayload::new(env_detail)
-                .with_build_kinds(has_expression_build, has_manifest_build),
+                .with_build_kinds(has_expression_build, has_manifest_build)
+                .with_manifest_version(
+                    publish_provider
+                        .env_metadata
+                        .lockfile
+                        .manifest_schema_version()
+                        .to_string(),
+                ),
         )) {
             debug!(error = %err, "Failed to record v2 event");
         }
