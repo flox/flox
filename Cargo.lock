@@ -1487,6 +1487,7 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
+ "strum",
  "syn 2.0.114",
 ]
 
