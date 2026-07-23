@@ -6,10 +6,8 @@ use std::sync::LazyLock;
 /// Each entry: (env_var_name, expected_value_or_none, invocation_source_tag)
 /// Use None for expected_value to check env var presence only
 const INFERENCE_HEURISTICS: &[(&str, Option<&str>, &str)] = &[
-    // CI and containerd contexts. The "ci" / "containerd" tags are also
-    // matched by literal in `flox-events` to derive the typed payload
-    // booleans — renaming them silently breaks that derivation (guarded
-    // by `detection_tokens_drive_typed_payload_bools` in the flox crate).
+    // CI and containerd contexts. Consumers derive CI / container
+    // membership from these tags — renaming them changes what they see.
     ("CI", None, "ci"),
     ("FLOX_CONTAINERD", None, "containerd"),
     // Terminal programs

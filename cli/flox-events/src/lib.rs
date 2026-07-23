@@ -216,35 +216,11 @@ pub struct CommandPayload {
     empty_flags: Vec<String>,
     /// Tokens describing how this CLI invocation was launched (shell, prompt,
     /// service runner, etc.). Mirrors the legacy `INVOCATION_SOURCES`.
+    /// CI / container membership is derived from these tokens by the
+    /// consumer (a token equal to `"ci"` / `"containerd"` or a
+    /// hierarchical sub-token like `"ci.github-actions"`, matched
+    /// case-insensitively).
     invocation_sources: Vec<String>,
-    /// Whether `invocation_sources` carries the `"ci"` token or a
-    /// hierarchical sub-token of it (e.g. `"ci.github-actions"`).
-    /// Derived in [`SharedMetadataTemplate::into_payload`], so `Some`
-    /// on every emitted row; `None` only when reading back rows
-    /// buffered by binaries that predate the field, and omitted on
-    /// re-serialization so unknown stays unknown.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    in_ci: Option<bool>,
-    /// Whether `invocation_sources` carries the `"containerd"` token
-    /// (the `FLOX_CONTAINERD` marker exported by flox-built container
-    /// images — not generic container detection) or a sub-token of
-    /// it. Same `None` semantics as `in_ci`.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    containerd: Option<bool>,
-}
-
-/// `true` when `sources` carries `root` itself or a hierarchical
-/// sub-token of it (`"ci.github-actions"` counts for `"ci"`;
-/// `"citrus"` does not). ASCII-case-insensitive, because explicit
-/// `FLOX_INVOCATION_SOURCE` tokens arrive verbatim.
-fn has_source_token(sources: &[String], root: &str) -> bool {
-    sources.iter().any(|source| {
-        let Some(prefix) = source.get(..root.len()) else {
-            return false;
-        };
-        prefix.eq_ignore_ascii_case(root)
-            && (source.len() == root.len() || source.as_bytes()[root.len()] == b'.')
-    })
 }
 
 /// Static slice of [`CommandPayload`] that is constant for the duration of
@@ -269,12 +245,11 @@ impl SharedMetadataTemplate {
     /// Merge the stored static fields with the supplied subcommand to produce
     /// a complete [`CommandPayload`] ready for serialization.
     ///
-    /// `kernel_version` and the `in_ci` / `containerd` bools are derived
-    /// here from the template's own fields. This is the only production
-    /// constructor of [`CommandPayload`] (its fields are private), so
-    /// every *emitted* payload agrees with the values it mirrors.
-    /// Deserialization is exempt on purpose: rows buffered by older
-    /// binaries reload with the derived fields absent.
+    /// `kernel_version` is derived here from the template's own fields.
+    /// This is the only production constructor of [`CommandPayload`]
+    /// (its fields are private), so every *emitted* payload agrees with
+    /// the value it mirrors. Deserialization is exempt on purpose: rows
+    /// buffered by older binaries reload with the derived field absent.
     pub fn into_payload(&self, subcommand: String) -> CommandPayload {
         CommandPayload {
             subcommand,
@@ -285,8 +260,6 @@ impl SharedMetadataTemplate {
             os: self.os.clone(),
             os_version: self.os_version.clone(),
             empty_flags: self.empty_flags.clone(),
-            in_ci: Some(has_source_token(&self.invocation_sources, "ci")),
-            containerd: Some(has_source_token(&self.invocation_sources, "containerd")),
             invocation_sources: self.invocation_sources.clone(),
         }
     }
@@ -707,8 +680,6 @@ mod tests {
             os_version: Some("24.04".to_string()),
             empty_flags: vec![],
             invocation_sources: vec!["shell".to_string()],
-            in_ci: Some(false),
-            containerd: Some(false),
         }
     }
 
@@ -723,8 +694,6 @@ mod tests {
             "os_version": "24.04",
             "empty_flags": [],
             "invocation_sources": ["shell"],
-            "in_ci": false,
-            "containerd": false,
         })
     }
 
@@ -886,9 +855,8 @@ mod tests {
         assert_eq!(payload, command_payload("activate"));
     }
 
-    /// Template fixture matching [`command_payload`]'s derived fields:
-    /// `kernel_version` mirrors `os_family_release`, and `["shell"]`
-    /// carries neither detection token.
+    /// Template fixture matching [`command_payload`]'s derived field:
+    /// `kernel_version` mirrors `os_family_release`.
     fn shared_metadata_for_payload_tests() -> SharedMetadataTemplate {
         SharedMetadataTemplate {
             flox_version: "0.0.0-test".to_string(),
@@ -899,30 +867,6 @@ mod tests {
             empty_flags: vec![],
             invocation_sources: vec!["shell".to_string()],
         }
-    }
-
-    /// True-case sibling of the `false`/`false` shape in
-    /// [`command_run_serializes_to_v2_envelope`].
-    #[test]
-    fn command_run_typed_detection_bools_envelope_golden() {
-        let mut payload = command_payload("install");
-        payload.in_ci = Some(true);
-        payload.containerd = Some(true);
-        payload.invocation_sources = vec!["ci".to_string(), "containerd".to_string()];
-        let value = serde_json::to_value(fixed_event(EventKind::CliCommandRun(
-            CliCommandRunPayload::new(payload),
-        )))
-        .expect("event serializes");
-        let mut expected_payload = expected_payload_json("install");
-        let obj = expected_payload.as_object_mut().expect("payload object");
-        obj.insert("in_ci".to_string(), json!(true));
-        obj.insert("containerd".to_string(), json!(true));
-        obj.insert(
-            "invocation_sources".to_string(),
-            json!(["ci", "containerd"]),
-        );
-        let expected = command_run_envelope_json(expected_payload);
-        assert_eq!(value, expected);
     }
 
     /// A `cli.command_run` row buffered by a binary that predates the
@@ -957,55 +901,11 @@ mod tests {
         };
         let mut expected = command_payload("install");
         expected.kernel_version = None;
-        expected.in_ci = None;
-        expected.containerd = None;
         assert_eq!(payload, &CliCommandRunPayload::new(expected));
         // Round trip: the flush path re-serializes buffered rows, and a
         // value the old binary never recorded must stay absent.
         let reserialized = serde_json::to_value(event).expect("event re-serializes");
         assert_eq!(reserialized, old_row);
-    }
-
-    /// The typed bools are derived from the token list when the payload
-    /// is built, counting hierarchical sub-tokens — an explicit
-    /// `"ci.github-actions"` override sets `in_ci` even when the bare
-    /// `"ci"` token is absent, while a lookalike token does not.
-    #[test]
-    fn into_payload_counts_hierarchical_source_tokens() {
-        let mut template = shared_metadata_for_payload_tests();
-        template.invocation_sources = vec!["ci.github-actions".to_string()];
-        let mut expected = command_payload("activate");
-        expected.invocation_sources = vec!["ci.github-actions".to_string()];
-        expected.in_ci = Some(true);
-        assert_eq!(template.into_payload("activate".to_string()), expected);
-
-        template.invocation_sources = vec!["citrus".to_string()];
-        let mut expected = command_payload("activate");
-        expected.invocation_sources = vec!["citrus".to_string()];
-        expected.in_ci = Some(false);
-        assert_eq!(template.into_payload("activate".to_string()), expected);
-
-        // Explicit overrides arrive verbatim; matching is
-        // case-insensitive.
-        template.invocation_sources = vec!["CI.jenkins".to_string()];
-        let mut expected = command_payload("activate");
-        expected.invocation_sources = vec!["CI.jenkins".to_string()];
-        expected.in_ci = Some(true);
-        assert_eq!(template.into_payload("activate".to_string()), expected);
-
-        // Bare exact-match root token.
-        template.invocation_sources = vec!["ci".to_string()];
-        let mut expected = command_payload("activate");
-        expected.invocation_sources = vec!["ci".to_string()];
-        expected.in_ci = Some(true);
-        assert_eq!(template.into_payload("activate".to_string()), expected);
-
-        // The containerd root follows the same hierarchy rule.
-        template.invocation_sources = vec!["containerd.foo".to_string()];
-        let mut expected = command_payload("activate");
-        expected.invocation_sources = vec!["containerd.foo".to_string()];
-        expected.containerd = Some(true);
-        assert_eq!(template.into_payload("activate".to_string()), expected);
     }
 
     /// `kernel_version` is omitted from the wire (not serialized as
