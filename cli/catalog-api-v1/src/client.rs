@@ -377,7 +377,7 @@ manifest packages were built via the traditional flox manifest workflow.*/
     ///    "mycatalog"
     ///  ],
     ///  "type": "string",
-    ///  "pattern": "[a-zA-Z0-9\\-_]{3,64}"
+    ///  "pattern": "^[a-zA-Z0-9\\-_]{3,63}$"
     ///}
     /// ```
     /// </details>
@@ -406,9 +406,9 @@ manifest packages were built via the traditional flox manifest workflow.*/
             value: &str,
         ) -> ::std::result::Result<Self, self::error::ConversionError> {
             static PATTERN: ::std::sync::LazyLock<::regress::Regex> = ::std::sync::LazyLock::new(||
-            { ::regress::Regex::new("[a-zA-Z0-9\\-_]{3,64}").unwrap() });
+            { ::regress::Regex::new("^[a-zA-Z0-9\\-_]{3,63}$").unwrap() });
             if PATTERN.find(value).is_none() {
-                return Err("doesn't match pattern \"[a-zA-Z0-9\\-_]{3,64}\"".into());
+                return Err("doesn't match pattern \"^[a-zA-Z0-9\\-_]{3,63}$\"".into());
             }
             Ok(Self(value.to_string()))
         }
@@ -4687,7 +4687,8 @@ because the two anchors carry different value types.*/
     ///{
     ///  "title": "Search Term",
     ///  "type": "string",
-    ///  "pattern": "[a-zA-Z0-9\\-\\.\\\\@%_,]{2,200}"
+    ///  "maxLength": 200,
+    ///  "minLength": 2
     ///}
     /// ```
     /// </details>
@@ -4715,12 +4716,11 @@ because the two anchors carry different value types.*/
         fn from_str(
             value: &str,
         ) -> ::std::result::Result<Self, self::error::ConversionError> {
-            static PATTERN: ::std::sync::LazyLock<::regress::Regex> = ::std::sync::LazyLock::new(||
-            { ::regress::Regex::new("[a-zA-Z0-9\\-\\.\\\\@%_,]{2,200}").unwrap() });
-            if PATTERN.find(value).is_none() {
-                return Err(
-                    "doesn't match pattern \"[a-zA-Z0-9\\-\\.\\\\@%_,]{2,200}\"".into(),
-                );
+            if value.chars().count() > 200usize {
+                return Err("longer than 200 characters".into());
+            }
+            if value.chars().count() < 2usize {
+                return Err("shorter than 2 characters".into());
             }
             Ok(Self(value.to_string()))
         }
