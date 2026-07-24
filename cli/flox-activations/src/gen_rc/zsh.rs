@@ -5,11 +5,11 @@ use std::path::PathBuf;
 use anyhow::Result;
 use flox_core::activate::context::InvocationType;
 use flox_core::activate::vars::{FLOX_ACTIVATIONS_BIN, FLOX_INVOCATION_TYPES_VAR};
-use flox_core::hook_actions::PROMPT_HOOK_VERSION_ENV;
+use flox_core::hook_actions::{PROMPT_HOOK_VERSION_ENV, prompt_hook_marker_value};
 use indoc::{formatdoc, indoc};
 use shell_gen::{GenerateShell, Shell, set_unexported_unexpanded, source_file};
 
-use crate::attach_diff::todo_drop_unset;
+use crate::attach_diff::{todo_drop_set_exported_unexpanded, todo_drop_unset};
 use crate::gen_rc::{Action, RM, invocation_types_update_stmt};
 
 /// Arguments for generating zsh startup commands
@@ -220,16 +220,33 @@ pub fn generate_zsh_profile_commands(
         },
     }
 
-    // The prompt hook exports `_FLOX_PROMPT_HOOK_VERSION` at registration (see
-    // hook.rs) so a subprocess like `flox deactivate` can detect a compatible
-    // hook. It is set shell-side, so it isn't part of the env-var diff. Only the
-    // outermost deactivate clears it: the prompt hook stays registered while any
-    // activation remains on the stack, so unsetting it on an inner deactivate
-    // would make the next `flox deactivate` wrongly report the hook missing.
-    if let Action::Deactivate(ctx) = action
-        && ctx.restore_diff.is_outermost_deactivate()
-    {
-        stmts.push(todo_drop_unset(PROMPT_HOOK_VERSION_ENV));
+    // The `_FLOX_PROMPT_HOOK_VERSION` marker (`<version>:<installed>`, see
+    // `PROMPT_HOOK_VERSION_ENV` in flox-core). A subshell activation
+    // (`-c` / exec) registers no prompt hook, so it exports
+    // `<version>:false` — deliberately overwriting a `:true` inherited from
+    // an eval-activated parent, whose hook function does not survive into
+    // the subshell. The marker is set shell-side, so it isn't part of the
+    // env-var diff. Only the outermost deactivate clears it: the prompt
+    // hook stays registered while any activation remains on the stack, so
+    // unsetting it on an inner deactivate would make the next
+    // `flox deactivate` wrongly report the hook missing.
+    match action {
+        Action::Activate { args, .. } => {
+            if !matches!(
+                args.invocation_type,
+                InvocationType::Interactive | InvocationType::InPlace
+            ) {
+                stmts.push(todo_drop_set_exported_unexpanded(
+                    PROMPT_HOOK_VERSION_ENV,
+                    prompt_hook_marker_value(false),
+                ));
+            }
+        },
+        Action::Deactivate(ctx) => {
+            if ctx.restore_diff.is_outermost_deactivate() {
+                stmts.push(todo_drop_unset(PROMPT_HOOK_VERSION_ENV));
+            }
+        },
     }
 
     // Source set-prompt.zsh if we're in an interactive shell
@@ -379,7 +396,7 @@ mod tests {
             _FLOX_INVOCATION_TYPES="$('/flox_activations' push-invocation-type --invocation-type interactive --env '{"name":"test_env","type":"path"}' --current "${_FLOX_INVOCATION_TYPES:-}")";
             if [[ -o interactive ]]; then source '/interpreter/activate.d/set-prompt.zsh'; fi;
             /nix/store/XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX-coreutils-9.10/bin/rm /path/to/rc/file;
-            export _FLOX_PROMPT_HOOK_VERSION=1;
+            export _FLOX_PROMPT_HOOK_VERSION=1:true;
             _flox_hook() {
               local _flox_vars;
               _flox_vars="$("/flox" hook-env --shell zsh --shell-pid $$ --invocation-types "${_FLOX_INVOCATION_TYPES:-}")";
@@ -423,7 +440,7 @@ mod tests {
             _FLOX_INVOCATION_TYPES="$('/flox_activations' push-invocation-type --invocation-type inplace --env '{"name":"test_env","type":"path"}' --current "${_FLOX_INVOCATION_TYPES:-}")";
             if [[ -o interactive ]]; then source '/interpreter/activate.d/set-prompt.zsh'; fi;
             /nix/store/XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX-coreutils-9.10/bin/rm /path/to/rc/file;
-            export _FLOX_PROMPT_HOOK_VERSION=1;
+            export _FLOX_PROMPT_HOOK_VERSION=1:true;
             _flox_hook() {
               local _flox_vars;
               _flox_vars="$("/flox" hook-env --shell zsh --shell-pid $$ --invocation-types "${_FLOX_INVOCATION_TYPES:-}")";

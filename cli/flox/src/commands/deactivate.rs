@@ -11,8 +11,9 @@ use flox_core::activations::activation_state_dir_path;
 use flox_core::canonical_path::CanonicalPath;
 use flox_core::hook_actions::{
     HookAction,
-    PROMPT_HOOK_VERSION,
     PROMPT_HOOK_VERSION_ENV,
+    prompt_hook_installed,
+    prompt_hook_version_mismatched,
     write_hook_actions,
 };
 use flox_rust_sdk::flox::Flox;
@@ -157,6 +158,11 @@ impl Deactivate {
             .then_some(remaining_invocation_types);
 
         let target = deactivation_target(&flox, &active);
+        // TODO: if disable_hook = true, we'll error later on when we
+        // find PROMPT_HOOK_VERSION is not set
+        // We'd hit this case if someone has an environment in their RC files, upgrades, and then runs `flox deactivate --in-place ...`
+        // We could maybe figure out a way to handle that case, but because that's hidden, ignore for now
+        let prompt_hook_version = std::env::var(PROMPT_HOOK_VERSION_ENV).ok();
 
         let mut writer = BufWriter::new(stdout());
         emit_deactivate_script(
@@ -166,6 +172,7 @@ impl Deactivate {
             &target.activation_state_dir,
             &target.flox_env,
             flox_activate_tracelevel(),
+            prompt_hook_version.as_deref(),
             None,
             &mut writer,
         )?;
@@ -174,16 +181,15 @@ impl Deactivate {
     }
 }
 
-/// Verify that this shell has a prompt hook able to service a plain
+/// Verify this shell has a prompt hook able to service a plain
 /// `flox deactivate`, returning a descriptive error if not.
 ///
-/// `flox deactivate` records its request in a file the shell's prompt hook reads
-/// on the next prompt; with no compatible hook registered, that file is never
-/// consumed and the command would be a silent no-op. Two ways it can be missing:
-/// - `disable_hook = true` in the config turns the prompt hook off entirely.
-/// - The hook exports [`PROMPT_HOOK_VERSION_ENV`] at activation: an unset value
-///   means no hook is set up (or it predates this marker), and a non-matching
-///   value means it was set up by an incompatible version of Flox.
+/// `flox deactivate` records its request in a file the prompt hook reads on the
+/// next prompt; with no compatible hook, that file is never consumed and the
+/// command is a silent no-op. Three ways it can be missing: `disable_hook =
+/// true` turns the hook off, the [`PROMPT_HOOK_VERSION_ENV`] marker names an
+/// incompatible version, or the marker says no hook is registered in this
+/// shell (unset, or installed=false as in a subshell activation).
 fn ensure_prompt_hook_available(config: &Config) -> Result<()> {
     if config.flox.disable_hook.unwrap_or(false) {
         bail!(formatdoc! {"
@@ -192,20 +198,47 @@ fn ensure_prompt_hook_available(config: &Config) -> Result<()> {
         "});
     }
 
-    match std::env::var(PROMPT_HOOK_VERSION_ENV)
-        .ok()
-        .and_then(|value| value.parse::<u8>().ok())
-    {
-        Some(version) if version == PROMPT_HOOK_VERSION => Ok(()),
-        Some(_) => bail!(formatdoc! {"
+    let prompt_hook_version = std::env::var(PROMPT_HOOK_VERSION_ENV).ok();
+
+    if prompt_hook_version_mismatched(prompt_hook_version.as_deref()) {
+        bail!(formatdoc! {"
             This shell's Flox prompt hook was set up by an incompatible version of Flox.
             Restart your shell to pick up the current version, then deactivate again.
-        "}),
-        None => bail!(formatdoc! {"
+        "});
+    }
+
+    if !prompt_hook_installed(prompt_hook_version.as_deref()) {
+        bail!(formatdoc! {"
             The Flox prompt hook is not set up in this shell, so 'flox deactivate' cannot take effect on the next prompt.
             Restart your shell to activate with the prompt hook, then deactivate again.
-        "}),
+        "});
     }
+
+    Ok(())
+}
+
+/// Verify the version part of `prompt_hook_version` matches the compiled
+/// [`flox_core::hook_actions::PROMPT_HOOK_VERSION`] before
+/// [`emit_deactivate_script`] decodes any diff
+/// the hook produced. The installed part is ignored: a subshell activation's
+/// `<version>:false` marker still names a trustworthy protocol version.
+///
+/// Checked once at the sole chokepoint for diff decoding (see
+/// `emit_deactivate_script`'s docs), so everything downstream — the
+/// nested-layer decode in `flox-activations` and the `DiffSerializer` payload
+/// it decodes — can assume the payload is current. An absent marker (a shell
+/// with no Flox activation machinery, e.g. one set up by an older Flox) and a
+/// mismatched one both mean the diff could be stale or a shape the binary no
+/// longer understands, so both fail the same way.
+fn ensure_prompt_hook_version_current(prompt_hook_version: Option<&str>) -> Result<()> {
+    if prompt_hook_version_mismatched(prompt_hook_version) || prompt_hook_version.is_none() {
+        bail!(formatdoc! {"
+            This shell's Flox prompt hook is out of sync with the running Flox.
+            Restart your shell to pick up the current version, then try again.
+        "});
+    }
+
+    Ok(())
 }
 
 /// The data needed to deactivate the front-of-stack active environment.
@@ -321,7 +354,13 @@ pub(crate) fn flox_activate_tracelevel() -> u32 {
 
 /// Emit a deactivation script for `invocation_kind` to `writer`.
 ///
-/// Shared by `flox deactivate --print-script` and `flox hook-env`.
+/// Shared by `flox deactivate --print-script` and `flox hook-env`, and the
+/// sole chokepoint for diff decoding: the only caller of
+/// `generate_deactivate_script[_with_diff]` in `flox-activations`. It first
+/// checks `prompt_hook_version` via [`ensure_prompt_hook_version_current`], so
+/// decoding below — the nested-layer decode and the `DiffSerializer` payload
+/// itself — can assume the diff is current.
+///
 /// `invocation_kind` is the invocation-type stack entry for the layer being
 /// popped — the entry the eval'ing shell pushed when it activated that layer:
 /// - `Some(Interactive)` → an exit (the subshell exits and the executive
@@ -352,6 +391,10 @@ pub(crate) fn flox_activate_tracelevel() -> u32 {
 /// front of the stack from this process's `_FLOX_HOOK_DIFF`; `Some` restores
 /// an explicitly provided diff, which is how the prompt hook pops several
 /// stacked layers in one run (see `embedded_hook_diff`).
+///
+/// `prompt_hook_version` is the caller's exported [`PROMPT_HOOK_VERSION_ENV`],
+/// read once at the boundary and threaded in (like `flox_activate_tracelevel`)
+/// so this function never reads the process environment.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn emit_deactivate_script(
     shell: ShellWithPath,
@@ -360,9 +403,14 @@ pub(crate) fn emit_deactivate_script(
     activation_state_dir: &Path,
     flox_env: &Path,
     flox_activate_tracelevel: u32,
+    prompt_hook_version: Option<&str>,
     encoded_diff: Option<&str>,
     writer: &mut impl Write,
 ) -> Result<()> {
+    // TODO: we error high up in handle() for hook-env and activate, should we
+    // do the same in deactivate for consistency?
+    ensure_prompt_hook_version_current(prompt_hook_version)?;
+
     match invocation_kind {
         Some(InvocationKind::Interactive) => {
             debug!("triggering exit for interactive deactivation");
@@ -422,11 +470,18 @@ mod tests {
         state_json_path,
         write_activations_json,
     };
+    use flox_core::hook_actions::prompt_hook_marker_value;
     use flox_rust_sdk::flox::test_helpers::flox_instance;
     use flox_rust_sdk::models::environment::generations::GenerationId;
     use flox_rust_sdk::models::environment::{EnvironmentPointer, ManagedPointer, PathPointer};
 
     use super::*;
+
+    /// The marker as the shell hook would export it, passed to
+    /// [`emit_deactivate_script`] so its version guard sees a compatible hook.
+    fn current_prompt_hook_version() -> String {
+        prompt_hook_marker_value(true)
+    }
 
     fn interactive_deactivate_script(shell: ShellWithPath) -> String {
         let mut buf = Vec::new();
@@ -437,6 +492,7 @@ mod tests {
             Path::new("/activation_state_dir"),
             Path::new("/flox_env"),
             0,
+            Some(&current_prompt_hook_version()),
             None,
             &mut buf,
         )
@@ -463,6 +519,7 @@ mod tests {
             Path::new("/activation_state_dir"),
             Path::new("/flox_env"),
             0,
+            Some(&current_prompt_hook_version()),
             Some(&encoded_diff),
             &mut buf,
         )

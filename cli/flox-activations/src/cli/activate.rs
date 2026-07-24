@@ -2,7 +2,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
-use anyhow::Result;
+use anyhow::{Result, bail};
 use clap::Args;
 use flox_core::activate::context::{ActivateCtx, InvocationType};
 use flox_core::activations::{
@@ -14,6 +14,7 @@ use flox_core::activations::{
     state_json_path,
     write_activations_json,
 };
+use flox_core::hook_actions::{PROMPT_HOOK_VERSION_ENV, prompt_hook_version_mismatched};
 use indoc::formatdoc;
 use tracing::debug;
 
@@ -92,6 +93,8 @@ impl ActivateArgs {
 
         // Unset FLOX_SHELL to detect the parent shell anew with each flox invocation.
         unsafe { std::env::remove_var("FLOX_SHELL") };
+
+        ensure_prompt_hook_version_compatible_for_activate()?;
 
         let start_id = self.start_or_attach(
             &context,
@@ -250,4 +253,30 @@ impl ActivateArgs {
             },
         }
     }
+}
+
+/// Fail closed rather than silently overwrite `_FLOX_PROMPT_HOOK_VERSION`:
+/// stacking an activation from a different Flox version on top of a shell
+/// that already carries the marker would otherwise build a shell whose
+/// activation layers speak two versions of the hook/diff protocol.
+///
+/// An unset marker (fresh shell) or one whose version part matches are both
+/// safe to proceed on; only a marker that is set with a different version
+/// means this shell was set up by another version of Flox.
+///
+/// This is a backstop for invocations that don't go through the flox binary
+/// (e.g. container entrypoints). User-driven activations hit the flox crate's
+/// twin first, which also names the active environments in its error; that
+/// detail comes from `_FLOX_ACTIVE_ENVIRONMENTS` helpers this crate cannot
+/// depend on, so the error here stays terse.
+fn ensure_prompt_hook_version_compatible_for_activate() -> Result<()> {
+    let prompt_hook_version = std::env::var(PROMPT_HOOK_VERSION_ENV).ok();
+    if prompt_hook_version_mismatched(prompt_hook_version.as_deref()) {
+        bail!(formatdoc! {"
+            This shell has activated environments from an incompatible version of Flox.
+            Restart your shell, then activate again.
+        "});
+    }
+
+    Ok(())
 }

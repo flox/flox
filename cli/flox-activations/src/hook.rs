@@ -21,20 +21,21 @@
 //! `flox-activations detach` for layers this shell never attached to.
 //!
 //! Each hook also exports [`PROMPT_HOOK_VERSION_ENV`] =
-//! [`PROMPT_HOOK_VERSION`] at registration time (top level, so it is set
-//! before the first prompt). It is exported, unlike `_FLOX_INVOCATION_TYPES`,
-//! so a subprocess such as `flox deactivate` can confirm a compatible hook is
-//! set up before writing an action file the hook would otherwise never
-//! consume.
+//! `<version>:true` at registration time (top level, so it is set before the
+//! first prompt); subshell activations export `<version>:false` instead (see
+//! `gen_rc`). It is exported, unlike `_FLOX_INVOCATION_TYPES`, so a
+//! subprocess such as `flox deactivate` can confirm a compatible hook is set
+//! up before writing an action file the hook would otherwise never consume.
 
 use flox_core::activate::vars::{FLOX_INVOCATION_TYPES_VAR, FLOX_INVOCATION_TYPES_WIRE_VAR};
-use flox_core::hook_actions::{PROMPT_HOOK_VERSION, PROMPT_HOOK_VERSION_ENV};
+use flox_core::hook_actions::{PROMPT_HOOK_VERSION_ENV, prompt_hook_marker_value};
 use indoc::formatdoc;
 
 pub fn bash_hook(flox_bin: &str) -> String {
+    let marker = prompt_hook_marker_value(true);
     formatdoc!(
         r#"
-        export {PROMPT_HOOK_VERSION_ENV}={PROMPT_HOOK_VERSION};
+        export {PROMPT_HOOK_VERSION_ENV}={marker};
         _flox_hook() {{
           local _prev_exit=$?;
           local _flox_vars;
@@ -58,9 +59,10 @@ pub fn bash_hook(flox_bin: &str) -> String {
 // Unlike bash, zsh restores $? before calling each precmd function
 // independently, so we don't need to save/restore it ourselves.
 pub fn zsh_hook(flox_bin: &str) -> String {
+    let marker = prompt_hook_marker_value(true);
     formatdoc!(
         r#"
-        export {PROMPT_HOOK_VERSION_ENV}={PROMPT_HOOK_VERSION};
+        export {PROMPT_HOOK_VERSION_ENV}={marker};
         _flox_hook() {{
           local _flox_vars;
           _flox_vars="$("{flox_bin}" hook-env --shell zsh --shell-pid $$ --invocation-types "${{{FLOX_INVOCATION_TYPES_VAR}:-}}")";
@@ -108,9 +110,10 @@ pub fn fish_hook(flox_bin: &str) -> String {
     //   - eval_after_arrow: PWD hook sets a flag; evaluation is deferred
     //     until before the next command executes (fish_preexec).
     //   - disable_arrow: no PWD reaction; only prompt-based evaluation.
+    let marker = prompt_hook_marker_value(true);
     formatdoc!(
         r#"
-        set -gx {PROMPT_HOOK_VERSION_ENV} {PROMPT_HOOK_VERSION};
+        set -gx {PROMPT_HOOK_VERSION_ENV} {marker};
         function _flox_hook --on-event fish_prompt;
             eval ("{flox_bin}" hook-env --shell fish --shell-pid $fish_pid --invocation-types "${FLOX_INVOCATION_TYPES_VAR}" | string collect);
             if test "$FLOX_AUTO_ACTIVATE_FISH_MODE" != "disable_arrow";
@@ -180,9 +183,10 @@ pub fn tcsh_hook(flox_bin: &str) -> String {
         "if ( $?_flox_exit ) exit".to_string(),
     ]
     .join("; ");
+    let marker = prompt_hook_marker_value(true);
     formatdoc!(
         r#"
-        setenv {PROMPT_HOOK_VERSION_ENV} {PROMPT_HOOK_VERSION};
+        setenv {PROMPT_HOOK_VERSION_ENV} {marker};
         alias precmd '{hook}';
         alias cwdcmd '{hook}';
         "#
