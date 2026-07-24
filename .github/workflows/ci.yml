@@ -75,10 +75,10 @@ jobs:
         uses: "./.github/actions/common-setup"
         with:
           GITHUB_ACCESS_TOKEN: "${{ secrets.MANAGED_FLOXBOT_GITHUB_ACCESS_TOKEN_REPO_SCOPE }}"
-          SUBSTITUTER: "${{ vars.MANAGED_CACHE_PUBLIC_S3_BUCKET }}"
+          SUBSTITUTER: "${{ vars.MANAGED_CACHE_PUBLIC_R2_BUCKET }}"
           SUBSTITUTER_KEY: "${{ secrets.MANAGED_CACHE_PUBLIC_SECRET_KEY }}"
-          AWS_ACCESS_KEY_ID: "${{ secrets.MANAGED_CACHE_PUBLIC_AWS_ACCESS_KEY_ID }}"
-          AWS_SECRET_ACCESS_KEY: "${{ secrets.MANAGED_CACHE_PUBLIC_AWS_SECRET_ACCESS_KEY }}"
+          AWS_ACCESS_KEY_ID: "${{ secrets.MANAGED_CACHE_PUBLIC_R2_ACCESS_KEY_ID }}"
+          AWS_SECRET_ACCESS_KEY: "${{ secrets.MANAGED_CACHE_PUBLIC_R2_SECRET_ACCESS_KEY }}"
           SSH_KEY: "${{ secrets.MANAGED_FLOXBOT_SSH_KEY }}"
 
       - name: "Build"
@@ -111,10 +111,10 @@ jobs:
         uses: "./.github/actions/common-setup"
         with:
           GITHUB_ACCESS_TOKEN: "${{ secrets.MANAGED_FLOXBOT_GITHUB_ACCESS_TOKEN_REPO_SCOPE }}"
-          SUBSTITUTER: "${{ vars.MANAGED_CACHE_PUBLIC_S3_BUCKET }}"
+          SUBSTITUTER: "${{ vars.MANAGED_CACHE_PUBLIC_R2_BUCKET }}"
           SUBSTITUTER_KEY: "${{ secrets.MANAGED_CACHE_PUBLIC_SECRET_KEY }}"
-          AWS_ACCESS_KEY_ID: "${{ secrets.MANAGED_CACHE_PUBLIC_AWS_ACCESS_KEY_ID }}"
-          AWS_SECRET_ACCESS_KEY: "${{ secrets.MANAGED_CACHE_PUBLIC_AWS_SECRET_ACCESS_KEY }}"
+          AWS_ACCESS_KEY_ID: "${{ secrets.MANAGED_CACHE_PUBLIC_R2_ACCESS_KEY_ID }}"
+          AWS_SECRET_ACCESS_KEY: "${{ secrets.MANAGED_CACHE_PUBLIC_R2_SECRET_ACCESS_KEY }}"
           SSH_KEY: "${{ secrets.MANAGED_FLOXBOT_SSH_KEY }}"
 
       - name: "Test NEF"
@@ -154,10 +154,10 @@ jobs:
         uses: "./.github/actions/common-setup"
         with:
           GITHUB_ACCESS_TOKEN: "${{ secrets.MANAGED_FLOXBOT_GITHUB_ACCESS_TOKEN_REPO_SCOPE }}"
-          SUBSTITUTER: "${{ vars.MANAGED_CACHE_PUBLIC_S3_BUCKET }}"
+          SUBSTITUTER: "${{ vars.MANAGED_CACHE_PUBLIC_R2_BUCKET }}"
           SUBSTITUTER_KEY: "${{ secrets.MANAGED_CACHE_PUBLIC_SECRET_KEY }}"
-          AWS_ACCESS_KEY_ID: "${{ secrets.MANAGED_CACHE_PUBLIC_AWS_ACCESS_KEY_ID }}"
-          AWS_SECRET_ACCESS_KEY: "${{ secrets.MANAGED_CACHE_PUBLIC_AWS_SECRET_ACCESS_KEY }}"
+          AWS_ACCESS_KEY_ID: "${{ secrets.MANAGED_CACHE_PUBLIC_R2_ACCESS_KEY_ID }}"
+          AWS_SECRET_ACCESS_KEY: "${{ secrets.MANAGED_CACHE_PUBLIC_R2_SECRET_ACCESS_KEY }}"
           SSH_KEY: "${{ secrets.MANAGED_FLOXBOT_SSH_KEY }}"
 
       - name: "Cache Cargo"
@@ -240,10 +240,10 @@ jobs:
         uses: "./.github/actions/common-setup"
         with:
           GITHUB_ACCESS_TOKEN: "${{ secrets.MANAGED_FLOXBOT_GITHUB_ACCESS_TOKEN_REPO_SCOPE }}"
-          SUBSTITUTER: "${{ vars.MANAGED_CACHE_PUBLIC_S3_BUCKET }}"
+          SUBSTITUTER: "${{ vars.MANAGED_CACHE_PUBLIC_R2_BUCKET }}"
           SUBSTITUTER_KEY: "${{ secrets.MANAGED_CACHE_PUBLIC_SECRET_KEY }}"
-          AWS_ACCESS_KEY_ID: "${{ secrets.MANAGED_CACHE_PUBLIC_AWS_ACCESS_KEY_ID }}"
-          AWS_SECRET_ACCESS_KEY: "${{ secrets.MANAGED_CACHE_PUBLIC_AWS_SECRET_ACCESS_KEY }}"
+          AWS_ACCESS_KEY_ID: "${{ secrets.MANAGED_CACHE_PUBLIC_R2_ACCESS_KEY_ID }}"
+          AWS_SECRET_ACCESS_KEY: "${{ secrets.MANAGED_CACHE_PUBLIC_R2_SECRET_ACCESS_KEY }}"
           SSH_KEY: "${{ secrets.MANAGED_FLOXBOT_SSH_KEY }}"
           TAILSCALE_URL: "${{ vars.MANAGED_TAILSCALE_URL }}"
           TAILSCALE_AUTH_KEY: "${{ secrets.MANAGED_TAILSCALE_AUTH_KEY }}"
@@ -264,7 +264,7 @@ jobs:
         id: "build"
         env:
           NIX_SUBSTITUTER: "${{ vars.MANAGED_CACHE_PUBLIC_S3_BUCKET }}"
-          NIX_SUBSTITUTER_KEY: ${{ secrets.MANAGED_CACHE_PUBLIC_SECRET_KEY }}"
+          NIX_SUBSTITUTER_KEY: "${{ secrets.MANAGED_CACHE_PUBLIC_SECRET_KEY }}"
         run: |
           export AWS_ACCESS_KEY_ID
           export AWS_SECRET_ACCESS_KEY
@@ -422,10 +422,10 @@ jobs:
         uses: "./.github/actions/common-setup"
         with:
           GITHUB_ACCESS_TOKEN: "${{ secrets.MANAGED_FLOXBOT_GITHUB_ACCESS_TOKEN_REPO_SCOPE }}"
-          SUBSTITUTER: "${{    vars.MANAGED_CACHE_PUBLIC_S3_BUCKET }}"
+          SUBSTITUTER: "${{ vars.MANAGED_CACHE_PUBLIC_R2_BUCKET }}"
           SUBSTITUTER_KEY: "${{ secrets.MANAGED_CACHE_PUBLIC_SECRET_KEY }}"
-          AWS_ACCESS_KEY_ID: "${{ secrets.MANAGED_CACHE_PUBLIC_AWS_ACCESS_KEY_ID }}"
-          AWS_SECRET_ACCESS_KEY: "${{ secrets.MANAGED_CACHE_PUBLIC_AWS_SECRET_ACCESS_KEY }}"
+          AWS_ACCESS_KEY_ID: "${{ secrets.MANAGED_CACHE_PUBLIC_R2_ACCESS_KEY_ID }}"
+          AWS_SECRET_ACCESS_KEY: "${{ secrets.MANAGED_CACHE_PUBLIC_R2_SECRET_ACCESS_KEY }}"
           SSH_KEY: "${{ secrets.MANAGED_FLOXBOT_SSH_KEY }}"
           TAILSCALE_URL: "${{ vars.MANAGED_TAILSCALE_URL }}"
           TAILSCALE_AUTH_KEY: "${{ secrets.MANAGED_TAILSCALE_AUTH_KEY }}"

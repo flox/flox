@@ -6,7 +6,10 @@
 {
   description = "flox - Harness the power of Nix";
 
-  nixConfig.extra-substituters = [ "https://cache.flox.dev" ];
+  # cache.flox.dev advertises no priority and would otherwise rank above
+  # cache.nixos.org (priority 40) for every path both caches carry.
+  # priority=50 restricts it to the paths only it serves: flox closures.
+  nixConfig.extra-substituters = [ "https://cache.flox.dev?priority=50" ];
   nixConfig.extra-trusted-public-keys = [
     "flox-cache-public-1:7F4OyH7ZCnFhcze3fJdfyXYLQw/aV7GEed86nQ7IsOs="
   ];
