@@ -136,6 +136,8 @@ pub enum EventKind {
     CliPackageUninstall(CliPackagePayload),
     #[serde(rename = "cli.environment.containerize")]
     CliEnvironmentContainerize(CliEnvironmentPayload),
+    #[serde(rename = "cli.environment.create")]
+    CliEnvironmentCreate(CliEnvironmentPayload),
     #[serde(rename = "cli.environment.delete")]
     CliEnvironmentDelete(CliEnvironmentPayload),
     #[serde(rename = "cli.environment.edit")]
@@ -1019,6 +1021,30 @@ mod tests {
             "env_kind": "path",
             "env_ref_or_name": "myenv",
         }));
+        assert_eq!(value, expected);
+    }
+
+    #[test]
+    fn cli_environment_create_envelope_golden() {
+        let environment_id = Uuid::from_u128(0x11111111_1111_1111_1111_111111111111);
+        let detail = env_detail("path", "myenv").with_environment_id(environment_id);
+        let payload = CliEnvironmentPayload::new(detail);
+        let value = serde_json::to_value(fixed_event(EventKind::CliEnvironmentCreate(payload)))
+            .expect("event serializes");
+        let payload_json = json!({
+            "env_kind": "path",
+            "env_ref_or_name": "myenv",
+            "environment_id": "11111111-1111-1111-1111-111111111111",
+        });
+        let expected = json!({
+            "event_id": "00000000-0000-0000-0000-000000000000",
+            "event_timestamp": EPOCH_UNIX_MS,
+            "source": "cli",
+            "invocation_id": "00000000-0000-0000-0000-000000000000",
+            "device_id": "00000000-0000-0000-0000-000000000000",
+            "event_type": "cli.environment.create",
+            "payload": payload_json,
+        });
         assert_eq!(value, expected);
     }
 

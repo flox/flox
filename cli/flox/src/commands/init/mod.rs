@@ -6,6 +6,7 @@ use anyhow::{Context, Result, anyhow, bail};
 use bpaf::Bpaf;
 use flox_core::activate::mode::ActivateMode;
 use flox_core::data::environment_ref::{DEFAULT_NAME, EnvironmentName, RemoteEnvironmentRef};
+use flox_events::{CliEnvironmentPayload, EventKind, EventsHub};
 use flox_manifest::raw::{CatalogPackage, PackageToInstall};
 use flox_rust_sdk::data::AttrPath;
 use flox_rust_sdk::flox::Flox;
@@ -23,7 +24,7 @@ use tracing::{debug, info_span, instrument};
 use crate::commands::{SHELL_COMPLETION_DIR, ensure_auth, environment_description};
 use crate::subcommand_metric;
 use crate::utils::dialog::Dialog;
-use crate::utils::events::new_environment_pointer_id;
+use crate::utils::events::{env_detail_from_concrete, new_environment_pointer_id};
 use crate::utils::message;
 
 mod go;
@@ -242,6 +243,13 @@ async fn init_local_environment(
         PathEnvironment::init(path_pointer, dir, &customization, flox)?
     };
 
+    let env = ConcreteEnvironment::Path(env);
+    if let Err(err) = EventsHub::global().record_event(EventKind::CliEnvironmentCreate(
+        CliEnvironmentPayload::new(env_detail_from_concrete(flox, &env)),
+    )) {
+        debug!(error = %err, "Failed to record v2 event");
+    }
+
     let env_in_git_repo = GitCommandProvider::discover(dir).is_ok();
 
     message::created(format!(
@@ -250,7 +258,7 @@ async fn init_local_environment(
         system = flox.system
     ));
     if let Some(packages) = customization.packages {
-        let description = environment_description(&ConcreteEnvironment::Path(env))?;
+        let description = environment_description(&env)?;
         for package in packages {
             message::package_installed(&PackageToInstall::Catalog(package), &description);
         }
@@ -288,7 +296,16 @@ fn init_floxhub_environment_decorated(
     env_ref: RemoteEnvironmentRef,
     bare: bool,
 ) -> Result<()> {
-    RemoteEnvironment::init_floxhub_environment(flox, env_ref.clone(), bare)?;
+    let env = ConcreteEnvironment::Remote(RemoteEnvironment::init_floxhub_environment(
+        flox,
+        env_ref.clone(),
+        bare,
+    )?);
+    if let Err(err) = EventsHub::global().record_event(EventKind::CliEnvironmentCreate(
+        CliEnvironmentPayload::new(env_detail_from_concrete(flox, &env)),
+    )) {
+        debug!(error = %err, "Failed to record v2 event");
+    }
     message::created(format!("Created environment '{env_ref}'"));
     message::plain(formatdoc! {"
 
@@ -704,6 +721,7 @@ mod tests {
     use flox_rust_sdk::utils::logging::test_helpers::test_subscriber_message_only;
     use indoc::indoc;
     use pretty_assertions::assert_eq;
+    use serial_test::serial;
 
     use super::*;
 
@@ -953,6 +971,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(global_events_client)]
     fn init_floxhub_environment_initializes_and_prints_message() {
         let owner = EnvironmentOwner::from_str("test").unwrap();
         let name = EnvironmentName::from_str("foo").unwrap();
