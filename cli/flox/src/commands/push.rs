@@ -64,6 +64,7 @@ impl Push {
             let pointer = ManagedPointer::new(
                 env_ref.owner().clone(),
                 env_ref.name().clone(),
+                None,
                 &flox.floxhub,
             );
 
@@ -86,7 +87,7 @@ impl Push {
         environment_subcommand_metric!("push", env);
 
         if let Err(err) = EventsHub::global().record_event(EventKind::CliEnvironmentPush(
-            CliEnvironmentPayload::new(env_detail_from_concrete(&env)),
+            CliEnvironmentPayload::new(env_detail_from_concrete(&flox, &env)),
         )) {
             debug!(error = %err, "Failed to record v2 event");
         }
@@ -135,7 +136,7 @@ async fn handle_path_environment_push(
         )?
     };
 
-    let pointer = ManagedPointer::new(owner.clone(), path_environment.name(), &flox.floxhub);
+    let pointer = ManagedPointer::new(owner.clone(), path_environment.name(), None, &flox.floxhub);
 
     let managed_environment =
         ManagedEnvironment::push_new(flox, path_environment, owner, force, false)
@@ -454,7 +455,8 @@ mod tests {
         env.push(&flox, false).unwrap();
 
         // Now open it as a remote environment (this will cache it)
-        let pointer = ManagedPointer::new(owner.clone(), name.parse().unwrap(), &flox.floxhub);
+        let pointer =
+            ManagedPointer::new(owner.clone(), name.parse().unwrap(), None, &flox.floxhub);
         let mut remote_env = RemoteEnvironment::new(&flox, pointer, None).unwrap();
 
         // Make changes to the cached remote environment
@@ -509,7 +511,8 @@ mod tests {
         env.push(&flox, false).unwrap();
 
         // Now open it as a remote environment (this will cache it)
-        let pointer = ManagedPointer::new(owner.clone(), name.parse().unwrap(), &flox.floxhub);
+        let pointer =
+            ManagedPointer::new(owner.clone(), name.parse().unwrap(), None, &flox.floxhub);
         let remote_env = RemoteEnvironment::new(&flox, pointer, None).unwrap();
 
         // Push the remote environment without making changes using -r

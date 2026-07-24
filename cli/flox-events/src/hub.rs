@@ -36,16 +36,22 @@ impl EventsHub {
 
     pub fn set_client(&self, new_client: EventsClient) -> Option<EventsClient> {
         self.completed_recorded.store(false, Ordering::SeqCst);
-        self.with_client(|client| client.replace(new_client))
+        self.lock_client(|client| client.replace(new_client))
     }
 
     pub fn clear_client(&self) -> Option<EventsClient> {
         self.completed_recorded.store(false, Ordering::SeqCst);
-        self.with_client(Option::take)
+        self.lock_client(Option::take)
+    }
+
+    /// Run `f` only when a client is installed — for work that only feeds
+    /// event payloads and would otherwise be wasted.
+    pub fn with_client<T>(&self, f: impl FnOnce() -> T) -> Option<T> {
+        self.lock_client(|client| client.is_some()).then(f)
     }
 
     pub fn flush(&self, force: bool) -> Result<()> {
-        self.with_client(|client| {
+        self.lock_client(|client| {
             if let Some(client) = client {
                 client.flush(force)
             } else {
@@ -56,7 +62,7 @@ impl EventsHub {
     }
 
     pub fn record_event(&self, kind: EventKind) -> Result<()> {
-        self.with_client(|client| {
+        self.lock_client(|client| {
             let Some(client) = client else {
                 trace!("No v2 events client configured, skipping record");
                 return Ok(());
@@ -69,7 +75,7 @@ impl EventsHub {
     /// Record a `cli.command_run` event for `subcommand`. No-op when no
     /// client is installed.
     pub fn record_command_run(&self, subcommand: String) -> Result<()> {
-        self.with_client(|client| {
+        self.lock_client(|client| {
             let Some(client) = client else {
                 trace!("No v2 events client configured, skipping command_run record");
                 return Ok(());
@@ -91,7 +97,7 @@ impl EventsHub {
             debug!("command_completed already recorded for this client install, skipping");
             return Ok(());
         }
-        self.with_client(|client| {
+        self.lock_client(|client| {
             let Some(client) = client else {
                 trace!("No v2 events client configured, skipping command_completed record");
                 return Ok(());
@@ -115,7 +121,7 @@ impl EventsHub {
         Ok(EventsGuard::from_hub(self.clone()))
     }
 
-    fn with_client<T>(&self, f: impl FnOnce(&mut Option<EventsClient>) -> T) -> T {
+    fn lock_client<T>(&self, f: impl FnOnce(&mut Option<EventsClient>) -> T) -> T {
         let mut client = self
             .client
             .lock()

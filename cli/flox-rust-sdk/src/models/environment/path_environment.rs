@@ -649,6 +649,7 @@ pub mod test_helpers {
                 .unwrap()
                 .parse()
                 .unwrap(),
+            None,
         );
         let manifest = Manifest::parse_toml_typed(contents).unwrap();
         PathEnvironment::write_new_unchecked(flox, pointer, path, &manifest.as_writable()).unwrap()
@@ -660,7 +661,7 @@ pub mod test_helpers {
         path: impl AsRef<Path>,
         name: &str,
     ) -> PathEnvironment {
-        let pointer = PathPointer::new(name.parse().unwrap());
+        let pointer = PathPointer::new(name.parse().unwrap(), None);
         let manifest = Manifest::parse_toml_typed(contents).unwrap();
         PathEnvironment::write_new_unchecked(flox, pointer, path, &manifest.as_writable()).unwrap()
     }
@@ -720,6 +721,7 @@ pub mod test_helpers {
             })
             .parse()
             .unwrap(),
+            None,
         );
         PathEnvironment::write_new_unchecked(
             flox,
@@ -805,11 +807,45 @@ pub mod tests {
         })
     }
 
+    /// Renaming rewrites `env.json` and must keep the pointer id, and
+    /// merely opening an id-less environment must not modify `env.json`.
+    #[test]
+    fn rename_preserves_pointer_id_and_open_does_not_backfill() {
+        let (flox, temp_dir) = flox_instance();
+        let environment_temp_dir = tempfile::tempdir_in(&temp_dir).unwrap();
+        let id = uuid::Uuid::new_v4();
+        let mut pointer = PathPointer::new("test".parse().unwrap(), None);
+        pointer.id = Some(id);
+
+        let mut env = PathEnvironment::init(
+            pointer,
+            environment_temp_dir.path(),
+            &InitCustomization::default(),
+            &flox,
+        )
+        .unwrap();
+        let pointer_path = env.path.join(ENVIRONMENT_POINTER_FILENAME);
+
+        env.rename("renamed".parse().unwrap()).unwrap();
+        let written: PathPointer =
+            serde_json::from_str(&fs::read_to_string(&pointer_path).unwrap()).unwrap();
+        assert_eq!(written.id, Some(id));
+        assert_eq!(written.name.to_string(), "renamed");
+
+        // An environment written without an id (an older binary's output)
+        // stays untouched by read paths.
+        fs::write(&pointer_path, r#"{"name": "renamed", "version": 1}"#).unwrap();
+        let before = fs::read_to_string(&pointer_path).unwrap();
+        let opened = DotFlox::open_in(environment_temp_dir.path()).unwrap();
+        assert_eq!(opened.pointer.name().to_string(), "renamed");
+        assert_eq!(fs::read_to_string(&pointer_path).unwrap(), before);
+    }
+
     #[test]
     fn create_env() {
         let (flox, temp_dir) = flox_instance();
         let environment_temp_dir = tempfile::tempdir_in(&temp_dir).unwrap();
-        let pointer = PathPointer::new("test".parse().unwrap());
+        let pointer = PathPointer::new("test".parse().unwrap(), None);
 
         let actual = PathEnvironment::init(
             pointer,
@@ -820,7 +856,7 @@ pub mod tests {
         .unwrap();
 
         let expected = PathEnvironment::new(
-            PathPointer::new("test".parse().unwrap()),
+            PathPointer::new("test".parse().unwrap(), None),
             CanonicalPath::new(environment_temp_dir.path().join(DOT_FLOX)).unwrap(),
             &flox.system,
         )
@@ -845,7 +881,7 @@ pub mod tests {
         let (flox, temp_dir) = flox_instance();
 
         let environment_temp_dir = tempfile::tempdir_in(&temp_dir).unwrap();
-        let pointer = PathPointer::new("test".parse().unwrap());
+        let pointer = PathPointer::new("test".parse().unwrap(), None);
 
         let env = PathEnvironment::init(
             pointer,
@@ -879,7 +915,7 @@ pub mod tests {
     fn registers_on_init() {
         let (flox, tmp_dir) = flox_instance();
         let environment_temp_dir = tempfile::tempdir_in(&tmp_dir).unwrap();
-        let ptr = PathPointer::new("test".parse().unwrap());
+        let ptr = PathPointer::new("test".parse().unwrap(), None);
         let _env = PathEnvironment::init(
             ptr,
             environment_temp_dir.path(),
@@ -901,7 +937,7 @@ pub mod tests {
         let (flox, tmp_dir) = flox_instance();
         let environment_temp_dir = tempfile::tempdir_in(&tmp_dir).unwrap();
         // Create an environment so that the .flox directory is populated and we can open it later
-        let ptr = PathPointer::new("test".parse().unwrap());
+        let ptr = PathPointer::new("test".parse().unwrap(), None);
         let env = PathEnvironment::init(
             ptr.clone(),
             environment_temp_dir.path(),
@@ -926,7 +962,7 @@ pub mod tests {
         let (flox, tmp_dir) = flox_instance();
         let environment_temp_dir = tempfile::tempdir_in(&tmp_dir).unwrap();
         // Create an environment so that the .flox directory is populated and we can open it later
-        let ptr = PathPointer::new("test".parse().unwrap());
+        let ptr = PathPointer::new("test".parse().unwrap(), None);
         let env = PathEnvironment::init(
             ptr.clone(),
             environment_temp_dir.path(),

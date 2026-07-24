@@ -219,15 +219,8 @@ impl Environment for ManagedEnvironment {
 
     /// Returns the lockfile if it already exists.
     fn existing_lockfile(&self, flox: &Flox) -> Result<Option<Lockfile>, EnvironmentError> {
-        if let Some(generation) = self.generation {
-            let lockfile_contents = self
-                .generations()
-                .lockfile_contents(*generation)
-                .map_err(ManagedEnvironmentError::Generations)?;
-
-            return Lockfile::from_str(&lockfile_contents)
-                .map_err(EnvironmentError::Lockfile)
-                .map(Some);
+        if self.generation.is_some() {
+            return self.existing_lockfile_without_checkout();
         }
 
         self.local_env_or_copy_current_generation(flox)?
@@ -1177,6 +1170,40 @@ impl ManagedEnvironment {
         &self.pointer
     }
 
+    /// The generation this environment operates on: the pinned generation
+    /// when opened at one (e.g. `flox activate --generation`), otherwise
+    /// the current generation.
+    pub fn generation(&self) -> Result<Option<GenerationId>, EnvironmentError> {
+        if let Some(generation) = self.generation {
+            return Ok(Some(generation));
+        }
+        Ok(self
+            .generations_metadata()
+            .map_err(ManagedEnvironmentError::Generations)?
+            .current_gen())
+    }
+
+    /// The lockfile this environment resolves to, read without materializing
+    /// the local checkout.
+    pub fn existing_lockfile_without_checkout(&self) -> Result<Option<Lockfile>, EnvironmentError> {
+        if let Some(generation) = self.generation {
+            return self
+                .generations()
+                .lockfile(*generation)
+                .map_err(ManagedEnvironmentError::Generations)
+                .map_err(EnvironmentError::from)
+                .map(Some);
+        }
+
+        let env_dir = self.path.join(ENV_DIR_NAME);
+        if !env_dir.exists() {
+            return Ok(None);
+        }
+        CoreEnvironment::new(env_dir, self.include_fetcher.clone())
+            .existing_lockfile()
+            .map_err(EnvironmentError::Core)
+    }
+
     pub(crate) fn generations(&self) -> Generations {
         self.floxmeta_branch.generations()
     }
@@ -1270,6 +1297,7 @@ impl ManagedEnvironment {
         // path of the original .flox directory
         let dot_flox_path = path_environment.path.clone();
         let name = path_environment.name();
+        let pointer_id = path_environment.pointer.id;
 
         let mut core_environment = path_environment.into_core_environment()?;
 
@@ -1288,10 +1316,11 @@ impl ManagedEnvironment {
         // Ensure that the environment does not include other local environments
         check_for_local_includes(&lockfile)?;
 
+        let pointer = ManagedPointer::new(owner, name, pointer_id, &flox.floxhub);
+
         Self::push_new_without_building(
             flox,
-            owner,
-            name,
+            pointer,
             force,
             initializing,
             dot_flox_path,
@@ -1310,15 +1339,12 @@ impl ManagedEnvironment {
     /// [HistoryKind::Initialize] for environments that are (virtually) created on FloxHub.
     fn push_new_without_building(
         flox: &Flox,
-        owner: EnvironmentOwner,
-        name: EnvironmentName,
+        pointer: ManagedPointer,
         force: bool,
         initializing: bool,
         dot_flox_path: CanonicalPath,
         mut core_environment: CoreEnvironment,
     ) -> Result<Self, EnvironmentError> {
-        let pointer = ManagedPointer::new(owner.clone(), name.clone(), &flox.floxhub);
-
         let checkedout_floxmeta_path = tempfile::tempdir_in(&flox.temp_dir).unwrap().keep();
         let temp_floxmeta_path = tempfile::tempdir_in(&flox.temp_dir).unwrap().keep();
 
@@ -1339,7 +1365,7 @@ impl ManagedEnvironment {
             checkedout_floxmeta_path,
             temp_floxmeta_path,
             remote_branch_name(&pointer),
-            &name,
+            &pointer.name,
         )
         .map_err(ManagedEnvironmentError::InitializeFloxmeta)?;
 
@@ -1385,7 +1411,10 @@ impl ManagedEnvironment {
             // we also need to catch this success.
             Err(GitRemoteCommandError::Diverged) | Ok(PushFlag::UptoDate) => {
                 Err(ManagedEnvironmentError::UpstreamAlreadyExists {
-                    env_ref: RemoteEnvironmentRef::new_from_parts(owner, name),
+                    env_ref: RemoteEnvironmentRef::new_from_parts(
+                        pointer.owner.clone(),
+                        pointer.name.clone(),
+                    ),
                     upstream: flox.floxhub.base_url().to_string(),
                 })?
             },
@@ -1616,7 +1645,7 @@ impl ManagedEnvironment {
         )?;
 
         // create the metadata for a path environment
-        let path_pointer = PathPointer::new(self.pointer.name);
+        let path_pointer = PathPointer::new(self.pointer.name, self.pointer.id);
         fs::write(
             self.path.join(ENVIRONMENT_POINTER_FILENAME),
             serde_json::to_string(&path_pointer)
@@ -1664,12 +1693,22 @@ pub mod test_helpers {
             pointer: ManagedPointer::new(
                 "owner".parse().unwrap(),
                 "test".parse().unwrap(),
+                None,
                 &floxhub,
             ),
             floxmeta_branch,
             include_fetcher: mock_include_fetcher(),
             generation: None,
         }
+    }
+
+    /// Pin `env` to a generation, as `flox activate --generation` would.
+    pub fn with_pinned_generation(
+        mut env: ManagedEnvironment,
+        generation: GenerationId,
+    ) -> ManagedEnvironment {
+        env.generation = Some(generation);
+        env
     }
 
     /// Get a [ManagedEnvironment] that has been pushed to (a mock) FloxHub and
@@ -1691,8 +1730,7 @@ pub mod test_helpers {
     ) -> ManagedEnvironment {
         ManagedEnvironment::push_new_without_building(
             flox,
-            owner,
-            "name".parse().unwrap(),
+            ManagedPointer::new(owner, "name".parse().unwrap(), None, &flox.floxhub),
             false,
             false,
             CanonicalPath::new(tempdir_in(&flox.temp_dir).unwrap().keep()).unwrap(),
@@ -1748,6 +1786,7 @@ mod test {
 
     use flox_core::Version;
     use flox_manifest::interfaces::{AsLatestSchema, AsTypedOnlyManifest};
+    use flox_manifest::lockfile::LockedPackage;
     use flox_manifest::lockfile::test_helpers::fake_catalog_package_lock;
     use flox_manifest::parsed::Inner;
     use flox_manifest::parsed::latest::{self, ManifestLatest};
@@ -1759,6 +1798,7 @@ mod test {
         mock_managed_environment_unlocked,
     };
     use url::Url;
+    use uuid::Uuid;
 
     use super::test_helpers::mock_managed_environment_in;
     use super::*;
@@ -1769,6 +1809,7 @@ mod test {
         read_environment_registry,
     };
     use crate::models::environment::DOT_FLOX;
+    use crate::models::environment::path_environment::test_helpers::new_named_path_environment_in;
     use crate::models::environment::test_helpers::{
         new_core_environment,
         new_core_environment_with_lockfile,
@@ -1778,6 +1819,116 @@ mod test {
     use crate::providers::git::GitCommandProvider;
     use crate::providers::git::tests::{commit_file, test_git_options};
 
+    /// Pushing a path environment carries its pointer id into the managed
+    /// pointer; an environment without one stays without one.
+    #[test]
+    fn push_new_carries_pointer_id() {
+        let owner = EnvironmentOwner::from_str("owner").unwrap();
+        let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub(Some(&owner));
+
+        let manifest = toml_edit::ser::to_string_pretty(&Manifest::default()).unwrap();
+        let push = |flox: &Flox, name: &str, pointer_id: Option<Uuid>| {
+            let dir = tempfile::tempdir_in(&flox.temp_dir).unwrap().keep();
+            let mut path_env = new_named_path_environment_in(flox, &manifest, &dir, name);
+            path_env.pointer.id = pointer_id;
+            let dot_flox_path = path_env.path.clone();
+            let env =
+                ManagedEnvironment::push_new(flox, path_env, owner.clone(), false, false).unwrap();
+            let written: EnvironmentPointer = serde_json::from_str(
+                &fs::read_to_string(dot_flox_path.join(ENVIRONMENT_POINTER_FILENAME)).unwrap(),
+            )
+            .unwrap();
+            let EnvironmentPointer::Managed(written) = written else {
+                panic!("expected managed pointer");
+            };
+            assert_eq!(written.id, env.pointer.id, "in-memory and on-disk id agree");
+            written.id
+        };
+
+        let carried = Uuid::new_v4();
+        assert_eq!(push(&flox, "carried", Some(carried)), Some(carried));
+        assert_eq!(push(&flox, "unset", None), None);
+    }
+
+    /// The checkout-free lockfile read reads the pinned generation's
+    /// lockfile from floxmeta and otherwise only the local checkout —
+    /// never materializing one.
+    #[test]
+    fn existing_lockfile_without_checkout_never_materializes() {
+        let owner = EnvironmentOwner::from_str("owner").unwrap();
+        let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub(Some(&owner));
+
+        let manifest = toml_edit::ser::to_string_pretty(&Manifest::default()).unwrap();
+        let (_install_id, _descriptor, locked_package) = fake_catalog_package_lock("hello", None);
+        let generation_lockfile = Lockfile {
+            packages: vec![LockedPackage::Catalog(locked_package)],
+            ..Lockfile::default()
+        };
+        let lockfile_contents = serde_json::to_string(&generation_lockfile).unwrap();
+        let dot_flox_path =
+            CanonicalPath::new(tempfile::tempdir_in(&flox.temp_dir).unwrap().keep()).unwrap();
+        let mut managed_env = ManagedEnvironment::push_new_without_building(
+            &flox,
+            ManagedPointer::new(owner, "name".parse().unwrap(), None, &flox.floxhub),
+            false,
+            false,
+            dot_flox_path,
+            new_core_environment_with_lockfile(&flox, &manifest, &lockfile_contents),
+        )
+        .unwrap();
+
+        assert_eq!(
+            managed_env.generation().unwrap(),
+            Some(GenerationId::from(1_usize)),
+            "unpinned resolves to the current generation"
+        );
+        assert_eq!(
+            managed_env.existing_lockfile_without_checkout().unwrap(),
+            None,
+            "no local checkout, nothing to read"
+        );
+        assert!(
+            !managed_env.path.join(ENV_DIR_NAME).exists(),
+            "reading the lockfile must not materialize the checkout"
+        );
+
+        managed_env.generation = Some(GenerationId::from(1_usize));
+        assert_eq!(
+            managed_env.generation().unwrap(),
+            Some(GenerationId::from(1_usize))
+        );
+        assert_eq!(
+            managed_env.existing_lockfile_without_checkout().unwrap(),
+            Some(generation_lockfile),
+            "the pinned generation's lockfile is read from floxmeta"
+        );
+    }
+
+    /// Converting a managed environment back to a path environment
+    /// (`flox pull --copy`) keeps the pointer id.
+    #[test]
+    fn into_path_environment_preserves_pointer_id() {
+        let owner = EnvironmentOwner::from_str("owner").unwrap();
+        let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub(Some(&owner));
+
+        let id = Uuid::new_v4();
+        let manifest = toml_edit::ser::to_string_pretty(&Manifest::default()).unwrap();
+        let mut managed_env = mock_managed_environment_unlocked(&flox, &manifest, owner);
+        managed_env.pointer.id = Some(id);
+
+        let path_env = managed_env.into_path_environment(&flox).unwrap();
+        assert_eq!(path_env.pointer.id, Some(id));
+
+        let written: EnvironmentPointer = serde_json::from_str(
+            &fs::read_to_string(path_env.path.join(ENVIRONMENT_POINTER_FILENAME)).unwrap(),
+        )
+        .unwrap();
+        let EnvironmentPointer::Path(written) = written else {
+            panic!("expected path pointer");
+        };
+        assert_eq!(written.id, Some(id));
+    }
+
     /// Create a [ManagedPointer] for testing with mock owner and name data
     /// as well as an override for the floxhub git url to fetch from local
     /// git repositories.
@@ -1785,6 +1936,7 @@ mod test {
         ManagedPointer {
             owner: EnvironmentOwner::from_str("owner").unwrap(),
             name: EnvironmentName::from_str("name").unwrap(),
+            id: None,
             floxhub_base_url: Url::from_str("https://hub.flox.dev").unwrap(),
             floxhub_git_url_override: Some(
                 Url::from_directory_path(mock_floxhub_git_path).unwrap(),

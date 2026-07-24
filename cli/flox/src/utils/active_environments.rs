@@ -204,6 +204,7 @@ mod tests {
             path: PathBuf::new(),
             pointer: EnvironmentPointer::Path(PathPointer::new(
                 EnvironmentName::from_str(name).unwrap(),
+                None,
             )),
         })
     }
@@ -233,6 +234,29 @@ mod tests {
 
         active.set_last_active(env2.clone(), None, ActivateMode::Dev);
         assert_eq!(active.is_active_with_generation(&env2), None);
+    }
+
+    /// An activation recorded by a binary that predates pointer ids (or vice
+    /// versa) must still be detected: the pointer id is not part of identity.
+    #[test]
+    fn activation_detection_ignores_pointer_id() {
+        let recorded = new_uninitialized_environment("env1");
+        let mut with_id = recorded.clone();
+        let UninitializedEnvironment::DotFlox(DotFlox {
+            pointer: EnvironmentPointer::Path(pointer),
+            ..
+        }) = &mut with_id
+        else {
+            panic!("expected path pointer");
+        };
+        pointer.id = Some(uuid::Uuid::new_v4());
+
+        let generation = Some(GenerationId::from_str("42").unwrap());
+        let mut active = ActiveEnvironments::default();
+        active.set_last_active(recorded, generation, ActivateMode::Dev);
+
+        assert!(active.is_active(&with_id));
+        assert_eq!(active.is_active_with_generation(&with_id), generation);
     }
 
     /// Simulate setting an active environment in one flox invocation and then

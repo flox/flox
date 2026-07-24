@@ -108,8 +108,12 @@ impl IncludeFetcher {
         name: &Option<String>,
         generation: Option<usize>,
     ) -> Result<(Manifest<TypedOnly>, String), EnvironmentError> {
-        let pointer =
-            ManagedPointer::new(remote.owner().clone(), remote.name().clone(), &flox.floxhub);
+        let pointer = ManagedPointer::new(
+            remote.owner().clone(),
+            remote.name().clone(),
+            None,
+            &flox.floxhub,
+        );
 
         // Don't affect existing open remotes but still uses the same floxmeta.
         let tempdir =
@@ -363,6 +367,7 @@ mod test {
             ManagedPointer::new(
                 env_ref.owner().clone(),
                 env_ref.name().clone(),
+                None,
                 &flox.floxhub,
             ),
             None,

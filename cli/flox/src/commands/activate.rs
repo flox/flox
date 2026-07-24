@@ -235,14 +235,14 @@ impl Activate {
         // *outcome* is carried on `cli.command_completed` (exit_code), not by
         // the presence of this dispatch-time event, so emitting before a
         // possible trust decline is intentional, not a logged false success.
-        let v2_env_detail = env_detail_from_concrete(&concrete_environment);
+        let v2_env_detail = env_detail_from_concrete(&flox, &concrete_environment);
         let v2_mode = options
             .mode
             .clone()
             .unwrap_or(ActivateMode::Dev)
             .to_string();
         if let Err(err) = EventsHub::global().record_event(EventKind::CliEnvironmentActivate(
-            CliEnvironmentActivatePayload::new(v2_env_detail)
+            CliEnvironmentActivatePayload::new(v2_env_detail.clone())
                 .with_start_services(options.start_services)
                 .with_mode(v2_mode),
         )) {
@@ -386,6 +386,7 @@ impl ActivateOptions {
         ensure_prompt_hook_version_compatible_for_activate()?;
 
         let now_active = UninitializedEnvironment::from_concrete_environment(&concrete_environment);
+        let v2_env_detail = env_detail_from_concrete(&flox, &concrete_environment);
 
         let lockfile = match concrete_environment.lockfile(&flox)? {
             LockResult::Changed(lockfile) => {
@@ -418,7 +419,7 @@ impl ActivateOptions {
         subcommand_metric!("activate", "has_includes" = has_includes);
 
         if let Err(err) = EventsHub::global().record_event(EventKind::CliEnvironmentActivate(
-            CliEnvironmentActivatePayload::new(env_detail_from_concrete(&concrete_environment))
+            CliEnvironmentActivatePayload::new(v2_env_detail.clone())
                 .with_has_includes(has_includes),
         )) {
             debug!(error = %err, "Failed to record v2 event");
@@ -454,7 +455,7 @@ impl ActivateOptions {
         // subcommand and rides `lockfile_version` on a real
         // `cli.environment.activate` event instead.
         if let Err(err) = EventsHub::global().record_event(EventKind::CliEnvironmentActivate(
-            CliEnvironmentActivatePayload::new(env_detail_from_concrete(&concrete_environment))
+            CliEnvironmentActivatePayload::new(v2_env_detail.clone())
                 .with_lockfile_version(lockfile_version.to_string())
                 .with_manifest_version(lockfile.manifest_schema_version().to_string()),
         )) {
@@ -577,8 +578,7 @@ impl ActivateOptions {
         // synchronously by the pre-exec emit + flush block below
         // (spec AC #5).
         if let Err(err) = EventsHub::global().record_event(EventKind::CliEnvironmentActivate(
-            CliEnvironmentActivatePayload::new(env_detail_from_concrete(&concrete_environment))
-                .with_shell(shell.to_string()),
+            CliEnvironmentActivatePayload::new(v2_env_detail.clone()).with_shell(shell.to_string()),
         )) {
             debug!(error = %err, "Failed to record v2 event");
         }
@@ -1080,14 +1080,14 @@ mod tests {
     static DEFAULT_ENV: LazyLock<UninitializedEnvironment> = LazyLock::new(|| {
         UninitializedEnvironment::DotFlox(DotFlox {
             path: PathBuf::from(""),
-            pointer: EnvironmentPointer::Path(PathPointer::new("default".parse().unwrap())),
+            pointer: EnvironmentPointer::Path(PathPointer::new("default".parse().unwrap(), None)),
         })
     });
 
     static NON_DEFAULT_ENV: LazyLock<UninitializedEnvironment> = LazyLock::new(|| {
         UninitializedEnvironment::DotFlox(DotFlox {
             path: PathBuf::from(""),
-            pointer: EnvironmentPointer::Path(PathPointer::new("wichtig".parse().unwrap())),
+            pointer: EnvironmentPointer::Path(PathPointer::new("wichtig".parse().unwrap(), None)),
         })
     });
 

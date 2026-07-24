@@ -23,6 +23,7 @@ use tracing::{debug, info_span, instrument};
 use crate::commands::{SHELL_COMPLETION_DIR, ensure_auth, environment_description};
 use crate::subcommand_metric;
 use crate::utils::dialog::Dialog;
+use crate::utils::events::new_environment_pointer_id;
 use crate::utils::message;
 
 mod go;
@@ -226,7 +227,7 @@ async fn init_local_environment(
         customization.activate_mode = Some(ActivateMode::Run);
     }
 
-    let path_pointer = PathPointer::new(name.clone());
+    let path_pointer = PathPointer::new(name.clone(), new_environment_pointer_id(flox));
     let env = if customization.packages.is_some() {
         info_span!(
             "init_with_suggested_packages",
@@ -977,7 +978,11 @@ mod tests {
                 .contains("Add environment variables and shell hooks")
         );
 
-        RemoteEnvironment::new(&flox, ManagedPointer::new(owner, name, &flox.floxhub), None)
-            .expect("find initialized remote environment");
+        RemoteEnvironment::new(
+            &flox,
+            ManagedPointer::new(owner, name, None, &flox.floxhub),
+            None,
+        )
+        .expect("find initialized remote environment");
     }
 }

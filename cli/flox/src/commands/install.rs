@@ -185,7 +185,7 @@ impl Install {
         };
         environment_subcommand_metric!("install", concrete_environment);
         if let Err(err) = EventsHub::global().record_event(EventKind::CliEnvironmentInstall(
-            CliEnvironmentPayload::new(env_detail_from_concrete(&concrete_environment)),
+            CliEnvironmentPayload::new(env_detail_from_concrete(&flox, &concrete_environment)),
         )) {
             debug!(error = %err, "Failed to record v2 event");
         }
@@ -665,7 +665,7 @@ async fn try_create_default_environment_interactive(
             .parse()
             .expect("'default' is a known accepted name");
 
-        let pointer = ManagedPointer::new(owner, name, &flox.floxhub);
+        let pointer = ManagedPointer::new(owner, name, None, &flox.floxhub);
 
         match RemoteEnvironment::new(flox, pointer, None) {
             Ok(existing_env) => {

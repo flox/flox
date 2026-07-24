@@ -1313,6 +1313,7 @@ impl EnvironmentSelect {
                 let pointer = ManagedPointer::new(
                     env_ref.owner().clone(),
                     env_ref.name().clone(),
+                    None,
                     &flox.floxhub,
                 );
 
@@ -1334,6 +1335,7 @@ impl EnvironmentSelect {
                 let pointer = ManagedPointer::new(
                     env_ref.owner().clone(),
                     env_ref.name().clone(),
+                    None,
                     &flox.floxhub,
                 );
 
@@ -1371,6 +1373,7 @@ impl EnvironmentSelect {
                 let pointer = ManagedPointer::new(
                     env_ref.owner().clone(),
                     env_ref.name().clone(),
+                    None,
                     &flox.floxhub,
                 );
 
@@ -1397,6 +1400,7 @@ impl EnvironmentSelect {
                 let pointer = ManagedPointer::new(
                     env_ref.owner().clone(),
                     env_ref.name().clone(),
+                    None,
                     &flox.floxhub,
                 );
 

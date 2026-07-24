@@ -102,7 +102,7 @@ impl Edit {
         };
         environment_subcommand_metric!("edit", detected_environment);
         if let Err(err) = EventsHub::global().record_event(EventKind::CliEnvironmentEdit(
-            CliEnvironmentEditPayload::new(env_detail_from_concrete(&detected_environment)),
+            CliEnvironmentEditPayload::new(env_detail_from_concrete(&flox, &detected_environment)),
         )) {
             debug!(error = %err, "Failed to record v2 event");
         }
@@ -270,7 +270,7 @@ impl Edit {
                 let edited_includes = old_includes != new_includes;
                 subcommand_metric!("edit", "edited_includes" = edited_includes);
                 if let Err(err) = EventsHub::global().record_event(EventKind::CliEnvironmentEdit(
-                    CliEnvironmentEditPayload::new(env_detail_from_concrete(environment))
+                    CliEnvironmentEditPayload::new(env_detail_from_concrete(flox, environment))
                         .with_edited_includes(edited_includes)
                         .with_manifest_version(new_lockfile.manifest_schema_version().to_string()),
                 )) {
