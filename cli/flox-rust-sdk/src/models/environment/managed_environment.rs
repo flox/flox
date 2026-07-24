@@ -1177,6 +1177,34 @@ impl ManagedEnvironment {
         &self.pointer
     }
 
+    /// The generation this environment operates on: the pinned generation
+    /// when opened at one (e.g. `flox activate --generation`), otherwise the
+    /// current generation.
+    pub fn generation(&self) -> Result<Option<GenerationId>, EnvironmentError> {
+        if let Some(generation) = self.generation {
+            return Ok(Some(generation));
+        }
+        Ok(self
+            .generations_metadata()
+            .map_err(ManagedEnvironmentError::Generations)?
+            .current_gen())
+    }
+
+    /// The lockfile for the generation this environment operates on
+    /// ([`Self::generation`]), read straight from generation metadata so it
+    /// never materializes the local checkout. `None` when the environment
+    /// has no current generation.
+    pub fn existing_lockfile_without_checkout(&self) -> Result<Option<Lockfile>, EnvironmentError> {
+        let Some(generation) = self.generation()? else {
+            return Ok(None);
+        };
+        self.generations()
+            .lockfile(*generation)
+            .map_err(ManagedEnvironmentError::Generations)
+            .map_err(EnvironmentError::from)
+            .map(Some)
+    }
+
     pub(crate) fn generations(&self) -> Generations {
         self.floxmeta_branch.generations()
     }
@@ -1963,6 +1991,39 @@ mod test {
         assert_eq!(
             local_manifest.as_writable().to_string(),
             locally_edited_content
+        );
+    }
+
+    #[test]
+    fn existing_lockfile_without_checkout_never_materializes() {
+        let owner = EnvironmentOwner::from_str("owner").unwrap();
+        let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub(Some(&owner));
+
+        let managed_env = test_helpers::mock_managed_environment_unlocked(
+            &flox,
+            &toml_edit::ser::to_string_pretty(&Manifest::default()).unwrap(),
+            owner,
+        );
+
+        // An unpinned environment resolves to its current generation, and
+        // `generation()` must agree with the metadata's current generation.
+        let current = managed_env.generations_metadata().unwrap().current_gen();
+        assert!(
+            current.is_some(),
+            "a freshly pushed environment has a current generation"
+        );
+        assert_eq!(
+            managed_env.generation().unwrap(),
+            current,
+            "unpinned resolves to the current generation"
+        );
+
+        // Reading the lineage lockfile is a metadata read — it must never
+        // materialize the local checkout.
+        let _ = managed_env.existing_lockfile_without_checkout();
+        assert!(
+            !managed_env.path.join(super::ENV_DIR_NAME).exists(),
+            "reading the lockfile must not materialize the checkout"
         );
     }
 

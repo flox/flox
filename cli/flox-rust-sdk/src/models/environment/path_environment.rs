@@ -188,6 +188,16 @@ impl PathEnvironment {
     fn path_hash(&self) -> String {
         path_hash(&self.path)
     }
+
+    /// The existing lockfile without a `Flox` instance. Path environments keep
+    /// their lockfile on disk and resolve nothing to read it — the [Environment]
+    /// trait's `existing_lockfile` already ignores its `flox` argument — so
+    /// callers that lack a `Flox` can read the lockfile through this.
+    pub fn existing_lockfile_without_flox(&self) -> Result<Option<Lockfile>, EnvironmentError> {
+        self.as_core_environment()?
+            .existing_lockfile()
+            .map_err(EnvironmentError::Core)
+    }
 }
 
 impl Environment for PathEnvironment {

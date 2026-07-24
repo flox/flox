@@ -336,6 +336,14 @@ pub struct EnvDetail {
     /// for remote and managed environments, and `Environment::name(...)`
     /// for path environments. Matches the value the legacy macros emit.
     env_ref_or_name: String,
+    /// Current generation the command started from. Absent for path
+    /// environments, which have no generations.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    generation_number: Option<u64>,
+    /// Number of packages locked for the invoking system when the command
+    /// started. Absent when no lockfile is available.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    package_count: Option<u64>,
 }
 
 impl EnvDetail {
@@ -343,7 +351,19 @@ impl EnvDetail {
         Self {
             env_kind: env_kind.into(),
             env_ref_or_name: env_ref_or_name.into(),
+            generation_number: None,
+            package_count: None,
         }
+    }
+
+    pub fn with_generation_number(mut self, generation_number: u64) -> Self {
+        self.generation_number = Some(generation_number);
+        self
+    }
+
+    pub fn with_package_count(mut self, package_count: u64) -> Self {
+        self.package_count = Some(package_count);
+        self
     }
 }
 
@@ -855,6 +875,8 @@ mod tests {
         EnvDetail {
             env_kind: kind.to_string(),
             env_ref_or_name: ref_or_name.to_string(),
+            generation_number: None,
+            package_count: None,
         }
     }
 
@@ -898,6 +920,39 @@ mod tests {
             "has_includes": true,
         }));
         assert_eq!(value, expected);
+    }
+
+    #[test]
+    fn cli_environment_activate_managed_lineage_fields_envelope_golden() {
+        let detail = env_detail("managed", "alice/myenv")
+            .with_generation_number(3)
+            .with_package_count(7);
+        let payload = CliEnvironmentActivatePayload::new(detail);
+        let value = serde_json::to_value(fixed_event(EventKind::CliEnvironmentActivate(payload)))
+            .expect("event serializes");
+        let expected = activate_envelope_json(json!({
+            "env_kind": "managed",
+            "env_ref_or_name": "alice/myenv",
+            "generation_number": 3,
+            "package_count": 7,
+        }));
+        assert_eq!(value, expected);
+    }
+
+    /// A buffered environment-event row recorded by a binary that predates
+    /// the lineage fields must deserialize and re-serialize unchanged —
+    /// absent fields stay absent, nothing is fabricated.
+    #[test]
+    fn environment_row_without_lineage_fields_round_trips() {
+        let old_row = env_envelope_json("cli.environment.delete");
+        let event: Event =
+            serde_json::from_value(old_row.clone()).expect("old-shape row deserializes");
+        let EventKind::CliEnvironmentDelete(ref payload) = event.kind else {
+            panic!("expected cli.environment.delete");
+        };
+        assert_eq!(payload, &CliEnvironmentPayload::new(managed_env_detail()));
+        let reserialized = serde_json::to_value(event).expect("event re-serializes");
+        assert_eq!(reserialized, old_row);
     }
 
     #[test]
@@ -1828,6 +1883,8 @@ mod pipeline_tests {
         let env_detail = EnvDetail {
             env_kind: "path".to_string(),
             env_ref_or_name: "myenv".to_string(),
+            generation_number: None,
+            package_count: None,
         };
 
         hub.record_event(EventKind::CliEnvironmentEdit(
