@@ -349,7 +349,9 @@ impl Edit {
             | Err(e @ EnvironmentError::Core(CoreEnvironmentError::DeserializeManifest(_)))
             | Err(
                 e @ EnvironmentError::Core(CoreEnvironmentError::BuildEnv(
-                    BuildEnvError::Realise2 { .. } | BuildEnvError::Build(_),
+                    BuildEnvError::Realise2 { .. }
+                    | BuildEnvError::Build(_)
+                    | BuildEnvError::VarsCycle { .. },
                 )),
             )
             | Err(
@@ -503,6 +505,20 @@ mod tests {
     fn test_recover_edit_loop_result_locking() {
         let result = Err(EnvironmentError::Core(CoreEnvironmentError::Resolve(
             ResolveError::ResolutionFailed(ResolutionFailures(vec![])),
+        )));
+
+        Edit::make_interactively_recoverable(result)
+            .expect("should be recoverable")
+            .expect_err("should return recoverable err");
+    }
+
+    /// a `[vars]` reference cycle is recoverable, so editing drops back into the editor
+    #[test]
+    fn test_recover_edit_loop_result_vars_cycle() {
+        let result = Err(EnvironmentError::Core(CoreEnvironmentError::BuildEnv(
+            BuildEnvError::VarsCycle {
+                cycle: "foo → bar → foo".to_string(),
+            },
         )));
 
         Edit::make_interactively_recoverable(result)
