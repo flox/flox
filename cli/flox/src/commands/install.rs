@@ -655,7 +655,7 @@ async fn try_create_default_environment_interactive(
 
     // Creates a default environment for the user, skipping checks for init
     // customizations and skipping the normal `init` output.
-    let env = {
+    let (env, newly_created) = {
         // ensure user is logged in
         let handle = ensure_auth(flox).await?;
         let owner = handle
@@ -670,15 +670,28 @@ async fn try_create_default_environment_interactive(
         match RemoteEnvironment::new(flox, pointer, None) {
             Ok(existing_env) => {
                 debug!("environment already exists -- will not init again");
-                existing_env
+                (existing_env, false)
             },
             Err(RemoteEnvironmentError::OpenManagedEnvironment(
                 ManagedEnvironmentError::UpstreamNotFound { env_ref, .. },
-            )) => RemoteEnvironment::init_floxhub_environment(flox, env_ref.clone(), false)
-                .with_context(|| format!("Failed to initialize FloxHub environment '{env_ref}'"))?,
+            )) => (
+                RemoteEnvironment::init_floxhub_environment(flox, env_ref.clone(), false)
+                    .with_context(|| {
+                        format!("Failed to initialize FloxHub environment '{env_ref}'")
+                    })?,
+                true,
+            ),
             Err(e) => Err(e)?,
         }
     };
+    let env = ConcreteEnvironment::Remote(env);
+    if newly_created
+        && let Err(err) = EventsHub::global().record_event(EventKind::CliEnvironmentCreate(
+            CliEnvironmentPayload::new(env_detail_from_concrete(flox, &env)),
+        ))
+    {
+        debug!(error = %err, "Failed to record v2 event");
+    }
 
     // record that we created default env
     // Note: we record this _after_ attempting to create the default env,
@@ -689,7 +702,7 @@ async fn try_create_default_environment_interactive(
 
     prompt_to_modify_rc_file()?;
 
-    Ok(ConcreteEnvironment::Remote(env))
+    Ok(env)
 }
 /// Returns a formatted string representing a possibly truncated list of
 /// packages to install.

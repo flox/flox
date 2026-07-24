@@ -82,7 +82,8 @@ pub trait ManifestBuilder {
     fn clean(self, package: &[PackageTargetName]) -> Result<(), ManifestBuilderError>;
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, strum::IntoStaticStr)]
+#[strum(serialize_all = "snake_case", prefix = "build.")]
 pub enum ManifestBuilderError {
     #[error("failed to call package builder: {0}")]
     CallBuilderError(#[source] std::io::Error),
@@ -1246,6 +1247,31 @@ mod tests {
     use crate::models::environment::{Environment, copy_dir_recursive};
     use crate::providers::catalog::test_helpers::catalog_replay_client;
     use crate::providers::git::{GitCommandProvider, GitProvider};
+
+    #[test]
+    fn manifest_builder_error_slugs_are_namespaced() {
+        // These slugs are telemetry wire values (flox-events `build_error_kind`);
+        // a variant rename is a wire change.
+        let cases: [(ManifestBuilderError, &str); 4] = [
+            (ManifestBuilderError::BuildFailure, "build.build_failure"),
+            (
+                ManifestBuilderError::CallBuilderError(std::io::Error::other("")),
+                "build.call_builder_error",
+            ),
+            (
+                ManifestBuilderError::ListNixExpressions(String::new()),
+                "build.list_nix_expressions",
+            ),
+            (
+                ManifestBuilderError::ParseLicenseMetaData(String::new()),
+                "build.parse_license_meta_data",
+            ),
+        ];
+        for (err, expected) in &cases {
+            let slug: &'static str = err.into();
+            assert_eq!(slug, *expected);
+        }
+    }
 
     #[test]
     fn build_returns_failure_when_package_not_defined() {
