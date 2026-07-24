@@ -12,6 +12,7 @@ use flox_core::canonical_path::CanonicalPath;
 use flox_core::hook_actions::{
     HookAction,
     PROMPT_HOOK_VERSION_ENV,
+    prompt_hook_installed,
     prompt_hook_version_mismatched,
     write_hook_actions,
 };
@@ -185,9 +186,10 @@ impl Deactivate {
 ///
 /// `flox deactivate` records its request in a file the prompt hook reads on the
 /// next prompt; with no compatible hook, that file is never consumed and the
-/// command is a silent no-op. Two ways it can be missing: `disable_hook = true`
-/// turns the hook off, or [`PROMPT_HOOK_VERSION_ENV`] is unset (no hook set up in
-/// this shell) or set to an incompatible version.
+/// command is a silent no-op. Three ways it can be missing: `disable_hook =
+/// true` turns the hook off, the [`PROMPT_HOOK_VERSION_ENV`] marker names an
+/// incompatible version, or the marker says no hook is registered in this
+/// shell (unset, or installed=false as in a subshell activation).
 fn ensure_prompt_hook_available(config: &Config) -> Result<()> {
     if config.flox.disable_hook.unwrap_or(false) {
         bail!(formatdoc! {"
@@ -205,7 +207,7 @@ fn ensure_prompt_hook_available(config: &Config) -> Result<()> {
         "});
     }
 
-    if prompt_hook_version.is_none() {
+    if !prompt_hook_installed(prompt_hook_version.as_deref()) {
         bail!(formatdoc! {"
             The Flox prompt hook is not set up in this shell, so 'flox deactivate' cannot take effect on the next prompt.
             Restart your shell to activate with the prompt hook, then deactivate again.
@@ -215,15 +217,19 @@ fn ensure_prompt_hook_available(config: &Config) -> Result<()> {
     Ok(())
 }
 
-/// Verify `prompt_hook_version` matches the compiled [`PROMPT_HOOK_VERSION`]
-/// before [`emit_deactivate_script`] decodes any diff the hook produced.
+/// Verify the version part of `prompt_hook_version` matches the compiled
+/// [`flox_core::hook_actions::PROMPT_HOOK_VERSION`] before
+/// [`emit_deactivate_script`] decodes any diff
+/// the hook produced. The installed part is ignored: a subshell activation's
+/// `<version>:false` marker still names a trustworthy protocol version.
 ///
 /// Checked once at the sole chokepoint for diff decoding (see
 /// `emit_deactivate_script`'s docs), so everything downstream — the
 /// nested-layer decode in `flox-activations` and the `DiffSerializer` payload
-/// it decodes — can assume the payload is current. An absent marker (no hook)
-/// and a mismatched one both mean the diff could be stale or a shape the binary
-/// no longer understands, so both fail the same way.
+/// it decodes — can assume the payload is current. An absent marker (a shell
+/// with no Flox activation machinery, e.g. one set up by an older Flox) and a
+/// mismatched one both mean the diff could be stale or a shape the binary no
+/// longer understands, so both fail the same way.
 fn ensure_prompt_hook_version_current(prompt_hook_version: Option<&str>) -> Result<()> {
     if prompt_hook_version_mismatched(prompt_hook_version) || prompt_hook_version.is_none() {
         bail!(formatdoc! {"
@@ -464,18 +470,17 @@ mod tests {
         state_json_path,
         write_activations_json,
     };
-    use flox_core::hook_actions::PROMPT_HOOK_VERSION;
+    use flox_core::hook_actions::prompt_hook_marker_value;
     use flox_rust_sdk::flox::test_helpers::flox_instance;
     use flox_rust_sdk::models::environment::generations::GenerationId;
     use flox_rust_sdk::models::environment::{EnvironmentPointer, ManagedPointer, PathPointer};
 
     use super::*;
 
-    /// The current [`PROMPT_HOOK_VERSION`] as the shell hook would export it,
-    /// passed to [`emit_deactivate_script`] so its version guard sees a
-    /// compatible hook.
+    /// The marker as the shell hook would export it, passed to
+    /// [`emit_deactivate_script`] so its version guard sees a compatible hook.
     fn current_prompt_hook_version() -> String {
-        PROMPT_HOOK_VERSION.to_string()
+        prompt_hook_marker_value(true)
     }
 
     fn interactive_deactivate_script(shell: ShellWithPath) -> String {

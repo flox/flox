@@ -52,10 +52,10 @@ pub enum HookAction {
 /// payload are one protocol with one source of truth, not three independently
 /// versioned formats.
 ///
-/// It is the `version` of the on-disk [`HookActionsFile`] and the value the
-/// shell hook exports as [`PROMPT_HOOK_VERSION_ENV`]. The `_FLOX_HOOK_DIFF`
-/// payload carries no version of its own: `flox deactivate` and the
-/// `flox hook-env` sweep both funnel through one chokepoint
+/// It is the `version` of the on-disk [`HookActionsFile`] and the version part
+/// of the value the shell hook exports as [`PROMPT_HOOK_VERSION_ENV`]. The
+/// `_FLOX_HOOK_DIFF` payload carries no version of its own: `flox deactivate`
+/// and the `flox hook-env` sweep both funnel through one chokepoint
 /// (`emit_deactivate_script` in the `flox` crate) that checks the exported
 /// value before decoding any diff, and `flox deactivate` checks it again
 /// before writing an action file the hook must read.
@@ -66,8 +66,17 @@ pub enum HookAction {
 /// tracking which sub-format changed on each bump.
 pub const PROMPT_HOOK_VERSION: u8 = 1;
 
-/// Environment variable the shell hook exports to advertise that a prompt hook
-/// speaking version [`PROMPT_HOOK_VERSION`] is registered in this shell.
+/// Environment variable advertising this shell's activation machinery, with a
+/// value of the form `<version>:<installed>` (see [`prompt_hook_marker_value`]),
+/// e.g. `1:true`.
+///
+/// - `<version>` is [`PROMPT_HOOK_VERSION`], the protocol version of the
+///   activation/diff machinery that set up this shell.
+/// - `<installed>` is `true` when a prompt hook is registered in this shell
+///   (exported by the hook at registration, see `hook.rs` in
+///   `flox-activations`) and `false` in subshell activations
+///   (`flox activate -c` / exec), which run the activation machinery without
+///   registering a hook.
 ///
 /// It is exported (unlike `_FLOX_INVOCATION_TYPES`) precisely so a subprocess
 /// like `flox deactivate` can read it to confirm the hook is set up and
@@ -75,14 +84,44 @@ pub const PROMPT_HOOK_VERSION: u8 = 1;
 /// consume.
 pub const PROMPT_HOOK_VERSION_ENV: &str = "_FLOX_PROMPT_HOOK_VERSION";
 
-/// Whether `prompt_hook_version` (the shell's exported
-/// [`PROMPT_HOOK_VERSION_ENV`]) is set to anything other than the compiled
+/// The [`PROMPT_HOOK_VERSION_ENV`] value for the current protocol version with
+/// the given installed state.
+pub fn prompt_hook_marker_value(installed: bool) -> String {
+    format!("{PROMPT_HOOK_VERSION}:{installed}")
+}
+
+/// The `<version>` part of a [`PROMPT_HOOK_VERSION_ENV`] marker value: the text
+/// before the first `:`, or the whole value if there is none.
+fn prompt_hook_marker_version(value: &str) -> &str {
+    value.split(':').next().unwrap_or(value)
+}
+
+/// Whether the version part of `prompt_hook_version` (the shell's exported
+/// [`PROMPT_HOOK_VERSION_ENV`]) is anything other than the compiled
 /// [`PROMPT_HOOK_VERSION`]: a different number, or a value that does not parse
 /// as the current one. Both mean the marker does not match this binary's
-/// protocol, so both fail closed; only an unset marker (no hook) is not a
-/// mismatch.
+/// protocol, so both fail closed; only an unset marker (no activation
+/// machinery in this shell) is not a mismatch. The installed part is ignored:
+/// a subshell's `false` marker still names a trustworthy protocol version.
 pub fn prompt_hook_version_mismatched(prompt_hook_version: Option<&str>) -> bool {
-    prompt_hook_version.is_some_and(|value| value.parse::<u8>().ok() != Some(PROMPT_HOOK_VERSION))
+    prompt_hook_version.is_some_and(|value| {
+        prompt_hook_marker_version(value).parse::<u8>().ok() != Some(PROMPT_HOOK_VERSION)
+    })
+}
+
+/// Whether `prompt_hook_version` (the shell's exported
+/// [`PROMPT_HOOK_VERSION_ENV`]) says a prompt hook is registered in this
+/// shell: the value is exactly two `:`-separated parts with the second
+/// exactly `true`. Unset, `false`, a marker with no installed part, extra
+/// trailing fields, and garbage all read as no hook installed (fail closed).
+/// Callers that also need the diff protocol to be trustworthy must check
+/// [`prompt_hook_version_mismatched`] separately.
+pub fn prompt_hook_installed(prompt_hook_version: Option<&str>) -> bool {
+    prompt_hook_version.is_some_and(|value| {
+        let mut parts = value.split(':');
+        parts.next();
+        parts.next() == Some("true") && parts.next().is_none()
+    })
 }
 
 /// Versioned on-disk form of the prompt-hook action file.
@@ -230,18 +269,61 @@ mod tests {
 
     #[test]
     fn version_mismatch_fails_closed_on_set_but_unparseable_marker() {
-        // Unset (no hook) is the only value that is not a mismatch.
+        // Unset (no activation machinery in this shell) is not a mismatch.
         assert!(!prompt_hook_version_mismatched(None));
+        // Only the version part is compared: both installed states, and a
+        // bare version with no installed part, are current.
+        assert!(!prompt_hook_version_mismatched(Some(
+            &prompt_hook_marker_value(true)
+        )));
+        assert!(!prompt_hook_version_mismatched(Some(
+            &prompt_hook_marker_value(false)
+        )));
         assert!(!prompt_hook_version_mismatched(Some(
             &PROMPT_HOOK_VERSION.to_string()
         )));
-        // A different version, and anything that does not parse as the current
-        // version -- empty, non-numeric, or out of `u8` range -- all fail
-        // closed rather than being read as compatible.
+        // A different version, and anything whose version part does not parse
+        // as the current version -- empty, non-numeric, or out of `u8` range
+        // -- all fail closed rather than being read as compatible.
         assert!(prompt_hook_version_mismatched(Some("0")));
         assert!(prompt_hook_version_mismatched(Some("")));
         assert!(prompt_hook_version_mismatched(Some("abc")));
         assert!(prompt_hook_version_mismatched(Some("999")));
+        assert!(prompt_hook_version_mismatched(Some("0:true")));
+        assert!(prompt_hook_version_mismatched(Some("99:true")));
+        assert!(prompt_hook_version_mismatched(Some(":true")));
+        assert!(prompt_hook_version_mismatched(Some("abc:false")));
+    }
+
+    #[test]
+    fn installed_requires_explicit_true_part() {
+        assert!(prompt_hook_installed(Some(&prompt_hook_marker_value(true))));
+        // Any other state -- installed=false, unset, a bare version with no
+        // installed part, extra trailing fields, or garbage -- reads as no
+        // hook installed.
+        assert!(!prompt_hook_installed(Some(&prompt_hook_marker_value(
+            false
+        ))));
+        assert!(!prompt_hook_installed(None));
+        assert!(!prompt_hook_installed(Some(
+            &PROMPT_HOOK_VERSION.to_string()
+        )));
+        assert!(!prompt_hook_installed(Some("")));
+        assert!(!prompt_hook_installed(Some("1:yes")));
+        assert!(!prompt_hook_installed(Some("abc")));
+        assert!(!prompt_hook_installed(Some("1:true:extra")));
+    }
+
+    #[test]
+    fn marker_value_encodes_version_and_installed() {
+        assert_eq!(
+            prompt_hook_marker_value(true),
+            format!("{PROMPT_HOOK_VERSION}:true")
+        );
+        assert_eq!(
+            prompt_hook_marker_value(false),
+            format!("{PROMPT_HOOK_VERSION}:false")
+        );
     }
 
     #[test]

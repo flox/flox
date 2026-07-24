@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use anyhow::Result;
 use flox_core::activate::context::{AutoActivateFishMode, InvocationType};
 use flox_core::activate::vars::{FLOX_ACTIVATIONS_BIN, FLOX_INVOCATION_TYPES_VAR};
-use flox_core::hook_actions::PROMPT_HOOK_VERSION_ENV;
+use flox_core::hook_actions::{PROMPT_HOOK_VERSION_ENV, prompt_hook_marker_value};
 use shell_gen::{GenerateShell, Shell};
 
 use crate::attach_diff::{todo_drop_set_exported_unexpanded, todo_drop_unset};
@@ -118,16 +118,33 @@ pub fn generate_fish_profile_commands(
         },
     }
 
-    // The prompt hook exports `_FLOX_PROMPT_HOOK_VERSION` at registration (see
-    // hook.rs) so a subprocess like `flox deactivate` can detect a compatible
-    // hook. It is set shell-side, so it isn't part of the env-var diff. Only the
-    // outermost deactivate clears it: the prompt hook stays registered while any
-    // activation remains on the stack, so unsetting it on an inner deactivate
-    // would make the next `flox deactivate` wrongly report the hook missing.
-    if let Action::Deactivate(ctx) = action
-        && ctx.restore_diff.is_outermost_deactivate()
-    {
-        stmts.push(todo_drop_unset(PROMPT_HOOK_VERSION_ENV));
+    // The `_FLOX_PROMPT_HOOK_VERSION` marker (`<version>:<installed>`, see
+    // `PROMPT_HOOK_VERSION_ENV` in flox-core). A subshell activation
+    // (`-c` / exec) registers no prompt hook, so it exports
+    // `<version>:false` — deliberately overwriting a `:true` inherited from
+    // an eval-activated parent, whose hook function does not survive into
+    // the subshell. The marker is set shell-side, so it isn't part of the
+    // env-var diff. Only the outermost deactivate clears it: the prompt
+    // hook stays registered while any activation remains on the stack, so
+    // unsetting it on an inner deactivate would make the next
+    // `flox deactivate` wrongly report the hook missing.
+    match action {
+        Action::Activate { args, .. } => {
+            if !matches!(
+                args.invocation_type,
+                InvocationType::Interactive | InvocationType::InPlace
+            ) {
+                stmts.push(todo_drop_set_exported_unexpanded(
+                    PROMPT_HOOK_VERSION_ENV,
+                    prompt_hook_marker_value(false),
+                ));
+            }
+        },
+        Action::Deactivate(ctx) => {
+            if ctx.restore_diff.is_outermost_deactivate() {
+                stmts.push(todo_drop_unset(PROMPT_HOOK_VERSION_ENV));
+            }
+        },
     }
 
     // Source set-prompt.fish if we're in an interactive shell
@@ -349,7 +366,7 @@ mod tests {
             /flox_activations profile-scripts --shell fish --already-sourced-env-dirs  "$_FLOX_SOURCED_PROFILE_SCRIPTS" --env-dirs "$FLOX_ENV_DIRS" | source;
             set -gx fish_trace 0;
             /nix/store/XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX-coreutils-9.10/bin/rm /path/to/rc/file;
-            set -gx _FLOX_PROMPT_HOOK_VERSION 1;
+            set -gx _FLOX_PROMPT_HOOK_VERSION 1:true;
             function _flox_hook --on-event fish_prompt;
                 eval ("/flox" hook-env --shell fish --shell-pid $fish_pid --invocation-types "$_FLOX_INVOCATION_TYPES" | string collect);
                 if test "$FLOX_AUTO_ACTIVATE_FISH_MODE" != "disable_arrow";
@@ -406,7 +423,7 @@ mod tests {
             /flox_activations profile-scripts --shell fish --already-sourced-env-dirs  "$_FLOX_SOURCED_PROFILE_SCRIPTS" --env-dirs "$FLOX_ENV_DIRS" | source;
             set -gx fish_trace 0;
             /nix/store/XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX-coreutils-9.10/bin/rm /path/to/rc/file;
-            set -gx _FLOX_PROMPT_HOOK_VERSION 1;
+            set -gx _FLOX_PROMPT_HOOK_VERSION 1:true;
             function _flox_hook --on-event fish_prompt;
                 eval ("/flox" hook-env --shell fish --shell-pid $fish_pid --invocation-types "$_FLOX_INVOCATION_TYPES" | string collect);
                 if test "$FLOX_AUTO_ACTIVATE_FISH_MODE" != "disable_arrow";

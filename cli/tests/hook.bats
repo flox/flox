@@ -416,7 +416,7 @@ EXPIRED_FLOXHUB_TOKEN="eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3gu
     _flox_hook
     echo \"during:\$TEST_VAR2\"
     cd $BATS_TEST_TMPDIR
-    export _FLOX_PROMPT_HOOK_VERSION=99
+    export _FLOX_PROMPT_HOOK_VERSION=99:true
     $FLOX_BIN hook-env --shell bash --shell-pid \$\$
   "
   assert_failure
@@ -424,8 +424,8 @@ EXPIRED_FLOXHUB_TOKEN="eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3gu
   assert_output --partial "out of sync with the running Flox"
 }
 
-# The stale-version guard warns only when there is auto-activation work; a shell
-# sitting inside its active environment with nothing to do stays quiet.
+# The stale-version guard errors only when there is auto-activation work; a
+# shell sitting inside its active environment with nothing to do stays quiet.
 # bats test_tags=hook:auto-deactivate:stale-version-idle
 @test "bash: stale prompt-hook version stays quiet with nothing to auto-activate" {
   project_setup
@@ -439,7 +439,7 @@ EXPIRED_FLOXHUB_TOKEN="eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3gu
     eval \"\$($FLOX_BIN activate -d $PROJECT_DIR)\"
     cd $PROJECT2_DIR
     _flox_hook
-    export _FLOX_PROMPT_HOOK_VERSION=99
+    export _FLOX_PROMPT_HOOK_VERSION=99:true
     _flox_hook
     echo done
   "
@@ -957,7 +957,7 @@ EOF
   "
   assert_success
   # The marker survives the inner deactivation (the regression).
-  assert_output --partial "after-inner:marker=[1]"
+  assert_output --partial "after-inner:marker=[1:true]"
   refute_output --partial "is not set up in this shell"
   refute_output --partial "SECOND_DEACTIVATE_FAILED"
   # The outer deactivation tore the whole stack down.
@@ -981,7 +981,7 @@ EOF
     echo \"after-outer:[\$FLOX_PROMPT_ENVIRONMENTS]\"
   "
   assert_success
-  assert_output --partial "after-inner:marker=[1]"
+  assert_output --partial "after-inner:marker=[1:true]"
   refute_output --partial "is not set up in this shell"
   refute_output --partial "SECOND_DEACTIVATE_FAILED"
   assert_output --partial "after-outer:[]"
@@ -1019,7 +1019,7 @@ EOF
   run bash -c "
     export FLOX_SHELL=\$(which bash)
     eval \"\$($FLOX_BIN activate -d $PROJECT_DIR)\"
-    export _FLOX_PROMPT_HOOK_VERSION=99
+    export _FLOX_PROMPT_HOOK_VERSION=99:true
     $FLOX_BIN deactivate
   "
   assert_failure
@@ -1033,7 +1033,7 @@ EOF
   run bash -c "
     export FLOX_SHELL=\$(which bash)
     eval \"\$($FLOX_BIN activate -d $PROJECT_DIR)\"
-    export _FLOX_PROMPT_HOOK_VERSION=99
+    export _FLOX_PROMPT_HOOK_VERSION=99:true
     $FLOX_BIN activate -d $PROJECT_DIR
   "
   assert_failure

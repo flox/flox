@@ -260,9 +260,15 @@ impl ActivateArgs {
 /// that already carries the marker would otherwise build a shell whose
 /// activation layers speak two versions of the hook/diff protocol.
 ///
-/// An unset marker (fresh shell -- registration sets it) or one that matches
-/// are both safe to proceed on; only a marker that is set and different means
-/// this shell was set up by another version of Flox.
+/// An unset marker (fresh shell) or one whose version part matches are both
+/// safe to proceed on; only a marker that is set with a different version
+/// means this shell was set up by another version of Flox.
+///
+/// This is a backstop for invocations that don't go through the flox binary
+/// (e.g. container entrypoints). User-driven activations hit the flox crate's
+/// twin first, which also names the active environments in its error; that
+/// detail comes from `_FLOX_ACTIVE_ENVIRONMENTS` helpers this crate cannot
+/// depend on, so the error here stays terse.
 fn ensure_prompt_hook_version_compatible_for_activate() -> Result<()> {
     let prompt_hook_version = std::env::var(PROMPT_HOOK_VERSION_ENV).ok();
     if prompt_hook_version_mismatched(prompt_hook_version.as_deref()) {

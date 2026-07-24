@@ -782,15 +782,19 @@ impl ActivateOptions {
     }
 }
 
-/// Fail closed rather than stack an activation from a different Flox version
-/// on top of a shell that already carries `_FLOX_PROMPT_HOOK_VERSION`: the
-/// shell's activation layers would otherwise speak two versions of the
-/// hook/diff protocol.
+/// Fail closed rather than run any activation from a different Flox version
+/// in a shell that already carries `_FLOX_PROMPT_HOOK_VERSION`. The marker
+/// versions the whole shell-side protocol, and every activation mode consumes
+/// some of that inherited state — even a one-shot `flox activate -- cmd`
+/// embeds the shell's `_FLOX_HOOK_DIFF` in the diff it computes and reads
+/// `_FLOX_ACTIVE_ENVIRONMENTS` on deactivation — so this guard runs before
+/// the invocation type is examined rather than only for activations that
+/// persist a layer on the prompt hook.
 ///
-/// An unset marker (fresh shell -- registration sets it) or one that matches
-/// are both safe to proceed on; only a marker that is set and different means
-/// this shell was set up by another version of Flox. The error lists the
-/// environments active in this shell so the user knows which ones to
+/// An unset marker (fresh shell) or one whose version part matches are both
+/// safe to proceed on; only a marker that is set with a different version
+/// means this shell was set up by another version of Flox. The error lists
+/// the environments active in this shell so the user knows which ones to
 /// re-activate after restarting.
 ///
 /// `flox-activations activate` has its own fail-closed check for invocations
