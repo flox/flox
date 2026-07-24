@@ -12,6 +12,7 @@ use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment};
 use flox_rust_sdk::providers::build::{
     COMMON_NIXPKGS_URL,
+    CatalogLock,
     FloxBuildMk,
     ManifestBuilder,
     PackageTarget,
@@ -326,6 +327,9 @@ impl Build {
             nef_stability,
             None,
             system_override,
+            // `flox build` always resolves a fresh catalog lock; it never
+            // reuses a lock from a preceding phase.
+            CatalogLock::Fresh,
         )?;
 
         let current_dir = env::current_dir()

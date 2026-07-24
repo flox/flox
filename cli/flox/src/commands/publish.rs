@@ -7,7 +7,7 @@ use flox_events::{CliEnvironmentPublishPayload, EventKind, EventsHub};
 use flox_manifest::{Manifest, MigratedTypedOnly};
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment};
-use flox_rust_sdk::providers::build::{COMMON_NIXPKGS_URL, PackageTarget};
+use flox_rust_sdk::providers::build::{COMMON_NIXPKGS_URL, CatalogLock, PackageTarget};
 use flox_rust_sdk::providers::nix_auth::NixAuth;
 use flox_rust_sdk::providers::publish::{
     PublishProvider,
@@ -16,6 +16,8 @@ use flox_rust_sdk::providers::publish::{
     check_build_metadata,
     check_environment_metadata,
     check_package_metadata,
+    lock_build_inputs,
+    render_build_source,
 };
 use floxhub_client::{CatalogClientTrait, CheckBuildQuery, CheckBuildResponse, FloxhubClientError};
 use indoc::formatdoc;
@@ -294,19 +296,30 @@ impl Publish {
 
         let system_override_inner = publish_config.system_override.into_inner();
 
-        let build_metadata = check_build_metadata(
+        // Render the build source exactly once and share it between the lock
+        // and build phases below, so their catalog-lock paths coincide and
+        // the build can reuse the lock phase's catalog lock instead of
+        // recomputing it.
+        let rendered = render_build_source(
             &flox,
-            &selected_base_nixpkgs_url,
-            system_override_inner,
             &publish_provider.env_metadata,
             &publish_provider.package_metadata.package,
-            nef_stability,
+        )?;
+
+        // Compute the catalog lock (the closure identity) without building,
+        // so the dedup pre-check below can run before the package build.
+        let locked = lock_build_inputs(
+            &flox,
+            &rendered,
+            &publish_provider.package_metadata.package,
+            nef_stability.clone(),
+            system_override_inner.clone(),
         )?;
 
         // Dedup check: ask the catalog server if this exact build has already
-        // been published before spending time on the upload. The closure
-        // identity (direct_catalog_inputs) is available after
-        // check_build_metadata, enabling a closure-aware match on the server.
+        // been published, BEFORE spending time on the package build. The
+        // closure identity (direct_catalog_inputs) comes from the lock phase
+        // above, enabling a closure-aware match on the server.
         let nixpkgs_rev = publish_provider.package_metadata.base_catalog_ref.rev();
         let nixpkgs_rev = nixpkgs_rev.as_deref().unwrap_or_else(|| {
             warn!(
@@ -324,8 +337,8 @@ impl Publish {
                 source_url: &publish_provider.env_metadata.build_repo_meta.url,
                 source_rev: &publish_provider.env_metadata.build_repo_meta.rev,
                 nixpkgs_rev,
-                system: build_metadata.system,
-                locked_inputs: &build_metadata.direct_catalog_inputs,
+                system: locked.system,
+                locked_inputs: &locked.direct_catalog_inputs,
             })
             .await;
 
@@ -354,6 +367,22 @@ impl Publish {
                 );
             },
         }
+
+        // New (or check failed): perform the full build. This reuses the
+        // catalog lock the lock phase above already computed instead of
+        // recomputing it, keyed on the authoritative lock artifact that phase
+        // emitted so a broken render->lock->build invariant fails loudly.
+        let build_metadata = check_build_metadata(
+            &flox,
+            &selected_base_nixpkgs_url,
+            system_override_inner,
+            &rendered,
+            &publish_provider.package_metadata.package,
+            nef_stability,
+            CatalogLock::Reuse {
+                lockfile: locked.catalog_lockfile.clone(),
+            },
+        )?;
 
         // CLI args take precedence over config
         let key_file = publish_config.cache_args.signing_private_key.or(config
