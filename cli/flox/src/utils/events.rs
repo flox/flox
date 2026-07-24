@@ -77,6 +77,12 @@ pub fn current_invocation_id() -> Option<Uuid> {
     RESOLVED_INVOCATION_ID.get().copied()
 }
 
+/// Saturate a duration into whole ms (u64::MAX ms is ~584M years — a
+/// ceiling only).
+pub(crate) fn duration_to_ms(elapsed: std::time::Duration) -> u64 {
+    u64::try_from(elapsed.as_millis()).unwrap_or(u64::MAX)
+}
+
 /// Build the [`SharedMetadataTemplate`] stamped onto every v2 event emitted
 /// by this process. The fields mirror the legacy
 /// [`crate::utils::metrics::MetricEntry`] so downstream consumers can
