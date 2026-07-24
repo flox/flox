@@ -633,12 +633,33 @@ impl CliEnvironmentGenerationsListPayload {
 // environment context (build operates on the manifest's `build`
 // table; search hits the catalog without a resolved environment).
 
+/// The outcome of a `flox build` invocation's build step. Parallels
+/// [`PackageOutcome`] with the same `success`/`failure` wire values.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum BuildOutcome {
+    Success,
+    Failure,
+}
+
 /// Payload for [`EventKind::CliBuild`]. Carries `flox build`'s
-/// per-invocation build-kind detection flags.
+/// per-invocation build-kind detection flags, plus the build outcome
+/// (outcome, duration, classified error, and the lockfile hash) once the
+/// build step has run.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CliBuildPayload {
     has_expression_build: bool,
     has_manifest_build: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    outcome: Option<BuildOutcome>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    duration_ms: Option<u64>,
+    /// Classified `ManifestBuilderError` slug (e.g. `build.build_failure`)
+    /// on failure — never the raw error message or build output.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    error_kind: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    lockfile_hash: Option<String>,
 }
 
 impl CliBuildPayload {
@@ -646,7 +667,31 @@ impl CliBuildPayload {
         Self {
             has_expression_build,
             has_manifest_build,
+            outcome: None,
+            duration_ms: None,
+            error_kind: None,
+            lockfile_hash: None,
         }
+    }
+
+    pub fn with_outcome(mut self, value: BuildOutcome) -> Self {
+        self.outcome = Some(value);
+        self
+    }
+
+    pub fn with_duration_ms(mut self, value: u64) -> Self {
+        self.duration_ms = Some(value);
+        self
+    }
+
+    pub fn with_error_kind(mut self, value: impl Into<String>) -> Self {
+        self.error_kind = Some(value.into());
+        self
+    }
+
+    pub fn with_lockfile_hash(mut self, value: impl Into<String>) -> Self {
+        self.lockfile_hash = Some(value.into());
+        self
     }
 }
 
@@ -1362,6 +1407,63 @@ mod tests {
         let payload_json = json!({
             "has_expression_build": true,
             "has_manifest_build": false,
+        });
+        let expected = json!({
+            "event_id": "00000000-0000-0000-0000-000000000000",
+            "event_timestamp": EPOCH_UNIX_MS,
+            "source": "cli",
+            "invocation_id": "00000000-0000-0000-0000-000000000000",
+            "device_id": "00000000-0000-0000-0000-000000000000",
+            "event_type": "cli.build",
+            "payload": payload_json,
+        });
+        assert_eq!(value, expected);
+    }
+
+    #[test]
+    fn cli_build_success_envelope_golden() {
+        let payload = CliBuildPayload::new(true, true)
+            .with_duration_ms(1234)
+            .with_lockfile_hash("d5f2b8")
+            .with_outcome(BuildOutcome::Success);
+        let value = serde_json::to_value(fixed_event(EventKind::CliBuild(payload)))
+            .expect("event serializes");
+        let payload_json = json!({
+            "has_expression_build": true,
+            "has_manifest_build": true,
+            "outcome": "success",
+            "duration_ms": 1234,
+            "lockfile_hash": "d5f2b8",
+        });
+        let expected = json!({
+            "event_id": "00000000-0000-0000-0000-000000000000",
+            "event_timestamp": EPOCH_UNIX_MS,
+            "source": "cli",
+            "invocation_id": "00000000-0000-0000-0000-000000000000",
+            "device_id": "00000000-0000-0000-0000-000000000000",
+            "event_type": "cli.build",
+            "payload": payload_json,
+        });
+        assert_eq!(value, expected);
+    }
+
+    #[test]
+    fn cli_build_failure_envelope_golden() {
+        // `error_kind` is a classified slug, never raw error text.
+        let payload = CliBuildPayload::new(false, true)
+            .with_duration_ms(50)
+            .with_lockfile_hash("d5f2b8")
+            .with_outcome(BuildOutcome::Failure)
+            .with_error_kind("build.build_failure");
+        let value = serde_json::to_value(fixed_event(EventKind::CliBuild(payload)))
+            .expect("event serializes");
+        let payload_json = json!({
+            "has_expression_build": false,
+            "has_manifest_build": true,
+            "outcome": "failure",
+            "duration_ms": 50,
+            "lockfile_hash": "d5f2b8",
+            "error_kind": "build.build_failure",
         });
         let expected = json!({
             "event_id": "00000000-0000-0000-0000-000000000000",
