@@ -118,6 +118,16 @@ impl<S> Generations<S> {
         read_metadata(&self.repo, &self.branch)
     }
 
+    /// The [GenerationId] that the next [`Generations::add_generation`] will
+    /// assign.
+    ///
+    /// Lets the mutation flow name the upcoming generation's GC-root links
+    /// (`nix build --out-link` targets) before the generation is committed to
+    /// floxmeta. Stable as long as no generation is added in between.
+    pub fn next_generation_id(&self) -> Result<GenerationId, GenerationsError> {
+        Ok(self.metadata()?.next_generation_id())
+    }
+
     /// Read the manifest of a given generation and return its contents as a string
     pub fn manifest_contents(&self, generation: usize) -> Result<String, GenerationsError> {
         let metadata = self.metadata()?;
@@ -331,7 +341,7 @@ impl Generations<ReadWrite<'_>> {
         &mut self,
         environment: &mut CoreEnvironment,
         change_kind: HistoryKind,
-    ) -> Result<(), GenerationsError> {
+    ) -> Result<GenerationId, GenerationsError> {
         // add metadata
         // this returns a free generation id to store the env files under
         let mut metadata = self.metadata()?;
@@ -372,7 +382,7 @@ impl Generations<ReadWrite<'_>> {
             .push("origin", false)
             .map_err(GenerationsError::CompleteTransaction)?;
 
-        Ok(())
+        Ok(generation)
     }
 
     /// Switch to a provided generation to either roll backwards or forwards.
@@ -732,6 +742,17 @@ pub struct SwitchGenerationOptions {
 }
 
 impl AllGenerationsMetadata {
+    /// The [GenerationId] that the next [Self::add_generation] will assign.
+    ///
+    /// Generations are numbered consecutively, so the next id is one past the
+    /// highest ever allocated (`total_generations`). Reading it does not mutate
+    /// metadata, so callers can name per-generation artifacts (e.g. GC-root
+    /// links) for the upcoming generation before it is committed. The value is
+    /// stable until the next `add_generation` (or other mutation).
+    pub fn next_generation_id(&self) -> GenerationId {
+        GenerationId(self.total_generations + 1)
+    }
+
     /// Add metadata for a new generation, as well as consistent history.
     /// The return provides the [GenerationId] of the added generation metadata,
     /// that should **subsequently** be used
@@ -753,7 +774,7 @@ impl AllGenerationsMetadata {
         // generation if you're currently on e.g. 2, but the latest is 5.
         //
         // Keys should all be numbers, but if they aren't we provide a default value.
-        let next_generation = GenerationId(self.total_generations + 1);
+        let next_generation = self.next_generation_id();
         let current_generation = self.current_gen();
 
         let history_spec = HistorySpec {
@@ -1448,6 +1469,24 @@ mod tests {
             assert_eq!(history.previous_generation, None);
             assert_eq!(history.kind, options.kind);
             assert_eq!(history.timestamp, options.timestamp);
+        }
+
+        #[test]
+        fn next_generation_id_matches_subsequent_add() {
+            let mut metadata = AllGenerationsMetadata::default();
+
+            // The peeked id must equal what add_generation actually assigns,
+            // both for the first generation and after one already exists, so the
+            // mutation flow can name GC-root links before committing.
+            let peeked_first = metadata.next_generation_id();
+            let (added_first, _) = metadata.add_generation(default_add_generation_options());
+            assert_eq!(peeked_first, added_first);
+            assert_eq!(peeked_first, GenerationId(1));
+
+            let peeked_second = metadata.next_generation_id();
+            let (added_second, _) = metadata.add_generation(default_add_generation_options());
+            assert_eq!(peeked_second, added_second);
+            assert_eq!(peeked_second, GenerationId(2));
         }
 
         #[test]

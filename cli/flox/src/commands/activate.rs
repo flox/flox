@@ -468,9 +468,13 @@ impl ActivateOptions {
                 .unwrap_or_default(),
         );
         let mode_link_path = rendered_env_path.clone().for_mode(&mode);
-        let store_path = fs::read_link(&mode_link_path).with_context(|| {
+        // Fully resolve to the nix store path: for managed environments the
+        // activation link is a two-level symlink (pointer -> generation GC-root
+        // link -> store), so a single `read_link` would yield the relative
+        // generation-link name rather than the store path.
+        let store_path = fs::canonicalize(&mode_link_path).with_context(|| {
             format!(
-                "a symlink at {} was just created and should still exist",
+                "a symlink at {} was just created and should still resolve",
                 mode_link_path.display()
             )
         })?;

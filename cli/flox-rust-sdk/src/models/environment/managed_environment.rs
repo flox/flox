@@ -35,6 +35,7 @@ use super::{
     EnvironmentError,
     EnvironmentPointer,
     GCROOTS_DIR_NAME,
+    GenerationLink,
     InstallationAttempt,
     LOG_DIR_NAME,
     ManagedPointer,
@@ -165,6 +166,9 @@ pub enum ManagedEnvironmentError {
 
     #[error("could not commit generation")]
     CommitGeneration(#[source] GenerationsError),
+
+    #[error("could not update activation links")]
+    FlipActivationLinks(#[source] std::io::Error),
 
     #[error("could not build environment")]
     Build(#[source] CoreEnvironmentError),
@@ -318,17 +322,18 @@ impl Environment for ManagedEnvironment {
             })
             .collect();
 
-        let out_link_prefix = self.rendered_env_links.out_link_prefix();
-        let result = local_checkout.install(packages, flox, Some(out_link_prefix))?;
+        let generation_id = generations
+            .next_generation_id()
+            .map_err(ManagedEnvironmentError::Generations)?;
+        let generation_link = self.rendered_env_links.generation_link(generation_id);
+        let result =
+            local_checkout.install(packages, flox, Some(generation_link.out_link_prefix()))?;
         if !result.modifications.is_empty() {
             let change = HistoryKind::Install { targets };
-            generations
+            let committed = generations
                 .add_generation(&mut local_checkout, change)
                 .map_err(ManagedEnvironmentError::CommitGeneration)?;
-            self.lock_pointer()?;
-        }
-        if result.built_environments.is_some() {
-            self.rendered_env_links.replace_legacy_links();
+            self.flip_to_committed_generation(committed, generation_id, &generation_link)?;
         }
 
         Ok(result)
@@ -361,19 +366,20 @@ impl Environment for ManagedEnvironment {
         }
 
         let targets: Vec<String> = specs.iter().map(|s| s.package_ref.clone()).collect();
-        let out_link_prefix = self.rendered_env_links.out_link_prefix();
-        let result = local_checkout.uninstall(specs, flox, Some(out_link_prefix))?;
+        let generation_id = generations
+            .next_generation_id()
+            .map_err(ManagedEnvironmentError::Generations)?;
+        let generation_link = self.rendered_env_links.generation_link(generation_id);
+        let result =
+            local_checkout.uninstall(specs, flox, Some(generation_link.out_link_prefix()))?;
         let change = HistoryKind::Uninstall { targets };
 
         // It's an error to uninstall a package that isn't installed so if we
         // got this far then we need a new generation.
-        generations
+        let committed = generations
             .add_generation(&mut local_checkout, change)
             .map_err(ManagedEnvironmentError::CommitGeneration)?;
-        self.lock_pointer()?;
-        if result.built_environment_store_paths.is_some() {
-            self.rendered_env_links.replace_legacy_links();
-        }
+        self.flip_to_committed_generation(committed, generation_id, &generation_link)?;
 
         Ok(result)
     }
@@ -394,16 +400,19 @@ impl Environment for ManagedEnvironment {
 
         let mut local_checkout = self.local_env_or_copy_current_generation(flox)?;
 
-        let out_link_prefix = self.rendered_env_links.out_link_prefix();
-        let result = local_checkout.edit(flox, contents, Some(out_link_prefix))?;
+        let generation_id = generations
+            .next_generation_id()
+            .map_err(ManagedEnvironmentError::Generations)?;
+        let generation_link = self.rendered_env_links.generation_link(generation_id);
+        let result =
+            local_checkout.edit(flox, contents, Some(generation_link.out_link_prefix()))?;
 
         match &result {
             EditResult::Changed { .. } => {
-                generations
+                let committed = generations
                     .add_generation(&mut local_checkout, HistoryKind::Edit)
                     .map_err(ManagedEnvironmentError::CommitGeneration)?;
-                self.lock_pointer()?;
-                self.rendered_env_links.replace_legacy_links();
+                self.flip_to_committed_generation(committed, generation_id, &generation_link)?;
             },
             EditResult::Unchanged => {},
         }
@@ -449,20 +458,24 @@ impl Environment for ManagedEnvironment {
             ))?
         }
 
-        let out_link_prefix = self.rendered_env_links.out_link_prefix();
-        let result = local_checkout.upgrade(flox, groups_or_iids, true, Some(out_link_prefix))?;
+        let generation_id = generations
+            .next_generation_id()
+            .map_err(ManagedEnvironmentError::Generations)?;
+        let generation_link = self.rendered_env_links.generation_link(generation_id);
+        let result = local_checkout.upgrade(
+            flox,
+            groups_or_iids,
+            true,
+            Some(generation_link.out_link_prefix()),
+        )?;
         if !result.diff().is_empty() {
             let change = HistoryKind::Upgrade {
                 targets: result.packages().collect(),
             };
-            generations
+            let committed = generations
                 .add_generation(&mut local_checkout, change)
                 .map_err(ManagedEnvironmentError::CommitGeneration)?;
-
-            self.lock_pointer()?;
-        }
-        if result.store_path.is_some() {
-            self.rendered_env_links.replace_legacy_links();
+            self.flip_to_committed_generation(committed, generation_id, &generation_link)?;
         }
         Ok(result)
     }
@@ -493,19 +506,23 @@ impl Environment for ManagedEnvironment {
             ))?
         }
 
-        let out_link_prefix = self.rendered_env_links.out_link_prefix();
-        let result =
-            local_checkout.include_upgrade(flox, to_upgrade.clone(), Some(out_link_prefix))?;
+        let generation_id = generations
+            .next_generation_id()
+            .map_err(ManagedEnvironmentError::Generations)?;
+        let generation_link = self.rendered_env_links.generation_link(generation_id);
+        let result = local_checkout.include_upgrade(
+            flox,
+            to_upgrade.clone(),
+            Some(generation_link.out_link_prefix()),
+        )?;
         if result.store_path.is_some() {
             let change = HistoryKind::IncludeUpgrade {
                 targets: to_upgrade,
             };
-            generations
+            let committed = generations
                 .add_generation(&mut local_checkout, change)
                 .map_err(ManagedEnvironmentError::CommitGeneration)?;
-
-            self.lock_pointer()?;
-            self.rendered_env_links.replace_legacy_links();
+            self.flip_to_committed_generation(committed, generation_id, &generation_link)?;
         }
 
         Ok(result)
@@ -555,12 +572,19 @@ impl Environment for ManagedEnvironment {
     }
 
     fn build(&mut self, flox: &Flox) -> Result<BuildEnvOutputs, EnvironmentError> {
-        let out_link_prefix = self.rendered_env_links.out_link_prefix();
+        let current_generation = self
+            .generations()
+            .metadata()
+            .map_err(ManagedEnvironmentError::Generations)?
+            .current_gen()
+            .expect("managed environment always has a current generation");
+        let generation_link = self.rendered_env_links.generation_link(current_generation);
+
         let mut local_checkout = self.local_env_or_copy_current_generation(flox)?;
         // todo: ensure lockfile exists?
 
-        let store_paths = local_checkout.build(flox, Some(out_link_prefix))?;
-        self.rendered_env_links.replace_legacy_links();
+        let store_paths = local_checkout.build(flox, Some(generation_link.out_link_prefix()))?;
+        self.flip_to_generation(&generation_link)?;
         Ok(store_paths)
     }
 
@@ -731,19 +755,20 @@ impl GenerationsExt for ManagedEnvironment {
 
         let base_dir = CanonicalPath::new(run_dir).expect("run dir is checked to exist");
 
-        let rendered_env_links =
-            RenderedEnvironmentLinks::new_in_base_dir_with_name_system_and_generation(
-                &base_dir,
-                self.name().as_ref(),
-                &flox.system,
-                generation,
-            );
+        // Activating a specific generation builds (if necessary) and resolves
+        // directly to that generation's GC-root link, without flipping the
+        // current pointer — `--generation N` must not change which generation
+        // is current.
+        let generation_link = RenderedEnvironmentLinks::new_in_base_dir_with_name_and_system(
+            &base_dir,
+            self.name().as_ref(),
+            &flox.system,
+        )
+        .generation_link(generation);
 
-        let out_link_prefix = rendered_env_links.out_link_prefix();
-        core_environment.build(flox, Some(out_link_prefix))?;
-        rendered_env_links.replace_legacy_links();
+        core_environment.build(flox, Some(generation_link.out_link_prefix()))?;
 
-        Ok(rendered_env_links)
+        Ok(generation_link.activation_links())
     }
 
     fn remote_generations_metadata(
@@ -863,7 +888,12 @@ impl ManagedEnvironment {
         write_generation_lock(&lock_path, &validated_lock)
             .map_err(ManagedEnvironmentError::from)?;
 
-        // Setup rendered_env_links
+        // Setup rendered_env_links.
+        //
+        // This always tracks the *current* generation's activation pointer, even
+        // for a pinned-generation view: pinned activation is served separately by
+        // `rendered_env_links_for_generation`, and current-generation operations
+        // (e.g. `build`) derive the per-generation GC-root link from this pointer.
         let rendered_env_links = {
             let run_dir = dot_flox_path.join(GCROOTS_DIR_NAME);
             if !run_dir.exists() {
@@ -873,20 +903,11 @@ impl ManagedEnvironment {
 
             let base_dir = CanonicalPath::new(run_dir).expect("run dir is checked to exist");
 
-            if let Some(generation) = generation {
-                RenderedEnvironmentLinks::new_in_base_dir_with_name_system_and_generation(
-                    &base_dir,
-                    pointer.name.as_ref(),
-                    &flox.system,
-                    generation,
-                )
-            } else {
-                RenderedEnvironmentLinks::new_in_base_dir_with_name_and_system(
-                    &base_dir,
-                    pointer.name.as_ref(),
-                    &flox.system,
-                )
-            }
+            RenderedEnvironmentLinks::new_in_base_dir_with_name_and_system(
+                &base_dir,
+                pointer.name.as_ref(),
+                &flox.system,
+            )
         };
 
         let parent_directory = dot_flox_path
@@ -1020,11 +1041,6 @@ impl ManagedEnvironment {
         // but we don't need to support pushing old manifests.
         local_checkout.lock(flox)?;
 
-        // Ensure the created generation is valid
-        let out_link_prefix = self.rendered_env_links.out_link_prefix();
-        local_checkout.build(flox, Some(out_link_prefix))?;
-        self.rendered_env_links.replace_legacy_links();
-
         let mut generations = self.generations();
         let mut generations = generations
             .writable(
@@ -1035,11 +1051,19 @@ impl ManagedEnvironment {
             )
             .map_err(ManagedEnvironmentError::CreateFloxmetaDir)?;
 
-        generations
+        // Build the new generation to its GC-root link (which also validates
+        // that it builds), commit it, then flip the activation pointer to it.
+        let generation_id = generations
+            .next_generation_id()
+            .map_err(ManagedEnvironmentError::Generations)?;
+        let generation_link = self.rendered_env_links.generation_link(generation_id);
+        local_checkout.build(flox, Some(generation_link.out_link_prefix()))?;
+
+        let committed = generations
             .add_generation(&mut local_checkout, HistoryKind::Edit)
             .map_err(ManagedEnvironmentError::CommitGeneration)?;
 
-        self.lock_pointer()?;
+        self.flip_to_committed_generation(committed, generation_id, &generation_link)?;
         Ok(SyncToGenerationResult::Synced)
     }
 
@@ -1164,6 +1188,43 @@ impl ManagedEnvironment {
 
         write_generation_lock(lock_path, &lock)?;
         Ok(())
+    }
+
+    /// Atomically point the activation links at a freshly built generation's
+    /// GC-root links, then refresh legacy compatibility links.
+    ///
+    /// This is the final, user-visible step of a managed-environment mutation
+    /// and must run only after the generation has been committed to floxmeta
+    /// (flox#4332).
+    fn flip_to_generation(&self, generation_link: &GenerationLink) -> Result<(), EnvironmentError> {
+        self.rendered_env_links
+            .flip_to(generation_link)
+            .map_err(ManagedEnvironmentError::FlipActivationLinks)?;
+        self.rendered_env_links.replace_legacy_links();
+        Ok(())
+    }
+
+    /// Commit-time pointer flip for a freshly committed mutation: write the
+    /// generation lock and flip the activation pointer to `built_link`.
+    ///
+    /// `built_link` was built for `built_for` (the id predicted by
+    /// `next_generation_id`), which must equal the `committed` id returned by
+    /// `add_generation` — both are read from the same floxmeta snapshot, so
+    /// they always match. The assertion guards against ever flipping the
+    /// activation pointer to a generation link that was never built (e.g. if a
+    /// future change reintroduced a window between predicting and committing).
+    fn flip_to_committed_generation(
+        &self,
+        committed: GenerationId,
+        built_for: GenerationId,
+        built_link: &GenerationLink,
+    ) -> Result<(), EnvironmentError> {
+        assert_eq!(
+            committed, built_for,
+            "committed generation {committed} does not match the built generation link {built_for}"
+        );
+        self.lock_pointer()?;
+        self.flip_to_generation(built_link)
     }
 
     /// Returns the environment owner
@@ -2520,6 +2581,51 @@ mod test {
             env.generations_metadata().unwrap().current_gen().as_deref(),
             Some(&2),
             "installing the same package should not change the generation"
+        );
+    }
+
+    /// After a managed mutation the activation pointer is a relative symlink to
+    /// the new generation's GC-root link (`-N-link`), not a direct store path —
+    /// the two-level model from flox#4332.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn mutation_points_activation_link_at_generation_gc_root() {
+        let owner = "owner".parse().unwrap();
+        let (mut flox, temp_dir) = flox_instance_with_optional_floxhub(Some(&owner));
+
+        flox.catalog_client =
+            catalog_replay_client(GENERATED_DATA.join("resolve/hello.yaml")).await;
+
+        let mut env = mock_managed_environment_in(&flox, "version = 1", owner, &temp_dir, None);
+        let packages = [PackageToInstall::Catalog(
+            CatalogPackage::from_str("hello").unwrap(),
+        )];
+        env.install(&packages, &flox).unwrap();
+
+        let generation = env
+            .generations_metadata()
+            .unwrap()
+            .current_gen()
+            .expect("environment has a current generation");
+        let generation_link = env.rendered_env_links.generation_link(generation);
+        let generation_dev = PathBuf::from(format!(
+            "{}-dev",
+            generation_link.out_link_prefix().display()
+        ));
+
+        // The generation GC-root link exists and keeps the store path live.
+        assert!(
+            generation_dev.is_symlink(),
+            "generation GC-root link should exist: {}",
+            generation_dev.display()
+        );
+
+        // The activation pointer is a relative symlink to that generation link.
+        let pointer_dev = env.rendered_env_links.dev.as_path();
+        assert!(pointer_dev.is_symlink(), "activation pointer should exist");
+        assert_eq!(
+            std::fs::read_link(pointer_dev).unwrap(),
+            Path::new(generation_dev.file_name().unwrap()),
+            "activation pointer should redirect to the generation GC-root link"
         );
     }
 

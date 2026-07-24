@@ -224,7 +224,11 @@ impl ServicesEnvironment {
 
         let rendered_link = rendered_env_links.for_mode(mode);
         let link_path: &Path = rendered_link.as_ref();
-        let Ok(current_store_path) = std::fs::read_link(link_path) else {
+        // Fully resolve the (possibly two-level) activation link to the nix
+        // store path, matching `flox_activate_store_path` set at activation
+        // time. A single `read_link` would yield the relative generation-link
+        // name for managed environments.
+        let Ok(current_store_path) = std::fs::canonicalize(link_path) else {
             return ProcessComposeState::NotCurrent;
         };
 
