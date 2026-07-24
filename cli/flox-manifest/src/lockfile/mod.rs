@@ -86,6 +86,19 @@ impl Lockfile {
         serde_json::from_slice(&contents).map_err(LockfileError::ParseJson)
     }
 
+    /// A blake3 fingerprint of the locked state, over the same canonical JSON
+    /// the lockfile is written to disk with (`to_string_pretty`). It
+    /// identifies *what was built* — the in-memory lockfile, which may have
+    /// been re-locked to differ from the on-disk file — and is stable within a
+    /// CLI version (it fingerprints the serialization, not the on-disk bytes,
+    /// and is deterministic only while every serialized map stays ordered).
+    /// `None` if serialization fails.
+    pub fn content_hash(&self) -> Option<String> {
+        serde_json::to_string_pretty(self)
+            .ok()
+            .map(|json| flox_core::blake3_hex(json.as_bytes()))
+    }
+
     pub fn version(&self) -> u8 {
         1
     }
@@ -611,6 +624,20 @@ pub(crate) mod tests {
     use crate::interfaces::AsTypedOnlyManifest;
     use crate::parsed::Inner;
     use crate::parsed::latest::{ManifestLatest, ManifestPackageDescriptor};
+
+    #[test]
+    fn content_hash_is_a_deterministic_digest() {
+        use flox_test_utils::GENERATED_DATA;
+        let path = CanonicalPath::new(GENERATED_DATA.join("envs/hello/manifest.lock")).unwrap();
+        let lockfile = Lockfile::read_from_file(&path).unwrap();
+        let hash = lockfile.content_hash().unwrap();
+        assert_eq!(hash.len(), 64);
+        // Round-trip through serialize → parse → hash: a non-ordered map in the
+        // lockfile tree would reorder keys and change the digest.
+        let round_tripped: Lockfile =
+            serde_json::from_str(&serde_json::to_string(&lockfile).unwrap()).unwrap();
+        assert_eq!(round_tripped.content_hash().unwrap(), hash);
+    }
 
     #[test]
     fn test_list_packages_catalog() {

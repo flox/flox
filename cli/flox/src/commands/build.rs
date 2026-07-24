@@ -1,11 +1,13 @@
 use std::env;
+use std::os::unix::process::ExitStatusExt;
 use std::path::Path;
 use std::process::Stdio;
+use std::time::Instant;
 
 use anyhow::{Context, Result, bail};
 use bpaf::Bpaf;
 use flox_core::data::CanonicalPath;
-use flox_events::{CliBuildPayload, EventKind, EventsHub};
+use flox_events::{CliBuildPayload, EventKind, EventsHub, Outcome};
 use flox_manifest::lockfile::Lockfile;
 use flox_manifest::{Manifest, MigratedTypedOnly};
 use flox_rust_sdk::flox::Flox;
@@ -14,6 +16,7 @@ use flox_rust_sdk::providers::build::{
     COMMON_NIXPKGS_URL,
     FloxBuildMk,
     ManifestBuilder,
+    ManifestBuilderError,
     PackageTarget,
     PackageTargetKind,
     PackageTargets,
@@ -33,6 +36,7 @@ use tracing::{debug, instrument, trace};
 use url::Url;
 
 use super::{DirEnvironmentSelect, dir_environment_select};
+use crate::utils::events::duration_to_ms;
 use crate::utils::message;
 use crate::{environment_subcommand_metric, subcommand_metric};
 
@@ -312,13 +316,9 @@ impl Build {
             "has_expression_build" = has_expression_build,
             "has_manifest_build" = has_manifest_build
         );
-        if let Err(err) = EventsHub::global().record_event(EventKind::CliBuild(
-            CliBuildPayload::new(has_expression_build, has_manifest_build),
-        )) {
-            debug!(error = %err, "Failed to record v2 event");
-        }
 
         let builder = FloxBuildMk::new(&flox, &base_dir, &expression_ref, &built_environments);
+        let build_start = Instant::now();
         let results = builder.build(
             &base_nixpkgs_url,
             &FLOX_INTERPRETER,
@@ -326,7 +326,40 @@ impl Build {
             nef_stability,
             None,
             system_override,
-        )?;
+        );
+        let build_duration_ms = duration_to_ms(build_start.elapsed());
+
+        // A build cut short by a signal — Ctrl-C sends SIGINT to the whole
+        // process group — has no genuine outcome, so it must not be recorded as
+        // a build failure. Only `BuildFailure` carries the child's status.
+        let interrupted = matches!(
+            &results,
+            Err(ManifestBuilderError::BuildFailure { status }) if status.signal().is_some()
+        );
+        if !interrupted {
+            // Gate the payload work — notably the lockfile serialization and
+            // hash — on an installed client, as env-detail lineage fields are.
+            let payload = EventsHub::global().when_client_set(|| {
+                let mut payload = CliBuildPayload::new(has_expression_build, has_manifest_build)
+                    .with_duration_ms(build_duration_ms);
+                if let Some(lockfile_hash) = lockfile.content_hash() {
+                    payload = payload.with_lockfile_hash(lockfile_hash);
+                }
+                match &results {
+                    Ok(_) => payload.with_outcome(Outcome::Success),
+                    Err(err) => payload
+                        .with_outcome(Outcome::Failure)
+                        .with_error_kind(err.into()),
+                }
+            });
+            if let Some(payload) = payload
+                && let Err(err) = EventsHub::global().record_event(EventKind::CliBuild(payload))
+            {
+                debug!(error = %err, "Failed to record v2 event");
+            }
+        }
+
+        let results = results?;
 
         let current_dir = env::current_dir()
             .context("could not get current directory")?

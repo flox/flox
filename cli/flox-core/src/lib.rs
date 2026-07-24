@@ -24,11 +24,18 @@ pub use version::Version;
 
 pub const N_HASH_CHARS: usize = 8;
 
+/// Full 64-char blake3 hex digest of `bytes`. The primitive behind
+/// [`path_hash`] and callers that fingerprint content (e.g. a lockfile's
+/// canonical serialization); callers own which bytes they hash.
+pub fn blake3_hex(bytes: &[u8]) -> String {
+    blake3::hash(bytes).to_hex().to_string()
+}
+
 /// Returns the truncated hash of a [Path]
 pub fn path_hash(p: impl AsRef<Path>) -> String {
-    let mut chars = blake3::hash(p.as_ref().as_os_str().as_bytes()).to_hex();
-    chars.truncate(N_HASH_CHARS);
-    chars.to_string()
+    let mut hash = blake3_hex(p.as_ref().as_os_str().as_bytes());
+    hash.truncate(N_HASH_CHARS);
+    hash
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -125,4 +132,16 @@ pub fn maybe_traceable_path(maybe_path: &Option<PathBuf>) -> impl tracing::Value
 /// Returns a log file name, or glob pattern, for upgrade-check logs.
 pub fn log_file_format_upgrade_check(index: impl Display) -> String {
     format!("upgrade-check.{}.log", index)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn blake3_hex_is_a_full_hex_digest() {
+        let hash = blake3_hex(b"flox");
+        assert_eq!(hash.len(), 64);
+        assert!(hash.chars().all(|c| c.is_ascii_hexdigit()));
+    }
 }

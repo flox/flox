@@ -82,7 +82,8 @@ pub trait ManifestBuilder {
     fn clean(self, package: &[PackageTargetName]) -> Result<(), ManifestBuilderError>;
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, strum::IntoStaticStr, strum::EnumCount)]
+#[strum(serialize_all = "snake_case", prefix = "build.")]
 pub enum ManifestBuilderError {
     #[error("failed to call package builder: {0}")]
     CallBuilderError(#[source] std::io::Error),
@@ -108,8 +109,11 @@ pub enum ManifestBuilderError {
     #[error("failed to clean up build artifacts: {status}")]
     RunClean { status: ExitStatus },
 
+    // Carries the child's `ExitStatus` so callers can tell a genuine build
+    // failure from a signal-terminated one (e.g. Ctrl-C, which reaches the
+    // whole process group).
     #[error("Build failed")]
-    BuildFailure,
+    BuildFailure { status: ExitStatus },
 }
 
 #[derive(Debug, PartialEq, Deserialize, Default, derive_more::Deref)]
@@ -428,7 +432,7 @@ impl ManifestBuilder for FloxBuildMk<'_> {
             .map_err(ManifestBuilderError::CallBuilderError)?;
 
         if !status.success() {
-            return Err(ManifestBuilderError::BuildFailure);
+            return Err(ManifestBuilderError::BuildFailure { status });
         }
 
         // TODO: should we bubble up errors through the channel?
@@ -1230,6 +1234,7 @@ mod license_tests {
 mod tests {
     use std::fs::{self, File};
     use std::os::unix::fs::PermissionsExt;
+    use std::os::unix::process::ExitStatusExt;
 
     use anyhow::Context;
     use flox_manifest::interfaces::{AsWritableManifest, WriteManifest};
@@ -1246,6 +1251,23 @@ mod tests {
     use crate::models::environment::{Environment, copy_dir_recursive};
     use crate::providers::catalog::test_helpers::catalog_replay_client;
     use crate::providers::git::{GitCommandProvider, GitProvider};
+
+    #[test]
+    fn build_failure_slug_is_namespaced() {
+        use strum::EnumCount;
+
+        // A new variant must get a deliberate look at its telemetry slug
+        // (cli.build `error_kind`): this count trips so the wire value isn't
+        // shipped unreviewed.
+        assert_eq!(ManifestBuilderError::COUNT, 9);
+
+        // A rename of the emitted variant would silently change the slug.
+        let err = ManifestBuilderError::BuildFailure {
+            status: ExitStatus::from_raw(1 << 8),
+        };
+        let slug: &'static str = (&err).into();
+        assert_eq!(slug, "build.build_failure");
+    }
 
     #[test]
     fn build_returns_failure_when_package_not_defined() {

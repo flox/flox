@@ -1,6 +1,6 @@
 use anyhow::Result;
 use bpaf::Bpaf;
-use flox_events::{CliEnvironmentPayload, CliPackagePayload, EventKind, EventsHub, PackageOutcome};
+use flox_events::{CliEnvironmentPayload, CliPackagePayload, EventKind, EventsHub, Outcome};
 use flox_manifest::parsed::latest::SelectedOutputs;
 use flox_manifest::raw::PackageModification;
 use flox_rust_sdk::flox::Flox;
@@ -137,7 +137,7 @@ impl Uninstall {
                 continue;
             }
             if let Err(err) = hub.record_event(EventKind::CliPackageUninstall(
-                CliPackagePayload::new(modification.install_id.clone(), PackageOutcome::Success),
+                CliPackagePayload::new(modification.install_id.clone(), Outcome::Success),
             )) {
                 debug!(error = %err, "Failed to record v2 event");
             }

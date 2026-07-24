@@ -1,7 +1,7 @@
 use anyhow::Result;
 use bpaf::Bpaf;
 use crossterm::style::Stylize;
-use flox_events::{CliEnvironmentPayload, CliPackagePayload, EventKind, EventsHub, PackageOutcome};
+use flox_events::{CliEnvironmentPayload, CliPackagePayload, EventKind, EventsHub, Outcome};
 use flox_manifest::lockfile::LockedPackage;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::{Environment, SingleSystemUpgradeDiff};
@@ -159,7 +159,7 @@ impl Upgrade {
         let hub = EventsHub::global();
         for (_, (before, _)) in diff_for_system.iter() {
             if let Err(err) = hub.record_event(EventKind::CliPackageUpgrade(
-                CliPackagePayload::new(before.install_id().to_string(), PackageOutcome::Success),
+                CliPackagePayload::new(before.install_id().to_string(), Outcome::Success),
             )) {
                 debug!(error = %err, "Failed to record v2 event");
             }
