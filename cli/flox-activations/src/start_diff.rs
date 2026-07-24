@@ -40,6 +40,34 @@ impl StartDiff {
         Ok(from_parsed_files(&start_env, &end_env))
     }
 
+    /// Like [`from_files`](Self::from_files), but returns `Ok(None)` when the
+    /// snapshots are absent because the activation was torn down (its state
+    /// directory removed by the executive's cleanup) between the decision to
+    /// read it and this read. This distinguishes that recoverable teardown
+    /// race from a genuine read/parse failure, which is still returned as
+    /// `Err`. Callers that can recover (re-evaluate, or skip) should prefer
+    /// this over [`from_files`](Self::from_files), which treats a missing file
+    /// as fatal.
+    pub fn from_files_if_present(
+        activation_state_dir: impl AsRef<Path>,
+    ) -> Result<Option<StartDiff>> {
+        let start_json = activation_state_dir.as_ref().join(ENV_DIFF_START_JSON);
+        let end_json = activation_state_dir.as_ref().join(ENV_DIFF_END_JSON);
+
+        let Some(start_env) = parse_env_json_if_present(&start_json)
+            .with_context(|| format!("Failed to read {}", start_json.display()))?
+        else {
+            return Ok(None);
+        };
+        let Some(end_env) = parse_env_json_if_present(&end_json)
+            .with_context(|| format!("Failed to read {}", end_json.display()))?
+        else {
+            return Ok(None);
+        };
+
+        Ok(Some(from_parsed_files(&start_env, &end_env)))
+    }
+
     #[cfg(test)]
     pub fn from_parts(additions: HashMap<String, String>, deletions: Vec<String>) -> Self {
         StartDiff(EnvDiff::from_parts(additions, deletions))
@@ -53,6 +81,18 @@ impl StartDiff {
 fn parse_env_json(path: impl AsRef<Path>) -> Result<HashMap<String, String>> {
     let contents = std::fs::read_to_string(path.as_ref())?;
     Ok(serde_json::from_str(&contents)?)
+}
+
+/// Like [`parse_env_json`], but returns `Ok(None)` when the file does not
+/// exist (the activation was torn down) rather than erroring. Any other
+/// failure — including a parse error on a file that does exist — is returned
+/// as `Err`.
+fn parse_env_json_if_present(path: impl AsRef<Path>) -> Result<Option<HashMap<String, String>>> {
+    match std::fs::read_to_string(path.as_ref()) {
+        Ok(contents) => Ok(Some(serde_json::from_str(&contents)?)),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(err) => Err(err.into()),
+    }
 }
 
 fn from_parsed_files(
@@ -168,5 +208,53 @@ mod tests {
 
         assert_eq!(diff.additions(), &HashMap::new());
         assert_eq!(diff.deletions(), vec!["VAR1".to_string()]);
+    }
+
+    #[test]
+    fn test_from_files_if_present_reads_both_files() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join(ENV_DIFF_START_JSON), r#"{"VAR1":"a"}"#).unwrap();
+        std::fs::write(
+            dir.path().join(ENV_DIFF_END_JSON),
+            r#"{"VAR1":"a","VAR2":"b"}"#,
+        )
+        .unwrap();
+
+        let diff = StartDiff::from_files_if_present(dir.path())
+            .unwrap()
+            .expect("both files present");
+        assert_eq!(
+            diff.additions(),
+            &HashMap::from([("VAR2".to_string(), "b".to_string())])
+        );
+    }
+
+    #[test]
+    fn test_from_files_if_present_returns_none_when_torn_down() {
+        // No files at all — the activation's state dir was removed by cleanup.
+        let dir = tempfile::tempdir().unwrap();
+        assert!(
+            StartDiff::from_files_if_present(dir.path())
+                .unwrap()
+                .is_none()
+        );
+
+        // start present but end missing (mid-teardown) is also "gone", not an error.
+        std::fs::write(dir.path().join(ENV_DIFF_START_JSON), r#"{"VAR1":"a"}"#).unwrap();
+        assert!(
+            StartDiff::from_files_if_present(dir.path())
+                .unwrap()
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn test_from_files_if_present_errors_on_malformed_file() {
+        // A file that exists but is not valid JSON is a real error, not a
+        // teardown — it must not be swallowed as `None`.
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join(ENV_DIFF_START_JSON), "not json").unwrap();
+        std::fs::write(dir.path().join(ENV_DIFF_END_JSON), r#"{}"#).unwrap();
+        assert!(StartDiff::from_files_if_present(dir.path()).is_err());
     }
 }

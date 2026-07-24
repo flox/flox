@@ -204,7 +204,11 @@ if [ "$_command_mode" = "false" ]; then
   _start_env_json="$_start_state_dir/start.env.json"
   _end_env_json="$_start_state_dir/end.env.json"
   # First activation of this environment. Snapshot environment to start.
-  $_jq -nS env > "$_start_env_json"
+  # Write to a temp file in the same directory and rename into place so a
+  # concurrently-attaching activation never observes a partially-written
+  # snapshot (the rename is atomic; a reader sees the whole file or nothing).
+  $_jq -nS env > "$_start_env_json.tmp"
+  mv -f "$_start_env_json.tmp" "$_start_env_json"
 fi
 
 case "$_FLOX_ENV_ACTIVATION_MODE" in
@@ -256,8 +260,9 @@ if [ "$_command_mode" = "true" ]; then
 fi
 
 if [ "$_command_mode" = "false" ]; then
-  # Capture ending environment.
-  $_jq -nS env > "$_end_env_json"
+  # Capture ending environment. Atomic write (see start.env.json above).
+  $_jq -nS env > "$_end_env_json.tmp"
+  mv -f "$_end_env_json.tmp" "$_end_env_json"
 fi
 
 "$_flox_activate_tracer" "${BASH_SOURCE[0]}" "$@" END

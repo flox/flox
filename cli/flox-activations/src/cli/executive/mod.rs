@@ -431,13 +431,18 @@ fn handle_start_services_signal(
         return Ok(None);
     }
 
-    start_process_compose_no_services(
+    let started = start_process_compose_no_services(
         subsystem_verbosity,
         attach_ctx,
         project_ctx,
         &ready_start_id,
         activation_state_dir,
     )?;
+    if !started {
+        // The activation was torn down before we could start services; there
+        // is nothing to record.
+        return Ok(None);
+    }
 
     activations.set_current_process_compose_start_id(ready_start_id);
 
