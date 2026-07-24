@@ -63,6 +63,9 @@ struct Cli {
     /// body. All diagnostics go to stderr; the lock is still written to `--out`.
     #[arg(short, long)]
     verbose: bool,
+
+    #[arg(long)]
+    scan: bool,
 }
 
 #[tokio::main]
@@ -132,6 +135,12 @@ async fn run(cli: Cli) -> Result<()> {
     let mut references: BTreeSet<CatalogRef> = BTreeSet::new();
     for rel in &cli.rel_paths {
         references.extend(scan_package(&cli.base_dir, rel)?);
+    }
+
+    if cli.scan {
+        println!("{}", serde_json::to_string_pretty(&references).unwrap());
+
+        return Ok(());
     }
 
     // Render each failure to its message body at the boundary, while the
