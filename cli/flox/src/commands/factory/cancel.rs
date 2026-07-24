@@ -1,11 +1,10 @@
-use std::num::NonZeroU64;
-
 use anyhow::Result;
 use bpaf::Bpaf;
-use floxhub_client::{BuildResponse, FactoryClientError, FactoryClientTrait, FactoryStatus};
+use floxhub_client::{BuildResponse, EffectiveBuildStatus, FactoryClientError, FactoryClientTrait};
 use indoc::{formatdoc, indoc};
 use tracing::instrument;
 
+use super::BuildId;
 use crate::utils::message;
 use crate::{Exit, subcommand_metric};
 
@@ -21,7 +20,7 @@ pub struct Cancel {
 
     /// Build ID to cancel
     #[bpaf(positional("ID"))]
-    pub id: NonZeroU64,
+    pub id: BuildId,
 }
 
 impl Cancel {
@@ -29,20 +28,12 @@ impl Cancel {
     pub async fn handle(self, client: &impl FactoryClientTrait) -> Result<()> {
         subcommand_metric!("factory::cancel");
 
-        // Build IDs are `i64` server-side, so an ID beyond `i64::MAX` cannot
-        // name a real build. Reject it as not found rather than cast with `as`,
-        // whose silent wrap would put a negative ID on the destructive endpoint;
-        // this returns before any request is issued.
-        let Ok(build_id) = i64::try_from(self.id.get()) else {
-            return Err(self.fail(&FactoryClientError::NotFound));
-        };
-
         // Issue the idempotent cancel. A 200 carries the build's effective
         // status, from which the outcome (initiated vs already terminal) is
         // read; every HTTP and transport failure is classified in the client
         // layer into the typed error the exit-code contract maps.
-        match client.cancel_build(build_id).await {
-            Ok(build) => match success_outcome(&build, self.id) {
+        match client.cancel_build(self.id.get()).await {
+            Ok(build) => match success_outcome(&build.status, self.id) {
                 // Terminal: the cancel is fully resolved. Print to stdout, exit 0.
                 CancelOutcome::Resolved(message) => {
                     print!("{}", render(&build, &message, self.json)?);
@@ -84,7 +75,7 @@ impl Cancel {
 /// An unrecognised response degrades to a generic service error (exit 1),
 /// following the codebase's graceful handling of unexpected responses rather
 /// than escalating it to a bespoke outcome.
-fn classify_error(err: &FactoryClientError, id: NonZeroU64) -> (String, u8) {
+fn classify_error(err: &FactoryClientError, id: BuildId) -> (String, u8) {
     match err {
         // No such build: exit 2.
         FactoryClientError::NotFound => (
@@ -120,8 +111,9 @@ fn classify_error(err: &FactoryClientError, id: NonZeroU64) -> (String, u8) {
         ),
         // A non-auth 4xx, or a body that did not parse as a build: an
         // unrecognised response, reported as a generic service error and retried
-        // rather than escalated. Exit 1. Naming the variant rather than `_` makes
-        // a future error variant a compile error rather than a silent default.
+        // rather than escalated. Exit 1. Naming the variant rather than using
+        // `_` makes a future error variant a compile error rather than a silent
+        // default.
         FactoryClientError::APIError(_) => (
             formatdoc! {"
                 The Flox Factory could not cancel build {id}.
@@ -150,49 +142,43 @@ enum CancelOutcome {
 /// Classify a successful (HTTP 200) cancel response from the build's effective
 /// `status`.
 ///
-/// The seven wire statuses parse into [`FactoryStatus`]; matching the enum makes
-/// a newly added server status a compile error here (once the client is
-/// regenerated) rather than a silent contract violation. `pending` is the one
-/// effective status the enum cannot represent: it is synthesized server-side for
-/// an undispatched build (`task_id IS NULL`), so it is matched on the string.
+/// Matching the typed [`EffectiveBuildStatus`] exhaustively makes a newly added
+/// server status a compile error here rather than a silent contract violation.
 ///
 /// A satisfied cancel reports a terminal `cancelled`/`completed`/`failed`/
-/// `timed_out`. A non-terminal status (`running`/`queued`/`dispatching`/
-/// `pending`) means the cancel was accepted but the build has not yet stopped;
-/// like the read verbs, that is a normal outcome, not a retryable error. Only a
-/// status outside the lifecycle vocabulary is a contract violation.
-fn success_outcome(build: &BuildResponse, id: NonZeroU64) -> CancelOutcome {
-    let status = build.status.as_str();
-    match build.status.parse::<FactoryStatus>() {
-        Ok(FactoryStatus::Cancelled) => {
+/// `timed_out`. A non-terminal `running`/`pending` means the cancel was accepted
+/// but the build has not yet stopped; like the read verbs, that is a normal
+/// outcome, not a retryable error. Only an unrecognized status is a contract
+/// violation.
+fn success_outcome(status: &EffectiveBuildStatus, id: BuildId) -> CancelOutcome {
+    let word = status.as_str();
+    match status {
+        EffectiveBuildStatus::Cancelled => {
             CancelOutcome::Resolved(format!("Cancellation initiated for build {id}."))
         },
-        // `timed_out` is a terminal status in the factory `Status` vocabulary;
-        // the service normalizes it to `failed` on a response (see the
-        // `BuildResponse.status` docs), so it should not appear here, but a
-        // known terminal status must not read as a contract violation.
-        Ok(FactoryStatus::Completed | FactoryStatus::Failed | FactoryStatus::TimedOut) => {
-            CancelOutcome::Resolved(format!(
-                "Build {id} is already {status}; nothing to cancel."
-            ))
+        EffectiveBuildStatus::Completed => {
+            CancelOutcome::Resolved(format!("Build {id} already completed; nothing to cancel."))
         },
-        Ok(FactoryStatus::Running | FactoryStatus::Queued | FactoryStatus::Dispatching) => {
-            CancelOutcome::Accepted(accepted_message(id, status))
+        EffectiveBuildStatus::Failed => {
+            CancelOutcome::Resolved(format!("Build {id} already failed; nothing to cancel."))
         },
-        // `pending`: an undispatched build's synthesized status, outside the
-        // `FactoryStatus` enum but a known, non-terminal outcome.
-        Err(_) if status == "pending" => CancelOutcome::Accepted(accepted_message(id, status)),
-        // A status outside the lifecycle vocabulary is a contract violation, not
-        // a successful cancel.
-        Err(_) => CancelOutcome::Unexpected(formatdoc! {"
-            The Flox Factory returned an unexpected status '{status}' for build {id}.
+        EffectiveBuildStatus::TimedOut => {
+            CancelOutcome::Resolved(format!("Build {id} already timed out; nothing to cancel."))
+        },
+        EffectiveBuildStatus::Running | EffectiveBuildStatus::Pending => {
+            CancelOutcome::Accepted(accepted_message(id, word))
+        },
+        // A status outside the known vocabulary is a contract violation, not a
+        // successful cancel.
+        EffectiveBuildStatus::Unknown(_) => CancelOutcome::Unexpected(formatdoc! {"
+            The Flox Factory returned an unexpected status '{word}' for build {id}.
             Run 'flox factory status {id}' to check the build."}),
     }
 }
 
 /// The "accepted but not yet terminal" message, shared by the non-terminal wire
 /// statuses and the synthesized `pending`.
-fn accepted_message(id: NonZeroU64, status: &str) -> String {
+fn accepted_message(id: BuildId, status: &str) -> String {
     formatdoc! {"
         Cancellation accepted for build {id}; it is {status} and not yet terminal.
         Run 'flox factory status {id}' to follow it."}
@@ -210,8 +196,6 @@ fn render(build: &BuildResponse, outcome: &str, json: bool) -> Result<String> {
 
 #[cfg(test)]
 mod tests {
-    use std::num::NonZeroU64;
-
     use flox_rust_sdk::utils::logging::test_helpers::test_subscriber_message_only;
     use floxhub_client::FactoryApiError;
     use pretty_assertions::assert_eq;
@@ -220,22 +204,18 @@ mod tests {
     use super::*;
     use crate::commands::factory::test_helpers::{StubFactoryClient, StubResult, make_build};
 
-    fn id(n: u64) -> NonZeroU64 {
-        NonZeroU64::new(n).unwrap()
+    fn id(n: i64) -> BuildId {
+        n.to_string().parse().unwrap()
     }
 
     // -------------------------------------------------------------------------
-    // success_outcome — the body-status -> outcome mapping
+    // success_outcome: the status-to-outcome mapping
     // -------------------------------------------------------------------------
-
-    fn build_with_status(status: &str) -> BuildResponse {
-        make_build(42, "x86_64-linux", "hello", Some(status))
-    }
 
     #[test]
     fn cancelled_status_is_resolved() {
         assert_eq!(
-            success_outcome(&build_with_status("cancelled"), id(42)),
+            success_outcome(&EffectiveBuildStatus::Cancelled, id(42)),
             CancelOutcome::Resolved("Cancellation initiated for build 42.".to_string())
         );
     }
@@ -243,18 +223,16 @@ mod tests {
     #[test]
     fn completed_status_is_resolved() {
         assert_eq!(
-            success_outcome(&build_with_status("completed"), id(42)),
-            CancelOutcome::Resolved(
-                "Build 42 is already completed; nothing to cancel.".to_string()
-            )
+            success_outcome(&EffectiveBuildStatus::Completed, id(42)),
+            CancelOutcome::Resolved("Build 42 already completed; nothing to cancel.".to_string())
         );
     }
 
     #[test]
     fn failed_status_is_resolved() {
         assert_eq!(
-            success_outcome(&build_with_status("failed"), id(42)),
-            CancelOutcome::Resolved("Build 42 is already failed; nothing to cancel.".to_string())
+            success_outcome(&EffectiveBuildStatus::Failed, id(42)),
+            CancelOutcome::Resolved("Build 42 already failed; nothing to cancel.".to_string())
         );
     }
 
@@ -263,10 +241,8 @@ mod tests {
         // `timed_out` is terminal, so it is an "already terminal" exit-0
         // outcome, not a contract violation.
         assert_eq!(
-            success_outcome(&build_with_status("timed_out"), id(42)),
-            CancelOutcome::Resolved(
-                "Build 42 is already timed_out; nothing to cancel.".to_string()
-            )
+            success_outcome(&EffectiveBuildStatus::TimedOut, id(42)),
+            CancelOutcome::Resolved("Build 42 already timed out; nothing to cancel.".to_string())
         );
     }
 
@@ -275,7 +251,7 @@ mod tests {
         // A 200 with a non-terminal status means the cancel was accepted but the
         // build has not yet stopped: a normal exit-0 outcome, not a retry.
         assert_eq!(
-            success_outcome(&build_with_status("running"), id(42)),
+            success_outcome(&EffectiveBuildStatus::Running, id(42)),
             CancelOutcome::Accepted(
                 indoc! {"
                     Cancellation accepted for build 42; it is running and not yet terminal.
@@ -287,11 +263,11 @@ mod tests {
 
     #[test]
     fn pending_status_is_accepted() {
-        // `pending` is an undispatched build's synthesized status: not in the
-        // `FactoryStatus` enum, but a known non-terminal outcome, so the cancel
-        // is accepted (exit 0) rather than read as a contract violation.
+        // `pending` is an undispatched build's effective status: a known
+        // non-terminal outcome, so the cancel is accepted (exit 0) rather than
+        // read as a contract violation.
         assert_eq!(
-            success_outcome(&build_with_status("pending"), id(42)),
+            success_outcome(&EffectiveBuildStatus::Pending, id(42)),
             CancelOutcome::Accepted(
                 indoc! {"
                     Cancellation accepted for build 42; it is pending and not yet terminal.
@@ -303,9 +279,12 @@ mod tests {
 
     #[test]
     fn out_of_vocabulary_status_is_unexpected() {
-        // Only a status outside the lifecycle vocabulary is a contract violation.
+        // Only a status outside the known vocabulary is a contract violation.
         assert_eq!(
-            success_outcome(&build_with_status("frobnicated"), id(42)),
+            success_outcome(
+                &EffectiveBuildStatus::Unknown("frobnicated".to_string()),
+                id(42)
+            ),
             CancelOutcome::Unexpected(
                 indoc! {"
                     The Flox Factory returned an unexpected status 'frobnicated' for build 42.
@@ -407,7 +386,12 @@ mod tests {
 
     #[test]
     fn render_human_prints_the_outcome_line() {
-        let build = make_build(42, "x86_64-linux", "hello", Some("running"));
+        let build = make_build(
+            42,
+            "x86_64-linux",
+            "hello",
+            Some(EffectiveBuildStatus::Running),
+        );
         assert_eq!(
             render(&build, "Cancellation initiated for build 42.", false).unwrap(),
             "Cancellation initiated for build 42.\n"
@@ -416,7 +400,12 @@ mod tests {
 
     #[test]
     fn render_json_emits_the_build_and_ignores_the_outcome() {
-        let build = make_build(42, "x86_64-linux", "hello", Some("running"));
+        let build = make_build(
+            42,
+            "x86_64-linux",
+            "hello",
+            Some(EffectiveBuildStatus::Running),
+        );
         let rendered = render(&build, "OUTCOME LINE", true).unwrap();
         // The JSON branch serializes the build and drops the human outcome
         // line. Assert the behavior of the branch, not serde's round-trip
@@ -432,7 +421,8 @@ mod tests {
 
     #[tokio::test]
     async fn successful_cancel_issues_delete_and_returns_ok() {
-        let client = StubFactoryClient::with_cancel(StubResult::Build("cancelled".to_string()));
+        let client =
+            StubFactoryClient::with_cancel(StubResult::Build(EffectiveBuildStatus::Cancelled));
         let args = Cancel {
             json: false,
             id: id(42),
@@ -478,7 +468,8 @@ mod tests {
         // A 200 with a non-terminal status means the cancel was accepted but the
         // build has not yet stopped: a normal success (exit 0) with a warning,
         // not a retryable error.
-        let client = StubFactoryClient::with_cancel(StubResult::Build("running".to_string()));
+        let client =
+            StubFactoryClient::with_cancel(StubResult::Build(EffectiveBuildStatus::Running));
         let args = Cancel {
             json: false,
             id: id(42),
@@ -505,7 +496,9 @@ mod tests {
         // A 200 whose status is outside the lifecycle vocabulary is a contract
         // violation, not a successful cancel: the verb returns exit 1 and emits
         // the error to stderr rather than printing the build to stdout.
-        let client = StubFactoryClient::with_cancel(StubResult::Build("frobnicated".to_string()));
+        let client = StubFactoryClient::with_cancel(StubResult::Build(
+            EffectiveBuildStatus::Unknown("frobnicated".to_string()),
+        ));
         let args = Cancel {
             json: false,
             id: id(42),
@@ -572,33 +565,6 @@ mod tests {
         assert_eq!(writer.to_string(), indoc! {"
             ✘ ERROR: Authentication was rejected by the Flox Factory.
             Run 'flox auth login' and try again.
-        "});
-    }
-
-    #[tokio::test]
-    async fn id_beyond_i64_max_is_not_found_without_a_request() {
-        // An ID above i64::MAX cannot name a real build. The stub would answer
-        // the DELETE successfully, so reaching the not-found path at all proves
-        // the range guard fired before any request — and no DELETE was issued.
-        let client = StubFactoryClient::with_cancel(StubResult::Build("cancelled".to_string()));
-        let args = Cancel {
-            json: false,
-            id: NonZeroU64::new(u64::MAX).unwrap(),
-        };
-
-        let (subscriber, writer) = test_subscriber_message_only();
-        let err = async { args.handle(&client).await.unwrap_err() }
-            .with_subscriber(subscriber)
-            .await;
-
-        assert!(err.is::<Exit>(), "expected an Exit error, got {err:?}");
-        assert!(
-            !client.cancel_was_called(),
-            "no DELETE should be issued for an out-of-range ID"
-        );
-        assert_eq!(writer.to_string(), indoc! {"
-            ✘ ERROR: No Flox Factory build found with ID 18446744073709551615.
-            Use 'flox factory list' to see existing builds.
         "});
     }
 }

@@ -3,7 +3,17 @@ use std::str::FromStr;
 
 use anyhow::Result;
 use bpaf::Bpaf;
-use floxhub_client::{BuildResponse, FactoryClientTrait, FactoryStatus};
+use floxhub_client::{
+    AttrPathItem,
+    BuildFilters,
+    BuildResponse,
+    EffectiveBuildStatus,
+    FactoryClientTrait,
+    Since,
+    SourceCommitShaItem,
+    SystemItem,
+};
+use itertools::Itertools;
 use serde::Serialize;
 use tracing::instrument;
 
@@ -11,57 +21,96 @@ use super::{effective_status, effective_updated_at};
 use crate::subcommand_metric;
 use crate::utils::message::page_output;
 
-/// CLI-boundary filter for `--status`, extending the seven wire `Status`
-/// values with the server-side keyword `undispatched` (builds where
-/// `task_id IS NULL`).
+/// Parse one `--status` value into a typed [`EffectiveBuildStatus`], rejecting
+/// any word outside the known vocabulary at the CLI boundary. The status
+/// vocabulary is pinned by the vendored schema, so an invalid value is a
+/// definite user error rather than something only the server can judge.
+fn parse_status(s: String) -> Result<EffectiveBuildStatus, String> {
+    EffectiveBuildStatus::KNOWN
+        .iter()
+        .find(|status| status.as_str() == s)
+        .cloned()
+        .ok_or_else(|| {
+            let valid = EffectiveBuildStatus::KNOWN
+                .iter()
+                .map(EffectiveBuildStatus::as_str)
+                .join(", ");
+            format!("Invalid status '{s}'; valid values are: {valid}.")
+        })
+}
+
+/// Parse one flag value into a generated newtype at the CLI boundary, naming
+/// `noun` in either failure so a user passing several empty values can tell
+/// which flag was rejected.
 ///
-/// `undispatched` is accepted by the GET /builds query parameter but is NOT
-/// a value of the `Status` enum. It is the mechanism for filtering builds
-/// the CLI renders as "pending (not dispatched)". The richer list-query
-/// contract — including effective-status matching semantics and what
-/// `undispatched` precisely means — is owned by ECO-97.
-#[derive(Debug, Clone, PartialEq)]
-pub enum StatusFilter {
-    /// One of the seven task lifecycle statuses on the wire.
-    Status(FactoryStatus),
-    /// Server-side keyword: builds with no dispatched task (`task_id IS NULL`).
-    Undispatched,
+/// The empty case gets its own message; any other constraint the newtype
+/// enforces reports the newtype's own error, so the message stays truthful if
+/// the schema tightens.
+fn parse_non_empty<T>(s: String, noun: &str) -> Result<T, String>
+where
+    T: FromStr,
+    T::Err: fmt::Display,
+{
+    if s.is_empty() {
+        return Err(format!("{noun} must not be empty."));
+    }
+    s.parse()
+        .map_err(|e| format!("{noun} '{s}' is invalid: {e}."))
 }
 
-impl FromStr for StatusFilter {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if s == "undispatched" {
-            return Ok(StatusFilter::Undispatched);
-        }
-        FactoryStatus::from_str(s)
-            .map(StatusFilter::Status)
-            .map_err(|_| {
-                format!("Invalid status '{s}'; valid values are: queued, dispatching, running, completed, failed, timed_out, cancelled, undispatched.")
-            })
-    }
+/// Parse one `--attr-path` prefix at the CLI boundary.
+fn parse_attr_path(s: String) -> Result<AttrPathItem, String> {
+    parse_non_empty(s, "Attribute path prefix")
 }
 
-impl fmt::Display for StatusFilter {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            StatusFilter::Status(s) => fmt::Display::fmt(s, f),
-            StatusFilter::Undispatched => f.write_str("undispatched"),
-        }
-    }
+/// Parse one `--source-commit-sha` prefix at the CLI boundary.
+fn parse_source_commit_sha(s: String) -> Result<SourceCommitShaItem, String> {
+    parse_non_empty(s, "Source commit SHA prefix")
+}
+
+/// Parse one `--system` value at the CLI boundary. Only emptiness is rejected
+/// here: the set of valid systems is a deployment's own catalog data, so the
+/// server is the sole authority on the vocabulary.
+fn parse_system(s: String) -> Result<SystemItem, String> {
+    parse_non_empty(s, "System")
+}
+
+/// Parse the `--since` value at the CLI boundary. Only emptiness is rejected
+/// here: the server owns the time grammar and remains the sole authority on it.
+fn parse_since(s: String) -> Result<Since, String> {
+    parse_non_empty(s, "Time")
 }
 
 /// List Flox Factory builds.
+///
+/// Each filter is repeatable and ORs its values; different filters AND together.
+/// An unfiltered invocation lists every build.
 #[derive(Debug, Clone, PartialEq, Bpaf)]
 pub struct List {
-    /// Filter by build status.
-    /// Valid values: queued, dispatching, running, completed, failed,
-    /// timed_out, cancelled, undispatched.
-    /// Use "undispatched" to show builds that have not yet been sent
-    /// to Build Coordinator (displayed as "pending (not dispatched)").
-    #[bpaf(long)]
-    pub status: Option<StatusFilter>,
+    /// Filter by build status; repeat to match any of several.
+    /// Valid values: pending, running, completed, failed, timed_out,
+    /// cancelled.
+    #[bpaf(long, argument::<String>("STATUS"), parse(parse_status), many)]
+    pub status: Vec<EffectiveBuildStatus>,
+
+    /// Filter by system; repeat to match any of several.
+    /// Examples: aarch64-darwin, aarch64-linux, x86_64-darwin, x86_64-linux.
+    /// A system the server does not know is reported with the values it does.
+    #[bpaf(long, argument::<String>("SYSTEM"), parse(parse_system), many)]
+    pub system: Vec<SystemItem>,
+
+    /// Filter by attribute-path prefix; repeat to match any of several.
+    #[bpaf(long, argument::<String>("PREFIX"), parse(parse_attr_path), many)]
+    pub attr_path: Vec<AttrPathItem>,
+
+    /// Filter by source commit SHA prefix; repeat to match any of several.
+    #[bpaf(long, argument::<String>("PREFIX"), parse(parse_source_commit_sha), many)]
+    pub source_commit_sha: Vec<SourceCommitShaItem>,
+
+    /// Only builds created at or after this time, given as a relative offset
+    /// ("7d") or an ISO 8601 timestamp.
+    #[bpaf(long, argument::<String>("TIME"), parse(parse_since), optional)]
+    pub since: Option<Since>,
 
     /// Display output as JSON
     #[bpaf(long)]
@@ -77,16 +126,19 @@ impl List {
     pub async fn handle(self, client: &impl FactoryClientTrait) -> Result<()> {
         subcommand_metric!("factory::list");
 
-        // Convert the validated filter to its wire string. The seven Status
-        // values use their own Display ("running", etc.); "undispatched" is
-        // forwarded as the literal keyword the server accepts.
-        let status_str = self.status.as_ref().map(|f| f.to_string());
+        let filters = BuildFilters {
+            status: self.status,
+            system: self.system,
+            attr_path: self.attr_path,
+            source_commit_sha: self.source_commit_sha,
+            since: self.since,
+        };
 
         // Depage the full result set, mirroring `flox generations list`: the
         // operator sees every matching build at once and scrolls with the
         // pager, rather than stepping server-side pages by hand.
         let builds = client
-            .list_builds(status_str.as_deref())
+            .list_builds(&filters)
             .await
             .map_err(|e| super::user_facing_error(e, None))?;
 
@@ -203,33 +255,24 @@ impl fmt::Display for BuildListDisplay {
 
 #[cfg(test)]
 mod tests {
+    use bpaf::Parser;
     use indoc::indoc;
     use pretty_assertions::assert_eq;
 
     use super::*;
-    use crate::commands::factory::test_helpers::make_build;
-
-    #[test]
-    fn status_filter_parses_undispatched_keyword() {
-        let f: StatusFilter = "undispatched".parse().unwrap();
-        assert_eq!(f, StatusFilter::Undispatched);
-    }
-
-    #[test]
-    fn status_filter_rejects_invalid_value_with_named_values() {
-        let err = "garbage".parse::<StatusFilter>().unwrap_err();
-        assert_eq!(
-            err,
-            "Invalid status 'garbage'; valid values are: queued, dispatching, running, completed, failed, timed_out, cancelled, undispatched."
-        );
-    }
+    use crate::commands::factory::test_helpers::{StubFactoryClient, StubResult, make_build};
 
     #[test]
     fn list_display_renders_table_exactly() {
         // A dispatched build shows its task's updated_at; an undispatched build
         // has no task, so UPDATED falls back to the build's created_at.
         let builds = vec![
-            make_build(1, "x86_64-linux", "hello", Some("running")),
+            make_build(
+                1,
+                "x86_64-linux",
+                "hello",
+                Some(EffectiveBuildStatus::Running),
+            ),
             make_build(2, "aarch64-darwin", "ripgrep", None),
         ];
         let display = BuildListDisplay::from(builds);
@@ -238,5 +281,124 @@ mod tests {
             1         hello      x86_64-linux    running                   2025-01-01T00:00:01+00:00
             2         ripgrep    aarch64-darwin  pending (not dispatched)  2025-01-01T00:00:00+00:00
         "});
+    }
+
+    #[test]
+    fn list_display_renders_new_status_labels() {
+        // The labels introduced with the typed status: a timed-out build reads
+        // `timed_out` (not `failed`), a pre-dispatch cancel reads `cancelled`
+        // (not undispatched), and an unrecognized status renders tolerantly as
+        // `unknown: <value>` rather than blanking the row.
+        let builds = vec![
+            make_build(
+                3,
+                "x86_64-linux",
+                "curl",
+                Some(EffectiveBuildStatus::TimedOut),
+            ),
+            make_build(
+                4,
+                "aarch64-darwin",
+                "jq",
+                Some(EffectiveBuildStatus::Cancelled),
+            ),
+            make_build(
+                5,
+                "x86_64-linux",
+                "wget",
+                Some(EffectiveBuildStatus::Unknown("frobnicated".to_string())),
+            ),
+        ];
+        let display = BuildListDisplay::from(builds);
+        assert_eq!(display.to_string(), indoc! {"
+            BUILD ID  ATTR PATH  SYSTEM          STATUS                UPDATED
+            3         curl       x86_64-linux    timed_out             2025-01-01T00:00:01+00:00
+            4         jq         aarch64-darwin  cancelled             2025-01-01T00:00:00+00:00
+            5         wget       x86_64-linux    unknown: frobnicated  2025-01-01T00:00:00+00:00
+        "});
+    }
+
+    #[tokio::test]
+    async fn list_handler_forwards_all_filters() {
+        let client = StubFactoryClient::with_outcomes(
+            StubResult::Build(EffectiveBuildStatus::Completed),
+            StubResult::NotFound,
+        );
+        let args = List {
+            status: vec![EffectiveBuildStatus::Running, EffectiveBuildStatus::Failed],
+            system: vec!["aarch64-darwin".parse().unwrap()],
+            attr_path: vec!["hello".parse().unwrap()],
+            source_commit_sha: vec!["abc123".parse().unwrap()],
+            since: Some("7d".parse().unwrap()),
+            json: false,
+            no_pager: true,
+        };
+
+        args.handle(&client).await.unwrap();
+
+        assert_eq!(
+            client.last_filters(),
+            Some(BuildFilters {
+                status: vec![EffectiveBuildStatus::Running, EffectiveBuildStatus::Failed],
+                system: vec!["aarch64-darwin".parse().unwrap()],
+                attr_path: vec!["hello".parse().unwrap()],
+                source_commit_sha: vec!["abc123".parse().unwrap()],
+                since: Some("7d".parse().unwrap()),
+            })
+        );
+    }
+
+    #[test]
+    fn unknown_status_is_rejected_at_parse_time() {
+        // The status vocabulary is pinned by the vendored schema, so an unknown
+        // value is a definite user error caught at the flag boundary, and the
+        // failure names the accepted values.
+        let failure = list()
+            .to_options()
+            .run_inner(&["--status", "garbage"][..])
+            .expect_err("expected an unknown --status to fail parsing");
+        // bpaf line-wraps the rendered failure, so compare with newlines
+        // collapsed to spaces.
+        let message = failure.unwrap_stderr().replace('\n', " ");
+        assert!(
+            message.contains("Invalid status 'garbage'"),
+            "unexpected parse failure: {message}"
+        );
+        assert!(
+            message.contains(
+                "valid values are: pending, running, completed, failed, timed_out, cancelled"
+            ),
+            "unexpected parse failure: {message}"
+        );
+    }
+
+    /// Every filter rejects an empty value at the boundary, before it becomes
+    /// an unmatchable filter or a doomed request, and each names itself so a
+    /// user passing several empty values can tell which one was rejected.
+    #[test]
+    fn empty_filter_values_are_rejected_and_name_their_flag() {
+        // `--since` is optional rather than repeatable, so its boundary parse
+        // applies inside the optional lift; it is covered here to pin that the
+        // lift does not skip the parse.
+        let cases = [
+            ("--attr-path", "Attribute path prefix must not be empty."),
+            (
+                "--source-commit-sha",
+                "Source commit SHA prefix must not be empty.",
+            ),
+            ("--system", "System must not be empty."),
+            ("--since", "Time must not be empty."),
+        ];
+
+        for (flag, expected) in cases {
+            let Err(failure) = list().to_options().run_inner(&[flag, ""][..]) else {
+                panic!("expected an empty {flag} to fail parsing");
+            };
+            let message = failure.unwrap_stderr().replace('\n', " ");
+            assert!(
+                message.contains(expected),
+                "expected {flag} to report {expected:?}, got: {message}"
+            );
+        }
     }
 }
