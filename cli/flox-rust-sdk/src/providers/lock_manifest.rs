@@ -3384,10 +3384,10 @@ mod tests {
         .unwrap();
 
         assert_eq!(merged, ManifestLatest {
-            vars: Vars::from_map(BTreeMap::from([
+            vars: Vars::from_map([
                 ("foo".to_string(), "highest_precedence".to_string()),
-                ("bar".to_string(), "higher_precedence".to_string())
-            ])),
+                ("bar".to_string(), "higher_precedence".to_string()),
+            ]),
             ..Default::default()
         });
         assert_eq!(
@@ -3823,12 +3823,12 @@ mod tests {
         assert_eq!(
             lockfile.manifest,
             ManifestLatest {
-                vars: Vars::from_map(BTreeMap::from([
+                vars: Vars::from_map([
                     ("child_local".to_string(), "hi".to_string()),
                     ("child_remote".to_string(), "hi".to_string()),
                     ("parent".to_string(), "hi".to_string()),
                     ("composer".to_string(), "hi".to_string()),
-                ])),
+                ]),
                 ..Default::default()
             }
             .as_typed_only(),

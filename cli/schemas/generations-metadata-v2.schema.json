@@ -1,183 +1,209 @@
 {
+  "type": "object",
+  "properties": {
+    "version": {
+      "$ref": "#/$defs/version",
+      "description": "Schema version of the metadata file"
+    },
+    "history": {
+      "$ref": "#/$defs/History"
+    },
+    "total_generations": {
+      "type": "integer",
+      "format": "uint",
+      "minimum": 0
+    }
+  },
+  "required": [
+    "version",
+    "history",
+    "total_generations"
+  ],
+  "description": "flox environment metadata for managed environments\n\nManaged environments support rolling back to previous generations.\nGenerations are defined as immutable copy-on-write folders.\nRollbacks and associated [SingleGenerationMetadata] are tracked per environment\nin a metadata file at the root of the environment branch.",
+  "title": "AllGenerationsMetadata",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$defs": {
-    "GenerationId": {
-      "type": "string"
+    "version": {
+      "type": "integer",
+      "const": 2
     },
     "History": {
+      "type": "array",
       "items": {
         "$ref": "#/$defs/HistorySpec"
-      },
-      "type": "array"
+      }
     },
     "HistorySpec": {
+      "type": "object",
       "anyOf": [
         {
+          "type": "object",
           "properties": {
             "kind": {
-              "const": "import",
-              "type": "string"
+              "type": "string",
+              "const": "import"
             }
           },
           "required": [
             "kind"
           ],
-          "title": "Import",
-          "type": "object"
+          "title": "Import"
         },
         {
+          "type": "object",
           "properties": {
             "kind": {
-              "const": "initialize",
-              "type": "string"
+              "type": "string",
+              "const": "initialize"
             }
           },
           "required": [
             "kind"
           ],
-          "title": "Initialize",
-          "type": "object"
+          "title": "Initialize"
         },
         {
+          "type": "object",
           "properties": {
             "description": {
               "type": "string"
             },
             "kind": {
-              "const": "migrate_v1",
-              "type": "string"
+              "type": "string",
+              "const": "migrate_v1"
             }
           },
           "required": [
             "kind",
             "description"
           ],
-          "title": "MigrateV1",
-          "type": "object"
+          "title": "MigrateV1"
         },
         {
+          "type": "object",
           "properties": {
-            "kind": {
-              "const": "install",
-              "type": "string"
-            },
             "targets": {
+              "type": "array",
               "items": {
                 "type": "string"
-              },
-              "type": "array"
+              }
+            },
+            "kind": {
+              "type": "string",
+              "const": "install"
             }
           },
           "required": [
             "kind",
             "targets"
           ],
-          "title": "Install",
-          "type": "object"
+          "title": "Install"
         },
         {
+          "type": "object",
           "properties": {
             "kind": {
-              "const": "edit",
-              "type": "string"
+              "type": "string",
+              "const": "edit"
             }
           },
           "required": [
             "kind"
           ],
-          "title": "Edit",
-          "type": "object"
+          "title": "Edit"
         },
         {
+          "type": "object",
           "properties": {
-            "kind": {
-              "const": "uninstall",
-              "type": "string"
-            },
             "targets": {
+              "type": "array",
               "items": {
                 "type": "string"
-              },
-              "type": "array"
+              }
+            },
+            "kind": {
+              "type": "string",
+              "const": "uninstall"
             }
           },
           "required": [
             "kind",
             "targets"
           ],
-          "title": "Uninstall",
-          "type": "object"
+          "title": "Uninstall"
         },
         {
+          "type": "object",
           "properties": {
-            "kind": {
-              "const": "upgrade",
-              "type": "string"
-            },
             "targets": {
+              "type": "array",
               "items": {
                 "type": "string"
-              },
-              "type": "array"
+              }
+            },
+            "kind": {
+              "type": "string",
+              "const": "upgrade"
             }
           },
           "required": [
             "kind",
             "targets"
           ],
-          "title": "Upgrade",
-          "type": "object"
+          "title": "Upgrade"
         },
         {
+          "type": "object",
           "properties": {
-            "kind": {
-              "const": "include_upgrade",
-              "type": "string"
-            },
             "targets": {
+              "type": "array",
               "items": {
                 "type": "string"
-              },
-              "type": "array"
+              }
+            },
+            "kind": {
+              "type": "string",
+              "const": "include_upgrade"
             }
           },
           "required": [
             "kind",
             "targets"
           ],
-          "title": "IncludeUpgrade",
-          "type": "object"
+          "title": "IncludeUpgrade"
         },
         {
+          "type": "object",
           "properties": {
             "kind": {
-              "const": "switch_generation",
-              "type": "string"
+              "type": "string",
+              "const": "switch_generation"
             }
           },
           "required": [
             "kind"
           ],
-          "title": "SwitchGeneration",
-          "type": "object"
+          "title": "SwitchGeneration"
         },
         {
+          "type": "object",
           "properties": {
-            "kind": {
-              "const": "other",
-              "type": "string"
-            },
             "summary": {
               "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "const": "other"
             }
           },
           "required": [
             "kind",
             "summary"
           ],
-          "title": "Other",
-          "type": "object"
+          "title": "Other"
         },
         {
+          "type": "object",
           "properties": {
             "kind": {
               "type": "string"
@@ -186,33 +212,38 @@
           "required": [
             "kind"
           ],
-          "title": "Unknown",
-          "type": "object"
+          "title": "Unknown"
         }
       ],
       "description": "The structure of a single change, tying together\n_who_ performed _what_ change, where and when.",
       "properties": {
         "author": {
-          "description": "Local username of the user performing the change",
-          "type": "string"
+          "type": "string",
+          "description": "Local username of the user performing the change"
+        },
+        "hostname": {
+          "type": "string",
+          "description": "Hostname of the machine, on which the change was made"
         },
         "command": {
-          "description": "Command line args to the command that performed the change\nThis can be `None` if the change was invoked by a unit test or FloxHub.",
-          "items": {
-            "type": "string"
-          },
           "type": [
             "array",
             "null"
-          ]
+          ],
+          "items": {
+            "type": "string"
+          },
+          "description": "Command line args to the command that performed the change\nThis can be `None` if the change was invoked by a unit test or FloxHub."
+        },
+        "timestamp": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0,
+          "description": "Timestamp associated with the change"
         },
         "current_generation": {
           "$ref": "#/$defs/GenerationId",
           "description": "Currently live generation, e.g. created by the change\nor switched to."
-        },
-        "hostname": {
-          "description": "Hostname of the machine, on which the change was made",
-          "type": "string"
         },
         "previous_generation": {
           "anyOf": [
@@ -224,12 +255,6 @@
             }
           ],
           "description": "Previous generation before a new generation was created,\nor the generation live before a generation switch."
-        },
-        "timestamp": {
-          "description": "Timestamp associated with the change",
-          "format": "uint",
-          "minimum": 0,
-          "type": "integer"
         }
       },
       "required": [
@@ -237,35 +262,10 @@
         "hostname",
         "timestamp",
         "current_generation"
-      ],
-      "type": "object"
+      ]
     },
-    "version": {
-      "const": 2,
-      "type": "integer"
+    "GenerationId": {
+      "type": "string"
     }
-  },
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "flox environment metadata for managed environments\n\nManaged environments support rolling back to previous generations.\nGenerations are defined as immutable copy-on-write folders.\nRollbacks and associated [SingleGenerationMetadata] are tracked per environment\nin a metadata file at the root of the environment branch.",
-  "properties": {
-    "history": {
-      "$ref": "#/$defs/History"
-    },
-    "total_generations": {
-      "format": "uint",
-      "minimum": 0,
-      "type": "integer"
-    },
-    "version": {
-      "$ref": "#/$defs/version",
-      "description": "Schema version of the metadata file"
-    }
-  },
-  "required": [
-    "version",
-    "history",
-    "total_generations"
-  ],
-  "title": "AllGenerationsMetadata",
-  "type": "object"
+  }
 }

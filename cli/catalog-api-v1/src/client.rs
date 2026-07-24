@@ -5527,6 +5527,226 @@ impl ClientInfo<crate::hooks::RequestHooks> for Client {
 impl ClientHooks<crate::hooks::RequestHooks> for &Client {}
 #[allow(clippy::all)]
 impl Client {
+    /**Search for packages
+
+Search the catalog(s) under the given criteria for matching packages.
+
+Required Query Parameters:
+- **system**: The system architecture to search for (e.g., x86_64-linux)
+
+Optional Query Parameters:
+- **search_term**: The search term to filter packages by
+- **catalogs**: Comma separated list of catalog names to search; defaults to
+  all catalogs. Note: when searching base catalog, search_term is required.
+- **page**: Page number for pagination (default: 0)
+- **pageSize**: Page size for pagination (default: 10)
+Returns:
+- **PackageSearchResult**: A list of PackageInfoSearch items and total count
+
+Sends a `GET` request to `/api/v1/catalog/search`
+
+*/
+    pub async fn search_api_v1_catalog_search_get<'a>(
+        &'a self,
+        catalogs: Option<&'a str>,
+        page: Option<i64>,
+        page_size: Option<i64>,
+        search_term: Option<&'a types::SearchTerm>,
+        system: types::PackageSystem,
+    ) -> Result<ResponseValue<types::PackageSearchResult>, Error<types::ErrorResponse>> {
+        let url = format!("{}/api/v1/catalog/search", self.baseurl);
+        let mut header_map = ::reqwest::header::HeaderMap::with_capacity(1usize);
+        header_map
+            .append(
+                ::reqwest::header::HeaderName::from_static("api-version"),
+                ::reqwest::header::HeaderValue::from_static(Self::api_version()),
+            );
+        #[allow(unused_mut)]
+        let mut request = self
+            .client
+            .get(url)
+            .header(
+                ::reqwest::header::ACCEPT,
+                ::reqwest::header::HeaderValue::from_static("application/json"),
+            )
+            .query(&progenitor_client::QueryParam::new("catalogs", &catalogs))
+            .query(&progenitor_client::QueryParam::new("page", &page))
+            .query(&progenitor_client::QueryParam::new("pageSize", &page_size))
+            .query(&progenitor_client::QueryParam::new("search_term", &search_term))
+            .query(&progenitor_client::QueryParam::new("system", &system))
+            .headers(header_map)
+            .build()?;
+        let info = OperationInfo {
+            operation_id: "search_api_v1_catalog_search_get",
+        };
+        self.pre(&mut request, &info).await?;
+        let result = self.exec(request, &info).await;
+        self.post(&result, &info).await?;
+        let response = result?;
+        match response.status().as_u16() {
+            200u16 => ResponseValue::from_response(response).await,
+            422u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            _ => Err(Error::UnexpectedResponse(response)),
+        }
+    }
+    /**Shows available packages of a specific package
+
+Returns a list of versions for a given attr_path
+
+Required Query Parameters:
+- **attr_path**: The attr_path, must be valid.
+
+Optional Query Parameters:
+- **page**: Optional page number for pagination (def = 0)
+- **pageSize**: Optional page size for pagination (def = 10)
+
+Returns:
+- **PackagesResult**: A list of PackageResolutionInfo and the total result count
+
+Sends a `GET` request to `/api/v1/catalog/packages/{attr_path}`
+
+*/
+    pub async fn packages_api_v1_catalog_packages_attr_path_get<'a>(
+        &'a self,
+        attr_path: &'a str,
+        page: Option<i64>,
+        page_size: Option<i64>,
+    ) -> Result<ResponseValue<types::PackagesResult>, Error<types::ErrorResponse>> {
+        let url = format!(
+            "{}/api/v1/catalog/packages/{}",
+            self.baseurl,
+            encode_path(&attr_path.to_string()),
+        );
+        let mut header_map = ::reqwest::header::HeaderMap::with_capacity(1usize);
+        header_map
+            .append(
+                ::reqwest::header::HeaderName::from_static("api-version"),
+                ::reqwest::header::HeaderValue::from_static(Self::api_version()),
+            );
+        #[allow(unused_mut)]
+        let mut request = self
+            .client
+            .get(url)
+            .header(
+                ::reqwest::header::ACCEPT,
+                ::reqwest::header::HeaderValue::from_static("application/json"),
+            )
+            .query(&progenitor_client::QueryParam::new("page", &page))
+            .query(&progenitor_client::QueryParam::new("pageSize", &page_size))
+            .headers(header_map)
+            .build()?;
+        let info = OperationInfo {
+            operation_id: "packages_api_v1_catalog_packages_attr_path_get",
+        };
+        self.pre(&mut request, &info).await?;
+        let result = self.exec(request, &info).await;
+        self.post(&result, &info).await?;
+        let response = result?;
+        match response.status().as_u16() {
+            200u16 => ResponseValue::from_response(response).await,
+            404u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            422u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            _ => Err(Error::UnexpectedResponse(response)),
+        }
+    }
+    /**Resolve a list of Package Groups
+
+Resolves a list of package groups, each being a list of package descriptors.
+
+Required Body:
+- **groups**: An object with an `items` array of PackageGroups to resolve.
+
+Optional Query Parameters:
+- **candidate_pages**: Number of additional candidate pages to return
+  (default: 0)
+
+Returns:
+- **ResolvedPackageGroups**: An object with an `items` array of
+  `ResolvedPackageGroup` items.
+
+Resolution Rules:
+- Each `PackageGroup` is resolved independently.
+- Each page that has packages meeting all descriptors in the group is
+  returned.
+- The latest complete page includes full package details.
+- Additional candidate pages are returned without full details.
+
+PackageDescriptor Fields:
+- **install_id**: [required] Reference identifier for the package in the
+  manifest. Used for error messages and result correlation.
+- **attr_path**: [required] The nix attribute path to match exactly.
+- **systems**: [required] List of systems to resolve for (e.g.,
+  x86_64-linux).
+- **version**: [optional] Version constraint. Can be a literal version or
+  semver constraint. Packages whose version cannot be parsed as semver are
+  excluded when using semver constraints.
+- **derivation**: [optional] Specific derivation path to match.
+- **allow_pre_releases**: [optional] Include pre-release versions when using
+  semver constraints (default: False).
+- **allow_broken**: [optional] Include packages marked as broken
+  (default: False).
+- **allow_unfree**: [optional] Include packages with unfree licenses
+  (default: True).
+- **allow_insecure**: [optional] Include packages marked as insecure
+  (default: False).
+- **allowed_licenses**: [optional] List of acceptable license identifiers.
+- **allow_missing_builds**: [optional] Include packages without confirmed
+  build artifacts (default: False). If resolution fails with this
+  constraint, it may be relaxed with a warning message.
+
+Sends a `POST` request to `/api/v1/catalog/resolve`
+
+*/
+    pub async fn resolve_api_v1_catalog_resolve_post<'a>(
+        &'a self,
+        candidate_pages: Option<i64>,
+        body: &'a types::PackageGroups,
+    ) -> Result<
+        ResponseValue<types::ResolvedPackageGroups>,
+        Error<types::ErrorResponse>,
+    > {
+        let url = format!("{}/api/v1/catalog/resolve", self.baseurl);
+        let mut header_map = ::reqwest::header::HeaderMap::with_capacity(1usize);
+        header_map
+            .append(
+                ::reqwest::header::HeaderName::from_static("api-version"),
+                ::reqwest::header::HeaderValue::from_static(Self::api_version()),
+            );
+        #[allow(unused_mut)]
+        let mut request = self
+            .client
+            .post(url)
+            .header(
+                ::reqwest::header::ACCEPT,
+                ::reqwest::header::HeaderValue::from_static("application/json"),
+            )
+            .json(&body)
+            .query(
+                &progenitor_client::QueryParam::new("candidate_pages", &candidate_pages),
+            )
+            .headers(header_map)
+            .build()?;
+        let info = OperationInfo {
+            operation_id: "resolve_api_v1_catalog_resolve_post",
+        };
+        self.pre(&mut request, &info).await?;
+        let result = self.exec(request, &info).await;
+        self.post(&result, &info).await?;
+        let response = result?;
+        match response.status().as_u16() {
+            200u16 => ResponseValue::from_response(response).await,
+            422u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            _ => Err(Error::UnexpectedResponse(response)),
+        }
+    }
     /**Lookup
 
 Resolve build inputs for one or more reference groups.
@@ -5570,6 +5790,61 @@ Sends a `POST` request to `/api/v1/catalog/build-inputs/lookup`
             .build()?;
         let info = OperationInfo {
             operation_id: "lookup_api_v1_catalog_build_inputs_lookup_post",
+        };
+        self.pre(&mut request, &info).await?;
+        let result = self.exec(request, &info).await;
+        self.post(&result, &info).await?;
+        let response = result?;
+        match response.status().as_u16() {
+            200u16 => ResponseValue::from_response(response).await,
+            422u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            _ => Err(Error::UnexpectedResponse(response)),
+        }
+    }
+    /**Adjust various settings
+
+Adjusts various settings on the catalog service.
+
+Query Parameters:
+- **key**: The the key to adjust.
+    - "plan" - Enables the logging of the DB query plan for queries for
+    **value** seconds.  It will be scheduled to turn off automatically after
+    that.
+
+Sends a `POST` request to `/api/v1/catalog/settings/{key}`
+
+*/
+    pub async fn settings_api_v1_catalog_settings_key_post<'a>(
+        &'a self,
+        key: &'a str,
+        value: &'a str,
+    ) -> Result<ResponseValue<::serde_json::Value>, Error<types::ErrorResponse>> {
+        let url = format!(
+            "{}/api/v1/catalog/settings/{}",
+            self.baseurl,
+            encode_path(&key.to_string()),
+        );
+        let mut header_map = ::reqwest::header::HeaderMap::with_capacity(1usize);
+        header_map
+            .append(
+                ::reqwest::header::HeaderName::from_static("api-version"),
+                ::reqwest::header::HeaderValue::from_static(Self::api_version()),
+            );
+        #[allow(unused_mut)]
+        let mut request = self
+            .client
+            .post(url)
+            .header(
+                ::reqwest::header::ACCEPT,
+                ::reqwest::header::HeaderValue::from_static("application/json"),
+            )
+            .query(&progenitor_client::QueryParam::new("value", &value))
+            .headers(header_map)
+            .build()?;
+        let info = OperationInfo {
+            operation_id: "settings_api_v1_catalog_settings_key_post",
         };
         self.pre(&mut request, &info).await?;
         let result = self.exec(request, &info).await;
@@ -5746,79 +6021,6 @@ Sends a `DELETE` request to `/api/v1/catalog/catalogs/{catalog_name}`
                 Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
             }
             501u16 => {
-                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
-            }
-            _ => Err(Error::UnexpectedResponse(response)),
-        }
-    }
-    /**List all packages with their locked source metadata
-
-Return a flat paginated list of all packages in the catalog with their
-locked source metadata (url, ref, rev, dir, buildType).
-
-Packages published before source tracking was introduced have
-source=null and buildType=null.
-
-Path Parameters:
-- **catalog_name**: The name of the catalog
-
-Query Parameters:
-- **page**: Zero-indexed page number (default: 0)
-- **pageSize**: Items per page (default: 10)
-
-Returns:
-- **LockedSourcesResponse**: Paginated list with total_count
-
-Sends a `GET` request to `/api/v1/catalog/catalogs/{catalog_name}/locked-sources`
-
-*/
-    pub async fn get_catalog_locked_sources_api_v1_catalog_catalogs_catalog_name_locked_sources_get<
-        'a,
-    >(
-        &'a self,
-        catalog_name: &'a types::CatalogName,
-        page: Option<i64>,
-        page_size: Option<i64>,
-    ) -> Result<
-        ResponseValue<types::LockedSourcesResponse>,
-        Error<types::ErrorResponse>,
-    > {
-        let url = format!(
-            "{}/api/v1/catalog/catalogs/{}/locked-sources",
-            self.baseurl,
-            encode_path(&catalog_name.to_string()),
-        );
-        let mut header_map = ::reqwest::header::HeaderMap::with_capacity(1usize);
-        header_map
-            .append(
-                ::reqwest::header::HeaderName::from_static("api-version"),
-                ::reqwest::header::HeaderValue::from_static(Self::api_version()),
-            );
-        #[allow(unused_mut)]
-        let mut request = self
-            .client
-            .get(url)
-            .header(
-                ::reqwest::header::ACCEPT,
-                ::reqwest::header::HeaderValue::from_static("application/json"),
-            )
-            .query(&progenitor_client::QueryParam::new("page", &page))
-            .query(&progenitor_client::QueryParam::new("pageSize", &page_size))
-            .headers(header_map)
-            .build()?;
-        let info = OperationInfo {
-            operation_id: "get_catalog_locked_sources_api_v1_catalog_catalogs_catalog_name_locked_sources_get",
-        };
-        self.pre(&mut request, &info).await?;
-        let result = self.exec(request, &info).await;
-        self.post(&result, &info).await?;
-        let response = result?;
-        match response.status().as_u16() {
-            200u16 => ResponseValue::from_response(response).await,
-            404u16 => {
-                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
-            }
-            422u16 => {
                 Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
             }
             _ => Err(Error::UnexpectedResponse(response)),
@@ -6007,6 +6209,75 @@ Sends a `GET` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{pack
         let response = result?;
         match response.status().as_u16() {
             200u16 => ResponseValue::from_response(response).await,
+            404u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            422u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            _ => Err(Error::UnexpectedResponse(response)),
+        }
+    }
+    /**Request access and info to publish a package
+
+Request access and informatin to publish a package to this catalog.
+Path Parameters:
+- **catalog_name**: The name of the catalog
+- **package_name**: The name of the package
+Body Content:
+- **PublishInfoRequest**: The information needed to publish to the catalog
+Returns:
+- **PublishRequestResponse**
+
+Sends a `POST` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{package_name}/publish/info`
+
+*/
+    pub async fn publish_request_api_v1_catalog_catalogs_catalog_name_packages_package_name_publish_info_post<
+        'a,
+    >(
+        &'a self,
+        catalog_name: &'a types::CatalogName,
+        package_name: &'a types::PackageName,
+        body: &'a types::PublishInfoRequest,
+    ) -> Result<
+        ResponseValue<types::PublishInfoResponseCatalog>,
+        Error<types::ErrorResponse>,
+    > {
+        let url = format!(
+            "{}/api/v1/catalog/catalogs/{}/packages/{}/publish/info",
+            self.baseurl,
+            encode_path(&catalog_name.to_string()),
+            encode_path(&package_name.to_string()),
+        );
+        let mut header_map = ::reqwest::header::HeaderMap::with_capacity(1usize);
+        header_map
+            .append(
+                ::reqwest::header::HeaderName::from_static("api-version"),
+                ::reqwest::header::HeaderValue::from_static(Self::api_version()),
+            );
+        #[allow(unused_mut)]
+        let mut request = self
+            .client
+            .post(url)
+            .header(
+                ::reqwest::header::ACCEPT,
+                ::reqwest::header::HeaderValue::from_static("application/json"),
+            )
+            .json(&body)
+            .headers(header_map)
+            .build()?;
+        let info = OperationInfo {
+            operation_id: "publish_request_api_v1_catalog_catalogs_catalog_name_packages_package_name_publish_info_post",
+        };
+        self.pre(&mut request, &info).await?;
+        let result = self.exec(request, &info).await;
+        self.post(&result, &info).await?;
+        let response = result?;
+        match response.status().as_u16() {
+            200u16 => ResponseValue::from_response(response).await,
+            400u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
             404u16 => {
                 Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
             }
@@ -6297,36 +6568,42 @@ Sends a `POST` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{pac
             _ => Err(Error::UnexpectedResponse(response)),
         }
     }
-    /**Request access and info to publish a package
+    /**List all packages with their locked source metadata
 
-Request access and informatin to publish a package to this catalog.
+Return a flat paginated list of all packages in the catalog with their
+locked source metadata (url, ref, rev, dir, buildType).
+
+Packages published before source tracking was introduced have
+source=null and buildType=null.
+
 Path Parameters:
 - **catalog_name**: The name of the catalog
-- **package_name**: The name of the package
-Body Content:
-- **PublishInfoRequest**: The information needed to publish to the catalog
-Returns:
-- **PublishRequestResponse**
 
-Sends a `POST` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{package_name}/publish/info`
+Query Parameters:
+- **page**: Zero-indexed page number (default: 0)
+- **pageSize**: Items per page (default: 10)
+
+Returns:
+- **LockedSourcesResponse**: Paginated list with total_count
+
+Sends a `GET` request to `/api/v1/catalog/catalogs/{catalog_name}/locked-sources`
 
 */
-    pub async fn publish_request_api_v1_catalog_catalogs_catalog_name_packages_package_name_publish_info_post<
+    pub async fn get_catalog_locked_sources_api_v1_catalog_catalogs_catalog_name_locked_sources_get<
         'a,
     >(
         &'a self,
         catalog_name: &'a types::CatalogName,
-        package_name: &'a types::PackageName,
-        body: &'a types::PublishInfoRequest,
+        page: Option<i64>,
+        page_size: Option<i64>,
     ) -> Result<
-        ResponseValue<types::PublishInfoResponseCatalog>,
+        ResponseValue<types::LockedSourcesResponse>,
         Error<types::ErrorResponse>,
     > {
         let url = format!(
-            "{}/api/v1/catalog/catalogs/{}/packages/{}/publish/info",
+            "{}/api/v1/catalog/catalogs/{}/locked-sources",
             self.baseurl,
             encode_path(&catalog_name.to_string()),
-            encode_path(&package_name.to_string()),
         );
         let mut header_map = ::reqwest::header::HeaderMap::with_capacity(1usize);
         header_map
@@ -6337,16 +6614,17 @@ Sends a `POST` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{pac
         #[allow(unused_mut)]
         let mut request = self
             .client
-            .post(url)
+            .get(url)
             .header(
                 ::reqwest::header::ACCEPT,
                 ::reqwest::header::HeaderValue::from_static("application/json"),
             )
-            .json(&body)
+            .query(&progenitor_client::QueryParam::new("page", &page))
+            .query(&progenitor_client::QueryParam::new("pageSize", &page_size))
             .headers(header_map)
             .build()?;
         let info = OperationInfo {
-            operation_id: "publish_request_api_v1_catalog_catalogs_catalog_name_packages_package_name_publish_info_post",
+            operation_id: "get_catalog_locked_sources_api_v1_catalog_catalogs_catalog_name_locked_sources_get",
         };
         self.pre(&mut request, &info).await?;
         let result = self.exec(request, &info).await;
@@ -6354,9 +6632,6 @@ Sends a `POST` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{pac
         let response = result?;
         match response.status().as_u16() {
             200u16 => ResponseValue::from_response(response).await,
-            400u16 => {
-                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
-            }
             404u16 => {
                 Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
             }
@@ -6534,223 +6809,6 @@ Sends a `GET` request to `/api/v1/catalog/info/base-catalog`
             _ => Err(Error::UnexpectedResponse(response)),
         }
     }
-    /**Shows available packages of a specific package
-
-Returns a list of versions for a given attr_path
-
-Required Query Parameters:
-- **attr_path**: The attr_path, must be valid.
-
-Optional Query Parameters:
-- **page**: Optional page number for pagination (def = 0)
-- **pageSize**: Optional page size for pagination (def = 10)
-
-Returns:
-- **PackagesResult**: A list of PackageResolutionInfo and the total result count
-
-Sends a `GET` request to `/api/v1/catalog/packages/{attr_path}`
-
-*/
-    pub async fn packages_api_v1_catalog_packages_attr_path_get<'a>(
-        &'a self,
-        attr_path: &'a str,
-        page: Option<i64>,
-        page_size: Option<i64>,
-    ) -> Result<ResponseValue<types::PackagesResult>, Error<types::ErrorResponse>> {
-        let url = format!(
-            "{}/api/v1/catalog/packages/{}",
-            self.baseurl,
-            encode_path(&attr_path.to_string()),
-        );
-        let mut header_map = ::reqwest::header::HeaderMap::with_capacity(1usize);
-        header_map
-            .append(
-                ::reqwest::header::HeaderName::from_static("api-version"),
-                ::reqwest::header::HeaderValue::from_static(Self::api_version()),
-            );
-        #[allow(unused_mut)]
-        let mut request = self
-            .client
-            .get(url)
-            .header(
-                ::reqwest::header::ACCEPT,
-                ::reqwest::header::HeaderValue::from_static("application/json"),
-            )
-            .query(&progenitor_client::QueryParam::new("page", &page))
-            .query(&progenitor_client::QueryParam::new("pageSize", &page_size))
-            .headers(header_map)
-            .build()?;
-        let info = OperationInfo {
-            operation_id: "packages_api_v1_catalog_packages_attr_path_get",
-        };
-        self.pre(&mut request, &info).await?;
-        let result = self.exec(request, &info).await;
-        self.post(&result, &info).await?;
-        let response = result?;
-        match response.status().as_u16() {
-            200u16 => ResponseValue::from_response(response).await,
-            404u16 => {
-                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
-            }
-            422u16 => {
-                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
-            }
-            _ => Err(Error::UnexpectedResponse(response)),
-        }
-    }
-    /**Resolve a list of Package Groups
-
-Resolves a list of package groups, each being a list of package descriptors.
-
-Required Body:
-- **groups**: An object with an `items` array of PackageGroups to resolve.
-
-Optional Query Parameters:
-- **candidate_pages**: Number of additional candidate pages to return
-  (default: 0)
-
-Returns:
-- **ResolvedPackageGroups**: An object with an `items` array of
-  `ResolvedPackageGroup` items.
-
-Resolution Rules:
-- Each `PackageGroup` is resolved independently.
-- Each page that has packages meeting all descriptors in the group is
-  returned.
-- The latest complete page includes full package details.
-- Additional candidate pages are returned without full details.
-
-PackageDescriptor Fields:
-- **install_id**: [required] Reference identifier for the package in the
-  manifest. Used for error messages and result correlation.
-- **attr_path**: [required] The nix attribute path to match exactly.
-- **systems**: [required] List of systems to resolve for (e.g.,
-  x86_64-linux).
-- **version**: [optional] Version constraint. Can be a literal version or
-  semver constraint. Packages whose version cannot be parsed as semver are
-  excluded when using semver constraints.
-- **derivation**: [optional] Specific derivation path to match.
-- **allow_pre_releases**: [optional] Include pre-release versions when using
-  semver constraints (default: False).
-- **allow_broken**: [optional] Include packages marked as broken
-  (default: False).
-- **allow_unfree**: [optional] Include packages with unfree licenses
-  (default: True).
-- **allow_insecure**: [optional] Include packages marked as insecure
-  (default: False).
-- **allowed_licenses**: [optional] List of acceptable license identifiers.
-- **allow_missing_builds**: [optional] Include packages without confirmed
-  build artifacts (default: False). If resolution fails with this
-  constraint, it may be relaxed with a warning message.
-
-Sends a `POST` request to `/api/v1/catalog/resolve`
-
-*/
-    pub async fn resolve_api_v1_catalog_resolve_post<'a>(
-        &'a self,
-        candidate_pages: Option<i64>,
-        body: &'a types::PackageGroups,
-    ) -> Result<
-        ResponseValue<types::ResolvedPackageGroups>,
-        Error<types::ErrorResponse>,
-    > {
-        let url = format!("{}/api/v1/catalog/resolve", self.baseurl);
-        let mut header_map = ::reqwest::header::HeaderMap::with_capacity(1usize);
-        header_map
-            .append(
-                ::reqwest::header::HeaderName::from_static("api-version"),
-                ::reqwest::header::HeaderValue::from_static(Self::api_version()),
-            );
-        #[allow(unused_mut)]
-        let mut request = self
-            .client
-            .post(url)
-            .header(
-                ::reqwest::header::ACCEPT,
-                ::reqwest::header::HeaderValue::from_static("application/json"),
-            )
-            .json(&body)
-            .query(
-                &progenitor_client::QueryParam::new("candidate_pages", &candidate_pages),
-            )
-            .headers(header_map)
-            .build()?;
-        let info = OperationInfo {
-            operation_id: "resolve_api_v1_catalog_resolve_post",
-        };
-        self.pre(&mut request, &info).await?;
-        let result = self.exec(request, &info).await;
-        self.post(&result, &info).await?;
-        let response = result?;
-        match response.status().as_u16() {
-            200u16 => ResponseValue::from_response(response).await,
-            422u16 => {
-                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
-            }
-            _ => Err(Error::UnexpectedResponse(response)),
-        }
-    }
-    /**Get SBOM for an environment
-
-Get SBOM (Software Bill of Materials) for an environment.
-
-Args:
-    body: Request body containing lockfile and environment metadata
-    format: SBOM format (defaults to SbomFormat.SPDX_2_3_JSON)
-    user: Authenticated user context
-    cache: Request-scoped dependency cache (injected)
-
-Returns:
-    SBOM document in the requested format
-
-Raises:
-    HTTPException: If lockfile is malformed, system is invalid, or SBOM generation fails
-
-Sends a `POST` request to `/api/v1/catalog/sbom/environment`
-
-*/
-    pub async fn environment_sbom_api_v1_catalog_sbom_environment_post<'a>(
-        &'a self,
-        format: Option<types::SbomFormat>,
-        body: &'a types::EnvironmentSbomRequest,
-    ) -> Result<
-        ResponseValue<::serde_json::Map<::std::string::String, ::serde_json::Value>>,
-        Error<types::ErrorResponse>,
-    > {
-        let url = format!("{}/api/v1/catalog/sbom/environment", self.baseurl);
-        let mut header_map = ::reqwest::header::HeaderMap::with_capacity(1usize);
-        header_map
-            .append(
-                ::reqwest::header::HeaderName::from_static("api-version"),
-                ::reqwest::header::HeaderValue::from_static(Self::api_version()),
-            );
-        #[allow(unused_mut)]
-        let mut request = self
-            .client
-            .post(url)
-            .header(
-                ::reqwest::header::ACCEPT,
-                ::reqwest::header::HeaderValue::from_static("application/json"),
-            )
-            .json(&body)
-            .query(&progenitor_client::QueryParam::new("format", &format))
-            .headers(header_map)
-            .build()?;
-        let info = OperationInfo {
-            operation_id: "environment_sbom_api_v1_catalog_sbom_environment_post",
-        };
-        self.pre(&mut request, &info).await?;
-        let result = self.exec(request, &info).await;
-        self.post(&result, &info).await?;
-        let response = result?;
-        match response.status().as_u16() {
-            200u16 => ResponseValue::from_response(response).await,
-            422u16 => {
-                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
-            }
-            _ => Err(Error::UnexpectedResponse(response)),
-        }
-    }
     /**Get SBOM for a package derivation
 
 Get SBOM (Software Bill of Materials) for a package derivation.
@@ -6826,93 +6884,34 @@ Arguments:
             _ => Err(Error::UnexpectedResponse(response)),
         }
     }
-    /**Search for packages
+    /**Get SBOM for an environment
 
-Search the catalog(s) under the given criteria for matching packages.
+Get SBOM (Software Bill of Materials) for an environment.
 
-Required Query Parameters:
-- **system**: The system architecture to search for (e.g., x86_64-linux)
+Args:
+    body: Request body containing lockfile and environment metadata
+    format: SBOM format (defaults to SbomFormat.SPDX_2_3_JSON)
+    user: Authenticated user context
+    cache: Request-scoped dependency cache (injected)
 
-Optional Query Parameters:
-- **search_term**: The search term to filter packages by
-- **catalogs**: Comma separated list of catalog names to search; defaults to
-  all catalogs. Note: when searching base catalog, search_term is required.
-- **page**: Page number for pagination (default: 0)
-- **pageSize**: Page size for pagination (default: 10)
 Returns:
-- **PackageSearchResult**: A list of PackageInfoSearch items and total count
+    SBOM document in the requested format
 
-Sends a `GET` request to `/api/v1/catalog/search`
+Raises:
+    HTTPException: If lockfile is malformed, system is invalid, or SBOM generation fails
 
-*/
-    pub async fn search_api_v1_catalog_search_get<'a>(
-        &'a self,
-        catalogs: Option<&'a str>,
-        page: Option<i64>,
-        page_size: Option<i64>,
-        search_term: Option<&'a types::SearchTerm>,
-        system: types::PackageSystem,
-    ) -> Result<ResponseValue<types::PackageSearchResult>, Error<types::ErrorResponse>> {
-        let url = format!("{}/api/v1/catalog/search", self.baseurl);
-        let mut header_map = ::reqwest::header::HeaderMap::with_capacity(1usize);
-        header_map
-            .append(
-                ::reqwest::header::HeaderName::from_static("api-version"),
-                ::reqwest::header::HeaderValue::from_static(Self::api_version()),
-            );
-        #[allow(unused_mut)]
-        let mut request = self
-            .client
-            .get(url)
-            .header(
-                ::reqwest::header::ACCEPT,
-                ::reqwest::header::HeaderValue::from_static("application/json"),
-            )
-            .query(&progenitor_client::QueryParam::new("catalogs", &catalogs))
-            .query(&progenitor_client::QueryParam::new("page", &page))
-            .query(&progenitor_client::QueryParam::new("pageSize", &page_size))
-            .query(&progenitor_client::QueryParam::new("search_term", &search_term))
-            .query(&progenitor_client::QueryParam::new("system", &system))
-            .headers(header_map)
-            .build()?;
-        let info = OperationInfo {
-            operation_id: "search_api_v1_catalog_search_get",
-        };
-        self.pre(&mut request, &info).await?;
-        let result = self.exec(request, &info).await;
-        self.post(&result, &info).await?;
-        let response = result?;
-        match response.status().as_u16() {
-            200u16 => ResponseValue::from_response(response).await,
-            422u16 => {
-                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
-            }
-            _ => Err(Error::UnexpectedResponse(response)),
-        }
-    }
-    /**Adjust various settings
-
-Adjusts various settings on the catalog service.
-
-Query Parameters:
-- **key**: The the key to adjust.
-    - "plan" - Enables the logging of the DB query plan for queries for
-    **value** seconds.  It will be scheduled to turn off automatically after
-    that.
-
-Sends a `POST` request to `/api/v1/catalog/settings/{key}`
+Sends a `POST` request to `/api/v1/catalog/sbom/environment`
 
 */
-    pub async fn settings_api_v1_catalog_settings_key_post<'a>(
+    pub async fn environment_sbom_api_v1_catalog_sbom_environment_post<'a>(
         &'a self,
-        key: &'a str,
-        value: &'a str,
-    ) -> Result<ResponseValue<::serde_json::Value>, Error<types::ErrorResponse>> {
-        let url = format!(
-            "{}/api/v1/catalog/settings/{}",
-            self.baseurl,
-            encode_path(&key.to_string()),
-        );
+        format: Option<types::SbomFormat>,
+        body: &'a types::EnvironmentSbomRequest,
+    ) -> Result<
+        ResponseValue<::serde_json::Map<::std::string::String, ::serde_json::Value>>,
+        Error<types::ErrorResponse>,
+    > {
+        let url = format!("{}/api/v1/catalog/sbom/environment", self.baseurl);
         let mut header_map = ::reqwest::header::HeaderMap::with_capacity(1usize);
         header_map
             .append(
@@ -6927,11 +6926,12 @@ Sends a `POST` request to `/api/v1/catalog/settings/{key}`
                 ::reqwest::header::ACCEPT,
                 ::reqwest::header::HeaderValue::from_static("application/json"),
             )
-            .query(&progenitor_client::QueryParam::new("value", &value))
+            .json(&body)
+            .query(&progenitor_client::QueryParam::new("format", &format))
             .headers(header_map)
             .build()?;
         let info = OperationInfo {
-            operation_id: "settings_api_v1_catalog_settings_key_post",
+            operation_id: "environment_sbom_api_v1_catalog_sbom_environment_post",
         };
         self.pre(&mut request, &info).await?;
         let result = self.exec(request, &info).await;

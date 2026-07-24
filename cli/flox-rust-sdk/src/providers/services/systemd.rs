@@ -54,11 +54,11 @@ impl<'a> ServiceUnitContext<'a> {
         &self,
         systemd_env: Option<std::collections::BTreeMap<String, String>>,
     ) -> Option<std::collections::BTreeMap<String, String>> {
-        let mut env = self
+        let mut env: std::collections::BTreeMap<String, String> = self
             .descriptor
             .vars
             .as_ref()
-            .map(|v| v.inner().clone())
+            .map(|v| v.inner().clone().into_iter().collect())
             .unwrap_or_default();
 
         if let Some(e) = systemd_env {

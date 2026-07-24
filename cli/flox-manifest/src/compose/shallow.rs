@@ -7,6 +7,7 @@ use super::{
     Warning,
     append_optional_strings,
     deep_merge_optional_containerize_config,
+    index_map_union,
     map_union,
     shallow_merge_options,
 };
@@ -79,7 +80,7 @@ impl ShallowMerger {
         low_priority: &Vars,
         high_priority: &Vars,
     ) -> Result<(Vars, Vec<Warning>), MergeError> {
-        let (merged, warnings) = map_union(
+        let (merged, warnings) = index_map_union(
             KeyPath::from_iter(["vars"]),
             low_priority.inner(),
             high_priority.inner(),
@@ -438,8 +439,8 @@ mod tests {
         // in the merged output.
         #[test]
         fn merges_vars_section(maps in btree_maps_overlapping_keys::<String>(1, 3)) {
-            let vars1 = Vars(maps.map1.clone());
-            let vars2 = Vars(maps.map2.clone());
+            let vars1 = Vars::from_map(maps.map1.clone());
+            let vars2 = Vars::from_map(maps.map2.clone());
             let (merged, warnings) = ShallowMerger::merge_vars(&vars1, &vars2).unwrap();
             let merged = merged.inner();
             for key in maps.unique_keys_map1.iter() {

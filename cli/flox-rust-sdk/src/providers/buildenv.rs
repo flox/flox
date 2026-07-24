@@ -19,6 +19,7 @@ use flox_manifest::lockfile::{
     Lockfile,
     PackageToList,
 };
+use flox_manifest::parsed::Inner;
 use flox_manifest::parsed::latest::SelectedOutputs;
 use floxhub_client::{CatalogClientTrait, FloxhubClientError, StoreInfo};
 use pollster::FutureExt as _;
@@ -969,6 +970,7 @@ where
         &self,
         lockfile_path: &Path,
         service_config_path: Option<PathBuf>,
+        vars_order: &[String],
         out_link_prefix: Option<&Path>,
     ) -> Result<BuildEnvOutputs, BuildEnvError> {
         let mut nix_build_command = base_command();
@@ -983,6 +985,12 @@ where
             .arg("--argstr")
             .arg("manifestLock")
             .arg(lockfile_path);
+        // Nix sorts attribute names, so `buildenv.nix` cannot recover the
+        // manifest's `[vars]` order from the lockfile itself.
+        nix_build_command
+            .arg("--argstr")
+            .arg("varsOrder")
+            .arg(serde_json::to_string(vars_order).expect("var names serialize to JSON"));
         if let Some(service_config_path) = &service_config_path {
             nix_build_command
                 .arg("--argstr")
@@ -1434,6 +1442,16 @@ where
             });
         }
 
+        // `[vars]` are rendered to the activation envrc in manifest order so
+        // an entry may reference entries defined above it.
+        let vars_order: Vec<String> = manifest
+            .as_latest_schema()
+            .vars
+            .inner()
+            .keys()
+            .cloned()
+            .collect();
+
         // Realise the packages in the lockfile, for the current system.
         // "Realising" a package means to check if the associated store paths are valid
         // and otherwise building the package to _create_ valid store paths.
@@ -1479,7 +1497,14 @@ where
                     .collect()
             },
             || all_env_paths.clone(),
-            || self.call_buildenv_nix(lockfile_path, service_config_path.clone(), out_link_prefix),
+            || {
+                self.call_buildenv_nix(
+                    lockfile_path,
+                    service_config_path.clone(),
+                    &vars_order,
+                    out_link_prefix,
+                )
+            },
         )
     }
 }
@@ -2494,6 +2519,33 @@ mod buildenv_tests {
             let content = std::fs::read_to_string(&envrc_path).unwrap();
             assert!(content.contains(r#"export singlequotes="'bar'""#));
             assert!(content.contains(r#"export singlequoteescaped="\'baz""#));
+        }
+    }
+
+    /// `[vars]` are rendered to the envrc in manifest order rather than
+    /// alphabetical order, so an entry may reference entries defined above it.
+    #[test]
+    fn environment_renders_vars_in_manifest_order() {
+        let buildenv = buildenv_instance();
+        let lockfile_path = MANUALLY_GENERATED.join("buildenv/lockfiles/vars_order/manifest.lock");
+        let client = MockClient::new();
+        let result = buildenv.build(&client, &lockfile_path, None, None).unwrap();
+
+        let runtime = result.run.as_ref();
+        let develop = result.dev.as_ref();
+
+        for envrc_path in [
+            runtime.join("activate.d/envrc"),
+            develop.join("activate.d/envrc"),
+        ] {
+            let content = std::fs::read_to_string(&envrc_path).unwrap();
+            let zebra = content.find(r#"export zebra="stripes""#).unwrap();
+            let mango = content.find(r#"export mango="tropical""#).unwrap();
+            let apple = content.find(r#"export apple="${zebra}/fruit""#).unwrap();
+            assert!(
+                zebra < mango && mango < apple,
+                "expected `[vars]` in manifest order in envrc: {content}"
+            );
         }
     }
 

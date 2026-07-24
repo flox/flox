@@ -1740,6 +1740,7 @@ dependencies = [
  "flox-core",
  "flox-test-utils",
  "indent",
+ "indexmap 2.13.0",
  "indoc",
  "itertools 0.14.0",
  "pretty_assertions",
@@ -1823,6 +1824,7 @@ dependencies = [
  "anyhow",
  "chrono",
  "dirs",
+ "indexmap 2.13.0",
  "indoc",
  "nix",
  "proptest",
@@ -4402,6 +4404,7 @@ checksum = "a2b42f36aa1cd011945615b92222f6bf73c599a102a300334cd7f8dbeec726cc"
 dependencies = [
  "chrono",
  "dyn-clone",
+ "indexmap 2.13.0",
  "ref-cast",
  "schemars_derive 1.2.1",
  "serde",
@@ -4703,6 +4706,7 @@ version = "1.0.149"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "83fc039473c5595ace860d8c4fafa220ff474b3fc6bfdb4293327f1a37e94d86"
 dependencies = [
+ "indexmap 2.13.0",
  "itoa",
  "memchr",
  "serde",

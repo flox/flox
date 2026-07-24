@@ -439,6 +439,21 @@ mod tests {
     }
 
     #[test]
+    fn vars_preserve_manifest_file_order() {
+        let manifest = with_latest_schema(indoc! {r#"
+            [vars]
+            zebra = "stripes"
+            apple = "${zebra}/fruit"
+            mango = "tropical"
+        "#});
+
+        let parsed = toml_edit::de::from_str::<ManifestLatest>(&manifest).unwrap();
+
+        let keys = parsed.vars.inner().keys().cloned().collect::<Vec<_>>();
+        assert_eq!(keys, ["zebra", "apple", "mango"]);
+    }
+
+    #[test]
     fn auto_start_is_not_treated_as_service_name() {
         let manifest = with_latest_schema(indoc! {r#"
             [services]

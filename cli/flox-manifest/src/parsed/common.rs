@@ -1,5 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Display;
+use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
 
 use flox_core::activate::mode::ActivateMode;
@@ -10,11 +11,13 @@ use flox_test_utils::proptest::{
     alphanum_and_whitespace_string,
     alphanum_string,
     btree_map_strategy,
+    index_map_strategy,
     optional_btree_map,
     optional_btree_set,
     optional_string,
     optional_vec_of_strings,
 };
+use indexmap::IndexMap;
 use indoc::formatdoc;
 use itertools::Itertools;
 #[cfg(any(test, feature = "tests"))]
@@ -146,19 +149,42 @@ pub struct PackageDescriptorStorePath {
     pub priority: Option<u64>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash, JsonSchema)]
+/// The `[vars]` section of a manifest.
+///
+/// Entries preserve the order in which they are defined in the manifest and
+/// are rendered to the activation script in that order, so an entry may
+/// reference entries defined above it.
+#[derive(Debug, Clone, Serialize, Deserialize, Default, JsonSchema)]
 #[cfg_attr(any(test, feature = "tests"), derive(proptest_derive::Arbitrary))]
 pub struct Vars(
     #[cfg_attr(
         any(test, feature = "tests"),
-        proptest(strategy = "btree_map_strategy::<String>(5, 3)")
+        proptest(strategy = "index_map_strategy::<String>(5, 3)")
     )]
-    pub(crate) BTreeMap<String, String>,
+    pub(crate) IndexMap<String, String>,
 );
 
 impl Vars {
-    pub fn from_map(map: BTreeMap<String, String>) -> Self {
-        Self(map)
+    pub fn from_map(map: impl IntoIterator<Item = (String, String)>) -> Self {
+        Self(map.into_iter().collect())
+    }
+}
+
+// Order affects how vars are rendered, so equality and hashing are
+// order-sensitive, unlike `IndexMap`'s own order-insensitive `PartialEq`.
+impl PartialEq for Vars {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.iter().eq(other.0.iter())
+    }
+}
+
+impl Eq for Vars {}
+
+impl Hash for Vars {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        for entry in &self.0 {
+            entry.hash(state);
+        }
     }
 }
 
@@ -168,7 +194,7 @@ impl SkipSerializing for Vars {
     }
 }
 
-impl_into_inner!(Vars, BTreeMap<String, String>);
+impl_into_inner!(Vars, IndexMap<String, String>);
 #[skip_serializing_none]
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash, JsonSchema)]
 #[cfg_attr(any(test, feature = "tests"), derive(proptest_derive::Arbitrary))]

@@ -1,6 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::fmt::{self, Display, Formatter};
 pub mod shallow;
+use indexmap::IndexMap;
 #[cfg(any(test, feature = "tests"))]
 use proptest::prelude::*;
 use schemars::JsonSchema;
@@ -254,6 +255,30 @@ where
     (merged, warnings)
 }
 
+/// Like [map_union], but preserves the insertion order of both maps:
+/// low priority entries keep their positions, high priority entries either
+/// override in place or are appended in their own order.
+#[must_use]
+fn index_map_union(
+    base_key: KeyPath,
+    low_priority: &IndexMap<String, String>,
+    high_priority: &IndexMap<String, String>,
+) -> (IndexMap<String, String>, Vec<Warning>) {
+    let warnings = high_priority
+        .keys()
+        .filter(|key| low_priority.contains_key(*key))
+        .map(|key| Warning::Overriding(base_key.push(key)))
+        .collect();
+
+    let mut merged = low_priority.clone();
+    merged.extend(
+        high_priority
+            .iter()
+            .map(|(key, value)| (key.clone(), value.clone())),
+    );
+    (merged, warnings)
+}
+
 /// Takes the high priority `T` if it's present, otherwise the low priority `T`.
 #[must_use]
 fn shallow_merge_options<M, T: Into<M>>(
@@ -380,10 +405,44 @@ pub fn new_package_overrides(old_ids: &[String], new_ids: &[String]) -> Vec<Stri
 
 #[cfg(test)]
 mod tests {
+    use indoc::indoc;
+
     use super::shallow::ShallowMerger;
     use super::*;
     use crate::parsed::common::Vars;
     use crate::parsed::v1_13_0::Profile;
+    use crate::test_helpers::with_latest_schema;
+
+    #[test]
+    fn merged_vars_preserve_definition_order() {
+        let dep = toml_edit::de::from_str::<ManifestLatest>(&with_latest_schema(indoc! {r#"
+            [vars]
+            zebra = "stripes"
+            apple = "fruit"
+        "#}))
+        .unwrap();
+        let composer = toml_edit::de::from_str::<ManifestLatest>(&with_latest_schema(indoc! {r#"
+            [vars]
+            mango = "tropical"
+            apple = "overridden"
+        "#}))
+        .unwrap();
+        let composite = CompositeManifest {
+            composer,
+            deps: vec![("dep".to_string(), dep)],
+        };
+
+        let (merged, _warnings) = composite
+            .merge_all(ManifestMerger::Shallow(ShallowMerger))
+            .unwrap();
+
+        // Vars from included environments keep their definition order and
+        // come before vars first defined by the composer. An overriding var
+        // keeps the position of the definition it overrides.
+        let keys = merged.vars.inner().keys().cloned().collect::<Vec<_>>();
+        assert_eq!(keys, ["zebra", "apple", "mango"]);
+        assert_eq!(merged.vars.inner()["apple"], "overridden");
+    }
 
     #[test]
     fn composite_manifest_runs_merger() {
@@ -403,10 +462,7 @@ mod tests {
             manifest
         };
         let manifest2 = ManifestLatest {
-            vars: Vars(BTreeMap::from([(
-                "var2".to_string(),
-                "manifest2".to_string(),
-            )])),
+            vars: Vars::from_map([("var2".to_string(), "manifest2".to_string())]),
             profile: Some(Profile {
                 common: Some("manifest2".to_string()),
                 ..Default::default()
