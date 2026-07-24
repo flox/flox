@@ -1,8 +1,18 @@
 use std::fmt;
+use std::str::FromStr;
 
 use anyhow::Result;
 use bpaf::Bpaf;
-use floxhub_client::{BuildFilters, BuildResponse, EffectiveBuildStatus, FactoryClientTrait};
+use floxhub_client::{
+    AttrPathItem,
+    BuildFilters,
+    BuildResponse,
+    EffectiveBuildStatus,
+    FactoryClientTrait,
+    Since,
+    SourceCommitShaItem,
+    SystemItem,
+};
 use itertools::Itertools;
 use serde::Serialize;
 use tracing::instrument;
@@ -29,6 +39,48 @@ fn parse_status(s: String) -> Result<EffectiveBuildStatus, String> {
         })
 }
 
+/// Parse one flag value into a generated newtype at the CLI boundary, naming
+/// `noun` in either failure so a user passing several empty values can tell
+/// which flag was rejected.
+///
+/// The empty case gets its own message; any other constraint the newtype
+/// enforces reports the newtype's own error, so the message stays truthful if
+/// the schema tightens.
+fn parse_non_empty<T>(s: String, noun: &str) -> Result<T, String>
+where
+    T: FromStr,
+    T::Err: fmt::Display,
+{
+    if s.is_empty() {
+        return Err(format!("{noun} must not be empty."));
+    }
+    s.parse()
+        .map_err(|e| format!("{noun} '{s}' is invalid: {e}."))
+}
+
+/// Parse one `--attr-path` prefix at the CLI boundary.
+fn parse_attr_path(s: String) -> Result<AttrPathItem, String> {
+    parse_non_empty(s, "Attribute path prefix")
+}
+
+/// Parse one `--source-commit-sha` prefix at the CLI boundary.
+fn parse_source_commit_sha(s: String) -> Result<SourceCommitShaItem, String> {
+    parse_non_empty(s, "Source commit SHA prefix")
+}
+
+/// Parse one `--system` value at the CLI boundary. Only emptiness is rejected
+/// here: the set of valid systems is a deployment's own catalog data, so the
+/// server is the sole authority on the vocabulary.
+fn parse_system(s: String) -> Result<SystemItem, String> {
+    parse_non_empty(s, "System")
+}
+
+/// Parse the `--since` value at the CLI boundary. Only emptiness is rejected
+/// here: the server owns the time grammar and remains the sole authority on it.
+fn parse_since(s: String) -> Result<Since, String> {
+    parse_non_empty(s, "Time")
+}
+
 /// List Flox Factory builds.
 ///
 /// Each filter is repeatable and ORs its values; different filters AND together.
@@ -40,6 +92,25 @@ pub struct List {
     /// cancelled.
     #[bpaf(long, argument::<String>("STATUS"), parse(parse_status), many)]
     pub status: Vec<EffectiveBuildStatus>,
+
+    /// Filter by system; repeat to match any of several.
+    /// Examples: aarch64-darwin, aarch64-linux, x86_64-darwin, x86_64-linux.
+    /// A system the server does not know is reported with the values it does.
+    #[bpaf(long, argument::<String>("SYSTEM"), parse(parse_system), many)]
+    pub system: Vec<SystemItem>,
+
+    /// Filter by attribute-path prefix; repeat to match any of several.
+    #[bpaf(long, argument::<String>("PREFIX"), parse(parse_attr_path), many)]
+    pub attr_path: Vec<AttrPathItem>,
+
+    /// Filter by source commit SHA prefix; repeat to match any of several.
+    #[bpaf(long, argument::<String>("PREFIX"), parse(parse_source_commit_sha), many)]
+    pub source_commit_sha: Vec<SourceCommitShaItem>,
+
+    /// Only builds created at or after this time, given as a relative offset
+    /// ("7d") or an ISO 8601 timestamp.
+    #[bpaf(long, argument::<String>("TIME"), parse(parse_since), optional)]
+    pub since: Option<Since>,
 
     /// Display output as JSON
     #[bpaf(long)]
@@ -57,7 +128,10 @@ impl List {
 
         let filters = BuildFilters {
             status: self.status,
-            ..Default::default()
+            system: self.system,
+            attr_path: self.attr_path,
+            source_commit_sha: self.source_commit_sha,
+            since: self.since,
         };
 
         // Depage the full result set, mirroring `flox generations list`: the
@@ -245,13 +319,17 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn list_handler_forwards_status_filters() {
+    async fn list_handler_forwards_all_filters() {
         let client = StubFactoryClient::with_outcomes(
             StubResult::Build(EffectiveBuildStatus::Completed),
             StubResult::NotFound,
         );
         let args = List {
             status: vec![EffectiveBuildStatus::Running, EffectiveBuildStatus::Failed],
+            system: vec!["aarch64-darwin".parse().unwrap()],
+            attr_path: vec!["hello".parse().unwrap()],
+            source_commit_sha: vec!["abc123".parse().unwrap()],
+            since: Some("7d".parse().unwrap()),
             json: false,
             no_pager: true,
         };
@@ -262,7 +340,10 @@ mod tests {
             client.last_filters(),
             Some(BuildFilters {
                 status: vec![EffectiveBuildStatus::Running, EffectiveBuildStatus::Failed],
-                ..Default::default()
+                system: vec!["aarch64-darwin".parse().unwrap()],
+                attr_path: vec!["hello".parse().unwrap()],
+                source_commit_sha: vec!["abc123".parse().unwrap()],
+                since: Some("7d".parse().unwrap()),
             })
         );
     }
@@ -289,5 +370,35 @@ mod tests {
             ),
             "unexpected parse failure: {message}"
         );
+    }
+
+    /// Every filter rejects an empty value at the boundary, before it becomes
+    /// an unmatchable filter or a doomed request, and each names itself so a
+    /// user passing several empty values can tell which one was rejected.
+    #[test]
+    fn empty_filter_values_are_rejected_and_name_their_flag() {
+        // `--since` is optional rather than repeatable, so its boundary parse
+        // applies inside the optional lift; it is covered here to pin that the
+        // lift does not skip the parse.
+        let cases = [
+            ("--attr-path", "Attribute path prefix must not be empty."),
+            (
+                "--source-commit-sha",
+                "Source commit SHA prefix must not be empty.",
+            ),
+            ("--system", "System must not be empty."),
+            ("--since", "Time must not be empty."),
+        ];
+
+        for (flag, expected) in cases {
+            let Err(failure) = list().to_options().run_inner(&[flag, ""][..]) else {
+                panic!("expected an empty {flag} to fail parsing");
+            };
+            let message = failure.unwrap_stderr().replace('\n', " ");
+            assert!(
+                message.contains(expected),
+                "expected {flag} to report {expected:?}, got: {message}"
+            );
+        }
     }
 }
