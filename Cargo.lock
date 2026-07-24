@@ -1553,6 +1553,7 @@ dependencies = [
  "anyhow",
  "apple-native-keyring-store",
  "beta",
+ "blake3",
  "bpaf",
  "chrono",
  "close_fds",

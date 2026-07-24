@@ -82,7 +82,8 @@ pub trait ManifestBuilder {
     fn clean(self, package: &[PackageTargetName]) -> Result<(), ManifestBuilderError>;
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, strum::IntoStaticStr)]
+#[strum(serialize_all = "snake_case", prefix = "build.")]
 pub enum ManifestBuilderError {
     #[error("failed to call package builder: {0}")]
     CallBuilderError(#[source] std::io::Error),
@@ -1230,6 +1231,7 @@ mod license_tests {
 mod tests {
     use std::fs::{self, File};
     use std::os::unix::fs::PermissionsExt;
+    use std::os::unix::process::ExitStatusExt;
 
     use anyhow::Context;
     use flox_manifest::interfaces::{AsWritableManifest, WriteManifest};
@@ -1246,6 +1248,54 @@ mod tests {
     use crate::models::environment::{Environment, copy_dir_recursive};
     use crate::providers::catalog::test_helpers::catalog_replay_client;
     use crate::providers::git::{GitCommandProvider, GitProvider};
+
+    #[test]
+    fn manifest_builder_error_slugs_are_namespaced() {
+        // These slugs are telemetry wire values (flox-events `error_kind`);
+        // a variant rename is a wire change. Every variant is reachable at
+        // the emit site, so pin them all.
+        let io = || std::io::Error::other("");
+        let cases: [(ManifestBuilderError, &str); 9] = [
+            (
+                ManifestBuilderError::CallBuilderError(io()),
+                "build.call_builder_error",
+            ),
+            (
+                ManifestBuilderError::CreateBuildResultFile(io()),
+                "build.create_build_result_file",
+            ),
+            (
+                ManifestBuilderError::ReadBuildResultFile(io()),
+                "build.read_build_result_file",
+            ),
+            (
+                ManifestBuilderError::ParseBuildResultFile(
+                    serde_json::from_str::<i32>("x").unwrap_err(),
+                ),
+                "build.parse_build_result_file",
+            ),
+            (ManifestBuilderError::CallNef(io()), "build.call_nef"),
+            (
+                ManifestBuilderError::ListNixExpressions(String::new()),
+                "build.list_nix_expressions",
+            ),
+            (
+                ManifestBuilderError::ParseLicenseMetaData(String::new()),
+                "build.parse_license_meta_data",
+            ),
+            (
+                ManifestBuilderError::RunClean {
+                    status: ExitStatus::from_raw(0),
+                },
+                "build.run_clean",
+            ),
+            (ManifestBuilderError::BuildFailure, "build.build_failure"),
+        ];
+        for (err, expected) in &cases {
+            let slug: &'static str = err.into();
+            assert_eq!(slug, *expected);
+        }
+    }
 
     #[test]
     fn build_returns_failure_when_package_not_defined() {
