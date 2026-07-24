@@ -223,7 +223,14 @@ impl Build {
             .map(|target| target.name())
             .collect::<Vec<_>>();
 
-        let builder = FloxBuildMk::new(&flox, &base_dir, &expression_ref, &flox_env_build_outputs);
+        let cache_path = env.cache_path()?;
+        let builder = FloxBuildMk::new(
+            &flox,
+            &base_dir,
+            &expression_ref,
+            &flox_env_build_outputs,
+            &cache_path,
+        );
         builder.clean(&target_names)?;
 
         message::updated(format!(
@@ -318,7 +325,14 @@ impl Build {
             debug!(error = %err, "Failed to record v2 event");
         }
 
-        let builder = FloxBuildMk::new(&flox, &base_dir, &expression_ref, &built_environments);
+        let cache_path = env.cache_path()?;
+        let builder = FloxBuildMk::new(
+            &flox,
+            &base_dir,
+            &expression_ref,
+            &built_environments,
+            &cache_path,
+        );
         let results = builder.build(
             &base_nixpkgs_url,
             &FLOX_INTERPRETER,

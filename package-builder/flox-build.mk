@@ -217,6 +217,8 @@ $(PROJECT_TMPDIR)/check-build-prerequisites:
 	@# Check that the BUILDTIME_NIXPKGS_URL and EXPRESSION_BUILD_NIXPKGS_URL are defined.
 	$(if $(BUILDTIME_NIXPKGS_URL),,$(error BUILDTIME_NIXPKGS_URL not defined))
 	$(if $(EXPRESSION_BUILD_NIXPKGS_URL),,$(error EXPRESSION_BUILD_NIXPKGS_URL not defined))
+	@# Check that the FLOX_ENV_CACHE is defined.
+	$(if $(FLOX_ENV_CACHE),,$(error FLOX_ENV_CACHE not defined))
 	@$(_mkdir) -p $(@D)
 	@$(_touch) $@
 
@@ -482,7 +484,13 @@ define BUILD_local_template =
 	@# expanding ~ or globbing *, leaving libsandbox to interpret the patterns).
 	@# As a result of the space delimiter, individual patterns cannot contain
 	@# spaces; this is documented for the `sandbox-allow` manifest field.
+	@#
+	@# FLOX_ENV_CACHE is provided by the CLI and set explicitly on the
+	@# activation (rather than inherited from any enclosing activation) so
+	@# that the interpreter's profile.d scripts write generated state
+	@# (e.g. pip.ini) to this build's environment cache deterministically.
 	$(_V_) $(_env) $$(QUOTED_ENV_DISALLOW_ARGS) out=$($(_pvarname)_out) \
+	  FLOX_ENV_CACHE=$(FLOX_ENV_CACHE) \
 	  $(FLOX_INTERPRETER)/activate --env $$($(_pvarname)_develop_copy_env) \
 	    --mode build --skip-hook-on-activate --env-project $(PWD) -- \
 	    $(_t3) $($(_pvarname)_logfile) -- \
