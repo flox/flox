@@ -28,6 +28,7 @@ use super::{
     EditResult,
     Environment,
     EnvironmentError,
+    EnvironmentPointer,
     GCROOTS_DIR_NAME,
     InstallationAttempt,
     ManagedPointer,
@@ -35,17 +36,20 @@ use super::{
     UninstallationAttempt,
 };
 use crate::flox::Flox;
+use crate::models::env_registry::{EnvRegistryError, deregister};
 use crate::models::environment::PathPointer;
 use crate::models::environment::floxmeta_branch::{
     BranchOrd,
     FloxmetaBranch,
     FloxmetaBranchError,
     GenerationLock,
+    prune_branches_from_floxmeta_by_pointer,
     write_generation_lock,
 };
 use crate::models::environment::generations::SyncToGenerationResult;
 use crate::models::environment::managed_environment::GENERATION_LOCK_FILENAME;
 use crate::models::environment::path_environment::{InitCustomization, PathEnvironment};
+use crate::models::floxmeta::{FloxMeta, FloxMetaError};
 use crate::providers::lock_manifest::LockResult;
 
 const REMOTE_ENVIRONMENT_BASE_DIR: &str = "remote";
@@ -86,6 +90,15 @@ pub enum RemoteEnvironmentError {
 
     #[error("generations error")]
     Generations(#[source] GenerationsError),
+
+    #[error("could not deregister local copy of environment")]
+    DeregisterLocalCheckout(#[source] EnvRegistryError),
+
+    #[error("could not delete local copy of environment")]
+    DeleteLocalCheckout(#[source] std::io::Error),
+
+    #[error("could not prune local metadata for environment")]
+    PruneFloxmetaBranch(#[source] FloxMetaError),
 }
 
 #[derive(Debug)]
@@ -113,6 +126,54 @@ impl RemoteEnvironment {
     /// I.e. whether there is a backing managed environment in the cache.
     pub fn is_cached(flox: &Flox, pointer: &ManagedPointer) -> bool {
         Self::checkout_path(flox, pointer).join(DOT_FLOX).exists()
+    }
+
+    /// Delete the local copy of a remote environment cached at
+    /// [RemoteEnvironment::checkout_path].
+    ///
+    /// This removes the checkout created by `flox activate --reference` /
+    /// `flox pull --reference`, prunes the per-checkout branch from the local
+    /// floxmeta repository, and deregisters it from the environment registry,
+    /// **without** deleting the upstream environment on FloxHub.
+    ///
+    /// This is a purely local filesystem operation: it neither requires
+    /// network access nor that the checkout still be openable, so it can clean
+    /// up a cached copy even when it can no longer be activated. Metadata
+    /// cleanup is best-effort — if no local floxmeta exists (e.g. a broken
+    /// copy), there is simply nothing to prune.
+    pub fn delete_local_checkout(
+        flox: &Flox,
+        pointer: &ManagedPointer,
+    ) -> Result<(), RemoteEnvironmentError> {
+        let checkout_path = Self::checkout_path(flox, pointer);
+        let dot_flox_path = checkout_path.join(DOT_FLOX);
+
+        // Prune the per-checkout floxmeta branch and deregister the checkout
+        // while its `.flox` still exists, since both key off the hash of the
+        // canonicalized path. Branch pruning stays local: `FloxMeta::open_local`
+        // never contacts FloxHub, and a missing floxmeta (e.g. a broken cached
+        // copy) simply leaves nothing to prune.
+        if let Ok(canonical_dot_flox) = CanonicalPath::new(&dot_flox_path) {
+            if let Ok(mut floxmeta) = FloxMeta::open_local(flox, pointer) {
+                prune_branches_from_floxmeta_by_pointer(
+                    &mut floxmeta,
+                    pointer,
+                    &canonical_dot_flox,
+                )
+                .map_err(RemoteEnvironmentError::PruneFloxmetaBranch)?;
+            }
+
+            deregister(
+                flox,
+                &canonical_dot_flox,
+                &EnvironmentPointer::Managed(pointer.clone()),
+            )
+            .map_err(RemoteEnvironmentError::DeregisterLocalCheckout)?;
+        }
+
+        fs::remove_dir_all(&checkout_path).map_err(RemoteEnvironmentError::DeleteLocalCheckout)?;
+
+        Ok(())
     }
 
     /// Pull a remote environment into a flox-provided managed environment
@@ -713,6 +774,48 @@ mod tests {
                 .as_writable()
                 .to_string(),
             with_latest_schema("")
+        );
+    }
+
+    /// Deleting the local checkout removes the cached copy and prunes the
+    /// per-checkout floxmeta branch, without requiring the upstream environment
+    /// (which is untouched here).
+    #[test]
+    fn delete_local_checkout_removes_cached_copy() {
+        use crate::models::environment::floxmeta_branch::branch_name;
+
+        let owner = EnvironmentOwner::from_str("test").unwrap();
+        let name = EnvironmentName::from_str("foo").unwrap();
+        let env_ref = RemoteEnvironmentRef::new_from_parts(owner.clone(), name.clone());
+
+        let (flox, _tempdir_handle) = flox_instance_with_optional_floxhub(Some(&owner));
+        RemoteEnvironment::init_floxhub_environment(&flox, env_ref, true).unwrap();
+
+        let pointer = ManagedPointer::new(owner, name, &flox.floxhub);
+
+        // Materialize the local checkout at `checkout_path`.
+        RemoteEnvironment::new(&flox, pointer.clone(), None).expect("cache remote environment");
+        assert!(RemoteEnvironment::is_cached(&flox, &pointer));
+
+        // The cached copy has a per-checkout branch in the local floxmeta repo.
+        let dot_flox =
+            CanonicalPath::new(RemoteEnvironment::checkout_path(&flox, &pointer).join(DOT_FLOX))
+                .expect("cached checkout has a .flox directory");
+        let branch = branch_name(&pointer, &dot_flox);
+        let floxmeta = FloxMeta::open_local(&flox, &pointer).expect("local floxmeta exists");
+        assert!(
+            floxmeta.git.has_branch(&branch).unwrap(),
+            "per-checkout branch should exist before deletion"
+        );
+
+        RemoteEnvironment::delete_local_checkout(&flox, &pointer).expect("delete local checkout");
+        assert!(!RemoteEnvironment::is_cached(&flox, &pointer));
+
+        // The per-checkout branch was pruned; the floxmeta repo itself remains.
+        let floxmeta = FloxMeta::open_local(&flox, &pointer).expect("local floxmeta still exists");
+        assert!(
+            !floxmeta.git.has_branch(&branch).unwrap(),
+            "per-checkout branch should be pruned after deletion"
         );
     }
 

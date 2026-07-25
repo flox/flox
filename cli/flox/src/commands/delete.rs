@@ -1,16 +1,18 @@
 use anyhow::{Result, bail};
 use bpaf::Bpaf;
+use flox_core::data::environment_ref::RemoteEnvironmentRef;
 use flox_events::{CliEnvironmentPayload, EventKind, EventsHub};
 use flox_rust_sdk::flox::Flox;
-use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment};
+use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironment;
+use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment, ManagedPointer};
 use indoc::formatdoc;
 use tracing::{debug, instrument};
 
 use crate::commands::{DirEnvironmentSelect, dir_environment_select, environment_description};
-use crate::environment_subcommand_metric;
 use crate::utils::dialog::{Confirm, Dialog};
 use crate::utils::events::env_detail_from_concrete;
 use crate::utils::message;
+use crate::{environment_subcommand_metric, subcommand_metric};
 
 // Delete an environment
 #[derive(Bpaf, Clone)]
@@ -18,6 +20,13 @@ pub struct Delete {
     /// Delete an environment without confirmation.
     #[bpaf(short, long)]
     force: bool,
+
+    /// Delete the local copy of a FloxHub environment.
+    ///
+    /// Removes the copy cached on this machine by `flox activate --reference`
+    /// or `flox pull --reference`. The environment on FloxHub is not deleted.
+    #[bpaf(long("reference"), long("ref"), short('r'), argument("owner>/<name"))]
+    remote: Option<RemoteEnvironmentRef>,
 
     // TODO: switch back to `EnvironmentSelect` once we implement
     // <https://github.com/flox/flox/issues/3391>
@@ -28,6 +37,15 @@ pub struct Delete {
 impl Delete {
     #[instrument(name = "delete", skip_all)]
     pub async fn handle(self, mut flox: Flox) -> Result<()> {
+        // `-r`/`--reference` deletes only the local cached copy of a FloxHub
+        // environment; the upstream environment is never touched.
+        if let Some(env_ref) = self.remote.clone() {
+            if matches!(self.environment, DirEnvironmentSelect::Dir(_)) {
+                bail!("`--reference` cannot be combined with `-d`.");
+            }
+            return delete_local_remote_copy(&flox, env_ref, self.force).await;
+        }
+
         let environment = self
             .environment
             .detect_concrete_environment(&mut flox, "Delete")?;
@@ -93,4 +111,55 @@ impl Delete {
 
         Ok(())
     }
+}
+
+/// Delete the local cached copy of a remote (FloxHub) environment.
+///
+/// The copy is the one created on this machine by `flox activate --reference`
+/// or `flox pull --reference`. This does not delete the environment on FloxHub,
+/// and is a local operation that doesn't require network access.
+async fn delete_local_remote_copy(
+    flox: &Flox,
+    env_ref: RemoteEnvironmentRef,
+    force: bool,
+) -> Result<()> {
+    subcommand_metric!("delete", remote_environment = env_ref.to_string());
+
+    let pointer = ManagedPointer::new(
+        env_ref.owner().clone(),
+        env_ref.name().clone(),
+        &flox.floxhub,
+    );
+
+    if !RemoteEnvironment::is_cached(flox, &pointer) {
+        bail!(formatdoc! {"
+            No local copy of remote environment {env_ref} was found.
+
+            A local copy is created by 'flox activate --reference {env_ref}' or 'flox pull --reference {env_ref}'.
+        "});
+    }
+
+    let confirm = Dialog {
+        message: &format!(
+            "You are about to delete the local copy of {env_ref}. \
+             The environment on FloxHub will not be deleted. Are you sure?"
+        ),
+        help_message: Some("Use `-f` to force deletion"),
+        typed: Confirm {
+            default: Some(false),
+        },
+    };
+
+    if !force && Dialog::can_prompt() && !confirm.prompt().await? {
+        bail!("Environment deletion cancelled");
+    }
+
+    RemoteEnvironment::delete_local_checkout(flox, &pointer)?;
+
+    message::deleted(format!(
+        "Local copy of environment {env_ref} deleted. \
+         The environment on FloxHub was not deleted."
+    ));
+
+    Ok(())
 }
