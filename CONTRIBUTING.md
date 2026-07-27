@@ -574,6 +574,6 @@ PRs.  Or, if they represent multiple bigger changes, squashed into multiple
 distinct change sets.  Also be sure to run all tests before creating a mergeable
 PR (See [above](#testing)).
 
-Because the squashed commit takes its message from the pull request title, that
+Because the merge commit takes its message from the pull request title, that
 title must follow the [conventional commits](#commits) format just like an
 individual commit — otherwise the merge fails validation.
