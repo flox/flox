@@ -294,11 +294,6 @@ impl RemoteEnvironment {
         self.inner.generation()
     }
 
-    /// See [ManagedEnvironment::existing_lockfile_without_checkout].
-    pub fn existing_lockfile_without_checkout(&self) -> Result<Option<Lockfile>, EnvironmentError> {
-        self.inner.existing_lockfile_without_checkout()
-    }
-
     /// Push local changes to FloxHub for this remote environment
     ///
     /// This pushes any local changes made to the cached remote environment back to FloxHub.
@@ -523,6 +518,12 @@ impl GenerationsExt for RemoteEnvironment {
         &self,
     ) -> Result<WithOtherFields<AllGenerationsMetadata>, GenerationsError> {
         self.inner.generations_metadata()
+    }
+
+    fn generation_and_existing_lockfile(
+        &self,
+    ) -> Result<(Option<GenerationId>, Option<Lockfile>), EnvironmentError> {
+        self.inner.generation_and_existing_lockfile()
     }
 
     fn switch_generation(

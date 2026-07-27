@@ -166,6 +166,21 @@ impl<S> Generations<S> {
         Ok(lockfile_osstr.to_string_lossy().to_string())
     }
 
+    /// Read and parse the lockfile of a generation without first re-reading
+    /// metadata to check the generation exists — the caller already resolved
+    /// the generation, so a missing one surfaces as a `git show` error.
+    pub fn lockfile_unchecked(&self, generation: usize) -> Result<Lockfile, GenerationsError> {
+        let lockfile_osstr = self
+            .repo
+            .show(&format!(
+                "{}:{}/{}/{}",
+                self.branch, generation, ENV_DIR_NAME, LOCKFILE_FILENAME
+            ))
+            .map_err(GenerationsError::ShowLockfile)?;
+        Lockfile::from_str(lockfile_osstr.to_string_lossy().as_ref())
+            .map_err(GenerationsError::Lockfile)
+    }
+
     /// Read the manifest of the current generation and return its contents as a string
     pub fn current_gen_manifest_contents(&self) -> Result<String, GenerationsError> {
         let metadata = self.metadata()?;
@@ -592,6 +607,13 @@ pub trait GenerationsExt {
     fn generations_metadata(
         &self,
     ) -> Result<WithOtherFields<AllGenerationsMetadata>, GenerationsError>;
+
+    /// The operating generation and its lockfile, read in a single metadata
+    /// pass for telemetry. Best-effort: a generation whose lockfile can't be
+    /// read still yields its id.
+    fn generation_and_existing_lockfile(
+        &self,
+    ) -> Result<(Option<GenerationId>, Option<Lockfile>), EnvironmentError>;
 
     fn switch_generation(
         &mut self,

@@ -17,8 +17,8 @@ use std::sync::{LazyLock, OnceLock};
 
 use flox_config::Config;
 use flox_events::{EnvDetail, EventsClient, EventsHub, SharedMetadataTemplate};
-use flox_rust_sdk::flox::FLOX_VERSION;
-use flox_rust_sdk::flox::Flox;
+use flox_rust_sdk::flox::{FLOX_VERSION, Flox};
+use flox_rust_sdk::models::environment::generations::GenerationsExt;
 use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment};
 use flox_rust_sdk::utils::INVOCATION_SOURCES;
 use tracing::debug;
@@ -150,35 +150,38 @@ struct EnvLineageFields {
 /// a failure leaves the field absent and is logged at debug, never failing the
 /// command.
 fn read_env_lineage_fields(flox: &Flox, env: &ConcreteEnvironment) -> EnvLineageFields {
-    let generation_number = match env {
-        ConcreteEnvironment::Managed(environment) => environment.generation(),
-        ConcreteEnvironment::Remote(environment) => environment.generation(),
-        ConcreteEnvironment::Path(_) => Ok(None),
-    }
-    .map_err(|err| debug!(error = %err, "v2 events: could not read generation"))
-    .ok()
-    .flatten()
-    .map(|generation| *generation as u64);
-
-    let package_count = match env {
-        ConcreteEnvironment::Path(environment) => environment.existing_lockfile(flox),
+    // Managed/remote resolve their generation and lockfile in a single
+    // metadata read; path envs have no generation and read their on-disk
+    // lockfile.
+    let (generation, lockfile) = match env {
+        ConcreteEnvironment::Path(environment) => (None, environment.existing_lockfile(flox)),
         ConcreteEnvironment::Managed(environment) => {
-            environment.existing_lockfile_without_checkout()
+            match environment.generation_and_existing_lockfile() {
+                Ok((generation, lockfile)) => (generation, Ok(lockfile)),
+                Err(err) => (None, Err(err)),
+            }
         },
         ConcreteEnvironment::Remote(environment) => {
-            environment.existing_lockfile_without_checkout()
+            match environment.generation_and_existing_lockfile() {
+                Ok((generation, lockfile)) => (generation, Ok(lockfile)),
+                Err(err) => (None, Err(err)),
+            }
         },
-    }
-    .map_err(|err| debug!(error = %err, "v2 events: could not read lockfile"))
-    .ok()
-    .flatten()
-    .map(|lockfile| {
-        lockfile
-            .packages
-            .iter()
-            .filter(|package| package.system().as_str() == flox.system.as_str())
-            .count() as u64
-    });
+    };
+
+    let generation_number = generation.map(|generation| *generation as u64);
+
+    let package_count = lockfile
+        .map_err(|err| debug!(error = %err, "v2 events: could not read lockfile"))
+        .ok()
+        .flatten()
+        .map(|lockfile| {
+            lockfile
+                .packages
+                .iter()
+                .filter(|package| package.system().as_str() == flox.system.as_str())
+                .count() as u64
+        });
 
     EnvLineageFields {
         generation_number,
@@ -200,7 +203,8 @@ pub fn env_detail_from_concrete(flox: &Flox, env: &ConcreteEnvironment) -> EnvDe
         },
     };
     let mut detail = EnvDetail::new(env_kind, env_ref_or_name);
-    if let Some(fields) = EventsHub::global().when_client_set(|| read_env_lineage_fields(flox, env)) {
+    if let Some(fields) = EventsHub::global().when_client_set(|| read_env_lineage_fields(flox, env))
+    {
         if let Some(generation_number) = fields.generation_number {
             detail = detail.with_generation_number(generation_number);
         }

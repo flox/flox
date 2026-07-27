@@ -652,6 +652,19 @@ impl GenerationsExt for ManagedEnvironment {
         self.generations().metadata()
     }
 
+    fn generation_and_existing_lockfile(
+        &self,
+    ) -> Result<(Option<GenerationId>, Option<Lockfile>), EnvironmentError> {
+        let Some(generation) = self.generation()? else {
+            return Ok((None, None));
+        };
+        // The generation came from metadata (or a pin), so read its lockfile
+        // directly without re-reading metadata to validate it. Best-effort: a
+        // generation whose lockfile can't be read still yields its id.
+        let lockfile = self.generations().lockfile_unchecked(*generation).ok();
+        Ok((Some(generation), lockfile))
+    }
+
     fn switch_generation(
         &mut self,
         flox: &Flox,
@@ -1188,21 +1201,6 @@ impl ManagedEnvironment {
             .generations_metadata()
             .map_err(ManagedEnvironmentError::Generations)?
             .current_gen())
-    }
-
-    /// The lockfile for the generation this environment operates on
-    /// ([`Self::generation`]), read straight from generation metadata so it
-    /// never materializes the local checkout. `None` when the environment
-    /// has no current generation.
-    pub fn existing_lockfile_without_checkout(&self) -> Result<Option<Lockfile>, EnvironmentError> {
-        let Some(generation) = self.generation()? else {
-            return Ok(None);
-        };
-        self.generations()
-            .lockfile(*generation)
-            .map_err(ManagedEnvironmentError::Generations)
-            .map_err(EnvironmentError::from)
-            .map(Some)
     }
 
     pub(crate) fn generations(&self) -> Generations {
@@ -1995,7 +1993,7 @@ mod test {
     }
 
     #[test]
-    fn existing_lockfile_without_checkout_never_materializes() {
+    fn generation_and_lockfile_never_materializes() {
         let owner = EnvironmentOwner::from_str("owner").unwrap();
         let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub(Some(&owner));
 
@@ -2018,9 +2016,22 @@ mod test {
             "unpinned resolves to the current generation"
         );
 
+        // The combined read resolves the generation and, for this unlocked
+        // fixture (no committed lockfile), yields no lockfile — best-effort.
+        // TODO: a locked fixture should also assert Some(lockfile) with a known
+        // package_count to fully cover the managed lineage read.
+        let (generation, lockfile) = managed_env.generation_and_existing_lockfile().unwrap();
+        assert_eq!(
+            generation, current,
+            "the combined read resolves the current generation"
+        );
+        assert!(
+            lockfile.is_none(),
+            "the unlocked fixture has no committed lockfile"
+        );
+
         // Reading the lineage lockfile is a metadata read — it must never
         // materialize the local checkout.
-        let _ = managed_env.existing_lockfile_without_checkout();
         assert!(
             !managed_env.path.join(super::ENV_DIR_NAME).exists(),
             "reading the lockfile must not materialize the checkout"
