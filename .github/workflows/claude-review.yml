@@ -1,8 +1,27 @@
 name: Claude Code Review
 
 on:
+  # Deliberately no `synchronize`: automated review is a checkpoint for when a
+  # PR arrives ready for eyes, not a gate on every push. It runs on `opened`
+  # for a non-draft PR and on `ready_for_review` when a draft is promoted.
+  #
+  # An on-demand re-review trigger is deliberately out of scope here; see the
+  # follow-up PR. `@claude` (claude-mention.yml) is NOT a substitute for this
+  # reviewer — it is a general-purpose interactive agent on a different model,
+  # effort, harness and prompt, with no inline-comment tooling. Use it for
+  # questions and scoped asks, not as the re-review path.
   pull_request:
-    types: [opened, synchronize, ready_for_review]
+    types: [opened, ready_for_review]
+
+# One review at a time per PR, and never interrupt one that is already running:
+# the review posts inline comments as it goes, so cancelling mid-flight leaves a
+# half-posted review behind — findings with no summary and no signal that
+# anything was dropped. A second trigger waits instead. Keyed by PR number
+# rather than head ref, because a branch name is not unique to a pull request
+# but the review's unit of work is exactly one.
+concurrency:
+  group: claude-review-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
 
 jobs:
   review:
