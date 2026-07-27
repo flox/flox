@@ -10,7 +10,7 @@ use flox_manifest::parsed::Inner;
 use flox_manifest::parsed::common::DEFAULT_GROUP_NAME;
 use flox_manifest::parsed::latest::BuildSandbox;
 use flox_manifest::{Manifest, MigratedTypedOnly};
-use floxhub_client::{BaseCatalogUrl, LockedInputEntry};
+use floxhub_client::{BaseCatalogUrl, LockedInputEntry, PackageSystem};
 use indoc::formatdoc;
 use itertools::Itertools;
 use nef_lock_catalog::NixFlakeref;
@@ -176,16 +176,16 @@ pub struct BuildResult {
 /// Deserialization mirror of [`BuildResults`] for the `lock` goal's
 /// `LOCK_RESULT_FILE`: the catalog lock's closure identity, computed
 /// without performing a package build.
-#[derive(Debug, PartialEq, Deserialize, Default, derive_more::Deref)]
+#[derive(Clone, Debug, PartialEq, Deserialize, Default, derive_more::Deref)]
 pub struct LockResults(Vec<LockResult>);
 
 /// Deserialization mirror of [`BuildResult`]'s closure-identity fields.
-#[derive(Debug, PartialEq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Deserialize)]
 pub struct LockResult {
     /// The package this lock belongs to, so a caller locking several packages
     /// at once can tell the results apart.
     pub pname: String,
-    pub system: String,
+    pub system: PackageSystem,
     /// The direct catalog inputs the lock phase resolved, keyed by
     /// locked-input reference. Empty for build modes (e.g. manifest builds)
     /// that resolve no catalog inputs.
@@ -1494,6 +1494,7 @@ mod tests {
     use std::fs::{self, File};
     use std::os::unix::fs::PermissionsExt;
     use std::os::unix::process::ExitStatusExt;
+    use std::str::FromStr;
 
     use anyhow::Context;
     use flox_manifest::interfaces::{AsWritableManifest, WriteManifest};
@@ -1611,7 +1612,7 @@ mod tests {
         let lock_results = lock_with_nix_expr(&flox, &mut env, &expression_ref, &package_name);
         assert_eq!(*lock_results, vec![LockResult {
             pname: package_name,
-            system: flox.system.clone(),
+            system: PackageSystem::from_str(&flox.system).unwrap(),
             direct_catalog_inputs: HashMap::new(),
         }]);
     }
@@ -4180,6 +4181,7 @@ mod tests {
 #[cfg(test)]
 mod nef_tests {
     use std::fs;
+    use std::str::FromStr;
 
     use indoc::{formatdoc, indoc};
     use pretty_assertions::assert_eq;
@@ -4219,7 +4221,10 @@ mod nef_tests {
         // lock() should compute the catalog lock without building.
         let lock_results = lock_with_nix_expr(&flox, &mut env, &expressions_ref, &pname);
         assert_eq!(lock_results.len(), 1);
-        assert_eq!(lock_results[0].system, flox.system);
+        assert_eq!(
+            lock_results[0].system,
+            PackageSystem::from_str(&flox.system).unwrap()
+        );
 
         let result_path = env_path.join(format!("result-{pname}"));
         assert!(

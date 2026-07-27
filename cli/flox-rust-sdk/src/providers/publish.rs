@@ -972,9 +972,7 @@ pub fn lock_build_inputs(
     };
 
     Ok(LockedBuildInputs {
-        system: PackageSystem::from_str(lock_result.system.as_str()).map_err(|_e| {
-            PublishError::UnsupportedEnvironmentState("Invalid system".to_string())
-        })?,
+        system: lock_result.system,
         direct_catalog_inputs: lock_result.direct_catalog_inputs.clone(),
     })
 }
