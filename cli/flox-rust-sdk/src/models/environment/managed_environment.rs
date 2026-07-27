@@ -652,6 +652,16 @@ impl GenerationsExt for ManagedEnvironment {
         self.generations().metadata()
     }
 
+    fn generation(&self) -> Result<Option<GenerationId>, EnvironmentError> {
+        if let Some(generation) = self.generation {
+            return Ok(Some(generation));
+        }
+        Ok(self
+            .generations_metadata()
+            .map_err(ManagedEnvironmentError::Generations)?
+            .current_gen())
+    }
+
     fn generation_and_existing_lockfile(
         &self,
     ) -> Result<(Option<GenerationId>, Option<Lockfile>), EnvironmentError> {
@@ -1188,19 +1198,6 @@ impl ManagedEnvironment {
     /// Return the managed pointer
     pub fn pointer(&self) -> &ManagedPointer {
         &self.pointer
-    }
-
-    /// The generation this environment operates on: the pinned generation
-    /// when opened at one (e.g. `flox activate --generation`), otherwise the
-    /// current generation.
-    pub fn generation(&self) -> Result<Option<GenerationId>, EnvironmentError> {
-        if let Some(generation) = self.generation {
-            return Ok(Some(generation));
-        }
-        Ok(self
-            .generations_metadata()
-            .map_err(ManagedEnvironmentError::Generations)?
-            .current_gen())
     }
 
     pub(crate) fn generations(&self) -> Generations {

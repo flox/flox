@@ -336,8 +336,10 @@ pub struct EnvDetail {
     /// for remote and managed environments, and `Environment::name(...)`
     /// for path environments. Matches the value the legacy macros emit.
     env_ref_or_name: String,
-    /// Current generation the command started from. Absent for path
-    /// environments, which have no generations.
+    /// The generation the command operated on — the pinned generation when
+    /// opened at one (e.g. `flox activate --generation`), otherwise the
+    /// environment's current generation. Absent for path environments (which
+    /// have no generations) and whenever the generation can't be read.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     generation_number: Option<u64>,
     /// Number of packages locked for the invoking system when the command

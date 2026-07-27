@@ -289,11 +289,6 @@ impl RemoteEnvironment {
         self.inner.pointer()
     }
 
-    /// See [ManagedEnvironment::generation].
-    pub fn generation(&self) -> Result<Option<GenerationId>, EnvironmentError> {
-        self.inner.generation()
-    }
-
     /// Push local changes to FloxHub for this remote environment
     ///
     /// This pushes any local changes made to the cached remote environment back to FloxHub.
@@ -518,6 +513,10 @@ impl GenerationsExt for RemoteEnvironment {
         &self,
     ) -> Result<WithOtherFields<AllGenerationsMetadata>, GenerationsError> {
         self.inner.generations_metadata()
+    }
+
+    fn generation(&self) -> Result<Option<GenerationId>, EnvironmentError> {
+        self.inner.generation()
     }
 
     fn generation_and_existing_lockfile(
