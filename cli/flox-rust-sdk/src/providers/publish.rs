@@ -2618,11 +2618,12 @@ pub mod tests {
             PublishTestUser::WithCatalogs,
             recording_name,
         );
+        let user_handle = flox.auth_context.handle().unwrap();
         let publish_provider = PublishProvider::new(env_meta, pkg_meta, auth);
-        let res = publish_provider
+        let err = publish_provider
             .publish(
                 &flox.floxhub_client,
-                &flox.auth_context.handle().unwrap(),
+                &user_handle,
                 PackageCreatedGuard { _private: () },
                 &build_meta,
                 None,
@@ -2630,8 +2631,22 @@ pub mod tests {
                 // from FIXED_TEST_STORE_PATH in the local daemon store.
                 false,
             )
-            .await;
-        assert!(res.is_err());
+            .await
+            .unwrap_err();
+        // Assert on the server's own 404 detail, not just `is_err()`: a
+        // recording that no longer matches the request also fails with a 404,
+        // but one that carries no `detail` body. Only the message below
+        // proves the package was actually reported missing.
+        assert!(
+            matches!(err, PublishError::CatalogError(_)),
+            "expected CatalogError, got: {err}"
+        );
+        assert_eq!(
+            err.to_string(),
+            format!(
+                "404 Not Found: The package with name {recording_name} in catalog {user_handle} was not found"
+            )
+        );
     }
 
     // ---- gather_build_repo_meta error differentiation tests ----
