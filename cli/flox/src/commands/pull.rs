@@ -157,7 +157,7 @@ impl Pull {
                 // contract). Outcome rides on `cli.command_completed`
                 // (exit_code), so emitting before the bail is intentional.
                 if let Err(err) = EventsHub::global().record_event(EventKind::CliEnvironmentPull(
-                    CliEnvironmentPayload::new(env_detail_from_concrete(&environment)),
+                    CliEnvironmentPayload::new(env_detail_from_concrete(&flox, &environment)),
                 )) {
                     debug!(error = %err, "Failed to record v2 event");
                 }

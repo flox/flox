@@ -104,7 +104,7 @@ impl Edit {
         // Capture the environment detail once, before the edit can create a new
         // generation, so both cli.environment.edit events for this invocation
         // report the generation the command started from (as `activate` does).
-        let env_detail = env_detail_from_concrete(&detected_environment);
+        let env_detail = env_detail_from_concrete(&flox, &detected_environment);
         if let Err(err) = EventsHub::global().record_event(EventKind::CliEnvironmentEdit(
             CliEnvironmentEditPayload::new(env_detail.clone()),
         )) {
@@ -837,7 +837,7 @@ mod tests {
         fs::write(environment.manifest_path(&flox).unwrap(), new_contents).unwrap();
 
         let mut concrete = ConcreteEnvironment::Managed(environment);
-        let env_detail = env_detail_from_concrete(&concrete);
+        let env_detail = env_detail_from_concrete(&flox, &concrete);
         let err = Edit::edit_manifest(&flox, &mut concrete, None, env_detail)
             .await
             .expect_err("edit should fail");
@@ -871,7 +871,7 @@ mod tests {
         fs::write(environment.manifest_path(&flox).unwrap(), new_contents).unwrap();
 
         let mut concrete = ConcreteEnvironment::Managed(environment);
-        let env_detail = env_detail_from_concrete(&concrete);
+        let env_detail = env_detail_from_concrete(&flox, &concrete);
         Edit::edit_manifest(
             &flox,
             &mut concrete,

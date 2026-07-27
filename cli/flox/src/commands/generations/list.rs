@@ -62,7 +62,7 @@ impl List {
         environment_subcommand_metric!("generations::list", env, request_tree = request_tree);
         if let Err(err) =
             EventsHub::global().record_event(EventKind::CliEnvironmentGenerationsList(
-                CliEnvironmentGenerationsListPayload::new(env_detail_from_concrete(&env))
+                CliEnvironmentGenerationsListPayload::new(env_detail_from_concrete(&flox, &env))
                     .with_request_tree(request_tree),
             ))
         {

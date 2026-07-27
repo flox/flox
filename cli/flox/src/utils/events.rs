@@ -18,6 +18,7 @@ use std::sync::{LazyLock, OnceLock};
 use flox_config::Config;
 use flox_events::{EnvDetail, EventsClient, EventsHub, SharedMetadataTemplate};
 use flox_rust_sdk::flox::FLOX_VERSION;
+use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment};
 use flox_rust_sdk::utils::INVOCATION_SOURCES;
 use tracing::debug;
@@ -148,7 +149,7 @@ struct EnvLineageFields {
 /// Read the lineage fields for `env`. Every read is best-effort and read-only:
 /// a failure leaves the field absent and is logged at debug, never failing the
 /// command.
-fn read_env_lineage_fields(env: &ConcreteEnvironment) -> EnvLineageFields {
+fn read_env_lineage_fields(flox: &Flox, env: &ConcreteEnvironment) -> EnvLineageFields {
     let generation_number = match env {
         ConcreteEnvironment::Managed(environment) => environment.generation(),
         ConcreteEnvironment::Remote(environment) => environment.generation(),
@@ -160,7 +161,7 @@ fn read_env_lineage_fields(env: &ConcreteEnvironment) -> EnvLineageFields {
     .map(|generation| *generation as u64);
 
     let package_count = match env {
-        ConcreteEnvironment::Path(environment) => environment.existing_lockfile_without_flox(),
+        ConcreteEnvironment::Path(environment) => environment.existing_lockfile(flox),
         ConcreteEnvironment::Managed(environment) => {
             environment.existing_lockfile_without_checkout()
         },
@@ -175,7 +176,7 @@ fn read_env_lineage_fields(env: &ConcreteEnvironment) -> EnvLineageFields {
         lockfile
             .packages
             .iter()
-            .filter(|package| package.system().as_str() == env!("NIX_TARGET_SYSTEM"))
+            .filter(|package| package.system().as_str() == flox.system.as_str())
             .count() as u64
     });
 
@@ -190,7 +191,7 @@ fn read_env_lineage_fields(env: &ConcreteEnvironment) -> EnvLineageFields {
 /// `environment_subcommand_metric!` macro. Shared across call sites so the
 /// per-kind match is not duplicated. The lineage fields are only read when an
 /// events client is installed.
-pub fn env_detail_from_concrete(env: &ConcreteEnvironment) -> EnvDetail {
+pub fn env_detail_from_concrete(flox: &Flox, env: &ConcreteEnvironment) -> EnvDetail {
     let (env_kind, env_ref_or_name) = match env {
         ConcreteEnvironment::Remote(environment) => ("remote", environment.env_ref().to_string()),
         ConcreteEnvironment::Managed(environment) => ("managed", environment.env_ref().to_string()),
@@ -199,7 +200,7 @@ pub fn env_detail_from_concrete(env: &ConcreteEnvironment) -> EnvDetail {
         },
     };
     let mut detail = EnvDetail::new(env_kind, env_ref_or_name);
-    if let Some(fields) = EventsHub::global().when_client_set(|| read_env_lineage_fields(env)) {
+    if let Some(fields) = EventsHub::global().when_client_set(|| read_env_lineage_fields(flox, env)) {
         if let Some(generation_number) = fields.generation_number {
             detail = detail.with_generation_number(generation_number);
         }

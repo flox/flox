@@ -39,7 +39,7 @@ impl Rollback {
         environment_subcommand_metric!("generations::rollback", env);
         if let Err(err) =
             EventsHub::global().record_event(EventKind::CliEnvironmentGenerationsRollback(
-                CliEnvironmentPayload::new(env_detail_from_concrete(&env)),
+                CliEnvironmentPayload::new(env_detail_from_concrete(&flox, &env)),
             ))
         {
             debug!(error = %err, "Failed to record v2 event");

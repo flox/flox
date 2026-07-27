@@ -69,7 +69,7 @@ impl List {
             .await?;
         environment_subcommand_metric!("list", env);
         if let Err(err) = EventsHub::global().record_event(EventKind::CliEnvironmentList(
-            CliEnvironmentPayload::new(env_detail_from_concrete(&env)),
+            CliEnvironmentPayload::new(env_detail_from_concrete(&flox, &env)),
         )) {
             debug!(error = %err, "Failed to record v2 event");
         }

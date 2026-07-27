@@ -235,7 +235,7 @@ impl Activate {
         // *outcome* is carried on `cli.command_completed` (exit_code), not by
         // the presence of this dispatch-time event, so emitting before a
         // possible trust decline is intentional, not a logged false success.
-        let v2_env_detail = env_detail_from_concrete(&concrete_environment);
+        let v2_env_detail = env_detail_from_concrete(&flox, &concrete_environment);
         let v2_mode = options
             .mode
             .clone()
@@ -421,7 +421,7 @@ impl ActivateOptions {
         // this activation locked — a never-locked path env has no lockfile until
         // now — and so a declined-trust or lock-error abort above performs no
         // lineage git I/O for an event that is never emitted.
-        let v2_env_detail = env_detail_from_concrete(&concrete_environment);
+        let v2_env_detail = env_detail_from_concrete(&flox, &concrete_environment);
 
         if let Err(err) = EventsHub::global().record_event(EventKind::CliEnvironmentActivate(
             CliEnvironmentActivatePayload::new(v2_env_detail.clone())
