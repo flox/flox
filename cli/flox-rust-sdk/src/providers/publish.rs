@@ -2425,7 +2425,10 @@ pub mod tests {
     // publish test mocks.
     #[tokio::test(flavor = "multi_thread")]
     async fn retrieves_base_catalog_url() {
-        let (_build_meta, env_meta, _pkg_meta) = dummy_publish_metadata("mypkg2");
+        // Unlike the recording tests below, the name is never sent to the
+        // catalog here -- `pkg_meta` is discarded -- so it needs no
+        // per-test uniqueness.
+        let (_build_meta, env_meta, _pkg_meta) = dummy_publish_metadata("unused");
         let (flox, _tmpdir) = flox_instance();
         let (flox, _auth) = auto_recording_catalog_client_for_authed_local_services(
             flox,
