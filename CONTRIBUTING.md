@@ -126,8 +126,8 @@ whose commits are all correctly formatted can still fail at merge time if the
 title itself does not conform.
 
 ```
-❌ Add support for parsing arrays
-✅ feat(parser): add support for parsing arrays
+❌ Add ability to parse arrays
+✅ feat(parser): add ability to parse arrays
 ```
 
 ## Development
