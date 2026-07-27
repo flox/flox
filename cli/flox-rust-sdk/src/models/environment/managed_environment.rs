@@ -1771,6 +1771,7 @@ mod test {
 
     use flox_core::Version;
     use flox_manifest::interfaces::{AsLatestSchema, AsTypedOnlyManifest};
+    use flox_manifest::lockfile::PackageToList;
     use flox_manifest::lockfile::test_helpers::fake_catalog_package_lock;
     use flox_manifest::parsed::Inner;
     use flox_manifest::parsed::latest::{self, ManifestLatest};
@@ -2014,9 +2015,9 @@ mod test {
         );
 
         // The combined read resolves the generation and, for this unlocked
-        // fixture (no committed lockfile), yields no lockfile — best-effort.
-        // TODO: a locked fixture should also assert Some(lockfile) with a known
-        // package_count to fully cover the managed lineage read.
+        // fixture (no committed lockfile), yields no lockfile — best-effort. A
+        // locked env's package_count is covered by
+        // `generation_and_lockfile_reads_locked_packages`.
         let (generation, lockfile) = managed_env.generation_and_existing_lockfile().unwrap();
         assert_eq!(
             generation, current,
@@ -2032,6 +2033,52 @@ mod test {
         assert!(
             !managed_env.path.join(super::ENV_DIR_NAME).exists(),
             "reading the lockfile must not materialize the checkout"
+        );
+    }
+
+    /// A managed environment locked with packages reports its lineage: the
+    /// combined read returns the current generation and a lockfile whose
+    /// per-system package count matches what was installed.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn generation_and_lockfile_reads_locked_packages() {
+        let owner = "owner".parse().unwrap();
+        let (mut flox, tempdir) = flox_instance_with_optional_floxhub(Some(&owner));
+
+        let initial_manifest = indoc! {r#"
+            version = 1
+            [install]
+        "#};
+        let mut environment =
+            mock_managed_environment_in(&flox, initial_manifest, owner, &tempdir, Some("test-env"));
+
+        flox.floxhub_client =
+            catalog_replay_client(GENERATED_DATA.join("resolve/hello.yaml")).await;
+        environment
+            .install(
+                &[PackageToInstall::parse(&flox.system, "hello").unwrap()],
+                &flox,
+            )
+            .unwrap();
+
+        let (generation, lockfile) = environment.generation_and_existing_lockfile().unwrap();
+        assert_eq!(
+            generation,
+            environment.generations_metadata().unwrap().current_gen(),
+            "the combined read resolves the current generation"
+        );
+        let lockfile = lockfile.expect("a locked managed env has a readable lockfile");
+        let packages = lockfile.list_packages(&flox.system).unwrap();
+        let install_ids: Vec<&str> = packages
+            .iter()
+            .map(|package| match package {
+                PackageToList::Catalog(_, locked) => locked.install_id.as_str(),
+                _ => panic!("expected a catalog package"),
+            })
+            .collect();
+        assert_eq!(
+            install_ids,
+            ["hello"],
+            "the combined read reports the installed package by identity"
         );
     }
 
