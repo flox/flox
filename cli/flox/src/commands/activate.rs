@@ -386,7 +386,6 @@ impl ActivateOptions {
         ensure_prompt_hook_version_compatible_for_activate()?;
 
         let now_active = UninitializedEnvironment::from_concrete_environment(&concrete_environment);
-        let v2_env_detail = env_detail_from_concrete(&concrete_environment);
 
         let lockfile = match concrete_environment.lockfile(&flox)? {
             LockResult::Changed(lockfile) => {
@@ -417,6 +416,12 @@ impl ActivateOptions {
         // breadcrumb metric to estimate use of composition
         let has_includes = lockfile.compose.is_some();
         subcommand_metric!("activate", "has_includes" = has_includes);
+
+        // Read env detail after locking so package_count reflects the packages
+        // this activation locked — a never-locked path env has no lockfile until
+        // now — and so a declined-trust or lock-error abort above performs no
+        // lineage git I/O for an event that is never emitted.
+        let v2_env_detail = env_detail_from_concrete(&concrete_environment);
 
         if let Err(err) = EventsHub::global().record_event(EventKind::CliEnvironmentActivate(
             CliEnvironmentActivatePayload::new(v2_env_detail.clone())

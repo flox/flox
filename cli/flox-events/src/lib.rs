@@ -506,6 +506,11 @@ impl CliPackagePayload {
 /// Payload for [`EventKind::CliEnvironmentEdit`]. Emitted once eagerly
 /// with env detail; a manifest edit that changes the manifest emits a
 /// second row carrying `edited_includes`.
+///
+/// `env_detail` is the pre-edit snapshot on both rows (the generation the
+/// command started from), so the two rows agree on lineage. The result-known
+/// row's `manifest_version` describes the post-edit manifest, so lineage and
+/// the result fields are deliberately different epochs, not one snapshot.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CliEnvironmentEditPayload {
     #[serde(flatten)]
