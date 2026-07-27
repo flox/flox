@@ -145,7 +145,7 @@ pub enum ManifestBuilderError {
     #[error("Build failed")]
     BuildFailure { status: ExitStatus },
 
-    #[error("Lock failed")]
+    #[error("Failed to compute the catalog lock.")]
     LockFailure,
 }
 
