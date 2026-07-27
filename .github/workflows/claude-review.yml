@@ -1,8 +1,15 @@
 name: Claude Code Review
 
 on:
+  # Deliberately no `synchronize`: automated review is an initial/ready
+  # checkpoint, not a per-push gate. Request a re-review after substantial
+  # changes by commenting `@claude` (see claude-mention.yml).
   pull_request:
-    types: [opened, synchronize, ready_for_review]
+    types: [opened, ready_for_review]
+
+concurrency:
+  group: "${{ github.workflow }}-${{ github.head_ref || github.sha }}"
+  cancel-in-progress: true
 
 jobs:
   review:
