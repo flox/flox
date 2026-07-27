@@ -1,33 +1,61 @@
 name: Claude Code Review
 
 on:
-  # Deliberately no `synchronize`: automated review is a checkpoint for when a
-  # PR arrives ready for eyes, not a gate on every push. It runs on `opened`
-  # for a non-draft PR and on `ready_for_review` when a draft is promoted.
+  # Two ways to *request* the review below; this file is the only place one is
+  # *performed*. Deliberately no `synchronize`: the automated pass is a
+  # checkpoint for when a PR arrives ready for eyes, not a gate on every push.
   #
-  # An on-demand re-review trigger is deliberately out of scope here; see the
-  # follow-up PR. `@claude` (claude-mention.yml) is NOT a substitute for this
-  # reviewer — it is a general-purpose interactive agent on a different model,
-  # effort, harness and prompt, with no inline-comment tooling. Use it for
-  # questions and scoped asks, not as the re-review path.
+  #   automatic  `opened` on a non-draft PR, `ready_for_review` on a promoted
+  #              draft — the first-look pass.
+  #   on demand  comment `/claude-review` on the PR — same model, effort,
+  #              prompt, plugin and inline-comment tooling, on the current head.
+  #
+  # `@claude` (claude-mention.yml) is NOT a substitute for either: it is a
+  # general-purpose interactive agent on a different model, effort, harness and
+  # prompt, with no inline-comment tooling. Use it for questions and scoped
+  # asks; use `/claude-review` when you want the review below.
+  #
+  # `issue_comment` is not an arbitrary choice of trigger. claude-code-action
+  # validates `track_progress` against a fixed event allow-list and throws on
+  # anything else, which rules out `labeled`, `workflow_dispatch` and
+  # `repository_dispatch`. Of the PR-local triggers, only this one keeps the
+  # tracking comment. See src/modes/detector.ts in the action.
   pull_request:
     types: [opened, ready_for_review]
+  issue_comment:
+    types: [created]
 
 # One review at a time per PR, and never interrupt one that is already running:
 # the review posts inline comments as it goes, so cancelling mid-flight leaves a
 # half-posted review behind — findings with no summary and no signal that
-# anything was dropped. A second trigger waits instead. Keyed by PR number
+# anything was dropped. A second request waits instead. Keyed by PR number
 # rather than head ref, because a branch name is not unique to a pull request
 # but the review's unit of work is exactly one.
 concurrency:
-  group: claude-review-pr-${{ github.event.pull_request.number }}
+  group: claude-review-pr-${{ github.event.pull_request.number || github.event.issue.number }}
   cancel-in-progress: false
 
 jobs:
   review:
-    # Skip on fork PRs: the review needs CLAUDE_CODE_OAUTH_TOKEN, which isn't
-    # available to pull_request runs from forks, so it only fails.
-    if: ${{ !github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository }}
+    # Automatic: non-draft, same-repo pull requests only — the review needs
+    # CLAUDE_CODE_OAUTH_TOKEN, which isn't available to `pull_request` runs from
+    # forks, so it only fails.
+    #
+    # On demand: a `/claude-review` comment, at the start of the body, on a pull
+    # request rather than an issue, from someone with write access. The fork
+    # check for this path can't be expressed here — `issue_comment` payloads
+    # carry no head repo — so it happens in the preflight step below.
+    if: |
+      (
+        github.event_name == 'pull_request' &&
+        !github.event.pull_request.draft &&
+        github.event.pull_request.head.repo.full_name == github.repository
+      ) || (
+        github.event_name == 'issue_comment' &&
+        github.event.issue.pull_request &&
+        startsWith(github.event.comment.body, '/claude-review') &&
+        contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association)
+      )
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -36,16 +64,64 @@ jobs:
       id-token: write # Required in order for the Claude GitHub app to function
       actions: read # Required for Claude to read CI results on PRs
     steps:
+      # Resolves the one thing the two trigger paths disagree about — where the
+      # PR number lives — and applies the fork rule the job-level `if` can't
+      # reach on the comment path.
+      #
+      # `issue_comment` runs in the base repo with secrets even for fork PRs, so
+      # unlike `pull_request` this path *could* review them. It deliberately
+      # doesn't: turning an untrusted diff into input for an agent holding a
+      # write-scoped token is a security decision on its own merits, not
+      # something to acquire as a side effect of adding a re-review command.
+      - name: Preflight
+        id: preflight
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          EVENT: ${{ github.event_name }}
+          NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
+          COMMENT_ID: ${{ github.event.comment.id }}
+        run: |
+          echo "number=$NUMBER" >> "$GITHUB_OUTPUT"
+
+          if [ "$EVENT" != "issue_comment" ]; then
+            echo "review=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Acknowledge the command now: the tracking comment doesn't appear
+          # until the action starts, a Nix install later.
+          gh api --method POST --silent \
+            "repos/$GH_REPO/issues/comments/$COMMENT_ID/reactions" \
+            -f content=eyes || true
+
+          if [ "$(gh pr view "$NUMBER" --json isCrossRepository -q .isCrossRepository)" = "true" ]; then
+            echo "review=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::/claude-review is not available on fork PRs."
+            gh pr comment "$NUMBER" --body-file - <<'MSG'
+          :no_entry: `/claude-review` is not available on pull requests from forks — the review needs credentials that fork pull requests cannot safely be given.
+          MSG
+          else
+            echo "review=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Checkout repository
+        if: steps.preflight.outputs.review == 'true'
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           fetch-depth: 1
+          # `pull_request` already checks out the merge ref; `issue_comment`
+          # defaults to the base branch, so name it explicitly. Both paths then
+          # review the same thing: the PR merged into its base, at current head.
+          ref: ${{ github.event_name == 'issue_comment' && format('refs/pull/{0}/merge', github.event.issue.number) || '' }}
 
       - name: Install Nix
+        if: steps.preflight.outputs.review == 'true'
         uses: cachix/install-nix-action@96951a368ba55167b55f1c916f7d416bac6505fe # v31
 
       - name: Run Claude Code Review
         id: claude-review
+        if: steps.preflight.outputs.review == 'true'
         uses: anthropics/claude-code-action@12531344451323133b0493233c759991ac61da12 # v1.0.174
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
@@ -70,7 +146,7 @@ jobs:
           plugins: 'superpowers@claude-plugins-official'
           track_progress: true
           prompt: |
-            Review PR #${{ github.event.pull_request.number }} in ${{ github.repository }}.
+            Review PR #${{ steps.preflight.outputs.number }} in ${{ github.repository }}.
 
             Conduct the review using the superpowers:requesting-code-review skill
             and its code-reviewer template, reviewing the PR's full diff against
@@ -86,3 +162,7 @@ jobs:
             - Finish by writing the review summary into the tracking comment.
               If there are no issues, say specifically what you reviewed and
               verified rather than a bare "no issues found".
+            - State the PR head commit you actually reviewed (from `gh pr view
+              --json headRefOid`) in that summary. A PR can be reviewed more
+              than once now, so the commit is what distinguishes this pass from
+              the one before it.
