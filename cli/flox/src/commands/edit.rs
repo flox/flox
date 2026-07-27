@@ -7,7 +7,7 @@ use std::process::Command;
 use anyhow::{Context, Result, bail};
 use bpaf::Bpaf;
 use flox_core::data::environment_ref::EnvironmentName;
-use flox_events::{CliEnvironmentEditPayload, EventKind, EventsHub};
+use flox_events::{CliEnvironmentEditPayload, EnvDetail, EventKind, EventsHub};
 use flox_manifest::interfaces::{AsWritableManifest, WriteManifest};
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::generations::{
@@ -101,8 +101,12 @@ impl Edit {
             Err(e) => Err(e)?,
         };
         environment_subcommand_metric!("edit", detected_environment);
+        // Capture the environment detail once, before the edit can create a new
+        // generation, so both cli.environment.edit events for this invocation
+        // report the generation the command started from (as `activate` does).
+        let env_detail = env_detail_from_concrete(&detected_environment);
         if let Err(err) = EventsHub::global().record_event(EventKind::CliEnvironmentEdit(
-            CliEnvironmentEditPayload::new(env_detail_from_concrete(&detected_environment)),
+            CliEnvironmentEditPayload::new(env_detail.clone()),
         )) {
             debug!(error = %err, "Failed to record v2 event");
         }
@@ -115,7 +119,7 @@ impl Edit {
 
                 let contents = Self::provided_manifest_contents(file)?;
 
-                Self::edit_manifest(&flox, &mut detected_environment, contents).await?
+                Self::edit_manifest(&flox, &mut detected_environment, contents, env_detail).await?
             },
             EditAction::Rename { name } => {
                 let span = tracing::info_span!("rename");
@@ -207,6 +211,7 @@ impl Edit {
         flox: &Flox,
         environment: &mut ConcreteEnvironment,
         contents: Option<String>,
+        env_detail: EnvDetail,
     ) -> Result<()> {
         if let ConcreteEnvironment::Managed(environment) = environment
             && environment.has_local_changes(flox)?
@@ -270,7 +275,7 @@ impl Edit {
                 let edited_includes = old_includes != new_includes;
                 subcommand_metric!("edit", "edited_includes" = edited_includes);
                 if let Err(err) = EventsHub::global().record_event(EventKind::CliEnvironmentEdit(
-                    CliEnvironmentEditPayload::new(env_detail_from_concrete(environment))
+                    CliEnvironmentEditPayload::new(env_detail)
                         .with_edited_includes(edited_includes)
                         .with_manifest_version(new_lockfile.manifest_schema_version().to_string()),
                 )) {
@@ -831,7 +836,9 @@ mod tests {
         // edit the local manifest
         fs::write(environment.manifest_path(&flox).unwrap(), new_contents).unwrap();
 
-        let err = Edit::edit_manifest(&flox, &mut ConcreteEnvironment::Managed(environment), None)
+        let mut concrete = ConcreteEnvironment::Managed(environment);
+        let env_detail = env_detail_from_concrete(&concrete);
+        let err = Edit::edit_manifest(&flox, &mut concrete, None, env_detail)
             .await
             .expect_err("edit should fail");
 
@@ -863,10 +870,13 @@ mod tests {
         // edit the local manifest
         fs::write(environment.manifest_path(&flox).unwrap(), new_contents).unwrap();
 
+        let mut concrete = ConcreteEnvironment::Managed(environment);
+        let env_detail = env_detail_from_concrete(&concrete);
         Edit::edit_manifest(
             &flox,
-            &mut ConcreteEnvironment::Managed(environment),
+            &mut concrete,
             Some(new_contents.to_string()),
+            env_detail,
         )
         .await
         .expect("edit should succeed");
