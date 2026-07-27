@@ -7,135 +7,13 @@
     "version": "unknown"
   },
   "paths": {
-    "/api/v1/factory/health": {
-      "get": {
-        "tags": [
-          "health"
-        ],
-        "summary": "Health",
-        "operationId": "health_api_v1_factory_health_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/factory/ready": {
-      "get": {
-        "tags": [
-          "health"
-        ],
-        "summary": "Ready",
-        "operationId": "ready_api_v1_factory_ready_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/factory/webhooks/github": {
-      "post": {
-        "tags": [
-          "webhooks"
-        ],
-        "summary": "Receive Github Webhook",
-        "description": "Receive a GitHub webhook delivery.\n\nNon-push events are acknowledged and ignored. Push events are\nvalidated, parsed, and stored. Returns a status dict indicating\nwhether the event was accepted, ignored, a duplicate, or caused\na parse error.",
-        "operationId": "receive_github_webhook_api_v1_factory_webhooks_github_post",
-        "parameters": [
-          {
-            "name": "x-github-event",
-            "in": "header",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "X-Github-Event"
-            }
-          },
-          {
-            "name": "x-github-delivery",
-            "in": "header",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "X-Github-Delivery"
-            }
-          },
-          {
-            "name": "x-hub-signature-256",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "title": "X-Hub-Signature-256",
-              "nullable": true,
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Receive Github Webhook Api V1 Factory Webhooks Github Post"
-                }
-              }
-            }
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Unauthorized"
-          },
-          "413": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Request Entity Too Large"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Unprocessable Entity"
-          }
-        }
-      }
-    },
     "/api/v1/factory/builds": {
       "get": {
         "tags": [
           "builds"
         ],
         "summary": "List Builds",
-        "description": "Return a paginated list of builds.\n\nUse the `status` query parameter to filter:\n- ``undispatched``: builds with no task (task_id IS NULL)\n- Any other value: filters by tasks.status (e.g. ``running``)",
+        "description": "Return a paginated list of builds, newest first.\n\nThe ``status`` filter matches builds by an effective status derived\nfrom the build's lifecycle (never stored), drawn from a six-value\nvocabulary:\n\n- ``pending``: accepted but not yet dispatched to a builder.\n- ``running``: dispatched and building.\n- ``completed``: finished successfully.\n- ``failed``: finished unsuccessfully. Excludes timed-out builds,\n  which match ``timed_out``.\n- ``timed_out``: terminated for exceeding its time budget.\n- ``cancelled``: cancelled, whether before or after dispatch.\n\nThese six values are both the filter vocabulary and the response\nvocabulary: a timed-out build matches ``?status=timed_out`` and\nreports ``status: \"timed_out\"`` in the response body.\n\nFilters:\n\n- ``status``: match one or more effective-status values.\n- ``system``: match system names exactly. A name outside the\n  server's system vocabulary returns 422 naming the accepted\n  values, which are the systems this deployment's catalog holds\n  and so may differ between deployments.\n- ``attr_path``: match attr_path by prefix.\n- ``source_commit_sha``: match source commit SHA by prefix.\n- ``since``: return builds created at or after this time. Accepts a\n  relative duration matching ``[0-9]+[smhdwy]`` (e.g. ``7d``) or an\n  absolute ISO 8601 timestamp; a timestamp without a UTC offset is\n  read as UTC.\n\nFilters combine with AND across parameters and OR within a repeated\none: ``?status=running&status=failed`` matches either status, and\nadding ``&system=x86_64-linux`` further requires that system. Each\nrepeated parameter accepts at most 50 values.\n\n``cursor`` and ``sort`` are reserved for future use and have no\neffect in v1; results are always ordered newest-first.",
         "operationId": "list_builds_api_v1_factory_builds_get",
         "security": [
           {
@@ -151,10 +29,80 @@
             "in": "query",
             "required": false,
             "schema": {
+              "description": "Filter by effective status; repeatable, matched as OR. One of pending, running, completed, failed, timed_out, cancelled.",
               "title": "Status",
               "nullable": true,
-              "type": "string"
-            }
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/EffectiveBuildStatus"
+              },
+              "maxItems": 50
+            },
+            "description": "Filter by effective status; repeatable, matched as OR. One of pending, running, completed, failed, timed_out, cancelled."
+          },
+          {
+            "name": "system",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "description": "Filter by system, matched exactly; repeatable, matched as OR. Values must be non-empty, and a value outside the server's system vocabulary returns 422 naming the accepted values.",
+              "title": "System",
+              "nullable": true,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "maxItems": 50
+            },
+            "description": "Filter by system, matched exactly; repeatable, matched as OR. Values must be non-empty, and a value outside the server's system vocabulary returns 422 naming the accepted values."
+          },
+          {
+            "name": "attr_path",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "description": "Filter by attr_path prefix; repeatable, matched as OR. Values must be non-empty.",
+              "title": "Attr Path",
+              "nullable": true,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "maxItems": 50
+            },
+            "description": "Filter by attr_path prefix; repeatable, matched as OR. Values must be non-empty."
+          },
+          {
+            "name": "source_commit_sha",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "description": "Filter by source commit SHA prefix; repeatable, matched as OR. Values must be non-empty.",
+              "title": "Source Commit Sha",
+              "nullable": true,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "maxItems": 50
+            },
+            "description": "Filter by source commit SHA prefix; repeatable, matched as OR. Values must be non-empty."
+          },
+          {
+            "name": "since",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "description": "Return builds created at or after this time (inclusive). Either a relative duration matching [0-9]+[smhdwy] (e.g. '7d') or an absolute ISO 8601 timestamp; a timestamp without a UTC offset is read as UTC.",
+              "title": "Since",
+              "nullable": true,
+              "type": "string",
+              "minLength": 1
+            },
+            "description": "Return builds created at or after this time (inclusive). Either a relative duration matching [0-9]+[smhdwy] (e.g. '7d') or an absolute ISO 8601 timestamp; a timestamp without a UTC offset is read as UTC."
           },
           {
             "name": "page",
@@ -162,6 +110,7 @@
             "required": false,
             "schema": {
               "type": "integer",
+              "maximum": 10737418,
               "minimum": 0,
               "default": 0,
               "title": "Page"
@@ -178,6 +127,30 @@
               "default": 50,
               "title": "Page Size"
             }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "description": "Reserved for future use; not implemented in v1 (results are always ordered newest-first).",
+              "title": "Cursor",
+              "nullable": true,
+              "type": "string"
+            },
+            "description": "Reserved for future use; not implemented in v1 (results are always ordered newest-first)."
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "description": "Reserved for future use; not implemented in v1 (results are always ordered newest-first).",
+              "title": "Sort",
+              "nullable": true,
+              "type": "string"
+            },
+            "description": "Reserved for future use; not implemented in v1 (results are always ordered newest-first)."
           }
         ],
         "responses": {
@@ -269,7 +242,7 @@
           "builds"
         ],
         "summary": "Cancel Build",
-        "description": "Cancel a build.\n\nHandles both active builds (delegated to Build Coordinator) and\npre-dispatch builds (cancelled FS-only via an atomic row lock).\n\nThe operation is idempotent with respect to terminal state. When\nthe build has already reached a terminal state (``cancelled``,\n``completed``, or ``failed``) \u2014 whether Build Coordinator reports\nit or the local task row records it \u2014 the response is still 200\nand the ``status`` field carries that terminal state. Coordinator\nstatuses are normalized into the task vocabulary before they are\nsurfaced (BC's ``timed_out`` is reported as ``failed``, exactly as\nthe callback path persists it), so the cancel response and a\nsubsequent ``GET`` always agree.\n\nCancelling a pre-dispatch build permanently retires its identity\ntuple: ``uq_factory_build_identity`` dedup treats the cancelled\nrow like any other terminal build, so a later event expanding to\nthe same identity inserts nothing. Recovery is manual by design \u2014\na cancel that ambient event traffic could overturn would not be a\ncancel.\n\nOutcomes:\n    200 \u2014 Build cancelled, or already terminal. ``BuildResponse.status``\n          reflects the effective state.\n    404 \u2014 No build with the given ID.\n    502 \u2014 Build Coordinator unreachable or returned an unexpected\n          error; or the coordinator does not know the build yet\n          because its dispatch is in flight (the worker commits\n          its claim before the HTTP submit), or no longer knows it\n          (coordinator restart or purge). In every 502 case the\n          correct client action is retry with backoff.\n\nAn audit log line is emitted on every path, including unhandled\nexceptions (``outcome=internal_error``).",
+        "description": "Cancel a build.\n\nHandles both active builds (delegated to Build Coordinator) and\npre-dispatch builds (cancelled FS-only via an atomic row lock).\n\nThe operation is idempotent with respect to terminal state. When\nthe build has already reached a terminal state (``cancelled``,\n``completed``, ``failed``, or ``timed_out``) \u2014 whether Build\nCoordinator reports it or the local task row records it \u2014 the\nresponse is still 200 and the ``status`` field carries that\nterminal state. Coordinator statuses are normalized into the\neffective vocabulary before they are surfaced: BC's ``timed_out``\nsurfaces as ``timed_out``, the same word a subsequent ``GET``\nreconstructs from the footprint the callback path persists\n(status='failed' + error_class='timeout'), so the two surfaces\nalways agree.\n\nCancelling a pre-dispatch build permanently retires its identity\ntuple: ``uq_factory_build_identity`` dedup treats the cancelled\nrow like any other terminal build, so a later event expanding to\nthe same identity inserts nothing. Recovery is manual by design \u2014\na cancel that ambient event traffic could overturn would not be a\ncancel.\n\nOutcomes:\n    200 \u2014 Build cancelled, or already terminal. ``BuildResponse.status``\n          reflects the effective state.\n    404 \u2014 No build with the given ID.\n    502 \u2014 Build Coordinator unreachable or returned an unexpected\n          error; or the coordinator does not know the build yet\n          because its dispatch is in flight (the worker commits\n          its claim before the HTTP submit), or no longer knows it\n          (coordinator restart or purge). In every 502 case the\n          correct client action is retry with backoff.\n\nAn audit log line is emitted on every path, including unhandled\nexceptions (``outcome=internal_error``).",
         "operationId": "cancel_build_api_v1_factory_builds__build_id__delete",
         "security": [
           {
@@ -405,63 +378,6 @@
         }
       }
     },
-    "/api/v1/factory/callbacks/builds/{task_id}": {
-      "post": {
-        "tags": [
-          "callbacks"
-        ],
-        "summary": "Receive Build Callback",
-        "description": "Receive a build coordinator callback for a task.\n\nReturns 200 in all reachable code paths (validation errors are\nauto-converted to 422 by FastAPI); see module docstring for the\nrationale on each branch.",
-        "operationId": "receive_build_callback_api_v1_factory_callbacks_builds__task_id__post",
-        "parameters": [
-          {
-            "name": "task_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "title": "Task Id"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/BuildCallbackPayload"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "additionalProperties": {
-                    "type": "string"
-                  },
-                  "title": "Response Receive Build Callback Api V1 Factory Callbacks Builds  Task Id  Post"
-                }
-              }
-            }
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Unprocessable Entity"
-          }
-        }
-      }
-    },
     "/api/v1/factory/tasks/{task_id}": {
       "get": {
         "tags": [
@@ -526,44 +442,6 @@
   },
   "components": {
     "schemas": {
-      "BuildCallbackPayload": {
-        "properties": {
-          "build_id": {
-            "type": "string",
-            "title": "Build Id"
-          },
-          "status": {
-            "type": "string",
-            "enum": [
-              "queued",
-              "dispatching",
-              "running",
-              "completed",
-              "failed",
-              "timed_out",
-              "cancelled"
-            ],
-            "title": "Status"
-          },
-          "error_message": {
-            "title": "Error Message",
-            "nullable": true,
-            "type": "string"
-          },
-          "exit_code": {
-            "title": "Exit Code",
-            "nullable": true,
-            "type": "integer"
-          }
-        },
-        "type": "object",
-        "required": [
-          "build_id",
-          "status"
-        ],
-        "title": "BuildCallbackPayload",
-        "description": "Payload posted by the build coordinator to\n``POST /api/v1/factory/callbacks/builds/{task_id}``.\n\nFields match ``build_coordinator/reporter.py:51-56`` exactly.\nAll four are required by the coordinator wire contract; the\nOptional[None] defaults on ``error_message`` and ``exit_code``\naccommodate the ``completed`` and ``cancelled`` terminal cases\nwhere neither is meaningful."
-      },
       "BuildListResponse": {
         "properties": {
           "builds": {
@@ -603,8 +481,7 @@
             "title": "Build Id"
           },
           "status": {
-            "type": "string",
-            "title": "Status"
+            "$ref": "#/components/schemas/EffectiveBuildStatus"
           },
           "source_repo_url": {
             "type": "string",
@@ -663,7 +540,20 @@
           "created_at"
         ],
         "title": "BuildResponse",
-        "description": "Build-specific details with optional task sub-object.\n\nThe task field is None for undispatched builds (task_id IS NULL\nin factory_builds).\n\nThe status field is the build's effective current status, computed\nserver-side from the freshest authoritative source:\n\n- Pre-dispatch (task_id IS NULL): computed from\n  factory_builds.cancelled_at \u2014 ``\"cancelled\"`` when set, else\n  ``\"pending\"``. Neither word is stored; the timestamp is the only\n  persisted pre-dispatch state.\n- Dispatched: tasks.status (``\"running\"``, ``\"completed\"``,\n  ``\"failed\"``, ``\"cancelled\"``).\n- On cancel responses: Build Coordinator's returned status, which\n  is fresher than the local row (which lags until BC's callback\n  lands), normalized into the task vocabulary above \u2014 BC's\n  ``timed_out`` is reported as ``failed``, exactly as the callback\n  path persists it. The field never carries a word outside the\n  union of the two sets above.\n\nStaleness: after handoff the field tracks tasks.status, which only\nadvances when Build Coordinator's terminal callback lands. When\ncallbacks are disabled (no callback base URL configured \u2014 a\nsupported worker configuration), the post-handoff status stays at\nthe last persisted value (typically ``\"running\"``) indefinitely;\na cancel response is then the only place a fresher\ncoordinator-reported status appears."
+        "description": "Build-specific details with optional task sub-object.\n\nThe task field is None for undispatched builds (task_id IS NULL\nin factory_builds).\n\nThe status field is the build's effective current status \u2014 the\nEffectiveBuildStatus vocabulary \u2014 computed server-side from the\nfreshest authoritative source:\n\n- Pre-dispatch (task_id IS NULL): computed from\n  factory_builds.cancelled_at \u2014 ``\"cancelled\"`` when set, else\n  ``\"pending\"``. Neither word is stored; the timestamp is the only\n  persisted pre-dispatch state.\n- Dispatched: tasks.status (``\"running\"``, ``\"completed\"``,\n  ``\"failed\"``, ``\"cancelled\"``), with ``\"timed_out\"``\n  reconstructed from the persisted footprint of an execution\n  timeout (status='failed' + error_class='timeout'). A submit-time\n  ``dispatch_timeout`` is a different failure \u2014 the build never\n  observably started \u2014 and reads as ``\"failed\"``.\n- On cancel responses: Build Coordinator's returned status, which\n  is fresher than the local row (which lags until BC's callback\n  lands), put through the same derivation \u2014 BC's ``timed_out``\n  surfaces as ``\"timed_out\"``, agreeing with what a subsequent GET\n  reconstructs once the callback persists the footprint. The field\n  never carries a word outside the effective vocabulary.\n\nStaleness: after handoff the field tracks tasks.status, which only\nadvances when Build Coordinator's terminal callback lands. When\ncallbacks are disabled (no callback base URL configured \u2014 a\nsupported worker configuration), the post-handoff status stays at\nthe last persisted value (typically ``\"running\"``) indefinitely;\na cancel response is then the only place a fresher\ncoordinator-reported status appears."
+      },
+      "EffectiveBuildStatus": {
+        "type": "string",
+        "enum": [
+          "pending",
+          "running",
+          "completed",
+          "failed",
+          "timed_out",
+          "cancelled"
+        ],
+        "title": "EffectiveBuildStatus",
+        "description": "Effective status of a build, derived server-side and never stored.\n\nA dispatched build's task lifecycle is authoritative, with\ntimed_out reconstructed from a failed task whose error class is\n'timeout'; a build cancelled before dispatch is cancelled; an\nundispatched, uncancelled build is pending. These six values are\nexactly what the derivation can emit; emittable, filterable, and\nthe whole vocabulary are the same set. The member order here is\nthe documentation order."
       },
       "ErrorResponse": {
         "properties": {
@@ -679,6 +569,17 @@
         "title": "ErrorResponse",
         "description": "JSON body returned for all error responses on the builds endpoints."
       },
+      "TaskErrorClass": {
+        "type": "string",
+        "enum": [
+          "transient",
+          "permanent",
+          "timeout",
+          "dispatch_timeout"
+        ],
+        "title": "TaskErrorClass",
+        "description": "Diagnostic class of a failed task.\n\nMirrors the ``ck_task_error_class`` CHECK as of migration 1.8.2:\nerror_class IN ('transient', 'permanent', 'timeout',\n'dispatch_timeout'); the column is NULL for non-failure\nterminals.\n\n- TRANSIENT: retry-able by the sweeper.\n- PERMANENT: will not improve on retry.\n- TIMEOUT: the coordinator reported an execution timeout \u2014 a\n  build that ran and overran its limit.\n- DISPATCH_TIMEOUT: the submit HTTP call to the coordinator\n  itself timed out, so the build's handoff never observably\n  started.\n\nThe last two are kept distinct so the read surface shows an\nexecution timeout as timed_out while a submit timeout reads as\nfailed."
+      },
       "TaskResponse": {
         "properties": {
           "task_id": {
@@ -690,8 +591,7 @@
             "title": "Task Type"
           },
           "status": {
-            "type": "string",
-            "title": "Status"
+            "$ref": "#/components/schemas/TaskStatus"
           },
           "error_message": {
             "title": "Error Message",
@@ -699,9 +599,8 @@
             "type": "string"
           },
           "error_class": {
-            "title": "Error Class",
             "nullable": true,
-            "type": "string"
+            "$ref": "#/components/schemas/TaskErrorClass"
           },
           "created_at": {
             "type": "string",
@@ -735,7 +634,18 @@
           "updated_at"
         ],
         "title": "TaskResponse",
-        "description": "Generic task lifecycle \u2014 same shape for all operation types."
+        "description": "Generic task lifecycle \u2014 same shape for all operation types.\n\nThe status field carries the task vocabulary \u2014 the persisted\nlifecycle words, distinct from the derived effective vocabulary\non BuildResponse.status. The task sub-object reports the stored\nfootprint the top-level status is derived from: a timed-out\nbuild's task still reads status='failed' + error_class='timeout'\nwhile the build-level status reads 'timed_out'."
+      },
+      "TaskStatus": {
+        "type": "string",
+        "enum": [
+          "running",
+          "completed",
+          "failed",
+          "cancelled"
+        ],
+        "title": "TaskStatus",
+        "description": "Valid status values for tasks.\n\nMirrors the CHECK constraint as of migration 1.8.0:\nstatus IN ('running', 'completed', 'failed', 'cancelled').\n\nThe claim CTE inserts tasks directly as 'running' (the claim is\nthe dispatch; there is no separate queued phase). The three\nterminal values are written by ``process_callback`` and\n``mark_task_failed``."
       }
     },
     "securitySchemes": {
