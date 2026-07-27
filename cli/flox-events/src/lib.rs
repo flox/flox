@@ -332,6 +332,11 @@ enum EnvIdentity {
     Path {
         #[serde(rename = "env_ref_or_name")]
         name: String,
+        /// Stable id for a local environment definition, minted at creation
+        /// and committed with `.flox`. Absent for local environments created
+        /// before the id existed.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        local_environment_id: Option<Uuid>,
     },
     Managed {
         #[serde(rename = "env_ref_or_name")]
@@ -367,9 +372,12 @@ pub struct EnvDetail {
 }
 
 impl EnvDetail {
-    pub fn path(name: impl Into<String>) -> Self {
+    pub fn path(name: impl Into<String>, local_environment_id: Option<Uuid>) -> Self {
         Self {
-            identity: EnvIdentity::Path { name: name.into() },
+            identity: EnvIdentity::Path {
+                name: name.into(),
+                local_environment_id,
+            },
             package_count: None,
         }
     }
@@ -911,7 +919,7 @@ mod tests {
 
     fn env_detail(kind: &str, ref_or_name: &str) -> EnvDetail {
         match kind {
-            "path" => EnvDetail::path(ref_or_name),
+            "path" => EnvDetail::path(ref_or_name, None),
             "managed" => EnvDetail::managed(ref_or_name, None),
             "remote" => EnvDetail::remote(ref_or_name, None),
             other => panic!("unexpected environment kind: {other}"),
@@ -971,6 +979,21 @@ mod tests {
             "env_ref_or_name": "alice/myenv",
             "generation_number": 3,
             "package_count": 7,
+        }));
+        assert_eq!(value, expected);
+    }
+
+    #[test]
+    fn cli_environment_activate_path_id_envelope_golden() {
+        let id = Uuid::from_u128(0x0123456789abcdef0123456789abcdef);
+        let detail = EnvDetail::path("myenv", Some(id));
+        let payload = CliEnvironmentActivatePayload::new(detail);
+        let value = serde_json::to_value(fixed_event(EventKind::CliEnvironmentActivate(payload)))
+            .expect("event serializes");
+        let expected = activate_envelope_json(json!({
+            "env_kind": "path",
+            "env_ref_or_name": "myenv",
+            "local_environment_id": id.to_string(),
         }));
         assert_eq!(value, expected);
     }
@@ -1916,7 +1939,7 @@ mod pipeline_tests {
         let hub = EventsHub::new();
         hub.set_client(client_with_connection(&tempdir, connection));
 
-        let env_detail = EnvDetail::path("myenv");
+        let env_detail = EnvDetail::path("myenv", None);
 
         hub.record_event(EventKind::CliEnvironmentEdit(
             CliEnvironmentEditPayload::new(env_detail.clone()),
@@ -1942,7 +1965,7 @@ mod pipeline_tests {
             assert_eq!(event.invocation_id, INVOCATION_ID);
             match &event.kind {
                 EventKind::CliEnvironmentEdit(p) => {
-                    assert_eq!(p.env_detail, EnvDetail::path("myenv"));
+                    assert_eq!(p.env_detail, EnvDetail::path("myenv", None));
                     match p.edited_includes {
                         None => eager_seen = true,
                         Some(true) => result_seen = true,

@@ -117,6 +117,12 @@ EOF
   run cat .flox/.gitattributes
   assert_success
   assert_line "env/manifest.lock linguist-generated=true linguist-language=JSON"
+
+  # A stable local environment id is minted and committed with .flox
+  assert [ -e ".flox/telemetry_id" ]
+  run cat .flox/telemetry_id
+  assert_success
+  assert_output --regexp '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
 }
 
 @test "c7: tips omit 'flox push' when within a git repo" {

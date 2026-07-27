@@ -14,6 +14,7 @@ pub mod didyoumean;
 pub mod errors;
 pub mod events;
 pub mod init;
+pub mod local_environment_id;
 pub mod message;
 pub mod metrics;
 pub mod openers;
