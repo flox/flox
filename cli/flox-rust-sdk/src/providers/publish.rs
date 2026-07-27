@@ -65,6 +65,9 @@ pub enum PublishError {
     #[error("The outputs from the build do not exist: {0}")]
     NonexistentOutputs(String),
 
+    #[error("Locking a single package returned {0} results.")]
+    UnexpectedLockResults(usize),
+
     #[error("The environment is in an unsupported state for publishing: {0}")]
     UnsupportedEnvironmentState(String),
 
@@ -934,24 +937,19 @@ pub fn render_build_source(
 pub struct LockedBuildInputs {
     pub system: PackageSystem,
     pub direct_catalog_inputs: HashMap<String, LockedInputEntry>,
-    /// Authoritative path of the catalog lock this lock phase wrote, threaded
-    /// to a following [`check_build_metadata`] so its build reuses exactly
-    /// this lock (via [`CatalogLock::Reuse`]). [`None`] for manifest builds,
-    /// which resolve no catalog inputs and so have no catalog lock to reuse.
-    pub catalog_lockfile: Option<PathBuf>,
 }
 
 /// Compute the catalog lock for `pkg` against the already-rendered
 /// `rendered` source, without building it.
 ///
-/// `rendered` MUST come from [`render_build_source`] for the same publish
-/// that will subsequently call [`check_build_metadata`] with the same
-/// `rendered`, so the catalog-lock path is identical and the build phase can
-/// reuse the lock this call computed.
+/// `catalog_lock` names where the lock is written. Pass the same value to a
+/// following [`check_build_metadata`] so its build consumes exactly this
+/// lock, which is what makes the checked closure identity the built one.
 pub fn lock_build_inputs(
     flox: &Flox,
     rendered: &RenderedSource,
     pkg: &PackageTarget,
+    catalog_lock: CatalogLock,
     nef_stability: Option<String>,
     system_override: Option<String>,
 ) -> Result<LockedBuildInputs, PublishError> {
@@ -963,21 +961,21 @@ pub fn lock_build_inputs(
         &rendered.flox_env_cache,
     );
 
-    let lock_results = builder.lock(&[pkg.name()], nef_stability, system_override)?;
+    let lock_results = builder.lock(
+        &[(pkg.name(), catalog_lock)],
+        nef_stability,
+        system_override,
+    )?;
 
-    if lock_results.len() != 1 {
-        return Err(PublishError::NonexistentOutputs(
-            "No results returned from lock command.".to_string(),
-        ));
-    }
-    let lock_result = &lock_results[0];
+    let [lock_result] = &lock_results[..] else {
+        return Err(PublishError::UnexpectedLockResults(lock_results.len()));
+    };
 
     Ok(LockedBuildInputs {
         system: PackageSystem::from_str(lock_result.system.as_str()).map_err(|_e| {
             PublishError::UnsupportedEnvironmentState("Invalid system".to_string())
         })?,
         direct_catalog_inputs: lock_result.direct_catalog_inputs.clone(),
-        catalog_lockfile: lock_result.catalog_lockfile.clone(),
     })
 }
 
@@ -988,22 +986,21 @@ pub fn lock_build_inputs(
 ///
 /// `rendered` MUST come from [`render_build_source`] for `pkg`; it is passed
 /// in (rather than rendered internally) so that a preceding
-/// [`lock_build_inputs`] call against the same `rendered` source shares its
-/// working directory, letting this build reuse that lock phase's catalog
-/// lock instead of recomputing it.
+/// [`lock_build_inputs`] call shares this build's working directory instead
+/// of rendering the source a second time.
 ///
-/// `catalog_lock` selects that reuse: pass [`CatalogLock::Reuse`] with the
-/// [`LockedBuildInputs::catalog_lockfile`] from the preceding
-/// [`lock_build_inputs`] call, or [`CatalogLock::Fresh`] when no lock phase
-/// preceded this build (e.g. a standalone check with no dedup pre-pass).
+/// `catalog_lock` names the lock this build uses. Pass the value a preceding
+/// [`lock_build_inputs`] call was given to build exactly the closure that
+/// call resolved, or [`CatalogLock::Ephemeral`] when no lock phase preceded
+/// this build (e.g. a standalone check with no dedup pre-pass).
 pub fn check_build_metadata(
     flox: &Flox,
     base_nixpkgs_url: &BaseCatalogUrl,
     system_override: Option<String>,
     rendered: &RenderedSource,
     pkg: &PackageTarget,
-    nef_stability: Option<String>,
     catalog_lock: CatalogLock,
+    nef_stability: Option<String>,
 ) -> Result<CheckedBuildMetadata, PublishError> {
     let builder = FloxBuildMk::new(
         flox,
@@ -1016,13 +1013,12 @@ pub fn check_build_metadata(
     let build_results = builder.build(
         &base_nixpkgs_url.as_flake_ref()?,
         &rendered.built_environments.dev,
-        &[pkg.name()],
+        &[(pkg.name(), catalog_lock)],
         // Lock the NEF catalog inputs at the stability selected for publish, so
         // the recorded inputs match the build the user intends to publish.
         nef_stability,
         Some(false),
         system_override,
-        catalog_lock,
     )?;
 
     if build_results.len() != 1 {
@@ -1680,8 +1676,8 @@ pub mod tests {
             None,
             &rendered,
             &EXAMPLE_MANIFEST_PACKAGE_TARGET,
+            CatalogLock::Ephemeral,
             None,
-            CatalogLock::Fresh,
         )
         .unwrap();
 
@@ -1734,8 +1730,8 @@ pub mod tests {
             None,
             &rendered,
             &EXAMPLE_MANIFEST_PACKAGE_TARGET_MISSING_FIELDS,
+            CatalogLock::Ephemeral,
             None,
-            CatalogLock::Fresh,
         )
         .unwrap();
 
@@ -1793,8 +1789,8 @@ pub mod tests {
             None,
             &rendered,
             &pure_pkg,
+            CatalogLock::Ephemeral,
             None,
-            CatalogLock::Fresh,
         )
         .unwrap();
 
@@ -1828,6 +1824,7 @@ pub mod tests {
             &flox,
             &rendered,
             &EXAMPLE_MANIFEST_PACKAGE_TARGET,
+            CatalogLock::Ephemeral,
             None,
             None,
         )
@@ -1870,7 +1867,15 @@ pub mod tests {
         let env_metadata = check_environment_metadata(&flox, &env).unwrap();
         let rendered = render_build_source(&flox, &env_metadata, &pure_pkg).unwrap();
 
-        let locked = lock_build_inputs(&flox, &rendered, &pure_pkg, None, None).unwrap();
+        let locked = lock_build_inputs(
+            &flox,
+            &rendered,
+            &pure_pkg,
+            CatalogLock::Ephemeral,
+            None,
+            None,
+        )
+        .unwrap();
 
         assert_eq!(locked.system.to_string(), flox.system);
         assert!(locked.direct_catalog_inputs.is_empty());
@@ -1901,8 +1906,8 @@ pub mod tests {
             None,
             &rendered,
             &package_metadata.package,
+            CatalogLock::Ephemeral,
             None,
-            CatalogLock::Fresh,
         )
         .unwrap();
 
@@ -1966,8 +1971,8 @@ pub mod tests {
             None,
             &rendered,
             &package_metadata.package,
+            CatalogLock::Ephemeral,
             None,
-            CatalogLock::Fresh,
         )
         .unwrap();
 
@@ -2318,8 +2323,8 @@ pub mod tests {
             None,
             &rendered,
             &package_metadata.package,
+            CatalogLock::Ephemeral,
             None,
-            CatalogLock::Fresh,
         )
         .unwrap();
 

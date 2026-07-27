@@ -69,21 +69,18 @@ pub trait ManifestBuilder {
     /// inputs of NEF (expression) builds, as selected by the `--stability`
     /// flag. When [None] the Makefile falls back to its default stability.
     ///
-    /// `catalog_lock` selects whether to resolve a fresh catalog lock or reuse
-    /// one a preceding [`ManifestBuilder::lock`] call against the same
-    /// `base_dir` already computed (see [`CatalogLock`]). It must be
-    /// [`CatalogLock::Fresh`] on the `flox build` path so that builds always
-    /// resolve a fresh catalog lock.
-    #[allow(clippy::too_many_arguments)]
+    /// Each package carries its own [`CatalogLock`], naming where that
+    /// package's catalog lock lives. Locks are per package because a build
+    /// resolves one per package; a single lock shared across `packages` would
+    /// only be well-defined when building exactly one.
     fn build(
         self,
         expression_build_nixpkgs: &Url,
         flox_interpreter: &Path,
-        packages: &[PackageTargetName],
+        packages: &[(PackageTargetName, CatalogLock)],
         nef_stability: Option<String>,
         build_cache: Option<bool>,
         system_override: Option<String>,
-        catalog_lock: CatalogLock,
     ) -> Result<BuildResults, ManifestBuilderError>;
 
     fn clean(self, package: &[PackageTargetName]) -> Result<(), ManifestBuilderError>;
@@ -94,9 +91,13 @@ pub trait ManifestBuilder {
     /// `lock` goal), so no package build is performed and no `result-*`
     /// symlinks are created. Used to make the closure identity available
     /// ahead of a build, e.g. for publish dedup.
+    ///
+    /// Pass [`CatalogLock::File`] to write a package's lock somewhere the
+    /// caller can hand to a later [`ManifestBuilder::build`], which is how a
+    /// build reuses the lock this call resolved.
     fn lock(
         self,
-        packages: &[PackageTargetName],
+        packages: &[(PackageTargetName, CatalogLock)],
         nef_stability: Option<String>,
         system_override: Option<String>,
     ) -> Result<LockResults, ManifestBuilderError>;
@@ -146,9 +147,6 @@ pub enum ManifestBuilderError {
 
     #[error("Lock failed")]
     LockFailure,
-
-    #[error("catalog lock to reuse was not found at {}", .path.display())]
-    LockReuseArtifactMissing { path: PathBuf },
 }
 
 #[derive(Debug, PartialEq, Deserialize, Default, derive_more::Deref)]
@@ -184,15 +182,10 @@ pub struct LockResults(Vec<LockResult>);
 /// Deserialization mirror of [`BuildResult`]'s closure-identity fields.
 #[derive(Debug, PartialEq, Deserialize)]
 pub struct LockResult {
+    /// The package this lock belongs to, so a caller locking several packages
+    /// at once can tell the results apart.
+    pub pname: String,
     pub system: String,
-    /// Authoritative on-disk path of the catalog lock this lock phase wrote,
-    /// as emitted by the Makefile's `lock` goal. This is the exact artifact a
-    /// following [`ManifestBuilder::build`] with [`CatalogLock::Reuse`]
-    /// consumes, so the reuse can be provenance-checked against it. [`None`]
-    /// for build modes that resolve no catalog inputs (manifest builds), which
-    /// have no catalog lock to reuse.
-    #[serde(default)]
-    pub catalog_lockfile: Option<PathBuf>,
     /// The direct catalog inputs the lock phase resolved, keyed by
     /// locked-input reference. Empty for build modes (e.g. manifest builds)
     /// that resolve no catalog inputs.
@@ -200,52 +193,45 @@ pub struct LockResult {
     pub direct_catalog_inputs: HashMap<String, LockedInputEntry>,
 }
 
-/// Whether a [`ManifestBuilder::build`] resolves a fresh catalog lock or
-/// reuses one a preceding [`ManifestBuilder::lock`] call already computed.
+/// Where a package's catalog lock lives.
 ///
-/// Replaces a bare `reuse_catalog_lock: bool` so the reuse policy — and the
-/// authoritative lock artifact reuse depends on — is explicit at the call
-/// site rather than positional and implicit.
+/// The caller names the location rather than discovering one the Makefile
+/// chose, which is what lets a lock phase and a following build phase agree
+/// on a single artifact — and what will let a lock file be passed in from
+/// the command line or read from a checkout.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CatalogLock {
-    /// Resolve a fresh catalog lock. The `flox build` path and the `lock` goal
-    /// itself always use this, so a build never depends on a stale lock.
-    Fresh,
-    /// Reuse the catalog lock a preceding `lock()` emitted.
-    ///
-    /// `lockfile` is the authoritative path from that lock phase's
-    /// `LOCK_RESULT_FILE` ([`LockResult::catalog_lockfile`]). `build` verifies
-    /// it is present before reusing, so a broken render->lock->build invariant
-    /// fails loudly instead of the Makefile silently re-locking a
-    /// possibly-different identity. [`None`] for build modes with no catalog
-    /// lock (manifest builds), where the reuse flag is a harmless no-op.
-    Reuse { lockfile: Option<PathBuf> },
+    /// Let the builder lock into its own temporary directory. The lock is
+    /// resolved fresh on every invocation and is not meant to outlive it.
+    Ephemeral,
+    /// Use the lock file at this path, resolving into it when it does not
+    /// exist yet. An existing file is taken as-is and never re-resolved, so
+    /// the caller decides when a lock becomes stale.
+    File(PathBuf),
 }
 
-/// The `FLOX_REUSE_CATALOG_LOCK` make-variable assignment for `catalog_lock`.
+/// The `CATALOG_LOCKS` make-variable assignment naming each package's lock.
 ///
-/// A command-line assignment overrides a same-named exported environment
-/// variable in GNU make, so the [`CatalogLock::Fresh`] arm passes an empty
-/// assignment to shield a fresh lock from a stray exported
-/// `FLOX_REUSE_CATALOG_LOCK`. The [`CatalogLock::Reuse`] arm verifies the
-/// authoritative lock artifact is present first, turning a broken
-/// render->lock->build invariant into a loud error rather than a silent
-/// re-lock in the Makefile.
-fn catalog_lock_make_arg(catalog_lock: &CatalogLock) -> Result<&'static str, ManifestBuilderError> {
-    let lockfile = match catalog_lock {
-        CatalogLock::Fresh => return Ok("FLOX_REUSE_CATALOG_LOCK="),
-        CatalogLock::Reuse { lockfile } => lockfile,
-    };
+/// [`CatalogLock::Ephemeral`] packages are omitted: absence of an entry is
+/// what tells the Makefile to lock into its own temporary directory.
+fn catalog_locks_make_arg(packages: &[(PackageTargetName, CatalogLock)]) -> String {
+    let locks = packages
+        .iter()
+        .filter_map(|(name, lock)| match lock {
+            CatalogLock::Ephemeral => None,
+            CatalogLock::File(path) => Some(format!("{}={}", name.as_ref(), path.display())),
+        })
+        .join(" ");
 
-    if let Some(lockfile) = lockfile
-        && !lockfile.exists()
-    {
-        return Err(ManifestBuilderError::LockReuseArtifactMissing {
-            path: lockfile.clone(),
-        });
-    }
+    format!("CATALOG_LOCKS={locks}")
+}
 
-    Ok("FLOX_REUSE_CATALOG_LOCK=1")
+/// The `PACKAGES` make-variable assignment listing the packages to act on.
+fn packages_make_arg(packages: &[(PackageTargetName, CatalogLock)]) -> String {
+    format!(
+        "PACKAGES={}",
+        packages.iter().map(|(name, _)| name.as_ref()).join(" ")
+    )
 }
 
 /// Represents different license formats that can be found in package metadata
@@ -431,16 +417,14 @@ impl ManifestBuilder for FloxBuildMk<'_> {
     /// of manifest and expression build if `expression_build_nixpkgs_url`
     /// is different from the environments toplevel group,
     /// i.e. manifest builds and expression builds would use incompatible nixpkgs.
-    #[allow(clippy::too_many_arguments)]
     fn build(
         self,
         expression_build_nixpkgs_url: &Url,
         flox_interpreter: &Path,
-        packages: &[PackageTargetName],
+        packages: &[(PackageTargetName, CatalogLock)],
         nef_stability: Option<String>,
         build_cache: Option<bool>,
         system_override: Option<String>,
-        catalog_lock: CatalogLock,
     ) -> Result<BuildResults, ManifestBuilderError> {
         let mut command = self.base_command(self.base_dir);
         command.arg("build");
@@ -460,12 +444,7 @@ impl ManifestBuilder for FloxBuildMk<'_> {
             command.arg(format!("NIX_SYSTEM={system_override}"));
         }
 
-        // Resolve a fresh catalog lock, or reuse the one a preceding `lock()`
-        // call against this same `base_dir` already wrote. Reuse is verified
-        // against the authoritative lock artifact (see [`catalog_lock_make_arg`])
-        // and must stay [`CatalogLock::Fresh`] on the `flox build` path so
-        // builds always resolve a fresh lock.
-        command.arg(catalog_lock_make_arg(&catalog_lock)?);
+        command.arg(catalog_locks_make_arg(packages));
 
         command.arg(format!(
             "FLOX_ENV={}",
@@ -485,10 +464,7 @@ impl ManifestBuilder for FloxBuildMk<'_> {
         // Add the list of packages to be built by passing a space-delimited list
         // of pnames in the PACKAGES variable. If no packages are specified then
         // the makefile will build all packages by default.
-        command.arg(format!(
-            "PACKAGES={}",
-            packages.iter().map(|name| name.as_ref()).join(" ")
-        ));
+        command.arg(packages_make_arg(packages));
 
         let build_result_path = NamedTempFile::new_in(self.temp_dir)
             .map_err(ManifestBuilderError::CreateBuildResultFile)?
@@ -672,17 +648,13 @@ impl ManifestBuilder for FloxBuildMk<'_> {
     /// `FLOX_INTERPRETER`, since the lock goal stops before eval/build.
     fn lock(
         self,
-        packages: &[PackageTargetName],
+        packages: &[(PackageTargetName, CatalogLock)],
         nef_stability: Option<String>,
         system_override: Option<String>,
     ) -> Result<LockResults, ManifestBuilderError> {
         let mut command = self.base_command(self.base_dir);
         command.arg("lock");
-        // The lock goal always computes a fresh catalog lock. A command-line
-        // assignment overrides a same-named exported environment variable in
-        // GNU make, so this shields it from a stray exported
-        // FLOX_REUSE_CATALOG_LOCK.
-        command.arg("FLOX_REUSE_CATALOG_LOCK=");
+        command.arg(catalog_locks_make_arg(packages));
         command.arg(format!("BUILDTIME_NIXPKGS_URL={}", &*COMMON_NIXPKGS_URL));
 
         // The stability used to resolve NEF catalog build inputs. Only passed
@@ -715,10 +687,7 @@ impl ManifestBuilder for FloxBuildMk<'_> {
         // Add the list of packages to be locked by passing a space-delimited
         // list of pnames in the PACKAGES variable. PACKAGES must be
         // non-empty; the makefile errors if it is not defined or empty.
-        command.arg(format!(
-            "PACKAGES={}",
-            packages.iter().map(|name| name.as_ref()).join(" ")
-        ));
+        command.arg(packages_make_arg(packages));
 
         let lock_result_path = NamedTempFile::new_in(self.temp_dir)
             .map_err(ManifestBuilderError::CreateLockResultFile)?
@@ -1139,11 +1108,13 @@ pub mod test_helpers {
         .build(
             &toplevel_or_common_nixpkgs,
             &env.rendered_env_links(flox).unwrap().dev,
-            &[PackageTargetName::new_unchecked(&package)],
+            &[(
+                PackageTargetName::new_unchecked(&package),
+                CatalogLock::Ephemeral,
+            )],
             None,
             build_cache,
             None,
-            CatalogLock::Fresh,
         );
 
         let output_build_results = match output_build_results {
@@ -1188,34 +1159,15 @@ pub mod test_helpers {
             &built_environments,
             &cache_path,
         )
-        .lock(&[PackageTargetName::new_unchecked(&package)], None, None)
+        .lock(
+            &[(
+                PackageTargetName::new_unchecked(&package),
+                CatalogLock::Ephemeral,
+            )],
+            None,
+            None,
+        )
         .expect("lock() should succeed")
-    }
-
-    /// Computes the path of the per-package catalog-lock file
-    /// `flox-build.mk` derives from `base_dir`: `$(TMPDIR)/<hash of
-    /// base_dir>/<pname>/catalog.lock`, where `<hash>` is the first 8
-    /// characters of the hex sha256 digest of `base_dir`
-    /// (`flox-build.mk:142`, `PROJECT_TMPDIR`). Shells out to the same
-    /// `sha256sum`/`head` coreutils the Makefile uses, so this stays in
-    /// lockstep with the Makefile's derivation without duplicating a hash
-    /// implementation in Rust.
-    pub fn catalog_lockfile_path(base_dir: &Path, pname: &str) -> PathBuf {
-        let tmpdir = std::env::var("TMPDIR").unwrap_or_else(|_| "/tmp".to_string());
-        let output = Command::new("sh")
-            .arg("-c")
-            .arg("echo \"$1\" | sha256sum | head -c8")
-            .arg("sh") // becomes $0
-            .arg(base_dir.as_os_str())
-            .output()
-            .expect("failed to hash base_dir for PROJECT_TMPDIR");
-        assert!(output.status.success(), "hashing base_dir failed");
-        let hash = String::from_utf8(output.stdout).expect("hash output should be utf8");
-
-        Path::new(&tmpdir)
-            .join(hash)
-            .join(pname)
-            .join("catalog.lock")
     }
 
     /// Runs a build and asserts that the `ExitStatus` matches `expect_status`.
@@ -1571,47 +1523,38 @@ mod tests {
     }
 
     #[test]
-    fn catalog_lock_make_arg_fresh_disables_reuse() {
+    fn catalog_locks_make_arg_omits_ephemeral_packages() {
+        // An empty assignment is still passed, so an exported CATALOG_LOCKS
+        // cannot reach the Makefile: a command-line assignment wins in GNU
+        // make, and absence of an entry is what selects a fresh lock.
         assert_eq!(
-            catalog_lock_make_arg(&CatalogLock::Fresh).unwrap(),
-            "FLOX_REUSE_CATALOG_LOCK="
+            catalog_locks_make_arg(&[(
+                PackageTargetName::new_unchecked(&"foo"),
+                CatalogLock::Ephemeral,
+            )]),
+            "CATALOG_LOCKS="
         );
     }
 
     #[test]
-    fn catalog_lock_make_arg_reuse_without_lockfile_enables_reuse() {
-        // Manifest builds carry no catalog-lock path; the reuse flag is a no-op.
+    fn catalog_locks_make_arg_names_a_lock_per_package() {
         assert_eq!(
-            catalog_lock_make_arg(&CatalogLock::Reuse { lockfile: None }).unwrap(),
-            "FLOX_REUSE_CATALOG_LOCK=1"
+            catalog_locks_make_arg(&[
+                (
+                    PackageTargetName::new_unchecked(&"foo"),
+                    CatalogLock::File(PathBuf::from("/locks/foo.lock")),
+                ),
+                (
+                    PackageTargetName::new_unchecked(&"bar"),
+                    CatalogLock::Ephemeral,
+                ),
+                (
+                    PackageTargetName::new_unchecked(&"baz"),
+                    CatalogLock::File(PathBuf::from("/locks/baz.lock")),
+                ),
+            ]),
+            "CATALOG_LOCKS=foo=/locks/foo.lock baz=/locks/baz.lock"
         );
-    }
-
-    #[test]
-    fn catalog_lock_make_arg_reuse_with_present_lockfile_enables_reuse() {
-        let lockfile = NamedTempFile::new().unwrap();
-        assert_eq!(
-            catalog_lock_make_arg(&CatalogLock::Reuse {
-                lockfile: Some(lockfile.path().to_path_buf()),
-            })
-            .unwrap(),
-            "FLOX_REUSE_CATALOG_LOCK=1"
-        );
-    }
-
-    #[test]
-    fn catalog_lock_make_arg_reuse_with_missing_lockfile_errors() {
-        // A reuse whose authoritative artifact has vanished must fail loudly
-        // instead of letting the Makefile silently re-lock a different identity.
-        let missing = PathBuf::from("/does/not/exist/catalog.lock");
-        let err = catalog_lock_make_arg(&CatalogLock::Reuse {
-            lockfile: Some(missing.clone()),
-        })
-        .unwrap_err();
-        assert!(matches!(
-            err,
-            ManifestBuilderError::LockReuseArtifactMissing { path } if path == missing
-        ));
     }
 
     #[test]
@@ -1666,12 +1609,11 @@ mod tests {
         // Manifest builds resolve no catalog inputs, so the lock goal emits
         // an empty map without building anything.
         let lock_results = lock_with_nix_expr(&flox, &mut env, &expression_ref, &package_name);
-        assert_eq!(lock_results.len(), 1);
-        assert_eq!(lock_results[0].system, flox.system);
-        assert!(lock_results[0].direct_catalog_inputs.is_empty());
-        // Manifest builds have no catalog lock, so no authoritative path is
-        // emitted and there is nothing for a reuse build to key on.
-        assert_eq!(lock_results[0].catalog_lockfile, None);
+        assert_eq!(*lock_results, vec![LockResult {
+            pname: package_name,
+            system: flox.system.clone(),
+            direct_catalog_inputs: HashMap::new(),
+        }]);
     }
 
     #[test]
@@ -4248,7 +4190,6 @@ mod nef_tests {
     use crate::models::environment::path_environment::test_helpers::new_path_environment;
     use crate::providers::build::test_helpers::{
         assert_build_status_with_nix_expr,
-        catalog_lockfile_path,
         lock_with_nix_expr,
         prepare_nix_expressions_in,
     };
@@ -4451,14 +4392,13 @@ mod nef_tests {
         );
     }
 
-    /// `build(CatalogLock::Reuse { .. })` against the same `base_dir` a
-    /// preceding `lock()` call used must reuse that lock instead of
-    /// recomputing it: the catalog-lock file's mtime must be unchanged
-    /// across the build invocation. This is the single-lock guarantee the
-    /// publish reorder depends on (a naive `make lock` then `make build`
-    /// re-locks, since the catalog lock's DAG root is `.PHONY`).
+    /// `lock()` resolves into the caller's [`CatalogLock::File`] and a
+    /// following `build()` over that same file uses it as-is: the lock file's
+    /// mtime must be unchanged across the build. This is the single-lock
+    /// guarantee the publish reorder depends on (a naive `make lock` then
+    /// `make build` re-locks, since the catalog lock's DAG root is `.PHONY`).
     #[test]
-    fn build_reuses_catalog_lock_from_preceding_lock_call() {
+    fn build_uses_the_catalog_lock_a_preceding_lock_call_wrote() {
         let pname = "foo".to_string();
 
         let (flox, tempdir) = flox_instance();
@@ -4477,29 +4417,31 @@ mod nef_tests {
 
         let built_environments = env.build(&flox).unwrap();
         let cache_path = env.cache_path().unwrap();
-        let lock_file = catalog_lockfile_path(&base_dir, &pname);
 
-        let lock_results = FloxBuildMk::new(
+        // The caller owns the lock's location, so the test knows it up front
+        // rather than re-deriving the Makefile's temporary-directory layout.
+        let lock_file = tempdir_in(&tempdir).unwrap().keep().join("catalog.lock");
+        let catalog_lock = CatalogLock::File(lock_file.clone());
+
+        FloxBuildMk::new(
             &flox,
             &base_dir,
             &expressions_ref,
             &built_environments,
             &cache_path,
         )
-        .lock(&[PackageTargetName::new_unchecked(&pname)], None, None)
+        .lock(
+            &[(
+                PackageTargetName::new_unchecked(&pname),
+                catalog_lock.clone(),
+            )],
+            None,
+            None,
+        )
         .expect("lock() should succeed");
 
-        // lock() emits the authoritative on-disk catalog-lock path, which must
-        // be exactly the file the reuse build reads (the path the Makefile
-        // derives from base_dir).
-        assert_eq!(
-            lock_results[0].catalog_lockfile.as_deref(),
-            Some(lock_file.as_path()),
-            "lock() must emit the authoritative catalog-lock path in its result"
-        );
-
         let mtime_after_lock = fs::metadata(&lock_file)
-            .expect("lock() should have written the catalog-lock file")
+            .expect("lock() should have resolved into the supplied lock file")
             .modified()
             .unwrap();
 
@@ -4521,26 +4463,22 @@ mod nef_tests {
         .build(
             &toplevel_or_common_nixpkgs,
             &env.rendered_env_links(&flox).unwrap().dev,
-            &[PackageTargetName::new_unchecked(&pname)],
+            &[(PackageTargetName::new_unchecked(&pname), catalog_lock)],
             None,
             None,
             None,
-            // Reuse the lock keyed on the authoritative path lock() emitted.
-            CatalogLock::Reuse {
-                lockfile: lock_results[0].catalog_lockfile.clone(),
-            },
         )
         .expect("build() should succeed");
 
         let mtime_after_build = fs::metadata(&lock_file)
-            .expect("catalog-lock file should still exist after build()")
+            .expect("the supplied lock file should still exist after build()")
             .modified()
             .unwrap();
 
         assert_eq!(
             mtime_after_lock, mtime_after_build,
-            "build(CatalogLock::Reuse) must not recompute the catalog lock \
-             a preceding lock() call already wrote"
+            "build() must not re-resolve a catalog lock that already exists at \
+             the caller-supplied path"
         );
     }
 

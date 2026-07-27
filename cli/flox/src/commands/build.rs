@@ -319,9 +319,13 @@ impl Build {
 
         prefetch_expression_build_flake_ref(&packages_to_build, &base_nixpkgs_url)?;
 
-        let target_names = packages_to_build
+        // `flox build` names no lock file, so every package's catalog lock is
+        // resolved into the builder's own temporary directory. Reusing an
+        // in-tree lock here is separate work: producing one is not supported
+        // yet.
+        let build_targets = packages_to_build
             .iter()
-            .map(|target| target.name())
+            .map(|target| (target.name(), CatalogLock::Ephemeral))
             .collect::<Vec<_>>();
 
         let has_expression_build = packages_to_build
@@ -348,13 +352,10 @@ impl Build {
         let results = builder.build(
             &base_nixpkgs_url,
             &FLOX_INTERPRETER,
-            &target_names,
+            &build_targets,
             nef_stability,
             None,
             system_override,
-            // `flox build` always resolves a fresh catalog lock; it never
-            // reuses a lock from a preceding phase.
-            CatalogLock::Fresh,
         );
         let build_duration_ms = duration_to_ms(build_start.elapsed());
 

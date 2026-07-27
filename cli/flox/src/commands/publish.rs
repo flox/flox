@@ -22,6 +22,7 @@ use flox_rust_sdk::providers::publish::{
 use floxhub_client::{CatalogClientTrait, CheckBuildQuery, CheckBuildResponse, FloxhubClientError};
 use indoc::formatdoc;
 use nef_lock_catalog::NixFlakeref;
+use tempfile::TempDir;
 use tracing::{debug, info_span, instrument, warn};
 
 use super::{DirEnvironmentSelect, dir_environment_select};
@@ -297,14 +298,21 @@ impl Publish {
         let system_override_inner = publish_config.system_override.into_inner();
 
         // Render the build source exactly once and share it between the lock
-        // and build phases below, so their catalog-lock paths coincide and
-        // the build can reuse the lock phase's catalog lock instead of
-        // recomputing it.
+        // and build phases below, so the source is not built twice.
         let rendered = render_build_source(
             &flox,
             &publish_provider.env_metadata,
             &publish_provider.package_metadata.package,
         )?;
+
+        // Publish owns the catalog lock's location: the lock phase resolves
+        // it here and the build phase consumes exactly this file, so the
+        // closure identity checked against the server is the one that gets
+        // built. The lock is scoped to this publish, hence a temporary
+        // directory rather than a path in the user's checkout.
+        let catalog_lock_dir = TempDir::new_in(&flox.temp_dir)
+            .context("could not create a directory for the catalog lock")?;
+        let catalog_lock = CatalogLock::File(catalog_lock_dir.path().join("catalog.lock"));
 
         // Compute the catalog lock (the closure identity) without building,
         // so the dedup pre-check below can run before the package build.
@@ -312,6 +320,7 @@ impl Publish {
             &flox,
             &rendered,
             &publish_provider.package_metadata.package,
+            catalog_lock.clone(),
             nef_stability.clone(),
             system_override_inner.clone(),
         )?;
@@ -368,20 +377,17 @@ impl Publish {
             },
         }
 
-        // New (or check failed): perform the full build. This reuses the
-        // catalog lock the lock phase above already computed instead of
-        // recomputing it, keyed on the authoritative lock artifact that phase
-        // emitted so a broken render->lock->build invariant fails loudly.
+        // New (or check failed): perform the full build, over the lock the
+        // phase above already resolved rather than resolving the catalog a
+        // second time.
         let build_metadata = check_build_metadata(
             &flox,
             &selected_base_nixpkgs_url,
             system_override_inner,
             &rendered,
             &publish_provider.package_metadata.package,
+            catalog_lock,
             nef_stability,
-            CatalogLock::Reuse {
-                lockfile: locked.catalog_lockfile.clone(),
-            },
         )?;
 
         // CLI args take precedence over config

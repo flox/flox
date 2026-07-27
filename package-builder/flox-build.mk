@@ -34,6 +34,14 @@ define mkVarname =
   $(subst -,_,$(1))
 endef
 
+# CATALOG_LOCKS names where each package's catalog lock lives, as a
+# space-separated list of "<attrpath>=<lockfile>" pairs. It is how the caller
+# controls the lock artifact rather than discovering one this Makefile chose:
+# a named lock is used as-is when it exists and resolved into when it does
+# not ("use if present, create if absent"). Packages with no entry lock into
+# PROJECT_TMPDIR and always resolve fresh.
+catalogLockFor = $(strip $(patsubst $(1)=%,%,$(filter $(1)=%,$(CATALOG_LOCKS))))
+
 # Substitute Nix store paths for packages required by this Makefile.
 __bash := @bash@
 __coreutils := @coreutils@
@@ -289,7 +297,12 @@ define COMMON_BUILD_VARS_template =
   $(eval $(_pvarname)_evalJSON = $($(_pvarname)_tmpBasename)/eval.json)
   $(eval $(_pvarname)_buildJSON = $($(_pvarname)_tmpBasename)/build.json)
   $(eval $(_pvarname)_buildMetaJSON = $($(_pvarname)_tmpBasename)/build-meta.json)
-  $(eval $(_pvarname)_catalogLockfile = $($(_pvarname)_tmpBasename)/catalog.lock)
+  # A caller-supplied catalog lock (see CATALOG_LOCKS) lives wherever the
+  # caller put it and is theirs to manage; clean/$(_pname) only removes
+  # $(_pvarname)_tmpBasename, so it is left alone.
+  $(eval $(_pvarname)_suppliedCatalogLockfile = $(call catalogLockFor,$(_pname)))
+  $(eval $(_pvarname)_catalogLockfile = \
+    $(or $($(_pvarname)_suppliedCatalogLockfile),$($(_pvarname)_tmpBasename)/catalog.lock))
   $(eval $(_pvarname)_lockJSON = $($(_pvarname)_tmpBasename)/lock.json)
 
   # Create a temporary file for collecting log output from the build.
@@ -692,15 +705,15 @@ define MANIFEST_BUILD_template =
   # Calculate name.
   $(eval _name = $(_pname)-$(_version))
 
-  # Manifest builds resolve no catalog inputs, so the lock JSON is a
-  # build-free constant emission consistent with the empty
-  # direct_catalog_inputs manifest builds already record at build time. No
-  # `catalog_lockfile` is emitted: there is no catalog lock to reuse, so the
-  # field is absent (parsed as null) and FLOX_REUSE_CATALOG_LOCK is a no-op.
+  # Manifest builds resolve no catalog inputs of their own, so the lock JSON
+  # is a build-free constant emission consistent with the empty
+  # direct_catalog_inputs manifest builds already record at build time.
+  # A manifest build that depends on a NEF package does inherit that
+  # package's catalog inputs; aggregating them here is tracked separately.
   $($(_pvarname)_lockJSON): $(PROJECT_TMPDIR)/check-build-prerequisites
 	$(_V_) $(_mkdir) -p $$(@D)
-	$(_V_) $(_jq) -n --arg system '$(NIX_SYSTEM)' \
-	  '{ system: $$$$system, direct_catalog_inputs: {} }' > $$@
+	$(_V_) $(_jq) -n --arg pname '$(_pname)' --arg system '$(NIX_SYSTEM)' \
+	  '{ pname: $$$$pname, system: $$$$system, direct_catalog_inputs: {} }' > $$@
 
   # By the time this rule will be evaluated all of its package dependencies
   # will have been added to the set of rule prerequisites in $^, using their
@@ -852,16 +865,15 @@ define NIX_EXPRESSION_BUILD_template =
   # this with "_" for use in variable names.
   $(eval _pvarname = $(call mkVarname,$(_pname)))
 
-  # Start by calculating the catalog inputs lock. When FLOX_REUSE_CATALOG_LOCK
-  # is set and the lock already exists, reuse it instead of re-locking; this
-  # is how a `build` invocation immediately following a `lock` invocation (in
-  # the same base_dir) avoids computing the catalog lock twice. The flag
-  # defaults unset, so `flox build` and the `lock` goal itself always compute
-  # a fresh lock.
+  # Start by calculating the catalog inputs lock. A lock the caller named via
+  # CATALOG_LOCKS is used as-is when it already exists, which is how a `build`
+  # following a `lock` over the same lock file avoids resolving the catalog
+  # twice. Without a caller-supplied path the lock is always resolved fresh,
+  # so `flox build` never picks up a leftover lock from an earlier run.
   $($(_pvarname)_catalogLockfile): $(PROJECT_TMPDIR)/check-build-prerequisites
 	$(_V_) $(_mkdir) -p $$(@D)
-	$(_V_) if [ -n "$(FLOX_REUSE_CATALOG_LOCK)" ] && [ -f '$$@' ]; then \
-	  : "reusing catalog lock from the preceding lock phase"; \
+	$(_V_) if [ -n '$($(_pvarname)_suppliedCatalogLockfile)' ] && [ -f '$$@' ]; then \
+	  : "using the catalog lock supplied at $$@"; \
 	else \
 	  $(_lock) \
 	    --base-dir '$$(NIX_EXPRESSION_ABSDIRPATH_$(_pvarname))' \
@@ -870,19 +882,15 @@ define NIX_EXPRESSION_BUILD_template =
 	    --out '$$@'; \
 	fi
 
-  # Project the catalog lock into the
-  # {system, catalog_lockfile, direct_catalog_inputs} shape consumed by the
-  # `lock` goal's LOCK_RESULT_FILE, mirroring build-meta.json's equivalent
-  # fields. `catalog_lockfile` is the authoritative on-disk path of the catalog
-  # lock this goal wrote (`$<`, the same file a following `build` with
-  # FLOX_REUSE_CATALOG_LOCK reuses), so the reuse path is provenance-checked
-  # against a concrete artifact rather than trusted by call ordering alone.
+  # Project the catalog lock into the {pname, system, direct_catalog_inputs}
+  # shape consumed by the `lock` goal's LOCK_RESULT_FILE, mirroring
+  # build-meta.json's equivalent fields. `pname` keys the entry to its package
+  # so callers locking several packages can tell the results apart.
   $($(_pvarname)_lockJSON): $($(_pvarname)_catalogLockfile)
 	$(_V_) $(_mkdir) -p $$(@D)
-	$(_V_) $(_jq) -n --arg system '$(NIX_SYSTEM)' \
-	  --arg catalog_lockfile '$$<' \
+	$(_V_) $(_jq) -n --arg pname '$(_pname)' --arg system '$(NIX_SYSTEM)' \
 	  --slurpfile lock '$$<' \
-	  '{ system: $$$$system, catalog_lockfile: $$$$catalog_lockfile, direct_catalog_inputs: $$$$lock[0].direct_catalog_inputs }' > $$@
+	  '{ pname: $$$$pname, system: $$$$system, direct_catalog_inputs: $$$$lock[0].direct_catalog_inputs }' > $$@
 
   # Continue by evaluating the build
   $($(_pvarname)_evalJSON): $($(_pvarname)_catalogLockfile)
