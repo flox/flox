@@ -1,44 +1,33 @@
 name: Claude Code Review
 
 on:
-  # There are several ways to *request* a review; this file is the only place
-  # one is *performed*. Deliberately no `synchronize` — the automated pass is a
-  # checkpoint when a PR arrives ready for eyes, plus an explicit follow-up
-  # whenever someone asks for one, not a gate on every push.
+  # Deliberately no `synchronize`: automated review is a checkpoint for when a
+  # PR arrives ready for eyes, not a gate on every push. It runs on `opened`
+  # for a non-draft PR and on `ready_for_review` when a draft is promoted.
   #
-  # To request another review, add the `claude-review` label to the PR. The
-  # workflow consumes the label before reviewing, so it re-arms immediately and
-  # can be applied as often as you like.
-  #
-  # `@claude` (claude-mention.yml) is NOT this reviewer: it is a
-  # general-purpose interactive agent on a different model, effort, harness and
-  # prompt, with no inline-comment tooling. Use it for questions and scoped
-  # asks; use the label when you want the review below.
+  # An on-demand re-review trigger is deliberately out of scope here; see the
+  # follow-up PR. `@claude` (claude-mention.yml) is NOT a substitute for this
+  # reviewer — it is a general-purpose interactive agent on a different model,
+  # effort, harness and prompt, with no inline-comment tooling. Use it for
+  # questions and scoped asks, not as the re-review path.
   pull_request:
-    types: [opened, ready_for_review, labeled]
+    types: [opened, ready_for_review]
 
 # One review at a time per PR, and never interrupt one that is already running:
-# it posts inline comments as it goes, so cancelling mid-flight leaves a
-# half-posted review behind. A request arriving mid-review waits its turn.
+# the review posts inline comments as it goes, so cancelling mid-flight leaves a
+# half-posted review behind — findings with no summary and no signal that
+# anything was dropped. A second trigger waits instead. Keyed by PR number
+# rather than head ref, because a branch name is not unique to a pull request
+# but the review's unit of work is exactly one.
 concurrency:
   group: claude-review-pr-${{ github.event.pull_request.number }}
   cancel-in-progress: false
 
 jobs:
   review:
-    # Runs when a non-draft PR is opened, when a draft is marked ready, or when
-    # the `claude-review` label is added. The label is an explicit request, so
-    # it is honoured on drafts too — otherwise the label would stick with
-    # nothing to consume it.
-    #
-    # Skip on fork PRs either way: the review needs CLAUDE_CODE_OAUTH_TOKEN,
-    # which isn't available to pull_request runs from forks, so it only fails.
-    if: |
-      github.event.pull_request.head.repo.full_name == github.repository &&
-      (
-        (github.event.action == 'labeled' && github.event.label.name == 'claude-review') ||
-        (github.event.action != 'labeled' && !github.event.pull_request.draft)
-      )
+    # Skip on fork PRs: the review needs CLAUDE_CODE_OAUTH_TOKEN, which isn't
+    # available to pull_request runs from forks, so it only fails.
+    if: ${{ !github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -47,24 +36,6 @@ jobs:
       id-token: write # Required in order for the Claude GitHub app to function
       actions: read # Required for Claude to read CI results on PRs
     steps:
-      # Consumed *before* the expensive review, which is what makes the label a
-      # reusable button: it can be re-applied the moment a review starts rather
-      # than only once one finishes. Label events raised by GITHUB_TOKEN do not
-      # trigger workflows, so this cannot recurse.
-      - name: Consume the claude-review label
-        if: contains(github.event.pull_request.labels.*.name, 'claude-review')
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REPO: ${{ github.repository }}
-          PR: ${{ github.event.pull_request.number }}
-        run: |
-          if gh api --method DELETE --silent \
-            "repos/$REPO/issues/$PR/labels/claude-review"; then
-            echo "::notice::Consumed the claude-review label. Re-apply it to request another review."
-          else
-            echo "::warning::Could not remove the claude-review label. Remove it by hand, or the next request won't fire."
-          fi
-
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
@@ -115,7 +86,3 @@ jobs:
             - Finish by writing the review summary into the tracking comment.
               If there are no issues, say specifically what you reviewed and
               verified rather than a bare "no issues found".
-            - State the PR head commit you actually reviewed (from `gh pr view
-              --json headRefOid`) in that summary. Reviews can be requested
-              again while one is in flight, so the commit is what distinguishes
-              a follow-up review from the one before it.
