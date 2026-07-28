@@ -369,6 +369,38 @@ fn handle_process_exited(
                     );
                 }
             }
+
+            // Double check that all attached PIDs are monitored.
+            // We're seeing flakey tests that double checking seems to fix.
+            // It's not entirely clear what scenario is causing the flakes, but
+            // it may be related to a race caused by firing the prompt hook.
+            //
+            // Another possible explanation would be during activation,
+            // state.json replaces the short-lived activation PID
+            // with the user shell PID. The executive normally discovers the replacement
+            // through StateFileChanged, but filesystem notifications can be missed or
+            // coalesced.
+            // After ProcessExited, reread the current attachments and ensure every
+            // remaining PID is monitored. This makes filesystem notifications a fast
+            // path instead of a correctness requirement and allows teardown after the
+            // replacement shell exits.
+            //
+            // We haven't pinpointed exactly why that would have started happening.
+            //
+            // See https://flox-dev.slack.com/archives/C05P6A5J6U8/p1785269662236939?thread_ts=1785243629.173519&cid=C05P6A5J6U8
+            //
+            // The PID that triggered this event is excluded because it was
+            // just handled above. start_monitoring() would skip it anyway when
+            // it was re-monitored, but not when the loop guard blocked it.
+            let other_attached_pids = activations
+                .all_attached_pids_and_expiration()
+                .into_iter()
+                .filter(|(attached_pid, _)| *attached_pid != pid)
+                .collect();
+            coordinator
+                .ensure_monitoring_pids(other_attached_pids)
+                .context("failed to ensure monitoring PIDs")?;
+
             Ok(false)
         },
         Ok(Some(locked_activations)) => {
@@ -642,19 +674,19 @@ mod test {
         stop_process(proc);
     }
 
-    /// Test that handle_process_exited is a no-op when the PID is not in state.json.
+    /// Test that handle_process_exited monitors replacement PIDs even when no
+    /// StateFileChanged event is delivered.
     ///
     /// This can happen in two cases:
     /// 1. --remove-pid removes a PID from state.json, but the
     ///    executive still has a watcher running for that PID.
     /// 2. `flox-activations detach` removes a PID from state.json
     ///
-    /// In either case, when the process eventually exits and the executive
-    /// receives a ProcessExited event, it should be a no-op.
-    ///
-    /// We mimic scenario 1 here
+    /// In either case, handling the stale ProcessExited event must reconcile
+    /// the replacement PID directly. Filesystem notifications are a fast path,
+    /// not the only path that preserves cleanup correctness.
     #[test]
-    fn process_exited_noop_for_pid_not_in_state() {
+    fn process_exited_reconciles_replacement_pid() {
         let temp_dir = tempfile::tempdir().unwrap();
         let runtime_dir = temp_dir.path();
         let dot_flox_path = PathBuf::from(".flox");
@@ -714,10 +746,10 @@ mod test {
             &activation_state_directory,
         );
 
-        // Should return Ok(false) - no cleanup needed, still have active PIDs
+        // No cleanup is needed while the replacement PID is active.
         assert!(
             matches!(result, Ok(false)),
-            "handle_process_exited should return Ok(false) for PID not in state, got: {:?}",
+            "handle_process_exited should keep monitoring while replacement PIDs remain, got: {:?}",
             result
         );
 
@@ -725,8 +757,33 @@ mod test {
         let final_state = read_activation_state(runtime_dir, &dot_flox_path);
         assert_eq!(initial_state, final_state);
 
-        // Clean up
+        // Show that pid2 is monitored by stopping it and asserting we receive
+        // its exit event. No StateFileChanged event is ever injected here, so
+        // only handle_process_exited could have started that watcher.
         stop_process(proc2);
+        let event = coordinator
+            .receiver
+            .recv_timeout(std::time::Duration::from_secs(2))
+            .expect("replacement PID should be monitored");
+        assert_eq!(event, ExecutiveEvent::ProcessExited { pid: pid2 });
+
+        let result = handle_process_exited(
+            pid2,
+            &coordinator,
+            &mut loop_guard,
+            &state_json,
+            &project.process_compose_bin,
+            &project.flox_services_socket,
+            &activation_state_directory,
+        );
+        assert!(
+            matches!(result, Ok(true)),
+            "replacement PID exit should clean up the activation, got: {result:?}"
+        );
+        assert!(
+            !activation_state_directory.exists(),
+            "activation state should be removed after the replacement PID exits"
+        );
     }
 
     #[test]
