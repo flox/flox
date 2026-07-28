@@ -8,8 +8,6 @@
 //! deliberately not part of the environment pointer, and the SDK is not
 //! involved in minting or reading it.
 
-use std::path::Path;
-
 use flox_core::data::CanonicalPath;
 use flox_core::write_atomically;
 use tracing::debug;
@@ -21,7 +19,7 @@ pub(crate) const TELEMETRY_ID_FILENAME: &str = "telemetry_id";
 /// Read the local environment id from `<dot_flox>/telemetry_id`. Best-effort
 /// and read-only: a missing or malformed file yields `None`, never an error,
 /// and reading never writes.
-pub(crate) fn read(dot_flox: &Path) -> Option<Uuid> {
+pub(crate) fn read(dot_flox: &CanonicalPath) -> Option<Uuid> {
     let contents = std::fs::read_to_string(dot_flox.join(TELEMETRY_ID_FILENAME)).ok()?;
     Uuid::try_parse(contents.trim()).ok()
 }
@@ -51,9 +49,9 @@ mod tests {
     fn ensure_creates_readable_id() {
         let dir = tempdir().unwrap();
         let dot_flox = CanonicalPath::new(dir.path()).unwrap();
-        assert_eq!(read(dir.path()), None, "no id before minting");
+        assert_eq!(read(&dot_flox), None, "no id before minting");
         ensure(&dot_flox);
-        assert_ne!(read(dir.path()), None, "id exists after ensuring");
+        assert_ne!(read(&dot_flox), None, "id exists after ensuring");
     }
 
     #[test]
@@ -61,10 +59,10 @@ mod tests {
         let dir = tempdir().unwrap();
         let dot_flox = CanonicalPath::new(dir.path()).unwrap();
         ensure(&dot_flox);
-        let first = read(dir.path());
+        let first = read(&dot_flox);
         ensure(&dot_flox);
         assert_eq!(
-            read(dir.path()),
+            read(&dot_flox),
             first,
             "ensuring again keeps the existing id"
         );
@@ -73,7 +71,8 @@ mod tests {
     #[test]
     fn malformed_file_reads_as_absent() {
         let dir = tempdir().unwrap();
+        let dot_flox = CanonicalPath::new(dir.path()).unwrap();
         std::fs::write(dir.path().join(TELEMETRY_ID_FILENAME), "not-a-uuid").unwrap();
-        assert_eq!(read(dir.path()), None);
+        assert_eq!(read(&dot_flox), None);
     }
 }
