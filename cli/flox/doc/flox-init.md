@@ -35,11 +35,12 @@ The `--name` flag can be used to name a specific environment.
 By default, the environment will be created in the current directory.
 Flox will add a directory `$PWD/.flox` containing all relevant environment
 metadata.
-Local environments include a random identifier in `.flox/telemetry_id`.
-This file is committed with the environment so clones share the same
-environment identifier.
-It is created even when metrics collection is disabled; disabling metrics
-prevents the identifier from being submitted.
+Flox stores a random identifier in `.flox/telemetry_id` to group metrics from
+commands that use the same local environment.
+The file is committed so the identifier stays with the environment when it is
+cloned.
+Flox always creates the file, but submits the identifier only when metrics
+collection is enabled.
 The `--dir` flag can be used to create an environment in another location.
 
 If an environment already exists in the current directory,
