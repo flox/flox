@@ -65,7 +65,7 @@ use crate::commands::{
 };
 use crate::utils::detect_shell::{detect_shell_for_in_place, detect_shell_for_subshell};
 use crate::utils::errors::format_diverged_metadata;
-use crate::utils::events::env_detail_from_concrete;
+use crate::utils::events::{env_detail_from_concrete, env_detail_from_concrete_without_lineage};
 use crate::utils::message;
 use crate::utils::upgrade_output::{count_upgrade_categories, format_upgrade_summary};
 use crate::{Exit, environment_subcommand_metric, subcommand_metric, utils};
@@ -235,7 +235,7 @@ impl Activate {
         // *outcome* is carried on `cli.command_completed` (exit_code), not by
         // the presence of this dispatch-time event, so emitting before a
         // possible trust decline is intentional, not a logged false success.
-        let v2_env_detail = env_detail_from_concrete(&flox, &concrete_environment);
+        let v2_env_detail = env_detail_from_concrete_without_lineage(&concrete_environment);
         let v2_mode = options
             .mode
             .clone()

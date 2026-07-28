@@ -155,6 +155,10 @@ impl<S> Generations<S> {
         if !metadata.generations().contains_key(&generation.into()) {
             return Err(GenerationsError::GenerationNotFound(generation));
         }
+        self.show_lockfile_contents(generation)
+    }
+
+    fn show_lockfile_contents(&self, generation: usize) -> Result<String, GenerationsError> {
         let lockfile_osstr = self
             .repo
             .show(&format!(
@@ -170,15 +174,8 @@ impl<S> Generations<S> {
     /// metadata to check the generation exists — the caller already resolved
     /// the generation, so a missing one surfaces as a `git show` error.
     pub fn lockfile_unchecked(&self, generation: usize) -> Result<Lockfile, GenerationsError> {
-        let lockfile_osstr = self
-            .repo
-            .show(&format!(
-                "{}:{}/{}/{}",
-                self.branch, generation, ENV_DIR_NAME, LOCKFILE_FILENAME
-            ))
-            .map_err(GenerationsError::ShowLockfile)?;
-        Lockfile::from_str(lockfile_osstr.to_string_lossy().as_ref())
-            .map_err(GenerationsError::Lockfile)
+        let contents = self.show_lockfile_contents(generation)?;
+        Lockfile::from_str(&contents).map_err(GenerationsError::Lockfile)
     }
 
     /// Read the manifest of the current generation and return its contents as a string

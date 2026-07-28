@@ -192,25 +192,41 @@ fn read_env_lineage_fields(flox: &Flox, env: &ConcreteEnvironment) -> EnvLineage
 /// Build an [`EnvDetail`] for the supplied [`ConcreteEnvironment`], using the
 /// same env-kind / env-ref mapping as the legacy
 /// `environment_subcommand_metric!` macro. Shared across call sites so the
-/// per-kind match is not duplicated. The lineage fields are only read when an
-/// events client is installed.
-pub fn env_detail_from_concrete(flox: &Flox, env: &ConcreteEnvironment) -> EnvDetail {
-    let (env_kind, env_ref_or_name) = match env {
-        ConcreteEnvironment::Remote(environment) => ("remote", environment.env_ref().to_string()),
-        ConcreteEnvironment::Managed(environment) => ("managed", environment.env_ref().to_string()),
-        ConcreteEnvironment::Path(environment) => {
-            ("path", Environment::name(environment).to_string())
+/// per-kind match is not duplicated.
+fn env_detail_with_generation(
+    env: &ConcreteEnvironment,
+    generation_number: Option<u64>,
+) -> EnvDetail {
+    match env {
+        ConcreteEnvironment::Remote(environment) => {
+            EnvDetail::remote(environment.env_ref().to_string(), generation_number)
         },
+        ConcreteEnvironment::Managed(environment) => {
+            EnvDetail::managed(environment.env_ref().to_string(), generation_number)
+        },
+        ConcreteEnvironment::Path(environment) => {
+            EnvDetail::path(Environment::name(environment).to_string())
+        },
+    }
+}
+
+/// Build environment identity without reading lineage. Used by eager events
+/// that must emit before locking or trust decisions.
+pub fn env_detail_from_concrete_without_lineage(env: &ConcreteEnvironment) -> EnvDetail {
+    env_detail_with_generation(env, None)
+}
+
+/// Build environment detail, reading lineage only when an events client is
+/// installed.
+pub fn env_detail_from_concrete(flox: &Flox, env: &ConcreteEnvironment) -> EnvDetail {
+    let Some(fields) = EventsHub::global().when_client_set(|| read_env_lineage_fields(flox, env))
+    else {
+        return env_detail_from_concrete_without_lineage(env);
     };
-    let mut detail = EnvDetail::new(env_kind, env_ref_or_name);
-    if let Some(fields) = EventsHub::global().when_client_set(|| read_env_lineage_fields(flox, env))
-    {
-        if let Some(generation_number) = fields.generation_number {
-            detail = detail.with_generation_number(generation_number);
-        }
-        if let Some(package_count) = fields.package_count {
-            detail = detail.with_package_count(package_count);
-        }
+
+    let mut detail = env_detail_with_generation(env, fields.generation_number);
+    if let Some(package_count) = fields.package_count {
+        detail = detail.with_package_count(package_count);
     }
     detail
 }
