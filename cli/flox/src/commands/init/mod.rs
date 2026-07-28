@@ -244,7 +244,7 @@ async fn init_local_environment(
     // Give the new environment a stable local id for telemetry correlation,
     // committed with `.flox`. Idempotent and best-effort; read paths never
     // write it.
-    local_environment_id::mint(&env.path);
+    local_environment_id::ensure(&env.path);
 
     let env_in_git_repo = GitCommandProvider::discover(dir).is_ok();
 

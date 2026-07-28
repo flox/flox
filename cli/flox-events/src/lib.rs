@@ -333,8 +333,9 @@ enum EnvIdentity {
         #[serde(rename = "env_ref_or_name")]
         name: String,
         /// Stable id for a local environment definition, minted at creation
-        /// and committed with `.flox`. Absent for local environments created
-        /// before the id existed.
+        /// and committed with `.flox`. Deliberately distinct from a
+        /// managed/remote environment's server-assigned id. Also absent for
+        /// local environments created before the id existed.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         local_environment_id: Option<Uuid>,
     },

@@ -187,7 +187,7 @@ impl Pull {
                     let pointer = managed_environment.pointer().clone();
                     let path_env = managed_environment.into_path_environment(&flox)?;
                     // A copy is a new environment definition, so it gets its own id.
-                    local_environment_id::mint(&path_env.dot_flox_path());
+                    local_environment_id::ensure(&path_env.dot_flox_path());
 
                     message::created(formatdoc! {"
                         Created path environment from {owner}/{name}.
@@ -405,7 +405,7 @@ impl Pull {
                 Ok(env) => {
                     create_dot_flox_gitignore(env.dot_flox_path())?;
                     // A copy is a new environment definition, so it gets its own id.
-                    local_environment_id::mint(&dot_flox_path);
+                    local_environment_id::ensure(&env.dot_flox_path());
                 },
             }
         }

@@ -156,9 +156,9 @@ fn read_env_lineage_fields(flox: &Flox, env: &ConcreteEnvironment) -> EnvLineage
         ConcreteEnvironment::Path(environment) => {
             local_environment_id::read(&environment.dot_flox_path())
         },
-        // Managed/remote environments are identified downstream by owner/name,
-        // and by a server-assigned id under a different key, so the CLI emits
-        // no local id for them.
+        // The CLI has no server-assigned id for managed/remote environments.
+        // Their events carry owner/name in `env_ref_or_name`, so they emit no
+        // local id.
         ConcreteEnvironment::Managed(_) | ConcreteEnvironment::Remote(_) => None,
     };
 

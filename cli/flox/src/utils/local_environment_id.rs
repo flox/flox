@@ -10,6 +10,7 @@
 
 use std::path::Path;
 
+use flox_core::data::CanonicalPath;
 use flox_core::write_atomically;
 use tracing::debug;
 use uuid::Uuid;
@@ -25,21 +26,19 @@ pub(crate) fn read(dot_flox: &Path) -> Option<Uuid> {
     Uuid::try_parse(contents.trim()).ok()
 }
 
-/// Mint a stable local id for a newly created path environment and write it to
-/// `<dot_flox>/telemetry_id`, returning it. Idempotent: if a valid id already
-/// exists it is returned unchanged, so calling this on an already-identified
-/// environment never regenerates the id. Best-effort: a write failure is
-/// logged, and that environment then carries no id for its lifetime (reads
-/// never write, so nothing recreates it).
-pub(crate) fn mint(dot_flox: &Path) -> Uuid {
-    if let Some(existing) = read(dot_flox) {
-        return existing;
+/// Ensure a newly created path environment has a stable local id at
+/// `<dot_flox>/telemetry_id`. Idempotent: an already-identified environment
+/// keeps its existing id. Best-effort: a write failure is logged, and that
+/// environment then carries no id for its lifetime (reads never write, so
+/// nothing recreates it).
+pub(crate) fn ensure(dot_flox: &CanonicalPath) {
+    if read(dot_flox).is_some() {
+        return;
     }
     let id = Uuid::new_v4();
     if let Err(err) = write_atomically(dot_flox.join(TELEMETRY_ID_FILENAME), format!("{id}\n")) {
         debug!(error = %err, "could not write local_environment_id");
     }
-    id
 }
 
 #[cfg(test)]
@@ -49,21 +48,25 @@ mod tests {
     use super::*;
 
     #[test]
-    fn mint_then_read_round_trips() {
+    fn ensure_creates_readable_id() {
         let dir = tempdir().unwrap();
+        let dot_flox = CanonicalPath::new(dir.path()).unwrap();
         assert_eq!(read(dir.path()), None, "no id before minting");
-        let id = mint(dir.path());
-        assert_eq!(read(dir.path()), Some(id), "read returns the minted id");
+        ensure(&dot_flox);
+        assert_ne!(read(dir.path()), None, "id exists after ensuring");
     }
 
     #[test]
-    fn mint_is_idempotent() {
+    fn ensure_keeps_existing_id() {
         let dir = tempdir().unwrap();
-        let first = mint(dir.path());
+        let dot_flox = CanonicalPath::new(dir.path()).unwrap();
+        ensure(&dot_flox);
+        let first = read(dir.path());
+        ensure(&dot_flox);
         assert_eq!(
-            mint(dir.path()),
+            read(dir.path()),
             first,
-            "a second mint keeps the existing id"
+            "ensuring again keeps the existing id"
         );
     }
 
