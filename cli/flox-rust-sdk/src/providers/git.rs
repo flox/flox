@@ -533,9 +533,9 @@ impl GitCommandProvider {
                 .to_str()
                 .ok_or(GitCommandBranchHashError::HashNotUnicode)
                 .map(|hash| hash.trim().to_string()),
-            Err(GitCommandError::BadExit(1, stdout, stderr))
-                if stdout.is_empty() && stderr.is_empty() =>
-            {
+            // Git exits 1 with empty stdout for a missing ref. Wrappers may
+            // write unrelated diagnostics to stderr.
+            Err(GitCommandError::BadExit(1, stdout, _)) if stdout.is_empty() => {
                 Err(GitCommandBranchHashError::DoesNotExist)
             },
             Err(e) => Err(e.into()),
@@ -1416,6 +1416,7 @@ pub mod tests {
 
     use std::collections::HashMap;
     use std::fs;
+    use std::os::unix::fs::PermissionsExt;
 
     use pretty_assertions::assert_eq;
     use tempfile::TempDir;
@@ -1728,6 +1729,29 @@ pub mod tests {
         let (repo, _tempdir_handle) = init_temp_repo(false);
 
         assert!(!repo.has_branch("branch_1").unwrap());
+    }
+
+    #[test]
+    fn missing_branch_with_git_wrapper_stderr_returns_does_not_exist() {
+        let (mut repo, tempdir_handle) = init_temp_repo(false);
+        let git_wrapper = tempdir_handle.path().join("git-wrapper");
+        fs::write(
+            &git_wrapper,
+            format!(
+                "#!/bin/sh\nprintf '%s\\n' 'wrapper diagnostic' >&2\nexec \"{}\" \"$@\"\n",
+                &*GIT_BIN
+            ),
+        )
+        .unwrap();
+        let mut permissions = fs::metadata(&git_wrapper).unwrap().permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(&git_wrapper, permissions).unwrap();
+        repo.options.set_exe(git_wrapper.to_string_lossy());
+
+        match repo.branch_hash("branch_1") {
+            Err(GitCommandBranchHashError::DoesNotExist) => {},
+            result => panic!("expected DoesNotExist, got {result:?}"),
+        }
     }
 
     #[test]
