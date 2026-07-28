@@ -463,7 +463,7 @@ jobs:
     # Spelled out rather than left implicit so that a failed `scope` cannot
     # skip this required check: `nix-build` succeeding is the only precondition,
     # exactly as before. A skipped `nix-build` (fork PR) still skips this job.
-    if: ${{ needs.nix-build.result == 'success' }}
+    if: ${{ !cancelled() && needs.nix-build.result == 'success' }}
 
     strategy:
       fail-fast: false
