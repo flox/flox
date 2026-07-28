@@ -39,6 +39,7 @@ use crate::utils::events::duration_to_ms;
 use crate::utils::init::init_telemetry_uuid;
 use crate::utils::metrics::{Hub, read_metrics_uuid};
 
+mod beta;
 mod commands;
 mod utils;
 
