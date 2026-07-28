@@ -59,6 +59,10 @@ project_teardown() {
 
 setup() {
   common_test_setup
+  # `deactivate --print-script` after an in-place activation needs the
+  # `_FLOX_PROMPT_HOOK_VERSION` marker, so opt out of the suite-wide
+  # `disable_hook = true`.
+  enable_prompt_hook
   home_setup test
   setup_isolated_flox
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.yaml"

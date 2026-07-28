@@ -52,6 +52,11 @@ project_teardown() {
 
 setup() {
   common_test_setup
+  # Every test here deactivates, either with a plain `flox deactivate` serviced
+  # by the prompt hook or with `deactivate --print-script`, which needs the
+  # marker hook registration exports. Opt out of the suite-wide
+  # `disable_hook = true`.
+  enable_prompt_hook
   home_setup test
   user_dotfiles_setup
   setup_isolated_flox

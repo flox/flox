@@ -117,9 +117,11 @@ setup_file() {
 setup() {
   common_test_setup
   # This file exercises `prompt`-mode auto-activation (consent prompts and the
-  # default first-encounter behaviour), so override the suite-wide `allowlist`
-  # default back to `prompt` for every test here.
+  # default first-encounter behaviour) and the prompt hook itself, so override
+  # the suite-wide `disabled`/`disable_hook = true` defaults for every test
+  # here.
   export FLOX_AUTO_ACTIVATE=prompt
+  enable_prompt_hook
   setup_isolated_flox
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.yaml"
 }

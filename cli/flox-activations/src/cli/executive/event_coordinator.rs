@@ -2,6 +2,7 @@
 //! architecture.
 
 use std::collections::HashMap;
+use std::ffi::OsStr;
 use std::path::Path;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex};
@@ -15,7 +16,7 @@ use flox_core::proc_status::pid_is_running;
 /// How long to wait between polling iterations when pidfd is unavailable.
 const POLLING_INTERVAL: Duration = Duration::from_millis(100);
 use nix::libc::{SIGCHLD, SIGINT, SIGQUIT, SIGTERM};
-use notify::{RecommendedWatcher, RecursiveMode, Watcher};
+use notify::{Event, RecommendedWatcher, RecursiveMode, Watcher};
 use signal_hook::iterator::Signals;
 use time::OffsetDateTime;
 use tracing::{debug, error, trace, warn};
@@ -156,12 +157,12 @@ impl EventCoordinator {
         state_json_path: impl AsRef<Path>,
         sender: Sender<ExecutiveEvent>,
     ) -> Result<RecommendedWatcher> {
-        let state_json_path = state_json_path.as_ref();
-        let parent_dir = state_json_path
+        let owned_state_json_path = state_json_path.as_ref().to_path_buf();
+        let parent_dir = owned_state_json_path
             .parent()
             .context("state.json path has no parent directory")?
             .to_path_buf();
-        let filename = state_json_path
+        let filename = owned_state_json_path
             .file_name()
             .context("state.json path has no filename")?
             .to_owned();
@@ -169,20 +170,16 @@ impl EventCoordinator {
         let mut watcher =
             notify::recommended_watcher(move |res: notify::Result<notify::Event>| match res {
                 Ok(event) => {
-                    // Only care about file creation (atomic rename) or data modification.
-                    // This filters out Close, Access, Remove, and other irrelevant events
-                    // that would cause redundant state.json reads.
-                    let is_write_event = event.kind.is_modify() || event.kind.is_create();
-                    let is_state_json_event = event
-                        .paths
-                        .iter()
-                        .any(|p| p.file_name() == Some(filename.as_os_str()));
-
-                    if !is_write_event || !is_state_json_event {
+                    if !should_emit_state_changed(&event, &owned_state_json_path, &filename) {
                         return;
                     }
 
-                    debug!(?event, "state.json changed, sending event to main loop");
+                    // Warn if the event is reporting events are being dropped
+                    if event.need_rescan() {
+                        warn!(?event, "file watcher dropped events, sending event to main loop to double check for state.json changes");
+                    } else {
+                        debug!(?event, "state.json changed, sending event to main loop");
+                    }
 
                     if sender.send(ExecutiveEvent::StateFileChanged).is_err() {
                         // Channel closed, nothing to do
@@ -199,7 +196,7 @@ impl EventCoordinator {
             .watch(&parent_dir, RecursiveMode::NonRecursive)
             .context("failed to watch state.json parent directory")?;
 
-        debug!(state_json_path = %state_json_path.display(), "started watching state.json");
+        debug!(state_json_path = %state_json_path.as_ref().display(), "started watching state.json");
         Ok(watcher)
     }
 
@@ -287,6 +284,29 @@ impl EventCoordinator {
         debug!("started signal handler thread");
         Ok(handle)
     }
+}
+
+/// Whether a watcher event means StateFileChanged should be sent to the main loop.
+///
+/// Emit StateFileChanged for:
+/// - File creation (atomic rename) or data modification.
+///   This filters out Close, Access, Remove, and other irrelevant events
+///   that would cause redundant state.json reads.
+/// - A rescan event, in which case the watcher is dropping events. In that case
+///   we have to double check state.json exists because the main loop assumes it
+///   does
+fn should_emit_state_changed(event: &Event, state_json_path: &Path, filename: &OsStr) -> bool {
+    let is_write_event = event.kind.is_modify() || event.kind.is_create();
+    let is_state_json_event = event.paths.iter().any(|p| p.file_name() == Some(filename));
+    if is_write_event && is_state_json_event {
+        return true;
+    }
+
+    if event.need_rescan() && state_json_path.exists() {
+        return true;
+    }
+
+    false
 }
 
 /// Spawn a thread that waits for a specific PID to exit.
@@ -433,5 +453,96 @@ mod tests {
             .expect("should receive event within timeout");
 
         assert_eq!(event, ExecutiveEvent::StateFileChanged);
+    }
+
+    mod should_emit_state_changed {
+        use std::path::PathBuf;
+
+        use notify::EventKind;
+        use notify::event::{CreateKind, Flag, ModifyKind, RenameMode};
+
+        use super::*;
+
+        /// A directory holding a state.json, plus the path to it.
+        fn state_json_in_temp_dir() -> (tempfile::TempDir, PathBuf) {
+            let temp_dir = tempfile::tempdir().unwrap();
+            let state_json_path = temp_dir.path().join("state.json");
+            fs::write(&state_json_path, "{}").unwrap();
+            (temp_dir, state_json_path)
+        }
+
+        fn rescan_event() -> Event {
+            Event::new(EventKind::Other).set_flag(Flag::Rescan)
+        }
+
+        /// state.json is written by atomic rename, so the rename onto the
+        /// target name is the event that means the state changed.
+        #[test]
+        fn rename_onto_state_json_is_a_change() {
+            let (_temp_dir, state_json_path) = state_json_in_temp_dir();
+            let event = Event::new(EventKind::Modify(ModifyKind::Name(RenameMode::Any)))
+                .add_path(state_json_path.clone());
+
+            assert!(should_emit_state_changed(
+                &event,
+                &state_json_path,
+                state_json_path.file_name().unwrap()
+            ));
+        }
+
+        /// The temp file the atomic write lands in first is not state.json;
+        /// re-reading on it would just read the previous contents.
+        #[test]
+        fn temp_file_create_is_not_a_change() {
+            let (temp_dir, state_json_path) = state_json_in_temp_dir();
+            let event = Event::new(EventKind::Create(CreateKind::File))
+                .add_path(temp_dir.path().join(".tmpAbC123"));
+
+            assert!(!should_emit_state_changed(
+                &event,
+                &state_json_path,
+                state_json_path.file_name().unwrap()
+            ));
+        }
+
+        /// A rescan is the backend saying it dropped events. It names no file
+        /// and its kind is neither create nor modify, so filtering on kind and
+        /// name alone would discard it — and with it any attach that happened
+        /// during the overflow, leaving that PID unmonitored forever.
+        #[test]
+        fn rescan_is_a_change_despite_naming_no_file() {
+            let (_temp_dir, state_json_path) = state_json_in_temp_dir();
+            let event = rescan_event();
+
+            assert!(
+                event.paths.is_empty(),
+                "a rescan carries no path to match on"
+            );
+            assert!(
+                !event.kind.is_modify() && !event.kind.is_create(),
+                "a rescan is neither a modify nor a create"
+            );
+            assert!(should_emit_state_changed(
+                &event,
+                &state_json_path,
+                state_json_path.file_name().unwrap()
+            ));
+        }
+
+        /// A rescan carries no timing guarantee, so it can arrive after the
+        /// activation was torn down. Signalling a re-read then would have the
+        /// loop treat the missing file as fatal, and reading it would recreate
+        /// the directory cleanup had just removed.
+        #[test]
+        fn rescan_after_state_json_is_gone_is_not_a_change() {
+            let (_temp_dir, state_json_path) = state_json_in_temp_dir();
+            fs::remove_file(&state_json_path).unwrap();
+
+            assert!(!should_emit_state_changed(
+                &rescan_event(),
+                &state_json_path,
+                state_json_path.file_name().unwrap()
+            ));
+        }
     }
 }

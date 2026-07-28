@@ -159,13 +159,34 @@ setup_file() { common_file_setup; }
 
 # Added for consistency with `teardown' routines.
 common_test_setup() {
-  # Auto-activation is on by default. Default the whole suite to `allowlist`
-  # mode so that walking past a discovered `.flox` never auto-activates or
-  # prompts unless a test explicitly allows it. This keeps tests hermetic and
-  # independent of the developer's own shell/config leaking in. Files that
-  # exercise `prompt`-mode behaviour override this to `prompt` file-wide.
-  export FLOX_AUTO_ACTIVATE=allowlist
+  # Auto-activation and the prompt hook are on by default. Turn both off for
+  # the whole suite so that neither can influence a test that is not about
+  # them: walking past a discovered `.flox` never auto-activates or prompts,
+  # and activation registers no prompt hook. This keeps tests hermetic and
+  # independent of the developer's own shell/config leaking in.
+  #
+  # Files that exercise this machinery opt back in:
+  #   - hook.bats overrides FLOX_AUTO_ACTIVATE to `prompt` file-wide.
+  #   - the deactivate and hook tests call `enable_prompt_hook` (see below).
+  export FLOX_AUTO_ACTIVATE=disabled
+  export FLOX_DISABLE_HOOK=true
 }
+
+# Undo the suite-wide `disable_hook = true` for tests that need activation to
+# register a prompt hook. Required by anything that runs a plain
+# `flox deactivate` (which refuses to run with the hook disabled) and by
+# anything that runs `flox deactivate --print-script` after an interactive or
+# in-place activation, since the emitted script is gated on the
+# `_FLOX_PROMPT_HOOK_VERSION` marker that only hook registration exports.
+#
+# Unsets rather than exporting `false`: environment variables outrank
+# `$FLOX_CONFIG_DIR/flox.toml`, so an exported value would defeat a test that
+# sets `disable_hook` itself via `flox config --set`. Unset falls through to
+# the shipped default, which is already `false`.
+enable_prompt_hook() {
+  unset FLOX_DISABLE_HOOK
+}
+
 setup() { common_test_setup; }
 
 # ---------------------------------------------------------------------------- #
