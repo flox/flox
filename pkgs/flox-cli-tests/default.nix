@@ -36,6 +36,7 @@
   podman,
   procps,
   pstree,
+  python3,
   unixtools,
   util-linux,
   which,
@@ -78,6 +79,7 @@ let
     openssh
     parallel
     pstree
+    python3
     unixtools.util-linux
     util-linux # for setsid
     which
