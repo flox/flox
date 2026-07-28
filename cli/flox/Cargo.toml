@@ -25,6 +25,7 @@ indent.workspace = true
 indicatif.workspace = true
 indoc.workspace = true
 inquire.workspace = true
+interim.workspace = true
 itertools.workspace = true
 keyring-core.workspace = true
 nix.workspace = true
