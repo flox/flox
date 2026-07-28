@@ -13,14 +13,9 @@ fn main() {
     let mut spec_json: serde_json::Value =
         serde_json::from_reader(file).expect("Failed to parse openapi spec");
 
-    // Keep only paths under /api/v1/factory/builds — the endpoints the CLI
-    // verbs (status, list, logs, cancel) call. All other paths are dropped
-    // from codegen (schemas referenced by retained paths are still emitted):
-    //   - /api/v1/factory/health, /ready  — probe endpoints with untyped `{}`
-    //     schemas that Progenitor 0.11.2 cannot process (assertion failure).
-    //   - /api/v1/factory/webhooks/*      — GitHub inbound, never called by CLI.
-    //   - /api/v1/factory/callbacks/*     — Build Coordinator inbound, not for CLI.
-    //   - /api/v1/factory/tasks/*         — task internals, not exposed by CLI verbs.
+    // Keep only the /api/v1/factory/builds paths: the endpoints the CLI verbs
+    // (status, list, logs, cancel) call. Other exported paths are dropped from
+    // codegen; schemas referenced by retained paths are still emitted.
     spec_json["paths"]
         .as_object_mut()
         .unwrap()
@@ -39,6 +34,14 @@ fn main() {
 fn generator() -> progenitor::Generator {
     let mut settings = progenitor::GenerationSettings::default();
     settings.with_derive("PartialEq");
+    // Splice in the hand-written tolerant status enum for both the response
+    // body and the `status` query-param filter, so an unrecognized status
+    // renders as `unknown: <value>` instead of failing deserialization.
+    settings.with_replacement(
+        "EffectiveBuildStatus",
+        "crate::status::EffectiveBuildStatus",
+        vec![].into_iter(),
+    );
     settings.with_inner_type(parse_quote! { crate::hooks::RequestHooks });
     progenitor::Generator::new(&settings)
 }
