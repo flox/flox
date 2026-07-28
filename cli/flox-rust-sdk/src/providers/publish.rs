@@ -116,6 +116,11 @@ pub enum PublishError {
 
     #[error("Timed out waiting for publish completion")]
     PublishTimeout,
+
+    #[error(
+        "'{0}' is not a system Flox can publish for.\nSupported systems are 'aarch64-darwin', 'aarch64-linux', 'x86_64-darwin' and 'x86_64-linux'."
+    )]
+    UnsupportedSystem(String),
 }
 
 /// The `Publish` trait describes the high level behavior of publishing a package to a catalog.
@@ -945,6 +950,9 @@ pub struct LockedBuildInputs {
 /// `catalog_lock` names where the lock is written. Pass the same value to a
 /// following [`check_build_metadata`] so its build consumes exactly this
 /// lock, which is what makes the checked closure identity the built one.
+///
+/// Manifest builds never reach the builder: the lock goal emits a constant for
+/// them, and running it is not free (see below).
 pub fn lock_build_inputs(
     flox: &Flox,
     rendered: &RenderedSource,
@@ -953,6 +961,21 @@ pub fn lock_build_inputs(
     nef_stability: Option<String>,
     system_override: Option<String>,
 ) -> Result<LockedBuildInputs, PublishError> {
+    // A manifest build resolves no catalog inputs of its own, so the lock goal
+    // only ever emits an empty map for it. Spawning the builder to obtain a
+    // constant would not be free: the Makefile evaluates every manifest build's
+    // `version.command` in a build-mode activation while it parses, on every
+    // invocation, so a lock pass would run each of those user-supplied commands
+    // a second time per publish. Answer directly instead.
+    if pkg.kind().is_manifest_build() {
+        let system = system_override.as_deref().unwrap_or(&flox.system);
+        return Ok(LockedBuildInputs {
+            system: PackageSystem::from_str(system)
+                .map_err(|_| PublishError::UnsupportedSystem(system.to_string()))?,
+            direct_catalog_inputs: HashMap::new(),
+        });
+    }
+
     let builder = FloxBuildMk::new(
         flox,
         &rendered.base_dir,
@@ -1805,9 +1828,12 @@ pub mod tests {
         assert_eq!(meta.version, Some("1.0.2a".to_string()));
     }
 
-    /// `lock_build_inputs` against the [`BuildWorkdir::SharedClone`] path
-    /// (the default: no `sandbox = "pure"` set) returns a populated system
-    /// and the manifest build's empty `direct_catalog_inputs`.
+    /// `lock_build_inputs` for a manifest build reports the current system and
+    /// an empty `direct_catalog_inputs` without invoking the builder at all —
+    /// the named lock file is never created, which is the observable proof
+    /// that no `make lock` ran and so no `version.command` was re-executed.
+    /// Rendered through the [`BuildWorkdir::SharedClone`] path (the default:
+    /// no `sandbox = "pure"` set).
     #[test]
     fn lock_build_inputs_shared_clone() {
         let (flox, _temp_dir_handle) = flox_instance();
@@ -1818,11 +1844,12 @@ pub mod tests {
         let rendered =
             render_build_source(&flox, &env_metadata, &EXAMPLE_MANIFEST_PACKAGE_TARGET).unwrap();
 
+        let lock_file = flox.temp_dir.join("manifest-build-catalog.lock");
         let locked = lock_build_inputs(
             &flox,
             &rendered,
             &EXAMPLE_MANIFEST_PACKAGE_TARGET,
-            CatalogLock::Ephemeral,
+            CatalogLock::File(lock_file.clone()),
             None,
             None,
         )
@@ -1830,11 +1857,15 @@ pub mod tests {
 
         assert_eq!(locked.system.to_string(), flox.system);
         assert!(locked.direct_catalog_inputs.is_empty());
+        assert!(
+            !lock_file.exists(),
+            "a manifest build must not spawn the builder to learn it has no catalog inputs"
+        );
     }
 
-    /// `lock_build_inputs` against the [`BuildWorkdir::OriginalCheckout`]
-    /// path (`sandbox = "pure"`) returns the same shape as the
-    /// `SharedClone` case.
+    /// `lock_build_inputs` for a manifest build rendered through the
+    /// [`BuildWorkdir::OriginalCheckout`] path (`sandbox = "pure"`) returns
+    /// the same shape as the `SharedClone` case.
     #[test]
     fn lock_build_inputs_original_checkout() {
         let (flox, _temp_dir_handle) = flox_instance();
