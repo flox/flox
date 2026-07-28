@@ -147,6 +147,11 @@ pub enum ManifestBuilderError {
 
     #[error("Failed to compute the catalog lock.")]
     LockFailure,
+
+    #[error(
+        "The catalog lock path contains whitespace, which the package builder cannot represent: {0}\nChoose a lock path without spaces or tabs."
+    )]
+    CatalogLockPathWithWhitespace(PathBuf),
 }
 
 #[derive(Debug, PartialEq, Deserialize, Default, derive_more::Deref)]
@@ -185,12 +190,32 @@ pub struct LockResult {
     /// The package this lock belongs to, so a caller locking several packages
     /// at once can tell the results apart.
     pub pname: String,
+    #[serde(deserialize_with = "deserialize_package_system")]
     pub system: PackageSystem,
     /// The direct catalog inputs the lock phase resolved, keyed by
     /// locked-input reference. Empty for build modes (e.g. manifest builds)
     /// that resolve no catalog inputs.
     #[serde(default)]
     pub direct_catalog_inputs: HashMap<String, LockedInputEntry>,
+}
+
+/// Parse a lock result's system, naming the offending value when it is not a
+/// system Flox can build for.
+///
+/// The value comes from the builder's `NIX_SYSTEM`, i.e. from `--system` when
+/// the user passed one. The derived deserializer would report it as an unknown
+/// variant of an internal type, which reads as a malformed lock result rather
+/// than as the unsupported system that actually caused it.
+fn deserialize_package_system<'de, D>(deserializer: D) -> Result<PackageSystem, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let system = String::deserialize(deserializer)?;
+    std::str::FromStr::from_str(&system).map_err(|_| {
+        serde::de::Error::custom(format!(
+            "'{system}' is not a system Flox can build for; expected 'aarch64-darwin', 'aarch64-linux', 'x86_64-darwin' or 'x86_64-linux'"
+        ))
+    })
 }
 
 /// Where a package's catalog lock lives.
@@ -214,16 +239,38 @@ pub enum CatalogLock {
 ///
 /// [`CatalogLock::Ephemeral`] packages are omitted: absence of an entry is
 /// what tells the Makefile to lock into its own temporary directory.
-fn catalog_locks_make_arg(packages: &[(PackageTargetName, CatalogLock)]) -> String {
+///
+/// The Makefile splits this variable into words to find a package's entry
+/// (`catalogLockFor`), and make's word functions have no notion of quoting or
+/// escaping, so a path containing whitespace cannot be represented here at
+/// all. Such a path is rejected rather than passed through: the Makefile would
+/// otherwise silently take the prefix up to the first space as the lock path,
+/// and that prefix is the same on every run, so a later invocation would find
+/// the earlier run's file and reuse a closure that was never resolved for it.
+fn catalog_locks_make_arg(
+    packages: &[(PackageTargetName, CatalogLock)],
+) -> Result<String, ManifestBuilderError> {
     let locks = packages
         .iter()
         .filter_map(|(name, lock)| match lock {
             CatalogLock::Ephemeral => None,
-            CatalogLock::File(path) => Some(format!("{}={}", name.as_ref(), path.display())),
+            CatalogLock::File(path) => Some((name, path)),
         })
-        .join(" ");
+        .map(|(name, path)| {
+            if path
+                .as_os_str()
+                .to_string_lossy()
+                .contains(char::is_whitespace)
+            {
+                return Err(ManifestBuilderError::CatalogLockPathWithWhitespace(
+                    path.clone(),
+                ));
+            }
+            Ok(format!("{}={}", name.as_ref(), path.display()))
+        })
+        .process_results(|mut entries| entries.join(" "))?;
 
-    format!("CATALOG_LOCKS={locks}")
+    Ok(format!("CATALOG_LOCKS={locks}"))
 }
 
 /// The `PACKAGES` make-variable assignment listing the packages to act on.
@@ -331,6 +378,9 @@ pub struct FloxBuildMk<'args> {
     // are inherited from the current process.
     stdout_buffer: Option<&'args mut String>,
     stderr_buffer: Option<&'args mut String>,
+    /// Extra environment for the `make` subprocess, see [`FloxBuildMk::env`].
+    #[cfg(test)]
+    extra_env: Vec<(std::ffi::OsString, std::ffi::OsString)>,
 }
 
 impl FloxBuildMk<'_> {
@@ -350,7 +400,27 @@ impl FloxBuildMk<'_> {
             flox_env_cache,
             stdout_buffer: None,
             stderr_buffer: None,
+            #[cfg(test)]
+            extra_env: Vec::new(),
         }
+    }
+
+    /// Set an environment variable on the `make` subprocess this builder
+    /// spawns.
+    ///
+    /// Tests use this to scope a catalog mock recording to their own
+    /// subprocesses. Setting it on the test process instead would be visible
+    /// to every test running concurrently, including ones that resolve a
+    /// catalog lock of their own and would then be answered by the wrong
+    /// recording.
+    #[cfg(test)]
+    fn env(
+        mut self,
+        key: impl Into<std::ffi::OsString>,
+        value: impl Into<std::ffi::OsString>,
+    ) -> Self {
+        self.extra_env.push((key.into(), value.into()));
+        self
     }
 
     /// Create a new instance with std{out,err} piped into buffers
@@ -375,6 +445,8 @@ impl FloxBuildMk<'_> {
             flox_env_cache,
             stdout_buffer: Some(stdout),
             stderr_buffer: Some(stderr),
+            #[cfg(test)]
+            extra_env: Vec::new(),
         }
     }
 
@@ -382,6 +454,8 @@ impl FloxBuildMk<'_> {
         // todo: extra makeflags, eventually
         let mut command = Command::new(&*GNUMAKE_BIN);
         command.env_remove("MAKEFLAGS");
+        #[cfg(test)]
+        command.envs(self.extra_env.iter().map(|(k, v)| (k, v)));
         command.arg("--file").arg(&*FLOX_BUILD_MK);
         command.arg("--directory").arg(base_dir); // Change dir before reading makefile.
         if self.verbosity <= 0 {
@@ -444,7 +518,7 @@ impl ManifestBuilder for FloxBuildMk<'_> {
             command.arg(format!("NIX_SYSTEM={system_override}"));
         }
 
-        command.arg(catalog_locks_make_arg(packages));
+        command.arg(catalog_locks_make_arg(packages)?);
 
         command.arg(format!(
             "FLOX_ENV={}",
@@ -654,7 +728,7 @@ impl ManifestBuilder for FloxBuildMk<'_> {
     ) -> Result<LockResults, ManifestBuilderError> {
         let mut command = self.base_command(self.base_dir);
         command.arg("lock");
-        command.arg(catalog_locks_make_arg(packages));
+        command.arg(catalog_locks_make_arg(packages)?);
         command.arg(format!("BUILDTIME_NIXPKGS_URL={}", &*COMMON_NIXPKGS_URL));
 
         // The stability used to resolve NEF catalog build inputs. Only passed
@@ -1532,7 +1606,8 @@ mod tests {
             catalog_locks_make_arg(&[(
                 PackageTargetName::new_unchecked(&"foo"),
                 CatalogLock::Ephemeral,
-            )]),
+            )])
+            .unwrap(),
             "CATALOG_LOCKS="
         );
     }
@@ -1553,8 +1628,46 @@ mod tests {
                     PackageTargetName::new_unchecked(&"baz"),
                     CatalogLock::File(PathBuf::from("/locks/baz.lock")),
                 ),
-            ]),
+            ])
+            .unwrap(),
             "CATALOG_LOCKS=foo=/locks/foo.lock baz=/locks/baz.lock"
+        );
+    }
+
+    /// An unsupported `--system` reaches Rust as the lock result's `system`
+    /// field, so the parse failure has to name the value the user passed
+    /// rather than report an unknown variant of an internal type.
+    #[test]
+    fn lock_result_parse_error_names_the_unsupported_system() {
+        let err = serde_json::from_str::<LockResults>(
+            r#"[{"pname": "foo", "system": "riscv64-linux", "direct_catalog_inputs": {}}]"#,
+        )
+        .unwrap_err();
+
+        assert!(
+            err.to_string().contains("riscv64-linux"),
+            "expected the offending system to be named, got: {err}"
+        );
+    }
+
+    /// The Makefile finds a package's lock by splitting `CATALOG_LOCKS` into
+    /// words, so a path containing whitespace would arrive truncated at the
+    /// first space — and truncated identically on every run, which is what
+    /// would make a later invocation reuse an earlier run's lock. Reject the
+    /// path instead of emitting one that means something else.
+    #[test]
+    fn catalog_locks_make_arg_rejects_a_lock_path_containing_whitespace() {
+        let path = PathBuf::from("/tmp/my locks/foo.lock");
+
+        let err = catalog_locks_make_arg(&[(
+            PackageTargetName::new_unchecked(&"foo"),
+            CatalogLock::File(path.clone()),
+        )])
+        .unwrap_err();
+
+        assert!(
+            matches!(&err, ManifestBuilderError::CatalogLockPathWithWhitespace(p) if *p == path),
+            "expected a whitespace rejection, got: {err:?}"
         );
     }
 
@@ -4252,38 +4365,32 @@ mod nef_tests {
         );
     }
 
-    /// Companion to `nef_lock_matches_build_catalog_inputs_and_skips_build`:
-    /// that test's fixture references no catalog packages, so its parity
-    /// assertion is `{} == {}` and would pass even if catalog inputs were
-    /// dropped or mis-projected. This test resolves a real catalog
-    /// reference and asserts lock/build parity on the populated map.
+    /// A NEF expression directory whose `foo` package references a real
+    /// catalog input (`catalogs.myorg.hello`), together with the
+    /// `_FLOX_USE_CATALOG_MOCK` recording that resolves that reference.
+    struct PopulatedCatalogInput {
+        expressions_ref: NixFlakeref,
+        mock_recording: PathBuf,
+    }
+
+    /// Build the [`PopulatedCatalogInput`] fixture under `tempdir`.
     ///
-    /// The catalog `/build-inputs/lookup` endpoint is mocked hermetically
-    /// via `_FLOX_USE_CATALOG_MOCK` (an httpmock recording, no network).
-    /// The resolved package's source is a local git repository — the same
-    /// directory that hosts the `foo` package under test also hosts a
-    /// `hello` package, and doubles as `hello`'s own git-fetchable catalog
-    /// source — so `nix build` can actually fetch and build it via
-    /// `builtins.fetchTree {type = "git"; url = "file://...";}`, which
-    /// resolves from the local filesystem with no network access.
-    #[test]
-    fn nef_lock_matches_build_catalog_inputs_and_skips_build_with_populated_catalog_input() {
-        let pname = "foo".to_string();
-
-        let (flox, tempdir) = flox_instance();
-
-        let manifest = formatdoc! {r#"
-            version = 1
-        "#};
-        let mut env = new_path_environment(&flox, &manifest);
-
+    /// The catalog `/build-inputs/lookup` endpoint is mocked hermetically via
+    /// `_FLOX_USE_CATALOG_MOCK` (an httpmock recording, no network). The
+    /// resolved package's source is a local git repository — the same
+    /// directory that hosts the `foo` package under test also hosts a `hello`
+    /// package, and doubles as `hello`'s own git-fetchable catalog source — so
+    /// `nix build` can actually fetch and build it via
+    /// `builtins.fetchTree {type = "git"; url = "file://...";}`, which resolves
+    /// from the local filesystem with no network access.
+    fn populated_catalog_input(flox: &Flox, tempdir: &Path, pname: &str) -> PopulatedCatalogInput {
         // `foo` references a real catalog input (`catalogs.myorg.hello`).
         // `hello` is the catalog-side NEF package the mocked lookup below
         // resolves that reference to.
-        let expressions_dir = tempdir_in(&tempdir).unwrap().keep();
+        let expressions_dir = tempdir_in(tempdir).unwrap().keep();
         let pkgs_dir = expressions_dir.join("pkgs");
-        fs::create_dir_all(pkgs_dir.join(&pname)).unwrap();
-        fs::write(pkgs_dir.join(&pname).join("default.nix"), indoc! {r#"
+        fs::create_dir_all(pkgs_dir.join(pname)).unwrap();
+        fs::write(pkgs_dir.join(pname).join("default.nix"), indoc! {r#"
             {catalogs, runCommand}: runCommand "foo" {} ''
                 echo -n "Hello, World!" >> $out
                 cat ${catalogs.myorg.hello} >> $out
@@ -4352,36 +4459,86 @@ mod nef_tests {
                 "body": serde_json::to_string(&response_body).unwrap(),
             },
         });
-        let mock_recording_path = flox.temp_dir.join("catalog_lookup_mock.yaml");
-        fs::write(
-            &mock_recording_path,
-            serde_json::to_string(&recording).unwrap(),
+        let mock_recording = flox.temp_dir.join("catalog_lookup_mock.yaml");
+        fs::write(&mock_recording, serde_json::to_string(&recording).unwrap()).unwrap();
+
+        PopulatedCatalogInput {
+            expressions_ref,
+            mock_recording,
+        }
+    }
+
+    /// Companion to `nef_lock_matches_build_catalog_inputs_and_skips_build`:
+    /// that test's fixture references no catalog packages, so its parity
+    /// assertion is `{} == {}` and would pass even if catalog inputs were
+    /// dropped or mis-projected. This test resolves a real catalog
+    /// reference and asserts lock/build parity on the populated map.
+    #[test]
+    fn nef_lock_matches_build_catalog_inputs_and_skips_build_with_populated_catalog_input() {
+        let pname = "foo".to_string();
+
+        let (flox, tempdir) = flox_instance();
+
+        let manifest = formatdoc! {r#"
+            version = 1
+        "#};
+        let mut env = new_path_environment(&flox, &manifest);
+        let base_dir = env.parent_path().unwrap();
+
+        let PopulatedCatalogInput {
+            expressions_ref,
+            mock_recording,
+        } = populated_catalog_input(&flox, tempdir.path(), &pname);
+
+        let built_environments = env.build(&flox).unwrap();
+        let cache_path = env.cache_path().unwrap();
+
+        // lock() should compute the catalog lock without building. The mock is
+        // set on the builder's own subprocesses rather than on this process, so
+        // tests running concurrently never see this recording.
+        let lock_results = FloxBuildMk::new(
+            &flox,
+            &base_dir,
+            &expressions_ref,
+            &built_environments,
+            &cache_path,
         )
-        .unwrap();
+        .env("_FLOX_USE_CATALOG_MOCK", &mock_recording)
+        .lock(
+            &[(
+                PackageTargetName::new_unchecked(&pname),
+                CatalogLock::Ephemeral,
+            )],
+            None,
+            None,
+        )
+        .expect("lock() should succeed");
 
-        // Scope the mock to this test's make/nix subprocesses only: they
-        // inherit the current process env at spawn time, and temp_env
-        // serializes concurrent mutators so parallel tests don't race on
-        // this process-wide variable.
-        let (lock_results, build_results) = temp_env::with_var(
-            "_FLOX_USE_CATALOG_MOCK",
-            Some(mock_recording_path.as_os_str()),
-            || {
-                // lock() should compute the catalog lock without building.
-                let lock_results = lock_with_nix_expr(&flox, &mut env, &expressions_ref, &pname);
+        let toplevel_or_common_nixpkgs =
+            find_toplevel_group_nixpkgs(&env.lockfile(&flox).unwrap().into())
+                .map(|toplevel_nixpkgs| toplevel_nixpkgs.as_flake_ref().unwrap())
+                .unwrap_or_else(|| COMMON_NIXPKGS_URL.clone());
 
-                let collected = assert_build_status_with_nix_expr(
-                    &flox,
-                    &mut env,
-                    &expressions_ref,
-                    &pname,
-                    None,
-                    true,
-                );
-
-                (lock_results, collected.build_results.unwrap())
-            },
-        );
+        let build_results = FloxBuildMk::new(
+            &flox,
+            &base_dir,
+            &expressions_ref,
+            &built_environments,
+            &cache_path,
+        )
+        .env("_FLOX_USE_CATALOG_MOCK", &mock_recording)
+        .build(
+            &toplevel_or_common_nixpkgs,
+            &env.rendered_env_links(&flox).unwrap().dev,
+            &[(
+                PackageTargetName::new_unchecked(&pname),
+                CatalogLock::Ephemeral,
+            )],
+            None,
+            None,
+            None,
+        )
+        .expect("build() should succeed");
 
         assert_eq!(lock_results.len(), 1);
         assert!(
@@ -4398,10 +4555,19 @@ mod nef_tests {
     }
 
     /// `lock()` resolves into the caller's [`CatalogLock::File`] and a
-    /// following `build()` over that same file uses it as-is: the lock file's
-    /// mtime must be unchanged across the build. This is the single-lock
-    /// guarantee the publish reorder depends on (a naive `make lock` then
-    /// `make build` re-locks, since the catalog lock's DAG root is `.PHONY`).
+    /// following `build()` over that same file consumes it instead of
+    /// resolving the catalog a second time. This is the single-lock guarantee
+    /// the publish reorder depends on (a naive `make lock` then `make build`
+    /// re-locks, since the catalog lock's DAG root is `.PHONY`).
+    ///
+    /// The load-bearing evidence is that the build runs with the catalog mock
+    /// out of scope: the fixture's `foo` references a catalog package, so a
+    /// build that did not consume the supplied lock would have to resolve
+    /// `myorg.hello` itself, and with no mock it cannot. Comparing the lock
+    /// file's mtime across the build is kept as a supporting assertion only —
+    /// on its own it cannot detect the feature's removal, since a build that
+    /// re-resolves does so into its own temporary directory and leaves the
+    /// caller's file untouched.
     #[test]
     fn build_uses_the_catalog_lock_a_preceding_lock_call_wrote() {
         let pname = "foo".to_string();
@@ -4414,11 +4580,10 @@ mod nef_tests {
         let mut env = new_path_environment(&flox, &manifest);
         let base_dir = env.parent_path().unwrap();
 
-        let expressions_ref = prepare_nix_expressions_in(&tempdir, &[(&[&pname], indoc! {r#"
-            {runCommand}: runCommand "{pname}" {} ''
-                echo -n "Hello, World!" >> $out
-            ''
-            "#})]);
+        let PopulatedCatalogInput {
+            expressions_ref,
+            mock_recording,
+        } = populated_catalog_input(&flox, tempdir.path(), &pname);
 
         let built_environments = env.build(&flox).unwrap();
         let cache_path = env.cache_path().unwrap();
@@ -4428,13 +4593,16 @@ mod nef_tests {
         let lock_file = tempdir_in(&tempdir).unwrap().keep().join("catalog.lock");
         let catalog_lock = CatalogLock::File(lock_file.clone());
 
-        FloxBuildMk::new(
+        // The mock is set on the lock phase's own subprocesses. The build below
+        // deliberately runs without it.
+        let lock_results = FloxBuildMk::new(
             &flox,
             &base_dir,
             &expressions_ref,
             &built_environments,
             &cache_path,
         )
+        .env("_FLOX_USE_CATALOG_MOCK", &mock_recording)
         .lock(
             &[(
                 PackageTargetName::new_unchecked(&pname),
@@ -4444,6 +4612,11 @@ mod nef_tests {
             None,
         )
         .expect("lock() should succeed");
+
+        assert!(
+            !lock_results[0].direct_catalog_inputs.is_empty(),
+            "expected the mocked lookup to populate a real catalog input"
+        );
 
         let mtime_after_lock = fs::metadata(&lock_file)
             .expect("lock() should have resolved into the supplied lock file")
@@ -4457,8 +4630,9 @@ mod nef_tests {
 
         // A second, distinct `FloxBuildMk` instance over the *same* base_dir
         // (mirroring how `lock_build_inputs`/`check_build_metadata` share one
-        // `RenderedSource` in the publish reorder).
-        FloxBuildMk::new(
+        // `RenderedSource` in the publish reorder) — and deliberately outside
+        // the catalog mock, so the build can only succeed by using the lock.
+        let build_results = FloxBuildMk::new(
             &flox,
             &base_dir,
             &expressions_ref,
@@ -4473,7 +4647,16 @@ mod nef_tests {
             None,
             None,
         )
-        .expect("build() should succeed");
+        .expect(
+            "build() should succeed over the caller-supplied lock, without resolving the catalog",
+        );
+
+        // Positive evidence that the build's closure is the locked one, rather
+        // than one it resolved for itself.
+        assert_eq!(
+            lock_results[0].direct_catalog_inputs,
+            build_results[0].direct_catalog_inputs
+        );
 
         let mtime_after_build = fs::metadata(&lock_file)
             .expect("the supplied lock file should still exist after build()")
