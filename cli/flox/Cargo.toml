@@ -9,7 +9,6 @@ ignored = ["sapling-renderdag"]
 [dependencies]
 anstream.workspace = true
 anyhow.workspace = true
-beta.workspace = true
 bpaf.workspace = true
 chrono.workspace = true
 close_fds.workspace = true

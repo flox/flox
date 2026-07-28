@@ -1,7 +1,8 @@
 use anyhow::Result;
-use beta::beta_enabled;
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
+
+use crate::beta::beta_enabled;
 
 #[derive(Bpaf, Clone)]
 #[bpaf(hide)]

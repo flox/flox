@@ -1,6 +1,5 @@
 [workspace]
 members = [
-    "cli/beta",
     "cli/catalog-api-v1",
     "cli/factory-api-v1",
     "cli/flox",
@@ -31,7 +30,6 @@ anstream = "0.6"
 anyhow = "1"
 async-stream = "0.3.6"
 blake3 = "1.8.2"
-beta = { path = "cli/beta" }
 bpaf = { version = "0.9.24", features = ["derive", "autocomplete"] }
 catalog-api-v1 = { path = "cli/catalog-api-v1" }
 factory-api-v1 = { path = "cli/factory-api-v1" }
