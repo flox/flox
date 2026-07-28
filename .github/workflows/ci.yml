@@ -48,10 +48,57 @@ env:
   FLOX_RUNNING_RELEASE: "${{ startsWith(github.head_ref, 'release-') || startsWith(github.base_ref, 'release-') }}"
 
 jobs:
+  # Classify the change under test so the expensive jobs below can no-op on
+  # changes that cannot possibly affect them — most importantly, so that a
+  # documentation-only pull request does not occupy the shared remote Darwin
+  # builders.
+  #
+  # This job is deliberately *not* a gate. Nothing below is skipped at the job
+  # level on the strength of its output: every required check still runs and
+  # still posts a status, and only the steps inside those jobs are gated. A
+  # required check that never reports leaves the merge queue waiting forever,
+  # so the wiring below is careful to make that impossible.
+  scope:
+    name: "Scope"
+    runs-on: "ubuntu-latest"
+    timeout-minutes: 10
+
+    permissions:
+      contents: read
+
+    outputs:
+      heavy: "${{ steps.classify.outputs.heavy }}"
+
+    steps:
+      - name: "Checkout"
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          # `git merge-base` needs history on both sides of the comparison.
+          fetch-depth: 0
+
+      - name: "Classify the diff"
+        id: "classify"
+        # Context values are passed via `env:` and referenced as shell
+        # variables rather than interpolated directly into `run:`, to avoid
+        # script injection from attacker-controlled values such as branch names.
+        env:
+          MERGE_GROUP_BASE_SHA: "${{ github.event.merge_group.base_sha }}"
+          PR_BASE_REF: "${{ github.base_ref }}"
+          PR_NUMBER: "${{ github.event.pull_request.number }}"
+        run: ./.github/scripts/classify-ci-scope.sh
+
   nix-plugins-dev:
     name: "Nix Plugins"
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
+
+    needs:
+      - "scope"
+
+    # Run even if `scope` failed, so this required check always posts a status.
+    # The step conditions below default to running the heavy steps whenever
+    # `scope` did not explicitly report `heavy=false`.
+    if: ${{ !cancelled() }}
 
     strategy:
       fail-fast: false
@@ -79,6 +126,7 @@ jobs:
           wait-timeout-minutes: 15
 
       - name: "Setup"
+        if: ${{ needs.scope.outputs.heavy != 'false' }}
         uses: "./.github/actions/common-setup"
         with:
           GITHUB_ACCESS_TOKEN: "${{ secrets.MANAGED_FLOXBOT_GITHUB_ACCESS_TOKEN_REPO_SCOPE }}"
@@ -89,9 +137,11 @@ jobs:
           SSH_KEY: "${{ secrets.MANAGED_FLOXBOT_SSH_KEY }}"
 
       - name: "Build"
+        if: ${{ needs.scope.outputs.heavy != 'false' }}
         run: nix develop -L --no-update-lock-file --command just build-nix-plugins
 
       - name: "Test"
+        if: ${{ needs.scope.outputs.heavy != 'false' }}
         run: nix develop -L --no-update-lock-file --command just test-nix-plugins
 
   nef-dev:
@@ -135,6 +185,12 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
 
+    needs:
+      - "scope"
+
+    # See `nix-plugins-dev`: always runs, only its steps are gated.
+    if: ${{ !cancelled() }}
+
     permissions:
       id-token: write # Needed for CodeCov
 
@@ -158,6 +214,7 @@ jobs:
           wait-timeout-minutes: 15
 
       - name: "Setup"
+        if: ${{ needs.scope.outputs.heavy != 'false' }}
         uses: "./.github/actions/common-setup"
         with:
           GITHUB_ACCESS_TOKEN: "${{ secrets.MANAGED_FLOXBOT_GITHUB_ACCESS_TOKEN_REPO_SCOPE }}"
@@ -168,6 +225,7 @@ jobs:
           SSH_KEY: "${{ secrets.MANAGED_FLOXBOT_SSH_KEY }}"
 
       - name: "Cache Cargo"
+        if: ${{ needs.scope.outputs.heavy != 'false' }}
         uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5
         with:
           path: |
@@ -180,16 +238,19 @@ jobs:
           restore-keys: "cargo-${{ runner.os }}-"
 
       - name: "Build"
+        if: ${{ needs.scope.outputs.heavy != 'false' }}
         run: nix develop -L --no-update-lock-file --command just build-cli
 
       - name: "CLI Unit Tests"
         # Only run unit tests if when not running specialized integration tests
         id: unit-tests
+        if: ${{ needs.scope.outputs.heavy != 'false' }}
         env:
           RUST_BACKTRACE: 1
         run: nix develop -L --no-update-lock-file --command just impure-tests
 
       - name: "Check schemas are up to date"
+        if: ${{ needs.scope.outputs.heavy != 'false' }}
         run: |
           nix develop -L --no-update-lock-file --command just gen-schemas
           if ! git diff --quiet cli/schemas; then
@@ -205,9 +266,15 @@ jobs:
     # it can only fail. The required "Nix build (*)" contexts are posted on the
     # same commit by the maintainer-run community-ci draft PR (CONTRIBUTING.md).
     # Pushes, merge-queue runs, and same-repo PRs are unaffected.
-    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+    #
+    # `!cancelled()` keeps the pre-existing fork condition as the *only* reason
+    # this job is ever skipped: a failed `scope` must not silence it.
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
     runs-on: "ubuntu-latest"
     timeout-minutes: 120
+
+    needs:
+      - "scope"
 
     permissions:
       id-token: write # Needed for AWS Creds
@@ -244,6 +311,7 @@ jobs:
           wait-timeout-minutes: 15
 
       - name: "Setup"
+        if: ${{ needs.scope.outputs.heavy != 'false' }}
         uses: "./.github/actions/common-setup"
         with:
           GITHUB_ACCESS_TOKEN: "${{ secrets.MANAGED_FLOXBOT_GITHUB_ACCESS_TOKEN_REPO_SCOPE }}"
@@ -259,6 +327,7 @@ jobs:
           SETUP_NIX: "false"
 
       - name: "Configure AWS Credentials"
+        if: ${{ needs.scope.outputs.heavy != 'false' }}
         uses: aws-actions/configure-aws-credentials@8df5847569e6427dd6c4fb1cf565c83acfa8afa7 # v6
         with:
           role-to-assume: "arn:aws:iam::759020684799:role/github-oidc-role-flox-cache-public"
@@ -269,6 +338,7 @@ jobs:
 
       - name: "Build"
         id: "build"
+        if: ${{ needs.scope.outputs.heavy != 'false' }}
         env:
           NIX_SUBSTITUTER: "${{ vars.MANAGED_CACHE_PUBLIC_S3_BUCKET }}"
           NIX_SUBSTITUTER_KEY: ${{ secrets.MANAGED_CACHE_PUBLIC_SECRET_KEY }}"
@@ -387,7 +457,13 @@ jobs:
       id-token: write # Needed for CodeCov
 
     needs:
+      - "scope"
       - "nix-build"
+
+    # Spelled out rather than left implicit so that a failed `scope` cannot
+    # skip this required check: `nix-build` succeeding is the only precondition,
+    # exactly as before. A skipped `nix-build` (fork PR) still skips this job.
+    if: ${{ needs.nix-build.result == 'success' }}
 
     strategy:
       fail-fast: false
@@ -426,6 +502,7 @@ jobs:
           wait-timeout-minutes: 15
 
       - name: "Setup"
+        if: ${{ needs.scope.outputs.heavy != 'false' }}
         uses: "./.github/actions/common-setup"
         with:
           GITHUB_ACCESS_TOKEN: "${{ secrets.MANAGED_FLOXBOT_GITHUB_ACCESS_TOKEN_REPO_SCOPE }}"
@@ -441,6 +518,7 @@ jobs:
 
       - name: "Run Bats Tests (./#flox-cli-tests)"
         timeout-minutes: 30
+        if: ${{ needs.scope.outputs.heavy != 'false' }}
         env:
           MATRIX_SYSTEM: ${{ matrix.system }}
           MATRIX_TEST_TAGS: ${{ matrix.test-tags }}
