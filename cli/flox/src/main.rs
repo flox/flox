@@ -143,27 +143,25 @@ fn main() -> ExitCode {
     let args = commands::flox_cli().run_inner(Args::current_args());
 
     if let Some(parse_err) = args.as_ref().err() {
+        // `flox <name>` may be an installed beta extension rather than a typo.
+        // Both non-completion arms need this, so it runs once ahead of the
+        // match: `Stderr` is the ordinary unknown-subcommand failure, and
+        // `flox <name> --help` lands in `Stdout` rather than `Stderr` because
+        // bpaf treats `--help` as a global short-circuit that fires before it
+        // decides `<name>` is unknown. Dispatching first shows an installed
+        // extension's own `--help`; the reserved-name guard and a lookup miss
+        // both return `None` and fall through to the unchanged behavior below.
+        if !matches!(parse_err, bpaf::ParseFailure::Completion(_))
+            && let Some(exit) = beta::extensions::try_dispatch_external()
+        {
+            return exit;
+        }
         match parse_err {
             bpaf::ParseFailure::Stdout(m, _) => {
-                // `flox <name> --help` lands here, not in the `Stderr` arm:
-                // bpaf treats `--help` as a global short-circuit that fires
-                // before it decides `<name>` is unknown, so the help text is
-                // produced instead of a parse error. Attempt dispatch first so
-                // an installed extension's own `--help` is shown; the reserved
-                // guard and a lookup miss both fall through to flox's help.
-                if let Some(exit) = commands::extension::try_dispatch_external() {
-                    return exit;
-                }
                 print!("{m:80}");
                 return ExitCode::from(0);
             },
             bpaf::ParseFailure::Stderr(m) => {
-                // `flox <name>` may be an installed beta extension rather than a
-                // typo. Only reached once the parse has already failed, and a
-                // miss falls through to the unchanged error below.
-                if let Some(exit) = commands::extension::try_dispatch_external() {
-                    return exit;
-                }
                 message::error(format!("{m:80}"));
                 return ExitCode::from(1);
             },

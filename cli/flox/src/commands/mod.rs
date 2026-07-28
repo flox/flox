@@ -9,7 +9,6 @@ mod deactivate;
 mod delete;
 mod edit;
 mod envs;
-pub mod extension;
 mod factory;
 mod gc;
 pub(crate) mod general;
@@ -92,7 +91,7 @@ use crate::utils::message;
 use crate::utils::metrics::{AWSDatalakeConnection, Client, Hub, read_metrics_uuid};
 use crate::utils::update_notifications::UpdateNotification;
 
-const SHELL_COMPLETION_DIR: ShellComp = ShellComp::Dir { mask: None };
+pub(crate) const SHELL_COMPLETION_DIR: ShellComp = ShellComp::Dir { mask: None };
 const SHELL_COMPLETION_FILE: ShellComp = ShellComp::File { mask: None };
 const SHELL_COMPLETION_COMMAND: ShellComp = ShellComp::Raw {
     bash: r#"COMPREPLY=($(compgen -A command -- "${COMP_WORDS[$COMP_CWORD]}"))"#,

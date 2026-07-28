@@ -3,7 +3,7 @@ use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
 
 use crate::beta::beta_enabled;
-use crate::commands::extension;
+use crate::beta::extensions::commands as extension;
 
 #[derive(Bpaf, Clone)]
 #[bpaf(hide)]

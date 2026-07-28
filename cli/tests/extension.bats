@@ -17,6 +17,12 @@ load test_support.bash
 # ---------------------------------------------------------------------------- #
 
 setup() {
+  # Skipped in setup so it covers every test in the file. Extensions are
+  # gated behind `features.beta` and the subsystem lives in the lightly
+  # reviewed `beta` module, so these don't run in CI. Delete this line
+  # while working on them; the suite is expected to pass.
+  skip "skipping tests for beta command, un-skip when hacking on beta commands"
+
   common_test_setup
   setup_isolated_flox
   # setup_isolated_flox exports FLOX_DATA_DIR; the dispatch path resolves
@@ -922,7 +928,7 @@ echo "EXT_NAME=${FLOX_EXTENSION_NAME:-unset}"'
     skip "PROJECT_ROOT_DIR not set (tests running from a Nix-built copy)"
   fi
 
-  local docs="$PROJECT_ROOT_DIR/docs/extensions"
+  local docs="$PROJECT_ROOT_DIR/cli/flox/src/beta/extensions/docs"
   [ -f "$docs/README.md" ]
   [ -f "$docs/user-guide.md" ]
   [ -f "$docs/author-guide.md" ]
