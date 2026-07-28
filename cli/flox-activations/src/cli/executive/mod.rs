@@ -331,44 +331,45 @@ fn handle_process_exited(
     // Use PidWatcher to clean up the state
     match watcher::cleanup_pid(state_json_path, activation_state_dir, pid) {
         Ok(None) => {
-            // Still have active PIDs - check if this PID re-attached
-            // and needs to be monitored again.
+            // Still have active PIDs. Reconcile every attachment instead of
+            // relying solely on StateFileChanged: replacing the short-lived
+            // `flox-activations` PID with the shell PID can race the file
+            // watcher notification.
             //
-            // Note: This is intentionally redundant with the file watcher
-            // in start_state_watcher(). The file watcher handles the normal
-            // case where state.json is modified and we detect new PIDs.
-            // However, if the PID re-attaches between stop_monitoring() and
-            // cleanup_pids(), and the file watcher event hasn't fired yet,
-            // this check ensures we don't miss it. The redundancy is safe
-            // because start_monitoring() is idempotent.
+            // This is intentionally redundant with the file watcher in
+            // start_state_watcher(). The redundancy is safe because
+            // start_monitoring() is idempotent.
             //
-            // This also hypothetically catches the case where a PID exits
-            // before its expiration and the watcher thread sends an event early.
-            // That's not currently reachable because the watcher should sleep,
-            // but the watcher shouldn't be treated as the authority on expired
-            // PIDs.
+            // The PID that generated this event needs separate loop
+            // protection because it may have re-attached or remained attached
+            // until an expiration. Other PIDs have not generated this event,
+            // so they can be monitored normally.
             let (activations_json, _lock) = read_activations_json(state_json_path)?;
             let Some(activations) = activations_json else {
                 bail!("executive shouldn't be running when state.json doesn't exist");
             };
-            // Check if the PID that triggered this event is still in state
-            let pid_reused = activations
-                .all_attached_pids_and_expiration()
-                .into_iter()
-                .find(|(attached_pid, _)| *attached_pid == pid);
-            if let Some((pid, expiration)) = pid_reused {
-                if loop_guard.allow_remonitor(pid) {
-                    debug!(pid, "PID re-attached to activation, starting new monitor");
-                    coordinator
-                        .start_monitoring(pid, expiration)
-                        .context("failed to restart monitoring for re-attached PID")?;
-                } else {
-                    error!(
-                        pid,
-                        "PID re-monitored too many times, skipping to prevent loop"
-                    );
+
+            for (attached_pid, expiration) in activations.all_attached_pids_and_expiration() {
+                if attached_pid == pid {
+                    if loop_guard.allow_remonitor(pid) {
+                        debug!(pid, "PID re-attached to activation, starting new monitor");
+                        coordinator
+                            .start_monitoring(pid, expiration)
+                            .context("failed to restart monitoring for re-attached PID")?;
+                    } else {
+                        error!(
+                            pid,
+                            "PID re-monitored too many times, skipping to prevent loop"
+                        );
+                    }
+                    continue;
                 }
+
+                coordinator
+                    .start_monitoring(attached_pid, expiration)
+                    .context("failed to monitor attached PID after process exit")?;
             }
+
             Ok(false)
         },
         Ok(Some(locked_activations)) => {
@@ -642,19 +643,19 @@ mod test {
         stop_process(proc);
     }
 
-    /// Test that handle_process_exited is a no-op when the PID is not in state.json.
+    /// Test that handle_process_exited monitors replacement PIDs even when no
+    /// StateFileChanged event is delivered.
     ///
     /// This can happen in two cases:
     /// 1. --remove-pid removes a PID from state.json, but the
     ///    executive still has a watcher running for that PID.
     /// 2. `flox-activations detach` removes a PID from state.json
     ///
-    /// In either case, when the process eventually exits and the executive
-    /// receives a ProcessExited event, it should be a no-op.
-    ///
-    /// We mimic scenario 1 here
+    /// In either case, handling the stale ProcessExited event must reconcile
+    /// the replacement PID directly. Filesystem notifications are a fast path,
+    /// not the only path that preserves cleanup correctness.
     #[test]
-    fn process_exited_noop_for_pid_not_in_state() {
+    fn process_exited_reconciles_replacement_pid() {
         let temp_dir = tempfile::tempdir().unwrap();
         let runtime_dir = temp_dir.path();
         let dot_flox_path = PathBuf::from(".flox");
@@ -714,10 +715,10 @@ mod test {
             &activation_state_directory,
         );
 
-        // Should return Ok(false) - no cleanup needed, still have active PIDs
+        // No cleanup is needed while the replacement PID is active.
         assert!(
             matches!(result, Ok(false)),
-            "handle_process_exited should return Ok(false) for PID not in state, got: {:?}",
+            "handle_process_exited should keep monitoring while replacement PIDs remain, got: {:?}",
             result
         );
 
@@ -725,8 +726,32 @@ mod test {
         let final_state = read_activation_state(runtime_dir, &dot_flox_path);
         assert_eq!(initial_state, final_state);
 
-        // Clean up
+        // The replacement must be monitored without injecting a
+        // StateFileChanged event.
         stop_process(proc2);
+        let event = coordinator
+            .receiver
+            .recv_timeout(std::time::Duration::from_secs(2))
+            .expect("replacement PID should be monitored");
+        assert_eq!(event, ExecutiveEvent::ProcessExited { pid: pid2 });
+
+        let result = handle_process_exited(
+            pid2,
+            &coordinator,
+            &mut loop_guard,
+            &state_json,
+            &project.process_compose_bin,
+            &project.flox_services_socket,
+            &activation_state_directory,
+        );
+        assert!(
+            matches!(result, Ok(true)),
+            "replacement PID exit should clean up the activation, got: {result:?}"
+        );
+        assert!(
+            !activation_state_directory.exists(),
+            "activation state should be removed after the replacement PID exits"
+        );
     }
 
     #[test]
