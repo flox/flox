@@ -1710,6 +1710,12 @@ EOF
 
 # bats test_tags=services:auto-deactivate
 @test "services stop after auto-activated environment is deactivated" {
+  # The only services test that drives the prompt hook: it needs `_flox_hook`
+  # registered and auto-activation live for the env it allows below, so opt out
+  # of the suite-wide `disable_hook = true` / `auto_activate = disabled`.
+  enable_prompt_hook
+  export FLOX_AUTO_ACTIVATE=allowlist
+
   setup_sleeping_services
 
   "$FLOX_BIN" activate allow -d "$PROJECT_DIR"
