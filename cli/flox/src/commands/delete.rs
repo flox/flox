@@ -23,8 +23,10 @@ pub struct Delete {
 
     /// Delete the local copy of a FloxHub environment.
     ///
-    /// Removes the copy cached on this machine by `flox activate --reference`
-    /// or `flox pull --reference`. The environment on FloxHub is not deleted.
+    /// Removes only the copy cached on this machine by `flox activate
+    /// --reference` or `flox pull --reference`. The environment on FloxHub is
+    /// not deleted and will be downloaded again the next time you activate or
+    /// pull the reference.
     #[bpaf(long("reference"), long("ref"), short('r'), argument("owner>/<name"))]
     remote: Option<RemoteEnvironmentRef>,
 
@@ -142,7 +144,9 @@ async fn delete_local_remote_copy(
     let confirm = Dialog {
         message: &format!(
             "You are about to delete the local copy of {env_ref}. \
-             The environment on FloxHub will not be deleted. Are you sure?"
+             The environment on FloxHub will not be deleted and will be \
+             downloaded again the next time you activate or pull it. \
+             Are you sure?"
         ),
         help_message: Some("Use `-f` to force deletion"),
         typed: Confirm {
@@ -158,7 +162,8 @@ async fn delete_local_remote_copy(
 
     message::deleted(format!(
         "Local copy of environment {env_ref} deleted. \
-         The environment on FloxHub was not deleted."
+         The environment on FloxHub was not deleted; it will be downloaded \
+         again the next time you activate or pull {env_ref}."
     ));
 
     Ok(())

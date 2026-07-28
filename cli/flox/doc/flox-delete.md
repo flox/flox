@@ -32,7 +32,11 @@ The `--reference` flag instead deletes the local copy of a FloxHub environment
 that was cached on this machine by
 [`flox-activate(1)`](./flox-activate.md) or [`flox-pull(1)`](./flox-pull.md)
 with `--reference`.
-The environment on FloxHub is *not* deleted.
+Only the local copy is removed:
+the environment on FloxHub is *not* deleted,
+and will be downloaded again the next time you activate or pull the reference.
+Deleting the upstream environment on FloxHub is not currently supported from
+the command line.
 This is a local operation and does not require network access, so it can also
 clean up a cached copy that can no longer be activated.
 
@@ -49,10 +53,11 @@ use.
 :   Delete the environment without confirmation.
 
 `-r <owner>/<name>`, `--reference <owner>/<name>`
-:   Delete the local copy of the FloxHub environment `<owner>/<name>`
+:   Delete only the local copy of the FloxHub environment `<owner>/<name>`
     cached in `~/.cache`.
 
-    The environment on FloxHub is not deleted.
+    The environment on FloxHub is not deleted and will be downloaded again
+    the next time you activate or pull the reference.
 
     Cannot be used with `--dir`.
 
