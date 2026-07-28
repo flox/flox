@@ -101,3 +101,8 @@ flox-manifest = { workspace = true, features = [ "tests" ]}
 [features]
 extra-tests = ["impure-unit-tests"]
 impure-unit-tests = []
+# Compiles and runs the unit tests under `src/beta/`. Off by default (and
+# deliberately not part of `extra-tests`) so beta tests stay out of CI while
+# the subsystem is gated, mirroring the suite-wide skip in
+# `cli/tests/extension.bats`.
+beta-tests = []

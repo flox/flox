@@ -84,3 +84,9 @@ Two modules are involved, by design:
   `flox-rust-sdk`; keep it in the `beta` module.
 - Integration tests are not required for beta commands while they
   remain gated.
+- Tests for beta code are skipped by default while the subsystem is
+  gated: `cli/tests/extension.bats` skips every test from `setup()`, and
+  unit tests under `cli/flox/src/beta/` sit behind the off-by-default
+  `beta-tests` cargo feature (gate new `mod tests` with
+  `#[cfg(feature = "beta-tests")]`). Run them while hacking with
+  `cargo test -p flox --features beta-tests beta::`.
