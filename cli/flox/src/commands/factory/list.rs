@@ -1,8 +1,19 @@
 use std::fmt;
+use std::str::FromStr;
 
-use anyhow::Result;
+use anyhow::{Result, anyhow, bail};
 use bpaf::Bpaf;
-use floxhub_client::{BuildFilters, BuildResponse, EffectiveBuildStatus, FactoryClientTrait};
+use chrono::{DateTime, Months, TimeDelta, Utc};
+use floxhub_client::{
+    AttrPathItem,
+    BuildFilters,
+    BuildResponse,
+    EffectiveBuildStatus,
+    FactoryClientTrait,
+    SourceCommitShaItem,
+    SystemItem,
+};
+use interim::{Dialect, Interval, parse_date_string, parse_duration};
 use serde::Serialize;
 use tracing::instrument;
 
@@ -12,8 +23,8 @@ use crate::utils::message::page_output;
 
 /// List Flox Factory builds.
 ///
-/// Each filter is repeatable and ORs its values; different filters AND together.
-/// An unfiltered invocation lists every build.
+/// Each filter except --since is repeatable and ORs its values; different
+/// filters AND together. An unfiltered invocation lists every build.
 #[derive(Debug, Clone, PartialEq, Bpaf)]
 pub struct List {
     /// Filter by build status; repeat to match any of several.
@@ -21,6 +32,27 @@ pub struct List {
     /// cancelled.
     #[bpaf(long, argument::<String>("STATUS"), parse(parse_status), many)]
     pub status: Vec<EffectiveBuildStatus>,
+
+    /// Filter by system; repeat to match any of several.
+    /// Examples: aarch64-darwin, aarch64-linux, x86_64-darwin, x86_64-linux.
+    /// A system the server does not know is reported with the values it does.
+    #[bpaf(long, argument::<String>("SYSTEM"), parse(parse_non_empty("System")), many)]
+    pub system: Vec<SystemItem>,
+
+    /// Filter by attribute path; a prefix matches; repeat to match any of
+    /// several.
+    #[bpaf(long, argument::<String>("PATH"), parse(parse_non_empty("Attribute path")), many)]
+    pub attr_path: Vec<AttrPathItem>,
+
+    /// Filter by source revision (commit SHA); a prefix matches; repeat to
+    /// match any of several.
+    #[bpaf(long("source-rev"), argument::<String>("REV"), parse(parse_non_empty("Source revision")), many)]
+    pub source_commit_sha: Vec<SourceCommitShaItem>,
+
+    /// Only builds created at or after this time, given as a duration counted
+    /// back from now ("7d"), a phrase ("yesterday"), or an ISO 8601 timestamp.
+    #[bpaf(long, argument::<String>("TIME"), parse(parse_since), optional)]
+    pub since: Option<DateTime<Utc>>,
 
     /// Display output as JSON
     #[bpaf(long)]
@@ -38,7 +70,10 @@ impl List {
 
         let filters = BuildFilters {
             status: self.status,
-            ..Default::default()
+            system: self.system,
+            attr_path: self.attr_path,
+            source_commit_sha: self.source_commit_sha,
+            since: self.since,
         };
 
         // Depage the full result set, mirroring `flox generations list`: the
@@ -65,8 +100,79 @@ impl List {
 /// Parse one `--status` value into a typed [`EffectiveBuildStatus`] at the
 /// CLI boundary. The type's `FromStr` is strict and its error names the
 /// accepted values, so the message is shown as-is.
-fn parse_status(s: String) -> Result<EffectiveBuildStatus, String> {
-    s.parse::<EffectiveBuildStatus>().map_err(|e| e.to_string())
+fn parse_status(s: String) -> Result<EffectiveBuildStatus> {
+    Ok(s.parse()?)
+}
+
+/// Build a bpaf `parse` function for one flag value, naming `noun` in either
+/// failure so a user passing several empty values can tell which flag was
+/// rejected.
+///
+/// The empty case gets its own message; any other constraint the parsed type
+/// enforces reports the type's own error, so the message stays truthful if
+/// the schema tightens.
+fn parse_non_empty<T>(noun: &'static str) -> impl Fn(String) -> Result<T>
+where
+    T: FromStr,
+    T::Err: fmt::Display,
+{
+    move |s: String| {
+        if s.is_empty() {
+            bail!("{noun} must not be empty.");
+        }
+        s.parse()
+            .map_err(|e| anyhow!("{noun} '{s}' is invalid: {e}."))
+    }
+}
+
+/// Fixes the reading of an ambiguous slash-date: `01/07/2026` is 7 January.
+const SINCE_DIALECT: Dialect = Dialect::Us;
+
+/// Parse the `--since` value at the CLI boundary, against the current time.
+fn parse_since(s: String) -> Result<DateTime<Utc>> {
+    resolve_since(&s, Utc::now())
+}
+
+/// Resolve a `--since` expression to the instant it names, relative to `now`.
+///
+/// A duration counts backwards, so `7d` and `7 days ago` name the same bound;
+/// anything else is read as an absolute date or timestamp. Resolving here means
+/// every page of one listing is sent the same bound, rather than a moving one.
+/// The bound must not lie in the future, which no build could satisfy.
+fn resolve_since(s: &str, now: DateTime<Utc>) -> Result<DateTime<Utc>> {
+    if s.is_empty() {
+        bail!("Time must not be empty.");
+    }
+
+    let resolved = match parse_duration(s) {
+        Ok(interval) => {
+            back_from(now, interval).ok_or_else(|| anyhow!("Time '{s}' is out of range."))?
+        },
+        Err(_) => parse_date_string(s, now, SINCE_DIALECT).map_err(|_| {
+            anyhow!("Time '{s}' is invalid; use a duration like '7d', a phrase like 'yesterday', or an ISO 8601 timestamp.")
+        })?,
+    };
+
+    if resolved > now {
+        bail!("Time '{s}' is in the future; '--since' names a point in the past.");
+    }
+
+    Ok(resolved)
+}
+
+/// Move `now` back by the interval's magnitude, whichever sign it carries.
+/// Months are subtracted as calendar months, so the day of the month and the
+/// time of day both survive.
+fn back_from(now: DateTime<Utc>, interval: Interval) -> Option<DateTime<Utc>> {
+    match interval {
+        Interval::Seconds(seconds) => {
+            now.checked_sub_signed(TimeDelta::try_seconds(seconds.unsigned_abs().into())?)
+        },
+        Interval::Days(days) => {
+            now.checked_sub_signed(TimeDelta::try_days(days.unsigned_abs().into())?)
+        },
+        Interval::Months(months) => now.checked_sub_months(Months::new(months.unsigned_abs())),
+    }
 }
 
 /// Render the builds as either pretty-printed JSON or a table.
@@ -233,13 +339,17 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn list_handler_forwards_status_filters() {
+    async fn list_handler_forwards_all_filters() {
         let client = StubFactoryClient::with_outcomes(
             StubResult::Build(EffectiveBuildStatus::Completed),
             StubResult::NotFound,
         );
         let args = List {
             status: vec![EffectiveBuildStatus::Running, EffectiveBuildStatus::Failed],
+            system: vec!["aarch64-darwin".parse().unwrap()],
+            attr_path: vec!["hello".parse().unwrap()],
+            source_commit_sha: vec!["abc123".parse().unwrap()],
+            since: Some("2026-07-17T12:00:00Z".parse().unwrap()),
             json: false,
             no_pager: true,
         };
@@ -250,7 +360,10 @@ mod tests {
             client.last_filters(),
             Some(BuildFilters {
                 status: vec![EffectiveBuildStatus::Running, EffectiveBuildStatus::Failed],
-                ..Default::default()
+                system: vec!["aarch64-darwin".parse().unwrap()],
+                attr_path: vec!["hello".parse().unwrap()],
+                source_commit_sha: vec!["abc123".parse().unwrap()],
+                since: Some("2026-07-17T12:00:00Z".parse().unwrap()),
             })
         );
     }
@@ -277,5 +390,119 @@ mod tests {
             ),
             "unexpected parse failure: {message}"
         );
+    }
+
+    /// Every filter rejects an empty value at the boundary, before it becomes
+    /// an unmatchable filter or a doomed request, and each names itself so a
+    /// user passing several empty values can tell which one was rejected.
+    #[test]
+    fn empty_filter_values_are_rejected_and_name_their_flag() {
+        // `--since` is optional rather than repeatable, so its boundary parse
+        // applies inside the optional lift; it is covered here to pin that the
+        // lift does not skip the parse.
+        let cases = [
+            ("--attr-path", "Attribute path must not be empty."),
+            ("--source-rev", "Source revision must not be empty."),
+            ("--system", "System must not be empty."),
+            ("--since", "Time must not be empty."),
+        ];
+
+        for (flag, expected) in cases {
+            let Err(failure) = list().to_options().run_inner(&[flag, ""][..]) else {
+                panic!("expected an empty {flag} to fail parsing");
+            };
+            let message = failure.unwrap_stderr().replace('\n', " ");
+            assert!(
+                message.contains(expected),
+                "expected {flag} to report {expected:?}, got: {message}"
+            );
+        }
+    }
+
+    fn utc(s: &str) -> DateTime<Utc> {
+        s.parse().expect("test timestamp should parse")
+    }
+
+    /// The clock the resolver tests run against, so they check its arithmetic
+    /// rather than the machine's current time. A Friday, strictly after
+    /// midnight, which [`a_time_that_cannot_be_used_is_rejected_with_a_reason`]
+    /// relies on: a same-weekday name resolves to today's midnight and only
+    /// advances a week once that midnight is already behind `now`.
+    fn now() -> DateTime<Utc> {
+        utc("2026-07-24T12:00:00Z")
+    }
+
+    /// `--since` names a lower bound in the past, so a duration is an offset
+    /// backwards from now however it is spelled.
+    #[test]
+    fn a_duration_counts_backwards_from_now() {
+        let resolved: Vec<_> = ["30s", "15m", "2h", "7d", "3w", "7 days", "7 days ago"]
+            .iter()
+            .map(|input| resolve_since(input, now()).map_err(|e| e.to_string()))
+            .collect();
+
+        assert_eq!(resolved, vec![
+            Ok(utc("2026-07-24T11:59:30Z")),
+            Ok(utc("2026-07-24T11:45:00Z")),
+            Ok(utc("2026-07-24T10:00:00Z")),
+            Ok(utc("2026-07-17T12:00:00Z")),
+            Ok(utc("2026-07-03T12:00:00Z")),
+            Ok(utc("2026-07-17T12:00:00Z")),
+            Ok(utc("2026-07-17T12:00:00Z")),
+        ]);
+    }
+
+    /// A year and a month are calendar quantities rather than fixed spans of
+    /// days, and neither disturbs the time of day.
+    #[test]
+    fn a_year_and_a_month_are_calendar_quantities() {
+        let resolved: Vec<_> = ["1y", "1 month", "3 months ago"]
+            .iter()
+            .map(|input| resolve_since(input, now()).map_err(|e| e.to_string()))
+            .collect();
+
+        assert_eq!(resolved, vec![
+            Ok(utc("2025-07-24T12:00:00Z")),
+            Ok(utc("2026-06-24T12:00:00Z")),
+            Ok(utc("2026-04-24T12:00:00Z")),
+        ]);
+    }
+
+    /// Anything that is not a duration names an instant outright. A value
+    /// without an offset is read as UTC.
+    #[test]
+    fn an_absolute_value_names_its_own_instant() {
+        let resolved: Vec<_> = [
+            "2026-07-01",
+            "2026-07-01T06:30:00Z",
+            "2026-07-01T06:30:00+02:00",
+            "2026-07-01 06:30",
+        ]
+        .iter()
+        .map(|input| resolve_since(input, now()).map_err(|e| e.to_string()))
+        .collect();
+
+        assert_eq!(resolved, vec![
+            Ok(utc("2026-07-01T00:00:00Z")),
+            Ok(utc("2026-07-01T06:30:00Z")),
+            Ok(utc("2026-07-01T04:30:00Z")),
+            Ok(utc("2026-07-01T06:30:00Z")),
+        ]);
+    }
+
+    /// Each rejection says what is wrong with the value and offers a spelling
+    /// that works, without exposing the parser's own diagnostics.
+    #[test]
+    fn a_time_that_cannot_be_used_is_rejected_with_a_reason() {
+        let failures: Vec<_> = ["banana", "friday", "2027-01-01"]
+            .iter()
+            .map(|input| resolve_since(input, now()).unwrap_err().to_string())
+            .collect();
+
+        assert_eq!(failures, vec![
+            "Time 'banana' is invalid; use a duration like '7d', a phrase like 'yesterday', or an ISO 8601 timestamp.".to_string(),
+            "Time 'friday' is in the future; '--since' names a point in the past.".to_string(),
+            "Time '2027-01-01' is in the future; '--since' names a point in the past.".to_string(),
+        ]);
     }
 }
