@@ -195,6 +195,9 @@ flox_cli_vars_setup() {
   # stops a developer's real FLOX_FLOXHUB_TOKEN from leaking into tests.
   # Tests that exercise logged-out behavior `unset FLOX_FLOXHUB_TOKEN`.
   export FLOX_FLOXHUB_TOKEN="eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3guZGV2L2hhbmRsZSI6InRlc3QiLCJleHAiOjk5OTk5OTk5OTl9.6-nbzFzQEjEX7dfWZFLE-I_qW2N_-9W2HFzzfsquI74"
+  # Record executive logs at trace level so they're useful when a test failure
+  # dumps them, e.g. from `wait_for_activations`.
+  export _FLOX_EXECUTIVE_VERBOSITY=3
 }
 
 # ---------------------------------------------------------------------------- #
