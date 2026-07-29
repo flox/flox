@@ -55,9 +55,17 @@ function make_dummy_env() {
 
   pushd "$(mktemp -d)" >/dev/null || return
   "$FLOX_BIN" init --name "$ENV_NAME"
+  SOURCE_LOCAL_ENVIRONMENT_ID="$(cat .flox/telemetry_id)"
   "$FLOX_BIN" push --owner "$OWNER"
   "$FLOX_BIN" delete --force
   popd >/dev/null || return
+}
+
+function assert_fresh_local_environment_id() {
+  run cat .flox/telemetry_id
+  assert_success
+  assert_output --regexp '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+  assert_not_equal "$output" "$SOURCE_LOCAL_ENVIRONMENT_ID"
 }
 
 # push an update to floxhub from another peer
@@ -411,6 +419,7 @@ function add_incompatible_package() {
   assert [ $(cat .flox/env.json | jq -r '.owner') == "null" ]
   assert [ -f .flox/.gitignore ]
   assert_output --partial "Created path environment from owner/name"
+  assert_fresh_local_environment_id
 }
 
 # bats test_tags=pull:copy:new:error-if-incompatible
@@ -432,6 +441,7 @@ function add_incompatible_package() {
   assert [ -e ".flox/env.lock" ]
   assert [ $(cat .flox/env.json | jq -r '.name') == "name" ]
   assert [ $(cat .flox/env.json | jq -r '.owner') == "owner" ]
+  assert [ ! -e ".flox/telemetry_id" ]
 
   run "$FLOX_BIN" pull --copy
   assert_success
@@ -439,6 +449,7 @@ function add_incompatible_package() {
   assert [ $(cat .flox/env.json | jq -r '.name') == "name" ]
   assert [ $(cat .flox/env.json | jq -r '.owner') == "null" ]
   assert_output --partial "Created path environment from owner/name"
+  assert_fresh_local_environment_id
 }
 
 # `flox pull --copy` is the recommended way to push an environment to a new name

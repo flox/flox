@@ -36,7 +36,7 @@ use crate::commands::{EnvironmentSelect, environment_description, environment_se
 use crate::utils::dialog::{Dialog, Select};
 use crate::utils::errors::{display_chain, format_core_error};
 use crate::utils::events::env_detail_from_concrete;
-use crate::utils::message;
+use crate::utils::{local_environment_id, message};
 use crate::{environment_subcommand_metric, subcommand_metric};
 
 #[derive(Debug, Clone, Bpaf)]
@@ -185,7 +185,9 @@ impl Pull {
                     };
 
                     let pointer = managed_environment.pointer().clone();
-                    managed_environment.into_path_environment(&flox)?;
+                    let path_env = managed_environment.into_path_environment(&flox)?;
+                    // A copy is a new environment definition, so it gets its own id.
+                    local_environment_id::ensure(&path_env.dot_flox_path());
 
                     message::created(formatdoc! {"
                         Created path environment from {owner}/{name}.
@@ -402,6 +404,8 @@ impl Pull {
                 },
                 Ok(env) => {
                     create_dot_flox_gitignore(env.dot_flox_path())?;
+                    // A copy is a new environment definition, so it gets its own id.
+                    local_environment_id::ensure(&env.dot_flox_path());
                 },
             }
         }

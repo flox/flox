@@ -23,7 +23,7 @@ use tracing::{debug, info_span, instrument};
 use crate::commands::{SHELL_COMPLETION_DIR, ensure_auth, environment_description};
 use crate::subcommand_metric;
 use crate::utils::dialog::Dialog;
-use crate::utils::message;
+use crate::utils::{local_environment_id, message};
 
 mod go;
 mod node;
@@ -240,6 +240,11 @@ async fn init_local_environment(
         debug!("creating environment");
         PathEnvironment::init(path_pointer, dir, &customization, flox)?
     };
+
+    // Give the new environment a stable local id for telemetry correlation,
+    // committed with `.flox`. Idempotent and best-effort; read paths never
+    // write it.
+    local_environment_id::ensure(&env.path);
 
     let env_in_git_repo = GitCommandProvider::discover(dir).is_ok();
 

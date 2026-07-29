@@ -24,6 +24,7 @@ use flox_rust_sdk::utils::INVOCATION_SOURCES;
 use tracing::debug;
 use uuid::Uuid;
 
+use crate::utils::local_environment_id;
 use crate::utils::metrics::read_metrics_uuid;
 
 /// Stores the invocation_id resolved by [`resolve_invocation_id`] so detached
@@ -142,6 +143,7 @@ pub fn build_events_client(
 
 /// Lineage fields for the environment the current invocation operates on.
 struct EnvLineageFields {
+    local_environment_id: Option<Uuid>,
     generation_number: Option<u64>,
     package_count: Option<u64>,
 }
@@ -150,6 +152,16 @@ struct EnvLineageFields {
 /// a failure leaves the field absent and is logged at debug, never failing the
 /// command.
 fn read_env_lineage_fields(flox: &Flox, env: &ConcreteEnvironment) -> EnvLineageFields {
+    let local_environment_id = match env {
+        ConcreteEnvironment::Path(environment) => {
+            local_environment_id::read(&environment.dot_flox_path())
+        },
+        // The CLI has no server-assigned id for managed/remote environments.
+        // Their events carry owner/name in `env_ref_or_name`, so they emit no
+        // local id.
+        ConcreteEnvironment::Managed(_) | ConcreteEnvironment::Remote(_) => None,
+    };
+
     // Managed/remote resolve their generation and lockfile in a single
     // metadata read; path envs have no generation and read their on-disk
     // lockfile.
@@ -184,6 +196,7 @@ fn read_env_lineage_fields(flox: &Flox, env: &ConcreteEnvironment) -> EnvLineage
         });
 
     EnvLineageFields {
+        local_environment_id,
         generation_number,
         package_count,
     }
@@ -193,9 +206,10 @@ fn read_env_lineage_fields(flox: &Flox, env: &ConcreteEnvironment) -> EnvLineage
 /// same env-kind / env-ref mapping as the legacy
 /// `environment_subcommand_metric!` macro. Shared across call sites so the
 /// per-kind match is not duplicated.
-fn env_detail_with_generation(
+fn env_detail_with_lineage(
     env: &ConcreteEnvironment,
     generation_number: Option<u64>,
+    local_environment_id: Option<Uuid>,
 ) -> EnvDetail {
     match env {
         ConcreteEnvironment::Remote(environment) => {
@@ -204,16 +218,17 @@ fn env_detail_with_generation(
         ConcreteEnvironment::Managed(environment) => {
             EnvDetail::managed(environment.env_ref().to_string(), generation_number)
         },
-        ConcreteEnvironment::Path(environment) => {
-            EnvDetail::path(Environment::name(environment).to_string())
-        },
+        ConcreteEnvironment::Path(environment) => EnvDetail::path(
+            Environment::name(environment).to_string(),
+            local_environment_id,
+        ),
     }
 }
 
 /// Build environment identity without reading lineage. Used by eager events
 /// that must emit before locking or trust decisions.
 pub fn env_detail_from_concrete_without_lineage(env: &ConcreteEnvironment) -> EnvDetail {
-    env_detail_with_generation(env, None)
+    env_detail_with_lineage(env, None, None)
 }
 
 /// Build environment detail, reading lineage only when an events client is
@@ -223,8 +238,8 @@ pub fn env_detail_from_concrete(flox: &Flox, env: &ConcreteEnvironment) -> EnvDe
     else {
         return env_detail_from_concrete_without_lineage(env);
     };
-
-    let mut detail = env_detail_with_generation(env, fields.generation_number);
+    let mut detail =
+        env_detail_with_lineage(env, fields.generation_number, fields.local_environment_id);
     if let Some(package_count) = fields.package_count {
         detail = detail.with_package_count(package_count);
     }
