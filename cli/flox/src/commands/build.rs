@@ -4,6 +4,9 @@ use std::path::Path;
 use std::process::Stdio;
 use std::time::Instant;
 
+// `::` selects the extern `nix` crate rather than the
+// `flox_rust_sdk::providers::nix` module that is also in scope.
+use ::nix::sys::signal::Signal;
 use anyhow::{Context, Result, bail};
 use bpaf::Bpaf;
 use flox_core::data::CanonicalPath;
@@ -329,32 +332,33 @@ impl Build {
         );
         let build_duration_ms = duration_to_ms(build_start.elapsed());
 
-        // A build cut short by a signal — Ctrl-C sends SIGINT to the whole
-        // process group — has no genuine outcome, so it must not be recorded as
-        // a build failure. Only `BuildFailure` carries the child's status.
-        let interrupted = matches!(
+        // A build the user cancelled has no genuine outcome, so it must not be
+        // recorded as a build failure — Ctrl-C sends SIGINT to the whole process
+        // group, and we treat the sibling cancellation/termination-request
+        // signals (SIGQUIT, SIGHUP, SIGTERM) the same way. A build the OOM killer
+        // takes down (SIGKILL) or whose builder crashes (SIGSEGV/SIGABRT/…) is a
+        // real failure and is still recorded. Only `BuildFailure` carries status.
+        let cancelled = matches!(
             &results,
-            Err(ManifestBuilderError::BuildFailure { status }) if status.signal().is_some()
+            Err(ManifestBuilderError::BuildFailure { status })
+                if matches!(
+                    status.signal().and_then(|s| Signal::try_from(s).ok()),
+                    Some(Signal::SIGINT | Signal::SIGQUIT | Signal::SIGHUP | Signal::SIGTERM)
+                )
         );
-        if !interrupted {
-            // Gate the payload work — notably the lockfile serialization and
-            // hash — on an installed client, as env-detail lineage fields are.
-            let payload = EventsHub::global().when_client_set(|| {
-                let mut payload = CliBuildPayload::new(has_expression_build, has_manifest_build)
-                    .with_duration_ms(build_duration_ms);
-                if let Some(lockfile_hash) = lockfile.content_hash() {
-                    payload = payload.with_lockfile_hash(lockfile_hash);
-                }
-                match &results {
-                    Ok(_) => payload.with_outcome(Outcome::Success),
-                    Err(err) => payload
-                        .with_outcome(Outcome::Failure)
-                        .with_error_kind(err.into()),
-                }
-            });
-            if let Some(payload) = payload
-                && let Err(err) = EventsHub::global().record_event(EventKind::CliBuild(payload))
-            {
+        if !cancelled {
+            let mut payload = CliBuildPayload::new(has_expression_build, has_manifest_build)
+                .with_duration_ms(build_duration_ms);
+            if let Some(lockfile_hash) = lockfile.content_hash() {
+                payload = payload.with_lockfile_hash(lockfile_hash);
+            }
+            let payload = match &results {
+                Ok(_) => payload.with_outcome(Outcome::Success),
+                Err(err) => payload
+                    .with_outcome(Outcome::Failure)
+                    .with_error_kind(err.into()),
+            };
+            if let Err(err) = EventsHub::global().record_event(EventKind::CliBuild(payload)) {
                 debug!(error = %err, "Failed to record v2 event");
             }
         }
