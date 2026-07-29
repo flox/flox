@@ -224,6 +224,23 @@ pub struct CommandPayload {
     os: Option<String>,
     /// Linux distribution version (e.g. `22.04`); `None` outside Linux.
     os_version: Option<String>,
+    /// macOS product version (e.g. `15.5`), distinct from the Darwin
+    /// kernel release in `os_family_release`; absent outside macOS and
+    /// when unreadable. `os`/`os_version` keep their Linux-only meaning.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    os_platform_version: Option<String>,
+    /// Shell flox is configured to integrate with: `bash`, `zsh`, `fish`,
+    /// or `tcsh`; absent when unknown, never defaulted. A user overriding
+    /// flox's shell integration reports the override, not their login
+    /// shell. The shell an activation actually *drives* travels on the
+    /// activate event's own `shell` field, not here.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    shell: Option<String>,
+    /// Execution architecture of the CLI binary (`aarch64` or `x86_64`),
+    /// from the native build target — an x86_64 binary under Rosetta
+    /// reports `x86_64`, by design.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    architecture: Option<String>,
     /// CLI flags that were observed empty on this invocation. Reserved for
     /// the per-command instrumentation PRs.
     empty_flags: Vec<String>,
@@ -243,13 +260,16 @@ pub struct CommandPayload {
 /// event it emits without the call site rebuilding the same fields each
 /// time. The `subcommand` field is supplied per-emission and merged in by
 /// [`SharedMetadataTemplate::into_payload`].
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SharedMetadataTemplate {
     pub flox_version: String,
     pub os_family: Option<String>,
     pub os_family_release: Option<String>,
     pub os: Option<String>,
     pub os_version: Option<String>,
+    pub os_platform_version: Option<String>,
+    pub shell: Option<String>,
+    pub architecture: Option<String>,
     pub empty_flags: Vec<String>,
     pub invocation_sources: Vec<String>,
 }
@@ -265,6 +285,9 @@ impl SharedMetadataTemplate {
             os_family_release: self.os_family_release.clone(),
             os: self.os.clone(),
             os_version: self.os_version.clone(),
+            os_platform_version: self.os_platform_version.clone(),
+            shell: self.shell.clone(),
+            architecture: self.architecture.clone(),
             empty_flags: self.empty_flags.clone(),
             invocation_sources: self.invocation_sources.clone(),
         }
@@ -804,6 +827,9 @@ mod tests {
             os_family_release: Some("6.10.0".to_string()),
             os: Some("ubuntu".to_string()),
             os_version: Some("24.04".to_string()),
+            os_platform_version: None,
+            shell: None,
+            architecture: None,
             empty_flags: vec![],
             invocation_sources: vec!["shell".to_string()],
         }
@@ -843,6 +869,47 @@ mod tests {
         .expect("event serializes");
         let expected = command_run_envelope_json(expected_payload_json("install"));
         assert_eq!(value, expected);
+    }
+
+    #[test]
+    fn command_run_machine_context_envelope_golden() {
+        // macOS-shaped run row: product version distinct from the kernel
+        // release in `os_family_release`.
+        let mut payload = command_payload("install");
+        payload.os_family = Some("Mac OS".to_string());
+        payload.os_family_release = Some("24.5.0".to_string());
+        payload.os = None;
+        payload.os_version = None;
+        payload.os_platform_version = Some("15.5".to_string());
+        payload.shell = Some("zsh".to_string());
+        payload.architecture = Some("aarch64".to_string());
+        let value = serde_json::to_value(fixed_event(EventKind::CliCommandRun(
+            CliCommandRunPayload::new(payload),
+        )))
+        .expect("event serializes");
+        let expected = command_run_envelope_json(json!({
+            "subcommand": "install",
+            "flox_version": "0.0.0-test",
+            "os_family": "Mac OS",
+            "os_family_release": "24.5.0",
+            "os": null,
+            "os_version": null,
+            "os_platform_version": "15.5",
+            "shell": "zsh",
+            "architecture": "aarch64",
+            "empty_flags": [],
+            "invocation_sources": ["shell"],
+        }));
+        assert_eq!(value, expected);
+    }
+
+    #[test]
+    fn command_payload_without_machine_context_keys_deserializes() {
+        // Rows buffered by an older producer carry none of the machine-context
+        // keys; they must stay field-additive and read back as `None`.
+        let payload: CommandPayload = serde_json::from_value(expected_payload_json("install"))
+            .expect("payload without machine-context keys deserializes");
+        assert_eq!(payload, command_payload("install"));
     }
 
     #[test]
@@ -1031,6 +1098,9 @@ mod tests {
             os_family_release: Some("6.10.0".to_string()),
             os: Some("ubuntu".to_string()),
             os_version: Some("24.04".to_string()),
+            os_platform_version: None,
+            shell: None,
+            architecture: None,
             empty_flags: vec![],
             invocation_sources: vec!["shell".to_string()],
         }
@@ -1665,6 +1735,9 @@ mod pipeline_tests {
             os_family_release: Some("6.10.0".to_string()),
             os: Some("ubuntu".to_string()),
             os_version: Some("24.04".to_string()),
+            os_platform_version: None,
+            shell: None,
+            architecture: None,
             empty_flags: vec![],
             invocation_sources: vec!["shell".to_string()],
         }

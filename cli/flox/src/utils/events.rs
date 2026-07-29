@@ -24,6 +24,7 @@ use flox_rust_sdk::utils::INVOCATION_SOURCES;
 use tracing::debug;
 use uuid::Uuid;
 
+use crate::utils::detect_shell::detect_shell_name_for_metrics;
 use crate::utils::local_environment_id;
 use crate::utils::metrics::read_metrics_uuid;
 
@@ -99,9 +100,39 @@ fn shared_metadata_template() -> SharedMetadataTemplate {
         os_family_release: sys_info::os_release().ok(),
         os: linux_release.as_ref().and_then(|r| r.id.clone()),
         os_version: linux_release.and_then(|r| r.version_id),
+        os_platform_version: macos_product_version(),
+        shell: detect_shell_name_for_metrics().map(String::from),
+        architecture: architecture_from_system(env!("NIX_TARGET_SYSTEM")),
         empty_flags: vec![],
         invocation_sources: INVOCATION_SOURCES.clone(),
     }
+}
+
+/// macOS product version (e.g. `15.5`) via [`sysinfo::System::os_version`]
+/// — NOT the kernel release that the near-identically-named
+/// `sys_info::os_release()` puts in `os_family_release`. Best-effort `None`.
+fn macos_product_version() -> Option<String> {
+    #[cfg(target_os = "macos")]
+    let raw = sysinfo::System::os_version();
+    #[cfg(not(target_os = "macos"))]
+    let raw = None;
+    normalize_macos_product_version(raw)
+}
+
+/// A binary linked against a pre-macOS-11 SDK (or run under the system's
+/// version-compat shim) reads back a constant `10.16`. No real macOS ever
+/// reported that — Big Sur is 11.x — so treat it as unknown, not a version.
+fn normalize_macos_product_version(raw: Option<String>) -> Option<String> {
+    raw.filter(|version| version != "10.16" && !version.starts_with("10.16."))
+}
+
+/// Arch component of a Nix system double (`aarch64-darwin` → `aarch64`).
+/// Deliberately the build target, not a host-CPU probe — Rosetta semantics
+/// are pinned on the wire field's doc.
+fn architecture_from_system(system: &str) -> Option<String> {
+    system
+        .split_once('-')
+        .map(|(architecture, _os)| architecture.to_string())
 }
 
 /// Try to build an [`EventsClient`] to install on the global
@@ -118,6 +149,10 @@ fn shared_metadata_template() -> SharedMetadataTemplate {
 /// (`AuthContext::user_subject`) — the returned client snapshots it at
 /// construction (see [`flox_events::EventsClient`] for the snapshot
 /// semantics).
+///
+/// Ordering invariant: [`shared_metadata_template`] performs machine-context
+/// detection, so it must stay behind the `disable_metrics` early return —
+/// opted-out runs do no metrics-only metadata work.
 pub fn build_events_client(
     config: &Config,
     invocation_id: Uuid,
@@ -321,6 +356,95 @@ mod tests {
     }
 
     #[test]
+    fn normalize_macos_product_version_drops_compat_shim_sentinel() {
+        // `10.16` is the version-compat shim's constant, never a real
+        // product version — it must read as unknown, not ship on the wire.
+        assert_eq!(
+            normalize_macos_product_version(Some("10.16".to_string())),
+            None
+        );
+        assert_eq!(
+            normalize_macos_product_version(Some("10.16.0".to_string())),
+            None
+        );
+        assert_eq!(
+            normalize_macos_product_version(Some("15.5".to_string())).as_deref(),
+            Some("15.5")
+        );
+        assert_eq!(normalize_macos_product_version(None), None);
+    }
+
+    #[test]
+    fn architecture_from_system_extracts_arch() {
+        assert_eq!(
+            architecture_from_system("aarch64-darwin").as_deref(),
+            Some("aarch64")
+        );
+        assert_eq!(
+            architecture_from_system("x86_64-linux").as_deref(),
+            Some("x86_64")
+        );
+    }
+
+    #[test]
+    fn shared_metadata_template_populates_machine_context() {
+        let template = shared_metadata_template();
+
+        // Whole-struct compare: machine-dependent fields are cloned from the
+        // actual value, architecture is pinned from the compile-time target,
+        // and a new template field breaks this literal. Shell's chain
+        // behavior is pinned in the detect_shell tests; the value-domain
+        // assertion below guards the wire here.
+        let expected = SharedMetadataTemplate {
+            flox_version: FLOX_VERSION.to_string(),
+            os_family: template.os_family.clone(),
+            os_family_release: template.os_family_release.clone(),
+            os: template.os.clone(),
+            os_version: template.os_version.clone(),
+            os_platform_version: template.os_platform_version.clone(),
+            shell: template.shell.clone(),
+            architecture: architecture_from_system(env!("NIX_TARGET_SYSTEM")),
+            empty_flags: vec![],
+            invocation_sources: INVOCATION_SOURCES.clone(),
+        };
+        assert_eq!(template, expected);
+
+        // A normalized name from the closed set — never a filesystem path
+        // (which would carry usernames onto the wire).
+        if let Some(shell) = template.shell.as_deref() {
+            assert!(
+                matches!(shell, "bash" | "zsh" | "fish" | "tcsh"),
+                "shell must be a normalized supported-shell name, got {shell:?}"
+            );
+        }
+
+        // architecture is the compile-time native target — always known.
+        let arch = template
+            .architecture
+            .as_deref()
+            .expect("architecture is compile-time known");
+        assert!(matches!(arch, "aarch64" | "x86_64"));
+
+        // os_platform_version is the macOS *product* version — macOS-only,
+        // best-effort (the sysctl read may be denied in a sandbox), and
+        // never the Darwin kernel release when it is present.
+        if cfg!(target_os = "macos") {
+            if let Some(product) = template.os_platform_version.as_deref() {
+                assert!(product.chars().next().is_some_and(|c| c.is_ascii_digit()));
+                assert_ne!(
+                    template.os_platform_version, template.os_family_release,
+                    "product version must stay distinct from the kernel release"
+                );
+            }
+        } else {
+            assert_eq!(
+                template.os_platform_version, None,
+                "os_platform_version is macOS-only"
+            );
+        }
+    }
+
+    #[test]
     #[serial(v2_events_wrapper_env)]
     fn build_events_client_returns_none_when_disable_metrics_is_true() {
         let tempdir = tempfile::tempdir().expect("tempdir");
@@ -394,6 +518,9 @@ mod tests {
             os_family_release: None,
             os: None,
             os_version: None,
+            os_platform_version: None,
+            shell: None,
+            architecture: None,
             empty_flags: vec![],
             invocation_sources: vec!["shell".to_string()],
         };
