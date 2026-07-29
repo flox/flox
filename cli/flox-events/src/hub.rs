@@ -72,6 +72,24 @@ impl EventsHub {
         })
     }
 
+    /// Record one event with an explicit authenticated subject.
+    ///
+    /// Passing `None` omits a subject instead of using the client snapshot.
+    pub fn record_event_with_auth_subject(
+        &self,
+        kind: EventKind,
+        auth_subject: Option<&str>,
+    ) -> Result<()> {
+        self.with_client(|client| {
+            let Some(client) = client else {
+                trace!("No v2 events client configured, skipping record");
+                return Ok(());
+            };
+
+            client.record_event_with_auth_subject(kind, auth_subject)
+        })
+    }
+
     /// Record a `cli.command_run` event for `subcommand`. No-op when no
     /// client is installed.
     pub fn record_command_run(&self, subcommand: String) -> Result<()> {

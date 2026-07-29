@@ -32,7 +32,7 @@ const CLI_SOURCE: &str = "cli";
 /// `source` is always `"cli"`. `kind` carries the variant tag and its
 /// typed payload and is flattened into the envelope, so the wire shape
 /// is `{event_id, event_timestamp, source, invocation_id, device_id,
-/// auth_subject?, event_type, payload}`.
+/// auth_subject?, producer_version?, event_type, payload}`.
 ///
 /// The CLI serializes events for transport and deserializes the same shape to
 /// reload its local buffer.
@@ -62,6 +62,11 @@ pub struct Event {
     /// identifier contract.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub auth_subject: Option<String>,
+    /// Version of the producer identified by `source`.
+    ///
+    /// Absent only when reloading events buffered by an older CLI.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub producer_version: Option<String>,
     /// The event variant and its typed payload. Flattened into the
     /// envelope: the variant's `#[serde(rename)]` becomes `event_type`
     /// and the variant's payload struct becomes `payload`.
@@ -79,6 +84,7 @@ struct EventWire {
     invocation_id: Uuid,
     device_id: Uuid,
     auth_subject: Option<String>,
+    producer_version: Option<String>,
     #[serde(flatten)]
     kind: EventKind,
 }
@@ -103,6 +109,7 @@ impl<'de> Deserialize<'de> for Event {
             invocation_id: wire.invocation_id,
             device_id: wire.device_id,
             auth_subject: wire.auth_subject,
+            producer_version: wire.producer_version,
             kind: wire.kind,
         })
     }
@@ -186,6 +193,10 @@ pub enum EventKind {
     CliBuild(CliBuildPayload),
     #[serde(rename = "cli.search")]
     CliSearch(CliSearchPayload),
+    #[serde(rename = "cli.authenticated")]
+    CliAuthenticated {},
+    #[serde(rename = "cli.update_prompted")]
+    CliUpdatePrompted {},
 }
 
 /// Shared metadata fields stamped onto every `cli.*` command event payload.
@@ -780,6 +791,7 @@ mod tests {
             invocation_id: Uuid::nil(),
             device_id: Uuid::nil(),
             auth_subject: None,
+            producer_version: Some("0.0.0-test".to_string()),
             kind,
         }
     }
@@ -817,6 +829,7 @@ mod tests {
             "source": "cli",
             "invocation_id": "00000000-0000-0000-0000-000000000000",
             "device_id": "00000000-0000-0000-0000-000000000000",
+            "producer_version": "0.0.0-test",
             "event_type": "cli.command_run",
             "payload": payload,
         })
@@ -883,6 +896,7 @@ mod tests {
             "source": "cli",
             "invocation_id": "00000000-0000-0000-0000-000000000000",
             "device_id": "00000000-0000-0000-0000-000000000000",
+            "producer_version": "0.0.0-test",
             "event_type": "cli.command_completed",
             "payload": {
                 "subcommand": "install",
@@ -930,6 +944,7 @@ mod tests {
             "source": "cli",
             "invocation_id": "00000000-0000-0000-0000-000000000000",
             "device_id": "00000000-0000-0000-0000-000000000000",
+            "producer_version": "0.0.0-test",
             "event_type": "cli.command_completed",
             "payload": {
                 "subcommand": "install",
@@ -955,10 +970,50 @@ mod tests {
             "invocation_id": "00000000-0000-0000-0000-000000000000",
             "device_id": "00000000-0000-0000-0000-000000000000",
             "auth_subject": "test-subject-7f3a",
+            "producer_version": "0.0.0-test",
             "event_type": "cli.command_run",
             "payload": expected_payload_json("install"),
         });
         assert_eq!(value, expected);
+    }
+
+    #[test]
+    fn authenticated_serializes_with_empty_payload() {
+        let mut event = fixed_event(EventKind::CliAuthenticated {});
+        event.auth_subject = Some("test-subject-7f3a".to_string());
+
+        let value = serde_json::to_value(event).expect("event serializes");
+        let expected = json!({
+            "event_id": "00000000-0000-0000-0000-000000000000",
+            "event_timestamp": EPOCH_UNIX_MS,
+            "source": "cli",
+            "invocation_id": "00000000-0000-0000-0000-000000000000",
+            "device_id": "00000000-0000-0000-0000-000000000000",
+            "auth_subject": "test-subject-7f3a",
+            "producer_version": "0.0.0-test",
+            "event_type": "cli.authenticated",
+            "payload": {},
+        });
+        assert_eq!(value, expected);
+    }
+
+    #[test]
+    fn buffered_event_without_producer_version_remains_without_it() {
+        let mut json = command_run_envelope_json(expected_payload_json("install"));
+        json.as_object_mut()
+            .expect("envelope object")
+            .remove("producer_version");
+
+        let event: Event = serde_json::from_value(json.clone()).expect("event deserializes");
+        let mut expected = fixed_event(EventKind::CliCommandRun(CliCommandRunPayload::new(
+            command_payload("install"),
+        )));
+        expected.producer_version = None;
+        assert_eq!(event, expected);
+        assert_eq!(
+            serde_json::to_value(event).expect("event reserializes"),
+            json
+        );
     }
 
     #[test]
@@ -997,6 +1052,7 @@ mod tests {
             "source": "cli",
             "invocation_id": "00000000-0000-0000-0000-000000000000",
             "device_id": "00000000-0000-0000-0000-000000000000",
+            "producer_version": "0.0.0-test",
             "event_type": "cli.environment.activate",
             "payload": payload,
         })
@@ -1147,6 +1203,7 @@ mod tests {
             "source": "cli",
             "invocation_id": "00000000-0000-0000-0000-000000000000",
             "device_id": "00000000-0000-0000-0000-000000000000",
+            "producer_version": "0.0.0-test",
             "event_type": "cli.environment.create",
             "payload": payload_json,
         });
@@ -1168,6 +1225,7 @@ mod tests {
             "source": "cli",
             "invocation_id": "00000000-0000-0000-0000-000000000000",
             "device_id": "00000000-0000-0000-0000-000000000000",
+            "producer_version": "0.0.0-test",
             "event_type": "cli.environment.push",
             "payload": payload_json,
         });
@@ -1192,6 +1250,7 @@ mod tests {
             "source": "cli",
             "invocation_id": "00000000-0000-0000-0000-000000000000",
             "device_id": "00000000-0000-0000-0000-000000000000",
+            "producer_version": "0.0.0-test",
             "event_type": "cli.environment.pull",
             "payload": payload_json,
         });
@@ -1209,6 +1268,7 @@ mod tests {
             "source": "cli",
             "invocation_id": "00000000-0000-0000-0000-000000000000",
             "device_id": "00000000-0000-0000-0000-000000000000",
+            "producer_version": "0.0.0-test",
             "event_type": event_type,
             "payload": payload_json,
         })
@@ -1263,6 +1323,7 @@ mod tests {
             "source": "cli",
             "invocation_id": "00000000-0000-0000-0000-000000000000",
             "device_id": "00000000-0000-0000-0000-000000000000",
+            "producer_version": "0.0.0-test",
             "event_type": event_type,
             "payload": payload_json,
         })
@@ -1275,6 +1336,7 @@ mod tests {
             "source": "cli",
             "invocation_id": "00000000-0000-0000-0000-000000000000",
             "device_id": "00000000-0000-0000-0000-000000000000",
+            "producer_version": "0.0.0-test",
             "event_type": "cli.build",
             "payload": payload,
         })
@@ -1494,6 +1556,7 @@ mod tests {
             "source": "cli",
             "invocation_id": "00000000-0000-0000-0000-000000000000",
             "device_id": "00000000-0000-0000-0000-000000000000",
+            "producer_version": "0.0.0-test",
             "event_type": "cli.build",
             "payload": { "has_expression_build": true, "has_manifest_build": false },
         });
@@ -1561,6 +1624,7 @@ mod tests {
             "source": "cli",
             "invocation_id": "00000000-0000-0000-0000-000000000000",
             "device_id": "00000000-0000-0000-0000-000000000000",
+            "producer_version": "0.0.0-test",
             "event_type": "cli.search",
             "payload": payload_json,
         });
@@ -1589,6 +1653,7 @@ mod pipeline_tests {
             invocation_id: INVOCATION_ID,
             device_id: DEVICE_ID,
             auth_subject: None,
+            producer_version: Some("0.0.0-test".to_string()),
             kind,
         }
     }
@@ -1668,6 +1733,40 @@ mod pipeline_tests {
     }
 
     #[test]
+    fn one_event_auth_subject_override_does_not_mutate_client() {
+        let tempdir = tempfile::tempdir().expect("tempdir");
+        let client = EventsClient::new_with_connection(
+            DEVICE_ID,
+            tempdir.path(),
+            INVOCATION_ID,
+            Some("previous-subject".to_string()),
+            shared_metadata(),
+            MockEventsConnection::default(),
+        );
+
+        client
+            .record_event_with_auth_subject(EventKind::CliAuthenticated {}, Some("fresh-subject"))
+            .expect("record fresh subject");
+        client
+            .record_event_with_auth_subject(EventKind::CliAuthenticated {}, None)
+            .expect("record anonymous event");
+        client
+            .record_event(EventKind::CliUpdatePrompted {})
+            .expect("record client snapshot");
+
+        let buffer = EventsBuffer::read(tempdir.path()).expect("read buffer");
+        let recorded: Vec<_> = buffer
+            .iter()
+            .map(|event| (event.auth_subject.as_deref(), &event.kind))
+            .collect();
+        assert_eq!(recorded, vec![
+            (Some("fresh-subject"), &EventKind::CliAuthenticated {},),
+            (None, &EventKind::CliAuthenticated {}),
+            (Some("previous-subject"), &EventKind::CliUpdatePrompted {},),
+        ]);
+    }
+
+    #[test]
     fn events_buffer_round_trips_entries_from_disk() {
         let tempdir = tempfile::tempdir().expect("tempdir");
         let first = fixed_event(command_run_kind());
@@ -1736,6 +1835,7 @@ mod pipeline_tests {
         assert_eq!(event.invocation_id, INVOCATION_ID);
         assert_eq!(event.device_id, DEVICE_ID);
         assert_eq!(event.auth_subject, None);
+        assert_eq!(event.producer_version.as_deref(), Some("0.0.0-test"));
         assert_eq!(event.kind, command_completed_kind());
     }
 
