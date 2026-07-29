@@ -5665,7 +5665,7 @@ success"
   run "$FLOX_BIN" activate -D -- echo "activated"
   assert_success
   assert_output --partial "activated"
-  assert_output --partial "Your FloxHub token has expired."
+  assert_output --partial "You are not logged in to FloxHub. Run 'flox auth login' to log in."
 }
 
 # bats test_tags=activate,activate:idempotent

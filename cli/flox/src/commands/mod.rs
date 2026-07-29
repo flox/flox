@@ -542,6 +542,11 @@ impl FloxArgs {
     /// Parse and validate the configured `floxhub_token`, building the
     /// [AuthContext] and emitting any user-facing warnings as a side effect.
     ///
+    /// A user who is not logged in — no token, or a parsed token that has
+    /// expired — is reminded to run 'flox auth login'. The reminder is
+    /// suppressed for `flox auth` subcommands, the prompt-hook flow, and
+    /// invocations nested inside an activation.
+    ///
     /// The token is not consumed when the configured authn mode does not use
     /// it (e.g. Kerberos) — construction cannot fail there, so warning about
     /// the token's state — or rewriting the user's config — never happens.
@@ -551,7 +556,7 @@ impl FloxArgs {
     ///
     /// A `flox_pat_` token is opaque: it is never parsed, never wiped as
     /// invalid, and its expiry is unknown until it is lazily resolved via
-    /// /me — so no startup warning applies to it.
+    /// /me — so it counts as logged in and no startup warning applies to it.
     fn resolve_auth_context(&self, config: &Config, stores: &CredentialStores) -> AuthContext {
         // Kerberos does not use FloxHub tokens; the stored token is not
         // consumed (and none of the token warnings below apply).
@@ -586,17 +591,20 @@ impl FloxArgs {
                 AuthContext::Auth0(None)
             },
             Ok(auth_context) => {
-                if let AuthContext::Auth0(Some(token)) = &auth_context
-                    && token.is_expired()
-                {
-                    let reauthenticating = matches!(
-                        self.command,
-                        Some(Commands::Admin(AdminCommands::Auth(
-                            auth::Auth::Login { .. }
-                        )))
-                    );
-                    // The token is account-global, so the reminder only needs to
-                    // appear once per shell session. The outermost activation
+                let logged_out = match &auth_context {
+                    AuthContext::Auth0(None) => true,
+                    AuthContext::Auth0(Some(token)) => token.is_expired(),
+                    _ => false,
+                };
+                if logged_out {
+                    // Every `flox auth` subcommand either logs the user in
+                    // (`login`) or already reports the logged-out state itself
+                    // (`status`, `logout`, `token`), so the reminder would be
+                    // redundant there.
+                    let is_auth_command =
+                        matches!(self.command, Some(Commands::Admin(AdminCommands::Auth(_))));
+                    // The logged-out state is account-global, so the reminder only
+                    // needs to appear once per shell session. The outermost activation
                     // surfaces it; any `flox` invocation already running inside an
                     // activation — a nested `flox activate`, or a command in an
                     // activated shell whose rc re-activates an environment — stays
@@ -604,9 +612,9 @@ impl FloxArgs {
                     // shell, including in-place `eval "$(flox activate)"` ones, so
                     // it is a reliable signal even across the parent shell.
                     let nested = activated_environments().last_active().is_some();
-                    if !reauthenticating && !self.is_prompt_hook_flow() && !nested {
+                    if !is_auth_command && !self.is_prompt_hook_flow() && !nested {
                         message::warning(
-                            "Your FloxHub token has expired. Run 'flox auth login' to re-authenticate.",
+                            "You are not logged in to FloxHub. Run 'flox auth login' to log in.",
                         );
                     }
                 }
@@ -1808,9 +1816,9 @@ pub(super) async fn ensure_auth(flox: &mut Flox) -> Result<String> {
 ///
 /// Unlike [`ensure_auth`], an expired Auth0 token is not a hard failure: the
 /// handle is still readable from the token, and [`FloxArgs::resolve_auth_context`]
-/// has already warned about the expiry, so activation proceeds with the handle
-/// rather than blocking. FloxHub still validates the token on the actual
-/// request. Missing credentials (not logged in / no Kerberos ticket) fall back
+/// has already warned that the user is not logged in, so activation proceeds
+/// with the handle rather than blocking. FloxHub still validates the token on
+/// the actual request. Missing credentials (not logged in / no Kerberos ticket) fall back
 /// to [`ensure_auth`] and its recovery flow.
 async fn ensure_auth_allowing_expired(flox: &mut Flox) -> Result<String> {
     // An expired identity still carries its handle; only a missing identity

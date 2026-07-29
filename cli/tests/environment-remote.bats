@@ -332,11 +332,11 @@ EOF
   # Use an expired token (exp: 2024-01-01T00:00:00+00:00, handle: "test")
   export FLOX_FLOXHUB_TOKEN="eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3guZGV2L2hhbmRsZSI6InRlc3QiLCJleHAiOjE3MDQwNjM2MDB9.-5VCofPtmYQuvh21EV1nEJhTFV_URkRP0WFu4QDPFxY"
 
-  # The expired token warning should appear, but activation should succeed
+  # The logged-out warning should appear, but activation should succeed
   # because the user handle from the expired token matches the environment owner.
   run "$FLOX_BIN" activate --reference "$OWNER/test" -- true
   assert_success
-  assert_output --partial "Your FloxHub token has expired."
+  assert_output --partial "You are not logged in to FloxHub."
 }
 
 # bats test_tags=remote,activate,trust,remote:activate:trust-flox
