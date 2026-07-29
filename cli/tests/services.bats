@@ -1725,6 +1725,9 @@ EOF
   mkdir -p "$OUTER_DIR"
   "$FLOX_BIN" init -d "$OUTER_DIR"
 
+  # Make the poll helper callable inside bash -c below.
+  export -f wait_for_partial_file_content
+
   run --separate-stderr bash -c "
     set -euo pipefail
     export FLOX_SHELL=\$(which bash)
@@ -1740,17 +1743,18 @@ EOF
     '$FLOX_BIN' services start
     '${TESTS_DIR}'/services/wait_for_service_status.sh one:Running
 
+
     # CD away; _flox_hook auto-deactivates the services project.
     cd '$BATS_TEST_TMPDIR'
     _flox_hook
+
+    executive_log=\"\$(echo '$PROJECT_DIR/.flox/log/executive.'*.log.*)\"
+    wait_for_partial_file_content \"\$executive_log\" 'woof'
+    # Poll while the shell is still alive: we want to test that detach
+    # succeeded, not that the executive detected an exiting PID
+    wait_for_partial_file_content \"\$executive_log\" 'finished cleanup'
   "
   assert_success
-
-  # wait_for_partial_file_content is a bats helper not available inside bash -c,
-  # so we poll the executive log here in the test body after the subshell exits.
-  executive_log="$(echo "$PROJECT_DIR/.flox/log/executive."*.log.*)"
-  wait_for_partial_file_content "$executive_log" "woof"
-  wait_for_partial_file_content "$executive_log" "finished cleanup"
 }
 
 @test "vars: service-level variables are set" {
