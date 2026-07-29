@@ -3046,6 +3046,73 @@ $hello_path
 EOF
 }
 
+write_test_var_manifest() {
+  MANIFEST_CONTENTS="$(cat << "EOF"
+    version = 1
+    [vars]
+    TEST_VAR = "in-place"
+EOF
+  )"
+
+  echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f -
+}
+
+# An in-place activation is applied by eval'ing a command substitution, and the
+# unquoted form collapses the whole script onto a single line. Every statement
+# it emits therefore has to terminate itself, or it swallows the one that
+# follows as its own arguments: the swallowed statement never runs, and its
+# words land in the shell's arguments instead.
+# bats test_tags=activate,activate:in-place
+@test "bash: unquoted in-place activation activates the environment" {
+  project_setup
+  enable_prompt_hook
+  write_test_var_manifest
+
+  run bash <(cat <<'EOF'
+    eval $("$FLOX_BIN" activate)
+    echo "TEST_VAR=[${TEST_VAR:-UNSET}]"
+    echo "positional=[$*]"
+EOF
+)
+  assert_success
+  assert_output --partial "TEST_VAR=[in-place]"
+  assert_output --partial "positional=[]"
+}
+
+# bats test_tags=activate,activate:in-place
+@test "zsh: unquoted in-place activation activates the environment" {
+  project_setup
+  enable_prompt_hook
+  write_test_var_manifest
+
+  run zsh <(cat <<'EOF'
+    eval $("$FLOX_BIN" activate)
+    echo "TEST_VAR=[${TEST_VAR:-UNSET}]"
+    echo "positional=[$*]"
+EOF
+)
+  assert_success
+  assert_output --partial "TEST_VAR=[in-place]"
+  assert_output --partial "positional=[]"
+}
+
+# bats test_tags=activate,activate:in-place
+@test "fish: unquoted in-place activation activates the environment" {
+  project_setup
+  enable_prompt_hook
+  write_test_var_manifest
+
+  run fish <(cat <<'EOF'
+    eval ("$FLOX_BIN" activate)
+    echo "TEST_VAR=[$TEST_VAR]"
+    echo "argv=[$argv]"
+EOF
+)
+  assert_success
+  assert_output --partial "TEST_VAR=[in-place]"
+  assert_output --partial "argv=[]"
+}
+
 @test "no unset variables in bash" {
   project_setup
   run bash <(cat <<'EOF'

@@ -49,12 +49,12 @@ pub fn generate_bash_profile_commands(
     match action {
         Action::Activate { args, .. } => {
             if args.flox_activate_tracelevel >= 2 {
-                stmts.push("set -x".to_stmt());
+                stmts.push("set -x;".to_stmt());
             }
         },
         Action::Deactivate(ctx) => {
             if ctx.flox_activate_tracelevel >= 2 {
-                stmts.push("set -x".to_stmt());
+                stmts.push("set -x;".to_stmt());
             }
         },
     }
@@ -267,7 +267,7 @@ pub fn generate_bash_profile_commands(
     // when attempting to invoke `hash -r`.
     match action {
         Action::Activate { .. } => {
-            stmts.push("set +h".to_stmt());
+            stmts.push("set +h;".to_stmt());
         },
         Action::Deactivate(ctx) => {
             // Re-enable command hashing (bash default), but only if no
@@ -283,12 +283,12 @@ pub fn generate_bash_profile_commands(
     match action {
         Action::Activate { args, .. } => {
             if args.flox_activate_tracelevel >= 2 {
-                stmts.push("set +x".to_stmt());
+                stmts.push("set +x;".to_stmt());
             }
         },
         Action::Deactivate(ctx) => {
             if ctx.flox_activate_tracelevel >= 2 {
-                stmts.push("set +x".to_stmt());
+                stmts.push("set +x;".to_stmt());
             }
         },
     }
@@ -393,7 +393,7 @@ mod tests {
     fn test_generate_bash_startup_commands_subprocess() {
         let output = render(false);
         expect![[r#"
-            set -x
+            set -x;
             export _flox_sourcing_rc=true;
             source /home/user/.bashrc;
             unset _flox_sourcing_rc;
@@ -413,8 +413,8 @@ mod tests {
             eval "$('/flox_activations' set-env-dirs --shell bash --flox-env "/flox_env" --env-dirs "${FLOX_ENV_DIRS:-}" --sbin-dirs "${_FLOX_ENV_DIRS_ADD_SBIN:-}")";
             eval "$('/flox_activations' fix-paths --shell bash --env-dirs "$FLOX_ENV_DIRS" --sbin-dirs "${_FLOX_ENV_DIRS_ADD_SBIN:-}" --path "$PATH" --manpath "${MANPATH:-}")";
             eval "$('/flox_activations' profile-scripts --shell bash --already-sourced-env-dirs "${_FLOX_SOURCED_PROFILE_SCRIPTS:-}" --env-dirs "${FLOX_ENV_DIRS:-}")";
-            set +h
-            set +x
+            set +h;
+            set +x;
             /nix/store/XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX-coreutils-9.10/bin/rm /path/to/rc/file;
             export _FLOX_PROMPT_HOOK_VERSION=1:true;
             _flox_hook() {
@@ -440,7 +440,7 @@ mod tests {
     fn test_generate_bash_startup_commands_in_place() {
         let output = render(true);
         expect![[r#"
-            set -x
+            set -x;
             export FLOX_PROMPT_COLOR_1=1;
             export FLOX_PROMPT_COLOR_2=2;
             export FLOX_PROMPT_ENVIRONMENTS=prompt_envs;
@@ -462,8 +462,8 @@ mod tests {
             eval "$('/flox_activations' set-env-dirs --shell bash --flox-env "/flox_env" --env-dirs "${FLOX_ENV_DIRS:-}" --sbin-dirs "${_FLOX_ENV_DIRS_ADD_SBIN:-}")";
             eval "$('/flox_activations' fix-paths --shell bash --env-dirs "$FLOX_ENV_DIRS" --sbin-dirs "${_FLOX_ENV_DIRS_ADD_SBIN:-}" --path "$PATH" --manpath "${MANPATH:-}")";
             eval "$('/flox_activations' profile-scripts --shell bash --already-sourced-env-dirs "${_FLOX_SOURCED_PROFILE_SCRIPTS:-}" --env-dirs "${FLOX_ENV_DIRS:-}")";
-            set +h
-            set +x
+            set +h;
+            set +x;
             /nix/store/XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX-coreutils-9.10/bin/rm /path/to/rc/file;
             export _FLOX_PROMPT_HOOK_VERSION=1:true;
             _flox_hook() {
@@ -520,10 +520,10 @@ mod tests {
     #[test]
     fn generate_bash_profile_deactivate_traced() {
         // The traced variant is the untraced body wrapped in
-        // `set -x` / `set +x`. The body itself is snapshotted by
+        // `set -x;` / `set +x;`. The body itself is snapshotted by
         // `generate_bash_profile_deactivate`.
         let traced = render_deactivate(2);
         let untraced = render_deactivate(0);
-        assert_eq!(traced, format!("set -x\n{untraced}set +x\n"));
+        assert_eq!(traced, format!("set -x;\n{untraced}set +x;\n"));
     }
 }

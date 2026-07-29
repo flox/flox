@@ -52,12 +52,12 @@ pub fn generate_tcsh_profile_commands(
     match action {
         Action::Activate { args, .. } => {
             if args.flox_activate_tracelevel >= 2 {
-                stmts.push("set verbose".to_stmt());
+                stmts.push("set verbose;".to_stmt());
             }
         },
         Action::Deactivate(ctx) => {
             if ctx.flox_activate_tracelevel >= 2 {
-                stmts.push("set verbose".to_stmt());
+                stmts.push("set verbose;".to_stmt());
             }
         },
     }
@@ -404,7 +404,7 @@ mod tests {
     fn test_generate_tcsh_startup_commands_subprocess() {
         let output = render(false);
         expect![[r#"
-            set verbose
+            set verbose;
             setenv ADDED_VAR ADDED_VALUE;
             setenv FLOX_ACTIVATE_START_SERVICES false;
             setenv FLOX_ENV /flox_env;
@@ -444,7 +444,7 @@ mod tests {
     fn test_generate_tcsh_startup_commands_in_place() {
         let output = render(true);
         expect![[r#"
-            set verbose
+            set verbose;
             setenv FLOX_PROMPT_COLOR_1 1;
             setenv FLOX_PROMPT_COLOR_2 2;
             setenv FLOX_PROMPT_ENVIRONMENTS prompt_envs;
@@ -522,10 +522,10 @@ mod tests {
     #[test]
     fn generate_tcsh_profile_deactivate_traced() {
         // The traced variant is the untraced body wrapped in
-        // `set verbose` / `unset verbose;`. The body itself is
+        // `set verbose;` / `unset verbose;`. The body itself is
         // snapshotted by `generate_tcsh_profile_deactivate`.
         let traced = render_deactivate(2);
         let untraced = render_deactivate(0);
-        assert_eq!(traced, format!("set verbose\n{untraced}unset verbose;\n"));
+        assert_eq!(traced, format!("set verbose;\n{untraced}unset verbose;\n"));
     }
 }
