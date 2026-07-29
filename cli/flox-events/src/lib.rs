@@ -499,43 +499,41 @@ impl CliEnvironmentActivatePayload {
     }
 }
 
-/// Outcome of an individual package's install / upgrade / uninstall
-/// attempt within a single `flox <command>` invocation.
-///
-/// Recorded best-effort from a single error-handling site (e.g.
-/// `Install::handle_error` in `cli/flox/src/commands/install.rs`); the
-/// outcome value is ambiguous in two directions and consumers must
-/// account for both:
-///
-/// - **Absence of `Success` is not proof of failure.** A `?`-propagated
-///   early exit from inside the install pipeline skips the success-branch
-///   emit; no per-package record is written for any package the
-///   invocation attempted.
-/// - **Presence of `Failure` is not proof that *that specific package*
-///   failed.** On a partial-failure invocation the failure-branch emit
-///   marks every attempted package `Failure` because the partition of
-///   succeeded vs failed packages has not been computed at that site —
-///   matching the legacy packed `failed_packages` string's semantics.
+/// Success or failure of a `cli.*` operation. Shared across events (the
+/// per-package install / upgrade / uninstall verbs and `cli.build`); the
+/// per-event meaning of each value lives on the individual payload's
+/// `outcome` field.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
-pub enum PackageOutcome {
+pub enum Outcome {
     Success,
     Failure,
 }
 
 /// Payload shared by the per-package events (`cli.package.install` /
-/// `.upgrade` / `.uninstall`). One event is emitted per package; see
-/// [`PackageOutcome`] for the outcome semantics.
+/// `.upgrade` / `.uninstall`). One event is emitted per package.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CliPackagePayload {
     /// Per-package identifier matching what the legacy `failed_packages`
     /// string packed (catalog `pkg_path`, flake URL, or store path).
     package: String,
-    outcome: PackageOutcome,
+    /// Outcome of this package's attempt within the invocation. Recorded
+    /// best-effort from a single error-handling site (e.g.
+    /// `Install::handle_error` in `cli/flox/src/commands/install.rs`), so the
+    /// value is ambiguous in two directions and consumers must account for
+    /// both:
+    /// - **Absence of `Success` is not proof of failure.** A `?`-propagated
+    ///   early exit skips the success-branch emit; no per-package record is
+    ///   written for any package the invocation attempted.
+    /// - **Presence of `Failure` is not proof that *that specific package*
+    ///   failed.** The failure-branch emit marks every attempted package
+    ///   `Failure` because the succeeded-vs-failed partition is not computed
+    ///   at that site — matching the legacy packed `failed_packages` string.
+    outcome: Outcome,
 }
 
 impl CliPackagePayload {
-    pub fn new(package: String, outcome: PackageOutcome) -> Self {
+    pub fn new(package: String, outcome: Outcome) -> Self {
         Self { package, outcome }
     }
 }
@@ -667,11 +665,30 @@ impl CliEnvironmentGenerationsListPayload {
 // table; search hits the catalog without a resolved environment).
 
 /// Payload for [`EventKind::CliBuild`]. Carries `flox build`'s
-/// per-invocation build-kind detection flags.
+/// per-invocation build-kind detection flags, plus the build outcome
+/// once the build step has run.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CliBuildPayload {
     has_expression_build: bool,
     has_manifest_build: bool,
+    /// Whether the build step succeeded or failed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    outcome: Option<Outcome>,
+    /// Wall-clock ms for the build step only (not the whole invocation).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    duration_ms: Option<u64>,
+    /// Classified `ManifestBuilderError` slug (e.g. `build.build_failure`)
+    /// on failure — never the raw error message or build output.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    error_kind: Option<String>,
+    /// blake3 fingerprint of the locked state that was built (the in-memory
+    /// `Lockfile`'s canonical serialization). It identifies *what was built*
+    /// and is stable within a CLI version — but it is NOT the on-disk
+    /// lockfile bytes, NOT a durable cross-version identity, and NOT a
+    /// package-set identity (its preimage includes vars, hooks, and build
+    /// scripts). Consumers comparing it must hash through the same helper.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    lockfile_hash: Option<String>,
 }
 
 impl CliBuildPayload {
@@ -679,7 +696,35 @@ impl CliBuildPayload {
         Self {
             has_expression_build,
             has_manifest_build,
+            outcome: None,
+            duration_ms: None,
+            error_kind: None,
+            lockfile_hash: None,
         }
+    }
+
+    pub fn with_outcome(mut self, value: Outcome) -> Self {
+        self.outcome = Some(value);
+        self
+    }
+
+    pub fn with_duration_ms(mut self, value: u64) -> Self {
+        self.duration_ms = Some(value);
+        self
+    }
+
+    /// `&'static str` (not `impl Into<String>`) so only compile-time slugs —
+    /// e.g. a `strum::IntoStaticStr` derivation — can populate `error_kind`;
+    /// a runtime-rendered error string is a compile error, keeping the field
+    /// leak-proof by construction.
+    pub fn with_error_kind(mut self, value: &'static str) -> Self {
+        self.error_kind = Some(value.to_string());
+        self
+    }
+
+    pub fn with_lockfile_hash(mut self, value: impl Into<String>) -> Self {
+        self.lockfile_hash = Some(value.into());
+        self
     }
 }
 
@@ -1129,7 +1174,7 @@ mod tests {
 
     #[test]
     fn cli_package_install_success_envelope_golden() {
-        let payload = CliPackagePayload::new("hello".to_string(), PackageOutcome::Success);
+        let payload = CliPackagePayload::new("hello".to_string(), Outcome::Success);
         let value = serde_json::to_value(fixed_event(EventKind::CliPackageInstall(payload)))
             .expect("event serializes");
         let expected = package_envelope_json("cli.package.install", "hello", "success");
@@ -1138,7 +1183,7 @@ mod tests {
 
     #[test]
     fn cli_package_install_failure_envelope_golden() {
-        let payload = CliPackagePayload::new("nope".to_string(), PackageOutcome::Failure);
+        let payload = CliPackagePayload::new("nope".to_string(), Outcome::Failure);
         let value = serde_json::to_value(fixed_event(EventKind::CliPackageInstall(payload)))
             .expect("event serializes");
         let expected = package_envelope_json("cli.package.install", "nope", "failure");
@@ -1147,7 +1192,7 @@ mod tests {
 
     #[test]
     fn cli_package_upgrade_envelope_golden() {
-        let payload = CliPackagePayload::new("hello".to_string(), PackageOutcome::Success);
+        let payload = CliPackagePayload::new("hello".to_string(), Outcome::Success);
         let value = serde_json::to_value(fixed_event(EventKind::CliPackageUpgrade(payload)))
             .expect("event serializes");
         let expected = package_envelope_json("cli.package.upgrade", "hello", "success");
@@ -1156,7 +1201,7 @@ mod tests {
 
     #[test]
     fn cli_package_uninstall_envelope_golden() {
-        let payload = CliPackagePayload::new("hello".to_string(), PackageOutcome::Success);
+        let payload = CliPackagePayload::new("hello".to_string(), Outcome::Success);
         let value = serde_json::to_value(fixed_event(EventKind::CliPackageUninstall(payload)))
             .expect("event serializes");
         let expected = package_envelope_json("cli.package.uninstall", "hello", "success");
@@ -1178,6 +1223,18 @@ mod tests {
             "device_id": "00000000-0000-0000-0000-000000000000",
             "event_type": event_type,
             "payload": payload_json,
+        })
+    }
+
+    fn cli_build_envelope_json(payload: serde_json::Value) -> serde_json::Value {
+        json!({
+            "event_id": "00000000-0000-0000-0000-000000000000",
+            "event_timestamp": EPOCH_UNIX_MS,
+            "source": "cli",
+            "invocation_id": "00000000-0000-0000-0000-000000000000",
+            "device_id": "00000000-0000-0000-0000-000000000000",
+            "event_type": "cli.build",
+            "payload": payload,
         })
     }
 
@@ -1377,19 +1434,72 @@ mod tests {
         let payload = CliBuildPayload::new(true, false);
         let value = serde_json::to_value(fixed_event(EventKind::CliBuild(payload)))
             .expect("event serializes");
-        let payload_json = json!({
+        let expected = cli_build_envelope_json(json!({
             "has_expression_build": true,
             "has_manifest_build": false,
-        });
-        let expected = json!({
+        }));
+        assert_eq!(value, expected);
+    }
+
+    #[test]
+    fn cli_build_row_without_outcome_fields_round_trips() {
+        // A row buffered by a binary predating the outcome fields (two bools,
+        // no outcome/duration/error/hash) must deserialize with those absent
+        // and re-serialize unchanged.
+        let old_row = json!({
             "event_id": "00000000-0000-0000-0000-000000000000",
             "event_timestamp": EPOCH_UNIX_MS,
             "source": "cli",
             "invocation_id": "00000000-0000-0000-0000-000000000000",
             "device_id": "00000000-0000-0000-0000-000000000000",
             "event_type": "cli.build",
-            "payload": payload_json,
+            "payload": { "has_expression_build": true, "has_manifest_build": false },
         });
+        let event: Event =
+            serde_json::from_value(old_row.clone()).expect("old-shape row deserializes");
+        let EventKind::CliBuild(ref payload) = event.kind else {
+            panic!("expected cli.build");
+        };
+        assert_eq!(payload, &CliBuildPayload::new(true, false));
+        let reserialized = serde_json::to_value(event).expect("event re-serializes");
+        assert_eq!(reserialized, old_row);
+    }
+
+    #[test]
+    fn cli_build_success_envelope_golden() {
+        let payload = CliBuildPayload::new(true, true)
+            .with_duration_ms(1234)
+            .with_lockfile_hash("d5f2b8")
+            .with_outcome(Outcome::Success);
+        let value = serde_json::to_value(fixed_event(EventKind::CliBuild(payload)))
+            .expect("event serializes");
+        let expected = cli_build_envelope_json(json!({
+            "has_expression_build": true,
+            "has_manifest_build": true,
+            "outcome": "success",
+            "duration_ms": 1234,
+            "lockfile_hash": "d5f2b8",
+        }));
+        assert_eq!(value, expected);
+    }
+
+    #[test]
+    fn cli_build_failure_envelope_golden() {
+        let payload = CliBuildPayload::new(false, true)
+            .with_duration_ms(50)
+            .with_lockfile_hash("d5f2b8")
+            .with_outcome(Outcome::Failure)
+            .with_error_kind("build.build_failure");
+        let value = serde_json::to_value(fixed_event(EventKind::CliBuild(payload)))
+            .expect("event serializes");
+        let expected = cli_build_envelope_json(json!({
+            "has_expression_build": false,
+            "has_manifest_build": true,
+            "outcome": "failure",
+            "duration_ms": 50,
+            "lockfile_hash": "d5f2b8",
+            "error_kind": "build.build_failure",
+        }));
         assert_eq!(value, expected);
     }
 
@@ -1852,12 +1962,12 @@ mod pipeline_tests {
 
         hub.record_event(EventKind::CliPackageInstall(CliPackagePayload::new(
             "pkgA".to_string(),
-            PackageOutcome::Success,
+            Outcome::Success,
         )))
         .expect("record pkgA");
         hub.record_event(EventKind::CliPackageInstall(CliPackagePayload::new(
             "pkgB".to_string(),
-            PackageOutcome::Success,
+            Outcome::Success,
         )))
         .expect("record pkgB");
         hub.flush(true).expect("flush events");
@@ -1874,7 +1984,7 @@ mod pipeline_tests {
         for event in &events {
             match &event.kind {
                 EventKind::CliPackageInstall(p) => {
-                    assert_eq!(p.outcome, PackageOutcome::Success);
+                    assert_eq!(p.outcome, Outcome::Success);
                     packages.push(p.package.clone());
                 },
                 other => panic!("expected CliPackageInstall, got {other:?}"),
@@ -1902,7 +2012,7 @@ mod pipeline_tests {
         for package in ["pkgA", "nope"] {
             hub.record_event(EventKind::CliPackageInstall(CliPackagePayload::new(
                 package.to_string(),
-                PackageOutcome::Failure,
+                Outcome::Failure,
             )))
             .expect("record failure");
         }
@@ -1919,7 +2029,7 @@ mod pipeline_tests {
         for event in &events {
             match &event.kind {
                 EventKind::CliPackageInstall(p) => {
-                    assert_eq!(p.outcome, PackageOutcome::Failure);
+                    assert_eq!(p.outcome, Outcome::Failure);
                 },
                 other => panic!("expected CliPackageInstall, got {other:?}"),
             }

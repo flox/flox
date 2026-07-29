@@ -35,6 +35,7 @@ use crate::utils::errors::{
     format_managed_error,
     format_remote_error,
 };
+use crate::utils::events::duration_to_ms;
 use crate::utils::init::init_telemetry_uuid;
 use crate::utils::metrics::{Hub, read_metrics_uuid};
 
@@ -260,12 +261,6 @@ where
     for<'a> &'a T: Into<&'static str>,
 {
     e.into()
-}
-
-/// Saturate a duration into whole ms (u64::MAX ms is ~584M years — a
-/// ceiling only).
-fn duration_to_ms(elapsed: std::time::Duration) -> u64 {
-    u64::try_from(elapsed.as_millis()).unwrap_or(u64::MAX)
 }
 
 /// Fixed bash completion script that replaces bpaf's generated version.
