@@ -514,10 +514,7 @@ impl ActivationState {
         // Return the start_id only when no remaining attachment references it.
         let has_remaining = self.attached_pids.values().any(|a| a.start_id == start_id);
 
-        // Only update ready state if there are still attached PIDs
-        if !self.attached_pids.is_empty() {
-            self.update_ready_after_detach();
-        }
+        self.update_ready_after_detach();
 
         if has_remaining {
             Ok(None)
@@ -575,11 +572,15 @@ impl ActivationState {
     }
 
     /// Set ready to False if there are no more PIDs attached to the current start
-    /// Should only be called when there are some attached PIDs
+    ///
+    /// This includes the case where nothing is attached at all: `detach`'s
+    /// caller removes the emptied start's state directory before dropping the
+    /// lock, so a `ready` left naming that start would send the next
+    /// activation down the attach path to read files that are already gone.
+    /// The whole activation state directory is torn down shortly afterwards by
+    /// the executive, but not under the same lock, so the state has to be
+    /// self-consistent in the meantime.
     fn update_ready_after_detach(&mut self) {
-        if self.attached_pids.is_empty() {
-            unreachable!("should remove all state when there are no more attached PIDs");
-        }
         match self.ready {
             Ready::True(ref start_id) => {
                 if !self.attachments_by_start_id().contains_key(start_id) {
@@ -1277,6 +1278,36 @@ mod tests {
         assert!(activations.attached_pids.contains_key(&pid));
         assert!(!modified);
         assert!(empty_start.is_none());
+    }
+
+    mod detach {
+        use super::*;
+
+        /// `flox-activations detach` deletes the emptied start's state
+        /// directory as soon as the last PID detaches, so a re-activation that
+        /// beats the executive's `cleanup_all` must start fresh. Leaving
+        /// `ready` as `Ready::True(start_id)` sends it down the attach path
+        /// instead, to read a `start.env.json` that is already gone.
+        #[test]
+        fn reactivation_after_last_detach_starts_instead_of_attaching() {
+            let start_id = StartIdentifier::new("/nix/store/path1");
+            let mut activations = make_activations(Ready::True(start_id.clone()));
+            let pid = 123;
+            activations.attach(pid, make_attachment(start_id.clone()));
+            activations.detach(pid).unwrap();
+
+            // Deliberately no assertion on the new StartIdentifier: it is
+            // millisecond-stamped, so a fast run mints one equal to the old.
+            // Taking the Start arm is the invariant that matters — it re-runs
+            // the activation and recreates the directory, where Attach would
+            // read the files detach removed.
+            let result = activations.start_or_attach(456, &start_id.store_path);
+
+            assert!(
+                matches!(result, StartOrAttachResult::Start { .. }),
+                "Expected StartOrAttachResult::Start, got {result:?}"
+            );
+        }
     }
 
     mod running_processes {

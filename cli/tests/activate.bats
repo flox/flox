@@ -969,6 +969,9 @@ EOF
 
 # bats test_tags=activate,activate:rc:zsh
 @test "zsh: deactivate restores pre-activation completions" {
+  # `deactivate --print-script` needs the marker that hook registration
+  # exports, so opt out of the suite-wide `disable_hook = true`.
+  enable_prompt_hook
   project_setup
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/fd.yaml" \
     "$FLOX_BIN" install fd
@@ -997,6 +1000,9 @@ EOF
 
 # bats test_tags=activate,activate:rc:zsh
 @test "zsh: deactivate inner activation cleans up completions" {
+  # `deactivate --print-script` needs the marker that hook registration
+  # exports, so opt out of the suite-wide `disable_hook = true`.
+  enable_prompt_hook
   # PROJECT_DIR (outer env): no packages — fd must NOT be available from
   # the outer env so we can verify the inner deactivation removes it.
   project_setup
