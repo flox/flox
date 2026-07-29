@@ -10,7 +10,6 @@ use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment};
 use flox_rust_sdk::providers::build::{COMMON_NIXPKGS_URL, CatalogLock, PackageTarget};
 use flox_rust_sdk::providers::nix_auth::NixAuth;
 use flox_rust_sdk::providers::publish::{
-    PublishError,
     PublishProvider,
     Publisher,
     build_repo_err,
@@ -72,45 +71,6 @@ fn dedup_outcome(result: Result<CheckBuildResponse, FloxhubClientError>) -> Dedu
         Ok(resp) if resp.already_published => DedupOutcome::AlreadyPublished(resp),
         Ok(_) => DedupOutcome::New,
         Err(e) => DedupOutcome::CheckFailed(e),
-    }
-}
-
-/// What the dedup pre-check decided, before the package build.
-#[derive(Debug)]
-enum PreBuildOutcome<T> {
-    /// The catalog already has this exact build. Nothing was built.
-    AlreadyPublished(CheckBuildResponse),
-    /// The package is new (or the check itself failed), so it was built.
-    Built(T),
-}
-
-/// Run `build` unless the dedup pre-check says this exact build is already
-/// published.
-///
-/// Skipping the build on a duplicate is the whole point of hoisting the
-/// closure identity ahead of it, and "the build did not run" is not something
-/// the surrounding orchestration can be asked about. Expressing the gate as a
-/// function over the check result and a deferred build makes it a property a
-/// test can observe directly, without a catalog client or a builder mock.
-fn build_unless_already_published<T, B>(
-    check_result: Result<CheckBuildResponse, FloxhubClientError>,
-    build: B,
-) -> Result<PreBuildOutcome<T>, PublishError>
-where
-    B: FnOnce() -> Result<T, PublishError>,
-{
-    match dedup_outcome(check_result) {
-        DedupOutcome::AlreadyPublished(resp) => Ok(PreBuildOutcome::AlreadyPublished(resp)),
-        DedupOutcome::New => Ok(PreBuildOutcome::Built(build()?)),
-        DedupOutcome::CheckFailed(e) => {
-            // A failed check must never block a publish; warn and continue.
-            message::warning("Unable to check if already published — continuing with publish.");
-            warn!(
-                error = %e,
-                "Dedup pre-check failed, proceeding with publish"
-            );
-            Ok(PreBuildOutcome::Built(build()?))
-        },
     }
 }
 
@@ -360,7 +320,7 @@ impl Publish {
             &flox,
             &rendered,
             &publish_provider.package_metadata.package,
-            catalog_lock.clone(),
+            &catalog_lock,
             nef_stability.clone(),
             system_override_inner.clone(),
         )?;
@@ -391,21 +351,9 @@ impl Publish {
             })
             .await;
 
-        // A true duplicate stops here, before the build. Otherwise the full
-        // build runs over the lock the phase above already resolved, rather
-        // than resolving the catalog a second time.
-        let build_metadata = match build_unless_already_published(check_result, || {
-            check_build_metadata(
-                &flox,
-                &selected_base_nixpkgs_url,
-                system_override_inner,
-                &rendered,
-                &publish_provider.package_metadata.package,
-                catalog_lock,
-                nef_stability,
-            )
-        })? {
-            PreBuildOutcome::AlreadyPublished(resp) => {
+        // A true duplicate stops here, before the build.
+        match dedup_outcome(check_result) {
+            DedupOutcome::AlreadyPublished(resp) => {
                 message::updated(formatdoc! {"
                     Package already published.
 
@@ -419,8 +367,28 @@ impl Publish {
                 });
                 return Ok(());
             },
-            PreBuildOutcome::Built(build_metadata) => build_metadata,
-        };
+            DedupOutcome::New => {},
+            DedupOutcome::CheckFailed(e) => {
+                // A failed check must never block a publish; warn and continue.
+                message::warning("Unable to check if already published — continuing with publish.");
+                warn!(
+                    error = %e,
+                    "Dedup pre-check failed, proceeding with publish"
+                );
+            },
+        }
+
+        // Not a duplicate, so pay for the build — over the lock the phase above
+        // already resolved, rather than resolving the catalog a second time.
+        let build_metadata = check_build_metadata(
+            &flox,
+            &selected_base_nixpkgs_url,
+            system_override_inner,
+            &rendered,
+            &publish_provider.package_metadata.package,
+            &catalog_lock,
+            nef_stability,
+        )?;
 
         // The dedup verdict above was decided on the closure the lock phase
         // resolved, so the build has to have built that same closure. The two
@@ -443,11 +411,6 @@ impl Publish {
                 built_inputs = build_metadata.direct_catalog_inputs.len(),
             });
         }
-
-        // The lock is scoped to this publish and has now served both the check
-        // and the build, so retire it here rather than leaving its lifetime to
-        // the end of this function.
-        drop(catalog_lock_dir);
 
         // CLI args take precedence over config
         let key_file = publish_config.cache_args.signing_private_key.or(config
@@ -511,8 +474,6 @@ impl Publish {
 
 #[cfg(test)]
 mod tests {
-    use std::cell::Cell;
-
     use flox_manifest::test_helpers::with_latest_schema;
     use flox_rust_sdk::providers::build::test_helpers::prepare_empty_expressions_ref;
     use indoc::indoc;
@@ -683,58 +644,5 @@ mod tests {
             dedup_outcome(result),
             DedupOutcome::CheckFailed(_)
         ));
-    }
-
-    // --- pre-build short-circuit unit tests ---
-
-    /// The reason the closure identity is computed before the build: a
-    /// duplicate must not pay for the package build. Moving the build back
-    /// ahead of this gate reintroduces the regression AI-411 exists to fix,
-    /// so the "did not run" half is asserted, not just the returned variant.
-    #[test]
-    fn an_already_published_package_is_not_built() {
-        let built = Cell::new(false);
-
-        let outcome = build_unless_already_published(Ok(make_check_response(true)), || {
-            built.set(true);
-            Ok(())
-        })
-        .unwrap();
-
-        assert!(matches!(outcome, PreBuildOutcome::AlreadyPublished(_)));
-        assert!(!built.get(), "a duplicate publish must skip the build");
-    }
-
-    #[test]
-    fn a_new_package_is_built() {
-        let built = Cell::new(false);
-
-        let outcome = build_unless_already_published(Ok(make_check_response(false)), || {
-            built.set(true);
-            Ok(())
-        })
-        .unwrap();
-
-        assert!(matches!(outcome, PreBuildOutcome::Built(())));
-        assert!(built.get(), "a new package must be built");
-    }
-
-    /// A failed check is a best-effort optimisation falling through, not a
-    /// verdict: the publish proceeds exactly as it would for a new package.
-    #[test]
-    fn a_failed_check_still_builds() {
-        let built = Cell::new(false);
-
-        let outcome = build_unless_already_published(
-            Err(FloxhubClientError::Other("network error".to_string())),
-            || {
-                built.set(true);
-                Ok(())
-            },
-        )
-        .unwrap();
-
-        assert!(matches!(outcome, PreBuildOutcome::Built(())));
-        assert!(built.get(), "a failed check must never block a publish");
     }
 }

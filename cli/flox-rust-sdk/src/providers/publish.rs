@@ -894,12 +894,16 @@ fn convert_build_result_to_build_metadata(
 /// [`lock_build_inputs`] and [`check_build_metadata`] are both called against
 /// the same `RenderedSource` so their catalog-lock paths coincide and the
 /// build phase can reuse the lock phase's catalog lock.
+///
+/// Opaque to callers: it is produced by [`render_build_source`] and consumed
+/// by this module's build entry points, and nothing outside has a reason to
+/// take it apart.
 #[derive(Debug, Clone)]
 pub struct RenderedSource {
-    pub expression_ref: NixFlakeref,
-    pub base_dir: PathBuf,
-    pub built_environments: BuildEnvOutputs,
-    pub flox_env_cache: PathBuf,
+    expression_ref: NixFlakeref,
+    base_dir: PathBuf,
+    built_environments: BuildEnvOutputs,
+    flox_env_cache: PathBuf,
 }
 
 /// Render the build source for `pkg` exactly once, choosing the build
@@ -957,7 +961,7 @@ pub fn lock_build_inputs(
     flox: &Flox,
     rendered: &RenderedSource,
     pkg: &PackageTarget,
-    catalog_lock: CatalogLock,
+    catalog_lock: &CatalogLock,
     nef_stability: Option<String>,
     system_override: Option<String>,
 ) -> Result<LockedBuildInputs, PublishError> {
@@ -967,6 +971,12 @@ pub fn lock_build_inputs(
     // `version.command` in a build-mode activation while it parses, on every
     // invocation, so a lock pass would run each of those user-supplied commands
     // a second time per publish. Answer directly instead.
+    //
+    // TODO: a manifest build that depends on a NEF package inherits that
+    // package's catalog inputs, so once the Makefile aggregates them this
+    // shortcut becomes wrong and has to go — the lock goal will have a real
+    // answer to give for manifest builds too. Until then it would only pay the
+    // double `version.command` cost to be handed back the empty map below.
     if pkg.kind().is_manifest_build() {
         let system = system_override.as_deref().unwrap_or(&flox.system);
         return Ok(LockedBuildInputs {
@@ -985,7 +995,7 @@ pub fn lock_build_inputs(
     );
 
     let lock_results = builder.lock(
-        &[(pkg.name(), catalog_lock)],
+        &[(pkg.name(), catalog_lock.clone())],
         nef_stability,
         system_override,
     )?;
@@ -1020,7 +1030,7 @@ pub fn check_build_metadata(
     system_override: Option<String>,
     rendered: &RenderedSource,
     pkg: &PackageTarget,
-    catalog_lock: CatalogLock,
+    catalog_lock: &CatalogLock,
     nef_stability: Option<String>,
 ) -> Result<CheckedBuildMetadata, PublishError> {
     let builder = FloxBuildMk::new(
@@ -1034,7 +1044,7 @@ pub fn check_build_metadata(
     let build_results = builder.build(
         &base_nixpkgs_url.as_flake_ref()?,
         &rendered.built_environments.dev,
-        &[(pkg.name(), catalog_lock)],
+        &[(pkg.name(), catalog_lock.clone())],
         // Lock the NEF catalog inputs at the stability selected for publish, so
         // the recorded inputs match the build the user intends to publish.
         nef_stability,
@@ -1697,7 +1707,7 @@ pub mod tests {
             None,
             &rendered,
             &EXAMPLE_MANIFEST_PACKAGE_TARGET,
-            CatalogLock::Ephemeral,
+            &CatalogLock::Ephemeral,
             None,
         )
         .unwrap();
@@ -1751,7 +1761,7 @@ pub mod tests {
             None,
             &rendered,
             &EXAMPLE_MANIFEST_PACKAGE_TARGET_MISSING_FIELDS,
-            CatalogLock::Ephemeral,
+            &CatalogLock::Ephemeral,
             None,
         )
         .unwrap();
@@ -1810,7 +1820,7 @@ pub mod tests {
             None,
             &rendered,
             &pure_pkg,
-            CatalogLock::Ephemeral,
+            &CatalogLock::Ephemeral,
             None,
         )
         .unwrap();
@@ -1832,10 +1842,8 @@ pub mod tests {
     /// an empty `direct_catalog_inputs` without invoking the builder at all —
     /// the named lock file is never created, which is the observable proof
     /// that no `make lock` ran and so no `version.command` was re-executed.
-    /// Rendered through the [`BuildWorkdir::SharedClone`] path (the default:
-    /// no `sandbox = "pure"` set).
     #[test]
-    fn lock_build_inputs_shared_clone() {
+    fn lock_build_inputs_for_a_manifest_build_does_not_spawn_the_builder() {
         let (flox, _temp_dir_handle) = flox_instance();
         let (_tempdir_handle, _remote_repo, remote_uri) = example_git_remote_repo();
         let (env, _build_repo) = example_path_environment(&flox, Some(&remote_uri));
@@ -1849,7 +1857,7 @@ pub mod tests {
             &flox,
             &rendered,
             &EXAMPLE_MANIFEST_PACKAGE_TARGET,
-            CatalogLock::File(lock_file.clone()),
+            &CatalogLock::File(lock_file.clone()),
             None,
             None,
         )
@@ -1861,53 +1869,6 @@ pub mod tests {
             !lock_file.exists(),
             "a manifest build must not spawn the builder to learn it has no catalog inputs"
         );
-    }
-
-    /// `lock_build_inputs` for a manifest build rendered through the
-    /// [`BuildWorkdir::OriginalCheckout`] path (`sandbox = "pure"`) returns
-    /// the same shape as the `SharedClone` case.
-    #[test]
-    fn lock_build_inputs_original_checkout() {
-        let (flox, _temp_dir_handle) = flox_instance();
-        let (_tempdir_handle, _remote_repo, remote_uri) = example_git_remote_repo();
-        let (env, git) = example_path_environment(&flox, Some(&remote_uri));
-
-        let manifest_path = env.manifest_path(&flox).unwrap();
-        let manifest_content = std::fs::read_to_string(&manifest_path).unwrap();
-        let pure_manifest = manifest_content.replace(
-            "mypkg.version = \"1.0.2a\"",
-            "mypkg.version = \"1.0.2a\"\nmypkg.sandbox = \"pure\"",
-        );
-        assert!(
-            pure_manifest.contains("mypkg.sandbox = \"pure\""),
-            "manifest patch failed — did the fixture version string change?"
-        );
-        std::fs::write(&manifest_path, &pure_manifest).unwrap();
-
-        git.add(&[manifest_path.as_path()]).unwrap();
-        git.commit("set sandbox=pure").unwrap();
-        git.push("origin", false).unwrap();
-
-        let pure_pkg =
-            PackageTarget::new_unchecked(EXAMPLE_PACKAGE_NAME, PackageTargetKind::ManifestBuild {
-                sandbox: Some(BuildSandbox::Pure),
-            });
-
-        let env_metadata = check_environment_metadata(&flox, &env).unwrap();
-        let rendered = render_build_source(&flox, &env_metadata, &pure_pkg).unwrap();
-
-        let locked = lock_build_inputs(
-            &flox,
-            &rendered,
-            &pure_pkg,
-            CatalogLock::Ephemeral,
-            None,
-            None,
-        )
-        .unwrap();
-
-        assert_eq!(locked.system.to_string(), flox.system);
-        assert!(locked.direct_catalog_inputs.is_empty());
     }
 
     #[tokio::test]
@@ -1935,7 +1896,7 @@ pub mod tests {
             None,
             &rendered,
             &package_metadata.package,
-            CatalogLock::Ephemeral,
+            &CatalogLock::Ephemeral,
             None,
         )
         .unwrap();
@@ -2000,7 +1961,7 @@ pub mod tests {
             None,
             &rendered,
             &package_metadata.package,
-            CatalogLock::Ephemeral,
+            &CatalogLock::Ephemeral,
             None,
         )
         .unwrap();
@@ -2352,7 +2313,7 @@ pub mod tests {
             None,
             &rendered,
             &package_metadata.package,
-            CatalogLock::Ephemeral,
+            &CatalogLock::Ephemeral,
             None,
         )
         .unwrap();

@@ -708,6 +708,8 @@ define MANIFEST_BUILD_template =
   # Manifest builds resolve no catalog inputs of their own, so the lock JSON
   # is a build-free constant emission consistent with the empty
   # direct_catalog_inputs manifest builds already record at build time.
+  # No `catalog_lockfile` is emitted either: no lock is written, so there is no
+  # path to report and the field is absent (parsed as null).
   # A manifest build that depends on a NEF package does inherit that
   # package's catalog inputs; aggregating them here is tracked separately.
   $($(_pvarname)_lockJSON): $(PROJECT_TMPDIR)/check-build-prerequisites
@@ -882,15 +884,19 @@ define NIX_EXPRESSION_BUILD_template =
 	    --out '$$@'; \
 	fi
 
-  # Project the catalog lock into the {pname, system, direct_catalog_inputs}
-  # shape consumed by the `lock` goal's LOCK_RESULT_FILE, mirroring
-  # build-meta.json's equivalent fields. `pname` keys the entry to its package
-  # so callers locking several packages can tell the results apart.
+  # Project the catalog lock into the
+  # {pname, catalog_lockfile, system, direct_catalog_inputs} shape consumed by
+  # the `lock` goal's LOCK_RESULT_FILE, mirroring build-meta.json's equivalent
+  # fields. `pname` keys the entry to its package so callers locking several
+  # packages can tell the results apart. `catalog_lockfile` is the on-disk path
+  # of the lock this rule wrote (`$<`), which is the only way a caller that
+  # named no lock of its own learns where the lock ended up.
   $($(_pvarname)_lockJSON): $($(_pvarname)_catalogLockfile)
 	$(_V_) $(_mkdir) -p $$(@D)
 	$(_V_) $(_jq) -n --arg pname '$(_pname)' --arg system '$(NIX_SYSTEM)' \
+	  --arg catalog_lockfile '$$<' \
 	  --slurpfile lock '$$<' \
-	  '{ pname: $$$$pname, system: $$$$system, direct_catalog_inputs: $$$$lock[0].direct_catalog_inputs }' > $$@
+	  '{ pname: $$$$pname, catalog_lockfile: $$$$catalog_lockfile, system: $$$$system, direct_catalog_inputs: $$$$lock[0].direct_catalog_inputs }' > $$@
 
   # Continue by evaluating the build
   $($(_pvarname)_evalJSON): $($(_pvarname)_catalogLockfile)
