@@ -249,6 +249,13 @@ async fn init_local_environment(
     local_environment_id::ensure(&env.path);
 
     let env = ConcreteEnvironment::Path(env);
+    // Unlike the sibling `cli.environment.*` events, which emit at dispatch and
+    // let `cli.command_completed` carry the outcome, a create event is emitted
+    // after the creating call succeeds: there is no environment to describe
+    // until then, and the id above must exist to ride along on the payload.
+    // Emitting here rather than at the end of this function is deliberate — the
+    // environment exists on disk from `PathEnvironment::init` onward, so a
+    // later failure in the reporting below does not un-create it.
     if let Err(err) = EventsHub::global().record_event(EventKind::CliEnvironmentCreate(
         CliEnvironmentPayload::new(env_detail_from_concrete(flox, &env)),
     )) {
@@ -721,12 +728,15 @@ fn group_for_single_package(attr_path: &str, version: Option<&str>) -> PackageGr
 mod tests {
 
     use flox_core::data::environment_ref::EnvironmentOwner;
+    use flox_events::test_helpers::MockEventsConnection;
+    use flox_events::{EventsClient, SharedMetadataTemplate};
     use flox_rust_sdk::flox::test_helpers::flox_instance_with_optional_floxhub;
     use flox_rust_sdk::models::environment::ManagedPointer;
     use flox_rust_sdk::utils::logging::test_helpers::test_subscriber_message_only;
     use indoc::indoc;
     use pretty_assertions::assert_eq;
     use serial_test::serial;
+    use uuid::Uuid;
 
     use super::*;
 
@@ -1004,5 +1014,70 @@ mod tests {
 
         RemoteEnvironment::new(&flox, ManagedPointer::new(owner, name, &flox.floxhub), None)
             .expect("find initialized remote environment");
+    }
+
+    /// `flox init -r` records exactly one `cli.environment.create` naming the
+    /// environment it created. Without this the emit could be deleted outright
+    /// and every other test would still pass.
+    #[test]
+    #[serial(global_events_client)]
+    fn init_floxhub_environment_records_create_event() {
+        let owner = EnvironmentOwner::from_str("test").unwrap();
+        let name = EnvironmentName::from_str("foo").unwrap();
+        let env_ref = RemoteEnvironmentRef::new_from_parts(owner.clone(), name.clone());
+
+        let (flox, _tempdir_handle) = flox_instance_with_optional_floxhub(Some(&owner));
+
+        let buffer_dir = tempfile::tempdir().expect("tempdir");
+        let connection = MockEventsConnection::default();
+        let sent_batches = connection.sent_batches();
+        let client = EventsClient::new_with_connection(
+            Uuid::new_v4(),
+            buffer_dir.path(),
+            Uuid::new_v4(),
+            None,
+            SharedMetadataTemplate {
+                flox_version: "0.0.0-test".to_string(),
+                os_family: Some("Linux".to_string()),
+                os_family_release: None,
+                os: None,
+                os_version: None,
+                empty_flags: vec![],
+                invocation_sources: vec!["shell".to_string()],
+            },
+            connection,
+        );
+        let previous = EventsHub::global().set_client(client);
+
+        let result = init_floxhub_environment_decorated(&flox, env_ref.clone(), false);
+        let flushed = EventsHub::global().flush(true);
+
+        // Restore the previous client before asserting, so a failure here
+        // doesn't leak the mock client into the next test in this process.
+        EventsHub::global().clear_client();
+        if let Some(previous) = previous {
+            EventsHub::global().set_client(previous);
+        }
+
+        result.expect("environment initializes");
+        flushed.expect("flush");
+
+        let events: Vec<_> = sent_batches
+            .lock()
+            .unwrap()
+            .clone()
+            .into_iter()
+            .flatten()
+            .map(|event| serde_json::to_value(event).expect("event serializes"))
+            .filter(|event| event["event_type"] == "cli.environment.create")
+            .collect();
+
+        assert_eq!(events.len(), 1, "exactly one create event");
+        assert_eq!(events[0]["payload"]["env_kind"], "remote");
+        assert_eq!(
+            events[0]["payload"]["env_ref_or_name"],
+            env_ref.to_string(),
+            "the create event names the environment that was created"
+        );
     }
 }

@@ -189,6 +189,18 @@ impl Pull {
                     // A copy is a new environment definition, so it gets its own id.
                     local_environment_id::ensure(&path_env.dot_flox_path());
 
+                    // A copy brings a new environment definition into
+                    // existence, so it is a creation for the same reason it
+                    // mints its own id above.
+                    let path_env = ConcreteEnvironment::Path(path_env);
+                    if let Err(err) =
+                        EventsHub::global().record_event(EventKind::CliEnvironmentCreate(
+                            CliEnvironmentPayload::new(env_detail_from_concrete(&flox, &path_env)),
+                        ))
+                    {
+                        debug!(error = %err, "Failed to record v2 event");
+                    }
+
                     message::created(formatdoc! {"
                         Created path environment from {owner}/{name}.
                     ", owner = pointer.owner, name = pointer.name});
@@ -406,6 +418,17 @@ impl Pull {
                     create_dot_flox_gitignore(env.dot_flox_path())?;
                     // A copy is a new environment definition, so it gets its own id.
                     local_environment_id::ensure(&env.dot_flox_path());
+
+                    // As above: a copy is a new definition, so it is a
+                    // creation.
+                    let env = ConcreteEnvironment::Path(env);
+                    if let Err(err) =
+                        EventsHub::global().record_event(EventKind::CliEnvironmentCreate(
+                            CliEnvironmentPayload::new(env_detail_from_concrete(flox, &env)),
+                        ))
+                    {
+                        debug!(error = %err, "Failed to record v2 event");
+                    }
                 },
             }
         }

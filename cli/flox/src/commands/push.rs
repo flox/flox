@@ -137,6 +137,13 @@ async fn handle_path_environment_push(
 
     let pointer = ManagedPointer::new(owner.clone(), path_environment.name(), &flox.floxhub);
 
+    // Deliberately no `cli.environment.create` here, even though this does
+    // create the environment on FloxHub: a push promotes an environment that
+    // already exists locally — and that already recorded its creation when
+    // `flox init` made it — so emitting again would count one environment
+    // twice. The `false` argument below is `initializing`, which records the
+    // generation as `HistoryKind::Import` rather than `HistoryKind::Initialize`
+    // for the same reason.
     let managed_environment =
         ManagedEnvironment::push_new(flox, path_environment, owner, force, false)
             .map_err(|err| convert_error(err, pointer, true))?;
