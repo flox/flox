@@ -136,20 +136,14 @@ pub enum EventKind {
     CliPackageUninstall(CliPackagePayload),
     #[serde(rename = "cli.environment.containerize")]
     CliEnvironmentContainerize(CliEnvironmentPayload),
-    /// An environment definition came into existence.
+    /// An environment definition came into existence — not an existing one
+    /// changing form. `flox push` promotes a definition to a managed one and
+    /// `flox pull` without `--copy` checks one out locally; counting either
+    /// would report one environment twice.
     ///
-    /// Emitted once, where a definition starts: `flox init`, `flox init -r`,
-    /// the first-run `flox install` flow when it creates the user's default
-    /// environment, and `flox pull --copy` when the copy is a definition of
-    /// its own. For path environments that is exactly when a new
+    /// For path environments this is exactly when a new
     /// `local_environment_id` is minted, so a create row and a first-seen id
     /// coincide.
-    ///
-    /// Changing form is not creating. `flox push` promotes an existing
-    /// definition to a managed one, and `flox pull` without `--copy`
-    /// materializes a local checkout of a definition that already exists;
-    /// neither mints an id and neither emits. Counting either as a create
-    /// would report one environment twice.
     #[serde(rename = "cli.environment.create")]
     CliEnvironmentCreate(CliEnvironmentPayload),
     #[serde(rename = "cli.environment.delete")]

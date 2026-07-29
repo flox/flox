@@ -24,12 +24,9 @@ pub struct EventsBuffer {
     storage: File,
     _file_lock: LockFile,
     buffer: VecDeque<Event>,
-    /// Lines this binary could not parse, kept verbatim.
-    ///
-    /// Almost always an event type written by a newer flox sharing the same
-    /// data dir. They are carried through [`Self::overwrite_file`] unchanged
-    /// so that a binary which understands them can still send them, and so
-    /// that reading the buffer never destroys telemetry.
+    /// Lines this binary could not parse — almost always an event type
+    /// written by a newer flox sharing the data dir. Kept verbatim so a
+    /// binary that understands them can still send them.
     unknown: VecDeque<String>,
 }
 
@@ -74,11 +71,9 @@ impl EventsBuffer {
             .read_to_string(&mut buffer_json)
             .context("Could not read v2 events buffer file")?;
 
-        // Parse per line rather than as one stream. A `StreamDeserializer`
-        // stops at its first error and reports the rest of the input as
-        // consumed, so a single unreadable entry would silently take every
-        // later entry with it — and `overwrite_file` would then persist that
-        // loss.
+        // Per line, not one `StreamDeserializer`: that stops at its first
+        // error and reports the rest of the input as consumed, so one
+        // unreadable entry would take every later entry with it.
         let mut buffer = VecDeque::new();
         let mut unknown = VecDeque::new();
         for line in buffer_json.lines() {
@@ -93,8 +88,8 @@ impl EventsBuffer {
                 },
             }
         }
-        // Retained lines are bounded like the parsed ones: a machine that
-        // permanently runs an older flox must not grow this file forever.
+        // Bounded like the parsed ones: a machine permanently on an older
+        // flox must not grow this file forever.
         while unknown.len() >= MAX_BUFFER_SIZE {
             unknown.pop_front();
         }
@@ -145,8 +140,8 @@ impl EventsBuffer {
                 .context("Could not write v2 event buffer newline")?;
         }
 
-        // Entries this binary could not read are written back untouched, so a
-        // rewrite never drops what it could not interpret.
+        // Written back untouched, so a rewrite never drops what this binary
+        // could not interpret.
         for line in &self.unknown {
             self.storage
                 .write_all(line.as_bytes())
@@ -225,8 +220,6 @@ mod tests {
         )
     }
 
-    /// An entry this binary cannot parse — an event type added by a newer
-    /// flox — must not take the entries after it down with it.
     #[test]
     fn unreadable_entry_does_not_discard_later_entries() {
         let dir = tempfile::tempdir().unwrap();
@@ -247,9 +240,6 @@ mod tests {
         assert_eq!(buffer.unknown.len(), 1, "the unreadable entry is retained");
     }
 
-    /// Reading a buffer and rewriting it must never destroy an entry this
-    /// binary could not interpret: a newer flox has to still be able to send
-    /// it.
     #[test]
     fn unreadable_entry_survives_a_rewrite() {
         let dir = tempfile::tempdir().unwrap();

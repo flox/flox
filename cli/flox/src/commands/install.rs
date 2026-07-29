@@ -675,9 +675,6 @@ async fn try_create_default_environment_interactive(
                             format!("Failed to initialize FloxHub environment '{env_ref}'")
                         })?,
                 );
-                // Emitted inside this arm because it is the only one that
-                // creates the environment: opening a pre-existing default
-                // records nothing.
                 if let Err(err) = EventsHub::global().record_event(EventKind::CliEnvironmentCreate(
                     CliEnvironmentPayload::new(env_detail_from_concrete(flox, &env)),
                 )) {

@@ -249,13 +249,9 @@ async fn init_local_environment(
     let definition = local_environment_id::ensure(&env.path);
 
     let env = ConcreteEnvironment::Path(env);
-    // Emitted after the creating call succeeds, unlike the sibling
-    // `cli.environment.*` events that emit at dispatch and let
-    // `cli.command_completed` carry the outcome: there is no environment to
-    // describe until then, and the id above must exist to ride along on the
-    // payload. Emitting here rather than at the end of this function is
-    // deliberate — the environment exists on disk from `PathEnvironment::init`
-    // onward, so a later failure in the reporting below does not un-create it.
+    // Emitted here rather than at the end of the function: the environment
+    // exists from `PathEnvironment::init` onward, so a later failure in the
+    // reporting below does not un-create it.
     if definition == local_environment_id::Definition::New
         && let Err(err) = EventsHub::global().record_event(EventKind::CliEnvironmentCreate(
             CliEnvironmentPayload::new(env_detail_from_concrete(flox, &env)),
@@ -1021,10 +1017,9 @@ mod tests {
             .expect("find initialized remote environment");
     }
 
-    /// A mock-backed events client installed on the global hub, restored on
-    /// drop so a panicking assertion cannot leak the mock into the next test
-    /// in this process. Tests holding one must be `#[serial]` on
-    /// `global_events_client`.
+    /// A mock-backed events client on the global hub, restored on drop so a
+    /// panicking assertion cannot leak it into the next test. Holders must be
+    /// `#[serial(global_events_client)]`.
     struct MockHub {
         previous: Option<EventsClient>,
         sent_batches: Arc<Mutex<Vec<Vec<Event>>>>,
@@ -1059,8 +1054,7 @@ mod tests {
             }
         }
 
-        /// Flush the hub and return every `cli.environment.create` payload
-        /// that reached the connection.
+        /// Flushes, then returns the create payloads that were sent.
         fn create_payloads(&self) -> Vec<CliEnvironmentPayload> {
             EventsHub::global().flush(true).expect("flush");
             self.sent_batches
@@ -1085,11 +1079,6 @@ mod tests {
         }
     }
 
-    /// `flox init` records exactly one `cli.environment.create`, carrying the
-    /// `local_environment_id` that was just minted into `.flox`. This is the
-    /// highest-volume emit site and the only one whose payload carries a real
-    /// id, so without this the emit could be deleted outright and the rest of
-    /// the suite would stay green.
     #[tokio::test]
     #[serial(global_events_client)]
     async fn init_local_environment_records_create_event_with_local_id() {
@@ -1111,9 +1100,8 @@ mod tests {
         )]);
     }
 
-    /// `flox init -r` records exactly one `cli.environment.create` naming the
-    /// environment it created. A remote environment has no CLI-side id, so the
-    /// payload pins that `local_environment_id` is absent rather than invented.
+    /// A remote environment has no CLI-side id, so this pins that
+    /// `local_environment_id` is absent rather than invented.
     #[test]
     #[serial(global_events_client)]
     fn init_floxhub_environment_records_create_event() {
