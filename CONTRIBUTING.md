@@ -115,6 +115,22 @@ $ cz commit
 
 to make conforming commits interactively.
 
+-----
+
+**The pull request title must also follow the conventional commits format.**
+
+Pull requests are merged via a merge queue (see [Merges](#merges)), and GitHub
+uses the pull request title as the message of the resulting merge commit on
+`main`.
+That commit message is validated the same way individual commits are, so a PR
+whose commits are all correctly formatted can still fail at merge time if the
+title itself does not conform.
+
+```
+❌ Add ability to parse arrays
+✅ feat(parser): add ability to parse arrays
+```
+
 ## Development
 
 ```console
@@ -554,7 +570,11 @@ changes.
 
 Development is done on branches and merged back to `main`.  Keep your branch
 updated by rebasing and resolving conflicts regularly to avoid messy merges.
-Merges to `main` should be squashed and *ff-only* back to `main` using GitHub
-PRs.  Or, if they represent multiple bigger changes, squashed into multiple
-distinct change sets.  Also be sure to run all tests before creating a mergeable
-PR (See [above](#testing)).
+Merges to `main` go through a GitHub merge queue, which creates a merge commit
+on `main` whose message is the pull request title.  Keep each branch focused;
+if a change is large, split it into multiple distinct change sets.  Also be
+sure to run all tests before creating a mergeable PR (See [above](#testing)).
+
+Because the merge commit takes its message from the pull request title, that
+title must follow the [conventional commits](#commits) format just like an
+individual commit — otherwise the merge fails validation.

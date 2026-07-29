@@ -3809,7 +3809,7 @@ mod tests {
                 # because that proves that the source has been successfully extracted
                 # into the build sandbox.
                 mkdir $out
-                ls > $out/{file_name}
+                LC_ALL=C ls > $out/{file_name}
             """
         "#};
 
