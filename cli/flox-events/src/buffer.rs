@@ -24,6 +24,13 @@ pub struct EventsBuffer {
     storage: File,
     _file_lock: LockFile,
     buffer: VecDeque<Event>,
+    /// Lines this binary could not parse, kept verbatim.
+    ///
+    /// Almost always an event type written by a newer flox sharing the same
+    /// data dir. They are carried through [`Self::overwrite_file`] unchanged
+    /// so that a binary which understands them can still send them, and so
+    /// that reading the buffer never destroys telemetry.
+    unknown: VecDeque<String>,
 }
 
 impl EventsBuffer {
@@ -67,21 +74,36 @@ impl EventsBuffer {
             .read_to_string(&mut buffer_json)
             .context("Could not read v2 events buffer file")?;
 
-        let buffer = serde_json::Deserializer::from_str(&buffer_json)
-            .into_iter::<Event>()
-            .filter_map(|event| match event {
-                Ok(event) => Some(event),
+        // Parse per line rather than as one stream. A `StreamDeserializer`
+        // stops at its first error and reports the rest of the input as
+        // consumed, so a single unreadable entry would silently take every
+        // later entry with it — and `overwrite_file` would then persist that
+        // loss.
+        let mut buffer = VecDeque::new();
+        let mut unknown = VecDeque::new();
+        for line in buffer_json.lines() {
+            if line.trim().is_empty() {
+                continue;
+            }
+            match serde_json::from_str::<Event>(line) {
+                Ok(event) => buffer.push_back(event),
                 Err(err) => {
-                    debug!(error = %err, "Skipping unreadable v2 event buffer entry");
-                    None
+                    debug!(error = %err, "Retaining unreadable v2 event buffer entry");
+                    unknown.push_back(line.to_string());
                 },
-            })
-            .collect();
+            }
+        }
+        // Retained lines are bounded like the parsed ones: a machine that
+        // permanently runs an older flox must not grow this file forever.
+        while unknown.len() >= MAX_BUFFER_SIZE {
+            unknown.pop_front();
+        }
 
         Ok(Self {
             storage: events_buffer_file,
             _file_lock: events_lock,
             buffer,
+            unknown,
         })
     }
 
@@ -118,6 +140,17 @@ impl EventsBuffer {
             self.storage
                 .write_all(serde_json::to_string(event)?.as_bytes())
                 .context("Could not write v2 event to buffer file")?;
+            self.storage
+                .write_all(b"\n")
+                .context("Could not write v2 event buffer newline")?;
+        }
+
+        // Entries this binary could not read are written back untouched, so a
+        // rewrite never drops what it could not interpret.
+        for line in &self.unknown {
+            self.storage
+                .write_all(line.as_bytes())
+                .context("Could not write retained v2 event to buffer file")?;
             self.storage
                 .write_all(b"\n")
                 .context("Could not write v2 event buffer newline")?;
@@ -177,5 +210,68 @@ impl EventsBuffer {
         while self.buffer.len() >= MAX_BUFFER_SIZE {
             self.buffer.pop_front();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A serialized envelope of `event_type`, as an older binary would find
+    /// it in a buffer written by a newer one.
+    fn envelope(event_type: &str) -> String {
+        format!(
+            r#"{{"event_id":"00000000-0000-0000-0000-000000000000","event_timestamp":0,"source":"cli","invocation_id":"00000000-0000-0000-0000-000000000000","device_id":"00000000-0000-0000-0000-000000000000","event_type":"{event_type}","payload":{{"env_kind":"path","env_ref_or_name":"myenv"}}}}"#
+        )
+    }
+
+    /// An entry this binary cannot parse — an event type added by a newer
+    /// flox — must not take the entries after it down with it.
+    #[test]
+    fn unreadable_entry_does_not_discard_later_entries() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join(EVENTS_BUFFER_FILE_NAME),
+            format!(
+                "{}\n{}\n{}\n",
+                envelope("cli.environment.delete"),
+                envelope("cli.environment.from.the.future"),
+                envelope("cli.environment.list"),
+            ),
+        )
+        .unwrap();
+
+        let buffer = EventsBuffer::read(dir.path()).unwrap();
+
+        assert_eq!(buffer.buffer.len(), 2, "both readable entries survive");
+        assert_eq!(buffer.unknown.len(), 1, "the unreadable entry is retained");
+    }
+
+    /// Reading a buffer and rewriting it must never destroy an entry this
+    /// binary could not interpret: a newer flox has to still be able to send
+    /// it.
+    #[test]
+    fn unreadable_entry_survives_a_rewrite() {
+        let dir = tempfile::tempdir().unwrap();
+        let future = envelope("cli.environment.from.the.future");
+        std::fs::write(
+            dir.path().join(EVENTS_BUFFER_FILE_NAME),
+            format!("{}\n{}\n", envelope("cli.environment.delete"), future),
+        )
+        .unwrap();
+
+        {
+            let mut buffer = EventsBuffer::read(dir.path()).unwrap();
+            let sent = buffer.batch_size(usize::MAX);
+            buffer.drain_sent(sent);
+            buffer.overwrite_file().unwrap();
+        }
+
+        let contents = std::fs::read_to_string(dir.path().join(EVENTS_BUFFER_FILE_NAME)).unwrap();
+        assert_eq!(
+            contents.lines().collect::<Vec<_>>(),
+            vec![future.as_str()],
+            "the sent entry is drained and the unreadable one is written back"
+        );
     }
 }
