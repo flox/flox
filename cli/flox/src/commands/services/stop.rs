@@ -29,7 +29,7 @@ impl Stop {
             ServicesEnvironment::from_environment_selection(&mut flox, &self.environment).await?;
         environment_subcommand_metric!("services::stop", env.environment);
         if let Err(err) = EventsHub::global().record_event(EventKind::CliEnvironmentServicesStop(
-            CliEnvironmentPayload::new(env_detail_from_concrete(&env.environment)),
+            CliEnvironmentPayload::new(env_detail_from_concrete(&flox, &env.environment)),
         )) {
             debug!(error = %err, "Failed to record v2 event");
         }

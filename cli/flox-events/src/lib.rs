@@ -322,28 +322,81 @@ impl CliCommandCompletedPayload {
     }
 }
 
-/// Environment kind a `cli.environment.*` event touched, matching the three
-/// legacy `environment_subcommand_metric!` arms (`remote_environment` /
-/// `managed_environment` / `path_environment`).
+/// Identity of the environment a `cli.environment.*` event touched.
+///
+/// The internally tagged representation preserves the existing flat wire
+/// shape while ensuring path environments cannot carry generation fields.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "env_kind", rename_all = "lowercase")]
+enum EnvIdentity {
+    Path {
+        #[serde(rename = "env_ref_or_name")]
+        name: String,
+    },
+    Managed {
+        #[serde(rename = "env_ref_or_name")]
+        env_ref: String,
+        /// The generation the command operated on — the pinned generation
+        /// when opened at one (e.g. `flox activate --generation`), otherwise
+        /// the environment's current generation. Absent whenever the
+        /// generation can't be read.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        generation_number: Option<u64>,
+    },
+    Remote {
+        #[serde(rename = "env_ref_or_name")]
+        env_ref: String,
+        /// The generation the command operated on — the pinned generation
+        /// when opened at one (e.g. `flox activate --generation`), otherwise
+        /// the environment's current generation. Absent whenever the
+        /// generation can't be read.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        generation_number: Option<u64>,
+    },
+}
+
+/// Environment detail shared by every `cli.environment.*` event.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct EnvDetail {
-    /// One of `"remote"`, `"managed"`, `"path"` — the environment variant
-    /// the command operated on. `"managed"` is also used for `flox pull`'s
-    /// `NewAbbreviated` branch, where only the remote ref is known at
-    /// emission time.
-    env_kind: String,
-    /// The environment's identifier — the result of `env_ref().to_string()`
-    /// for remote and managed environments, and `Environment::name(...)`
-    /// for path environments. Matches the value the legacy macros emit.
-    env_ref_or_name: String,
+    #[serde(flatten)]
+    identity: EnvIdentity,
+    /// Number of packages locked for the invoking system when the command
+    /// started. Absent when no lockfile is available.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    package_count: Option<u64>,
 }
 
 impl EnvDetail {
-    pub fn new(env_kind: impl Into<String>, env_ref_or_name: impl Into<String>) -> Self {
+    pub fn path(name: impl Into<String>) -> Self {
         Self {
-            env_kind: env_kind.into(),
-            env_ref_or_name: env_ref_or_name.into(),
+            identity: EnvIdentity::Path { name: name.into() },
+            package_count: None,
         }
+    }
+
+    pub fn managed(env_ref: impl Into<String>, generation_number: Option<u64>) -> Self {
+        Self {
+            identity: EnvIdentity::Managed {
+                env_ref: env_ref.into(),
+                generation_number,
+            },
+            package_count: None,
+        }
+    }
+
+    pub fn remote(env_ref: impl Into<String>, generation_number: Option<u64>) -> Self {
+        Self {
+            identity: EnvIdentity::Remote {
+                env_ref: env_ref.into(),
+                generation_number,
+            },
+            package_count: None,
+        }
+    }
+
+    pub fn with_package_count(mut self, package_count: u64) -> Self {
+        self.package_count = Some(package_count);
+        self
     }
 }
 
@@ -486,6 +539,11 @@ impl CliPackagePayload {
 /// Payload for [`EventKind::CliEnvironmentEdit`]. Emitted once eagerly
 /// with env detail; a manifest edit that changes the manifest emits a
 /// second row carrying `edited_includes`.
+///
+/// `env_detail` is the pre-edit snapshot on both rows (the generation the
+/// command started from), so the two rows agree on lineage. The result-known
+/// row's `manifest_version` describes the post-edit manifest, so lineage and
+/// the result fields are deliberately different epochs, not one snapshot.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CliEnvironmentEditPayload {
     #[serde(flatten)]
@@ -852,9 +910,11 @@ mod tests {
     }
 
     fn env_detail(kind: &str, ref_or_name: &str) -> EnvDetail {
-        EnvDetail {
-            env_kind: kind.to_string(),
-            env_ref_or_name: ref_or_name.to_string(),
+        match kind {
+            "path" => EnvDetail::path(ref_or_name),
+            "managed" => EnvDetail::managed(ref_or_name, None),
+            "remote" => EnvDetail::remote(ref_or_name, None),
+            other => panic!("unexpected environment kind: {other}"),
         }
     }
 
@@ -898,6 +958,37 @@ mod tests {
             "has_includes": true,
         }));
         assert_eq!(value, expected);
+    }
+
+    #[test]
+    fn cli_environment_activate_managed_lineage_fields_envelope_golden() {
+        let detail = EnvDetail::managed("alice/myenv", Some(3)).with_package_count(7);
+        let payload = CliEnvironmentActivatePayload::new(detail);
+        let value = serde_json::to_value(fixed_event(EventKind::CliEnvironmentActivate(payload)))
+            .expect("event serializes");
+        let expected = activate_envelope_json(json!({
+            "env_kind": "managed",
+            "env_ref_or_name": "alice/myenv",
+            "generation_number": 3,
+            "package_count": 7,
+        }));
+        assert_eq!(value, expected);
+    }
+
+    /// A buffered environment-event row recorded by a binary that predates
+    /// the lineage fields must deserialize and re-serialize unchanged —
+    /// absent fields stay absent, nothing is fabricated.
+    #[test]
+    fn environment_row_without_lineage_fields_round_trips() {
+        let old_row = env_envelope_json("cli.environment.delete");
+        let event: Event =
+            serde_json::from_value(old_row.clone()).expect("old-shape row deserializes");
+        let EventKind::CliEnvironmentDelete(ref payload) = event.kind else {
+            panic!("expected cli.environment.delete");
+        };
+        assert_eq!(payload, &CliEnvironmentPayload::new(managed_env_detail()));
+        let reserialized = serde_json::to_value(event).expect("event re-serializes");
+        assert_eq!(reserialized, old_row);
     }
 
     #[test]
@@ -1825,10 +1916,7 @@ mod pipeline_tests {
         let hub = EventsHub::new();
         hub.set_client(client_with_connection(&tempdir, connection));
 
-        let env_detail = EnvDetail {
-            env_kind: "path".to_string(),
-            env_ref_or_name: "myenv".to_string(),
-        };
+        let env_detail = EnvDetail::path("myenv");
 
         hub.record_event(EventKind::CliEnvironmentEdit(
             CliEnvironmentEditPayload::new(env_detail.clone()),
@@ -1854,7 +1942,7 @@ mod pipeline_tests {
             assert_eq!(event.invocation_id, INVOCATION_ID);
             match &event.kind {
                 EventKind::CliEnvironmentEdit(p) => {
-                    assert_eq!(p.env_detail.env_kind, "path");
+                    assert_eq!(p.env_detail, EnvDetail::path("myenv"));
                     match p.edited_includes {
                         None => eager_seen = true,
                         Some(true) => result_seen = true,

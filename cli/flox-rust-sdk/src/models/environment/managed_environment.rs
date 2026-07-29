@@ -652,6 +652,29 @@ impl GenerationsExt for ManagedEnvironment {
         self.generations().metadata()
     }
 
+    fn generation(&self) -> Result<Option<GenerationId>, EnvironmentError> {
+        if let Some(generation) = self.generation {
+            return Ok(Some(generation));
+        }
+        Ok(self
+            .generations_metadata()
+            .map_err(ManagedEnvironmentError::Generations)?
+            .current_gen())
+    }
+
+    fn generation_and_existing_lockfile(
+        &self,
+    ) -> Result<(Option<GenerationId>, Option<Lockfile>), EnvironmentError> {
+        let Some(generation) = self.generation()? else {
+            return Ok((None, None));
+        };
+        // The generation came from metadata (or a pin), so read its lockfile
+        // directly without re-reading metadata to validate it. Best-effort: a
+        // generation whose lockfile can't be read still yields its id.
+        let lockfile = self.generations().lockfile_unchecked(*generation).ok();
+        Ok((Some(generation), lockfile))
+    }
+
     fn switch_generation(
         &mut self,
         flox: &Flox,
@@ -1748,6 +1771,7 @@ mod test {
 
     use flox_core::Version;
     use flox_manifest::interfaces::{AsLatestSchema, AsTypedOnlyManifest};
+    use flox_manifest::lockfile::PackageToList;
     use flox_manifest::lockfile::test_helpers::fake_catalog_package_lock;
     use flox_manifest::parsed::Inner;
     use flox_manifest::parsed::latest::{self, ManifestLatest};
@@ -1963,6 +1987,98 @@ mod test {
         assert_eq!(
             local_manifest.as_writable().to_string(),
             locally_edited_content
+        );
+    }
+
+    #[test]
+    fn generation_and_lockfile_never_materializes() {
+        let owner = EnvironmentOwner::from_str("owner").unwrap();
+        let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub(Some(&owner));
+
+        let managed_env = test_helpers::mock_managed_environment_unlocked(
+            &flox,
+            &toml_edit::ser::to_string_pretty(&Manifest::default()).unwrap(),
+            owner,
+        );
+
+        // An unpinned environment resolves to its current generation, and
+        // `generation()` must agree with the metadata's current generation.
+        let current = managed_env.generations_metadata().unwrap().current_gen();
+        assert!(
+            current.is_some(),
+            "a freshly pushed environment has a current generation"
+        );
+        assert_eq!(
+            managed_env.generation().unwrap(),
+            current,
+            "unpinned resolves to the current generation"
+        );
+
+        // The combined read resolves the generation and, for this unlocked
+        // fixture (no committed lockfile), yields no lockfile — best-effort. A
+        // locked env's package_count is covered by
+        // `generation_and_lockfile_reads_locked_packages`.
+        let (generation, lockfile) = managed_env.generation_and_existing_lockfile().unwrap();
+        assert_eq!(
+            generation, current,
+            "the combined read resolves the current generation"
+        );
+        assert!(
+            lockfile.is_none(),
+            "the unlocked fixture has no committed lockfile"
+        );
+
+        // Reading the lineage lockfile is a metadata read — it must never
+        // materialize the local checkout.
+        assert!(
+            !managed_env.path.join(super::ENV_DIR_NAME).exists(),
+            "reading the lockfile must not materialize the checkout"
+        );
+    }
+
+    /// A managed environment locked with packages reports its lineage: the
+    /// combined read returns the current generation and a lockfile whose
+    /// per-system package count matches what was installed.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn generation_and_lockfile_reads_locked_packages() {
+        let owner = "owner".parse().unwrap();
+        let (mut flox, tempdir) = flox_instance_with_optional_floxhub(Some(&owner));
+
+        let initial_manifest = indoc! {r#"
+            version = 1
+            [install]
+        "#};
+        let mut environment =
+            mock_managed_environment_in(&flox, initial_manifest, owner, &tempdir, Some("test-env"));
+
+        flox.floxhub_client =
+            catalog_replay_client(GENERATED_DATA.join("resolve/hello.yaml")).await;
+        environment
+            .install(
+                &[PackageToInstall::parse(&flox.system, "hello").unwrap()],
+                &flox,
+            )
+            .unwrap();
+
+        let (generation, lockfile) = environment.generation_and_existing_lockfile().unwrap();
+        assert_eq!(
+            generation,
+            environment.generations_metadata().unwrap().current_gen(),
+            "the combined read resolves the current generation"
+        );
+        let lockfile = lockfile.expect("a locked managed env has a readable lockfile");
+        let packages = lockfile.list_packages(&flox.system).unwrap();
+        let install_ids: Vec<&str> = packages
+            .iter()
+            .map(|package| match package {
+                PackageToList::Catalog(_, locked) => locked.install_id.as_str(),
+                _ => panic!("expected a catalog package"),
+            })
+            .collect();
+        assert_eq!(
+            install_ids,
+            ["hello"],
+            "the combined read reports the installed package by identity"
         );
     }
 

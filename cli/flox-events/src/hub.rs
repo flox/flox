@@ -44,6 +44,12 @@ impl EventsHub {
         self.with_client(Option::take)
     }
 
+    /// Run `f` only when a client is installed, for work that only feeds
+    /// event payloads and would otherwise be wasted.
+    pub fn when_client_set<T>(&self, f: impl FnOnce() -> T) -> Option<T> {
+        self.with_client(|client| client.is_some()).then(f)
+    }
+
     pub fn flush(&self, force: bool) -> Result<()> {
         self.with_client(|client| {
             if let Some(client) = client {

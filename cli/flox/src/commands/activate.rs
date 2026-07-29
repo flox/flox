@@ -65,7 +65,7 @@ use crate::commands::{
 };
 use crate::utils::detect_shell::{detect_shell_for_in_place, detect_shell_for_subshell};
 use crate::utils::errors::format_diverged_metadata;
-use crate::utils::events::env_detail_from_concrete;
+use crate::utils::events::{env_detail_from_concrete, env_detail_from_concrete_without_lineage};
 use crate::utils::message;
 use crate::utils::upgrade_output::{count_upgrade_categories, format_upgrade_summary};
 use crate::{Exit, environment_subcommand_metric, subcommand_metric, utils};
@@ -235,7 +235,7 @@ impl Activate {
         // *outcome* is carried on `cli.command_completed` (exit_code), not by
         // the presence of this dispatch-time event, so emitting before a
         // possible trust decline is intentional, not a logged false success.
-        let v2_env_detail = env_detail_from_concrete(&concrete_environment);
+        let v2_env_detail = env_detail_from_concrete_without_lineage(&concrete_environment);
         let v2_mode = options
             .mode
             .clone()
@@ -417,8 +417,14 @@ impl ActivateOptions {
         let has_includes = lockfile.compose.is_some();
         subcommand_metric!("activate", "has_includes" = has_includes);
 
+        // Read env detail after locking so package_count reflects the packages
+        // this activation locked — a never-locked path env has no lockfile until
+        // now — and so a declined-trust or lock-error abort above performs no
+        // lineage git I/O for an event that is never emitted.
+        let v2_env_detail = env_detail_from_concrete(&flox, &concrete_environment);
+
         if let Err(err) = EventsHub::global().record_event(EventKind::CliEnvironmentActivate(
-            CliEnvironmentActivatePayload::new(env_detail_from_concrete(&concrete_environment))
+            CliEnvironmentActivatePayload::new(v2_env_detail.clone())
                 .with_has_includes(has_includes),
         )) {
             debug!(error = %err, "Failed to record v2 event");
@@ -454,7 +460,7 @@ impl ActivateOptions {
         // subcommand and rides `lockfile_version` on a real
         // `cli.environment.activate` event instead.
         if let Err(err) = EventsHub::global().record_event(EventKind::CliEnvironmentActivate(
-            CliEnvironmentActivatePayload::new(env_detail_from_concrete(&concrete_environment))
+            CliEnvironmentActivatePayload::new(v2_env_detail.clone())
                 .with_lockfile_version(lockfile_version.to_string())
                 .with_manifest_version(lockfile.manifest_schema_version().to_string()),
         )) {
@@ -577,8 +583,7 @@ impl ActivateOptions {
         // synchronously by the pre-exec emit + flush block below
         // (spec AC #5).
         if let Err(err) = EventsHub::global().record_event(EventKind::CliEnvironmentActivate(
-            CliEnvironmentActivatePayload::new(env_detail_from_concrete(&concrete_environment))
-                .with_shell(shell.to_string()),
+            CliEnvironmentActivatePayload::new(v2_env_detail.clone()).with_shell(shell.to_string()),
         )) {
             debug!(error = %err, "Failed to record v2 event");
         }

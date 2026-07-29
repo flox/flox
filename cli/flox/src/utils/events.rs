@@ -16,8 +16,9 @@ use std::str::FromStr;
 use std::sync::{LazyLock, OnceLock};
 
 use flox_config::Config;
-use flox_events::{EnvDetail, EventsClient, SharedMetadataTemplate};
-use flox_rust_sdk::flox::FLOX_VERSION;
+use flox_events::{EnvDetail, EventsClient, EventsHub, SharedMetadataTemplate};
+use flox_rust_sdk::flox::{FLOX_VERSION, Flox};
+use flox_rust_sdk::models::environment::generations::GenerationsExt;
 use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment};
 use flox_rust_sdk::utils::INVOCATION_SOURCES;
 use tracing::debug;
@@ -139,22 +140,95 @@ pub fn build_events_client(
     ))
 }
 
+/// Lineage fields for the environment the current invocation operates on.
+struct EnvLineageFields {
+    generation_number: Option<u64>,
+    package_count: Option<u64>,
+}
+
+/// Read the lineage fields for `env`. Every read is best-effort and read-only:
+/// a failure leaves the field absent and is logged at debug, never failing the
+/// command.
+fn read_env_lineage_fields(flox: &Flox, env: &ConcreteEnvironment) -> EnvLineageFields {
+    // Managed/remote resolve their generation and lockfile in a single
+    // metadata read; path envs have no generation and read their on-disk
+    // lockfile.
+    let (generation, lockfile) = match env {
+        ConcreteEnvironment::Path(environment) => (None, environment.existing_lockfile(flox)),
+        ConcreteEnvironment::Managed(environment) => {
+            match environment.generation_and_existing_lockfile() {
+                Ok((generation, lockfile)) => (generation, Ok(lockfile)),
+                Err(err) => (None, Err(err)),
+            }
+        },
+        ConcreteEnvironment::Remote(environment) => {
+            match environment.generation_and_existing_lockfile() {
+                Ok((generation, lockfile)) => (generation, Ok(lockfile)),
+                Err(err) => (None, Err(err)),
+            }
+        },
+    };
+
+    let generation_number = generation.map(|generation| *generation as u64);
+
+    let package_count = lockfile
+        .map_err(|err| debug!(error = %err, "v2 events: could not read lockfile"))
+        .ok()
+        .flatten()
+        .map(|lockfile| {
+            lockfile
+                .packages
+                .iter()
+                .filter(|package| package.system().as_str() == flox.system.as_str())
+                .count() as u64
+        });
+
+    EnvLineageFields {
+        generation_number,
+        package_count,
+    }
+}
+
 /// Build an [`EnvDetail`] for the supplied [`ConcreteEnvironment`], using the
 /// same env-kind / env-ref mapping as the legacy
 /// `environment_subcommand_metric!` macro. Shared across call sites so the
 /// per-kind match is not duplicated.
-pub fn env_detail_from_concrete(env: &ConcreteEnvironment) -> EnvDetail {
+fn env_detail_with_generation(
+    env: &ConcreteEnvironment,
+    generation_number: Option<u64>,
+) -> EnvDetail {
     match env {
         ConcreteEnvironment::Remote(environment) => {
-            EnvDetail::new("remote", environment.env_ref().to_string())
+            EnvDetail::remote(environment.env_ref().to_string(), generation_number)
         },
         ConcreteEnvironment::Managed(environment) => {
-            EnvDetail::new("managed", environment.env_ref().to_string())
+            EnvDetail::managed(environment.env_ref().to_string(), generation_number)
         },
         ConcreteEnvironment::Path(environment) => {
-            EnvDetail::new("path", Environment::name(environment).to_string())
+            EnvDetail::path(Environment::name(environment).to_string())
         },
     }
+}
+
+/// Build environment identity without reading lineage. Used by eager events
+/// that must emit before locking or trust decisions.
+pub fn env_detail_from_concrete_without_lineage(env: &ConcreteEnvironment) -> EnvDetail {
+    env_detail_with_generation(env, None)
+}
+
+/// Build environment detail, reading lineage only when an events client is
+/// installed.
+pub fn env_detail_from_concrete(flox: &Flox, env: &ConcreteEnvironment) -> EnvDetail {
+    let Some(fields) = EventsHub::global().when_client_set(|| read_env_lineage_fields(flox, env))
+    else {
+        return env_detail_from_concrete_without_lineage(env);
+    };
+
+    let mut detail = env_detail_with_generation(env, fields.generation_number);
+    if let Some(package_count) = fields.package_count {
+        detail = detail.with_package_count(package_count);
+    }
+    detail
 }
 
 #[cfg(test)]

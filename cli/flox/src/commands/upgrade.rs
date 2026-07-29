@@ -53,7 +53,7 @@ impl Upgrade {
             .await?;
         environment_subcommand_metric!("upgrade", concrete_environment);
         if let Err(err) = EventsHub::global().record_event(EventKind::CliEnvironmentUpgrade(
-            CliEnvironmentPayload::new(env_detail_from_concrete(&concrete_environment)),
+            CliEnvironmentPayload::new(env_detail_from_concrete(&flox, &concrete_environment)),
         )) {
             debug!(error = %err, "Failed to record v2 event");
         }

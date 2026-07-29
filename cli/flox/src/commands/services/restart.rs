@@ -47,7 +47,7 @@ impl Restart {
         environment_subcommand_metric!("services::restart", env.environment);
         if let Err(err) =
             EventsHub::global().record_event(EventKind::CliEnvironmentServicesRestart(
-                CliEnvironmentPayload::new(env_detail_from_concrete(&env.environment)),
+                CliEnvironmentPayload::new(env_detail_from_concrete(&flox, &env.environment)),
             ))
         {
             debug!(error = %err, "Failed to record v2 event");

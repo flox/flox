@@ -34,7 +34,7 @@ impl Delete {
 
         environment_subcommand_metric!("delete", environment);
         if let Err(err) = EventsHub::global().record_event(EventKind::CliEnvironmentDelete(
-            CliEnvironmentPayload::new(env_detail_from_concrete(&environment)),
+            CliEnvironmentPayload::new(env_detail_from_concrete(&flox, &environment)),
         )) {
             debug!(error = %err, "Failed to record v2 event");
         }

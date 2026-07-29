@@ -108,7 +108,7 @@ impl Pull {
                 // detail directly from the `RemoteRef` to match the
                 // legacy `managed_environment = remote.to_string()`
                 // extra above (spec AC #2).
-                let env_detail = EnvDetail::new("managed", remote.to_string());
+                let env_detail = EnvDetail::managed(remote.to_string(), None);
                 if let Err(err) = EventsHub::global().record_event(EventKind::CliEnvironmentPull(
                     CliEnvironmentPayload::new(env_detail),
                 )) {
@@ -157,7 +157,7 @@ impl Pull {
                 // contract). Outcome rides on `cli.command_completed`
                 // (exit_code), so emitting before the bail is intentional.
                 if let Err(err) = EventsHub::global().record_event(EventKind::CliEnvironmentPull(
-                    CliEnvironmentPayload::new(env_detail_from_concrete(&environment)),
+                    CliEnvironmentPayload::new(env_detail_from_concrete(&flox, &environment)),
                 )) {
                     debug!(error = %err, "Failed to record v2 event");
                 }

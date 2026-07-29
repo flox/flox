@@ -185,7 +185,7 @@ impl Install {
         };
         environment_subcommand_metric!("install", concrete_environment);
         if let Err(err) = EventsHub::global().record_event(EventKind::CliEnvironmentInstall(
-            CliEnvironmentPayload::new(env_detail_from_concrete(&concrete_environment)),
+            CliEnvironmentPayload::new(env_detail_from_concrete(&flox, &concrete_environment)),
         )) {
             debug!(error = %err, "Failed to record v2 event");
         }

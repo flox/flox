@@ -515,6 +515,16 @@ impl GenerationsExt for RemoteEnvironment {
         self.inner.generations_metadata()
     }
 
+    fn generation(&self) -> Result<Option<GenerationId>, EnvironmentError> {
+        self.inner.generation()
+    }
+
+    fn generation_and_existing_lockfile(
+        &self,
+    ) -> Result<(Option<GenerationId>, Option<Lockfile>), EnvironmentError> {
+        self.inner.generation_and_existing_lockfile()
+    }
+
     fn switch_generation(
         &mut self,
         flox: &Flox,
