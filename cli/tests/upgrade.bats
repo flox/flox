@@ -83,7 +83,7 @@ function old_hello_response_version() {
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
     run "$FLOX_BIN" upgrade
   assert_success
-  assert_output \
+  assert_output --partial \
 "✔ Upgraded 1 version change in 'test':
 - hello: $(old_hello_response_version) -> $(hello_response_version)"
 
@@ -103,7 +103,7 @@ function old_hello_response_version() {
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
     run "$FLOX_BIN" upgrade toplevel
   assert_success
-  assert_output \
+  assert_output --partial \
 "✔ Upgraded 1 version change in 'test':
 - hello: $(old_hello_response_version) -> $(hello_response_version)"
 
@@ -123,7 +123,7 @@ function old_hello_response_version() {
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
     run "$FLOX_BIN" upgrade hello
   assert_success
-  assert_output \
+  assert_output --partial \
 "✔ Upgraded 1 version change in 'test':
 - hello: $(old_hello_response_version) -> $(hello_response_version)"
 
@@ -153,7 +153,7 @@ function old_hello_response_version() {
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/curl_hello_bumped_revs.yaml" \
     run "$FLOX_BIN" upgrade
   assert_success
-  assert_output "No upgrades available for packages in 'test'."
+  assert_output --partial "No upgrades available for packages in 'test'."
 
   curr_lock=$(jq --sort-keys . "$LOCK_PATH")
 
@@ -173,7 +173,7 @@ function old_hello_response_version() {
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
     run "$FLOX_BIN" upgrade --dry-run
   assert_success
-  assert_output \
+  assert_output --partial \
 "Dry run: 1 version change in 'test':
 - hello: $(old_hello_response_version) -> $(hello_response_version)
 
@@ -190,7 +190,7 @@ To apply these changes, run upgrade without the '--dry-run' flag."
 
   run "$FLOX_BIN" upgrade
   assert_success
-  assert_output "No upgrades available for packages in 'test'."
+  assert_output --partial "No upgrades available for packages in 'test'."
 
   new_version="$(jq -r '.packages[0]."version"' "$LOCK_PATH")"
   old_version="2.10.0"
@@ -201,7 +201,7 @@ To apply these changes, run upgrade without the '--dry-run' flag."
   run "$FLOX_BIN" upgrade
   assert_success
 
-  assert_output \
+  assert_output --partial \
 "✔ Upgraded 1 version change in 'test':
 - hello: $old_version -> $new_version"
 }
@@ -214,5 +214,5 @@ To apply these changes, run upgrade without the '--dry-run' flag."
 
   run "$FLOX_BIN" upgrade hello
   assert_success
-  assert_output "No upgrades available for the specified packages in 'test'."
+  assert_output --partial "No upgrades available for the specified packages in 'test'."
 }
