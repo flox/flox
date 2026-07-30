@@ -73,7 +73,7 @@ function old_hello_response_version() {
 
 # bats test_tags=upgrade:hello
 @test "upgrade hello" {
-  "$FLOX_BIN" init
+  flox_init_pinned
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/old_hello.yaml" "$FLOX_BIN" install hello
 
   old_hello_locked_drv=$(jq -r '.packages.[0].derivation' "$LOCK_PATH")
@@ -94,7 +94,7 @@ function old_hello_response_version() {
 }
 
 @test "upgrade by group (toplevel)" {
-  "$FLOX_BIN" init
+  flox_init_pinned
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/old_hello.yaml" "$FLOX_BIN" install hello
 
   old_hello_locked_drv=$(jq -r '.packages.[0].derivation' "$LOCK_PATH")
@@ -114,7 +114,7 @@ function old_hello_response_version() {
 }
 
 @test "upgrade by iid" {
-  "$FLOX_BIN" init
+  flox_init_pinned
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/old_hello.yaml" "$FLOX_BIN" install hello
 
   old_hello_locked_drv=$(jq -r '.packages.[0].derivation' "$LOCK_PATH")
@@ -134,7 +134,7 @@ function old_hello_response_version() {
 }
 
 @test "upgrade errors on iid in group with other packages" {
-  "$FLOX_BIN" init
+  flox_init_pinned
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/curl_hello.yaml" "$FLOX_BIN" install curl hello
 
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.yaml" \
@@ -145,7 +145,7 @@ function old_hello_response_version() {
 
 # bats test_tags=upgrade:page-not-upgraded
 @test "page changes should not be considered an upgrade" {
-  "$FLOX_BIN" init
+  flox_init_pinned
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/curl_hello.yaml" \
     "$FLOX_BIN" install curl hello
   prev_lock=$(jq --sort-keys . "$LOCK_PATH")
@@ -163,7 +163,7 @@ function old_hello_response_version() {
 
 # bats test_tags=upgrade:dry-run
 @test "'upgrade --dry-run' does not update the lockfile" {
-  "$FLOX_BIN" init
+  flox_init_pinned
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/old_hello.yaml" "$FLOX_BIN" install hello
 
   old_hello_locked_drv=$(jq -r '.packages.[0].derivation' "$LOCK_PATH")

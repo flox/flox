@@ -1603,6 +1603,7 @@ mod migration_tests {
     use flox_manifest::raw::CatalogPackage;
     use flox_manifest::test_helpers::{with_latest_schema, with_schema};
     use flox_test_utils::GENERATED_DATA;
+    use flox_test_utils::manifests::ALL_SYSTEMS_OPTIONS;
     use indoc::indoc;
 
     use super::*;
@@ -1695,9 +1696,10 @@ mod migration_tests {
     async fn v1_including_latest_with_hello_is_not_migrated() {
         let (mut flox, tempdir) = flox_instance();
 
-        let included_manifest = with_latest_schema(indoc! {r#"
+        let included_manifest = with_latest_schema(&formatdoc! {r#"
             [install]
             hello.pkg-path = "hello"
+            {ALL_SYSTEMS_OPTIONS}
         "#});
 
         flox.floxhub_client =
@@ -1736,10 +1738,11 @@ mod migration_tests {
         let (mut flox, tempdir) = flox_instance();
         flox.floxhub_client = catalog_replay_client(GENERATED_DATA.join("envs/bash.yaml")).await;
 
-        let included_manifest = with_latest_schema(indoc! {r#"
+        let included_manifest = with_latest_schema(&formatdoc! {r#"
             [install]
             bash.pkg-path = "bashNonInteractive"
             bash.outputs = "all"
+            {ALL_SYSTEMS_OPTIONS}
         "#});
         setup_locked_included_env(&flox, tempdir.path(), &included_manifest);
 
@@ -1759,10 +1762,11 @@ mod migration_tests {
     async fn v1_including_latest_with_specific_outputs_is_migrated() {
         let (mut flox, tempdir) = flox_instance();
 
-        let included_manifest = with_latest_schema(indoc! {r#"
+        let included_manifest = with_latest_schema(&formatdoc! {r#"
             [install]
             bash.pkg-path = "bashNonInteractive"
             bash.outputs = ["out"]
+            {ALL_SYSTEMS_OPTIONS}
         "#});
 
         flox.floxhub_client = catalog_replay_client(GENERATED_DATA.join("envs/bash.yaml")).await;
@@ -1802,13 +1806,14 @@ mod migration_tests {
         assert_eq!(manifest.get_schema_version(), KnownSchemaVersion::V1);
 
         // Now update the included env to add a package with explicit outputs.
-        let updated_included_manifest = with_latest_schema(indoc! {r#"
+        let updated_included_manifest = with_latest_schema(&formatdoc! {r#"
             [vars]
             included_var = "value"
 
             [install]
             bash.pkg-path = "bashNonInteractive"
             bash.outputs = "all"
+            {ALL_SYSTEMS_OPTIONS}
         "#});
 
         flox.floxhub_client = catalog_replay_client(GENERATED_DATA.join("envs/bash.yaml")).await;
@@ -1867,15 +1872,16 @@ mod migration_tests {
 
         // Edit the composer to add a package with explicit outputs,
         // which requires a schema bump.
-        let edited_manifest = with_latest_schema(indoc! {r#"
+        let edited_manifest = with_latest_schema(&formatdoc! {r#"
             [include]
             environments = [
-              { dir = "../included" },
+              {{ dir = "../included" }},
             ]
 
             [install]
             bash.pkg-path = "bashNonInteractive"
             bash.outputs = "all"
+            {ALL_SYSTEMS_OPTIONS}
         "#});
 
         flox.floxhub_client = catalog_replay_client(GENERATED_DATA.join("envs/bash.yaml")).await;
@@ -1957,7 +1963,7 @@ mod migration_tests {
         let (mut flox, _tempdir) = flox_instance();
         flox.floxhub_client =
             catalog_replay_client(GENERATED_DATA.join("resolve/hello.yaml")).await;
-        let mut env = new_path_environment(&flox, "version = 1");
+        let mut env = new_path_environment(&flox, &format!("version = 1\n{ALL_SYSTEMS_OPTIONS}"));
         _ = env.lockfile(&flox).unwrap(); // make sure a lockfile exists
         assert_eq!(
             env.manifest_without_migrating(&flox)
@@ -1991,7 +1997,7 @@ mod migration_tests {
     async fn v1_manifest_migrates_when_bash_is_installed() {
         let (mut flox, _tempdir) = flox_instance();
         flox.floxhub_client = catalog_replay_client(GENERATED_DATA.join("envs/bash.yaml")).await;
-        let mut env = new_path_environment(&flox, "version = 1");
+        let mut env = new_path_environment(&flox, &format!("version = 1\n{ALL_SYSTEMS_OPTIONS}"));
         _ = env.lockfile(&flox).unwrap(); // make sure a lockfile exists
         assert_eq!(
             env.manifest_without_migrating(&flox)

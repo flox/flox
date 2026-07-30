@@ -86,6 +86,9 @@ check_manifest_updated() {
 version = 1
 [install]
 hello.pkg-path = "hello"
+
+[options]
+systems = ["aarch64-darwin", "aarch64-linux", "x86_64-darwin", "x86_64-linux"]
 EOF
 
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
@@ -264,6 +267,9 @@ version = 1
 [install]
 vim.pkg-path = "vim"
 vim-full.pkg-path = "vim-full"
+
+[options]
+systems = ["aarch64-darwin", "aarch64-linux", "x86_64-darwin", "x86_64-linux"]
 EOF
 )
 
@@ -273,6 +279,9 @@ version = 1
 vim.pkg-path = "vim"
 vim-full.pkg-path = "vim-full"
 vim-full.priority = 4
+
+[options]
+systems = ["aarch64-darwin", "aarch64-linux", "x86_64-darwin", "x86_64-linux"]
 EOF
 )
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/vim-vim-full-conflict.yaml"
@@ -316,6 +325,9 @@ bar.command = """
   chmod +x $out/bin/collide
   echo ${foo} > $out/nix-support/propagated-build-inputs
 """
+
+[options]
+systems = ["aarch64-darwin", "aarch64-linux", "x86_64-darwin", "x86_64-linux"]
 EOF
   )
 
@@ -374,6 +386,9 @@ top.command = """
   chmod +x $out/bin/top-bin
   echo ${middle} > $out/nix-support/propagated-build-inputs
 """
+
+[options]
+systems = ["aarch64-darwin", "aarch64-linux", "x86_64-darwin", "x86_64-linux"]
 EOF
   )
 

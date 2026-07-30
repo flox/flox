@@ -1356,8 +1356,9 @@ mod tests {
     use flox_manifest::parsed::Inner;
     use flox_manifest::raw::CatalogPackage;
     use flox_manifest::test_helpers::{with_latest_schema, with_schema};
+    use flox_test_utils::manifests::ALL_SYSTEMS_OPTIONS;
     use flox_test_utils::{GENERATED_DATA, MANUALLY_GENERATED};
-    use indoc::indoc;
+    use indoc::{formatdoc, indoc};
     use pretty_assertions::assert_eq;
     use tempfile::{TempDir, tempdir_in};
     use test_helpers::{new_core_environment_from_env_files, new_core_environment_with_lockfile};
@@ -1376,7 +1377,11 @@ mod tests {
     fn empty_core_environment() -> (CoreEnvironment, Flox, TempDir) {
         let (flox, tempdir) = flox_instance();
 
-        (new_core_environment(&flox, "version = 1"), flox, tempdir)
+        (
+            new_core_environment(&flox, &format!("version = 1\n{ALL_SYSTEMS_OPTIONS}")),
+            flox,
+            tempdir,
+        )
     }
 
     /// Check that `edit` updates the manifest and creates a lockfile
@@ -1398,9 +1403,10 @@ mod tests {
             base_directory: None,
         });
 
-        let new_env_str = with_latest_schema(indoc! {r#"
+        let new_env_str = with_latest_schema(&formatdoc! {r#"
             [install]
             hello.pkg-path = "hello"
+            {ALL_SYSTEMS_OPTIONS}
         "#});
 
         flox.floxhub_client =
@@ -1508,12 +1514,13 @@ mod tests {
     async fn edit_adding_package_returns_changed() {
         let (mut env_view, mut flox, _temp_dir_handle) = empty_core_environment();
 
-        let new_env_str = r#"
-        version = 1
+        let new_env_str = formatdoc! {r#"
+            version = 1
 
-        [install]
-        hello.pkg-path = "hello"
-        "#;
+            [install]
+            hello.pkg-path = "hello"
+            {ALL_SYSTEMS_OPTIONS}
+        "#};
 
         flox.floxhub_client =
             catalog_replay_client(GENERATED_DATA.join("resolve/hello.yaml")).await;
@@ -1630,12 +1637,13 @@ mod tests {
         let env_path = tempfile::tempdir_in(&tempdir).unwrap();
         fs::write(
             env_path.path().join(MANIFEST_FILENAME),
-            r#"
-        version = 1
+            formatdoc! {r#"
+                version = 1
 
-        [install]
-        hello.pkg-path = "hello"
-        "#,
+                [install]
+                hello.pkg-path = "hello"
+                {ALL_SYSTEMS_OPTIONS}
+            "#},
         )
         .unwrap();
 

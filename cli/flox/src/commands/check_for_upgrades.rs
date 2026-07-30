@@ -288,9 +288,13 @@ mod tests {
 
     use flox_rust_sdk::flox::test_helpers::flox_instance;
     use flox_rust_sdk::models::environment::UpgradeResult;
-    use flox_rust_sdk::models::environment::path_environment::test_helpers::new_path_environment_from_env_files;
+    use flox_rust_sdk::models::environment::path_environment::test_helpers::{
+        new_path_environment,
+        new_path_environment_from_env_files,
+    };
     use flox_rust_sdk::providers::catalog::test_helpers::catalog_replay_client;
     use flox_test_utils::GENERATED_DATA;
+    use flox_test_utils::manifests::HELLO;
 
     use super::*;
 
@@ -347,8 +351,13 @@ mod tests {
     async fn checks_if_not_recently_checked() {
         let (mut flox, _tempdir) = flox_instance();
 
-        let environment =
-            new_path_environment_from_env_files(&flox, GENERATED_DATA.join("envs/hello"));
+        // Build the env from a pinned manifest and lock it from the recording
+        // instead of the generated env fixture (whose manifest doesn't pin
+        // systems).
+        let mut environment = new_path_environment(&flox, HELLO);
+        flox.floxhub_client =
+            catalog_replay_client(GENERATED_DATA.join("resolve/hello.yaml")).await;
+        environment.lockfile(&flox).unwrap();
 
         // required to read the upgrade information after being moved in the following line.
         let cache_path = environment.cache_path().unwrap();

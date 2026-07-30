@@ -46,7 +46,7 @@ teardown() {
 
 @test "uninstall: confirmation message" {
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml"
-  "$FLOX_BIN" init
+  flox_init_pinned
   run "$FLOX_BIN" install hello
   assert_success
   assert_output --partial "✔ 'hello' installed to environment 'test'"
@@ -59,7 +59,7 @@ teardown() {
 
 @test "uninstall: errors (without proceeding) for already uninstalled packages" {
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml"
-  "$FLOX_BIN" init
+  flox_init_pinned
   run "$FLOX_BIN" install hello
   assert_success
 
@@ -71,7 +71,7 @@ teardown() {
 
 @test "uninstall: edits manifest" {
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml"
-  "$FLOX_BIN" init
+  flox_init_pinned
   run "$FLOX_BIN" install hello
   assert_success
   run "$FLOX_BIN" uninstall hello
@@ -89,7 +89,7 @@ teardown() {
 
 @test "uninstall: removes link to installed binary" {
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml"
-  "$FLOX_BIN" init
+  flox_init_pinned
   run "$FLOX_BIN" install hello
   assert_success
   assert_output --partial "✔ 'hello' installed to environment"
@@ -114,7 +114,7 @@ teardown() {
 
 @test "uninstall: can uninstall packages with dotted att_paths" {
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/rubyPackages_3_2.rails.yaml"
-  run "$FLOX_BIN" init
+  run flox_init_pinned
   assert_success
   # Install a dotted package
   run "$FLOX_BIN" install rubyPackages_3_2.rails
@@ -151,6 +151,9 @@ hello.pkg-path = "hello"
 environments = [
   { dir = "../included" },
 ]
+
+[options]
+systems = ["aarch64-darwin", "aarch64-linux", "x86_64-darwin", "x86_64-linux"]
 EOF
 
   run "$FLOX_BIN" uninstall -d composer hello
@@ -174,6 +177,9 @@ version = 1
 
 [install]
 hello.pkg-path = "hello"
+
+[options]
+systems = ["aarch64-darwin", "aarch64-linux", "x86_64-darwin", "x86_64-linux"]
 EOF
 
   "$FLOX_BIN" init -d composer
@@ -205,6 +211,9 @@ version = 1
 
 [install]
 hello.pkg-path = "hello"
+
+[options]
+systems = ["aarch64-darwin", "aarch64-linux", "x86_64-darwin", "x86_64-linux"]
 EOF
 
   "$FLOX_BIN" init -d composer

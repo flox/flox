@@ -226,6 +226,7 @@ EOF
 # bats test_tags=services:manifest-changes
 @test "install: warns about restarting services" {
   setup_sleeping_services
+  pin_recorded_systems
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml"
 
   run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
@@ -239,6 +240,7 @@ EOF
 # bats test_tags=services:manifest-changes
 @test "uninstall: warns about restarting services" {
   setup_sleeping_services
+  pin_recorded_systems
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml"
   run "$FLOX_BIN" install hello
 
@@ -253,6 +255,7 @@ EOF
 # bats test_tags=services:manifest-changes
 @test "upgrade: warns about restarting services" {
   setup_sleeping_services
+  pin_recorded_systems
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/old_hello.yaml" \
     run "$FLOX_BIN" install hello
 
@@ -286,6 +289,7 @@ EOF
 
   setup_isolated_flox
   setup_sleeping_services
+  pin_recorded_systems
   floxhub_setup "$OWNER"
 
   run "$FLOX_BIN" push --owner "$OWNER"
@@ -1626,6 +1630,9 @@ EOF
     shutdown.command = '''
       kill -9 "$(cat $(pwd)/pidfile)"
     '''
+
+    [options]
+    systems = ["aarch64-darwin", "aarch64-linux", "x86_64-darwin", "x86_64-linux"]
 EOF
 )"
 

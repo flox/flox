@@ -1777,6 +1777,7 @@ mod test {
     use flox_manifest::parsed::latest::{self, ManifestLatest};
     use flox_manifest::{MANIFEST_FILENAME, Manifest};
     use flox_test_utils::GENERATED_DATA;
+    use flox_test_utils::manifests::ALL_SYSTEMS_OPTIONS;
     use indoc::{formatdoc, indoc};
     use test_helpers::{
         mock_managed_environment_from_env_files,
@@ -2044,12 +2045,13 @@ mod test {
         let owner = "owner".parse().unwrap();
         let (mut flox, tempdir) = flox_instance_with_optional_floxhub(Some(&owner));
 
-        let initial_manifest = indoc! {r#"
+        let initial_manifest = formatdoc! {r#"
             version = 1
             [install]
+            {ALL_SYSTEMS_OPTIONS}
         "#};
         let mut environment =
-            mock_managed_environment_in(&flox, initial_manifest, owner, &tempdir, Some("test-env"));
+            mock_managed_environment_in(&flox, &initial_manifest, owner, &tempdir, Some("test-env"));
 
         flox.floxhub_client =
             catalog_replay_client(GENERATED_DATA.join("resolve/hello.yaml")).await;
@@ -2157,6 +2159,14 @@ mod test {
             catalog_replay_client(GENERATED_DATA.join("resolve/hello.yaml")).await;
 
         let mut new_manifest = ManifestLatest::default();
+        // Pin the systems the recording was made with so the resolve request
+        // matches on every build host.
+        new_manifest.options.systems = Some(vec![
+            "aarch64-darwin".to_string(),
+            "aarch64-linux".to_string(),
+            "x86_64-darwin".to_string(),
+            "x86_64-linux".to_string(),
+        ]);
         new_manifest.install.inner_mut().insert(
             "hello".to_string(),
             latest::PackageDescriptorCatalog {
@@ -2186,11 +2196,7 @@ mod test {
         let lockfile: Lockfile = serde_json::from_str(&lockfile_content).unwrap();
 
         assert_eq!(lockfile.manifest, new_manifest);
-        // 1 package x the default systems
-        assert_eq!(
-            lockfile.packages.len(),
-            flox_manifest::raw::DEFAULT_SYSTEMS_STR.len()
-        );
+        assert_eq!(lockfile.packages.len(), 4); // 1 package x 4 pinned systems
 
         let lockfile_in_generation_content =
             fs::read_to_string(managed_env.lockfile_path(&flox).unwrap()).unwrap();
@@ -2617,7 +2623,13 @@ mod test {
         flox.floxhub_client =
             catalog_replay_client(GENERATED_DATA.join("resolve/hello.yaml")).await;
 
-        let mut env = mock_managed_environment_in(&flox, "version = 1", owner, &temp_dir, None);
+        let mut env = mock_managed_environment_in(
+            &flox,
+            &format!("version = 1\n{ALL_SYSTEMS_OPTIONS}"),
+            owner,
+            &temp_dir,
+            None,
+        );
         assert_eq!(
             env.generations_metadata().unwrap().current_gen().as_deref(),
             Some(&1),
@@ -2657,6 +2669,7 @@ mod test {
 
             [install]
             {package}.pkg-path = "{package}"
+            {ALL_SYSTEMS_OPTIONS}
         "#};
 
         let mut env = mock_managed_environment_in(&flox, &manifest, owner, &temp_dir, None);
@@ -2734,17 +2747,18 @@ mod test {
         let owner = "owner".parse().unwrap();
         let (mut flox, temp_dir) = flox_instance_with_optional_floxhub(Some(&owner));
 
-        let manifest = indoc! {r#"
+        let manifest = formatdoc! {r#"
             version = 1
 
             [install]
             hello.pkg-path = "hello"
+            {ALL_SYSTEMS_OPTIONS}
         "#};
 
         flox.floxhub_client =
             catalog_replay_client(GENERATED_DATA.join("resolve/old_hello.yaml")).await;
 
-        let mut env = mock_managed_environment_in(&flox, manifest, owner, &temp_dir, None);
+        let mut env = mock_managed_environment_in(&flox, &manifest, owner, &temp_dir, None);
         assert_eq!(
             env.generations_metadata().unwrap().current_gen().as_deref(),
             Some(&1),
@@ -2834,14 +2848,15 @@ mod test {
         let (mut flox, tempdir) = flox_instance_with_optional_floxhub(Some(&owner));
 
         flox.floxhub_client = catalog_replay_client(GENERATED_DATA.join("empty.yaml")).await;
-        let initial_manifest = indoc! {r#"
+        let initial_manifest = formatdoc! {r#"
             version = 1
             [install]
+            {ALL_SYSTEMS_OPTIONS}
         "#};
 
         let mut environment = mock_managed_environment_in(
             &flox,
-            initial_manifest,
+            &initial_manifest,
             owner.clone(),
             &tempdir,
             Some("test-env"),

@@ -263,13 +263,11 @@ mod tests {
     use flox_manifest::raw::PackageToInstall;
     use flox_rust_sdk::flox::test_helpers::flox_instance;
     use flox_rust_sdk::models::environment::Environment;
-    use flox_rust_sdk::models::environment::path_environment::test_helpers::{
-        new_named_path_environment,
-        new_named_path_environment_from_env_files,
-    };
+    use flox_rust_sdk::models::environment::path_environment::test_helpers::new_named_path_environment;
     use flox_rust_sdk::providers::catalog::test_helpers::catalog_replay_client;
     use flox_rust_sdk::utils::logging::test_helpers::test_subscriber_message_only;
     use flox_test_utils::GENERATED_DATA;
+    use flox_test_utils::manifests::{ALL_SYSTEMS_OPTIONS, HELLO};
     use indoc::indoc;
     use serial_test::serial;
     use tempfile::TempDir;
@@ -348,7 +346,11 @@ mod tests {
     #[serial(global_events_client)]
     async fn upgrade_records_previous_version_on_package_events() {
         let (mut flox, _tempdir) = flox_instance();
-        let mut environment = new_named_path_environment(&flox, "version = 1", "name");
+        let mut environment = new_named_path_environment(
+            &flox,
+            &format!("version = 1\n{ALL_SYSTEMS_OPTIONS}"),
+            "name",
+        );
 
         let response_path = if cfg!(target_os = "macos") {
             "resolve/old_darwin_hello.yaml"
@@ -437,14 +439,11 @@ mod tests {
         let (mut flox, _tempdir) = flox_instance();
         let (subscriber, writer) = test_subscriber_message_only();
 
-        let environment = new_named_path_environment_from_env_files(
-            &flox,
-            GENERATED_DATA.join("envs/hello"),
-            "name",
-        );
+        let mut environment = new_named_path_environment(&flox, HELLO, "name");
 
         flox.floxhub_client =
             catalog_replay_client(GENERATED_DATA.join("resolve/hello.yaml")).await;
+        environment.lockfile(&flox).unwrap();
 
         Upgrade {
             environment: EnvironmentSelect::Dir(environment.parent_path().unwrap()),
@@ -466,7 +465,11 @@ mod tests {
         let (mut flox, _tempdir) = flox_instance();
         let (subscriber, writer) = test_subscriber_message_only();
 
-        let mut environment = new_named_path_environment(&flox, "version = 1", "name");
+        let mut environment = new_named_path_environment(
+            &flox,
+            &format!("version = 1\n{ALL_SYSTEMS_OPTIONS}"),
+            "name",
+        );
 
         let response_path = if cfg!(target_os = "macos") {
             "resolve/old_linux_hello.yaml"
@@ -704,7 +707,11 @@ mod tests {
         let (mut flox, _tempdir) = flox_instance();
         let (subscriber, writer) = test_subscriber_message_only();
 
-        let mut environment = new_named_path_environment(&flox, "version = 1", "name");
+        let mut environment = new_named_path_environment(
+            &flox,
+            &format!("version = 1\n{ALL_SYSTEMS_OPTIONS}"),
+            "name",
+        );
 
         // Use the fixture that has an older version for THIS system
         let response_path = if cfg!(target_os = "macos") {
