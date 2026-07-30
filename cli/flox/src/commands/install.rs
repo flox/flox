@@ -21,7 +21,6 @@ use flox_manifest::raw::{
 };
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::managed_environment::ManagedEnvironmentError;
-use floxhub_client::AuthContext;
 use flox_rust_sdk::models::environment::remote_environment::{
     RemoteEnvironment,
     RemoteEnvironmentError,
@@ -43,7 +42,11 @@ use flox_rust_sdk::providers::lock_manifest::{
     ResolutionFailures,
     ResolveError,
 };
-use floxhub_client::{MsgAttrPathNotFoundNotFoundForAllSystems, MsgAttrPathNotFoundNotInCatalog};
+use floxhub_client::{
+    AuthContext,
+    MsgAttrPathNotFoundNotFoundForAllSystems,
+    MsgAttrPathNotFoundNotInCatalog,
+};
 use indoc::formatdoc;
 use itertools::Itertools;
 use shell_gen::ShellWithPath;

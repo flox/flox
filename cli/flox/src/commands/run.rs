@@ -25,7 +25,6 @@ use anyhow::Result;
 use bpaf::Bpaf;
 use flox_manifest::raw::{CatalogPackage, RawManifestError};
 use flox_rust_sdk::flox::Flox;
-use floxhub_client::AuthContext;
 use flox_rust_sdk::providers::buildenv::{
     BuildEnvError,
     build_catalog_pkg_from_source,
@@ -35,6 +34,7 @@ use flox_rust_sdk::providers::buildenv::{
 };
 use flox_rust_sdk::providers::nix_auth::{AuthProvider, NixAuth};
 use floxhub_client::{
+    AuthContext,
     CatalogClientTrait,
     MessageLevel,
     PackageDescriptor,

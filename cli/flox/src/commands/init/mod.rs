@@ -9,14 +9,19 @@ use flox_core::data::environment_ref::{DEFAULT_NAME, EnvironmentName, RemoteEnvi
 use flox_manifest::raw::{CatalogPackage, PackageToInstall};
 use flox_rust_sdk::data::AttrPath;
 use flox_rust_sdk::flox::Flox;
-use floxhub_client::AuthContext;
 use flox_rust_sdk::models::environment::path_environment::{InitCustomization, PathEnvironment};
 use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironment;
 use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment, PathPointer};
 use flox_rust_sdk::providers::catalog::ALL_SYSTEMS;
 use flox_rust_sdk::providers::git::{GitCommandProvider, GitProvider};
 use flox_rust_sdk::providers::manifest_init::ManifestInitializer;
-use floxhub_client::{CatalogClientTrait, PackageDescriptor, PackageGroup, PackageResolutionInfo};
+use floxhub_client::{
+    AuthContext,
+    CatalogClientTrait,
+    PackageDescriptor,
+    PackageGroup,
+    PackageResolutionInfo,
+};
 use indoc::{formatdoc, indoc};
 use path_dedot::ParseDot;
 use tracing::{debug, info_span, instrument};
