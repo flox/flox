@@ -222,35 +222,28 @@ To apply these changes, run upgrade without the '--dry-run' flag."
 # ---------------------------------------------------------------------------- #
 
 # bats test_tags=upgrade,regression
-@test "upgrade keeps manifest and lockfile schemas in sync" {
+@test "upgrade migrates the on-disk manifest with the lockfile" {
   # Init environment, then overwrite with pre-built v1 fixtures
-  # (created by flox v1.9.1 with curl+hello installed).
+  # (created by flox v1.9.1 with curl+hello installed, then adjusted so
+  # hello is older than the version returned by the catalog mock).
   "$FLOX_BIN" init
-  cp "$GENERATED_DATA/envs/v1_curl_hello/manifest.toml" "$MANIFEST_PATH"
-  cp "$GENERATED_DATA/envs/v1_curl_hello/manifest.lock" "$LOCK_PATH"
+  cp "$MANUALLY_GENERATED/v1_curl_hello/manifest.toml" "$MANIFEST_PATH"
+  cp "$MANUALLY_GENERATED/v1_curl_hello/manifest.lock" "$LOCK_PATH"
 
   # Confirm starting state: manifest is v1
   run grep -c '^version = 1' "$MANIFEST_PATH"
   assert_success
 
-  # The mock resolves the same package versions the fixture lockfile
-  # already contains, so this upgrade is a no-op.
-  # A no-op upgrade must not persist anything: in particular it must not
-  # migrate the on-disk manifest while skipping the lockfile write
-  # (the inverse of the CLI-4 divergence).
+  # The catalog mock upgrades hello and requires the outputs migration for
+  # curl, so both the lockfile and the on-disk manifest must migrate.
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/curl_hello.yaml" \
     run "$FLOX_BIN" upgrade
   assert_success
-  assert_output --partial "No upgrades available"
+  assert_output --partial "- hello: 2.12.2 -> 2.12.3"
 
-  # The on-disk manifest is untouched.
-  run grep -c '^version = 1' "$MANIFEST_PATH"
-  assert_success
-
-  # Whatever the outcome of an upgrade, the schema of the on-disk manifest
-  # and the schema of the manifest embedded in the lockfile must match.
-  # Don't assert a specific version: the invariant is that the two never
-  # diverge, not that they land on any particular schema.
+  # The on-disk manifest and the manifest embedded in the lockfile must
+  # migrate to the same schema. This assertion fails without the upgrade
+  # path calling ensure_manifest_schemas_match().
   manifest_schema=$(sed -n 's/^schema-version = "\(.*\)"/\1/p; s/^version = \(.*\)/\1/p' "$MANIFEST_PATH" | head -1)
   lockfile_schema=$(jq -r '
     if .manifest["schema-version"]
@@ -258,4 +251,5 @@ To apply these changes, run upgrade without the '--dry-run' flag."
     else (.manifest.version | tostring)
     end' "$LOCK_PATH")
   assert_equal "$manifest_schema" "$lockfile_schema"
+  assert_not_equal "$manifest_schema" "1"
 }

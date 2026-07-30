@@ -170,12 +170,12 @@
     {
       "attr_path": "hello",
       "broken": false,
-      "derivation": "/nix/store/w0axphsdrbdjylhf1rp6wrh4xb7q8cf8-hello-2.12.3.drv",
+      "derivation": "/nix/store/w0axphsdrbdjylhf1rp6wrh4xb7q8cf8-hello-2.12.2.drv",
       "description": "Program that produces a familiar, friendly greeting",
       "install_id": "hello",
       "license": "GPL-3.0-or-later",
       "locked_url": "https://github.com/flox/nixpkgs?rev=4c1018dae018162ec878d42fec712642d214fdfa",
-      "name": "hello-2.12.3",
+      "name": "hello-2.12.2",
       "pname": "hello",
       "rev": "4c1018dae018162ec878d42fec712642d214fdfa",
       "rev_count": 977467,
@@ -185,12 +185,12 @@
         "unstable"
       ],
       "unfree": false,
-      "version": "2.12.3",
+      "version": "2.12.2",
       "outputs_to_install": [
         "out"
       ],
       "outputs": {
-        "out": "/nix/store/5cg54ha6i85582akxl6vpp5421lyr4pb-hello-2.12.3"
+        "out": "/nix/store/5cg54ha6i85582akxl6vpp5421lyr4pb-hello-2.12.2"
       },
       "system": "aarch64-darwin",
       "group": "toplevel",
@@ -199,12 +199,12 @@
     {
       "attr_path": "hello",
       "broken": false,
-      "derivation": "/nix/store/6cccmgw49dd50vgh6p0cz4g9ja772l6j-hello-2.12.3.drv",
+      "derivation": "/nix/store/6cccmgw49dd50vgh6p0cz4g9ja772l6j-hello-2.12.2.drv",
       "description": "Program that produces a familiar, friendly greeting",
       "install_id": "hello",
       "license": "GPL-3.0-or-later",
       "locked_url": "https://github.com/flox/nixpkgs?rev=4c1018dae018162ec878d42fec712642d214fdfa",
-      "name": "hello-2.12.3",
+      "name": "hello-2.12.2",
       "pname": "hello",
       "rev": "4c1018dae018162ec878d42fec712642d214fdfa",
       "rev_count": 977467,
@@ -214,12 +214,12 @@
         "unstable"
       ],
       "unfree": false,
-      "version": "2.12.3",
+      "version": "2.12.2",
       "outputs_to_install": [
         "out"
       ],
       "outputs": {
-        "out": "/nix/store/g383j16f2lxz4zzs967i9hjgvivy6q7h-hello-2.12.3"
+        "out": "/nix/store/g383j16f2lxz4zzs967i9hjgvivy6q7h-hello-2.12.2"
       },
       "system": "aarch64-linux",
       "group": "toplevel",
@@ -228,12 +228,12 @@
     {
       "attr_path": "hello",
       "broken": false,
-      "derivation": "/nix/store/m0ccxjpn61yr7zngqra0ahg8aqarpvca-hello-2.12.3.drv",
+      "derivation": "/nix/store/m0ccxjpn61yr7zngqra0ahg8aqarpvca-hello-2.12.2.drv",
       "description": "Program that produces a familiar, friendly greeting",
       "install_id": "hello",
       "license": "GPL-3.0-or-later",
       "locked_url": "https://github.com/flox/nixpkgs?rev=4c1018dae018162ec878d42fec712642d214fdfa",
-      "name": "hello-2.12.3",
+      "name": "hello-2.12.2",
       "pname": "hello",
       "rev": "4c1018dae018162ec878d42fec712642d214fdfa",
       "rev_count": 977467,
@@ -243,12 +243,12 @@
         "unstable"
       ],
       "unfree": false,
-      "version": "2.12.3",
+      "version": "2.12.2",
       "outputs_to_install": [
         "out"
       ],
       "outputs": {
-        "out": "/nix/store/kqbjfx3hp125sg0fkv1141m4s02z9w0r-hello-2.12.3"
+        "out": "/nix/store/kqbjfx3hp125sg0fkv1141m4s02z9w0r-hello-2.12.2"
       },
       "system": "x86_64-darwin",
       "group": "toplevel",
@@ -257,12 +257,12 @@
     {
       "attr_path": "hello",
       "broken": false,
-      "derivation": "/nix/store/7mdg60drrnh0wq1j8hmmbhll47czm107-hello-2.12.3.drv",
+      "derivation": "/nix/store/7mdg60drrnh0wq1j8hmmbhll47czm107-hello-2.12.2.drv",
       "description": "Program that produces a familiar, friendly greeting",
       "install_id": "hello",
       "license": "GPL-3.0-or-later",
       "locked_url": "https://github.com/flox/nixpkgs?rev=4c1018dae018162ec878d42fec712642d214fdfa",
-      "name": "hello-2.12.3",
+      "name": "hello-2.12.2",
       "pname": "hello",
       "rev": "4c1018dae018162ec878d42fec712642d214fdfa",
       "rev_count": 977467,
@@ -272,12 +272,12 @@
         "unstable"
       ],
       "unfree": false,
-      "version": "2.12.3",
+      "version": "2.12.2",
       "outputs_to_install": [
         "out"
       ],
       "outputs": {
-        "out": "/nix/store/10s5j3mfdg22k1597x580qrhprnzcjwb-hello-2.12.3"
+        "out": "/nix/store/10s5j3mfdg22k1597x580qrhprnzcjwb-hello-2.12.2"
       },
       "system": "x86_64-linux",
       "group": "toplevel",
