@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::ffi::OsStr;
 use std::fmt::Display;
 use std::path::{Path, PathBuf};
@@ -131,6 +131,16 @@ pub enum BuildEnvError {
         Remove one of these references so the variables no longer form a loop."
     )]
     VarsCycle { cycle: String },
+
+    #[error(
+        "This environment is not locked for your system ({system}).\n\
+        Locked systems: {locked}\n\
+        Run 'flox upgrade' to re-lock the environment for your system, or add '{system}' to 'options.systems' with 'flox edit'.",
+        locked = locked_systems.join(", "))]
+    LockfileMissingCurrentSystem {
+        system: String,
+        locked_systems: Vec<String>,
+    },
 
     /// An error that occurred while creating GC roots via `create_gc_root_in`.
     #[error("Failed to link environment: {0}")]
@@ -1407,6 +1417,34 @@ pub fn materialise_with_retry<T>(
     unreachable!("retry loop always returns")
 }
 
+/// Verify that a lockfile that contains locked packages provides at least one
+/// package for `system`.
+///
+/// A lockfile with packages, but none for the current system, would
+/// "successfully" build an environment with no packages in it. This can
+/// happen when the environment was locked on a host whose implicit default
+/// systems set doesn't include this system.
+/// An environment without any packages at all is legitimate and builds fine.
+/// Environments that set `options.systems` explicitly are reported via
+/// [BuildEnvError::LockfileIncompatible] before this check.
+fn check_lockfile_has_current_system(
+    lockfile: &Lockfile,
+    system: &str,
+) -> Result<(), BuildEnvError> {
+    if lockfile.packages.is_empty() {
+        return Ok(());
+    }
+    let locked_systems: BTreeSet<&System> =
+        lockfile.packages.iter().map(|pkg| pkg.system()).collect();
+    if locked_systems.iter().any(|locked| *locked == system) {
+        return Ok(());
+    }
+    Err(BuildEnvError::LockfileMissingCurrentSystem {
+        system: system.to_string(),
+        locked_systems: locked_systems.into_iter().cloned().collect(),
+    })
+}
+
 impl<A> BuildEnv for BuildEnvNix<A>
 where
     A: AuthProvider,
@@ -1453,6 +1491,13 @@ where
             .map_err(|cycle| BuildEnvError::VarsCycle {
                 cycle: cycle.to_string(),
             })?;
+
+        // Even without explicit `options.systems`, the lockfile may lack
+        // packages for the current system, e.g. when the environment was
+        // locked on a host whose implicit default systems set doesn't include
+        // this system. Building would silently produce an environment with no
+        // packages, so fail with a re-lock hint instead.
+        check_lockfile_has_current_system(&lockfile, env!("NIX_TARGET_SYSTEM"))?;
 
         // Realise the packages in the lockfile, for the current system.
         // "Realising" a package means to check if the associated store paths are valid
@@ -2948,6 +2993,64 @@ mod join_realise_results_tests {
         assert!(
             matches!(result, Err(BuildEnvError::Other(_))),
             "got {result:?}"
+        );
+    }
+}
+
+#[cfg(test)]
+mod current_system_check_tests {
+    use flox_core::Version;
+    use flox_manifest::interfaces::AsTypedOnlyManifest;
+    use flox_manifest::lockfile::test_helpers::fake_catalog_package_lock;
+    use flox_manifest::parsed::latest::ManifestLatest;
+
+    use super::*;
+
+    fn lockfile_with_packages(packages: Vec<LockedPackage>) -> Lockfile {
+        Lockfile {
+            version: Version::<1>,
+            manifest: ManifestLatest::default().as_typed_only(),
+            packages,
+            compose: None,
+        }
+    }
+
+    /// An environment without any packages is legitimate and must build.
+    #[test]
+    fn allows_environment_without_packages() {
+        let lockfile = lockfile_with_packages(vec![]);
+        assert!(check_lockfile_has_current_system(&lockfile, "x86_64-linux").is_ok());
+    }
+
+    #[test]
+    fn allows_lockfile_with_package_for_current_system() {
+        // [fake_catalog_package_lock] locks for aarch64-darwin.
+        let (_, _, locked) = fake_catalog_package_lock("hello", None);
+        let lockfile = lockfile_with_packages(vec![locked.into()]);
+        assert!(check_lockfile_has_current_system(&lockfile, "aarch64-darwin").is_ok());
+    }
+
+    /// A lockfile whose packages are all locked for other systems must not
+    /// silently build an environment with no packages.
+    #[test]
+    fn errors_when_no_package_locked_for_current_system() {
+        // [fake_catalog_package_lock] locks for aarch64-darwin.
+        let (_, _, locked) = fake_catalog_package_lock("hello", None);
+        let lockfile = lockfile_with_packages(vec![locked.into()]);
+
+        let err = check_lockfile_has_current_system(&lockfile, "x86_64-linux").unwrap_err();
+        let BuildEnvError::LockfileMissingCurrentSystem {
+            system,
+            locked_systems,
+        } = err
+        else {
+            panic!("expected LockfileMissingCurrentSystem, got {err:?}");
+        };
+        assert_eq!(
+            (system, locked_systems),
+            ("x86_64-linux".to_string(), vec![
+                "aarch64-darwin".to_string()
+            ])
         );
     }
 }

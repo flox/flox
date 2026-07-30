@@ -1258,12 +1258,16 @@ impl CoreEnvironmentError {
             CoreEnvironmentError::Resolve(ResolveError::ResolutionFailed(failures))
              if failures.0.iter().any(|f| matches!(f, ResolutionFailure::PackageUnavailableOnSomeSystems { .. })));
 
-        // Incompatible system errors during build
-        // i.e. trying to build a lockfile that specifies systems,
-        // but the current system is not in the list
+        // Incompatible system errors during build:
+        // either the lockfile explicitly specifies systems and the current
+        // system is not in the list, or the lockfile contains packages but
+        // none locked for the current system.
         let is_build_incompatible_system_error = matches!(
             self,
-            CoreEnvironmentError::BuildEnv(BuildEnvError::LockfileIncompatible { .. })
+            CoreEnvironmentError::BuildEnv(
+                BuildEnvError::LockfileIncompatible { .. }
+                    | BuildEnvError::LockfileMissingCurrentSystem { .. }
+            )
         );
 
         is_lock_incompatible_system_error || is_build_incompatible_system_error
@@ -1635,16 +1639,13 @@ mod tests {
         let (mut flox, tempdir) = flox_instance();
 
         let env_path = tempfile::tempdir_in(&tempdir).unwrap();
-        fs::write(
-            env_path.path().join(MANIFEST_FILENAME),
-            formatdoc! {r#"
+        fs::write(env_path.path().join(MANIFEST_FILENAME), formatdoc! {r#"
                 version = 1
 
                 [install]
                 hello.pkg-path = "hello"
                 {ALL_SYSTEMS_OPTIONS}
-            "#},
-        )
+            "#})
         .unwrap();
 
         let mut env_view = CoreEnvironment::new(&env_path, IncludeFetcher {

@@ -2050,8 +2050,13 @@ mod test {
             [install]
             {ALL_SYSTEMS_OPTIONS}
         "#};
-        let mut environment =
-            mock_managed_environment_in(&flox, &initial_manifest, owner, &tempdir, Some("test-env"));
+        let mut environment = mock_managed_environment_in(
+            &flox,
+            &initial_manifest,
+            owner,
+            &tempdir,
+            Some("test-env"),
+        );
 
         flox.floxhub_client =
             catalog_replay_client(GENERATED_DATA.join("resolve/hello.yaml")).await;
