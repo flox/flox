@@ -87,6 +87,48 @@ impl ScanCtx<'_> {
     }
 }
 
+/// Parse a Nix file, rejecting any syntax error.
+///
+/// rnix is error-tolerant: `Parse::tree` yields a partial tree for a malformed
+/// file, so an unchecked parse silently drops the references in the broken
+/// region. The error is carried as the scan error's source, so its own
+/// rendering describes what the parser rejected. It locates itself by byte
+/// offset, so the position is resolved here, where the content is in hand.
+///
+/// A malformed file can produce several errors, and only the first is reported,
+/// for simplicity.
+/// The main objective is to report that the file failed to parse,
+/// other tools are in a better place to report details.
+fn parse_nix(content: &str, path: &Path) -> Result<rnix::Root, ScanError> {
+    let parse = rnix::Root::parse(content);
+    let Some(error) = parse.errors().first() else {
+        return Ok(parse.tree());
+    };
+    Err(ScanError::UnparsableFile {
+        file: path.to_path_buf(),
+        position: parse_error_offset(error).map(|offset| line_col(content, offset)),
+        error: error.clone(),
+    })
+}
+
+/// The byte offset a parse error points at. `None` for the variants that carry
+/// no source range (end-of-file and recursion-limit errors).
+fn parse_error_offset(error: &rnix::ParseError) -> Option<usize> {
+    use rnix::ParseError;
+
+    let range = match error {
+        ParseError::Unexpected(range)
+        | ParseError::UnexpectedExtra(range)
+        | ParseError::UnexpectedDoubleBind(range)
+        | ParseError::UnexpectedWanted(_, range, _)
+        | ParseError::DuplicatedArgs(range, _) => range,
+        // `ParseError` is `#[non_exhaustive]`, so a catch-all is required; a
+        // variant added upstream degrades to a file-level location.
+        _ => return None,
+    };
+    Some(usize::from(range.start()))
+}
+
 /// Resolve a byte `offset` into `content` to a 1-based `(line, column)`.
 pub(super) fn line_col(content: &str, offset: usize) -> (usize, usize) {
     let mut line = 1;
@@ -126,8 +168,7 @@ pub(super) fn analyze_file_at(
 ) -> Result<FileInfo, ScanError> {
     debug!(file = %path.display(), "reading NEF expression");
 
-    let parse = rnix::Root::parse(content);
-    let root = parse.tree();
+    let root = parse_nix(content, path)?;
 
     // Dependency arguments come from the eventual package function: wrappers
     // around it (`let … in`, `with …;`, parentheses) do not change which
@@ -215,21 +256,23 @@ pub(super) fn analyze_file_at(
             // its refs are rewritten back into the parent's namespace.
             let rewrites: HashMap<String, String> = match pending.arg {
                 ImportArg::Set(forwards) => forwards,
-                ImportArg::Root(parent_root) => match top_ident_param(&imported_content) {
-                    Some(param) => HashMap::from([(param, parent_root)]),
-                    None => {
-                        // A pattern parameter destructures the namespace into
-                        // names the scanner cannot statically bind, so
-                        // anything under the root may be referenced: it
-                        // escapes whole rather than being dropped.
-                        warn!(
-                            file = %target.display(),
-                            root = %parent_root,
-                            "imported file does not take the namespace as a plain parameter; locking the whole root",
-                        );
-                        refs.insert(format!("{parent_root}.*"));
-                        continue;
-                    },
+                ImportArg::Root(parent_root) => {
+                    match top_ident_param(&imported_content, &target)? {
+                        Some(param) => HashMap::from([(param, parent_root)]),
+                        None => {
+                            // A pattern parameter destructures the namespace into
+                            // names the scanner cannot statically bind, so
+                            // anything under the root may be referenced: it
+                            // escapes whole rather than being dropped.
+                            warn!(
+                                file = %target.display(),
+                                root = %parent_root,
+                                "imported file does not take the namespace as a plain parameter; locking the whole root",
+                            );
+                            refs.insert(format!("{parent_root}.*"));
+                            continue;
+                        },
+                    }
                 },
             };
             // The same file imported under a different forwarding contributes
@@ -1626,15 +1669,19 @@ fn top_level_lambda(root: &rnix::Root) -> Option<ast::Lambda> {
 }
 
 /// The name of a file's top-level plain lambda parameter (`cats: …`), if any.
-fn top_ident_param(content: &str) -> Option<String> {
-    let root = rnix::Root::parse(content).tree();
+///
+/// Parses the imported file before the recursion does, so a syntax error there
+/// surfaces as such instead of looking like a pattern parameter and widening the
+/// whole root to a sentinel.
+fn top_ident_param(content: &str, path: &Path) -> Result<Option<String>, ScanError> {
+    let root = parse_nix(content, path)?;
     let Some(ast::Expr::Lambda(lambda)) = root.expr() else {
-        return None;
+        return Ok(None);
     };
     let Some(ast::Param::IdentParam(param)) = lambda.param() else {
-        return None;
+        return Ok(None);
     };
-    param.ident().as_ref().and_then(ident_name)
+    Ok(param.ident().as_ref().and_then(ident_name))
 }
 
 /// Rewrite a child-rooted reference back to the parent's namespace using the
@@ -2944,6 +2991,45 @@ mod tests {
                     file: PathBuf::from(path),
                     position,
                 },
+                "fixture: {path}"
+            );
+        }
+    }
+
+    #[test]
+    fn unparsable_file_fails_scan() {
+        // rnix recovers from the malformed binding and yields a partial tree,
+        // which would drop the refs in the broken region; the scan fails
+        // instead, pointing at the syntax error.
+        let path = "test_data/catalog_refs/invalid-syntax.nix";
+        let err = scan_err_at(path, &root_attributes(&["catalogs"]));
+        // Asserted through the rendered message: it names the file and the
+        // position, and the parse error's exact shape is rnix's to change.
+        assert_eq!(
+            err.to_string(),
+            format!("Invalid Nix syntax at {path}:5:11")
+        );
+    }
+
+    #[test]
+    fn unparsable_import_target_fails_scan_naming_the_import() {
+        // A syntax error in an imported file is reported against that file,
+        // not the entry that forwards into it. The two forwarding shapes are
+        // detected in different places: the attrset form parses the target in
+        // the recursion, the whole-root form earlier, in `top_ident_param`.
+        // Without the latter's check the unparsed target reads as a pattern
+        // parameter and widens the root to `catalogs.*` instead of failing.
+        let target =
+            fs::canonicalize("test_data/catalog_refs/parse-error-import/broken.nix").unwrap();
+        let cases = [
+            "test_data/catalog_refs/parse-error-import/entry.nix",
+            "test_data/catalog_refs/parse-error-import/whole-root.nix",
+        ];
+        for path in cases {
+            let err = scan_err_at(path, &root_attributes(&["catalogs"]));
+            assert_eq!(
+                err.to_string(),
+                format!("Invalid Nix syntax at {}:4:12", target.display()),
                 "fixture: {path}"
             );
         }

@@ -3,8 +3,28 @@ use std::path::{Path, PathBuf};
 use indoc::formatdoc;
 
 /// A scan failure that must stop locking.
-#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+///
+/// `Eq` is absent because [rnix::ParseError] does not implement it.
+#[derive(Debug, Clone, PartialEq, thiserror::Error)]
 pub enum ScanError {
+    /// A file the scan must read is not valid Nix. rnix is error-tolerant and
+    /// yields a partial tree for a malformed file, so the references in the
+    /// broken region would be dropped without a signal.
+    ///
+    /// The parse error is the source rather than part of the message: it
+    /// already describes what the parser rejected, and rewriting that would
+    /// duplicate rnix's own reporting.
+    #[error("{}", unparsable_file_message(file, *position))]
+    UnparsableFile {
+        file: PathBuf,
+        /// 1-based `(line, column)` of the parse error, when it carries a
+        /// source range. Resolved at construction: the error locates itself by
+        /// byte offset, and only the file's content turns that into a position.
+        position: Option<(usize, usize)>,
+        #[source]
+        error: rnix::ParseError,
+    },
+
     /// A catalog root is referenced by a file whose top-level lambda does not
     /// declare it as a parameter. NEF supplies only declared arguments
     /// (callPackage semantics), so every reference through the root is
@@ -39,6 +59,13 @@ fn location_suffix(file: &Path, position: Option<(usize, usize)>) -> String {
     }
 }
 
+/// Render [ScanError::UnparsableFile] for the user. Kept to a single line with
+/// no full stop so the parse error reads as its continuation when the source
+/// chain is printed.
+fn unparsable_file_message(file: &Path, position: Option<(usize, usize)>) -> String {
+    format!("Invalid Nix syntax{}", location_suffix(file, position))
+}
+
 /// Render [ScanError::UndeclaredRoot] for the user.
 fn undeclared_root_message(root: &str, file: &Path, position: Option<(usize, usize)>) -> String {
     let location = location_suffix(file, position);
@@ -59,6 +86,46 @@ fn unreadable_import_message(target: &Path, file: &Path, position: (usize, usize
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// What `lock` prints: the message plus the source chain, which is where
+    /// the parse error itself surfaces.
+    fn chained(err: &ScanError) -> String {
+        let mut rendered = err.to_string();
+        let mut source = std::error::Error::source(err);
+        while let Some(err) = source {
+            rendered.push_str(&format!(": {err}"));
+            source = err.source();
+        }
+        rendered
+    }
+
+    #[test]
+    fn unparsable_file_error_message_points_at_the_syntax_error() {
+        let err = ScanError::UnparsableFile {
+            file: PathBuf::from("pkgs/foo.nix"),
+            position: Some((4, 12)),
+            error: rnix::ParseError::UnexpectedEOF,
+        };
+        assert_eq!(
+            chained(&err),
+            "Invalid Nix syntax at pkgs/foo.nix:4:12: unexpected end of file"
+        );
+    }
+
+    #[test]
+    fn unparsable_file_error_message_without_a_position_names_the_file() {
+        // An end-of-file error carries no source range, so there is no position
+        // to report.
+        let err = ScanError::UnparsableFile {
+            file: PathBuf::from("pkgs/foo.nix"),
+            position: None,
+            error: rnix::ParseError::UnexpectedEOF,
+        };
+        assert_eq!(
+            chained(&err),
+            "Invalid Nix syntax in pkgs/foo.nix: unexpected end of file"
+        );
+    }
 
     #[test]
     fn unreadable_import_error_message_points_at_the_import() {

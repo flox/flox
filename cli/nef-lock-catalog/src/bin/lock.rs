@@ -91,9 +91,11 @@ async fn main() -> ExitCode {
     match run(cli).await {
         Ok(()) => ExitCode::SUCCESS,
         // Decorate the rendered message body with `✘ ERROR:` here — the single
-        // place presentation is applied.
+        // place presentation is applied. The alternate form appends the source
+        // chain, which is where a wrapped cause states what actually went
+        // wrong (a scan failure carries the rnix parse error that way).
         Err(err) => {
-            eprintln!("{}", format_error(err));
+            eprintln!("{}", format_error(format!("{err:#}")));
             ExitCode::FAILURE
         },
     }
