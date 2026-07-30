@@ -25,6 +25,7 @@ use anyhow::Result;
 use bpaf::Bpaf;
 use flox_manifest::raw::{CatalogPackage, RawManifestError};
 use flox_rust_sdk::flox::Flox;
+use floxhub_client::AuthContext;
 use flox_rust_sdk::providers::buildenv::{
     BuildEnvError,
     build_catalog_pkg_from_source,
@@ -199,9 +200,11 @@ impl Run {
         subcommand_metric!("run");
 
         // TODO(DEV-200): replace with actual docs URL when available
-        message::warning(
-            "This command will require authentication in an upcoming release. See https://flox.dev/docs/install-flox/ for more info.",
-        );
+        if matches!(flox.auth_context, AuthContext::Auth0(None)) {
+            message::warning(
+                "This command will require authentication in an upcoming release. See https://flox.dev/docs/install-flox/ for more info.",
+            );
+        }
 
         // Re-read raw OS args. bpaf has already consumed the first `--`, so
         // we cannot rely on self._raw_args for correct passthrough semantics.

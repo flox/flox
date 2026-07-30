@@ -21,6 +21,7 @@ use flox_manifest::raw::{
 };
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::managed_environment::ManagedEnvironmentError;
+use floxhub_client::AuthContext;
 use flox_rust_sdk::models::environment::remote_environment::{
     RemoteEnvironment,
     RemoteEnvironmentError,
@@ -128,9 +129,11 @@ impl Install {
         subcommand_metric!("install");
 
         // TODO(DEV-200): replace with actual docs URL when available
-        message::warning(
-            "This command will require authentication in an upcoming release. See https://flox.dev/docs/install-flox/ for more info.",
-        );
+        if matches!(flox.auth_context, AuthContext::Auth0(None)) {
+            message::warning(
+                "This command will require authentication in an upcoming release. See https://flox.dev/docs/install-flox/ for more info.",
+            );
+        }
 
         debug!(
             "attempting to install packages [{}] to {:?}",

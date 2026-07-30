@@ -9,6 +9,7 @@ use flox_core::data::environment_ref::{DEFAULT_NAME, EnvironmentName, RemoteEnvi
 use flox_manifest::raw::{CatalogPackage, PackageToInstall};
 use flox_rust_sdk::data::AttrPath;
 use flox_rust_sdk::flox::Flox;
+use floxhub_client::AuthContext;
 use flox_rust_sdk::models::environment::path_environment::{InitCustomization, PathEnvironment};
 use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironment;
 use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment, PathPointer};
@@ -109,9 +110,11 @@ impl Init {
         subcommand_metric!("init");
 
         // TODO(DEV-200): replace with actual docs URL when available
-        message::warning(
-            "This command will require authentication in an upcoming release. See https://flox.dev/docs/install-flox/ for more info.",
-        );
+        if matches!(flox.auth_context, AuthContext::Auth0(None)) {
+            message::warning(
+                "This command will require authentication in an upcoming release. See https://flox.dev/docs/install-flox/ for more info.",
+            );
+        }
 
         match self.type_select {
             InitEnvironmentTypeSelect::Path {

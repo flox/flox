@@ -27,6 +27,7 @@ use flox_manifest::parsed::Inner;
 use flox_manifest::parsed::common::IncludeDescriptor;
 use flox_manifest::{Manifest, MigratedTypedOnly};
 use flox_rust_sdk::flox::Flox;
+use floxhub_client::AuthContext;
 use flox_rust_sdk::models::environment::floxmeta_branch::BranchOrd;
 use flox_rust_sdk::models::environment::generations::{GenerationId, GenerationsExt};
 use flox_rust_sdk::models::environment::managed_environment::DivergedMetadata;
@@ -226,7 +227,9 @@ impl Activate {
         );
 
         // TODO(DEV-200): replace with actual docs URL when available
-        if concrete_environment.existing_lockfile(&flox)?.is_none() {
+        if concrete_environment.existing_lockfile(&flox)?.is_none()
+            && matches!(flox.auth_context, AuthContext::Auth0(None))
+        {
             message::warning(
                 "Locking environments will require authentication in an upcoming release. See https://flox.dev/docs/install-flox/ for more info.",
             );

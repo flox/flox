@@ -10,6 +10,7 @@ use flox_core::data::environment_ref::EnvironmentName;
 use flox_events::{CliEnvironmentEditPayload, EnvDetail, EventKind, EventsHub};
 use flox_manifest::interfaces::{AsWritableManifest, WriteManifest};
 use flox_rust_sdk::flox::Flox;
+use floxhub_client::AuthContext;
 use flox_rust_sdk::models::environment::generations::{
     GenerationsEnvironment,
     GenerationsExt,
@@ -87,9 +88,11 @@ impl Edit {
         subcommand_metric!("edit");
 
         // TODO(DEV-200): replace with actual docs URL when available
-        message::warning(
-            "This command will require authentication in an upcoming release. See https://flox.dev/docs/install-flox/ for more info.",
-        );
+        if matches!(flox.auth_context, AuthContext::Auth0(None)) {
+            message::warning(
+                "This command will require authentication in an upcoming release. See https://flox.dev/docs/install-flox/ for more info.",
+            );
+        }
 
         // Ensure the user is logged in for the following remote operations
         if let EnvironmentSelect::Remote(_) = self.environment {
