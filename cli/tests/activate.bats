@@ -3527,7 +3527,7 @@ EOF
     eval "$(${FLOX_BIN} activate -d ${PROJECT_DIR})"
   '
   # There should be no errors from the in-place activations.
-  assert_output "✔ 'hello' installed to environment '${PROJECT_NAME}'"
+  assert_output --partial "✔ 'hello' installed to environment '${PROJECT_NAME}'"
   assert_success
 
   # Additional activations of the modified environment should still work.

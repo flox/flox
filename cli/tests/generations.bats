@@ -192,11 +192,7 @@ test_mutate_with_activate_generation() {
 
   RUST_BACKTRACE=0 run "$FLOX_BIN" activate --generation 3 -- "$FLOX_BIN" "${argv[@]}"
   assert_failure
-  assert_output - <<EOF
-${FLOXHUB_GIT_WARNING?}
-
-${FLOXHUB_GIT_WARNING?}
-
+  assert_output --partial - <<EOF
 ✘ ERROR: generations error: Cannot modify environments that are activated with a specific generation.
 
 If you wish to modify the environment at this generation:

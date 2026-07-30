@@ -119,7 +119,8 @@ EOF
 
 @test "'flox activate' without lockfile prints lock warning" {
   "$FLOX_BIN" init
-  # No install or prior activate — no lockfile exists
+  # flox init always creates a lockfile; remove it to simulate a pre-lockfile env
+  rm .flox/env/manifest.lock
   run "$FLOX_BIN" activate -c true
   assert_success
   assert_output --partial "$LOCK_WARNING"
