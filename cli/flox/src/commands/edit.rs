@@ -10,7 +10,6 @@ use flox_core::data::environment_ref::EnvironmentName;
 use flox_events::{CliEnvironmentEditPayload, EnvDetail, EventKind, EventsHub};
 use flox_manifest::interfaces::{AsWritableManifest, WriteManifest};
 use flox_rust_sdk::flox::Flox;
-use floxhub_client::AuthContext;
 use flox_rust_sdk::models::environment::generations::{
     GenerationsEnvironment,
     GenerationsExt,
@@ -26,6 +25,7 @@ use flox_rust_sdk::models::environment::{
 };
 use flox_rust_sdk::providers::buildenv::BuildEnvError;
 use flox_rust_sdk::providers::services::process_compose::ServiceError;
+use floxhub_client::AuthContext;
 use indoc::formatdoc;
 use itertools::Itertools;
 use tracing::{debug, instrument};
