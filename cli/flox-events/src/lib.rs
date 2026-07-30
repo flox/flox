@@ -138,7 +138,7 @@ pub enum EventKind {
     #[serde(rename = "cli.package.install")]
     CliPackageInstall(CliPackagePayload),
     #[serde(rename = "cli.package.upgrade")]
-    CliPackageUpgrade(CliPackagePayload),
+    CliPackageUpgrade(CliPackageUpgradePayload),
     #[serde(rename = "cli.package.uninstall")]
     CliPackageUninstall(CliPackagePayload),
     #[serde(rename = "cli.environment.containerize")]
@@ -554,12 +554,14 @@ pub enum Outcome {
     Failure,
 }
 
-/// Payload shared by the per-package events (`cli.package.install` /
-/// `.upgrade` / `.uninstall`). One event is emitted per package.
+/// Payload shared by `cli.package.install` and `cli.package.uninstall`.
+/// One event is emitted per package.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CliPackagePayload {
-    /// Per-package identifier matching what the legacy `failed_packages`
-    /// string packed (catalog `pkg_path`, flake URL, or store path).
+    /// Per-package identifier. Install events carry the coordinate as the
+    /// user wrote it (catalog pkg path, flake installable, or store path —
+    /// what the legacy `failed_packages` string packed); uninstall events
+    /// currently carry the manifest install id instead.
     package: String,
     /// Outcome of this package's attempt within the invocation. Recorded
     /// best-effort from a single error-handling site (e.g.
@@ -579,6 +581,60 @@ pub struct CliPackagePayload {
 impl CliPackagePayload {
     pub fn new(package: String, outcome: Outcome) -> Self {
         Self { package, outcome }
+    }
+}
+
+/// Payload for [`EventKind::CliPackageUpgrade`]. One event per upgraded
+/// package, for the current system only — upgrades applied for other
+/// systems in the same invocation emit nothing.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CliPackageUpgradePayload {
+    /// The package coordinate as written in the manifest (catalog pkg
+    /// path, flake installable, or store path) — stable across upgrades
+    /// and shared with the install events. Not unique within an
+    /// invocation: one coordinate installed under several install ids
+    /// upgrades as several rows.
+    package: String,
+    /// See [`CliPackagePayload::outcome`]; upgrade rows are emitted from
+    /// the success path only.
+    outcome: Outcome,
+    /// The manifest install id this row's package was upgraded under —
+    /// the per-invocation unique key.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    install_id: Option<String>,
+    /// Version before the upgrade; absent when unknown.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    previous_version: Option<String>,
+    /// Version after the upgrade; absent when unknown. A rebuild without
+    /// a version change carries the same value in both version fields.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    version: Option<String>,
+}
+
+impl CliPackageUpgradePayload {
+    pub fn new(package: String, outcome: Outcome) -> Self {
+        Self {
+            package,
+            outcome,
+            install_id: None,
+            previous_version: None,
+            version: None,
+        }
+    }
+
+    pub fn with_install_id(mut self, value: impl Into<String>) -> Self {
+        self.install_id = Some(value.into());
+        self
+    }
+
+    pub fn with_previous_version(mut self, value: impl Into<String>) -> Self {
+        self.previous_version = Some(value.into());
+        self
+    }
+
+    pub fn with_version(mut self, value: impl Into<String>) -> Self {
+        self.version = Some(value.into());
+        self
     }
 }
 
@@ -1345,6 +1401,35 @@ mod tests {
     }
 
     #[test]
+    fn cli_package_upgrade_full_envelope_golden() {
+        let payload = CliPackageUpgradePayload::new("hello".to_string(), Outcome::Success)
+            .with_install_id("greeting")
+            .with_previous_version("2.10.1")
+            .with_version("2.12.3");
+        let value = serde_json::to_value(fixed_event(EventKind::CliPackageUpgrade(payload)))
+            .expect("event serializes");
+        let mut expected = package_envelope_json("cli.package.upgrade", "hello", "success");
+        expected["payload"]["install_id"] = json!("greeting");
+        expected["payload"]["previous_version"] = json!("2.10.1");
+        expected["payload"]["version"] = json!("2.12.3");
+        assert_eq!(value, expected);
+    }
+
+    #[test]
+    fn cli_package_upgrade_payload_without_optional_keys_deserializes() {
+        // Rows buffered by an older producer carry only package + outcome;
+        // they must stay field-additive and read back with every optional
+        // field `None`.
+        let payload: CliPackageUpgradePayload =
+            serde_json::from_value(json!({ "package": "hello", "outcome": "success" }))
+                .expect("payload without optional keys deserializes");
+        assert_eq!(
+            payload,
+            CliPackageUpgradePayload::new("hello".to_string(), Outcome::Success)
+        );
+    }
+
+    #[test]
     fn cli_package_install_success_envelope_golden() {
         let payload = CliPackagePayload::new("hello".to_string(), Outcome::Success);
         let value = serde_json::to_value(fixed_event(EventKind::CliPackageInstall(payload)))
@@ -1364,7 +1449,8 @@ mod tests {
 
     #[test]
     fn cli_package_upgrade_envelope_golden() {
-        let payload = CliPackagePayload::new("hello".to_string(), Outcome::Success);
+        // Optional fields omitted entirely when unset — never null.
+        let payload = CliPackageUpgradePayload::new("hello".to_string(), Outcome::Success);
         let value = serde_json::to_value(fixed_event(EventKind::CliPackageUpgrade(payload)))
             .expect("event serializes");
         let expected = package_envelope_json("cli.package.upgrade", "hello", "success");

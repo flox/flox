@@ -39,6 +39,17 @@ impl ManifestPackageDescriptor {
             _ => false,
         }
     }
+
+    /// The package coordinate as written in the manifest (catalog pkg path,
+    /// flake installable, or store path) — independent of the user-chosen
+    /// install id, and stable across upgrades.
+    pub fn package_identifier(&self) -> &str {
+        match self {
+            ManifestPackageDescriptor::Catalog(pkg) => &pkg.pkg_path,
+            ManifestPackageDescriptor::FlakeRef(pkg) => &pkg.flake,
+            ManifestPackageDescriptor::StorePath(pkg) => &pkg.store_path,
+        }
+    }
 }
 
 impl ManifestPackageDescriptor {
@@ -348,5 +359,27 @@ impl From<v1::ManifestPackageDescriptor> for ManifestPackageDescriptor {
                 ManifestPackageDescriptor::StorePath(old)
             },
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+
+    #[test]
+    fn package_identifier_is_the_manifest_coordinate() {
+        let catalog: ManifestPackageDescriptor =
+            serde_json::from_value(json!({ "pkg-path": "python313Packages.pip" })).unwrap();
+        assert_eq!(catalog.package_identifier(), "python313Packages.pip");
+
+        let flake: ManifestPackageDescriptor =
+            serde_json::from_value(json!({ "flake": "github:NixOS/nixpkgs#hello" })).unwrap();
+        assert_eq!(flake.package_identifier(), "github:NixOS/nixpkgs#hello");
+
+        let store_path: ManifestPackageDescriptor =
+            serde_json::from_value(json!({ "store-path": "/nix/store/abc-hello" })).unwrap();
+        assert_eq!(store_path.package_identifier(), "/nix/store/abc-hello");
     }
 }
