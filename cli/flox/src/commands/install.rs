@@ -1033,6 +1033,7 @@ mod tests {
             .await
             .expect("installation failed");
         let expected = formatdoc! {"
+             ! This command will require authentication in an upcoming release. See https://flox.dev/docs/install-flox/ for more info.
              ! '{install_id}' installed only for the following systems: {installed_systems}
         "};
         assert_eq!(writer.to_string(), expected);
