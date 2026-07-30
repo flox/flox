@@ -2186,7 +2186,11 @@ mod test {
         let lockfile: Lockfile = serde_json::from_str(&lockfile_content).unwrap();
 
         assert_eq!(lockfile.manifest, new_manifest);
-        assert_eq!(lockfile.packages.len(), 4); // 1 x 4 systems
+        // 1 package x the default systems
+        assert_eq!(
+            lockfile.packages.len(),
+            flox_manifest::raw::DEFAULT_SYSTEMS_STR.len()
+        );
 
         let lockfile_in_generation_content =
             fs::read_to_string(managed_env.lockfile_path(&flox).unwrap()).unwrap();
