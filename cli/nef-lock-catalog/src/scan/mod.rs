@@ -9,7 +9,7 @@ mod analyze;
 mod error;
 mod graph;
 
-pub use error::ScanError;
+pub use error::{ImportSite, ScanError};
 use graph::PackageGraph;
 
 /// A single catalog attribute-path reference discovered by the scanner,
@@ -112,12 +112,41 @@ pub fn scan_package_with_roots(
 
 #[cfg(test)]
 mod tests {
-    use std::fs;
+    use std::{assert_matches, fs};
 
     use super::*;
 
     fn set(items: &[&str]) -> BTreeSet<CatalogRef> {
         items.iter().map(|s| CatalogRef::from(*s)).collect()
+    }
+
+    #[test]
+    fn unreadable_entry_fails_the_scan() {
+        // The entry names the file NEF would evaluate, so failing to read it
+        // must not resolve to an empty reference set: that would write a lock
+        // claiming the package has no catalog inputs.
+        let base_dir = Path::new("test_data/catalog_refs");
+        let err =
+            scan_package(base_dir, Path::new("no-such-package.nix")).expect_err("scan should fail");
+        assert_matches!(
+            err,
+            ScanError::UnreadableFile {
+                file,
+                source,
+                imported_from: None,
+            } if file == base_dir.join("no-such-package.nix")
+                && source.kind() == std::io::ErrorKind::NotFound
+        );
+    }
+
+    #[test]
+    fn dependency_argument_resolving_to_nothing_scans_clean() {
+        // An argument NEF satisfies from nixpkgs names no file in the package
+        // set. It is skipped, not read, so the tightened read path must not
+        // turn it into a failure.
+        let base_dir = Path::new("test_data/catalog_refs");
+        let got = scan_package(base_dir, Path::new("nixpkgs-arg.nix")).unwrap();
+        assert_eq!(got, set(&["catalogs.myorg.toolkit.readVersion"]));
     }
 
     #[test]

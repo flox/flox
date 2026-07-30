@@ -33,14 +33,13 @@ impl PackageGraph {
     }
 
     /// Add an entry package by its path relative to `base_dir`, reading and
-    /// analyzing it. Imports resolve against the entry's own directory. An
-    /// unreadable entry is a no-op. Callable more than once.
+    /// analyzing it. Imports resolve against the entry's own directory.
+    /// Callable more than once.
     pub(super) fn add_root(&mut self, rel_file: impl AsRef<Path>) -> Result<(), ScanError> {
         let path = self.base_dir.join(rel_file.as_ref());
         let key = package_key(rel_file.as_ref());
-        if let Some(scan) = read_and_analyze(&path, &self.root_attributes)? {
-            self.scans.insert(key, scan);
-        }
+        let scan = read_and_analyze(&path, &self.root_attributes)?;
+        self.scans.insert(key, scan);
         Ok(())
     }
 
@@ -127,6 +126,10 @@ fn package_key(rel_file: &Path) -> String {
 /// directory); a `<comp>/default.nix` is a package directory; a directory with
 /// no `default.nix` is an attribute set that is descended into. Components past
 /// the package file are attributes within it and are ignored.
+///
+/// `Ok(None)` means the argument names nothing on disk, which is how an
+/// argument NEF satisfies from nixpkgs looks. A file that does resolve but
+/// cannot be read is an error instead: it is a package of this set.
 fn try_resolve_dependency_argument(
     dir: &Path,
     components: &[String],
@@ -136,12 +139,12 @@ fn try_resolve_dependency_argument(
     for comp in components {
         let file = cur.join(format!("{comp}.nix"));
         if file.is_file() {
-            return read_and_analyze(&file, root_attributes);
+            return read_and_analyze(&file, root_attributes).map(Some);
         }
         let sub = cur.join(comp);
         let default = sub.join("default.nix");
         if default.is_file() {
-            return read_and_analyze(&default, root_attributes);
+            return read_and_analyze(&default, root_attributes).map(Some);
         }
         if sub.is_dir() {
             cur = sub;
@@ -157,16 +160,16 @@ fn try_resolve_dependency_argument(
 /// Relative imports in the file resolve against its own directory, so the
 /// file's parent is passed as the import base. Shared by [PackageGraph::add_root]
 /// (entry packages) and [try_resolve_dependency_argument] (dependencies).
-fn read_and_analyze(
-    path: &Path,
-    root_attributes: &HashSet<String>,
-) -> Result<Option<FileInfo>, ScanError> {
-    // TODO(ECO-133): an unreadable file silently resolves to `None`, which
-    // drops the package and its refs from the closure. This should probably be
-    // a hard error rather than a silent skip.
-    let Ok(content) = fs::read_to_string(path) else {
-        return Ok(None);
-    };
+///
+/// Error, if the file at `path` cannot be read.
+/// Skipping the analysis here would otherwise lead to incomplete closures,
+/// and likely evaluation errors.
+fn read_and_analyze(path: &Path, root_attributes: &HashSet<String>) -> Result<FileInfo, ScanError> {
+    let content = fs::read_to_string(path).map_err(|source| ScanError::UnreadableFile {
+        file: path.to_path_buf(),
+        source,
+        imported_from: None,
+    })?;
     analyze_file_at(
         &content,
         root_attributes,
@@ -175,5 +178,4 @@ fn read_and_analyze(
         path,
         &identity_origins(root_attributes),
     )
-    .map(Some)
 }

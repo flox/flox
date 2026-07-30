@@ -2,10 +2,21 @@ use std::path::{Path, PathBuf};
 
 use indoc::formatdoc;
 
+/// Where a file was named, when the scan did not read it directly.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ImportSite {
+    /// The importing file.
+    pub file: PathBuf,
+    /// 1-based `(line, column)` of the import application.
+    pub position: (usize, usize),
+}
+
 /// A scan failure that must stop locking.
 ///
-/// `Eq` is absent because [rnix::ParseError] does not implement it.
-#[derive(Debug, Clone, PartialEq, thiserror::Error)]
+/// Only `Debug` is derived: the wrapped [rnix::ParseError] rules out `Eq`, and
+/// [std::io::Error] rules out `Clone` and `PartialEq` too. Tests assert on the
+/// rendered message instead.
+#[derive(Debug, thiserror::Error)]
 pub enum ScanError {
     /// A file the scan must read is not valid Nix. rnix is error-tolerant and
     /// yields a partial tree for a malformed file, so the references in the
@@ -37,16 +48,22 @@ pub enum ScanError {
         position: Option<(usize, usize)>,
     },
 
-    /// An import that forwards catalog namespaces names a target file that
-    /// cannot be read. The refs the imported file would contribute through
-    /// the forwarded namespaces cannot be discovered, so the scan fails
-    /// rather than silently under-locking.
-    #[error("{}", unreadable_import_message(target, file, *position))]
-    UnreadableImport {
-        target: PathBuf,
+    /// A file the scan must read cannot be read. Whether it is the entry
+    /// expression, a dependency argument resolved by file convention, or the
+    /// target of an import that forwards a catalog namespace, the references
+    /// it would contribute cannot be discovered, so the scan fails rather
+    /// than silently under-locking.
+    ///
+    /// The IO error is the source rather than part of the message, so what
+    /// went wrong (missing, unreadable) is stated once, by the OS.
+    #[error("{}", unreadable_file_message(file, imported_from.as_ref()))]
+    UnreadableFile {
         file: PathBuf,
-        /// 1-based `(line, column)` of the import application.
-        position: (usize, usize),
+        #[source]
+        source: std::io::Error,
+        /// `Some` when the file was reached by an `import`; `None` when the
+        /// scan resolved it directly (entry file or dependency argument).
+        imported_from: Option<ImportSite>,
     },
 }
 
@@ -74,13 +91,18 @@ fn undeclared_root_message(root: &str, file: &Path, position: Option<(usize, usi
         Add '{root}' to the function arguments, e.g. '{{ {root}, ... }}:'."}
 }
 
-/// Render [ScanError::UnreadableImport] for the user.
-fn unreadable_import_message(target: &Path, file: &Path, position: (usize, usize)) -> String {
-    let target = target.display();
-    let location = location_suffix(file, Some(position));
-    formatdoc! {"
-        '{target}' is imported{location} but cannot be read.
-        Check that the imported file exists and is readable."}
+/// Render [ScanError::UnreadableFile] for the user. Kept to a single line with
+/// no full stop so the IO error reads as its continuation when the source chain
+/// is printed.
+fn unreadable_file_message(file: &Path, imported_from: Option<&ImportSite>) -> String {
+    let file = file.display();
+    match imported_from {
+        Some(site) => {
+            let location = location_suffix(&site.file, Some(site.position));
+            format!("'{file}' is imported{location} but cannot be read")
+        },
+        None => format!("'{file}' cannot be read"),
+    }
 }
 
 #[cfg(test)]
@@ -128,15 +150,32 @@ mod tests {
     }
 
     #[test]
-    fn unreadable_import_error_message_points_at_the_import() {
-        let err = ScanError::UnreadableImport {
-            target: PathBuf::from("pkgs/helper.nix"),
-            file: PathBuf::from("pkgs/foo.nix"),
-            position: (4, 1),
+    fn unreadable_file_error_message_points_at_the_import() {
+        let err = ScanError::UnreadableFile {
+            file: PathBuf::from("pkgs/helper.nix"),
+            source: std::io::Error::from(std::io::ErrorKind::NotFound),
+            imported_from: Some(ImportSite {
+                file: PathBuf::from("pkgs/foo.nix"),
+                position: (4, 1),
+            }),
         };
-        assert_eq!(err.to_string(), indoc::indoc! {"
-                'pkgs/helper.nix' is imported at pkgs/foo.nix:4:1 but cannot be read.
-                Check that the imported file exists and is readable."});
+        assert_eq!(
+            chained(&err),
+            "'pkgs/helper.nix' is imported at pkgs/foo.nix:4:1 but cannot be read: entity not found"
+        );
+    }
+
+    #[test]
+    fn unreadable_file_error_message_names_a_directly_resolved_file() {
+        let err = ScanError::UnreadableFile {
+            file: PathBuf::from("pkgs/foo.nix"),
+            source: std::io::Error::from(std::io::ErrorKind::PermissionDenied),
+            imported_from: None,
+        };
+        assert_eq!(
+            chained(&err),
+            "'pkgs/foo.nix' cannot be read: permission denied"
+        );
     }
 
     #[test]

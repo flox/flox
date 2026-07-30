@@ -13,7 +13,7 @@ use rnix::ast::HasEntry;
 use rowan::ast::AstNode;
 use tracing::{debug, warn};
 
-use super::{CatalogRef, ScanError};
+use super::{CatalogRef, ImportSite, ScanError};
 
 /// Catalog references and dependency attr-paths extracted from one file.
 #[derive(Debug)]
@@ -243,15 +243,17 @@ pub(super) fn analyze_file_at(
             } else {
                 target
             };
-            let Ok(imported_content) = fs::read_to_string(&target) else {
-                // The refs the imported file would contribute cannot be
-                // discovered, so fail rather than silently under-lock.
-                return Err(ScanError::UnreadableImport {
-                    target,
-                    file: path.to_path_buf(),
-                    position: line_col(content, pending.offset),
-                });
-            };
+            // The refs the imported file would contribute cannot be
+            // discovered, so fail rather than silently under-lock.
+            let imported_content =
+                fs::read_to_string(&target).map_err(|source| ScanError::UnreadableFile {
+                    file: target.clone(),
+                    source,
+                    imported_from: Some(ImportSite {
+                        file: path.to_path_buf(),
+                        position: line_col(content, pending.offset),
+                    }),
+                })?;
             // The child is scanned with its own parameter names as root_attributes;
             // its refs are rewritten back into the parent's namespace.
             let rewrites: HashMap<String, String> = match pending.arg {
@@ -1776,6 +1778,8 @@ fn attr_static_name(attr: &ast::Attr) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
+
     use super::*;
 
     fn root_attributes(names: &[&str]) -> HashSet<String> {
@@ -2984,13 +2988,18 @@ mod tests {
         ];
         for (path, position) in cases {
             let err = scan_err_at(path, &root_attributes(&["catalogs"]));
-            assert_eq!(
+            assert_matches!(
                 err,
-                ScanError::UnreadableImport {
-                    target: PathBuf::from("test_data/catalog_refs/no-such-helper.nix"),
-                    file: PathBuf::from(path),
-                    position,
-                },
+                ScanError::UnreadableFile {
+                    file,
+                    source,
+                    imported_from: Some(site),
+                } if file == Path::new("test_data/catalog_refs/no-such-helper.nix")
+                    && source.kind() == std::io::ErrorKind::NotFound
+                    && site == ImportSite {
+                        file: PathBuf::from(path),
+                        position,
+                    },
                 "fixture: {path}"
             );
         }
@@ -3087,13 +3096,16 @@ mod tests {
             ),
         ];
         for (label, content, position) in cases {
-            assert_eq!(
-                scan_err(content, &root_attributes(&["catalogs"])),
+            let err = scan_err(content, &root_attributes(&["catalogs"]));
+            assert_matches!(
+                err,
                 ScanError::UndeclaredRoot {
-                    root: "catalogs".to_string(),
-                    file: PathBuf::from("test.nix"),
-                    position: Some(position),
-                },
+                    root,
+                    file,
+                    position: got,
+                } if root == "catalogs"
+                    && file == Path::new("test.nix")
+                    && got == Some(position),
                 "{label}",
             );
         }
@@ -3167,10 +3179,13 @@ mod tests {
             &identity_origins(&root_attributes(&["catalogs"])),
         )
         .expect_err("scan should fail");
-        assert_eq!(err, ScanError::UndeclaredRoot {
-            root: "catalogs".to_string(),
-            file: path.to_path_buf(),
-            position: Some((6, 35)),
-        });
+        assert_matches!(
+            err,
+            ScanError::UndeclaredRoot {
+                root,
+                file,
+                position,
+            } if root == "catalogs" && file == path && position == Some((6, 35))
+        );
     }
 }
