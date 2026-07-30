@@ -269,7 +269,10 @@ mod tests {
 
         let printed = writer.to_string();
 
-        assert_eq!(printed, "! This command will require authentication in an upcoming release. See https://flox.dev/docs/install-flox/ for more info.\nNo upgrades available for packages in 'name'.\n");
+        assert_eq!(
+            printed,
+            "! This command will require authentication in an upcoming release. See https://flox.dev/docs/install-flox/ for more info.\nNo upgrades available for packages in 'name'.\n"
+        );
     }
 
     /// Run an upgrade of an environment that only has upgrades on other systems
