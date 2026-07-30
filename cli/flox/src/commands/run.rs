@@ -46,6 +46,7 @@ use thiserror::Error;
 use tracing::{debug, info_span};
 
 use crate::subcommand_metric;
+use crate::utils::message;
 
 // ---------------------------------------------------------------------------
 // Error types
@@ -196,6 +197,11 @@ impl Run {
     /// then resolve, download, and exec.
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("run");
+
+        // TODO(DEV-200): replace with actual docs URL when available
+        message::warning(
+            "This command will require authentication in an upcoming release. See https://flox.dev/docs/install-flox/ for more info.",
+        );
 
         // Re-read raw OS args. bpaf has already consumed the first `--`, so
         // we cannot rely on self._raw_args for correct passthrough semantics.

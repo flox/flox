@@ -225,6 +225,13 @@ impl Activate {
                 .to_string()
         );
 
+        // TODO(DEV-200): replace with actual docs URL when available
+        if concrete_environment.existing_lockfile(&flox)?.is_none() {
+            message::warning(
+                "Locking environments will require authentication in an upcoming release. See https://flox.dev/docs/install-flox/ for more info.",
+            );
+        }
+
         // Both telemetry stacks emit in parallel through the dormant
         // phase; the new-pipeline mirrors below are no-ops in production
         // until the cutover PR installs an `EventsHub` client.

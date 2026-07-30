@@ -37,6 +37,12 @@ impl Upgrade {
         // Record subcommand metric prior to environment_subcommand_metric below
         // in case we error before then
         subcommand_metric!("upgrade");
+
+        // TODO(DEV-200): replace with actual docs URL when available
+        message::warning(
+            "This command will require authentication in an upcoming release. See https://flox.dev/docs/install-flox/ for more info.",
+        );
+
         tracing::debug!(
             to_upgrade = self.groups_or_iids.join(","),
             "upgrading groups and install ids"

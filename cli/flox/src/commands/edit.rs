@@ -86,6 +86,11 @@ impl Edit {
         // in case we error before then
         subcommand_metric!("edit");
 
+        // TODO(DEV-200): replace with actual docs URL when available
+        message::warning(
+            "This command will require authentication in an upcoming release. See https://flox.dev/docs/install-flox/ for more info.",
+        );
+
         // Ensure the user is logged in for the following remote operations
         if let EnvironmentSelect::Remote(_) = self.environment {
             ensure_auth(&mut flox).await?;

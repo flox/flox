@@ -67,6 +67,11 @@ impl IncludeCommands {
 impl Upgrade {
     #[instrument(name = "upgrade", skip_all)]
     pub async fn handle(self, mut flox: Flox) -> Result<()> {
+        // TODO(DEV-200): replace with actual docs URL when available
+        message::warning(
+            "This command will require authentication in an upcoming release. See https://flox.dev/docs/install-flox/ for more info.",
+        );
+
         let mut environment = self
             .environment
             .detect_concrete_environment(
