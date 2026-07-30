@@ -937,6 +937,7 @@ mod tests {
         .unwrap();
 
         assert_eq!(writer.to_string(), indoc! {"
+            ! This command will require authentication in an upcoming release. See https://flox.dev/docs/install-flox/ for more info.
             ✔ Environment successfully updated.
             ℹ Run 'flox list -c' to see merged manifest.
             "});
@@ -992,6 +993,7 @@ mod tests {
         // - overrides are shown even if `includes` didn't change.
         // - hint to see the merged manifest is shown.
         assert_eq!(writer.to_string(), indoc! {"
+            ! This command will require authentication in an upcoming release. See https://flox.dev/docs/install-flox/ for more info.
             ✔ Environment successfully updated.
             ℹ The following manifest fields were overridden during merging:
             - This environment set:
