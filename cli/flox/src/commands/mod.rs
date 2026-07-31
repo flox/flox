@@ -41,6 +41,7 @@ use flox_config::{Config, EnvironmentTrust, FLOX_DIR_NAME, TokenStorageMode};
 use flox_core::data::environment_ref::{self, DEFAULT_NAME, RemoteEnvironmentRef};
 use flox_core::floxhub::{DEFAULT_FLOXHUB_URL, Floxhub};
 use flox_core::vars::FLOX_DISABLE_METRICS_VAR;
+use flox_events::{EventKind, EventsHub};
 use flox_manifest::interfaces::AsLatestSchema;
 use flox_manifest::{Manifest, TypedOnly};
 use flox_rust_sdk::flox::{AuthContext, FLOX_VERSION, Flox, FloxhubTokenError};
@@ -265,11 +266,18 @@ impl FloxArgs {
             .unwrap_or_default();
             let active_environments = activated_environments();
             print_welcome_message(envs, active_environments);
-            UpdateNotification::check_for_and_print_update_notification(
+            let update_prompted = UpdateNotification::check_for_and_print_update_notification(
                 &config.flox.cache_dir,
                 &update_channel,
             )
             .await;
+            if update_prompted
+                && let Some(events_client) =
+                    build_events_client(&config, resolve_invocation_id(), None)
+                && let Err(err) = events_client.record_event(EventKind::CliUpdatePrompted {})
+            {
+                debug!(error = %err, "Failed to record v2 cli.update_prompted event");
+            }
             return Ok(());
         }
 
@@ -364,7 +372,7 @@ impl FloxArgs {
             resolve_invocation_id(),
             credential.user_subject().map(String::from),
         ) {
-            flox_events::EventsHub::global().set_client(events_client);
+            EventsHub::global().set_client(events_client);
         }
 
         // Emit the v2 `cli.command_run` once at dispatch start. The matching
@@ -385,9 +393,7 @@ impl FloxArgs {
             .as_ref()
             .map(Commands::subcommand_name)
             .unwrap_or("help");
-        if let Err(err) =
-            flox_events::EventsHub::global().record_command_run(v2_subcommand.to_string())
-        {
+        if let Err(err) = EventsHub::global().record_command_run(v2_subcommand.to_string()) {
             debug!(error = %err, "Failed to record v2 cli.command_run event");
         }
 
@@ -472,7 +478,14 @@ impl FloxArgs {
             // but I'm not sure it's worth a refactor.
             match check_for_update_handle.await {
                 Ok(update_notification) => {
-                    UpdateNotification::handle_update_result(update_notification, &update_channel);
+                    if UpdateNotification::handle_update_result(
+                        update_notification,
+                        &update_channel,
+                    ) && let Err(err) =
+                        EventsHub::global().record_event(EventKind::CliUpdatePrompted {})
+                    {
+                        debug!(error = %err, "Failed to record v2 cli.update_prompted event");
+                    }
                 },
                 Err(e) => debug!("Failed to check for CLI update: {}", display_chain(&e)),
             }

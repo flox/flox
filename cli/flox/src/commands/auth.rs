@@ -6,6 +6,7 @@ use bpaf::Bpaf;
 use chrono::offset::Utc;
 use chrono::{DateTime, Duration};
 use flox_config::{Config, FLOX_CONFIG_FILE, TokenStorageMode};
+use flox_events::{EventKind, EventsHub};
 use flox_rust_sdk::flox::{FLOX_VERSION, Flox, FloxhubToken};
 use floxhub_client::{AuthContext, AuthFailure};
 use indoc::{formatdoc, indoc};
@@ -529,6 +530,13 @@ fn complete_login(
         }
     }
 
+    if let Err(err) = EventsHub::global().record_event_with_auth_subject(
+        EventKind::CliAuthenticated {},
+        flox.auth_context.user_subject(),
+    ) {
+        debug!(error = %err, "Failed to record v2 cli.authenticated event");
+    }
+
     Ok(handle)
 }
 
@@ -625,11 +633,46 @@ mod tests {
     use std::fs;
 
     use flox_config::FLOX_CONFIG_FILE;
+    use flox_events::{EventsBuffer, EventsClient, SharedMetadataTemplate};
     use flox_rust_sdk::flox::test_helpers::{create_test_token, flox_instance};
-    use floxhub_client::test_helpers::FAKE_EXPIRED_TOKEN;
+    use floxhub_client::test_helpers::{FAKE_EXPIRED_TOKEN, FAKE_TOKEN_WITH_SUB};
     use httpmock::MockServer;
+    use serial_test::serial;
+    use uuid::Uuid;
 
     use super::*;
+
+    struct EventsClientReset(Option<EventsClient>);
+
+    impl Drop for EventsClientReset {
+        fn drop(&mut self) {
+            EventsHub::global().clear_client();
+            if let Some(previous) = self.0.take() {
+                EventsHub::global().set_client(previous);
+            }
+        }
+    }
+
+    fn install_events_client(flox: &Flox) -> EventsClientReset {
+        let client = EventsClient::new(
+            Uuid::new_v4(),
+            &flox.data_dir,
+            "",
+            "",
+            Uuid::new_v4(),
+            Some("previous-subject".to_string()),
+            SharedMetadataTemplate {
+                flox_version: "0.0.0-test".to_string(),
+                os_family: None,
+                os_family_release: None,
+                os: None,
+                os_version: None,
+                empty_flags: vec![],
+                invocation_sources: vec![],
+            },
+        );
+        EventsClientReset(EventsHub::global().set_client(client))
+    }
 
     /// Point the Flox instance's client at a mock `/me` server.
     fn override_client(flox: &mut Flox, server: &MockServer) {
@@ -675,6 +718,68 @@ mod tests {
             assert_eq!(stored.secret(), token.secret());
         })
         .await;
+    }
+
+    #[test]
+    #[serial(global_events_client)]
+    fn complete_login_records_fresh_auth0_subject_and_omits_pat_subject() {
+        temp_env::with_var("_FLOX_DISABLE_KEYRING", Some("true"), || {
+            let (mut flox, _temp_dir) = flox_instance();
+            let _reset = install_events_client(&flox);
+
+            complete_login(
+                &mut flox,
+                AuthContext::Auth0(Some(
+                    FloxhubToken::new(FAKE_TOKEN_WITH_SUB.to_string()).expect("token parses"),
+                )),
+                "test".to_string(),
+                false,
+                false,
+                TokenStorageMode::Keyring,
+            )
+            .expect("Auth0 login completes");
+            complete_login(
+                &mut flox,
+                AuthContext::new_from_token(Some("flox_pat_secret")).expect("PAT parses"),
+                "pat-user".to_string(),
+                false,
+                false,
+                TokenStorageMode::Keyring,
+            )
+            .expect("PAT login completes");
+
+            let buffer = EventsBuffer::read(&flox.data_dir).expect("read events");
+            let recorded: Vec<_> = buffer
+                .iter()
+                .map(|event| (event.auth_subject.as_deref(), &event.kind))
+                .collect();
+            assert_eq!(recorded, vec![
+                (Some("github|424242"), &EventKind::CliAuthenticated {},),
+                (None, &EventKind::CliAuthenticated {}),
+            ]);
+        });
+    }
+
+    #[tokio::test]
+    #[serial(global_events_client)]
+    async fn failed_login_records_no_authenticated_event() {
+        let (mut flox, _temp_dir) = flox_instance();
+        let _reset = install_events_client(&flox);
+        let token_file = flox.temp_dir.join("token");
+        fs::write(&token_file, "not-a-jwt").unwrap();
+
+        login_with_token_file(
+            &mut flox,
+            &token_file,
+            false,
+            false,
+            TokenStorageMode::Keyring,
+        )
+        .await
+        .expect_err("malformed token fails");
+
+        let buffer = EventsBuffer::read(&flox.data_dir).expect("read events");
+        assert_eq!(buffer.iter().count(), 0);
     }
 
     #[tokio::test]

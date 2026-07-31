@@ -109,13 +109,22 @@ impl EventsClient {
     }
 
     pub fn record_event(&self, kind: EventKind) -> Result<()> {
+        self.record_event_with_auth_subject(kind, self.auth_subject.as_deref())
+    }
+
+    pub(crate) fn record_event_with_auth_subject(
+        &self,
+        kind: EventKind,
+        auth_subject: Option<&str>,
+    ) -> Result<()> {
         let event = Event {
             event_id: Uuid::new_v4(),
             event_timestamp: OffsetDateTime::now_utc(),
             source: "cli",
             invocation_id: self.invocation_id,
             device_id: self.device_id,
-            auth_subject: self.auth_subject.clone(),
+            auth_subject: auth_subject.map(str::to_owned),
+            producer_version: Some(self.shared_metadata.flox_version.clone()),
             kind,
         };
 

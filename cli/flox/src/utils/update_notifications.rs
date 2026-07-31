@@ -86,7 +86,7 @@ impl UpdateNotification {
     pub async fn check_for_and_print_update_notification(
         cache_dir: impl AsRef<Path>,
         release_channel: &Option<InstallerChannel>,
-    ) {
+    ) -> bool {
         Self::handle_update_result(
             Self::check_for_update(cache_dir, release_channel).await,
             release_channel,
@@ -173,25 +173,29 @@ impl UpdateNotification {
     pub fn handle_update_result(
         update_notification: Result<UpdateCheckResult, UpdateNotificationError>,
         release_env: &Option<InstallerChannel>,
-    ) {
+    ) -> bool {
         match update_notification {
-            Ok(UpdateCheckResult::Skipped) => {},
+            Ok(UpdateCheckResult::Skipped) => false,
             Ok(UpdateCheckResult::RefreshNotificationFile(notification_file)) => {
                 Self::write_notification_file(notification_file);
+                false
             },
             Ok(UpdateCheckResult::UpdateAvailable(update_notification)) => {
                 Self::write_notification_file(&update_notification.notification_file);
                 update_notification.print_new_version_available(release_env);
+                true
             },
             Err(UpdateNotificationError::WeMayHaveMessedUp(e)) => {
                 debug!("Failed to check for CLI updates. Sending error to Sentry if enabled");
                 capture_anyhow(&anyhow!("Failed to check for CLI updates: {e}"));
+                false
             },
             Err(e) => {
                 debug!(
                     "Failed to check for CLI update. Ignoring error: {}",
                     display_chain(&e)
                 );
+                false
             },
         }
     }
@@ -345,7 +349,7 @@ mod tests {
         let temp_dir = tempdir().unwrap();
         let notification_file = temp_dir.path().join("notification_file");
 
-        UpdateNotification::handle_update_result(
+        let displayed = UpdateNotification::handle_update_result(
             Ok(UpdateCheckResult::UpdateAvailable(UpdateNotification {
                 new_version: "new_version".to_string(),
                 notification_file: notification_file.clone(),
@@ -355,6 +359,7 @@ mod tests {
 
         serde_json::from_str::<LastUpdateCheck>(&fs::read_to_string(notification_file).unwrap())
             .unwrap();
+        assert!(displayed);
     }
 
     /// [UpdateNotification::handle_update_result] should write notification_file,
@@ -364,7 +369,7 @@ mod tests {
         let temp_dir = tempdir().unwrap();
         let notification_file = temp_dir.path().join("notification_file");
 
-        UpdateNotification::handle_update_result(
+        let displayed = UpdateNotification::handle_update_result(
             Ok(UpdateCheckResult::RefreshNotificationFile(
                 notification_file.clone(),
             )),
@@ -373,6 +378,15 @@ mod tests {
 
         serde_json::from_str::<LastUpdateCheck>(&fs::read_to_string(notification_file).unwrap())
             .unwrap();
+        assert!(!displayed);
+    }
+
+    #[test]
+    fn handle_update_result_reports_skipped_as_not_displayed() {
+        assert!(!UpdateNotification::handle_update_result(
+            Ok(UpdateCheckResult::Skipped),
+            &Some(InstallerChannel::Stable),
+        ));
     }
 
     /// [UpdateNotificationError::WeMayHaveMessedUp] errors should be sent to sentry
