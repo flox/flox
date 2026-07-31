@@ -12,3 +12,4 @@ pub mod nix_auth;
 pub mod publish;
 pub mod services;
 pub mod upgrade_checks;
+pub(crate) mod vars_order;
