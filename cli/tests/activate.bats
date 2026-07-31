@@ -4231,19 +4231,11 @@ attach_previous_release() {
   # v1.12.1), so the current binary can attach to a previous-release activation.
   incrementing_version_this_release="false"
 
-  # The GC root symlink naming convention changed in this release from
-  # dot-separator (<system>.<name>.dev / <system>.<name>.run) to
-  # dash-separator (<system>.<name>-dev / <system>.<name>-run).  The previous
-  # release (v1.12.1) creates symlinks with the old naming; the current binary
-  # looks for symlinks with the new naming.  Cross-version attach fails to find
-  # the existing GC root symlinks, causing it to start a new activation instead
-  # of attaching and making the test fail for the wrong reason.
-  #
   # Set to "true" whenever the buildenv format changes and FLOX_LATEST_VERSION
   # still points to a release that uses the old format.  Set back to "false"
   # once FLOX_LATEST_VERSION is a release that already uses the new format
   # (so both sides use the same GC root symlink paths and attachment succeeds).
-  buildenv_format_changed_this_release="true"
+  buildenv_format_changed_this_release="false"
   if [ "$buildenv_format_changed_this_release" = "true" ]; then
     skip "buildenv output format changed in this release; cross-version attach requires matching GC root symlink paths (set buildenv_format_changed_this_release=false once FLOX_LATEST_VERSION uses the new format)"
   fi
