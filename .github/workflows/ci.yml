@@ -39,6 +39,13 @@ concurrency:
 env:
   # Also set in setup_suite.bash but set here for consistency
   FLOX_DISABLE_METRICS: "true"
+  # "true" when this run is part of cutting a release, i.e. the PR from a
+  # `release-*` branch to `main`, or a PR backporting into a `release-*`
+  # branch.  Some invariants only hold once `VERSION` has been bumped, which
+  # happens on the release branch; tests assert those only when this is set.
+  # `head_ref`/`base_ref` are empty outside `pull_request`, so pushes to `main`
+  # and tag pushes correctly yield "false".
+  FLOX_RUNNING_RELEASE: "${{ startsWith(github.head_ref, 'release-') || startsWith(github.base_ref, 'release-') }}"
 
 jobs:
   nix-plugins-dev:

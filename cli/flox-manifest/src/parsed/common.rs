@@ -714,9 +714,16 @@ mod tests {
     /// `schema-version` is a Flox CLI release version. If someone adds a newer
     /// schema (e.g. `1.14.0`) without bumping `VERSION`, new manifests would
     /// claim a newer Flox release than the CLI reports.
+    ///
+    /// `VERSION` is bumped on the release branch, so for most of a development
+    /// cycle a newly added schema is legitimately ahead of it. The invariant
+    /// only has to hold at release time, so it is asserted only in release CI.
     #[test]
-    #[ignore = "VERSION is bumped by the release process which we need to add a workaround for"]
     fn cli_version_is_at_least_latest_schema_version() {
+        if std::env::var("FLOX_RUNNING_RELEASE").as_deref() != Ok("true") {
+            return;
+        }
+
         let version_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../VERSION");
         let cli_version: FloxVersion = std::fs::read_to_string(&version_path)
             .expect("failed to read VERSION")
@@ -729,8 +736,15 @@ mod tests {
             .parse()
             .expect("latest schema version must be valid FloxVersion");
 
+        // Compare base semvers: release candidates reach this check as
+        // `1.14.0-rc.1`, which orders below the `1.14.0` schema they ship.
+        let cli_base: FloxVersion = cli_version
+            .base_semver()
+            .parse()
+            .expect("base semver of VERSION should be valid FloxVersion");
+
         assert!(
-            cli_version >= latest_schema,
+            cli_base >= latest_schema,
             "VERSION ({cli_version}) must be >= latest schema-version ({latest_schema}).\n\
              When adding a new manifest schema, bump the VERSION file."
         );
