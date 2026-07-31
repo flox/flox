@@ -1025,7 +1025,7 @@ impl<'a> Walker<'a> {
             // A dynamic import path cannot be followed; when the argument
             // would forward a namespace, say so rather than failing silently
             // (the argument then escapes analysis as a value below).
-            Some((None, arg)) if self.forwards_any_root(&arg, env) => {
+            Some((None, arg)) if self.forwards_any_namespace(&arg, env) => {
                 self.ctx.warn_dynamic_import(offset_of(apply.syntax()));
             },
             Some((None, _)) | None => {},
@@ -1151,26 +1151,28 @@ impl<'a> Walker<'a> {
         }
     }
 
-    /// Whether an import argument would forward a whole root namespace.
-    fn forwards_any_root(&self, arg: &ast::Expr, env: &Env) -> bool {
+    /// Whether an import argument would forward a namespace, were the import
+    /// followable. Asks the same question as [Self::import_forwards], so the
+    /// warning fires exactly where following would have scanned through.
+    fn forwards_any_namespace(&self, arg: &ast::Expr, env: &Env) -> bool {
         match arg {
             ast::Expr::AttrSet(attrset) => {
                 attrset.attrpath_values().any(|entry| {
                     entry
                         .value()
                         .and_then(|value| resolve_expr_binding(&value, env))
-                        .is_some_and(|binding| is_root_binding(&binding))
+                        .is_some_and(|binding| is_forwardable(&binding))
                 }) || attrset.inherits().any(|inherit| {
                     inherit.from().is_none()
                         && inherit.attrs().any(|attr| {
                             attr_static_name(&attr)
                                 .and_then(|name| env.get(&name))
-                                .is_some_and(is_root_binding)
+                                .is_some_and(is_forwardable)
                         })
                 })
             },
             other => {
-                resolve_expr_binding(other, env).is_some_and(|binding| is_root_binding(&binding))
+                resolve_expr_binding(other, env).is_some_and(|binding| is_forwardable(&binding))
             },
         }
     }
@@ -1707,8 +1709,8 @@ fn extract_import(apply: &ast::Apply) -> Option<(Option<String>, ast::Expr)> {
 }
 
 /// Whether a binding is a whole catalog root.
-fn is_root_binding(binding: &Binding) -> bool {
-    matches!(binding, Binding::Path(path) if path.len() == 1)
+fn is_forwardable(binding: &Binding) -> bool {
+    matches!(binding, Binding::Path(path) if !reaches_package(path))
 }
 
 /// The file's package function: the top-level lambda, looked for through
