@@ -179,6 +179,20 @@ cd / && cd "$DEMO"     # silent
 "$FLOX" config --delete activation_notifications
 ```
 
+`-q` also silences it, which is worth a moment because it was **not** true before
+this branch for any mode:
+
+```bash
+"$FLOX" -q activate -- true    # silent
+```
+
+`flox-activations` has no quiet mode — the verbosity it is handed is clamped to
+`max(0)` (`cli/flox/src/commands/activate.rs`), so a negative verbosity never
+reached it and the pre-existing subshell message ignored `-q` entirely. Adding
+output to a subsystem that cannot be quieted would have been the fair objection
+to this whole change, so the decision is made in the `flox` crate, which is the
+only place that knows the user's real verbosity.
+
 ---
 
 ## Act 3 — Spend the savings: the prompt gets shorter

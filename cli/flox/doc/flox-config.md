@@ -86,7 +86,8 @@ flox config --set 'trusted_environments."owner/name"' trust
     Apart from subshell activations, which always announce, a notification is
     printed only when stderr is a terminal, so a human sees the environment
     named while output collected by CI or a script stays clean.
-    Environments named `default` are never announced.
+    Environments named `default` are never announced, and `-q` suppresses the
+    notification for every mode.
 
     (default: true)
 

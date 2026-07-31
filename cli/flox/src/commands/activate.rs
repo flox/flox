@@ -650,6 +650,12 @@ impl ActivateOptions {
         // environment is ambient rather than a place you arrived at, so its
         // activation is not a transition worth reporting — and an rc-file
         // activation of it would otherwise announce itself in every new shell.
+        // `-q` is resolved here rather than in `flox-activations`, which has no
+        // quiet mode of its own: the verbosity it receives below is clamped to
+        // `max(0)`, so a negative (quieter) verbosity never reaches it. Deciding
+        // here keeps the one place that knows the user's real verbosity as the
+        // one place that decides, and makes `flox -q activate` silent — which it
+        // was not before, for any mode.
         let mode_announces = match invocation_type {
             InvocationType::Interactive => true,
             InvocationType::InPlace
@@ -657,6 +663,7 @@ impl ActivateOptions {
             | InvocationType::ExecCommand(_) => std::io::stderr().is_tty(),
         };
         let announce_activation = mode_announces
+            && flox.verbosity >= 0
             && now_active.name().as_ref() != DEFAULT_NAME
             && config.flox.activation_notifications.unwrap_or(true);
 
