@@ -19,6 +19,28 @@
 # newline-separated paths on stdin to exercise the allowlist without git.
 #
 # ---------------------------------------------------------------------------- #
+#
+# Why this is not `dorny/paths-filter`.
+#
+# That action answers "did *any* changed file match this pattern?". This gate
+# needs the opposite quantifier — "did *every* changed file match the inert
+# allowlist?" — and the two are not interchangeable, because getting the
+# polarity backwards fails towards skipping CI rather than towards running it.
+#
+# The action can be coerced into the universal form with
+# `predicate-quantifier: every` over a list of negated globs, but the two rules
+# that carry the actual risk do not fit in a filter block at all: the
+# `cli/flox/doc/*` carve-out below is a disjunction, and "an empty diff is
+# heavy" is not a pattern. Both would end up in a hand-written boolean over
+# three filter outputs in the job's `outputs:`, which is exactly the logic that
+# most needs a test and is the one place no test can reach. The
+# never-exit-non-zero posture would still have to be added on top.
+#
+# So the safety-relevant surface would not shrink, it would move somewhere less
+# legible and stop being testable. `--classify-only` above is what buys the
+# allowlist a test suite that runs without CI.
+#
+# ---------------------------------------------------------------------------- #
 
 set -uo pipefail
 
