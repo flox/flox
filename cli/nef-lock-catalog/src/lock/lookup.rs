@@ -190,7 +190,12 @@ mod tests {
         ];
         let got: Vec<(&str, bool)> = cases
             .iter()
-            .map(|(reference, _)| (*reference, is_root_sentinel(&CatalogRef::from(*reference))))
+            .map(|(reference, _)| {
+                (
+                    *reference,
+                    is_root_sentinel(&CatalogRef::new_unchecked(*reference)),
+                )
+            })
             .collect();
         let expected: Vec<(&str, bool)> = cases.into_iter().collect();
         assert_eq!(got, expected);
@@ -199,8 +204,8 @@ mod tests {
     #[test]
     fn build_request_maps_references_and_stability() {
         let references = BTreeSet::from([
-            CatalogRef::from("catalogs.myorg.hello"),
-            CatalogRef::from("catalogs.myorg.world"),
+            CatalogRef::new_unchecked("catalogs.myorg.hello"),
+            CatalogRef::new_unchecked("catalogs.myorg.world"),
         ]);
 
         let wire = build_request(references, "stable".parse().unwrap());

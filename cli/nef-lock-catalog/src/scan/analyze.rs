@@ -343,7 +343,10 @@ pub(super) fn analyze_file_at(
     }
 
     Ok(FileInfo {
-        refs: refs.into_iter().map(CatalogRef).collect(),
+        // Unchecked for now: the walker can still emit a root wildcard, and
+        // rejecting one here needs the scan error that reports where it came
+        // from.
+        refs: refs.into_iter().map(CatalogRef::new_unchecked).collect(),
         dependency_args,
     })
 }
@@ -1848,7 +1851,10 @@ mod tests {
     }
 
     fn set(items: &[&str]) -> BTreeSet<CatalogRef> {
-        items.iter().map(|s| CatalogRef::from(*s)).collect()
+        items
+            .iter()
+            .map(|s| CatalogRef::new_unchecked(*s))
+            .collect()
     }
 
     #[test]
@@ -1941,8 +1947,8 @@ mod tests {
             include_str!("../../test_data/catalog_refs/multi-attr-inherit.nix"),
             &root_attributes(&["catalogs"]),
         );
-        assert!(!got.contains(&CatalogRef::from("catalogs.myorg.python3Packages")));
-        assert!(!got.contains(&CatalogRef::from("catalogs.myorg.toolkit")));
+        assert!(!got.contains(&CatalogRef::new_unchecked("catalogs.myorg.python3Packages")));
+        assert!(!got.contains(&CatalogRef::new_unchecked("catalogs.myorg.toolkit")));
     }
 
     #[test]
@@ -2139,7 +2145,7 @@ mod tests {
             include_str!("../../test_data/catalog_refs/with-namespace.nix"),
             &root_attributes(&["catalogs"]),
         );
-        assert!(!got.contains(&CatalogRef::from("catalogs.myorg")));
+        assert!(!got.contains(&CatalogRef::new_unchecked("catalogs.myorg")));
     }
 
     #[test]
@@ -2149,7 +2155,7 @@ mod tests {
             &root_attributes(&["catalogs"]),
         );
         assert!(
-            got.contains(&CatalogRef::from("catalogs.myorg.*")),
+            got.contains(&CatalogRef::new_unchecked("catalogs.myorg.*")),
             "got: {got:?}"
         );
     }
@@ -2275,7 +2281,7 @@ mod tests {
             &root_attributes(&["catalogs"]),
         );
         assert!(
-            got.contains(&CatalogRef::from("catalogs.b.pkg")),
+            got.contains(&CatalogRef::new_unchecked("catalogs.b.pkg")),
             "got: {got:?}"
         );
     }

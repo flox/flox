@@ -1,6 +1,7 @@
 use std::collections::{BTreeSet, HashSet};
 use std::fmt::{self, Display};
 use std::path::Path;
+use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
 use tracing::{debug, instrument};
@@ -17,26 +18,55 @@ use graph::PackageGraph;
 /// the tail to a `*` sentinel (e.g. `catalogs.myorg.*`).
 ///
 /// Distinct from a bare `String` so downstream lookup grouping consumes a
-/// typed reference rather than an arbitrary string.
+/// typed reference rather than an arbitrary string, and validated so that
+/// consumers need not re-check the shapes that could never resolve — see
+/// [CatalogRef::from_str].
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(try_from = "String")]
 pub struct CatalogRef(String);
+
+/// A string that cannot be a [CatalogRef].
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[error("'{0}' references the whole catalog namespace")]
+pub struct RootWildcard(pub String);
 
 impl CatalogRef {
     /// The reference as a dotted attr-path string.
     pub fn as_str(&self) -> &str {
         &self.0
     }
-}
 
-impl From<String> for CatalogRef {
-    fn from(value: String) -> Self {
-        Self(value)
+    /// Build a reference without checking the invariant, for tests and for the
+    /// scanner's own construction, which reports a violation with the source
+    /// location it alone has.
+    pub(crate) fn new_unchecked(value: impl Into<String>) -> Self {
+        Self(value.into())
     }
 }
 
-impl From<&str> for CatalogRef {
-    fn from(value: &str) -> Self {
-        Self(value.to_string())
+/// A reference is rooted and never a bare root wildcard.
+///
+/// The wire form drops the leading root segment, so `catalogs.*` would go out
+/// as `*` and a rootless reference as itself; neither names anything the
+/// server can resolve, and either would fail the whole lock. Rejecting them
+/// here means no consumer has to.
+impl FromStr for CatalogRef {
+    type Err = RootWildcard;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value.split_once('.') {
+            None | Some((_, "*")) => Err(RootWildcard(value.to_string())),
+            Some(_) => Ok(Self(value.to_string())),
+        }
+    }
+}
+
+/// Deserialization goes through [FromStr] (see `#[serde(try_from)]`).
+impl TryFrom<String> for CatalogRef {
+    type Error = RootWildcard;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        value.parse()
     }
 }
 
@@ -117,7 +147,40 @@ mod tests {
     use super::*;
 
     fn set(items: &[&str]) -> BTreeSet<CatalogRef> {
-        items.iter().map(|s| CatalogRef::from(*s)).collect()
+        items
+            .iter()
+            .map(|s| CatalogRef::new_unchecked(*s))
+            .collect()
+    }
+
+    #[test]
+    fn catalog_ref_rejects_references_that_cannot_resolve() {
+        let cases = [
+            // Rooted references, whatever the depth or sentinel.
+            ("catalogs.myorg.pkg.readVersion", true),
+            ("catalogs.myorg.pkg", true),
+            ("catalogs.myorg.*", true),
+            // A root wildcard goes on the wire as `*`, a rootless reference as
+            // itself; neither names anything resolvable.
+            ("catalogs.*", false),
+            ("catalogs", false),
+        ];
+        let got: Vec<(&str, bool)> = cases
+            .iter()
+            .map(|(reference, _)| (*reference, reference.parse::<CatalogRef>().is_ok()))
+            .collect();
+        assert_eq!(got, cases.to_vec());
+    }
+
+    #[test]
+    fn catalog_ref_deserialization_upholds_the_invariant() {
+        // `#[serde(try_from)]` keeps the invariant on the way in; without it a
+        // lock file could reintroduce a reference the type rules out.
+        assert_matches!(
+            serde_json::from_str::<CatalogRef>("\"catalogs.myorg.pkg\""),
+            Ok(reference) if reference.as_str() == "catalogs.myorg.pkg"
+        );
+        assert_matches!(serde_json::from_str::<CatalogRef>("\"catalogs.*\""), Err(_));
     }
 
     #[test]
