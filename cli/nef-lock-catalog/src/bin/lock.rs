@@ -69,10 +69,19 @@ struct Cli {
 async fn main() -> ExitCode {
     let cli = Cli::parse();
 
+    // A `warn` floor so the scanner's warnings are printed, scoped to this
+    // crate so a dependency's are not. `RUST_LOG` replaces it.
+    //
     // `--verbose` raises this crate's log level to `debug` on top of any
     // `RUST_LOG` setting; the file/reference/request diagnostics are emitted at
     // that level. Diagnostics go to stderr so `--out /dev/stdout` stays clean.
-    let mut filter = tracing_subscriber::EnvFilter::from_default_env();
+    let mut filter = tracing_subscriber::EnvFilter::builder()
+        .with_default_directive(
+            "nef_lock_catalog=warn"
+                .parse()
+                .expect("valid default directive"),
+        )
+        .from_env_lossy();
     if cli.verbose {
         filter = filter
             .add_directive("nef_lock_catalog=debug".parse().expect("valid directive"))
