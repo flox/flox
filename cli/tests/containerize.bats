@@ -90,6 +90,22 @@ podman_setup() {
   mkdir -p "$XDG_RUNTIME_DIR"
   mkdir -p "$XDG_CONFIG_HOME"
 
+  # PROBE (revert if it does not help): keep podman off the host's systemd.
+  # crun asks systemd over sd-bus to set up the cgroup, and some GitHub runner
+  # images deny that, failing every `podman run` with
+  # "crun: sd-bus call: Permission denied". cgroupfs needs no bus, and the file
+  # events logger avoids journald for the same reason. Linux only: on macOS
+  # podman runs inside its own VM, where the host's systemd is not involved.
+  if is_linux; then
+    export CONTAINERS_CONF="$XDG_CONFIG_HOME/containers/containers.conf"
+    mkdir -p "$(dirname "$CONTAINERS_CONF")"
+    cat > "$CONTAINERS_CONF" << 'EOF'
+[engine]
+cgroup_manager = "cgroupfs"
+events_logger = "file"
+EOF
+  fi
+
   # Set the flox-specific directories to point to this home-tempdir
   export FLOX_CACHE_DIR="$XDG_CACHE_HOME/flox"
   export FLOX_CONFIG_DIR="$XDG_CONFIG_HOME/flox"
