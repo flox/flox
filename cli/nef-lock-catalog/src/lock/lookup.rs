@@ -109,13 +109,21 @@ fn build_request(
 /// namespace is catalog-relative (`<catalog>.<package>`). Drop the leading root
 /// segment so the request matches what the server expects.
 fn wire_reference(reference: &CatalogRef) -> ReferencesItem {
-    let reference = reference.as_str();
-    let s = reference
-        .split_once('.')
-        .map(|(_root, rest)| rest.to_string())
-        .unwrap_or_else(|| reference.to_string());
+    // A reference always has a root to drop; that is what makes it one. The
+    // components go out as written rather than through `Display`, whose
+    // quoting is for reading a path back, not for the server's syntax.
+    let relative = reference
+        .path()
+        .components()
+        .iter()
+        .skip(1)
+        .map(|component| component.name().unwrap_or("*"))
+        .collect::<Vec<_>>()
+        .join(".");
     // Catalog paths are well below the 1024-char wire limit.
-    s.parse().expect("catalog reference exceeded 1024 chars")
+    relative
+        .parse()
+        .expect("catalog reference exceeded 1024 chars")
 }
 
 /// Map a lookup response into a [BuildLock], or fail with the unresolvable

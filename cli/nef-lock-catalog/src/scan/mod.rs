@@ -7,93 +7,117 @@ use serde::{Deserialize, Serialize};
 use tracing::{debug, instrument};
 
 mod analyze;
+mod attr_path;
 mod error;
 mod graph;
 
+pub use attr_path::{AttrPath, Component, InvalidAttrPath};
 pub use error::{ImportSite, ScanError};
 use graph::PackageGraph;
 
 /// A single catalog attribute-path reference discovered by the scanner,
-/// e.g. `catalogs.myorg.toolkit.readVersion`. A dynamic component collapses
-/// the tail to a `*` sentinel (e.g. `catalogs.myorg.*`).
+/// e.g. `catalogs.myorg.toolkit.readVersion`. Where the walker could not
+/// resolve a path further it names everything under it instead, rendered with
+/// a `*` sentinel (e.g. `catalogs.myorg.*`).
 ///
-/// Distinct from a bare `String` so downstream lookup grouping consumes a
-/// typed reference rather than an arbitrary string, and validated so that
-/// consumers need not re-check the shapes that could never resolve — see
-/// [CatalogRef::from_str].
+/// Distinct from an [AttrPath] because not every path the walker resolves can
+/// be locked: the conversion rejects the shapes that could never resolve, so
+/// consumers need not re-check them.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
-#[serde(try_from = "String")]
-pub struct CatalogRef(String);
+#[serde(into = "String", try_from = "String")]
+pub struct CatalogRef(AttrPath);
 
-/// A string that cannot be a [CatalogRef].
+/// An [AttrPath] that cannot be a [CatalogRef].
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
-#[error("'{reference}' {kind}")]
+#[error("'{path}' {kind}")]
 pub struct InvalidCatalogRef {
-    pub reference: String,
+    pub path: AttrPath,
     pub kind: InvalidCatalogRefKind,
 }
 
-/// Why a string cannot be a [CatalogRef]. Both shapes name nothing the server
+/// Why a path cannot be a [CatalogRef]. None of these name anything the server
 /// can resolve, for different reasons.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum InvalidCatalogRefKind {
-    /// The wire form drops the leading root segment, leaving `*`.
+    /// The wire form drops the leading root component, leaving `*`.
     #[error("references the whole catalog namespace")]
     RootWildcard,
-    /// There is no root segment to drop, so the wire form is the reference
+    /// There is no root component to drop, so the wire form is the reference
     /// itself — a name in the scanner's namespace, not the server's.
     #[error("is not rooted at a catalog namespace")]
     Rootless,
+    /// The server resolves no shallower than a catalog plus one component, so
+    /// naming a catalog alone reaches nothing.
+    #[error("names a catalog rather than a package in one")]
+    CatalogLevel,
 }
 
 impl CatalogRef {
-    /// The reference as a dotted attr-path string.
-    pub fn as_str(&self) -> &str {
+    /// The path this reference locks.
+    pub fn path(&self) -> &AttrPath {
         &self.0
     }
 
     /// Build a reference without checking the invariant, so tests can state
     /// their expectations as literals.
     #[cfg(test)]
-    pub(crate) fn new_unchecked(value: impl Into<String>) -> Self {
-        Self(value.into())
+    pub(crate) fn new_unchecked(value: &str) -> Self {
+        Self(value.parse().expect("attr paths always parse"))
     }
 }
 
-/// A reference is rooted and never a bare root wildcard.
-///
-/// The wire form drops the leading root segment, so `catalogs.*` would go out
-/// as `*` and a rootless reference as itself; neither names anything the
-/// server can resolve, and either would fail the whole lock. Rejecting them
-/// here means no consumer has to.
+/// A string that cannot be a [CatalogRef], either because it is not an
+/// attribute path or because it is one that cannot be locked.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum ParseCatalogRefError {
+    #[error(transparent)]
+    Path(#[from] InvalidAttrPath),
+    #[error(transparent)]
+    Reference(#[from] InvalidCatalogRef),
+}
+
+/// Parsing reads the text back into an [AttrPath] and applies the same rules
+/// as any other construction, so a reference read from a lock file is held to
+/// them too.
 impl FromStr for CatalogRef {
-    type Err = InvalidCatalogRef;
+    type Err = ParseCatalogRefError;
 
     fn from_str(value: &str) -> Result<Self, Self::Err> {
-        let kind = match value.split_once('.') {
-            None => InvalidCatalogRefKind::Rootless,
-            Some((_, "*")) => InvalidCatalogRefKind::RootWildcard,
-            Some(_) => return Ok(Self(value.to_string())),
-        };
-        Err(InvalidCatalogRef {
-            reference: value.to_string(),
-            kind,
-        })
+        let path: AttrPath = value.parse()?;
+        Ok(path.try_into()?)
     }
 }
 
 /// Deserialization goes through [FromStr] (see `#[serde(try_from)]`).
 impl TryFrom<String> for CatalogRef {
-    type Error = InvalidCatalogRef;
+    type Error = ParseCatalogRefError;
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
         value.parse()
     }
 }
 
+/// A reference reaches a package: a root, the catalog it names, and something
+/// within it — or a wildcard standing in for that last part.
+impl TryFrom<AttrPath> for CatalogRef {
+    type Error = InvalidCatalogRef;
+
+    fn try_from(path: AttrPath) -> Result<Self, Self::Error> {
+        let kind = match (path.base().len(), path.is_wildcard()) {
+            // A wildcard stands for whatever it replaced, so a base naming a
+            // root and a catalog already reaches into one.
+            (2.., true) | (3.., false) => return Ok(Self(path)),
+            (_, true) => InvalidCatalogRefKind::RootWildcard,
+            (2, false) => InvalidCatalogRefKind::CatalogLevel,
+            (_, false) => InvalidCatalogRefKind::Rootless,
+        };
+        Err(InvalidCatalogRef { path, kind })
+    }
+}
+
 impl From<CatalogRef> for String {
     fn from(value: CatalogRef) -> Self {
-        value.0
+        value.0.to_string()
     }
 }
 
@@ -168,38 +192,73 @@ mod tests {
     use super::*;
 
     fn set(items: &[&str]) -> BTreeSet<CatalogRef> {
-        items
-            .iter()
-            .map(|s| CatalogRef::new_unchecked(*s))
-            .collect()
+        items.iter().map(|s| CatalogRef::new_unchecked(s)).collect()
     }
 
     #[test]
     fn catalog_ref_rejects_references_that_cannot_resolve() {
-        use InvalidCatalogRefKind::{RootWildcard, Rootless};
+        use InvalidCatalogRefKind::{CatalogLevel, RootWildcard, Rootless};
 
         let cases = [
-            // Rooted references, whatever the depth or sentinel. Catalog and
-            // package sentinels expand server-side.
+            // References that reach into a catalog, whatever the depth.
+            // Catalog and package sentinels expand server-side.
             ("catalogs.myorg.pkg.readVersion", None),
             ("catalogs.myorg.pkg", None),
             ("catalogs.myorg.pkg.*", None),
             ("catalogs.myorg.*", None),
-            // Neither names anything resolvable, for different reasons: the
-            // wire form of the first is `*`, of the second the name itself.
+            // None of these name anything resolvable: the wire form of the
+            // first is `*`, of the second the name itself, and the third stops
+            // at a catalog rather than reaching into one.
             ("catalogs.*", Some(RootWildcard)),
             ("catalogs", Some(Rootless)),
+            ("catalogs.myorg", Some(CatalogLevel)),
         ];
         let got: Vec<(&str, Option<InvalidCatalogRefKind>)> = cases
             .iter()
             .map(|(reference, _)| {
-                (
-                    *reference,
-                    reference.parse::<CatalogRef>().err().map(|err| err.kind),
-                )
+                let kind = match reference.parse::<CatalogRef>() {
+                    Ok(_) => None,
+                    Err(ParseCatalogRefError::Reference(err)) => Some(err.kind),
+                    Err(err) => panic!("{reference}: expected a rejected path, got {err}"),
+                };
+                (*reference, kind)
             })
             .collect();
         assert_eq!(got, cases.to_vec());
+    }
+
+    #[test]
+    fn catalog_ref_rejects_text_that_is_not_an_attribute_path() {
+        // Parsing goes through rnix, so what is not Nix is not a path. A
+        // dynamic attribute is the one Nix-legal shape refused: it names
+        // nothing until evaluated.
+        let cases = ["catalogs myorg", "catalogs.${org}.pkg", ""];
+        for reference in cases {
+            assert_matches!(
+                reference.parse::<CatalogRef>(),
+                Err(ParseCatalogRefError::Path(_)),
+                "reference: {reference}"
+            );
+        }
+    }
+
+    #[test]
+    fn catalog_ref_round_trips_quoted_names() {
+        // A name the catalog could not hold is still a path Nix accepts, so
+        // parsing keeps it and rendering quotes it back. The walker widens
+        // rather than emitting one, but a reference read from text must
+        // survive being written out again.
+        for reference in [
+            "catalogs.myorg.pkg",
+            "catalogs.myorg.*",
+            "catalogs.\"foo.bar\".pkg",
+            "catalogs.myorg.\"with space\"",
+        ] {
+            let parsed = reference
+                .parse::<CatalogRef>()
+                .unwrap_or_else(|err| panic!("{reference}: {err}"));
+            assert_eq!(parsed.to_string(), reference);
+        }
     }
 
     #[test]
@@ -208,7 +267,7 @@ mod tests {
         // lock file could reintroduce a reference the type rules out.
         assert_matches!(
             serde_json::from_str::<CatalogRef>("\"catalogs.myorg.pkg\""),
-            Ok(reference) if reference.as_str() == "catalogs.myorg.pkg"
+            Ok(reference) if reference.to_string() == "catalogs.myorg.pkg"
         );
         assert_matches!(serde_json::from_str::<CatalogRef>("\"catalogs.*\""), Err(_));
     }
@@ -371,10 +430,12 @@ mod tests {
     /// anything shallower can never resolve (the server's floor is catalog +
     /// one component) and would fail the whole lock.
     #[test]
-    fn all_fixture_refs_are_lockable_shapes() {
+    fn every_fixture_scans_to_a_result() {
+        // The shapes this used to check for are now unrepresentable, so what
+        // is left is a sweep: every top-level fixture either scans or fails
+        // deliberately, and between them they do produce references.
         let dir = Path::new("test_data/catalog_refs");
         let mut scanned = 0;
-        let mut violations: Vec<String> = Vec::new();
         for entry in fs::read_dir(dir).expect("fixture dir") {
             let path = entry.expect("fixture entry").path();
             if path.extension().and_then(|ext| ext.to_str()) != Some("nix") {
@@ -382,20 +443,12 @@ mod tests {
             }
             let rel = path.file_name().expect("fixture file name");
             // Some fixtures pin scan *errors* (unreadable imports,
-            // undeclared root_attributes); they emit no refs to check.
+            // undeclared root_attributes); they emit no refs to count.
             let Ok(references) = scan_package(dir, Path::new(rel)) else {
                 continue;
             };
-            for reference in references {
-                scanned += 1;
-                let reference = reference.as_str();
-                let post_root = reference.split('.').count() - 1;
-                if !reference.ends_with(".*") && post_root < 2 {
-                    violations.push(reference.to_string());
-                }
-            }
+            scanned += references.len();
         }
-        assert_eq!(violations, Vec::<String>::new());
         assert!(scanned > 0, "no fixture refs scanned");
     }
 }

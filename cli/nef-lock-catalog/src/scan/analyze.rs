@@ -13,7 +13,16 @@ use rnix::ast::HasEntry;
 use rowan::ast::AstNode;
 use tracing::{debug, warn};
 
-use super::{CatalogRef, ImportSite, InvalidCatalogRef, InvalidCatalogRefKind, ScanError};
+use super::attr_path::{attr_static_name, ident_name, static_str_content};
+use super::{
+    AttrPath,
+    CatalogRef,
+    Component,
+    ImportSite,
+    InvalidCatalogRef,
+    InvalidCatalogRefKind,
+    ScanError,
+};
 
 /// Catalog references and dependency attr-paths extracted from one file.
 #[derive(Debug)]
@@ -277,11 +286,11 @@ pub(super) fn analyze_file_at(
                                 "imported file does not take the namespace as a plain parameter; locking the whole root",
                             );
                             let reason = InvalidCatalogRef {
-                                reference: format!("{parent_root}.*"),
+                                path: AttrPath::root(&parent_root).append_wildcard(),
                                 kind: InvalidCatalogRefKind::RootWildcard,
                             };
                             rejected_refs
-                                .entry(reason.reference.clone())
+                                .entry(reason.path.clone())
                                 .or_insert(RejectedRef {
                                     offset: pending.offset,
                                     reason: reason.to_string(),
@@ -323,17 +332,17 @@ pub(super) fn analyze_file_at(
                 &child_origins,
             )?;
             // Rewriting only replaces the leading component, so a reference
-            // valid in the child stays valid in the parent; the parse routes
-            // any surprise through the same reporting as the walk's own.
+            // valid in the child stays valid in the parent; the conversion
+            // routes any surprise through the same reporting as the walk's.
             for reference in imported.refs {
-                let rewritten = rewrite_root(reference.into(), &rewrites);
-                match rewritten.parse() {
+                let rewritten = rewrite_root(reference.path(), &rewrites);
+                match CatalogRef::try_from(rewritten) {
                     Ok(reference) => {
                         refs.insert(reference);
                     },
                     Err(reason) => {
                         rejected_refs
-                            .entry(reason.reference.clone())
+                            .entry(reason.path.clone())
                             .or_insert(RejectedRef {
                                 offset: pending.offset,
                                 reason: reason.to_string(),
@@ -362,9 +371,9 @@ pub(super) fn analyze_file_at(
         for root in undeclared {
             let referenced = refs
                 .iter()
-                .map(CatalogRef::as_str)
-                .chain(rejected_refs.keys().map(String::as_str))
-                .any(|reference| reference_root(reference) == root);
+                .map(|reference| reference.path().root_name())
+                .chain(rejected_refs.keys().map(AttrPath::root_name))
+                .any(|name| name == Some(root.as_str()));
             if referenced {
                 return Err(ScanError::UndeclaredRoot {
                     root: root.clone(),
@@ -405,10 +414,6 @@ pub(super) fn identity_origins(root_attributes: &HashSet<String>) -> BTreeMap<St
 }
 
 /// The root component of a dotted reference (`catalogs.a.b` → `catalogs`).
-fn reference_root(reference: &str) -> &str {
-    reference.split('.').next().unwrap_or(reference)
-}
-
 /// Collect the static attr-paths selected on dependency arguments.
 ///
 /// For every `select` whose base identifier is a dependency argument in
@@ -448,13 +453,13 @@ fn collect_dependency_selections(
 #[derive(Clone, Debug, PartialEq)]
 enum Binding {
     /// The name resolves to a catalog attr-path: a root itself
-    /// (`catalogs` = `Path(["catalogs"])`) or an alias of one. A path may end
-    /// in `"*"` when a dynamic component collapsed it.
-    Path(Vec<String>),
+    /// (`catalogs` = `Path(AttrPath::root("catalogs"))`) or an alias of one. A
+    /// path ends in a wildcard when a dynamic component collapsed it.
+    Path(AttrPath),
     /// The name resolves to one of several attr-paths (a conditional alias);
     /// every path is locked so the expression works whichever branch is
     /// taken.
-    Paths(BTreeSet<Vec<String>>),
+    Paths(BTreeSet<AttrPath>),
     /// The name is bound to an attrset literal; selecting a member continues
     /// resolution with that member's binding. Members the scanner cannot
     /// model are absent.
@@ -531,15 +536,15 @@ struct Walker<'a> {
     /// Byte offset of the first use of each root, for locating an
     /// undeclared-root error after the walk.
     first_root_use: HashMap<String, usize>,
-    /// References [CatalogRef] refused, keyed by the reference — which the
+    /// Paths [CatalogRef] refused, keyed by the path — which the
     /// undeclared-root check still needs to attribute to a root. Collected
     /// rather than raised so the walk stays infallible; [analyze_file_at]
     /// reports the first once the refs are complete.
-    rejected_refs: BTreeMap<String, RejectedRef>,
+    rejected_refs: BTreeMap<AttrPath, RejectedRef>,
 }
 
-/// Where a reference [CatalogRef] refused was first emitted, and what the rule
-/// that refused it said. The reason is kept rendered: nothing inspects it.
+/// Where a path [CatalogRef] refused was first emitted, and what the rule that
+/// refused it said. The reason is kept rendered: nothing inspects it.
 struct RejectedRef {
     offset: usize,
     reason: String,
@@ -550,7 +555,7 @@ struct WalkResult {
     refs: BTreeSet<CatalogRef>,
     pending_imports: Vec<PendingImport>,
     first_root_use: HashMap<String, usize>,
-    rejected_refs: BTreeMap<String, RejectedRef>,
+    rejected_refs: BTreeMap<AttrPath, RejectedRef>,
 }
 
 impl<'a> Walker<'a> {
@@ -580,7 +585,7 @@ impl<'a> Walker<'a> {
         let env: Env = self
             .root_attributes
             .iter()
-            .map(|root| (root.clone(), Binding::Path(vec![root.clone()])))
+            .map(|root| (root.clone(), Binding::Path(AttrPath::root(root))))
             .collect();
         if let Some(expr) = root.expr() {
             self.walk(expr.syntax(), &env);
@@ -598,13 +603,13 @@ impl<'a> Walker<'a> {
         }
     }
 
-    /// Record a discovered reference, or — when it is one [CatalogRef] refuses
-    /// — where it was emitted, so [analyze_file_at] can report it.
-    fn emit(&mut self, offset: usize, reference: String) {
-        self.ctx.report(offset, &reference);
-        self.note_root_use(offset, &reference);
-        match reference.parse() {
+    /// Record the reference a resolved path denotes, or — when it is one
+    /// [CatalogRef] refuses — why, so [analyze_file_at] can report it.
+    fn emit(&mut self, offset: usize, path: AttrPath) {
+        self.note_root_use(offset, &path);
+        match CatalogRef::try_from(path) {
             Ok(reference) => {
+                self.ctx.report(offset, &reference.to_string());
                 self.refs.insert(reference);
             },
             Err(reason) => self.note_rejected_ref(offset, reason),
@@ -615,17 +620,18 @@ impl<'a> Walker<'a> {
     /// emitted.
     fn note_rejected_ref(&mut self, offset: usize, reason: InvalidCatalogRef) {
         self.rejected_refs
-            .entry(reason.reference.clone())
+            .entry(reason.path.clone())
             .or_insert(RejectedRef {
                 offset,
                 reason: reason.to_string(),
             });
     }
 
-    /// Record where a root was first used (`reference` may be the bare root
-    /// name or a dotted path under it).
-    fn note_root_use(&mut self, offset: usize, reference: &str) {
-        let root = reference_root(reference);
+    /// Record where the root a path is rooted at was first used.
+    fn note_root_use(&mut self, offset: usize, path: &AttrPath) {
+        let Some(root) = path.root_name() else {
+            return;
+        };
         if !self.first_root_use.contains_key(root) {
             self.first_root_use.insert(root.to_string(), offset);
         }
@@ -695,30 +701,29 @@ impl<'a> Walker<'a> {
     /// inherits). A package-deep path is an exact ref; a whole catalog or the
     /// root escaping into unknown code widens to a sentinel, since anything
     /// under it may be accessed.
-    fn emit_value_paths(&mut self, offset: usize, paths: BTreeSet<Vec<String>>) {
+    fn emit_value_paths(&mut self, offset: usize, paths: BTreeSet<AttrPath>) {
         for path in paths {
-            if path.len() >= 3 || path.last().map(String::as_str) == Some("*") {
-                self.emit(offset, join_path(&path));
+            if reaches_package(&path) {
+                self.emit(offset, path);
                 continue;
             }
             // A catalog widened to `<root>.<catalog>.*` over-locks but still
             // resolves, so it is worth a warning. Widening the root itself is
             // rejected outright by [analyze_file_at] and needs none.
-            let escapes_catalog = path.len() >= 2;
-            let reference = join_path(&append_star(path));
-            if escapes_catalog {
-                self.ctx.warn_escape(offset, &reference);
+            let widened = path.append_wildcard();
+            if reaches_package(&widened) {
+                self.ctx.warn_escape(offset, &widened.to_string());
             }
-            self.emit(offset, reference);
+            self.emit(offset, widened);
         }
     }
 
     /// [Self::emit_value_paths] restricted to package-deep paths, for
     /// positions where shallow paths are consumed rather than escaping.
-    fn emit_deep_paths(&mut self, offset: usize, paths: BTreeSet<Vec<String>>) {
+    fn emit_deep_paths(&mut self, offset: usize, paths: BTreeSet<AttrPath>) {
         for path in paths {
-            if path.len() >= 3 || path.last().map(String::as_str) == Some("*") {
-                self.emit(offset, join_path(&path));
+            if reaches_package(&path) {
+                self.emit(offset, path);
             }
         }
     }
@@ -789,7 +794,7 @@ impl<'a> Walker<'a> {
             .declared_params
             .is_none_or(|declared| declared.contains(name));
         if receivable && self.root_attributes.contains(name) {
-            Binding::Path(vec![name.to_string()])
+            Binding::Path(AttrPath::root(name))
         } else {
             Binding::Opaque
         }
@@ -834,9 +839,8 @@ impl<'a> Walker<'a> {
     /// `inherit (<source>) a b c;` in a binding scope (`let`, `rec { }`,
     /// consumed set literal) — each name only becomes an alias (use sites
     /// drive the refs, like an alias binding's RHS: only package-deep
-    /// members are refs of their own). A name the catalog cannot contain
-    /// (dotted quoted attr) collapses to a sentinel at the source. A
-    /// from-less `inherit x;` only rebinds the outer name.
+    /// members are refs of their own). A dynamic name collapses to a sentinel
+    /// at the source. A from-less `inherit x;` only rebinds the outer name.
     fn walk_binding_inherit(&mut self, inherit: &ast::Inherit, env: &Env) {
         let Some(from_expr) = inherit.from().and_then(|from| from.expr()) else {
             return;
@@ -850,11 +854,12 @@ impl<'a> Walker<'a> {
             Some(bases) => {
                 for attr in inherit.attrs() {
                     let name = attr_static_name(&attr);
-                    let paths: BTreeSet<Vec<String>> = bases
+                    let paths: BTreeSet<AttrPath> = bases
                         .iter()
+                        .cloned()
                         .map(|base| match &name {
-                            Some(name) => append_component(base.clone(), name.clone()),
-                            None => append_star(base.clone()),
+                            Some(name) => base.append_attribute(name),
+                            None => base.append_wildcard(),
                         })
                         .collect();
                     self.emit_deep_paths(offset_of(attr.syntax()), paths);
@@ -930,12 +935,12 @@ impl<'a> Walker<'a> {
         for attr in inherit.attrs() {
             let offset = offset_of(attr.syntax());
             let Some(name) = attr_static_name(&attr) else {
-                // A name the catalog cannot contain (dotted quoted attr)
-                // collapses to a sentinel at the source.
+                // A dynamic name is unknown until evaluated, so the source
+                // collapses to a sentinel.
                 if let Some(source) = &from_binding {
-                    let paths: BTreeSet<Vec<String>> = escaping_paths_of(source)
+                    let paths: BTreeSet<AttrPath> = escaping_paths_of(source)
                         .into_iter()
-                        .map(append_star)
+                        .map(AttrPath::append_wildcard)
                         .collect();
                     self.emit_value_paths(offset, paths);
                 }
@@ -970,7 +975,8 @@ impl<'a> Walker<'a> {
             AttrsetConsumer::Lambda(params) => {
                 params.contains(name)
                     && self.root_attributes.contains(name)
-                    && matches!(binding, Some(Binding::Path(path)) if path.len() == 1 && path[0] == name)
+                    && matches!(binding, Some(Binding::Path(path))
+                        if path.components() == [Component::Attribute(name.to_string())])
             },
         }
     }
@@ -992,8 +998,10 @@ impl<'a> Walker<'a> {
         if let Some(ns) = with_expr.namespace()
             && let Some(paths) = resolve_expr_paths(&ns, env)
         {
+            // `with` puts every name under the namespace in scope without
+            // naming any, so the whole subtree is reachable.
             for path in paths {
-                self.emit(offset_of(with_expr.syntax()), join_path(&append_star(path)));
+                self.emit(offset_of(with_expr.syntax()), path.append_wildcard());
             }
             self.walk_consumed_source(&ns, env);
             if let Some(body) = with_expr.body() {
@@ -1017,13 +1025,12 @@ impl<'a> Walker<'a> {
             let key = inner.argument();
             for target_path in target_paths {
                 let path = match key.as_ref().and_then(static_str) {
-                    Some(key) => append_component(target_path, key),
-                    None => append_star(target_path),
+                    Some(key) => target_path.append_attribute(key),
+                    None => target_path.append_wildcard(),
                 };
-                self.emit(
-                    offset_of(apply.syntax()),
-                    join_path(&widen_if_catalog_level(path)),
-                );
+                // A static key can still land on a catalog, which reaches
+                // nothing on its own, so it widens.
+                self.emit(offset_of(apply.syntax()), widen_to_package(path));
             }
             self.walk_consumed_source(&target, env);
             if let Some(key) = key {
@@ -1091,7 +1098,7 @@ impl<'a> Walker<'a> {
                     // from the import trace back to this argument.
                     let arg_offset = offset_of(attrset.syntax());
                     for parent_root in forwards.values() {
-                        self.note_root_use(arg_offset, parent_root);
+                        self.note_root_use(arg_offset, &AttrPath::root(parent_root));
                     }
                     self.pending_imports.push(PendingImport {
                         path,
@@ -1105,12 +1112,13 @@ impl<'a> Walker<'a> {
                 // `import ./h.nix catalogs` — the whole namespace is the
                 // argument, consumed by following the import.
                 if let Some(Binding::Path(root_path)) = resolve_expr_binding(other, env)
-                    && let [root] = root_path.as_slice()
+                    && let Some(root) = root_path.as_whole_root()
                 {
-                    self.note_root_use(offset_of(other.syntax()), root);
+                    let root = root.to_string();
+                    self.note_root_use(offset_of(other.syntax()), &root_path);
                     self.pending_imports.push(PendingImport {
                         path,
-                        arg: ImportArg::Root(root.clone()),
+                        arg: ImportArg::Root(root),
                         offset,
                     });
                     return true;
@@ -1138,7 +1146,7 @@ impl<'a> Walker<'a> {
                     // lambda binds under the same root name were walked in
                     // the body; only the rest escapes.
                     if let Some(Binding::Set(members)) = env.get(&name) {
-                        let uncovered: BTreeSet<Vec<String>> = members
+                        let uncovered: BTreeSet<AttrPath> = members
                             .iter()
                             .filter(|(member, binding)| {
                                 !self.consumed_by(&consumer, member, Some(binding))
@@ -1209,9 +1217,9 @@ impl<'a> Walker<'a> {
             };
             let Some(value) = entry.value() else { continue };
             if let Some(Binding::Path(path)) = resolve_expr_binding(&value, env)
-                && let [root] = path.as_slice()
+                && let Some(root) = path.as_whole_root()
             {
-                forwards.insert(name, root.clone());
+                forwards.insert(name, root.to_string());
             }
         }
         for inherit in arg.inherits() {
@@ -1229,9 +1237,9 @@ impl<'a> Walker<'a> {
                     (true, _) => None,
                 };
                 if let Some(Binding::Path(path)) = binding
-                    && let [root] = path.as_slice()
+                    && let Some(root) = path.as_whole_root()
                 {
-                    forwards.insert(name, root.clone());
+                    forwards.insert(name, root.to_string());
                 }
             }
         }
@@ -1243,11 +1251,10 @@ impl<'a> Walker<'a> {
             Some(binding) => {
                 match paths_of(binding.clone()) {
                     Some(paths) => {
+                        // A select can land on a catalog, which reaches
+                        // nothing on its own, so it widens.
                         for path in paths {
-                            self.emit(
-                                offset_of(select.syntax()),
-                                join_path(&widen_if_catalog_level(path)),
-                            );
+                            self.emit(offset_of(select.syntax()), widen_to_package(path));
                         }
                     },
                     // The select reaches a modeled set (`t.sub`) used as a
@@ -1278,9 +1285,9 @@ impl<'a> Walker<'a> {
                         .any(|attr| attr_static_name(&attr).is_none())
                 });
                 if dynamic {
-                    let paths: BTreeSet<Vec<String>> = escaping_paths_of(&binding)
+                    let paths: BTreeSet<AttrPath> = escaping_paths_of(&binding)
                         .into_iter()
-                        .map(append_star)
+                        .map(AttrPath::append_wildcard)
                         .collect();
                     if !paths.is_empty() {
                         self.emit_value_paths(offset_of(select.syntax()), paths);
@@ -1336,7 +1343,7 @@ impl<'a> Walker<'a> {
                     Some(paths) => {
                         for path in paths {
                             if path.len() >= 3 {
-                                self.emit(offset_of(select.syntax()), join_path(&path));
+                                self.emit(offset_of(select.syntax()), path);
                             }
                         }
                         if let Some(base) = select.expr() {
@@ -1576,20 +1583,22 @@ fn resolve_expr_binding(expr: &ast::Expr, env: &Env) -> Option<Binding> {
             let mut current = resolve_expr_binding(&select.expr()?, env)?;
             for attr in select.attrpath()?.attrs() {
                 current = match (current, attr_static_name(&attr)) {
-                    (Binding::Path(path), Some(name)) => {
-                        Binding::Path(append_component(path, name))
-                    },
+                    (Binding::Path(path), Some(name)) => Binding::Path(path.append_attribute(name)),
                     // A dynamic component collapses the path and consumes
                     // whatever follows.
-                    (Binding::Path(path), None) => return Some(Binding::Path(append_star(path))),
+                    (Binding::Path(path), None) => {
+                        return Some(Binding::Path(path.append_wildcard()));
+                    },
                     (Binding::Paths(paths), Some(name)) => Binding::Paths(
                         paths
                             .into_iter()
-                            .map(|path| append_component(path, name.clone()))
+                            .map(|path| path.append_attribute(&name))
                             .collect(),
                     ),
                     (Binding::Paths(paths), None) => {
-                        return Some(Binding::Paths(paths.into_iter().map(append_star).collect()));
+                        return Some(Binding::Paths(
+                            paths.into_iter().map(AttrPath::append_wildcard).collect(),
+                        ));
                     },
                     (Binding::Set(members), Some(name)) => members.get(&name)?.clone(),
                     (Binding::Set(_), None) => return None,
@@ -1616,7 +1625,7 @@ fn resolve_expr_binding(expr: &ast::Expr, env: &Env) -> Option<Binding> {
         // A conditional resolves to whichever branches the scanner can model;
         // all of them must be locked.
         ast::Expr::IfElse(if_else) => {
-            let mut paths: BTreeSet<Vec<String>> = BTreeSet::new();
+            let mut paths: BTreeSet<AttrPath> = BTreeSet::new();
             for branch in [if_else.body(), if_else.else_body()].into_iter().flatten() {
                 match resolve_expr_binding(&branch, env) {
                     Some(Binding::Path(path)) => {
@@ -1635,7 +1644,7 @@ fn resolve_expr_binding(expr: &ast::Expr, env: &Env) -> Option<Binding> {
 
 /// The attr-paths a binding denotes: one for an alias, several for a
 /// conditional alias, none for sets and opaque bindings.
-fn paths_of(binding: Binding) -> Option<BTreeSet<Vec<String>>> {
+fn paths_of(binding: Binding) -> Option<BTreeSet<AttrPath>> {
     match binding {
         Binding::Path(path) => Some(BTreeSet::from([path])),
         Binding::Paths(paths) => Some(paths),
@@ -1647,7 +1656,7 @@ fn paths_of(binding: Binding) -> Option<BTreeSet<Vec<String>>> {
 /// code the scanner cannot follow: an alias's own paths, or every path
 /// reachable through the members of a modeled set (recursively). Bindings
 /// that carry no catalog paths contribute nothing.
-fn escaping_paths_of(binding: &Binding) -> BTreeSet<Vec<String>> {
+fn escaping_paths_of(binding: &Binding) -> BTreeSet<AttrPath> {
     match binding {
         Binding::Path(path) => BTreeSet::from([path.clone()]),
         Binding::Paths(paths) => paths.clone(),
@@ -1657,29 +1666,36 @@ fn escaping_paths_of(binding: &Binding) -> BTreeSet<Vec<String>> {
 }
 
 /// Resolve an expression to the set of attr-paths it may denote.
-fn resolve_expr_paths(expr: &ast::Expr, env: &Env) -> Option<BTreeSet<Vec<String>>> {
+fn resolve_expr_paths(expr: &ast::Expr, env: &Env) -> Option<BTreeSet<AttrPath>> {
     paths_of(resolve_expr_binding(expr, env)?)
 }
 
 /// [resolve_expr_paths] for a select node.
-fn resolve_select_paths(select: &ast::Select, env: &Env) -> Option<BTreeSet<Vec<String>>> {
+fn resolve_select_paths(select: &ast::Select, env: &Env) -> Option<BTreeSet<AttrPath>> {
     paths_of(resolve_expr_binding(
         &ast::Expr::Select(select.clone()),
         env,
     )?)
 }
 
-/// Append one component; a path already collapsed to `*` absorbs it.
-fn append_component(mut path: Vec<String>, name: String) -> Vec<String> {
-    if path.last().map(String::as_str) != Some("*") {
-        path.push(name);
+/// Whether a path reaches into a catalog: a root, the catalog, and something
+/// within it — where a wildcard stands in for that last part. Anything
+/// shallower is not lockable, so the walker widens it (see
+/// [Walker::emit_value_paths]) and [CatalogRef] refuses what is left.
+fn reaches_package(path: &AttrPath) -> bool {
+    match path.is_wildcard() {
+        true => path.base().len() >= 2,
+        false => path.len() >= 3,
     }
-    path
 }
 
-/// Collapse the path's tail to a `*` sentinel (idempotent).
-fn append_star(path: Vec<String>) -> Vec<String> {
-    append_component(path, "*".to_string())
+/// A path that stops short of a package, widened so it names everything under
+/// itself instead. Already-deep paths are returned unchanged.
+fn widen_to_package(path: AttrPath) -> AttrPath {
+    match reaches_package(&path) {
+        true => path,
+        false => path.append_wildcard(),
+    }
 }
 
 /// The binding `inherit (<source>) <name>;` produces for `name`, given the
@@ -1687,39 +1703,17 @@ fn append_star(path: Vec<String>) -> Vec<String> {
 /// modeled set.
 fn member_binding(source: &Binding, name: &str) -> Option<Binding> {
     match source {
-        Binding::Path(base) => Some(Binding::Path(append_component(
-            base.clone(),
-            name.to_string(),
-        ))),
+        Binding::Path(base) => Some(Binding::Path(base.clone().append_attribute(name))),
         Binding::Paths(bases) => Some(Binding::Paths(
             bases
                 .iter()
                 .cloned()
-                .map(|base| append_component(base, name.to_string()))
+                .map(|base| base.append_attribute(name))
                 .collect(),
         )),
         Binding::Set(members) => members.get(name).cloned(),
         _ => None,
     }
-}
-
-/// Widen a path that names a whole catalog or the root itself (fewer than two
-/// components past the root) to a `.*` sentinel: the server's resolution floor
-/// is catalog + one component, so such an exact ref can never resolve.
-fn widen_if_catalog_level(path: Vec<String>) -> Vec<String> {
-    if path.len() < 3 {
-        append_star(path)
-    } else {
-        path
-    }
-}
-
-fn join_path(path: &[String]) -> String {
-    path.join(".")
-}
-
-fn ident_name(ident: &ast::Ident) -> Option<String> {
-    Some(ident.ident_token()?.text().to_string())
 }
 
 /// The inner application of a two-argument call `f a b`, i.e. `f a`.
@@ -1781,16 +1775,20 @@ fn top_ident_param(content: &str, path: &Path) -> Result<Option<String>, ScanErr
     Ok(param.ident().as_ref().and_then(ident_name))
 }
 
-/// Rewrite a child-rooted reference back to the parent's namespace using the
-/// child-name → parent-root map of the import that forwarded it.
-fn rewrite_root(reference: String, rewrites: &HashMap<String, String>) -> String {
-    match reference.split_once('.') {
-        Some((root, rest)) => match rewrites.get(root) {
-            Some(parent) => format!("{parent}.{rest}"),
-            None => reference,
-        },
-        None => reference,
-    }
+/// Rewrite a child-rooted path back to the parent's namespace using the
+/// child-name → parent-root map of the import that forwarded it. Only the root
+/// changes, so a path valid in the child stays valid in the parent.
+fn rewrite_root(path: &AttrPath, rewrites: &HashMap<String, String>) -> AttrPath {
+    let Some(parent) = path.root_name().and_then(|root| rewrites.get(root)) else {
+        return path.clone();
+    };
+    path.components()
+        .iter()
+        .skip(1)
+        .fold(AttrPath::root(parent), |path, component| match component {
+            Component::Attribute(name) => path.append_attribute(name),
+            Component::Wildcard => path.append_wildcard(),
+        })
 }
 
 /// Extract a statically-known path or string literal as a string, or `None`
@@ -1837,38 +1835,6 @@ fn is_get_attr_fn(expr: &ast::Expr) -> bool {
 fn static_str(expr: &ast::Expr) -> Option<String> {
     let ast::Expr::Str(s) = expr else { return None };
     static_str_content(s)
-}
-
-/// Extract a string node's contents when it has no interpolation, or `None`.
-fn static_str_content(s: &ast::Str) -> Option<String> {
-    if s.syntax().children().next().is_some() {
-        return None;
-    }
-    s.syntax().children_with_tokens().find_map(|n| {
-        if let rowan::NodeOrToken::Token(t) = n
-            && t.kind() == rnix::SyntaxKind::TOKEN_STRING_CONTENT
-        {
-            return Some(t.text().to_string());
-        }
-        None
-    })
-}
-
-/// Resolve an attribute to its statically-known component name: a plain
-/// identifier, or a non-interpolated string literal that is a valid catalog
-/// component name. Returns `None` for dynamic attrs and for quoted names the
-/// catalog cannot contain (`.`, `"`, `\` are rejected by the server's name
-/// validators), which callers collapse to a `*` sentinel.
-fn attr_static_name(attr: &ast::Attr) -> Option<String> {
-    match attr {
-        ast::Attr::Ident(id) => Some(id.ident_token()?.text().to_string()),
-        ast::Attr::Str(s) => {
-            let name = static_str_content(s)?;
-            let valid = !name.is_empty() && !name.contains(['.', '"', '\\']);
-            valid.then_some(name)
-        },
-        ast::Attr::Dynamic(_) => None,
-    }
 }
 
 #[cfg(test)]
@@ -1943,10 +1909,7 @@ mod tests {
     }
 
     fn set(items: &[&str]) -> BTreeSet<CatalogRef> {
-        items
-            .iter()
-            .map(|s| CatalogRef::new_unchecked(*s))
-            .collect()
+        items.iter().map(|s| CatalogRef::new_unchecked(s)).collect()
     }
 
     #[test]
@@ -2653,11 +2616,11 @@ mod tests {
             // An unused inherit binding is never evaluated and locks
             // nothing, like an unused alias binding.
             ("{ catalogs }: let inherit (catalogs) myorg; in null", &[]),
-            // A quoted name the catalog cannot contain still collapses to a
-            // sentinel at the source.
+            // A quoted name is a component like any other; whether the
+            // catalog holds one is not the scanner's call.
             (
                 "{ catalogs }: let inherit (catalogs.myorg) \"a.b\"; in null",
-                &["catalogs.myorg.*"],
+                &["catalogs.myorg.\"a.b\""],
             ),
         ];
         for (content, expected) in cases {
@@ -2802,15 +2765,15 @@ mod tests {
     #[test]
     fn quoted_attrs_static_when_valid_names() {
         let cases: &[(&str, &[&str])] = &[
-            // A non-interpolated string attr that is a valid catalog component
-            // name is an ordinary static component.
+            // A non-interpolated string attr is an ordinary static component,
+            // rendered bare when Nix would read it as an identifier.
             (r#"{ catalogs }: catalogs.myorg."with-dash".x"#, &[
                 "catalogs.myorg.with-dash.x",
             ]),
-            // A quoted attr containing `.` cannot exist as a catalog component
-            // (server rejects dotted names), so it collapses to a sentinel.
+            // A quoted attr containing `.` is one component, not two: it is
+            // recorded as written and rendered back quoted.
             (r#"{ catalogs }: catalogs.myorg."foo.bar""#, &[
-                "catalogs.myorg.*",
+                r#"catalogs.myorg."foo.bar""#,
             ]),
             // Quoted inherit names are components too, not silently dropped.
             (
