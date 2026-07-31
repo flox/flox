@@ -1,27 +1,21 @@
 # Demo: activation visibility
 
-A follow-along script for this branch. ~5 minutes, bash or zsh.
-
-Beat 1 uses your **installed** Flox (1.14, what ships today). Everything after
-uses the branch binary (`$FLOX`).
+A follow-along script for this branch. ~5 minutes, bash or zsh, with `flox`
+pointing at a build of this branch.
 
 ## Setup
 
 ```bash
-cd /path/to/flox
-git switch daniel/dev-44-activation-visibility-prototype
-nix develop -c just build
-
-export FLOX=$PWD/target/debug/flox
 export FLOX_CONFIG_DIR=$(mktemp -d)
 DEMO=$(mktemp -d)/acme-api && mkdir -p "$DEMO" && cd "$DEMO"
-"$FLOX" init
+flox init
 ```
 
-## 1 — A prompt framework erases the Flox indicator
+## 1 — An activation notification in every mode
 
-Frameworks like starship regenerate `PS1` on every prompt, after Flox's
-one-time prepend. Stand one in with two lines, using installed Flox:
+Prompt frameworks like starship regenerate `PS1` on every prompt, after Flox's
+one-time prepend, so the `flox [...]` indicator never survives them. Stand one
+in with two lines and activate:
 
 ```bash
 bash --norc --noprofile -i
@@ -30,26 +24,6 @@ PS1="BASE> "
 _fake_starship() { PS1="STARSHIP> "; }   # stands in for starship's precmd
 PROMPT_COMMAND="_fake_starship"
 eval "$(flox activate -d "$DEMO")"
-echo "PS1 is now: [$PS1]"
-```
-
-The prompt says `STARSHIP>`, the `flox [...]` indicator is gone, and Flox
-printed nothing. The environment is active and invisible.
-
-```bash
-exit
-```
-
-## 2 — An activation notification in every mode
-
-Re-run the same snippet against the branch:
-
-```bash
-bash --norc --noprofile -i
-PS1="BASE> "
-_fake_starship() { PS1="STARSHIP> "; }
-PROMPT_COMMAND="_fake_starship"
-eval "$("$FLOX" activate -d "$DEMO")"
 ```
 
 ```
@@ -64,7 +38,7 @@ hook, so a second environment activates on `cd` alone:
 
 ```bash
 DEMO2=$(mktemp -d)/billing && mkdir -p "$DEMO2"
-"$FLOX" init --dir "$DEMO2" && "$FLOX" activate allow --dir "$DEMO2"
+flox init --dir "$DEMO2" && flox activate allow --dir "$DEMO2"
 cd "$DEMO2"
 ```
 
@@ -80,35 +54,35 @@ subshells, the notification only fires when stderr is a terminal, so CI and
 scripts stay clean:
 
 ```bash
-"$FLOX" activate -d "$DEMO" -- true 2>&1 | cat   # silent: stderr is a pipe
-"$FLOX" activate -d "$DEMO" -- true              # announces: stderr is a tty
+flox activate -d "$DEMO" -- true 2>&1 | cat   # silent: stderr is a pipe
+flox activate -d "$DEMO" -- true              # announces: stderr is a tty
 ```
 
-## 3 — Turning it off
+## 2 — Turning it off
 
 One setting, and `-q` for one-offs:
 
 ```bash
-"$FLOX" config --set activation_notifications false
+flox config --set activation_notifications false
 cd / && cd "$DEMO2"                # silent
-"$FLOX" config --delete activation_notifications
+flox config --delete activation_notifications
 
-"$FLOX" -q activate -- true        # silent, in every mode
+flox -q activate -- true           # silent, in every mode
 ```
 
-## 4 — A shorter prompt by default
+## 3 — A shorter prompt by default
 
 `prompt_detail` now defaults to `name`, so a FloxHub environment shows as
 `flox [core]` instead of `flox [wandb/core (local)]`. Compare with any FloxHub
 environment (a fresh shell per comparison):
 
 ```bash
-"$FLOX" config --set prompt_detail full
-bash --norc --noprofile -i -c 'PS1="BASE> "; eval "$('"$FLOX"' activate -r <owner>/<env>)"; echo "$PS1"'
+flox config --set prompt_detail full
+bash --norc --noprofile -i -c 'PS1="BASE> "; eval "$(flox activate -r <owner>/<env>)"; echo "$PS1"'
 # → flox [<owner>/<env> (local)] BASE>
 
-"$FLOX" config --delete prompt_detail
-bash --norc --noprofile -i -c 'PS1="BASE> "; eval "$('"$FLOX"' activate -r <owner>/<env>)"; echo "$PS1"'
+flox config --delete prompt_detail
+bash --norc --noprofile -i -c 'PS1="BASE> "; eval "$(flox activate -r <owner>/<env>)"; echo "$PS1"'
 # → flox [<env>] BASE>
 ```
 
@@ -133,5 +107,5 @@ FLOX_PROMPT = "acme"
 ```bash
 exit
 cd /; rm -rf "$DEMO" "$DEMO2" "$FLOX_CONFIG_DIR"
-unset FLOX FLOX_CONFIG_DIR DEMO DEMO2
+unset FLOX_CONFIG_DIR DEMO DEMO2
 ```
