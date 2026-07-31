@@ -36,6 +36,24 @@ pub enum ScanError {
         error: rnix::ParseError,
     },
 
+    /// The scan discovered a reference [CatalogRef] refuses, so no lock could
+    /// be produced from it. Today that means a namespace escaping static
+    /// analysis as a whole — passing `catalogs` to an opaque function,
+    /// selecting a catalog dynamically, forwarding it through an import that
+    /// cannot be followed — which widens to a root wildcard.
+    ///
+    /// `reason` is whatever the rule that rejected it said, rendered into the
+    /// message rather than exposed as the error's source: nothing inspects it,
+    /// and keeping it opaque means a new rule needs no change here.
+    #[error("{}", unlockable_reference_message(file, *position, reason))]
+    UnlockableReference {
+        file: PathBuf,
+        /// 1-based `(line, column)` where the reference was emitted, when
+        /// recorded.
+        position: Option<(usize, usize)>,
+        reason: String,
+    },
+
     /// A catalog root is referenced by a file whose top-level lambda does not
     /// declare it as a parameter. NEF supplies only declared arguments
     /// (callPackage semantics), so every reference through the root is
@@ -81,6 +99,18 @@ fn location_suffix(file: &Path, position: Option<(usize, usize)>) -> String {
 /// chain is printed.
 fn unparsable_file_message(file: &Path, position: Option<(usize, usize)>) -> String {
     format!("Invalid Nix syntax{}", location_suffix(file, position))
+}
+
+/// Render [ScanError::UnlockableReference] for the user.
+fn unlockable_reference_message(
+    file: &Path,
+    position: Option<(usize, usize)>,
+    reason: &str,
+) -> String {
+    let location = location_suffix(file, position);
+    formatdoc! {"
+        Cannot lock a catalog reference{location}: {reason}.
+        Reference packages as 'catalogs.<CATALOG>.<PACKAGE>'."}
 }
 
 /// Render [ScanError::UndeclaredRoot] for the user.
@@ -176,6 +206,18 @@ mod tests {
             chained(&err),
             "'pkgs/foo.nix' cannot be read: permission denied"
         );
+    }
+
+    #[test]
+    fn unlockable_reference_message_states_the_reason_and_the_location() {
+        let err = ScanError::UnlockableReference {
+            file: PathBuf::from("pkgs/foo.nix"),
+            position: Some((7, 14)),
+            reason: "'catalogs.*' references the whole catalog namespace".to_string(),
+        };
+        assert_eq!(err.to_string(), indoc::indoc! {"
+                Cannot lock a catalog reference at pkgs/foo.nix:7:14: 'catalogs.*' references the whole catalog namespace.
+                Reference packages as 'catalogs.<CATALOG>.<PACKAGE>'."});
     }
 
     #[test]

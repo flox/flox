@@ -13,7 +13,7 @@ use rnix::ast::HasEntry;
 use rowan::ast::AstNode;
 use tracing::{debug, warn};
 
-use super::{CatalogRef, ImportSite, ScanError};
+use super::{CatalogRef, ImportSite, InvalidCatalogRef, InvalidCatalogRefKind, ScanError};
 
 /// Catalog references and dependency attr-paths extracted from one file.
 #[derive(Debug)]
@@ -226,7 +226,12 @@ pub(super) fn analyze_file_at(
     let ctx = ScanCtx { path, content };
     let mut walker = Walker::new(root_attributes, declared_params.as_ref(), ctx);
     walker.walk_root(&root);
-    let (mut refs, pending_imports, first_root_use) = walker.finish();
+    let WalkResult {
+        mut refs,
+        pending_imports,
+        first_root_use,
+        mut rejected_refs,
+    } = walker.finish();
 
     // Imports are IO: the walker only records facts, the drain here reads and
     // recurses. Relative paths resolve against the importing file's directory.
@@ -271,7 +276,16 @@ pub(super) fn analyze_file_at(
                                 root = %parent_root,
                                 "imported file does not take the namespace as a plain parameter; locking the whole root",
                             );
-                            refs.insert(format!("{parent_root}.*"));
+                            let reason = InvalidCatalogRef {
+                                reference: format!("{parent_root}.*"),
+                                kind: InvalidCatalogRefKind::RootWildcard,
+                            };
+                            rejected_refs
+                                .entry(reason.reference.clone())
+                                .or_insert(RejectedRef {
+                                    offset: pending.offset,
+                                    reason: reason.to_string(),
+                                });
                             continue;
                         },
                     }
@@ -308,18 +322,37 @@ pub(super) fn analyze_file_at(
                 &target,
                 &child_origins,
             )?;
-            refs.extend(
-                imported
-                    .refs
-                    .into_iter()
-                    .map(|reference| rewrite_root(reference.into(), &rewrites)),
-            );
+            // Rewriting only replaces the leading component, so a reference
+            // valid in the child stays valid in the parent; the parse routes
+            // any surprise through the same reporting as the walk's own.
+            for reference in imported.refs {
+                let rewritten = rewrite_root(reference.into(), &rewrites);
+                match rewritten.parse() {
+                    Ok(reference) => {
+                        refs.insert(reference);
+                    },
+                    Err(reason) => {
+                        rejected_refs
+                            .entry(reason.reference.clone())
+                            .or_insert(RejectedRef {
+                                offset: pending.offset,
+                                reason: reason.to_string(),
+                            });
+                    },
+                }
+            }
         }
     }
 
     // With the refs complete (imports included), reject any that resolve
     // through a root the top-level lambda does not declare — they could never
     // evaluate. Roots are checked in sorted order for a deterministic error.
+    //
+    // Rejected references are searched alongside the kept ones. A file like
+    // `{ mkDerivation }: mkDerivation { passthru = catalogs; }` uses the root
+    // but contributes nothing to `refs`, so searching `refs` alone would not
+    // see `catalogs` used at all and would fall through to the rejection,
+    // which says less than naming the undeclared argument.
     if let Some(declared) = &declared_params {
         let mut undeclared: Vec<&String> = root_attributes
             .iter()
@@ -327,10 +360,12 @@ pub(super) fn analyze_file_at(
             .collect();
         undeclared.sort();
         for root in undeclared {
-            if refs
+            let referenced = refs
                 .iter()
-                .any(|reference| reference_root(reference) == root)
-            {
+                .map(CatalogRef::as_str)
+                .chain(rejected_refs.keys().map(String::as_str))
+                .any(|reference| reference_root(reference) == root);
+            if referenced {
                 return Err(ScanError::UndeclaredRoot {
                     root: root.clone(),
                     file: path.to_path_buf(),
@@ -342,11 +377,20 @@ pub(super) fn analyze_file_at(
         }
     }
 
+    // A namespace that escaped static analysis widened to a reference
+    // [CatalogRef] refuses. Reporting it here, rather than where the lock
+    // request is built, is what gives the failure a file and a position; the
+    // first by name keeps the choice independent of traversal order.
+    if let Some((_, rejected)) = rejected_refs.pop_first() {
+        return Err(ScanError::UnlockableReference {
+            file: path.to_path_buf(),
+            position: Some(line_col(content, rejected.offset)),
+            reason: rejected.reason,
+        });
+    }
+
     Ok(FileInfo {
-        // Unchecked for now: the walker can still emit a root wildcard, and
-        // rejecting one here needs the scan error that reports where it came
-        // from.
-        refs: refs.into_iter().map(CatalogRef::new_unchecked).collect(),
+        refs,
         dependency_args,
     })
 }
@@ -482,11 +526,31 @@ struct Walker<'a> {
     /// hides them (see the declaration check in [analyze_file_at]).
     declared_params: Option<&'a HashSet<String>>,
     ctx: ScanCtx<'a>,
-    refs: BTreeSet<String>,
+    refs: BTreeSet<CatalogRef>,
     pending_imports: Vec<PendingImport>,
     /// Byte offset of the first use of each root, for locating an
     /// undeclared-root error after the walk.
     first_root_use: HashMap<String, usize>,
+    /// References [CatalogRef] refused, keyed by the reference — which the
+    /// undeclared-root check still needs to attribute to a root. Collected
+    /// rather than raised so the walk stays infallible; [analyze_file_at]
+    /// reports the first once the refs are complete.
+    rejected_refs: BTreeMap<String, RejectedRef>,
+}
+
+/// Where a reference [CatalogRef] refused was first emitted, and what the rule
+/// that refused it said. The reason is kept rendered: nothing inspects it.
+struct RejectedRef {
+    offset: usize,
+    reason: String,
+}
+
+/// What [Walker::finish] hands back to the IO drain in [analyze_file_at].
+struct WalkResult {
+    refs: BTreeSet<CatalogRef>,
+    pending_imports: Vec<PendingImport>,
+    first_root_use: HashMap<String, usize>,
+    rejected_refs: BTreeMap<String, RejectedRef>,
 }
 
 impl<'a> Walker<'a> {
@@ -504,6 +568,7 @@ impl<'a> Walker<'a> {
             refs: BTreeSet::new(),
             pending_imports: Vec::new(),
             first_root_use: HashMap::new(),
+            rejected_refs: BTreeMap::new(),
         }
     }
 
@@ -522,17 +587,39 @@ impl<'a> Walker<'a> {
         }
     }
 
-    /// Consume the walker, returning its collected facts as
-    /// `(refs, pending imports, first-use offsets)` for the IO drain in
+    /// Consume the walker, returning its collected facts for the IO drain in
     /// [analyze_file_at].
-    fn finish(self) -> (BTreeSet<String>, Vec<PendingImport>, HashMap<String, usize>) {
-        (self.refs, self.pending_imports, self.first_root_use)
+    fn finish(self) -> WalkResult {
+        WalkResult {
+            refs: self.refs,
+            pending_imports: self.pending_imports,
+            first_root_use: self.first_root_use,
+            rejected_refs: self.rejected_refs,
+        }
     }
 
+    /// Record a discovered reference, or — when it is one [CatalogRef] refuses
+    /// — where it was emitted, so [analyze_file_at] can report it.
     fn emit(&mut self, offset: usize, reference: String) {
         self.ctx.report(offset, &reference);
         self.note_root_use(offset, &reference);
-        self.refs.insert(reference);
+        match reference.parse() {
+            Ok(reference) => {
+                self.refs.insert(reference);
+            },
+            Err(reason) => self.note_rejected_ref(offset, reason),
+        }
+    }
+
+    /// Record why [CatalogRef] refused a reference, and where it was first
+    /// emitted.
+    fn note_rejected_ref(&mut self, offset: usize, reason: InvalidCatalogRef) {
+        self.rejected_refs
+            .entry(reason.reference.clone())
+            .or_insert(RejectedRef {
+                offset,
+                reason: reason.to_string(),
+            });
     }
 
     /// Record where a root was first used (`reference` may be the bare root
@@ -606,18 +693,23 @@ impl<'a> Walker<'a> {
 
     /// Emit refs for paths used as plain values (bare idents, from-less
     /// inherits). A package-deep path is an exact ref; a whole catalog or the
-    /// root escaping into unknown code widens to a sentinel with a warning,
-    /// since anything under it may be accessed.
+    /// root escaping into unknown code widens to a sentinel, since anything
+    /// under it may be accessed.
     fn emit_value_paths(&mut self, offset: usize, paths: BTreeSet<Vec<String>>) {
         for path in paths {
             if path.len() >= 3 || path.last().map(String::as_str) == Some("*") {
                 self.emit(offset, join_path(&path));
-            } else {
-                let reference = join_path(&append_star(path));
-                self.ctx.warn_escape(offset, &reference);
-                self.note_root_use(offset, &reference);
-                self.refs.insert(reference);
+                continue;
             }
+            // A catalog widened to `<root>.<catalog>.*` over-locks but still
+            // resolves, so it is worth a warning. Widening the root itself is
+            // rejected outright by [analyze_file_at] and needs none.
+            let escapes_catalog = path.len() >= 2;
+            let reference = join_path(&append_star(path));
+            if escapes_catalog {
+                self.ctx.warn_escape(offset, &reference);
+            }
+            self.emit(offset, reference);
         }
     }
 
@@ -2319,24 +2411,12 @@ mod tests {
     }
 
     #[test]
-    fn escaping_namespaces_emit_sentinels() {
+    fn escaping_catalogs_emit_sentinels() {
         let cases: &[(&str, &[&str])] = &[
-            // The whole root escapes into an opaque function: anything under
-            // it may be accessed.
-            ("{ catalogs, f }: f catalogs", &["catalogs.*"]),
             // A whole catalog escapes through an alias.
             ("{ catalogs, f }: let org = catalogs.myorg; in f org", &[
                 "catalogs.myorg.*",
             ]),
-            // Escape positions other than function arguments.
-            ("{ catalogs }: [ catalogs ]", &["catalogs.*"]),
-            ("{ catalogs, f }: f { inherit catalogs; }", &["catalogs.*"]),
-            // Helper-lambda indirection: the lambda parameter is opaque, so
-            // the refs inside it are invisible; the escaping root covers them.
-            (
-                "{ catalogs }: let f = c: c.myorg.toolkit; in f catalogs",
-                &["catalogs.*"],
-            ),
             // A modeled set escapes through every path reachable from its
             // members.
             (
@@ -2359,9 +2439,6 @@ mod tests {
             ("{ catalogs }: rec { org = catalogs.myorg; }", &[
                 "catalogs.myorg.*",
             ]),
-            // The @-name carries the root, so passing it whole escapes the
-            // root like `f catalogs` does.
-            ("args@{ catalogs, f, ... }: f args", &["catalogs.*"]),
             // A select reaching a nested modeled set escapes its members.
             (
                 "{ catalogs, f }: let t = { sub = { org = catalogs.myorg; }; }; in f t.sub",
@@ -2383,6 +2460,40 @@ mod tests {
             assert_eq!(
                 refs(content, &root_attributes(&["catalogs"])),
                 set(expected),
+                "content: {content}"
+            );
+        }
+    }
+
+    #[test]
+    fn escaping_root_namespace_is_an_error() {
+        // Widening a whole catalog over-locks but still resolves; widening the
+        // root itself yields a reference whose wire form is `*`, so the scan
+        // fails instead of emitting one.
+        let cases = [
+            // The root escapes into an opaque function.
+            ("{ catalogs, f }: f catalogs", (1, 20)),
+            // Escape positions other than function arguments.
+            ("{ catalogs }: [ catalogs ]", (1, 17)),
+            ("{ catalogs, f }: f { inherit catalogs; }", (1, 30)),
+            // Helper-lambda indirection: the lambda parameter is opaque, so
+            // the refs inside it are invisible and the root escapes whole.
+            (
+                "{ catalogs }: let f = c: c.myorg.toolkit; in f catalogs",
+                (1, 48),
+            ),
+            // The @-name carries the root, so passing it whole escapes the
+            // root like `f catalogs` does.
+            ("args@{ catalogs, f, ... }: f args", (1, 30)),
+        ];
+        for (content, position) in cases {
+            let err = scan_err(content, &root_attributes(&["catalogs"]));
+            assert_matches!(
+                err,
+                ScanError::UnlockableReference { file, position: got, reason }
+                    if file == Path::new("test.nix")
+                        && got == Some(position)
+                        && reason == "'catalogs.*' references the whole catalog namespace",
                 "content: {content}"
             );
         }
@@ -2417,13 +2528,6 @@ mod tests {
                 "args@{ catalogs, ... }: let mkPkg = { catalogs }: catalogs.myorg.inner; in mkPkg args",
                 &["catalogs.myorg.inner"],
             ),
-            // A lambda that binds the namespace under a different name
-            // cannot be matched to the set's root member (and its body is
-            // walked with an opaque parameter): the root escapes.
-            (
-                "args@{ catalogs, ... }: let mkPkg = { cats }: cats.myorg.inner; in mkPkg args",
-                &["catalogs.*"],
-            ),
         ];
         for (content, expected) in cases {
             assert_eq!(
@@ -2432,6 +2536,14 @@ mod tests {
                 "content: {content}"
             );
         }
+        // A lambda that binds the namespace under a different name cannot be
+        // matched to the set's root member (and its body is walked with an
+        // opaque parameter), so the root escapes and the scan fails.
+        let err = scan_err(
+            "args@{ catalogs, ... }: let mkPkg = { cats }: cats.myorg.inner; in mkPkg args",
+            &root_attributes(&["catalogs"]),
+        );
+        assert_matches!(err, ScanError::UnlockableReference { .. });
     }
 
     #[test]
@@ -2666,10 +2778,6 @@ mod tests {
                 &["catalogs.a.name", "catalogs.myorg.*"],
             ),
             (
-                "{ catalogs }: with catalogs.${catalogs.a.name}; toolkit",
-                &["catalogs.*", "catalogs.a.name"],
-            ),
-            (
                 "{ catalogs }: builtins.getAttr \"k\" catalogs.myorg.${catalogs.a.name}",
                 &["catalogs.a.name", "catalogs.myorg.*"],
             ),
@@ -2681,6 +2789,14 @@ mod tests {
                 "content: {content}"
             );
         }
+        // The `with` namespace is dynamic at the catalog component, so it
+        // widens to the root even though the dynamic component holds a
+        // resolvable ref of its own.
+        let err = scan_err(
+            "{ catalogs }: with catalogs.${catalogs.a.name}; toolkit",
+            &root_attributes(&["catalogs"]),
+        );
+        assert_matches!(err, ScanError::UnlockableReference { .. });
     }
 
     #[test]
@@ -2721,12 +2837,14 @@ mod tests {
     }
 
     #[test]
-    fn dynamic_attr_at_first_component_emits_root_sentinel() {
-        let got = refs(
+    fn dynamic_attr_at_first_component_escapes_the_root() {
+        // A dynamic catalog name could be any catalog, so the reference widens
+        // to the root and cannot be locked.
+        let err = scan_err(
             "{ catalogs, org }: catalogs.${org}.pkg",
             &root_attributes(&["catalogs"]),
         );
-        assert_eq!(got, set(&["catalogs.*"]));
+        assert_matches!(err, ScanError::UnlockableReference { .. });
     }
 
     #[test]
@@ -2900,15 +3018,17 @@ mod tests {
 
     #[test]
     fn import_whole_root_to_pattern_param_escapes() {
-        // The helper destructures the namespace with a pattern parameter;
-        // its entries are namespace members, not root_attributes, so they cannot be
-        // bound statically and the whole root escapes rather than being
-        // dropped.
-        let got = refs_at(
-            "test_data/catalog_refs/import-entry-pattern.nix",
-            &root_attributes(&["catalogs"]),
+        // The helper destructures the namespace with a pattern parameter; its
+        // entries are namespace members, not root_attributes, so they cannot
+        // be bound statically. The whole root escapes rather than being
+        // dropped, which the scan then rejects, pointing at the import.
+        let path = "test_data/catalog_refs/import-entry-pattern.nix";
+        let err = scan_err_at(path, &root_attributes(&["catalogs"]));
+        assert_matches!(
+            err,
+            ScanError::UnlockableReference { file, position, .. }
+                if file == Path::new(path) && position == Some((5, 1))
         );
-        assert_eq!(got, set(&["catalogs.*"]));
     }
 
     #[test]
@@ -2930,14 +3050,16 @@ mod tests {
     }
 
     #[test]
-    fn import_dynamic_path_forwarding_root_is_conservative() {
-        // The import target cannot be read, so the forwarded namespace
-        // escapes analysis (a warning points at the dynamic path).
-        let got = refs(
+    fn import_dynamic_path_forwarding_root_is_an_error() {
+        // The import target is not statically known, so the forwarded
+        // namespace escapes analysis and the scan fails rather than locking a
+        // reference that could never resolve (a warning names the dynamic
+        // path).
+        let err = scan_err(
             "{ catalogs, p }: import p { inherit catalogs; }",
             &root_attributes(&["catalogs"]),
         );
-        assert_eq!(got, set(&["catalogs.*"]));
+        assert_matches!(err, ScanError::UnlockableReference { .. });
     }
 
     #[test]

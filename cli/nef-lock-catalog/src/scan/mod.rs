@@ -27,8 +27,24 @@ pub struct CatalogRef(String);
 
 /// A string that cannot be a [CatalogRef].
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
-#[error("'{0}' references the whole catalog namespace")]
-pub struct RootWildcard(pub String);
+#[error("'{reference}' {kind}")]
+pub struct InvalidCatalogRef {
+    pub reference: String,
+    pub kind: InvalidCatalogRefKind,
+}
+
+/// Why a string cannot be a [CatalogRef]. Both shapes name nothing the server
+/// can resolve, for different reasons.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum InvalidCatalogRefKind {
+    /// The wire form drops the leading root segment, leaving `*`.
+    #[error("references the whole catalog namespace")]
+    RootWildcard,
+    /// There is no root segment to drop, so the wire form is the reference
+    /// itself — a name in the scanner's namespace, not the server's.
+    #[error("is not rooted at a catalog namespace")]
+    Rootless,
+}
 
 impl CatalogRef {
     /// The reference as a dotted attr-path string.
@@ -36,9 +52,9 @@ impl CatalogRef {
         &self.0
     }
 
-    /// Build a reference without checking the invariant, for tests and for the
-    /// scanner's own construction, which reports a violation with the source
-    /// location it alone has.
+    /// Build a reference without checking the invariant, so tests can state
+    /// their expectations as literals.
+    #[cfg(test)]
     pub(crate) fn new_unchecked(value: impl Into<String>) -> Self {
         Self(value.into())
     }
@@ -51,19 +67,24 @@ impl CatalogRef {
 /// server can resolve, and either would fail the whole lock. Rejecting them
 /// here means no consumer has to.
 impl FromStr for CatalogRef {
-    type Err = RootWildcard;
+    type Err = InvalidCatalogRef;
 
     fn from_str(value: &str) -> Result<Self, Self::Err> {
-        match value.split_once('.') {
-            None | Some((_, "*")) => Err(RootWildcard(value.to_string())),
-            Some(_) => Ok(Self(value.to_string())),
-        }
+        let kind = match value.split_once('.') {
+            None => InvalidCatalogRefKind::Rootless,
+            Some((_, "*")) => InvalidCatalogRefKind::RootWildcard,
+            Some(_) => return Ok(Self(value.to_string())),
+        };
+        Err(InvalidCatalogRef {
+            reference: value.to_string(),
+            kind,
+        })
     }
 }
 
 /// Deserialization goes through [FromStr] (see `#[serde(try_from)]`).
 impl TryFrom<String> for CatalogRef {
-    type Error = RootWildcard;
+    type Error = InvalidCatalogRef;
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
         value.parse()
@@ -155,19 +176,28 @@ mod tests {
 
     #[test]
     fn catalog_ref_rejects_references_that_cannot_resolve() {
+        use InvalidCatalogRefKind::{RootWildcard, Rootless};
+
         let cases = [
-            // Rooted references, whatever the depth or sentinel.
-            ("catalogs.myorg.pkg.readVersion", true),
-            ("catalogs.myorg.pkg", true),
-            ("catalogs.myorg.*", true),
-            // A root wildcard goes on the wire as `*`, a rootless reference as
-            // itself; neither names anything resolvable.
-            ("catalogs.*", false),
-            ("catalogs", false),
+            // Rooted references, whatever the depth or sentinel. Catalog and
+            // package sentinels expand server-side.
+            ("catalogs.myorg.pkg.readVersion", None),
+            ("catalogs.myorg.pkg", None),
+            ("catalogs.myorg.pkg.*", None),
+            ("catalogs.myorg.*", None),
+            // Neither names anything resolvable, for different reasons: the
+            // wire form of the first is `*`, of the second the name itself.
+            ("catalogs.*", Some(RootWildcard)),
+            ("catalogs", Some(Rootless)),
         ];
-        let got: Vec<(&str, bool)> = cases
+        let got: Vec<(&str, Option<InvalidCatalogRefKind>)> = cases
             .iter()
-            .map(|(reference, _)| (*reference, reference.parse::<CatalogRef>().is_ok()))
+            .map(|(reference, _)| {
+                (
+                    *reference,
+                    reference.parse::<CatalogRef>().err().map(|err| err.kind),
+                )
+            })
             .collect();
         assert_eq!(got, cases.to_vec());
     }
