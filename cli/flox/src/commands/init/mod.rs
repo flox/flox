@@ -246,13 +246,13 @@ async fn init_local_environment(
     // Give the new environment a stable local id for telemetry correlation,
     // committed with `.flox`. Idempotent and best-effort; read paths never
     // write it.
-    let definition = local_environment_id::ensure(&env.path);
+    let origin = local_environment_id::ensure(&env.path);
 
     let env = ConcreteEnvironment::Path(env);
     // Emitted here rather than at the end of the function: the environment
     // exists from `PathEnvironment::init` onward, so a later failure in the
     // reporting below does not un-create it.
-    if definition == local_environment_id::Definition::New
+    if origin == local_environment_id::Origin::Minted
         && let Err(err) = EventsHub::global().record_event(EventKind::CliEnvironmentCreate(
             CliEnvironmentPayload::new(env_detail_from_concrete(flox, &env)),
         ))

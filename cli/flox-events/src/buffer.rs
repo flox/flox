@@ -88,8 +88,10 @@ impl EventsBuffer {
                 },
             }
         }
-        // Bounded like the parsed ones: a machine permanently on an older
-        // flox must not grow this file forever.
+        // Capped separately from the parsed entries, so the file holds up to
+        // 2 * MAX_BUFFER_SIZE lines. Anything unparseable lands here, not
+        // only newer-variant events: a line torn by a crash mid-append is
+        // also retained, and no binary will ever drain it.
         while unknown.len() >= MAX_BUFFER_SIZE {
             unknown.pop_front();
         }

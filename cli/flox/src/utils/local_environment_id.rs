@@ -24,14 +24,15 @@ pub(crate) fn read(dot_flox: &CanonicalPath) -> Option<Uuid> {
     Uuid::try_parse(contents.trim()).ok()
 }
 
-/// Whether an environment definition starts at this `.flox` or was already
-/// identified. `flox pull --copy` can convert in place, so a directory that
-/// was `flox init`-ed and then pushed keeps its original id.
+/// Where the id at a `.flox` came from. `flox pull --copy` can convert in
+/// place, so a directory that was `flox init`-ed and then pushed arrives here
+/// already carrying one.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Definition {
-    /// No id was present, so this call minted one. A write failure still
-    /// reports `New`: the definition is new, it simply carries no id.
-    New,
+pub(crate) enum Origin {
+    /// Nothing was there, so this call minted one. A failed write still
+    /// reports `Minted` — the environment is new, it just carries no id.
+    Minted,
+    /// An id was already present and was kept.
     Existing,
 }
 
@@ -40,15 +41,15 @@ pub(crate) enum Definition {
 /// keeps its existing id. Best-effort: a write failure is logged, and that
 /// environment then carries no id for its lifetime (reads never write, so
 /// nothing recreates it).
-pub(crate) fn ensure(dot_flox: &CanonicalPath) -> Definition {
+pub(crate) fn ensure(dot_flox: &CanonicalPath) -> Origin {
     if read(dot_flox).is_some() {
-        return Definition::Existing;
+        return Origin::Existing;
     }
     let id = Uuid::new_v4();
     if let Err(err) = write_atomically(dot_flox.join(TELEMETRY_ID_FILENAME), format!("{id}\n")) {
         debug!(error = %err, "could not write local_environment_id");
     }
-    Definition::New
+    Origin::Minted
 }
 
 #[cfg(test)]
@@ -62,7 +63,7 @@ mod tests {
         let dir = tempdir().unwrap();
         let dot_flox = CanonicalPath::new(dir.path()).unwrap();
         assert_eq!(read(&dot_flox), None, "no id before minting");
-        assert_eq!(ensure(&dot_flox), Definition::New);
+        assert_eq!(ensure(&dot_flox), Origin::Minted);
         assert_ne!(read(&dot_flox), None, "id exists after ensuring");
     }
 
@@ -70,12 +71,12 @@ mod tests {
     fn ensure_keeps_existing_id() {
         let dir = tempdir().unwrap();
         let dot_flox = CanonicalPath::new(dir.path()).unwrap();
-        assert_eq!(ensure(&dot_flox), Definition::New);
+        assert_eq!(ensure(&dot_flox), Origin::Minted);
         let first = read(&dot_flox);
         assert_eq!(
             ensure(&dot_flox),
-            Definition::Existing,
-            "a second ensure reports the definition already existed"
+            Origin::Existing,
+            "a second ensure reports the id was already there"
         );
         assert_eq!(
             read(&dot_flox),

@@ -186,10 +186,10 @@ impl Pull {
 
                     let pointer = managed_environment.pointer().clone();
                     let path_env = managed_environment.into_path_environment(&flox)?;
-                    let definition = local_environment_id::ensure(&path_env.dot_flox_path());
+                    let origin = local_environment_id::ensure(&path_env.dot_flox_path());
 
                     let path_env = ConcreteEnvironment::Path(path_env);
-                    if definition == local_environment_id::Definition::New
+                    if origin == local_environment_id::Origin::Minted
                         && let Err(err) = EventsHub::global().record_event(
                             EventKind::CliEnvironmentCreate(CliEnvironmentPayload::new(
                                 env_detail_from_concrete(&flox, &path_env),
@@ -414,10 +414,10 @@ impl Pull {
                 },
                 Ok(env) => {
                     create_dot_flox_gitignore(env.dot_flox_path())?;
-                    let definition = local_environment_id::ensure(&env.dot_flox_path());
+                    let origin = local_environment_id::ensure(&env.dot_flox_path());
 
                     let env = ConcreteEnvironment::Path(env);
-                    if definition == local_environment_id::Definition::New
+                    if origin == local_environment_id::Origin::Minted
                         && let Err(err) =
                             EventsHub::global().record_event(EventKind::CliEnvironmentCreate(
                                 CliEnvironmentPayload::new(env_detail_from_concrete(flox, &env)),
