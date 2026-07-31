@@ -38,6 +38,9 @@ pub struct ActivateArgs {
 }
 
 /// How an activation names itself on stderr once it is in effect.
+///
+/// The wording is the same in every mode; only whether the deactivate hint
+/// follows differs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ActivationAnnouncement {
     /// Name the environment and how to leave it. A subshell activation is a
@@ -61,6 +64,17 @@ impl ActivationAnnouncement {
         match invocation_type {
             InvocationType::Interactive => Self::Full,
             _ => Self::OneLine,
+        }
+    }
+
+    fn emit(self, transition: String) {
+        let deactivate_hint = "To stop using this environment, run 'flox deactivate'";
+        match self {
+            Self::Full => updated(formatdoc! {"{transition}
+                     {deactivate_hint}
+                     "}),
+            Self::OneLine => updated(transition),
+            Self::Silent => {},
         }
     }
 }
@@ -163,43 +177,22 @@ impl ActivateArgs {
         let warning_interval = Duration::from_secs(5);
         let mut last_warning: Option<Instant> = None;
 
-        let deactivate_hint = "To stop using this environment, run 'flox deactivate'";
         let announcement = ActivationAnnouncement::for_context(context, invocation_type);
 
         loop {
             match self.try_start_or_attach(context, subsystem_verbosity, vars_from_env)? {
                 StartOrAttachResult::Start { start_id, .. } => {
-                    match announcement {
-                        ActivationAnnouncement::Full => updated(
-                            formatdoc! {"You are now using the environment '{env_description}'
-                                     {deactivate_hint}
-                                     ",
-                            env_description = context.attach_ctx.env_description,
-                            },
-                        ),
-                        ActivationAnnouncement::OneLine => updated(format!(
-                            "Activated Flox environment '{}'.",
-                            context.attach_ctx.env_description
-                        )),
-                        ActivationAnnouncement::Silent => {},
-                    }
+                    announcement.emit(format!(
+                        "You are now using the environment '{}'",
+                        context.attach_ctx.env_description
+                    ));
                     return Ok(start_id);
                 },
                 StartOrAttachResult::Attach { start_id, .. } => {
-                    match announcement {
-                        ActivationAnnouncement::Full => updated(
-                            formatdoc! {"Attached to existing activation of environment '{env_description}'
-                                     {deactivate_hint}
-                                     ",
-                            env_description = context.attach_ctx.env_description,
-                            },
-                        ),
-                        ActivationAnnouncement::OneLine => updated(format!(
-                            "Activated Flox environment '{}'.",
-                            context.attach_ctx.env_description
-                        )),
-                        ActivationAnnouncement::Silent => {},
-                    }
+                    announcement.emit(format!(
+                        "Attached to existing activation of environment '{}'",
+                        context.attach_ctx.env_description
+                    ));
                     return Ok(start_id);
                 },
                 StartOrAttachResult::AlreadyStarting {

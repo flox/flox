@@ -78,10 +78,10 @@ flox config --set 'trusted_environments."owner/name"' trust
     ✔ You are now using the environment 'core'
     To stop using this environment, run 'flox deactivate'
     ```
-    In-place activations — including every auto-activation — print one line,
-    since they recur on each new shell or each `cd`:
+    In-place activations — including every auto-activation — print the same
+    message without the hint, since they recur on each new shell or each `cd`:
     ```console
-    ✔ Activated Flox environment 'core'.
+    ✔ You are now using the environment 'core'
     ```
     Apart from subshell activations, which always announce, a notification is
     printed only when stderr is a terminal, so a human sees the environment

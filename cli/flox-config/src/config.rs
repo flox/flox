@@ -150,7 +150,7 @@ pub struct FloxConfig {
     /// The notification message is:
     ///
     /// ```text
-    /// Activated Flox environment 'environment-name'.
+    /// You are now using the environment 'environment-name'
     /// ```
     ///
     /// (default: true)
