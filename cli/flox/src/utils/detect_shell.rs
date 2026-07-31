@@ -1,3 +1,16 @@
+//! Shell detection for activation and metrics.
+//!
+//! Three chains, differing in precedence and terminal policy:
+//! * subshell activation — `FLOX_SHELL`, `SHELL`, parent process, then the
+//!   bundled bash: [`detect_shell_for_subshell`];
+//! * metrics — the same chain and cache, but unknown stays `None`:
+//!   [`detect_shell_name_for_metrics`];
+//! * in-place activation — `FLOX_SHELL`, parent process, then `SHELL`,
+//!   uncached: [`detect_shell_for_in_place`].
+//!
+//! Each `*_with` variant is the same logic with the parent-process probe
+//! injectable for tests.
+
 use std::env;
 use std::path::PathBuf;
 use std::sync::LazyLock;
