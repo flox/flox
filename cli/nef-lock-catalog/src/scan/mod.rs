@@ -11,7 +11,8 @@ mod attr_path;
 mod error;
 mod graph;
 
-pub use attr_path::{AttrPath, InvalidAttrPath};
+pub(crate) use attr_path::AttrPath;
+pub use attr_path::InvalidAttrPath;
 pub use error::{ImportSite, ScanError};
 use graph::PackageGraph;
 
@@ -31,14 +32,16 @@ pub struct CatalogRef(AttrPath);
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[error("'{path}' {kind}")]
 pub struct InvalidCatalogRef {
-    pub path: AttrPath,
-    pub kind: InvalidCatalogRefKind,
+    /// The offending path. Crate-internal like [AttrPath] itself: outside the
+    /// crate a reference is text, and the message says which rule refused it.
+    pub(crate) path: AttrPath,
+    pub(crate) kind: InvalidCatalogRefKind,
 }
 
 /// Why a path cannot be a [CatalogRef]. None of these name anything the server
 /// can resolve, for different reasons.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
-pub enum InvalidCatalogRefKind {
+pub(crate) enum InvalidCatalogRefKind {
     /// The wire form drops the leading root component, leaving `*`.
     #[error("references the whole catalog namespace")]
     RootWildcard,
@@ -53,8 +56,9 @@ pub enum InvalidCatalogRefKind {
 }
 
 impl CatalogRef {
-    /// The path this reference locks.
-    pub fn path(&self) -> &AttrPath {
+    /// The path this reference locks. Crate-internal: a reference is a
+    /// [Display] value to consumers, and the wire form is built from it here.
+    pub(crate) fn path(&self) -> &AttrPath {
         &self.0
     }
 

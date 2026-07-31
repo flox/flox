@@ -53,17 +53,17 @@ fn is_bare_identifier(name: &str) -> bool {
 /// about what follows a component that could not be resolved, so appending
 /// past one is a no-op rather than an error.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct AttrPath(Vec<Component>);
+pub(crate) struct AttrPath(Vec<Component>);
 
 impl AttrPath {
     /// A path naming a single attribute, the catalog root the walker seeds its
     /// environment with.
-    pub fn root(name: impl Into<String>) -> Self {
+    pub(crate) fn root(name: impl Into<String>) -> Self {
         Self(vec![Component::Attribute(name.into())])
     }
 
     /// The path with `name` selected on it.
-    pub fn append_attribute(mut self, name: impl Into<String>) -> Self {
+    pub(crate) fn append_attribute(mut self, name: impl Into<String>) -> Self {
         if !self.is_wildcard() {
             self.0.push(Component::Attribute(name.into()));
         }
@@ -71,32 +71,32 @@ impl AttrPath {
     }
 
     /// The path with resolution stopped at its current depth.
-    pub fn append_wildcard(mut self) -> Self {
+    pub(crate) fn append_wildcard(mut self) -> Self {
         if !self.is_wildcard() {
             self.0.push(Component::Wildcard);
         }
         self
     }
 
-    pub fn len(&self) -> usize {
+    pub(crate) fn len(&self) -> usize {
         self.0.len()
     }
 
     /// Whether resolution stopped short of naming the path's last component.
-    pub fn is_wildcard(&self) -> bool {
+    pub(crate) fn is_wildcard(&self) -> bool {
         self.0.last() == Some(&Component::Wildcard)
     }
 
     /// The path with its root dropped, for reading it against a namespace
     /// other than the one it was rooted at.
-    pub fn pop_root(&self) -> Self {
+    pub(crate) fn pop_root(&self) -> Self {
         Self(self.0.iter().skip(1).cloned().collect())
     }
 
     /// This path continued by `tail`, the inverse of [Self::pop_root] for a
     /// path being re-rooted. Appending obeys the same absorbing rule as
     /// [Self::append_attribute]: nothing follows a wildcard.
-    pub fn concat(self, tail: Self) -> Self {
+    pub(crate) fn concat(self, tail: Self) -> Self {
         tail.0
             .into_iter()
             .fold(self, |path, component| match component {
@@ -106,7 +106,7 @@ impl AttrPath {
     }
 
     /// The attribute the path is rooted at, whatever its depth.
-    pub fn root_name(&self) -> Option<&str> {
+    pub(crate) fn root_name(&self) -> Option<&str> {
         match self.0.first() {
             Some(Component::Attribute(name)) => Some(name),
             _ => None,
