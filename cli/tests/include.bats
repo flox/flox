@@ -250,7 +250,12 @@ EOF
   setup_composer_with_remote_include
   run "$FLOX_BIN" include upgrade -d composer
   assert_success
-  assert_output --partial "No included environments have changes."
+  assert_output - <<EOF
+! Using file://${FLOX_FLOXHUB_PATH} as the FloxHub git endpoint.
+'\$_FLOX_FLOXHUB_GIT_URL' overrides the git endpoint and is intended for testing only.
+
+ℹ No included environments have changes.
+EOF
 }
 
 @test "include upgrade reports which remote environments have changes" {
@@ -258,7 +263,10 @@ EOF
   edit_remote
   run "$FLOX_BIN" include upgrade -d composer
   assert_success
-  assert_output --partial - <<EOF
+  assert_output - <<EOF
+! Using file://${FLOX_FLOXHUB_PATH} as the FloxHub git endpoint.
+'\$_FLOX_FLOXHUB_GIT_URL' overrides the git endpoint and is intended for testing only.
+
 ✔ Upgraded 'composer' with latest changes to:
 - 'remote'
 EOF

@@ -5,7 +5,6 @@ use flox_events::{CliEnvironmentPayload, CliPackagePayload, EventKind, EventsHub
 use flox_manifest::lockfile::LockedPackage;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::{Environment, SingleSystemUpgradeDiff};
-use floxhub_client::AuthContext;
 use indoc::formatdoc;
 use itertools::Itertools;
 use tracing::{debug, info_span, instrument};
@@ -40,7 +39,7 @@ impl Upgrade {
         subcommand_metric!("upgrade");
 
         // TODO(DEV-200): replace with actual docs URL when available
-        if matches!(flox.auth_context, AuthContext::Auth0(None)) {
+        if flox.auth_context.is_unauthenticated() {
             message::warning(
                 "This command will require authentication in an upcoming release. See https://flox.dev/docs/install-flox/ for more info.",
             );

@@ -15,13 +15,7 @@ use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment, PathP
 use flox_rust_sdk::providers::catalog::ALL_SYSTEMS;
 use flox_rust_sdk::providers::git::{GitCommandProvider, GitProvider};
 use flox_rust_sdk::providers::manifest_init::ManifestInitializer;
-use floxhub_client::{
-    AuthContext,
-    CatalogClientTrait,
-    PackageDescriptor,
-    PackageGroup,
-    PackageResolutionInfo,
-};
+use floxhub_client::{CatalogClientTrait, PackageDescriptor, PackageGroup, PackageResolutionInfo};
 use indoc::{formatdoc, indoc};
 use path_dedot::ParseDot;
 use tracing::{debug, info_span, instrument};
@@ -115,7 +109,7 @@ impl Init {
         subcommand_metric!("init");
 
         // TODO(DEV-200): replace with actual docs URL when available
-        if matches!(flox.auth_context, AuthContext::Auth0(None)) {
+        if flox.auth_context.is_unauthenticated() {
             message::warning(
                 "This command will require authentication in an upcoming release. See https://flox.dev/docs/install-flox/ for more info.",
             );

@@ -40,7 +40,6 @@ use flox_rust_sdk::providers::lock_manifest::LockResult;
 use flox_rust_sdk::providers::services::process_compose::{PROCESS_COMPOSE_BIN, ProcessStates};
 use flox_rust_sdk::providers::upgrade_checks::UpgradeInformationGuard;
 use flox_rust_sdk::utils::FLOX_INTERPRETER;
-use floxhub_client::AuthContext;
 use indoc::{formatdoc, indoc};
 use toml_edit::Key;
 use tracing::{debug, trace, warn};
@@ -228,7 +227,7 @@ impl Activate {
 
         // TODO(DEV-200): replace with actual docs URL when available
         if concrete_environment.existing_lockfile(&flox)?.is_none()
-            && matches!(flox.auth_context, AuthContext::Auth0(None))
+            && flox.auth_context.is_unauthenticated()
         {
             message::warning(
                 "Locking environments will require authentication in an upcoming release. See https://flox.dev/docs/install-flox/ for more info.",

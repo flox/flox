@@ -3,7 +3,6 @@ use bpaf::Bpaf;
 use flox_events::{CliEnvironmentPayload, EventKind, EventsHub};
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::Environment;
-use floxhub_client::AuthContext;
 use indoc::indoc;
 use tracing::{debug, info_span, instrument};
 
@@ -69,7 +68,7 @@ impl Upgrade {
     #[instrument(name = "upgrade", skip_all)]
     pub async fn handle(self, mut flox: Flox) -> Result<()> {
         // TODO(DEV-200): replace with actual docs URL when available
-        if matches!(flox.auth_context, AuthContext::Auth0(None)) {
+        if flox.auth_context.is_unauthenticated() {
             message::warning(
                 "This command will require authentication in an upcoming release. See https://flox.dev/docs/install-flox/ for more info.",
             );

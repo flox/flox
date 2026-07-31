@@ -25,7 +25,6 @@ use flox_rust_sdk::models::environment::{
 };
 use flox_rust_sdk::providers::buildenv::BuildEnvError;
 use flox_rust_sdk::providers::services::process_compose::ServiceError;
-use floxhub_client::AuthContext;
 use indoc::formatdoc;
 use itertools::Itertools;
 use tracing::{debug, instrument};
@@ -88,7 +87,7 @@ impl Edit {
         subcommand_metric!("edit");
 
         // TODO(DEV-200): replace with actual docs URL when available
-        if matches!(flox.auth_context, AuthContext::Auth0(None)) {
+        if flox.auth_context.is_unauthenticated() {
             message::warning(
                 "This command will require authentication in an upcoming release. See https://flox.dev/docs/install-flox/ for more info.",
             );

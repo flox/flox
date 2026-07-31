@@ -34,7 +34,6 @@ use flox_rust_sdk::providers::buildenv::{
 };
 use flox_rust_sdk::providers::nix_auth::{AuthProvider, NixAuth};
 use floxhub_client::{
-    AuthContext,
     CatalogClientTrait,
     MessageLevel,
     PackageDescriptor,
@@ -200,7 +199,7 @@ impl Run {
         subcommand_metric!("run");
 
         // TODO(DEV-200): replace with actual docs URL when available
-        if matches!(flox.auth_context, AuthContext::Auth0(None)) {
+        if flox.auth_context.is_unauthenticated() {
             message::warning(
                 "This command will require authentication in an upcoming release. See https://flox.dev/docs/install-flox/ for more info.",
             );

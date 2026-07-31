@@ -101,6 +101,13 @@ EOF
   assert_output --partial "$AUTH_WARNING"
 }
 
+@test "commands suppress auth warning when user is logged in" {
+  floxhub_setup "owner"
+  run "$FLOX_BIN" init
+  assert_success
+  refute_output --partial "$AUTH_WARNING"
+}
+
 # ---------------------------------------------------------------------------- #
 # Conditional warning: activate
 # ---------------------------------------------------------------------------- #
