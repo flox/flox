@@ -147,7 +147,7 @@ flox config --set 'trusted_environments."owner/name"' trust
 
 `hide_default_prompt`
 :   Hide environments named 'default' from the shell prompt,
-    and don't add environments named 'default' to `$FLOX_PROMPT_ENVIRONMENTS` (default: true).
+    and don't add environments named 'default' to `$FLOX_PROMPT_ENVIRONMENTS` (default: false).
 
 `installer_channel`
 :   Release channel to use when checking for updates to Flox.

@@ -543,7 +543,7 @@ impl ActivateOptions {
             "}),
             (set_prompt, hide_default_prompt, _) => (
                 set_prompt.unwrap_or(true),
-                hide_default_prompt.unwrap_or(true),
+                hide_default_prompt.unwrap_or(false),
             ),
         };
 
@@ -645,11 +645,11 @@ impl ActivateOptions {
         // mode renders no shell rc, so `set-prompt` never runs, and direnv
         // declines to export `PS1` at all.
         //
-        // Environments named `default` are excluded on the same reasoning that
-        // `hide_default_prompt` already applies to the prompt: the default
-        // environment is ambient rather than a place you arrived at, so its
-        // activation is not a transition worth reporting — and an rc-file
-        // activation of it would otherwise announce itself in every new shell.
+        // Environments named `default` are excluded for the same reason
+        // `hide_default_prompt` exists: the default environment is ambient
+        // rather than a place you arrived at, so its activation is not a
+        // transition worth reporting — and an rc-file activation of it would
+        // otherwise announce itself in every new shell.
         // `-q` is resolved here rather than in `flox-activations`, which has no
         // quiet mode of its own: the verbosity it receives below is clamped to
         // `max(0)`, so a negative (quieter) verbosity never reaches it. Deciding
