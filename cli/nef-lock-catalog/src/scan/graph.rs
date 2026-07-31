@@ -1,9 +1,9 @@
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use super::analyze::{FileInfo, analyze_file_at, identity_origins};
-use super::{CatalogRef, ScanError};
+use super::analyze::{FileInfo, RefSource, analyze_file_at, identity_origins};
+use super::{AttrPath, CatalogRef, ScanError};
 
 /// The NEF package files analyzed during closure resolution, keyed by package
 /// key.
@@ -86,10 +86,31 @@ impl PackageGraph {
     /// once [Self::expand_closure] has run: the graph then holds exactly the
     /// reachable packages, since only reachable arguments are ever resolved
     /// into it.
-    pub(super) fn references(&self) -> BTreeSet<CatalogRef> {
-        self.scans
-            .values()
-            .flat_map(|scan| scan.refs.iter().cloned())
+    ///
+    /// This is where paths become references. Whether one can be locked turns
+    /// on its depth below the top-level root, which a file scanned through a
+    /// forwarded namespace cannot know — only here has every path been
+    /// rewritten out of the namespace it was written in. Paths are visited in
+    /// order and the first that cannot be locked is reported against the
+    /// source it was found at.
+    pub(super) fn references(&self) -> Result<BTreeSet<CatalogRef>, ScanError> {
+        let mut paths: BTreeMap<&AttrPath, &RefSource> = BTreeMap::new();
+        for scan in self.scans.values() {
+            for (path, source) in &scan.refs {
+                paths.entry(path).or_insert(source);
+            }
+        }
+        paths
+            .into_iter()
+            .map(|(path, source)| {
+                CatalogRef::try_from(path.clone()).map_err(|reason| {
+                    ScanError::UnlockableReference {
+                        file: source.file.clone(),
+                        position: Some(source.position),
+                        reason: reason.to_string(),
+                    }
+                })
+            })
             .collect()
     }
 }

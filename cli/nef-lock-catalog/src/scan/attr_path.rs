@@ -109,20 +109,6 @@ impl AttrPath {
         }
     }
 
-    /// The root this path names when it names a root and nothing under it.
-    ///
-    /// Distinct from [Self::root_name], which answers what a path is rooted
-    /// at however deep it goes. Forwarding a namespace into an import is only
-    /// a forward when the argument *is* the namespace: passing `catalogs.myorg`
-    /// forwards nothing, and reading its root as `catalogs` would follow the
-    /// import as though the whole namespace had been handed over.
-    pub fn as_whole_root(&self) -> Option<&str> {
-        match self.0.as_slice() {
-            [Component::Attribute(name)] => Some(name),
-            _ => None,
-        }
-    }
-
     /// The attribute the path is rooted at, whatever its depth.
     pub fn root_name(&self) -> Option<&str> {
         match self.0.first() {

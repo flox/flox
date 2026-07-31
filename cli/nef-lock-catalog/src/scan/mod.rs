@@ -179,7 +179,7 @@ pub fn scan_package_with_roots(
     let mut graph = PackageGraph::new(base_dir, root_attributes);
     graph.add_root(rel_file)?;
     graph.expand_closure()?;
-    let references = graph.references();
+    let references = graph.references()?;
 
     debug!(references = references.len(), "scanned catalog references");
     Ok(references)
@@ -270,6 +270,23 @@ mod tests {
             Ok(reference) if reference.to_string() == "catalogs.myorg.pkg"
         );
         assert_matches!(serde_json::from_str::<CatalogRef>("\"catalogs.*\""), Err(_));
+    }
+
+    #[test]
+    fn root_wildcard_fails_the_scan() {
+        // The walk records the widening and the graph rejects it, once every
+        // path is back in the top-level namespace. The error still names the
+        // file and position the path was found at.
+        let base_dir = Path::new("test_data/catalog_refs");
+        let err =
+            scan_package(base_dir, Path::new("escaping-root.nix")).expect_err("scan should fail");
+        assert_matches!(
+            err,
+            ScanError::UnlockableReference { file, position, reason }
+                if file == base_dir.join("escaping-root.nix")
+                    && position == Some((4, 3))
+                    && reason == "'catalogs.*' references the whole catalog namespace"
+        );
     }
 
     #[test]

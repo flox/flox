@@ -14,23 +14,29 @@ use rowan::ast::AstNode;
 use tracing::{debug, warn};
 
 use super::attr_path::{attr_static_name, ident_name, static_str_content};
-use super::{
-    AttrPath,
-    CatalogRef,
-    Component,
-    ImportSite,
-    InvalidCatalogRef,
-    InvalidCatalogRefKind,
-    ScanError,
-};
+use super::{AttrPath, Component, ImportSite, ScanError};
+
+/// Where a path was first found. Kept alongside the path so that one which
+/// turns out to be unlockable — only decidable once forwarding has rewritten
+/// it into the top-level namespace — is still reported against the file and
+/// line it came from.
+#[derive(Debug, Clone)]
+pub(super) struct RefSource {
+    pub(super) file: PathBuf,
+    pub(super) position: (usize, usize),
+}
 
 /// Catalog references and dependency attr-paths extracted from one file.
 #[derive(Debug)]
 pub(super) struct FileInfo {
-    /// Fully-qualified catalog attr-paths referenced by the file
-    /// (e.g. `catalogs.myorg.toolkit.readVersion`). Tracked as [CatalogRef]
-    /// from the scan result onward; the walker builds them as strings.
-    pub(super) refs: BTreeSet<CatalogRef>,
+    /// Catalog attr-paths referenced by the file, rewritten into the
+    /// namespace of whoever imported it, each with the source it was found at.
+    ///
+    /// Paths rather than [CatalogRef]s: whether one can be locked depends on
+    /// its depth below the top-level root, which a file scanned through a
+    /// forwarded namespace does not know. The graph converts them once the
+    /// rewriting is done.
+    pub(super) refs: BTreeMap<AttrPath, RefSource>,
     /// Attr-paths of the packages this file depends on, resolved by the
     /// package graph's closure expansion. The first component is the
     /// dependency argument; any further components are members selected on it
@@ -50,6 +56,15 @@ struct ScanCtx<'a> {
 }
 
 impl ScanCtx<'_> {
+    /// Where in this file `offset` falls, for reporting a path that turns out
+    /// not to be lockable.
+    fn source_at(&self, offset: usize) -> RefSource {
+        RefSource {
+            file: self.path.to_path_buf(),
+            position: line_col(self.content, offset),
+        }
+    }
+
     /// Emit a `debug` event locating one discovered reference at `offset` (a
     /// byte offset into the file). Surfaced by `lock --verbose`.
     fn report(&self, offset: usize, reference: &str) {
@@ -171,9 +186,9 @@ pub(super) fn analyze_file_at(
     content: &str,
     root_attributes: &HashSet<String>,
     file_dir: Option<&Path>,
-    visited: &mut HashMap<PathBuf, HashSet<BTreeMap<String, String>>>,
+    visited: &mut HashMap<PathBuf, HashSet<BTreeMap<String, AttrPath>>>,
     path: &Path,
-    root_origins: &BTreeMap<String, String>,
+    root_origins: &BTreeMap<String, AttrPath>,
 ) -> Result<FileInfo, ScanError> {
     debug!(file = %path.display(), "reading NEF expression");
 
@@ -233,13 +248,17 @@ pub(super) fn analyze_file_at(
     collect_dependency_selections(root.syntax(), &dependency_arg_names, &mut dependency_args);
 
     let ctx = ScanCtx { path, content };
-    let mut walker = Walker::new(root_attributes, declared_params.as_ref(), ctx);
+    let mut walker = Walker::new(
+        root_attributes,
+        declared_params.as_ref(),
+        ctx.clone(),
+        root_origins,
+    );
     walker.walk_root(&root);
     let WalkResult {
         mut refs,
         pending_imports,
         first_root_use,
-        mut rejected_refs,
     } = walker.finish();
 
     // Imports are IO: the walker only records facts, the drain here reads and
@@ -270,31 +289,23 @@ pub(super) fn analyze_file_at(
                 })?;
             // The child is scanned with its own parameter names as root_attributes;
             // its refs are rewritten back into the parent's namespace.
-            let rewrites: HashMap<String, String> = match pending.arg {
+            let rewrites: BTreeMap<String, AttrPath> = match pending.arg {
                 ImportArg::Set(forwards) => forwards,
-                ImportArg::Root(parent_root) => {
+                ImportArg::Whole(parent) => {
                     match top_ident_param(&imported_content, &target)? {
-                        Some(param) => HashMap::from([(param, parent_root)]),
+                        Some(param) => BTreeMap::from([(param, parent)]),
                         None => {
                             // A pattern parameter destructures the namespace into
                             // names the scanner cannot statically bind, so
-                            // anything under the root may be referenced: it
-                            // escapes whole rather than being dropped.
+                            // anything under it may be referenced: it escapes
+                            // whole rather than being dropped.
                             warn!(
                                 file = %target.display(),
-                                root = %parent_root,
-                                "imported file does not take the namespace as a plain parameter; locking the whole root",
+                                namespace = %parent,
+                                "imported file does not take the namespace as a plain parameter; locking the whole subtree",
                             );
-                            let reason = InvalidCatalogRef {
-                                path: AttrPath::root(&parent_root).append_wildcard(),
-                                kind: InvalidCatalogRefKind::RootWildcard,
-                            };
-                            rejected_refs
-                                .entry(reason.path.clone())
-                                .or_insert(RejectedRef {
-                                    offset: pending.offset,
-                                    reason: reason.to_string(),
-                                });
+                            refs.entry(parent.append_wildcard())
+                                .or_insert_with(|| ctx.source_at(pending.offset));
                             continue;
                         },
                     }
@@ -307,12 +318,9 @@ pub(super) fn analyze_file_at(
             // being stored: two chains whose immediate maps look identical can
             // still stand for different top-level root_attributes, and only an identical
             // composition contributes identical refs.
-            let child_origins: BTreeMap<String, String> = rewrites
+            let child_origins: BTreeMap<String, AttrPath> = rewrites
                 .iter()
-                .map(|(child, parent)| {
-                    let origin = root_origins.get(parent).unwrap_or(parent);
-                    (child.clone(), origin.clone())
-                })
+                .map(|(child, parent)| (child.clone(), rewrite_root(parent, root_origins)))
                 .collect();
             if !visited
                 .entry(target.clone())
@@ -331,24 +339,12 @@ pub(super) fn analyze_file_at(
                 &target,
                 &child_origins,
             )?;
-            // Rewriting only replaces the leading component, so a reference
-            // valid in the child stays valid in the parent; the conversion
-            // routes any surprise through the same reporting as the walk's.
-            for reference in imported.refs {
-                let rewritten = rewrite_root(reference.path(), &rewrites);
-                match CatalogRef::try_from(rewritten) {
-                    Ok(reference) => {
-                        refs.insert(reference);
-                    },
-                    Err(reason) => {
-                        rejected_refs
-                            .entry(reason.path.clone())
-                            .or_insert(RejectedRef {
-                                offset: pending.offset,
-                                reason: reason.to_string(),
-                            });
-                    },
-                }
+            // The child's paths move into this file's namespace, keeping the
+            // source they were found at so a path that cannot be locked is
+            // still reported against the file that wrote it.
+            for (child_path, source) in imported.refs {
+                refs.entry(rewrite_root(&child_path, &rewrites))
+                    .or_insert(source);
             }
         }
     }
@@ -356,12 +352,6 @@ pub(super) fn analyze_file_at(
     // With the refs complete (imports included), reject any that resolve
     // through a root the top-level lambda does not declare — they could never
     // evaluate. Roots are checked in sorted order for a deterministic error.
-    //
-    // Rejected references are searched alongside the kept ones. A file like
-    // `{ mkDerivation }: mkDerivation { passthru = catalogs; }` uses the root
-    // but contributes nothing to `refs`, so searching `refs` alone would not
-    // see `catalogs` used at all and would fall through to the rejection,
-    // which says less than naming the undeclared argument.
     if let Some(declared) = &declared_params {
         let mut undeclared: Vec<&String> = root_attributes
             .iter()
@@ -370,10 +360,8 @@ pub(super) fn analyze_file_at(
         undeclared.sort();
         for root in undeclared {
             let referenced = refs
-                .iter()
-                .map(|reference| reference.path().root_name())
-                .chain(rejected_refs.keys().map(AttrPath::root_name))
-                .any(|name| name == Some(root.as_str()));
+                .keys()
+                .any(|path| path.root_name() == Some(root.as_str()));
             if referenced {
                 return Err(ScanError::UndeclaredRoot {
                     root: root.clone(),
@@ -386,18 +374,6 @@ pub(super) fn analyze_file_at(
         }
     }
 
-    // A namespace that escaped static analysis widened to a reference
-    // [CatalogRef] refuses. Reporting it here, rather than where the lock
-    // request is built, is what gives the failure a file and a position; the
-    // first by name keeps the choice independent of traversal order.
-    if let Some((_, rejected)) = rejected_refs.pop_first() {
-        return Err(ScanError::UnlockableReference {
-            file: path.to_path_buf(),
-            position: Some(line_col(content, rejected.offset)),
-            reason: rejected.reason,
-        });
-    }
-
     Ok(FileInfo {
         refs,
         dependency_args,
@@ -406,10 +382,10 @@ pub(super) fn analyze_file_at(
 
 /// The identity `root_origins` map for an entry file, whose root_attributes are the
 /// top-level root_attributes themselves (see [analyze_file_at]).
-pub(super) fn identity_origins(root_attributes: &HashSet<String>) -> BTreeMap<String, String> {
+pub(super) fn identity_origins(root_attributes: &HashSet<String>) -> BTreeMap<String, AttrPath> {
     root_attributes
         .iter()
-        .map(|root| (root.clone(), root.clone()))
+        .map(|root| (root.clone(), AttrPath::root(root)))
         .collect()
 }
 
@@ -494,14 +470,18 @@ struct PendingImport {
 }
 
 /// The catalog-forwarding shape of an import's argument.
+///
+/// A forward carries a path, not just a root: `{ myorg = catalogs.myorg; }`
+/// hands the child a catalog, and its refs come back under
+/// `catalogs.myorg.…` rather than the child's own parameter name.
 #[derive(Debug)]
 enum ImportArg {
-    /// An attrset argument: child parameter name → parent root it is bound
-    /// to (`{ inherit catalogs; }`, `{ cats = catalogs; }`).
-    Set(HashMap<String, String>),
-    /// The whole argument is a root namespace (`import ./h.nix catalogs`);
-    /// the child's lambda parameter binds this parent root.
-    Root(String),
+    /// An attrset argument: child parameter name → the parent path it is
+    /// bound to (`{ inherit catalogs; }`, `{ cats = catalogs; }`).
+    Set(BTreeMap<String, AttrPath>),
+    /// The whole argument is a catalog path (`import ./h.nix catalogs`); the
+    /// child's lambda parameter binds it.
+    Whole(AttrPath),
 }
 
 /// What consumes an attrset appearing in value position, deciding which of
@@ -514,7 +494,7 @@ enum AttrsetConsumer<'a> {
     /// An `import` application: names forwarded into the imported file (per
     /// [Walker::import_forwards]) are scanned through it; a root-named entry
     /// that does not forward is warned about.
-    Import(&'a HashMap<String, String>),
+    Import(&'a BTreeMap<String, AttrPath>),
     /// A lambda defined in this file: an entry binding a root under a
     /// parameter of the same name was already walked in the body.
     Lambda(&'a HashSet<String>),
@@ -531,31 +511,26 @@ struct Walker<'a> {
     /// hides them (see the declaration check in [analyze_file_at]).
     declared_params: Option<&'a HashSet<String>>,
     ctx: ScanCtx<'a>,
-    refs: BTreeSet<CatalogRef>,
+    /// Each root this file knows mapped to the top-level path it stands for.
+    /// A file scanned through a forwarded namespace writes paths shortened by
+    /// the prefix it was handed, so depth is judged against where a path will
+    /// end up rather than how it reads here.
+    root_origins: &'a BTreeMap<String, AttrPath>,
+    /// Paths reached, each with where it was first found. Not [CatalogRef]s:
+    /// the walk stays infallible, and lockability is decided once the graph
+    /// has every path in the top-level namespace.
+    refs: BTreeMap<AttrPath, RefSource>,
     pending_imports: Vec<PendingImport>,
     /// Byte offset of the first use of each root, for locating an
     /// undeclared-root error after the walk.
     first_root_use: HashMap<String, usize>,
-    /// Paths [CatalogRef] refused, keyed by the path — which the
-    /// undeclared-root check still needs to attribute to a root. Collected
-    /// rather than raised so the walk stays infallible; [analyze_file_at]
-    /// reports the first once the refs are complete.
-    rejected_refs: BTreeMap<AttrPath, RejectedRef>,
-}
-
-/// Where a path [CatalogRef] refused was first emitted, and what the rule that
-/// refused it said. The reason is kept rendered: nothing inspects it.
-struct RejectedRef {
-    offset: usize,
-    reason: String,
 }
 
 /// What [Walker::finish] hands back to the IO drain in [analyze_file_at].
 struct WalkResult {
-    refs: BTreeSet<CatalogRef>,
+    refs: BTreeMap<AttrPath, RefSource>,
     pending_imports: Vec<PendingImport>,
     first_root_use: HashMap<String, usize>,
-    rejected_refs: BTreeMap<AttrPath, RejectedRef>,
 }
 
 impl<'a> Walker<'a> {
@@ -565,16 +540,24 @@ impl<'a> Walker<'a> {
         root_attributes: &'a HashSet<String>,
         declared_params: Option<&'a HashSet<String>>,
         ctx: ScanCtx<'a>,
+        root_origins: &'a BTreeMap<String, AttrPath>,
     ) -> Self {
         Self {
             root_attributes,
             declared_params,
             ctx,
-            refs: BTreeSet::new(),
+            root_origins,
+            refs: BTreeMap::new(),
             pending_imports: Vec::new(),
             first_root_use: HashMap::new(),
-            rejected_refs: BTreeMap::new(),
         }
+    }
+
+    /// Whether a path reaches a package once it is back in the top-level
+    /// namespace, which is the depth that decides both widening and, later,
+    /// lockability.
+    fn reaches_package(&self, path: &AttrPath) -> bool {
+        reaches_package(&rewrite_root(path, self.root_origins))
     }
 
     /// Walk the file's top-level expression, seeding the environment with the
@@ -599,32 +582,18 @@ impl<'a> Walker<'a> {
             refs: self.refs,
             pending_imports: self.pending_imports,
             first_root_use: self.first_root_use,
-            rejected_refs: self.rejected_refs,
         }
     }
 
-    /// Record the reference a resolved path denotes, or — when it is one
-    /// [CatalogRef] refuses — why, so [analyze_file_at] can report it.
+    /// Record the path a use site resolves to, and where it was found.
+    /// Whether it can be locked is decided once forwarding has put it in the
+    /// top-level namespace, so nothing is rejected here.
     fn emit(&mut self, offset: usize, path: AttrPath) {
         self.note_root_use(offset, &path);
-        match CatalogRef::try_from(path) {
-            Ok(reference) => {
-                self.ctx.report(offset, &reference.to_string());
-                self.refs.insert(reference);
-            },
-            Err(reason) => self.note_rejected_ref(offset, reason),
-        }
-    }
-
-    /// Record why [CatalogRef] refused a reference, and where it was first
-    /// emitted.
-    fn note_rejected_ref(&mut self, offset: usize, reason: InvalidCatalogRef) {
-        self.rejected_refs
-            .entry(reason.path.clone())
-            .or_insert(RejectedRef {
-                offset,
-                reason: reason.to_string(),
-            });
+        self.ctx.report(offset, &path.to_string());
+        self.refs
+            .entry(path)
+            .or_insert_with(|| self.ctx.source_at(offset));
     }
 
     /// Record where the root a path is rooted at was first used.
@@ -703,15 +672,15 @@ impl<'a> Walker<'a> {
     /// under it may be accessed.
     fn emit_value_paths(&mut self, offset: usize, paths: BTreeSet<AttrPath>) {
         for path in paths {
-            if reaches_package(&path) {
+            if self.reaches_package(&path) {
                 self.emit(offset, path);
                 continue;
             }
             // A catalog widened to `<root>.<catalog>.*` over-locks but still
-            // resolves, so it is worth a warning. Widening the root itself is
-            // rejected outright by [analyze_file_at] and needs none.
+            // resolves, so it is worth a warning. Widening the root itself
+            // reaches nothing and the graph rejects it, needing none.
             let widened = path.append_wildcard();
-            if reaches_package(&widened) {
+            if self.reaches_package(&widened) {
                 self.ctx.warn_escape(offset, &widened.to_string());
             }
             self.emit(offset, widened);
@@ -722,9 +691,18 @@ impl<'a> Walker<'a> {
     /// positions where shallow paths are consumed rather than escaping.
     fn emit_deep_paths(&mut self, offset: usize, paths: BTreeSet<AttrPath>) {
         for path in paths {
-            if reaches_package(&path) {
+            if self.reaches_package(&path) {
                 self.emit(offset, path);
             }
+        }
+    }
+
+    /// A path that stops short of a package, widened so it names everything
+    /// under itself instead. Already-deep paths are returned unchanged.
+    fn widen_to_package(&self, path: AttrPath) -> AttrPath {
+        match self.reaches_package(&path) {
+            true => path,
+            false => path.append_wildcard(),
         }
     }
 
@@ -1030,7 +1008,7 @@ impl<'a> Walker<'a> {
                 };
                 // A static key can still land on a catalog, which reaches
                 // nothing on its own, so it widens.
-                self.emit(offset_of(apply.syntax()), widen_to_package(path));
+                self.emit(offset_of(apply.syntax()), self.widen_to_package(path));
             }
             self.walk_consumed_source(&target, env);
             if let Some(key) = key {
@@ -1097,8 +1075,8 @@ impl<'a> Walker<'a> {
                     // Forwarding is a use of each parent root: refs surfacing
                     // from the import trace back to this argument.
                     let arg_offset = offset_of(attrset.syntax());
-                    for parent_root in forwards.values() {
-                        self.note_root_use(arg_offset, &AttrPath::root(parent_root));
+                    for parent in forwards.values() {
+                        self.note_root_use(arg_offset, parent);
                     }
                     self.pending_imports.push(PendingImport {
                         path,
@@ -1109,21 +1087,21 @@ impl<'a> Walker<'a> {
                 true
             },
             other => {
-                // `import ./h.nix catalogs` — the whole namespace is the
+                // `import ./h.nix catalogs` — the namespace itself is the
                 // argument, consumed by following the import.
-                if let Some(Binding::Path(root_path)) = resolve_expr_binding(other, env)
-                    && let Some(root) = root_path.as_whole_root()
-                {
-                    let root = root.to_string();
-                    self.note_root_use(offset_of(other.syntax()), &root_path);
-                    self.pending_imports.push(PendingImport {
-                        path,
-                        arg: ImportArg::Root(root),
-                        offset,
-                    });
-                    return true;
+                let Some(Binding::Path(parent)) = resolve_expr_binding(other, env) else {
+                    return false;
+                };
+                if reaches_package(&parent) {
+                    return false;
                 }
-                false
+                self.note_root_use(offset_of(other.syntax()), &parent);
+                self.pending_imports.push(PendingImport {
+                    path,
+                    arg: ImportArg::Whole(parent),
+                    offset,
+                });
+                true
             },
         }
     }
@@ -1202,8 +1180,8 @@ impl<'a> Walker<'a> {
     /// `cats = catalogs;`). A binding that *names* a root but is bound to
     /// something else is not forwarded; [Self::walk_import_arg] warns about
     /// it — the imported file will not be scanned through it.
-    fn import_forwards(&self, arg: &ast::AttrSet, env: &Env) -> HashMap<String, String> {
-        let mut forwards = HashMap::new();
+    fn import_forwards(&self, arg: &ast::AttrSet, env: &Env) -> BTreeMap<String, AttrPath> {
+        let mut forwards = BTreeMap::new();
         for entry in arg.attrpath_values() {
             let Some(attrpath) = entry.attrpath() else {
                 continue;
@@ -1217,9 +1195,9 @@ impl<'a> Walker<'a> {
             };
             let Some(value) = entry.value() else { continue };
             if let Some(Binding::Path(path)) = resolve_expr_binding(&value, env)
-                && let Some(root) = path.as_whole_root()
+                && !reaches_package(&path)
             {
-                forwards.insert(name, root.to_string());
+                forwards.insert(name, path);
             }
         }
         for inherit in arg.inherits() {
@@ -1237,9 +1215,9 @@ impl<'a> Walker<'a> {
                     (true, _) => None,
                 };
                 if let Some(Binding::Path(path)) = binding
-                    && let Some(root) = path.as_whole_root()
+                    && !reaches_package(&path)
                 {
-                    forwards.insert(name, root.to_string());
+                    forwards.insert(name, path);
                 }
             }
         }
@@ -1254,7 +1232,7 @@ impl<'a> Walker<'a> {
                         // A select can land on a catalog, which reaches
                         // nothing on its own, so it widens.
                         for path in paths {
-                            self.emit(offset_of(select.syntax()), widen_to_package(path));
+                            self.emit(offset_of(select.syntax()), self.widen_to_package(path));
                         }
                     },
                     // The select reaches a modeled set (`t.sub`) used as a
@@ -1689,15 +1667,6 @@ fn reaches_package(path: &AttrPath) -> bool {
     }
 }
 
-/// A path that stops short of a package, widened so it names everything under
-/// itself instead. Already-deep paths are returned unchanged.
-fn widen_to_package(path: AttrPath) -> AttrPath {
-    match reaches_package(&path) {
-        true => path,
-        false => path.append_wildcard(),
-    }
-}
-
 /// The binding `inherit (<source>) <name>;` produces for `name`, given the
 /// source's binding: one more component on an attr-path, or a member of a
 /// modeled set.
@@ -1778,14 +1747,14 @@ fn top_ident_param(content: &str, path: &Path) -> Result<Option<String>, ScanErr
 /// Rewrite a child-rooted path back to the parent's namespace using the
 /// child-name → parent-root map of the import that forwarded it. Only the root
 /// changes, so a path valid in the child stays valid in the parent.
-fn rewrite_root(path: &AttrPath, rewrites: &HashMap<String, String>) -> AttrPath {
+fn rewrite_root(path: &AttrPath, rewrites: &BTreeMap<String, AttrPath>) -> AttrPath {
     let Some(parent) = path.root_name().and_then(|root| rewrites.get(root)) else {
         return path.clone();
     };
     path.components()
         .iter()
         .skip(1)
-        .fold(AttrPath::root(parent), |path, component| match component {
+        .fold(parent.clone(), |path, component| match component {
             Component::Attribute(name) => path.append_attribute(name),
             Component::Wildcard => path.append_wildcard(),
         })
@@ -1859,8 +1828,14 @@ mod tests {
         .expect("scan should succeed")
     }
 
-    fn refs(content: &str, root_attributes: &HashSet<String>) -> BTreeSet<CatalogRef> {
-        analyze_file(content, root_attributes).refs
+    /// The paths a file resolves to, rendered. Lockability is the graph's
+    /// call, so these are what the walk found, not what survives conversion.
+    fn refs(content: &str, root_attributes: &HashSet<String>) -> BTreeSet<String> {
+        rendered(analyze_file(content, root_attributes).refs)
+    }
+
+    fn rendered(refs: BTreeMap<AttrPath, RefSource>) -> BTreeSet<String> {
+        refs.into_keys().map(|path| path.to_string()).collect()
     }
 
     fn scan_err(content: &str, root_attributes: &HashSet<String>) -> ScanError {
@@ -1875,12 +1850,12 @@ mod tests {
         .expect_err("scan should fail")
     }
 
-    fn refs_at(path: &str, root_attributes: &HashSet<String>) -> BTreeSet<CatalogRef> {
+    fn refs_at(path: &str, root_attributes: &HashSet<String>) -> BTreeSet<String> {
         let path = Path::new(path);
         let content = fs::read_to_string(path).expect("test fixture missing");
         let dir = path.parent();
         let mut visited = HashMap::new();
-        analyze_file_at(
+        let info = analyze_file_at(
             &content,
             root_attributes,
             dir,
@@ -1888,8 +1863,8 @@ mod tests {
             path,
             &identity_origins(root_attributes),
         )
-        .expect("scan should succeed")
-        .refs
+        .expect("scan should succeed");
+        rendered(info.refs)
     }
 
     fn scan_err_at(path: &str, root_attributes: &HashSet<String>) -> ScanError {
@@ -1908,8 +1883,8 @@ mod tests {
         .expect_err("scan should fail")
     }
 
-    fn set(items: &[&str]) -> BTreeSet<CatalogRef> {
-        items.iter().map(|s| CatalogRef::new_unchecked(s)).collect()
+    fn set(items: &[&str]) -> BTreeSet<String> {
+        items.iter().map(|s| s.to_string()).collect()
     }
 
     #[test]
@@ -2002,8 +1977,8 @@ mod tests {
             include_str!("../../test_data/catalog_refs/multi-attr-inherit.nix"),
             &root_attributes(&["catalogs"]),
         );
-        assert!(!got.contains(&CatalogRef::new_unchecked("catalogs.myorg.python3Packages")));
-        assert!(!got.contains(&CatalogRef::new_unchecked("catalogs.myorg.toolkit")));
+        assert!(!got.contains("catalogs.myorg.python3Packages"));
+        assert!(!got.contains("catalogs.myorg.toolkit"));
     }
 
     #[test]
@@ -2200,7 +2175,7 @@ mod tests {
             include_str!("../../test_data/catalog_refs/with-namespace.nix"),
             &root_attributes(&["catalogs"]),
         );
-        assert!(!got.contains(&CatalogRef::new_unchecked("catalogs.myorg")));
+        assert!(!got.contains("catalogs.myorg"));
     }
 
     #[test]
@@ -2209,10 +2184,7 @@ mod tests {
             "{ catalogs }: let org = catalogs.myorg; in with org; toolkit",
             &root_attributes(&["catalogs"]),
         );
-        assert!(
-            got.contains(&CatalogRef::new_unchecked("catalogs.myorg.*")),
-            "got: {got:?}"
-        );
+        assert!(got.contains("catalogs.myorg.*"), "got: {got:?}");
     }
 
     #[test]
@@ -2335,10 +2307,7 @@ mod tests {
             "{ catalogs, x }: let a = if x then a.sub else catalogs.b.pkg; in a",
             &root_attributes(&["catalogs"]),
         );
-        assert!(
-            got.contains(&CatalogRef::new_unchecked("catalogs.b.pkg")),
-            "got: {got:?}"
-        );
+        assert!(got.contains("catalogs.b.pkg"), "got: {got:?}");
     }
 
     #[test]
@@ -2429,34 +2398,27 @@ mod tests {
     }
 
     #[test]
-    fn escaping_root_namespace_is_an_error() {
-        // Widening a whole catalog over-locks but still resolves; widening the
-        // root itself yields a reference whose wire form is `*`, so the scan
-        // fails instead of emitting one.
+    fn escaping_root_namespace_widens_to_the_root() {
+        // The walk records the widening; that a root wildcard cannot be locked
+        // is the graph's call, once forwarding has settled every path (see
+        // `root_wildcard_fails_the_scan`).
         let cases = [
             // The root escapes into an opaque function.
-            ("{ catalogs, f }: f catalogs", (1, 20)),
+            "{ catalogs, f }: f catalogs",
             // Escape positions other than function arguments.
-            ("{ catalogs }: [ catalogs ]", (1, 17)),
-            ("{ catalogs, f }: f { inherit catalogs; }", (1, 30)),
+            "{ catalogs }: [ catalogs ]",
+            "{ catalogs, f }: f { inherit catalogs; }",
             // Helper-lambda indirection: the lambda parameter is opaque, so
             // the refs inside it are invisible and the root escapes whole.
-            (
-                "{ catalogs }: let f = c: c.myorg.toolkit; in f catalogs",
-                (1, 48),
-            ),
+            "{ catalogs }: let f = c: c.myorg.toolkit; in f catalogs",
             // The @-name carries the root, so passing it whole escapes the
             // root like `f catalogs` does.
-            ("args@{ catalogs, f, ... }: f args", (1, 30)),
+            "args@{ catalogs, f, ... }: f args",
         ];
-        for (content, position) in cases {
-            let err = scan_err(content, &root_attributes(&["catalogs"]));
-            assert_matches!(
-                err,
-                ScanError::UnlockableReference { file, position: got, reason }
-                    if file == Path::new("test.nix")
-                        && got == Some(position)
-                        && reason == "'catalogs.*' references the whole catalog namespace",
+        for content in cases {
+            assert_eq!(
+                refs(content, &root_attributes(&["catalogs"])),
+                set(&["catalogs.*"]),
                 "content: {content}"
             );
         }
@@ -2501,12 +2463,12 @@ mod tests {
         }
         // A lambda that binds the namespace under a different name cannot be
         // matched to the set's root member (and its body is walked with an
-        // opaque parameter), so the root escapes and the scan fails.
-        let err = scan_err(
+        // opaque parameter), so the root escapes.
+        let got = refs(
             "args@{ catalogs, ... }: let mkPkg = { cats }: cats.myorg.inner; in mkPkg args",
             &root_attributes(&["catalogs"]),
         );
-        assert_matches!(err, ScanError::UnlockableReference { .. });
+        assert_eq!(got, set(&["catalogs.*"]));
     }
 
     #[test]
@@ -2755,11 +2717,11 @@ mod tests {
         // The `with` namespace is dynamic at the catalog component, so it
         // widens to the root even though the dynamic component holds a
         // resolvable ref of its own.
-        let err = scan_err(
+        let got = refs(
             "{ catalogs }: with catalogs.${catalogs.a.name}; toolkit",
             &root_attributes(&["catalogs"]),
         );
-        assert_matches!(err, ScanError::UnlockableReference { .. });
+        assert_eq!(got, set(&["catalogs.*", "catalogs.a.name"]));
     }
 
     #[test]
@@ -2801,13 +2763,13 @@ mod tests {
 
     #[test]
     fn dynamic_attr_at_first_component_escapes_the_root() {
-        // A dynamic catalog name could be any catalog, so the reference widens
-        // to the root and cannot be locked.
-        let err = scan_err(
+        // A dynamic catalog name could be any catalog, so the path widens to
+        // the root.
+        let got = refs(
             "{ catalogs, org }: catalogs.${org}.pkg",
             &root_attributes(&["catalogs"]),
         );
-        assert_matches!(err, ScanError::UnlockableReference { .. });
+        assert_eq!(got, set(&["catalogs.*"]));
     }
 
     #[test]
@@ -2916,17 +2878,8 @@ mod tests {
     fn import_arg_namespace_not_forwarded_escapes() {
         let cases: &[(&str, &[&str])] = &[
             // A catalog-level alias as an import argument is not forwarded
-            // (only whole root_attributes are), so the child uses the namespace where
-            // the scanner cannot see it: it escapes.
-            (
-                "{ catalogs }: let org = catalogs.myorg; in import ./x.nix { dep = org; }",
-                &["catalogs.myorg.*"],
-            ),
-            (
-                "{ catalogs }: let org = catalogs.myorg; in import ./x.nix { inherit org; }",
-                &["catalogs.myorg.*"],
-            ),
-            // A modeled set argument escapes through its members.
+            // A modeled set argument is not a path, so it is not forwarded and
+            // escapes through its members.
             (
                 "{ catalogs }: let s = { org = catalogs.myorg; }; in import ./x.nix { arg = s; }",
                 &["catalogs.myorg.*"],
@@ -2980,18 +2933,32 @@ mod tests {
     }
 
     #[test]
+    fn import_narrowed_namespace_is_followed_and_rewritten() {
+        // A catalog forwarded into a helper is scanned through, and the
+        // helper's paths come back under it. `myorg.pkg` is one component in
+        // the helper but package-deep once rewritten, which is why depth is
+        // judged after rewriting rather than per file.
+        let got = refs_at(
+            "test_data/catalog_refs/narrowed-forward/entry.nix",
+            &root_attributes(&["catalogs"]),
+        );
+        assert_eq!(
+            got,
+            set(&["catalogs.myorg.pkg", "catalogs.myorg.toolkit.readVersion",])
+        );
+    }
+
+    #[test]
     fn import_whole_root_to_pattern_param_escapes() {
         // The helper destructures the namespace with a pattern parameter; its
         // entries are namespace members, not root_attributes, so they cannot
-        // be bound statically. The whole root escapes rather than being
-        // dropped, which the scan then rejects, pointing at the import.
-        let path = "test_data/catalog_refs/import-entry-pattern.nix";
-        let err = scan_err_at(path, &root_attributes(&["catalogs"]));
-        assert_matches!(
-            err,
-            ScanError::UnlockableReference { file, position, .. }
-                if file == Path::new(path) && position == Some((5, 1))
+        // be bound statically. The whole namespace escapes rather than being
+        // dropped.
+        let got = refs_at(
+            "test_data/catalog_refs/import-entry-pattern.nix",
+            &root_attributes(&["catalogs"]),
         );
+        assert_eq!(got, set(&["catalogs.*"]));
     }
 
     #[test]
@@ -3013,16 +2980,15 @@ mod tests {
     }
 
     #[test]
-    fn import_dynamic_path_forwarding_root_is_an_error() {
+    fn import_dynamic_path_forwarding_root_widens() {
         // The import target is not statically known, so the forwarded
-        // namespace escapes analysis and the scan fails rather than locking a
-        // reference that could never resolve (a warning names the dynamic
+        // namespace escapes analysis and widens (a warning names the dynamic
         // path).
-        let err = scan_err(
+        let got = refs(
             "{ catalogs, p }: import p { inherit catalogs; }",
             &root_attributes(&["catalogs"]),
         );
-        assert_matches!(err, ScanError::UnlockableReference { .. });
+        assert_eq!(got, set(&["catalogs.*"]));
     }
 
     #[test]
