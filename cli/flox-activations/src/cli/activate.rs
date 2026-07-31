@@ -37,6 +37,34 @@ pub struct ActivateArgs {
     pub cmd: Option<Vec<String>>,
 }
 
+/// How an activation names itself on stderr once it is in effect.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ActivationAnnouncement {
+    /// Name the environment and how to leave it. A subshell activation is a
+    /// place the user typed their way into and has to type their way out of,
+    /// so the exit is worth stating; it is also printed at most once per
+    /// subshell.
+    Full,
+    /// Name the environment only. In-place activations recur — every new shell
+    /// for an rc-file activation, every `cd` for an auto-activation — so this
+    /// omits the hint that would otherwise repeat all day.
+    OneLine,
+    /// Say nothing.
+    Silent,
+}
+
+impl ActivationAnnouncement {
+    fn for_context(context: &ActivateCtx, invocation_type: &InvocationType) -> Self {
+        if !context.announce_activation {
+            return Self::Silent;
+        }
+        match invocation_type {
+            InvocationType::Interactive => Self::Full,
+            _ => Self::OneLine,
+        }
+    }
+}
+
 impl ActivateArgs {
     pub fn handle(self, subsystem_verbosity: u32) -> Result<(), anyhow::Error> {
         let contents = fs::read_to_string(&self.activate_data)?;
@@ -136,30 +164,41 @@ impl ActivateArgs {
         let mut last_warning: Option<Instant> = None;
 
         let deactivate_hint = "To stop using this environment, run 'flox deactivate'";
+        let announcement = ActivationAnnouncement::for_context(context, invocation_type);
 
         loop {
             match self.try_start_or_attach(context, subsystem_verbosity, vars_from_env)? {
                 StartOrAttachResult::Start { start_id, .. } => {
-                    if *invocation_type == InvocationType::Interactive {
-                        updated(
+                    match announcement {
+                        ActivationAnnouncement::Full => updated(
                             formatdoc! {"You are now using the environment '{env_description}'
                                      {deactivate_hint}
                                      ",
                             env_description = context.attach_ctx.env_description,
                             },
-                        );
+                        ),
+                        ActivationAnnouncement::OneLine => updated(format!(
+                            "Activated Flox environment '{}'.",
+                            context.attach_ctx.env_description
+                        )),
+                        ActivationAnnouncement::Silent => {},
                     }
                     return Ok(start_id);
                 },
                 StartOrAttachResult::Attach { start_id, .. } => {
-                    if *invocation_type == InvocationType::Interactive {
-                        updated(
+                    match announcement {
+                        ActivationAnnouncement::Full => updated(
                             formatdoc! {"Attached to existing activation of environment '{env_description}'
                                      {deactivate_hint}
                                      ",
                             env_description = context.attach_ctx.env_description,
                             },
-                        );
+                        ),
+                        ActivationAnnouncement::OneLine => updated(format!(
+                            "Activated Flox environment '{}'.",
+                            context.attach_ctx.env_description
+                        )),
+                        ActivationAnnouncement::Silent => {},
                     }
                     return Ok(start_id);
                 },
