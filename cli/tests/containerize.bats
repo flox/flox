@@ -162,6 +162,21 @@ setup_file() {
   mkdir -p "$XDG_CONFIG_HOME/containers"
   echo '{ "default": [ {"type": "insecureAcceptAnything"} ] }' > "$XDG_CONFIG_HOME/containers/policy.json"
 
+  # A self-hosted builder began denying crun's sd-bus call on 07-30, failing
+  # every `podman run` with "crun: sd-bus call: Permission denied". The session
+  # bus is reachable and restoring XDG_RUNTIME_DIR does not help, so the call
+  # itself is refused; cgroupfs sets the cgroup up directly and needs no bus.
+  # Stopgap until that host is repaired. macOS runs podman in its own VM.
+  if is_linux; then
+    # _OVERRIDE layers over the system and user config rather than replacing
+    # the chain, and the tmpdir keeps us out of a developer's containers.conf.
+    export CONTAINERS_CONF_OVERRIDE="$BATS_SUITE_TMPDIR/containers.conf"
+    cat > "$CONTAINERS_CONF_OVERRIDE" << 'EOF'
+[engine]
+cgroup_manager = "cgroupfs"
+EOF
+  fi
+
   # flox does not allow to set a $HOME
   # that does not correspond to the effective user's,
   # but podman requires the policy.json set in the **test user's** $HOME,
