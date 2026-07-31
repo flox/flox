@@ -2,6 +2,8 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use tracing::warn;
+
 use super::analyze::{FileInfo, RefSource, analyze_file_at, identity_origins};
 use super::{AttrPath, CatalogRef, ScanError};
 
@@ -93,6 +95,11 @@ impl PackageGraph {
     /// rewritten out of the namespace it was written in. Paths are visited in
     /// order and the first that cannot be locked is reported against the
     /// source it was found at.
+    ///
+    /// A reference that survives but ends in a wildcard is an over-lock: the
+    /// scanner could not resolve that far and locked the subtree instead. That
+    /// too is a property of the finished reference, so it is warned about
+    /// here rather than where the widening happened.
     pub(super) fn references(&self) -> Result<BTreeSet<CatalogRef>, ScanError> {
         let mut paths: BTreeMap<&AttrPath, &RefSource> = BTreeMap::new();
         for scan in self.scans.values() {
@@ -103,13 +110,23 @@ impl PackageGraph {
         paths
             .into_iter()
             .map(|(path, source)| {
-                CatalogRef::try_from(path.clone()).map_err(|reason| {
+                let reference = CatalogRef::try_from(path.clone()).map_err(|reason| {
                     ScanError::UnlockableReference {
                         file: source.file.clone(),
                         position: Some(source.position),
                         reason: reason.to_string(),
                     }
-                })
+                })?;
+                if reference.path().is_wildcard() {
+                    warn!(
+                        reference = %reference,
+                        file = %source.file.display(),
+                        line = source.position.0,
+                        column = source.position.1,
+                        "catalog namespace escapes static analysis; locking the whole subtree",
+                    );
+                }
+                Ok(reference)
             })
             .collect()
     }

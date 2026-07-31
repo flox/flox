@@ -96,19 +96,6 @@ impl ScanCtx<'_> {
             "import argument is not the catalog namespace; the imported file is not scanned through it",
         );
     }
-
-    /// Warn that a catalog namespace escapes static analysis at `offset`,
-    /// widening to `reference`.
-    fn warn_escape(&self, offset: usize, reference: &str) {
-        let (line, column) = line_col(self.content, offset);
-        warn!(
-            reference,
-            file = %self.path.display(),
-            line,
-            column,
-            "catalog namespace escapes static analysis; locking the whole subtree",
-        );
-    }
 }
 
 /// Parse a Nix file, rejecting any syntax error.
@@ -676,14 +663,10 @@ impl<'a> Walker<'a> {
                 self.emit(offset, path);
                 continue;
             }
-            // A catalog widened to `<root>.<catalog>.*` over-locks but still
-            // resolves, so it is worth a warning. Widening the root itself
-            // reaches nothing and the graph rejects it, needing none.
-            let widened = path.append_wildcard();
-            if self.reaches_package(&widened) {
-                self.ctx.warn_escape(offset, &widened.to_string());
-            }
-            self.emit(offset, widened);
+            // Whether widening over-locks or reaches nothing at all is a
+            // question about the finished reference, which the graph answers
+            // once every path is back in the top-level namespace.
+            self.emit(offset, path.append_wildcard());
         }
     }
 
