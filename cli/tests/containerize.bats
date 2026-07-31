@@ -155,8 +155,19 @@ setup_file() {
     fi
   else
     # `podman` behaves differently on Linux when using XDG_RUNTIME_DIR set by
-    # xdg_vars_setup, I'm guessing because it uses /run to interact with systemd
-    unset XDG_RUNTIME_DIR
+    # xdg_vars_setup, I'm guessing because it uses /run to interact with systemd.
+    # Point it at the real per-user runtime dir rather than dropping the
+    # variable: crun reaches systemd over the session bus at
+    # $XDG_RUNTIME_DIR/bus, and with nothing set it falls back to the system bus,
+    # which is what "crun: sd-bus call: Permission denied" is.
+    if [ -S "/run/user/$(id -u)/bus" ]; then
+      export XDG_RUNTIME_DIR="/run/user/$(id -u)"
+      export DBUS_SESSION_BUS_ADDRESS="unix:path=$XDG_RUNTIME_DIR/bus"
+    else
+      unset XDG_RUNTIME_DIR
+    fi
+    echo "PROBE XDG_RUNTIME_DIR: ${XDG_RUNTIME_DIR:-<unset>}" >&3
+    echo "PROBE DBUS_SESSION_BUS_ADDRESS: ${DBUS_SESSION_BUS_ADDRESS:-<unset>}" >&3
   fi
 
   mkdir -p "$XDG_CONFIG_HOME/containers"
