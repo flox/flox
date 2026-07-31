@@ -113,7 +113,11 @@ fn wire_reference(reference: &CatalogRef) -> ReferencesItem {
     // attribute Nix would not read bare goes out quoted, which the dotted wire
     // format needs to stay unambiguous — it cannot express a name containing a
     // `.` any other way.
-    let relative = reference.path().pop_root().to_string();
+    let relative = reference
+        .path()
+        .pop_root()
+        .expect("a reference names something under its root")
+        .to_string();
     // Catalog paths are well below the 1024-char wire limit.
     relative
         .parse()

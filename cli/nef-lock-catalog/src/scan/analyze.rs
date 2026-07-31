@@ -1747,10 +1747,10 @@ fn top_ident_param(content: &str, path: &Path) -> Result<Option<String>, ScanErr
 /// child-name → parent-root map of the import that forwarded it. Only the root
 /// changes, so a path valid in the child stays valid in the parent.
 fn rewrite_root(path: &AttrPath, rewrites: &BTreeMap<String, AttrPath>) -> AttrPath {
-    let Some(parent) = path.root_name().and_then(|root| rewrites.get(root)) else {
-        return path.clone();
-    };
-    parent.clone().concat(path.pop_root())
+    match path.root_name().and_then(|root| rewrites.get(root)) {
+        Some(parent) => path.replace_root(parent),
+        None => path.clone(),
+    }
 }
 
 /// Extract a statically-known path or string literal as a string, or `None`

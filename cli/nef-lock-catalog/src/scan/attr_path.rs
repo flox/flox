@@ -88,18 +88,28 @@ impl AttrPath {
     }
 
     /// The path with its root dropped, for reading it against a namespace
-    /// other than the one it was rooted at.
-    pub(crate) fn pop_root(&self) -> Self {
-        Self(self.0.iter().skip(1).cloned().collect())
+    /// other than the one it was rooted at. `None` for a path that is only a
+    /// root, which leaves nothing — every other way of building a path yields
+    /// at least one component, so this is what keeps an empty one
+    /// unrepresentable.
+    ///
+    /// A remaining lone wildcard is kept: `myorg.*` popped to `*` still says
+    /// the namespace it is re-rooted onto was reached but not resolved
+    /// through.
+    pub(crate) fn pop_root(&self) -> Option<Self> {
+        (self.len() >= 2).then(|| Self(self.0.iter().skip(1).cloned().collect()))
     }
 
-    /// This path continued by `tail`, the inverse of [Self::pop_root] for a
-    /// path being re-rooted. Appending obeys the same absorbing rule as
-    /// [Self::append_attribute]: nothing follows a wildcard.
-    pub(crate) fn concat(self, tail: Self) -> Self {
-        tail.0
-            .into_iter()
-            .fold(self, |path, component| match component {
+    /// This path with `parent` in place of its root, which is how a path
+    /// forwarded into an import moves back into the namespace that forwarded
+    /// it. A path that is only a root becomes `parent` itself, and a trailing
+    /// wildcard survives, so `myorg.*` re-rooted onto `catalogs.myorg` is
+    /// `catalogs.myorg.*`.
+    pub(crate) fn replace_root(&self, parent: &Self) -> Self {
+        self.0
+            .iter()
+            .skip(1)
+            .fold(parent.clone(), |path, component| match component {
                 Component::Attribute(name) => path.append_attribute(name),
                 Component::Wildcard => path.append_wildcard(),
             })
@@ -233,23 +243,44 @@ mod tests {
     }
 
     #[test]
-    fn pop_root_and_concat_re_root_a_path() {
-        // How a forwarded path moves between namespaces: the child's root is
-        // dropped and the parent's prefix takes its place.
-        let child = AttrPath::root("myorg")
-            .append_attribute("toolkit")
-            .append_wildcard();
+    fn replace_root_re_roots_a_forwarded_path() {
+        // How a forwarded path moves between namespaces, including the two
+        // ends: a trailing wildcard survives, and a path that is only a root
+        // becomes the parent itself.
         let parent = AttrPath::root("catalogs").append_attribute("myorg");
-        assert_eq!(
-            parent.concat(child.pop_root()).to_string(),
-            "catalogs.myorg.toolkit.*"
-        );
+        let cases = [
+            (
+                AttrPath::root("myorg")
+                    .append_attribute("toolkit")
+                    .append_wildcard(),
+                "catalogs.myorg.toolkit.*",
+            ),
+            (
+                AttrPath::root("myorg").append_wildcard(),
+                "catalogs.myorg.*",
+            ),
+            (AttrPath::root("myorg"), "catalogs.myorg"),
+        ];
+        for (child, expected) in cases {
+            assert_eq!(child.replace_root(&parent).to_string(), expected);
+        }
     }
 
     #[test]
-    fn concat_onto_a_wildcard_absorbs() {
+    fn pop_root_refuses_to_leave_nothing() {
+        // The only way to reach an empty path, and so the only place that has
+        // to refuse: every other constructor yields at least one component.
+        let widened = AttrPath::root("myorg").append_wildcard();
+        assert_eq!(
+            widened.pop_root().map(|path| path.to_string()),
+            Some("*".to_string())
+        );
+        assert_eq!(AttrPath::root("myorg").pop_root(), None);
+    }
+
+    #[test]
+    fn appending_past_a_wildcard_is_a_no_op() {
         let widened = AttrPath::root("catalogs").append_wildcard();
-        let tail = AttrPath::root("myorg").append_attribute("pkg");
-        assert_eq!(widened.concat(tail).to_string(), "catalogs.*");
+        assert_eq!(widened.append_attribute("myorg").to_string(), "catalogs.*");
     }
 }

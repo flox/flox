@@ -42,13 +42,12 @@ pub struct InvalidCatalogRef {
 /// can resolve, for different reasons.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub(crate) enum InvalidCatalogRefKind {
-    /// The wire form drops the leading root component, leaving `*`.
+    /// The path names the namespace and nothing under it, whether it says so
+    /// with a wildcard (`catalogs.*`) or by naming the root alone
+    /// (`catalogs`). The wire form drops the root, leaving `*` or nothing.
     #[error("references the whole catalog namespace")]
     RootWildcard,
-    /// There is no root component to drop, so the wire form is the reference
-    /// itself — a name in the scanner's namespace, not the server's.
-    #[error("is not rooted at a catalog namespace")]
-    Rootless,
+
     /// The server resolves no shallower than a catalog plus one component, so
     /// naming a catalog alone reaches nothing.
     #[error("names a catalog rather than a package in one")]
@@ -109,11 +108,12 @@ impl TryFrom<AttrPath> for CatalogRef {
     fn try_from(path: AttrPath) -> Result<Self, Self::Error> {
         // A wildcard is always last and stands for whatever it replaced, so
         // depth alone decides: root, catalog, and something within it.
+        // Anything shallower than a catalog names the namespace itself,
+        // however it is written.
         let kind = match (path.len(), path.is_wildcard()) {
             (3.., _) => return Ok(Self(path)),
-            (_, true) => InvalidCatalogRefKind::RootWildcard,
             (2, false) => InvalidCatalogRefKind::CatalogLevel,
-            (_, false) => InvalidCatalogRefKind::Rootless,
+            _ => InvalidCatalogRefKind::RootWildcard,
         };
         Err(InvalidCatalogRef { path, kind })
     }
@@ -201,7 +201,7 @@ mod tests {
 
     #[test]
     fn catalog_ref_rejects_references_that_cannot_resolve() {
-        use InvalidCatalogRefKind::{CatalogLevel, RootWildcard, Rootless};
+        use InvalidCatalogRefKind::{CatalogLevel, RootWildcard};
 
         let cases = [
             // References that reach into a catalog, whatever the depth.
@@ -210,11 +210,10 @@ mod tests {
             ("catalogs.myorg.pkg", None),
             ("catalogs.myorg.pkg.*", None),
             ("catalogs.myorg.*", None),
-            // None of these name anything resolvable: the wire form of the
-            // first is `*`, of the second the name itself, and the third stops
-            // at a catalog rather than reaching into one.
+            // Naming the namespace and naming it with a wildcard are the same
+            // reference; stopping at a catalog reaches nothing either.
             ("catalogs.*", Some(RootWildcard)),
-            ("catalogs", Some(Rootless)),
+            ("catalogs", Some(RootWildcard)),
             ("catalogs.myorg", Some(CatalogLevel)),
         ];
         let got: Vec<(&str, Option<InvalidCatalogRefKind>)> = cases
