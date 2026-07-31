@@ -34,7 +34,9 @@ nix develop -c just build
 Everything below uses `./target/debug/flox`, so it cannot disturb your installed
 Flox. Run it from the repo root in **bash** or **zsh**.
 
-You do **not** need direnv installed. Step 1 explains why.
+You do **not** need direnv installed — Act 1 uses your installed 1.14.0 to show
+that the direnv-to-auto-activation migration does not fix visibility, and Acts 2
+onward use the branch binary.
 
 Set up a scratch environment and a clean config so nothing here touches your
 real one:
@@ -61,7 +63,9 @@ PS1="BASEPROMPT> "
 eval "$(flox activate -d "$DEMO")"
 ```
 
-**What you see:** `flox [acme-api] BASEPROMPT>`. The prompt indicator is real —
+**What you see:** `flox [acme-api] BASEPROMPT>`. (If you already have
+environments active — a `default` environment, say — they are listed too, since
+the shell inherits them.) The prompt indicator is real —
 in-place activation *does* render a shell rc, so `set-prompt.bash` runs and `PS1`
 is modified. This is genuinely better than direnv, where exec-command mode renders
 no rc at all and direnv
@@ -163,22 +167,64 @@ eval "$("$FLOX" activate)"
 ```
 
 One line, and no deactivate hint — because in-place recurs, on every new shell
-and every `cd`, and you would read that hint a hundred times a day. Now let the
-*hook* do it. The `eval` above registered the prompt hook, so:
+and every `cd`, and you would read that hint a hundred times a day.
+
+Now let the *hook* do it. That `eval` registered the prompt hook, so a second
+environment will be activated for you on `cd` alone. It has to be a *different*
+environment: an environment you activated by hand is deliberately never
+auto-deactivated when you leave its directory, so `cd`-ing out of `$DEMO` and back
+in would not re-activate anything.
 
 ```bash
-"$FLOX" deactivate
-cd / && cd "$DEMO"
+DEMO2=$(mktemp -d)/billing && mkdir -p "$DEMO2"
+"$FLOX" init --dir "$DEMO2" && "$FLOX" activate allow --dir "$DEMO2"
+cd "$DEMO2"
 ```
 
-`cd` back in and the hook activates it for you, with the same one line:
+**What you should see** — from the hook, on a bare `cd`:
 
 ```
-✔ Activated Flox environment 'acme-api'.
+✔ Activated Flox environment 'billing'.
+```
+
+and the prompt now carrying both, most recently activated first:
+
+```
+flox [billing acme-api] BASE>
 ```
 
 Note the word **Flox** is in it — this is the channel that earns the brand, not
 the prompt.
+
+> ### Bug found while writing this demo — present in shipped 1.14.0, unrelated to this branch
+>
+> **Outermost `flox deactivate` permanently breaks auto-activation in that shell**
+> and prints an error on every subsequent prompt. Reproduce on stock 1.14.0:
+>
+> ```bash
+> PS1="BASE> "
+> eval "$(flox activate -d "$DEMO")"   # flox [acme-api] BASE>
+> flox deactivate
+> cd / && cd "$DEMO"
+> # ✘ ERROR: This shell's Flox prompt hook is out of sync with the running Flox.
+> #   Restart your shell to pick up the current version.
+> # …and again on every prompt after that, forever. Nothing auto-activates.
+> ```
+>
+> **Cause.** The deactivate script unsets `_FLOX_PROMPT_HOOK_VERSION` on the
+> outermost deactivate (`cli/flox-activations/src/gen_rc/bash.rs:170-172`) but
+> leaves `_flox_hook` registered in `PROMPT_COMMAND` — the unregister is an
+> explicit `// TODO` at `gen_rc/bash.rs:326-328`. On the next prompt the still-live
+> hook finds no marker, reads that as "hook out of sync," and fails closed
+> (`hook_env.rs`, the `prompt_hook_current` check). The existing code comment
+> reasons that clearing on the outermost deactivate is the safe choice; it is not,
+> precisely because the hook outlives the marker.
+>
+> Not fixed here — it is outside this PR's scope and wants its own change (either
+> unregister the hook, or leave the marker alone while the hook is registered). It
+> is worth a Linear issue: it is in `flox deactivate`, which shipped with
+> auto-activation, and any user who tries the natural
+> activate → deactivate → `cd` sequence hits it.
 
 Now re-run the Act 1 framework case against the branch, which is the whole
 argument in one screen:
@@ -267,24 +313,33 @@ more characters than it needs to.
 **Auto-activation makes this worse, not neutral, which is new information.** The
 hook walks from the current directory to the filesystem root and activates *every*
 environment it finds, outermost-first. Under direnv you got one environment in the
-prompt; under auto-activation you get the whole ancestor chain. In Act 1 the real
-output on a machine with a `default`-style environment above the scratch directory
-was:
+prompt; under auto-activation you get the whole ancestor chain. Verify it on stock
+1.14.0 with a two-level tree:
 
-```
-flox [acme-api agent-box-server] BASEPROMPT>
+```bash
+NEST=$(mktemp -d)/monorepo && mkdir -p "$NEST/services/api"
+(cd "$NEST" && flox init && flox activate allow)
+(cd "$NEST/services/api" && flox init && flox activate allow)
+bash --norc --noprofile -i
+PS1="BASE> "
+eval "$(flox activate -d "$NEST")"        # flox [monorepo] BASE>
+cd /tmp && cd "$NEST/services/api"
 ```
 
-Two environments, unprompted, from one `cd`. In a monorepo with composed
-environments — W&B's exact shape — that string grows with directory depth. So
-DEV-44 stops being a papercut Stahnke reported in April and becomes a scaling
-problem that auto-activation GA just shipped to everyone.
+**Observed:** `flox [api monorepo] BASE>` — two environments in the prompt from a
+single `cd`. In a monorepo with composed environments — W&B's exact shape — that
+string grows with directory depth. So DEV-44 stops being a papercut Stahnke
+reported in April and becomes a scaling problem that auto-activation GA just
+shipped to everyone.
+
+Note that `prompt_detail` does not help here: it shortens each *entry*, not the
+*number* of entries. Nothing on this branch addresses the chain length.
 
 The full string only appears for FloxHub environments, so the difference is
 clearest in the unit test that pins it:
 
 ```bash
-nix develop -c just unit-tests prompt_detail_narrows_remote_environment_to_its_name
+nix develop -c just ut prompt_detail_narrows_remote_environment_to_its_name
 ```
 
 It asserts:
@@ -297,12 +352,15 @@ It asserts:
 If you have a FloxHub environment handy, see it live:
 
 ```bash
+# a fresh shell per comparison, rather than `flox deactivate` between them —
+# see the bug box in Act 2
 "$FLOX" config --set prompt_detail full
-eval "$("$FLOX" activate -r <owner>/<env>)"   # flox [<owner>/<env> (local)]
-"$FLOX" deactivate
+bash --norc --noprofile -i -c 'PS1="BASE> "; eval "$('"$FLOX"' activate -r <owner>/<env>)"; echo "$PS1"'
+# → flox [<owner>/<env> (local)] BASE>
+
 "$FLOX" config --set prompt_detail name
-eval "$("$FLOX" activate -r <owner>/<env>)"   # flox [<env>]
-"$FLOX" deactivate
+bash --norc --noprofile -i -c 'PS1="BASE> "; eval "$('"$FLOX"' activate -r <owner>/<env>)"; echo "$PS1"'
+# → flox [<env>] BASE>
 ```
 
 `bare_description()` is left alone — it is also what Bash activation errors
@@ -320,8 +378,8 @@ And the `flox` label itself, which already worked in all four shells and was
 undocumented until this branch:
 
 ```bash
-FLOX_PROMPT=f eval "$("$FLOX" activate)"   # f [acme-api] $
-"$FLOX" deactivate
+bash --norc --noprofile -i -c 'PS1="BASE> "; FLOX_PROMPT=f; eval "$('"$FLOX"' activate)"; echo "$PS1"'
+# → f [acme-api] BASE>
 ```
 
 Because `[vars]` are applied before the prompt is set, an environment can carry
@@ -351,11 +409,18 @@ carries `env_detail`, `start_services`, `mode`, `has_includes`,
 `lockfile_version`, `manifest_version`, and `shell` — and `mode` is the *dev/run*
 activation mode. Nothing in the event records how the activation was invoked.
 
-The hook now says so explicitly:
+The hook now says so explicitly. Ask it what it would emit — the two variables
+stand in for "a shell that has the hook installed but nothing active yet", which
+is the state a real `cd` arrives in:
 
 ```bash
-cd "$DEMO"
-"$FLOX" hook-env --shell bash --shell-pid $$ | grep -o 'activate --auto-activated --dir [^)]*'
+(cd "$DEMO" && env -u _FLOX_ACTIVE_ENVIRONMENTS -u FLOX_ENV -u FLOX_PROMPT_ENVIRONMENTS \
+    _FLOX_PROMPT_HOOK_VERSION=1:true \
+    "$FLOX" hook-env --shell bash --shell-pid $$) | grep -o 'activate --auto-activated --dir .*'
+```
+
+```
+activate --auto-activated --dir /tmp/…/acme-api)";
 ```
 
 **What you should see:** the emitted activation carries `--auto-activated`. That
