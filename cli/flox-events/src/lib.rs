@@ -758,6 +758,14 @@ mod tests {
 
     use super::*;
 
+    // The `*_envelope_golden` tests below pin the serialized wire shape, not
+    // serde's behavior. Their consumer is the analytics ingestion (S3Queue
+    // into ClickHouse) in another repo, with no compile-time link back here,
+    // so renaming or dropping a field breaks nothing locally: these tests are
+    // the only signal. A failing golden means the contract moved and the
+    // consumer needs a migration. Update the expected JSON once that is
+    // arranged, not to make the test pass.
+
     /// The wire form of `OffsetDateTime::from_unix_timestamp(0)` under
     /// `TimestampMilliSeconds<i64>` — milliseconds since the Unix
     /// epoch, where 1970-01-01T00:00:00Z is exactly 0.
