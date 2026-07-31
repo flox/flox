@@ -109,17 +109,11 @@ fn build_request(
 /// namespace is catalog-relative (`<catalog>.<package>`). Drop the leading root
 /// segment so the request matches what the server expects.
 fn wire_reference(reference: &CatalogRef) -> ReferencesItem {
-    // A reference always has a root to drop; that is what makes it one. The
-    // components go out as written rather than through `Display`, whose
-    // quoting is for reading a path back, not for the server's syntax.
-    let relative = reference
-        .path()
-        .components()
-        .iter()
-        .skip(1)
-        .map(|component| component.name().unwrap_or("*"))
-        .collect::<Vec<_>>()
-        .join(".");
+    // A reference always has a root to drop; that is what makes it one. An
+    // attribute Nix would not read bare goes out quoted, which the dotted wire
+    // format needs to stay unambiguous — it cannot express a name containing a
+    // `.` any other way.
+    let relative = reference.path().pop_root().to_string();
     // Catalog paths are well below the 1024-char wire limit.
     relative
         .parse()

@@ -14,7 +14,7 @@ use rowan::ast::AstNode;
 use tracing::{debug, warn};
 
 use super::attr_path::{attr_static_name, ident_name, static_str_content};
-use super::{AttrPath, Component, ImportSite, ScanError};
+use super::{AttrPath, ImportSite, ScanError};
 
 /// Where a path was first found. Kept alongside the path so that one which
 /// turns out to be unlockable — only decidable once forwarding has rewritten
@@ -954,7 +954,7 @@ impl<'a> Walker<'a> {
                 params.contains(name)
                     && self.root_attributes.contains(name)
                     && matches!(binding, Some(Binding::Path(path))
-                        if path.components() == [Component::Attribute(name.to_string())])
+                        if path.len() == 1 && path.root_name() == Some(name))
             },
         }
     }
@@ -1661,10 +1661,9 @@ fn resolve_select_paths(select: &ast::Select, env: &Env) -> Option<BTreeSet<Attr
 /// shallower is not lockable, so the walker widens it (see
 /// [Walker::emit_value_paths]) and [CatalogRef] refuses what is left.
 fn reaches_package(path: &AttrPath) -> bool {
-    match path.is_wildcard() {
-        true => path.base().len() >= 2,
-        false => path.len() >= 3,
-    }
+    // A wildcard is always last and stands for whatever it replaced, so it
+    // counts as the component reaching into the catalog like any other.
+    path.len() >= 3
 }
 
 /// The binding `inherit (<source>) <name>;` produces for `name`, given the
@@ -1751,13 +1750,7 @@ fn rewrite_root(path: &AttrPath, rewrites: &BTreeMap<String, AttrPath>) -> AttrP
     let Some(parent) = path.root_name().and_then(|root| rewrites.get(root)) else {
         return path.clone();
     };
-    path.components()
-        .iter()
-        .skip(1)
-        .fold(parent.clone(), |path, component| match component {
-            Component::Attribute(name) => path.append_attribute(name),
-            Component::Wildcard => path.append_wildcard(),
-        })
+    parent.clone().concat(path.pop_root())
 }
 
 /// Extract a statically-known path or string literal as a string, or `None`

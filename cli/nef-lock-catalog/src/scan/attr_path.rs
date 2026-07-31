@@ -12,23 +12,14 @@ use std::str::FromStr;
 use rnix::ast;
 use rowan::ast::AstNode;
 
-/// One component of an [AttrPath].
+/// One component of an [AttrPath]. Internal to the path: callers ask about
+/// depth and re-root paths rather than taking them apart.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum Component {
+pub(super) enum Component {
     /// A statically known attribute name.
     Attribute(String),
     /// Resolution stopped here, so anything under this point may be reached.
     Wildcard,
-}
-
-impl Component {
-    /// The attribute name, as written between the quotes when it had any.
-    pub fn name(&self) -> Option<&str> {
-        match self {
-            Self::Attribute(name) => Some(name),
-            Self::Wildcard => None,
-        }
-    }
 }
 
 /// A name is rendered bare when Nix would accept it as one, and quoted
@@ -87,10 +78,6 @@ impl AttrPath {
         self
     }
 
-    pub fn components(&self) -> &[Component] {
-        &self.0
-    }
-
     pub fn len(&self) -> usize {
         self.0.len()
     }
@@ -100,13 +87,22 @@ impl AttrPath {
         self.0.last() == Some(&Component::Wildcard)
     }
 
-    /// The components before a trailing [Component::Wildcard], or the whole
-    /// path when there is none.
-    pub fn base(&self) -> &[Component] {
-        match self.is_wildcard() {
-            true => &self.0[..self.0.len() - 1],
-            false => &self.0,
-        }
+    /// The path with its root dropped, for reading it against a namespace
+    /// other than the one it was rooted at.
+    pub fn pop_root(&self) -> Self {
+        Self(self.0.iter().skip(1).cloned().collect())
+    }
+
+    /// This path continued by `tail`, the inverse of [Self::pop_root] for a
+    /// path being re-rooted. Appending obeys the same absorbing rule as
+    /// [Self::append_attribute]: nothing follows a wildcard.
+    pub fn concat(self, tail: Self) -> Self {
+        tail.0
+            .into_iter()
+            .fold(self, |path, component| match component {
+                Component::Attribute(name) => path.append_attribute(name),
+                Component::Wildcard => path.append_wildcard(),
+            })
     }
 
     /// The attribute the path is rooted at, whatever its depth.
@@ -237,9 +233,23 @@ mod tests {
     }
 
     #[test]
-    fn base_drops_only_a_trailing_wildcard() {
-        let concrete = AttrPath::root("catalogs").append_attribute("myorg");
-        let wildcard = concrete.clone().append_wildcard();
-        assert_eq!((concrete.base().len(), wildcard.base().len()), (2, 2));
+    fn pop_root_and_concat_re_root_a_path() {
+        // How a forwarded path moves between namespaces: the child's root is
+        // dropped and the parent's prefix takes its place.
+        let child = AttrPath::root("myorg")
+            .append_attribute("toolkit")
+            .append_wildcard();
+        let parent = AttrPath::root("catalogs").append_attribute("myorg");
+        assert_eq!(
+            parent.concat(child.pop_root()).to_string(),
+            "catalogs.myorg.toolkit.*"
+        );
+    }
+
+    #[test]
+    fn concat_onto_a_wildcard_absorbs() {
+        let widened = AttrPath::root("catalogs").append_wildcard();
+        let tail = AttrPath::root("myorg").append_attribute("pkg");
+        assert_eq!(widened.concat(tail).to_string(), "catalogs.*");
     }
 }

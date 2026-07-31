@@ -11,7 +11,7 @@ mod attr_path;
 mod error;
 mod graph;
 
-pub use attr_path::{AttrPath, Component, InvalidAttrPath};
+pub use attr_path::{AttrPath, InvalidAttrPath};
 pub use error::{ImportSite, ScanError};
 use graph::PackageGraph;
 
@@ -103,10 +103,10 @@ impl TryFrom<AttrPath> for CatalogRef {
     type Error = InvalidCatalogRef;
 
     fn try_from(path: AttrPath) -> Result<Self, Self::Error> {
-        let kind = match (path.base().len(), path.is_wildcard()) {
-            // A wildcard stands for whatever it replaced, so a base naming a
-            // root and a catalog already reaches into one.
-            (2.., true) | (3.., false) => return Ok(Self(path)),
+        // A wildcard is always last and stands for whatever it replaced, so
+        // depth alone decides: root, catalog, and something within it.
+        let kind = match (path.len(), path.is_wildcard()) {
+            (3.., _) => return Ok(Self(path)),
             (_, true) => InvalidCatalogRefKind::RootWildcard,
             (2, false) => InvalidCatalogRefKind::CatalogLevel,
             (_, false) => InvalidCatalogRefKind::Rootless,
