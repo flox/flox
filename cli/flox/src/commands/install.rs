@@ -664,12 +664,24 @@ async fn try_create_default_environment_interactive(
         match RemoteEnvironment::new(flox, pointer, None) {
             Ok(existing_env) => {
                 debug!("environment already exists -- will not init again");
-                existing_env
+                ConcreteEnvironment::Remote(existing_env)
             },
             Err(RemoteEnvironmentError::OpenManagedEnvironment(
                 ManagedEnvironmentError::UpstreamNotFound { env_ref, .. },
-            )) => RemoteEnvironment::init_floxhub_environment(flox, env_ref.clone(), false)
-                .with_context(|| format!("Failed to initialize FloxHub environment '{env_ref}'"))?,
+            )) => {
+                let env = ConcreteEnvironment::Remote(
+                    RemoteEnvironment::init_floxhub_environment(flox, env_ref.clone(), false)
+                        .with_context(|| {
+                            format!("Failed to initialize FloxHub environment '{env_ref}'")
+                        })?,
+                );
+                if let Err(err) = EventsHub::global().record_event(EventKind::CliEnvironmentCreate(
+                    CliEnvironmentPayload::new(env_detail_from_concrete(flox, &env)),
+                )) {
+                    debug!(error = %err, "Failed to record v2 event");
+                }
+                env
+            },
             Err(e) => Err(e)?,
         }
     };
@@ -683,7 +695,7 @@ async fn try_create_default_environment_interactive(
 
     prompt_to_modify_rc_file()?;
 
-    Ok(ConcreteEnvironment::Remote(env))
+    Ok(env)
 }
 /// Returns a formatted string representing a possibly truncated list of
 /// packages to install.

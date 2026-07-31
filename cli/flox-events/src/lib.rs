@@ -136,6 +136,16 @@ pub enum EventKind {
     CliPackageUninstall(CliPackagePayload),
     #[serde(rename = "cli.environment.containerize")]
     CliEnvironmentContainerize(CliEnvironmentPayload),
+    /// An environment definition came into existence — not an existing one
+    /// changing form. `flox push` promotes a definition to a managed one and
+    /// `flox pull` without `--copy` checks one out locally; counting either
+    /// would report one environment twice.
+    ///
+    /// For path environments this is exactly when a new
+    /// `local_environment_id` is minted, so a create row and a first-seen id
+    /// coincide.
+    #[serde(rename = "cli.environment.create")]
+    CliEnvironmentCreate(CliEnvironmentPayload),
     #[serde(rename = "cli.environment.delete")]
     CliEnvironmentDelete(CliEnvironmentPayload),
     #[serde(rename = "cli.environment.edit")]
@@ -410,7 +420,7 @@ impl EnvDetail {
 }
 
 /// Payload shared by every environment event that carries env detail and
-/// nothing else (push, pull, containerize, delete, include.upgrade,
+/// nothing else (create, push, pull, containerize, delete, include.upgrade,
 /// install, list, uninstall, upgrade, the `services.*` events, and the
 /// non-list `generations.*` events). The [`EventKind`] variant is the
 /// discriminant.
@@ -747,6 +757,14 @@ mod tests {
     use serde_json::json;
 
     use super::*;
+
+    // The `*_envelope_golden` tests below pin the serialized wire shape, not
+    // serde's behavior. Their consumer is the analytics ingestion (S3Queue
+    // into ClickHouse) in another repo, with no compile-time link back here,
+    // so renaming or dropping a field breaks nothing locally: these tests are
+    // the only signal. A failing golden means the contract moved and the
+    // consumer needs a migration. Update the expected JSON once that is
+    // arranged, not to make the test pass.
 
     /// The wire form of `OffsetDateTime::from_unix_timestamp(0)` under
     /// `TimestampMilliSeconds<i64>` — milliseconds since the Unix
@@ -1108,6 +1126,30 @@ mod tests {
             "env_kind": "path",
             "env_ref_or_name": "myenv",
         }));
+        assert_eq!(value, expected);
+    }
+
+    #[test]
+    fn cli_environment_create_envelope_golden() {
+        let local_environment_id = Uuid::from_u128(0x11111111_1111_1111_1111_111111111111);
+        let detail = EnvDetail::path("myenv", Some(local_environment_id));
+        let payload = CliEnvironmentPayload::new(detail);
+        let value = serde_json::to_value(fixed_event(EventKind::CliEnvironmentCreate(payload)))
+            .expect("event serializes");
+        let payload_json = json!({
+            "env_kind": "path",
+            "env_ref_or_name": "myenv",
+            "local_environment_id": "11111111-1111-1111-1111-111111111111",
+        });
+        let expected = json!({
+            "event_id": "00000000-0000-0000-0000-000000000000",
+            "event_timestamp": EPOCH_UNIX_MS,
+            "source": "cli",
+            "invocation_id": "00000000-0000-0000-0000-000000000000",
+            "device_id": "00000000-0000-0000-0000-000000000000",
+            "event_type": "cli.environment.create",
+            "payload": payload_json,
+        });
         assert_eq!(value, expected);
     }
 

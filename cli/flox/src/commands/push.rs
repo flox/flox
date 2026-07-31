@@ -137,6 +137,9 @@ async fn handle_path_environment_push(
 
     let pointer = ManagedPointer::new(owner.clone(), path_environment.name(), &flox.floxhub);
 
+    // No `cli.environment.create`, though this does create the environment on
+    // FloxHub: a push promotes a definition that already exists. See
+    // `EventKind::CliEnvironmentCreate`.
     let managed_environment =
         ManagedEnvironment::push_new(flox, path_environment, owner, force, false)
             .map_err(|err| convert_error(err, pointer, true))?;

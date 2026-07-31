@@ -6,6 +6,7 @@ use anyhow::{Context, Result, anyhow, bail};
 use bpaf::Bpaf;
 use flox_core::activate::mode::ActivateMode;
 use flox_core::data::environment_ref::{DEFAULT_NAME, EnvironmentName, RemoteEnvironmentRef};
+use flox_events::{CliEnvironmentPayload, EventKind, EventsHub};
 use flox_manifest::raw::{CatalogPackage, PackageToInstall};
 use flox_rust_sdk::data::AttrPath;
 use flox_rust_sdk::flox::Flox;
@@ -23,6 +24,7 @@ use tracing::{debug, info_span, instrument};
 use crate::commands::{SHELL_COMPLETION_DIR, ensure_auth, environment_description};
 use crate::subcommand_metric;
 use crate::utils::dialog::Dialog;
+use crate::utils::events::env_detail_from_concrete;
 use crate::utils::{local_environment_id, message};
 
 mod go;
@@ -244,7 +246,19 @@ async fn init_local_environment(
     // Give the new environment a stable local id for telemetry correlation,
     // committed with `.flox`. Idempotent and best-effort; read paths never
     // write it.
-    local_environment_id::ensure(&env.path);
+    let origin = local_environment_id::ensure(&env.path);
+
+    let env = ConcreteEnvironment::Path(env);
+    // Emitted here rather than at the end of the function: the environment
+    // exists from `PathEnvironment::init` onward, so a later failure in the
+    // reporting below does not un-create it.
+    if origin == local_environment_id::Origin::Minted
+        && let Err(err) = EventsHub::global().record_event(EventKind::CliEnvironmentCreate(
+            CliEnvironmentPayload::new(env_detail_from_concrete(flox, &env)),
+        ))
+    {
+        debug!(error = %err, "Failed to record v2 event");
+    }
 
     let env_in_git_repo = GitCommandProvider::discover(dir).is_ok();
 
@@ -254,7 +268,7 @@ async fn init_local_environment(
         system = flox.system
     ));
     if let Some(packages) = customization.packages {
-        let description = environment_description(&ConcreteEnvironment::Path(env))?;
+        let description = environment_description(&env)?;
         for package in packages {
             message::package_installed(&PackageToInstall::Catalog(package), &description);
         }
@@ -292,7 +306,16 @@ fn init_floxhub_environment_decorated(
     env_ref: RemoteEnvironmentRef,
     bare: bool,
 ) -> Result<()> {
-    RemoteEnvironment::init_floxhub_environment(flox, env_ref.clone(), bare)?;
+    let env = ConcreteEnvironment::Remote(RemoteEnvironment::init_floxhub_environment(
+        flox,
+        env_ref.clone(),
+        bare,
+    )?);
+    if let Err(err) = EventsHub::global().record_event(EventKind::CliEnvironmentCreate(
+        CliEnvironmentPayload::new(env_detail_from_concrete(flox, &env)),
+    )) {
+        debug!(error = %err, "Failed to record v2 event");
+    }
     message::created(format!("Created environment '{env_ref}'"));
     message::plain(formatdoc! {"
 
@@ -702,12 +725,19 @@ fn group_for_single_package(attr_path: &str, version: Option<&str>) -> PackageGr
 #[cfg(test)]
 mod tests {
 
+    use std::sync::{Arc, Mutex};
+
     use flox_core::data::environment_ref::EnvironmentOwner;
-    use flox_rust_sdk::flox::test_helpers::flox_instance_with_optional_floxhub;
-    use flox_rust_sdk::models::environment::ManagedPointer;
+    use flox_events::test_helpers::MockEventsConnection;
+    use flox_events::{EnvDetail, Event, EventsClient, SharedMetadataTemplate};
+    use flox_rust_sdk::flox::test_helpers::{flox_instance, flox_instance_with_optional_floxhub};
+    use flox_rust_sdk::models::environment::{DOT_FLOX, ManagedPointer};
     use flox_rust_sdk::utils::logging::test_helpers::test_subscriber_message_only;
     use indoc::indoc;
     use pretty_assertions::assert_eq;
+    use serial_test::serial;
+    use tempfile::TempDir;
+    use uuid::Uuid;
 
     use super::*;
 
@@ -957,6 +987,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(global_events_client)]
     fn init_floxhub_environment_initializes_and_prints_message() {
         let owner = EnvironmentOwner::from_str("test").unwrap();
         let name = EnvironmentName::from_str("foo").unwrap();
@@ -984,5 +1015,108 @@ mod tests {
 
         RemoteEnvironment::new(&flox, ManagedPointer::new(owner, name, &flox.floxhub), None)
             .expect("find initialized remote environment");
+    }
+
+    /// A mock-backed events client on the global hub, restored on drop so a
+    /// panicking assertion cannot leak it into the next test. Holders must be
+    /// `#[serial(global_events_client)]`.
+    struct MockHub {
+        previous: Option<EventsClient>,
+        sent_batches: Arc<Mutex<Vec<Vec<Event>>>>,
+        _buffer_dir: TempDir,
+    }
+
+    impl MockHub {
+        fn install() -> Self {
+            let buffer_dir = tempfile::tempdir().expect("tempdir");
+            let connection = MockEventsConnection::default();
+            let sent_batches = connection.sent_batches();
+            let client = EventsClient::new_with_connection(
+                Uuid::new_v4(),
+                buffer_dir.path(),
+                Uuid::new_v4(),
+                None,
+                SharedMetadataTemplate {
+                    flox_version: "0.0.0-test".to_string(),
+                    os_family: Some("Linux".to_string()),
+                    os_family_release: None,
+                    os: None,
+                    os_version: None,
+                    empty_flags: vec![],
+                    invocation_sources: vec!["shell".to_string()],
+                },
+                connection,
+            );
+            Self {
+                previous: EventsHub::global().set_client(client),
+                sent_batches,
+                _buffer_dir: buffer_dir,
+            }
+        }
+
+        /// Flushes, then returns the create payloads that were sent.
+        fn create_payloads(&self) -> Vec<CliEnvironmentPayload> {
+            EventsHub::global().flush(true).expect("flush");
+            self.sent_batches
+                .lock()
+                .unwrap()
+                .iter()
+                .flatten()
+                .filter_map(|event| match &event.kind {
+                    EventKind::CliEnvironmentCreate(payload) => Some(payload.clone()),
+                    _ => None,
+                })
+                .collect()
+        }
+    }
+
+    impl Drop for MockHub {
+        fn drop(&mut self) {
+            EventsHub::global().clear_client();
+            if let Some(previous) = self.previous.take() {
+                EventsHub::global().set_client(previous);
+            }
+        }
+    }
+
+    #[tokio::test]
+    #[serial(global_events_client)]
+    async fn init_local_environment_records_create_event_with_local_id() {
+        let (flox, _tempdir_handle) = flox_instance();
+        let dir = tempfile::tempdir().expect("tempdir");
+        let name = EnvironmentName::from_str("myenv").unwrap();
+
+        let hub = MockHub::install();
+        init_local_environment(&flox, dir.path(), &name, true, AutoSetupBehavior::Skip)
+            .await
+            .expect("environment initializes");
+
+        let minted = std::fs::read_to_string(dir.path().join(DOT_FLOX).join("telemetry_id"))
+            .expect("id file written");
+        let minted = Uuid::try_parse(minted.trim()).expect("id is a uuid");
+
+        assert_eq!(hub.create_payloads(), vec![CliEnvironmentPayload::new(
+            EnvDetail::path(name.to_string(), Some(minted)).with_package_count(0)
+        )]);
+    }
+
+    /// A remote environment has no CLI-side id, so this pins that
+    /// `local_environment_id` is absent rather than invented.
+    #[test]
+    #[serial(global_events_client)]
+    fn init_floxhub_environment_records_create_event() {
+        let owner = EnvironmentOwner::from_str("test").unwrap();
+        let name = EnvironmentName::from_str("foo").unwrap();
+        let env_ref = RemoteEnvironmentRef::new_from_parts(owner.clone(), name.clone());
+
+        let (flox, _tempdir_handle) = flox_instance_with_optional_floxhub(Some(&owner));
+
+        let hub = MockHub::install();
+        init_floxhub_environment_decorated(&flox, env_ref.clone(), false)
+            .expect("environment initializes");
+
+        assert_eq!(hub.create_payloads(), vec![CliEnvironmentPayload::new(
+            EnvDetail::remote(env_ref.to_string(), Some(1)).with_package_count(0)
+        )]);
     }
 }
