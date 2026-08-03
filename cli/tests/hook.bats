@@ -324,12 +324,13 @@ EXPIRED_FLOXHUB_TOKEN="eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3gu
 @test "fish: hook auto-activation sets the prompt" {
   project_setup
   project2_setup
-  # Mirror the reported scenario: the hook-registering outer activation is the
-  # 'default' env, which is hidden from FLOX_PROMPT_ENVIRONMENTS, so the outer
+  # Mirror the reported scenario: the hook-registering outer activation is a
+  # 'default' env hidden from FLOX_PROMPT_ENVIRONMENTS, so the outer
   # activation defines no prompt variables at the top level. (An unscoped fish
   # `set` reuses an existing variable's scope, so a visible outer env would
   # mask scoping bugs when the hook later sets prompt variables inside a
-  # function.)
+  # function.) Hiding is opt-in, so pin the config the scenario relies on.
+  "$FLOX_BIN" config --set hide_default_prompt true
   "$FLOX_BIN" edit -d "$PROJECT_DIR" --name default
   # Auto-activation is opt-in; allow the target before entering it.
   "$FLOX_BIN" activate allow -d "$PROJECT2_DIR"
