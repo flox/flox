@@ -347,10 +347,8 @@ impl FloxArgs {
         // absent — an accepted gap; a prompt hook must never trigger a
         // keyring unlock.
         let stores = CredentialStores::new(floxhub.base_url(), &config.flox.config_dir);
-        let is_auth0 = !matches!(
-            config.flox.floxhub_authn_mode,
-            Some(flox_config::AuthnMode::Kerberos)
-        );
+        let authn_mode = effective_authn_mode(&config, &floxhub);
+        let is_auth0 = matches!(authn_mode, flox_config::AuthnMode::Token);
         let should_store_credentials = is_auth0 && !self.is_prompt_hook_flow();
         if should_store_credentials {
             match stores.resolve_into(&mut config) {
@@ -365,7 +363,7 @@ impl FloxArgs {
             }
         }
 
-        let credential = self.resolve_auth_context(&config, &stores);
+        let credential = self.resolve_auth_context(&config, &authn_mode, &stores);
 
         if let Some(events_client) = build_events_client(
             &config,
@@ -552,10 +550,15 @@ impl FloxArgs {
     /// A `flox_pat_` token is opaque: it is never parsed, never wiped as
     /// invalid, and its expiry is unknown until it is lazily resolved via
     /// /me — so no startup warning applies to it.
-    fn resolve_auth_context(&self, config: &Config, stores: &CredentialStores) -> AuthContext {
+    fn resolve_auth_context(
+        &self,
+        config: &Config,
+        authn_mode: &flox_config::AuthnMode,
+        stores: &CredentialStores,
+    ) -> AuthContext {
         // Kerberos does not use FloxHub tokens; the stored token is not
         // consumed (and none of the token warnings below apply).
-        if let Some(flox_config::AuthnMode::Kerberos) = config.flox.floxhub_authn_mode {
+        if let flox_config::AuthnMode::Kerberos = authn_mode {
             return AuthContext::new_kerberos();
         }
 
@@ -613,6 +616,18 @@ impl FloxArgs {
                 auth_context
             },
         }
+    }
+}
+
+/// Resolve the effective authn mode.
+/// When `floxhub_authn_mode` is unset, the hosted FloxHub always
+/// authenticates via token (Auth0); other deployments get the default
+/// compiled into this build.
+fn effective_authn_mode(config: &Config, floxhub: &Floxhub) -> flox_config::AuthnMode {
+    match &config.flox.floxhub_authn_mode {
+        Some(mode) => mode.clone(),
+        None if floxhub.is_hosted() => flox_config::AuthnMode::Token,
+        None => flox_config::AuthnMode::build_default(),
     }
 }
 
