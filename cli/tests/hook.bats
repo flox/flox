@@ -158,6 +158,10 @@ EXPIRED_FLOXHUB_TOKEN="eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3gu
 # would be eval'd by the shell.
 # bats test_tags=hook:hook-env
 @test "'flox hook-env' suppresses advisory preamble output" {
+  # An empty cwd keeps this hermetic: a `.flox` littered into the shared bats
+  # cwd by an unrelated test would give hook-env auto-activation work and trip
+  # its stale-prompt-hook check instead of exercising the advisory suppression.
+  cd "$BATS_TEST_TMPDIR"
   _FLOX_FLOXHUB_GIT_URL="https://git.example.invalid/" \
     FLOX_FLOXHUB_TOKEN="$EXPIRED_FLOXHUB_TOKEN" \
     run --separate-stderr "$FLOX_BIN" hook-env --shell bash --shell-pid "$$"
@@ -171,6 +175,8 @@ EXPIRED_FLOXHUB_TOKEN="eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3gu
 # and rewriting config on every prompt.
 # bats test_tags=hook:hook-env
 @test "'flox hook-env' defers invalid token cleanup to user-invoked commands" {
+  # See the empty-cwd note in the first hook-env test.
+  cd "$BATS_TEST_TMPDIR"
   # The suite-wide env token would shadow the invalid file token (env wins over
   # the user config file), so drop it for this test.
   unset FLOX_FLOXHUB_TOKEN
@@ -264,6 +270,8 @@ EXPIRED_FLOXHUB_TOKEN="eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3gu
 
 # bats test_tags=hook:hook-env
 @test "'flox hook-env' suppresses the logged-out advisory when no token is set" {
+  # See the empty-cwd note in the first hook-env test.
+  cd "$BATS_TEST_TMPDIR"
   unset FLOX_FLOXHUB_TOKEN
   run --separate-stderr "$FLOX_BIN" hook-env --shell bash --shell-pid "$$"
   assert_success
