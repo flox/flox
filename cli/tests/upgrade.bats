@@ -216,3 +216,40 @@ To apply these changes, run upgrade without the '--dry-run' flag."
   assert_success
   assert_output "No upgrades available for the specified packages in 'test'."
 }
+
+# ---------------------------------------------------------------------------- #
+# Regression tests for schema migration bugs
+# ---------------------------------------------------------------------------- #
+
+# bats test_tags=upgrade,regression
+@test "upgrade migrates the on-disk manifest with the lockfile" {
+  # Init environment, then overwrite with pre-built v1 fixtures
+  # (created by flox v1.9.1 with curl+hello installed, then adjusted so
+  # hello is older than the version returned by the catalog mock).
+  "$FLOX_BIN" init
+  cp "$MANUALLY_GENERATED/v1_curl_hello/manifest.toml" "$MANIFEST_PATH"
+  cp "$MANUALLY_GENERATED/v1_curl_hello/manifest.lock" "$LOCK_PATH"
+
+  # Confirm starting state: manifest is v1
+  run grep -c '^version = 1' "$MANIFEST_PATH"
+  assert_success
+
+  # The catalog mock upgrades hello and requires the outputs migration for
+  # curl, so both the lockfile and the on-disk manifest must migrate.
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/curl_hello.yaml" \
+    run "$FLOX_BIN" upgrade
+  assert_success
+  assert_output --partial "- hello: 2.12.2 -> 2.12.3"
+
+  # The on-disk manifest and the manifest embedded in the lockfile must
+  # migrate to the same schema. This assertion fails without the upgrade
+  # path calling ensure_manifest_schemas_match().
+  manifest_schema=$(sed -n 's/^schema-version = "\(.*\)"/\1/p; s/^version = \(.*\)/\1/p' "$MANIFEST_PATH" | head -1)
+  lockfile_schema=$(jq -r '
+    if .manifest["schema-version"]
+    then .manifest["schema-version"]
+    else (.manifest.version | tostring)
+    end' "$LOCK_PATH")
+  assert_equal "$manifest_schema" "$lockfile_schema"
+  assert_not_equal "$manifest_schema" "1"
+}
