@@ -10,7 +10,7 @@
 
 use std::path::Path;
 
-use anyhow::{Result, bail};
+use anyhow::{Result, anyhow};
 use flox_core::activations::{ActivationState, read_activations_json, write_activations_json};
 use flox_core::proc_status::pid_is_running;
 use fslock::LockFile;
@@ -36,7 +36,10 @@ pub fn cleanup_pid(
 ) -> Result<Option<LockedActivationState>, Error> {
     let (activations_json, lock) = read_activations_json(state_json_path)?;
     let Some(mut activations) = activations_json else {
-        bail!("executive shouldn't be running when state.json doesn't exist");
+        return Err(
+            anyhow!("executive shouldn't be running when state.json doesn't exist")
+                .context(format!("when cleaning up PID {pid}")),
+        );
     };
 
     let now = OffsetDateTime::now_utc();

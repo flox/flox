@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result, anyhow, bail};
 use clap::Args;
 use event_coordinator::{EventCoordinator, ExecutiveEvent};
 use flox_core::activate::context::{AttachCtx, AttachProjectCtx};
@@ -214,7 +214,10 @@ fn run_event_loop(
                 debug!("Received SIGUSR1, starting process-compose");
                 let (activations_json, lock) = read_activations_json(&state_json_path)?;
                 let Some(activations) = activations_json else {
-                    bail!("executive shouldn't be running when state.json doesn't exist");
+                    return Err(anyhow!(
+                        "executive shouldn't be running when state.json doesn't exist"
+                    )
+                    .context("when handling StartServices"))?;
                 };
 
                 match handle_start_services_signal(
@@ -237,7 +240,10 @@ fn run_event_loop(
                 debug!("state.json changed, checking for new PIDs to monitor");
                 let (state, lock) = read_activations_json(&state_json_path)?;
                 let Some(activations) = state else {
-                    bail!("executive shouldn't be running when state.json doesn't exist");
+                    return Err(anyhow!(
+                        "executive shouldn't be running when state.json doesn't exist"
+                    )
+                    .context("when handling StateFileChanged"))?;
                 };
                 coordinator
                     .ensure_monitoring_pids(activations.all_attached_pids_and_expiration())
@@ -349,7 +355,10 @@ fn handle_process_exited(
             // PIDs.
             let (activations_json, _lock) = read_activations_json(state_json_path)?;
             let Some(activations) = activations_json else {
-                bail!("executive shouldn't be running when state.json doesn't exist");
+                return Err(anyhow!(
+                    "executive shouldn't be running when state.json doesn't exist"
+                )
+                .context("when checking for re-attached PIDs"))?;
             };
             // Check if the PID that triggered this event is still in state
             let pid_reused = activations
@@ -415,10 +424,12 @@ fn handle_process_exited(
             Ok(cleaned_up)
         },
         Err(err) => {
-            info!("running cleanup after error");
+            info!(%err, "running cleanup after error");
             let (activations_json, lock) = read_activations_json(state_json_path)?;
             let Some(activations) = activations_json else {
-                bail!("executive shouldn't be running when state.json doesn't exist");
+                return Err(
+                    err.context("executive shouldn't be running when state.json doesn't exist")
+                )?;
             };
             let _ = cleanup_all(
                 (activations, lock),

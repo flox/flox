@@ -9,7 +9,7 @@ use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result, anyhow};
 use flox_core::activations::{PidWithExpiration, read_activations_json};
 use flox_core::proc_status::pid_is_running;
 
@@ -87,7 +87,10 @@ impl EventCoordinator {
     pub fn spawn_all_watchers(&mut self, state_json_path: impl AsRef<Path>) -> Result<()> {
         let (activations_json, _lock) = read_activations_json(&state_json_path)?;
         let Some(activations) = activations_json else {
-            bail!("executive shouldn't be running when state.json doesn't exist");
+            return Err(
+                anyhow!("executive shouldn't be running when state.json doesn't exist")
+                    .context("when spawning watchers"),
+            )?;
         };
 
         // Watch attached PIDs
