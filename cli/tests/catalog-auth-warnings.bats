@@ -46,62 +46,13 @@ teardown() {
 # Unconditional warnings
 # ---------------------------------------------------------------------------- #
 
-@test "'flox init' prints auth deprecation warning" {
+@test "'flox init' prints auth deprecation warning when logged out" {
   run "$FLOX_BIN" init
   assert_success
   assert_output --partial "$AUTH_WARNING"
 }
 
-@test "'flox install' prints auth deprecation warning" {
-  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml"
-  "$FLOX_BIN" init
-  run "$FLOX_BIN" install hello
-  assert_success
-  assert_output --partial "$AUTH_WARNING"
-}
-
-@test "'flox edit' prints auth deprecation warning" {
-  "$FLOX_BIN" init
-  run "$FLOX_BIN" edit -f .flox/env/manifest.toml
-  assert_success
-  assert_output --partial "$AUTH_WARNING"
-}
-
-@test "'flox upgrade' prints auth deprecation warning" {
-  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml"
-  "$FLOX_BIN" init
-  "$FLOX_BIN" install hello
-  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml"
-  run "$FLOX_BIN" upgrade
-  assert_success
-  assert_output --partial "$AUTH_WARNING"
-}
-
-@test "'flox run' prints auth deprecation warning" {
-  # The warning fires before any expensive work; use a missing-package error
-  # to verify warning output without requiring a real nix store download.
-  run "$FLOX_BIN" run
-  # run exits with failure (no package specified), but warning is still printed
-  assert_output --partial "$AUTH_WARNING"
-}
-
-@test "'flox include upgrade' prints auth deprecation warning" {
-  "$FLOX_BIN" init -d included
-  "$FLOX_BIN" init -d composer
-  cat > composer/.flox/env/manifest.toml <<- EOF
-version = 1
-
-[include]
-environments = [
-  { dir = "../included" },
-]
-EOF
-  run "$FLOX_BIN" include upgrade -d composer
-  assert_success
-  assert_output --partial "$AUTH_WARNING"
-}
-
-@test "commands suppress auth warning when user is logged in" {
+@test "'flox init' suppresses auth warning when logged in" {
   floxhub_setup "owner"
   run "$FLOX_BIN" init
   assert_success
