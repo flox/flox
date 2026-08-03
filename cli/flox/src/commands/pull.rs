@@ -538,9 +538,12 @@ impl Pull {
                 }
             },
 
-            // Failed to _build_ the environment due to an incompatible package
+            // Failed to _build_ the environment, e.g. due to an incompatible
+            // package or a `[vars]` reference cycle
             EnvironmentError::Core(
-                ref core_err @ CoreEnvironmentError::BuildEnv(BuildEnvError::Realise2 { .. }),
+                ref core_err @ CoreEnvironmentError::BuildEnv(
+                    BuildEnvError::Realise2 { .. } | BuildEnvError::VarsCycle { .. },
+                ),
             ) => {
                 debug!(
                     "Failed to build environment: {err}",
@@ -784,6 +787,14 @@ mod tests {
         )))
     }
 
+    fn vars_cycle_result() -> Result<(), EnvironmentError> {
+        Err(EnvironmentError::Core(CoreEnvironmentError::BuildEnv(
+            BuildEnvError::VarsCycle {
+                cycle: "foo → bar → foo".to_string(),
+            },
+        )))
+    }
+
     #[test]
     fn ensure_valid_mock_incompatible_system_result() {
         match incompatible_system_result() {
@@ -950,6 +961,31 @@ mod tests {
         Pull::handle_pull_result(
             &flox,
             incompatible_package_result(),
+            &dot_flox_path,
+            false,
+            &mut unusable_mock_managed_environment(),
+            Some(QueryFunctions {
+                query_add_system: |_| panic!(),
+                query_ignore_build_errors: || Ok(true),
+            }),
+        )
+        .unwrap();
+
+        assert!(dot_flox_path.exists());
+    }
+
+    /// Pulling an environment with a `[vars]` reference cycle should prompt to
+    /// ignore the build error like any other build failure.
+    /// When answering yes, the environment should not be removed.
+    #[test]
+    fn handle_pull_result_vars_cycle_is_recoverable() {
+        let (flox, _temp_dir_handle) = flox_instance();
+
+        let dot_flox_path = tempdir_in(&flox.temp_dir).unwrap().keep();
+
+        Pull::handle_pull_result(
+            &flox,
+            vars_cycle_result(),
             &dot_flox_path,
             false,
             &mut unusable_mock_managed_environment(),
