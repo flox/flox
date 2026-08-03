@@ -981,23 +981,27 @@ fn write_activate_command(shell: Shell, project_dir: &Path, writer: &mut impl Wr
     let escaped_bin = shell_escape::escape(Cow::Borrowed(&*flox_bin));
     let dir = project_dir.to_string_lossy().to_string();
     let escaped_dir = shell_escape::escape(Cow::Borrowed(&*dir));
+    // `--auto-activated` is what distinguishes this call from a hand-written
+    // in-place activation: both arrive as `InvocationType::InPlace`, and
+    // without it the telemetry stream cannot tell the prompt hook's work
+    // apart from a shell rc file's.
     match shell {
         Shell::Bash | Shell::Zsh => {
             writeln!(
                 writer,
-                r#"eval "$({escaped_bin} activate --dir {escaped_dir})";"#
+                r#"eval "$({escaped_bin} activate --auto-activated --dir {escaped_dir})";"#
             )?;
         },
         Shell::Fish => {
             writeln!(
                 writer,
-                "{escaped_bin} activate --dir {escaped_dir} | source;"
+                "{escaped_bin} activate --auto-activated --dir {escaped_dir} | source;"
             )?;
         },
         Shell::Tcsh => {
             writeln!(
                 writer,
-                r#"eval "`{escaped_bin} activate --dir {escaped_dir}`";"#
+                r#"eval "`{escaped_bin} activate --auto-activated --dir {escaped_dir}`";"#
             )?;
         },
     }
@@ -1825,7 +1829,7 @@ mod tests {
         write_activate_command(Shell::Bash, Path::new("/home/user/my proj"), &mut buf).unwrap();
         let script = String::from_utf8(buf).unwrap();
         assert!(
-            script.contains("activate --dir '/home/user/my proj'"),
+            script.contains("activate --auto-activated --dir '/home/user/my proj'"),
             "{script}"
         );
         assert!(script.starts_with(r#"eval "$("#), "{script}");
