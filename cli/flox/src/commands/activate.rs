@@ -650,8 +650,7 @@ impl ActivateOptions {
         // quiet mode of its own: the verbosity it receives below is clamped to
         // `max(0)`, so a negative (quieter) verbosity never reaches it. Deciding
         // here keeps the one place that knows the user's real verbosity as the
-        // one place that decides, and makes `flox -q activate` silent — which it
-        // was not before, for any mode.
+        // one place that decides, and makes `flox -q activate` silent.
         let mode_announces = match invocation_type {
             InvocationType::Interactive => true,
             InvocationType::InPlace
