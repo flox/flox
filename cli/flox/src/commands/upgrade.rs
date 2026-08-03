@@ -39,6 +39,14 @@ impl Upgrade {
         // Record subcommand metric prior to environment_subcommand_metric below
         // in case we error before then
         subcommand_metric!("upgrade");
+
+        // TODO(DEV-200): replace with actual docs URL when available
+        if flox.auth_context.is_unauthenticated() {
+            message::warning(
+                "This command will require authentication in an upcoming release. See https://flox.dev/docs/install-flox/ for more info.",
+            );
+        }
+
         tracing::debug!(
             to_upgrade = self.groups_or_iids.join(","),
             "upgrading groups and install ids"
@@ -457,7 +465,10 @@ mod tests {
 
         let printed = writer.to_string();
 
-        assert_eq!(printed, "No upgrades available for packages in 'name'.\n");
+        assert_eq!(
+            printed,
+            "! This command will require authentication in an upcoming release. See https://flox.dev/docs/install-flox/ for more info.\nNo upgrades available for packages in 'name'.\n"
+        );
     }
 
     /// Run an upgrade of an environment that only has upgrades on other systems
@@ -502,6 +513,7 @@ mod tests {
         assert_eq!(
             run_upgrade_with_upgrades_on_other_system(false).await,
             indoc! {"
+            ! This command will require authentication in an upcoming release. See https://flox.dev/docs/install-flox/ for more info.
             ✔ Upgraded 'name'.
             Upgrades were not available for this system, but upgrades were applied for other
             systems supported by this environment.
@@ -515,6 +527,7 @@ mod tests {
         assert_eq!(
             run_upgrade_with_upgrades_on_other_system(true).await,
             indoc! {"
+            ! This command will require authentication in an upcoming release. See https://flox.dev/docs/install-flox/ for more info.
             Upgrades are not available for 'name' on this system, but upgrades are
             available for other systems supported by this environment.
             "}
@@ -739,6 +752,7 @@ mod tests {
     #[serial(global_events_client)]
     async fn dry_run_shows_version_change_summary() {
         assert_eq!(run_dry_run_with_version_change().await, indoc! {"
+            ! This command will require authentication in an upcoming release. See https://flox.dev/docs/install-flox/ for more info.
             Dry run: 1 version change in 'name':
             - hello: 2.10.1 -> 2.12.3
 

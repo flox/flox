@@ -110,6 +110,13 @@ impl Init {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("init");
 
+        // TODO(DEV-200): replace with actual docs URL when available
+        if flox.auth_context.is_unauthenticated() {
+            message::warning(
+                "This command will require authentication in an upcoming release. See https://flox.dev/docs/install-flox/ for more info.",
+            );
+        }
+
         match self.type_select {
             InitEnvironmentTypeSelect::Path {
                 dir,

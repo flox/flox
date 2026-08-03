@@ -147,6 +147,17 @@ impl AuthContext {
         }
     }
 
+    /// Returns true when no authentication material is available and a
+    /// future catalog-auth-gated call would fail.
+    ///
+    /// Currently only `Auth0(None)` (not logged in via the default flow) is
+    /// considered unauthenticated for the purpose of Milestone 1 deprecation
+    /// warnings. `Kerberos(None)`, `AccessToken`, and `Auth0(Some(expired))`
+    /// are outside the scope of this milestone.
+    pub fn is_unauthenticated(&self) -> bool {
+        matches!(self, AuthContext::Auth0(None))
+    }
+
     /// Create a Kerberos [`AuthContext`]: resolves the principal and embeds
     /// a SPNEGO token generator; returns `Kerberos(None)` (with a warning
     /// log) if the ticket cannot be resolved. FloxHub tokens are not used.

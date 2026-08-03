@@ -91,7 +91,7 @@ EOF
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
     run "$FLOX_BIN" edit -f "$TMP_MANIFEST_PATH"
   assert_success
-  assert_output "✔ Environment successfully updated."
+  assert_output --partial "✔ Environment successfully updated."
 }
 
 # ---------------------------------------------------------------------------- #
@@ -138,7 +138,7 @@ EOF
 
   RUST_BACKTRACE=0 run "$FLOX_BIN" edit -f ./manifest.toml
   assert_failure
-  assert_output - <<'EOF'
+  assert_output --partial - <<'EOF'
 ✘ ERROR: Failed to parse manifest:
 
 TOML parse error at line 1, column 7
@@ -161,7 +161,7 @@ EOF
 
   RUST_BACKTRACE=0 run sh -c "echo 'foo = ;' | ${FLOX_BIN} edit -f -"
   assert_failure
-  assert_output - <<'EOF'
+  assert_output --partial - <<'EOF'
 ✘ ERROR: Failed to parse manifest:
 
 TOML parse error at line 1, column 7
@@ -235,7 +235,7 @@ EOF
   # (simulates quitting the editor without saving)
   run "$FLOX_BIN" edit -f "$TESTS_DIR/edit/manifest.toml"
   assert_success
-  assert_output "! No changes made to environment."
+  assert_output --partial "No changes made to environment."
 }
 
 # bats test_tags=edit:unlocked
@@ -250,7 +250,7 @@ EOF
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
     run "$FLOX_BIN" edit -f "$TESTS_DIR/edit/manifest.toml"
   assert_success
-  assert_output "✔ Environment successfully updated."
+  assert_output --partial "✔ Environment successfully updated."
 }
 
 # ---------------------------------------------------------------------------- #

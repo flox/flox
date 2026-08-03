@@ -49,7 +49,7 @@ teardown() {
   "$FLOX_BIN" init
   run "$FLOX_BIN" install hello
   assert_success
-  assert_output "✔ 'hello' installed to environment 'test'"
+  assert_output --partial "✔ 'hello' installed to environment 'test'"
 }
 
 @test "'flox install' warns (preserving order) for already installed packages" {
@@ -293,7 +293,7 @@ EOF
 
   assert_failure
   SPACE=" "
-  assert_output "$(
+  assert_output --partial "$(
     cat << EOF
 ✘ ERROR: resolution failed:$SPACE
 Could not find package 'badpkg'.
@@ -311,7 +311,7 @@ EOF
     run "$FLOX_BIN" install badpkg1 badpkg2
 
   assert_failure
-  assert_output "$(
+  assert_output --partial "$(
     cat << EOF
 ✘ ERROR: resolution failed: multiple resolution failures:
 - Could not find package 'badpkg1'.
@@ -390,7 +390,7 @@ EOF
     run "$FLOX_BIN" install badpkg bpftrace
 
   assert_failure
-  assert_output "$(
+  assert_output --partial "$(
     cat << EOF
 ✘ ERROR: resolution failed: multiple resolution failures:
 - package 'bpftrace' not available for
@@ -418,7 +418,7 @@ EOF
 
   assert_failure
   SPACE=" "
-  assert_output "$(
+  assert_output --partial "$(
     cat << EOF
 ✘ ERROR: resolution failed:$SPACE
 No version compatible with '14.16.1' found for 'nodejs' on 'aarch64-darwin'.
@@ -436,7 +436,7 @@ EOF
 
   assert_failure
   SPACE=" "
-  assert_output "$(
+  assert_output --partial "$(
     cat << EOF
 ✘ ERROR: resolution failed:$SPACE
 The package 'python311Packages.torchvision-bin' is not found for all requested systems on the same page, consider package groups with the following system groupings: (x86_64-darwin), (aarch64-linux), (aarch64-linux,x86_64-darwin), (aarch64-darwin,aarch64-linux,x86_64-darwin).

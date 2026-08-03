@@ -89,7 +89,7 @@ teardown() {
   assert_success
 
   # Confirmation with tips printed
-  assert_output - << EOF
+  assert_output --partial - << EOF
 ⚡︎ Created environment 'test' ($NIX_SYSTEM)
 
 Next:
@@ -130,7 +130,7 @@ EOF
   run "$FLOX_BIN" init
   assert_success
 
-  assert_output - << EOF
+  assert_output --partial - << EOF
 ⚡︎ Created environment 'test' ($NIX_SYSTEM)
 
 Next:

@@ -127,6 +127,13 @@ impl Install {
     pub async fn handle(self, mut flox: Flox) -> Result<()> {
         subcommand_metric!("install");
 
+        // TODO(DEV-200): replace with actual docs URL when available
+        if flox.auth_context.is_unauthenticated() {
+            message::warning(
+                "This command will require authentication in an upcoming release. See https://flox.dev/docs/install-flox/ for more info.",
+            );
+        }
+
         debug!(
             "attempting to install packages [{}] to {:?}",
             self.packages.as_slice().join(", "),
@@ -1040,6 +1047,7 @@ mod tests {
             .await
             .expect("installation failed");
         let expected = formatdoc! {"
+             ! This command will require authentication in an upcoming release. See https://flox.dev/docs/install-flox/ for more info.
              ! '{install_id}' installed only for the following systems: {installed_systems}
         "};
         assert_eq!(writer.to_string(), expected);

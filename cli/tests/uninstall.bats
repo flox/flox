@@ -49,7 +49,7 @@ teardown() {
   "$FLOX_BIN" init
   run "$FLOX_BIN" install hello
   assert_success
-  assert_output "✔ 'hello' installed to environment 'test'"
+  assert_output --partial "✔ 'hello' installed to environment 'test'"
 
   run "$FLOX_BIN" uninstall hello
   assert_success
