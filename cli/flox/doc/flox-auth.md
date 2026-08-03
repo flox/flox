@@ -36,9 +36,13 @@ If called interactively it can open the browser for you if you press `<enter>`.
 With `--token-file <path>` the login is non-interactive:
 the FloxHub token is read from `<path>` instead
 (pass `-` to read the token from stdin).
+The file can contain a JWT access token, a personal access token,
+or a service account token.
+Token-file login does not open a browser or prompt for input.
+A JWT access token is validated locally.
 FloxHub must be reachable to validate personal access tokens and
 service account tokens.
-The validated token is stored without opening a browser or prompting for input.
+The validated token is stored.
 Use this in CI, containers, and other scripted setups.
 
 See also: [`flox-push(1)`](./flox-push.md),
