@@ -36,8 +36,9 @@ If called interactively it can open the browser for you if you press `<enter>`.
 With `--token-file <path>` the login is non-interactive:
 the FloxHub token is read from `<path>` instead
 (pass `-` to read the token from stdin).
-The token is validated and stored,
-and no browser, prompt, or network access is involved.
+FloxHub must be reachable to validate personal access tokens and
+service account tokens.
+The validated token is stored without opening a browser or prompting for input.
 Use this in CI, containers, and other scripted setups.
 
 See also: [`flox-push(1)`](./flox-push.md),
