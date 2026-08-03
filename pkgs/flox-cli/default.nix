@@ -18,6 +18,10 @@
   rust-toolchain,
   rustfmt ? rust-toolchain.rustfmt,
   stdenv,
+  # Default FloxHub authentication mode compiled into the binary
+  # ("token" or "kerberos"). Kerberos-authenticated on-premise deployments
+  # build with "kerberos"; the hosted FloxHub always uses Auth0 regardless.
+  defaultAuthnMode ? null,
 }:
 let
   FLOX_VERSION = lib.fileContents ./../../VERSION;
@@ -70,6 +74,9 @@ let
     }
     // lib.optionalAttrs stdenv.hostPlatform.isLinux {
       LOCALE_ARCHIVE = "${glibcLocalesUtf8}/lib/locale/locale-archive";
+    }
+    // lib.optionalAttrs (defaultAuthnMode != null) {
+      FLOX_DEFAULT_AUTHN_MODE = defaultAuthnMode;
     }
     // rust-internal-deps.passthru.envs;
 in

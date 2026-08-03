@@ -195,9 +195,9 @@ fn build_client(config: &Config, floxhub_token: Option<String>) -> Result<Floxhu
         "configured catalog client",
     );
 
-    let auth_context = match config.flox.floxhub_authn_mode {
-        Some(flox_config::AuthnMode::Kerberos) => AuthContext::new_kerberos(),
-        _ => AuthContext::new_from_token(floxhub_token.as_deref())?,
+    let auth_context = match effective_authn_mode(config, &floxhub) {
+        flox_config::AuthnMode::Kerberos => AuthContext::new_kerberos(),
+        flox_config::AuthnMode::Token => AuthContext::new_from_token(floxhub_token.as_deref())?,
     };
 
     let config = FloxhubClientConfig {
@@ -213,6 +213,18 @@ fn build_client(config: &Config, floxhub_token: Option<String>) -> Result<Floxhu
     };
 
     Ok(FloxhubClient::new(config)?)
+}
+
+/// Resolve the effective authn mode.
+/// When `floxhub_authn_mode` is unset, the hosted FloxHub always
+/// authenticates via token (Auth0); other deployments get the default
+/// compiled into this build.
+fn effective_authn_mode(config: &Config, floxhub: &Floxhub) -> flox_config::AuthnMode {
+    match &config.flox.floxhub_authn_mode {
+        Some(mode) => mode.clone(),
+        None if floxhub.is_hosted() => flox_config::AuthnMode::Token,
+        None => flox_config::AuthnMode::build_default(),
+    }
 }
 
 /// Render an authentication-related catalog failure with a token-aware hint.

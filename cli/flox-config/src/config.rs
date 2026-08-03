@@ -37,6 +37,55 @@ pub enum AuthnMode {
     Kerberos,
 }
 
+/// Default authentication mode compiled into this build, set via the
+/// `FLOX_DEFAULT_AUTHN_MODE` build-time environment variable
+/// ("token" or "kerberos"; unset means "token").
+///
+/// Deployments that authenticate via Kerberos compile their own CLI with
+/// `FLOX_DEFAULT_AUTHN_MODE=kerberos` so their users need no
+/// `floxhub_authn_mode` config, and the deployment is not named in source.
+/// The hosted FloxHub only supports token auth and overrides this default;
+/// see the `effective_authn_mode` helpers in consumers.
+const BUILD_DEFAULT_AUTHN_MODE: Option<&str> = option_env!("FLOX_DEFAULT_AUTHN_MODE");
+
+/// Reject a mistyped `FLOX_DEFAULT_AUTHN_MODE` at build time: a binary that
+/// silently fell back to token auth would fail exactly like a missing
+/// default, only harder to diagnose.
+const _: () = assert!(
+    match BUILD_DEFAULT_AUTHN_MODE {
+        None => true,
+        Some(mode) => const_str_eq(mode, "token") || const_str_eq(mode, "kerberos"),
+    },
+    "FLOX_DEFAULT_AUTHN_MODE must be 'token' or 'kerberos'"
+);
+
+/// `str` equality usable in `const` context (no const trait impls yet).
+const fn const_str_eq(a: &str, b: &str) -> bool {
+    let (a, b) = (a.as_bytes(), b.as_bytes());
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut i = 0;
+    while i < a.len() {
+        if a[i] != b[i] {
+            return false;
+        }
+        i += 1;
+    }
+    true
+}
+
+impl AuthnMode {
+    /// The default authentication mode compiled into this build
+    /// (see [`BUILD_DEFAULT_AUTHN_MODE`]).
+    pub fn build_default() -> Self {
+        match BUILD_DEFAULT_AUTHN_MODE {
+            Some("kerberos") => AuthnMode::Kerberos,
+            _ => AuthnMode::Token,
+        }
+    }
+}
+
 /// Where `flox auth login` stores the FloxHub token.
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
