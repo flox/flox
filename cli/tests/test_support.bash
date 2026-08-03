@@ -373,7 +373,12 @@ jq_edit() {
 
 cat_teardown_fifo() {
   if [ -n "${TEARDOWN_FIFO:-}" ]; then
-    timeout 1 cat "$TEARDOWN_FIFO"
+    # Wait generously: with a short timeout, a slow activation may reach its
+    # `echo > $TEARDOWN_FIFO` only after the reader has given up, after which
+    # the writer blocks in open() forever and project_teardown orphans the
+    # FIFO inode — leaking the activation process and its executive.
+    timeout 10 cat "$TEARDOWN_FIFO" \
+      || echo "cat_teardown_fifo: timed out waiting for writer on $TEARDOWN_FIFO" >&2
   fi
 
 }
