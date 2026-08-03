@@ -263,6 +263,9 @@ jobs:
       - name: "Build"
         id: "build"
         env:
+          # S3 on purpose, not R2: this is the destination the builders
+          # publish the product closures to, and cache.flox.dev serves them
+          # from there to users, flox-installers, and the bats test builders.
           NIX_SUBSTITUTER: "${{ vars.MANAGED_CACHE_PUBLIC_S3_BUCKET }}"
           NIX_SUBSTITUTER_KEY: "${{ secrets.MANAGED_CACHE_PUBLIC_SECRET_KEY }}"
         run: |
