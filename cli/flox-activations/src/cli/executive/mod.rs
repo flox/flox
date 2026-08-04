@@ -620,13 +620,12 @@ fn shut_down_and_remove_state(
     activation_state_dir_path: impl AsRef<Path>,
 ) -> Result<()> {
     let socket_path = socket_path.as_ref();
-    if socket_path.exists() {
-        if let Err(err) = process_compose_down(process_compose_bin, socket_path) {
-            warn!(%err, "failed to run process-compose shutdown command");
-        }
-        info!("shut down process-compose");
-    } else {
+    if !socket_path.exists() {
         info!(reason = "no socket", "did not shut down process-compose");
+    } else if let Err(err) = process_compose_down(process_compose_bin, socket_path) {
+        warn!(%err, "failed to run process-compose shutdown command");
+    } else {
+        info!("shut down process-compose");
     }
 
     // Atomically remove the activation state directory
