@@ -92,6 +92,11 @@ impl EventCoordinator {
     pub fn spawn_all_watchers(&mut self, state_json_path: impl AsRef<Path>) -> Result<()> {
         let (activations_json, _lock) = read_activations_json(&state_json_path)?;
         let Some(activations) = activations_json else {
+            // TODO: we should probably call cleanup_on_no_state here, but it's
+            // a more complicated situation than other state.json missing cases
+            // because the executive hasn't yet sent SIGUSR1
+            // At the same time it's less likely to be reachable since we should
+            // be here soon after running a CLI command.
             return Err(
                 anyhow!("executive shouldn't be running when state.json doesn't exist")
                     .context("when spawning watchers"),
