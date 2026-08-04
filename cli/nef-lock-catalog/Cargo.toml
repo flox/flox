@@ -3,6 +3,9 @@ name = "nef-lock-catalog"
 version.workspace = true
 edition.workspace = true
 
+[[bin]]
+name = "lock"
+
 [dependencies]
 anyhow.workspace = true
 clap.workspace = true

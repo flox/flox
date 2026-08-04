@@ -1,4 +1,4 @@
-use std::collections::{BTreeSet, HashMap};
+use std::collections::BTreeSet;
 use std::io::IsTerminal;
 use std::path::PathBuf;
 use std::process::ExitCode;
