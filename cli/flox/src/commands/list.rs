@@ -19,7 +19,7 @@ use indoc::formatdoc;
 use itertools::Itertools;
 use tracing::{debug, instrument};
 
-use super::{EnvironmentSelect, environment_select};
+use super::{EnvironmentSelect, LOCKING_AUTH_REQUIRED_SOON, environment_select};
 use crate::commands::render_composition_manifest;
 use crate::environment_subcommand_metric;
 use crate::utils::events::env_detail_from_concrete;
@@ -72,6 +72,16 @@ impl List {
             CliEnvironmentPayload::new(env_detail_from_concrete(&flox, &env)),
         )) {
             debug!(error = %err, "Failed to record v2 event");
+        }
+
+        // TODO(DEV-200): replace with actual docs URL when available
+        // Warn unauthenticated users before the first lock, which happens
+        // when --upstream is not set and no lockfile exists yet.
+        if !self.upstream
+            && env.existing_lockfile(&flox)?.is_none()
+            && flox.auth_context.is_unauthenticated()
+        {
+            message::warning(LOCKING_AUTH_REQUIRED_SOON);
         }
 
         let (manifest_contents, lockfile) = match (&mut env, self.upstream) {
