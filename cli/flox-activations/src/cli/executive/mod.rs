@@ -220,6 +220,11 @@ fn run_event_loop(
                 debug!("Received SIGUSR1, starting process-compose");
                 let (activations_json, lock) = read_activations_json(&state_json_path)?;
                 let Some(activations) = activations_json else {
+                    // TODO: we should probably call cleanup_on_no_state here, but it's
+                    // a more complicated situation than other state.json missing cases
+                    // because the executive hasn't started services yet.
+                    // At the same time it's less likely to be reachable since we should
+                    // be here soon after running a CLI command.
                     return Err(anyhow!(
                         "executive shouldn't be running when state.json doesn't exist"
                     )
@@ -251,6 +256,7 @@ fn run_event_loop(
                     // same exit as StateFileRemoved rather than erroring.
                     return cleanup_on_no_state(
                         lock,
+                        "handling a state.json change",
                         &state_json_path,
                         &process_compose_bin,
                         &socket_path,
@@ -295,6 +301,7 @@ fn run_event_loop(
                     .context("can't cleanup after state file removal")?;
                 return cleanup_on_no_state(
                     lock,
+                    "handling a state.json removal",
                     &state_json_path,
                     &process_compose_bin,
                     &socket_path,
@@ -364,8 +371,30 @@ fn handle_process_exited(
     // Remove from known_pids first so it can be re-monitored if it re-attached
     coordinator.stop_monitoring(pid);
 
+    // Read and lock here rather than inside cleanup_pid: every arm of the event
+    // loop answers "is there still activation state?" the same way, and keeping
+    // that decision in one layer means cleanup_pid can stay a function over
+    // state that is already known to exist.
+    let (activations_json, lock) = read_activations_json(state_json_path)?;
+    let Some(activations) = activations_json else {
+        cleanup_on_no_state(
+            lock,
+            "cleaning up an exited PID",
+            state_json_path,
+            process_compose_bin,
+            socket_path,
+            activation_state_dir,
+        )?;
+        return Ok(true);
+    };
+
     // Use PidWatcher to clean up the state
-    match watcher::cleanup_pid(state_json_path, activation_state_dir, pid) {
+    match watcher::cleanup_pid(
+        (activations, lock),
+        state_json_path,
+        activation_state_dir,
+        pid,
+    ) {
         Ok(None) => {
             // Still have active PIDs - check if this PID re-attached
             // and needs to be monitored again.
@@ -383,12 +412,17 @@ fn handle_process_exited(
             // That's not currently reachable because the watcher should sleep,
             // but the watcher shouldn't be treated as the authority on expired
             // PIDs.
-            let (activations_json, _lock) = read_activations_json(state_json_path)?;
+            let (activations_json, lock) = read_activations_json(state_json_path)?;
             let Some(activations) = activations_json else {
-                return Err(anyhow!(
-                    "executive shouldn't be running when state.json doesn't exist"
-                )
-                .context("when checking for re-attached PIDs"))?;
+                cleanup_on_no_state(
+                    lock,
+                    "checking for re-attached PIDs",
+                    state_json_path,
+                    process_compose_bin,
+                    socket_path,
+                    activation_state_dir,
+                )?;
+                return Ok(true);
             };
             // Check if the PID that triggered this event is still in state
             let pid_reused = activations
@@ -457,9 +491,19 @@ fn handle_process_exited(
             info!(%err, "running cleanup after error");
             let (activations_json, lock) = read_activations_json(state_json_path)?;
             let Some(activations) = activations_json else {
-                return Err(
-                    err.context("executive shouldn't be running when state.json doesn't exist")
+                // The original error is carried into the log rather than
+                // returned: with the state gone there is nothing left to
+                // recover, so exiting cleanly beats a failure the executive
+                // cannot act on.
+                cleanup_on_no_state(
+                    lock,
+                    &format!("cleaning up after error: {err}"),
+                    state_json_path,
+                    process_compose_bin,
+                    socket_path,
+                    activation_state_dir,
                 )?;
+                return Ok(true);
             };
             let _ = cleanup_all(
                 (activations, lock),
@@ -529,12 +573,19 @@ fn handle_start_services_signal(
 /// answer cannot change underneath us — unlike a bare `exists()`, which is only
 /// ever a statement about the past.
 ///
-/// Returns an error when the state really is gone: an activation destroyed out
-/// from under a running executive is an anomaly worth a non-zero exit, even
-/// though nothing here can recover from it. Cleanup still runs first. Returns
-/// `Ok` only for the benign case where a new activation has taken over.
+/// `discovered_during` names the operation that ran into the missing state.
+/// Several unrelated paths converge here, and which one noticed is the useful
+/// thing to know when reading an executive log, so it is carried into both
+/// outcomes.
+///
+/// Returns an error when the state really is gone: an activation being
+/// destroyed out from under a running executive is an anomaly worth a non-zero
+/// exit, even though nothing here can recover from it. Cleanup still runs
+/// first. Returns `Ok` only for the benign case where a new activation has
+/// taken over.
 fn cleanup_on_no_state(
     _hold_the_lock: LockFile,
+    discovered_during: &str,
     state_json_path: &Path,
     process_compose_bin: &Path,
     socket_path: &Path,
@@ -545,6 +596,7 @@ fn cleanup_on_no_state(
     // That is a handoff rather than a failure.
     if state_json_path.exists() {
         info!(
+            discovered_during,
             reason = "state.json recreated by a new activation",
             "exiting without cleanup"
         );
@@ -557,7 +609,7 @@ fn cleanup_on_no_state(
     shut_down_and_remove_state(process_compose_bin, socket_path, activation_state_dir_path)
         .context("failed to clean up after removed activation state")?;
 
-    bail!("activation state was removed while the executive was running")
+    bail!("activation state was removed while {discovered_during}")
 }
 
 /// Shutdown `process-compose` if running and remove the activation state
