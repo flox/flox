@@ -118,11 +118,13 @@ teardown() {
 # ---------------------------------------------------------------------------- #
 
 @test "'flox build' with existing lockfile does NOT print lock warning" {
+  # Log out so only the lockfile gate suppresses the warning (not the auth gate).
+  unset FLOX_FLOXHUB_TOKEN
   "$FLOX_BIN" init
-  # flox init creates a lockfile; build should NOT warn because lockfile exists
+  # flox init creates a lockfile; build should NOT warn because lockfile exists.
   run "$FLOX_BIN" build
   # Command fails because there are no build targets, but the lock warning
-  # must not appear — the lockfile gate prevents it regardless of auth state.
+  # must not appear — the lockfile gate prevents it.
   refute_output --partial "$LOCK_WARNING"
 }
 
