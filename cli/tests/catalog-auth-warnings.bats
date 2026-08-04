@@ -97,6 +97,7 @@ teardown() {
   "$FLOX_BIN" init
   # flox init creates a lockfile; list should NOT warn because lockfile exists
   run "$FLOX_BIN" list
+  assert_success
   # May print a "no packages" warning, but must not print the lock warning
   refute_output --partial "$LOCK_WARNING"
 }
@@ -108,5 +109,31 @@ teardown() {
   # flox init always creates a lockfile; remove it to simulate a pre-lockfile env
   rm .flox/env/manifest.lock
   run "$FLOX_BIN" list
+  assert_success
+  assert_output --partial "$LOCK_WARNING"
+}
+
+# ---------------------------------------------------------------------------- #
+# Conditional warning: build
+# ---------------------------------------------------------------------------- #
+
+@test "'flox build' with existing lockfile does NOT print lock warning" {
+  "$FLOX_BIN" init
+  # flox init creates a lockfile; build should NOT warn because lockfile exists
+  run "$FLOX_BIN" build
+  # Command fails because there are no build targets, but the lock warning
+  # must not appear — the lockfile gate prevents it regardless of auth state.
+  refute_output --partial "$LOCK_WARNING"
+}
+
+@test "'flox build' without lockfile prints lock warning" {
+  # The suite runs "logged in" by default; this test needs the logged-out state.
+  unset FLOX_FLOXHUB_TOKEN
+  "$FLOX_BIN" init
+  # flox init always creates a lockfile; remove it to simulate a pre-lockfile env
+  rm .flox/env/manifest.lock
+  run "$FLOX_BIN" build
+  # Command fails because there are no build targets, but the lock warning
+  # must appear before the build attempt when unauthenticated and no lockfile.
   assert_output --partial "$LOCK_WARNING"
 }
