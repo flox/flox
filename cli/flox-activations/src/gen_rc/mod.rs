@@ -175,6 +175,7 @@ pub(crate) mod test_helpers {
             disable_hook,
             flox_bin: "/flox".to_string(),
             auto_activate_fish_mode: None,
+            announce_activation: false,
         };
         let deleted_var = "DELETED_VAR".to_string();
         let modified_var = "MODIFIED_VAR".to_string();
