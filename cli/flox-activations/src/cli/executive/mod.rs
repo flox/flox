@@ -246,10 +246,16 @@ fn run_event_loop(
                 debug!("state.json changed, checking for new PIDs to monitor");
                 let (state, lock) = read_activations_json(&state_json_path)?;
                 let Some(activations) = state else {
-                    return Err(anyhow!(
-                        "executive shouldn't be running when state.json doesn't exist"
-                    )
-                    .context("when handling StateFileChanged"))?;
+                    // state.json went away between the watcher observing it and
+                    // this read. There is nothing left to monitor, so take the
+                    // same exit as StateFileRemoved rather than erroring.
+                    return cleanup_on_no_state(
+                        lock,
+                        &state_json_path,
+                        &process_compose_bin,
+                        &socket_path,
+                        &activation_state_dir,
+                    );
                 };
                 coordinator
                     .ensure_monitoring_pids(activations.all_attached_pids_and_expiration())
