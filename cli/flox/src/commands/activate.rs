@@ -7,7 +7,7 @@ use std::{env, fs};
 use anyhow::{Context, Result, anyhow, bail};
 use bpaf::Bpaf;
 use crossterm::tty::IsTty;
-use flox_config::{AutoActivationPreference, Config, EnvironmentPromptConfig};
+use flox_config::{AutoActivationPreference, Config, EnvironmentPromptConfig, PromptDetail};
 use flox_core::activate::context::{
     ActivateCtx,
     ActivateMode,
@@ -559,8 +559,11 @@ impl ActivateOptions {
         // We don't have access to the current PS1 (it's not exported), so we
         // can't modify it. Instead set FLOX_PROMPT_ENVIRONMENTS and let the
         // activation script set PS1 based on that.
-        let flox_prompt_environments =
-            Self::make_prompt_environments(hide_default_prompt, &flox_active_environments);
+        let flox_prompt_environments = Self::make_prompt_environments(
+            hide_default_prompt,
+            config.flox.prompt_detail.unwrap_or_default(),
+            &flox_active_environments,
+        );
 
         let prompt_color_1 = env::var("FLOX_PROMPT_COLOR_1")
             .unwrap_or(utils::colors::INDIGO_400.to_ansi256().to_string());
@@ -832,6 +835,7 @@ impl ActivateOptions {
     /// [`None`] if the prompt is disabled, or filters removed all components.
     fn make_prompt_environments(
         hide_default_prompt: bool,
+        prompt_detail: PromptDetail,
         flox_active_environments: &super::ActiveEnvironments,
     ) -> String {
         let prompt_envs: Vec<_> = flox_active_environments
@@ -840,11 +844,14 @@ impl ActivateOptions {
                 if hide_default_prompt && env.name().as_ref() == DEFAULT_NAME {
                     return None;
                 }
-                // Deliberately narrower than `bare_description()`, which
-                // still backs the activation announcements and the exported
-                // `FLOX_ENV_DESCRIPTION` variable with the full `owner/name`
-                // form.
-                Some(env.name().to_string())
+                // `PromptDetail::Name` is deliberately narrower than
+                // `bare_description()`, which still backs the activation
+                // announcements and the exported `FLOX_ENV_DESCRIPTION`
+                // variable with the full `owner/name` form.
+                Some(match prompt_detail {
+                    PromptDetail::Full => env.bare_description(),
+                    PromptDetail::Name => env.name().to_string(),
+                })
             })
             .collect();
 
@@ -1170,7 +1177,11 @@ mod tests {
     #[test]
     fn test_shell_prompt_empty_without_active_environments() {
         let active_environments = ActiveEnvironments::default();
-        let prompt = ActivateOptions::make_prompt_environments(false, &active_environments);
+        let prompt = ActivateOptions::make_prompt_environments(
+            false,
+            PromptDetail::Name,
+            &active_environments,
+        );
 
         assert_eq!(prompt, "");
     }
@@ -1181,11 +1192,19 @@ mod tests {
         active_environments.set_last_active(DEFAULT_ENV.clone(), None, ActivateMode::Dev);
 
         // with `hide_default_prompt = false` we should see the default environment
-        let prompt = ActivateOptions::make_prompt_environments(false, &active_environments);
+        let prompt = ActivateOptions::make_prompt_environments(
+            false,
+            PromptDetail::Name,
+            &active_environments,
+        );
         assert_eq!(prompt, "default".to_string());
 
         // with `hide_default_prompt = true` we should not see the default environment
-        let prompt = ActivateOptions::make_prompt_environments(true, &active_environments);
+        let prompt = ActivateOptions::make_prompt_environments(
+            true,
+            PromptDetail::Name,
+            &active_environments,
+        );
         assert_eq!(prompt, "");
     }
 
@@ -1196,17 +1215,27 @@ mod tests {
         active_environments.set_last_active(NON_DEFAULT_ENV.clone(), None, ActivateMode::Dev);
 
         // with `hide_default_prompt = false` we should see the default environment
-        let prompt = ActivateOptions::make_prompt_environments(false, &active_environments);
+        let prompt = ActivateOptions::make_prompt_environments(
+            false,
+            PromptDetail::Name,
+            &active_environments,
+        );
         assert_eq!(prompt, "wichtig default".to_string());
 
         // with `hide_default_prompt = true` we should not see the default environment
-        let prompt = ActivateOptions::make_prompt_environments(true, &active_environments);
+        let prompt = ActivateOptions::make_prompt_environments(
+            true,
+            PromptDetail::Name,
+            &active_environments,
+        );
         assert_eq!(prompt, "wichtig".to_string());
     }
 
-    /// Remote environments only show the name, same as path environments.
+    /// A remote environment is the only case where the prompt detail levels
+    /// differ: `bare_description` decorates it with the owner and `(local)`,
+    /// which is the string DEV-44 reports as too long and unclear.
     #[test]
-    fn prompt_shows_only_the_environment_name_for_remote_environments() {
+    fn prompt_detail_narrows_remote_environment_to_its_name() {
         let floxhub = Floxhub::new(DEFAULT_FLOXHUB_URL.clone(), None, None).unwrap();
         let remote_env = UninitializedEnvironment::Remote(ManagedPointer::new(
             "acme".parse().unwrap(),
@@ -1216,8 +1245,19 @@ mod tests {
         let mut active_environments = ActiveEnvironments::default();
         active_environments.set_last_active(remote_env, None, ActivateMode::Dev);
 
-        let prompt = ActivateOptions::make_prompt_environments(true, &active_environments);
-        assert_eq!(prompt, "core".to_string());
+        let full = ActivateOptions::make_prompt_environments(
+            true,
+            PromptDetail::Full,
+            &active_environments,
+        );
+        assert_eq!(full, "acme/core (local)".to_string());
+
+        let name = ActivateOptions::make_prompt_environments(
+            true,
+            PromptDetail::Name,
+            &active_environments,
+        );
+        assert_eq!(name, "core".to_string());
     }
 
     /// Build minimal ActivateOptions with only the service-related flags set.

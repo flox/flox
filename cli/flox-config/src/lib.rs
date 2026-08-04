@@ -19,6 +19,7 @@ pub use config::{
     FLOX_DIR_NAME,
     FloxConfig,
     InstallerChannel,
+    PromptDetail,
     PublishConfig,
     SearchLimit,
     TokenStorageMode,

@@ -130,6 +130,10 @@ pub struct FloxConfig {
     /// Hide environments named 'default' from the shell prompt
     pub hide_default_prompt: Option<bool>,
 
+    /// How much detail to show for each environment in the shell prompt.
+    /// Possible values: `name` (default), `full`.
+    pub prompt_detail: Option<PromptDetail>,
+
     /// Print notification if upgrades are available on `flox activate`.
     /// The notification message is:
     ///
@@ -189,6 +193,24 @@ pub enum EnvironmentPromptConfig {
     /// Change the shell prompt to show the active environments,
     /// but omit 'default' environments
     HideDefault,
+}
+
+/// How much of an environment's identity the shell prompt spells out.
+///
+/// The prompt is read on every command, so it pays a cost per glance that a
+/// one-time message does not. `Name` keeps the part that changes between
+/// environments and drops the part that is the same all day: the owner
+/// (the user already knows who they are) and the `(local)` marker, whose
+/// meaning — a local copy of a FloxHub environment rather than the upstream
+/// one — is not recoverable from the word itself.
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum PromptDetail {
+    /// Just the environment's name, e.g. `core`.
+    #[default]
+    Name,
+    /// Owner and locality as well, e.g. `acme/core (local)`.
+    Full,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
