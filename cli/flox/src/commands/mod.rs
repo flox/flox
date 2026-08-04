@@ -97,8 +97,7 @@ const SHELL_COMPLETION_COMMAND: ShellComp = ShellComp::Raw {
 /// Warning shown when an unauthenticated user runs a command that will perform
 /// the first lock of an environment (no lockfile exists yet).
 /// Once catalog auth gating is enforced, locking will require a login.
-pub(crate) const LOCKING_AUTH_REQUIRED_SOON: &str =
-    "Locking environments will require authentication in an upcoming release. See https://flox.dev/docs/install-flox/ for more info.";
+pub(crate) const LOCKING_AUTH_REQUIRED_SOON: &str = "Locking environments will require authentication in an upcoming release. See https://flox.dev/docs/install-flox/ for more info.";
 
 static FLOX_DESCRIPTION: &'_ str = indoc! {"
     Flox is a virtual environment and package manager all in one.\n\n

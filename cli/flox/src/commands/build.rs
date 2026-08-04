@@ -197,8 +197,7 @@ impl Build {
                 // TODO(DEV-200): replace with actual docs URL when available
                 // Warn unauthenticated users before the first lock, which happens
                 // when no lockfile exists yet.
-                if env.existing_lockfile(&flox)?.is_none()
-                    && flox.auth_context.is_unauthenticated()
+                if env.existing_lockfile(&flox)?.is_none() && flox.auth_context.is_unauthenticated()
                 {
                     message::warning(LOCKING_AUTH_REQUIRED_SOON);
                 }
