@@ -145,6 +145,17 @@ pub struct FloxConfig {
     /// (default: true)
     pub upgrade_notifications: Option<bool>,
 
+    /// Print a one-line notification naming the environment when it is
+    /// activated in the current shell, including by auto-activation.
+    /// The notification message is:
+    ///
+    /// ```text
+    /// You are now using the environment 'environment-name'
+    /// ```
+    ///
+    /// (default: true)
+    pub activation_notifications: Option<bool>,
+
     /// Configuration for 'flox publish'.
     pub publish: Option<PublishConfig>,
 
