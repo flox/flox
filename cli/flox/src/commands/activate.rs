@@ -825,7 +825,10 @@ impl ActivateOptions {
                 if hide_default_prompt && env.name().as_ref() == DEFAULT_NAME {
                     return None;
                 }
-                Some(env.bare_description())
+                // `bare_description` is also what Bash activation errors
+                // quote, so the prompt narrows it here rather than changing
+                // the description itself.
+                Some(env.name().to_string())
             })
             .collect();
 
@@ -1123,7 +1126,13 @@ pub fn write_auto_activation_preference(
 mod tests {
     use std::sync::LazyLock;
 
-    use flox_rust_sdk::models::environment::{DotFlox, EnvironmentPointer, PathPointer};
+    use flox_core::floxhub::{DEFAULT_FLOXHUB_URL, Floxhub};
+    use flox_rust_sdk::models::environment::{
+        DotFlox,
+        EnvironmentPointer,
+        ManagedPointer,
+        PathPointer,
+    };
 
     use super::*;
     use crate::commands::ActiveEnvironments;
@@ -1177,6 +1186,24 @@ mod tests {
         // with `hide_default_prompt = true` we should not see the default environment
         let prompt = ActivateOptions::make_prompt_environments(true, &active_environments);
         assert_eq!(prompt, "wichtig".to_string());
+    }
+
+    /// A remote environment is the case where the prompt used to say the most:
+    /// `bare_description` decorates it with the owner and `(local)`, which is
+    /// the string DEV-44 reports as too long and unclear.
+    #[test]
+    fn prompt_shows_only_the_environment_name_for_remote_environments() {
+        let floxhub = Floxhub::new(DEFAULT_FLOXHUB_URL.clone(), None, None).unwrap();
+        let remote_env = UninitializedEnvironment::Remote(ManagedPointer::new(
+            "acme".parse().unwrap(),
+            "core".parse().unwrap(),
+            &floxhub,
+        ));
+        let mut active_environments = ActiveEnvironments::default();
+        active_environments.set_last_active(remote_env, None, ActivateMode::Dev);
+
+        let prompt = ActivateOptions::make_prompt_environments(true, &active_environments);
+        assert_eq!(prompt, "core".to_string());
     }
 
     /// Build minimal ActivateOptions with only the service-related flags set.
