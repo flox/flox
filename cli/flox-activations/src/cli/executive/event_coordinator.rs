@@ -213,7 +213,7 @@ impl EventCoordinator {
                         return;
                     }
 
-                    if !should_emit_state_changed(&event, &owned_state_json_path, &filename) {
+                    if !should_emit_state_changed(&event, &filename) {
                         return;
                     }
 
@@ -337,21 +337,20 @@ impl EventCoordinator {
 /// - File creation (atomic rename) or data modification.
 ///   This filters out Close, Access, Remove, and other irrelevant events
 ///   that would cause redundant state.json reads.
-/// - A rescan event, in which case the watcher is dropping events. In that case
-///   we have to double check state.json exists because the main loop assumes it
-///   does
-fn should_emit_state_changed(event: &Event, state_json_path: &Path, filename: &OsStr) -> bool {
+/// - A rescan event, in which case the watcher is dropping events and the main
+///   loop has to re-read to pick up whatever it missed.
+///
+/// Deliberately does not consider whether state.json still exists. A stat here
+/// could only report the past; the main loop re-checks under the lock, where
+/// the answer is authoritative, before acting on either outcome.
+fn should_emit_state_changed(event: &Event, filename: &OsStr) -> bool {
     let is_write_event = event.kind.is_modify() || event.kind.is_create();
     let is_state_json_event = event.paths.iter().any(|p| p.file_name() == Some(filename));
     if is_write_event && is_state_json_event {
         return true;
     }
 
-    if event.need_rescan() && state_json_path.exists() {
-        return true;
-    }
-
-    false
+    event.need_rescan()
 }
 
 /// Spawn a thread that waits for a specific PID to exit.
@@ -597,7 +596,7 @@ mod tests {
         use std::path::PathBuf;
 
         use notify::EventKind;
-        use notify::event::{CreateKind, Flag, ModifyKind, RenameMode};
+        use notify::event::{CreateKind, ModifyKind, RenameMode};
 
         use super::*;
 
@@ -607,10 +606,6 @@ mod tests {
             let state_json_path = temp_dir.path().join("state.json");
             fs::write(&state_json_path, "{}").unwrap();
             (temp_dir, state_json_path)
-        }
-
-        fn rescan_event() -> Event {
-            Event::new(EventKind::Other).set_flag(Flag::Rescan)
         }
 
         /// state.json is written by atomic rename, so the rename onto the
@@ -623,7 +618,6 @@ mod tests {
 
             assert!(should_emit_state_changed(
                 &event,
-                &state_json_path,
                 state_json_path.file_name().unwrap()
             ));
         }
@@ -638,47 +632,6 @@ mod tests {
 
             assert!(!should_emit_state_changed(
                 &event,
-                &state_json_path,
-                state_json_path.file_name().unwrap()
-            ));
-        }
-
-        /// A rescan is the backend saying it dropped events. It names no file
-        /// and its kind is neither create nor modify, so filtering on kind and
-        /// name alone would discard it — and with it any attach that happened
-        /// during the overflow, leaving that PID unmonitored forever.
-        #[test]
-        fn rescan_is_a_change_despite_naming_no_file() {
-            let (_temp_dir, state_json_path) = state_json_in_temp_dir();
-            let event = rescan_event();
-
-            assert!(
-                event.paths.is_empty(),
-                "a rescan carries no path to match on"
-            );
-            assert!(
-                !event.kind.is_modify() && !event.kind.is_create(),
-                "a rescan is neither a modify nor a create"
-            );
-            assert!(should_emit_state_changed(
-                &event,
-                &state_json_path,
-                state_json_path.file_name().unwrap()
-            ));
-        }
-
-        /// A rescan carries no timing guarantee, so it can arrive after the
-        /// activation was torn down. Signalling a re-read then would have the
-        /// loop treat the missing file as fatal, and reading it would recreate
-        /// the directory cleanup had just removed.
-        #[test]
-        fn rescan_after_state_json_is_gone_is_not_a_change() {
-            let (_temp_dir, state_json_path) = state_json_in_temp_dir();
-            fs::remove_file(&state_json_path).unwrap();
-
-            assert!(!should_emit_state_changed(
-                &rescan_event(),
-                &state_json_path,
                 state_json_path.file_name().unwrap()
             ));
         }
