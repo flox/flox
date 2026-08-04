@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 use std::io::IsTerminal;
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -18,6 +18,7 @@ use floxhub_client::{
     Stability,
 };
 use nef_lock_catalog::{
+    BuildLock,
     CatalogRef,
     LockError,
     lock_references,
@@ -145,24 +146,29 @@ async fn run(cli: Cli) -> Result<()> {
         references.extend(scan_package(&cli.base_dir, rel)?);
     }
 
-    // Render each failure to its message body at the boundary, while the
-    // structured data is still in hand; `main` adds the `✘ ERROR:` decoration.
-    let lock = match lock_references(&client, references, cli.stability).await {
-        Ok(lock) => lock,
-        // REQ-013: surface the unresolvable dependency chains.
-        Err(LockError::Unresolvable(entries)) => bail!(render_unresolvable(&entries)),
-        // An auth failure can only surface as an `APIError` (the sole variant
-        // carrying an HTTP status); only then is the token-state hint relevant.
-        //
-        // NOTE: `build_inputs_lookup` currently maps every failure to `Other`
-        // (the lookup endpoint's `HttpValidationError` schema divergence), so no
-        // `APIError` reaches here yet and the hint stays dormant until the
-        // backend declares `ErrorResponse` on that endpoint.
-        Err(LockError::Client(source @ FloxhubClientError::APIError(_))) => {
-            bail!(render_client_error(&format!("{source:#}"), token_present))
-        },
-        // Any other lock failure needs no special rendering.
-        Err(other) => return Err(other.into()),
+    // Lock references via the catalog or produce an empty lock file if no references were found.
+    let lock = if !references.is_empty() {
+        // Render each failure to its message body at the CLI boundary.
+        match lock_references(&client, references, cli.stability).await {
+            Ok(lock) => lock,
+            // REQ-013: surface the unresolvable dependency chains.
+            Err(LockError::Unresolvable(entries)) => bail!(render_unresolvable(&entries)),
+            // An auth failure can only surface as an `APIError` (the sole variant
+            // carrying an HTTP status); only then is the token-state hint relevant.
+            //
+            // NOTE: `build_inputs_lookup` currently maps every failure to `Other`
+            // (the lookup endpoint's `HttpValidationError` schema divergence), so no
+            // `APIError` reaches here yet and the hint stays dormant until the
+            // backend declares `ErrorResponse` on that endpoint.
+            Err(LockError::Client(source @ FloxhubClientError::APIError(_))) => {
+                bail!(render_client_error(&format!("{source:#}"), token_present))
+            },
+            // Any other lock failure needs no special rendering.
+            Err(other) => return Err(other.into()),
+        }
+    } else {
+        debug!("No catalog references found, nothing to lock.");
+        BuildLock::default()
     };
 
     // Write to the requested file, or print to stdout when `--out` is omitted
