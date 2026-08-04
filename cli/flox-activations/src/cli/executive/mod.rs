@@ -6,9 +6,15 @@ use clap::Args;
 use event_coordinator::{EventCoordinator, ExecutiveEvent};
 use flox_core::activate::context::{AttachCtx, AttachProjectCtx};
 use flox_core::activate::vars::FLOX_EXECUTIVE_VERBOSITY_VAR;
-use flox_core::activations::{read_activations_json, state_json_path, write_activations_json};
+use flox_core::activations::{
+    acquire_activations_json_lock,
+    read_activations_json,
+    state_json_path,
+    write_activations_json,
+};
 use flox_core::sentry::init_sentry;
 use flox_core::traceable_path;
+use fslock::LockFile;
 use log_gc::{spawn_heartbeat_log, spawn_logs_gc_threads};
 use nix::sys::signal::Signal::SIGUSR1;
 use nix::sys::signal::kill;
@@ -271,6 +277,24 @@ fn run_event_loop(
                 }
                 // lock drops here when PIDs remain
             },
+            Ok(ExecutiveEvent::StateFileRemoved) => {
+                // state.json existed when this executive started, so a removal
+                // event means it was deleted at some point — typically by an
+                // external actor such as a test harness or manual cleanup
+                // removing the runtime dir. Either way this executive is done.
+                //
+                // The event only says state.json was missing at some point, so
+                // take the lock and let cleanup_on_no_state decide under it.
+                let lock = acquire_activations_json_lock(&state_json_path)
+                    .context("can't cleanup after state file removal")?;
+                return cleanup_on_no_state(
+                    lock,
+                    &state_json_path,
+                    &process_compose_bin,
+                    &socket_path,
+                    &activation_state_dir,
+                );
+            },
             Ok(ExecutiveEvent::SigChld) => {
                 reap_orphaned_children();
             },
@@ -487,23 +511,56 @@ fn handle_start_services_signal(
     Ok(Some((activations, lock)))
 }
 
-/// Shutdown `process-compose` if running and remove all activation state.
-/// To be called when there are no longer any PIDs attached.
-/// Returns `true` if cleanup ran, `false` if PIDs were found and cleanup was skipped.
-fn cleanup_all(
-    locked_activations: LockedActivationState,
+/// Shut down what can still be reached once state.json is gone.
+///
+/// Without state.json there is no attachment list to consult and no state left
+/// to remove, so stopping `process-compose` if its socket outlived the state is
+/// the only useful thing remaining. Attached processes may outlive the state;
+/// the executive can do nothing further for them.
+///
+/// Takes the lock rather than a path so that "state.json is absent" is decided
+/// while holding it. state.json cannot be written without the lock, so that
+/// answer cannot change underneath us — unlike a bare `exists()`, which is only
+/// ever a statement about the past.
+///
+/// Returns an error when the state really is gone: an activation destroyed out
+/// from under a running executive is an anomaly worth a non-zero exit, even
+/// though nothing here can recover from it. Cleanup still runs first. Returns
+/// `Ok` only for the benign case where a new activation has taken over.
+fn cleanup_on_no_state(
+    _hold_the_lock: LockFile,
+    state_json_path: &Path,
+    process_compose_bin: &Path,
+    socket_path: &Path,
+    activation_state_dir_path: &Path,
+) -> Result<()> {
+    // If state.json is back, it can only have been recreated by a new `start`,
+    // whose executive now owns the state and any services — leave both alone.
+    // That is a handoff rather than a failure.
+    if state_json_path.exists() {
+        info!(
+            reason = "state.json recreated by a new activation",
+            "exiting without cleanup"
+        );
+        return Ok(());
+    }
+
+    // Acquiring the lock recreates the state dir when an external `rm -rf` took
+    // it, so removing it here is what keeps this from leaving a directory and a
+    // stale state.lock behind.
+    shut_down_and_remove_state(process_compose_bin, socket_path, activation_state_dir_path)
+        .context("failed to clean up after removed activation state")?;
+
+    bail!("activation state was removed while the executive was running")
+}
+
+/// Shutdown `process-compose` if running and remove the activation state
+/// directory.
+fn shut_down_and_remove_state(
     process_compose_bin: &Path,
     socket_path: impl AsRef<Path>,
     activation_state_dir_path: impl AsRef<Path>,
-) -> Result<bool> {
-    info!("running cleanup");
-
-    let (activations_json, _hold_the_lock) = locked_activations;
-
-    if !activations_json.attached_pids_is_empty() {
-        warn!("cleanup called with PIDs still attached, skipping");
-        return Ok(false);
-    }
+) -> Result<()> {
     let socket_path = socket_path.as_ref();
     if socket_path.exists() {
         if let Err(err) = process_compose_down(process_compose_bin, socket_path) {
@@ -525,6 +582,29 @@ fn cleanup_all(
     fs::rename(activation_state_dir_path, &cleanup_path)
         .context("couldn't rename activations dir for cleanup")?;
     fs::remove_dir_all(&cleanup_path).context("couldn't remove activations dir")?;
+
+    Ok(())
+}
+
+/// Shutdown `process-compose` if running and remove all activation state.
+/// To be called when there are no longer any PIDs attached.
+/// Returns `true` if cleanup ran, `false` if PIDs were found and cleanup was skipped.
+fn cleanup_all(
+    locked_activations: LockedActivationState,
+    process_compose_bin: &Path,
+    socket_path: impl AsRef<Path>,
+    activation_state_dir_path: impl AsRef<Path>,
+) -> Result<bool> {
+    info!("running cleanup");
+
+    let (activations_json, _hold_the_lock) = locked_activations;
+
+    if !activations_json.attached_pids_is_empty() {
+        warn!("cleanup called with PIDs still attached, skipping");
+        return Ok(false);
+    }
+
+    shut_down_and_remove_state(process_compose_bin, socket_path, activation_state_dir_path)?;
 
     info!("finished cleanup");
 
