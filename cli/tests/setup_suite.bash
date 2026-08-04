@@ -189,6 +189,12 @@ flox_cli_vars_setup() {
   # isolated by FLOX_CONFIG_DIR), so e.g. auth logout / invalid-token migration
   # cannot read or clobber the real hub.flox.dev credential.
   export _FLOX_DISABLE_KEYRING='true'
+  # All tests run "logged in" by default, with the same valid dummy JWT that
+  # floxhub_setup() sets ({ "https://flox.dev/handle": "test", "exp": 9999999999 }).
+  # This keeps the suite quiet under the startup "not logged in" reminder and
+  # stops a developer's real FLOX_FLOXHUB_TOKEN from leaking into tests.
+  # Tests that exercise logged-out behavior `unset FLOX_FLOXHUB_TOKEN`.
+  export FLOX_FLOXHUB_TOKEN="eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3guZGV2L2hhbmRsZSI6InRlc3QiLCJleHAiOjk5OTk5OTk5OTl9.6-nbzFzQEjEX7dfWZFLE-I_qW2N_-9W2HFzzfsquI74"
 }
 
 # ---------------------------------------------------------------------------- #

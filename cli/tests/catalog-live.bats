@@ -24,6 +24,26 @@ teardown_file() {
 
 # ---------------------------------------------------------------------------- #
 
+setup() {
+  common_test_setup
+  # These tests hit the real preview catalog anonymously; the suite-wide
+  # dummy JWT would be rejected with 401.
+  unset FLOX_FLOXHUB_TOKEN
+  # Isolate each test in its own directory so a failure can never strand a
+  # `.flox` in the shared bats cwd, where later prompt-hook tests would
+  # discover it.
+  export PROJECT_DIR="${BATS_TEST_TMPDIR?}/project-${BATS_TEST_NUMBER?}"
+  mkdir -p "$PROJECT_DIR"
+  pushd "$PROJECT_DIR" > /dev/null || return
+}
+
+teardown() {
+  popd > /dev/null || return
+  rm -rf "${PROJECT_DIR?}"
+  unset PROJECT_DIR
+  common_test_teardown
+}
+
 @test "'flox search' works with catalog server" {
 
   run "$FLOX_BIN" search hello -vvv

@@ -384,7 +384,9 @@ EOF
 
   # Current recommendation for isolating environments:
   # https://github.com/flox/flox/issues/2447
-  run env -i FLOX_DISABLE_METRICS=true "$FLOX_BIN" activate -d "$PROJECT_DIR" -- hello
+  # Thread the suite's dummy token through `env -i` so the run stays "logged
+  # in" and the startup reminder doesn't break the exact output assertion.
+  run env -i FLOX_DISABLE_METRICS=true FLOX_FLOXHUB_TOKEN="$FLOX_FLOXHUB_TOKEN" "$FLOX_BIN" activate -d "$PROJECT_DIR" -- hello
   assert_success
   assert_output "Hello, world!"
 }
@@ -5665,7 +5667,7 @@ success"
   run "$FLOX_BIN" activate -D -- echo "activated"
   assert_success
   assert_output --partial "activated"
-  assert_output --partial "Your FloxHub token has expired."
+  assert_output --partial "You are not logged in to FloxHub. Run 'flox auth login' to log in."
 }
 
 # bats test_tags=activate,activate:idempotent

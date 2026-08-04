@@ -67,6 +67,8 @@ teardown() {
   assert_success
   refute_output --partial "token is invalid"
   refute_output --partial "token has expired"
+  # An opaque token counts as logged in: no startup reminder.
+  refute_output --partial "not logged in to FloxHub"
 }
 
 # bats test_tags=auth:pat:owner
