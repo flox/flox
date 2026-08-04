@@ -56,6 +56,7 @@ use crate::commands::general::update_config_with_query;
 use crate::commands::services::ServicesCommandsError;
 use crate::commands::{
     EnvironmentSelectError,
+    LOCKING_AUTH_REQUIRED_SOON,
     NoEnvironmentError,
     SHELL_COMPLETION_COMMAND,
     SHELL_COMPLETION_FILE,
@@ -229,9 +230,7 @@ impl Activate {
         if concrete_environment.existing_lockfile(&flox)?.is_none()
             && flox.auth_context.is_unauthenticated()
         {
-            message::warning(
-                "Locking environments will require authentication in an upcoming release. See https://flox.dev/docs/install-flox/ for more info.",
-            );
+            message::warning(LOCKING_AUTH_REQUIRED_SOON);
         }
 
         // Both telemetry stacks emit in parallel through the dormant
