@@ -16,7 +16,7 @@ use flox_core::proc_status::pid_is_running;
 /// How long to wait between polling iterations when pidfd is unavailable.
 const POLLING_INTERVAL: Duration = Duration::from_millis(100);
 use nix::libc::{SIGCHLD, SIGINT, SIGQUIT, SIGTERM};
-use notify::{Event, RecommendedWatcher, RecursiveMode, Watcher};
+use notify::{Config, Event, EventKindMask, RecommendedWatcher, RecursiveMode, Watcher};
 use signal_hook::iterator::Signals;
 use time::OffsetDateTime;
 use tracing::{debug, error, trace, warn};
@@ -35,7 +35,12 @@ pub enum ExecutiveEvent {
     StartServices,
     /// state.json was modified - check for new PIDs to monitor
     StateFileChanged,
+    /// state.json no longer exists - the activation state was deleted out
+    /// from under the executive, which should exit
+    StateFileRemoved,
 }
+
+const SANITY_CHECK_INTERVAL: Duration = Duration::from_mins(1);
 
 /// Coordinates PID monitoring across multiple threads.
 ///
@@ -98,7 +103,7 @@ impl EventCoordinator {
             .context("failed to ensure monitoring PIDs")?;
 
         // Watch state.json
-        let file_watcher = Self::start_state_watcher(state_json_path, self.sender.clone())
+        let file_watcher = Self::start_state_watcher(&state_json_path, self.sender.clone())
             .context("failed to start state file watcher")?;
         self._file_watcher = Some(file_watcher);
 
@@ -106,7 +111,28 @@ impl EventCoordinator {
         let signal_handler = Self::spawn_signal_handler(self.sender.clone())?;
         self._signal_handler = Some(signal_handler);
 
+        // Backstop thread to cleanup bad states
+        Self::spawn_sanity_check(&state_json_path, self.sender.clone());
+
         Ok(())
+    }
+
+    /// Periodically check if the executive should still be running
+    ///
+    /// For now this just checks if state.json still exists
+    fn spawn_sanity_check(state_json_path: impl AsRef<Path>, sender: Sender<ExecutiveEvent>) {
+        let state_json_path = state_json_path.as_ref().to_path_buf();
+        thread::spawn(move || {
+            loop {
+                // beware of logging in this loop since repeated logs can accumulate
+                thread::sleep(SANITY_CHECK_INTERVAL);
+                if !state_json_path.exists()
+                    && sender.send(ExecutiveEvent::StateFileRemoved).is_err()
+                {
+                    break;
+                }
+            }
+        });
     }
 
     /// Monitor PIDs not already monitored.
@@ -170,9 +196,22 @@ impl EventCoordinator {
             .context("state.json path has no filename")?
             .to_owned();
 
-        let mut watcher =
-            notify::recommended_watcher(move |res: notify::Result<notify::Event>| match res {
+        // We care about create, remove, and modify
+        let config = Config::default().with_event_kinds(EventKindMask::CORE);
+        let mut watcher = RecommendedWatcher::new(
+            move |res: notify::Result<notify::Event>| match res {
                 Ok(event) => {
+                    // Claude claims filtering on different kinds of events to
+                    // determine what's a removal will be too brittle, so just
+                    // check if state.json exists
+                    if !owned_state_json_path.exists() {
+                        debug!(?event, "state.json is gone, sending removal event to main loop");
+                        if sender.send(ExecutiveEvent::StateFileRemoved).is_err() {
+                            error!("failed to send StateFileRemoved event, channel closed");
+                        }
+                        return;
+                    }
+
                     if !should_emit_state_changed(&event, &owned_state_json_path, &filename) {
                         return;
                     }
@@ -192,8 +231,10 @@ impl EventCoordinator {
                 Err(err) => {
                     error!(%err, "file watcher error");
                 },
-            })
-            .context("failed to create file watcher")?;
+            },
+            config,
+        )
+        .context("failed to create file watcher")?;
 
         watcher
             .watch(&parent_dir, RecursiveMode::NonRecursive)
@@ -456,6 +497,55 @@ mod tests {
             .expect("should receive event within timeout");
 
         assert_eq!(event, ExecutiveEvent::StateFileChanged);
+    }
+
+    #[test]
+    fn state_watcher_detects_ancestor_dir_removal() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let watched_dir = temp_dir.path().join("activation");
+        fs::create_dir(&watched_dir).unwrap();
+        let state_json_path = watched_dir.join("state.json");
+        fs::write(&state_json_path, "{}").unwrap();
+
+        let (sender, receiver) = mpsc::channel();
+        let _watcher = EventCoordinator::start_state_watcher(&state_json_path, sender)
+            .expect("failed to start state watcher");
+
+        // Prove the watcher is live first, so that a missing event below
+        // cannot be explained by stream startup latency.
+        write_atomically(&state_json_path, "{\"modified\": true}").unwrap();
+        assert_eq!(
+            receiver.recv_timeout(Duration::from_secs(2)),
+            Ok(ExecutiveEvent::StateFileChanged)
+        );
+        // Drain coalesced trailing events from the write before deleting.
+        while receiver.recv_timeout(Duration::from_millis(500)).is_ok() {}
+
+        fs::remove_dir_all(temp_dir.path()).unwrap();
+
+        assert_eq!(
+            receiver.recv_timeout(Duration::from_secs(5)),
+            Ok(ExecutiveEvent::StateFileRemoved)
+        );
+    }
+
+    #[test]
+    fn state_watcher_sends_removed_when_state_json_deleted() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let state_json_path = temp_dir.path().join("state.json");
+        fs::write(&state_json_path, "{}").unwrap();
+
+        let (sender, receiver) = mpsc::channel();
+        let _watcher = EventCoordinator::start_state_watcher(&state_json_path, sender)
+            .expect("failed to start state watcher");
+
+        fs::remove_file(&state_json_path).unwrap();
+
+        let event = receiver
+            .recv_timeout(Duration::from_secs(2))
+            .expect("should receive event within timeout");
+
+        assert_eq!(event, ExecutiveEvent::StateFileRemoved);
     }
 
     mod should_emit_state_changed {
