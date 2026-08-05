@@ -125,6 +125,26 @@ pub struct ActivateCtx {
     /// Controls how the fish shell hook responds to directory changes.
     #[serde(default)]
     pub auto_activate_fish_mode: Option<AutoActivateFishMode>,
+
+    /// Whether this activation announces itself by naming the environment on
+    /// stderr once it is in effect.
+    ///
+    /// Resolved by the `flox` crate from `config.activation_notifications` and
+    /// the invocation type, because only the caller knows both. Defaults to
+    /// `false` so a context file written by an older Flox stays quiet rather
+    /// than gaining output the writer never asked for.
+    #[serde(default)]
+    pub announce_activation: bool,
+
+    /// Whether the auto-activation prompt hook initiated this activation
+    /// rather than the user typing `flox activate`.
+    ///
+    /// Distinguishes the two callers that both arrive as
+    /// [`InvocationType::InPlace`], which is otherwise ambiguous: the hook's
+    /// `eval "$(flox activate --dir ...)"` and a hand-written in-place
+    /// activation in a shell rc file.
+    #[serde(default)]
+    pub auto_activated: bool,
 }
 
 /// Fish shell hook mode, matching direnv's `direnv_fish_mode` values.

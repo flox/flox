@@ -70,6 +70,27 @@ flox config --set 'trusted_environments."owner/name"' trust
 
 # SUPPORTED CONFIGURATION OPTIONS
 
+`activation_notifications`
+:   Print a notification naming the environment when it is activated in the
+    current shell.
+    Subshell activations print the environment and how to leave it:
+    ```console
+    ✔ You are now using the environment 'core'
+    To stop using this environment, run 'flox deactivate'
+    ```
+    In-place activations — including every auto-activation — print the same
+    message without the hint, since they recur on each new shell or each `cd`:
+    ```console
+    ✔ You are now using the environment 'core'
+    ```
+    Apart from subshell activations, which always announce, a notification is
+    printed only when stderr is a terminal, so a human sees the environment
+    named while output collected by CI or a script stays clean.
+    Environments named `default` are never announced, and `-q` suppresses the
+    notification for every mode.
+
+    (default: true)
+
 `auto_activate`
 :   How auto-activation treats environments you have not yet allowed or denied.
     Possible values are `prompt` (default), `allowlist`, and `disabled`.
@@ -126,12 +147,23 @@ flox config --set 'trusted_environments."owner/name"' trust
 
 `hide_default_prompt`
 :   Hide environments named 'default' from the shell prompt,
-    and don't add environments named 'default' to `$FLOX_PROMPT_ENVIRONMENTS` (default: true).
+    and don't add environments named 'default' to `$FLOX_PROMPT_ENVIRONMENTS` (default: false).
 
 `installer_channel`
 :   Release channel to use when checking for updates to Flox.
     Valid values are `stable`, `nightly`, or `qa`.
     (default: `stable`)
+
+`prompt_detail`
+:   How much detail to show for each environment in the shell prompt.
+    Valid values are `name` or `full` (default: `name`).
+
+    * `name`: the environment's name only, e.g. `flox [core]`
+    * `full`: the owner and locality as well, e.g. `flox [wandb/core (local)]`
+
+    To change the `flox` label itself, set `$FLOX_PROMPT`.
+    See the *ENVIRONMENT VARIABLES* section of
+    [`flox-activate(1)`](./flox-activate.md).
 
 `search_limit`
 :   How many items `flox search` should show by default.

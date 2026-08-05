@@ -235,6 +235,12 @@ options.
     e.g. `owner1/foo owner2/bar local_env`.
     If `hide_default_prompt` is set to `true`, environments named `default` are
     excluded.
+    How much detail each entry carries is governed by `prompt_detail`; see
+    [`flox-config(1)`](./flox-config.md).
+    This variable is exported, so it is readable even by activations that do
+    not modify the prompt themselves — including `flox activate -- <CMD>`,
+    which is how direnv's `use flox` activates. A shell that manages its own
+    prompt can render an indicator from it directly.
 
 `$FLOX_ENV_CACHE`
 :   `activate` sets this variable to a directory that can be used by an
@@ -282,6 +288,19 @@ options.
          the `$FLOX_SHELL` variable,
          and if it cannot detect its parent shell type then will
          produce a script with syntax determined by `$SHELL`.
+
+`$FLOX_PROMPT`
+:   The label Flox puts at the front of the shell prompt, `flox` by default.
+    Set it to rebrand or shorten the indicator, e.g. `f` to reclaim three
+    columns, or the name of an internal platform that an environment belongs
+    to.
+    Because an environment's `[vars]` are applied before the prompt is set,
+    an environment can carry its own label in its manifest:
+
+    ```toml
+    [vars]
+    FLOX_PROMPT = "acme"
+    ```
 
 `$FLOX_PROMPT_COLOR_{1,2}`
 :   Flox adds text to the beginning of the shell prompt to indicate which

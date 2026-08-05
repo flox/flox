@@ -124,14 +124,18 @@ fn main() -> ExitCode {
     let _metrics_guard = Hub::global().try_guard().ok();
     let _v2_events_guard = EventsHub::global().try_guard().ok();
 
-    // Pass down the verbosity level to all sub-processes
+    // Pass down the verbosity level to all sub-processes. Subsystems have no
+    // quiet mode, so `-q` is clamped to 0 rather than passed through as -1:
+    // the interpreter scripts treat any nonzero tracelevel as `set -x`, which
+    // would turn a request for quiet into a full execution trace.
+    let subsystem_verbosity = verbosity.to_i32().max(0);
     unsafe {
         std::env::set_var(
             "_FLOX_SUBSYSTEM_VERBOSITY",
-            format!("{}", verbosity.to_i32()),
+            format!("{subsystem_verbosity}"),
         );
     }
-    debug!("set _FLOX_SUBSYSTEM_VERBOSITY={}", verbosity.to_i32());
+    debug!("set _FLOX_SUBSYSTEM_VERBOSITY={subsystem_verbosity}");
 
     // Run the argument parser
     //

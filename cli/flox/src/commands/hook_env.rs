@@ -981,23 +981,27 @@ fn write_activate_command(shell: Shell, project_dir: &Path, writer: &mut impl Wr
     let escaped_bin = shell_escape::escape(Cow::Borrowed(&*flox_bin));
     let dir = project_dir.to_string_lossy().to_string();
     let escaped_dir = shell_escape::escape(Cow::Borrowed(&*dir));
+    // `--auto-activated` is what distinguishes this call from a hand-written
+    // in-place activation: both arrive as `InvocationType::InPlace`, and
+    // without it neither the telemetry stream nor the activation message can
+    // tell the prompt hook's work apart from a shell rc file's.
     match shell {
         Shell::Bash | Shell::Zsh => {
             writeln!(
                 writer,
-                r#"eval "$({escaped_bin} activate --dir {escaped_dir})";"#
+                r#"eval "$({escaped_bin} activate --auto-activated --dir {escaped_dir})";"#
             )?;
         },
         Shell::Fish => {
             writeln!(
                 writer,
-                "{escaped_bin} activate --dir {escaped_dir} | source;"
+                "{escaped_bin} activate --auto-activated --dir {escaped_dir} | source;"
             )?;
         },
         Shell::Tcsh => {
             writeln!(
                 writer,
-                r#"eval "`{escaped_bin} activate --dir {escaped_dir}`";"#
+                r#"eval "`{escaped_bin} activate --auto-activated --dir {escaped_dir}`";"#
             )?;
         },
     }
