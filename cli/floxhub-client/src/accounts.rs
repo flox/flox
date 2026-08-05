@@ -95,6 +95,33 @@ mod tests {
         assert_eq!(identity, UserIdentity {
             handle: "testuser".to_string(),
             expires_at: Some("2027-01-01T00:00:00Z".parse().unwrap()),
+            service_account_access_level: None,
+        });
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn me_parses_service_account_access_level() {
+        let server = MockServer::start();
+        let mock = server.mock(|when, then| {
+            when.method(httpmock::Method::GET)
+                .path("/accounts/api/v1/accounts/me")
+                .header("authorization", "bearer flox_sat_secret");
+            then.status(200).json_body(serde_json::json!({
+                "user_id": "service-id",
+                "handle": "test-org",
+                "expires_at": null,
+                "service_account_access_level": "read_write",
+            }));
+        });
+
+        let client = AccountsApiClient::new_with_client(&server.base_url(), reqwest::Client::new());
+        let identity = client.me("flox_sat_secret").await.unwrap();
+
+        mock.assert();
+        assert_eq!(identity, UserIdentity {
+            handle: "test-org".to_string(),
+            expires_at: None,
+            service_account_access_level: Some(crate::auth::ServiceAccountAccessLevel::ReadWrite),
         });
     }
 }

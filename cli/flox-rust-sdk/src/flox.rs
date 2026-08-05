@@ -118,6 +118,7 @@ impl Flox {
             AuthContext::Auth0(Some(token)) => Ok(Some(UserIdentity {
                 handle: token.handle().to_string(),
                 expires_at: Some(token.expires_at()),
+                service_account_access_level: None,
             })),
             AuthContext::Auth0(None) => Err(AuthFailure::NotLoggedIn),
             AuthContext::AccessToken(token) => {
@@ -130,6 +131,7 @@ impl Flox {
             AuthContext::Kerberos(Some(material)) => Ok(Some(UserIdentity {
                 handle: material.principal.clone(),
                 expires_at: None,
+                service_account_access_level: None,
             })),
             AuthContext::Kerberos(None) => Err(AuthFailure::NoKerberosTicket),
         }
@@ -345,6 +347,7 @@ pub mod tests {
             Some(UserIdentity {
                 handle: "test".to_string(),
                 expires_at: Some(expires_at),
+                service_account_access_level: None,
             })
         );
     }

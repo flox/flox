@@ -1,0 +1,12 @@
+when:
+  method: GET
+  path: /accounts/api/v1/accounts/me
+  header:
+  - name: authorization
+    value: bearer flox_sat_read-write-secret
+then:
+  status: 200
+  header:
+  - name: content-type
+    value: application/json
+  body: '{"user_id":"service|read-write","handle":"owner","expires_at":null,"service_account_access_level":"read_write"}'

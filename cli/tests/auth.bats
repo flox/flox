@@ -124,6 +124,40 @@ EXPIRED_TOKEN="eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3guZGV2L2hh
   assert_output --partial "The provided token is not a valid FloxHub token."
 }
 
+# bats test_tags=auth,auth:status
+@test "auth status --json reports JWT identity and expiry" {
+  export FLOX_FLOXHUB_TOKEN="$DUMMY_TOKEN"
+
+  run "$FLOX_BIN" auth status --json
+  assert_success
+  assert_output --partial "\"status\": \"authenticated\""
+  assert_output --partial "\"handle\": \"test\""
+  assert_output --partial "\"credential_type\": \"auth0\""
+  assert_output --partial "\"expires_at\": \"2286-11-20T17:46:39Z\""
+  assert_output --partial "\"service_account_access_level\": null"
+  refute_output --partial "$DUMMY_TOKEN"
+}
+
+# bats test_tags=auth,auth:status
+@test "auth status --json distinguishes unauthenticated credentials" {
+  run "$FLOX_BIN" auth status --json
+  assert_failure
+  assert_output --partial "\"status\": \"unauthenticated\""
+  assert_output --partial "\"credential_type\": null"
+}
+
+# bats test_tags=auth,auth:status
+@test "auth status --json distinguishes an expired JWT" {
+  export FLOX_FLOXHUB_TOKEN="$EXPIRED_TOKEN"
+
+  run "$FLOX_BIN" auth status --json
+  assert_failure
+  assert_output --partial "\"status\": \"expired_or_revoked\""
+  assert_output --partial "\"handle\": \"test\""
+  assert_output --partial "\"credential_type\": \"auth0\""
+  refute_output --partial "$EXPIRED_TOKEN"
+}
+
 # bats test_tags=auth,auth:login:token-file
 @test "auth login --token-file fails for an expired token" {
   echo "$EXPIRED_TOKEN" > "$PROJECT_DIR/token"
