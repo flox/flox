@@ -39,6 +39,7 @@ use crate::utils::events::duration_to_ms;
 use crate::utils::init::init_telemetry_uuid;
 use crate::utils::metrics::{Hub, read_metrics_uuid};
 
+mod beta;
 mod commands;
 mod utils;
 
@@ -143,6 +144,29 @@ fn main() -> ExitCode {
     let args = commands::flox_cli().run_inner(Args::current_args());
 
     if let Some(parse_err) = args.as_ref().err() {
+        // `flox <name>` may be an installed beta extension rather than a typo.
+        // Both non-completion arms need this, so it runs once ahead of the
+        // match: `Stderr` is the ordinary unknown-subcommand failure, and
+        // `flox <name> --help` lands in `Stdout` rather than `Stderr` because
+        // bpaf treats `--help` as a global short-circuit that fires before it
+        // decides `<name>` is unknown. Dispatching first shows an installed
+        // extension's own `--help`; the reserved-name guard and a lookup miss
+        // both return `None` and fall through to the unchanged behavior below.
+        //
+        // Gated here rather than inside the beta module, mirroring how the
+        // `Commands::Beta` arm gates the beta subcommands before dispatching.
+        // `Flox` is not initialized at this point, so read the flag from the
+        // parsed config the same way that arm derives `Flox::features`. The
+        // config also folds in `FLOX_FEATURES_BETA`, so the env var enables
+        // dispatch too.
+        #[allow(deprecated)]
+        let beta_enabled = config.features.unwrap_or_default().beta;
+        if beta_enabled
+            && !matches!(parse_err, bpaf::ParseFailure::Completion(_))
+            && let Some(exit) = beta::extensions::try_dispatch_external(&config.flox.data_dir)
+        {
+            return exit;
+        }
         match parse_err {
             bpaf::ParseFailure::Stdout(m, _) => {
                 print!("{m:80}");
