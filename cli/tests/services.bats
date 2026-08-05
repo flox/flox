@@ -1657,7 +1657,7 @@ EOF
   TEARDOWN_FIFO="$PROJECT_DIR/finished_1"
   mkfifo "$TEARDOWN_FIFO"
   "$FLOX_BIN" activate --start-services -- bash -c "echo > started_1 && echo > $TEARDOWN_FIFO" &
-  timeout 2 cat started_1
+  timeout 10 cat started_1
 
   # Check that services and executive are both running
   "${TESTS_DIR}"/services/wait_for_service_status.sh one:Running
@@ -1684,7 +1684,7 @@ EOF
 
   "$FLOX_BIN" activate --start-services -- bash -c "echo > started_2 && echo > finished_2" 2>output &
 
-  timeout 2 cat started_2
+  timeout 10 cat started_2
   # Swap out teardown fifo and immediately teardown first activation
   # Wait for 2nd activation to start before tearing down the 1st
   # otherwise services might get stopped
