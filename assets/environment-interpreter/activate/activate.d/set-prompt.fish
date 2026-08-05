@@ -15,7 +15,7 @@ if set -q FLOX_PROMPT_ENVIRONMENTS && test -n "$FLOX_PROMPT_ENVIRONMENTS"
     # script may be sourced inside a function (the auto-activate hook), where
     # an unscoped set on a new variable would vanish when the function returns.
     if set -q NO_COLOR
-        set -g _flox "flox [$FLOX_PROMPT_ENVIRONMENTS]"
+        set -g _flox "$FLOX_PROMPT [$FLOX_PROMPT_ENVIRONMENTS]"
     else
         set colorPrompt1 \e\[38\;5\;$FLOX_PROMPT_COLOR_1""m
         set colorPrompt2 \e\[38\;5\;$FLOX_PROMPT_COLOR_2""m

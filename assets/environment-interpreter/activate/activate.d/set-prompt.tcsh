@@ -29,7 +29,7 @@ if ( $?prompt && $_flox_have_envs ) then
     set _floxPrompt2 = "$colorPrompt2""[$FLOX_PROMPT_ENVIRONMENTS]"
 
     if $?NO_COLOR then
-        set _flox = "flox [$FLOX_PROMPT_ENVIRONMENTS]"
+        set _flox = "$FLOX_PROMPT [$FLOX_PROMPT_ENVIRONMENTS]"
     else
         set _flox = "$colorBold$_floxPrompt1 $_floxPrompt2$colorReset"
     endif
