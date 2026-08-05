@@ -17,6 +17,7 @@ use flox_core::proc_status::pid_is_running;
 const POLLING_INTERVAL: Duration = Duration::from_millis(100);
 use nix::libc::{SIGCHLD, SIGINT, SIGQUIT, SIGTERM};
 use notify::{Event, RecommendedWatcher, RecursiveMode, Watcher};
+use sentry::integrations::anyhow::capture_anyhow;
 use signal_hook::iterator::Signals;
 use time::OffsetDateTime;
 use tracing::{debug, error, trace, warn};
@@ -317,8 +318,9 @@ fn should_emit_state_changed(event: &Event, state_json_path: &Path, filename: &O
 /// If expiration is set, the thread sleeps until the expiration time before
 /// starting to wait for the process to exit.
 ///
-/// On Linux < 5.3 where pidfd_open is unavailable (returns ENOSYS), falls back
-/// to polling the process status every 100ms.
+/// Falls back to polling the process status every 100ms when a wait handle
+/// can't be used: pidfd is unavailable (Linux < 5.3, ENOSYS), or opening one
+/// failed for a process that is still running.
 fn spawn_pid_watcher(
     pid: i32,
     expiration: Option<OffsetDateTime>,
@@ -348,6 +350,18 @@ fn spawn_pid_watcher(
                 warn!(pid, "pidfd unavailable (ENOSYS), using polling fallback");
                 None
             },
+            // If we say the PID has exited when it hasn't, we could create a
+            // loop by continually re-monitoring the same PID
+            Err(err) if pid_is_running(pid) => {
+                warn!(pid, %err, errno = ?err.raw_os_error(), "failed to open wait handle for a running process, falling back to polling");
+                // Opening a handle allocates a descriptor, which Claude says
+                // could fail with EMFILE, ENFILE, or EPERM
+                // Report to Sentry cause I'm curious if we're actually hitting this in the wild
+                capture_anyhow(&anyhow!(
+                    "failed to open wait handle for a running process: {err}"
+                ));
+                None
+            },
             Err(err) => {
                 // Process likely already dead (ESRCH or similar)
                 debug!(pid, %err, "failed to open wait handle, process likely already exited");
@@ -373,6 +387,15 @@ fn spawn_pid_watcher(
                         trace!(pid, "wait interrupted by signal, retrying");
                         continue;
                     },
+                    // If we say the PID has exited when it hasn't, we could create a
+                    // loop by continually re-monitoring the same PID
+                    Err(err) if pid_is_running(pid) => {
+                        warn!(pid, %err, errno = ?err.raw_os_error(), "wait failed for a running process, falling back to polling");
+                        // Report to Sentry cause I'm curious if we're actually hitting this in the wild
+                        capture_anyhow(&anyhow!("wait failed for a running process: {err}"));
+                        poll_until_exit(pid, &sender);
+                        return;
+                    },
                     Err(err) => {
                         warn!(pid, %err, "unexpected error waiting for process");
                         // Ignore error since we're just going to return
@@ -382,21 +405,22 @@ fn spawn_pid_watcher(
                 }
             }
         } else {
-            debug!(
-                "polling for PID {} to exit on system without blocking support",
-                pid
-            );
-            loop {
-                if !pid_is_running(pid) {
-                    debug!(pid, "process exited (polling)");
-                    // Ignore error since we're just going to return
-                    let _ = sender.send(ExecutiveEvent::ProcessExited { pid });
-                    return;
-                }
-                thread::sleep(POLLING_INTERVAL);
-            }
+            debug!("polling for PID {} to exit", pid);
+            poll_until_exit(pid, &sender);
         }
     })
+}
+
+fn poll_until_exit(pid: i32, sender: &Sender<ExecutiveEvent>) {
+    loop {
+        if !pid_is_running(pid) {
+            debug!(pid, "process exited (polling)");
+            // Ignore error since we're just going to return
+            let _ = sender.send(ExecutiveEvent::ProcessExited { pid });
+            return;
+        }
+        thread::sleep(POLLING_INTERVAL);
+    }
 }
 
 #[cfg(test)]
@@ -432,6 +456,27 @@ mod tests {
             .expect("should receive event within timeout");
 
         assert_eq!(event, ExecutiveEvent::ProcessExited { pid });
+    }
+
+    /// Polling reports the exit once the process is actually gone. This is the
+    /// fallback every path takes when a wait handle is unavailable.
+    #[test]
+    fn poll_until_exit_sends_process_exited_event() {
+        let (sender, receiver) = mpsc::channel();
+
+        let proc = start_process();
+        let pid = proc.id() as i32;
+
+        let poller = thread::spawn(move || poll_until_exit(pid, &sender));
+
+        stop_process(proc);
+
+        let event = receiver
+            .recv_timeout(Duration::from_secs(2))
+            .expect("should receive event within timeout");
+
+        assert_eq!(event, ExecutiveEvent::ProcessExited { pid });
+        poller.join().unwrap();
     }
 
     /// State watcher sends a StateFileChanged event when state.json is modified.
