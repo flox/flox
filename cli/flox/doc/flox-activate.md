@@ -276,9 +276,9 @@ options.
 
 `$FLOX_PROMPT`
 :   The label Flox puts at the front of the shell prompt, `flox` by default.
-    Set it to rebrand or shorten the indicator, e.g. `f` to reclaim three
-    columns, or the name of an internal platform that an environment belongs
-    to.
+    Set it to shorten the indicator, e.g. `f` to reclaim three columns,
+    or to rebrand it, for example with the name of an internal developer
+    platform built on Flox.
     Because an environment's `[vars]` are applied before the prompt is set,
     an environment can carry its own label in its manifest:
 
