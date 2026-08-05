@@ -9,7 +9,7 @@ use flox_core::hook_actions::{PROMPT_HOOK_VERSION_ENV, prompt_hook_marker_value}
 use indoc::{formatdoc, indoc};
 use shell_gen::{GenerateShell, Shell, set_unexported_unexpanded, source_file};
 
-use crate::attach_diff::{todo_drop_set_exported_unexpanded, todo_drop_unset};
+use crate::attach_diff::{FLOX_ADD_SBIN_VAR, todo_drop_set_exported_unexpanded, todo_drop_unset};
 use crate::gen_rc::{Action, RM, invocation_types_update_stmt};
 
 /// Arguments for generating zsh startup commands
@@ -17,6 +17,7 @@ use crate::gen_rc::{Action, RM, invocation_types_update_stmt};
 pub struct ZshStartupArgs {
     pub flox_activate_tracelevel: u32,
     pub activate_d: PathBuf,
+    pub add_sbin: bool,
     pub invocation_type: InvocationType,
     /// The activated environment's pointer as serialized in
     /// `_FLOX_ACTIVE_ENVIRONMENTS`, used to key its `_FLOX_INVOCATION_TYPES`
@@ -49,6 +50,18 @@ pub fn generate_zsh_profile_commands(
             stmts.push(set_unexported_unexpanded(
                 "_activate_d",
                 args.activate_d.display().to_string(),
+            ));
+            // The per-activation sbin opt-in, read by the sourced
+            // activate.d/zsh (bash/fish/tcsh instead bake `--add-sbin` into
+            // their generated set-env-dirs line). Set here rather than
+            // relying on an ambient value: an in-place activation has no
+            // spawned shell to receive it, and a value inherited from an
+            // outer activation must not leak into this one. It is a
+            // transient, non-exported shell variable — activate.d/zsh unsets
+            // it after use so it never reaches the activated environment.
+            stmts.push(set_unexported_unexpanded(
+                FLOX_ADD_SBIN_VAR,
+                args.add_sbin.to_string(),
             ));
         },
         Action::Deactivate(_) => {
@@ -383,6 +396,7 @@ mod tests {
         expect![[r#"
             typeset -g _flox_activate_tracelevel=3;
             typeset -g _activate_d=/interpreter/activate.d;
+            typeset -g _FLOX_ADD_SBIN=false;
             export ADDED_VAR=ADDED_VALUE;
             export FLOX_ACTIVATE_START_SERVICES=false;
             export FLOX_ENV=/flox_env;
@@ -422,6 +436,7 @@ mod tests {
         expect![[r#"
             typeset -g _flox_activate_tracelevel=3;
             typeset -g _activate_d=/interpreter/activate.d;
+            typeset -g _FLOX_ADD_SBIN=false;
             export FLOX_PROMPT_COLOR_1=1;
             export FLOX_PROMPT_COLOR_2=2;
             export FLOX_PROMPT_ENVIRONMENTS=prompt_envs;
@@ -478,6 +493,7 @@ mod tests {
             unset PATH;
             unset QUOTED_VAR;
             unset _FLOX_ACTIVE_ENVIRONMENTS;
+            unset _FLOX_ENV_DIRS_ADD_SBIN;
             unset _FLOX_HOOK_DIFF;
             unset _flox_activations;
             export MODIFIED_VAR=MODIFIED_ORIGINAL;

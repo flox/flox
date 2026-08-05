@@ -16,6 +16,17 @@ pub struct SetEnvDirsArgs {
         help = "The contents of the FLOX_ENV_DIRS variable (which may be unset or empty)."
     )]
     pub env_dirs: String,
+    #[arg(
+        long,
+        default_value = "",
+        help = "The contents of the _FLOX_ENV_DIRS_ADD_SBIN variable (which may be unset or empty)."
+    )]
+    pub sbin_dirs: String,
+    #[arg(
+        long,
+        help = "Whether to add the environment's sbin directory to PATH."
+    )]
+    pub add_sbin: bool,
     #[arg(short, long, help = "Which shell syntax to emit")]
     pub shell: String,
 }
@@ -33,25 +44,32 @@ impl SetEnvDirsArgs {
             self.env_dirs
         );
         let new_env_dirs = fix_env_dirs_var(&self.flox_env, &self.env_dirs);
+        let new_sbin_dirs = fix_sbin_dirs_var(&self.flox_env, self.add_sbin, &self.sbin_dirs);
         let sourceable_commands = match self.shell.as_ref() {
-            "bash" => {
-                format!("export FLOX_ENV_DIRS=\"{new_env_dirs}\";")
-            },
-            "zsh" => {
-                format!("export FLOX_ENV_DIRS=\"{new_env_dirs}\";")
+            "bash" | "zsh" => {
+                format!(
+                    "export FLOX_ENV_DIRS=\"{new_env_dirs}\";\nexport _FLOX_ENV_DIRS_ADD_SBIN=\"{new_sbin_dirs}\";"
+                )
             },
             "fish" => {
-                format!("set -gx FLOX_ENV_DIRS \"{new_env_dirs}\";")
+                format!(
+                    "set -gx FLOX_ENV_DIRS \"{new_env_dirs}\";\nset -gx _FLOX_ENV_DIRS_ADD_SBIN \"{new_sbin_dirs}\";"
+                )
             },
             "tcsh" => {
-                format!("setenv FLOX_ENV_DIRS \"{new_env_dirs}\";")
+                format!(
+                    "setenv FLOX_ENV_DIRS \"{new_env_dirs}\";\nsetenv _FLOX_ENV_DIRS_ADD_SBIN \"{new_sbin_dirs}\";"
+                )
             },
             other => {
                 bail!("invalid shell: {other}")
             },
         };
         output.write_all(sourceable_commands.as_bytes())?;
-        debug!("Set FLOX_ENV_DIRS, FLOX_ENV_DIRS={}", new_env_dirs);
+        debug!(
+            "Set FLOX_ENV_DIRS, FLOX_ENV_DIRS={}, _FLOX_ENV_DIRS_ADD_SBIN={}",
+            new_env_dirs, new_sbin_dirs
+        );
         Ok(())
     }
 }
@@ -60,6 +78,34 @@ pub fn fix_env_dirs_var(flox_env: impl AsRef<Path>, env_dirs: impl AsRef<str>) -
     let existing_dirs = separate_dir_list(env_dirs.as_ref());
     let new_dirs = populate_env_dirs(flox_env.as_ref(), &existing_dirs);
     join_dir_list(new_dirs)
+}
+
+/// Calculate the new _FLOX_ENV_DIRS_ADD_SBIN value: the subset of
+/// FLOX_ENV_DIRS whose environments want their `sbin` directory on PATH.
+/// If `add_sbin` is set, the environment is prepended to the list (unless
+/// already present); otherwise the list is passed through unchanged.
+///
+/// An empty list is represented by the "empty" sentinel (understood by
+/// `separate_dir_list`) rather than an empty string: tcsh versions before
+/// 6.23 drop an empty `$var:q` argument from the command line entirely,
+/// which would make `--sbin-dirs` consume the next argument as its value.
+pub fn fix_sbin_dirs_var(
+    flox_env: impl AsRef<Path>,
+    add_sbin: bool,
+    sbin_dirs: impl AsRef<str>,
+) -> String {
+    let existing_dirs = separate_dir_list(sbin_dirs.as_ref());
+    let new_dirs = if add_sbin {
+        populate_env_dirs(flox_env.as_ref(), &existing_dirs)
+    } else {
+        existing_dirs
+    };
+    let joined = join_dir_list(new_dirs);
+    if joined.is_empty() {
+        "empty".to_string()
+    } else {
+        joined
+    }
 }
 
 /// Adds a new environment to the list of active env dirs if its not already present.
@@ -100,12 +146,33 @@ mod test {
         let args = SetEnvDirsArgs {
             flox_env: PathBuf::from(flox_env),
             env_dirs: env_dirs.clone(),
+            sbin_dirs: String::new(),
+            add_sbin: false,
             shell: "bash".to_string(),
         };
         let mut buf = Vec::new();
         args.handle_inner(&mut buf).unwrap();
         let buf = String::from_utf8_lossy(&buf);
-        let expected = format!("export FLOX_ENV_DIRS=\"{flox_env}:{env_dirs}\";");
+        let expected = format!(
+            "export FLOX_ENV_DIRS=\"{flox_env}:{env_dirs}\";\nexport _FLOX_ENV_DIRS_ADD_SBIN=\"empty\";"
+        );
+        assert_eq!(buf, expected);
+    }
+
+    #[test]
+    fn prepends_to_sbin_dirs_when_add_sbin() {
+        let args = SetEnvDirsArgs {
+            flox_env: PathBuf::from("/foo"),
+            env_dirs: "/bar".to_string(),
+            sbin_dirs: "/bar".to_string(),
+            add_sbin: true,
+            shell: "bash".to_string(),
+        };
+        let mut buf = Vec::new();
+        args.handle_inner(&mut buf).unwrap();
+        let buf = String::from_utf8_lossy(&buf);
+        let expected =
+            "export FLOX_ENV_DIRS=\"/foo:/bar\";\nexport _FLOX_ENV_DIRS_ADD_SBIN=\"/foo:/bar\";";
         assert_eq!(buf, expected);
     }
 
@@ -119,6 +186,8 @@ mod test {
             SetEnvDirsArgs {
                 flox_env: PathBuf::from(flox_env),
                 env_dirs: env_dirs.to_string(),
+                sbin_dirs: String::new(),
+                add_sbin: true,
                 shell: shell.to_string(),
             }
             .handle_inner(&mut buf)
@@ -135,5 +204,35 @@ mod test {
         let env_dirs = vec![];
         let new_dirs = populate_env_dirs(&flox_env, &env_dirs);
         assert_eq!(new_dirs, vec![flox_env]);
+    }
+
+    #[test]
+    fn sbin_dirs_prepended_when_enabled() {
+        let fixed = fix_sbin_dirs_var("/foo", true, "/bar:/baz");
+        assert_eq!(fixed, "/foo:/bar:/baz");
+    }
+
+    #[test]
+    fn sbin_dirs_not_duplicated() {
+        let fixed = fix_sbin_dirs_var("/foo", true, "/foo:/bar");
+        assert_eq!(fixed, "/foo:/bar");
+    }
+
+    #[test]
+    fn sbin_dirs_unchanged_when_disabled() {
+        let fixed = fix_sbin_dirs_var("/foo", false, "/bar:/baz");
+        assert_eq!(fixed, "/bar:/baz");
+    }
+
+    #[test]
+    fn sbin_dirs_sentinel_when_disabled_and_empty() {
+        let fixed = fix_sbin_dirs_var("/foo", false, "");
+        assert_eq!(fixed, "empty");
+    }
+
+    #[test]
+    fn sbin_dirs_handles_empty_sentinel() {
+        let fixed = fix_sbin_dirs_var("/foo", true, "empty");
+        assert_eq!(fixed, "/foo");
     }
 }
