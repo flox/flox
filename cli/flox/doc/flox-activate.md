@@ -222,10 +222,10 @@ options.
     e.g. `foo bar local_env`.
     If `hide_default_prompt` is set to `true`, environments named `default` are
     excluded.
-    This variable is exported, so it is readable even by activations that do
-    not modify the prompt themselves — including `flox activate -- <CMD>`,
-    which is how direnv's `use flox` activates. A shell that manages its own
-    prompt can render an indicator from it directly.
+    This variable is exported, so it is set even by activations that do not
+    modify the prompt, such as `flox activate -- <CMD>`.
+    A shell that manages its own prompt can render an indicator from it
+    directly.
 
 `$FLOX_ENV_CACHE`
 :   `activate` sets this variable to a directory that can be used by an
