@@ -834,9 +834,10 @@ impl ActivateOptions {
                 if hide_default_prompt && env.name().as_ref() == DEFAULT_NAME {
                     return None;
                 }
-                // `bare_description` is also what Bash activation errors
-                // quote, so the prompt narrows it here rather than changing
-                // the description itself.
+                // Deliberately narrower than `bare_description()`, which
+                // still backs the activation announcements and the exported
+                // `FLOX_ENV_DESCRIPTION` variable with the full `owner/name`
+                // form.
                 Some(env.name().to_string())
             })
             .collect();
