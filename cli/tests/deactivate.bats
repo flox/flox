@@ -556,8 +556,8 @@ FLOX_COLD_START_UNSET=(
   -u _FLOX_HOOK_SAVE_FPATH
   -u _activate_d
   # Exported by an outer activation (e.g. when the test suite itself runs
-  # inside one) and unset by the deactivate flow, so leaked values surface
-  # as spurious env-diff records.
+  # inside one) and never unset again, so a leaked value would surface as a
+  # spurious env-diff record.
   -u _FLOX_PROMPT_HOOK_VERSION
   # The old name was exported by released flox; the new one is never
   # exported, but scrub both defensively.
@@ -625,6 +625,9 @@ diff_env_dumps() {
   # TODO: not all entries below are truly noise.
   # TODO: user_dotfiles_setup may be introducing some noise that we haven't
   # accounted for
+  # _FLOX_PROMPT_HOOK_VERSION intentionally persists after deactivation: the
+  # prompt hook stays registered for the life of the shell, and the marker
+  # must keep describing it so auto-activation keeps working.
   case "$OSTYPE" in
     darwin*)
       noise=(
@@ -635,6 +638,7 @@ diff_env_dumps() {
         NIX_SSL_CERT_FILE
         PATH_LOCALE
         REMOTEHOST
+        _FLOX_PROMPT_HOOK_VERSION
         _flox_activate_tracer
       )
       ;;
@@ -649,6 +653,7 @@ diff_env_dumps() {
         NIX_SSL_CERT_FILE
         REMOTEHOST
         SSL_CERT_FILE
+        _FLOX_PROMPT_HOOK_VERSION
         _flox_activate_tracer
       )
       ;;

@@ -9,7 +9,7 @@ use flox_core::hook_actions::{PROMPT_HOOK_VERSION_ENV, prompt_hook_marker_value}
 use indoc::{formatdoc, indoc};
 use shell_gen::{GenerateShell, Shell, set_unexported_unexpanded, source_file};
 
-use crate::attach_diff::{FLOX_ADD_SBIN_VAR, todo_drop_set_exported_unexpanded, todo_drop_unset};
+use crate::attach_diff::{FLOX_ADD_SBIN_VAR, todo_drop_set_exported_unexpanded};
 use crate::gen_rc::{Action, RM, invocation_types_update_stmt};
 
 /// Arguments for generating zsh startup commands
@@ -239,10 +239,11 @@ pub fn generate_zsh_profile_commands(
     // `<version>:false` — deliberately overwriting a `:true` inherited from
     // an eval-activated parent, whose hook function does not survive into
     // the subshell. The marker is set shell-side, so it isn't part of the
-    // env-var diff. Only the outermost deactivate clears it: the prompt
-    // hook stays registered while any activation remains on the stack, so
-    // unsetting it on an inner deactivate would make the next
-    // `flox deactivate` wrongly report the hook missing.
+    // env-var diff. Deactivation never clears it: the prompt hook stays
+    // registered for the life of the shell (auto-activation keeps running
+    // after the last layer is deactivated), so the marker must persist to
+    // describe it — clearing it would make every later hook-env run with
+    // auto-activation work fail with "out of sync" until the shell restarts.
     match action {
         Action::Activate { args, .. } => {
             if !matches!(
@@ -255,11 +256,7 @@ pub fn generate_zsh_profile_commands(
                 ));
             }
         },
-        Action::Deactivate(ctx) => {
-            if ctx.restore_diff.is_outermost_deactivate() {
-                stmts.push(todo_drop_unset(PROMPT_HOOK_VERSION_ENV));
-            }
-        },
+        Action::Deactivate(_) => {},
     }
 
     // Source set-prompt.zsh if we're in an interactive shell
@@ -516,7 +513,6 @@ mod tests {
             fi;
             eval "$('/flox_activations' profile-scripts-deactivate --shell zsh --env '/flox_env' --already-sourced-env-dirs "${_FLOX_SOURCED_PROFILE_SCRIPTS:-}")";
             unset _FLOX_INVOCATION_TYPES;
-            unset _FLOX_PROMPT_HOOK_VERSION;
             if [[ -o interactive ]]; then source '/interpreter/activate.d/set-prompt.zsh'; fi;
             unset _activate_d _flox_activate_tracer _flox_activate_tracelevel;
         "#]]

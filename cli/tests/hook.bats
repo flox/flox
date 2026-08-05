@@ -973,9 +973,10 @@ EOF
 # Each in-place deactivation used to unconditionally unset the exported
 # `_FLOX_PROMPT_HOOK_VERSION` marker, even when inner layers remained active and
 # the prompt hook was still registered. The next `flox deactivate` then found no
-# marker and wrongly aborted with "is not set up in this shell". Only the
-# outermost deactivation (the whole stack torn down) should clear the marker, so
-# every layer of a nested stack can be deactivated in turn.
+# marker and wrongly aborted with "is not set up in this shell". The marker must
+# never be cleared: the prompt hook stays registered even after the whole stack
+# is torn down, and without the marker every later hook run with
+# auto-activation work aborts with "out of sync" until the shell restarts.
 
 # bats test_tags=hook:deactivate:nested
 @test "bash: plain 'flox deactivate' works for each layer of a nested stack" {
@@ -989,20 +990,22 @@ EOF
     # Pop the inner layer; the prompt hook services the request.
     $FLOX_BIN deactivate
     _flox_hook
-    echo \"after-inner:marker=[\${_FLOX_PROMPT_HOOK_VERSION:-UNSET}]\"
+    echo \"after-inner:marker=[\${_FLOX_PROMPT_HOOK_VERSION}]\"
     # The outer layer is still active and the prompt hook is still set up, so
     # this must be accepted rather than aborting.
     $FLOX_BIN deactivate || echo SECOND_DEACTIVATE_FAILED
     _flox_hook
-    echo \"after-outer:[\$FLOX_PROMPT_ENVIRONMENTS]\"
+    echo \"after-outer:[\$FLOX_PROMPT_ENVIRONMENTS]marker=[\${_FLOX_PROMPT_HOOK_VERSION}]\"
   "
   assert_success
   # The marker survives the inner deactivation (the regression).
   assert_output --partial "after-inner:marker=[1:true]"
   refute_output --partial "is not set up in this shell"
   refute_output --partial "SECOND_DEACTIVATE_FAILED"
-  # The outer deactivation tore the whole stack down.
-  assert_output --partial "after-outer:[]"
+  # The outer deactivation tore the whole stack down, and the marker survives
+  # it too: the prompt hook remains registered, so a later hook run with
+  # auto-activation work must not abort with "out of sync".
+  assert_output --partial "after-outer:[]marker=[1:true]"
 }
 
 # bats test_tags=hook:deactivate:nested
@@ -1016,16 +1019,16 @@ EOF
     eval \"\$($FLOX_BIN activate -d $PROJECT3_DIR)\"
     $FLOX_BIN deactivate
     _flox_hook
-    echo \"after-inner:marker=[\${_FLOX_PROMPT_HOOK_VERSION:-UNSET}]\"
+    echo \"after-inner:marker=[\${_FLOX_PROMPT_HOOK_VERSION}]\"
     $FLOX_BIN deactivate || echo SECOND_DEACTIVATE_FAILED
     _flox_hook
-    echo \"after-outer:[\$FLOX_PROMPT_ENVIRONMENTS]\"
+    echo \"after-outer:[\$FLOX_PROMPT_ENVIRONMENTS]marker=[\${_FLOX_PROMPT_HOOK_VERSION}]\"
   "
   assert_success
   assert_output --partial "after-inner:marker=[1:true]"
   refute_output --partial "is not set up in this shell"
   refute_output --partial "SECOND_DEACTIVATE_FAILED"
-  assert_output --partial "after-outer:[]"
+  assert_output --partial "after-outer:[]marker=[1:true]"
 }
 
 # ---------------------------------------------------------------------------- #

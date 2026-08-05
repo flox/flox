@@ -158,11 +158,11 @@ pub fn generate_tcsh_profile_commands(
     // `<version>:false` — deliberately overwriting a `:true` inherited from
     // an eval-activated parent, whose hook alias does not survive into the
     // subshell. The marker is set shell-side, so it isn't part of the
-    // env-var diff. Only the outermost deactivate clears it: the prompt
-    // hook stays registered while any activation remains on the stack, so
-    // unsetting it on an inner deactivate would make the next
-    // `flox deactivate` wrongly report the hook missing. The marker is
-    // exported (`setenv`), so tear it down with `unsetenv`.
+    // env-var diff. Deactivation never clears it: the prompt hook stays
+    // registered for the life of the shell (auto-activation keeps running
+    // after the last layer is deactivated), so the marker must persist to
+    // describe it — clearing it would make every later hook-env run with
+    // auto-activation work fail with "out of sync" until the shell restarts.
     match action {
         Action::Activate { args, .. } => {
             if !matches!(
@@ -175,11 +175,7 @@ pub fn generate_tcsh_profile_commands(
                 ));
             }
         },
-        Action::Deactivate(ctx) => {
-            if ctx.restore_diff.is_outermost_deactivate() {
-                stmts.push(format!("unsetenv {PROMPT_HOOK_VERSION_ENV};").to_stmt());
-            }
-        },
+        Action::Deactivate(_) => {},
     }
 
     // Source set-prompt.tcsh if we're in an interactive shell
@@ -513,7 +509,6 @@ mod tests {
             setenv MODIFIED_VAR MODIFIED_ORIGINAL;
             setenv DELETED_VAR DELETED_ORIGINAL;
             unset _FLOX_INVOCATION_TYPES;
-            unsetenv _FLOX_PROMPT_HOOK_VERSION;
             if ( $?tty ) then; source '/interpreter/activate.d/set-prompt.tcsh'; endif;
             set _already_sourced_args = ();
             if ($?_FLOX_SOURCED_PROFILE_SCRIPTS) set _already_sourced_args = ( --already-sourced-env-dirs `echo $_FLOX_SOURCED_PROFILE_SCRIPTS:q` );
