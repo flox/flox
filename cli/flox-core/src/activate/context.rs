@@ -124,10 +124,10 @@ pub struct ActivateCtx {
     /// stderr once it is in effect.
     ///
     /// Resolved by the `flox` crate because the decision depends on state only
-    /// the caller has: the user's real verbosity and whether the environment
-    /// was already active. Defaults to `false` so a context file written by an
-    /// older Flox stays quiet rather than gaining output the writer never
-    /// asked for.
+    /// the caller has: the user's configuration, their real verbosity, and
+    /// whether the environment was already active. Defaults to `false` so a
+    /// context file written by an older Flox stays quiet rather than gaining
+    /// output the writer never asked for.
     #[serde(default)]
     pub announce_activation: bool,
 }

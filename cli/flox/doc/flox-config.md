@@ -70,6 +70,29 @@ flox config --set 'trusted_environments."owner/name"' trust
 
 # SUPPORTED CONFIGURATION OPTIONS
 
+`activation_notifications`
+:   Print a notification naming the environment when it is activated in the
+    current shell.
+    Subshell activations print the environment and how to leave it:
+    ```console
+    ✔ You are now using the environment 'core'
+    To stop using this environment, run 'flox deactivate'
+    ```
+    In-place activations — including every auto-activation — print the same
+    message without the hint, since they recur on each new shell or each `cd`:
+    ```console
+    ✔ You are now using the environment 'core'
+    ```
+    Apart from subshell activations, which always announce, a notification is
+    printed only when stderr is a terminal, so a human sees the environment
+    named while output collected by CI or a script stays clean.
+    An environment that is already active is not announced again, so nested
+    shells and re-sourced rc files stay quiet.
+    Environments named `default` are never announced, and `-q` suppresses the
+    notification for every mode.
+
+    (default: true)
+
 `auto_activate`
 :   How auto-activation treats environments you have not yet allowed or denied.
     Possible values are `prompt` (default), `allowlist`, and `disabled`.

@@ -678,7 +678,8 @@ impl ActivateOptions {
         let announce_activation = mode_announces
             && !already_active
             && flox.verbosity >= 0
-            && now_active.name().as_ref() != DEFAULT_NAME;
+            && now_active.name().as_ref() != DEFAULT_NAME
+            && config.flox.activation_notifications.unwrap_or(true);
 
         let activate_data = ActivateCtx {
             flox_activate_store_path: store_path.to_string_lossy().to_string(),
