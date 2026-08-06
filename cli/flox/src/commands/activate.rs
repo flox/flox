@@ -626,6 +626,51 @@ impl ActivateOptions {
 
         let activation_state_dir = activation_state_dir_path(&flox.runtime_dir, &dot_flox_path);
 
+        // Which modes announce.
+        //
+        // A subshell activation has always announced unconditionally, and
+        // callers depend on that, so it keeps doing so.
+        //
+        // Every other mode is newly announcing here, and each of them can also
+        // be driven by a program rather than a person: `eval "$(flox activate)"`
+        // from a script, `flox activate -- <CMD>` from CI. Requiring a terminal
+        // on stderr is what separates the two cases — a human watching, or a
+        // program collecting output something else will parse.
+        //
+        // That condition is also what lets the most invisible path speak.
+        // direnv's `use flox` activates via `flox activate -- direnv dump`, and
+        // direnv leaves stderr attached to the user's terminal (which is why its
+        // own `direnv: loading` lines are visible) while capturing only stdout.
+        // It is the one path where the prompt can never speak for Flox: exec
+        // mode renders no shell rc, so `set-prompt` never runs, and direnv
+        // declines to export `PS1` at all.
+        //
+        // An environment that is already active is not announced again: the
+        // shell is not transitioning anywhere, it is re-running an activation
+        // it already has — a nested shell re-sourcing an rc file, or a second
+        // in-place activation of the same environment.
+        //
+        // Environments named `default` are excluded for the same reason
+        // `hide_default_prompt` exists: the default environment is ambient
+        // rather than a place you arrived at, so its activation is not a
+        // transition worth reporting — and an rc-file activation of it would
+        // otherwise announce itself in every new shell.
+        // `-q` is resolved here rather than in `flox-activations`, which has no
+        // quiet mode of its own: the verbosity it receives below is clamped to
+        // `max(0)`, so a negative (quieter) verbosity never reaches it. Deciding
+        // here keeps the one place that knows the user's real verbosity as the
+        // one place that decides, and makes `flox -q activate` silent.
+        let mode_announces = match invocation_type {
+            InvocationType::Interactive => true,
+            InvocationType::InPlace
+            | InvocationType::ShellCommand(_)
+            | InvocationType::ExecCommand(_) => std::io::stderr().is_tty(),
+        };
+        let announce_activation = mode_announces
+            && !already_active
+            && flox.verbosity >= 0
+            && now_active.name().as_ref() != DEFAULT_NAME;
+
         let activate_data = ActivateCtx {
             flox_activate_store_path: store_path.to_string_lossy().to_string(),
             attach_ctx: core,
@@ -644,6 +689,7 @@ impl ActivateOptions {
                 .and_then(|p| p.to_str().map(String::from))
                 .unwrap_or_else(|| "flox".to_string()),
             auto_activate_fish_mode: config.flox.auto_activate_fish_mode,
+            announce_activation,
         };
 
         let tempfile = tempfile::NamedTempFile::new_in(flox.temp_dir)?;
