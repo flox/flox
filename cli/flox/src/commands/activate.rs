@@ -549,7 +549,7 @@ impl ActivateOptions {
             "}),
             (set_prompt, hide_default_prompt, _) => (
                 set_prompt.unwrap_or(true),
-                hide_default_prompt.unwrap_or(true),
+                hide_default_prompt.unwrap_or(false),
             ),
         };
 
@@ -632,6 +632,51 @@ impl ActivateOptions {
 
         let activation_state_dir = activation_state_dir_path(&flox.runtime_dir, &dot_flox_path);
 
+        // Which modes announce.
+        //
+        // A subshell activation has always announced unconditionally, and
+        // callers depend on that, so it keeps doing so.
+        //
+        // Every other mode is newly announcing here, and each of them can also
+        // be driven by a program rather than a person: `eval "$(flox activate)"`
+        // from a script, `flox activate -- <CMD>` from CI. Requiring a terminal
+        // on stderr is what separates the two cases — a human watching, or a
+        // program collecting output something else will parse.
+        //
+        // That condition is also what lets the most invisible path speak.
+        // direnv's `use flox` activates via `flox activate -- direnv dump`, and
+        // direnv leaves stderr attached to the user's terminal (which is why its
+        // own `direnv: loading` lines are visible) while capturing only stdout.
+        // It is the one path where the prompt can never speak for Flox: exec
+        // mode renders no shell rc, so `set-prompt` never runs, and direnv
+        // declines to export `PS1` at all.
+        //
+        // An environment that is already active is not announced again: the
+        // shell is not transitioning anywhere, it is re-running an activation
+        // it already has — a nested shell re-sourcing an rc file, or a second
+        // in-place activation of the same environment.
+        //
+        // Environments named `default` are excluded for the same reason
+        // `hide_default_prompt` exists: the default environment is ambient
+        // rather than a place you arrived at, so its activation is not a
+        // transition worth reporting — and an rc-file activation of it would
+        // otherwise announce itself in every new shell.
+        // `-q` is resolved here rather than in `flox-activations`, which has no
+        // quiet mode of its own: the verbosity it receives below is clamped to
+        // `max(0)`, so a negative (quieter) verbosity never reaches it. Deciding
+        // here keeps the one place that knows the user's real verbosity as the
+        // one place that decides, and makes `flox -q activate` silent.
+        let mode_announces = match invocation_type {
+            InvocationType::Interactive => true,
+            InvocationType::InPlace
+            | InvocationType::ShellCommand(_)
+            | InvocationType::ExecCommand(_) => std::io::stderr().is_tty(),
+        };
+        let announce_activation = mode_announces
+            && !already_active
+            && flox.verbosity >= 0
+            && now_active.name().as_ref() != DEFAULT_NAME;
+
         let activate_data = ActivateCtx {
             flox_activate_store_path: store_path.to_string_lossy().to_string(),
             attach_ctx: core,
@@ -650,6 +695,7 @@ impl ActivateOptions {
                 .and_then(|p| p.to_str().map(String::from))
                 .unwrap_or_else(|| "flox".to_string()),
             auto_activate_fish_mode: config.flox.auto_activate_fish_mode,
+            announce_activation,
         };
 
         let tempfile = tempfile::NamedTempFile::new_in(flox.temp_dir)?;
@@ -794,7 +840,11 @@ impl ActivateOptions {
                 if hide_default_prompt && env.name().as_ref() == DEFAULT_NAME {
                     return None;
                 }
-                Some(env.bare_description())
+                // Deliberately narrower than `bare_description()`, which
+                // still backs the activation announcements and the exported
+                // `FLOX_ENV_DESCRIPTION` variable with the full `owner/name`
+                // form.
+                Some(env.name().to_string())
             })
             .collect();
 
@@ -1092,7 +1142,13 @@ pub fn write_auto_activation_preference(
 mod tests {
     use std::sync::LazyLock;
 
-    use flox_rust_sdk::models::environment::{DotFlox, EnvironmentPointer, PathPointer};
+    use flox_core::floxhub::{DEFAULT_FLOXHUB_URL, Floxhub};
+    use flox_rust_sdk::models::environment::{
+        DotFlox,
+        EnvironmentPointer,
+        ManagedPointer,
+        PathPointer,
+    };
 
     use super::*;
     use crate::commands::ActiveEnvironments;
@@ -1146,6 +1202,22 @@ mod tests {
         // with `hide_default_prompt = true` we should not see the default environment
         let prompt = ActivateOptions::make_prompt_environments(true, &active_environments);
         assert_eq!(prompt, "wichtig".to_string());
+    }
+
+    /// Remote environments only show the name, same as path environments.
+    #[test]
+    fn prompt_shows_only_the_environment_name_for_remote_environments() {
+        let floxhub = Floxhub::new(DEFAULT_FLOXHUB_URL.clone(), None, None).unwrap();
+        let remote_env = UninitializedEnvironment::Remote(ManagedPointer::new(
+            "acme".parse().unwrap(),
+            "core".parse().unwrap(),
+            &floxhub,
+        ));
+        let mut active_environments = ActiveEnvironments::default();
+        active_environments.set_last_active(remote_env, None, ActivateMode::Dev);
+
+        let prompt = ActivateOptions::make_prompt_environments(true, &active_environments);
+        assert_eq!(prompt, "core".to_string());
     }
 
     /// Build minimal ActivateOptions with only the service-related flags set.
