@@ -3,6 +3,7 @@ use std::fmt::{self, Display};
 use std::path::Path;
 use std::str::FromStr;
 
+use flox_core::canonical_path::CanonicalPath;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, instrument};
 
@@ -180,10 +181,24 @@ pub fn scan_package_with_roots(
 ) -> Result<BTreeSet<CatalogRef>, ScanError> {
     let root_attributes: HashSet<String> = root_attributes.into_iter().map(Into::into).collect();
 
-    let mut graph = PackageGraph::new(base_dir, root_attributes);
-    graph.add_root(rel_file)?;
-    graph.expand_closure()?;
-    let references = graph.references()?;
+    // The scan names every file it reads canonically, so the root failures are
+    // re-expressed against has to be canonical too or nothing strips.
+    let base_dir = CanonicalPath::new(base_dir).map_err(|err| ScanError::UnreadableFile {
+        file: err.path,
+        source: err.err,
+        imported_from: None,
+    })?;
+
+    // Failures are re-expressed against the package-set root here, at the
+    // crate's boundary, so the paths a user reads name files the way they
+    // wrote them rather than wherever the scan happened to read them from.
+    let mut graph = PackageGraph::new(base_dir.clone(), root_attributes);
+    let scan = || {
+        graph.add_root(rel_file)?;
+        graph.expand_closure()?;
+        graph.references()
+    };
+    let references = scan().map_err(|err| err.relative_to(&base_dir))?;
 
     debug!(references = references.len(), "scanned catalog references");
     Ok(references)
@@ -278,15 +293,16 @@ mod tests {
     #[test]
     fn root_wildcard_fails_the_scan() {
         // The walk records the widening and the graph rejects it, once every
-        // path is back in the top-level namespace. The error still names the
-        // file and position the path was found at.
+        // path is back in the top-level namespace. The error names the file
+        // and position the path was found at, relative to the package-set
+        // root the caller named it under.
         let base_dir = Path::new("test_data/catalog_refs");
         let err =
             scan_package(base_dir, Path::new("escaping-root.nix")).expect_err("scan should fail");
         assert_matches!(
             err,
             ScanError::UnlockableReference { file, position, reason }
-                if file == base_dir.join("escaping-root.nix")
+                if file == Path::new("escaping-root.nix")
                     && position == Some((4, 3))
                     && reason == "'catalogs.*' references the whole catalog namespace"
         );
@@ -306,7 +322,7 @@ mod tests {
                 file,
                 source,
                 imported_from: None,
-            } if file == base_dir.join("no-such-package.nix")
+            } if file == Path::new("no-such-package.nix")
                 && source.kind() == std::io::ErrorKind::NotFound
         );
     }

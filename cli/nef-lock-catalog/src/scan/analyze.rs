@@ -8,6 +8,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use flox_core::canonical_path::CanonicalPath;
 use rnix::ast;
 use rnix::ast::HasEntry;
 use rowan::ast::AstNode;
@@ -165,19 +166,21 @@ pub(super) fn line_col(content: &str, offset: usize) -> (usize, usize) {
 /// When `file_dir` is `Some`, `import` calls forwarding a root are followed into
 /// the imported file; `visited` maps each drained target file to the top-level
 /// forwardings already scanned for it (see the drain below). `path` is the
-/// file's location, recorded in scan errors and used for verbose reference
-/// reporting. `root_origins` maps each root to the top-level root it stands
-/// for — the identity map at the entry file, and the composition of the
-/// forwarding chain in imported files. `import_stack` holds the files this one
-/// was reached through, canonicalized, so the drain can recognize a back-edge.
+/// file's canonical location, recorded in scan errors and used for verbose
+/// reference reporting; the drain resolves import targets the same way, so one
+/// file is named one way however it was reached. `root_origins` maps each root
+/// to the top-level root it stands for — the identity map at the entry file,
+/// and the composition of the forwarding chain in imported files.
+/// `import_stack` holds the files this one was reached through, so the drain
+/// can recognize a back-edge.
 pub(super) fn analyze_file_at(
     content: &str,
     root_attributes: &HashSet<String>,
     file_dir: Option<&Path>,
     visited: &mut HashMap<PathBuf, HashSet<BTreeMap<String, AttrPath>>>,
-    path: &Path,
+    path: &CanonicalPath,
     root_origins: &BTreeMap<String, AttrPath>,
-    import_stack: &[PathBuf],
+    import_stack: &[CanonicalPath],
 ) -> Result<FileInfo, ScanError> {
     debug!(file = %path.display(), "reading NEF expression");
 
@@ -253,29 +256,29 @@ pub(super) fn analyze_file_at(
     // Imports are IO: the walker only records facts, the drain here reads and
     // recurses. Relative paths resolve against the importing file's directory.
     if let Some(dir) = file_dir {
-        // Targets are canonicalized, so the stack this file extends must be
-        // too for a back-edge to be recognized. This file's content has
-        // already been read, so unlike an import target it cannot be missing:
-        // a failure here is a real IO fault and is reported rather than
-        // guessed around.
-        let canonical_path =
-            fs::canonicalize(path).map_err(|source| ScanError::UnreadableFile {
-                file: path.to_path_buf(),
-                source,
-                imported_from: None,
-            })?;
         for pending in pending_imports {
-            let target = dir.join(&pending.path);
-            // The fallback for an uncanonicalizable (missing) target still
-            // normalizes `.` components so errors show a clean path.
-            let target =
-                fs::canonicalize(&target).unwrap_or_else(|_| target.components().collect());
+            // Normalized so that a target which does not resolve still names a
+            // clean path in the error below.
+            let raw_target: PathBuf = dir.join(&pending.path).components().collect();
             // `import ./dir` means `./dir/default.nix`.
-            let target = if target.is_dir() {
-                target.join("default.nix")
+            let raw_target = if raw_target.is_dir() {
+                raw_target.join("default.nix")
             } else {
-                target
+                raw_target
             };
+            let import_site = || ImportSite {
+                file: path.to_path_buf(),
+                position: line_col(content, pending.offset),
+            };
+            // The refs the imported file would contribute cannot be
+            // discovered, so fail rather than silently under-lock — whether
+            // the target resolves to nothing or cannot be read once it does.
+            let target =
+                CanonicalPath::new(&raw_target).map_err(|err| ScanError::UnreadableFile {
+                    file: err.path,
+                    source: err.err,
+                    imported_from: Some(import_site()),
+                })?;
             // A back-edge to a file already being analyzed would re-enter it
             // under the namespace this lap forwards, which is one component
             // deeper than the last. Following that explores instantiations no
@@ -285,16 +288,11 @@ pub(super) fn analyze_file_at(
             if import_stack.contains(&target) {
                 continue;
             }
-            // The refs the imported file would contribute cannot be
-            // discovered, so fail rather than silently under-lock.
             let imported_content =
                 fs::read_to_string(&target).map_err(|source| ScanError::UnreadableFile {
-                    file: target.clone(),
+                    file: target.to_path_buf(),
                     source,
-                    imported_from: Some(ImportSite {
-                        file: path.to_path_buf(),
-                        position: line_col(content, pending.offset),
-                    }),
+                    imported_from: Some(import_site()),
                 })?;
             // The child is scanned with its own parameter names as root_attributes;
             // its refs are rewritten back into the parent's namespace.
@@ -332,7 +330,7 @@ pub(super) fn analyze_file_at(
                 .map(|(child, parent)| (child.clone(), rewrite_root(parent, root_origins)))
                 .collect();
             if !visited
-                .entry(target.clone())
+                .entry(target.to_path_buf())
                 .or_default()
                 .insert(child_origins.clone())
             {
@@ -340,11 +338,8 @@ pub(super) fn analyze_file_at(
             }
             let child_root_attributes: HashSet<String> = rewrites.keys().cloned().collect();
             let import_dir = target.parent().map(Path::to_path_buf);
-            let child_stack: Vec<PathBuf> = import_stack
-                .iter()
-                .cloned()
-                .chain([canonical_path.clone()])
-                .collect();
+            let child_stack: Vec<CanonicalPath> =
+                import_stack.iter().cloned().chain([path.clone()]).collect();
             let imported = analyze_file_at(
                 &imported_content,
                 &child_root_attributes,
@@ -1833,7 +1828,7 @@ mod tests {
             root_attributes,
             None,
             &mut HashMap::new(),
-            Path::new("test.nix"),
+            &CanonicalPath::new_unchecked("test.nix"),
             &identity_origins(root_attributes),
             &[],
         )
@@ -1856,7 +1851,7 @@ mod tests {
             root_attributes,
             None,
             &mut HashMap::new(),
-            Path::new("test.nix"),
+            &CanonicalPath::new_unchecked("test.nix"),
             &identity_origins(root_attributes),
             &[],
         )
@@ -1864,8 +1859,8 @@ mod tests {
     }
 
     fn refs_at(path: &str, root_attributes: &HashSet<String>) -> BTreeSet<String> {
-        let path = Path::new(path);
-        let content = fs::read_to_string(path).expect("test fixture missing");
+        let path = CanonicalPath::new(path).expect("test fixture missing");
+        let content = fs::read_to_string(&path).expect("test fixture missing");
         let dir = path.parent();
         let mut visited = HashMap::new();
         let info = analyze_file_at(
@@ -1873,7 +1868,7 @@ mod tests {
             root_attributes,
             dir,
             &mut visited,
-            path,
+            &path,
             &identity_origins(root_attributes),
             &[],
         )
@@ -1882,8 +1877,8 @@ mod tests {
     }
 
     fn scan_err_at(path: &str, root_attributes: &HashSet<String>) -> ScanError {
-        let path = Path::new(path);
-        let content = fs::read_to_string(path).expect("test fixture missing");
+        let path = CanonicalPath::new(path).expect("test fixture missing");
+        let content = fs::read_to_string(&path).expect("test fixture missing");
         let dir = path.parent();
         let mut visited = HashMap::new();
         analyze_file_at(
@@ -1891,7 +1886,7 @@ mod tests {
             root_attributes,
             dir,
             &mut visited,
-            path,
+            &path,
             &identity_origins(root_attributes),
             &[],
         )
@@ -3084,6 +3079,10 @@ mod tests {
                 (5, 1),
             ),
         ];
+        // The scan names files canonically. The missing target has no
+        // canonical form of its own, so it is named under the canonical
+        // directory the import resolved against.
+        let dir = fs::canonicalize("test_data/catalog_refs").unwrap();
         for (path, position) in cases {
             let err = scan_err_at(path, &root_attributes(&["catalogs"]));
             assert_matches!(
@@ -3092,10 +3091,10 @@ mod tests {
                     file,
                     source,
                     imported_from: Some(site),
-                } if file == Path::new("test_data/catalog_refs/no-such-helper.nix")
+                } if file == dir.join("no-such-helper.nix")
                     && source.kind() == std::io::ErrorKind::NotFound
                     && site == ImportSite {
-                        file: PathBuf::from(path),
+                        file: fs::canonicalize(path).unwrap(),
                         position,
                     },
                 "fixture: {path}"
@@ -3112,9 +3111,12 @@ mod tests {
         let err = scan_err_at(path, &root_attributes(&["catalogs"]));
         // Asserted through the rendered message: it names the file and the
         // position, and the parse error's exact shape is rnix's to change.
+        // The scan names files canonically; `scan_package` is what re-expresses
+        // them against the package-set root.
+        let canonical = fs::canonicalize(path).unwrap();
         assert_eq!(
             err.to_string(),
-            format!("Invalid Nix syntax at {path}:5:11")
+            format!("Invalid Nix syntax at {}:5:11", canonical.display())
         );
     }
 
@@ -3266,14 +3268,15 @@ mod tests {
 
     #[test]
     fn undeclared_root_forwarded_to_import_errors_at_forward_site() {
-        let path = Path::new("test_data/catalog_refs/undeclared-forward/entry.nix");
-        let content = fs::read_to_string(path).expect("test fixture missing");
+        let path = CanonicalPath::new("test_data/catalog_refs/undeclared-forward/entry.nix")
+            .expect("test fixture missing");
+        let content = fs::read_to_string(&path).expect("test fixture missing");
         let err = analyze_file_at(
             &content,
             &root_attributes(&["catalogs"]),
             path.parent(),
             &mut HashMap::new(),
-            path,
+            &path,
             &identity_origins(&root_attributes(&["catalogs"])),
             &[],
         )
@@ -3284,7 +3287,7 @@ mod tests {
                 root,
                 file,
                 position,
-            } if root == "catalogs" && file == path && position == Some((6, 35))
+            } if root == "catalogs" && file == *path && position == Some((6, 35))
         );
     }
 }

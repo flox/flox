@@ -85,6 +85,71 @@ pub enum ScanError {
     },
 }
 
+impl ScanError {
+    /// Re-express every file this error names relative to `base_dir`.
+    ///
+    /// The scan joins `base_dir` onto the path it is given before reading
+    /// anything, and follows imports through canonicalized absolute paths, so
+    /// by the time a failure is built its paths are absolute. Under `flox
+    /// build` that root is the source copy in the store, which is not a
+    /// location the user can open. The package-set root is the frame they
+    /// wrote the path in, and the builder runs the lock from the project
+    /// directory, so a path relative to it also resolves from their shell.
+    ///
+    /// A path outside `base_dir` is left absolute: it is still the only
+    /// honest way to name it.
+    pub(super) fn relative_to(self, base_dir: &Path) -> Self {
+        match self {
+            Self::UnparsableFile {
+                file,
+                position,
+                error,
+            } => Self::UnparsableFile {
+                file: relative_to(file, base_dir),
+                position,
+                error,
+            },
+            Self::UnlockableReference {
+                file,
+                position,
+                reason,
+            } => Self::UnlockableReference {
+                file: relative_to(file, base_dir),
+                position,
+                reason,
+            },
+            Self::UndeclaredRoot {
+                root,
+                file,
+                position,
+            } => Self::UndeclaredRoot {
+                root,
+                file: relative_to(file, base_dir),
+                position,
+            },
+            Self::UnreadableFile {
+                file,
+                source,
+                imported_from,
+            } => Self::UnreadableFile {
+                file: relative_to(file, base_dir),
+                source,
+                imported_from: imported_from.map(|site| ImportSite {
+                    file: relative_to(site.file, base_dir),
+                    position: site.position,
+                }),
+            },
+        }
+    }
+}
+
+/// `path` expressed relative to `base_dir`, or unchanged when it lies outside.
+pub(super) fn relative_to(path: PathBuf, base_dir: &Path) -> PathBuf {
+    path.strip_prefix(base_dir)
+        .map(Path::to_path_buf)
+        .unwrap_or(path)
+}
+
 /// Render a source location as a message suffix; the position is best-effort
 /// (forwarded-only uses may lack one).
 fn location_suffix(file: &Path, position: Option<(usize, usize)>) -> String {

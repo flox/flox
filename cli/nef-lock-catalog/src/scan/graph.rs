@@ -1,10 +1,12 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
+use flox_core::canonical_path::CanonicalPath;
 use tracing::warn;
 
 use super::analyze::{FileInfo, RefSource, analyze_file_at, identity_origins};
+use super::error::relative_to;
 use super::{AttrPath, CatalogRef, ScanError};
 
 /// The NEF package files analyzed during closure resolution, keyed by package
@@ -17,7 +19,7 @@ use super::{AttrPath, CatalogRef, ScanError};
 /// resolves each reachable dependency argument once and caches it in `scans`,
 /// so a package shared by several dependents is analyzed a single time.
 pub(super) struct PackageGraph {
-    base_dir: PathBuf,
+    base_dir: CanonicalPath,
     /// Catalog root parameter names every package is scanned against.
     root_attributes: HashSet<String>,
     scans: HashMap<String, FileInfo>,
@@ -26,9 +28,9 @@ pub(super) struct PackageGraph {
 impl PackageGraph {
     /// An empty graph resolving packages under `base_dir` and scanning each
     /// against `root_attributes` (the catalog root parameter names).
-    pub(super) fn new(base_dir: impl AsRef<Path>, root_attributes: HashSet<String>) -> Self {
+    pub(super) fn new(base_dir: CanonicalPath, root_attributes: HashSet<String>) -> Self {
         Self {
-            base_dir: base_dir.as_ref().to_path_buf(),
+            base_dir,
             root_attributes,
             scans: HashMap::new(),
         }
@@ -120,7 +122,7 @@ impl PackageGraph {
                 if reference.path().is_wildcard() {
                     warn!(
                         reference = %reference,
-                        file = %source.file.display(),
+                        file = %relative_to(source.file.clone(), &self.base_dir).display(),
                         line = source.position.0,
                         column = source.position.1,
                         "catalog namespace escapes static analysis; locking the whole subtree",
@@ -203,7 +205,16 @@ fn try_resolve_dependency_argument(
 /// Skipping the analysis here would otherwise lead to incomplete closures,
 /// and likely evaluation errors.
 fn read_and_analyze(path: &Path, root_attributes: &HashSet<String>) -> Result<FileInfo, ScanError> {
-    let content = fs::read_to_string(path).map_err(|source| ScanError::UnreadableFile {
+    // Files enter the scan here, and the analysis names them canonically from
+    // this point on: import targets are resolved that way, so an entry reached
+    // again through an import has to arrive under the same name to be
+    // recognized as the same file.
+    let path = CanonicalPath::new(path).map_err(|err| ScanError::UnreadableFile {
+        file: err.path,
+        source: err.err,
+        imported_from: None,
+    })?;
+    let content = fs::read_to_string(&path).map_err(|source| ScanError::UnreadableFile {
         file: path.to_path_buf(),
         source,
         imported_from: None,
@@ -213,7 +224,7 @@ fn read_and_analyze(path: &Path, root_attributes: &HashSet<String>) -> Result<Fi
         root_attributes,
         path.parent(),
         &mut HashMap::new(),
-        path,
+        &path,
         &identity_origins(root_attributes),
         &[],
     )
