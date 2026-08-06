@@ -10,7 +10,7 @@ use std::collections::HashMap;
 use std::sync::{LazyLock, Mutex};
 
 use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use thiserror::Error;
 
 /// Placeholder handle shown when a credential could not be verified (e.g.
@@ -18,37 +18,17 @@ use thiserror::Error;
 /// so an unknown handle is a display concern, never an access decision.
 pub const UNKNOWN_HANDLE: &str = "UNKNOWN";
 
-/// The canonical access level of a service account.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ServiceAccountAccessLevel {
-    ReadOnly,
-    ReadWrite,
-}
-
-impl std::fmt::Display for ServiceAccountAccessLevel {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ServiceAccountAccessLevel::ReadOnly => f.write_str("read-only"),
-            ServiceAccountAccessLevel::ReadWrite => f.write_str("read-write"),
-        }
-    }
-}
-
-/// The identity and metadata behind a credential.
+/// The identity behind a credential.
 ///
-/// Uniform across credential kinds, with service-only metadata omitted for
-/// all other credential kinds.
+/// Uniform across credential kinds: derived from JWT claims for Auth0,
+/// resolved from `/me` for a personal access token, and from the principal
+/// for Kerberos.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct UserIdentity {
     pub handle: String,
     /// Wall-clock expiry of the presenting credential;
     /// `None` when it never expires.
     pub expires_at: Option<DateTime<Utc>>,
-    /// The service principal's canonical access level, when the presenting
-    /// credential is a service account token.
-    #[serde(default)]
-    pub service_account_access_level: Option<ServiceAccountAccessLevel>,
 }
 
 impl UserIdentity {
@@ -107,7 +87,6 @@ pub mod test_helpers {
         UserIdentity {
             handle: handle.to_string(),
             expires_at: None,
-            service_account_access_level: None,
         }
     }
 }

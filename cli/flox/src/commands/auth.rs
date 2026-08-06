@@ -8,13 +8,7 @@ use chrono::{DateTime, Duration};
 use flox_config::{Config, FLOX_CONFIG_FILE, TokenStorageMode};
 use flox_events::{EventKind, EventsHub};
 use flox_rust_sdk::flox::{FLOX_VERSION, Flox, FloxhubToken};
-use floxhub_client::{
-    AuthContext,
-    AuthFailure,
-    CredentialType,
-    ServiceAccountAccessLevel,
-    UserIdentity,
-};
+use floxhub_client::{AuthContext, AuthFailure, CredentialType, UserIdentity};
 use indoc::{formatdoc, indoc};
 use oauth2::basic::{
     BasicClient,
@@ -70,7 +64,6 @@ struct AuthStatus {
     handle: Option<String>,
     credential_type: Option<CredentialType>,
     expires_at: Option<DateTime<Utc>>,
-    service_account_access_level: Option<ServiceAccountAccessLevel>,
 }
 
 impl AuthStatus {
@@ -86,17 +79,12 @@ impl AuthStatus {
                 } else {
                     AuthenticationState::Authenticated
                 };
-                let UserIdentity {
-                    handle,
-                    expires_at,
-                    service_account_access_level,
-                } = identity;
+                let UserIdentity { handle, expires_at } = identity;
                 Self {
                     status,
                     handle: Some(handle),
                     credential_type,
                     expires_at,
-                    service_account_access_level,
                 }
             },
             Ok(None) => Self {
@@ -104,21 +92,18 @@ impl AuthStatus {
                 handle: None,
                 credential_type,
                 expires_at: None,
-                service_account_access_level: None,
             },
             Err(AuthFailure::TokenExpired) => Self {
                 status: AuthenticationState::ExpiredOrRevoked,
                 handle: None,
                 credential_type,
                 expires_at: None,
-                service_account_access_level: None,
             },
             Err(_) => Self {
                 status: AuthenticationState::Unauthenticated,
                 handle: None,
                 credential_type,
                 expires_at: None,
-                service_account_access_level: None,
             },
         }
     }
@@ -451,9 +436,6 @@ impl Auth {
                         ));
                         if let Some(expires_at) = status.expires_at {
                             message::plain(format!("Expires at: {}.", expires_at.to_rfc3339()));
-                        }
-                        if let Some(access_level) = status.service_account_access_level {
-                            message::plain(format!("Service account access: {access_level}."));
                         }
                     },
                     AuthenticationState::Unverifiable => {
@@ -795,7 +777,7 @@ mod tests {
     }
 
     #[test]
-    fn structured_status_contains_service_metadata_without_secret() {
+    fn structured_status_contains_credential_metadata_without_secret() {
         let secret = "flox_sat_status-json-secret";
         let auth_context = AuthContext::new_from_token(Some(secret)).unwrap();
         let expires_at = "2030-01-01T00:00:00Z".parse().unwrap();
@@ -804,7 +786,6 @@ mod tests {
             Ok(Some(UserIdentity {
                 handle: "test-org".to_string(),
                 expires_at: Some(expires_at),
-                service_account_access_level: Some(ServiceAccountAccessLevel::ReadWrite),
             })),
         );
 
@@ -813,7 +794,6 @@ mod tests {
             handle: Some("test-org".to_string()),
             credential_type: Some(CredentialType::ServiceAccountToken),
             expires_at: Some(expires_at),
-            service_account_access_level: Some(ServiceAccountAccessLevel::ReadWrite),
         });
         let json = serde_json::to_value(&status).unwrap();
         assert_eq!(
@@ -823,21 +803,19 @@ mod tests {
                 "handle": "test-org",
                 "credential_type": "service_account_token",
                 "expires_at": "2030-01-01T00:00:00Z",
-                "service_account_access_level": "read_write",
             })
         );
         assert!(!json.to_string().contains(secret));
     }
 
     #[test]
-    fn structured_status_uses_null_for_missing_metadata() {
+    fn structured_status_uses_null_for_unknown_expiry() {
         let auth_context = AuthContext::new_from_token(Some("flox_pat_status-json")).unwrap();
         let status = AuthStatus::from_identity_result(
             &auth_context,
             Ok(Some(UserIdentity {
                 handle: "test-user".to_string(),
                 expires_at: None,
-                service_account_access_level: None,
             })),
         );
 
@@ -846,7 +824,6 @@ mod tests {
             handle: Some("test-user".to_string()),
             credential_type: Some(CredentialType::PersonalAccessToken),
             expires_at: None,
-            service_account_access_level: None,
         });
         assert_eq!(
             serde_json::to_value(&status).unwrap(),
@@ -855,7 +832,6 @@ mod tests {
                 "handle": "test-user",
                 "credential_type": "personal_access_token",
                 "expires_at": null,
-                "service_account_access_level": null,
             })
         );
     }

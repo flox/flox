@@ -50,8 +50,7 @@ Logs out from FloxHub.
 
 ## `status`
 
-Print the current identity, credential type, expiry when known, and service
-account access level when applicable.
+Print the current identity, credential type, and expiry when known.
 
 With `--json`, print a stable object with these fields:
 
@@ -61,8 +60,6 @@ With `--json`, print a stable object with these fields:
 - `credential_type`: `auth0`, `personal_access_token`,
   `service_account_token`, `access_token`, `kerberos`, or `null`.
 - `expires_at`: an RFC 3339 timestamp, or `null` when no expiry is available.
-- `service_account_access_level`: `read_only`, `read_write`, or `null` for
-  credentials that do not represent a service account.
 
 The JSON output never includes the credential secret. Unauthenticated,
 expired or revoked, and unverifiable states return a nonzero exit status.

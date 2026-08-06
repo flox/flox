@@ -134,7 +134,6 @@ EXPIRED_TOKEN="eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3guZGV2L2hh
   assert_output --partial "\"handle\": \"test\""
   assert_output --partial "\"credential_type\": \"auth0\""
   assert_output --partial "\"expires_at\": \"2286-11-20T17:46:39Z\""
-  assert_output --partial "\"service_account_access_level\": null"
   refute_output --partial "$DUMMY_TOKEN"
 }
 

@@ -132,7 +132,7 @@ teardown() {
 }
 
 # bats test_tags=auth:pat:status
-@test "pat: auth status --json reports explicit null metadata" {
+@test "pat: auth status --json reports unknown expiry" {
   export FLOX_FLOXHUB_TOKEN="flox_pat_test-secret"
   export _FLOX_USE_CATALOG_MOCK="$MANUALLY_GENERATED/auth/me_valid.yaml"
 
@@ -142,35 +142,32 @@ teardown() {
   assert_output --partial "\"handle\": \"owner\""
   assert_output --partial "\"credential_type\": \"personal_access_token\""
   assert_output --partial "\"expires_at\": null"
-  assert_output --partial "\"service_account_access_level\": null"
   refute_output --partial "flox_pat_test-secret"
 }
 
 # bats test_tags=auth:pat:status,auth:sat
-@test "sat: auth status reports read-only access and expiry" {
-  export FLOX_FLOXHUB_TOKEN="flox_sat_read-only-secret"
-  export _FLOX_USE_CATALOG_MOCK="$MANUALLY_GENERATED/auth/me_service_read_only.yaml"
+@test "sat: auth status reports credential type and expiry" {
+  export FLOX_FLOXHUB_TOKEN="flox_sat_expiring-secret"
+  export _FLOX_USE_CATALOG_MOCK="$MANUALLY_GENERATED/auth/me_service_expiring.yaml"
 
   run "$FLOX_BIN" auth status
   assert_success
   assert_output --partial "You are logged in as owner"
   assert_output --partial "Credential type: service account token."
   assert_output --partial "Expires at: 2030-01-01T00:00:00+00:00."
-  assert_output --partial "Service account access: read-only."
 }
 
 # bats test_tags=auth:pat:status,auth:sat
-@test "sat: auth status --json reports read-write access and unknown expiry" {
-  export FLOX_FLOXHUB_TOKEN="flox_sat_read-write-secret"
-  export _FLOX_USE_CATALOG_MOCK="$MANUALLY_GENERATED/auth/me_service_read_write.yaml"
+@test "sat: auth status --json reports unknown expiry" {
+  export FLOX_FLOXHUB_TOKEN="flox_sat_no-expiry-secret"
+  export _FLOX_USE_CATALOG_MOCK="$MANUALLY_GENERATED/auth/me_service_no_expiry.yaml"
 
   run "$FLOX_BIN" auth status --json
   assert_success
   assert_output --partial "\"status\": \"authenticated\""
   assert_output --partial "\"credential_type\": \"service_account_token\""
   assert_output --partial "\"expires_at\": null"
-  assert_output --partial "\"service_account_access_level\": \"read_write\""
-  refute_output --partial "flox_sat_read-write-secret"
+  refute_output --partial "flox_sat_no-expiry-secret"
 }
 
 # bats test_tags=auth:pat:status
