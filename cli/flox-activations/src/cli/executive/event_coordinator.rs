@@ -189,7 +189,9 @@ impl EventCoordinator {
                         // The receiver is dropped when the main loop exits during
                         // executive shutdown, so a late file-change event hitting
                         // a closed channel is expected, not an error.
-                        debug!("failed to send StateFileChanged event, channel closed during shutdown");
+                        debug!(
+                            "failed to send StateFileChanged event, channel closed during shutdown"
+                        );
                     }
                 },
                 Err(err) => {
