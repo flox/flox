@@ -2452,6 +2452,11 @@ mod buildenv_tests {
         let client = MockClient::new();
         let result = buildenv.build(&client, &lockfile_path, None, None);
         let err = result.expect_err("conflicting packages should fail to build");
+        assert!(
+            is_deterministic_buildenv_conflict(&err),
+            "a package conflict must be classified as deterministic so that it is not retried:\n\
+            actual: {err}"
+        );
 
         let BuildEnvError::Build(output) = err else {
             panic!("expected build to fail, got {}", err);
