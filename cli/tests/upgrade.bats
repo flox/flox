@@ -71,6 +71,21 @@ function old_hello_response_version() {
     jq -r '.items[].page.packages[0].version'
 }
 
+@test "upgrade warns when implicit default systems change on re-lock" {
+  if [ "$NIX_SYSTEM" == "x86_64-darwin" ]; then
+    skip "implicit default systems are unchanged on x86_64-darwin"
+  fi
+
+  "$FLOX_BIN" init
+  cp "$GENERATED_DATA"/envs/hello_before_three_system_relock/manifest.{toml,lock} \
+    "$PROJECT_DIR/.flox/env"
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello_three_systems.yaml" \
+    run "$FLOX_BIN" upgrade
+  assert_success
+  assert_output --partial "! packages have been removed from lockfile for 'x86_64-darwin'"
+  assert_output --partial "To reinstall, add 'x86_64-darwin' to 'options.systems' with 'flox edit'"
+}
+
 # bats test_tags=upgrade:hello
 @test "upgrade hello" {
   flox_init_pinned

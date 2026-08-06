@@ -5926,6 +5926,25 @@ success"
   assert_equal "$LINK_TARGET_1"  "$LINK_TARGET_2"
 }
 
+@test "activate warns when implicit default systems change on re-lock" {
+  if [ "$NIX_SYSTEM" == "x86_64-darwin" ]; then
+    skip "implicit default systems are unchanged on x86_64-darwin"
+  fi
+
+  project_setup_common
+  "$FLOX_BIN" init
+  cp "$GENERATED_DATA"/envs/hello_before_three_system_relock/manifest.{toml,lock} \
+    "$PROJECT_DIR/.flox/env"
+  tomlq --in-place --toml-output \
+    '.install.curl."pkg-path" = "curl"' "$PROJECT_DIR/.flox/env/manifest.toml"
+
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/curl_three_systems_after_hello.yaml" \
+    FLOX_SHELL=bash run "$FLOX_BIN" activate -- true
+  assert_success
+  assert_output --partial "! packages have been removed from lockfile for 'x86_64-darwin'"
+  assert_output --partial "To reinstall, add 'x86_64-darwin' to 'options.systems' with 'flox edit'"
+}
+
 # bats test_tags=activate,activate:idempotent,activate:prior-release
 @test "activate does not rewrite a prior-release lockfile" {
   # A lockfile produced by an earlier Flox release must be accepted as-is by
