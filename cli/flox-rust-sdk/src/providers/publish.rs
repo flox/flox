@@ -939,21 +939,39 @@ pub fn render_build_source(
     })
 }
 
-/// The catalog lock's closure identity for a package, computed ahead of a
-/// build so that publish dedup can short-circuit before paying the build
-/// cost.
+/// The lock phase's result: the catalog lock's closure identity for a
+/// package, computed ahead of a build so that publish dedup can
+/// short-circuit before paying the build cost, together with the lock and
+/// the lock arguments that produced it.
+///
+/// This is what makes the closure the dedup decision was made on the closure
+/// that gets built, and it does so in the types rather than by call
+/// ordering: [`lock_build_inputs`] is the only way to obtain one — the reuse
+/// fields below are private, so the type cannot be forged from outside this
+/// module — and [`check_build_metadata`] takes one instead of the lock
+/// arguments, so a build cannot be run against any lock but the one a lock
+/// phase resolved.
 #[derive(Debug, Clone, PartialEq)]
 pub struct LockedBuildInputs {
     pub system: PackageSystem,
     pub direct_catalog_inputs: HashMap<String, LockedInputEntry>,
+    /// The lock this closure identity was resolved into. The following build
+    /// consumes exactly this lock rather than resolving the catalog again.
+    catalog_lock: CatalogLock,
+    /// The stability the NEF catalog inputs were locked at, carried so the
+    /// build locks any input the lock phase did not at the same stability.
+    nef_stability: Option<String>,
+    /// The `--system` the lock was resolved for, carried so the build is run
+    /// for that same system.
+    system_override: Option<String>,
 }
 
 /// Compute the catalog lock for `pkg` against the already-rendered
 /// `rendered` source, without building it.
 ///
-/// `catalog_lock` names where the lock is written. Pass the same value to a
-/// following [`check_build_metadata`] so its build consumes exactly this
-/// lock, which is what makes the checked closure identity the built one.
+/// `catalog_lock` names where the lock is written. The returned
+/// [`LockedBuildInputs`] carries it to the following [`check_build_metadata`],
+/// whose build consumes exactly this lock.
 ///
 /// Manifest builds never reach the builder: the lock goal emits a constant for
 /// them, and running it is not free (see below).
@@ -983,6 +1001,9 @@ pub fn lock_build_inputs(
             system: PackageSystem::from_str(system)
                 .map_err(|_| PublishError::UnsupportedSystem(system.to_string()))?,
             direct_catalog_inputs: HashMap::new(),
+            catalog_lock: catalog_lock.clone(),
+            nef_stability,
+            system_override,
         });
     }
 
@@ -996,8 +1017,8 @@ pub fn lock_build_inputs(
 
     let lock_results = builder.lock(
         &[(pkg.name(), catalog_lock.clone())],
-        nef_stability,
-        system_override,
+        nef_stability.clone(),
+        system_override.clone(),
     )?;
 
     let [lock_result] = &lock_results[..] else {
@@ -1007,6 +1028,9 @@ pub fn lock_build_inputs(
     Ok(LockedBuildInputs {
         system: lock_result.system,
         direct_catalog_inputs: lock_result.direct_catalog_inputs.clone(),
+        catalog_lock: catalog_lock.clone(),
+        nef_stability,
+        system_override,
     })
 }
 
@@ -1020,18 +1044,18 @@ pub fn lock_build_inputs(
 /// [`lock_build_inputs`] call shares this build's working directory instead
 /// of rendering the source a second time.
 ///
-/// `catalog_lock` names the lock this build uses. Pass the value a preceding
-/// [`lock_build_inputs`] call was given to build exactly the closure that
-/// call resolved, or [`CatalogLock::Ephemeral`] when no lock phase preceded
-/// this build (e.g. a standalone check with no dedup pre-pass).
+/// `locked` is the [`lock_build_inputs`] result this build is run against: it
+/// names the lock to consume and the arguments it was resolved under, so the
+/// closure built here is the one that call resolved. Requiring it is what
+/// makes that reuse a property of the types rather than of the order the two
+/// are called in — a build with no lock phase to reuse still has to go
+/// through [`lock_build_inputs`], passing [`CatalogLock::Ephemeral`].
 pub fn check_build_metadata(
     flox: &Flox,
     base_nixpkgs_url: &BaseCatalogUrl,
-    system_override: Option<String>,
     rendered: &RenderedSource,
     pkg: &PackageTarget,
-    catalog_lock: &CatalogLock,
-    nef_stability: Option<String>,
+    locked: &LockedBuildInputs,
 ) -> Result<CheckedBuildMetadata, PublishError> {
     let builder = FloxBuildMk::new(
         flox,
@@ -1044,12 +1068,12 @@ pub fn check_build_metadata(
     let build_results = builder.build(
         &base_nixpkgs_url.as_flake_ref()?,
         &rendered.built_environments.dev,
-        &[(pkg.name(), catalog_lock.clone())],
+        &[(pkg.name(), locked.catalog_lock.clone())],
         // Lock the NEF catalog inputs at the stability selected for publish, so
         // the recorded inputs match the build the user intends to publish.
-        nef_stability,
+        locked.nef_stability.clone(),
         Some(false),
-        system_override,
+        locked.system_override.clone(),
     )?;
 
     if build_results.len() != 1 {
@@ -1699,16 +1723,23 @@ pub mod tests {
         let env_metadata = check_environment_metadata(&flox, &env).unwrap();
         let rendered =
             render_build_source(&flox, &env_metadata, &EXAMPLE_MANIFEST_PACKAGE_TARGET).unwrap();
+        let locked = lock_build_inputs(
+            &flox,
+            &rendered,
+            &EXAMPLE_MANIFEST_PACKAGE_TARGET,
+            &CatalogLock::Ephemeral,
+            None,
+            None,
+        )
+        .unwrap();
 
         // This will actually run the build
         let meta = check_build_metadata(
             &flox,
             env_metadata.toplevel_catalog_ref.as_ref().unwrap(),
-            None,
             &rendered,
             &EXAMPLE_MANIFEST_PACKAGE_TARGET,
-            &CatalogLock::Ephemeral,
-            None,
+            &locked,
         )
         .unwrap();
 
@@ -1753,16 +1784,23 @@ pub mod tests {
             &EXAMPLE_MANIFEST_PACKAGE_TARGET_MISSING_FIELDS,
         )
         .unwrap();
+        let locked = lock_build_inputs(
+            &flox,
+            &rendered,
+            &EXAMPLE_MANIFEST_PACKAGE_TARGET_MISSING_FIELDS,
+            &CatalogLock::Ephemeral,
+            None,
+            None,
+        )
+        .unwrap();
 
         // This will actually run the build
         let meta = check_build_metadata(
             &flox,
             env_metadata.toplevel_catalog_ref.as_ref().unwrap(),
-            None,
             &rendered,
             &EXAMPLE_MANIFEST_PACKAGE_TARGET_MISSING_FIELDS,
-            &CatalogLock::Ephemeral,
-            None,
+            &locked,
         )
         .unwrap();
 
@@ -1814,14 +1852,21 @@ pub mod tests {
 
         let env_metadata = check_environment_metadata(&flox, &env).unwrap();
         let rendered = render_build_source(&flox, &env_metadata, &pure_pkg).unwrap();
-        let meta = check_build_metadata(
+        let locked = lock_build_inputs(
             &flox,
-            env_metadata.toplevel_catalog_ref.as_ref().unwrap(),
-            None,
             &rendered,
             &pure_pkg,
             &CatalogLock::Ephemeral,
             None,
+            None,
+        )
+        .unwrap();
+        let meta = check_build_metadata(
+            &flox,
+            env_metadata.toplevel_catalog_ref.as_ref().unwrap(),
+            &rendered,
+            &pure_pkg,
+            &locked,
         )
         .unwrap();
 
@@ -1890,14 +1935,21 @@ pub mod tests {
 
         let rendered =
             render_build_source(&flox, &env_metadata, &package_metadata.package).unwrap();
-        let build_metadata = check_build_metadata(
+        let locked = lock_build_inputs(
             &flox,
-            env_metadata.toplevel_catalog_ref.as_ref().unwrap(),
-            None,
             &rendered,
             &package_metadata.package,
             &CatalogLock::Ephemeral,
             None,
+            None,
+        )
+        .unwrap();
+        let build_metadata = check_build_metadata(
+            &flox,
+            env_metadata.toplevel_catalog_ref.as_ref().unwrap(),
+            &rendered,
+            &package_metadata.package,
+            &locked,
         )
         .unwrap();
 
@@ -1955,14 +2007,21 @@ pub mod tests {
 
         let rendered =
             render_build_source(&flox, &env_metadata, &package_metadata.package).unwrap();
-        let build_metadata = check_build_metadata(
+        let locked = lock_build_inputs(
             &flox,
-            env_metadata.toplevel_catalog_ref.as_ref().unwrap(),
-            None,
             &rendered,
             &package_metadata.package,
             &CatalogLock::Ephemeral,
             None,
+            None,
+        )
+        .unwrap();
+        let build_metadata = check_build_metadata(
+            &flox,
+            env_metadata.toplevel_catalog_ref.as_ref().unwrap(),
+            &rendered,
+            &package_metadata.package,
+            &locked,
         )
         .unwrap();
 
@@ -2307,14 +2366,21 @@ pub mod tests {
 
         let rendered =
             render_build_source(&flox, &env_metadata, &package_metadata.package).unwrap();
-        let build_metadata = check_build_metadata(
+        let locked = lock_build_inputs(
             &flox,
-            env_metadata.toplevel_catalog_ref.as_ref().unwrap(),
-            None,
             &rendered,
             &package_metadata.package,
             &CatalogLock::Ephemeral,
             None,
+            None,
+        )
+        .unwrap();
+        let build_metadata = check_build_metadata(
+            &flox,
+            env_metadata.toplevel_catalog_ref.as_ref().unwrap(),
+            &rendered,
+            &package_metadata.package,
+            &locked,
         )
         .unwrap();
 

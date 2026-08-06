@@ -321,8 +321,8 @@ impl Publish {
             &rendered,
             &publish_provider.package_metadata.package,
             &catalog_lock,
-            nef_stability.clone(),
-            system_override_inner.clone(),
+            nef_stability,
+            system_override_inner,
         )?;
 
         // Dedup check: ask the catalog server if this exact build has already
@@ -380,24 +380,25 @@ impl Publish {
 
         // Not a duplicate, so pay for the build — over the lock the phase above
         // already resolved, rather than resolving the catalog a second time.
+        // Handing the build the lock phase's own result is what ties the two
+        // together: the lock, the stability and the system come from `locked`,
+        // so there is no second set of lock arguments to drift.
         let build_metadata = check_build_metadata(
             &flox,
             &selected_base_nixpkgs_url,
-            system_override_inner,
             &rendered,
             &publish_provider.package_metadata.package,
-            &catalog_lock,
-            nef_stability,
+            &locked,
         )?;
 
         // The dedup verdict above was decided on the closure the lock phase
         // resolved, so the build has to have built that same closure. The two
-        // agree by construction — both read the catalog lock at
-        // `catalog_lock` — but a lock that was not in fact reused, or a lock
-        // directory that went away underneath the build, would silently
-        // publish a package whose recorded closure was never the one checked,
-        // and every later dedup for this package would be decided against it.
-        // Fail here instead.
+        // agree by construction — the build reads the very lock `locked`
+        // names — but a lock that was not in fact reused, or a lock directory
+        // that went away underneath the build, would silently publish a
+        // package whose recorded closure was never the one checked, and every
+        // later dedup for this package would be decided against it. Fail here
+        // instead.
         if build_metadata.system != locked.system
             || build_metadata.direct_catalog_inputs != locked.direct_catalog_inputs
         {
