@@ -131,6 +131,7 @@ EXPIRED_TOKEN="eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3guZGV2L2hh
   run "$FLOX_BIN" auth status --json
   assert_success
   assert_output --partial "\"status\": \"authenticated\""
+  assert_output --partial "\"identity\": {"
   assert_output --partial "\"handle\": \"test\""
   assert_output --partial "\"credential_type\": \"auth0\""
   assert_output --partial "\"expires_at\": \"2286-11-20T17:46:39Z\""
@@ -143,6 +144,7 @@ EXPIRED_TOKEN="eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3guZGV2L2hh
   assert_failure
   assert_output --partial "\"status\": \"unauthenticated\""
   assert_output --partial "\"credential_type\": null"
+  assert_output --partial "\"identity\": null"
 }
 
 # bats test_tags=auth,auth:status
@@ -152,6 +154,7 @@ EXPIRED_TOKEN="eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3guZGV2L2hh
   run "$FLOX_BIN" auth status --json
   assert_failure
   assert_output --partial "\"status\": \"expired_or_revoked\""
+  assert_output --partial "\"identity\": {"
   assert_output --partial "\"handle\": \"test\""
   assert_output --partial "\"credential_type\": \"auth0\""
   refute_output --partial "$EXPIRED_TOKEN"

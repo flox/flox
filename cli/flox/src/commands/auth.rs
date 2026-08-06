@@ -49,68 +49,35 @@ pub struct Credential {
     pub expiry: String,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "snake_case")]
-enum AuthenticationState {
-    Authenticated,
-    Unauthenticated,
-    ExpiredOrRevoked,
-    Unverifiable,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize)]
-struct AuthStatus {
-    status: AuthenticationState,
-    handle: Option<String>,
+#[derive(Debug, Serialize)]
+struct JsonAuthStatus<'a> {
+    status: &'static str,
     credential_type: Option<CredentialType>,
-    expires_at: Option<DateTime<Utc>>,
+    identity: Option<&'a UserIdentity>,
 }
 
-impl AuthStatus {
-    fn from_identity_result(
-        auth_context: &AuthContext,
-        result: std::result::Result<Option<UserIdentity>, AuthFailure>,
-    ) -> Self {
-        let credential_type = auth_context.credential_type();
-        match result {
-            Ok(Some(identity)) => {
-                let status = if identity.is_expired() {
-                    AuthenticationState::ExpiredOrRevoked
-                } else {
-                    AuthenticationState::Authenticated
-                };
-                let UserIdentity { handle, expires_at } = identity;
-                Self {
-                    status,
-                    handle: Some(handle),
-                    credential_type,
-                    expires_at,
-                }
-            },
-            Ok(None) => Self {
-                status: AuthenticationState::Unverifiable,
-                handle: None,
-                credential_type,
-                expires_at: None,
-            },
-            Err(AuthFailure::TokenExpired) => Self {
-                status: AuthenticationState::ExpiredOrRevoked,
-                handle: None,
-                credential_type,
-                expires_at: None,
-            },
-            Err(_) => Self {
-                status: AuthenticationState::Unauthenticated,
-                handle: None,
-                credential_type,
-                expires_at: None,
-            },
-        }
-    }
+fn json_auth_status<'a>(
+    auth_context: &AuthContext,
+    result: &'a std::result::Result<Option<UserIdentity>, AuthFailure>,
+) -> (JsonAuthStatus<'a>, bool) {
+    let (status, identity, authenticated) = match result {
+        Ok(Some(identity)) if identity.is_expired() => {
+            ("expired_or_revoked", Some(identity), false)
+        },
+        Ok(Some(identity)) => ("authenticated", Some(identity), true),
+        Ok(None) => ("unverifiable", None, false),
+        Err(AuthFailure::TokenExpired) => ("expired_or_revoked", None, false),
+        Err(_) => ("unauthenticated", None, false),
+    };
 
-    fn is_authenticated(&self) -> bool {
-        self.status == AuthenticationState::Authenticated
-    }
+    (
+        JsonAuthStatus {
+            status,
+            credential_type: auth_context.credential_type(),
+            identity,
+        },
+        authenticated,
+    )
 }
 
 type ConfiguredClient<
@@ -407,51 +374,49 @@ impl Auth {
                 let _guard = span.enter();
                 // Resolve identity before probing storage. JSON output returns
                 // before a storage probe so stdout remains machine-readable.
-                let status =
-                    AuthStatus::from_identity_result(&flox.auth_context, flox.get_identity().await);
+                let identity = flox.get_identity().await;
 
                 if json {
+                    let (status, authenticated) = json_auth_status(&flox.auth_context, &identity);
                     println!("{}", serde_json::to_string_pretty(&status)?);
-                    if status.is_authenticated() {
+                    if authenticated {
                         return Ok(());
                     }
                     return Err(Exit(1).into());
                 }
 
-                match status.status {
-                    AuthenticationState::Authenticated => {
+                match identity {
+                    Ok(Some(identity)) if identity.is_expired() => {
+                        message::warning("Your FloxHub token is expired or has been revoked.");
+                        if let Some(expires_at) = identity.expires_at {
+                            message::plain(format!("Expired at: {}.", expires_at.to_rfc3339()));
+                        }
+                        return Err(Exit(1).into());
+                    },
+                    Ok(Some(identity)) => {
                         message::plain(format!(
                             "You are logged in as {} on {}",
-                            status
-                                .handle
-                                .as_deref()
-                                .expect("authenticated status has a handle"),
+                            identity.handle,
                             flox.floxhub.base_url()
                         ));
-                        message::plain(format!(
-                            "Credential type: {}.",
-                            status
-                                .credential_type
-                                .expect("authenticated status has a credential type")
-                        ));
-                        if let Some(expires_at) = status.expires_at {
+                        if let Some(credential_type) = flox.auth_context.credential_type() {
+                            message::plain(format!("Credential type: {credential_type}."));
+                        }
+                        if let Some(expires_at) = identity.expires_at {
                             message::plain(format!("Expires at: {}.", expires_at.to_rfc3339()));
                         }
                     },
-                    AuthenticationState::Unverifiable => {
+                    Ok(None) => {
                         message::warning(
                             "Found a FloxHub token but could not reach FloxHub to verify it.",
                         );
                         return Err(Exit(1).into());
                     },
-                    AuthenticationState::ExpiredOrRevoked => {
+                    Err(AuthFailure::TokenExpired) => {
                         message::warning("Your FloxHub token is expired or has been revoked.");
-                        if let Some(expires_at) = status.expires_at {
-                            message::plain(format!("Expired at: {}.", expires_at.to_rfc3339()));
-                        }
                         return Err(Exit(1).into());
                     },
-                    AuthenticationState::Unauthenticated => {
+                    Err(_) => {
                         message::warning("You are not currently logged in to FloxHub.");
                         return Err(Exit(1).into());
                     },
@@ -777,83 +742,85 @@ mod tests {
     }
 
     #[test]
-    fn structured_status_contains_credential_metadata_without_secret() {
+    fn json_status_reuses_identity_without_exposing_secret() {
         let secret = "flox_sat_status-json-secret";
         let auth_context = AuthContext::new_from_token(Some(secret)).unwrap();
         let expires_at = "2030-01-01T00:00:00Z".parse().unwrap();
-        let status = AuthStatus::from_identity_result(
-            &auth_context,
-            Ok(Some(UserIdentity {
-                handle: "test-org".to_string(),
-                expires_at: Some(expires_at),
-            })),
-        );
-
-        assert_eq!(status, AuthStatus {
-            status: AuthenticationState::Authenticated,
-            handle: Some("test-org".to_string()),
-            credential_type: Some(CredentialType::ServiceAccountToken),
+        let identity = Ok(Some(UserIdentity {
+            handle: "test-org".to_string(),
             expires_at: Some(expires_at),
-        });
+        }));
+        let (status, authenticated) = json_auth_status(&auth_context, &identity);
+
+        assert_eq!(authenticated, true);
         let json = serde_json::to_value(&status).unwrap();
         assert_eq!(
             json,
             serde_json::json!({
                 "status": "authenticated",
-                "handle": "test-org",
                 "credential_type": "service_account_token",
-                "expires_at": "2030-01-01T00:00:00Z",
+                "identity": {
+                    "handle": "test-org",
+                    "expires_at": "2030-01-01T00:00:00Z",
+                },
             })
         );
         assert!(!json.to_string().contains(secret));
     }
 
     #[test]
-    fn structured_status_uses_null_for_unknown_expiry() {
+    fn json_status_preserves_unknown_identity_expiry() {
         let auth_context = AuthContext::new_from_token(Some("flox_pat_status-json")).unwrap();
-        let status = AuthStatus::from_identity_result(
-            &auth_context,
-            Ok(Some(UserIdentity {
-                handle: "test-user".to_string(),
-                expires_at: None,
-            })),
-        );
-
-        assert_eq!(status, AuthStatus {
-            status: AuthenticationState::Authenticated,
-            handle: Some("test-user".to_string()),
-            credential_type: Some(CredentialType::PersonalAccessToken),
+        let identity = Ok(Some(UserIdentity {
+            handle: "test-user".to_string(),
             expires_at: None,
-        });
+        }));
+        let (status, authenticated) = json_auth_status(&auth_context, &identity);
+
+        assert_eq!(authenticated, true);
         assert_eq!(
             serde_json::to_value(&status).unwrap(),
             serde_json::json!({
                 "status": "authenticated",
-                "handle": "test-user",
                 "credential_type": "personal_access_token",
-                "expires_at": null,
+                "identity": {
+                    "handle": "test-user",
+                    "expires_at": null,
+                },
             })
         );
     }
 
     #[test]
-    fn structured_status_distinguishes_failure_states() {
+    fn json_status_distinguishes_failure_states_without_identity() {
         let unauthenticated = AuthContext::new_from_token(None).unwrap();
         let opaque = AuthContext::new_from_token(Some("flox_pat_status-failure")).unwrap();
+        let not_logged_in = Err(AuthFailure::NotLoggedIn);
+        let expired = Err(AuthFailure::TokenExpired);
+        let unverifiable = Ok(None);
 
-        assert_eq!(
-            [
-                AuthStatus::from_identity_result(&unauthenticated, Err(AuthFailure::NotLoggedIn))
-                    .status,
-                AuthStatus::from_identity_result(&opaque, Err(AuthFailure::TokenExpired)).status,
-                AuthStatus::from_identity_result(&opaque, Ok(None)).status,
-            ],
-            [
-                AuthenticationState::Unauthenticated,
-                AuthenticationState::ExpiredOrRevoked,
-                AuthenticationState::Unverifiable,
-            ]
-        );
+        let statuses = [
+            serde_json::to_value(json_auth_status(&unauthenticated, &not_logged_in).0).unwrap(),
+            serde_json::to_value(json_auth_status(&opaque, &expired).0).unwrap(),
+            serde_json::to_value(json_auth_status(&opaque, &unverifiable).0).unwrap(),
+        ];
+        assert_eq!(statuses, [
+            serde_json::json!({
+                "status": "unauthenticated",
+                "credential_type": null,
+                "identity": null,
+            }),
+            serde_json::json!({
+                "status": "expired_or_revoked",
+                "credential_type": "personal_access_token",
+                "identity": null,
+            }),
+            serde_json::json!({
+                "status": "unverifiable",
+                "credential_type": "personal_access_token",
+                "identity": null,
+            }),
+        ]);
     }
 
     /// A token-file login persists through the credential stores like an

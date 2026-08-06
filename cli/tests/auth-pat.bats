@@ -139,6 +139,7 @@ teardown() {
   run "$FLOX_BIN" auth status --json
   assert_success
   assert_output --partial "\"status\": \"authenticated\""
+  assert_output --partial "\"identity\": {"
   assert_output --partial "\"handle\": \"owner\""
   assert_output --partial "\"credential_type\": \"personal_access_token\""
   assert_output --partial "\"expires_at\": null"
@@ -166,6 +167,7 @@ teardown() {
   assert_success
   assert_output --partial "\"status\": \"authenticated\""
   assert_output --partial "\"credential_type\": \"service_account_token\""
+  assert_output --partial "\"identity\": {"
   assert_output --partial "\"expires_at\": null"
   refute_output --partial "flox_sat_no-expiry-secret"
 }
@@ -180,6 +182,7 @@ teardown() {
   assert_failure
   assert_output --partial "\"status\": \"unverifiable\""
   assert_output --partial "\"credential_type\": \"personal_access_token\""
+  assert_output --partial "\"identity\": null"
   refute_output --partial "flox_pat_unverifiable-status"
 }
 

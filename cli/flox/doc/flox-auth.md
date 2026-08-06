@@ -56,10 +56,12 @@ With `--json`, print a stable object with these fields:
 
 - `status`: `authenticated`, `unauthenticated`, `expired_or_revoked`, or
   `unverifiable`.
-- `handle`: the authenticated FloxHub identity, or `null` when unavailable.
 - `credential_type`: `auth0`, `personal_access_token`,
   `service_account_token`, `access_token`, `kerberos`, or `null`.
-- `expires_at`: an RFC 3339 timestamp, or `null` when no expiry is available.
+- `identity`: the authenticated identity, or `null` when unavailable.
+  - `handle`: the FloxHub handle.
+  - `expires_at`: an RFC 3339 timestamp, or `null` when no expiry is
+    available.
 
 The JSON output never includes the credential secret. Unauthenticated,
 expired or revoked, and unverifiable states return a nonzero exit status.
