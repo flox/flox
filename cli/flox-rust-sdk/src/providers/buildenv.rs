@@ -1166,7 +1166,7 @@ fn nix_path_info_null_paths(paths: &[String]) -> Result<Vec<String>, std::io::Er
         .collect())
 }
 
-/// Returns true if `err` reports a buildenv package-output conflict from
+/// Returns true if `err` reports a buildenv file collision from
 /// `buildenv/builder.pl`. These errors are deterministic — the same lockfile
 /// will always produce the same conflict — and must not be retried.
 ///
@@ -1287,7 +1287,7 @@ pub fn materialise_with_retry<T>(
                     // daemon, leaving paths on disk but unregistered.
                     match nix_path_info_null_paths(&confirmed) {
                         Ok(null_paths) if null_paths.is_empty() => {
-                            // Short-circuit deterministic package-output conflicts
+                            // Short-circuit deterministic file collisions
                             // before spending retries. The same lockfile always
                             // produces the same conflict, so retrying cannot help.
                             if is_deterministic_buildenv_conflict(&e) {
@@ -1295,7 +1295,7 @@ pub fn materialise_with_retry<T>(
                                     error = %e,
                                     attempt,
                                     "buildenv.nix reported a deterministic \
-                                    package-output conflict — not retrying"
+                                    file collision — not retrying"
                                 );
                                 return Err(e);
                             }
@@ -3175,7 +3175,7 @@ mod materialise_retry_tests {
         assert_eq!(
             build_calls.get(),
             1,
-            "must not retry a deterministic package-output conflict"
+            "must not retry a deterministic file collision"
         );
         assert_eq!(
             realise_calls.get(),
