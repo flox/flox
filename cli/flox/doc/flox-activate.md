@@ -222,6 +222,8 @@ options.
     e.g. `foo bar local_env`.
     If `hide_default_prompt` is set to `true`, environments named `default` are
     excluded.
+    How much detail each entry carries is governed by `prompt_detail`; see
+    [`flox-config(1)`](./flox-config.md).
     This variable is exported, so it is set even by activations that do not
     modify the prompt, such as `flox activate -- <CMD>`.
     A shell that manages its own prompt can render an indicator from it

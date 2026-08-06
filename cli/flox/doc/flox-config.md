@@ -133,6 +133,17 @@ flox config --set 'trusted_environments."owner/name"' trust
     Valid values are `stable`, `nightly`, or `qa`.
     (default: `stable`)
 
+`prompt_detail`
+:   How much detail to show for each environment in the shell prompt.
+    Valid values are `name` or `full` (default: `name`).
+
+    * `name`: the environment's name only, e.g. `flox [core]`
+    * `full`: the owner and locality as well, e.g. `flox [acme/core (local)]`
+
+    To change the `flox` label itself, set `$FLOX_PROMPT`.
+    See the *ENVIRONMENT VARIABLES* section of
+    [`flox-activate(1)`](./flox-activate.md).
+
 `search_limit`
 :   How many items `flox search` should show by default.
 
