@@ -22,7 +22,7 @@ use macos_containerize_proxy::ContainerizeProxy;
 use tracing::{debug, info, instrument};
 
 use super::{EnvironmentSelect, environment_select};
-use crate::commands::{LOCKING_AUTH_REQUIRED_SOON, SHELL_COMPLETION_FILE};
+use crate::commands::SHELL_COMPLETION_FILE;
 use crate::environment_subcommand_metric;
 use crate::utils::events::env_detail_from_concrete;
 use crate::utils::message;
@@ -74,13 +74,6 @@ impl Containerize {
             CliEnvironmentPayload::new(env_detail_from_concrete(&flox, &env)),
         )) {
             debug!(error = %err, "Failed to record v2 event");
-        }
-
-        // TODO(DEV-200): replace with actual docs URL when available
-        // Warn unauthenticated users before the first lock, which happens
-        // when no lockfile exists yet.
-        if env.existing_lockfile(&flox)?.is_none() && flox.auth_context.is_unauthenticated() {
-            message::warning(LOCKING_AUTH_REQUIRED_SOON);
         }
 
         // Check that a specified runtime exists.
