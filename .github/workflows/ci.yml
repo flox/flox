@@ -341,7 +341,7 @@ jobs:
         if: ${{ needs.scope.outputs.heavy != 'false' }}
         env:
           NIX_SUBSTITUTER: "${{ vars.MANAGED_CACHE_PUBLIC_S3_BUCKET }}"
-          NIX_SUBSTITUTER_KEY: ${{ secrets.MANAGED_CACHE_PUBLIC_SECRET_KEY }}"
+          NIX_SUBSTITUTER_KEY: "${{ secrets.MANAGED_CACHE_PUBLIC_SECRET_KEY }}"
         run: |
           export AWS_ACCESS_KEY_ID
           export AWS_SECRET_ACCESS_KEY
