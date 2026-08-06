@@ -1,0 +1,18 @@
+schema-version = "1.14.0"
+
+[install.hello]
+pkg-path = "hello"
+
+[vars]
+
+[hook]
+
+[profile]
+
+[services]
+
+[include]
+
+[build]
+
+[options]

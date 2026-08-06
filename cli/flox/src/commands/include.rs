@@ -110,6 +110,14 @@ impl Upgrade {
             message::updated(message);
             print_overridden_manifest_fields(&result.new_lockfile);
 
+            // `store_path` is only set when the upgrade wrote a new lockfile.
+            if result.store_path.is_some() {
+                message::print_default_systems_changed(
+                    result.old_lockfile.as_ref(),
+                    &result.new_lockfile,
+                );
+            }
+
             for name in self.to_upgrade {
                 if !include_diff.contains(&name) {
                     message::info(format!("Included environment '{name}' has no changes."));

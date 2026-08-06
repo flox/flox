@@ -157,6 +157,14 @@ impl Upgrade {
             "});
         }
 
+        // `store_path` is only set when the upgrade wrote a new lockfile.
+        if result.store_path.is_some() {
+            message::print_default_systems_changed(
+                result.old_lockfile.as_ref(),
+                &result.new_lockfile,
+            );
+        }
+
         warn_manifest_changes_for_services(&flox, &concrete_environment);
 
         let hub = EventsHub::global();

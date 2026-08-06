@@ -92,6 +92,116 @@ post_cmd = '''
 pre_cmd = "flox init && flox install hello"
 cmd = "flox install curl"
 
+# Records the request made after dropping x86_64-darwin from the implicit
+# default systems, along with the four-system lockfile that precedes it.
+[resolve.curl_three_systems_after_hello]
+skip_if_output_exists = "envs/composer_before_three_system_relock"
+pre_cmd = '''
+    flox init
+    tomlq --in-place --toml-output \
+        '.options.systems = [ "aarch64-darwin", "aarch64-linux", "x86_64-darwin", "x86_64-linux" ]' \
+        .flox/env/manifest.toml
+    flox install hello
+
+    cp .flox/env/manifest.toml old-manifest.toml
+    cp .flox/env/manifest.lock old-manifest.lock
+    tomlq --in-place --toml-output 'del(.options.systems)' old-manifest.toml
+    jq 'del(.manifest.options.systems)' old-manifest.lock > old-manifest.lock.tmp
+    mv old-manifest.lock.tmp old-manifest.lock
+
+    flox init -d included
+    cp .flox/env/manifest.toml included/.flox/env/manifest.toml
+    cp .flox/env/manifest.lock included/.flox/env/manifest.lock
+    flox init -d composer
+    tomlq --in-place --toml-output \
+        '.options.systems = [ "aarch64-darwin", "aarch64-linux", "x86_64-darwin", "x86_64-linux" ]' \
+        composer/.flox/env/manifest.toml
+    echo 'version = 1
+
+    [include]
+    environments = [{ dir = "../included" }]' | flox edit -f - -d composer
+    cp composer/.flox/env/manifest.toml old-composer-manifest.toml
+    cp composer/.flox/env/manifest.lock old-composer-manifest.lock
+    tomlq --in-place --toml-output 'del(.options.systems)' \
+        old-composer-manifest.toml
+    jq 'del(
+        .manifest.options.systems,
+        .compose.composer.options.systems,
+        .compose.include[].manifest.options.systems
+    )' old-composer-manifest.lock \
+        > old-composer-manifest.lock.tmp
+    mv old-composer-manifest.lock.tmp old-composer-manifest.lock
+
+    tomlq --in-place --toml-output \
+        '.options.systems = [ "aarch64-darwin", "aarch64-linux", "x86_64-linux" ]' \
+        .flox/env/manifest.toml
+'''
+cmd = "flox install curl"
+post_cmd = '''
+    envs_output_dir="$(dirname "$RESPONSE_FILE")/../envs"
+    env_dir="$envs_output_dir/hello_before_three_system_relock"
+    mkdir -p "$env_dir"
+    cp old-manifest.toml "$env_dir/manifest.toml"
+    cp old-manifest.lock "$env_dir/manifest.lock"
+
+    composer_dir="$envs_output_dir/composer_before_three_system_relock"
+    mkdir -p "$composer_dir"
+    cp old-composer-manifest.toml "$composer_dir/manifest.toml"
+    cp old-composer-manifest.lock "$composer_dir/manifest.lock"
+'''
+
+[resolve.hello_three_systems]
+pre_cmd = '''
+    flox init
+    tomlq --in-place --toml-output \
+        '.options.systems = [ "aarch64-darwin", "aarch64-linux", "x86_64-linux" ]' \
+        .flox/env/manifest.toml
+'''
+cmd = "flox install hello"
+
+[resolve.include_upgrade_three_systems]
+pre_cmd = '''
+    flox init -d included
+    tomlq --in-place --toml-output \
+        '.options.systems = [ "aarch64-darwin", "aarch64-linux", "x86_64-darwin", "x86_64-linux" ]' \
+        included/.flox/env/manifest.toml
+    flox install -d included hello
+
+    flox init -d composer
+    tomlq --in-place --toml-output \
+        '.options.systems = [ "aarch64-darwin", "aarch64-linux", "x86_64-darwin", "x86_64-linux" ]' \
+        composer/.flox/env/manifest.toml
+    echo 'version = 1
+
+    [include]
+    environments = [{ dir = "../included" }]' | flox edit -f - -d composer
+    tomlq --in-place --toml-output 'del(.options.systems)' \
+        included/.flox/env/manifest.toml
+    jq 'del(.manifest.options.systems)' included/.flox/env/manifest.lock \
+        > included/.flox/env/manifest.lock.tmp
+    mv included/.flox/env/manifest.lock.tmp included/.flox/env/manifest.lock
+    tomlq --in-place --toml-output 'del(.options.systems)' \
+        composer/.flox/env/manifest.toml
+    jq 'del(
+        .manifest.options.systems,
+        .compose.composer.options.systems,
+        .compose.include[].manifest.options.systems
+    )' composer/.flox/env/manifest.lock \
+        > composer/.flox/env/manifest.lock.tmp
+    mv composer/.flox/env/manifest.lock.tmp composer/.flox/env/manifest.lock
+
+    tomlq --in-place --toml-output \
+        '.options.systems = [ "aarch64-darwin", "aarch64-linux", "x86_64-linux" ]' \
+        included/.flox/env/manifest.toml
+    flox install -d included curl
+    tomlq --in-place --toml-output 'del(.options.systems)' \
+        included/.flox/env/manifest.toml
+    jq 'del(.manifest.options.systems)' included/.flox/env/manifest.lock \
+        > included/.flox/env/manifest.lock.tmp
+    mv included/.flox/env/manifest.lock.tmp included/.flox/env/manifest.lock
+'''
+cmd = "flox include upgrade -d composer"
+
 [resolve.emacs]
 pre_cmd = "flox init"
 cmd = "flox install emacs"
