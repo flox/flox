@@ -2523,9 +2523,8 @@ pub mod tests {
     // exactly that exchange.
     #[tokio::test(flavor = "multi_thread")]
     async fn error_publishing_to_read_only_catalog() {
-        // The package name matches the recording name: the catalog itself is
-        // a shared fixture (see TEST_READ_ONLY_CATALOG_NAME), but the
-        // package within it must be unique to this test.
+        // The server rejects package creation with 403 before the package
+        // reaches the catalog DB, so the name needs no per-test uniqueness.
         let recording_name = "publish_provider_error_when_user_only_has_read_access_to_catalog";
         let (_build_meta, env_meta, pkg_meta) = dummy_publish_metadata(recording_name);
         let (flox, _tmpdir) = flox_instance();
