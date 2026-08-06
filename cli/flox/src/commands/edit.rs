@@ -86,13 +86,6 @@ impl Edit {
         // in case we error before then
         subcommand_metric!("edit");
 
-        // TODO(DEV-200): replace with actual docs URL when available
-        if flox.auth_context.is_unauthenticated() {
-            message::warning(
-                "This command will require authentication in an upcoming release. See https://flox.dev/docs/install-flox/ for more info.",
-            );
-        }
-
         // Ensure the user is logged in for the following remote operations
         if let EnvironmentSelect::Remote(_) = self.environment {
             ensure_auth(&mut flox).await?;
@@ -955,7 +948,6 @@ mod tests {
         .unwrap();
 
         assert_eq!(writer.to_string(), indoc! {"
-            ! This command will require authentication in an upcoming release. See https://flox.dev/docs/install-flox/ for more info.
             ✔ Environment successfully updated.
             ℹ Run 'flox list -c' to see merged manifest.
             "});
@@ -1011,7 +1003,6 @@ mod tests {
         // - overrides are shown even if `includes` didn't change.
         // - hint to see the merged manifest is shown.
         assert_eq!(writer.to_string(), indoc! {"
-            ! This command will require authentication in an upcoming release. See https://flox.dev/docs/install-flox/ for more info.
             ✔ Environment successfully updated.
             ℹ The following manifest fields were overridden during merging:
             - This environment set:
