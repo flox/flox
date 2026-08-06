@@ -3843,6 +3843,73 @@ PIDs of the running activations: ${ACTIVATION_PID}"
   assert_output "$(realpath "$PROJECT_DIR")/emacs/.flox/run/$NIX_SYSTEM.emacs-dev/bin/emacs"
 }
 
+# An environment first activated under one stack of other environments and
+# then attached under a different stack must not replay the first stack's
+# PATH-like values: the attach context keeps its own entries and does not
+# gain entries from the start context.
+# bats test_tags=activate,activate:attach
+@test "attach under a different stack doesn't leak the start context" {
+  # We don't need an environment, but we do need wait_for_activations to have a
+  # PROJECT_DIR to look for
+  project_setup_common
+
+  MANIFEST_CONTENTS="$(cat << "EOF"
+    version = 1
+
+    [hook]
+    on-activate = """
+      export PATH="$FLOX_ENV_PROJECT/tools:$PATH"
+    """
+EOF
+  )"
+
+  for env in shared first second; do
+    "$FLOX_BIN" init -d "$env"
+    mkdir -p "$env/tools"
+    echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -d "$env" -f -
+  done
+
+  mkfifo activate_started_fifo
+  # Will get cat'ed in teardown
+  TEARDOWN_FIFO="$PROJECT_DIR/teardown_activate"
+  mkfifo "$TEARDOWN_FIFO"
+
+  # Start `shared` inside an activation of `first` and hold it open so a
+  # later activation of `shared` attaches to this start.
+  FLOX_SHELL=bash "$FLOX_BIN" activate -d first -c \
+    "\"$FLOX_BIN\" activate -d shared -c 'echo > activate_started_fifo && echo > \"$TEARDOWN_FIFO\"'" &
+  cat activate_started_fifo
+
+  # Attach `shared` inside an activation of `second`, probing the attach in
+  # both command mode (rc script runs) and exec mode (no rc script).
+  FLOX_SHELL=bash "$FLOX_BIN" activate -d second -c \
+    '"$FLOX_BIN" activate -d shared -c "echo \$PATH > path_cmd; echo \$XDG_DATA_DIRS > xdg_cmd"; "$FLOX_BIN" activate -d shared -- sh -c "echo \$PATH > path_exec; echo \$XDG_DATA_DIRS > xdg_exec"'
+
+  REAL_PROJECT_DIR="$(realpath "$PROJECT_DIR")"
+  for probe in path_cmd path_exec; do
+    run cat "$probe"
+    assert_success
+    # The hook dirs of the attached env and the attach context survive.
+    assert_output --regexp ".*$REAL_PROJECT_DIR/shared/tools.*"
+    assert_output --regexp ".*$REAL_PROJECT_DIR/second/tools.*"
+    # Both stacked envs' bin dirs are on PATH.
+    assert_output --regexp ".*$REAL_PROJECT_DIR/shared/.flox/run/$NIX_SYSTEM.shared-dev/bin.*"
+    assert_output --regexp ".*$REAL_PROJECT_DIR/second/.flox/run/$NIX_SYSTEM.second-dev/bin.*"
+    # Nothing from the start context leaks in.
+    refute_output --regexp ".*$REAL_PROJECT_DIR/first/.*"
+    refute_output --regexp ".*$PROJECT_DIR/first/.*"
+  done
+
+  for probe in xdg_cmd xdg_exec; do
+    run cat "$probe"
+    assert_success
+    assert_output --regexp ".*$REAL_PROJECT_DIR/shared/.flox/run/$NIX_SYSTEM.shared-dev/share.*"
+    assert_output --regexp ".*$REAL_PROJECT_DIR/second/.flox/run/$NIX_SYSTEM.second-dev/share.*"
+    refute_output --regexp ".*$REAL_PROJECT_DIR/first/.*"
+    refute_output --regexp ".*$PROJECT_DIR/first/.*"
+  done
+}
+
 # ---------------------------------------------------------------------------- #
 
 @test "bash: repeat activation in .bashrc doesn't break aliases" {

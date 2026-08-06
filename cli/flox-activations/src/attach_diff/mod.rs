@@ -3,6 +3,7 @@ use std::path::Path;
 use std::process::Command;
 
 pub mod diff_serializer;
+mod pathlike;
 
 use anyhow::Result;
 use flox_core::activate::context::{ActivateCtx, AttachCtx, AttachProjectCtx};
@@ -14,6 +15,7 @@ use shell_gen::{GenerateShell, SetVar, Statement, UnsetVar};
 use tracing::debug;
 
 use crate::attach_diff::diff_serializer::{DiffSerializer, FLOX_HOOK_DIFF_VAR};
+use crate::attach_diff::pathlike::{PathlikeReplayCtx, REPLAYED_PATHLIKE_VARS, current_value};
 use crate::cli::fix_paths::{fix_manpath_var, fix_path_var};
 use crate::cli::set_env_dirs::{fix_env_dirs_var, fix_sbin_dirs_var};
 use crate::env_diff::EnvDiff;
@@ -91,6 +93,13 @@ impl AttachDiff {
         // Extract the pre-activation snapshot before consuming vars_from_env.
         let full_env = vars_from_env.full_env.take();
 
+        // Recompute the fix-paths-managed vars for the attach context. For
+        // non-in-place activations these are exported below via
+        // `non_in_place_exports`; here they additionally serve as the base
+        // values for replaying recorded PATH-like additions.
+        let fixed_vars =
+            fixed_vars_to_export(&context.env, context.add_sbin, vars_from_env.clone());
+
         let single_sets: HashMap<String, String> = single_set_envs(context)
             .into_iter()
             .map(|(k, v)| (k.to_string(), v))
@@ -105,13 +114,34 @@ impl AttachDiff {
             }
         }
 
-        // For now don't prevent users overriding our variables
-        double_sets.additions.extend(
-            start_diff
-                .additions()
-                .iter()
-                .map(|(k, v)| (k.clone(), v.clone())),
-        );
+        // Replay the start diff. PATH-like variables recorded by the start
+        // bake in the environment stack that was active at start time, so
+        // they are translated relative to the attach context (see the
+        // `pathlike` module) rather than replayed verbatim. This requires
+        // the pre-activation snapshot; without one we fall back to verbatim
+        // replay. Everything else is replayed verbatim.
+        // For now don't prevent users overriding our variables.
+        let replay_ctx = full_env.as_ref().map(|_| {
+            PathlikeReplayCtx::new(
+                start_diff.start_env_dirs(),
+                fixed_vars.get(FLOX_ENV_DIRS_VAR).map_or("", String::as_str),
+            )
+        });
+        for (name, end_value) in start_diff.additions() {
+            let value = match (&replay_ctx, &full_env) {
+                (Some(replay_ctx), Some(current_env))
+                    if REPLAYED_PATHLIKE_VARS.contains(&name.as_str()) =>
+                {
+                    replay_ctx.translate(
+                        end_value,
+                        start_diff.start_value(name),
+                        current_value(name, &fixed_vars, current_env),
+                    )
+                },
+                _ => end_value.clone(),
+            };
+            double_sets.additions.insert(name.clone(), value);
+        }
         double_sets
             .deletions
             .extend(start_diff.deletions().iter().cloned());
@@ -489,6 +519,7 @@ pub fn activate_tracer(interpreter_path: impl AsRef<Path>) -> String {
 #[cfg(test)]
 mod tests {
     use std::collections::HashSet;
+    use std::path::PathBuf;
 
     use super::*;
 
@@ -497,6 +528,114 @@ mod tests {
             .iter()
             .map(|(k, v)| (k.to_string(), v.to_string()))
             .collect()
+    }
+
+    fn test_attach_ctx() -> AttachCtx {
+        AttachCtx {
+            env: "/envs/pi".to_string(),
+            env_cache: PathBuf::from("/env_cache"),
+            env_description: "pi".to_string(),
+            flox_active_environments: "active_envs".to_string(),
+            prompt_color_1: "1".to_string(),
+            prompt_color_2: "2".to_string(),
+            flox_prompt_environments: "prompt_envs".to_string(),
+            set_prompt: true,
+            flox_env_cuda_detection: "0".to_string(),
+            add_sbin: false,
+            interpreter_path: PathBuf::from("/interpreter"),
+        }
+    }
+
+    /// A start diff recorded under the stack pi:core, replayed by an attach
+    /// running under the stack pi:wandb (with a pre-activation snapshot).
+    fn cross_context_attach_diff(with_snapshot: bool) -> AttachDiff {
+        let start_diff = StartDiff::from_parts_with_start_values(
+            make_env(&[
+                ("CPATH", "/envs/pi/include:/envs/core/include"),
+                ("PATH", "/pi-tools:/envs/pi/bin:/envs/core/bin:/usr/bin"),
+                ("XDG_DATA_DIRS", "/envs/pi/share:/envs/core/share"),
+                ("HOOK_SCALAR", "from_start_context"),
+            ]),
+            vec![],
+            make_env(&[
+                ("CPATH", "/envs/core/include"),
+                ("PATH", "/envs/pi/bin:/envs/core/bin:/usr/bin"),
+                (FLOX_ENV_DIRS_VAR, "/envs/pi:/envs/core"),
+            ]),
+        );
+        let full_env = with_snapshot.then(|| {
+            make_env(&[
+                ("CPATH", "/envs/wandb/include"),
+                ("PATH", "/envs/wandb/bin:/usr/bin"),
+                ("XDG_DATA_DIRS", "/envs/wandb/share"),
+                (FLOX_ENV_DIRS_VAR, "/envs/wandb"),
+            ])
+        });
+        let vars_from_env = VarsFromEnvironment {
+            flox_env_dirs: Some("/envs/wandb".to_string()),
+            sbin_env_dirs: None,
+            path: Some("/envs/wandb/bin:/usr/bin".to_string()),
+            manpath: None,
+            full_env,
+        };
+        AttachDiff::new(
+            &test_attach_ctx(),
+            None,
+            0,
+            vars_from_env,
+            &start_diff,
+            false,
+        )
+        .expect("AttachDiff::new should succeed")
+    }
+
+    #[test]
+    fn pathlike_start_diff_vars_replayed_against_attach_context() {
+        let attach_diff = cross_context_attach_diff(true);
+
+        assert_eq!(
+            attach_diff.double_sets,
+            EnvDiff::from_parts(
+                make_env(&[
+                    // PATH-like vars keep this env's (and the hook's) additions
+                    // but swap the start context's stack for the attach
+                    // context's. PATH layers onto the fix-paths-recomputed base.
+                    ("CPATH", "/envs/pi/include:/envs/wandb/include"),
+                    ("PATH", "/pi-tools:/envs/pi/bin:/envs/wandb/bin:/usr/bin"),
+                    ("XDG_DATA_DIRS", "/envs/pi/share:/envs/wandb/share"),
+                    // Scalars replay verbatim.
+                    ("HOOK_SCALAR", "from_start_context"),
+                    // double_set_envs entries.
+                    (FLOX_ACTIVATE_START_SERVICES_VAR, "false"),
+                    ("FLOX_ENV", "/envs/pi"),
+                    ("FLOX_ENV_CACHE", "/env_cache"),
+                    ("FLOX_ENV_DESCRIPTION", "pi"),
+                ]),
+                vec!["FLOX_ENV_PROJECT".to_string()],
+            ),
+        );
+    }
+
+    #[test]
+    fn pathlike_replay_falls_back_to_verbatim_without_snapshot() {
+        let attach_diff = cross_context_attach_diff(false);
+
+        assert_eq!(
+            attach_diff.double_sets,
+            EnvDiff::from_parts(
+                make_env(&[
+                    ("CPATH", "/envs/pi/include:/envs/core/include"),
+                    ("PATH", "/pi-tools:/envs/pi/bin:/envs/core/bin:/usr/bin"),
+                    ("XDG_DATA_DIRS", "/envs/pi/share:/envs/core/share"),
+                    ("HOOK_SCALAR", "from_start_context"),
+                    (FLOX_ACTIVATE_START_SERVICES_VAR, "false"),
+                    ("FLOX_ENV", "/envs/pi"),
+                    ("FLOX_ENV_CACHE", "/env_cache"),
+                    ("FLOX_ENV_DESCRIPTION", "pi"),
+                ]),
+                vec!["FLOX_ENV_PROJECT".to_string()],
+            ),
+        );
     }
 
     fn make_keys(keys: &[&str]) -> HashSet<String> {

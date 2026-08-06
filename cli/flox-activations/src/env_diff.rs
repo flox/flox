@@ -4,7 +4,7 @@ use std::collections::HashMap;
 ///
 /// This is a minimal struct that is re-used in various other places to pass
 /// around environment variable changes
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct EnvDiff {
     pub additions: HashMap<String, String>,
     pub deletions: Vec<String>,
