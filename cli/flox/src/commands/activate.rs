@@ -169,6 +169,11 @@ pub struct ActivateOptions {
     #[bpaf(long, short)]
     pub generation: Option<GenerationId>,
 
+    /// Marks an activation as driven by the auto-activation prompt hook.
+    /// Set by `flox hook-env`, not by users.
+    #[bpaf(long("auto-activated"), hide)]
+    pub auto_activated: bool,
+
     #[bpaf(external(command_select), optional)]
     pub command: Option<CommandSelect>,
 }
@@ -253,7 +258,8 @@ impl Activate {
         if let Err(err) = EventsHub::global().record_event(EventKind::CliEnvironmentActivate(
             CliEnvironmentActivatePayload::new(v2_env_detail)
                 .with_start_services(options.start_services)
-                .with_mode(v2_mode),
+                .with_mode(v2_mode)
+                .with_auto_activated(options.auto_activated),
         )) {
             debug!(error = %err, "Failed to record v2 event");
         }
@@ -1226,6 +1232,7 @@ mod tests {
             no_start_services,
             mode: None,
             generation: None,
+            auto_activated: false,
             command: None,
         }
     }

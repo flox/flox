@@ -495,6 +495,11 @@ pub struct CliEnvironmentActivatePayload {
     manifest_version: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     shell: Option<String>,
+    /// `true` when the auto-activation prompt hook drove this activation.
+    /// `mode` cannot answer this on its own: the hook activates in-place, so
+    /// auto-activations and shell-rc activations share `mode: "inplace"`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    auto_activated: Option<bool>,
 }
 
 impl CliEnvironmentActivatePayload {
@@ -509,7 +514,13 @@ impl CliEnvironmentActivatePayload {
             lockfile_version: None,
             manifest_version: None,
             shell: None,
+            auto_activated: None,
         }
+    }
+
+    pub fn with_auto_activated(mut self, value: bool) -> Self {
+        self.auto_activated = Some(value);
+        self
     }
 
     pub fn with_start_services(mut self, value: bool) -> Self {
@@ -1196,6 +1207,25 @@ mod tests {
             "env_ref_or_name": "alice/myenv",
             "start_services": false,
             "mode": "dev",
+        }));
+        assert_eq!(value, expected);
+    }
+
+    /// The prompt hook activates in-place, so `mode` cannot separate an
+    /// auto-activation from a shell-rc activation; `auto_activated` is the only
+    /// field that does.
+    #[test]
+    fn cli_environment_activate_auto_activated_envelope_golden() {
+        let payload = CliEnvironmentActivatePayload::new(env_detail("path", "myenv"))
+            .with_mode("dev")
+            .with_auto_activated(true);
+        let value = serde_json::to_value(fixed_event(EventKind::CliEnvironmentActivate(payload)))
+            .expect("event serializes");
+        let expected = activate_envelope_json(json!({
+            "env_kind": "path",
+            "env_ref_or_name": "myenv",
+            "mode": "dev",
+            "auto_activated": true,
         }));
         assert_eq!(value, expected);
     }
