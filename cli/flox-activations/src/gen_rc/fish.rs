@@ -8,7 +8,7 @@ use flox_core::activate::vars::{FLOX_ACTIVATIONS_BIN, FLOX_INVOCATION_TYPES_VAR}
 use flox_core::hook_actions::{PROMPT_HOOK_VERSION_ENV, prompt_hook_marker_value};
 use shell_gen::{GenerateShell, Shell};
 
-use crate::attach_diff::{todo_drop_set_exported_unexpanded, todo_drop_unset};
+use crate::attach_diff::todo_drop_set_exported_unexpanded;
 use crate::gen_rc::{Action, RM, invocation_types_update_stmt};
 
 /// Arguments for generating fish startup commands
@@ -126,10 +126,11 @@ pub fn generate_fish_profile_commands(
     // `<version>:false` — deliberately overwriting a `:true` inherited from
     // an eval-activated parent, whose hook function does not survive into
     // the subshell. The marker is set shell-side, so it isn't part of the
-    // env-var diff. Only the outermost deactivate clears it: the prompt
-    // hook stays registered while any activation remains on the stack, so
-    // unsetting it on an inner deactivate would make the next
-    // `flox deactivate` wrongly report the hook missing.
+    // env-var diff. Deactivation never clears it: the prompt hook stays
+    // registered for the life of the shell (auto-activation keeps running
+    // after the last layer is deactivated), so the marker must persist to
+    // describe it — clearing it would make every later hook-env run with
+    // auto-activation work fail with "out of sync" until the shell restarts.
     match action {
         Action::Activate { args, .. } => {
             if !matches!(
@@ -142,11 +143,7 @@ pub fn generate_fish_profile_commands(
                 ));
             }
         },
-        Action::Deactivate(ctx) => {
-            if ctx.restore_diff.is_outermost_deactivate() {
-                stmts.push(todo_drop_unset(PROMPT_HOOK_VERSION_ENV));
-            }
-        },
+        Action::Deactivate(_) => {},
     }
 
     // Source set-prompt.fish if we're in an interactive shell
@@ -482,7 +479,6 @@ mod tests {
             set -gx MODIFIED_VAR MODIFIED_ORIGINAL;
             set -gx DELETED_VAR DELETED_ORIGINAL;
             set -e _FLOX_INVOCATION_TYPES;
-            set -e _FLOX_PROMPT_HOOK_VERSION;
             if isatty 1; source '/interpreter/activate.d/set-prompt.fish'; end;
             /flox_activations profile-scripts-deactivate --shell fish --env '/flox_env' --already-sourced-env-dirs (if set -q _FLOX_SOURCED_PROFILE_SCRIPTS; echo "$_FLOX_SOURCED_PROFILE_SCRIPTS"; else; echo ""; end) | source;
             set -e _activate_d _flox_activate_tracer;

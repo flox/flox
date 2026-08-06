@@ -71,8 +71,10 @@ setup() {
   # If a developer-shell auto-activation has leaked `_FLOX_HOOK_*` vars
   # into bats, activation will treat this as nested and skip the
   # snapshot/restore logic, hiding leaks the test is meant to catch.
+  # An inherited `_FLOX_PROMPT_HOOK_VERSION` would land in the pre-activate
+  # snapshot and mask the allow-listed marker leak as "no longer occurs".
   unset _FLOX_HOOK_SAVE_FPATH _FLOX_HOOK_SAVE_COMPINIT_DUMPFILE _FLOX_HOOK_DIFF
-  unset _FLOX_SOURCED_PROFILE_SCRIPTS
+  unset _FLOX_SOURCED_PROFILE_SCRIPTS _FLOX_PROMPT_HOOK_VERSION
 }
 
 teardown() {
@@ -127,7 +129,12 @@ export _TEST_HARNESS_NOISE_RE='^(__FT_RAN_.*|_FLOX_LOCAL_DEV|_FLOX_TEST_SUITE_MO
 # Seen in every shell:
 #   _FLOX_SOURCED_PROFILE_SCRIPTS — tracking var, intentionally NOT updated
 #                                   on deactivate (see deactivate.bats).
-_EXPECTED_LEAKS_SHARED='_FLOX_SOURCED_PROFILE_SCRIPTS'
+#   _FLOX_PROMPT_HOOK_VERSION     — the prompt hook stays registered for the
+#                                   life of the shell, so the marker must
+#                                   persist to describe it; clearing it would
+#                                   break auto-activation after the last
+#                                   deactivation.
+_EXPECTED_LEAKS_SHARED='_FLOX_SOURCED_PROFILE_SCRIPTS _FLOX_PROMPT_HOOK_VERSION'
 
 # bash-only:
 #   _flox_hook     — auto-activate prompt hook, left registered so re-entry

@@ -55,6 +55,16 @@ let
 
       # Reexport of the platform flox is being built for
       NIX_TARGET_SYSTEM = stdenv.targetPlatform.system;
+
+      # Compile the base version into the binary (option_env! in
+      # flox-core/src/vars.rs) so invocations that bypass the pkgs/flox
+      # wrapper — the prompt hook and auto-activation spawn the unwrapped
+      # binary via its absolute path — report the real version instead of
+      # the 0.0.0-dirty fallback. The wrapper's runtime FLOX_VERSION
+      # (which appends the git rev) still takes precedence when set. Only
+      # the VERSION file's contents are baked, never the git rev, so this
+      # does not invalidate the build cache on every commit.
+      inherit FLOX_VERSION;
     }
     // lib.optionalAttrs stdenv.hostPlatform.isLinux {
       LOCALE_ARCHIVE = "${glibcLocalesUtf8}/lib/locale/locale-archive";

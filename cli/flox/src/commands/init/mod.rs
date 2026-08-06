@@ -135,7 +135,7 @@ impl Init {
                     bail!("Couldn't determine home directory");
                 };
 
-                let default_environment = dir == home_dir;
+                let default_environment = canonical_or_raw(&dir) == canonical_or_raw(&home_dir);
 
                 let env_name = if let Some(ref name) = env_name {
                     EnvironmentName::from_str(name)?
@@ -167,6 +167,17 @@ impl Init {
         }
         Ok(())
     }
+}
+
+/// Canonicalize a path for comparison, falling back to the raw path when
+/// canonicalization fails (e.g. the path does not exist).
+///
+/// The working directory and `$HOME` disagree on symlinks: `current_dir`
+/// returns the kernel's resolved path while `$HOME` is taken verbatim, so a
+/// raw equality misses the home directory whenever any component is a
+/// symlink (e.g. macOS's `/tmp` -> `/private/tmp`, or a symlinked home).
+fn canonical_or_raw(path: &Path) -> PathBuf {
+    path.canonicalize().unwrap_or_else(|_| path.to_path_buf())
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -230,7 +241,7 @@ async fn init_local_environment(
         InitCustomization::default()
     };
 
-    if Some(dir) == std::env::home_dir().as_deref() {
+    if dirs::home_dir().map(|home| canonical_or_raw(&home)) == Some(canonical_or_raw(dir)) {
         debug!("environment in home-dir initialized in runtime mode");
         customization.activate_mode = Some(ActivateMode::Run);
     }

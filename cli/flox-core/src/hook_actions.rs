@@ -82,6 +82,11 @@ pub const PROMPT_HOOK_VERSION: u8 = 1;
 /// like `flox deactivate` can read it to confirm the hook is set up and
 /// compatible before writing an action file the hook would otherwise never
 /// consume.
+///
+/// Once exported, the marker persists for the life of the shell: the prompt
+/// hook is never unregistered, not even when the last activation is
+/// deactivated, and the marker must keep describing it so auto-activation
+/// keeps working afterwards.
 pub const PROMPT_HOOK_VERSION_ENV: &str = "_FLOX_PROMPT_HOOK_VERSION";
 
 /// The [`PROMPT_HOOK_VERSION_ENV`] value for the current protocol version with
