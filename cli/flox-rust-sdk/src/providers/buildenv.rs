@@ -2302,10 +2302,16 @@ mod realise_batch_tests {
 
 #[cfg(test)]
 mod buildenv_tests {
-    use std::collections::HashSet;
+    use std::collections::{BTreeMap, HashSet};
+    use std::fs;
     use std::os::unix::fs::PermissionsExt;
 
+    use flox_manifest::interfaces::AsTypedOnlyManifest;
+    use flox_manifest::lockfile::test_helpers::fake_catalog_package_lock_with_outputs;
+    use flox_manifest::parsed::latest::ManifestPackageDescriptor;
+    use flox_manifest::raw::test_helpers::empty_test_migrated_manifest;
     use flox_test_utils::{GENERATED_DATA, MANUALLY_GENERATED};
+    use tempfile::TempDir;
     use test_helpers::buildenv_instance;
 
     use super::*;
@@ -2467,6 +2473,121 @@ mod buildenv_tests {
         assert!(
             output.contains(expected),
             "expected output to contain a conflict message:\n\
+            actual: {output}\n\
+            expected: {expected}"
+        );
+    }
+
+    /// Adds the given outputs of one package to the store, all providing
+    /// `bin/collide`, and returns them keyed by output name.
+    ///
+    /// Adds directories rather than building a multi-output derivation:
+    /// `nix store add` gives exact control over the store path names that
+    /// `parseStorePath` in `buildenv/builder.pl` decomposes into a package
+    /// name and an output, and needs no builder on `PATH`, which a bare
+    /// `/bin/sh` derivation has in neither sandbox. The paths are
+    /// content-addressed, so repeated runs reuse the same two, and nothing
+    /// roots them.
+    fn add_conflicting_outputs_to_store(outputs: &[&str]) -> BTreeMap<String, String> {
+        let sources = TempDir::new().unwrap();
+        outputs
+            .iter()
+            .map(|&output| {
+                let source = sources.path().join(output);
+                fs::create_dir_all(source.join("bin")).unwrap();
+                // Differing contents so that the paths collide even when
+                // `checkCollisionContents` is enabled.
+                fs::write(source.join("bin/collide"), output).unwrap();
+
+                // Nix names the primary output after the package and suffixes
+                // every other output with its own name.
+                let name = match output {
+                    "out" => "collide-1.0".to_string(),
+                    other => format!("collide-1.0-{other}"),
+                };
+                let added = nix_base_command()
+                    .args(["store", "add", "--name", &name])
+                    .arg(&source)
+                    .output()
+                    .unwrap();
+                assert!(
+                    added.status.success(),
+                    "failed to add '{name}' to the store: {}",
+                    String::from_utf8_lossy(&added.stderr)
+                );
+
+                let store_path = String::from_utf8(added.stdout).unwrap().trim().to_string();
+                (output.to_string(), store_path)
+            })
+            .collect()
+    }
+
+    /// Writes a lockfile installing [add_conflicting_outputs_to_store] under
+    /// the install ID `my_tool`, which deliberately differs from the package
+    /// name `collide`.
+    ///
+    /// The outputs are selected by name rather than with `outputs = "all"`,
+    /// which is how a user hits this, because only the explicit list fixes the
+    /// order in which `builder.pl` links them. Both spellings reach the same
+    /// collision, but `"all"` is an unordered hash lookup in `builder.pl`, so
+    /// it leaves which output is reported first up to Perl.
+    fn lockfile_with_conflicting_outputs(dir: &Path) -> PathBuf {
+        let outputs = ["out", "dev"];
+        let (mut descriptor, mut locked) =
+            fake_catalog_package_lock_with_outputs("my_tool", "collide", &outputs);
+        let ManifestPackageDescriptor::Catalog(ref mut catalog_descriptor) = descriptor else {
+            panic!("expected a catalog descriptor");
+        };
+        catalog_descriptor.outputs = Some(SelectedOutputs::Specific(
+            outputs.iter().map(|o| o.to_string()).collect(),
+        ));
+        catalog_descriptor.systems = Some(vec![env!("NIX_TARGET_SYSTEM").to_string()]);
+        locked.system = env!("NIX_TARGET_SYSTEM").to_string();
+        locked.outputs = add_conflicting_outputs_to_store(&outputs);
+
+        let mut manifest = empty_test_migrated_manifest();
+        manifest
+            .as_latest_schema_mut()
+            .install
+            .inner_mut()
+            .insert("my_tool".to_string(), descriptor);
+
+        let lockfile = Lockfile {
+            manifest: manifest.as_latest_schema().as_typed_only(),
+            packages: vec![locked.into()],
+            ..Default::default()
+        };
+
+        let path = dir.join("manifest.lock");
+        fs::write(&path, serde_json::to_string_pretty(&lockfile).unwrap()).unwrap();
+        path
+    }
+
+    /// Two outputs of a single installed package that both provide the same
+    /// file are reported as a conflict, and are not retried.
+    #[test]
+    fn detects_conflicting_outputs_of_one_package() {
+        let buildenv = buildenv_instance();
+        let dir = TempDir::new().unwrap();
+        let lockfile_path = lockfile_with_conflicting_outputs(dir.path());
+        let client = MockClient::new();
+        let result = buildenv.build(&client, &lockfile_path, None, None);
+        let err = result.expect_err("conflicting outputs should fail to build");
+        assert!(
+            is_deterministic_buildenv_conflict(&err),
+            "an output conflict must be classified as deterministic so that it is not retried:\n\
+            actual: {err}"
+        );
+
+        let BuildEnvError::Build(output) = err else {
+            panic!("expected build to fail, got {}", err);
+        };
+
+        let expected = "> ❌ ERROR: 'collide (out)' conflicts with 'collide (dev)'. Both packages provide the file 'bin/collide'";
+
+        assert!(
+            output.contains(expected),
+            "expected output to contain an output conflict message:\n\
             actual: {output}\n\
             expected: {expected}"
         );
