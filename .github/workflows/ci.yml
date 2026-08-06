@@ -55,13 +55,31 @@ jobs:
   #
   # This job is deliberately *not* a gate. Nothing below is skipped at the job
   # level on the strength of its output: every required check still runs and
-  # still posts a status, and only the steps inside those jobs are gated. A
-  # required check that never reports leaves the merge queue waiting forever,
-  # so the wiring below is careful to make that impossible.
+  # still posts a status, and only the steps inside those jobs are gated.
+  #
+  # That is not a precaution against a hypothetical — it is a verified property
+  # of this repository. A job-level skip does not post the per-leg contexts the
+  # branch protection requires: on fork PR #4488, skipping `nix-build` at the
+  # job level produced exactly one check run named `Nix build`, with no matrix
+  # suffix and zero per-leg contexts; all four `Nix build (<system>)` contexts
+  # on that commit came from the separate community-ci run. 14 of the 16
+  # contexts in the `Main ruleset` are matrix legs owned by the four jobs gated
+  # here, so a job-level skip does not leave a required context pending — it
+  # means the context is never *created*, and the merge queue ejects the pull
+  # request on a status-check timeout.
   scope:
     name: "Scope"
     runs-on: "ubuntu-latest"
     timeout-minutes: 10
+
+    # Only `pull_request` and `merge_group` can be scoped down at all; the
+    # classifier's first act on any other event is to emit the constant
+    # `heavy=true`. Skipping the job outright on those events is safe under this
+    # design's own rule — a skipped `scope` yields `heavy == ''`, which
+    # satisfies every `!= 'false'` step condition below — and it keeps a
+    # transient `scope` failure on `main` from satisfying `failure()` in
+    # `report-failure` and paging Slack.
+    if: ${{ github.event_name == 'pull_request' || github.event_name == 'merge_group' }}
 
     permissions:
       contents: read
@@ -73,8 +91,36 @@ jobs:
       - name: "Checkout"
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
-          # `git merge-base` needs history on both sides of the comparison.
+          # `git merge-base` needs history on both sides of the comparison, so
+          # the depth has to stay: a shallow clone makes `merge-base` fail,
+          # which lands on `heavy=true` and turns this into a silent no-op gate.
           fetch-depth: 0
+          # The classifier reads path names and commit topology, never file
+          # contents, so the ~36 MiB of blobs across ~5800 commits is pure cost
+          # on the critical path of four jobs. `blob:none` rather than `tree:0`
+          # because `actions/checkout` materialises a working tree, and `tree:0`
+          # would force that back out as on-demand tree fetches.
+          filter: "blob:none"
+
+      - name: "Verify the classifier"
+        # Canary, not a test suite: a pull request that widens the allowlist
+        # necessarily edits `classify-ci-scope.sh`, which is itself always
+        # heavy, so this runs against the change that could break it. Keeping
+        # `GITHUB_OUTPUT`/`GITHUB_STEP_SUMMARY` empty stops the canary writing
+        # a verdict into either.
+        env:
+          GITHUB_OUTPUT: ""
+          GITHUB_STEP_SUMMARY: ""
+        run: |
+          printf 'cli/flox/src/main.rs\n' |
+            ./.github/scripts/classify-ci-scope.sh --classify-only |
+            grep -qx 'heavy=true'
+          printf 'README.md\ndocs/guide.md\n' |
+            ./.github/scripts/classify-ci-scope.sh --classify-only |
+            grep -qx 'heavy=false'
+          printf 'cli/flox/doc/manifest.toml.md\n' |
+            ./.github/scripts/classify-ci-scope.sh --classify-only |
+            grep -qx 'heavy=true'
 
       - name: "Classify the diff"
         id: "classify"
@@ -95,9 +141,9 @@ jobs:
     needs:
       - "scope"
 
-    # Run even if `scope` failed, so this required check always posts a status.
-    # The step conditions below default to running the heavy steps whenever
-    # `scope` did not explicitly report `heavy=false`.
+    # See `scope`: this job always runs, and only its steps are gated. The step
+    # conditions below default to running whenever `scope` did not explicitly
+    # report `heavy=false`, which covers a failed or skipped `scope`.
     if: ${{ !cancelled() }}
 
     strategy:
@@ -267,8 +313,8 @@ jobs:
     # same commit by the maintainer-run community-ci draft PR (CONTRIBUTING.md).
     # Pushes, merge-queue runs, and same-repo PRs are unaffected.
     #
-    # `!cancelled()` keeps the pre-existing fork condition as the *only* reason
-    # this job is ever skipped: a failed `scope` must not silence it.
+    # See `scope`: `!cancelled()` keeps the pre-existing fork condition as the
+    # *only* reason this job is ever skipped.
     if: ${{ !cancelled() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
     runs-on: "ubuntu-latest"
     timeout-minutes: 120
@@ -460,9 +506,10 @@ jobs:
       - "scope"
       - "nix-build"
 
-    # Spelled out rather than left implicit so that a failed `scope` cannot
-    # skip this required check: `nix-build` succeeding is the only precondition,
-    # exactly as before. A skipped `nix-build` (fork PR) still skips this job.
+    # See `scope`. Spelled out rather than left implicit because without a
+    # status-check function GitHub adds `success()` over *every* `needs`:
+    # `nix-build` succeeding is the only precondition, exactly as before, and a
+    # skipped `nix-build` (fork PR) still skips this job.
     if: ${{ !cancelled() && needs.nix-build.result == 'success' }}
 
     strategy:
