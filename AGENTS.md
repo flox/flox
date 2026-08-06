@@ -162,6 +162,12 @@ If so, add a `## Release Notes` section to the PR description describing the cha
 
 Update your branch against `main` by rebasing — never a merge commit.
 
+**Never mention customer names.** This is a public repository — keep
+customer and prospect names out of everything that lands on GitHub:
+PR titles and descriptions, commit messages, code comments, branch
+names, test names, and test data. Refer to "a customer" and link the
+internal Linear issue instead.
+
 ## Conventions
 
 - **Rust style:**
