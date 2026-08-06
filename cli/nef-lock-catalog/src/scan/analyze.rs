@@ -168,7 +168,8 @@ pub(super) fn line_col(content: &str, offset: usize) -> (usize, usize) {
 /// file's location, recorded in scan errors and used for verbose reference
 /// reporting. `root_origins` maps each root to the top-level root it stands
 /// for — the identity map at the entry file, and the composition of the
-/// forwarding chain in imported files.
+/// forwarding chain in imported files. `import_stack` holds the files this one
+/// was reached through, canonicalized, so the drain can recognize a back-edge.
 pub(super) fn analyze_file_at(
     content: &str,
     root_attributes: &HashSet<String>,
@@ -176,6 +177,7 @@ pub(super) fn analyze_file_at(
     visited: &mut HashMap<PathBuf, HashSet<BTreeMap<String, AttrPath>>>,
     path: &Path,
     root_origins: &BTreeMap<String, AttrPath>,
+    import_stack: &[PathBuf],
 ) -> Result<FileInfo, ScanError> {
     debug!(file = %path.display(), "reading NEF expression");
 
@@ -251,6 +253,17 @@ pub(super) fn analyze_file_at(
     // Imports are IO: the walker only records facts, the drain here reads and
     // recurses. Relative paths resolve against the importing file's directory.
     if let Some(dir) = file_dir {
+        // Targets are canonicalized, so the stack this file extends must be
+        // too for a back-edge to be recognized. This file's content has
+        // already been read, so unlike an import target it cannot be missing:
+        // a failure here is a real IO fault and is reported rather than
+        // guessed around.
+        let canonical_path =
+            fs::canonicalize(path).map_err(|source| ScanError::UnreadableFile {
+                file: path.to_path_buf(),
+                source,
+                imported_from: None,
+            })?;
         for pending in pending_imports {
             let target = dir.join(&pending.path);
             // The fallback for an uncanonicalizable (missing) target still
@@ -263,6 +276,15 @@ pub(super) fn analyze_file_at(
             } else {
                 target
             };
+            // A back-edge to a file already being analyzed would re-enter it
+            // under the namespace this lap forwards, which is one component
+            // deeper than the last. Following that explores instantiations no
+            // evaluation reaches — the cycle is only ever entered once — and
+            // the paths written there read as packages that do not exist. The
+            // file's own refs were collected when it was first entered.
+            if import_stack.contains(&target) {
+                continue;
+            }
             // The refs the imported file would contribute cannot be
             // discovered, so fail rather than silently under-lock.
             let imported_content =
@@ -318,6 +340,11 @@ pub(super) fn analyze_file_at(
             }
             let child_root_attributes: HashSet<String> = rewrites.keys().cloned().collect();
             let import_dir = target.parent().map(Path::to_path_buf);
+            let child_stack: Vec<PathBuf> = import_stack
+                .iter()
+                .cloned()
+                .chain([canonical_path.clone()])
+                .collect();
             let imported = analyze_file_at(
                 &imported_content,
                 &child_root_attributes,
@@ -325,6 +352,7 @@ pub(super) fn analyze_file_at(
                 visited,
                 &target,
                 &child_origins,
+                &child_stack,
             )?;
             // The child's paths move into this file's namespace, keeping the
             // source they were found at so a path that cannot be locked is
@@ -1075,7 +1103,7 @@ impl<'a> Walker<'a> {
                 let Some(Binding::Path(parent)) = resolve_expr_binding(other, env) else {
                     return false;
                 };
-                if reaches_package(&parent) {
+                if self.reaches_package(&parent) {
                     return false;
                 }
                 self.note_root_use(offset_of(other.syntax()), &parent);
@@ -1144,20 +1172,24 @@ impl<'a> Walker<'a> {
                     entry
                         .value()
                         .and_then(|value| resolve_expr_binding(&value, env))
-                        .is_some_and(|binding| is_forwardable(&binding))
+                        .is_some_and(|binding| self.is_forwardable(&binding))
                 }) || attrset.inherits().any(|inherit| {
                     inherit.from().is_none()
                         && inherit.attrs().any(|attr| {
                             attr_static_name(&attr)
                                 .and_then(|name| env.get(&name))
-                                .is_some_and(is_forwardable)
+                                .is_some_and(|binding| self.is_forwardable(binding))
                         })
                 })
             },
-            other => {
-                resolve_expr_binding(other, env).is_some_and(|binding| is_forwardable(&binding))
-            },
+            other => resolve_expr_binding(other, env)
+                .is_some_and(|binding| self.is_forwardable(&binding)),
         }
+    }
+
+    /// Whether a binding forwards a namespace rather than a package.
+    fn is_forwardable(&self, binding: &Binding) -> bool {
+        matches!(binding, Binding::Path(path) if !self.reaches_package(path))
     }
 
     /// Resolve which names an import's argument attrset forwards a whole
@@ -1180,7 +1212,7 @@ impl<'a> Walker<'a> {
             };
             let Some(value) = entry.value() else { continue };
             if let Some(Binding::Path(path)) = resolve_expr_binding(&value, env)
-                && !reaches_package(&path)
+                && !self.reaches_package(&path)
             {
                 forwards.insert(name, path);
             }
@@ -1200,7 +1232,7 @@ impl<'a> Walker<'a> {
                     (true, _) => None,
                 };
                 if let Some(Binding::Path(path)) = binding
-                    && !reaches_package(&path)
+                    && !self.reaches_package(&path)
                 {
                     forwards.insert(name, path);
                 }
@@ -1645,6 +1677,12 @@ fn resolve_select_paths(select: &ast::Select, env: &Env) -> Option<BTreeSet<Attr
 /// within it — where a wildcard stands in for that last part. Anything
 /// shallower is not lockable, so the walker widens it (see
 /// [Walker::emit_value_paths]) and [CatalogRef] refuses what is left.
+///
+/// This measures the path as written, so it only answers for the top-level
+/// namespace. Callers inside the walker want [Walker::reaches_package], which
+/// re-roots first: a file reached through a forward writes its paths in the
+/// namespace it was handed, and judging those raw reads a narrowed forward as
+/// shallow forever, which is what lets an import cycle recurse without end.
 fn reaches_package(path: &AttrPath) -> bool {
     // A wildcard is always last and stands for whatever it replaced, so it
     // counts as the component reaching into the catalog like any other.
@@ -1689,11 +1727,6 @@ fn extract_import(apply: &ast::Apply) -> Option<(Option<String>, ast::Expr)> {
     }
     let path = static_path_str(&inner.argument()?);
     Some((path, apply.argument()?))
-}
-
-/// Whether a binding is a whole catalog root.
-fn is_forwardable(binding: &Binding) -> bool {
-    matches!(binding, Binding::Path(path) if !reaches_package(path))
 }
 
 /// The file's package function: the top-level lambda, looked for through
@@ -1802,6 +1835,7 @@ mod tests {
             &mut HashMap::new(),
             Path::new("test.nix"),
             &identity_origins(root_attributes),
+            &[],
         )
         .expect("scan should succeed")
     }
@@ -1824,6 +1858,7 @@ mod tests {
             &mut HashMap::new(),
             Path::new("test.nix"),
             &identity_origins(root_attributes),
+            &[],
         )
         .expect_err("scan should fail")
     }
@@ -1840,6 +1875,7 @@ mod tests {
             &mut visited,
             path,
             &identity_origins(root_attributes),
+            &[],
         )
         .expect("scan should succeed");
         rendered(info.refs)
@@ -1857,6 +1893,7 @@ mod tests {
             &mut visited,
             path,
             &identity_origins(root_attributes),
+            &[],
         )
         .expect_err("scan should fail")
     }
@@ -3009,6 +3046,32 @@ mod tests {
     }
 
     #[test]
+    fn package_deep_forward_is_not_followed() {
+        // The argument is two components in the file that writes it, so judged
+        // as written it looks like a namespace to forward. Re-rooted it is
+        // already a package, and a package passed into an import is a value,
+        // not a namespace the imported file writes paths under.
+        let got = refs_at(
+            "test_data/catalog_refs/narrowed-forward-deep/entry.nix",
+            &root_attributes(&["catalogs"]),
+        );
+        assert_eq!(got, set(&["catalogs.myorg.pkg"]));
+    }
+
+    #[test]
+    fn narrowed_forward_cycle_terminates() {
+        // A cycle whose forward narrows on every lap: the local path stays the
+        // same length while the namespace it lands in grows, so the drain's
+        // visited key never repeats. Only re-rooting before judging depth ends
+        // it.
+        let got = refs_at(
+            "test_data/catalog_refs/narrowed-forward-cycle/entry.nix",
+            &root_attributes(&["catalogs"]),
+        );
+        assert_eq!(got, set(&["catalogs.myorg.pkg"]));
+    }
+
+    #[test]
     fn import_unreadable_target_fails_scan() {
         // The import target cannot be read, so the refs it would contribute
         // through the forwarded namespaces cannot be discovered; the scan
@@ -3212,6 +3275,7 @@ mod tests {
             &mut HashMap::new(),
             path,
             &identity_origins(&root_attributes(&["catalogs"])),
+            &[],
         )
         .expect_err("scan should fail");
         assert_matches!(

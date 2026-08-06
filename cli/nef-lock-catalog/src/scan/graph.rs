@@ -215,5 +215,6 @@ fn read_and_analyze(path: &Path, root_attributes: &HashSet<String>) -> Result<Fi
         &mut HashMap::new(),
         path,
         &identity_origins(root_attributes),
+        &[],
     )
 }
