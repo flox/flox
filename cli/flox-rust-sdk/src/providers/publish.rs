@@ -1210,6 +1210,33 @@ fn check_env_files_tracked(
     Ok(())
 }
 
+/// Parse a git remote URL into the form published to FloxHub, dropping the
+/// userinfo the URL type can address.
+///
+/// The URL identifies the source repo; userinfo is not needed for that. The
+/// setters only ever remove, and they decline to act on URLs that cannot
+/// carry userinfo, so this never publishes more than it did before.
+///
+/// The username is kept for ssh-family schemes: there it is the login
+/// (`git@github.com`) and the URL does not clone without it. Telling a login
+/// from any other value would be a guess, and a wrong guess breaks
+/// publishing.
+fn parse_publishable_remote_url(raw: &str) -> Result<Url, PublishError> {
+    let mut url = GitUrl::parse_to_url(raw)
+        .map_err(|err| build_repo_err(&format!("Could not parse the remote URL: {err}")))?;
+
+    let _ = url.set_password(None);
+    // Exhaustive for the ssh family: the parser folds every lowercase
+    // ssh-bearing scheme to plain `ssh`, and `url` lowercases the rest, so a
+    // mixed-case `GIT+SSH://` arrives as one of these three. A substring test
+    // would also match `notssh` and friends and keep their username.
+    if !matches!(url.scheme(), "ssh" | "git+ssh" | "ssh+git") {
+        let _ = url.set_username("");
+    }
+
+    Ok(url)
+}
+
 /// Check the local repo that the build source is in to make sure that it's in
 /// a state amenable to publishing an artifact built from it.
 ///
@@ -1292,8 +1319,7 @@ fn gather_build_repo_meta(
         }));
     }
 
-    let url =
-        GitUrl::parse_to_url(&remote_info.url).map_err(|err| build_repo_err(&err.to_string()))?;
+    let url = parse_publishable_remote_url(&remote_info.url)?;
 
     Ok(RemoteBuildRepoMetadata {
         url,
@@ -1305,6 +1331,10 @@ fn gather_build_repo_meta(
 }
 
 // TODO: remove after discussion reg UX of this change.
+//
+// SECURITY: if re-enabled, route the return value through
+// `parse_publishable_remote_url`. It returns raw `git remote get-url` output,
+// which can carry a credential in its userinfo.
 #[allow(unused)]
 fn url_for_remote_containing_current_rev(
     git: &impl GitProvider,
@@ -2877,6 +2907,223 @@ pub mod tests {
                 "404 Not Found: The package with name {recording_name} in catalog {user_handle} was not found"
             )
         );
+    }
+
+    // ---- published remote URL ----
+
+    /// Fails GitHub's token checksum, so no scanner mistakes it for live.
+    const FAKE_TOKEN: &str = "ghs_EXAMPLEnotarealtoken0000000000000";
+
+    /// Asserted on the whole serialized URL; component-only assertions hid a
+    /// mangled path in an earlier revision.
+    fn published(raw: &str) -> String {
+        parse_publishable_remote_url(raw)
+            .unwrap_or_else(|e| panic!("refused {raw}: {e}"))
+            .to_string()
+    }
+
+    #[test]
+    fn publish_url_drops_user_and_password() {
+        let raw = format!("https://x-access-token:{FAKE_TOKEN}@github.com/floxy/myrepo");
+
+        assert_eq!(published(&raw), "https://github.com/floxy/myrepo");
+    }
+
+    #[test]
+    fn publish_url_drops_a_username_with_no_password() {
+        let raw = format!("https://{FAKE_TOKEN}@github.com/floxy/myrepo");
+
+        assert_eq!(published(&raw), "https://github.com/floxy/myrepo");
+    }
+
+    #[test]
+    fn publish_url_keeps_the_ssh_login() {
+        // The URL does not clone without it.
+        assert_eq!(
+            published("git@github.com:floxy/myrepo.git"),
+            "ssh://git@github.com/floxy/myrepo.git"
+        );
+    }
+
+    #[test]
+    fn publish_url_retains_any_ssh_username() {
+        // scp syntax normalizes to scheme ssh, so every username in that
+        // position is kept, not just a login. Unchanged from before; telling
+        // them apart would be a guess.
+        let raw = format!("{FAKE_TOKEN}@github.com:org/repo.git");
+
+        assert_eq!(
+            published(&raw),
+            format!("ssh://{FAKE_TOKEN}@github.com/org/repo.git")
+        );
+    }
+
+    #[test]
+    fn publish_url_drops_userinfo_from_http_like_schemes() {
+        // `git remote get-url` returns whatever is in .git/config, so the
+        // scheme is not limited to https.
+        for (raw, expected) in [
+            (
+                format!("git+https://x-access-token:{FAKE_TOKEN}@github.com/floxy/myrepo"),
+                "git+https://github.com/floxy/myrepo",
+            ),
+            (
+                format!("http://x-access-token:{FAKE_TOKEN}@github.com/floxy/myrepo"),
+                "http://github.com/floxy/myrepo",
+            ),
+        ] {
+            assert_eq!(published(&raw), expected);
+        }
+    }
+
+    #[test]
+    fn publish_url_leaves_an_at_sign_in_the_path_alone() {
+        // `myprofile` in the codecommit form is an AWS CLI profile name.
+        for (raw, expected) in [
+            (
+                "/srv/git/team@acme/repo.git",
+                "file:///srv/git/team@acme/repo.git",
+            ),
+            (
+                "file:///srv/git/team@acme/repo.git",
+                "file:///srv/git/team@acme/repo.git",
+            ),
+            (
+                "https://github.com/o/r-with@sign.git",
+                "https://github.com/o/r-with@sign.git",
+            ),
+            (
+                "codecommit::us-east-1://myprofile@myrepo",
+                "ssh://codecommit/:us-east-1://myprofile@myrepo",
+            ),
+        ] {
+            assert_eq!(published(raw), expected);
+        }
+    }
+
+    #[test]
+    fn publish_url_leaves_a_clean_url_untouched() {
+        assert_eq!(
+            published("https://github.com/floxy/myrepo"),
+            "https://github.com/floxy/myrepo"
+        );
+    }
+
+    #[test]
+    fn publish_url_accepts_a_local_file_remote() {
+        // The test harness uses file:// remotes throughout.
+        assert_eq!(published("file:///home/me/repo"), "file:///home/me/repo");
+    }
+
+    #[test]
+    fn publish_url_preserves_scheme_host_port_and_path() {
+        // The doubled segment comes from the URL parser and predates this
+        // change; pinned so a future change to normalization is visible.
+        assert_eq!(
+            published("https://git.example.com:8443/o/r"),
+            "https://git.example.com:8443//o/r"
+        );
+    }
+
+    #[test]
+    fn publish_url_passes_through_shapes_the_parser_mangles() {
+        // These come back re-spelled, with the original address in the path or
+        // with no host at all, so the URL type has no userinfo to address and
+        // the setters decline. Returned exactly as before this change.
+        for raw in [
+            format!("hg::https://x-access-token:{FAKE_TOKEN}@bitbucket.org/o/r"),
+            format!("git://x-access-token:{FAKE_TOKEN}@corp.example/o/r"),
+            "codecommit::us-east-1://myprofile@myrepo".to_string(),
+        ] {
+            assert_eq!(
+                published(&raw),
+                GitUrl::parse_to_url(&raw).unwrap().to_string()
+            );
+        }
+    }
+
+    #[test]
+    fn publish_url_covers_every_known_remote_shape() {
+        // One table, exact expected output per shape, so any change in
+        // behaviour shows up here rather than in a property that happens to
+        // stay true. Rows that keep their userinfo are the documented
+        // pass-throughs: the parser leaves them with nothing addressable.
+        for (raw, expected) in [
+            (
+                format!("https://x-access-token:{FAKE_TOKEN}@github.com/o/r"),
+                "https://github.com/o/r".to_string(),
+            ),
+            (
+                format!("https://{FAKE_TOKEN}@github.com/o/r"),
+                "https://github.com/o/r".to_string(),
+            ),
+            (
+                format!("http://x-access-token:{FAKE_TOKEN}@github.com/o/r"),
+                "http://github.com/o/r".to_string(),
+            ),
+            (
+                format!("git+https://x-access-token:{FAKE_TOKEN}@github.com/o/r"),
+                "git+https://github.com/o/r".to_string(),
+            ),
+            (
+                "git@github.com:o/r.git".to_string(),
+                "ssh://git@github.com/o/r.git".to_string(),
+            ),
+            (
+                "git+ssh://git@github.com/o/r.git".to_string(),
+                "ssh://git@github.com/o/r.git".to_string(),
+            ),
+            (
+                "GIT+SSH://git@github.com/o/r.git".to_string(),
+                "git+ssh://git@github.com/o/r.git".to_string(),
+            ),
+            (
+                "SSH+GIT://git@github.com/o/r.git".to_string(),
+                "ssh+git://git@github.com/o/r.git".to_string(),
+            ),
+            // A compound ssh scheme still loses its password; only the login
+            // position is kept.
+            (
+                format!("GIT+SSH://user:{FAKE_TOKEN}@github.com/o/r.git"),
+                "git+ssh://user@github.com/o/r.git".to_string(),
+            ),
+            // Schemes that merely contain "ssh" are not ssh: a substring test
+            // would keep these usernames.
+            (
+                format!("NOTSSH://user:{FAKE_TOKEN}@host/o/r"),
+                "notssh://host/o/r".to_string(),
+            ),
+            (
+                format!("SSH-TUNNEL://user:{FAKE_TOKEN}@host/o/r"),
+                "ssh-tunnel://host/o/r".to_string(),
+            ),
+            (
+                format!("{FAKE_TOKEN}@github.com:o/r.git"),
+                format!("ssh://{FAKE_TOKEN}@github.com/o/r.git"),
+            ),
+            (
+                "https://github.com/o/r".to_string(),
+                "https://github.com/o/r".to_string(),
+            ),
+            (
+                "https://github.com/o/r-with@sign.git".to_string(),
+                "https://github.com/o/r-with@sign.git".to_string(),
+            ),
+            (
+                "file:///srv/git/team@acme/repo.git".to_string(),
+                "file:///srv/git/team@acme/repo.git".to_string(),
+            ),
+            (
+                "https://git.example.com:8443/o/r".to_string(),
+                "https://git.example.com:8443//o/r".to_string(),
+            ),
+            (
+                format!("https://user:{FAKE_TOKEN}@git.example.com:8443/o/r"),
+                "https://git.example.com:8443//o/r".to_string(),
+            ),
+        ] {
+            assert_eq!(published(&raw), expected, "for {raw}");
+        }
     }
 
     // ---- gather_build_repo_meta error differentiation tests ----
