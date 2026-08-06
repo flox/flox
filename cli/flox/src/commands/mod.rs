@@ -48,6 +48,7 @@ use flox_rust_sdk::flox::{AuthContext, FLOX_VERSION, Flox, FloxhubTokenError};
 use flox_rust_sdk::models::env_registry;
 use flox_rust_sdk::models::env_registry::{ENV_REGISTRY_FILENAME, EnvRegistry};
 use flox_rust_sdk::models::environment::generations::GenerationId;
+use flox_rust_sdk::models::environment::managed_environment::ManagedEnvironment;
 use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironment;
 use flox_rust_sdk::models::environment::{
     ConcreteEnvironment,
@@ -105,6 +106,29 @@ static FLOX_DESCRIPTION: &'_ str = indoc! {"
     With Flox you create environments that layer and replace dependencies just where it matters,
     making them portable across the full software lifecycle."
 };
+
+/// Error for the commands that need the whole project rather than just the
+/// environment, when the environment is linked to FloxHub. `action` is the
+/// verb the caller is refusing, e.g. "build".
+///
+/// `flox pull --copy` without an `<OWNER>/<NAME>` argument converts a
+/// ManagedEnvironment into a PathEnvironment in place.
+pub(crate) fn needs_project_files_error(env: &ManagedEnvironment, action: &str) -> String {
+    let pointer = env.pointer();
+    formatdoc! {"
+        Cannot {action} from an environment on FloxHub.
+
+        A pushed or pulled environment cannot be assumed to have its project files.
+        If this directory no longer needs to track FloxHub, disconnect it with:
+
+          flox pull --copy -d {dir}
+
+        The environment {owner}/{name} will remain available on FloxHub.",
+        owner = pointer.owner,
+        name = pointer.name,
+        dir = env.parent_path().expect(".flox is not '/'").display(),
+    }
+}
 
 fn vec_len<T>(x: Vec<T>) -> usize {
     Vec::len(&x)
