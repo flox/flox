@@ -231,8 +231,8 @@ options.
     environment.
 
 `$FLOX_PROMPT_ENVIRONMENTS`
-:   Contains a space-delimited list of the active environments,
-    e.g. `owner1/foo owner2/bar local_env`.
+:   Contains a space-delimited list of the names of the active environments,
+    e.g. `foo bar local_env`.
     If `hide_default_prompt` is set to `true`, environments named `default` are
     excluded.
 
