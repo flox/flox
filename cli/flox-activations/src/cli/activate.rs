@@ -37,45 +37,24 @@ pub struct ActivateArgs {
     pub cmd: Option<Vec<String>>,
 }
 
-/// How an activation names itself on stderr once it is in effect.
+/// Announce the activation by naming the environment on stderr.
 ///
 /// The wording is the same in every mode; only whether the deactivate hint
-/// follows differs.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ActivationAnnouncement {
-    /// Name the environment and how to leave it. A subshell activation is a
-    /// place the user typed their way into and has to type their way out of,
-    /// so the exit is worth stating; it is also printed at most once per
-    /// subshell.
-    Full,
-    /// Name the environment only. In-place activations recur — every new shell
-    /// for an rc-file activation, every `cd` for an auto-activation — so this
-    /// omits the hint that would otherwise repeat all day.
-    OneLine,
-    /// Say nothing.
-    Silent,
-}
-
-impl ActivationAnnouncement {
-    fn for_context(context: &ActivateCtx, invocation_type: &InvocationType) -> Self {
-        if !context.announce_activation {
-            return Self::Silent;
-        }
-        match invocation_type {
-            InvocationType::Interactive => Self::Full,
-            _ => Self::OneLine,
-        }
+/// follows differs. A subshell activation is a place the user typed their way
+/// into and has to type their way out of, so the exit is worth stating; it is
+/// also printed at most once per subshell. In-place activations recur — every
+/// new shell for an rc-file activation, every `cd` for an auto-activation — so
+/// they omit the hint that would otherwise repeat all day.
+fn announce(context: &ActivateCtx, invocation_type: &InvocationType, transition: String) {
+    if !context.announce_activation {
+        return;
     }
-
-    fn emit(self, transition: String) {
-        let deactivate_hint = "To stop using this environment, run 'flox deactivate'";
-        match self {
-            Self::Full => updated(formatdoc! {"{transition}
-                     {deactivate_hint}
-                     "}),
-            Self::OneLine => updated(transition),
-            Self::Silent => {},
-        }
+    if *invocation_type == InvocationType::Interactive {
+        updated(formatdoc! {"{transition}
+            To stop using this environment, run 'flox deactivate'
+            "});
+    } else {
+        updated(transition);
     }
 }
 
@@ -183,22 +162,28 @@ impl ActivateArgs {
         let warning_interval = Duration::from_secs(5);
         let mut last_warning: Option<Instant> = None;
 
-        let announcement = ActivationAnnouncement::for_context(context, invocation_type);
-
         loop {
             match self.try_start_or_attach(context, subsystem_verbosity, vars_from_env)? {
                 StartOrAttachResult::Start { start_id, .. } => {
-                    announcement.emit(format!(
-                        "You are now using the environment '{}'",
-                        context.attach_ctx.env_description
-                    ));
+                    announce(
+                        context,
+                        invocation_type,
+                        format!(
+                            "You are now using the environment '{}'",
+                            context.attach_ctx.env_description
+                        ),
+                    );
                     return Ok(start_id);
                 },
                 StartOrAttachResult::Attach { start_id, .. } => {
-                    announcement.emit(format!(
-                        "Attached to existing activation of environment '{}'",
-                        context.attach_ctx.env_description
-                    ));
+                    announce(
+                        context,
+                        invocation_type,
+                        format!(
+                            "Attached to existing activation of environment '{}'",
+                            context.attach_ctx.env_description
+                        ),
+                    );
                     return Ok(start_id);
                 },
                 StartOrAttachResult::AlreadyStarting {
