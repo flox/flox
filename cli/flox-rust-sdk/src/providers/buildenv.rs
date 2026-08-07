@@ -2522,9 +2522,10 @@ mod buildenv_tests {
             .collect()
     }
 
-    /// Writes a lockfile installing [add_conflicting_outputs_to_store] under
-    /// the install ID `my_tool`, which deliberately differs from the package
-    /// name `collide`.
+    /// Writes a lockfile installing [add_conflicting_outputs_to_store] under an
+    /// install ID that deliberately differs from the package name, so that a
+    /// message naming the install ID can only have read it from the lockfile
+    /// rather than parsed it back out of the store path.
     ///
     /// The outputs are selected by name rather than with `outputs = "all"`,
     /// which is how a user hits this, because only the explicit list fixes the
@@ -2583,7 +2584,7 @@ mod buildenv_tests {
             panic!("expected build to fail, got {}", err);
         };
 
-        let expected = "> ❌ ERROR: 'collide (out)' conflicts with 'collide (dev)'. Both packages provide the file 'bin/collide'";
+        let expected = "> ❌ ERROR: 'my_tool (out)' conflicts with 'my_tool (dev)'. Both packages provide the file 'bin/collide'";
 
         assert!(
             output.contains(expected),
