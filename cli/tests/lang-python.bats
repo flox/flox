@@ -115,6 +115,9 @@ teardown() {
 
 # bats test_tags=python:activate:requirements,catalog
 @test "flox activate works with requirements.txt and pip" {
+  if [ "$NIX_SYSTEM" == "x86_64-darwin" ]; then
+    skip "init tests only run on default systems"
+  fi
   cp -r "$INPUT_DATA"/init/python/common/* "$PROJECT_DIR/"
   cp -r "$INPUT_DATA"/init/python/requirements/* "$PROJECT_DIR/"
   # Files copied from the store are read-only
@@ -139,6 +142,9 @@ teardown() {
 
 # bats test_tags=init:python:auto-setup,init:python:auto-setup:bash,catalog
 @test "verify auto-setup Python venv activation: bash" {
+  if [ "$NIX_SYSTEM" == "x86_64-darwin" ]; then
+    skip "init tests only run on default systems"
+  fi
   OWNER="owner"
   NAME="name"
   echo "requests" > requirements.txt
@@ -152,6 +158,9 @@ teardown() {
 
 # bats test_tags=init:python:auto-setup,init:python:auto-setup:zsh,catalog
 @test "verify auto-setup Python venv activation: zsh" {
+  if [ "$NIX_SYSTEM" == "x86_64-darwin" ]; then
+    skip "init tests only run on default systems"
+  fi
   OWNER="owner"
   NAME="name"
   echo "requests" > requirements.txt
@@ -165,6 +174,9 @@ teardown() {
 
 # bats test_tags=init:python:auto-setup,init:python:auto-setup:fish,catalog
 @test "verify auto-setup Python venv activation: fish" {
+  if [ "$NIX_SYSTEM" == "x86_64-darwin" ]; then
+    skip "init tests only run on default systems"
+  fi
   OWNER="owner"
   NAME="name"
   echo "requests" > requirements.txt
@@ -178,6 +190,9 @@ teardown() {
 
 # bats test_tags=init:python:auto-setup,init:python:auto-setup:tcsh,catalog
 @test "verify auto-setup Python venv activation: tcsh" {
+  if [ "$NIX_SYSTEM" == "x86_64-darwin" ]; then
+    skip "init tests only run on default systems"
+  fi
   OWNER="owner"
   NAME="name"
   echo "requests" > requirements.txt
