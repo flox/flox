@@ -40,7 +40,7 @@ use super::core_environment::CoreEnvironment;
 use super::fetcher::IncludeFetcher;
 use super::managed_environment::ManagedEnvironment;
 use super::remote_environment::RemoteEnvironment;
-use super::{ConcreteEnvironment, ENV_DIR_NAME, EnvironmentError, copy_dir_recursive};
+use super::{ConcreteEnvironment, ENV_DIR_NAME, EnvironmentError};
 use crate::flox::Flox;
 use crate::models::environment::floxmeta_branch::BranchOrd;
 use crate::models::environment::{CoreEnvironmentError, UninitializedEnvironment};
@@ -365,9 +365,17 @@ impl Generations<ReadWrite<'_>> {
         let env_path = generation_path.join(ENV_DIR_NAME);
         fs::create_dir_all(&env_path).unwrap();
 
-        // copy `env/`, i.e. manifest and lockfile (if it exists) and possibly other assets
-        // copy into `<generation>/env/` to make creating `PathEnvironment` easier
-        copy_dir_recursive(environment.path(), &env_path, true).unwrap();
+        // Copy the manifest and optional lockfile into `<generation>/env/`.
+        fs::copy(
+            environment.manifest_path(),
+            env_path.join(MANIFEST_FILENAME),
+        )
+        .map_err(GenerationsError::CopyGenerationManifest)?;
+        let lockfile_path = environment.lockfile_path();
+        if lockfile_path.exists() {
+            fs::copy(lockfile_path, env_path.join(LOCKFILE_FILENAME))
+                .map_err(GenerationsError::CopyGenerationLockfile)?;
+        }
 
         // commit environment and metadata
         self.repo
@@ -495,6 +503,10 @@ pub enum GenerationsError {
     // region: manifest errors
     #[error("could not write manifest file")]
     WriteManifest(#[source] std::io::Error),
+    #[error("could not copy generation manifest")]
+    CopyGenerationManifest(#[source] std::io::Error),
+    #[error("could not copy generation lockfile")]
+    CopyGenerationLockfile(#[source] std::io::Error),
     #[error("could not show manifest file")]
     ShowManifest(#[source] GitCommandError),
     #[error("could not show lockfile")]
@@ -2127,6 +2139,54 @@ mod tests {
         );
 
         (generations, tempdir)
+    }
+
+    #[test]
+    fn add_generation_copies_only_manifest_and_lockfile() {
+        let (flox, tempdir) = flox_instance();
+        let env = new_path_environment(&flox, "version = 1");
+        let env_name = env.name();
+        let mut core_env = env.into_core_environment().unwrap();
+        core_env.lock(&flox).unwrap();
+        fs::write(
+            core_env.path().join(".manifest.toml.swp"),
+            "editor swap file",
+        )
+        .unwrap();
+
+        let floxmeta_checkedout_path = tempfile::tempdir_in(&tempdir).unwrap().keep();
+        let floxmeta_temp_path = tempfile::tempdir_in(&tempdir).unwrap().keep();
+        let mut generations = Generations::init(
+            test_git_options(),
+            floxmeta_checkedout_path,
+            floxmeta_temp_path,
+            "some-branch".to_string(),
+            &env_name,
+        )
+        .unwrap();
+        let mut generations_rw = generations
+            .writable(&tempdir, AUTHOR, HOSTNAME, &ARGV)
+            .unwrap();
+
+        generations_rw
+            .add_generation(&mut core_env, HistoryKind::Edit)
+            .unwrap();
+
+        let generation_env_path = generations_rw
+            .repo
+            .path()
+            .join(GEN_ID_1.to_string())
+            .join(ENV_DIR_NAME);
+        let mut generation_files = fs::read_dir(generation_env_path)
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name().into_string().unwrap())
+            .collect::<Vec<_>>();
+        generation_files.sort();
+
+        assert_eq!(generation_files, vec![
+            "manifest.lock".to_string(),
+            "manifest.toml".to_string(),
+        ]);
     }
 
     #[test]
