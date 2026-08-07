@@ -107,6 +107,8 @@ EOF
     "$PROJECT_DIR/.flox/env"
   cp "$GENERATED_DATA/envs/hello_before_three_system_relock/manifest.toml" \
     "$TMP_MANIFEST_PATH"
+  # Files copied from the store are read-only
+  chmod +w "$TMP_MANIFEST_PATH"
   tomlq --in-place --toml-output \
     '.install.curl."pkg-path" = "curl"' "$TMP_MANIFEST_PATH"
 
