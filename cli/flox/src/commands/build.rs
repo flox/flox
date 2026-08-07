@@ -1064,6 +1064,7 @@ mod test {
     }
 
     #[tokio::test]
+    #[serial_test::serial(import_nixpkgs)]
     async fn import_nixpkgs_creates_package_file() {
         let (flox, _temp_dir) = flox_instance();
 
@@ -1108,6 +1109,7 @@ mod test {
     }
 
     #[tokio::test]
+    #[serial_test::serial(import_nixpkgs)]
     async fn import_nixpkgs_creates_pkgs_directory() {
         let (flox, _temp_dir) = flox_instance();
 
@@ -1176,6 +1178,7 @@ mod test {
     }
 
     #[tokio::test]
+    #[serial_test::serial(import_nixpkgs)]
     async fn import_nixpkgs_overwrites_with_force_flag() {
         let (flox, _temp_dir) = flox_instance();
 
@@ -1228,6 +1231,7 @@ mod test {
     // match statement in the import_nixpkgs function.
 
     #[tokio::test]
+    #[serial_test::serial(import_nixpkgs)]
     async fn import_nixpkgs_handles_different_packages() {
         let packages = vec!["hello", "cowsay", "git"];
 
