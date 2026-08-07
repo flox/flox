@@ -133,6 +133,61 @@ teardown() {
   assert_output --partial "You are logged in as owner"
 }
 
+# bats test_tags=auth:pat:status
+@test "pat: auth status --json reports unknown expiry" {
+  export FLOX_FLOXHUB_TOKEN="flox_pat_test-secret"
+  export _FLOX_USE_CATALOG_MOCK="$MANUALLY_GENERATED/auth/me_valid.yaml"
+
+  run "$FLOX_BIN" auth status --json
+  assert_success
+  assert_output --partial "\"status\": \"authenticated\""
+  assert_output --partial "\"identity\": {"
+  assert_output --partial "\"handle\": \"owner\""
+  assert_output --partial "\"credential_type\": \"personal_access_token\""
+  assert_output --partial "\"expires_at\": null"
+  refute_output --partial "flox_pat_test-secret"
+}
+
+# bats test_tags=auth:pat:status,auth:sat
+@test "sat: auth status reports credential type and expiry" {
+  export FLOX_FLOXHUB_TOKEN="flox_sat_expiring-secret"
+  export _FLOX_USE_CATALOG_MOCK="$MANUALLY_GENERATED/auth/me_service_expiring.yaml"
+
+  run "$FLOX_BIN" auth status
+  assert_success
+  assert_output --partial "You are logged in as owner"
+  assert_output --partial "Credential type: service account token."
+  assert_output --partial "Expires at: 2030-01-01T00:00:00+00:00."
+}
+
+# bats test_tags=auth:pat:status,auth:sat
+@test "sat: auth status --json reports unknown expiry" {
+  export FLOX_FLOXHUB_TOKEN="flox_sat_no-expiry-secret"
+  export _FLOX_USE_CATALOG_MOCK="$MANUALLY_GENERATED/auth/me_service_no_expiry.yaml"
+
+  run "$FLOX_BIN" auth status --json
+  assert_success
+  assert_output --partial "\"status\": \"authenticated\""
+  assert_output --partial "\"credential_type\": \"service_account_token\""
+  assert_output --partial "\"identity\": {"
+  assert_output --partial "\"expires_at\": null"
+  refute_output --partial "flox_sat_no-expiry-secret"
+}
+
+# bats test_tags=auth:pat:status
+@test "pat: auth status --json distinguishes an unverifiable token" {
+  export FLOX_FLOXHUB_TOKEN="flox_pat_unverifiable-status"
+  unset _FLOX_USE_CATALOG_MOCK
+  export FLOX_CATALOG_URL="http://127.0.0.1:1"
+
+  run "$FLOX_BIN" auth status --json
+  assert_failure
+  assert_output --partial "\"status\": \"unverifiable\""
+  assert_output --partial "\"credential_type\": \"personal_access_token\""
+  assert_output --partial "\"identity\": null"
+  refute_output --partial "flox_pat_unverifiable-status"
+}
+
 # bats test_tags=auth:pat:login
 @test "pat: auth login --token-file logs in with a pat" {
   unset FLOX_FLOXHUB_TOKEN

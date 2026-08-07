@@ -23,7 +23,7 @@ pub(crate) mod identity;
 mod kerberos;
 mod token;
 
-pub use auth_context::{AuthContext, AuthFailure, AuthHeaderError};
+pub use auth_context::{AuthContext, AuthFailure, AuthHeaderError, CredentialType};
 pub use identity::{IdentityError, UNKNOWN_HANDLE, UserIdentity};
 pub use kerberos::{KerberosMaterial, TokenGenerator};
 pub use token::{AccessToken, FloxhubToken, FloxhubTokenError};

@@ -13,7 +13,7 @@ flox-auth - FloxHub authentication commands
 
 ```text
 flox [<general-options>] auth
-     (login [--token-file <path>] | logout | status | token)
+     (login [--token-file <path>] | logout | status [--json] | token)
 ```
 
 # DESCRIPTION
@@ -50,7 +50,21 @@ Logs out from FloxHub.
 
 ## `status`
 
-Print your current login status.
+Print the current identity, credential type, and expiry when known.
+
+With `--json`, print a stable object with these fields:
+
+- `status`: `authenticated`, `unauthenticated`, `expired_or_revoked`, or
+  `unverifiable`.
+- `credential_type`: `auth0`, `personal_access_token`,
+  `service_account_token`, `access_token`, `kerberos`, or `null`.
+- `identity`: the authenticated identity, or `null` when unavailable.
+  - `handle`: the FloxHub handle.
+  - `expires_at`: an RFC 3339 timestamp, or `null` when no expiry is
+    available.
+
+The JSON output never includes the credential secret. Unauthenticated,
+expired or revoked, and unverifiable states return a nonzero exit status.
 
 ## `token`
 

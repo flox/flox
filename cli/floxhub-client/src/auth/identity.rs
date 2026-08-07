@@ -10,7 +10,7 @@ use std::collections::HashMap;
 use std::sync::{LazyLock, Mutex};
 
 use chrono::{DateTime, Utc};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 /// Placeholder handle shown when a credential could not be verified (e.g.
@@ -23,7 +23,7 @@ pub const UNKNOWN_HANDLE: &str = "UNKNOWN";
 /// Uniform across credential kinds: derived from JWT claims for Auth0,
 /// resolved from `/me` for a personal access token, and from the principal
 /// for Kerberos.
-#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct UserIdentity {
     pub handle: String,
     /// Wall-clock expiry of the presenting credential;

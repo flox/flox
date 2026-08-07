@@ -10,10 +10,41 @@
 //! explicit state rather than a separate variant so that the configured auth
 //! mode is always preserved.
 
+use serde::Serialize;
 use url::Url;
 
 use crate::auth::kerberos::KerberosMaterial;
-use crate::auth::token::{ACCESS_TOKEN_PREFIX, AccessToken, FloxhubToken, FloxhubTokenError};
+use crate::auth::token::{
+    ACCESS_TOKEN_PREFIX,
+    AccessToken,
+    FloxhubToken,
+    FloxhubTokenError,
+    PERSONAL_ACCESS_TOKEN_PREFIX,
+    SERVICE_ACCOUNT_TOKEN_PREFIX,
+};
+
+/// The kind of credential represented by an [`AuthContext`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CredentialType {
+    Auth0,
+    PersonalAccessToken,
+    ServiceAccountToken,
+    AccessToken,
+    Kerberos,
+}
+
+impl std::fmt::Display for CredentialType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CredentialType::Auth0 => f.write_str("Auth0 token"),
+            CredentialType::PersonalAccessToken => f.write_str("personal access token"),
+            CredentialType::ServiceAccountToken => f.write_str("service account token"),
+            CredentialType::AccessToken => f.write_str("access token"),
+            CredentialType::Kerberos => f.write_str("Kerberos credential"),
+        }
+    }
+}
 
 /// Describes why authentication failed.
 ///
@@ -81,6 +112,27 @@ impl AuthContext {
             AuthContext::Auth0(None) => None,
             AuthContext::AccessToken(token) => token.handle(),
             AuthContext::Kerberos(Some(material)) => Some(material.principal.clone()),
+            AuthContext::Kerberos(None) => None,
+        }
+    }
+
+    /// Return the credential kind without exposing its secret.
+    pub fn credential_type(&self) -> Option<CredentialType> {
+        match self {
+            AuthContext::Auth0(Some(_)) => Some(CredentialType::Auth0),
+            AuthContext::Auth0(None) => None,
+            AuthContext::AccessToken(token)
+                if token.secret().starts_with(PERSONAL_ACCESS_TOKEN_PREFIX) =>
+            {
+                Some(CredentialType::PersonalAccessToken)
+            },
+            AuthContext::AccessToken(token)
+                if token.secret().starts_with(SERVICE_ACCOUNT_TOKEN_PREFIX) =>
+            {
+                Some(CredentialType::ServiceAccountToken)
+            },
+            AuthContext::AccessToken(_) => Some(CredentialType::AccessToken),
+            AuthContext::Kerberos(Some(_)) => Some(CredentialType::Kerberos),
             AuthContext::Kerberos(None) => None,
         }
     }
@@ -266,21 +318,21 @@ mod tests {
     }
 
     #[test]
-    fn new_from_token_routes_flox_prefix_to_access_token() {
-        // Any flox_-prefixed token is an opaque access token: personal
-        // access tokens today, service account tokens to come.
-        for secret in ["flox_pat_abc123", "flox_sat_abc123"] {
+    fn new_from_token_classifies_opaque_credential_types() {
+        for (secret, expected) in [
+            ("flox_pat_abc123", CredentialType::PersonalAccessToken),
+            ("flox_sat_abc123", CredentialType::ServiceAccountToken),
+            ("flox_future_abc123", CredentialType::AccessToken),
+        ] {
             let auth = AuthContext::new_from_token(Some(secret)).unwrap();
-            let AuthContext::AccessToken(token) = auth else {
-                panic!("expected AccessToken, got {auth:?}");
-            };
-            assert_eq!(token.secret(), secret);
+            assert_eq!(auth.credential_type(), Some(expected));
         }
     }
 
     #[test]
     fn new_from_token_routes_jwt_to_auth0() {
         let auth = AuthContext::new_from_token(Some(FAKE_TOKEN)).unwrap();
+        assert_eq!(auth.credential_type(), Some(CredentialType::Auth0));
         let AuthContext::Auth0(Some(token)) = auth else {
             panic!("expected Auth0, got {auth:?}");
         };
@@ -290,6 +342,7 @@ mod tests {
     #[test]
     fn new_from_token_without_token_is_not_logged_in() {
         let auth = AuthContext::new_from_token(None).unwrap();
+        assert_eq!(auth.credential_type(), None);
         assert!(matches!(auth, AuthContext::Auth0(None)));
     }
 
