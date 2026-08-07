@@ -1696,7 +1696,7 @@ mod migration_tests {
     async fn v1_including_latest_with_hello_is_not_migrated() {
         let (mut flox, tempdir) = flox_instance();
 
-        let included_manifest = with_latest_schema(&formatdoc! {r#"
+        let included_manifest = with_latest_schema(formatdoc! {r#"
             [install]
             hello.pkg-path = "hello"
             {ALL_SYSTEMS_OPTIONS}
@@ -1738,7 +1738,7 @@ mod migration_tests {
         let (mut flox, tempdir) = flox_instance();
         flox.floxhub_client = catalog_replay_client(GENERATED_DATA.join("envs/bash.yaml")).await;
 
-        let included_manifest = with_latest_schema(&formatdoc! {r#"
+        let included_manifest = with_latest_schema(formatdoc! {r#"
             [install]
             bash.pkg-path = "bashNonInteractive"
             bash.outputs = "all"
@@ -1762,7 +1762,7 @@ mod migration_tests {
     async fn v1_including_latest_with_specific_outputs_is_migrated() {
         let (mut flox, tempdir) = flox_instance();
 
-        let included_manifest = with_latest_schema(&formatdoc! {r#"
+        let included_manifest = with_latest_schema(formatdoc! {r#"
             [install]
             bash.pkg-path = "bashNonInteractive"
             bash.outputs = ["out"]
@@ -1806,7 +1806,7 @@ mod migration_tests {
         assert_eq!(manifest.get_schema_version(), KnownSchemaVersion::V1);
 
         // Now update the included env to add a package with explicit outputs.
-        let updated_included_manifest = with_latest_schema(&formatdoc! {r#"
+        let updated_included_manifest = with_latest_schema(formatdoc! {r#"
             [vars]
             included_var = "value"
 
@@ -1872,7 +1872,7 @@ mod migration_tests {
 
         // Edit the composer to add a package with explicit outputs,
         // which requires a schema bump.
-        let edited_manifest = with_latest_schema(&formatdoc! {r#"
+        let edited_manifest = with_latest_schema(formatdoc! {r#"
             [include]
             environments = [
               {{ dir = "../included" }},
