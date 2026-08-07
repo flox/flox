@@ -277,6 +277,7 @@ mod tests {
     use flox_test_utils::GENERATED_DATA;
     use flox_test_utils::manifests::{ALL_SYSTEMS_OPTIONS, HELLO};
     use indoc::indoc;
+    use pretty_assertions::{assert_eq, assert_str_eq};
     use serial_test::serial;
     use tempfile::TempDir;
     use tracing::instrument::WithSubscriber;
@@ -754,7 +755,7 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     #[serial(global_events_client)]
     async fn dry_run_shows_version_change_summary() {
-        assert_eq!(run_dry_run_with_version_change().await, indoc! {"
+        assert_str_eq!(run_dry_run_with_version_change().await, indoc! {"
             Dry run: 1 version change in 'name':
             - hello: 2.10.1 -> 2.12.3
 
