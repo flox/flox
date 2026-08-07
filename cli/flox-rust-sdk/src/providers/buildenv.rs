@@ -1166,24 +1166,31 @@ fn nix_path_info_null_paths(paths: &[String]) -> Result<Vec<String>, std::io::Er
         .collect())
 }
 
-/// Returns true if `err` reports a buildenv package-output conflict from
+/// Returns true if `err` reports a buildenv file collision from
 /// `buildenv/builder.pl`. These errors are deterministic — the same lockfile
 /// will always produce the same conflict — and must not be retried.
 ///
-/// Matches on the conflict-specific resolution hint emitted at
-/// `buildenv/builder.pl:245` (`Resolve by uninstalling one of the conflicting
-/// packages`) rather than the broader `❌ ERROR:` sentinel installed by the
-/// `$SIG{__DIE__}` handler at `buildenv/builder.pl:13`. The broader sentinel
-/// covers builder.pl's filesystem `die` paths (EMFILE, ENOSPC, etc. during
-/// mkpath/symlink), which are genuinely transient and must remain retryable.
+/// Matches on the conflict-specific resolution hints emitted by
+/// `buildenv/builder.pl` (`Resolve by uninstalling one of the conflicting
+/// packages`/`outputs`) rather than the broader `❌ ERROR:` sentinel installed
+/// by the `$SIG{__DIE__}` handler at `buildenv/builder.pl:13`. The broader
+/// sentinel covers builder.pl's filesystem `die` paths (EMFILE, ENOSPC, etc.
+/// during mkpath/symlink), which are genuinely transient and must remain
+/// retryable.
 ///
-/// If `buildenv/builder.pl`'s conflict message changes, the unit test
+/// The matched text is `$FLOX_CONFLICT_HINT_PREFIX` in
+/// `buildenv/builder.pl`, which both hints are built from. Two tests run
+/// builder.pl for real and fail if it stops emitting that prefix:
+/// `buildenv_tests::detects_conflicting_packages` covers a conflict between
+/// packages and `buildenv_tests::detects_conflicting_outputs_of_one_package`
+/// one between outputs of a single package. The stubbed stderr in
 /// `materialise_retry_tests::deterministic_buildenv_conflict_short_circuits`
-/// will break and signal a contract update is needed.
+/// pins the retry behaviour but not the contract, so it would keep passing on
+/// its own.
 fn is_deterministic_buildenv_conflict(err: &BuildEnvError) -> bool {
     match err {
         BuildEnvError::Build(stderr) => {
-            stderr.contains("Resolve by uninstalling one of the conflicting packages")
+            stderr.contains("Resolve by uninstalling one of the conflicting")
         },
         _ => false,
     }
@@ -1287,7 +1294,7 @@ pub fn materialise_with_retry<T>(
                     // daemon, leaving paths on disk but unregistered.
                     match nix_path_info_null_paths(&confirmed) {
                         Ok(null_paths) if null_paths.is_empty() => {
-                            // Short-circuit deterministic package-output conflicts
+                            // Short-circuit deterministic file collisions
                             // before spending retries. The same lockfile always
                             // produces the same conflict, so retrying cannot help.
                             if is_deterministic_buildenv_conflict(&e) {
@@ -1295,7 +1302,7 @@ pub fn materialise_with_retry<T>(
                                     error = %e,
                                     attempt,
                                     "buildenv.nix reported a deterministic \
-                                    package-output conflict — not retrying"
+                                    file collision — not retrying"
                                 );
                                 return Err(e);
                             }
@@ -2302,10 +2309,16 @@ mod realise_batch_tests {
 
 #[cfg(test)]
 mod buildenv_tests {
-    use std::collections::HashSet;
+    use std::collections::{BTreeMap, HashSet};
+    use std::fs;
     use std::os::unix::fs::PermissionsExt;
 
+    use flox_manifest::interfaces::AsTypedOnlyManifest;
+    use flox_manifest::lockfile::test_helpers::fake_catalog_package_lock_with_outputs;
+    use flox_manifest::parsed::latest::ManifestPackageDescriptor;
+    use flox_manifest::raw::test_helpers::empty_test_migrated_manifest;
     use flox_test_utils::{GENERATED_DATA, MANUALLY_GENERATED};
+    use tempfile::TempDir;
     use test_helpers::buildenv_instance;
 
     use super::*;
@@ -2452,6 +2465,11 @@ mod buildenv_tests {
         let client = MockClient::new();
         let result = buildenv.build(&client, &lockfile_path, None, None);
         let err = result.expect_err("conflicting packages should fail to build");
+        assert!(
+            is_deterministic_buildenv_conflict(&err),
+            "a package conflict must be classified as deterministic so that it is not retried:\n\
+            actual: {err}"
+        );
 
         let BuildEnvError::Build(output) = err else {
             panic!("expected build to fail, got {}", err);
@@ -2462,6 +2480,127 @@ mod buildenv_tests {
         assert!(
             output.contains(expected),
             "expected output to contain a conflict message:\n\
+            actual: {output}\n\
+            expected: {expected}"
+        );
+    }
+
+    /// Adds the given outputs of one package to the store, all providing
+    /// `bin/collide`, and returns them keyed by output name.
+    ///
+    /// Adds directories rather than building a multi-output derivation:
+    /// `nix store add` gives exact control over the store path names and
+    /// needs no builder on `PATH`, which a bare `/bin/sh` derivation has in
+    /// neither sandbox. The paths are content-addressed, so repeated runs
+    /// reuse the same two, and nothing roots them.
+    ///
+    /// The version is date-shaped because that is the case an output name
+    /// cannot be recovered from: `parseStorePath` in `buildenv/builder.pl`
+    /// splits on the first `-` followed by a digit, so `-dev` lands inside
+    /// the version of `collide-2024-07-02-dev` and reads no differently from
+    /// the `-02` before it. A message that still names `dev` can only have
+    /// taken it from the lockfile.
+    fn add_conflicting_outputs_to_store(outputs: &[&str]) -> BTreeMap<String, String> {
+        let sources = TempDir::new().unwrap();
+        outputs
+            .iter()
+            .map(|&output| {
+                let source = sources.path().join(output);
+                fs::create_dir_all(source.join("bin")).unwrap();
+                // Differing contents so that the paths collide even when
+                // `checkCollisionContents` is enabled.
+                fs::write(source.join("bin/collide"), output).unwrap();
+
+                // Nix names the primary output after the package and suffixes
+                // every other output with its own name.
+                let name = match output {
+                    "out" => "collide-2024-07-02".to_string(),
+                    other => format!("collide-2024-07-02-{other}"),
+                };
+                let added = nix_base_command()
+                    .args(["store", "add", "--name", &name])
+                    .arg(&source)
+                    .output()
+                    .unwrap();
+                assert!(
+                    added.status.success(),
+                    "failed to add '{name}' to the store: {}",
+                    String::from_utf8_lossy(&added.stderr)
+                );
+
+                let store_path = String::from_utf8(added.stdout).unwrap().trim().to_string();
+                (output.to_string(), store_path)
+            })
+            .collect()
+    }
+
+    /// Writes a lockfile installing [add_conflicting_outputs_to_store] under an
+    /// install ID that deliberately differs from the package name, so that a
+    /// message naming the install ID can only have read it from the lockfile
+    /// rather than parsed it back out of the store path.
+    ///
+    /// The outputs are selected by name rather than with `outputs = "all"`,
+    /// which is how a user hits this, because only the explicit list fixes the
+    /// order in which `builder.pl` links them. Both spellings reach the same
+    /// collision, but `"all"` is an unordered hash lookup in `builder.pl`, so
+    /// it leaves which output is reported first up to Perl.
+    fn lockfile_with_conflicting_outputs(dir: &Path) -> PathBuf {
+        let outputs = ["out", "dev"];
+        let (mut descriptor, mut locked) =
+            fake_catalog_package_lock_with_outputs("my_tool", "collide", &outputs);
+        let ManifestPackageDescriptor::Catalog(ref mut catalog_descriptor) = descriptor else {
+            panic!("expected a catalog descriptor");
+        };
+        catalog_descriptor.outputs = Some(SelectedOutputs::Specific(
+            outputs.iter().map(|o| o.to_string()).collect(),
+        ));
+        catalog_descriptor.systems = Some(vec![env!("NIX_TARGET_SYSTEM").to_string()]);
+        locked.system = env!("NIX_TARGET_SYSTEM").to_string();
+        locked.outputs = add_conflicting_outputs_to_store(&outputs);
+
+        let mut manifest = empty_test_migrated_manifest();
+        manifest
+            .as_latest_schema_mut()
+            .install
+            .inner_mut()
+            .insert("my_tool".to_string(), descriptor);
+
+        let lockfile = Lockfile {
+            manifest: manifest.as_latest_schema().as_typed_only(),
+            packages: vec![locked.into()],
+            ..Default::default()
+        };
+
+        let path = dir.join("manifest.lock");
+        fs::write(&path, serde_json::to_string_pretty(&lockfile).unwrap()).unwrap();
+        path
+    }
+
+    /// Two outputs of a single installed package are reported as a conflict
+    /// between that package's outputs, named by install ID.
+    #[test]
+    fn detects_conflicting_outputs_of_one_package() {
+        let buildenv = buildenv_instance();
+        let dir = TempDir::new().unwrap();
+        let lockfile_path = lockfile_with_conflicting_outputs(dir.path());
+        let client = MockClient::new();
+        let result = buildenv.build(&client, &lockfile_path, None, None);
+        let err = result.expect_err("conflicting outputs should fail to build");
+        assert!(
+            is_deterministic_buildenv_conflict(&err),
+            "an output conflict must be classified as deterministic so that it is not retried:\n\
+            actual: {err}"
+        );
+
+        let BuildEnvError::Build(output) = err else {
+            panic!("expected build to fail, got {}", err);
+        };
+
+        let expected = "> ❌ ERROR: 'my_tool^out' conflicts with 'my_tool^dev'. Both outputs of the same package provide the file 'bin/collide'";
+
+        assert!(
+            output.contains(expected),
+            "expected output to contain an output conflict message:\n\
             actual: {output}\n\
             expected: {expected}"
         );
@@ -3143,45 +3282,59 @@ mod materialise_retry_tests {
     #[test]
     fn deterministic_buildenv_conflict_short_circuits() {
         init_tracing();
-        // build_env always returns a conflict error containing the
-        // builder.pl resolution hint. realise and missing_paths are
+        // build_env always returns a conflict error containing one of the
+        // builder.pl resolution hints. realise and missing_paths are
         // wired to never block progress so the conflict is the only
         // reason for failure.
-        let realise_calls = Cell::new(0usize);
-        let build_calls = Cell::new(0usize);
-        let conflict_stderr = "environment> ❌ ERROR: 'vim' conflicts with \
-                               'vim-full'. Both packages provide the file \
-                               'bin/ex'\nenvironment> \nenvironment> Resolve \
-                               by uninstalling one of the conflicting \
-                               packages or setting the priority of the \
-                               preferred package to a value lower than '5'"
-            .to_string();
-        let result: Result<(), _> = materialise_with_retry(
-            || {
-                realise_calls.set(realise_calls.get() + 1);
-                Ok(())
-            },
-            Vec::new, // paths always present
-            Vec::new,
-            || {
-                build_calls.set(build_calls.get() + 1);
-                Err(BuildEnvError::Build(conflict_stderr.clone()))
-            },
-        );
-        match result.unwrap_err() {
-            BuildEnvError::Build(msg) => assert_eq!(msg, conflict_stderr),
-            e => panic!("expected Build, got {e:?}"),
+        let cases = [
+            (
+                "cross-package conflict",
+                "environment> ❌ ERROR: 'vim' conflicts with 'vim-full'. \
+                 Both packages provide the file 'bin/ex'\nenvironment> \
+                 \nenvironment> Resolve by uninstalling one of the \
+                 conflicting packages or setting the priority of the \
+                 preferred package to a value lower than '5'",
+            ),
+            (
+                "same-package output conflict",
+                "environment> ❌ ERROR: 'nodejs^dev' conflicts with \
+                 'nodejs^out'. Both outputs of the same package provide \
+                 the file 'include/node/node.h'\nenvironment> \
+                 \nenvironment> Resolve by uninstalling one of the \
+                 conflicting outputs from 'nodejs'",
+            ),
+        ];
+        for (case, conflict_stderr) in cases {
+            let realise_calls = Cell::new(0usize);
+            let build_calls = Cell::new(0usize);
+            let conflict_stderr = conflict_stderr.to_string();
+            let result: Result<(), _> = materialise_with_retry(
+                || {
+                    realise_calls.set(realise_calls.get() + 1);
+                    Ok(())
+                },
+                Vec::new, // paths always present
+                Vec::new,
+                || {
+                    build_calls.set(build_calls.get() + 1);
+                    Err(BuildEnvError::Build(conflict_stderr.clone()))
+                },
+            );
+            match result.unwrap_err() {
+                BuildEnvError::Build(msg) => assert_eq!(msg, conflict_stderr),
+                e => panic!("{case}: expected Build, got {e:?}"),
+            }
+            assert_eq!(
+                build_calls.get(),
+                1,
+                "{case}: must not retry a deterministic file collision"
+            );
+            assert_eq!(
+                realise_calls.get(),
+                1,
+                "{case}: realise called once before short-circuit"
+            );
         }
-        assert_eq!(
-            build_calls.get(),
-            1,
-            "must not retry a deterministic package-output conflict"
-        );
-        assert_eq!(
-            realise_calls.get(),
-            1,
-            "realise called once before short-circuit"
-        );
     }
 
     // --- realise errors ---

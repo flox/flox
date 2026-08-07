@@ -33,6 +33,23 @@ my $FLOX_RECURSIVE_LINK = 0;
 # it is incremented for each propagated package to prevent collisions between them, and
 # starting at 1000 ensures that they have lower priority than explicitly installed packages.
 my $ignoreCollisionCounter = 0;
+
+# Maps the store path of each installed output to the install ID that pulled
+# it in. Nixpkgs pnames routinely differ from the install ID the user typed
+# ("nodejs_24" installs a "nodejs" derivation, "make" installs "gnumake"), and
+# only the install ID is meaningful to the rest of Flox, so collision messages
+# name packages from this map. Packages that Flox installs itself, such as the
+# interpreter, have no install ID and are absent.
+my %installIdByStorePath;
+
+# Maps the store path of each installed output to the name of that output.
+# A store path spells its output as a trailing "-<output>" that cannot be told
+# apart from the tail of a version: "re2-2024-07-02-dev" and "hello-1.0-rc1"
+# have the same shape. Only the lockfile names outputs unambiguously, so
+# collision messages take them from this map. Filled in alongside
+# %installIdByStorePath, and likewise absent for anything installed by store
+# path or by Flox itself, neither of which the user selects by output.
+my %outputByStorePath;
 # </flox>
 
 my $out = $ENV{"out"};
@@ -137,7 +154,9 @@ sub prependDangling {
 }
 
 # Parses a /nix/store/<checksum>-<name>-<version>/<basename> path and
-# returns its constituent (name, version, basename) parts.
+# returns its constituent (name, version, basename) parts, followed by the
+# "/nix/store/<checksum>-<name>-<version>" prefix itself so that callers can
+# identify which installed output the path belongs to.
 sub parseStorePath($) {
     my $path = shift;
     # Split the path into its components.
@@ -158,36 +177,15 @@ sub parseStorePath($) {
     my $name = shift @pkgParts;
     my $version = shift @pkgParts;
     my $basename = join "/", @path;
-    return ($name, $version, $basename);
+    return ($name, $version, $basename, $storePath);
 }
 
-# Given a parsed version string (the 2nd element of parseStorePath's
-# return tuple), return the Nix output name encoded as a trailing
-# "-<output>" suffix, or "out" if no such suffix is present.
-#
-# parseStorePath splits the package-name-version on /-(?=\d)/, so for
-# a multi-output store path like ".../<hash>-kitty-0.47.4-kitten" the
-# returned version is "0.47.4-kitten" — the output suffix lands
-# inside the version field. An output name in Nixpkgs convention
-# starts with a lowercase letter and contains only alphanumeric or
-# underscore characters (e.g. "out", "dev", "lib", "kitten",
-# "shell_integration", "lib32"). It never contains a "." or "-",
-# which is how we distinguish it from a trailing version qualifier
-# such as "rc1" or "1.0.0-final".
-#
-# Common version qualifiers that would otherwise satisfy the shape
-# rule (rc, alpha, beta, pre, final, nightly, stable) are denied
-# explicitly to avoid rendering "1.0.0-alpha" as output "alpha".
-sub parseOutputFromVersion {
-    my $version = shift;
-    return "out" unless defined $version && $version =~ /-/;
-    my @parts = split /-/, $version;
-    my $last = $parts[-1];
-    return "out" unless $last =~ /^[a-z][a-zA-Z0-9_]*$/;
-    return "out" if $last =~
-        /^(rc|alpha|beta|pre|final|nightly|stable|snapshot|dirty)\d*$/i;
-    return $last;
-}
+# Opening text shared by both of the collision hints below. The Rust provider
+# matches it to classify a buildenv failure as deterministic and skip its retry
+# loop, so building both hints from one variable keeps them from drifting apart
+# from each other or from `is_deterministic_buildenv_conflict` in
+# `cli/flox-rust-sdk/src/providers/buildenv.rs`.
+my $FLOX_CONFLICT_HINT_PREFIX = "Resolve by uninstalling one of the conflicting ";
 
 sub findFiles {
     my ($relName, $target, $baseName, $ignoreCollisions, $checkCollisionContents, $priority) = @_;
@@ -260,31 +258,45 @@ sub findFiles {
             return;
         } else {
             # Improve upon the default collision message from upstream.
-            my ($targetName, $targetVersion, $targetBasename) = parseStorePath($target);
-            my ($oldTargetName, $oldTargetVersion, $oldTargetBasename) = parseStorePath($oldTarget);
-            my $errmsg;
-            if ($targetName eq $oldTargetName) {
-                my $oldOutput = parseOutputFromVersion($oldTargetVersion);
-                my $newOutput = parseOutputFromVersion($targetVersion);
-                if ($oldOutput ne $newOutput) {
-                    $errmsg = "'$oldTargetName ($oldOutput)' conflicts with "
-                            . "'$targetName ($newOutput)'. ";
-                } else {
-                    $errmsg = "'$oldTargetName' conflicts with '$targetName'. ";
-                }
+            # Skips the version, the 2nd element of the tuple, which names
+            # neither the package nor the output.
+            my ($targetName, $targetBasename, $targetStorePath) =
+                (parseStorePath($target))[0, 2, 3];
+            my ($oldTargetName, $oldTargetBasename, $oldTargetStorePath) =
+                (parseStorePath($oldTarget))[0, 2, 3];
+            my $installId = $installIdByStorePath{$targetStorePath};
+            my $oldInstallId = $installIdByStorePath{$oldTargetStorePath};
+            # Fall back to the store path name for packages that Flox installs
+            # itself, which the user cannot refer to by any other name either.
+            my $name = $installId // $targetName;
+            my $oldName = $oldInstallId // $oldTargetName;
+            my ($errmsg, $subject, $hint);
+            # Equal install IDs can only mean two outputs of one entry in
+            # `[install]`, which is also the only way both paths can have come
+            # from an output selection, so %outputByStorePath names them both.
+            # Every other pairing is two distinct packages, even when they are
+            # built from the same derivation name.
+            if (defined $installId && defined $oldInstallId && $installId eq $oldInstallId) {
+                my $oldOutput = $outputByStorePath{$oldTargetStorePath};
+                my $newOutput = $outputByStorePath{$targetStorePath};
+                $errmsg = "'$oldName^$oldOutput' conflicts with "
+                        . "'$name^$newOutput'. ";
+                $subject = "outputs of the same package";
+                $hint = $FLOX_CONFLICT_HINT_PREFIX . "outputs from '$name'";
             } else {
-                $errmsg = "'$oldTargetName' conflicts with '$targetName'. ";
+                $errmsg = "'$oldName' conflicts with '$name'. ";
+                $subject = "packages";
+                $hint = $FLOX_CONFLICT_HINT_PREFIX . "packages or " .
+                        "setting the priority of the preferred package to a value " .
+                        "lower than '$oldPriority'";
             }
             if ($targetBasename eq $oldTargetBasename) {
-                $errmsg .= "Both packages provide the file '$targetBasename'";
+                $errmsg .= "Both $subject provide the file '$targetBasename'";
             } else {
                 # This is unexpected ... revert to reporting the exact refs encountered.
                 $errmsg .= "collision between $targetRef and $oldTargetRef";
             }
-            die $errmsg . "\n\n" .
-                "Resolve by uninstalling one of the conflicting packages or " .
-                "setting the priority of the preferred package to a value " .
-                "lower than '$oldPriority'\n";
+            die $errmsg . "\n\n" . $hint . "\n";
         }
     }
 
@@ -537,7 +549,8 @@ if ($manifest) {
                 if (defined $package->{"store_path"}) {
                     push @retarray, {
                         "paths" => [ $package->{"store_path"} ],
-                        "priority" => $package->{"priority"}
+                        "priority" => $package->{"priority"},
+                        "install_id" => $package->{"install_id"}
                     };
                     next;
                 }
@@ -579,9 +592,11 @@ if ($manifest) {
                     my @outputs = getV1Outputs($package);
                     my @outputsToInstallPaths = ();
                     my @otherOutputPaths = ();
+                    my %outputByPath = ();
 
                     foreach my $output (@outputs) {
                         my $path = $package->{"outputs"}{$output};
+                        $outputByPath{$path} = $output;
                         if (grep { $_ eq $output } @{$outputsToInstall}) {
                             push @outputsToInstallPaths, $path;
                         } else {
@@ -593,7 +608,9 @@ if ($manifest) {
                     if (scalar @outputsToInstallPaths) {
                         push @retarray, {
                             "paths" => \@outputsToInstallPaths,
-                            "priority" => $package->{"priority"}
+                            "priority" => $package->{"priority"},
+                            "install_id" => $package->{"install_id"},
+                            "output_by_path" => \%outputByPath
                         };
                     }
 
@@ -603,20 +620,24 @@ if ($manifest) {
                     foreach my $otherPath (@otherOutputPaths) {
                         push @retarray, {
                             "paths" => [ $otherPath ],
-                            "priority" => ((1000 * $package->{"priority"}) + $ignoreCollisionCounter++)
+                            "priority" => ((1000 * $package->{"priority"}) + $ignoreCollisionCounter++),
+                            "install_id" => $package->{"install_id"},
+                            "output_by_path" => \%outputByPath
                         };
                     }
                 } elsif (exists $manifest->{"schema-version"}) {
                     # v1.10.0 manifest logic: increment priority for all outputs
                     my @outputs = getSpecifiedOutputs($descriptor, $package, $outputsToInstall);
-                    my @paths = map { $package->{"outputs"}{$_} } @outputs;
 
-                    next unless scalar @paths;
+                    next unless scalar @outputs;
 
-                    foreach my $path (@paths) {
+                    foreach my $output (@outputs) {
+                        my $path = $package->{"outputs"}{$output};
                         push @retarray, {
                             "paths" => [ $path ],
-                            "priority" => $package->{"priority"}
+                            "priority" => $package->{"priority"},
+                            "install_id" => $package->{"install_id"},
+                            "output_by_path" => { $path => $output }
                         };
                     }
                 } elsif (exists $manifest->{"schema-version"}) {
@@ -798,6 +819,15 @@ if ($manifest) {
         # user.
         for my $pkg (@{$pkgs}) {
             for my $path (sort byPackageName @{$pkg->{paths}}) {
+                # First write wins, matching `addPkg`, which links the first
+                # copy of a store path and skips the rest via `%done`. Two
+                # install IDs resolve to one store path when the same package
+                # is installed twice, and a collision has to name the ID whose
+                # copy was linked.
+                $installIdByStorePath{$path} //= $pkg->{install_id}
+                    if defined $pkg->{install_id};
+                $outputByStorePath{$path} //= $pkg->{output_by_path}{$path}
+                    if defined $pkg->{output_by_path};
                 addPkg($path,
                        $ENV{"ignoreCollisions"} eq "1",
                        $ENV{"checkCollisionContents"} eq "1",
@@ -970,6 +1000,8 @@ if ($manifest) {
         %postponed = ();
         %symlinks = ();
         %seen = ();
+        %installIdByStorePath = ();
+        %outputByStorePath = ();
         my $envName = $output->{"name"};
 
         my $path = $nix_attrs->{"outputs"}{$envName};
