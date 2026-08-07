@@ -658,6 +658,9 @@ pub fn format_remote_error(err: &RemoteEnvironmentError) -> String {
         RemoteEnvironmentError::WriteNewOutlink(_) => display_chain(err),
         RemoteEnvironmentError::CreateGcRootDir(_) => display_chain(err),
         RemoteEnvironmentError::Generations(_) => display_chain(err),
+        RemoteEnvironmentError::DeregisterLocalCheckout(_) => display_chain(err),
+        RemoteEnvironmentError::DeleteLocalCheckout(_) => display_chain(err),
+        RemoteEnvironmentError::PruneFloxmetaBranch(_) => display_chain(err),
     }
 }
 
