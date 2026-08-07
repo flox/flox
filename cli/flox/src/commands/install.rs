@@ -825,14 +825,14 @@ mod tests {
     use flox_rust_sdk::models::environment::Environment;
     use flox_rust_sdk::models::environment::path_environment::test_helpers::{
         new_named_path_environment_from_env_files,
-        new_path_environment_in,
+        new_path_environment_from_env_files_in,
     };
     use flox_rust_sdk::providers::catalog::SystemEnum;
     use flox_rust_sdk::providers::catalog::test_helpers::catalog_replay_client;
     use flox_rust_sdk::utils::logging::test_helpers::test_subscriber_message_only;
     use flox_test_utils::GENERATED_DATA;
-    use flox_test_utils::manifests::EMPTY_ALL_SYSTEMS;
     use indoc::formatdoc;
+    use pretty_assertions::assert_eq;
     use tracing::instrument::WithSubscriber;
 
     use super::{add_activation_to_rc_file, ensure_rc_file_exists};
@@ -1016,6 +1016,21 @@ mod tests {
         let (mut flox, tempdir) = flox_instance();
         let (subscriber, writer) = test_subscriber_message_only();
 
+        // The package being installed below only resolves for a subset of
+        // systems, so the environment needs a package that resolves for all of
+        // them to stay locked for the current system.
+        // The recordings replayed below were made against this exact
+        // environment, so it must be seeded from the fixture rather than
+        // locked here: a lock of `hello` from a different recording would
+        // resolve to different derivations and no longer match the request in
+        // the recording.
+        let _env = new_path_environment_from_env_files_in(
+            &flox,
+            GENERATED_DATA.join("envs/hello"),
+            tempdir.path(),
+            None,
+        );
+
         let is_linux = flox.system.ends_with("linux");
         let response_path = if is_linux {
             GENERATED_DATA.join("resolve/darwin_ps_all.yaml")
@@ -1031,7 +1046,6 @@ mod tests {
         };
         flox.floxhub_client = catalog_replay_client(response_path).await;
 
-        let _env = new_path_environment_in(&flox, EMPTY_ALL_SYSTEMS, tempdir.path());
         let install_cmd = Install {
             environment: EnvironmentSelect::Dir(tempdir.path().to_path_buf()),
             id: vec![],
@@ -1084,6 +1098,7 @@ mod tests {
         .expect("installation failed");
 
         assert_eq!(writer.to_string(), formatdoc! {"
+            ! This command will require authentication in an upcoming release. See https://flox.dev/docs/install-flox/ for more info.
             ✔ 'curl' installed to environment 'name'
             ℹ 'curl' has additional outputs, use 'flox list -a' to see more
             ! packages have been removed from lockfile for 'x86_64-darwin'
