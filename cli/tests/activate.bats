@@ -2936,6 +2936,7 @@ EOF
     skip "fish 3.2.2 is broken on aarch64-linux"
   fi
   project_setup
+  pin_recorded_systems
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/fish_3_2_2.yaml" \
     "$FLOX_BIN" install fish@3.2.2
 
