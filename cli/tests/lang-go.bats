@@ -52,6 +52,9 @@ teardown() {
 
 # bats test_tags=catalog
 @test "'flox init' sets up a local working Go module environment" {
+  if [ "$NIX_SYSTEM" == "x86_64-darwin" ]; then
+    skip "init tests only run on default systems"
+  fi
   cp -r "$INPUT_DATA"/init/go/common/* "$PROJECT_DIR/"
   cp -r "$INPUT_DATA"/init/go/module/* "$PROJECT_DIR/"
   # Files copied from the store are read-only
@@ -73,6 +76,9 @@ teardown() {
 
 # bats test_tags=catalog
 @test "'flox init' sets up a local working Go workspace environment" {
+  if [ "$NIX_SYSTEM" == "x86_64-darwin" ]; then
+    skip "init tests only run on default systems"
+  fi
   cp -r "$INPUT_DATA"/init/go/common/* "$PROJECT_DIR/"
   cp -r "$INPUT_DATA"/init/go/module/* "$PROJECT_DIR/"
   cp -r "$INPUT_DATA"/init/go/workspace/* "$PROJECT_DIR/"

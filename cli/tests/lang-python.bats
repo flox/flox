@@ -66,6 +66,9 @@ teardown() {
 
 # bats test_tags=python:activate:poetry,catalog
 @test "flox activate works with poetry" {
+  if [ "$NIX_SYSTEM" == "x86_64-darwin" ]; then
+    skip "init tests only run on default systems"
+  fi
   cp -r "$INPUT_DATA"/init/python/common/* "$PROJECT_DIR/"
   cp -r "$INPUT_DATA"/init/python/poetry/* "$PROJECT_DIR/"
   # Files copied from the store are read-only
@@ -91,6 +94,9 @@ teardown() {
 
 # bats test_tags=python:activate:pyproject:pip,catalog
 @test "flox activate works with pyproject and pip" {
+  if [ "$NIX_SYSTEM" == "x86_64-darwin" ]; then
+    skip "init tests only run on default systems"
+  fi
   cp -r "$INPUT_DATA"/init/python/common/* "$PROJECT_DIR/"
   cp -r "$INPUT_DATA"/init/python/pyproject-pip/* "$PROJECT_DIR/"
   # Files copied from the store are read-only
