@@ -2000,13 +2000,14 @@ mod tests {
             .inner_mut()
             .insert(foo_install_id.clone(), foo_descriptor.clone().into());
 
-        let expected = DEFAULT_SYSTEMS_STR
-            .clone()
+        let expected: Vec<_> = DEFAULT_SYSTEMS_STR
+            .iter()
             .map(|system| FlakeInstallableToLock {
                 install_id: foo_install_id.clone(),
                 descriptor: foo_descriptor.clone(),
                 system: system.to_string(),
-            });
+            })
+            .collect();
 
         let actual: Vec<_> = LockManifest::collect_flake_installables(&manifest).collect();
 
@@ -2058,13 +2059,14 @@ mod tests {
             .inner_mut()
             .insert(bar_install_id.clone(), bar_descriptor.clone());
 
-        let expected = DEFAULT_SYSTEMS_STR
-            .clone()
+        let expected: Vec<_> = DEFAULT_SYSTEMS_STR
+            .iter()
             .map(|system| FlakeInstallableToLock {
                 install_id: foo_install_id.clone(),
                 descriptor: foo_descriptor.clone(),
                 system: system.to_string(),
-            });
+            })
+            .collect();
 
         let actual: Vec<_> = LockManifest::collect_flake_installables(&manifest).collect();
 
@@ -2418,9 +2420,9 @@ mod tests {
     }
 
     /// If a manifest doesn't have `options.systems`, it defaults to locking for
-    /// 4 default systems
+    /// the default systems
     #[test]
-    fn collect_package_groups_defaults_to_four_systems() {
+    fn collect_package_groups_defaults_to_default_systems() {
         let manifest_str = indoc! {r#"
             version = 1
 
@@ -2442,14 +2444,15 @@ mod tests {
             .flat_map(|d| d.systems.clone())
             .collect::<Vec<_>>();
 
-        let expected_systems = [
-            PackageSystem::Aarch64Darwin,
-            PackageSystem::Aarch64Linux,
-            PackageSystem::X8664Darwin,
-            PackageSystem::X8664Linux,
-        ];
+        // Derive the expectation from the source of truth so this test
+        // doesn't encode a particular default set.
+        let expected_systems = DEFAULT_SYSTEMS_STR
+            .iter()
+            .sorted()
+            .map(|s| PackageSystem::from_str(s).unwrap())
+            .collect::<Vec<_>>();
 
-        assert_eq!(&*systems, expected_systems.as_slice());
+        assert_eq!(systems, expected_systems);
     }
 
     #[test]
@@ -3083,6 +3086,7 @@ mod tests {
 
             [options]
             allow.unfree = false
+            systems = ["aarch64-darwin", "x86_64-darwin", "aarch64-linux", "x86_64-linux"]
         "#},
             None,
         )

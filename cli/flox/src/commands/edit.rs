@@ -257,6 +257,11 @@ impl Edit {
 
                 warn_manifest_changes_for_services(flox, environment);
 
+                message::print_default_systems_changed(
+                    old_lockfile.as_ref().as_ref(),
+                    new_lockfile,
+                );
+
                 if new_lockfile.compose.is_some() {
                     message::print_overridden_manifest_fields(new_lockfile);
                     message::info("Run 'flox list -c' to see merged manifest.");

@@ -393,6 +393,25 @@ with_latest_schema() {
   fi
 }
 
+# The catalog recordings in "$GENERATED_DATA" were made with the old implicit
+# default systems set. `flox init` doesn't write `options.systems`, and the
+# implicit default set now includes the current system, so environments that
+# replay recorded resolutions must pin the recorded systems for their resolve
+# requests to keep matching the recordings on every machine.
+pin_recorded_systems() {
+  local manifest="${1:-.flox/env/manifest.toml}"
+  tomlq --in-place --toml-output \
+    '.options.systems = ["aarch64-darwin", "aarch64-linux", "x86_64-darwin", "x86_64-linux"]' \
+    "$manifest"
+}
+
+# `flox init` for tests that replay recorded resolutions: initialize the
+# environment in the current directory and pin the recorded systems set.
+flox_init_pinned() {
+  "$FLOX_BIN" init "$@"
+  pin_recorded_systems
+}
+
 # ---------------------------------------------------------------------------- #
 #
 #

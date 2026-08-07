@@ -399,15 +399,15 @@ impl ManifestInitializer {
             }
         } else {
             // If we init with the default systems, we can omit those.
-            options_table.decor_mut().set_suffix(indoc! {r#"
-
-                # Systems that environment is compatible with
-                # systems = [
-                #   "aarch64-darwin",
-                #   "aarch64-linux",
-                #   "x86_64-darwin",
-                #   "x86_64-linux",
-                # ]"#});
+            // Generate the commented-out example from DEFAULT_SYSTEMS_STR so
+            // the template can't drift from the actual default set.
+            let systems_lines = DEFAULT_SYSTEMS_STR
+                .iter()
+                .map(|system| format!("#   \"{system}\",\n"))
+                .collect::<String>();
+            options_table.decor_mut().set_suffix(format!(
+                "\n# Systems that environment is compatible with\n# systems = [\n{systems_lines}# ]"
+            ));
         }
 
         let cuda_detection_key = Key::new("cuda-detection");
@@ -439,6 +439,15 @@ mod tests {
     use flox_manifest::raw::CatalogPackage;
 
     use super::*;
+
+    /// The commented-out `systems` lines of the init template, derived from
+    /// [DEFAULT_SYSTEMS_STR] so expectations don't vary by build host.
+    fn default_systems_comment_lines() -> String {
+        DEFAULT_SYSTEMS_STR
+            .iter()
+            .map(|system| format!("#   \"{system}\",\n"))
+            .collect()
+    }
 
     #[test]
     fn create_documented_manifest_not_customized() {
@@ -544,14 +553,12 @@ mod tests {
             [options]
             # Systems that environment is compatible with
             # systems = [
-            #   "aarch64-darwin",
-            #   "aarch64-linux",
-            #   "x86_64-darwin",
-            #   "x86_64-linux",
+            @DEFAULT_SYSTEMS@
             # ]
             # Uncomment to disable CUDA detection.
             # cuda-detection = false
-        "#};
+        "#}
+        .replace("@DEFAULT_SYSTEMS@\n", &default_systems_comment_lines());
 
         let manifest =
             ManifestInitializer::new_documented(Features::default(), systems, &customization)
@@ -670,14 +677,12 @@ mod tests {
             [options]
             # Systems that environment is compatible with
             # systems = [
-            #   "aarch64-darwin",
-            #   "aarch64-linux",
-            #   "x86_64-darwin",
-            #   "x86_64-linux",
+            @DEFAULT_SYSTEMS@
             # ]
             # Uncomment to disable CUDA detection.
             # cuda-detection = false
-        "#};
+        "#}
+        .replace("@DEFAULT_SYSTEMS@\n", &default_systems_comment_lines());
 
         let manifest =
             ManifestInitializer::new_documented(Features::default(), systems, &customization)

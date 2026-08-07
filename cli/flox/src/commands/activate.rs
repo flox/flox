@@ -391,9 +391,12 @@ impl ActivateOptions {
 
         let now_active = UninitializedEnvironment::from_concrete_environment(&concrete_environment);
 
+        // Read before `lockfile()`, which may re-lock and overwrite it.
+        let old_lockfile = concrete_environment.existing_lockfile(&flox)?;
         let lockfile = match concrete_environment.lockfile(&flox)? {
             LockResult::Changed(lockfile) => {
                 message::print_overridden_manifest_fields(&lockfile);
+                message::print_default_systems_changed(old_lockfile.as_ref(), &lockfile);
                 lockfile
             },
             LockResult::Unchanged(lockfile) => lockfile,

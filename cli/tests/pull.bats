@@ -54,7 +54,9 @@ function make_dummy_env() {
   shift
 
   pushd "$(mktemp -d)" >/dev/null || return
-  "$FLOX_BIN" init --name "$ENV_NAME"
+  # Pin the recorded systems so that later re-locks of this environment
+  # (e.g. `update_dummy_env` installing gzip) match the recordings.
+  flox_init_pinned --name "$ENV_NAME"
   SOURCE_LOCAL_ENVIRONMENT_ID="$(cat .flox/telemetry_id)"
   "$FLOX_BIN" push --owner "$OWNER"
   "$FLOX_BIN" delete --force

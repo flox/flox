@@ -50,7 +50,9 @@ teardown() {
 
 # init path environment and push to remote
 function make_empty_managed_env() {
-  "$FLOX_BIN" init
+  # Pin the recorded systems so that later re-locks of this environment
+  # (e.g. installing packages) match the recordings.
+  flox_init_pinned
   "$FLOX_BIN" push --owner "$OWNER"
 }
 
@@ -108,6 +110,9 @@ version = 1
 
 [install]
 hello.pkg-path = "hello"
+
+[options]
+systems = ["aarch64-darwin", "aarch64-linux", "x86_64-darwin", "x86_64-linux"]
 EOF
 
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
@@ -146,7 +151,7 @@ EOF
   # on machine a, create and push the environment
   export FLOX_DATA_DIR="$(pwd)/a_data"
   pushd a > /dev/null || return
-  "$FLOX_BIN" init
+  flox_init_pinned
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
     "$FLOX_BIN" install hello
   "$FLOX_BIN" push --owner "$OWNER"
@@ -171,7 +176,7 @@ EOF
   # on machine a, create and push the (empty) environment
   export FLOX_DATA_DIR="$(pwd)/a_data"
   pushd a > /dev/null || return
-  "$FLOX_BIN" init
+  flox_init_pinned
   "$FLOX_BIN" push --owner "$OWNER"
   popd > /dev/null || return
 
@@ -209,7 +214,7 @@ EOF
   # on machine a, create and push the (empty) environment
   export FLOX_DATA_DIR="$(pwd)/a_data"
   pushd a > /dev/null || return
-  "$FLOX_BIN" init
+  flox_init_pinned
   "$FLOX_BIN" push --owner "$OWNER"
   popd > /dev/null || return
 
@@ -267,7 +272,7 @@ Upstream:
 
   # on machine a, create and push the (empty) environment
   pushd a > /dev/null || return
-  "$FLOX_BIN" init
+  flox_init_pinned
   FLOX_DATA_DIR="$(pwd)/a_data" "$FLOX_BIN" push --owner "$OWNER"
   popd > /dev/null || return
 
