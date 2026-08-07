@@ -249,6 +249,12 @@ To apply these changes, run upgrade without the '--dry-run' flag."
   run grep -c '^version = 1' "$MANIFEST_PATH"
   assert_success
 
+  # The fixture doesn't set `options.systems`, so pin the recorded systems to
+  # keep the resolve request matching now that the implicit default set is
+  # smaller. Files copied from the store are read-only.
+  chmod +w "$MANIFEST_PATH"
+  pin_recorded_systems "$MANIFEST_PATH"
+
   # The catalog mock upgrades hello and requires the outputs migration for
   # curl, so both the lockfile and the on-disk manifest must migrate.
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/curl_hello.yaml" \
