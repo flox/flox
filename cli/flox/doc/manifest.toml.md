@@ -335,16 +335,26 @@ descriptors and flake installables, and `store-path` is described below:
 
 The `[vars]` section allows you to define environment variables for your
 environment that are set during environment activation.
-The environment variables specified here cannot reference one another.
 The names and values of the environment variables are copied verbatim into the
 activation script,
 so capitalization will be preserved.
+Flox CLI versions 1.14.1 and later support references between `[vars]` entries
+using shell syntax such as `${NAME}`.
+The shell expands these references during activation.
+If your environment relies on interpolation,
+set [`minimum-cli-version`](#minimum-cli-version) to `"1.14.1"`.
+Flox orders the exports so that referenced `[vars]` entries are set before the
+values that depend on them.
+Flox computes this dependency order from the final merged `[vars]` values.
+If the entries form a reference cycle,
+Flox reports the variables in the cycle and the environment fails to build.
 
 Example:
 ```toml
 [vars]
-DB_URL = "http://localhost:2000"
 SERVER_PORT = "3000"
+BASE_URL = "http://localhost:${SERVER_PORT}"
+API_URL = "${BASE_URL}/api"
 ```
 
 ## `[hook]`
@@ -625,6 +635,7 @@ manifest, but things can be overridden or added by higher priority manifests.
 
 `[vars]`
 : Variables are overwritten entirely by a higher priority manifest.
+  Flox evaluates references among the final merged values in dependency order.
 
 `[hook]`
 : The scripts in `hook` are appended to one another with a newline in between.
