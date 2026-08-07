@@ -822,7 +822,15 @@ post_cmd = '''
 
 [envs.hello]
 skip_if_output_exists = "envs/hello"
-pre_cmd = "flox init"
+# Tests seed environments from this fixture and re-lock them without a
+# catalog mock, so it must pin `options.systems` to stay lock-stable when
+# the implicit default set changes.
+pre_cmd = '''
+    flox init
+    tomlq --in-place --toml-output \
+        '.options.systems = [ "aarch64-darwin", "aarch64-linux", "x86_64-darwin", "x86_64-linux" ]' \
+        .flox/env/manifest.toml
+'''
 cmd = "flox install hello"
 post_cmd = '''
     envs_output_dir="$(dirname $RESPONSE_FILE)"
