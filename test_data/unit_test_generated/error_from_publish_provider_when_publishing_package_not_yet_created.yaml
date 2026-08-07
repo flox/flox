@@ -1,5 +1,5 @@
 when:
-  path: /api/v1/catalog/catalogs/test1/packages/mypkg7/publish/info
+  path: /api/v1/catalog/catalogs/test1/packages/error_from_publish_provider_when_publishing_package_not_yet_created/publish/info
   method: POST
   body: '{}'
 then:
@@ -16,7 +16,7 @@ then:
   body: '{"ingress_uri":null,"ingress_auth":null,"catalog_store_config":{"store_type":"meta-only"}}'
 ---
 when:
-  path: /api/v1/catalog/catalogs/test1/packages/mypkg7/builds
+  path: /api/v1/catalog/catalogs/test1/packages/error_from_publish_provider_when_publishing_package_not_yet_created/builds
   method: POST
   json_body_includes:
   - build_type: manifest
@@ -24,11 +24,11 @@ when:
       broken: false
       description: dummy
       drv_path: dummy
-      name: mypkg7
+      name: error_from_publish_provider_when_publishing_package_not_yet_created
       outputs:
       - name: out
         store_path: /nix/store/xfigz788kjqvyyxdnyvycs0bfc6cdjp3-cli-128-fixed-empty
-      pname: mypkg7
+      pname: error_from_publish_provider_when_publishing_package_not_yet_created
       system: x86_64-linux
       version: 1.0.0
     dot_flox_dir: ''
@@ -55,7 +55,7 @@ then:
   - name: server
     value: uvicorn
   - name: content-length
-    value: '72'
+    value: '133'
   - name: content-type
     value: application/json
-  body: '{"detail":"The package with name mypkg7 in catalog test1 was not found"}'
+  body: '{"detail":"The package with name error_from_publish_provider_when_publishing_package_not_yet_created in catalog test1 was not found"}'
