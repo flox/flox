@@ -45,7 +45,14 @@ ignore_cmd_errors = true
 
 # Install a package that only exists on Linux
 [resolve.bpftrace]
-pre_cmd = "flox init"
+# The tests replaying this pin the recorded systems, so the recording has to
+# be made with them pinned too.
+pre_cmd = '''
+    flox init
+    tomlq --in-place --toml-output \
+        '.options.systems = [ "aarch64-darwin", "aarch64-linux", "x86_64-darwin", "x86_64-linux" ]' \
+        .flox/env/manifest.toml
+'''
 cmd = "flox install bpftrace"
 
 # Install multiple packages that only exist on Linux
@@ -248,8 +255,14 @@ cmd = "flox install daemonize"
 
 # This is used to trigger the "only install for some systems" code path
 [resolve.darwin_ps_all]
+# The tests replaying this pin the recorded systems, so the recording has to
+# be made with them pinned too. x86_64-darwin in particular has to stay
+# enabled for `darwin.ps` to resolve for it.
 pre_cmd = '''
     flox init
+    tomlq --in-place --toml-output \
+        '.options.systems = [ "aarch64-darwin", "aarch64-linux", "x86_64-darwin", "x86_64-linux" ]' \
+        .flox/env/manifest.toml
 '''
 cmd = "flox install darwin.ps"
 ignore_cmd_errors = true # build will fail on linux, that's fine
