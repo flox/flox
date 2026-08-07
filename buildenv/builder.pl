@@ -180,6 +180,13 @@ sub parseStorePath($) {
     return ($name, $version, $basename, $storePath);
 }
 
+# Opening text shared by both of the collision hints below. The Rust provider
+# matches it to classify a buildenv failure as deterministic and skip its retry
+# loop, so building both hints from one variable keeps them from drifting apart
+# from each other or from `is_deterministic_buildenv_conflict` in
+# `cli/flox-rust-sdk/src/providers/buildenv.rs`.
+my $FLOX_CONFLICT_HINT_PREFIX = "Resolve by uninstalling one of the conflicting ";
+
 sub findFiles {
     my ($relName, $target, $baseName, $ignoreCollisions, $checkCollisionContents, $priority) = @_;
 
@@ -263,7 +270,7 @@ sub findFiles {
             # itself, which the user cannot refer to by any other name either.
             my $name = $installId // $targetName;
             my $oldName = $oldInstallId // $oldTargetName;
-            my $errmsg;
+            my ($errmsg, $subject, $hint);
             # Equal install IDs can only mean two outputs of one entry in
             # `[install]`, which is also the only way both paths can have come
             # from an output selection, so %outputByStorePath names them both.
@@ -272,21 +279,24 @@ sub findFiles {
             if (defined $installId && defined $oldInstallId && $installId eq $oldInstallId) {
                 my $oldOutput = $outputByStorePath{$oldTargetStorePath};
                 my $newOutput = $outputByStorePath{$targetStorePath};
-                $errmsg = "'$oldName ($oldOutput)' conflicts with "
-                        . "'$name ($newOutput)'. ";
+                $errmsg = "'$oldName^$oldOutput' conflicts with "
+                        . "'$name^$newOutput'. ";
+                $subject = "outputs of the same package";
+                $hint = $FLOX_CONFLICT_HINT_PREFIX . "outputs from '$name'";
             } else {
                 $errmsg = "'$oldName' conflicts with '$name'. ";
+                $subject = "packages";
+                $hint = $FLOX_CONFLICT_HINT_PREFIX . "packages or " .
+                        "setting the priority of the preferred package to a value " .
+                        "lower than '$oldPriority'";
             }
             if ($targetBasename eq $oldTargetBasename) {
-                $errmsg .= "Both packages provide the file '$targetBasename'";
+                $errmsg .= "Both $subject provide the file '$targetBasename'";
             } else {
                 # This is unexpected ... revert to reporting the exact refs encountered.
                 $errmsg .= "collision between $targetRef and $oldTargetRef";
             }
-            die $errmsg . "\n\n" .
-                "Resolve by uninstalling one of the conflicting packages or " .
-                "setting the priority of the preferred package to a value " .
-                "lower than '$oldPriority'\n";
+            die $errmsg . "\n\n" . $hint . "\n";
         }
     }
 

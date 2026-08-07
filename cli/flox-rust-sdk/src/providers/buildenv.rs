@@ -1170,20 +1170,27 @@ fn nix_path_info_null_paths(paths: &[String]) -> Result<Vec<String>, std::io::Er
 /// `buildenv/builder.pl`. These errors are deterministic — the same lockfile
 /// will always produce the same conflict — and must not be retried.
 ///
-/// Matches on the conflict-specific resolution hint emitted at
-/// `buildenv/builder.pl:245` (`Resolve by uninstalling one of the conflicting
-/// packages`) rather than the broader `❌ ERROR:` sentinel installed by the
-/// `$SIG{__DIE__}` handler at `buildenv/builder.pl:13`. The broader sentinel
-/// covers builder.pl's filesystem `die` paths (EMFILE, ENOSPC, etc. during
-/// mkpath/symlink), which are genuinely transient and must remain retryable.
+/// Matches on the conflict-specific resolution hints emitted by
+/// `buildenv/builder.pl` (`Resolve by uninstalling one of the conflicting
+/// packages`/`outputs`) rather than the broader `❌ ERROR:` sentinel installed
+/// by the `$SIG{__DIE__}` handler at `buildenv/builder.pl:13`. The broader
+/// sentinel covers builder.pl's filesystem `die` paths (EMFILE, ENOSPC, etc.
+/// during mkpath/symlink), which are genuinely transient and must remain
+/// retryable.
 ///
-/// If `buildenv/builder.pl`'s conflict message changes, the unit test
+/// The matched text is `$FLOX_CONFLICT_HINT_PREFIX` in
+/// `buildenv/builder.pl`, which both hints are built from. Two tests run
+/// builder.pl for real and fail if it stops emitting that prefix:
+/// `buildenv_tests::detects_conflicting_packages` covers a conflict between
+/// packages and `buildenv_tests::detects_conflicting_outputs_of_one_package`
+/// one between outputs of a single package. The stubbed stderr in
 /// `materialise_retry_tests::deterministic_buildenv_conflict_short_circuits`
-/// will break and signal a contract update is needed.
+/// pins the retry behaviour but not the contract, so it would keep passing on
+/// its own.
 fn is_deterministic_buildenv_conflict(err: &BuildEnvError) -> bool {
     match err {
         BuildEnvError::Build(stderr) => {
-            stderr.contains("Resolve by uninstalling one of the conflicting packages")
+            stderr.contains("Resolve by uninstalling one of the conflicting")
         },
         _ => false,
     }
@@ -2569,8 +2576,8 @@ mod buildenv_tests {
         path
     }
 
-    /// Two outputs of a single installed package that both provide the same
-    /// file are reported as a conflict, and are not retried.
+    /// Two outputs of a single installed package are reported as a conflict
+    /// between that package's outputs, named by install ID.
     #[test]
     fn detects_conflicting_outputs_of_one_package() {
         let buildenv = buildenv_instance();
@@ -2589,7 +2596,7 @@ mod buildenv_tests {
             panic!("expected build to fail, got {}", err);
         };
 
-        let expected = "> ❌ ERROR: 'my_tool (out)' conflicts with 'my_tool (dev)'. Both packages provide the file 'bin/collide'";
+        let expected = "> ❌ ERROR: 'my_tool^out' conflicts with 'my_tool^dev'. Both outputs of the same package provide the file 'bin/collide'";
 
         assert!(
             output.contains(expected),
@@ -3275,45 +3282,59 @@ mod materialise_retry_tests {
     #[test]
     fn deterministic_buildenv_conflict_short_circuits() {
         init_tracing();
-        // build_env always returns a conflict error containing the
-        // builder.pl resolution hint. realise and missing_paths are
+        // build_env always returns a conflict error containing one of the
+        // builder.pl resolution hints. realise and missing_paths are
         // wired to never block progress so the conflict is the only
         // reason for failure.
-        let realise_calls = Cell::new(0usize);
-        let build_calls = Cell::new(0usize);
-        let conflict_stderr = "environment> ❌ ERROR: 'vim' conflicts with \
-                               'vim-full'. Both packages provide the file \
-                               'bin/ex'\nenvironment> \nenvironment> Resolve \
-                               by uninstalling one of the conflicting \
-                               packages or setting the priority of the \
-                               preferred package to a value lower than '5'"
-            .to_string();
-        let result: Result<(), _> = materialise_with_retry(
-            || {
-                realise_calls.set(realise_calls.get() + 1);
-                Ok(())
-            },
-            Vec::new, // paths always present
-            Vec::new,
-            || {
-                build_calls.set(build_calls.get() + 1);
-                Err(BuildEnvError::Build(conflict_stderr.clone()))
-            },
-        );
-        match result.unwrap_err() {
-            BuildEnvError::Build(msg) => assert_eq!(msg, conflict_stderr),
-            e => panic!("expected Build, got {e:?}"),
+        let cases = [
+            (
+                "cross-package conflict",
+                "environment> ❌ ERROR: 'vim' conflicts with 'vim-full'. \
+                 Both packages provide the file 'bin/ex'\nenvironment> \
+                 \nenvironment> Resolve by uninstalling one of the \
+                 conflicting packages or setting the priority of the \
+                 preferred package to a value lower than '5'",
+            ),
+            (
+                "same-package output conflict",
+                "environment> ❌ ERROR: 'nodejs^dev' conflicts with \
+                 'nodejs^out'. Both outputs of the same package provide \
+                 the file 'include/node/node.h'\nenvironment> \
+                 \nenvironment> Resolve by uninstalling one of the \
+                 conflicting outputs from 'nodejs'",
+            ),
+        ];
+        for (case, conflict_stderr) in cases {
+            let realise_calls = Cell::new(0usize);
+            let build_calls = Cell::new(0usize);
+            let conflict_stderr = conflict_stderr.to_string();
+            let result: Result<(), _> = materialise_with_retry(
+                || {
+                    realise_calls.set(realise_calls.get() + 1);
+                    Ok(())
+                },
+                Vec::new, // paths always present
+                Vec::new,
+                || {
+                    build_calls.set(build_calls.get() + 1);
+                    Err(BuildEnvError::Build(conflict_stderr.clone()))
+                },
+            );
+            match result.unwrap_err() {
+                BuildEnvError::Build(msg) => assert_eq!(msg, conflict_stderr),
+                e => panic!("{case}: expected Build, got {e:?}"),
+            }
+            assert_eq!(
+                build_calls.get(),
+                1,
+                "{case}: must not retry a deterministic file collision"
+            );
+            assert_eq!(
+                realise_calls.get(),
+                1,
+                "{case}: realise called once before short-circuit"
+            );
         }
-        assert_eq!(
-            build_calls.get(),
-            1,
-            "must not retry a deterministic file collision"
-        );
-        assert_eq!(
-            realise_calls.get(),
-            1,
-            "realise called once before short-circuit"
-        );
     }
 
     // --- realise errors ---
