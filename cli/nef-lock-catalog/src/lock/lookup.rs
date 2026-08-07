@@ -48,7 +48,7 @@ pub enum LockError {
     Transform(#[from] anyhow::Error),
 }
 
-/// Lock a flat list of catalog references in a single batched request.
+/// Lock a flat list of catalog references in a single request.
 ///
 /// Builds the wire request internally (one synthetic group), performs one
 /// `/build-inputs/lookup` call, and maps the response to a [BuildLock].
