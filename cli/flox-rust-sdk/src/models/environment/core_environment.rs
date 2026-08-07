@@ -1407,7 +1407,7 @@ mod tests {
             base_directory: None,
         });
 
-        let new_env_str = with_latest_schema(formatdoc! {r#"
+        let new_env_str = with_latest_schema(&formatdoc! {r#"
             [install]
             hello.pkg-path = "hello"
             {ALL_SYSTEMS_OPTIONS}
@@ -1746,11 +1746,6 @@ mod tests {
             .unwrap();
 
         let _ = environment.lock(&flox).unwrap();
-
-        println!(
-            "{}",
-            environment.existing_lockfile_contents().unwrap().unwrap()
-        );
 
         let mtime_after = environment
             .lockfile_path()

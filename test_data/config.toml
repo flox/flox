@@ -45,14 +45,7 @@ ignore_cmd_errors = true
 
 # Install a package that only exists on Linux
 [resolve.bpftrace]
-# TODO: a package common to _all_ systems is required, otherwise triggering LockfileMissingCurrentSystem
-pre_cmd = '''
-    flox init
-    tomlq --in-place --toml-output \
-        '.options.systems = [ "aarch64-darwin", "aarch64-linux", "x86_64-darwin", "x86_64-linux" ]' \
-        .flox/env/manifest.toml
-    flox install hello
-'''
+pre_cmd = "flox init"
 cmd = "flox install bpftrace"
 
 # Install multiple packages that only exist on Linux
@@ -255,13 +248,8 @@ cmd = "flox install daemonize"
 
 # This is used to trigger the "only install for some systems" code path
 [resolve.darwin_ps_all]
-# TODO: a package common to _all_ systems is required, otherwise triggering LockfileMissingCurrentSystem
 pre_cmd = '''
     flox init
-    tomlq --in-place --toml-output \
-        '.options.systems = [ "aarch64-darwin", "aarch64-linux", "x86_64-darwin", "x86_64-linux" ]' \
-        .flox/env/manifest.toml
-    flox install hello
 '''
 cmd = "flox install darwin.ps"
 ignore_cmd_errors = true # build will fail on linux, that's fine
@@ -834,12 +822,7 @@ post_cmd = '''
 
 [envs.hello]
 skip_if_output_exists = "envs/hello"
-pre_cmd = '''
-    flox init
-    tomlq --in-place --toml-output \
-        '.options.systems = [ "aarch64-darwin", "aarch64-linux", "x86_64-darwin", "x86_64-linux" ]' \
-        .flox/env/manifest.toml
-'''
+pre_cmd = "flox init"
 cmd = "flox install hello"
 post_cmd = '''
     envs_output_dir="$(dirname $RESPONSE_FILE)"
