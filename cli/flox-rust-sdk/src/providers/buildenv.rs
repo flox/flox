@@ -2482,12 +2482,17 @@ mod buildenv_tests {
     /// `bin/collide`, and returns them keyed by output name.
     ///
     /// Adds directories rather than building a multi-output derivation:
-    /// `nix store add` gives exact control over the store path names that
-    /// `parseStorePath` in `buildenv/builder.pl` decomposes into a package
-    /// name and an output, and needs no builder on `PATH`, which a bare
-    /// `/bin/sh` derivation has in neither sandbox. The paths are
-    /// content-addressed, so repeated runs reuse the same two, and nothing
-    /// roots them.
+    /// `nix store add` gives exact control over the store path names and
+    /// needs no builder on `PATH`, which a bare `/bin/sh` derivation has in
+    /// neither sandbox. The paths are content-addressed, so repeated runs
+    /// reuse the same two, and nothing roots them.
+    ///
+    /// The version is date-shaped because that is the case an output name
+    /// cannot be recovered from: `parseStorePath` in `buildenv/builder.pl`
+    /// splits on the first `-` followed by a digit, so `-dev` lands inside
+    /// the version of `collide-2024-07-02-dev` and reads no differently from
+    /// the `-02` before it. A message that still names `dev` can only have
+    /// taken it from the lockfile.
     fn add_conflicting_outputs_to_store(outputs: &[&str]) -> BTreeMap<String, String> {
         let sources = TempDir::new().unwrap();
         outputs
@@ -2502,8 +2507,8 @@ mod buildenv_tests {
                 // Nix names the primary output after the package and suffixes
                 // every other output with its own name.
                 let name = match output {
-                    "out" => "collide-1.0".to_string(),
-                    other => format!("collide-1.0-{other}"),
+                    "out" => "collide-2024-07-02".to_string(),
+                    other => format!("collide-2024-07-02-{other}"),
                 };
                 let added = nix_base_command()
                     .args(["store", "add", "--name", &name])
