@@ -38,7 +38,7 @@ use thiserror::Error;
 use tracing::{debug, instrument, trace};
 use url::Url;
 
-use super::{DirEnvironmentSelect, LOCKING_AUTH_REQUIRED_SOON, dir_environment_select};
+use super::{DirEnvironmentSelect, dir_environment_select};
 use crate::utils::events::duration_to_ms;
 use crate::utils::message;
 use crate::{environment_subcommand_metric, subcommand_metric};
@@ -193,14 +193,6 @@ impl Build {
                     .environment
                     .detect_concrete_environment(&mut flox, "Build packages of")?;
                 environment_subcommand_metric!("build", env);
-
-                // TODO(DEV-200): replace with actual docs URL when available
-                // Warn unauthenticated users before the first lock, which happens
-                // when no lockfile exists yet.
-                if env.existing_lockfile(&flox)?.is_none() && flox.auth_context.is_unauthenticated()
-                {
-                    message::warning(LOCKING_AUTH_REQUIRED_SOON);
-                }
 
                 Self::build(
                     flox,

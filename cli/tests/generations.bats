@@ -30,12 +30,17 @@ project_teardown() {
 
 create_environment_with_generations() {
   # Generation 1
-  "$FLOX_BIN" init --name "test"
+  flox_init_pinned --name "test"
   "$FLOX_BIN" push --owner owner
 
   # Generation 2
+  # Pin the recorded systems so the generation 3 install below matches the
+  # recording.
   MANIFEST_CONTENTS="$(cat << "EOF"
     version = 1
+
+    [options]
+    systems = ["aarch64-darwin", "aarch64-linux", "x86_64-darwin", "x86_64-linux"]
 EOF
   )"
   echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f -

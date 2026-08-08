@@ -40,13 +40,22 @@ pub const MANIFEST_INCLUDE_KEY: &str = "include";
 /// Represents the `[build]` table key in manifest.toml
 pub const MANIFEST_BUILD_KEY: &str = "build";
 
-pub static DEFAULT_SYSTEMS_STR: LazyLock<[String; 4]> = LazyLock::new(|| {
-    [
-        "aarch64-darwin".into(),
-        "aarch64-linux".into(),
-        "x86_64-darwin".into(),
-        "x86_64-linux".into(),
-    ]
+/// The systems assumed when a manifest has no `options.systems`.
+///
+/// The current system is always included so that environments initialized on
+/// a system outside the base set (e.g. `x86_64-darwin`) keep working there.
+/// The list is sorted and deduplicated so generated output stays
+/// deterministic for a given host.
+pub static DEFAULT_SYSTEMS_STR: LazyLock<Vec<String>> = LazyLock::new(|| {
+    let mut systems = vec![
+        "aarch64-darwin".to_string(),
+        "aarch64-linux".to_string(),
+        "x86_64-linux".to_string(),
+        env!("NIX_TARGET_SYSTEM").to_string(),
+    ];
+    systems.sort();
+    systems.dedup();
+    systems
 });
 
 pub(crate) fn get_schema_version_kind(toml: &DocumentMut) -> Result<VersionKind, ManifestError> {

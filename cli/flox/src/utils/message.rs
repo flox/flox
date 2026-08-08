@@ -7,7 +7,7 @@ use flox_core::data::System;
 use flox_core::util::message::{format_error, format_updated};
 pub use flox_core::util::message::{stderr_supports_color, stdout_supports_color};
 use flox_manifest::compose::{COMPOSER_MANIFEST_ID, Warning};
-use flox_manifest::lockfile::{LockedPackage, Lockfile, PackageOutputs};
+use flox_manifest::lockfile::{LockedPackage, Lockfile, PackageOutputs, default_systems_change};
 use flox_manifest::parsed::latest::SelectedOutputs;
 use flox_manifest::raw::PackageToInstall;
 use indoc::formatdoc;
@@ -320,8 +320,49 @@ pub(crate) fn print_overridden_manifest_fields(lockfile: &Lockfile) {
     }
 }
 
+/// Report when re-locking changed the implicit default systems the environment
+/// is locked for, e.g. because a newer Flox with a different default set
+/// re-locked an environment without explicit `options.systems`.
+pub(crate) fn print_default_systems_changed(
+    old_lockfile: Option<&Lockfile>,
+    new_lockfile: &Lockfile,
+) {
+    let Some(old_lockfile) = old_lockfile else {
+        return;
+    };
+
+    let change = match default_systems_change(old_lockfile, new_lockfile) {
+        Ok(Some(change)) => change,
+        Ok(None) => return,
+        // A warning must never fail the command that triggered the re-lock.
+        Err(err) => {
+            debug!(%err, "failed to detect default systems change");
+            return;
+        },
+    };
+
+    for system in change.removed {
+        warning(
+            formatdoc! {"
+            packages have been removed from lockfile for '{system}'
+            To reinstall, add '{system}' to 'options.systems' with 'flox edit'
+        "}
+            .trim_end(),
+        );
+    }
+
+    for system in change.added {
+        info(format!("packages have been added for '{system}'"));
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use flox_core::Version;
+    use flox_manifest::interfaces::AsTypedOnlyManifest;
+    use flox_manifest::lockfile::test_helpers::fake_catalog_package_lock;
+    use flox_manifest::parsed::Inner;
+    use flox_manifest::parsed::latest::{ManifestLatest, ManifestPackageDescriptor};
     use flox_rust_sdk::flox::test_helpers::flox_instance;
     use flox_rust_sdk::models::environment::Environment;
     use flox_rust_sdk::models::environment::path_environment::test_helpers::new_path_environment;
@@ -331,6 +372,130 @@ mod tests {
     use tracing::instrument::WithSubscriber;
 
     use super::*;
+
+    /// Build a lockfile with a single catalog package locked for
+    /// `locked_systems`, optionally with explicit `options.systems` in the
+    /// embedded manifest.
+    fn lockfile_locked_for_systems(
+        locked_systems: &[&str],
+        options_systems: Option<&[&str]>,
+    ) -> Lockfile {
+        let (iid, mut descriptor, locked) = fake_catalog_package_lock("hello", None);
+        if let ManifestPackageDescriptor::Catalog(ref mut descriptor) = descriptor {
+            descriptor.systems = None;
+        } else {
+            panic!("Expected a catalog descriptor");
+        }
+
+        let mut manifest = ManifestLatest::default();
+        manifest.options.systems =
+            options_systems.map(|systems| systems.iter().map(|s| s.to_string()).collect());
+        manifest.install.inner_mut().insert(iid, descriptor);
+
+        let packages = locked_systems
+            .iter()
+            .map(|system| {
+                let mut locked = locked.clone();
+                locked.system = system.to_string();
+                locked.into()
+            })
+            .collect();
+
+        Lockfile {
+            version: Version::<1>,
+            manifest: manifest.as_typed_only(),
+            packages,
+            compose: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn print_default_systems_changed_reports_added_and_removed() {
+        let old = lockfile_locked_for_systems(
+            &[
+                "aarch64-darwin",
+                "aarch64-linux",
+                "x86_64-darwin",
+                "x86_64-linux",
+            ],
+            None,
+        );
+        let new = lockfile_locked_for_systems(
+            &[
+                "aarch64-darwin",
+                "aarch64-linux",
+                "riscv64-linux",
+                "x86_64-linux",
+            ],
+            None,
+        );
+
+        let (subscriber, writer) = test_subscriber_message_only();
+        async {
+            print_default_systems_changed(Some(&old), &new);
+        }
+        .with_subscriber(subscriber)
+        .await;
+
+        assert_eq!(writer.to_string(), indoc! {"
+            ! packages have been removed from lockfile for 'x86_64-darwin'
+            To reinstall, add 'x86_64-darwin' to 'options.systems' with 'flox edit'
+            ℹ packages have been added for 'riscv64-linux'
+            "});
+    }
+
+    #[tokio::test]
+    async fn print_default_systems_changed_removal_only() {
+        let old = lockfile_locked_for_systems(
+            &[
+                "aarch64-darwin",
+                "aarch64-linux",
+                "x86_64-darwin",
+                "x86_64-linux",
+            ],
+            None,
+        );
+        let new =
+            lockfile_locked_for_systems(&["aarch64-darwin", "aarch64-linux", "x86_64-linux"], None);
+
+        let (subscriber, writer) = test_subscriber_message_only();
+        async {
+            print_default_systems_changed(Some(&old), &new);
+        }
+        .with_subscriber(subscriber)
+        .await;
+
+        assert_eq!(writer.to_string(), indoc! {"
+            ! packages have been removed from lockfile for 'x86_64-darwin'
+            To reinstall, add 'x86_64-darwin' to 'options.systems' with 'flox edit'
+            "});
+    }
+
+    #[tokio::test]
+    async fn print_default_systems_changed_silent_when_explicit_or_first_lock() {
+        let systems = ["aarch64-darwin", "aarch64-linux", "x86_64-linux"];
+        let explicit = lockfile_locked_for_systems(&systems, Some(&systems));
+        let implicit = lockfile_locked_for_systems(
+            &[
+                "aarch64-darwin",
+                "aarch64-linux",
+                "x86_64-darwin",
+                "x86_64-linux",
+            ],
+            None,
+        );
+
+        let (subscriber, writer) = test_subscriber_message_only();
+        async {
+            print_default_systems_changed(Some(&explicit), &implicit);
+            print_default_systems_changed(Some(&implicit), &explicit);
+            print_default_systems_changed(None, &implicit);
+        }
+        .with_subscriber(subscriber)
+        .await;
+
+        assert_eq!(writer.to_string(), "");
+    }
 
     #[tokio::test]
     async fn test_print_overridden_manifest_fields() {

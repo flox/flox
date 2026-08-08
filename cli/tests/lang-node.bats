@@ -52,6 +52,9 @@ teardown() {
 
 # bats test_tags=catalog
 @test "flox activate works with npm" {
+  if [ "$NIX_SYSTEM" == "x86_64-darwin" ]; then
+    skip "init tests only run on default systems"
+  fi
   cp -r "$INPUT_DATA/init/node/npm/." .
   # Files copied from the store are read-only
   chmod -R +w .
@@ -65,6 +68,9 @@ teardown() {
 
 # bats test_tags=catalog
 @test "auto init matches yarn version to yarn 1.x" {
+  if [ "$NIX_SYSTEM" == "x86_64-darwin" ]; then
+    skip "init tests only run on default systems"
+  fi
   cp -r "$INPUT_DATA/init/node/yarn_1x/." .
   # Files copied from the store are read-only
   chmod -R +w .
@@ -81,6 +87,9 @@ teardown() {
 
 # bats test_tags=catalog,init
 @test "auto init installs nodejs major version package" {
+  if [ "$NIX_SYSTEM" == "x86_64-darwin" ]; then
+    skip "init tests only run on default systems"
+  fi
   cp -r "$INPUT_DATA/init/node/nodejs_20/." .
   chmod -R +w .
   # This test ensures that when a package.json has a version requirement,
@@ -94,6 +103,9 @@ teardown() {
 
 # bats test_tags=catalog,init
 @test "auto init installs nodejs version range package" {
+  if [ "$NIX_SYSTEM" == "x86_64-darwin" ]; then
+    skip "init tests only run on default systems"
+  fi
   cp -r "$INPUT_DATA/init/node/nodejs_lt_24/." .
   chmod -R +w .
   # This test ensures that when a package.json has a version requirement,
@@ -108,6 +120,9 @@ teardown() {
 
 # bats test_tags=catalog,init
 @test "auto init matches yarn version to yarn-berry" {
+  if [ "$NIX_SYSTEM" == "x86_64-darwin" ]; then
+    skip "init tests only run on default systems"
+  fi
   cp -r "$INPUT_DATA/init/node/yarn_berry/." .
   chmod -R +w .
   # We specify yarn 4 in `package.json` but this is also equivalent to the

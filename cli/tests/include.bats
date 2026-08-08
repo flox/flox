@@ -136,7 +136,8 @@ EOF
 
 @test "include upgrade reports no changes" {
   setup_composer_and_two_includes
-  run "$FLOX_BIN" include upgrade -d composer
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/curl_three_systems_after_hello.yaml" \
+    run "$FLOX_BIN" include upgrade -d composer
   assert_success
   assert_output --partial "No included environments have changes."
 }
@@ -200,6 +201,28 @@ EOF
   assert_success
   assert_output --partial 'included1 = "v2"'
   assert_output --partial 'included2 = "v1"'
+}
+
+@test "include upgrade warns when implicit default systems change on re-lock" {
+  if [ "$NIX_SYSTEM" == "x86_64-darwin" ]; then
+    skip "implicit default systems are unchanged on x86_64-darwin"
+  fi
+
+  "$FLOX_BIN" init -d included
+  cp "$GENERATED_DATA"/envs/hello_before_three_system_relock/manifest.{toml,lock} \
+    included/.flox/env
+  "$FLOX_BIN" init -d composer
+  cp "$GENERATED_DATA"/envs/composer_before_three_system_relock/manifest.{toml,lock} \
+    composer/.flox/env
+
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/curl_three_systems_after_hello.yaml" \
+    "$FLOX_BIN" install -d included curl
+
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/include_upgrade_three_systems.yaml" \
+    run "$FLOX_BIN" include upgrade -d composer
+  assert_success
+  assert_output --partial "! packages have been removed from lockfile for 'x86_64-darwin'"
+  assert_output --partial "To reinstall, add 'x86_64-darwin' to 'options.systems' with 'flox edit'"
 }
 
 # ---------------------------------------------------------------------------- #

@@ -46,14 +46,14 @@ teardown() {
 
 @test "'flox install' displays confirmation message" {
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml"
-  "$FLOX_BIN" init
+  flox_init_pinned
   run "$FLOX_BIN" install hello
   assert_success
   assert_output --partial "✔ 'hello' installed to environment 'test'"
 }
 
 @test "'flox install' warns (preserving order) for already installed packages" {
-  "$FLOX_BIN" init
+  flox_init_pinned
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
     run "$FLOX_BIN" install hello
   assert_success
@@ -68,7 +68,7 @@ EOF
 
 @test "'flox install' edits manifest" {
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml"
-  "$FLOX_BIN" init
+  flox_init_pinned
   run "$FLOX_BIN" install hello
   assert_success
   run grep 'hello.pkg-path = "hello"' "$PROJECT_DIR/.flox/env/manifest.toml"
@@ -76,7 +76,7 @@ EOF
 }
 
 @test "'flox install' provides suggestions when package not found" {
-  "$FLOX_BIN" init
+  flox_init_pinned
   # This package doesn't exist but *does* have suggestions
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/package_suggestions.yaml" \
     run "$FLOX_BIN" install package
@@ -121,7 +121,7 @@ EOF
 
 @test "'flox install' creates link to installed binary" {
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml"
-  "$FLOX_BIN" init
+  flox_init_pinned
   run "$FLOX_BIN" install hello
   assert_success
   assert_output --partial "✔ 'hello' installed to environment"
@@ -133,7 +133,7 @@ EOF
 
 @test "'flox install' installs by path" {
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml"
-  run "$FLOX_BIN" init
+  run flox_init_pinned
   assert_success
   run "$FLOX_BIN" install hello
   assert_success
@@ -144,7 +144,7 @@ EOF
 
 @test "'flox install' infers install ID" {
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/rubyPackages_3_2.rails.yaml"
-  run "$FLOX_BIN" init
+  run flox_init_pinned
   assert_success
   run "$FLOX_BIN" install rubyPackages_3_2.rails
   assert_success
@@ -155,7 +155,7 @@ EOF
 
 @test "'flox install' overrides install ID with '-i'" {
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/envs/hello_as_greeting/hello_as_greeting.yaml"
-  run "$FLOX_BIN" init
+  run flox_init_pinned
   assert_success
   run "$FLOX_BIN" install -i greeting hello
   assert_success
@@ -165,7 +165,7 @@ EOF
 
 @test "'flox install' overrides install ID with '--id'" {
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/envs/hello_as_greeting/hello_as_greeting.yaml"
-  run "$FLOX_BIN" init
+  run flox_init_pinned
   assert_success
   run "$FLOX_BIN" install --id greeting hello
   assert_success
@@ -175,7 +175,7 @@ EOF
 
 @test "'flox install' accepts mix of inferred and supplied install IDs" {
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/webmention_ripgrep_rails.yaml"
-  run "$FLOX_BIN" init
+  run flox_init_pinned
   assert_success
   run "$FLOX_BIN" install -i foo rubyPackages_3_2.webmention ripgrep -i bar rubyPackages_3_2.rails
   assert_success
@@ -187,7 +187,7 @@ EOF
 
 @test "'flox i' aliases to 'install'" {
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml"
-  run "$FLOX_BIN" init
+  run flox_init_pinned
   assert_success
   run "$FLOX_BIN" i hello
   assert_success
@@ -202,6 +202,7 @@ EOF
 @test "'flox install' with outputs selected" {
   # Included environment with bash already installed for the first output.
   "$FLOX_BIN" init -d included
+  pin_recorded_systems included/.flox/env/manifest.toml
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/envs/bash_v1_10_0_out.yaml" \
     "$FLOX_BIN" install -d included -i bash "bashNonInteractive^out"
 
@@ -246,7 +247,7 @@ EOF
 
 # This is also checking we can build an unfree package
 @test "'flox install' warns about unfree packages" {
-  "$FLOX_BIN" init
+  flox_init_pinned
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello_unfree.yaml"
   run "$FLOX_BIN" install hello-unfree
   assert_success
@@ -275,6 +276,7 @@ EOF
   )"
 
   echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f -
+  pin_recorded_systems
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/tabula_allowed.yaml" \
     run "$FLOX_BIN" install tabula
   assert_success
@@ -284,7 +286,7 @@ EOF
 
 # bats test_tags=resolution:single-package-not-found
 @test "resolution message: single package not found, without curation" {
-  "$FLOX_BIN" init
+  flox_init_pinned
 
   # disable backtrace; we expect this to fail and assert output
   RUST_BACKTRACE=0 \
@@ -303,7 +305,7 @@ EOF
 }
 
 @test "resolution message: multiple packages not found, without curation" {
-  "$FLOX_BIN" init
+  flox_init_pinned
 
   # disable backtrace; we expect this to fail and assert output
   RUST_BACKTRACE=0 \
@@ -324,7 +326,7 @@ EOF
 
 # bats test_tags=resolution:single-package-not-found
 @test "resolution message: single package not found, with curation" {
-  "$FLOX_BIN" init
+  flox_init_pinned
 
   # disable backtrace; we expect this to fail and assert output
   RUST_BACKTRACE=0 \
@@ -347,7 +349,7 @@ EOF
 
 # bats test_tags=install:single-not-on-all-systems
 @test "resolution fixup: package not available on all systems installs with looser constraints" {
-  "$FLOX_BIN" init
+  flox_init_pinned
 
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/bpftrace.yaml" \
     run "$FLOX_BIN" install bpftrace
@@ -362,7 +364,7 @@ EOF
 
 # bats test_tags=install:multiple-not-on-all-systems
 @test "resolution fixup: multiple packages not available on all systems install with looser constraints" {
-  "$FLOX_BIN" init
+  flox_init_pinned
 
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/bpftrace_systemd.yaml" \
     run "$FLOX_BIN" install bpftrace systemd
@@ -382,7 +384,7 @@ EOF
 
 # bats test_tags=install:not-on-all-systems-and-other-error
 @test "resolution message: package not available on all systems with no fix when there is another error" {
-  "$FLOX_BIN" init
+  flox_init_pinned
 
   # disable backtrace; we expect this to fail and assert output
   RUST_BACKTRACE=0 \
@@ -409,7 +411,7 @@ EOF
 }
 
 @test "resolution message: version not found" {
-  "$FLOX_BIN" init
+  flox_init_pinned
 
   # disable backtrace; we expect this to fail and assert output
   RUST_BACKTRACE=0 \
@@ -427,7 +429,7 @@ EOF
 }
 
 @test "resolution message: systems not on same page" {
-  "$FLOX_BIN" init
+  flox_init_pinned
 
   # disable backtrace; we expect this to fail and assert output
   RUST_BACKTRACE=0 \
@@ -511,6 +513,7 @@ EOF
 @test "'flox install' info message when overriding included package" {
   # This will be an included environment
   "$FLOX_BIN" init -d included
+  pin_recorded_systems included/.flox/env/manifest.toml
 
   # Install a package that will be overridden by the composer later
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
@@ -575,6 +578,7 @@ EOF
   # Create and push test/default environment
   run "$FLOX_BIN" init -d "$DEFAULT_ENV_DIR" --name default
   assert_success
+  pin_recorded_systems "$DEFAULT_ENV_DIR/.flox/env/manifest.toml"
   run "$FLOX_BIN" push -d "$DEFAULT_ENV_DIR" --owner test
   assert_success
 

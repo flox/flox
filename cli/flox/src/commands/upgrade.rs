@@ -40,13 +40,6 @@ impl Upgrade {
         // in case we error before then
         subcommand_metric!("upgrade");
 
-        // TODO(DEV-200): replace with actual docs URL when available
-        if flox.auth_context.is_unauthenticated() {
-            message::warning(
-                "This command will require authentication in an upcoming release. See https://flox.dev/docs/install-flox/ for more info.",
-            );
-        }
-
         tracing::debug!(
             to_upgrade = self.groups_or_iids.join(","),
             "upgrading groups and install ids"
@@ -164,6 +157,14 @@ impl Upgrade {
             "});
         }
 
+        // `store_path` is only set when the upgrade wrote a new lockfile.
+        if result.store_path.is_some() {
+            message::print_default_systems_changed(
+                result.old_lockfile.as_ref(),
+                &result.new_lockfile,
+            );
+        }
+
         warn_manifest_changes_for_services(&flox, &concrete_environment);
 
         let hub = EventsHub::global();
@@ -270,14 +271,13 @@ mod tests {
     use flox_manifest::raw::PackageToInstall;
     use flox_rust_sdk::flox::test_helpers::flox_instance;
     use flox_rust_sdk::models::environment::Environment;
-    use flox_rust_sdk::models::environment::path_environment::test_helpers::{
-        new_named_path_environment,
-        new_named_path_environment_from_env_files,
-    };
+    use flox_rust_sdk::models::environment::path_environment::test_helpers::new_named_path_environment;
     use flox_rust_sdk::providers::catalog::test_helpers::catalog_replay_client;
     use flox_rust_sdk::utils::logging::test_helpers::test_subscriber_message_only;
     use flox_test_utils::GENERATED_DATA;
+    use flox_test_utils::manifests::{ALL_SYSTEMS_OPTIONS, HELLO};
     use indoc::indoc;
+    use pretty_assertions::{assert_eq, assert_str_eq};
     use serial_test::serial;
     use tempfile::TempDir;
     use tracing::instrument::WithSubscriber;
@@ -355,7 +355,11 @@ mod tests {
     #[serial(global_events_client)]
     async fn upgrade_records_previous_version_on_package_events() {
         let (mut flox, _tempdir) = flox_instance();
-        let mut environment = new_named_path_environment(&flox, "version = 1", "name");
+        let mut environment = new_named_path_environment(
+            &flox,
+            &format!("version = 1\n{ALL_SYSTEMS_OPTIONS}"),
+            "name",
+        );
 
         let response_path = if cfg!(target_os = "macos") {
             "resolve/old_darwin_hello.yaml"
@@ -444,14 +448,11 @@ mod tests {
         let (mut flox, _tempdir) = flox_instance();
         let (subscriber, writer) = test_subscriber_message_only();
 
-        let environment = new_named_path_environment_from_env_files(
-            &flox,
-            GENERATED_DATA.join("envs/hello"),
-            "name",
-        );
+        let mut environment = new_named_path_environment(&flox, HELLO, "name");
 
         flox.floxhub_client =
             catalog_replay_client(GENERATED_DATA.join("resolve/hello.yaml")).await;
+        environment.lockfile(&flox).unwrap();
 
         Upgrade {
             environment: EnvironmentSelect::Dir(environment.parent_path().unwrap()),
@@ -465,10 +466,7 @@ mod tests {
 
         let printed = writer.to_string();
 
-        assert_eq!(
-            printed,
-            "! This command will require authentication in an upcoming release. See https://flox.dev/docs/install-flox/ for more info.\nNo upgrades available for packages in 'name'.\n"
-        );
+        assert_eq!(printed, "No upgrades available for packages in 'name'.\n");
     }
 
     /// Run an upgrade of an environment that only has upgrades on other systems
@@ -476,7 +474,11 @@ mod tests {
         let (mut flox, _tempdir) = flox_instance();
         let (subscriber, writer) = test_subscriber_message_only();
 
-        let mut environment = new_named_path_environment(&flox, "version = 1", "name");
+        let mut environment = new_named_path_environment(
+            &flox,
+            &format!("version = 1\n{ALL_SYSTEMS_OPTIONS}"),
+            "name",
+        );
 
         let response_path = if cfg!(target_os = "macos") {
             "resolve/old_linux_hello.yaml"
@@ -513,7 +515,6 @@ mod tests {
         assert_eq!(
             run_upgrade_with_upgrades_on_other_system(false).await,
             indoc! {"
-            ! This command will require authentication in an upcoming release. See https://flox.dev/docs/install-flox/ for more info.
             ✔ Upgraded 'name'.
             Upgrades were not available for this system, but upgrades were applied for other
             systems supported by this environment.
@@ -527,7 +528,6 @@ mod tests {
         assert_eq!(
             run_upgrade_with_upgrades_on_other_system(true).await,
             indoc! {"
-            ! This command will require authentication in an upcoming release. See https://flox.dev/docs/install-flox/ for more info.
             Upgrades are not available for 'name' on this system, but upgrades are
             available for other systems supported by this environment.
             "}
@@ -716,7 +716,11 @@ mod tests {
         let (mut flox, _tempdir) = flox_instance();
         let (subscriber, writer) = test_subscriber_message_only();
 
-        let mut environment = new_named_path_environment(&flox, "version = 1", "name");
+        let mut environment = new_named_path_environment(
+            &flox,
+            &format!("version = 1\n{ALL_SYSTEMS_OPTIONS}"),
+            "name",
+        );
 
         // Use the fixture that has an older version for THIS system
         let response_path = if cfg!(target_os = "macos") {
@@ -751,8 +755,7 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     #[serial(global_events_client)]
     async fn dry_run_shows_version_change_summary() {
-        assert_eq!(run_dry_run_with_version_change().await, indoc! {"
-            ! This command will require authentication in an upcoming release. See https://flox.dev/docs/install-flox/ for more info.
+        assert_str_eq!(run_dry_run_with_version_change().await, indoc! {"
             Dry run: 1 version change in 'name':
             - hello: 2.10.1 -> 2.12.3
 

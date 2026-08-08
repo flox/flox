@@ -17,3 +17,8 @@ export REDIS_PORT
 
 [services.redis]
 command = 'redis-server --port "${REDIS_PORT}"'
+
+# Pin the systems this manifest's packages were recorded for so resolution
+# replays match the recordings on every machine.
+[options]
+systems = ["aarch64-darwin", "aarch64-linux", "x86_64-darwin", "x86_64-linux"]

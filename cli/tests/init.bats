@@ -216,6 +216,9 @@ EOF
 
 # bats test_tags=init:python:requirements
 @test "'flox init' sets up a working Python environment that works across all methods of activate" {
+  if [ "$NIX_SYSTEM" == "x86_64-darwin" ]; then
+    skip "init tests only run on default systems"
+  fi
   OWNER="owner"
   NAME="name"
 

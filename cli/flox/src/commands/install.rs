@@ -127,13 +127,6 @@ impl Install {
     pub async fn handle(self, mut flox: Flox) -> Result<()> {
         subcommand_metric!("install");
 
-        // TODO(DEV-200): replace with actual docs URL when available
-        if flox.auth_context.is_unauthenticated() {
-            message::warning(
-                "This command will require authentication in an upcoming release. See https://flox.dev/docs/install-flox/ for more info.",
-            );
-        }
-
         debug!(
             "attempting to install packages [{}] to {:?}",
             self.packages.as_slice().join(", "),
@@ -200,16 +193,14 @@ impl Install {
         let description = environment_description(&concrete_environment)?;
 
         // Get a list of the packages that this environment is already overriding via composition.
-        let maybe_lockfile = concrete_environment.existing_lockfile(&flox)?;
-        let existing_composer_package_overrides = if let Some(lockfile) = maybe_lockfile {
-            lockfile
-                .compose
-                .map(|c| c.warnings)
-                .map(|warnings| package_overrides_for_manifest_id(&warnings, COMPOSER_MANIFEST_ID))
-                .unwrap_or_default()
-        } else {
-            vec![]
-        };
+        let old_lockfile = concrete_environment.existing_lockfile(&flox)?;
+        let existing_composer_package_overrides = old_lockfile
+            .as_ref()
+            .and_then(|lockfile| lockfile.compose.as_ref())
+            .map(|compose| {
+                package_overrides_for_manifest_id(&compose.warnings, COMPOSER_MANIFEST_ID)
+            })
+            .unwrap_or_default();
 
         // We don't know the contents of the packages field when the span is created
         sentry_set_tag(
@@ -287,6 +278,7 @@ impl Install {
         message::packages_already_installed(&partitioned.already_installed, &description);
         message::packages_outputs_updated(&partitioned.outputs_updated, &description);
         message::packages_newly_overridden_by_composer(&new_package_overrides);
+        message::print_default_systems_changed(old_lockfile.as_ref(), &lockfile);
 
         if !installation.modifications.is_empty() {
             for warning in Self::generate_unfree_and_broken_warnings(
@@ -830,7 +822,11 @@ mod tests {
     use flox_manifest::lockfile::{LockedPackage, LockedPackageCatalog, Lockfile};
     use flox_manifest::raw::{CatalogPackage, PackageToInstall, RawSelectedOutputs};
     use flox_rust_sdk::flox::test_helpers::flox_instance;
-    use flox_rust_sdk::models::environment::path_environment::test_helpers::new_path_environment_in;
+    use flox_rust_sdk::models::environment::Environment;
+    use flox_rust_sdk::models::environment::path_environment::test_helpers::{
+        new_named_path_environment_from_env_files,
+        new_path_environment_in,
+    };
     use flox_rust_sdk::providers::catalog::SystemEnum;
     use flox_rust_sdk::providers::catalog::test_helpers::catalog_replay_client;
     use flox_rust_sdk::utils::logging::test_helpers::test_subscriber_message_only;
@@ -1047,10 +1043,52 @@ mod tests {
             .await
             .expect("installation failed");
         let expected = formatdoc! {"
-             ! This command will require authentication in an upcoming release. See https://flox.dev/docs/install-flox/ for more info.
              ! '{install_id}' installed only for the following systems: {installed_systems}
         "};
         assert_eq!(writer.to_string(), expected);
+    }
+
+    /// Re-locking an environment locked by a Flox version with a different
+    /// implicit default systems set warns about the change.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn warns_when_default_systems_changed_on_relock() {
+        let (mut flox, _tempdir) = flox_instance();
+        // On x86_64-darwin the implicit default set still contains all four
+        // systems, so there is no transition to warn about (and the replayed
+        // request below would not match).
+        if flox.system == "x86_64-darwin" {
+            return;
+        }
+        let (subscriber, writer) = test_subscriber_message_only();
+
+        // The fixture was locked with the old 4-system implicit default set
+        // and has no `options.systems`.
+        let environment = new_named_path_environment_from_env_files(
+            &flox,
+            GENERATED_DATA.join("envs/hello_before_three_system_relock"),
+            "name",
+        );
+        flox.floxhub_client = catalog_replay_client(
+            GENERATED_DATA.join("resolve/curl_three_systems_after_hello.yaml"),
+        )
+        .await;
+
+        Install {
+            environment: EnvironmentSelect::Dir(environment.parent_path().unwrap()),
+            id: vec![],
+            packages: vec!["curl".to_string()],
+        }
+        .handle(flox)
+        .with_subscriber(subscriber)
+        .await
+        .expect("installation failed");
+
+        assert_eq!(writer.to_string(), formatdoc! {"
+            ✔ 'curl' installed to environment 'name'
+            ℹ 'curl' has additional outputs, use 'flox list -a' to see more
+            ! packages have been removed from lockfile for 'x86_64-darwin'
+            To reinstall, add 'x86_64-darwin' to 'options.systems' with 'flox edit'
+        "});
     }
 
     /// `bash` has more outputs available than its default set, so installing it

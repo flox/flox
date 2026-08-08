@@ -1,7 +1,7 @@
 {
   "lockfile-version": 1,
   "manifest": {
-    "schema-version": "1.14.0",
+    "version": 1,
     "install": {
       "hello": {
         "pkg-path": "hello"
@@ -9,14 +9,7 @@
     },
     "hook": {},
     "profile": {},
-    "options": {
-      "systems": [
-        "aarch64-darwin",
-        "aarch64-linux",
-        "x86_64-darwin",
-        "x86_64-linux"
-      ]
-    }
+    "options": {}
   },
   "packages": [
     {
@@ -139,5 +132,38 @@
       "group": "toplevel",
       "priority": 5
     }
-  ]
+  ],
+  "compose": {
+    "composer": {
+      "version": 1,
+      "options": {},
+      "include": {
+        "environments": [
+          {
+            "dir": "../included"
+          }
+        ]
+      }
+    },
+    "include": [
+      {
+        "manifest": {
+          "schema-version": "1.14.0",
+          "install": {
+            "hello": {
+              "pkg-path": "hello"
+            }
+          },
+          "hook": {},
+          "profile": {},
+          "options": {}
+        },
+        "name": "included",
+        "descriptor": {
+          "dir": "../included"
+        }
+      }
+    ],
+    "warnings": []
+  }
 }

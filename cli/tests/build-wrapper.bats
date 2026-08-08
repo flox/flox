@@ -62,6 +62,9 @@ teardown() {
 
       chmod +x "$out/bin/print-FLOX_ENV_DIRS"
     """
+
+    [options]
+    systems = ["aarch64-darwin", "aarch64-linux", "x86_64-darwin", "x86_64-linux"]
 EOF
   )"
 
@@ -102,6 +105,7 @@ EOF
   assert_output --partial "Cannot import toml"
 
   "$FLOX_BIN" init -d consumer
+  pin_recorded_systems consumer/.flox/env/manifest.toml
   "$FLOX_BIN" install -d consumer ./result-print-modules/bin/print-modules
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/python-toml.yaml" \
     "$FLOX_BIN" install -d consumer python313Packages.toml
