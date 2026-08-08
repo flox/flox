@@ -52,10 +52,14 @@ pre-commit-hooks.lib.${stdenv.hostPlatform.system}.run {
       enable = true;
       settings = {
         denyWarnings = true;
-        # '--tests': ensure that #[cfg(test)] is linted as well
+        # '--all-targets': lint every target, not just the test build.
+        #   '--tests' alone compiles each binary with `cfg(test)` on, so a
+        #   helper whose only callers are in `#[cfg(test)]` modules still
+        #   looks live and `dead_code` never fires. Building the plain
+        #   targets too is what catches code that only tests still use.
         # '--workspace': lint all packages in the workspace
         # '--no-deps': don't lint dependencies
-        extraArgs = "--tests --workspace --no-deps";
+        extraArgs = "--all-targets --workspace --no-deps";
       };
     };
     commitizen = {
