@@ -33,7 +33,6 @@ use toml_edit::DocumentMut;
 use crate::interfaces::{
     AsTypedOnlyManifest,
     AsWritableManifest,
-    CommonFields,
     OriginalSchemaVersion,
     SchemaVersion,
 };
@@ -261,6 +260,21 @@ impl Parsed {
             Parsed::V1_14_0(_) => KnownSchemaVersion::V1_14_0,
         }
     }
+
+    /// Validates the services section of the contained manifest.
+    ///
+    /// Dispatched per version because the services types are version-specific
+    /// from V1_14_0 on.
+    pub(crate) fn validate_services(&self) -> Result<(), ManifestError> {
+        match self {
+            Parsed::V1(m) => m.services.validate(),
+            Parsed::V1_10_0(m) => m.services.validate(),
+            Parsed::V1_11_0(m) => m.services.validate(),
+            Parsed::V1_12_0(m) => m.services.validate(),
+            Parsed::V1_13_0(m) => m.services.validate(),
+            Parsed::V1_14_0(m) => m.services.validate(),
+        }
+    }
 }
 
 /// Type states for the state machine that represents loading, parsing,
@@ -362,7 +376,7 @@ impl Manifest<TomlParsed> {
                 parsed,
             },
         };
-        manifest.inner.parsed.services().validate()?;
+        manifest.inner.parsed.validate_services()?;
         Ok(manifest)
     }
 }

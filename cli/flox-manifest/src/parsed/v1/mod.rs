@@ -160,9 +160,7 @@ pub mod test_helpers {
                     for (_name, svc) in services.inner_mut().iter_mut() {
                         if svc.is_daemon.is_some_and(|is_daemon| is_daemon) {
                             svc.shutdown = Some(ServiceShutdown {
-                                command: Some("cmd".to_string()),
-                                timeout_seconds: None,
-                                signal: None,
+                                command: "cmd".to_string(),
                             });
                         }
                     }
