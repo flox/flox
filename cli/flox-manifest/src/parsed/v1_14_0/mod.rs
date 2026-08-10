@@ -266,6 +266,26 @@ impl Services {
             }
         }
 
+        // A misspelled `depends-on` key is otherwise only reported by
+        // process-compose, in its own vocabulary, when the services are
+        // started. Catching it here surfaces it when the manifest is edited.
+        // Only the existence of the target is checked; ordering cycles are left
+        // to the process manager.
+        for (name, desc) in self.service_map.iter() {
+            let Some(depends_on) = desc.depends_on.as_ref() else {
+                continue;
+            };
+            for target in depends_on.keys() {
+                if !self.service_map.contains_key(target) {
+                    let msg = formatdoc! {"
+                        Service '{name}' depends on service '{target}', which is not defined in this environment.
+                        Check the spelling of '{target}', or add a '[services.{target}]' section.
+                    "};
+                    return Err(ManifestError::InvalidServiceConfig(msg));
+                }
+            }
+        }
+
         Ok(())
     }
 
@@ -278,6 +298,10 @@ impl Services {
     /// the current system; process-compose rejects such an edge when the
     /// services are started. Checking the pre-filter map would miss this,
     /// because the depended-on service exists there.
+    ///
+    /// A target that names no service at all is a separate mistake, reported by
+    /// [`Services::validate`] when the manifest is parsed, so an edge that
+    /// reaches this check has a target that exists somewhere in the manifest.
     pub fn validate_depends_on(&self, system: &System) -> Result<(), ManifestError> {
         for (name, desc) in self.service_map.iter() {
             let Some(depends_on) = desc.depends_on.as_ref() else {
@@ -428,6 +452,11 @@ pub struct ServiceShutdown {
 ///
 /// Serializes to the literal condition strings that process-compose expects in
 /// a `depends_on.<name>.condition` field.
+///
+/// process-compose also accepts `process_healthy`, which is deliberately not
+/// offered here: it only means anything once readiness probes are surfaced in
+/// the manifest, so it arrives with them rather than accepting a condition that
+/// can never be satisfied.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash, JsonSchema)]
 #[cfg_attr(any(test, feature = "tests"), derive(proptest_derive::Arbitrary))]
 #[serde(rename_all = "snake_case")]
@@ -660,6 +689,34 @@ mod tests {
             ..descriptor("run")
         });
         assert!(good_signal.validate().is_ok());
+    }
+
+    #[test]
+    fn rejects_depends_on_target_that_names_no_service() {
+        // A misspelled dependency name is caught when the manifest is
+        // validated, rather than by process-compose at 'flox services start'.
+        let web = ServiceDescriptor {
+            depends_on: Some(BTreeMap::from([(
+                "migratons".to_string(),
+                ServiceDependency {
+                    condition: ServiceStartCondition::ProcessCompletedSuccessfully,
+                },
+            )])),
+            ..descriptor("run-web")
+        };
+        let services = Services {
+            auto_start: None,
+            service_map: BTreeMap::from([
+                ("migrations".to_string(), descriptor("run-migrations")),
+                ("web".to_string(), web),
+            ]),
+        };
+
+        let err = services.validate().unwrap_err();
+        assert!(
+            err.to_string().contains("migratons"),
+            "error should name the misspelled dependency, got: {err}"
+        );
     }
 
     #[test]
