@@ -54,6 +54,11 @@ pub(crate) fn detect_shell_for_subshell() -> ShellWithPath {
 
 /// Utility method for testing implementing the logic of shell detection
 /// for subshells, generically over a parent shell detection function.
+///
+/// Test-only: production resolves the chain once through
+/// [`SHELL_CHAIN_DETECTION`], so there is no non-test caller to keep the
+/// injected probe.
+#[cfg(test)]
 fn detect_shell_for_subshell_with(
     parent_shell_fn: impl Fn() -> Result<ShellWithPath>,
 ) -> ShellWithPath {
