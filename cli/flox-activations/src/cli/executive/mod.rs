@@ -12,6 +12,7 @@ use flox_core::activations::{
     state_json_path,
     write_activations_json,
 };
+use flox_core::proc_status::read_pid_status;
 use flox_core::sentry::init_sentry;
 use flox_core::traceable_path;
 use fslock::LockFile;
@@ -431,13 +432,28 @@ fn handle_process_exited(
                 .find(|(attached_pid, _)| *attached_pid == pid);
             if let Some((pid, expiration)) = pid_reused {
                 if loop_guard.allow_remonitor(pid) {
-                    debug!(pid, "PID re-attached to activation, starting new monitor");
+                    // info so that Sentry breadcrumbs show every iteration
+                    // leading up to the loop guard tripping.
+                    // The status is included because read_pid_status reports
+                    // Dead both for a process that has exited and for one
+                    // whose status couldn't be read, and re-monitoring a PID
+                    // that doesn't report Running is what a loop looks like.
+                    info!(
+                        pid,
+                        ?expiration,
+                        status = ?read_pid_status(pid),
+                        count = loop_guard.count,
+                        "PID re-attached to activation, starting new monitor"
+                    );
                     coordinator
                         .start_monitoring(pid, expiration)
                         .context("failed to restart monitoring for re-attached PID")?;
                 } else {
                     error!(
                         pid,
+                        ?expiration,
+                        status = ?read_pid_status(pid),
+                        count = loop_guard.count,
                         "PID re-monitored too many times, skipping to prevent loop"
                     );
                 }
