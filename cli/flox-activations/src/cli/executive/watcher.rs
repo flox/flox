@@ -10,8 +10,8 @@
 
 use std::path::Path;
 
-use anyhow::{Result, anyhow};
-use flox_core::activations::{ActivationState, read_activations_json, write_activations_json};
+use anyhow::Result;
+use flox_core::activations::{ActivationState, write_activations_json};
 use flox_core::proc_status::pid_is_running;
 use fslock::LockFile;
 use time::OffsetDateTime;
@@ -26,21 +26,20 @@ pub type LockedActivationState = (ActivationState, LockFile);
 
 /// Check if the provided PID is still running and clean it up if not.
 ///
+/// Takes the state already locked rather than reading it, so that whether
+/// state.json still exists is decided by the caller. Every arm of the event
+/// loop answers that the same way, and it is not this function's policy to set.
+///
 /// Returns `Some(LockedActivationState)` if all PIDs have terminated and
 /// cleanup should proceed.
 /// Returns `None` if there are still active PIDs.
 pub fn cleanup_pid(
+    locked_activations: LockedActivationState,
     state_json_path: &Path,
     activation_state_dir: &Path,
     pid: i32,
 ) -> Result<Option<LockedActivationState>, Error> {
-    let (activations_json, lock) = read_activations_json(state_json_path)?;
-    let Some(mut activations) = activations_json else {
-        return Err(
-            anyhow!("executive shouldn't be running when state.json doesn't exist")
-                .context(format!("when cleaning up PID {pid}")),
-        );
-    };
+    let (mut activations, lock) = locked_activations;
 
     let now = OffsetDateTime::now_utc();
     let (empty_start_id, modified) = activations.cleanup_pid(pid, pid_is_running, now);
@@ -80,10 +79,22 @@ pub mod test {
 
     use flox_core::activate::mode::ActivateMode;
     use flox_core::activations::test_helpers::write_activation_state;
-    use flox_core::activations::{StartOrAttachResult, activation_state_dir_path, state_json_path};
+    use flox_core::activations::{
+        StartOrAttachResult,
+        activation_state_dir_path,
+        read_activations_json,
+        state_json_path,
+    };
     use flox_core::proc_status::{ProcStatus, pid_is_running, read_pid_status};
 
     use super::*;
+
+    /// Read and lock the state the way the event loop does before calling
+    /// [`cleanup_pid`].
+    fn locked_state(state_json_path: &Path) -> LockedActivationState {
+        let (activations, lock) = read_activations_json(state_json_path).unwrap();
+        (activations.expect("state.json should exist"), lock)
+    }
 
     // NOTE: these two functions are copied from flox-rust-sdk since you can't
     //       share anything behind #[cfg(test)] across crates
@@ -169,14 +180,25 @@ pub mod test {
 
         // Clean up first PID - should not trigger full cleanup yet
         stop_process(proc1);
-        let result = cleanup_pid(&state_json_path, &activation_state_dir, pid1).unwrap();
+        let result = cleanup_pid(
+            locked_state(&state_json_path),
+            &state_json_path,
+            &activation_state_dir,
+            pid1,
+        )
+        .unwrap();
         assert!(result.is_none(), "should not cleanup after first PID");
 
         // Clean up second PID - should trigger full cleanup
         stop_process(proc2);
-        let (state, _lock) = cleanup_pid(&state_json_path, &activation_state_dir, pid2)
-            .unwrap()
-            .expect("should return cleanup result");
+        let (state, _lock) = cleanup_pid(
+            locked_state(&state_json_path),
+            &state_json_path,
+            &activation_state_dir,
+            pid2,
+        )
+        .unwrap()
+        .expect("should return cleanup result");
         assert_eq!(
             state.attachments_by_start_id(),
             BTreeMap::new(),
@@ -237,7 +259,13 @@ pub mod test {
 
         // Terminate proc1 and call cleanup_pid
         stop_process(proc1);
-        let result = cleanup_pid(&state_json_path, &activation_state_dir, pid1).unwrap();
+        let result = cleanup_pid(
+            locked_state(&state_json_path),
+            &state_json_path,
+            &activation_state_dir,
+            pid1,
+        )
+        .unwrap();
         assert!(result.is_none(), "should not cleanup while pid2 is running");
 
         // Verify state_dir_1 has been removed but state_dir_2 still exists
@@ -246,9 +274,14 @@ pub mod test {
 
         // Clean up
         stop_process(proc2);
-        let (state, _lock) = cleanup_pid(&state_json_path, &activation_state_dir, pid2)
-            .unwrap()
-            .expect("should return cleanup result");
+        let (state, _lock) = cleanup_pid(
+            locked_state(&state_json_path),
+            &state_json_path,
+            &activation_state_dir,
+            pid2,
+        )
+        .unwrap()
+        .expect("should return cleanup result");
         assert_eq!(
             state.attachments_by_start_id(),
             BTreeMap::new(),
