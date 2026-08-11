@@ -132,6 +132,16 @@ pub enum BuildEnvError {
     )]
     VarsCycle { cycle: String },
 
+    #[error(
+        "This environment is not locked for your system ({system}).\n\
+        Locked systems: {locked}\n\
+        Run 'flox upgrade' to re-lock the environment for your system, or add '{system}' to 'options.systems' with 'flox edit'.",
+        locked = locked_systems.join(", "))]
+    LockfileMissingCurrentSystem {
+        system: String,
+        locked_systems: Vec<String>,
+    },
+
     /// An error that occurred while creating GC roots via `create_gc_root_in`.
     #[error("Failed to link environment: {0}")]
     Link(String),
@@ -1407,6 +1417,26 @@ pub fn materialise_with_retry<T>(
     unreachable!("retry loop always returns")
 }
 
+/// Verify that a lockfile's inferred implicit systems include `system`.
+///
+/// [Lockfile::implicit_resolved_systems] returns no signal for explicitly
+/// scoped environments or packages, which don't participate in this check.
+fn check_lockfile_has_current_system(
+    lockfile: &Lockfile,
+    system: &str,
+) -> Result<(), BuildEnvError> {
+    let Some(locked_systems) = lockfile.implicit_resolved_systems()? else {
+        return Ok(());
+    };
+    if locked_systems.contains(system) {
+        return Ok(());
+    }
+    Err(BuildEnvError::LockfileMissingCurrentSystem {
+        system: system.to_string(),
+        locked_systems: locked_systems.into_iter().collect(),
+    })
+}
+
 impl<A> BuildEnv for BuildEnvNix<A>
 where
     A: AuthProvider,
@@ -1446,6 +1476,11 @@ where
                 systems: systems.clone(),
             });
         }
+
+        // Without explicit `options.systems`, packages which inherit the
+        // default systems may only have locks for other systems. Building
+        // would silently omit those packages, so fail with a re-lock hint.
+        check_lockfile_has_current_system(&lockfile, env!("NIX_TARGET_SYSTEM"))?;
 
         // Reject `[vars]` reference cycles before any build work rather than
         // letting bash fail opaquely at activation time.
@@ -2948,6 +2983,96 @@ mod join_realise_results_tests {
         assert!(
             matches!(result, Err(BuildEnvError::Other(_))),
             "got {result:?}"
+        );
+    }
+}
+
+#[cfg(test)]
+mod current_system_check_tests {
+    use flox_core::Version;
+    use flox_manifest::interfaces::AsTypedOnlyManifest;
+    use flox_manifest::lockfile::test_helpers::fake_catalog_package_lock;
+    use flox_manifest::parsed::latest::{ManifestLatest, ManifestPackageDescriptor};
+
+    use super::*;
+
+    fn lockfile_with_packages(manifest: &ManifestLatest, packages: Vec<LockedPackage>) -> Lockfile {
+        Lockfile {
+            version: Version::<1>,
+            manifest: manifest.as_typed_only(),
+            packages,
+            compose: None,
+        }
+    }
+
+    fn manifest_and_catalog_lock(
+        package_systems: Option<Vec<System>>,
+        options_systems: Option<Vec<System>>,
+    ) -> (ManifestLatest, LockedPackage) {
+        // [fake_catalog_package_lock] locks for aarch64-darwin.
+        let (install_id, mut descriptor, locked) = fake_catalog_package_lock("hello", None);
+        let ManifestPackageDescriptor::Catalog(catalog_descriptor) = &mut descriptor else {
+            unreachable!("the fake catalog package must have a catalog descriptor")
+        };
+        catalog_descriptor.systems = package_systems;
+
+        let mut manifest = ManifestLatest::default();
+        manifest.options.systems = options_systems;
+        manifest.install.inner_mut().insert(install_id, descriptor);
+        (manifest, locked.into())
+    }
+
+    /// An environment without any packages is legitimate and must build.
+    #[test]
+    fn allows_environment_without_packages() {
+        let manifest = ManifestLatest::default();
+        let lockfile = lockfile_with_packages(&manifest, vec![]);
+        assert!(check_lockfile_has_current_system(&lockfile, "x86_64-linux").is_ok());
+    }
+
+    #[test]
+    fn allows_implicitly_scoped_package_for_current_system() {
+        let (manifest, locked) = manifest_and_catalog_lock(None, None);
+        let lockfile = lockfile_with_packages(&manifest, vec![locked]);
+        assert!(check_lockfile_has_current_system(&lockfile, "aarch64-darwin").is_ok());
+    }
+
+    #[test]
+    fn allows_package_explicitly_scoped_to_another_system() {
+        let (manifest, locked) =
+            manifest_and_catalog_lock(Some(vec!["aarch64-darwin".to_string()]), None);
+        let lockfile = lockfile_with_packages(&manifest, vec![locked]);
+        assert!(check_lockfile_has_current_system(&lockfile, "x86_64-linux").is_ok());
+    }
+
+    #[test]
+    fn allows_when_options_systems_is_set() {
+        let (manifest, locked) =
+            manifest_and_catalog_lock(None, Some(vec!["x86_64-linux".to_string()]));
+        let lockfile = lockfile_with_packages(&manifest, vec![locked]);
+        assert!(check_lockfile_has_current_system(&lockfile, "x86_64-linux").is_ok());
+    }
+
+    /// A lockfile whose packages are all locked for other systems must not
+    /// silently build an environment with no packages.
+    #[test]
+    fn errors_when_implicitly_scoped_packages_are_only_locked_for_other_systems() {
+        let (manifest, locked) = manifest_and_catalog_lock(None, None);
+        let lockfile = lockfile_with_packages(&manifest, vec![locked]);
+
+        let err = check_lockfile_has_current_system(&lockfile, "x86_64-linux").unwrap_err();
+        let BuildEnvError::LockfileMissingCurrentSystem {
+            system,
+            locked_systems,
+        } = err
+        else {
+            panic!("expected LockfileMissingCurrentSystem, got {err:?}");
+        };
+        assert_eq!(
+            (system, locked_systems),
+            ("x86_64-linux".to_string(), vec![
+                "aarch64-darwin".to_string()
+            ])
         );
     }
 }

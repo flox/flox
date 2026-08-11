@@ -56,7 +56,6 @@ use crate::commands::general::update_config_with_query;
 use crate::commands::services::ServicesCommandsError;
 use crate::commands::{
     EnvironmentSelectError,
-    LOCKING_AUTH_REQUIRED_SOON,
     NoEnvironmentError,
     SHELL_COMPLETION_COMMAND,
     SHELL_COMPLETION_FILE,
@@ -230,13 +229,6 @@ impl Activate {
                 .to_string()
         );
 
-        // TODO(DEV-200): replace with actual docs URL when available
-        if concrete_environment.existing_lockfile(&flox)?.is_none()
-            && flox.auth_context.is_unauthenticated()
-        {
-            message::warning(LOCKING_AUTH_REQUIRED_SOON);
-        }
-
         // Both telemetry stacks emit in parallel through the dormant
         // phase; the new-pipeline mirrors below are no-ops in production
         // until the cutover PR installs an `EventsHub` client.
@@ -399,9 +391,12 @@ impl ActivateOptions {
 
         let now_active = UninitializedEnvironment::from_concrete_environment(&concrete_environment);
 
+        // Read before `lockfile()`, which may re-lock and overwrite it.
+        let old_lockfile = concrete_environment.existing_lockfile(&flox)?;
         let lockfile = match concrete_environment.lockfile(&flox)? {
             LockResult::Changed(lockfile) => {
                 message::print_overridden_manifest_fields(&lockfile);
+                message::print_default_systems_changed(old_lockfile.as_ref(), &lockfile);
                 lockfile
             },
             LockResult::Unchanged(lockfile) => lockfile,

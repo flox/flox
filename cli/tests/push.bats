@@ -92,7 +92,7 @@ teardown() {
   mkdir -p "machine_b"
 
   pushd "machine_a" >/dev/null || return
-  "$FLOX_BIN" init --name "test"
+  flox_init_pinned --name "test"
   "$FLOX_BIN" install hello
   "$FLOX_BIN" push --owner owner
   popd >/dev/null || return
@@ -115,7 +115,7 @@ teardown() {
 
   # Create an environment owner/test on machine_a and push it to floxhub
   pushd "machine_a" >/dev/null || return
-  "$FLOX_BIN" init --name "test"
+  flox_init_pinned --name "test"
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/vim.yaml"
   "$FLOX_BIN" install vim
 
@@ -128,7 +128,7 @@ teardown() {
   pushd "machine_b" >/dev/null || return
   echo "trying to push to the same upstream env" >&3
 
-  "$FLOX_BIN" init --name "test"
+  flox_init_pinned --name "test"
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/emacs.yaml"
   "$FLOX_BIN" install emacs
   # export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.yaml"
@@ -146,7 +146,7 @@ teardown() {
 
   # Create an environment owner/test on machine_a and push it to floxhub
   pushd "machine_a" >/dev/null || return
-  "$FLOX_BIN" init --name "test"
+  flox_init_pinned --name "test"
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/vim.yaml"
   "$FLOX_BIN" install vim
   # Also uses the `vim` resolution since it makes sure the manifest is locked before pushing
@@ -156,7 +156,7 @@ teardown() {
   # Create an environment owner/test on machine_b and force-push it to floxhub
   pushd "machine_b" > /dev/null || return
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.yaml"
-  "$FLOX_BIN" init --name "test"
+  flox_init_pinned --name "test"
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/emacs.yaml"
   "$FLOX_BIN" install emacs
   # Also uses the `emacs` resolution since it makes sure the manifest is locked before pushing

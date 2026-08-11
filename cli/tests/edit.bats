@@ -86,12 +86,37 @@ check_manifest_updated() {
 version = 1
 [install]
 hello.pkg-path = "hello"
+
+[options]
+systems = ["aarch64-darwin", "aarch64-linux", "x86_64-darwin", "x86_64-linux"]
 EOF
 
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
     run "$FLOX_BIN" edit -f "$TMP_MANIFEST_PATH"
   assert_success
   assert_output --partial "✔ Environment successfully updated."
+}
+
+@test "'flox edit' warns when implicit default systems change on re-lock" {
+  if [ "$NIX_SYSTEM" == "x86_64-darwin" ]; then
+    skip "implicit default systems are unchanged on x86_64-darwin"
+  fi
+
+  "$FLOX_BIN" init
+  cp "$GENERATED_DATA"/envs/hello_before_three_system_relock/manifest.{toml,lock} \
+    "$PROJECT_DIR/.flox/env"
+  cp "$GENERATED_DATA/envs/hello_before_three_system_relock/manifest.toml" \
+    "$TMP_MANIFEST_PATH"
+  # Files copied from the store are read-only
+  chmod +w "$TMP_MANIFEST_PATH"
+  tomlq --in-place --toml-output \
+    '.install.curl."pkg-path" = "curl"' "$TMP_MANIFEST_PATH"
+
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/curl_three_systems_after_hello.yaml" \
+    run "$FLOX_BIN" edit -f "$TMP_MANIFEST_PATH"
+  assert_success
+  assert_output --partial "! packages have been removed from lockfile for 'x86_64-darwin'"
+  assert_output --partial "To reinstall, add 'x86_64-darwin' to 'options.systems' with 'flox edit'"
 }
 
 # ---------------------------------------------------------------------------- #
@@ -264,6 +289,9 @@ version = 1
 [install]
 vim.pkg-path = "vim"
 vim-full.pkg-path = "vim-full"
+
+[options]
+systems = ["aarch64-darwin", "aarch64-linux", "x86_64-darwin", "x86_64-linux"]
 EOF
 )
 
@@ -273,6 +301,9 @@ version = 1
 vim.pkg-path = "vim"
 vim-full.pkg-path = "vim-full"
 vim-full.priority = 4
+
+[options]
+systems = ["aarch64-darwin", "aarch64-linux", "x86_64-darwin", "x86_64-linux"]
 EOF
 )
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/vim-vim-full-conflict.yaml"
@@ -316,6 +347,9 @@ bar.command = """
   chmod +x $out/bin/collide
   echo ${foo} > $out/nix-support/propagated-build-inputs
 """
+
+[options]
+systems = ["aarch64-darwin", "aarch64-linux", "x86_64-darwin", "x86_64-linux"]
 EOF
   )
 
@@ -374,6 +408,9 @@ top.command = """
   chmod +x $out/bin/top-bin
   echo ${middle} > $out/nix-support/propagated-build-inputs
 """
+
+[options]
+systems = ["aarch64-darwin", "aarch64-linux", "x86_64-darwin", "x86_64-linux"]
 EOF
   )
 

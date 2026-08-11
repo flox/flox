@@ -16,7 +16,7 @@ pub use store_path::LockedPackageStorePath;
 
 pub type FlakeRef = Value;
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Display;
 use std::fs;
 use std::str::FromStr;
@@ -24,6 +24,7 @@ use std::str::FromStr;
 use flox_core::Version;
 
 use crate::interfaces::{AsLatestSchema, PackageLookup, SchemaVersion};
+use crate::parsed::Inner;
 use crate::parsed::common::KnownSchemaVersion;
 use crate::parsed::latest::{PackageDescriptorCatalog, PackageDescriptorFlake};
 use crate::{Manifest, ManifestError, MigratedTypedOnly, TypedOnly};
@@ -186,6 +187,83 @@ impl Lockfile {
             .iter()
             .find(|pkg| pkg.install_id() == id.as_ref())
     }
+
+    /// The systems this lockfile was resolved for when the merged manifest has
+    /// no explicit `options.systems`.
+    ///
+    /// The lockfile doesn't record the default systems in effect at lock time,
+    /// so they are derived from the locked packages: a catalog package without
+    /// a per-package `systems` restriction is resolved for exactly the default
+    /// set (resolution uses `pkg.systems || options.systems || default`).
+    /// If systems defaulting ever moves server side, consider recording the
+    /// resolved systems in the lockfile instead of deriving them here.
+    ///
+    /// Returns `Ok(None)` when `options.systems` is set or when no package
+    /// provides a signal.
+    pub fn implicit_resolved_systems(&self) -> Result<Option<BTreeSet<System>>, ManifestError> {
+        let manifest = self.migrated_manifest()?;
+        let manifest = manifest.as_latest_schema();
+        if manifest.options.systems.is_some() {
+            return Ok(None);
+        }
+
+        let unconstrained_install_ids = manifest
+            .install
+            .inner()
+            .iter()
+            .filter(|(_, descriptor)| {
+                descriptor
+                    .as_catalog_descriptor_ref()
+                    .is_some_and(|descriptor| descriptor.systems.is_none())
+            })
+            .map(|(install_id, _)| install_id.as_str())
+            .collect::<BTreeSet<_>>();
+
+        let systems = self
+            .packages
+            .iter()
+            .filter(|package| unconstrained_install_ids.contains(package.install_id()))
+            .map(|package| package.system().clone())
+            .collect::<BTreeSet<_>>();
+
+        if systems.is_empty() {
+            return Ok(None);
+        }
+        Ok(Some(systems))
+    }
+}
+
+/// The change in default systems between two lockfiles that were both resolved
+/// without explicit `options.systems`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DefaultSystemsChange {
+    pub added: Vec<System>,
+    pub removed: Vec<System>,
+}
+
+/// Detect whether `old` and `new` were both resolved with implicit default
+/// systems and those defaults differ,
+/// e.g. because `new` was locked by a Flox version with a different default
+/// set, dropping packages `old` had locked.
+pub fn default_systems_change(
+    old: &Lockfile,
+    new: &Lockfile,
+) -> Result<Option<DefaultSystemsChange>, ManifestError> {
+    let (Some(old_systems), Some(new_systems)) = (
+        old.implicit_resolved_systems()?,
+        new.implicit_resolved_systems()?,
+    ) else {
+        return Ok(None);
+    };
+
+    if old_systems == new_systems {
+        return Ok(None);
+    }
+
+    Ok(Some(DefaultSystemsChange {
+        added: new_systems.difference(&old_systems).cloned().collect(),
+        removed: old_systems.difference(&new_systems).cloned().collect(),
+    }))
 }
 
 impl FromStr for Lockfile {
@@ -767,5 +845,157 @@ pub(crate) mod tests {
         ];
 
         assert_eq!(&actual, &expected);
+    }
+
+    const OLD_DEFAULT_SYSTEMS: [&str; 4] = [
+        "aarch64-darwin",
+        "aarch64-linux",
+        "x86_64-darwin",
+        "x86_64-linux",
+    ];
+
+    fn systems_set(systems: &[&str]) -> BTreeSet<System> {
+        systems.iter().map(|s| s.to_string()).collect()
+    }
+
+    /// Build a lockfile with a single catalog package locked for
+    /// `locked_systems`, optionally with explicit `options.systems` or
+    /// per-package `systems` in the embedded manifest.
+    fn lockfile_locked_for_systems(
+        locked_systems: &[&str],
+        options_systems: Option<&[&str]>,
+        descriptor_systems: Option<&[&str]>,
+    ) -> Lockfile {
+        let (iid, mut descriptor, locked) = fake_catalog_package_lock("hello", None);
+        if let ManifestPackageDescriptor::Catalog(ref mut descriptor) = descriptor {
+            descriptor.systems =
+                descriptor_systems.map(|systems| systems.iter().map(|s| s.to_string()).collect());
+        } else {
+            panic!("Expected a catalog descriptor");
+        }
+
+        let mut manifest = ManifestLatest::default();
+        manifest.options.systems =
+            options_systems.map(|systems| systems.iter().map(|s| s.to_string()).collect());
+        manifest.install.inner_mut().insert(iid, descriptor);
+
+        let packages = locked_systems
+            .iter()
+            .map(|system| {
+                let mut locked = locked.clone();
+                locked.system = system.to_string();
+                locked.into()
+            })
+            .collect();
+
+        Lockfile {
+            version: Version::<1>,
+            manifest: manifest.as_typed_only(),
+            packages,
+            compose: None,
+        }
+    }
+
+    #[test]
+    fn implicit_resolved_systems_derived_from_unconstrained_package() {
+        let lockfile = lockfile_locked_for_systems(&OLD_DEFAULT_SYSTEMS, None, None);
+
+        assert_eq!(
+            lockfile.implicit_resolved_systems().unwrap(),
+            Some(systems_set(&OLD_DEFAULT_SYSTEMS))
+        );
+    }
+
+    #[test]
+    fn implicit_resolved_systems_none_when_options_systems_set() {
+        let lockfile =
+            lockfile_locked_for_systems(&OLD_DEFAULT_SYSTEMS, Some(&OLD_DEFAULT_SYSTEMS), None);
+
+        assert_eq!(lockfile.implicit_resolved_systems().unwrap(), None);
+    }
+
+    #[test]
+    fn implicit_resolved_systems_none_when_all_packages_pin_systems() {
+        let lockfile =
+            lockfile_locked_for_systems(&["aarch64-darwin"], None, Some(&["aarch64-darwin"]));
+
+        assert_eq!(lockfile.implicit_resolved_systems().unwrap(), None);
+    }
+
+    #[test]
+    fn implicit_resolved_systems_none_without_packages() {
+        let lockfile = lockfile_locked_for_systems(&[], None, None);
+
+        assert_eq!(lockfile.implicit_resolved_systems().unwrap(), None);
+    }
+
+    #[test]
+    fn implicit_resolved_systems_ignores_packages_with_pinned_systems() {
+        let mut lockfile = lockfile_locked_for_systems(&OLD_DEFAULT_SYSTEMS, None, None);
+
+        // Add a second package pinned to a single system; it must not
+        // contribute to the derived set.
+        let (iid, mut descriptor, mut locked) = fake_catalog_package_lock("pinned", None);
+        if let ManifestPackageDescriptor::Catalog(ref mut descriptor) = descriptor {
+            descriptor.systems = Some(vec![PackageSystem::Aarch64Linux.to_string()]);
+        } else {
+            panic!("Expected a catalog descriptor");
+        }
+        locked.system = PackageSystem::Aarch64Linux.to_string();
+
+        let mut manifest = lockfile
+            .migrated_manifest()
+            .unwrap()
+            .as_latest_schema()
+            .clone();
+        manifest.install.inner_mut().insert(iid, descriptor);
+        lockfile.manifest = manifest.as_typed_only();
+        lockfile.packages.push(locked.into());
+
+        assert_eq!(
+            lockfile.implicit_resolved_systems().unwrap(),
+            Some(systems_set(&OLD_DEFAULT_SYSTEMS))
+        );
+    }
+
+    #[test]
+    fn default_systems_change_reports_added_and_removed() {
+        let old = lockfile_locked_for_systems(&OLD_DEFAULT_SYSTEMS, None, None);
+        let new = lockfile_locked_for_systems(
+            &[
+                "aarch64-darwin",
+                "aarch64-linux",
+                "riscv64-linux",
+                "x86_64-linux",
+            ],
+            None,
+            None,
+        );
+
+        assert_eq!(
+            default_systems_change(&old, &new).unwrap(),
+            Some(DefaultSystemsChange {
+                added: vec!["riscv64-linux".to_string()],
+                removed: vec!["x86_64-darwin".to_string()],
+            })
+        );
+    }
+
+    #[test]
+    fn default_systems_change_none_when_sets_equal() {
+        let old = lockfile_locked_for_systems(&OLD_DEFAULT_SYSTEMS, None, None);
+        let new = lockfile_locked_for_systems(&OLD_DEFAULT_SYSTEMS, None, None);
+
+        assert_eq!(default_systems_change(&old, &new).unwrap(), None);
+    }
+
+    #[test]
+    fn default_systems_change_none_when_either_lock_is_explicit() {
+        let implicit = lockfile_locked_for_systems(&OLD_DEFAULT_SYSTEMS, None, None);
+        let explicit =
+            lockfile_locked_for_systems(&["aarch64-darwin"], Some(&["aarch64-darwin"]), None);
+
+        assert_eq!(default_systems_change(&explicit, &implicit).unwrap(), None);
+        assert_eq!(default_systems_change(&implicit, &explicit).unwrap(), None);
     }
 }

@@ -67,13 +67,6 @@ impl IncludeCommands {
 impl Upgrade {
     #[instrument(name = "upgrade", skip_all)]
     pub async fn handle(self, mut flox: Flox) -> Result<()> {
-        // TODO(DEV-200): replace with actual docs URL when available
-        if flox.auth_context.is_unauthenticated() {
-            message::warning(
-                "This command will require authentication in an upcoming release. See https://flox.dev/docs/install-flox/ for more info.",
-            );
-        }
-
         let mut environment = self
             .environment
             .detect_concrete_environment(
@@ -116,6 +109,14 @@ impl Upgrade {
             }
             message::updated(message);
             print_overridden_manifest_fields(&result.new_lockfile);
+
+            // `store_path` is only set when the upgrade wrote a new lockfile.
+            if result.store_path.is_some() {
+                message::print_default_systems_changed(
+                    result.old_lockfile.as_ref(),
+                    &result.new_lockfile,
+                );
+            }
 
             for name in self.to_upgrade {
                 if !include_diff.contains(&name) {

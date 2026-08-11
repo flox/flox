@@ -44,9 +44,27 @@ teardown() {
   common_test_teardown
 }
 
+@test "uninstall: warns when an outdated lockfile is re-locked for new default systems" {
+  if [ "$NIX_SYSTEM" == "x86_64-darwin" ]; then
+    skip "implicit default systems are unchanged on x86_64-darwin"
+  fi
+
+  "$FLOX_BIN" init
+  cp "$GENERATED_DATA"/envs/hello_before_three_system_relock/manifest.{toml,lock} \
+    "$PROJECT_DIR/.flox/env"
+  tomlq --in-place --toml-output \
+    '.install.curl."pkg-path" = "curl"' "$MANIFEST_PATH"
+
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/curl_three_systems_after_hello.yaml" \
+    run "$FLOX_BIN" uninstall hello
+  assert_success
+  assert_output --partial "! packages have been removed from lockfile for 'x86_64-darwin'"
+  assert_output --partial "To reinstall, add 'x86_64-darwin' to 'options.systems' with 'flox edit'"
+}
+
 @test "uninstall: confirmation message" {
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml"
-  "$FLOX_BIN" init
+  flox_init_pinned
   run "$FLOX_BIN" install hello
   assert_success
   assert_output --partial "✔ 'hello' installed to environment 'test'"
@@ -59,7 +77,7 @@ teardown() {
 
 @test "uninstall: errors (without proceeding) for already uninstalled packages" {
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml"
-  "$FLOX_BIN" init
+  flox_init_pinned
   run "$FLOX_BIN" install hello
   assert_success
 
@@ -71,7 +89,7 @@ teardown() {
 
 @test "uninstall: edits manifest" {
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml"
-  "$FLOX_BIN" init
+  flox_init_pinned
   run "$FLOX_BIN" install hello
   assert_success
   run "$FLOX_BIN" uninstall hello
@@ -89,7 +107,7 @@ teardown() {
 
 @test "uninstall: removes link to installed binary" {
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml"
-  "$FLOX_BIN" init
+  flox_init_pinned
   run "$FLOX_BIN" install hello
   assert_success
   assert_output --partial "✔ 'hello' installed to environment"
@@ -114,7 +132,7 @@ teardown() {
 
 @test "uninstall: can uninstall packages with dotted att_paths" {
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/rubyPackages_3_2.rails.yaml"
-  run "$FLOX_BIN" init
+  run flox_init_pinned
   assert_success
   # Install a dotted package
   run "$FLOX_BIN" install rubyPackages_3_2.rails
@@ -151,6 +169,9 @@ hello.pkg-path = "hello"
 environments = [
   { dir = "../included" },
 ]
+
+[options]
+systems = ["aarch64-darwin", "aarch64-linux", "x86_64-darwin", "x86_64-linux"]
 EOF
 
   run "$FLOX_BIN" uninstall -d composer hello
@@ -174,6 +195,9 @@ version = 1
 
 [install]
 hello.pkg-path = "hello"
+
+[options]
+systems = ["aarch64-darwin", "aarch64-linux", "x86_64-darwin", "x86_64-linux"]
 EOF
 
   "$FLOX_BIN" init -d composer
@@ -205,6 +229,9 @@ version = 1
 
 [install]
 hello.pkg-path = "hello"
+
+[options]
+systems = ["aarch64-darwin", "aarch64-linux", "x86_64-darwin", "x86_64-linux"]
 EOF
 
   "$FLOX_BIN" init -d composer

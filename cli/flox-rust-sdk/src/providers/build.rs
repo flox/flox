@@ -1482,6 +1482,7 @@ mod tests {
 
     use anyhow::Context;
     use flox_manifest::interfaces::{AsWritableManifest, WriteManifest};
+    use flox_test_utils::manifests::ALL_SYSTEMS_OPTIONS;
     use flox_test_utils::{GENERATED_DATA, init_tracing};
     use indoc::{formatdoc, indoc};
 
@@ -2193,6 +2194,7 @@ mod tests {
                 mkdir $out
                 type hello | grep -o "{file_content}" > $out/{file_name}
             """
+            {ALL_SYSTEMS_OPTIONS}
         "#};
 
         let (mut flox, _temp_dir_handle) = flox_instance();
@@ -2227,6 +2229,7 @@ mod tests {
                 EOF
                 chmod +x $out/bin/{file_name}
             """
+            {ALL_SYSTEMS_OPTIONS}
         "#};
 
         let (mut flox, _temp_dir_handle) = flox_instance();
@@ -2568,6 +2571,7 @@ mod tests {
                 mkdir -p $out/bin
                 cp main $out/bin/{file_name}
             """
+            {ALL_SYSTEMS_OPTIONS}
         "#};
 
         let (mut flox, _temp_dir_handle) = flox_instance();
@@ -2669,6 +2673,7 @@ mod tests {
                 mkdir -p $out/bin
                 cp main $out/bin/{file_name}
             """
+            {ALL_SYSTEMS_OPTIONS}
         "#};
 
         let (mut flox, _temp_dir_handle) = flox_instance();
@@ -3073,6 +3078,7 @@ mod tests {
             command = """
             {build_command}
             """
+            {ALL_SYSTEMS_OPTIONS}
         "#};
 
         assert_closure_check_failure(&manifest, &package_name, "resolve/hello.yaml").await;
@@ -3095,6 +3101,7 @@ mod tests {
             command = """
             {build_command}
             """
+            {ALL_SYSTEMS_OPTIONS}
         "#};
 
         assert_closure_check_failure(
@@ -3130,6 +3137,7 @@ mod tests {
             command = """
             {build_command}
             """
+            {ALL_SYSTEMS_OPTIONS}
         "#};
 
         let (mut flox, _temp_dir_handle) = flox_instance();
@@ -3452,6 +3460,7 @@ mod tests {
                         echo "foo" > $out
                     """
                     {version_spec}
+                    {ALL_SYSTEMS_OPTIONS}
                 "#};
                 let (mut flox, _temp_dir_handle) = flox_instance();
                 let mut env = new_path_environment(&flox, &manifest);
@@ -3714,6 +3723,7 @@ mod tests {
                 mkdir -p $out/bin
                 ln -s $FLOX_ENV/bin/hello $out/bin
             """
+            {ALL_SYSTEMS_OPTIONS}
         "#};
 
         let (mut flox, _temp_dir_handle) = flox_instance();
@@ -3942,6 +3952,7 @@ mod tests {
             """
             runtime-packages = [ "hello" ]
             sandbox = "{}"
+            {ALL_SYSTEMS_OPTIONS}
         "#, if sandbox { "pure" } else { "off" }};
 
         let (mut flox, _temp_dir_handle) = flox_instance();
@@ -4043,6 +4054,7 @@ mod tests {
               mkdir $out && cp {file_name} $out
             '''
             sandbox = "{}"
+            {ALL_SYSTEMS_OPTIONS}
         "#, if sandbox { "pure" } else { "off" }}; // [sic] sandbox can be "warn" and "enforce" too
 
         flox.floxhub_client =
