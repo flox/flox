@@ -328,7 +328,8 @@ fn run_event_loop(
 }
 
 /// Guards against infinite re-monitoring loops for the same PID.
-/// If a PID is re-monitored `limit` times consecutively, further re-monitoring is skipped.
+/// If a PID is re-monitored `limit` times without being detached in between,
+/// further re-monitoring is skipped.
 struct LoopGuard {
     pid: Option<i32>,
     count: u32,
@@ -353,6 +354,15 @@ impl LoopGuard {
             self.count = 1;
         }
         self.count <= self.limit
+    }
+
+    /// Record that a PID is no longer attached, clearing the counter if it
+    /// was tracking that PID.
+    fn reset_on_detach(&mut self, pid: i32) {
+        if self.pid == Some(pid) {
+            self.pid = None;
+            self.count = 0;
+        }
     }
 }
 
@@ -457,6 +467,8 @@ fn handle_process_exited(
                         "PID re-monitored too many times, skipping to prevent loop"
                     );
                 }
+            } else {
+                loop_guard.reset_on_detach(pid);
             }
 
             // Double check that all attached PIDs are monitored.
@@ -969,6 +981,90 @@ mod test {
             guard.allow_remonitor(pid),
             "counter should reset after different PID"
         );
+    }
+
+    #[test]
+    fn loop_guard_resets_when_tracked_pid_detaches() {
+        let mut guard = LoopGuard::new(2);
+        let pid = 12345;
+
+        assert!(guard.allow_remonitor(pid));
+        assert!(guard.allow_remonitor(pid));
+        assert!(!guard.allow_remonitor(pid));
+
+        // Detaching a different PID doesn't reset the counter
+        guard.reset_on_detach(67890);
+        assert!(!guard.allow_remonitor(pid));
+
+        guard.reset_on_detach(pid);
+        assert!(
+            guard.allow_remonitor(pid),
+            "counter should reset after the PID detached"
+        );
+    }
+
+    /// A PID exit that resolves in a detach rather than a re-attach resets
+    /// the loop guard so later legitimate re-attaches of the same PID aren't
+    /// blocked.
+    #[test]
+    fn handle_process_exited_resets_loop_guard_on_detach() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let runtime_dir = temp_dir.path();
+        let dot_flox_path = PathBuf::from(".flox");
+        let flox_env = dot_flox_path.join("run/test");
+        let store_path = "store_path".to_string();
+
+        // One PID that will exit and one that keeps the activation alive
+        let exited = start_process();
+        let exited_pid = exited.id() as i32;
+        let keeper = start_process();
+        let keeper_pid = keeper.id() as i32;
+
+        let mut state =
+            ActivationState::new(&ActivateMode::default(), Some(&dot_flox_path), &flox_env);
+        let result = state.start_or_attach(exited_pid, &store_path);
+        let StartOrAttachResult::Start { start_id, .. } = result else {
+            panic!("Expected Start")
+        };
+        state.set_ready(&start_id);
+        let result = state.start_or_attach(keeper_pid, &store_path);
+        let StartOrAttachResult::Attach { .. } = result else {
+            panic!("Expected Attach")
+        };
+        write_activation_state(runtime_dir, &dot_flox_path, state);
+
+        let activation_state_directory = activation_state_dir_path(runtime_dir, &dot_flox_path);
+        let state_json = state_json_path(&activation_state_directory);
+
+        let coordinator = EventCoordinator::new().unwrap();
+        let mut loop_guard = LoopGuard::new(2);
+        let (_attach, project) = test_context(&dot_flox_path, &flox_env.to_string_lossy());
+
+        // Exhaust the guard for the PID
+        assert!(loop_guard.allow_remonitor(exited_pid));
+        assert!(loop_guard.allow_remonitor(exited_pid));
+        assert!(!loop_guard.allow_remonitor(exited_pid));
+
+        stop_process(exited);
+
+        // The exited PID is detached, which resets the guard
+        let result = handle_process_exited(
+            exited_pid,
+            &coordinator,
+            &mut loop_guard,
+            &state_json,
+            &project.process_compose_bin,
+            &project.flox_services_socket,
+            &activation_state_directory,
+        );
+        assert!(matches!(result, Ok(false)), "keeper PID should remain");
+
+        assert!(
+            loop_guard.allow_remonitor(exited_pid),
+            "guard should reset after the PID detached"
+        );
+
+        stop_process(keeper);
     }
 
     /// Test that handle_process_exited increments the loop guard when a PID
