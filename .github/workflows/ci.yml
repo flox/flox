@@ -144,7 +144,14 @@ jobs:
     # See `scope`: this job always runs, and only its steps are gated. The step
     # conditions below default to running whenever `scope` did not explicitly
     # report `heavy=false`, which covers a failed or skipped `scope`.
-    if: ${{ !cancelled() }}
+    #
+    # The push-to-main exclusion below is unrelated to `scope` and doesn't hit
+    # the branch-protection problem `scope` documents: it only applies to the
+    # `push` event, which isn't gated by required status checks (the commit
+    # already passed them in the merge queue before landing on main), so a
+    # job-level skip here is safe. Nothing here needs to warm a cache the way
+    # `cli-unit`'s Cargo cache does, so the whole job is skipped outright.
+    if: ${{ !cancelled() && !(github.event_name == 'push' && github.ref == 'refs/heads/main') }}
 
     strategy:
       fail-fast: false
@@ -192,6 +199,11 @@ jobs:
 
   nef-dev:
     name: "Nix expression tests"
+    # Skip on push to main; already run in the merge queue. Safe as a job-level
+    # skip (see `nix-plugins-dev`): `push` isn't subject to required status
+    # checks, so this doesn't hit the branch-protection issue `scope` guards
+    # against.
+    if: ${{ !(github.event_name == 'push' && github.ref == 'refs/heads/main') }}
     runs-on: "ubuntu-22.04-8core"
     timeout-minutes: 15 # eval only tests should be plenty fast
 
@@ -235,6 +247,14 @@ jobs:
       - "scope"
 
     # See `nix-plugins-dev`: always runs, only its steps are gated.
+    #
+    # Unlike `nix-plugins-dev`/`nef-dev`, this job is NOT job-skipped on push
+    # to main: the "Build" step below writes the Cargo cache, and caches are
+    # only ever refreshed by the branch that ran them. Skipping the whole job
+    # on main would leave every new PR branch without a warm cache to restore
+    # via `restore-keys`. Only the "CLI Unit Tests" and "Check schemas" steps
+    # (the actually-redundant parts, already covered by the merge queue) are
+    # skipped on push to main below.
     if: ${{ !cancelled() }}
 
     permissions:
@@ -289,14 +309,21 @@ jobs:
 
       - name: "CLI Unit Tests"
         # Only run unit tests if when not running specialized integration tests
+        # Also skip on push to main; already run in the merge queue. The
+        # "Build" step above still runs unconditionally (subject only to
+        # `scope`) so the Cargo cache above stays warm for new branches to
+        # restore from — caches are only ever written by the job that ran
+        # them, so without a job running here on main, `restore-keys` would
+        # never have anything fresh to fall back to.
         id: unit-tests
-        if: ${{ needs.scope.outputs.heavy != 'false' }}
+        if: ${{ needs.scope.outputs.heavy != 'false' && !(github.event_name == 'push' && github.ref == 'refs/heads/main') }}
         env:
           RUST_BACKTRACE: 1
         run: nix develop -L --no-update-lock-file --command just impure-tests
 
       - name: "Check schemas are up to date"
-        if: ${{ needs.scope.outputs.heavy != 'false' }}
+        # Skip on push to main; already run in the merge queue.
+        if: ${{ needs.scope.outputs.heavy != 'false' && !(github.event_name == 'push' && github.ref == 'refs/heads/main') }}
         run: |
           nix develop -L --no-update-lock-file --command just gen-schemas
           if ! git diff --quiet cli/schemas; then
@@ -468,11 +495,14 @@ jobs:
 
     if: ${{ failure() && (github.base_ref == 'refs/heads/main' || github.ref == 'refs/heads/main') && github.event_name == 'push' }}
 
+    # nix-build and cli-unit still run on push to main (see their `if`
+    # conditions); nix-plugins-dev, nef-dev, and nix-build-bats-tests are
+    # skipped there, so they're dropped from `needs` — a skipped job's result
+    # isn't a `failure()` anyway, but keeping stale deps out avoids implying
+    # they're expected to run.
     needs:
       - "nix-build"
-      - "nix-plugins-dev"
       - "cli-unit"
-      - "nix-build-bats-tests"
 
     steps:
       - name: "Setup upterm session"
@@ -510,7 +540,11 @@ jobs:
     # status-check function GitHub adds `success()` over *every* `needs`:
     # `nix-build` succeeding is the only precondition, exactly as before, and a
     # skipped `nix-build` (fork PR) still skips this job.
-    if: ${{ !cancelled() && needs.nix-build.result == 'success' }}
+    #
+    # Also skipped outright on push to main; already run in the merge queue.
+    # See `nix-plugins-dev` for why a job-level skip is safe here specifically
+    # for the `push` event.
+    if: ${{ !cancelled() && needs.nix-build.result == 'success' && !(github.event_name == 'push' && github.ref == 'refs/heads/main') }}
 
     strategy:
       fail-fast: false
