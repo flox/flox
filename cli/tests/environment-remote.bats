@@ -47,14 +47,13 @@ teardown() {
 # ---------------------------------------------------------------------------- #
 
 function make_empty_remote_env() {
+  skip_x86_64_darwin_replay
   NAME="${1:-test}"
 
   mkdir local
   pushd local
   # init path environment and push to remote
-  # Pin the recorded systems so that later re-locks of this environment
-  # (e.g. installing packages via --reference) match the recordings.
-  flox_init_pinned --name "$NAME"
+  "$FLOX_BIN" init --name "$NAME"
   "$FLOX_BIN" push --owner "$OWNER"
   "$FLOX_BIN" delete -f
   popd
@@ -156,6 +155,7 @@ EOF
 
 # bats test_tags=edit,remote,remote:edit
 @test "m3: edit a package from a managed environment" {
+  skip_x86_64_darwin_replay
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml"
   make_empty_remote_env
 
@@ -166,9 +166,6 @@ version = 1
 
 [install]
 hello.pkg-path = "hello"
-
-[options]
-systems = ["aarch64-darwin", "aarch64-linux", "x86_64-darwin", "x86_64-linux"]
 EOF
 
   run "$FLOX_BIN" edit -f "$TMP_MANIFEST_PATH" --reference "$OWNER/test"

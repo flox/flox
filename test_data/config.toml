@@ -45,8 +45,10 @@ ignore_cmd_errors = true
 
 # Install a package that only exists on Linux
 [resolve.bpftrace]
-# The tests replaying this pin the recorded systems, so the recording has to
-# be made with them pinned too.
+# Requests all four systems, including x86_64-darwin, which is no longer an
+# implicit default. The test replaying this asks for them explicitly
+# (`EMPTY_ALL_SYSTEMS`) to cover resolution against non-default systems, so the
+# recording has to be made the same way.
 pre_cmd = '''
     flox init
     tomlq --in-place --toml-output \
@@ -255,9 +257,11 @@ cmd = "flox install daemonize"
 
 # This is used to trigger the "only install for some systems" code path
 [resolve.darwin_ps_all]
-# The tests replaying this pin the recorded systems, so the recording has to
-# be made with them pinned too. x86_64-darwin in particular has to stay
-# enabled for `darwin.ps` to resolve for it.
+# Requests all four systems, including x86_64-darwin, which is no longer an
+# implicit default. The test replaying this asks for them explicitly
+# (`EMPTY_ALL_SYSTEMS`) to cover resolution against non-default systems, so the
+# recording has to be made the same way. x86_64-darwin in particular has to
+# stay enabled for `darwin.ps` to resolve for it.
 pre_cmd = '''
     flox init
     tomlq --in-place --toml-output \
@@ -525,7 +529,16 @@ pre_cmd = "flox init"
 cmd = "flox install python313Packages.toml"
 
 [resolve.torchvision-bin]
-pre_cmd = "flox init"
+# Requests all four systems, including x86_64-darwin, which is no longer an
+# implicit default. x86_64-darwin is the system that has no page in common with
+# the others, so the "systems not on same page" error this records only occurs
+# when it is asked for explicitly. The test replaying it pins the same set.
+pre_cmd = '''
+    flox init
+    tomlq --in-place --toml-output \
+        '.options.systems = [ "aarch64-darwin", "aarch64-linux", "x86_64-darwin", "x86_64-linux" ]' \
+        .flox/env/manifest.toml
+'''
 cmd = "flox install python311Packages.torchvision-bin"
 ignore_cmd_errors = true
 

@@ -1482,7 +1482,6 @@ mod tests {
 
     use anyhow::Context;
     use flox_manifest::interfaces::{AsWritableManifest, WriteManifest};
-    use flox_test_utils::manifests::ALL_SYSTEMS_OPTIONS;
     use flox_test_utils::{GENERATED_DATA, init_tracing};
     use indoc::{formatdoc, indoc};
 
@@ -2177,6 +2176,10 @@ mod tests {
         assert_build_file(&env_path, &package_name, &file_name, &file_content);
     }
 
+    #[cfg_attr(
+        all(target_os = "macos", target_arch = "x86_64"),
+        ignore = "catalog recordings don't cover x86_64-darwin"
+    )]
     #[tokio::test(flavor = "multi_thread")]
     async fn build_uses_package_from_manifest() {
         let package_name = String::from("foo");
@@ -2194,7 +2197,6 @@ mod tests {
                 mkdir $out
                 type hello | grep -o "{file_content}" > $out/{file_name}
             """
-            {ALL_SYSTEMS_OPTIONS}
         "#};
 
         let (mut flox, _temp_dir_handle) = flox_instance();
@@ -2209,6 +2211,10 @@ mod tests {
         assert_build_file(&env_path, &package_name, &file_name, &file_content);
     }
 
+    #[cfg_attr(
+        all(target_os = "macos", target_arch = "x86_64"),
+        ignore = "catalog recordings don't cover x86_64-darwin"
+    )]
     #[tokio::test(flavor = "multi_thread")]
     async fn build_result_uses_package_from_environment() {
         let package_name = String::from("foo");
@@ -2229,7 +2235,6 @@ mod tests {
                 EOF
                 chmod +x $out/bin/{file_name}
             """
-            {ALL_SYSTEMS_OPTIONS}
         "#};
 
         let (mut flox, _temp_dir_handle) = flox_instance();
@@ -2554,6 +2559,10 @@ mod tests {
         assert_build_file(&env_path, &package_name, &file_name, content_after);
     }
 
+    #[cfg_attr(
+        all(target_os = "macos", target_arch = "x86_64"),
+        ignore = "catalog recordings don't cover x86_64-darwin"
+    )]
     #[tokio::test(flavor = "multi_thread")]
     async fn build_wraps_binaries_with_preserved_arg0() {
         let package_name = String::from("foo");
@@ -2571,7 +2580,6 @@ mod tests {
                 mkdir -p $out/bin
                 cp main $out/bin/{file_name}
             """
-            {ALL_SYSTEMS_OPTIONS}
         "#};
 
         let (mut flox, _temp_dir_handle) = flox_instance();
@@ -2656,6 +2664,10 @@ mod tests {
         );
     }
 
+    #[cfg_attr(
+        all(target_os = "macos", target_arch = "x86_64"),
+        ignore = "catalog recordings don't cover x86_64-darwin"
+    )]
     #[tokio::test(flavor = "multi_thread")]
     async fn build_wraps_scripts_without_preserved_exe() {
         let package_name = String::from("foo");
@@ -2673,7 +2685,6 @@ mod tests {
                 mkdir -p $out/bin
                 cp main $out/bin/{file_name}
             """
-            {ALL_SYSTEMS_OPTIONS}
         "#};
 
         let (mut flox, _temp_dir_handle) = flox_instance();
@@ -3063,6 +3074,10 @@ mod tests {
     }
 
     /// Packages referenced from outside `runtime-packages` trigger a build failure.
+    #[cfg_attr(
+        all(target_os = "macos", target_arch = "x86_64"),
+        ignore = "catalog recordings don't cover x86_64-darwin"
+    )]
     #[tokio::test(flavor = "multi_thread")]
     async fn closure_check_runtime_packages() {
         let package_name = String::from("my-package");
@@ -3078,7 +3093,6 @@ mod tests {
             command = """
             {build_command}
             """
-            {ALL_SYSTEMS_OPTIONS}
         "#};
 
         assert_closure_check_failure(&manifest, &package_name, "resolve/hello.yaml").await;
@@ -3086,6 +3100,10 @@ mod tests {
 
     /// Packages referenced from outside the `toplevel` group trigger a build
     /// failure even when `runtime-packages` is not specified.
+    #[cfg_attr(
+        all(target_os = "macos", target_arch = "x86_64"),
+        ignore = "catalog recordings don't cover x86_64-darwin"
+    )]
     #[tokio::test(flavor = "multi_thread")]
     async fn closure_check_non_toplevel_pkg_group() {
         let package_name = String::from("my-package");
@@ -3101,7 +3119,6 @@ mod tests {
             command = """
             {build_command}
             """
-            {ALL_SYSTEMS_OPTIONS}
         "#};
 
         assert_closure_check_failure(
@@ -3137,7 +3154,6 @@ mod tests {
             command = """
             {build_command}
             """
-            {ALL_SYSTEMS_OPTIONS}
         "#};
 
         let (mut flox, _temp_dir_handle) = flox_instance();
@@ -3165,6 +3181,10 @@ mod tests {
         }
     }
 
+    #[cfg_attr(
+        all(target_os = "macos", target_arch = "x86_64"),
+        ignore = "catalog recordings don't cover x86_64-darwin"
+    )]
     #[tokio::test(flavor = "multi_thread")]
     async fn nonexistent_path_check_in_runtime_packages() {
         let bin_name = String::from("hello");
@@ -3172,6 +3192,10 @@ mod tests {
         assert_nonexistent_path_check_failure(&bin_name, &hint).await;
     }
 
+    #[cfg_attr(
+        all(target_os = "macos", target_arch = "x86_64"),
+        ignore = "catalog recordings don't cover x86_64-darwin"
+    )]
     #[tokio::test(flavor = "multi_thread")]
     async fn nonexistent_path_check_not_in_toplevel() {
         let bin_name = String::from("curl");
@@ -3179,6 +3203,10 @@ mod tests {
         assert_nonexistent_path_check_failure(&bin_name, &hint).await;
     }
 
+    #[cfg_attr(
+        all(target_os = "macos", target_arch = "x86_64"),
+        ignore = "catalog recordings don't cover x86_64-darwin"
+    )]
     #[tokio::test(flavor = "multi_thread")]
     async fn nonexistent_path_check_complete_fiction() {
         let bin_name = String::from("not-found");
@@ -3431,6 +3459,10 @@ mod tests {
         assert_eq!(drv_value, expected);
     }
 
+    #[cfg_attr(
+        all(target_os = "macos", target_arch = "x86_64"),
+        ignore = "catalog recordings don't cover x86_64-darwin"
+    )]
     #[tokio::test(flavor = "multi_thread")]
     async fn build_version_propagated() {
         let pname = "foo".to_string();
@@ -3460,7 +3492,6 @@ mod tests {
                         echo "foo" > $out
                     """
                     {version_spec}
-                    {ALL_SYSTEMS_OPTIONS}
                 "#};
                 let (mut flox, _temp_dir_handle) = flox_instance();
                 let mut env = new_path_environment(&flox, &manifest);
@@ -3723,7 +3754,6 @@ mod tests {
                 mkdir -p $out/bin
                 ln -s $FLOX_ENV/bin/hello $out/bin
             """
-            {ALL_SYSTEMS_OPTIONS}
         "#};
 
         let (mut flox, _temp_dir_handle) = flox_instance();
@@ -3749,11 +3779,19 @@ mod tests {
         );
     }
 
+    #[cfg_attr(
+        all(target_os = "macos", target_arch = "x86_64"),
+        ignore = "catalog recordings don't cover x86_64-darwin"
+    )]
     #[tokio::test(flavor = "multi_thread")]
     async fn build_symlinks_can_refer_to_flox_env_sandbox_pure() {
         build_symlinks_can_refer_to_flox_env("pure").await;
     }
 
+    #[cfg_attr(
+        all(target_os = "macos", target_arch = "x86_64"),
+        ignore = "catalog recordings don't cover x86_64-darwin"
+    )]
     #[tokio::test(flavor = "multi_thread")]
     async fn build_symlinks_can_refer_to_flox_env_sandbox_off() {
         build_symlinks_can_refer_to_flox_env("off").await;
@@ -3952,7 +3990,6 @@ mod tests {
             """
             runtime-packages = [ "hello" ]
             sandbox = "{}"
-            {ALL_SYSTEMS_OPTIONS}
         "#, if sandbox { "pure" } else { "off" }};
 
         let (mut flox, _temp_dir_handle) = flox_instance();
@@ -3980,11 +4017,19 @@ mod tests {
         );
     }
 
+    #[cfg_attr(
+        all(target_os = "macos", target_arch = "x86_64"),
+        ignore = "catalog recordings don't cover x86_64-darwin"
+    )]
     #[tokio::test(flavor = "multi_thread")]
     async fn build_result_only_has_runtime_packages_sandbox_off() {
         build_result_only_has_runtime_packages(false).await;
     }
 
+    #[cfg_attr(
+        all(target_os = "macos", target_arch = "x86_64"),
+        ignore = "catalog recordings don't cover x86_64-darwin"
+    )]
     #[tokio::test(flavor = "multi_thread")]
     async fn build_result_only_has_runtime_packages_sandbox_pure() {
         build_result_only_has_runtime_packages(true).await;
@@ -4054,7 +4099,6 @@ mod tests {
               mkdir $out && cp {file_name} $out
             '''
             sandbox = "{}"
-            {ALL_SYSTEMS_OPTIONS}
         "#, if sandbox { "pure" } else { "off" }}; // [sic] sandbox can be "warn" and "enforce" too
 
         flox.floxhub_client =
@@ -4084,11 +4128,19 @@ mod tests {
         assert_build_file(&env_path, &package_name, &file_name, &file_content);
     }
 
+    #[cfg_attr(
+        all(target_os = "macos", target_arch = "x86_64"),
+        ignore = "catalog recordings don't cover x86_64-darwin"
+    )]
     #[tokio::test(flavor = "multi_thread")]
     async fn build_can_use_cmake_sandbox_off() {
         build_can_use_cmake(false).await;
     }
 
+    #[cfg_attr(
+        all(target_os = "macos", target_arch = "x86_64"),
+        ignore = "catalog recordings don't cover x86_64-darwin"
+    )]
     #[tokio::test(flavor = "multi_thread")]
     async fn build_can_use_cmake_sandbox_pure() {
         build_can_use_cmake(true).await;

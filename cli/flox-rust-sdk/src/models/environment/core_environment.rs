@@ -1360,7 +1360,6 @@ mod tests {
     use flox_manifest::parsed::Inner;
     use flox_manifest::raw::CatalogPackage;
     use flox_manifest::test_helpers::{with_latest_schema, with_schema};
-    use flox_test_utils::manifests::ALL_SYSTEMS_OPTIONS;
     use flox_test_utils::{GENERATED_DATA, MANUALLY_GENERATED};
     use indoc::{formatdoc, indoc};
     use pretty_assertions::assert_eq;
@@ -1381,11 +1380,7 @@ mod tests {
     fn empty_core_environment() -> (CoreEnvironment, Flox, TempDir) {
         let (flox, tempdir) = flox_instance();
 
-        (
-            new_core_environment(&flox, &format!("version = 1\n{ALL_SYSTEMS_OPTIONS}")),
-            flox,
-            tempdir,
-        )
+        (new_core_environment(&flox, "version = 1"), flox, tempdir)
     }
 
     /// Check that `edit` updates the manifest and creates a lockfile
@@ -1410,7 +1405,6 @@ mod tests {
         let new_env_str = with_latest_schema(&formatdoc! {r#"
             [install]
             hello.pkg-path = "hello"
-            {ALL_SYSTEMS_OPTIONS}
         "#});
 
         flox.floxhub_client =
@@ -1514,6 +1508,10 @@ mod tests {
 
     /// Installing hello with edit returns EditResult::Changed and
     /// reactivate_required() returns false
+    #[cfg_attr(
+        all(target_os = "macos", target_arch = "x86_64"),
+        ignore = "catalog recordings don't cover x86_64-darwin"
+    )]
     #[tokio::test(flavor = "multi_thread")]
     async fn edit_adding_package_returns_changed() {
         let (mut env_view, mut flox, _temp_dir_handle) = empty_core_environment();
@@ -1523,7 +1521,6 @@ mod tests {
 
             [install]
             hello.pkg-path = "hello"
-            {ALL_SYSTEMS_OPTIONS}
         "#};
 
         flox.floxhub_client =
@@ -1552,6 +1549,10 @@ mod tests {
     }
 
     /// Check that with an empty list of packages to upgrade, all packages are upgraded
+    #[cfg_attr(
+        all(target_os = "macos", target_arch = "x86_64"),
+        ignore = "catalog recordings don't cover x86_64-darwin"
+    )]
     #[tokio::test(flavor = "multi_thread")]
     async fn upgrade_with_empty_list_upgrades_all() {
         let (mut env_view, mut flox, _temp_dir_handle) = empty_core_environment();
@@ -1644,7 +1645,6 @@ mod tests {
 
                 [install]
                 hello.pkg-path = "hello"
-                {ALL_SYSTEMS_OPTIONS}
             "#})
         .unwrap();
 

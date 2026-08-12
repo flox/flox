@@ -127,8 +127,8 @@ function assert_run_mode() {
 }
 
 @test "runtime: dev dependencies aren't added to PATH" {
+  skip_x86_64_darwin_replay
   project_setup
-  pin_recorded_systems
   "$FLOX_BIN" edit -n "runtime_project" # give it a stable name
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/almonds.yaml" "$FLOX_BIN" install almonds
   # `almonds` brings in Python as a development dependency, and we don't want
@@ -143,8 +143,8 @@ EOF
 }
 
 @test "runtime: packages still added to PATH" {
+  skip_x86_64_darwin_replay
   project_setup
-  pin_recorded_systems
   "$FLOX_BIN" edit -n "runtime_project" # give it a stable name
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/almonds.yaml" "$FLOX_BIN" install almonds
   run "$FLOX_BIN" activate -m run -c "which almonds"
@@ -152,16 +152,15 @@ EOF
 }
 
 @test "runtime: remains in runtime mode as bottom layer" {
+  skip_x86_64_darwin_replay
   # Prepare two environments that we're going to layer
   export bottom_layer_dir="$BATS_TEST_TMPDIR/bottom_layer"
   mkdir "$bottom_layer_dir"
   "$FLOX_BIN" init -d "$bottom_layer_dir"
-  pin_recorded_systems "$bottom_layer_dir/.flox/env/manifest.toml"
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/almonds.yaml" "$FLOX_BIN" install -d "$bottom_layer_dir" almonds
   export top_layer_dir="$BATS_TEST_TMPDIR/top_layer"
   mkdir "$top_layer_dir"
   "$FLOX_BIN" init -d "$top_layer_dir"
-  pin_recorded_systems "$top_layer_dir/.flox/env/manifest.toml"
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" "$FLOX_BIN" install -d "$top_layer_dir" hello
 
 
@@ -190,16 +189,15 @@ EOF
 }
 
 @test "runtime: remains in runtime mode as top layer" {
+  skip_x86_64_darwin_replay
   # Prepare two environments that we're going to layer
   export bottom_layer_dir="$BATS_TEST_TMPDIR/bottom_layer"
   mkdir "$bottom_layer_dir"
   "$FLOX_BIN" init -d "$bottom_layer_dir"
-  pin_recorded_systems "$bottom_layer_dir/.flox/env/manifest.toml"
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" "$FLOX_BIN" install -d "$bottom_layer_dir" hello
   export top_layer_dir="$BATS_TEST_TMPDIR/top_layer"
   mkdir "$top_layer_dir"
   "$FLOX_BIN" init -d "$top_layer_dir"
-  pin_recorded_systems "$top_layer_dir/.flox/env/manifest.toml"
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/almonds.yaml" "$FLOX_BIN" install -d "$top_layer_dir" almonds
 
   SCRIPT="$(cat << 'EOF'
@@ -223,8 +221,8 @@ EOF
 }
 
 @test "runtime: doesn't set CPATH" {
+  skip_x86_64_darwin_replay
   project_setup
-  pin_recorded_systems
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" "$FLOX_BIN" install hello
   export outer_cpath="$CPATH"
   run "$FLOX_BIN" activate -m run -c '[ "$CPATH" = "$outer_cpath" ]'

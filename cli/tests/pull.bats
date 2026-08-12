@@ -48,15 +48,14 @@ teardown() {
 }
 
 function make_dummy_env() {
+  skip_x86_64_darwin_replay
   OWNER="$1"
   shift
   ENV_NAME="$1"
   shift
 
   pushd "$(mktemp -d)" >/dev/null || return
-  # Pin the recorded systems so that later re-locks of this environment
-  # (e.g. `update_dummy_env` installing gzip) match the recordings.
-  flox_init_pinned --name "$ENV_NAME"
+  "$FLOX_BIN" init --name "$ENV_NAME"
   SOURCE_LOCAL_ENVIRONMENT_ID="$(cat .flox/telemetry_id)"
   "$FLOX_BIN" push --owner "$OWNER"
   "$FLOX_BIN" delete --force

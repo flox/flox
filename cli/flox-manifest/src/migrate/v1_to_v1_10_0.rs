@@ -395,9 +395,9 @@ mod tests {
             CanonicalPath::new_unchecked(GENERATED_DATA.join("envs/bash/manifest.lock"));
         let lockfile = Lockfile::read_from_file(&lockfile_path).unwrap();
 
-        // A package we know exists
+        // A package we know exists, locked for each of the default systems
         let pkgs = get_locked_packages_by_install_id("bash", &lockfile).unwrap();
-        assert_eq!(pkgs.len(), 4);
+        assert_eq!(pkgs.len(), 3);
 
         // A package we know doesn't exist
         let should_be_none = get_locked_packages_by_install_id("foo", &lockfile);

@@ -29,18 +29,18 @@ project_teardown() {
 }
 
 create_environment_with_generations() {
+  skip_x86_64_darwin_replay
   # Generation 1
-  flox_init_pinned --name "test"
+  "$FLOX_BIN" init --name "test"
   "$FLOX_BIN" push --owner owner
 
   # Generation 2
-  # Pin the recorded systems so the generation 3 install below matches the
-  # recording.
+  # Any edit will do, as long as it actually changes the manifest.
   MANIFEST_CONTENTS="$(cat << "EOF"
     version = 1
 
-    [options]
-    systems = ["aarch64-darwin", "aarch64-linux", "x86_64-darwin", "x86_64-linux"]
+    [vars]
+    generation = "2"
 EOF
   )"
   echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f -

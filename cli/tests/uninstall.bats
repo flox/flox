@@ -63,8 +63,9 @@ teardown() {
 }
 
 @test "uninstall: confirmation message" {
+  skip_x86_64_darwin_replay
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml"
-  flox_init_pinned
+  "$FLOX_BIN" init
   run "$FLOX_BIN" install hello
   assert_success
   assert_output --partial "✔ 'hello' installed to environment 'test'"
@@ -76,8 +77,9 @@ teardown() {
 }
 
 @test "uninstall: errors (without proceeding) for already uninstalled packages" {
+  skip_x86_64_darwin_replay
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml"
-  flox_init_pinned
+  "$FLOX_BIN" init
   run "$FLOX_BIN" install hello
   assert_success
 
@@ -88,8 +90,9 @@ teardown() {
 }
 
 @test "uninstall: edits manifest" {
+  skip_x86_64_darwin_replay
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml"
-  flox_init_pinned
+  "$FLOX_BIN" init
   run "$FLOX_BIN" install hello
   assert_success
   run "$FLOX_BIN" uninstall hello
@@ -106,8 +109,9 @@ teardown() {
 }
 
 @test "uninstall: removes link to installed binary" {
+  skip_x86_64_darwin_replay
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml"
-  flox_init_pinned
+  "$FLOX_BIN" init
   run "$FLOX_BIN" install hello
   assert_success
   assert_output --partial "✔ 'hello' installed to environment"
@@ -131,8 +135,9 @@ teardown() {
 }
 
 @test "uninstall: can uninstall packages with dotted att_paths" {
+  skip_x86_64_darwin_replay
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/rubyPackages_3_2.rails.yaml"
-  run flox_init_pinned
+  run "$FLOX_BIN" init
   assert_success
   # Install a dotted package
   run "$FLOX_BIN" install rubyPackages_3_2.rails
@@ -152,6 +157,7 @@ teardown() {
 }
 
 @test "uninstall: removes a package from a composing environment" {
+  skip_x86_64_darwin_replay
   "$FLOX_BIN" init -d included
   "$FLOX_BIN" edit -d included -f - <<- EOF
 version = 1
@@ -169,9 +175,6 @@ hello.pkg-path = "hello"
 environments = [
   { dir = "../included" },
 ]
-
-[options]
-systems = ["aarch64-darwin", "aarch64-linux", "x86_64-darwin", "x86_64-linux"]
 EOF
 
   run "$FLOX_BIN" uninstall -d composer hello
@@ -188,6 +191,7 @@ EOF
 }
 
 @test "uninstall: refuses to remove a package from an included environment" {
+  skip_x86_64_darwin_replay
   "$FLOX_BIN" init -d included
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
     "$FLOX_BIN" edit -d included -f - <<- EOF
@@ -195,9 +199,6 @@ version = 1
 
 [install]
 hello.pkg-path = "hello"
-
-[options]
-systems = ["aarch64-darwin", "aarch64-linux", "x86_64-darwin", "x86_64-linux"]
 EOF
 
   "$FLOX_BIN" init -d composer
@@ -222,6 +223,7 @@ EOF
 }
 
 @test "uninstall: warns when removing a package that is still provided by an include" {
+  skip_x86_64_darwin_replay
   "$FLOX_BIN" init -d included
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
     "$FLOX_BIN" edit -d included -f - <<- EOF
@@ -229,9 +231,6 @@ version = 1
 
 [install]
 hello.pkg-path = "hello"
-
-[options]
-systems = ["aarch64-darwin", "aarch64-linux", "x86_64-darwin", "x86_64-linux"]
 EOF
 
   "$FLOX_BIN" init -d composer

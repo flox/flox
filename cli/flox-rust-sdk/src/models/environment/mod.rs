@@ -1603,7 +1603,6 @@ mod migration_tests {
     use flox_manifest::raw::CatalogPackage;
     use flox_manifest::test_helpers::{with_latest_schema, with_schema};
     use flox_test_utils::GENERATED_DATA;
-    use flox_test_utils::manifests::ALL_SYSTEMS_OPTIONS;
     use indoc::indoc;
 
     use super::*;
@@ -1692,6 +1691,10 @@ mod migration_tests {
     /// A v1 composer including a v1.10.0 environment with hello (whose
     /// outputs match outputs_to_install) should not be migrated because
     /// hello doesn't require explicit outputs.
+    #[cfg_attr(
+        all(target_os = "macos", target_arch = "x86_64"),
+        ignore = "catalog recordings don't cover x86_64-darwin"
+    )]
     #[tokio::test(flavor = "multi_thread")]
     async fn v1_including_latest_with_hello_is_not_migrated() {
         let (mut flox, tempdir) = flox_instance();
@@ -1699,7 +1702,6 @@ mod migration_tests {
         let included_manifest = with_latest_schema(formatdoc! {r#"
             [install]
             hello.pkg-path = "hello"
-            {ALL_SYSTEMS_OPTIONS}
         "#});
 
         flox.floxhub_client =
@@ -1733,6 +1735,10 @@ mod migration_tests {
     /// represented in v1 (v1 PackageDescriptorCatalog has no outputs field
     /// and uses deny_unknown_fields), so the merged manifest requires
     /// v1.10.0 and the composer's on-disk manifest should be rewritten.
+    #[cfg_attr(
+        all(target_os = "macos", target_arch = "x86_64"),
+        ignore = "catalog recordings don't cover x86_64-darwin"
+    )]
     #[tokio::test(flavor = "multi_thread")]
     async fn v1_including_latest_with_outputs_all_is_migrated() {
         let (mut flox, tempdir) = flox_instance();
@@ -1742,7 +1748,6 @@ mod migration_tests {
             [install]
             bash.pkg-path = "bashNonInteractive"
             bash.outputs = "all"
-            {ALL_SYSTEMS_OPTIONS}
         "#});
         setup_locked_included_env(&flox, tempdir.path(), &included_manifest);
 
@@ -1758,6 +1763,10 @@ mod migration_tests {
     /// `outputs = ["out"]` on bash should be migrated. Even though "out"
     /// is a common output, the explicit outputs field means the merged
     /// manifest can't be deserialized as v1.
+    #[cfg_attr(
+        all(target_os = "macos", target_arch = "x86_64"),
+        ignore = "catalog recordings don't cover x86_64-darwin"
+    )]
     #[tokio::test(flavor = "multi_thread")]
     async fn v1_including_latest_with_specific_outputs_is_migrated() {
         let (mut flox, tempdir) = flox_instance();
@@ -1766,7 +1775,6 @@ mod migration_tests {
             [install]
             bash.pkg-path = "bashNonInteractive"
             bash.outputs = ["out"]
-            {ALL_SYSTEMS_OPTIONS}
         "#});
 
         flox.floxhub_client = catalog_replay_client(GENERATED_DATA.join("envs/bash.yaml")).await;
@@ -1784,6 +1792,10 @@ mod migration_tests {
     /// environment (only vars) should be migrated when the included
     /// environment is updated to contain a package with explicit outputs
     /// and `include_upgrade` is called.
+    #[cfg_attr(
+        all(target_os = "macos", target_arch = "x86_64"),
+        ignore = "catalog recordings don't cover x86_64-darwin"
+    )]
     #[tokio::test(flavor = "multi_thread")]
     async fn include_upgrade_triggers_migration_when_included_adds_outputs() {
         let (mut flox, tempdir) = flox_instance();
@@ -1813,7 +1825,6 @@ mod migration_tests {
             [install]
             bash.pkg-path = "bashNonInteractive"
             bash.outputs = "all"
-            {ALL_SYSTEMS_OPTIONS}
         "#});
 
         flox.floxhub_client = catalog_replay_client(GENERATED_DATA.join("envs/bash.yaml")).await;
@@ -1852,6 +1863,10 @@ mod migration_tests {
     /// A v1 composer that includes a v1 environment should have its
     /// compose.composer migrated when the composer itself is edited to
     /// add a package with explicit outputs.
+    #[cfg_attr(
+        all(target_os = "macos", target_arch = "x86_64"),
+        ignore = "catalog recordings don't cover x86_64-darwin"
+    )]
     #[tokio::test(flavor = "multi_thread")]
     async fn edit_triggers_migration() {
         let (mut flox, tempdir) = flox_instance();
@@ -1881,7 +1896,6 @@ mod migration_tests {
             [install]
             bash.pkg-path = "bashNonInteractive"
             bash.outputs = "all"
-            {ALL_SYSTEMS_OPTIONS}
         "#});
 
         flox.floxhub_client = catalog_replay_client(GENERATED_DATA.join("envs/bash.yaml")).await;
@@ -1958,12 +1972,16 @@ mod migration_tests {
         assert!(matches!(second_lock, LockResult::Unchanged(_)));
     }
 
+    #[cfg_attr(
+        all(target_os = "macos", target_arch = "x86_64"),
+        ignore = "catalog recordings don't cover x86_64-darwin"
+    )]
     #[tokio::test(flavor = "multi_thread")]
     async fn v1_manifest_doesnt_migrate_when_hello_is_installed() {
         let (mut flox, _tempdir) = flox_instance();
         flox.floxhub_client =
             catalog_replay_client(GENERATED_DATA.join("resolve/hello.yaml")).await;
-        let mut env = new_path_environment(&flox, &format!("version = 1\n{ALL_SYSTEMS_OPTIONS}"));
+        let mut env = new_path_environment(&flox, "version = 1");
         _ = env.lockfile(&flox).unwrap(); // make sure a lockfile exists
         assert_eq!(
             env.manifest_without_migrating(&flox)
@@ -1993,11 +2011,15 @@ mod migration_tests {
     /// Installing bash (which has non-default outputs) SHOULD trigger
     /// migration to v1.10.0. This is the counterpart to
     /// `v1_manifest_doesnt_migrate_when_hello_is_installed`.
+    #[cfg_attr(
+        all(target_os = "macos", target_arch = "x86_64"),
+        ignore = "catalog recordings don't cover x86_64-darwin"
+    )]
     #[tokio::test(flavor = "multi_thread")]
     async fn v1_manifest_migrates_when_bash_is_installed() {
         let (mut flox, _tempdir) = flox_instance();
         flox.floxhub_client = catalog_replay_client(GENERATED_DATA.join("envs/bash.yaml")).await;
-        let mut env = new_path_environment(&flox, &format!("version = 1\n{ALL_SYSTEMS_OPTIONS}"));
+        let mut env = new_path_environment(&flox, "version = 1");
         _ = env.lockfile(&flox).unwrap(); // make sure a lockfile exists
         assert_eq!(
             env.manifest_without_migrating(&flox)

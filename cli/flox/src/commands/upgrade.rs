@@ -275,7 +275,7 @@ mod tests {
     use flox_rust_sdk::providers::catalog::test_helpers::catalog_replay_client;
     use flox_rust_sdk::utils::logging::test_helpers::test_subscriber_message_only;
     use flox_test_utils::GENERATED_DATA;
-    use flox_test_utils::manifests::{ALL_SYSTEMS_OPTIONS, HELLO};
+    use flox_test_utils::manifests::HELLO;
     use indoc::indoc;
     use pretty_assertions::{assert_eq, assert_str_eq};
     use serial_test::serial;
@@ -351,15 +351,15 @@ mod tests {
         }
     }
 
+    #[cfg_attr(
+        all(target_os = "macos", target_arch = "x86_64"),
+        ignore = "catalog recordings don't cover x86_64-darwin"
+    )]
     #[tokio::test(flavor = "multi_thread")]
     #[serial(global_events_client)]
     async fn upgrade_records_previous_version_on_package_events() {
         let (mut flox, _tempdir) = flox_instance();
-        let mut environment = new_named_path_environment(
-            &flox,
-            &format!("version = 1\n{ALL_SYSTEMS_OPTIONS}"),
-            "name",
-        );
+        let mut environment = new_named_path_environment(&flox, "version = 1", "name");
 
         let response_path = if cfg!(target_os = "macos") {
             "resolve/old_darwin_hello.yaml"
@@ -442,6 +442,10 @@ mod tests {
     }
 
     /// Check message printed when there are no upgrades available
+    #[cfg_attr(
+        all(target_os = "macos", target_arch = "x86_64"),
+        ignore = "catalog recordings don't cover x86_64-darwin"
+    )]
     #[tokio::test(flavor = "multi_thread")]
     #[serial(global_events_client)]
     async fn confirmation_when_up_to_date() {
@@ -474,11 +478,7 @@ mod tests {
         let (mut flox, _tempdir) = flox_instance();
         let (subscriber, writer) = test_subscriber_message_only();
 
-        let mut environment = new_named_path_environment(
-            &flox,
-            &format!("version = 1\n{ALL_SYSTEMS_OPTIONS}"),
-            "name",
-        );
+        let mut environment = new_named_path_environment(&flox, "version = 1", "name");
 
         let response_path = if cfg!(target_os = "macos") {
             "resolve/old_linux_hello.yaml"
@@ -509,6 +509,10 @@ mod tests {
         writer.to_string()
     }
 
+    #[cfg_attr(
+        all(target_os = "macos", target_arch = "x86_64"),
+        ignore = "catalog recordings don't cover x86_64-darwin"
+    )]
     #[tokio::test(flavor = "multi_thread")]
     #[serial(global_events_client)]
     async fn upgrade_on_other_system() {
@@ -522,6 +526,10 @@ mod tests {
         );
     }
 
+    #[cfg_attr(
+        all(target_os = "macos", target_arch = "x86_64"),
+        ignore = "catalog recordings don't cover x86_64-darwin"
+    )]
     #[tokio::test(flavor = "multi_thread")]
     #[serial(global_events_client)]
     async fn upgrade_dry_run_on_other_system() {
@@ -716,11 +724,7 @@ mod tests {
         let (mut flox, _tempdir) = flox_instance();
         let (subscriber, writer) = test_subscriber_message_only();
 
-        let mut environment = new_named_path_environment(
-            &flox,
-            &format!("version = 1\n{ALL_SYSTEMS_OPTIONS}"),
-            "name",
-        );
+        let mut environment = new_named_path_environment(&flox, "version = 1", "name");
 
         // Use the fixture that has an older version for THIS system
         let response_path = if cfg!(target_os = "macos") {
@@ -752,6 +756,10 @@ mod tests {
         writer.to_string()
     }
 
+    #[cfg_attr(
+        all(target_os = "macos", target_arch = "x86_64"),
+        ignore = "catalog recordings don't cover x86_64-darwin"
+    )]
     #[tokio::test(flavor = "multi_thread")]
     #[serial(global_events_client)]
     async fn dry_run_shows_version_change_summary() {

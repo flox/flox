@@ -398,23 +398,30 @@ with_latest_schema() {
   fi
 }
 
-# The catalog recordings in "$GENERATED_DATA" were made with the old implicit
-# default systems set. `flox init` doesn't write `options.systems`, and the
-# implicit default set now includes the current system, so environments that
-# replay recorded resolutions must pin the recorded systems for their resolve
-# requests to keep matching the recordings on every machine.
-pin_recorded_systems() {
+# The catalog recordings in "$GENERATED_DATA" were made without x86_64-darwin,
+# which is no longer one of the implicit default systems. On an x86_64-darwin
+# host the implicit default set adds it back, so the resolve request an
+# environment sends no longer matches any recording and the mock server answers
+# 404. Tests that replay a recording can't run there.
+#
+# Coverage for resolving explicitly requested non-default systems lives in the
+# tests that call `pin_all_systems` instead of this.
+skip_x86_64_darwin_replay() {
+  if [ "$NIX_SYSTEM" == "x86_64-darwin" ]; then
+    skip "catalog recordings don't cover x86_64-darwin"
+  fi
+}
+
+# Ask for all four systems, including x86_64-darwin, which is no longer an
+# implicit default. Use this with the recordings that were deliberately made for
+# the full set (e.g. `resolve/bpftrace.yaml`, `envs/hello_as_greeting`) to cover
+# resolution against explicitly requested non-default systems. Such tests run on
+# every host and must not call `skip_x86_64_darwin_replay`.
+pin_all_systems() {
   local manifest="${1:-.flox/env/manifest.toml}"
   tomlq --in-place --toml-output \
     '.options.systems = ["aarch64-darwin", "aarch64-linux", "x86_64-darwin", "x86_64-linux"]' \
     "$manifest"
-}
-
-# `flox init` for tests that replay recorded resolutions: initialize the
-# environment in the current directory and pin the recorded systems set.
-flox_init_pinned() {
-  "$FLOX_BIN" init "$@"
-  pin_recorded_systems
 }
 
 # ---------------------------------------------------------------------------- #

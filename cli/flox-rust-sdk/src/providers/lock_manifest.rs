@@ -3075,6 +3075,10 @@ mod tests {
 
     /// [Lockfile::lock_manifest] returns an error if the server
     /// returns a package that is not allowed.
+    #[cfg_attr(
+        all(target_os = "macos", target_arch = "x86_64"),
+        ignore = "catalog recordings don't cover x86_64-darwin"
+    )]
     #[tokio::test]
     async fn lock_manifest_catches_not_allowed_package_from_server() {
         let manifest = Manifest::parse_and_migrate(
@@ -3086,7 +3090,6 @@ mod tests {
 
             [options]
             allow.unfree = false
-            systems = ["aarch64-darwin", "x86_64-darwin", "aarch64-linux", "x86_64-linux"]
         "#},
             None,
         )
