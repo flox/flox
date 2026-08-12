@@ -1,11 +1,15 @@
 use std::collections::BTreeMap;
 
+#[cfg(any(test, feature = "tests"))]
+use flox_test_utils::proptest::alphanum_and_whitespace_string;
+#[cfg(any(test, feature = "tests"))]
+use proptest::prelude::*;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
 
 use crate::interfaces::{AsTypedOnlyManifest, SchemaVersion, impl_pkg_lookup};
-use crate::parsed::common::{Containerize, Hook, Include, KnownSchemaVersion, Options, Vars};
+use crate::parsed::common::{Containerize, Include, KnownSchemaVersion, Options, Vars};
 use crate::parsed::v1_10_0::{Install, ManifestPackageDescriptor};
 pub use crate::parsed::v1_11_0::MinimumCliVersion;
 pub use crate::parsed::v1_12_0::Services;
@@ -122,5 +126,43 @@ impl AsTypedOnlyManifest for ManifestV1_15_0 {
 impl SchemaVersion for ManifestV1_15_0 {
     fn get_schema_version(&self) -> KnownSchemaVersion {
         KnownSchemaVersion::V1_15_0
+    }
+}
+
+/// Lifecycle hooks for V1_15_0: adds an optional `on-deactivate` script that
+/// is run when the last attachment detaches from an activation. The
+/// `on-activate` field is the same as earlier schema versions, which keep
+/// using `common::Hook`.
+#[skip_serializing_none]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash, JsonSchema)]
+#[cfg_attr(any(test, feature = "tests"), derive(proptest_derive::Arbitrary))]
+#[serde(rename_all = "kebab-case")]
+#[serde(deny_unknown_fields)]
+pub struct Hook {
+    /// A script that is run at activation time,
+    /// in a flox provided bash shell
+    #[cfg_attr(
+        any(test, feature = "tests"),
+        proptest(strategy = "proptest::option::of(alphanum_and_whitespace_string(5))")
+    )]
+    pub(crate) on_activate: Option<String>,
+    /// A script that is run in a flox provided bash shell when the last
+    /// attachment detaches from an activation
+    #[cfg_attr(
+        any(test, feature = "tests"),
+        proptest(strategy = "proptest::option::of(alphanum_and_whitespace_string(5))")
+    )]
+    pub(crate) on_deactivate: Option<String>,
+}
+
+// Conversion from the common type, used by the V1_14_0 -> V1_15_0 migration.
+// The new `on_deactivate` field defaults to None, which is what makes the
+// migration lossless.
+impl From<crate::parsed::common::Hook> for Hook {
+    fn from(hook: crate::parsed::common::Hook) -> Self {
+        Hook {
+            on_activate: hook.on_activate,
+            on_deactivate: None,
+        }
     }
 }

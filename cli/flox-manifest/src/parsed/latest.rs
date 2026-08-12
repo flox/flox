@@ -13,6 +13,9 @@ pub use crate::parsed::v1_11_0::MinimumCliVersion;
 // BuildSandbox is version-specific from V1_13_0 on (it adds `warn`/`enforce`),
 // so the latest schema re-exports that copy rather than common's.
 pub use crate::parsed::v1_13_0::BuildSandbox;
+// Hook is version-specific from V1_15_0 on (it adds `on-deactivate`),
+// so the latest schema re-exports that copy rather than common's.
+pub use crate::parsed::v1_15_0::Hook;
 use crate::{Manifest, ManifestError, TypedOnly};
 pub type ManifestLatest = crate::parsed::v1_15_0::ManifestV1_15_0;
 
@@ -134,12 +137,7 @@ mod tests {
     use crate::ManifestError;
     use crate::interfaces::{PackageLookup, SchemaVersion};
     use crate::parsed::Inner;
-    use crate::parsed::common::{
-        BuildVersion,
-        Hook,
-        IncludeDescriptor,
-        PackageDescriptorStorePath,
-    };
+    use crate::parsed::common::{BuildVersion, IncludeDescriptor, PackageDescriptorStorePath};
     // ManifestLatest's build section is the version-specific Build (with
     // `sandbox-allow`), so build assertions use the latest schema's types.
     use crate::parsed::v1_13_0::{Build, BuildDescriptor, Profile, ProfileDeactivate};
@@ -566,6 +564,79 @@ mod tests {
         let serialized = toml_edit::ser::to_string_pretty(&manifest).unwrap();
 
         assert!(!serialized.contains("[plugins"));
+    }
+
+    #[test]
+    fn hook_on_deactivate_rejected_by_v1_14_0_schema() {
+        let manifest = with_schema(KnownSchemaVersion::V1_14_0, indoc! {r#"
+            [hook]
+            on-deactivate = "rm -f $FLOX_ENV_CACHE/scratch"
+        "#});
+
+        let err = Manifest::parse_toml_typed(&manifest)
+            .expect_err("'hook.on-deactivate' should be rejected by the v1.14.0 schema");
+
+        let ManifestError::Invalid(err) = err else {
+            panic!("expected ManifestError::Invalid, got: {err:?}");
+        };
+        assert!(
+            err.message()
+                .starts_with("unknown field `on-deactivate`, expected"),
+            "unexpected error message: {err}",
+        );
+    }
+
+    #[test]
+    fn hook_on_deactivate_parses_with_latest_schema() {
+        let manifest = with_latest_schema(indoc! {r#"
+            [hook]
+            on-activate = "touch $FLOX_ENV_CACHE/scratch"
+            on-deactivate = "rm -f $FLOX_ENV_CACHE/scratch"
+        "#});
+
+        let parsed = toml_edit::de::from_str::<ManifestLatest>(&manifest).unwrap();
+
+        assert_eq!(
+            parsed.hook,
+            Some(Hook {
+                on_activate: Some("touch $FLOX_ENV_CACHE/scratch".to_string()),
+                on_deactivate: Some("rm -f $FLOX_ENV_CACHE/scratch".to_string()),
+            })
+        );
+    }
+
+    #[test]
+    fn downgrades_to_v1_14_0_when_on_deactivate_unused() {
+        let manifest = ManifestLatest {
+            hook: Some(Hook {
+                on_activate: Some("echo hello".to_string()),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+
+        let compat = manifest
+            .as_maybe_backwards_compatible(KnownSchemaVersion::V1_14_0, None)
+            .unwrap();
+
+        assert_eq!(compat.get_schema_version(), KnownSchemaVersion::V1_14_0);
+    }
+
+    #[test]
+    fn stays_latest_schema_when_on_deactivate_used() {
+        let manifest = ManifestLatest {
+            hook: Some(Hook {
+                on_activate: None,
+                on_deactivate: Some("echo goodbye".to_string()),
+            }),
+            ..Default::default()
+        };
+
+        let compat = manifest
+            .as_maybe_backwards_compatible(KnownSchemaVersion::V1_14_0, None)
+            .unwrap();
+
+        assert_eq!(compat.get_schema_version(), KnownSchemaVersion::latest());
     }
 
     #[test]

@@ -105,6 +105,23 @@ let
       else
         ""
     )
+    (
+      if
+        (
+          builtins.hasAttr "on-deactivate" hookSection
+          && (builtins.getAttr "on-deactivate" hookSection) != null
+        )
+      then
+        let
+          contents = outdentScript (builtins.getAttr "on-deactivate" hookSection);
+          scriptFile = builtins.toFile "hook-on-deactivate" contents;
+        in
+        ''
+          "${coreutils}/bin/cp" ${scriptFile} $out/activate.d/hook-on-deactivate
+        ''
+      else
+        ""
+    )
     # service-config.yaml section
     (
       if (serviceConfigYaml == null) then

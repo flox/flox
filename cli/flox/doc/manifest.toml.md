@@ -407,6 +407,48 @@ run of the script for the first activation for your shell.
 It's also best practice to write hooks defensively, assuming the user is using
 the environment from any directory on their machine.
 
+### `on-deactivate`
+
+The `on-deactivate` script is the bookend to `on-activate`:
+think of an activation as a bookshelf, where `on-activate` and `on-deactivate`
+are the book ends and each attached shell or command is a book on the shelf.
+`on-activate` runs when the first attachment starts the activation,
+and `on-deactivate` runs once the last attachment for that activation goes
+away — whether via `flox deactivate` or by the shell or command exiting.
+
+Use it for cleanup that should happen after the whole activation winds down,
+such as removing temporary files or releasing external resources created by
+`on-activate`.
+It is not needed for stopping services — use `services.<name>.shutdown` for
+that; services are shut down before `on-deactivate` runs.
+
+Like `on-activate`, the script runs in a **bash** shell.
+It sees the environment as `on-activate` left it,
+so variables exported during `on-activate` are available for cleanup:
+
+```toml
+[hook]
+on-activate = """
+    venv_dir="$(mktemp -d)"
+    export venv_dir
+    python -m venv "$venv_dir"
+"""
+on-deactivate = """
+    rm -rf "$venv_dir"
+"""
+```
+
+The script runs in a background process, not in your shell,
+so it cannot prompt for input and its output does not appear in your
+terminal;
+output is captured in the environment's activation logs.
+A failing `on-deactivate` script is logged and never blocks deactivation.
+
+The script is best-effort: it does not run if the activation's background
+process is killed or the machine shuts down uncleanly.
+For per-shell cleanup that should run every time a shell detaches
+(the end of each "book" on the shelf), use `profile.deactivate` instead.
+
 ### `script` - DEPRECATED
 This field was deprecated in favor of the `profile` section.
 

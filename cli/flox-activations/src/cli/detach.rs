@@ -53,11 +53,15 @@ impl DetachArgs {
 
         let empty_start_id = state.detach(self.pid)?;
 
-        // In the executive we only remove start state dir when we know
-        // cleanup_all won't trigger, but we can't know whether or not
-        // cleanup_all will trigger here because we're about to drop the lock.
-        // It won't hurt to remove this directory
-        if let Some(ref start_id) = empty_start_id {
+        // An emptied start is normally handed off to the executive, which
+        // runs its hook.on-deactivate and then removes the start state dir
+        // once woken by the state.json write below. Without a running
+        // executive (e.g. containerize uses its own PID) nothing would ever
+        // sweep the directory, so remove it inline; no hook runs in that
+        // case.
+        if let Some(ref start_id) = empty_start_id
+            && !state.executive_running()
+        {
             start_id
                 .remove_start_state_dir(&self.activation_state_dir)
                 .context("failed to remove start state dir after detach")?;
@@ -136,36 +140,74 @@ mod test {
             .expect("detach should be a no-op when state is missing");
     }
 
-    /// When the last PID overall detaches, its start state dir is removed
-    /// immediately rather than deferred to the executive's cleanup_all — so a
-    /// racing activation that supersedes this start can't leave it orphaned.
-    #[test]
-    fn start_state_dir_removed_when_last_pid_detaches() {
-        let tmp = TempDir::new().unwrap();
-        let dot_flox_path = tmp.path().join(".flox");
-        let pid = 12345_i32;
-
+    /// Set up state with a single attached PID and its start state dir,
+    /// returning the activation state dir and the start state dir.
+    fn setup_single_attachment(
+        tmp: &TempDir,
+        dot_flox_path: &std::path::Path,
+        pid: i32,
+        executive_pid: i32,
+    ) -> (std::path::PathBuf, std::path::PathBuf) {
         let mut state = ActivationState::new(
             &ActivateMode::default(),
-            Some(&dot_flox_path),
+            Some(dot_flox_path),
             dot_flox_path.join("run/default"),
         );
-        state.set_executive_pid(1);
+        state.set_executive_pid(executive_pid);
         let StartOrAttachResult::Start { start_id } = state.start_or_attach(pid, "/nix/store/test")
         else {
             panic!("expected Start for pid");
         };
 
-        write_activation_state(tmp.path(), &dot_flox_path, state);
+        write_activation_state(tmp.path(), dot_flox_path, state);
 
-        let activation_state_dir = activation_state_dir_path(tmp.path(), &dot_flox_path);
-
+        let activation_state_dir = activation_state_dir_path(tmp.path(), dot_flox_path);
         let start_state_dir = start_id.start_state_dir(&activation_state_dir).unwrap();
         std::fs::create_dir_all(&start_state_dir).unwrap();
         assert!(
             start_state_dir.exists(),
             "start state dir should exist before detach"
         );
+        (activation_state_dir, start_state_dir)
+    }
+
+    /// When the last PID detaches and an executive is running, the start
+    /// state dir is left in place: the executive runs hook.on-deactivate and
+    /// removes it.
+    #[test]
+    fn start_state_dir_handed_to_executive_when_last_pid_detaches() {
+        let tmp = TempDir::new().unwrap();
+        let dot_flox_path = tmp.path().join(".flox");
+        let pid = 12345_i32;
+
+        // PID 1 is always running, standing in for a live executive.
+        let (activation_state_dir, start_state_dir) =
+            setup_single_attachment(&tmp, &dot_flox_path, pid, 1);
+
+        let args = DetachArgs {
+            activation_state_dir,
+            pid,
+        };
+        args.handle().expect("detach should succeed");
+
+        assert!(
+            start_state_dir.exists(),
+            "start state dir should be left for the executive when it is running"
+        );
+    }
+
+    /// Without a running executive (e.g. containerize) nothing would ever
+    /// sweep the start state dir, so detach removes it inline.
+    #[test]
+    fn start_state_dir_removed_inline_without_executive() {
+        let tmp = TempDir::new().unwrap();
+        let dot_flox_path = tmp.path().join(".flox");
+        let pid = 12345_i32;
+
+        // An executive PID that is certainly not running.
+        let dead_executive = start_dead_pid();
+        let (activation_state_dir, start_state_dir) =
+            setup_single_attachment(&tmp, &dot_flox_path, pid, dead_executive);
 
         let args = DetachArgs {
             activation_state_dir,
@@ -175,7 +217,15 @@ mod test {
 
         assert!(
             !start_state_dir.exists(),
-            "start state dir should be removed when the last PID detaches"
+            "start state dir should be removed inline when no executive is running"
         );
+    }
+
+    /// Spawn and reap a short-lived process, returning its no-longer-running PID.
+    fn start_dead_pid() -> i32 {
+        let mut child = std::process::Command::new("true").spawn().unwrap();
+        let pid = child.id() as i32;
+        child.wait().unwrap();
+        pid
     }
 }

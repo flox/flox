@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs::DirBuilder;
 use std::ops::Deref;
 use std::os::unix::fs::DirBuilderExt;
@@ -9,7 +9,7 @@ use fslock::LockFile;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use time::OffsetDateTime;
-use tracing::{debug, trace};
+use tracing::{debug, trace, warn};
 
 use crate::activate::mode::ActivateMode;
 use crate::proc_status::pid_is_running;
@@ -340,6 +340,60 @@ impl StartIdentifier {
         })?;
         Ok(())
     }
+
+    /// Persist this identifier inside its start state directory.
+    ///
+    /// The directory name only contains the store path basename, so this
+    /// marker is what lets a process holding just the activation state
+    /// directory (e.g. the executive sweeping starts with no remaining
+    /// attachments) reconstruct the full identifier and locate the rendered
+    /// environment for the `hook.on-deactivate` script.
+    pub fn write_to_start_state_dir(
+        &self,
+        activation_state_dir: impl AsRef<Path>,
+    ) -> Result<(), Error> {
+        let path = self
+            .start_state_dir(activation_state_dir)?
+            .join(START_ID_JSON);
+        let contents = serde_json::to_string(self).context("failed to serialize start id")?;
+        std::fs::write(&path, contents)
+            .with_context(|| format!("failed to write start id to '{}'", path.display()))?;
+        Ok(())
+    }
+}
+
+/// File name of the [StartIdentifier] marker within a start state directory.
+const START_ID_JSON: &str = "start_id.json";
+
+/// Read the [StartIdentifier] of every start state directory found in an
+/// activation state directory.
+///
+/// Directories without a readable marker (e.g. created by an older Flox
+/// version, or a start that died before writing it) are skipped with a
+/// warning; they are still removed wholesale when the whole activation state
+/// directory is torn down.
+pub fn read_start_ids_from_disk(activation_state_dir: impl AsRef<Path>) -> Vec<StartIdentifier> {
+    let Ok(entries) = std::fs::read_dir(activation_state_dir.as_ref()) else {
+        return Vec::new();
+    };
+    entries
+        .filter_map(|entry| {
+            let path = entry.ok()?.path();
+            if !path.is_dir() {
+                return None;
+            }
+            let marker = path.join(START_ID_JSON);
+            if !marker.exists() {
+                return None;
+            }
+            let contents = std::fs::read_to_string(&marker)
+                .inspect_err(|err| warn!(%err, ?marker, "failed to read start id marker"))
+                .ok()?;
+            serde_json::from_str(&contents)
+                .inspect_err(|err| warn!(%err, ?marker, "failed to parse start id marker"))
+                .ok()
+        })
+        .collect()
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -431,6 +485,27 @@ impl ActivationState {
 
     pub fn attached_pids_is_empty(&self) -> bool {
         self.attached_pids.is_empty()
+    }
+
+    /// Returns the start IDs that are still in use: those referenced by an
+    /// attachment, plus a ready or currently starting activation (whose PID
+    /// may not have registered its start state directory contents yet).
+    ///
+    /// Start state directories on disk whose ID is not in this set belong to
+    /// starts with no remaining attachments and are safe to tear down.
+    pub fn live_start_ids(&self) -> BTreeSet<StartIdentifier> {
+        let mut live: BTreeSet<StartIdentifier> = self
+            .attached_pids
+            .values()
+            .map(|attachment| attachment.start_id.clone())
+            .collect();
+        match &self.ready {
+            Ready::True(start_id) | Ready::Starting(_, start_id) => {
+                live.insert(start_id.clone());
+            },
+            Ready::False => {},
+        }
+        live
     }
 
     /// Returns all attached PIDs and their expirations, flattened from all start IDs
@@ -573,13 +648,12 @@ impl ActivationState {
 
     /// Set ready to False if there are no more PIDs attached to the current start
     ///
-    /// This includes the case where nothing is attached at all: `detach`'s
-    /// caller removes the emptied start's state directory before dropping the
-    /// lock, so a `ready` left naming that start would send the next
-    /// activation down the attach path to read files that are already gone.
-    /// The whole activation state directory is torn down shortly afterwards by
-    /// the executive, but not under the same lock, so the state has to be
-    /// self-consistent in the meantime.
+    /// This includes the case where nothing is attached at all: the emptied
+    /// start's state directory is torn down asynchronously by the executive
+    /// (after running any `hook.on-deactivate`), so a `ready` left naming that
+    /// start would send the next activation down the attach path to read files
+    /// that may already be gone. The state has to be self-consistent the
+    /// moment the lock drops.
     fn update_ready_after_detach(&mut self) {
         match self.ready {
             Ready::True(ref start_id) => {

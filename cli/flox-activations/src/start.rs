@@ -58,6 +58,7 @@ pub fn start(
         .recursive(true)
         .mode(0o700)
         .create(&start_state_dir)?;
+    start_id.write_to_start_state_dir(&context.activation_state_dir)?;
 
     let new_executive = match context.project_ctx.as_ref() {
         // Start a new executive.

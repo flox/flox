@@ -7,6 +7,7 @@ pub mod gen_rc;
 pub mod hook;
 pub mod logger;
 pub mod message;
+mod on_deactivate;
 mod process_compose;
 mod start;
 pub mod start_diff;

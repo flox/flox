@@ -372,6 +372,27 @@
       },
       "type": "object"
     },
+    "Hook2": {
+      "additionalProperties": false,
+      "description": "Lifecycle hooks for V1_15_0: adds an optional `on-deactivate` script that\nis run when the last attachment detaches from an activation. The\n`on-activate` field is the same as earlier schema versions, which keep\nusing `common::Hook`.",
+      "properties": {
+        "on-activate": {
+          "description": "A script that is run at activation time,\nin a flox provided bash shell",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "on-deactivate": {
+          "description": "A script that is run in a flox provided bash shell when the last\nattachment detaches from an activation",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
     "Include": {
       "additionalProperties": false,
       "description": "The section where users can declare dependencies on other environments.",
@@ -972,7 +993,7 @@
         "hook": {
           "anyOf": [
             {
-              "$ref": "#/$defs/Hook"
+              "$ref": "#/$defs/Hook2"
             },
             {
               "type": "null"

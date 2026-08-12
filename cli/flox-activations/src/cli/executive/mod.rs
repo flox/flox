@@ -27,6 +27,7 @@ use watcher::LockedActivationState;
 
 use crate::cli::activate::NO_REMOVE_ACTIVATION_FILES;
 use crate::logger::init_executive_logger;
+use crate::on_deactivate::{orphaned_start_ids, sweep_orphaned_starts};
 use crate::process_compose::{process_compose_down, start_process_compose_no_services};
 
 mod event_coordinator;
@@ -211,6 +212,9 @@ fn run_event_loop(
                     &process_compose_bin,
                     &socket_path,
                     &activation_state_dir,
+                    subsystem_verbosity,
+                    &initial_attach_ctx,
+                    &project_ctx,
                 )?;
                 if should_exit {
                     return Ok(());
@@ -279,6 +283,9 @@ fn run_event_loop(
                         &process_compose_bin,
                         &socket_path,
                         &activation_state_dir,
+                        subsystem_verbosity,
+                        &initial_attach_ctx,
+                        &project_ctx,
                     )
                     .context("cleanup failed after StateFileChanged with empty PIDs")?
                     {
@@ -286,8 +293,23 @@ fn run_event_loop(
                     }
                     // A PID raced in between the empty check and cleanup_all;
                     // continue the event loop so the new PID stays monitored.
+                } else {
+                    // A detach may have emptied a start while other
+                    // attachments remain (e.g. an explicit `flox deactivate`
+                    // hands the start state dir off to the executive). Tear
+                    // down any such start, dropping the lock first: its
+                    // hook.on-deactivate has no timeout and must not block
+                    // new activations.
+                    let orphaned = orphaned_start_ids(&activation_state_dir, &activations);
+                    drop(lock);
+                    sweep_orphaned_starts(
+                        subsystem_verbosity,
+                        &initial_attach_ctx,
+                        &project_ctx,
+                        &activation_state_dir,
+                        orphaned,
+                    );
                 }
-                // lock drops here when PIDs remain
             },
             Ok(ExecutiveEvent::StateFileRemoved) => {
                 // state.json existed when this executive started, so a removal
@@ -359,6 +381,7 @@ impl LoopGuard {
 ///
 /// Returns `true` if all PIDs have terminated and cleanup completed (exit the loop),
 /// or `false` if there are still active PIDs (continue the loop).
+#[allow(clippy::too_many_arguments)]
 fn handle_process_exited(
     pid: i32,
     coordinator: &EventCoordinator,
@@ -367,6 +390,9 @@ fn handle_process_exited(
     process_compose_bin: &Path,
     socket_path: &Path,
     activation_state_dir: &Path,
+    subsystem_verbosity: u32,
+    initial_attach_ctx: &AttachCtx,
+    project_ctx: &AttachProjectCtx,
 ) -> Result<bool> {
     // Remove from known_pids first so it can be re-monitored if it re-attached
     coordinator.stop_monitoring(pid);
@@ -389,12 +415,7 @@ fn handle_process_exited(
     };
 
     // Use PidWatcher to clean up the state
-    match watcher::cleanup_pid(
-        (activations, lock),
-        state_json_path,
-        activation_state_dir,
-        pid,
-    ) {
+    match watcher::cleanup_pid((activations, lock), state_json_path, pid) {
         Ok(None) => {
             // Still have active PIDs - check if this PID re-attached
             // and needs to be monitored again.
@@ -474,6 +495,20 @@ fn handle_process_exited(
                 .ensure_monitoring_pids(other_attached_pids)
                 .context("failed to ensure monitoring PIDs")?;
 
+            // The exited PID may have been the last attachment for its start
+            // even though other starts still have attachments. Tear down any
+            // such start, dropping the lock first: its hook.on-deactivate has
+            // no timeout and must not block new activations.
+            let orphaned = orphaned_start_ids(activation_state_dir, &activations);
+            drop(lock);
+            sweep_orphaned_starts(
+                subsystem_verbosity,
+                initial_attach_ctx,
+                project_ctx,
+                activation_state_dir,
+                orphaned,
+            );
+
             Ok(false)
         },
         Ok(Some(locked_activations)) => {
@@ -483,6 +518,9 @@ fn handle_process_exited(
                 process_compose_bin,
                 socket_path,
                 activation_state_dir,
+                subsystem_verbosity,
+                initial_attach_ctx,
+                project_ctx,
             )
             .context("cleanup failed")?;
             Ok(cleaned_up)
@@ -510,6 +548,9 @@ fn handle_process_exited(
                 process_compose_bin,
                 socket_path,
                 activation_state_dir,
+                subsystem_verbosity,
+                initial_attach_ctx,
+                project_ctx,
             );
             bail!(err.context("failed while waiting for termination"))
         },
@@ -614,12 +655,22 @@ fn cleanup_on_no_state(
 
 /// Shutdown `process-compose` if running and remove the activation state
 /// directory.
+///
+/// Used when state.json is gone and the starts on disk can't be trusted;
+/// no `hook.on-deactivate` runs on this path.
 fn shut_down_and_remove_state(
     process_compose_bin: &Path,
     socket_path: impl AsRef<Path>,
     activation_state_dir_path: impl AsRef<Path>,
 ) -> Result<()> {
-    let socket_path = socket_path.as_ref();
+    shut_down_process_compose(process_compose_bin, socket_path.as_ref());
+    let cleanup_path = rename_state_for_removal(activation_state_dir_path.as_ref())?;
+    fs::remove_dir_all(&cleanup_path).context("couldn't remove activations dir")?;
+    Ok(())
+}
+
+/// Shutdown `process-compose` if its socket is present.
+fn shut_down_process_compose(process_compose_bin: &Path, socket_path: &Path) {
     if !socket_path.exists() {
         info!(reason = "no socket", "did not shut down process-compose");
     } else if let Err(err) = process_compose_down(process_compose_bin, socket_path) {
@@ -627,30 +678,36 @@ fn shut_down_and_remove_state(
     } else {
         info!("shut down process-compose");
     }
+}
 
-    // Atomically remove the activation state directory
-    // We want to avoid a race where remove_dir_all removes the lock before
-    // removing activation state dir,
-    // and then another activation creates a lock and causes remove_dir_all to
-    // fail.
-    let activation_state_dir_path = activation_state_dir_path.as_ref();
+/// Atomically detach the activation state directory for removal by renaming
+/// it, returning the renamed path.
+///
+/// We want to avoid a race where remove_dir_all removes the lock before
+/// removing activation state dir,
+/// and then another activation creates a lock and causes remove_dir_all to
+/// fail.
+fn rename_state_for_removal(activation_state_dir_path: &Path) -> Result<PathBuf> {
     let cleanup_path =
         activation_state_dir_path.with_extension(format!("cleanup.{}", std::process::id()));
     fs::rename(activation_state_dir_path, &cleanup_path)
         .context("couldn't rename activations dir for cleanup")?;
-    fs::remove_dir_all(&cleanup_path).context("couldn't remove activations dir")?;
-
-    Ok(())
+    Ok(cleanup_path)
 }
 
-/// Shutdown `process-compose` if running and remove all activation state.
+/// Shutdown `process-compose` if running, run any `hook.on-deactivate`
+/// bookends, and remove all activation state.
 /// To be called when there are no longer any PIDs attached.
 /// Returns `true` if cleanup ran, `false` if PIDs were found and cleanup was skipped.
+#[allow(clippy::too_many_arguments)]
 fn cleanup_all(
     locked_activations: LockedActivationState,
     process_compose_bin: &Path,
     socket_path: impl AsRef<Path>,
     activation_state_dir_path: impl AsRef<Path>,
+    subsystem_verbosity: u32,
+    initial_attach_ctx: &AttachCtx,
+    project_ctx: &AttachProjectCtx,
 ) -> Result<bool> {
     info!("running cleanup");
 
@@ -661,7 +718,25 @@ fn cleanup_all(
         return Ok(false);
     }
 
-    shut_down_and_remove_state(process_compose_bin, socket_path, activation_state_dir_path)?;
+    shut_down_process_compose(process_compose_bin, socket_path.as_ref());
+    let cleanup_path = rename_state_for_removal(activation_state_dir_path.as_ref())?;
+
+    // Run hook.on-deactivate for the remaining start(s), mirroring the
+    // activation order in reverse: services were shut down above, the hook
+    // bookends close last. This runs after the rename so a hanging hook can't
+    // block new activations — they recreate the directory under its original
+    // name — and it also covers starts handed off by an explicit detach that
+    // the executive never got to sweep.
+    let orphaned = orphaned_start_ids(&cleanup_path, &activations_json);
+    sweep_orphaned_starts(
+        subsystem_verbosity,
+        initial_attach_ctx,
+        project_ctx,
+        &cleanup_path,
+        orphaned,
+    );
+
+    fs::remove_dir_all(&cleanup_path).context("couldn't remove activations dir")?;
 
     info!("finished cleanup");
 
@@ -677,35 +752,8 @@ mod test {
     use flox_core::activations::{ActivationState, StartOrAttachResult, activation_state_dir_path};
 
     use super::event_coordinator::{EventCoordinator, ExecutiveEvent};
-    use super::watcher::test::{start_process, stop_process};
+    use super::watcher::test::{start_process, stop_process, test_context};
     use super::*;
-
-    /// Create minimal context for testing.
-    /// The actual values don't matter since tests don't trigger SIGUSR1.
-    fn test_context(dot_flox_path: &Path, flox_env: &str) -> (AttachCtx, AttachProjectCtx) {
-        let attach = AttachCtx {
-            env: flox_env.to_string(),
-            env_description: "test".to_string(),
-            env_cache: dot_flox_path.join("cache"),
-            interpreter_path: PathBuf::from("/nix/store/fake"),
-            prompt_color_1: "".to_string(),
-            prompt_color_2: "".to_string(),
-            flox_prompt_environments: "".to_string(),
-            set_prompt: false,
-            flox_env_cuda_detection: "".to_string(),
-            add_sbin: false,
-            flox_active_environments: "".to_string(),
-        };
-        let project = AttachProjectCtx {
-            env_project: dot_flox_path.to_path_buf(),
-            dot_flox_path: dot_flox_path.to_path_buf(),
-            flox_env_log_dir: PathBuf::from("/tmp/test_log_dir"),
-            flox_services_socket: PathBuf::from("/does_not_exist"),
-            process_compose_bin: PathBuf::from("/nix/store/fake-process-compose"),
-            services_to_start: Vec::new(),
-        };
-        (attach, project)
-    }
 
     #[test]
     fn monitoring_loop_removes_state_on_cleanup() {
@@ -880,7 +928,7 @@ mod test {
         // These are all dummy values
         let coordinator = EventCoordinator::new().unwrap();
         let mut loop_guard = LoopGuard::new(5);
-        let (_attach, project) = test_context(&dot_flox_path, &flox_env.to_string_lossy());
+        let (attach, project) = test_context(&dot_flox_path, &flox_env.to_string_lossy());
 
         stop_process(proc1);
 
@@ -893,6 +941,9 @@ mod test {
             &project.process_compose_bin,
             &project.flox_services_socket,
             &activation_state_directory,
+            0,
+            &attach,
+            &project,
         );
 
         // No cleanup is needed while the replacement PID is active.
@@ -924,6 +975,9 @@ mod test {
             &project.process_compose_bin,
             &project.flox_services_socket,
             &activation_state_directory,
+            0,
+            &attach,
+            &project,
         );
         assert!(
             matches!(result, Ok(true)),
@@ -988,7 +1042,7 @@ mod test {
         let coordinator = EventCoordinator::new().unwrap();
         // Use a low limit so we can test hitting it
         let mut loop_guard = LoopGuard::new(2);
-        let (_attach, project) = test_context(&dot_flox_path, &flox_env.to_string_lossy());
+        let (attach, project) = test_context(&dot_flox_path, &flox_env.to_string_lossy());
 
         // First call: PID is in state and running, so it will be re-monitored.
         // loop_guard.allow_remonitor(pid) returns true (count=1 < limit=2)
@@ -1000,6 +1054,9 @@ mod test {
             &project.process_compose_bin,
             &project.flox_services_socket,
             &activation_state_directory,
+            0,
+            &attach,
+            &project,
         );
         assert!(matches!(result, Ok(false)), "first call should succeed");
 
@@ -1013,6 +1070,9 @@ mod test {
             &project.process_compose_bin,
             &project.flox_services_socket,
             &activation_state_directory,
+            0,
+            &attach,
+            &project,
         );
         assert!(matches!(result, Ok(false)), "second call should succeed");
 
