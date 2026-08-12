@@ -15,13 +15,14 @@ use crate::parsed::common::{
     ActivateOptions,
     Allows,
     Containerize,
-    Hook,
     Include,
     Options,
     SemverOptions,
     Vars,
 };
-use crate::parsed::latest::{Install, ManifestLatest, MinimumCliVersion};
+// merge_hook operates on the latest schema's Hook (which carries
+// `on-deactivate`), so composing environments preserves the field.
+use crate::parsed::latest::{Hook, Install, ManifestLatest, MinimumCliVersion};
 // merge_build operates on the latest schema's Build (which carries
 // `sandbox-allow`), so composing environments preserves the field.
 use crate::parsed::v1_13_0::{Build, Profile, ProfileDeactivate, Services};
@@ -100,6 +101,14 @@ impl ShallowMerger {
                 on_activate: append_optional_strings(
                     low_priority.on_activate.as_ref(),
                     high_priority.on_activate.as_ref(),
+                ),
+                // Deactivation runs in reverse order from activation (LIFO
+                // cleanup), so a low-priority on-deactivate snippet should run
+                // *after* the high-priority one. Append accordingly: high
+                // first, then low.
+                on_deactivate: append_optional_strings(
+                    high_priority.on_deactivate.as_ref(),
+                    low_priority.on_deactivate.as_ref(),
                 ),
             })),
         }
@@ -538,17 +547,28 @@ mod tests {
 
         // Ensures that for any two manifests if they both have hooks, the merge joins them with a newline.
         // When one manifest has a hook and the other doesn't the hook that's present should be passed
-        // straight through.
+        // straight through. on-activate joins low priority first; on-deactivate joins in reverse
+        // (LIFO cleanup), high priority first.
         #[test]
         fn merges_hook_section(hook1 in any::<Option<Hook>>(), hook2 in any::<Option<Hook>>()) {
             let merged = ShallowMerger::merge_hook(hook1.as_ref(), hook2.as_ref()).unwrap();
-            let expected = match (hook1.unwrap_or_default().on_activate, hook2.unwrap_or_default().on_activate) {
+            let hook1 = hook1.unwrap_or_default();
+            let hook2 = hook2.unwrap_or_default();
+            let expected_on_activate = match (hook1.on_activate, hook2.on_activate) {
                 (Some(h1), Some(h2)) => Some(format!("{h1}\n{h2}")),
                 (Some(h1), None) => Some(h1.clone()),
                 (None, Some(h2)) => Some(h2.clone()),
                 (None, None) => None,
             };
-            prop_assert_eq!(merged.unwrap_or_default().on_activate, expected);
+            let expected_on_deactivate = match (hook1.on_deactivate, hook2.on_deactivate) {
+                (Some(h1), Some(h2)) => Some(format!("{h2}\n{h1}")),
+                (Some(h1), None) => Some(h1.clone()),
+                (None, Some(h2)) => Some(h2.clone()),
+                (None, None) => None,
+            };
+            let merged = merged.unwrap_or_default();
+            prop_assert_eq!(merged.on_activate, expected_on_activate);
+            prop_assert_eq!(merged.on_deactivate, expected_on_deactivate);
         }
 
         // Ensures that two arbitrary options sections are deep merged with the exception of
