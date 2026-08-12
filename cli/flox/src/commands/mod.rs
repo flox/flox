@@ -798,7 +798,7 @@ enum UseCommands {
     Run(#[bpaf(external(run::run))] run::Run),
 
     /// Manage services in an environment
-    #[bpaf(command)]
+    #[bpaf(command, long("service"))]
     Services(
         #[bpaf(
             external(services::services_commands),
