@@ -37,6 +37,30 @@ pub enum AuthnMode {
     Kerberos,
 }
 
+impl Default for AuthnMode {
+    /// Default authentication mode compiled into this build, set via the
+    /// `FLOX_DEFAULT_AUTHN_MODE` build-time environment variable
+    /// ("token" or "kerberos"; unset means "token").
+    ///
+    /// Deployments that authenticate via Kerberos compile their own CLI with
+    /// `FLOX_DEFAULT_AUTHN_MODE=kerberos` so their users need no
+    /// `floxhub_authn_mode` config, and the deployment is not named in source.
+    /// The hosted FloxHub only supports token auth and overrides this default;
+    /// see the `effective_authn_mode` helpers in consumers.
+    ///
+    /// The Nix interface (`defaultAuthnMode` on `pkgs/flox-cli`) rejects
+    /// invalid values before invoking Cargo; a direct Cargo build with an
+    /// invalid value fails here on first use instead of silently falling
+    /// back to token auth.
+    fn default() -> Self {
+        match option_env!("FLOX_DEFAULT_AUTHN_MODE") {
+            Some("kerberos") => Self::Kerberos,
+            Some("token") | None => Self::Token,
+            Some(mode) => panic!("invalid FLOX_DEFAULT_AUTHN_MODE: {mode}"),
+        }
+    }
+}
+
 /// Where `flox auth login` stores the FloxHub token.
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
