@@ -99,24 +99,24 @@ EOF
   run ./result-print-modules/bin/print-modules
   assert_success
   # requests can be found
-  assert_output --regexp "\['/nix/store/.*-environment-build-print-modules/lib/python3.13/site-packages/requests'\]"
+  assert_output --regexp "\['/nix/store/.*-environment-build-print-modules/lib/python3.14/site-packages/requests'\]"
   # Confirm toml cannot be found
   assert_output --partial "Cannot import toml"
 
   "$FLOX_BIN" init -d consumer
   "$FLOX_BIN" install -d consumer ./result-print-modules/bin/print-modules
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/python-toml.yaml" \
-    "$FLOX_BIN" install -d consumer python313Packages.toml
+    "$FLOX_BIN" install -d consumer python314Packages.toml
 
   # Double check toml module can be found with environment activated
   run "$FLOX_BIN" activate -d consumer -- python3 -c "import toml; print(toml.__path__)"
   assert_success
-  assert_output --regexp "\['.*consumer/.flox/run/$NIX_SYSTEM.consumer-dev/lib/python3.13/site-packages/toml'\]"
+  assert_output --regexp "\['.*consumer/.flox/run/$NIX_SYSTEM.consumer-dev/lib/python3.14/site-packages/toml'\]"
 
   # Wrapped program can find requests but not toml
   run "$FLOX_BIN" activate -d consumer -- print-modules
   assert_success
-  assert_output --regexp "\['/nix/store/.*-environment-build-print-modules/lib/python3.13/site-packages/requests'\]"
+  assert_output --regexp "\['/nix/store/.*-environment-build-print-modules/lib/python3.14/site-packages/requests'\]"
   assert_output --partial "Cannot import toml"
 }
 

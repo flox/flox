@@ -1,7 +1,8 @@
 version = 1
 
 [install]
-requests.pkg-path = "python313Packages.requests"
+# bump python314 whenever python3 gets a newer minor version
+requests.pkg-path = "python314Packages.requests"
 python3.pkg-path = "python3"
 
 [build.print-modules]

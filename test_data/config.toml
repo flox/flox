@@ -526,7 +526,7 @@ cmd = "flox install tabula"
 
 [resolve.python-toml]
 pre_cmd = "flox init"
-cmd = "flox install python313Packages.toml"
+cmd = "flox install python314Packages.toml"
 
 [resolve.torchvision-bin]
 # Requests all four systems, including x86_64-darwin, which is no longer an
