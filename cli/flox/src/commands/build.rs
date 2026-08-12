@@ -39,7 +39,7 @@ use thiserror::Error;
 use tracing::{debug, instrument, trace};
 use url::Url;
 
-use super::{DirEnvironmentSelect, dir_environment_select};
+use super::{DirEnvironmentSelect, dir_environment_select, needs_project_files_error};
 use crate::utils::events::duration_to_ms;
 use crate::utils::message;
 use crate::{environment_subcommand_metric, subcommand_metric};
@@ -211,10 +211,11 @@ impl Build {
     async fn clean(flox: Flox, mut env: ConcreteEnvironment, packages: Vec<String>) -> Result<()> {
         match &env {
             ConcreteEnvironment::Path(_) => (),
-            ConcreteEnvironment::Managed(_) => {
-                bail!("Cannot build from an environment on FloxHub.")
+            ConcreteEnvironment::Managed(managed) => {
+                bail!(needs_project_files_error(managed, "build"))
             },
             ConcreteEnvironment::Remote(_) => {
+                // guarded by DirEnvironmentSelect
                 unreachable!("Cannot build from a remote environment")
             },
         };
@@ -259,10 +260,11 @@ impl Build {
     ) -> Result<()> {
         match &env {
             ConcreteEnvironment::Path(_) => (),
-            ConcreteEnvironment::Managed(_) => {
-                bail!("Cannot build from an environment on FloxHub.")
+            ConcreteEnvironment::Managed(managed) => {
+                bail!(needs_project_files_error(managed, "build"))
             },
             ConcreteEnvironment::Remote(_) => {
+                // guarded by DirEnvironmentSelect
                 unreachable!("Cannot build from a remote environment")
             },
         };
@@ -466,10 +468,11 @@ impl Build {
     ) -> Result<()> {
         match &env {
             ConcreteEnvironment::Path(_) => (),
-            ConcreteEnvironment::Managed(_) => {
-                bail!("Cannot import from nixpkgs in an environment on FloxHub.")
+            ConcreteEnvironment::Managed(managed) => {
+                bail!(needs_project_files_error(managed, "import"))
             },
             ConcreteEnvironment::Remote(_) => {
+                // guarded by DirEnvironmentSelect
                 unreachable!("Cannot import from nixpkgs in a remote environment")
             },
         };

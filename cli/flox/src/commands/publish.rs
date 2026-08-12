@@ -38,7 +38,7 @@ use crate::commands::build::{
     prefetch_flake_ref,
     system_override,
 };
-use crate::commands::{SHELL_COMPLETION_FILE, ensure_auth};
+use crate::commands::{SHELL_COMPLETION_FILE, ensure_auth, needs_project_files_error};
 use crate::utils::errors::display_chain;
 use crate::utils::events::env_detail_from_concrete;
 use crate::utils::message;
@@ -191,8 +191,8 @@ impl Publish {
         let env_detail = env_detail_from_concrete(&flox, &env);
         let path_env = match env {
             ConcreteEnvironment::Path(path_env) => path_env,
-            ConcreteEnvironment::Managed(_) => {
-                bail!("Cannot publish from an environment on FloxHub.")
+            ConcreteEnvironment::Managed(managed) => {
+                bail!(needs_project_files_error(&managed, "publish"))
             },
             ConcreteEnvironment::Remote(_) => {
                 // guarded by DirEnvironmentSelect
