@@ -1,12 +1,12 @@
 when:
   path: /api/v1/catalog/resolve
   method: POST
-  body: '{"items":[{"descriptors":[{"allow_broken":null,"allow_insecure":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"nodejs","install_id":"nodejs","systems":["aarch64-darwin"],"version":"14.16.1"},{"allow_broken":null,"allow_insecure":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"nodejs","install_id":"nodejs","systems":["aarch64-linux"],"version":"14.16.1"},{"allow_broken":null,"allow_insecure":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"nodejs","install_id":"nodejs","systems":["x86_64-darwin"],"version":"14.16.1"},{"allow_broken":null,"allow_insecure":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"nodejs","install_id":"nodejs","systems":["x86_64-linux"],"version":"14.16.1"}],"name":"toplevel"}]}'
+  body: '{"items":[{"descriptors":[{"allow_broken":null,"allow_insecure":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"nodejs","install_id":"nodejs","systems":["aarch64-darwin"],"version":"14.16.1"},{"allow_broken":null,"allow_insecure":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"nodejs","install_id":"nodejs","systems":["aarch64-linux"],"version":"14.16.1"},{"allow_broken":null,"allow_insecure":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"nodejs","install_id":"nodejs","systems":["x86_64-linux"],"version":"14.16.1"}],"name":"toplevel"}]}'
 then:
   status: 200
   header:
   - name: date
-    value: Tue, 21 Apr 2026 21:58:14 GMT
+    value: Thu, 13 Aug 2026 22:38:25 GMT
   - name: content-type
     value: application/json
   - name: content-length
@@ -14,5 +14,5 @@ then:
   - name: server
     value: uvicorn
   - name: apigw-requestid
-    value: cMLmcjE-IAMEMKA=
+    value: CEAXNjcvIAMEMgA=
   body: '{"items":[{"name":"toplevel","page":null,"candidate_pages":null,"messages":[{"level":"error","type":"version_not_found","message":"No version compatible with ''14.16.1'' found for ''nodejs'' on ''aarch64-darwin''.","context":{"attr_path":"nodejs","install_id":"nodejs","system":"aarch64-darwin"}},{"level":"trace","type":"resolution_logic","message":"TRACE (GROUP): Group ''toplevel'' could not be resolved with strategy: Stage 1: Only allow missing builds for packages without current locked derivations.","context":{"install_id":"GROUP","message":"Group ''toplevel'' could not be resolved with strategy: Stage 1: Only allow missing builds for packages without current locked derivations."}},{"level":"trace","type":"resolution_logic","message":"TRACE (GROUP): Group ''toplevel'' could not be resolved with strategy: Stage 2: Unlock existing derivations but require known builds.","context":{"install_id":"GROUP","message":"Group ''toplevel'' could not be resolved with strategy: Stage 2: Unlock existing derivations but require known builds."}},{"level":"trace","type":"resolution_logic","message":"TRACE (GROUP): Group ''toplevel'' could not be resolved with strategy: Stage 3: Unlock existing derivations and allow missing builds.","context":{"install_id":"GROUP","message":"Group ''toplevel'' could not be resolved with strategy: Stage 3: Unlock existing derivations and allow missing builds."}}]}]}'

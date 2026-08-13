@@ -1,7 +1,8 @@
-schema-version = "1.12.0"
+schema-version = "1.14.0"
 
 [install]
-requests.pkg-path = "python313Packages.requests"
+# bump python314 whenever python3 gets a newer minor version
+requests.pkg-path = "python314Packages.requests"
 requests.outputs = "all"
 python3.pkg-path = "python3"
 python3.outputs = "all"
