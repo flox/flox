@@ -297,8 +297,12 @@ gen-unit-data-for-publish floxhub_repo_path force="": (reset-floxhub-db floxhub_
         export _FLOX_UNIT_TEST_RECORD="missing"
     fi
 
-    # Run the tests that will regenerate the mocks
-    {{ cargo_test_invocation }} --no-fail-fast --filterset 'test(providers::publish) | test(commands::publish) | test(providers::catalog::tests::creates_new_catalog)'
+    # Run the tests that will regenerate the mocks.
+    #
+    # providers::catalog::tests::creates_new_catalog is left out: it is
+    # #[ignore]d for the reason given in its ignore message, so selecting it
+    # here without --run-ignored would silently never run it.
+    {{ cargo_test_invocation }} --no-fail-fast --filterset 'test(providers::publish) | test(commands::publish)'
 
 @gen-unit-data floxhub_path force="false": (gen-unit-data-no-publish force) (gen-unit-data-for-publish floxhub_path force)
 

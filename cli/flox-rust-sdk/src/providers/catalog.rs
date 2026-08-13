@@ -941,7 +941,7 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    #[ignore = "A catalog can only be created once, this test fails on repeated runs or against an existing DB"]
+    #[ignore = "A catalog can only be created once, this test fails on repeated runs or against an existing DB. The catalog name is granted to test_user_no_catalogs by floxhub's test-user role fixture, so it can't be made unique per run without a floxhub-side change."]
     async fn creates_new_catalog() {
         let (flox, _tmpdir) = flox_instance();
         let (flox, _auth) = auto_recording_catalog_client_for_authed_local_services(
