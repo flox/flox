@@ -299,13 +299,9 @@ gen-unit-data-for-publish floxhub_repo_path force="": (reset-floxhub-db floxhub_
 
     # Run the tests that will regenerate the mocks.
     #
-    # providers::catalog::tests::creates_new_catalog is deliberately left out
-    # of this filterset: it targets a catalog name that floxhub's test-user
-    # role fixture grants to test_user_no_catalogs ahead of creation, so the
-    # name can't be made unique per test run without a floxhub-side fixture
-    # change. The test stays #[ignore]d for the same reason (see its ignore
-    # message) and must not be selected here without --run-ignored, or it
-    # silently never runs.
+    # providers::catalog::tests::creates_new_catalog is left out: it is
+    # #[ignore]d for the reason given in its ignore message, so selecting it
+    # here without --run-ignored would silently never run it.
     {{ cargo_test_invocation }} --no-fail-fast --filterset 'test(providers::publish) | test(commands::publish)'
 
 @gen-unit-data floxhub_path force="false": (gen-unit-data-no-publish force) (gen-unit-data-for-publish floxhub_path force)

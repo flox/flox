@@ -2425,9 +2425,7 @@ pub mod tests {
     // publish test mocks.
     #[tokio::test(flavor = "multi_thread")]
     async fn retrieves_base_catalog_url() {
-        // Unlike the recording tests below, the name is never sent to the
-        // catalog here -- `pkg_meta` is discarded -- so it needs no
-        // per-test uniqueness.
+        // `pkg_meta` is discarded, so this name never reaches the catalog.
         let (_build_meta, env_meta, _pkg_meta) = dummy_publish_metadata("unused");
         let (flox, _tmpdir) = flox_instance();
         let (flox, _auth) = auto_recording_catalog_client_for_authed_local_services(
@@ -2445,8 +2443,8 @@ pub mod tests {
     // without first needing to pay and create an organization.
     #[tokio::test(flavor = "multi_thread")]
     async fn publishes_new_package_for_users_default_catalog_and_creates_catalog() {
-        // The package name matches the recording name so that no other
-        // recording test can collide with it in the live catalog DB.
+        // Name the package after the recording so no other test can collide
+        // with it in the live catalog DB.
         let recording_name = "publish_provider_publishes_package_in_users_catalog";
         let (build_meta, env_meta, pkg_meta) = dummy_publish_metadata(recording_name);
         let (flox, _tmpdir) = flox_instance();
@@ -2481,9 +2479,8 @@ pub mod tests {
     // (2) they have write permissions.
     #[tokio::test(flavor = "multi_thread")]
     async fn publishes_new_package_for_org_catalog() {
-        // The package name matches the recording name: the catalog itself is
-        // a shared fixture (see TEST_READ_WRITE_CATALOG_NAME), but the
-        // package within it must be unique to this test.
+        // Unique per test as above: the org catalog is a shared fixture, the
+        // package inside it must not be.
         let recording_name = "publish_provider_creates_package_in_org_catalog";
         let (build_meta, env_meta, pkg_meta) = dummy_publish_metadata(recording_name);
         let (flox, _tmpdir) = flox_instance();
@@ -2523,8 +2520,7 @@ pub mod tests {
     // exactly that exchange.
     #[tokio::test(flavor = "multi_thread")]
     async fn error_publishing_to_read_only_catalog() {
-        // The server rejects package creation with 403 before the package
-        // reaches the catalog DB, so the name needs no per-test uniqueness.
+        // The 403 lands before the package reaches the catalog DB.
         let recording_name = "publish_provider_error_when_user_only_has_read_access_to_catalog";
         let (_build_meta, env_meta, pkg_meta) = dummy_publish_metadata(recording_name);
         let (flox, _tmpdir) = flox_instance();
@@ -2553,9 +2549,7 @@ pub mod tests {
         // metadata more than once. Whether that makes sense is a separate
         // concern, so this test is just identifying current behavior.
         //
-        // The package name matches the recording name: the catalog itself is
-        // a shared fixture (see TEST_READ_WRITE_CATALOG_NAME), but the
-        // package within it must be unique to this test.
+        // Unique per test as above.
         let recording_name = "repeat_publish_of_existing_package_succeeds";
         let (build_meta, env_meta, pkg_meta) = dummy_publish_metadata(recording_name);
         let (flox, _tmpdir) = flox_instance();
@@ -2609,9 +2603,8 @@ pub mod tests {
         // test is just ensuring that we've correctly identified the current
         // behavior.
         //
-        // The package name matches the recording name so no other recording
-        // test can have already created it in the user's own catalog --
-        // this test's assertion depends on the package not existing yet.
+        // Unique per test as above, and here the assertion depends on the
+        // package not existing yet.
         let recording_name = "error_from_publish_provider_when_publishing_package_not_yet_created";
         let (build_meta, env_meta, pkg_meta) = dummy_publish_metadata(recording_name);
         let (flox, _tmpdir) = flox_instance();
@@ -2635,10 +2628,8 @@ pub mod tests {
             )
             .await
             .unwrap_err();
-        // Assert on the server's own 404 detail, not just `is_err()`: a
-        // recording that no longer matches the request also fails with a 404,
-        // but one that carries no `detail` body. Only the message below
-        // proves the package was actually reported missing.
+        // A stale recording also fails with a 404, but with no `detail` body,
+        // so only the message proves the package was reported missing.
         assert!(
             matches!(err, PublishError::CatalogError(_)),
             "expected CatalogError, got: {err}"
