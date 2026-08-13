@@ -2380,7 +2380,7 @@
           "type": "object"
         },
         "ServiceStartCondition": {
-          "description": "The state a depended-on service must reach before a dependent service is\nallowed to start.\n\nSerializes to the literal condition strings that process-compose expects in\na `depends_on.<name>.condition` field.",
+          "description": "The state a depended-on service must reach before a dependent service is\nallowed to start.\n\nSerializes to the literal condition strings that process-compose expects in\na `depends_on.<name>.condition` field.\n\nprocess-compose also accepts `process_healthy`, which is deliberately not\noffered here: it only means anything once readiness probes are surfaced in\nthe manifest, so it arrives with them rather than accepting a condition that\ncan never be satisfied.",
           "oneOf": [
             {
               "const": "process_started",
