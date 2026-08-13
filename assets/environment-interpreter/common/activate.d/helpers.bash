@@ -1,8 +1,7 @@
-# jq for flox_plugin_data below. Neither the activate script's `$_jq` nor
-# any PATH lookup is guaranteed here: the wrapper (build-mode) context never
-# sets `$_jq`, and this file is sourced before PATH is finalized in both
-# contexts. Substituted at build time, like the other tool paths used across
-# activate.d.
+# jq for flox_plugin_data below. A PATH lookup is not guaranteed here: this
+# file is sourced before PATH is finalized in both the activate and the
+# wrapper (build-mode) contexts. Substituted at build time, like the other
+# tool paths used across activate.d.
 _jq="@jq@/bin/jq"
 
 # flox_plugin_data <plugin-package-name>

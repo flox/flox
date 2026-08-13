@@ -106,7 +106,7 @@ pub(crate) mod test_helpers {
     use super::{DeactivateCtx, StartupCtx};
     use crate::attach::{startup_ctx, write_to_writer};
     use crate::attach_diff::diff_serializer::{DiffSerializer, FLOX_HOOK_DIFF_VAR};
-    use crate::start_diff::StartDiff;
+    use crate::env_trace::EnvTrace;
     use crate::vars_from_env::VarsFromEnvironment;
 
     /// An environment pointer for gen_rc fixtures, serialized the way it
@@ -180,7 +180,7 @@ pub(crate) mod test_helpers {
         };
         let deleted_var = "DELETED_VAR".to_string();
         let modified_var = "MODIFIED_VAR".to_string();
-        let start_diff = StartDiff::from_parts(
+        let env_trace = EnvTrace::from_parts(
             HashMap::from([
                 ("ADDED_VAR".to_string(), "ADDED_VALUE".to_string()),
                 (modified_var.clone(), "MODIFIED_VALUE".to_string()),
@@ -204,7 +204,7 @@ pub(crate) mod test_helpers {
             act_ctx,
             invocation_type,
             rc_path,
-            start_diff,
+            env_trace,
             "TRACER",
             3,
             vars_from_env,

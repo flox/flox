@@ -17,7 +17,7 @@ use crate::attach_diff::diff_serializer::{DiffSerializer, FLOX_HOOK_DIFF_VAR};
 use crate::cli::fix_paths::{fix_manpath_var, fix_path_var};
 use crate::cli::set_env_dirs::{fix_env_dirs_var, fix_sbin_dirs_var};
 use crate::env_diff::EnvDiff;
-use crate::start_diff::StartDiff;
+use crate::env_trace::EnvTrace;
 use crate::vars_from_env::VarsFromEnvironment;
 pub const FLOX_PROMPT_ENVIRONMENTS_VAR: &str = "FLOX_PROMPT_ENVIRONMENTS";
 
@@ -84,7 +84,7 @@ impl AttachDiff {
         project: Option<&AttachProjectCtx>,
         subsystem_verbosity: u32,
         mut vars_from_env: VarsFromEnvironment,
-        start_diff: &StartDiff,
+        env_trace: &EnvTrace,
         is_in_place: bool,
     ) -> Result<Self> {
         // Extract the pre-activation snapshot before consuming vars_from_env.
@@ -96,24 +96,51 @@ impl AttachDiff {
             .collect();
         let mut double_sets = double_set_envs(context, project);
 
-        let mut non_in_place_sets: HashMap<String, String> = HashMap::new();
+        // Only non-in-place activations export these as command environment;
+        // in-place recomputes them in the generated rc script at runtime.
+        let non_in_place_sets: HashMap<String, String> = if is_in_place {
+            HashMap::new()
+        } else {
+            non_in_place_exports(context, subsystem_verbosity, vars_from_env)
+                .into_iter()
+                .map(|(k, v)| (k.to_string(), v))
+                .collect()
+        };
 
-        if !is_in_place {
-            for (k, v) in non_in_place_exports(context, subsystem_verbosity, vars_from_env) {
-                non_in_place_sets.insert(k.to_string(), v);
+        // Generate the diff that replays the trace onto the environment the
+        // replayed statements will actually execute in: the pre-activation
+        // environment overlaid with the variables set before them.
+        // Trace-recorded prepends/appends thereby extend this shell's own
+        // values (e.g. its own PATH) instead of replaying absolute values
+        // captured in the shell that ran the activate script. For in-place
+        // activations the non-in-place exports are excluded: the generated rc
+        // applies the replayed statements first and then recomputes those
+        // variables via set-env-dirs and fix-paths, so they are layered on
+        // top at runtime rather than present in the replay base.
+        let resolved = {
+            // TODO: we should probably share what vars get set with
+            // assemble_activate_command. We want to apply exactly the same
+            // "pre-vars applied via envtrace" environment
+            let mut base_env = full_env.clone();
+            base_env.extend(single_sets.clone());
+            base_env.extend(double_sets.additions.clone());
+            for var in &double_sets.deletions {
+                base_env.remove(var);
             }
-        }
+            base_env.extend(non_in_place_sets.clone());
+            env_trace.generate_diff(&base_env)
+        };
 
         // For now don't prevent users overriding our variables
         double_sets.additions.extend(
-            start_diff
-                .additions()
+            resolved
+                .additions
                 .iter()
                 .map(|(k, v)| (k.clone(), v.clone())),
         );
         double_sets
             .deletions
-            .extend(start_diff.deletions().iter().cloned());
+            .extend(resolved.deletions.iter().cloned());
 
         let encoded_diff = {
             let mut intended_sets = if is_in_place {
@@ -483,8 +510,10 @@ pub fn activate_tracer(interpreter_path: impl AsRef<Path>) -> String {
 #[cfg(test)]
 mod tests {
     use std::collections::HashSet;
+    use std::path::PathBuf;
 
     use super::*;
+    use crate::env_trace::{EnvTrace, TraceOp, TraceRecord};
 
     fn make_env(pairs: &[(&str, &str)]) -> HashMap<String, String> {
         pairs
@@ -553,5 +582,105 @@ mod tests {
         assert!(diff.added.is_empty());
         assert_eq!(diff.modified, make_env(&[("UNCHANGED", "value")]));
         assert!(diff.removed.is_empty());
+    }
+
+    fn test_attach_ctx() -> AttachCtx {
+        AttachCtx {
+            env: "/flox_env".to_string(),
+            env_cache: PathBuf::from("/flox_env_cache"),
+            env_description: "env_description".to_string(),
+            flox_active_environments: "active_envs".to_string(),
+            prompt_color_1: "1".to_string(),
+            prompt_color_2: "2".to_string(),
+            flox_prompt_environments: "prompt_envs".to_string(),
+            set_prompt: true,
+            flox_env_cuda_detection: "0".to_string(),
+            add_sbin: false,
+            interpreter_path: PathBuf::from("/interpreter"),
+        }
+    }
+
+    fn growth_env_trace() -> EnvTrace {
+        EnvTrace::from_records(vec![
+            TraceRecord {
+                op: TraceOp::Append,
+                name: "PYTHONPATH".to_string(),
+                old: Some("/start-shell".to_string()),
+                operand: Some(":/hook-added".to_string()),
+            },
+            TraceRecord {
+                op: TraceOp::Append,
+                name: "PATH".to_string(),
+                old: Some("/start-shell-path".to_string()),
+                operand: Some(":/hook-bin".to_string()),
+            },
+        ])
+    }
+
+    fn growth_vars_from_env() -> VarsFromEnvironment {
+        VarsFromEnvironment {
+            flox_env_dirs: None,
+            sbin_env_dirs: None,
+            path: Some("/usr/bin".to_string()),
+            manpath: None,
+            full_env: make_env(&[("PYTHONPATH", "/attach-shell"), ("PATH", "/usr/bin")]),
+        }
+    }
+
+    /// Trace-recorded growth extends the attaching shell's own value rather
+    /// than replaying the absolute value captured in the shell that ran the
+    /// activate script, and deactivation restores that shell's own original.
+    #[test]
+    fn trace_growth_extends_the_attaching_shells_value() {
+        let attach_diff = AttachDiff::new(
+            &test_attach_ctx(),
+            None,
+            0,
+            growth_vars_from_env(),
+            &growth_env_trace(),
+            false,
+        )
+        .unwrap();
+
+        assert_eq!(
+            attach_diff.double_sets.additions.get("PYTHONPATH"),
+            Some(&"/attach-shell:/hook-added".to_string())
+        );
+        let diff = DiffSerializer::decode(attach_diff.encoded_diff()).unwrap();
+        assert_eq!(
+            diff.modified.get("PYTHONPATH"),
+            Some(&"/attach-shell".to_string())
+        );
+        assert!(diff.modified.contains_key("PATH"));
+    }
+
+    /// The in-place mirror of the test above: the replay base is the shell's
+    /// own environment without the non-in-place exports, which the generated
+    /// rc recomputes at runtime after the replayed statements.
+    #[test]
+    fn trace_growth_extends_the_attaching_shells_value_in_place() {
+        let attach_diff = AttachDiff::new(
+            &test_attach_ctx(),
+            None,
+            0,
+            growth_vars_from_env(),
+            &growth_env_trace(),
+            true,
+        )
+        .unwrap();
+
+        assert_eq!(
+            attach_diff.double_sets.additions.get("PYTHONPATH"),
+            Some(&"/attach-shell:/hook-added".to_string())
+        );
+        let diff = DiffSerializer::decode(attach_diff.encoded_diff()).unwrap();
+        assert_eq!(
+            diff.modified.get("PYTHONPATH"),
+            Some(&"/attach-shell".to_string())
+        );
+        // In-place activations set PATH dynamically via set-env-dirs and
+        // fix-paths in the generated rc, so it is still recorded for
+        // restore-on-deactivate.
+        assert!(diff.modified.contains_key("PATH"));
     }
 }

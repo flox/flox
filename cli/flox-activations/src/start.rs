@@ -38,8 +38,12 @@ use crate::process_compose::{
     start_services_via_socket,
     wait_for_socket_ready,
 };
-use crate::start_diff::ENV_DIFF_END_JSON;
 use crate::vars_from_env::VarsFromEnvironment;
+
+/// Marker the activate script writes into the start state directory as its
+/// last act, so that a hook which exited or exec'd out — taking the rest of
+/// the script with it — is distinguishable from one that returned normally.
+const ACTIVATE_COMPLETE_MARKER: &str = "complete";
 
 /// Start a new activation because we either have a:
 /// - different store path
@@ -104,7 +108,7 @@ pub fn start(
         bail!("Running hook.on-activate failed");
     }
 
-    if !start_state_dir.join(ENV_DIFF_END_JSON).exists() {
+    if !start_state_dir.join(ACTIVATE_COMPLETE_MARKER).exists() {
         bail!(indoc! {"
             The hook.on-activate script did not complete normally.
 

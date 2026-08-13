@@ -1,5 +1,6 @@
 {
   bash,
+  bashNonInteractive,
   coreutils,
   daemonize,
   findutils,
@@ -9,6 +10,7 @@
   iconv,
   jq,
   ld-floxlib,
+  lib,
   nawk,
   process-compose,
   runCommand,
@@ -24,6 +26,31 @@
 # Build or evaluate this package with `--option pure-eval false`.
 assert (flox-activations == null) -> builtins.getEnv "FLOX_ACTIVATIONS_BIN" != null;
 let
+  # Bash patched to record every environment-visible variable mutation to the
+  # file named by BASH_ENVTRACE_FILE; the patch's header comment is the
+  # format specification (its source repo, github.com/flox/bash-envtrace,
+  # is not public).
+  # The activate script runs under this bash so that attach/detach can replay
+  # and unwind exactly the mutations performed by profile.d scripts, manifest
+  # vars, and hook.on-activate — rather than inferring them from before/after
+  # environment snapshots. The patch is vendored from bash-envtrace commit
+  # f9c06c5 (the repo is not public, so it cannot be fetched at build time).
+  # It is in the official bash-patch format (apply with -p0), which is how
+  # nixpkgs applies bash patches, and targets the bash 5.3p9 sources built by
+  # nixpkgs' bashNonInteractive.
+  # Known-stale items in the vendored patch's header comment (the copy is
+  # kept byte-identical to the source commit rather than edited locally):
+  # its <op> table omits `set-if-absent` and its control-variable list
+  # omits BASH_ENVTRACE_RESET — both are implemented by the patch and
+  # documented in cli/flox-activations/src/env_trace.rs.
+  bash-envtrace =
+    assert lib.assertMsg (lib.hasPrefix "5.3" bashNonInteractive.version)
+      "bash-5.3-envtrace.patch targets bash 5.3 but bashNonInteractive is ${bashNonInteractive.version}; regenerate the patch (see the bash-envtrace repo's regen-patch) before bumping bash";
+    bashNonInteractive.overrideAttrs (prev: {
+      pname = prev.pname + "-envtrace";
+      patches = (prev.patches or [ ]) ++ [ ./bash-5.3-envtrace.patch ];
+    });
+
   # Borrowed from previous implementation of substituteAllFiles.
   substituteAllFiles =
     args:
@@ -66,6 +93,7 @@ let
       ;
     # Note that substitution doesn't work with variables containing "-"
     # so we need to create and use alternative names.
+    bash_envtrace = bash-envtrace;
     process_compose = process-compose;
     # If the flox-activations package is available, use it,
     # otherwise copy the binary from the environment into the store,
@@ -93,6 +121,24 @@ runCommand "flox-interpreter"
     ];
   }
   ''
+    # Smoke-check the tracer before assembling anything: the patched bash
+    # must record an exported mutation and honor declared reset intent, or
+    # every attach would fail at runtime with an empty trace.
+    cat > "$TMPDIR/envtrace-smoke.sh" <<EOS
+    BASH_ENVTRACE_FILE="$TMPDIR/envtrace-smoke.trace"
+    export ENVTRACE_SMOKE=value
+    BASH_ENVTRACE_RESET=1
+    export ENVTRACE_SMOKE=value
+    unset BASH_ENVTRACE_RESET BASH_ENVTRACE_FILE
+    EOS
+    ${bash-envtrace}/bin/bash "$TMPDIR/envtrace-smoke.sh"
+    # Anchor the ops on the 0x1f field separator the Rust parser requires:
+    # without it "reset" satisfies a bare "set" pattern, and a delimiter
+    # change would pass the smoke test only to fail every attach at
+    # runtime.
+    grep -q $'\x1f'"set"$'\x1f' "$TMPDIR/envtrace-smoke.trace"
+    grep -q $'\x1f'"reset"$'\x1f' "$TMPDIR/envtrace-smoke.trace"
+
     # Create the "out" output.
     mkdir -p $out
     cp -R ${environment-interpreter-with-paths}/common/* $out --no-preserve=mode

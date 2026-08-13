@@ -17,12 +17,12 @@ use tracing::debug;
 use crate::attach_diff::{AttachDiff, activate_tracer};
 use crate::cli::activate::NO_REMOVE_ACTIVATION_FILES;
 use crate::cli::attach::{AttachArgs, AttachExclusiveArgs};
+use crate::env_trace::EnvTrace;
 use crate::gen_rc::bash::{BashStartupArgs, generate_bash_profile_commands};
 use crate::gen_rc::fish::{FishStartupArgs, generate_fish_profile_commands};
 use crate::gen_rc::tcsh::{TcshStartupArgs, generate_tcsh_profile_commands};
 use crate::gen_rc::zsh::{ZshStartupArgs, generate_zsh_profile_commands};
 use crate::gen_rc::{Action, ShellStartupArgs, StartupCtx};
-use crate::start_diff::StartDiff;
 use crate::vars_from_env::VarsFromEnvironment;
 
 pub const STARTUP_SCRIPT_PATH_OVERRIDE_VAR: &str = "_FLOX_RC_FILE_PATH";
@@ -36,7 +36,7 @@ pub fn attach(
 ) -> Result<(), anyhow::Error> {
     // Use pre-computed activation_state_dir to get start state directory
     let start_state_dir = start_id.start_state_dir(&context.activation_state_dir)?;
-    let diff = StartDiff::from_files(&start_state_dir)?;
+    let env_trace = EnvTrace::from_state_dir(&start_state_dir)?;
 
     // Create the path if we're going to need it (we won't for in-place).
     // We're doing this ahead of time here because it's shell-agnostic and the `match`
@@ -70,7 +70,7 @@ pub fn attach(
         context,
         invocation_type.clone(),
         rc_path,
-        diff,
+        env_trace,
         &tracer,
         subsystem_verbosity,
         vars_from_env,
@@ -109,7 +109,7 @@ pub(crate) fn startup_ctx(
     ctx: ActivateCtx,
     invocation_type: InvocationType,
     rc_path: Option<PathBuf>,
-    start_diff: StartDiff,
+    env_trace: EnvTrace,
     activate_tracer: &str,
     subsystem_verbosity: u32,
     vars_from_env: VarsFromEnvironment,
@@ -130,7 +130,7 @@ pub(crate) fn startup_ctx(
         ctx.project_ctx.as_ref(),
         subsystem_verbosity,
         vars_from_env,
-        &start_diff,
+        &env_trace,
         invocation_type.is_in_place(),
     )?;
 

@@ -12,7 +12,7 @@ use time::macros::format_description;
 use tracing::{debug, info};
 
 use crate::attach_diff::AttachDiff;
-use crate::start_diff::StartDiff;
+use crate::env_trace::EnvTrace;
 use crate::vars_from_env::VarsFromEnvironment;
 
 const BASH_BIN: &str = env!("X_BASH_BIN");
@@ -95,14 +95,14 @@ pub fn start_process_compose_no_services(
     // The executive inherits the pre-activation environment from activate,
     // so these values are the same as what the initial activation captured.
     let vars_from_env = VarsFromEnvironment::get()?;
-    // Load the environment diff for the activation that we're attaching to.
-    let start_diff = StartDiff::from_files(&start_state_dir)?;
+    // Load the environment trace for the activation that we're attaching to.
+    let env_trace = EnvTrace::from_state_dir(&start_state_dir)?;
     let attach_diff = AttachDiff::new(
         attach_ctx,
         Some(project),
         subsystem_verbosity,
         vars_from_env,
-        &start_diff,
+        &env_trace,
         false,
     )?;
     attach_diff.apply_to_command(&mut command);
