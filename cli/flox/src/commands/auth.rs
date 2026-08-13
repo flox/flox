@@ -1,3 +1,4 @@
+use std::fmt;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
@@ -43,10 +44,19 @@ use crate::utils::message;
 use crate::utils::openers::Browser;
 use crate::{Exit, subcommand_metric};
 
-#[derive(Debug, Default, Clone, Serialize)]
+#[derive(Default, Clone, Serialize)]
 pub struct Credential {
     pub token: String,
     pub expiry: String,
+}
+
+impl fmt::Debug for Credential {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Credential")
+            .field("token", &"***")
+            .field("expiry", &self.expiry)
+            .finish()
+    }
 }
 
 type ConfiguredClient<
@@ -641,6 +651,20 @@ mod tests {
     use uuid::Uuid;
 
     use super::*;
+
+    #[test]
+    fn credential_debug_redacts_token() {
+        let credential = Credential {
+            token: "synthetic-token".to_string(),
+            expiry: "2026-08-13T12:00:00Z".to_string(),
+        };
+
+        assert_eq!(format!("{credential:#?}"), indoc! {r#"
+                Credential {
+                    token: "***",
+                    expiry: "2026-08-13T12:00:00Z",
+                }"#});
+    }
 
     struct EventsClientReset(Option<EventsClient>);
 
