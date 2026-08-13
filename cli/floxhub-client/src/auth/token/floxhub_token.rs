@@ -10,6 +10,7 @@
 //! [`BareToken`]: crate::auth::token::BareToken
 //! [`AuthContext::new_from_token`]: crate::auth::AuthContext::new_from_token
 
+use std::fmt;
 use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
@@ -34,12 +35,21 @@ struct FloxTokenClaims {
 
 /// A token authenticating a user with FloxHub, identifying its owner
 /// locally through the Auth0 tenant's handle claim.
-#[derive(Debug, Clone, DeserializeFromStr)]
+#[derive(Clone, DeserializeFromStr)]
 pub struct FloxhubToken {
     /// The entire token as a string
     token: String,
     /// Assertions about the identity of the token's owner
     token_data: FloxTokenClaims,
+}
+
+impl fmt::Debug for FloxhubToken {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("FloxhubToken")
+            .field("token", &"***")
+            .field("token_data", &self.token_data)
+            .finish()
+    }
 }
 
 impl FloxhubToken {
@@ -194,6 +204,16 @@ mod tests {
     use super::test_helpers::*;
     use super::*;
     use crate::auth::token::test_helpers::FAKE_TOKEN_NO_HANDLE;
+
+    #[test]
+    fn floxhub_token_debug_redacts_secret() {
+        let token = FloxhubToken::new(FAKE_TOKEN.to_string()).expect("synthetic token parses");
+
+        assert_eq!(
+            format!("{token:?}"),
+            "FloxhubToken { token: \"***\", token_data: FloxTokenClaims { handle: \"test\", exp: 9999999999, sub: None } }"
+        );
+    }
 
     #[test]
     fn auth0_shaped_jwt_answers_identity_locally() {
