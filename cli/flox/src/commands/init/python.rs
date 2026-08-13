@@ -910,6 +910,10 @@ mod tests {
     }
 
     /// ProvidedVersion::Compatible should be returned for an empty pyproject.toml
+    #[cfg_attr(
+        all(target_os = "macos", target_arch = "x86_64"),
+        ignore = "catalog recordings don't cover x86_64-darwin"
+    )]
     #[tokio::test]
     async fn pyproject_empty_with_catalog() {
         let (mut flox, _temp_dir_handle) = flox_instance();
@@ -931,6 +935,10 @@ mod tests {
     }
 
     /// ProvidedVersion::Compatible should be returned for requires-python with no space.
+    #[cfg_attr(
+        all(target_os = "macos", target_arch = "x86_64"),
+        ignore = "catalog recordings don't cover x86_64-darwin"
+    )]
     #[tokio::test]
     async fn pyproject_available_version_no_space() {
         let (mut flox, _temp_dir_handle) = flox_instance();
@@ -955,6 +963,10 @@ mod tests {
     }
 
     /// ProvidedVersion::Compatible should be returned for requires-python with space.
+    #[cfg_attr(
+        all(target_os = "macos", target_arch = "x86_64"),
+        ignore = "catalog recordings don't cover x86_64-darwin"
+    )]
     #[tokio::test]
     async fn pyproject_available_version_with_space() {
         let (mut flox, _temp_dir_handle) = flox_instance();
@@ -980,6 +992,10 @@ mod tests {
         });
     }
 
+    #[cfg_attr(
+        all(target_os = "macos", target_arch = "x86_64"),
+        ignore = "catalog recordings don't cover x86_64-darwin"
+    )]
     #[tokio::test]
     async fn pyproject_available_version_eqeq() {
         let (mut flox, _temp_dir_handle) = flox_instance();
@@ -1003,6 +1019,10 @@ mod tests {
         });
     }
 
+    #[cfg_attr(
+        all(target_os = "macos", target_arch = "x86_64"),
+        ignore = "catalog recordings don't cover x86_64-darwin"
+    )]
     #[tokio::test]
     async fn pyproject_available_version_gte_lt() {
         let (mut flox, _temp_dir_handle) = flox_instance();
@@ -1029,6 +1049,10 @@ mod tests {
     }
 
     /// ProvidedVersion::Incompatible should be returned for requires-python = "1"
+    #[cfg_attr(
+        all(target_os = "macos", target_arch = "x86_64"),
+        ignore = "catalog recordings don't cover x86_64-darwin"
+    )]
     #[tokio::test]
     async fn pyproject_unavailable_version_with_catalog() {
         let (mut flox, _temp_dir_handle) = flox_instance();
@@ -1098,6 +1122,10 @@ mod tests {
     }
 
     /// ProvidedVersion::Compatible should be returned for python = "^3.7"
+    #[cfg_attr(
+        all(target_os = "macos", target_arch = "x86_64"),
+        ignore = "catalog recordings don't cover x86_64-darwin"
+    )]
     #[tokio::test]
     async fn poetry_pyproject_available_version_with_catalog() {
         let (mut flox, _temp_dir_handle) = flox_instance();
@@ -1127,6 +1155,10 @@ mod tests {
     }
 
     /// ProvidedVersion::Incompatible should be returned for python = "1"
+    #[cfg_attr(
+        all(target_os = "macos", target_arch = "x86_64"),
+        ignore = "catalog recordings don't cover x86_64-darwin"
+    )]
     #[tokio::test]
     async fn poetry_pyproject_unavailable_version_with_catalog() {
         let (mut flox, _temp_dir_handle) = flox_instance();

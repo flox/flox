@@ -1,8 +1,10 @@
 use std::collections::{HashMap, VecDeque};
 use std::fmt::Debug;
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 use std::sync::{Arc, LazyLock, Mutex};
 
+use flox_manifest::raw::DEFAULT_SYSTEMS_STR;
 use floxhub_client::{
     ApiResponseValue,
     BaseCatalogInfo,
@@ -403,13 +405,22 @@ impl CatalogClientTrait for MockClient {
 /// An alias so the flox crate doesn't have to depend on the catalog-api crate
 pub type SystemEnum = PackageSystem;
 
-/// All available systems.
-pub static ALL_SYSTEMS: [SystemEnum; 4] = [
-    SystemEnum::Aarch64Darwin,
-    SystemEnum::Aarch64Linux,
-    SystemEnum::X8664Darwin,
-    SystemEnum::X8664Linux,
-];
+/// The systems a manifest is locked for when it doesn't set
+/// `options.systems`, as [SystemEnum] rather than strings.
+///
+/// Resolving against anything wider than this asks the catalog for systems the
+/// environment being built will never contain, which can narrow the result to a
+/// page all of them share and so report an older version than is actually
+/// available.
+pub static DEFAULT_SYSTEMS: LazyLock<Vec<SystemEnum>> = LazyLock::new(|| {
+    DEFAULT_SYSTEMS_STR
+        .iter()
+        .map(|system| {
+            SystemEnum::from_str(system)
+                .unwrap_or_else(|_| panic!("'{system}' is not a known system"))
+        })
+        .collect()
+});
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum SearchTerm {

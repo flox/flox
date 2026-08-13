@@ -7,7 +7,7 @@ use flox_core::traceable_path;
 use flox_manifest::raw::CatalogPackage;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::path_environment::InitCustomization;
-use flox_rust_sdk::providers::catalog::ALL_SYSTEMS;
+use flox_rust_sdk::providers::catalog::DEFAULT_SYSTEMS;
 use floxhub_client::{CatalogClientTrait, PackageDescriptor, PackageGroup};
 use indoc::{formatdoc, indoc};
 use regex::Regex;
@@ -486,7 +486,7 @@ impl Node {
                     allow_unfree: None,
                     allowed_licenses: None,
                     allow_missing_builds: None,
-                    systems: ALL_SYSTEMS.to_vec(),
+                    systems: DEFAULT_SYSTEMS.clone(),
                 },
                 PackageDescriptor {
                     allow_broken: None,
@@ -498,7 +498,7 @@ impl Node {
                     attr_path: "nodejs".to_string(),
                     derivation: None,
                     install_id: "nodejs".to_string(), // generic "nodejs" package
-                    systems: ALL_SYSTEMS.to_vec(),
+                    systems: DEFAULT_SYSTEMS.clone(),
                     version: requested_node_version.clone(),
                 },
             ],
@@ -1126,6 +1126,10 @@ mod tests {
 
     use super::*;
 
+    #[cfg_attr(
+        all(target_os = "macos", target_arch = "x86_64"),
+        ignore = "catalog recordings don't cover x86_64-darwin"
+    )]
     #[tokio::test]
     async fn new_detection() {
         #[skip_serializing_none]
@@ -1554,6 +1558,10 @@ mod tests {
     ///////////////////////////////////////////////////////////////////////////
 
     /// Test finding yarn with no constraints succeeds
+    #[cfg_attr(
+        all(target_os = "macos", target_arch = "x86_64"),
+        ignore = "catalog recordings don't cover x86_64-darwin"
+    )]
     #[tokio::test]
     async fn try_find_compatible_yarn_no_constraints_with_catalog() {
         let (mut flox, _temp_dir_handle) = flox_instance();
@@ -1576,6 +1584,10 @@ mod tests {
     }
 
     /// Test finding yarn with the version of nixpkgs#nodejs specified succeeds
+    #[cfg_attr(
+        all(target_os = "macos", target_arch = "x86_64"),
+        ignore = "catalog recordings don't cover x86_64-darwin"
+    )]
     #[tokio::test]
     async fn try_find_compatible_yarn_node_available_with_catalog() {
         let (mut flox, _temp_dir_handle) = flox_instance();
@@ -1602,6 +1614,10 @@ mod tests {
 
     /// Test finding yarn with a version of node other than that of
     /// nixpkgs#nodejs fails
+    #[cfg_attr(
+        all(target_os = "macos", target_arch = "x86_64"),
+        ignore = "catalog recordings don't cover x86_64-darwin"
+    )]
     #[tokio::test]
     async fn try_find_compatible_yarn_node_unavailable_with_catalog() {
         let (mut flox, _temp_dir_handle) = flox_instance();
@@ -1622,6 +1638,10 @@ mod tests {
     }
 
     /// Test finding yarn with the version nixpkgs#yarn specified succeeds
+    #[cfg_attr(
+        all(target_os = "macos", target_arch = "x86_64"),
+        ignore = "catalog recordings don't cover x86_64-darwin"
+    )]
     #[tokio::test]
     async fn try_find_compatible_yarn_yarn_available_with_catalog() {
         let (mut flox, _temp_dir_handle) = flox_instance();
@@ -1643,6 +1663,10 @@ mod tests {
 
     /// Test finding yarn with a version of yarn other than that of
     /// nixpkgs#yarn fails
+    #[cfg_attr(
+        all(target_os = "macos", target_arch = "x86_64"),
+        ignore = "catalog recordings don't cover x86_64-darwin"
+    )]
     #[tokio::test]
     async fn try_find_compatible_yarn_yarn_unavailable_with_catalog() {
         let (mut flox, _temp_dir_handle) = flox_instance();
@@ -1662,6 +1686,10 @@ mod tests {
 
     /// Test finding yarn with versions of nixpkgs#yarn and nixpkgs#nodejs
     /// specified succeeds
+    #[cfg_attr(
+        all(target_os = "macos", target_arch = "x86_64"),
+        ignore = "catalog recordings don't cover x86_64-darwin"
+    )]
     #[tokio::test]
     async fn try_find_compatible_yarn_both_available_with_catalog() {
         let (mut flox, _temp_dir_handle) = flox_instance();

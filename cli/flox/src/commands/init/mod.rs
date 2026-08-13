@@ -13,7 +13,7 @@ use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::path_environment::{InitCustomization, PathEnvironment};
 use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironment;
 use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment, PathPointer};
-use flox_rust_sdk::providers::catalog::ALL_SYSTEMS;
+use flox_rust_sdk::providers::catalog::DEFAULT_SYSTEMS;
 use flox_rust_sdk::providers::git::{GitCommandProvider, GitProvider};
 use flox_rust_sdk::providers::manifest_init::ManifestInitializer;
 use floxhub_client::{CatalogClientTrait, PackageDescriptor, PackageGroup, PackageResolutionInfo};
@@ -630,7 +630,7 @@ async fn try_find_compatible_package(
                     allow_unfree: None,
                     allowed_licenses: None,
                     allow_missing_builds: None,
-                    systems: ALL_SYSTEMS.to_vec(),
+                    systems: DEFAULT_SYSTEMS.clone(),
                 }],
                 name: attr_path.to_string(),
             }])
@@ -727,7 +727,7 @@ fn group_for_single_package(attr_path: &str, version: Option<&str>) -> PackageGr
             allow_unfree: None,
             allowed_licenses: None,
             allow_missing_builds: None,
-            systems: ALL_SYSTEMS.to_vec(),
+            systems: DEFAULT_SYSTEMS.clone(),
         }],
         name: attr_path.to_string(),
     }
