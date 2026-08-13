@@ -50,7 +50,7 @@ Logs out from FloxHub.
 
 ## `status`
 
-Print your current login status.
+Print your current login status and token expiry when known.
 
 ## `token`
 
