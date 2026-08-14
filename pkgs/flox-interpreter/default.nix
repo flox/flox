@@ -1,5 +1,4 @@
 {
-  bash,
   bashNonInteractive,
   coreutils,
   daemonize,
@@ -26,18 +25,20 @@
 # Build or evaluate this package with `--option pure-eval false`.
 assert (flox-activations == null) -> builtins.getEnv "FLOX_ACTIVATIONS_BIN" != null;
 let
-  # Bash patched to record every environment-visible variable mutation to the
-  # file named by BASH_ENVTRACE_FILE; the patch's header comment is the
-  # format specification (its source repo, github.com/flox/bash-envtrace,
-  # is not public).
-  # The activate script runs under this bash so that attach/detach can replay
-  # and unwind exactly the mutations performed by profile.d scripts, manifest
-  # vars, and hook.on-activate — rather than inferring them from before/after
-  # environment snapshots. The patch is vendored from bash-envtrace commit
-  # f9c06c5 (the repo is not public, so it cannot be fetched at build time).
+  # `bash-envtrace` is bashNonInteractive plus the envtrace patch, which records
+  # every environment-visible variable mutation to the file named by
+  # BASH_ENVTRACE_FILE. The activate script (and only that script) runs
+  # under it so that attach can replay exactly the mutations performed by
+  # profile.d scripts, manifest vars, and hook.on-activate.
+  # bashNonInteractive is the base deliberately: the activate script is
+  # always headless (no readline needed), the build is the small (~3M) one,
+  # and confining the patched bash to this script keeps user-facing
+  # subshells (INTERACTIVE_BASH_BIN in flox-cli) on stock bashInteractive.
+  # The patch is vendored from bash-envtrace commit f9c06c5 (the repo,
+  # github.com/flox/bash-envtrace, is not public, so it cannot be fetched
+  # at build time); its header comment is the format specification.
   # It is in the official bash-patch format (apply with -p0), which is how
-  # nixpkgs applies bash patches, and targets the bash 5.3p9 sources built by
-  # nixpkgs' bashNonInteractive.
+  # nixpkgs applies bash patches, and targets bash 5.3p9 sources.
   # Known-stale items in the vendored patch's header comment (the copy is
   # kept byte-identical to the source commit rather than edited locally):
   # its <op> table omits `set-if-absent` and its control-variable list
@@ -84,7 +85,6 @@ let
     files = [ "." ]; # Perform recursive substitution on all files.
     # Substitute all of the following variables.
     inherit
-      bash
       coreutils
       findutils
       getopt
