@@ -6,6 +6,7 @@ use std::time::Duration;
 use flox_core::util::default_nix_env_vars;
 
 pub mod active_environments;
+pub mod auth_warning;
 pub mod colors;
 pub mod credential_store;
 pub mod detect_shell;

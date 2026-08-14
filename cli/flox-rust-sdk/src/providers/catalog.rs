@@ -618,6 +618,7 @@ pub mod test_helpers {
             // change (see the Justfile `gen-unit-data-no-publish` comment
             // for the full atomic flip checklist).
             stability: None,
+            on_unauthenticated_resolve: None,
         };
         FloxhubClient::new(catalog_config).expect("failed to create catalog client")
     }
@@ -715,6 +716,7 @@ pub mod test_helpers {
             // since nothing mutates `_FLOX_RESOLVE_STABILITY` mid-process, the
             // record and replay runs read the same value.
             stability: FloxhubClientConfig::stability_from_env(),
+            on_unauthenticated_resolve: None,
         };
         let mut client =
             FloxhubClient::new(catalog_config).expect("failed to create catalog client");
@@ -893,6 +895,7 @@ pub mod test_helpers {
             auth_context: AuthContext::Auth0(Some(admin_token)),
             user_agent: None,
             stability: None,
+            on_unauthenticated_resolve: None,
         };
         let admin_client =
             FloxhubClient::new(admin_config).expect("failed to create admin catalog client");

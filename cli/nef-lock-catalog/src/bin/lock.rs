@@ -227,6 +227,7 @@ fn build_client(config: &Config, floxhub_token: Option<String>) -> Result<Floxhu
         // `--stability` flag targets a different endpoint entirely, so it
         // does not participate in the `_FLOX_RESOLVE_STABILITY` mechanism.
         stability: None,
+        on_unauthenticated_resolve: None,
     };
 
     Ok(FloxhubClient::new(config)?)
