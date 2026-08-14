@@ -317,6 +317,16 @@ impl CatalogClientTrait for FloxhubClient {
         package_groups: Vec<PackageGroup>,
     ) -> Result<Vec<ResolvedPackageGroup>, ResolveError> {
         tracing::debug!(n_groups = package_groups.len(), "resolving package groups");
+
+        // This is the call that will require authentication once catalog auth
+        // gating is enforced server-side, so an unauthenticated request is
+        // reported here — not per command — via the configured hook.
+        if self.config.auth_context.is_unauthenticated()
+            && let Some(hook) = &self.config.on_unauthenticated_resolve
+        {
+            hook.call();
+        }
+
         let package_groups = api_types::PackageGroups {
             items: package_groups
                 .into_iter()
@@ -926,6 +936,7 @@ pub mod test_helpers {
             auth_context: AuthContext::new_from_token(None).expect("no token to parse"),
             user_agent: None,
             stability: None,
+            on_unauthenticated_resolve: None,
         }
     }
 
@@ -956,6 +967,7 @@ pub mod tests {
 
     use super::test_helpers::client_config;
     use super::*;
+    use crate::config::UnauthenticatedResolveHook;
     const SENTRY_TRACE_HEADER: &str = "sentry-trace";
 
     #[tokio::test(flavor = "multi_thread")]
@@ -1138,6 +1150,67 @@ pub mod tests {
             .await
             .unwrap();
         mock.assert();
+    }
+
+    /// `resolve()` fires `on_unauthenticated_resolve` before contacting the
+    /// server when no authentication material is available.
+    #[tokio::test]
+    async fn resolve_fires_unauthenticated_hook_when_logged_out() {
+        let server = MockServer::start_async().await;
+        let mock = server.mock(|when, then| {
+            when.method("POST").path("/api/v1/catalog/resolve");
+            then.status(200).json_body(json!({"items": []}));
+        });
+
+        let fired = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let fired_in_hook = std::sync::Arc::clone(&fired);
+        let config = FloxhubClientConfig {
+            on_unauthenticated_resolve: Some(UnauthenticatedResolveHook::new(move || {
+                fired_in_hook.store(true, std::sync::atomic::Ordering::SeqCst);
+            })),
+            ..client_config(&server.base_url())
+        };
+        let client = FloxhubClient::new(config).unwrap();
+        client
+            .resolve(vec![PackageGroup {
+                name: "group".to_string(),
+                descriptors: vec![],
+            }])
+            .await
+            .unwrap();
+        mock.assert();
+        assert!(fired.load(std::sync::atomic::Ordering::SeqCst));
+    }
+
+    /// `resolve()` does not fire `on_unauthenticated_resolve` when the client
+    /// carries authentication material.
+    #[tokio::test]
+    async fn resolve_skips_unauthenticated_hook_when_authenticated() {
+        let server = MockServer::start_async().await;
+        let mock = server.mock(|when, then| {
+            when.method("POST").path("/api/v1/catalog/resolve");
+            then.status(200).json_body(json!({"items": []}));
+        });
+
+        let fired = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let fired_in_hook = std::sync::Arc::clone(&fired);
+        let config = FloxhubClientConfig {
+            auth_context: AuthContext::new_from_token(Some("flox_pat_test")).unwrap(),
+            on_unauthenticated_resolve: Some(UnauthenticatedResolveHook::new(move || {
+                fired_in_hook.store(true, std::sync::atomic::Ordering::SeqCst);
+            })),
+            ..client_config(&server.base_url())
+        };
+        let client = FloxhubClient::new(config).unwrap();
+        client
+            .resolve(vec![PackageGroup {
+                name: "group".to_string(),
+                descriptors: vec![],
+            }])
+            .await
+            .unwrap();
+        mock.assert();
+        assert!(!fired.load(std::sync::atomic::Ordering::SeqCst));
     }
 
     #[tokio::test]

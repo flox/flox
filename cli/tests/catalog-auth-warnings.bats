@@ -1,0 +1,127 @@
+#! /usr/bin/env bats
+# -*- mode: bats; -*-
+# ============================================================================ #
+#
+# Tests for DEV-199: warn unauthenticated users at the point of contacting the
+# catalog /resolve endpoint — the call that will require authentication once
+# catalog auth gating is enforced server-side.
+#
+# Commands that never resolve (fully locked environments, empty manifests)
+# must stay quiet; any command that triggers a resolve warns, rate-limited to
+# once per 8 hours via a timestamp file in the cache directory.
+#
+# bats file_tags=catalog-auth-warnings
+#
+# ---------------------------------------------------------------------------- #
+
+load test_support.bash
+
+# ---------------------------------------------------------------------------- #
+
+RESOLVE_AUTH_WARNING="Resolving packages will require authentication to FloxHub in an upcoming release."
+STAMP_FILE_NAME="resolve-auth-warning-timestamp.json"
+
+project_setup() {
+  export PROJECT_NAME="test"
+  export PROJECT_DIR="${BATS_TEST_TMPDIR?}/$PROJECT_NAME"
+  rm -rf "$PROJECT_DIR"
+  mkdir -p "$PROJECT_DIR"
+  pushd "$PROJECT_DIR" > /dev/null || return
+}
+
+project_teardown() {
+  popd > /dev/null || return
+  rm -rf "${PROJECT_DIR?}"
+  unset PROJECT_DIR
+}
+
+setup() {
+  common_test_setup
+  setup_isolated_flox
+  project_setup
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml"
+}
+
+teardown() {
+  project_teardown
+  common_test_teardown
+}
+
+# ---------------------------------------------------------------------------- #
+# Warn on resolve
+# ---------------------------------------------------------------------------- #
+
+@test "resolving while logged out prints the auth warning" {
+  # The suite runs "logged in" by default; this test needs the logged-out state.
+  unset FLOX_FLOXHUB_TOKEN
+  flox_init_pinned
+  run "$FLOX_BIN" install hello
+  assert_success
+  assert_output --partial "$RESOLVE_AUTH_WARNING"
+}
+
+@test "resolving while logged in does NOT print the auth warning" {
+  flox_init_pinned
+  run "$FLOX_BIN" install hello
+  assert_success
+  refute_output --partial "$RESOLVE_AUTH_WARNING"
+}
+
+@test "'-q' suppresses the auth warning" {
+  unset FLOX_FLOXHUB_TOKEN
+  flox_init_pinned
+  run "$FLOX_BIN" -q install hello
+  assert_success
+  refute_output --partial "$RESOLVE_AUTH_WARNING"
+}
+
+# ---------------------------------------------------------------------------- #
+# No resolve, no warning
+# ---------------------------------------------------------------------------- #
+
+@test "'flox init' with nothing to resolve does NOT print the auth warning" {
+  unset FLOX_FLOXHUB_TOKEN
+  run "$FLOX_BIN" init
+  assert_success
+  refute_output --partial "$RESOLVE_AUTH_WARNING"
+}
+
+@test "'flox activate' with existing lockfile does NOT print the auth warning" {
+  # Lock the environment while logged in, then activate logged out: the
+  # lockfile means no resolve happens, so no warning — the case that must
+  # stay quiet for `flox activate` in shell rc files.
+  flox_init_pinned
+  "$FLOX_BIN" install hello
+  unset FLOX_FLOXHUB_TOKEN
+  run "$FLOX_BIN" activate -- true
+  assert_success
+  refute_output --partial "$RESOLVE_AUTH_WARNING"
+}
+
+# ---------------------------------------------------------------------------- #
+# Rate limiting
+# ---------------------------------------------------------------------------- #
+
+@test "a second resolve within the rate-limit window does NOT warn again" {
+  unset FLOX_FLOXHUB_TOKEN
+  flox_init_pinned
+  run "$FLOX_BIN" install hello
+  assert_output --partial "$RESOLVE_AUTH_WARNING"
+  # Force a fresh resolve by removing the lockfile.
+  rm .flox/env/manifest.lock
+  run "$FLOX_BIN" list
+  assert_success
+  refute_output --partial "$RESOLVE_AUTH_WARNING"
+}
+
+@test "a resolve after the rate-limit window expires warns again" {
+  unset FLOX_FLOXHUB_TOKEN
+  flox_init_pinned
+  "$FLOX_BIN" install hello
+  # Backdate the stamp beyond the 8 hour window.
+  echo '{"last_warning":"2020-01-01T00:00:00Z"}' > "$FLOX_CACHE_DIR/$STAMP_FILE_NAME"
+  rm .flox/env/manifest.lock
+  run "$FLOX_BIN" list
+  assert_success
+  assert_output --partial "$RESOLVE_AUTH_WARNING"
+}

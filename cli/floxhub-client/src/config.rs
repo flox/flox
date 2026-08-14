@@ -2,8 +2,38 @@
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use crate::AuthContext;
+
+/// Hook invoked by [`crate::FloxhubClient::resolve`] just before it contacts
+/// the catalog `/resolve` endpoint without authentication material (see
+/// [`AuthContext::is_unauthenticated`]).
+///
+/// The CLI installs a hook that warns that resolution will require
+/// authentication in an upcoming release; rate limiting and output routing
+/// live in that hook, not here. Consumers with no user to warn (tests, batch
+/// tools) leave the config field unset. This call site is also where an
+/// interactive "log in now?" prompt will live once catalog auth gating is
+/// enforced server-side.
+#[derive(Clone)]
+pub struct UnauthenticatedResolveHook(Arc<dyn Fn() + Send + Sync>);
+
+impl UnauthenticatedResolveHook {
+    pub fn new(hook: impl Fn() + Send + Sync + 'static) -> Self {
+        Self(Arc::new(hook))
+    }
+
+    pub fn call(&self) {
+        (self.0)()
+    }
+}
+
+impl std::fmt::Debug for UnauthenticatedResolveHook {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("UnauthenticatedResolveHook")
+    }
+}
 
 /// Configuration for FloxHub client construction.
 ///
@@ -24,6 +54,9 @@ pub struct FloxhubClientConfig {
     /// `resolve()`. Test/regen-only — not a user-facing interface. See
     /// [`crate::FLOX_RESOLVE_STABILITY_VAR`] and [`Self::stability_from_env`].
     pub stability: Option<String>,
+    /// Invoked when `resolve()` is called without authentication material;
+    /// `None` disables the unauthenticated-resolve warning.
+    pub on_unauthenticated_resolve: Option<UnauthenticatedResolveHook>,
 }
 
 impl FloxhubClientConfig {

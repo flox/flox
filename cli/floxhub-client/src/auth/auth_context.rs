@@ -150,10 +150,10 @@ impl AuthContext {
     /// Returns true when no authentication material is available and a
     /// future catalog-auth-gated call would fail.
     ///
-    /// Currently only `Auth0(None)` (not logged in via the default flow) is
-    /// considered unauthenticated for the purpose of Milestone 1 deprecation
-    /// warnings. `Kerberos(None)`, `AccessToken`, and `Auth0(Some(expired))`
-    /// are outside the scope of this milestone.
+    /// Only `Auth0(None)` (not logged in via the default flow) counts.
+    /// `Kerberos(..)` does not require a FloxHub login, `AccessToken` carries
+    /// its own material, and `Auth0(Some(expired))` is still validated
+    /// server-side, so none of them are treated as unauthenticated here.
     pub fn is_unauthenticated(&self) -> bool {
         matches!(self, AuthContext::Auth0(None))
     }
