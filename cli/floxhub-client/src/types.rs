@@ -49,6 +49,9 @@ pub use api_types::{
     UnresolvableEntry,
     UnresolvableLeaf,
 };
+// Command lookup. Unlike search, by-command is unpaginated, so the generated
+// result type is already the whole answer and needs no `ResultsPage` wrapper.
+pub use api_types::{ByCommandResult, CommandProvider};
 // ---------------------------------------------------------------------------
 // Package descriptors
 // ---------------------------------------------------------------------------

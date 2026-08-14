@@ -17,6 +17,14 @@ pub enum SearchError {
 }
 
 #[derive(Debug, Error)]
+pub enum ByCommandError {
+    #[error("invalid command name")]
+    InvalidCommandName(#[source] api_error::ConversionError),
+    #[error("catalog error")]
+    FloxhubClientError(#[from] FloxhubClientError),
+}
+
+#[derive(Debug, Error)]
 pub enum ResolveError {
     #[error("catalog error")]
     FloxhubClientError(#[from] FloxhubClientError),

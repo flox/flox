@@ -9,6 +9,8 @@ use floxhub_client::{
     BaseCatalogUrl,
     BuildInputsLookupRequest,
     BuildInputsLookupResponse,
+    ByCommandError,
+    ByCommandResult,
     CatalogClientTrait,
     CatalogStoreConfig,
     CheckBuildQuery,
@@ -85,6 +87,7 @@ pub enum Response {
     CreatePackage,
     PublishBuild,
     GetBaseCatalog(BaseCatalogInfo),
+    ByCommand(ByCommandResult),
 }
 
 #[derive(Debug, Error)]
@@ -246,6 +249,28 @@ impl CatalogClientTrait for MockClient {
                 )),
             )),
             _ => panic!("expected search response, found {:?}", &mock_resp),
+        }
+    }
+
+    async fn by_command(
+        &self,
+        _command_name: impl AsRef<str> + Send + Sync,
+        _system: PackageSystem,
+    ) -> Result<ByCommandResult, ByCommandError> {
+        let mock_resp = self
+            .mock_responses
+            .lock()
+            .expect("couldn't acquire mock lock")
+            .pop_front();
+        match mock_resp {
+            Some(Response::ByCommand(resp)) => Ok(resp),
+            Some(Response::Error(err)) => Err(ByCommandError::FloxhubClientError(
+                FloxhubClientError::APIError(floxhub_client::ApiError::ErrorResponse(
+                    err.try_into()
+                        .expect("couldn't convert mock error response"),
+                )),
+            )),
+            _ => panic!("expected by_command response, found {:?}", &mock_resp),
         }
     }
 
