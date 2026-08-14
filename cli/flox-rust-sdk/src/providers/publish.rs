@@ -2662,7 +2662,8 @@ pub mod tests {
     // publish test mocks.
     #[tokio::test(flavor = "multi_thread")]
     async fn retrieves_base_catalog_url() {
-        let (_build_meta, env_meta, _pkg_meta) = dummy_publish_metadata("mypkg2");
+        // `pkg_meta` is discarded, so this name never reaches the catalog.
+        let (_build_meta, env_meta, _pkg_meta) = dummy_publish_metadata("unused");
         let (flox, _tmpdir) = flox_instance();
         let (flox, _auth) = auto_recording_catalog_client_for_authed_local_services(
             flox,
@@ -2679,12 +2680,15 @@ pub mod tests {
     // without first needing to pay and create an organization.
     #[tokio::test(flavor = "multi_thread")]
     async fn publishes_new_package_for_users_default_catalog_and_creates_catalog() {
-        let (build_meta, env_meta, pkg_meta) = dummy_publish_metadata("mypkg3");
+        // Name the package after the recording so no other test can collide
+        // with it in the live catalog DB.
+        let recording_name = "publish_provider_publishes_package_in_users_catalog";
+        let (build_meta, env_meta, pkg_meta) = dummy_publish_metadata(recording_name);
         let (flox, _tmpdir) = flox_instance();
         let (flox, auth) = auto_recording_catalog_client_for_authed_local_services(
             flox,
             PublishTestUser::NoCatalogs,
-            "publish_provider_publishes_package_in_users_catalog",
+            recording_name,
         );
         let user_handle = flox.auth_context.handle().unwrap();
         let publish_provider = PublishProvider::new(env_meta, pkg_meta, auth);
@@ -2712,12 +2716,15 @@ pub mod tests {
     // (2) they have write permissions.
     #[tokio::test(flavor = "multi_thread")]
     async fn publishes_new_package_for_org_catalog() {
-        let (build_meta, env_meta, pkg_meta) = dummy_publish_metadata("mypkg4");
+        // Unique per test as above: the org catalog is a shared fixture, the
+        // package inside it must not be.
+        let recording_name = "publish_provider_creates_package_in_org_catalog";
+        let (build_meta, env_meta, pkg_meta) = dummy_publish_metadata(recording_name);
         let (flox, _tmpdir) = flox_instance();
         let (flox, auth) = auto_recording_catalog_client_for_authed_local_services(
             flox,
             PublishTestUser::WithCatalogs,
-            "publish_provider_creates_package_in_org_catalog",
+            recording_name,
         );
         let publish_provider = PublishProvider::new(env_meta, pkg_meta, auth);
         let packaged_created_guard = publish_provider
@@ -2750,12 +2757,14 @@ pub mod tests {
     // exactly that exchange.
     #[tokio::test(flavor = "multi_thread")]
     async fn error_publishing_to_read_only_catalog() {
-        let (_build_meta, env_meta, pkg_meta) = dummy_publish_metadata("mypkg5");
+        // The 403 lands before the package reaches the catalog DB.
+        let recording_name = "publish_provider_error_when_user_only_has_read_access_to_catalog";
+        let (_build_meta, env_meta, pkg_meta) = dummy_publish_metadata(recording_name);
         let (flox, _tmpdir) = flox_instance();
         let (flox, auth) = auto_recording_catalog_client_for_authed_local_services(
             flox,
             PublishTestUser::WithCatalogs,
-            "publish_provider_error_when_user_only_has_read_access_to_catalog",
+            recording_name,
         );
         let publish_provider = PublishProvider::new(env_meta, pkg_meta, auth);
         let err = publish_provider
@@ -2776,12 +2785,15 @@ pub mod tests {
         // This test is ensuring that you can publish a package with the same
         // metadata more than once. Whether that makes sense is a separate
         // concern, so this test is just identifying current behavior.
-        let (build_meta, env_meta, pkg_meta) = dummy_publish_metadata("mypkg6");
+        //
+        // Unique per test as above.
+        let recording_name = "repeat_publish_of_existing_package_succeeds";
+        let (build_meta, env_meta, pkg_meta) = dummy_publish_metadata(recording_name);
         let (flox, _tmpdir) = flox_instance();
         let (flox, auth) = auto_recording_catalog_client_for_authed_local_services(
             flox,
             PublishTestUser::WithCatalogs,
-            "repeat_publish_of_existing_package_succeeds",
+            recording_name,
         );
         let publish_provider = PublishProvider::new(env_meta, pkg_meta, auth);
         let packaged_created_guard = publish_provider
@@ -2827,18 +2839,23 @@ pub mod tests {
         // `create_package`. We have a guard that prevents this, so again this
         // test is just ensuring that we've correctly identified the current
         // behavior.
-        let (build_meta, env_meta, pkg_meta) = dummy_publish_metadata("mypkg7");
+        //
+        // Unique per test as above, and here the assertion depends on the
+        // package not existing yet.
+        let recording_name = "error_from_publish_provider_when_publishing_package_not_yet_created";
+        let (build_meta, env_meta, pkg_meta) = dummy_publish_metadata(recording_name);
         let (flox, _tmpdir) = flox_instance();
         let (flox, auth) = auto_recording_catalog_client_for_authed_local_services(
             flox,
             PublishTestUser::WithCatalogs,
-            "error_from_publish_provider_when_publishing_package_not_yet_created",
+            recording_name,
         );
+        let user_handle = flox.auth_context.handle().unwrap();
         let publish_provider = PublishProvider::new(env_meta, pkg_meta, auth);
-        let res = publish_provider
+        let err = publish_provider
             .publish(
                 &flox.floxhub_client,
-                &flox.auth_context.handle().unwrap(),
+                &user_handle,
                 PackageCreatedGuard { _private: () },
                 &build_meta,
                 None,
@@ -2846,8 +2863,20 @@ pub mod tests {
                 // from FIXED_TEST_STORE_PATH in the local daemon store.
                 false,
             )
-            .await;
-        assert!(res.is_err());
+            .await
+            .unwrap_err();
+        // A stale recording also fails with a 404, but with no `detail` body,
+        // so only the message proves the package was reported missing.
+        assert!(
+            matches!(err, PublishError::CatalogError(_)),
+            "expected CatalogError, got: {err}"
+        );
+        assert_eq!(
+            err.to_string(),
+            format!(
+                "404 Not Found: The package with name {recording_name} in catalog {user_handle} was not found"
+            )
+        );
     }
 
     // ---- gather_build_repo_meta error differentiation tests ----

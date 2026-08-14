@@ -10,13 +10,13 @@ then:
   - name: server
     value: uvicorn
   - name: content-length
-    value: '71'
+    value: '116'
   - name: content-type
     value: application/json
-  body: '{"catalog":"test_user_no_catalogs","name":"mypkg3","original_url":null}'
+  body: '{"catalog":"test_user_no_catalogs","name":"publish_provider_publishes_package_in_users_catalog","original_url":null}'
 ---
 when:
-  path: /api/v1/catalog/catalogs/test_user_no_catalogs/packages/mypkg3/publish/info
+  path: /api/v1/catalog/catalogs/test_user_no_catalogs/packages/publish_provider_publishes_package_in_users_catalog/publish/info
   method: POST
   body: '{}'
 then:
@@ -33,7 +33,7 @@ then:
   body: '{"ingress_uri":null,"ingress_auth":null,"catalog_store_config":{"store_type":"meta-only"}}'
 ---
 when:
-  path: /api/v1/catalog/catalogs/test_user_no_catalogs/packages/mypkg3/builds
+  path: /api/v1/catalog/catalogs/test_user_no_catalogs/packages/publish_provider_publishes_package_in_users_catalog/builds
   method: POST
   json_body_includes:
   - build_type: manifest
@@ -41,11 +41,11 @@ when:
       broken: false
       description: dummy
       drv_path: dummy
-      name: mypkg3
+      name: publish_provider_publishes_package_in_users_catalog
       outputs:
       - name: out
         store_path: /nix/store/xfigz788kjqvyyxdnyvycs0bfc6cdjp3-cli-128-fixed-empty
-      pname: mypkg3
+      pname: publish_provider_publishes_package_in_users_catalog
       system: x86_64-linux
       version: 1.0.0
     dot_flox_dir: ''
