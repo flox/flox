@@ -136,6 +136,19 @@ pub(crate) struct MockRecorder {
 
 impl Drop for MockRecorder {
     fn drop(&mut self) {
+        // A panicking test has only recorded the exchanges up to the point it
+        // failed, so writing here would replace a good committed cassette with
+        // a partial one — and the resulting file is only detected later, as an
+        // unrelated 404 from the next replay run. Leave the cassette alone and
+        // let the test failure be the signal.
+        if std::thread::panicking() {
+            debug!(
+                path = ?self.path,
+                "test panicked, discarding partial mock recording"
+            );
+            return;
+        }
+
         // `save` and `save_to` append a timestamp, so we rename after write.
         // https://github.com/alexliesenfeld/httpmock/issues/115
         let tempfile = self
