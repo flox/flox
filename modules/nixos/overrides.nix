@@ -122,11 +122,7 @@ let
         requires = [ "flox-pull@${name}.service" ];
         serviceConfig = mkMerge [
           {
-            Environment = [
-              "FLOX_DISABLE_METRICS=true"
-              "HOME=${WorkingDirectory}"
-              "SHELL=${pkgs.runtimeShell}"
-            ];
+            Environment = common.serviceEnvironment pkgs.runtimeShell WorkingDirectory;
             ExecStart = mkForce "${execStart}";
           }
           (mkIf (fCfg.floxHubTokenFile != null) {
@@ -154,7 +150,7 @@ in
       }) floxManagedServices
       ++ mapAttrsToList (name: svc: {
         assertion = !(svc.serviceConfig.DynamicUser or false);
-        message = "systemd.services.${name}: the Flox override does not support DynamicUser.";
+        message = "systemd.services.${name}: the Flox override does not support DynamicUser. Set systemd.services.${name}.serviceConfig.DynamicUser = lib.mkForce false and configure a static User and Group.";
       }) floxManagedServices;
 
     # Provisioning, scheduled pulls and restart-on-change are handled by

@@ -20,6 +20,9 @@ let
     types
     ;
 
+  # Options common to both Flox module types.
+  common = import ./common.nix { inherit lib; };
+
   pullConfigs = config.services.flox.pull.configs;
 
   # One pull script per managed service, keyed by systemd instance name.
@@ -64,7 +67,7 @@ let
       # (including an exported FLOX_FLOXHUB_TOKEN).
       as_user() {
         setpriv --reuid "$user" --regid "$group" --init-groups \
-          env HOME="$workdir" SHELL=${pkgs.runtimeShell} FLOX_DISABLE_METRICS=true "$@"
+          env ${escapeShellArgs (common.serviceEnvironment pkgs.runtimeShell cfg.workingDirectory)} "$@"
       }
 
       # Fingerprint of the local generation history, used to detect whether

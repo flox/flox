@@ -110,7 +110,21 @@ let
     };
   };
 
+  # Environment for every process that invokes flox on behalf of a service.
+  # flox resolves its directories from the XDG base directories, whose
+  # defaults come from the passwd database rather than $HOME, so each XDG
+  # variable is pinned beneath the working directory explicitly.
+  serviceEnvironment = shell: workingDirectory: [
+    "FLOX_DISABLE_METRICS=true"
+    "HOME=${workingDirectory}"
+    "SHELL=${shell}"
+    "XDG_CACHE_HOME=${workingDirectory}/.cache"
+    "XDG_CONFIG_HOME=${workingDirectory}/.config"
+    "XDG_DATA_HOME=${workingDirectory}/.local/share"
+    "XDG_STATE_HOME=${workingDirectory}/.local/state"
+  ];
+
 in
 {
-  inherit floxServiceOpts floxModuleOpts;
+  inherit floxServiceOpts floxModuleOpts serviceEnvironment;
 }

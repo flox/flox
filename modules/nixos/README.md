@@ -55,6 +55,21 @@ from a Flox perspective, the overrides approach makes it possible to leverage th
 full capabilities of the NixOS module subsystem, as well as the hundreds
 of existing NixOS modules maintained by the Nix community.
 
+Units using `DynamicUser` are not supported:
+the environment is provisioned before the service starts,
+so it must be owned by a static user.
+For such units, force `DynamicUser` off and configure a static
+user and group:
+```nix
+  users.users.echoip = { isSystemUser = true; group = "echoip"; };
+  users.groups.echoip = { };
+  systemd.services.echoip.serviceConfig = {
+    DynamicUser = lib.mkForce false;
+    User = "echoip";
+    Group = "echoip";
+  };
+```
+
 ## How environments are provisioned and updated
 
 Each service gets a working directory beneath `stateDir`

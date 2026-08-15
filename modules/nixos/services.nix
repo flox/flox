@@ -195,11 +195,7 @@ in
           User = serviceUser name aCfg;
           Group = serviceGroup name aCfg;
           WorkingDirectory = workingDirectory name;
-          Environment = [
-            "FLOX_DISABLE_METRICS=true"
-            "HOME=${workingDirectory name}"
-            "SHELL=${pkgs.runtimeShell}"
-          ];
+          Environment = common.serviceEnvironment pkgs.runtimeShell (workingDirectory name);
           ExecStart = "${startScript name aCfg}";
           Restart = "on-failure";
         }
