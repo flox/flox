@@ -36,6 +36,12 @@ let
             autoPull.enable = true;
           };
         };
+        # Exercises the makeJobScript path, which the execStart sample
+        # above leaves unevaluated.
+        systemd.services.sample-script.flox = {
+          environment = "flox/sample";
+          script = "sample --flag";
+        };
       }
     ];
   };
@@ -47,6 +53,7 @@ let
     "flox-autopull@sample.timer"
     "sample-override.service"
     "flox-autopull@sample-override.timer"
+    "sample-script.service"
   ];
 
   # The NixOS manual renders all option descriptions on real systems, so

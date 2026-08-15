@@ -55,6 +55,13 @@ let
       chmod ${workingDirectoryMode} "$workdir"
       cd "$workdir"
 
+      # Serialize pulls against this working directory: a service-start pull
+      # (flox-pull@) and a scheduled pull (flox-autopull@) are separate
+      # units and may otherwise run concurrently, e.g. when a persistent
+      # timer fires its catch-up run around boot.
+      exec 9>.flox-pull.lock
+      flock 9
+
       ${optionalString (cfg.floxHubTokenFile != null) ''
         # Export the FloxHub token for the flox invocations below. The token
         # must only ever travel through the environment: putting it on a

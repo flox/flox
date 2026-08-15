@@ -55,6 +55,15 @@ from a Flox perspective, the overrides approach makes it possible to leverage th
 full capabilities of the NixOS module subsystem, as well as the hundreds
 of existing NixOS modules maintained by the Nix community.
 
+The overridden `ExecStart` runs the command inside `flox activate`,
+so the process systemd tracks is the activation wrapper rather than
+the daemon itself.
+Units with `Type=simple` or `Type=exec` work as expected.
+`Type=forking` is not supported (PID tracking would point at the
+wrapper), and `Type=notify` units only become ready if systemd is
+allowed to accept readiness notifications from child processes
+(`NotifyAccess=all`).
+
 Units using `DynamicUser` are not supported:
 the environment is provisioned before the service starts,
 so it must be owned by a static user.
