@@ -111,13 +111,17 @@ let
   };
 
   # Environment for every process that invokes flox on behalf of a service.
-  # flox resolves its directories from the XDG base directories, whose
-  # defaults come from the passwd database rather than $HOME, so each XDG
-  # variable is pinned beneath the working directory explicitly.
-  serviceEnvironment = shell: workingDirectory: [
+  # USER must match the passwd name of the invoking uid: when it does not
+  # (e.g. under setpriv or a oneshot unit), flox resets HOME from the
+  # passwd database, discarding the working-directory HOME set here. The
+  # XDG variables are additionally pinned beneath the working directory so
+  # flox state stays with the service even if HOME is reset anyway.
+  serviceEnvironment = shell: workingDirectory: user: [
     "FLOX_DISABLE_METRICS=true"
     "HOME=${workingDirectory}"
+    "LOGNAME=${user}"
     "SHELL=${shell}"
+    "USER=${user}"
     "XDG_CACHE_HOME=${workingDirectory}/.cache"
     "XDG_CONFIG_HOME=${workingDirectory}/.config"
     "XDG_DATA_HOME=${workingDirectory}/.local/share"

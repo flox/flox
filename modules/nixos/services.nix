@@ -195,7 +195,9 @@ in
           User = serviceUser name aCfg;
           Group = serviceGroup name aCfg;
           WorkingDirectory = workingDirectory name;
-          Environment = common.serviceEnvironment pkgs.runtimeShell (workingDirectory name);
+          Environment = common.serviceEnvironment pkgs.runtimeShell (workingDirectory name) (
+            serviceUser name aCfg
+          );
           ExecStart = "${startScript name aCfg}";
           Restart = "on-failure";
         }

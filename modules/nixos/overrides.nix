@@ -122,7 +122,9 @@ let
         requires = [ "flox-pull@${name}.service" ];
         serviceConfig = mkMerge [
           {
-            Environment = common.serviceEnvironment pkgs.runtimeShell WorkingDirectory;
+            Environment = common.serviceEnvironment pkgs.runtimeShell WorkingDirectory (
+              toString (config.serviceConfig.User or "root")
+            );
             ExecStart = mkForce "${execStart}";
           }
           (mkIf (fCfg.floxHubTokenFile != null) {

@@ -67,7 +67,9 @@ let
       # (including an exported FLOX_FLOXHUB_TOKEN).
       as_user() {
         setpriv --reuid "$user" --regid "$group" --init-groups \
-          env ${escapeShellArgs (common.serviceEnvironment pkgs.runtimeShell cfg.workingDirectory)} "$@"
+          env ${
+            escapeShellArgs (common.serviceEnvironment pkgs.runtimeShell cfg.workingDirectory cfg.user)
+          } "$@"
       }
 
       # Fingerprint of the local generation history, used to detect whether
