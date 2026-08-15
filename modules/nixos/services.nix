@@ -104,6 +104,11 @@ let
         FLOX_FLOXHUB_TOKEN="$(cat "$CREDENTIALS_DIRECTORY/floxhub_token")"
         export FLOX_FLOXHUB_TOKEN
       fi
+      # By the time systemd runs ExecStart the previous instance's cgroup is
+      # gone, so any process-compose socket in this service's private cache
+      # is stale. Left in place it prevents services from starting again
+      # after an unclean shutdown.
+      rm -f ${workingDirectory name}/.cache/flox/run/*.sock
       exec ${activateCmd} -- ${logsCmd}
     '';
 
