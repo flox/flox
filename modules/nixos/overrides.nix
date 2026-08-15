@@ -131,6 +131,13 @@ let
               toString (config.serviceConfig.User or "root")
             );
             ExecStart = mkForce "${execStart}";
+            # Upstream modules commonly harden their units with
+            # ProtectSystem=strict; the activation must still be able to
+            # write the working directory and reach the nix daemon.
+            ReadWritePaths = [
+              WorkingDirectory
+              "/nix/var/nix/daemon-socket"
+            ];
           }
           (mkIf (fCfg.floxHubTokenFile != null) {
             LoadCredential = [ "floxhub_token:${fCfg.floxHubTokenFile}" ];
