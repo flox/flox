@@ -1,59 +1,78 @@
 { lib, ... }:
 
 let
-  inherit (lib) mdDoc mkOption types;
+  inherit (lib) mkOption types;
 
+  # Options shared by both the Services method (`services.flox.activations`)
+  # and the Overrides method (`systemd.services.<name>.flox`). The
+  # `environment` option is declared separately by each method: it is
+  # required for activations, while for overrides a null value means the
+  # unit is left untouched.
   floxServiceOpts = {
-    environment = mkOption {
-      type = types.nullOr types.str;
-      default = null;
-      example = "flox/default";
-      description = mdDoc "The Flox environment to use for the service";
-    };
     trustEnvironment = mkOption {
       type = types.bool;
       default = false;
-      description = mdDoc "Whether to trust the environment using invocation option";
+      description = "Whether to pass `--trust` when activating the environment.";
     };
     floxHubTokenFile = mkOption {
       type = types.nullOr types.path;
       default = null;
       example = "/run/secrets/floxhub/secret.token";
-      description = mdDoc "Full path to the FloxHub token file";
+      description = ''
+        Full path to a file containing a FloxHub token.
+        The token is exported to `flox` via the `FLOX_FLOXHUB_TOKEN`
+        environment variable and never appears on a command line or in a
+        configuration file.
+        The file must be readable by root; the service itself receives the
+        token through a systemd credential.
+      '';
     };
     extraFloxArgs = mkOption {
       type = types.listOf types.str;
       default = [ ];
-      example = [ "-v -v" ];
-      description = mdDoc "Additional arguments to pass to `flox`";
+      example = [
+        "-v"
+        "-v"
+      ];
+      description = "Additional arguments to pass to every `flox` invocation.";
     };
     extraFloxActivateArgs = mkOption {
       type = types.listOf types.str;
       default = [ ];
-      example = [ "--mode dev" ];
-      description = mdDoc "Additional arguments to pass to `flox activate`";
+      example = [
+        "--mode"
+        "dev"
+      ];
+      description = "Additional arguments to pass to `flox activate`.";
     };
     extraFloxPullArgs = mkOption {
       type = types.listOf types.str;
       default = [ ];
-      example = [ "--force" ];
-      description = mdDoc "Additional arguments to pass to `flox pull`";
+      example = [ "-v" ];
+      description = "Additional arguments to pass to `flox pull`.";
     };
     pullAtServiceStart = mkOption {
       type = types.bool;
       default = true;
-      description = mdDoc "Whether to pull the Flox environment at service start";
+      description = ''
+        Whether to refresh the Flox environment every time the service
+        starts.
+        The initial provisioning pull always happens regardless of this
+        option.
+        A failed refresh of an already-provisioned environment does not
+        prevent the service from starting.
+      '';
     };
     autoPull.enable = mkOption {
       type = types.bool;
       default = false;
-      description = mdDoc "Whether to automatically pull the Flox environment";
+      description = "Whether to pull the Flox environment on a schedule.";
     };
     autoPull.dates = mkOption {
       type = types.str;
       default = "00:00";
       example = "daily";
-      description = lib.mdDoc ''
+      description = ''
         When and how often to pull updates.
 
         The format is described in
@@ -63,23 +82,30 @@ let
     autoRestart.enable = mkOption {
       type = types.bool;
       default = false;
-      description = mdDoc "Whether to automatically restart the service when the Flox environment changes";
+      description = ''
+        Whether to restart the service when a scheduled pull
+        (see `autoPull`) fetches a new generation of the environment.
+        Without this option a pulled update only takes effect the next
+        time the service is restarted.
+      '';
     };
   };
 
   floxModuleOpts = {
     stateDir = mkOption {
       type = types.path;
-      default = "/run/flox";
+      default = "/var/lib/flox";
       description = ''
         Path containing all state pertaining to Flox-managed services.
+        Each service gets a working directory beneath it, holding the
+        pulled environment.
       '';
     };
     workingDirectoryMode = mkOption {
       type = types.str;
       default = "0700";
       description = ''
-        The mode of the service's working directory mode in numeric format.
+        The mode of each service's working directory in numeric format.
       '';
     };
   };

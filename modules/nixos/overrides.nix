@@ -1,24 +1,25 @@
 {
   config,
-  options,
   pkgs,
   lib,
-  name,
   utils,
   ...
 }:
 
 let
   inherit (config.programs.flox) package;
-  inherit (config.services.flox) stateDir workingDirectoryMode;
+  inherit (config.services.flox) stateDir;
   inherit (utils.systemdUtils.lib) makeJobScript;
   inherit (lib)
     escapeShellArgs
-    mdDoc
+    filterAttrs
+    mapAttrs
+    mapAttrsToList
     mkForce
     mkIf
     mkMerge
     mkOption
+    optionals
     types
     ;
 
@@ -28,155 +29,151 @@ let
   # Function to calculate the working directory for a service.
   workingDirectory = name: "${stateDir}/${name}";
 
+  # Units that have been handed over to Flox. Only ever used to define
+  # options outside of `systemd.services` (pull configs, assertions):
+  # feeding it back into `systemd.services` would make the merge depend on
+  # its own result.
+  floxManagedServices = filterAttrs (_: svc: svc.flox.environment != null) config.systemd.services;
+
   floxOverridesSubmodule =
     {
-      options,
       config,
       name,
       ...
     }:
     let
+      fCfg = config.flox;
       WorkingDirectory = workingDirectory name;
 
-      jobScripts = makeJobScript {
-        name = "${name}-start";
-        text =
-          if (config.flox.script != "") then
-            config.flox.script
-          else if (config.script != "") then
-            config.script
-          else
-            "";
+      scriptText = if fCfg.script != "" then fCfg.script else config.script;
+      jobScript = makeJobScript {
+        name = "${name}-flox-start";
+        text = scriptText;
         inherit (config) enableStrictShellChecks;
       };
-      # Prefer config.flox.execStart over config{,.flox}.script.
-      scriptAndArgs =
-        if (config.flox.execStart != "") then
-          config.flox.execStart
-        else if (jobScripts != "") then
-          "${jobScripts} ${config.scriptArgs}"
+      # Prefer flox.execStart, then flox.script, then the unit's own script.
+      # The null case is rejected by an assertion in the top-level module;
+      # the "false" placeholder only guards stray evaluations that bypass
+      # the assertion machinery.
+      mainCommand =
+        if fCfg.execStart != "" then
+          fCfg.execStart
+        else if scriptText != "" then
+          "${jobScript} ${config.scriptArgs}"
         else
-          null;
+          "false";
 
-      # Variables to customize flox invocations.
-      floxWithArgs = [ "${package}/bin/flox" ] ++ config.flox.extraFloxArgs;
-
-      floxAuthLoginWithArgs =
-        escapeShellArgs (
-          floxWithArgs
-          ++ [
-            "config"
-            "--set"
-            "floxhub_token"
-          ]
-        )
-        + " \"$(cat ${config.flox.floxHubTokenFile})\"";
-
-      floxPullWithArgs = escapeShellArgs (
-        floxWithArgs
-        ++ [
-          "pull"
-          "--force"
-          config.flox.environment
-        ]
-        ++ config.flox.extraFloxPullArgs
-      );
-
-      # We need a wrapper to optionally authenticate and pull updates prior to
-      # invoking `flox activate`. It would be better to do this like we do in
-      # services.nix by configuring separate service units for these functions,
-      # but I haven't found a way to declare new services from within a submodule.
-      ExecStartPre = pkgs.writeScript "${name}-ExecStartPre" (
-        ''
-          #! ${pkgs.runtimeShell} -eu
-          if [ -d ${WorkingDirectory} ]; then
-            # Assert all files in working directory are writable by the user.
-            # We won't be able to fix them, but at least we'll know.
-            myid=$(id -u)
-            find -H ${WorkingDirectory} '!' -user $myid -print0 | \
-              xargs --null --no-run-if-empty echo -e \
-                "WARNING: files with dubious ownership found in ${WorkingDirectory}\n" \
-                "--> FIX WITH: chown $myid"
-          else
-            ( set -x && mkdir -p ${WorkingDirectory} )
-          fi
-          # Be verbose about actions from this point forward.
-          set -x
-          chmod ${workingDirectoryMode} ${WorkingDirectory}
-          cd ${WorkingDirectory}
-        ''
-        + lib.optionalString (config.flox.floxHubTokenFile != null) ''
-          ${pkgs.runtimeShell} -c '${floxAuthLoginWithArgs}'
-        ''
-        + lib.optionalString (config.flox.pullAtServiceStart) floxPullWithArgs
-      );
-
-      floxActivateWithArgs = escapeShellArgs (
-        floxWithArgs
+      activateCmd = escapeShellArgs (
+        [ "${package}/bin/flox" ]
+        ++ fCfg.extraFloxArgs
         ++ [
           "activate"
           "--dir"
           WorkingDirectory
         ]
-        ++ lib.optionals config.flox.trustEnvironment [ "--trust" ]
-        ++ config.flox.extraFloxActivateArgs
+        ++ optionals fCfg.trustEnvironment [ "--trust" ]
+        ++ fCfg.extraFloxActivateArgs
       );
+
+      # The FloxHub token, if any, is provided as a systemd credential and
+      # travels to flox only through the environment.
+      execStart = pkgs.writeShellScript "flox-exec-start-${name}" ''
+        set -euo pipefail
+        if [ -n "''${CREDENTIALS_DIRECTORY:-}" ] && [ -e "$CREDENTIALS_DIRECTORY/floxhub_token" ]; then
+          FLOX_FLOXHUB_TOKEN="$(cat "$CREDENTIALS_DIRECTORY/floxhub_token")"
+          export FLOX_FLOXHUB_TOKEN
+        fi
+        exec ${activateCmd} -- ${mainCommand}
+      '';
 
     in
     {
       options = {
-        flox =
-          common.floxServiceOpts
-          // common.floxModuleOpts
-          // {
-            execStart = mkOption {
-              type = types.str;
-              default = "";
-              description = mdDoc "The command to override the unit's ExecStart with";
-            };
-            script = mkOption {
-              type = types.str;
-              default = "";
-              description = mdDoc "A script to entirely replace the unit's script";
-            };
+        flox = common.floxServiceOpts // {
+          environment = mkOption {
+            type = types.nullOr types.str;
+            default = null;
+            example = "flox/default";
+            description = ''
+              The Flox environment to run this unit from.
+              When null (the default) the unit is left untouched.
+            '';
           };
+          execStart = mkOption {
+            type = types.str;
+            default = "";
+            example = "echoip -l 127.0.0.1:8080 -H X-Real-IP";
+            description = "The command to override the unit's ExecStart with.";
+          };
+          script = mkOption {
+            type = types.str;
+            default = "";
+            description = "A script to entirely replace the unit's script.";
+          };
+        };
       };
-      config = mkIf (config.flox.environment != null) {
+
+      config = mkIf (fCfg.environment != null) {
+        # The pull unit provisions the environment on first start and
+        # refreshes it thereafter (see pullAtServiceStart). A failed
+        # refresh of an existing environment exits successfully, so this
+        # hard dependency only propagates initial provisioning failures.
+        after = [ "flox-pull@${name}.service" ];
+        requires = [ "flox-pull@${name}.service" ];
         serviceConfig = mkMerge [
-          # Default service config
           {
             Environment = [
               "FLOX_DISABLE_METRICS=true"
               "HOME=${WorkingDirectory}"
               "SHELL=${pkgs.runtimeShell}"
             ];
-            inherit ExecStartPre;
+            ExecStart = mkForce "${execStart}";
           }
-          (mkIf (scriptAndArgs != null) {
-            # Completely override the ExecStart config
-            ExecStart = mkForce "${floxActivateWithArgs} -- ${scriptAndArgs}";
+          (mkIf (fCfg.floxHubTokenFile != null) {
+            LoadCredential = [ "floxhub_token:${fCfg.floxHubTokenFile}" ];
           })
         ];
       };
     };
 
-  floxOverridesModule = {
-    options = {
-      # Enable floxOverridesSubmodule for overriding the execStart attribute
-      # of any given systemd service to run within a Flox environment.
-      systemd.services = mkOption {
-        type = types.attrsOf (types.submodule floxOverridesSubmodule);
-      };
-    };
-    config = {
-      # Create a state directory for storing "project" directories for the services
-      # to be activated. Create this using mode 1777 (like /tmp) so that services
-      # not running as root can create their own directories within it.
-      systemd.tmpfiles.rules = [
-        "d ${stateDir} 1777 root root - -"
-      ];
+in
+{
+  options = {
+    # Extend every systemd service with a `flox` section for running the
+    # unit from an activated Flox environment.
+    systemd.services = mkOption {
+      type = types.attrsOf (types.submodule floxOverridesSubmodule);
     };
   };
 
-in
-floxOverridesModule
+  config = {
+    assertions =
+      mapAttrsToList (name: svc: {
+        assertion = svc.flox.execStart != "" || svc.flox.script != "" || svc.script != "";
+        message = "systemd.services.${name}.flox.environment is set but there is no command to run. Set systemd.services.${name}.flox.execStart or systemd.services.${name}.flox.script.";
+      }) floxManagedServices
+      ++ mapAttrsToList (name: svc: {
+        assertion = !(svc.serviceConfig.DynamicUser or false);
+        message = "systemd.services.${name}: the Flox override does not support DynamicUser.";
+      }) floxManagedServices;
+
+    # Provisioning, scheduled pulls and restart-on-change are handled by
+    # the flox-pull@/flox-autopull@ template units; see pull.nix.
+    services.flox.pull.configs = mapAttrs (name: svc: {
+      unit = "${name}.service";
+      user = toString (svc.serviceConfig.User or "root");
+      group = toString (svc.serviceConfig.Group or "");
+      environment = svc.flox.environment;
+      workingDirectory = workingDirectory name;
+      inherit (svc.flox)
+        extraFloxArgs
+        extraFloxPullArgs
+        pullAtServiceStart
+        floxHubTokenFile
+        ;
+      autoPull = svc.flox.autoPull.enable;
+      autoPullDates = svc.flox.autoPull.dates;
+      autoRestart = svc.flox.autoRestart.enable;
+    }) floxManagedServices;
+  };
+}

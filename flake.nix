@@ -183,7 +183,13 @@
 
       # ------------------------------------------------------------------------ #
 
-      checks = builtins.mapAttrs (system: pkgs: { inherit (pkgs) pre-commit-check; }) pkgsContext;
+      checks = builtins.mapAttrs (system: pkgs: {
+        inherit (pkgs) pre-commit-check;
+        nixos-module = import ./modules/nixos/check.nix {
+          inherit pkgs nixpkgs;
+          module = import ./modules/nixos pkgsContext;
+        };
+      }) pkgsContext;
 
       # ------------------------------------------------------------------------ #
 

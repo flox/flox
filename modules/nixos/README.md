@@ -1,6 +1,6 @@
 # Flox NixOS module
 
-NixOS modules provides a rich interface for
+NixOS modules provide a rich interface for
 modeling configuration options for services,
 setting required environment variables
 and communicating various settings to related services.
@@ -55,32 +55,61 @@ from a Flox perspective, the overrides approach makes it possible to leverage th
 full capabilities of the NixOS module subsystem, as well as the hundreds
 of existing NixOS modules maintained by the Nix community.
 
+## How environments are provisioned and updated
+
+Each service gets a working directory beneath `stateDir`
+(default `/var/lib/flox`) holding the pulled environment.
+A `flox-pull@<name>` unit provisions the environment on first start
+and — unless `pullAtServiceStart` is disabled — refreshes it every time
+the service starts.
+A failed refresh of an already-provisioned environment does not prevent
+the service from starting;
+only the initial provisioning is a hard dependency.
+
+With `autoPull.enable` a systemd timer pulls updates on the schedule
+given by `autoPull.dates`.
+With `autoRestart.enable` the service is additionally restarted whenever
+a scheduled pull fetches a new generation of the environment;
+without it, a pulled update takes effect the next time the service
+restarts.
+
+## Authentication
+
+To pull private environments, point `floxHubTokenFile` at a file
+containing a FloxHub token (readable by root).
+The token is handed to the service as a systemd credential and reaches
+`flox` only through the `FLOX_FLOXHUB_TOKEN` environment variable;
+it never appears on a command line or in a configuration file.
+
 ## Common configuration attributes
 
 The following configuration attributes are supported by both
 of the Services and Overrides methods described above:
 
-* `environment` (mandatory)
-    The Flox environment to use for the service.
+* `environment`
+    The Flox environment to run the service from.
+    Mandatory for the Services method;
+    for the Overrides method a null value (the default)
+    leaves the unit untouched.
 
     - _Type_: string
     - _Example_: "flox/default"
 
 * `trustEnvironment`
-    Whether to trust the environment using invocation option.
+    Whether to pass `--trust` when activating the environment.
 
     - _Type_: boolean
     - _Default_: `false`
 
 * `floxHubTokenFile`
-    Full path to the FloxHub token file.
+    Full path to a file containing a FloxHub token.
 
     - _Type_: null or path
     - _Default_: `null`
     - _Example_: "/run/secrets/floxhub/secret.token"
 
 * `extraFloxArgs`
-    Additional arguments to pass to `flox`.
+    Additional arguments to pass to every `flox` invocation.
 
     - _Type_: list of strings
     - _Default_: [ ]
@@ -98,38 +127,75 @@ of the Services and Overrides methods described above:
 
     - _Type_: list of strings
     - _Default_: [ ]
-    - _Example_: [ "--force" ]
+    - _Example_: [ "-v" ]
 
 * `pullAtServiceStart`
-    Whether to pull the Flox environment at service start.
+    Whether to refresh the Flox environment every time the service starts.
+    The initial provisioning pull always happens regardless of this option.
 
     - _Type_: boolean
-    - _Default_: `false`
+    - _Default_: `true`
 
 * `autoPull.enable`
-    Whether to automatically pull the Flox environment.
+    Whether to pull the Flox environment on a schedule.
 
     - _Type_: boolean
     - _Default_: `false`
 
 * `autoPull.dates`
-    How often or when upgrade occurs, with format as described in `systemd.time(7)`.
+    When and how often to pull updates,
+    with format as described in `systemd.time(7)`.
 
     - _Type_: string
     - _Default_: `00:00`
     - _Example_: "daily"
 
 * `autoRestart.enable`
-    Whether to automatically restart the service when the Flox environment changes.
+    Whether to restart the service when a scheduled pull fetches a new
+    generation of the environment.
 
     - _Type_: boolean
     - _Default_: `false`
 
-* `stateDir`
+## Flox Services configuration attributes
+
+The following configuration attributes are supported by
+the Services method only:
+
+* `user`
+    The user with which to run the service.
+    When null, a `flox-<name>` system user is created for the service.
+    `group` must be set when this option is set.
+
+    - _Type_: null or string
+    - _Default_: `null`
+
+* `group`
+    The primary group membership for the service invocation.
+
+    - _Type_: null or string
+    - _Default_: `null`
+
+* `description`
+    The systemd description for the service.
+
+    - _Type_: null or string
+    - _Default_: `null`
+    - _Example_: "Foobar Web Server"
+
+The Services method also supports the following module-wide options:
+
+* `services.flox.stateDir`
     Path containing all state pertaining to Flox-managed services.
 
     - _Type_: path
-    - _Default_: `/run`
+    - _Default_: `/var/lib/flox`
+
+* `services.flox.workingDirectoryMode`
+    The mode of each service's working directory in numeric format.
+
+    - _Type_: string
+    - _Default_: `0700`
 
 ## Flox Overrides configuration attributes
 
@@ -139,15 +205,18 @@ the Overrides method only:
 * `execStart`
     The command to override the unit's ExecStart with.
 
-    - _Type_: null or string
-    - _Default_: `null`
+    - _Type_: string
+    - _Default_: `""`
     - _Example_: "echoip -l 127.0.0.1:8080 -H X-Real-IP"
 
 * `script`
-    Shell commands executed as the service’s main process.
+    Shell commands executed as the service’s main process,
+    replacing the unit's own `script` if it has one.
+    One of `execStart`, `script` or the unit's own `script`
+    must be set.
 
-    - _Type_: null or string
-    - _Default_: `null`
+    - _Type_: string
+    - _Default_: `""`
     - _Example_:
         ```nix
           ''

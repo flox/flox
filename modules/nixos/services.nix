@@ -1,263 +1,212 @@
 {
   config,
-  options,
   pkgs,
   lib,
-  utils,
   ...
 }:
 
 let
   inherit (config.programs.flox) package;
-  inherit (config.services.flox) activations stateDir workingDirectoryMode;
   inherit (lib)
     escapeShellArgs
-    mdDoc
+    filterAttrs
+    mapAttrs
+    mapAttrs'
+    mapAttrsToList
+    mkEnableOption
     mkIf
     mkMerge
     mkOption
+    nameValuePair
+    optionalAttrs
+    optionals
     types
     ;
+
+  cfg = config.services.flox;
 
   # Options common to both Flox module types.
   common = import ./common.nix { inherit lib; };
 
   # Function to calculate the working directory for a service.
-  workingDirectory = name: "${stateDir}/${name}";
+  workingDirectory = name: "${cfg.stateDir}/${name}";
 
-  floxActivationModule =
-    {
-      options,
-      name,
-      ...
-    }:
-    let
-      activationCfg = activations.${name};
-
-    in
-    {
-      options = common.floxServiceOpts // {
-        user = mkOption {
-          type = types.nullOr types.str;
-          default = null;
-          example = "root";
-          description = mdDoc "The user with which to run the service";
-        };
-        group = mkOption {
-          type = types.nullOr types.str;
-          default = null;
-          example = "root";
-          description = mdDoc "The primary group membership for the service invocation";
-        };
-        description = mkOption {
-          type = types.nullOr types.str;
-          default = null;
-          example = "Foobar Web Server";
-          description = mdDoc "The systemd description for the service";
-        };
+  floxActivationModule = {
+    options = common.floxServiceOpts // {
+      environment = mkOption {
+        type = types.str;
+        example = "flox/default";
+        description = "The Flox environment to run the service from.";
+      };
+      user = mkOption {
+        type = types.nullOr types.str;
+        default = null;
+        example = "root";
+        description = ''
+          The user with which to run the service.
+          When null, a `flox-<name>` system user is created for the
+          service.
+        '';
+      };
+      group = mkOption {
+        type = types.nullOr types.str;
+        default = null;
+        example = "root";
+        description = ''
+          The primary group membership for the service invocation.
+          Must be set when `user` is set.
+        '';
+      };
+      description = mkOption {
+        type = types.nullOr types.str;
+        default = null;
+        example = "Foobar Web Server";
+        description = "The systemd description for the service.";
       };
     };
-
-  floxServicesModule = {
-
-    # Options for system-wide activations
-    options = {
-      services.flox = common.floxModuleOpts // {
-        activations = mkOption {
-          type = types.attrsOf (types.submodule floxActivationModule);
-          default = { };
-        };
-      };
-    };
-
-    config =
-      let
-        enableFlox = {
-          programs.flox.enable = true;
-        };
-
-        activationConfigs = {
-
-          users = mkMerge (
-            lib.mapAttrsToList (
-              name: activationCfg:
-
-              (mkIf (activationCfg.user == null) {
-                # Create account and group for the service.
-                users."flox-${name}" = {
-                  isSystemUser = true;
-                  useDefaultShell = true;
-                  group = "flox-${name}";
-                  home = workingDirectory name;
-                  createHome = true;
-                  homeMode = workingDirectoryMode;
-                };
-                groups."flox-${name}" = { };
-              })
-            ) activations
-          );
-
-          systemd = mkMerge (
-            lib.mapAttrsToList (
-              name: activationCfg:
-
-              let
-                WorkingDirectory = workingDirectory name;
-
-                defaultUserGroupAttrs = {
-                  User = "flox-${name}";
-                  Group = "flox-${name}";
-                };
-                providedUserGroupAttrs =
-                  if (activationCfg.user != null -> activationCfg.group != null) then
-                    {
-                      User = activationCfg.user;
-                      Group = activationCfg.group;
-                    }
-                  else
-                    throw "\nOption services.flox.activations.${name}.group is not set when services.flox.activations.${name}.user is specified.";
-                userGroupAttrs =
-                  if (activationCfg.user == null) then defaultUserGroupAttrs else providedUserGroupAttrs;
-
-                Environment = [
-                  "FLOX_DISABLE_METRICS=true"
-                  "HOME=${WorkingDirectory}"
-                  "SHELL=${pkgs.runtimeShell}"
-                ];
-
-                # Variables to customize flox invocations.
-                floxWithArgs = [ "${package}/bin/flox" ] ++ activationCfg.extraFloxArgs;
-
-                floxAuthLoginWithArgs =
-                  escapeShellArgs (
-                    floxWithArgs
-                    ++ [
-                      "config"
-                      "--set"
-                      "floxhub_token"
-                    ]
-                  )
-                  + " \"$(cat ${activationCfg.floxHubTokenFile})\"";
-
-                floxPullWithArgs = escapeShellArgs (
-                  floxWithArgs
-                  ++ [
-                    "pull"
-                    "--force"
-                    activationCfg.environment
-                  ]
-                  ++ activationCfg.extraFloxPullArgs
-                );
-
-                floxActivateWithArgs = escapeShellArgs (
-                  floxWithArgs
-                  ++ [
-                    "activate"
-                    "--dir"
-                    WorkingDirectory
-                  ]
-                  ++ lib.optionals activationCfg.trustEnvironment [ "--trust" ]
-                  ++ activationCfg.extraFloxActivateArgs
-                );
-
-                commonServiceConfig = {
-                  inherit Environment WorkingDirectory;
-                } // userGroupAttrs;
-
-              in
-              mkMerge [
-
-                # Create the working directory for the service.
-                {
-                  tmpfiles.rules = [
-                    "d ${WorkingDirectory} ${workingDirectoryMode} ${userGroupAttrs.User} ${userGroupAttrs.Group} - -"
-                  ];
-                }
-
-                # Create the flox-login@${name} service for logging into FloxHub.
-                (mkIf (activationCfg.floxHubTokenFile != null) {
-                  services."flox-login@${name}" = {
-                    serviceConfig = commonServiceConfig // {
-                      Type = "oneshot";
-                      # N.B. must run this in a subshell to be able to `cat` the token file.
-                      ExecStart = [ "${pkgs.runtimeShell} -c '${floxAuthLoginWithArgs}'" ];
-                    };
-                  };
-                })
-
-                # Create the flox-pull@${name} service for pulling updates.
-                {
-                  services."flox-pull@${name}" = mkMerge [
-                    {
-                      serviceConfig = commonServiceConfig // {
-                        Type = "oneshot";
-                        # N.B. must run this in a subshell to be able to `cat` the token file.
-                        ExecStart = floxPullWithArgs;
-                      };
-                    }
-                    (mkIf (activationCfg.floxHubTokenFile != null) {
-                      unitConfig = {
-                        # Workaround so the service can pull the environment from private repositories
-                        After = [ "flox-login@${name}.service" ];
-                        Requires = [ "flox-login@${name}.service" ];
-                      };
-                    })
-                  ];
-                }
-
-                # Create the flox-autoPull@${name} timer for automatically
-                # pulling and restarting services on a schedule.
-                (mkIf activationCfg.autoPull.enable {
-                  timers."flox-autoPull@${name}" = {
-                    timerConfig = {
-                      RandomizedDelaySec = "15s";
-                      OnCalendar = activationCfg.autoPull.dates;
-                      Unit = "flox-pull@${name}.service";
-                    };
-                  };
-                })
-
-                # Create the ${name} service for running the service.
-                {
-                  services."${name}" = {
-                    description =
-                      if (activationCfg.description != null) then
-                        activationCfg.description
-                      else
-                        "Flox ${name} service running from ${activationCfg.environment} environment";
-                    wants = [ "network-online.target" ];
-                    after = [ "network-online.target" ];
-                    wantedBy = [ "multi-user.target" ];
-                    serviceConfig = commonServiceConfig // {
-                      ExecStart =
-                        "${floxActivateWithArgs} --start-services -- "
-                        + "${escapeShellArgs floxWithArgs} services logs --follow";
-                    };
-                    unitConfig = mkMerge [
-                      {
-                        After = [ "flox-pull@${name}.service" ];
-                      }
-                      (mkIf (activationCfg.pullAtServiceStart) {
-                        Requires = [ "flox-pull@${name}.service" ];
-                      })
-                    ];
-                  };
-                }
-
-              ]
-            ) activations
-          );
-
-        };
-
-      in
-
-      (mkMerge [
-        enableFlox
-        activationConfigs
-      ]);
-
   };
 
+  serviceUser = name: aCfg: if aCfg.user != null then aCfg.user else "flox-${name}";
+  serviceGroup = name: aCfg: if aCfg.user != null then aCfg.group else "flox-${name}";
+
+  # The main unit's start command: activate the environment with its
+  # services, and keep following their logs as the unit's foreground
+  # process. The FloxHub token, if any, is provided as a systemd credential
+  # and travels to flox only through the environment.
+  startScript =
+    name: aCfg:
+    let
+      activateCmd = escapeShellArgs (
+        [ "${package}/bin/flox" ]
+        ++ aCfg.extraFloxArgs
+        ++ [
+          "activate"
+          "--dir"
+          (workingDirectory name)
+        ]
+        ++ optionals aCfg.trustEnvironment [ "--trust" ]
+        ++ aCfg.extraFloxActivateArgs
+        ++ [ "--start-services" ]
+      );
+      logsCmd = escapeShellArgs (
+        [ "${package}/bin/flox" ]
+        ++ aCfg.extraFloxArgs
+        ++ [
+          "services"
+          "logs"
+          "--follow"
+        ]
+      );
+    in
+    pkgs.writeShellScript "flox-activate-${name}" ''
+      set -euo pipefail
+      if [ -n "''${CREDENTIALS_DIRECTORY:-}" ] && [ -e "$CREDENTIALS_DIRECTORY/floxhub_token" ]; then
+        FLOX_FLOXHUB_TOKEN="$(cat "$CREDENTIALS_DIRECTORY/floxhub_token")"
+        export FLOX_FLOXHUB_TOKEN
+      fi
+      exec ${activateCmd} -- ${logsCmd}
+    '';
+
 in
-floxServicesModule
+{
+  options = {
+    services.flox = common.floxModuleOpts // {
+      enable = mkEnableOption "running systemd services from Flox environments";
+      activations = mkOption {
+        type = types.attrsOf (types.submodule floxActivationModule);
+        default = { };
+        description = ''
+          Flox environments to activate as systemd services.
+          Each activation runs `flox activate --start-services` and
+          delegates process management to the Flox services subsystem.
+        '';
+      };
+    };
+  };
+
+  config = mkMerge [
+    {
+      assertions = [
+        {
+          assertion = cfg.activations == { } || cfg.enable;
+          message = "services.flox.activations is set but services.flox.enable is false. Set services.flox.enable = true to run the configured activations.";
+        }
+      ]
+      ++ mapAttrsToList (name: aCfg: {
+        assertion = aCfg.user == null || aCfg.group != null;
+        message = "services.flox.activations.${name}.group must be set when services.flox.activations.${name}.user is set.";
+      }) cfg.activations;
+    }
+
+    (mkIf cfg.enable {
+      # Create an account and group for each service that does not specify
+      # its own. The pull script creates and owns the working directory,
+      # which doubles as the service's home.
+      users.users = mapAttrs' (
+        name: aCfg:
+        nameValuePair "flox-${name}" {
+          isSystemUser = true;
+          useDefaultShell = true;
+          group = "flox-${name}";
+          home = workingDirectory name;
+        }
+      ) (filterAttrs (_: aCfg: aCfg.user == null) cfg.activations);
+      users.groups = mapAttrs' (name: _: nameValuePair "flox-${name}" { }) (
+        filterAttrs (_: aCfg: aCfg.user == null) cfg.activations
+      );
+
+      # Provisioning, scheduled pulls and restart-on-change are handled by
+      # the flox-pull@/flox-autopull@ template units; see pull.nix.
+      services.flox.pull.configs = mapAttrs (name: aCfg: {
+        unit = "${name}.service";
+        user = serviceUser name aCfg;
+        group = serviceGroup name aCfg;
+        workingDirectory = workingDirectory name;
+        inherit (aCfg)
+          environment
+          extraFloxArgs
+          extraFloxPullArgs
+          pullAtServiceStart
+          floxHubTokenFile
+          ;
+        autoPull = aCfg.autoPull.enable;
+        autoPullDates = aCfg.autoPull.dates;
+        autoRestart = aCfg.autoRestart.enable;
+      }) cfg.activations;
+
+      systemd.services = mapAttrs (name: aCfg: {
+        description =
+          if aCfg.description != null then
+            aCfg.description
+          else
+            "Flox ${name} service running from ${aCfg.environment} environment";
+        wants = [ "network-online.target" ];
+        after = [
+          "network-online.target"
+          "flox-pull@${name}.service"
+        ];
+        # The pull unit provisions the environment on first start and
+        # refreshes it thereafter (see pullAtServiceStart). A failed
+        # refresh of an existing environment exits successfully, so this
+        # hard dependency only propagates initial provisioning failures.
+        requires = [ "flox-pull@${name}.service" ];
+        wantedBy = [ "multi-user.target" ];
+        serviceConfig = {
+          User = serviceUser name aCfg;
+          Group = serviceGroup name aCfg;
+          WorkingDirectory = workingDirectory name;
+          Environment = [
+            "FLOX_DISABLE_METRICS=true"
+            "HOME=${workingDirectory name}"
+            "SHELL=${pkgs.runtimeShell}"
+          ];
+          ExecStart = "${startScript name aCfg}";
+          Restart = "on-failure";
+        }
+        // optionalAttrs (aCfg.floxHubTokenFile != null) {
+          LoadCredential = [ "floxhub_token:${aCfg.floxHubTokenFile}" ];
+        };
+      }) cfg.activations;
+    })
+  ];
+}
