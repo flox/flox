@@ -12,9 +12,14 @@ flox-delete - delete an environment
 # SYNOPSIS
 
 ```text
+# Delete an environment in a directory
 flox [<general options>] delete
      [-f]
      [-d=<path>]
+
+# Delete the local copy of a FloxHub environment
+flox [<general options>] delete -r <owner>/<name>
+     [-f]
 ```
 
 # DESCRIPTION
@@ -22,6 +27,18 @@ flox [<general options>] delete
 Deletes all data pertaining to an environment.
 By default, only the environment in the current directory is deleted,
 but environments in other directories may be deleted via the `-d` flag.
+
+The `--reference` flag instead deletes the local copy of a FloxHub environment
+that was cached on this machine by
+[`flox-activate(1)`](./flox-activate.md) or [`flox-pull(1)`](./flox-pull.md)
+with `--reference`.
+Only the local copy is removed:
+the environment on FloxHub is *not* deleted,
+and will be downloaded again the next time you activate or pull the reference.
+Deleting the upstream environment on FloxHub is not currently supported from
+the command line.
+This is a local operation and does not require network access, so it can also
+clean up a cached copy that can no longer be activated.
 
 By default, you will be prompted for a confirmation before deleting the
 environment.
@@ -35,10 +52,15 @@ use.
 `-f`, `--force`
 :   Delete the environment without confirmation.
 
-<!-- Copied from ./include/environment-options.md
-     `flox delete` does not currently handle remote environments
-     Replace with an include once support is added.
- -->
+`-r <owner>/<name>`, `--reference <owner>/<name>`
+:   Delete only the local copy of the FloxHub environment `<owner>/<name>`
+    cached in `~/.cache`.
+
+    The environment on FloxHub is not deleted and will be downloaded again
+    the next time you activate or pull the reference.
+
+    Cannot be used with `--dir`.
+
 ## Environment Options
 
 If no environment is specified for an environment command,
