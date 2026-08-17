@@ -20,7 +20,7 @@ use notify::{Config, Event, EventKindMask, RecommendedWatcher, RecursiveMode, Wa
 use sentry::integrations::anyhow::capture_anyhow;
 use signal_hook::iterator::Signals;
 use time::OffsetDateTime;
-use tracing::{debug, error, trace, warn};
+use tracing::{debug, error, info, trace, warn};
 use waitpid_any::WaitHandle;
 
 /// Events that can occur during PID monitoring.
@@ -412,8 +412,11 @@ fn spawn_pid_watcher(
                 None
             },
             Err(err) => {
-                // Process likely already dead (ESRCH or similar)
-                debug!(pid, %err, "failed to open wait handle, process likely already exited");
+                // Process likely already dead (ESRCH or similar), or its
+                // status couldn't be read
+                // info so that Sentry breadcrumbs show where a ProcessExited
+                // event came from
+                info!(pid, %err, errno = ?err.raw_os_error(), "failed to open wait handle, process likely already exited");
                 // Ignore error since we're just going to return
                 let _ = sender.send(ExecutiveEvent::ProcessExited { pid });
                 return;
@@ -427,7 +430,7 @@ fn spawn_pid_watcher(
             loop {
                 match handle.wait() {
                     Ok(()) => {
-                        debug!(pid, "process exited");
+                        info!(pid, "process exited");
                         // Ignore error since we're just going to return
                         let _ = sender.send(ExecutiveEvent::ProcessExited { pid });
                         return;
@@ -463,7 +466,7 @@ fn spawn_pid_watcher(
 fn poll_until_exit(pid: i32, sender: &Sender<ExecutiveEvent>) {
     loop {
         if !pid_is_running(pid) {
-            debug!(pid, "process exited (polling)");
+            info!(pid, "process exited (polling)");
             // Ignore error since we're just going to return
             let _ = sender.send(ExecutiveEvent::ProcessExited { pid });
             return;
