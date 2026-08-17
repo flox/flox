@@ -14,6 +14,9 @@ flox-run - run a command from a Flox Catalog package
 flox [<general-options>] run
      -p <package>
      -- <command> [<arguments>]
+
+flox [<general-options>] run
+     --reselect <command>
 ```
 
 # DESCRIPTION
@@ -52,9 +55,9 @@ flox run -p curl -- curl http://example.com
 
 Without `--`, flags that look like options could be claimed by the
 wrong side of the boundary — for example, `flox run -p curl curl
--sL http://example.com` passes `-sL` to `curl`, but
-`flox run curl -p curl -- curl ...` would fail because `-p` is
-consumed by `curl`, leaving flox without a package.
+-sL http://example.com` passes `-sL` to `curl`, but in
+`flox run curl -p curl -- curl ...` the `-p` is consumed by `curl`,
+leaving flox without a package of its own.
 
 **`--version` caveat:**
 Flox intercepts `--version` from the full argument list before parsing.
@@ -99,6 +102,12 @@ Repeated invocations of the same package skip the download step.
     Accepts plain package names only (e.g. `curl`, `ripgrep`).
     Version constraints (`@`), output selectors (`^`), and custom
     catalogs (`/`) are not supported in this release.
+
+`--reselect <command>`
+:   Forget the saved package preference for `<command>` and exit without
+    running anything.
+    Cannot be combined with a command to run.
+    Clearing a command that has no saved preference is not an error.
 
 `-- <command> [<arguments>]`
 :   The command to run and any arguments to pass to it.

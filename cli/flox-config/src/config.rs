@@ -166,6 +166,17 @@ pub struct FloxConfig {
     #[serde(default)]
     pub auto_activate_environments: HashMap<PathBuf, AutoActivationPreference>,
 
+    /// Remembered package choices for `flox run`.
+    /// Maps a command name (`vi`) to the attr-path of the package the user
+    /// chose to provide it (`vim`, `python311Packages.pip`).
+    ///
+    /// Only selections made at the interactive disambiguation prompt are
+    /// stored. A command that resolves to exactly one package is never
+    /// recorded, so an absent entry means "nothing to remember", not
+    /// "not yet resolved".
+    #[serde(default)]
+    pub run_preferences: HashMap<String, String>,
+
     /// Don't setup the Flox prompt hook as part of activation.
     /// This disables auto-activation as well as features like `flox deactivate`
     /// without `--print-script` (default: false)

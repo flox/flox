@@ -48,10 +48,10 @@ teardown() {
 # Required-flag errors (no network or store required)
 # ---------------------------------------------------------------------------- #
 
-@test "'flox run' with no args reports missing package" {
+@test "'flox run' with no args reports missing command" {
   run "$FLOX_BIN" run
   assert_failure
-  assert_output --partial "No package specified"
+  assert_output --partial "No command specified"
 }
 
 @test "'flox run <command>' without -p reports missing package" {
@@ -64,6 +64,59 @@ teardown() {
   run "$FLOX_BIN" run -p
   assert_failure
   assert_output --partial "Missing value"
+}
+
+# ---------------------------------------------------------------------------- #
+# --reselect (config state, no network or store required)
+# ---------------------------------------------------------------------------- #
+
+@test "'flox run --reselect' clears a saved preference" {
+  mkdir -p "$FLOX_CONFIG_DIR"
+  cat > "$FLOX_CONFIG_DIR/flox.toml" <<'EOF'
+[run_preferences]
+vi = "vim"
+EOF
+
+  run "$FLOX_BIN" run --reselect vi
+  assert_success
+  assert_output --partial "Cleared the saved package preference for 'vi'."
+
+  run cat "$FLOX_CONFIG_DIR/flox.toml"
+  refute_output --partial "vim"
+}
+
+@test "'flox run --reselect' on an absent preference succeeds" {
+  run "$FLOX_BIN" run --reselect vi
+  assert_success
+  assert_output --partial "No saved package preference for 'vi'."
+}
+
+@test "'flox run --reselect' leaves other preferences untouched" {
+  mkdir -p "$FLOX_CONFIG_DIR"
+  cat > "$FLOX_CONFIG_DIR/flox.toml" <<'EOF'
+[run_preferences]
+vi = "vim"
+pip = "python311Packages.pip"
+EOF
+
+  run "$FLOX_BIN" run --reselect vi
+  assert_success
+
+  run cat "$FLOX_CONFIG_DIR/flox.toml"
+  refute_output --partial "vim"
+  assert_output --partial 'pip = "python311Packages.pip"'
+}
+
+@test "'flox run --reselect' with a command is rejected" {
+  run "$FLOX_BIN" run --reselect vi vim
+  assert_failure
+  assert_output --partial "cannot be combined with a command"
+}
+
+@test "'flox run --reselect' without a value is rejected" {
+  run "$FLOX_BIN" run --reselect
+  assert_failure
+  assert_output --partial "Missing value for '--reselect'"
 }
 
 # ---------------------------------------------------------------------------- #
