@@ -9,7 +9,7 @@ use fslock::LockFile;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use time::OffsetDateTime;
-use tracing::{debug, trace};
+use tracing::{debug, info, trace};
 
 use crate::activate::mode::ActivateMode;
 use crate::proc_status::pid_is_running;
@@ -555,11 +555,13 @@ impl ActivationState {
         };
 
         if keep_attachment {
-            debug!(pid, "keeping attached PID");
+            // info so that Sentry breadcrumbs show why an exit event didn't
+            // detach the PID, mirroring "detaching terminated PID" below
+            info!(pid, expiration = ?attachment.expiration, "keeping attached PID");
             return (None, false);
         }
 
-        tracing::info!(pid, "detaching terminated PID");
+        info!(pid, "detaching terminated PID");
         let Ok(empty_start_id) = self.detach(pid) else {
             debug!(
                 pid,
