@@ -183,7 +183,13 @@
 
       # ------------------------------------------------------------------------ #
 
-      checks = builtins.mapAttrs (system: pkgs: { inherit (pkgs) pre-commit-check; }) pkgsContext;
+      checks = builtins.mapAttrs (system: pkgs: {
+        inherit (pkgs) pre-commit-check;
+        nixos-module = import ./modules/nixos/check.nix {
+          inherit pkgs nixpkgs;
+          module = import ./modules/nixos pkgsContext;
+        };
+      }) pkgsContext;
 
       # ------------------------------------------------------------------------ #
 
@@ -219,7 +225,7 @@
       # ------------------------------------------------------------------------ #
 
       # NixOS/Darwin/HomeManager module
-      nixosModules.flox = import ./modules/nixos.nix pkgsContext;
+      nixosModules.flox = import ./modules/nixos pkgsContext;
       darwinModules.flox = import ./modules/darwin.nix pkgsContext;
       homeModules.flox = import ./modules/home.nix pkgsContext;
 
