@@ -102,6 +102,67 @@
         }
       }
     },
+    "/api/v1/catalog/by-command": {
+      "get": {
+        "tags": [
+          "catalog"
+        ],
+        "summary": "Find packages that provide a command",
+        "description": "Reverse lookup: which package(s) provide the given command name.\n\nRequired Query Parameters:\n- **system**: The system architecture to search for (e.g., x86_64-linux)\n- **name**: The command name to look up (e.g., readelf, rg, gcc-13)\n\nReturns:\n- **ByCommandResult**: Providers of the command and total count\n\nNote: first pass returns a hardcoded mock so the OpenAPI contract can\nfreeze before the command_index table lands. No database query yet.",
+        "operationId": "by_command_api_v1_catalog_by_command_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          },
+          {
+            "HTTPBasic": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "system",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/PackageSystem"
+            }
+          },
+          {
+            "name": "name",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 2,
+              "maxLength": 200,
+              "title": "Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Packages that provide the given command",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ByCommandResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The command name or system could not be processed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/catalog/packages/{attr_path}": {
       "get": {
         "tags": [
@@ -1769,7 +1830,7 @@
           "info"
         ],
         "summary": "Get a raw dependency report for a storepath (excluding /nix/store/ prefix)",
-        "description": "Get a raw dependency report for a store path.\n\nPath Parameters:\n- **storepath**: The store path to analyze (excluding /nix/store/ prefix)\n\nReturns:\n- **RawDependencyReport**: Dependency graph with all transitive dependencies,\n  including store paths, derivation info, and dependency relationships.\n\nNote: Requires authentication and superuser (flox staff) access.",
+        "description": "Get a raw dependency report for a store path.\n\nPath Parameters:\n- **storepath**: The store path to analyze (excluding /nix/store/ prefix)\n\nReturns:\n- **RawDependencyReport**: Dependency graph with all transitive dependencies,\n  including store paths, derivation info, and dependency relationships.\n  Dependency lists and the dependencies mapping are sorted by full\n  store path (hash first, since a store path leads with its content\n  hash), so repeated calls over the same dependency graph return the\n  entries in the same order. Ordering only; the report's contents\n  still reflect whatever the catalog currently knows about the\n  closure.\n\nNote: Requires authentication and superuser (flox staff) access.",
         "operationId": "raw_dependency_report_api_v1_catalog_info_dependencies__storepath__raw_get",
         "security": [
           {
@@ -2268,6 +2329,51 @@
         "title": "BuildType",
         "description": "Records the build methodology used to produce a package.\n\nNEF packages carry full source metadata and can be reproduced from source;\nmanifest packages were built via the traditional flox manifest workflow."
       },
+      "ByCommandResult": {
+        "properties": {
+          "command_name": {
+            "type": "string",
+            "title": "Command Name"
+          },
+          "providers": {
+            "items": {
+              "$ref": "#/components/schemas/CommandProvider"
+            },
+            "type": "array",
+            "title": "Providers"
+          },
+          "total_count": {
+            "type": "integer",
+            "title": "Total Count"
+          },
+          "listing_known": {
+            "type": "boolean",
+            "title": "Listing Known"
+          }
+        },
+        "type": "object",
+        "required": [
+          "command_name",
+          "providers",
+          "total_count",
+          "listing_known"
+        ],
+        "title": "ByCommandResult",
+        "description": "Packages that provide a command name (reverse command\u2192package lookup).",
+        "example": {
+          "command_name": "readelf",
+          "listing_known": true,
+          "providers": [
+            {
+              "attr_path": "binutils",
+              "exact_name_match": false,
+              "pname": "binutils",
+              "system": "x86_64-linux"
+            }
+          ],
+          "total_count": 1
+        }
+      },
       "CatalogPage": {
         "properties": {
           "page": {
@@ -2586,6 +2692,40 @@
         ],
         "title": "CheckBuildResponse",
         "description": "Response from the check-build endpoint."
+      },
+      "CommandProvider": {
+        "properties": {
+          "attr_path": {
+            "type": "string",
+            "title": "Attr Path"
+          },
+          "pname": {
+            "type": "string",
+            "title": "Pname"
+          },
+          "exact_name_match": {
+            "type": "boolean",
+            "title": "Exact Name Match"
+          },
+          "system": {
+            "$ref": "#/components/schemas/PackageSystem"
+          }
+        },
+        "type": "object",
+        "required": [
+          "attr_path",
+          "pname",
+          "exact_name_match",
+          "system"
+        ],
+        "title": "CommandProvider",
+        "description": "A package that provides a given command name.",
+        "example": {
+          "attr_path": "binutils",
+          "exact_name_match": false,
+          "pname": "binutils",
+          "system": "x86_64-linux"
+        }
       },
       "DeprecationInfo": {
         "properties": {

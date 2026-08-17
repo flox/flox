@@ -366,6 +366,72 @@ manifest packages were built via the traditional flox manifest workflow.*/
             value.parse()
         }
     }
+    ///Packages that provide a command name (reverse command→package lookup).
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "ByCommandResult",
+    ///  "description": "Packages that provide a command name (reverse command→package lookup).",
+    ///  "examples": [
+    ///    {
+    ///      "command_name": "readelf",
+    ///      "listing_known": true,
+    ///      "providers": [
+    ///        {
+    ///          "attr_path": "binutils",
+    ///          "exact_name_match": false,
+    ///          "pname": "binutils",
+    ///          "system": "x86_64-linux"
+    ///        }
+    ///      ],
+    ///      "total_count": 1
+    ///    }
+    ///  ],
+    ///  "type": "object",
+    ///  "required": [
+    ///    "command_name",
+    ///    "listing_known",
+    ///    "providers",
+    ///    "total_count"
+    ///  ],
+    ///  "properties": {
+    ///    "command_name": {
+    ///      "title": "Command Name",
+    ///      "type": "string"
+    ///    },
+    ///    "listing_known": {
+    ///      "title": "Listing Known",
+    ///      "type": "boolean"
+    ///    },
+    ///    "providers": {
+    ///      "title": "Providers",
+    ///      "type": "array",
+    ///      "items": {
+    ///        "$ref": "#/components/schemas/CommandProvider"
+    ///      }
+    ///    },
+    ///    "total_count": {
+    ///      "title": "Total Count",
+    ///      "type": "integer"
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
+    pub struct ByCommandResult {
+        pub command_name: ::std::string::String,
+        pub listing_known: bool,
+        pub providers: ::std::vec::Vec<CommandProvider>,
+        pub total_count: i64,
+    }
+    impl ::std::convert::From<&ByCommandResult> for ByCommandResult {
+        fn from(value: &ByCommandResult) -> Self {
+            value.clone()
+        }
+    }
     ///`CatalogName`
     ///
     /// <details><summary>JSON schema</summary>
@@ -955,6 +1021,61 @@ manifest packages were built via the traditional flox manifest workflow.*/
     }
     impl ::std::convert::From<&CheckBuildResponse> for CheckBuildResponse {
         fn from(value: &CheckBuildResponse) -> Self {
+            value.clone()
+        }
+    }
+    ///A package that provides a given command name.
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "CommandProvider",
+    ///  "description": "A package that provides a given command name.",
+    ///  "examples": [
+    ///    {
+    ///      "attr_path": "binutils",
+    ///      "exact_name_match": false,
+    ///      "pname": "binutils",
+    ///      "system": "x86_64-linux"
+    ///    }
+    ///  ],
+    ///  "type": "object",
+    ///  "required": [
+    ///    "attr_path",
+    ///    "exact_name_match",
+    ///    "pname",
+    ///    "system"
+    ///  ],
+    ///  "properties": {
+    ///    "attr_path": {
+    ///      "title": "Attr Path",
+    ///      "type": "string"
+    ///    },
+    ///    "exact_name_match": {
+    ///      "title": "Exact Name Match",
+    ///      "type": "boolean"
+    ///    },
+    ///    "pname": {
+    ///      "title": "Pname",
+    ///      "type": "string"
+    ///    },
+    ///    "system": {
+    ///      "$ref": "#/components/schemas/PackageSystem"
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
+    pub struct CommandProvider {
+        pub attr_path: ::std::string::String,
+        pub exact_name_match: bool,
+        pub pname: ::std::string::String,
+        pub system: PackageSystem,
+    }
+    impl ::std::convert::From<&CommandProvider> for CommandProvider {
+        fn from(value: &CommandProvider) -> Self {
             value.clone()
         }
     }
@@ -1729,6 +1850,88 @@ catalog) or '<owner>.<pkgset>.*' (package set) — e.g. 'brantley.*'
             value: ::std::string::String,
         ) -> ::std::result::Result<Self, self::error::ConversionError> {
             value.parse()
+        }
+    }
+    ///`Name`
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "Name",
+    ///  "type": "string",
+    ///  "maxLength": 200,
+    ///  "minLength": 2
+    ///}
+    /// ```
+    /// </details>
+    #[derive(::serde::Serialize, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+    #[serde(transparent)]
+    pub struct Name(::std::string::String);
+    impl ::std::ops::Deref for Name {
+        type Target = ::std::string::String;
+        fn deref(&self) -> &::std::string::String {
+            &self.0
+        }
+    }
+    impl ::std::convert::From<Name> for ::std::string::String {
+        fn from(value: Name) -> Self {
+            value.0
+        }
+    }
+    impl ::std::convert::From<&Name> for Name {
+        fn from(value: &Name) -> Self {
+            value.clone()
+        }
+    }
+    impl ::std::str::FromStr for Name {
+        type Err = self::error::ConversionError;
+        fn from_str(
+            value: &str,
+        ) -> ::std::result::Result<Self, self::error::ConversionError> {
+            if value.chars().count() > 200usize {
+                return Err("longer than 200 characters".into());
+            }
+            if value.chars().count() < 2usize {
+                return Err("shorter than 2 characters".into());
+            }
+            Ok(Self(value.to_string()))
+        }
+    }
+    impl ::std::convert::TryFrom<&str> for Name {
+        type Error = self::error::ConversionError;
+        fn try_from(
+            value: &str,
+        ) -> ::std::result::Result<Self, self::error::ConversionError> {
+            value.parse()
+        }
+    }
+    impl ::std::convert::TryFrom<&::std::string::String> for Name {
+        type Error = self::error::ConversionError;
+        fn try_from(
+            value: &::std::string::String,
+        ) -> ::std::result::Result<Self, self::error::ConversionError> {
+            value.parse()
+        }
+    }
+    impl ::std::convert::TryFrom<::std::string::String> for Name {
+        type Error = self::error::ConversionError;
+        fn try_from(
+            value: ::std::string::String,
+        ) -> ::std::result::Result<Self, self::error::ConversionError> {
+            value.parse()
+        }
+    }
+    impl<'de> ::serde::Deserialize<'de> for Name {
+        fn deserialize<D>(deserializer: D) -> ::std::result::Result<Self, D::Error>
+        where
+            D: ::serde::Deserializer<'de>,
+        {
+            ::std::string::String::deserialize(deserializer)?
+                .parse()
+                .map_err(|e: self::error::ConversionError| {
+                    <D::Error as ::serde::de::Error>::custom(e.to_string())
+                })
         }
     }
     ///`NarFileLookup`
@@ -5570,6 +5773,62 @@ Sends a `POST` request to `/api/v1/catalog/build-inputs/lookup`
             .build()?;
         let info = OperationInfo {
             operation_id: "lookup_api_v1_catalog_build_inputs_lookup_post",
+        };
+        self.pre(&mut request, &info).await?;
+        let result = self.exec(request, &info).await;
+        self.post(&result, &info).await?;
+        let response = result?;
+        match response.status().as_u16() {
+            200u16 => ResponseValue::from_response(response).await,
+            422u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            _ => Err(Error::UnexpectedResponse(response)),
+        }
+    }
+    /**Find packages that provide a command
+
+Reverse lookup: which package(s) provide the given command name.
+
+Required Query Parameters:
+- **system**: The system architecture to search for (e.g., x86_64-linux)
+- **name**: The command name to look up (e.g., readelf, rg, gcc-13)
+
+Returns:
+- **ByCommandResult**: Providers of the command and total count
+
+Note: first pass returns a hardcoded mock so the OpenAPI contract can
+freeze before the command_index table lands. No database query yet.
+
+Sends a `GET` request to `/api/v1/catalog/by-command`
+
+*/
+    pub async fn by_command_api_v1_catalog_by_command_get<'a>(
+        &'a self,
+        name: &'a types::Name,
+        system: types::PackageSystem,
+    ) -> Result<ResponseValue<types::ByCommandResult>, Error<types::ErrorResponse>> {
+        let url = format!("{}/api/v1/catalog/by-command", self.baseurl);
+        let mut header_map = ::reqwest::header::HeaderMap::with_capacity(1usize);
+        header_map
+            .append(
+                ::reqwest::header::HeaderName::from_static("api-version"),
+                ::reqwest::header::HeaderValue::from_static(Self::api_version()),
+            );
+        #[allow(unused_mut)]
+        let mut request = self
+            .client
+            .get(url)
+            .header(
+                ::reqwest::header::ACCEPT,
+                ::reqwest::header::HeaderValue::from_static("application/json"),
+            )
+            .query(&progenitor_client::QueryParam::new("name", &name))
+            .query(&progenitor_client::QueryParam::new("system", &system))
+            .headers(header_map)
+            .build()?;
+        let info = OperationInfo {
+            operation_id: "by_command_api_v1_catalog_by_command_get",
         };
         self.pre(&mut request, &info).await?;
         let result = self.exec(request, &info).await;

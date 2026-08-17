@@ -32,7 +32,7 @@ use crate::MapApiErrorExt;
 use crate::accounts::{AccountsApiClient, MeError};
 use crate::auth::{AccessToken, AuthContext, IdentityError, UserIdentity, identity};
 use crate::config::FloxhubClientConfig;
-use crate::error::{FloxhubClientError, ResolveError, SearchError, VersionsError};
+use crate::error::{ByCommandError, FloxhubClientError, ResolveError, SearchError, VersionsError};
 use crate::mock::MockGuard;
 use crate::types::*;
 
@@ -232,6 +232,16 @@ pub trait CatalogClientTrait {
         limit: SearchLimit,
     ) -> Result<SearchResults, SearchError>;
 
+    /// Find packages that provide a named command.
+    ///
+    /// Unlike [`Self::search`], the endpoint is not paginated: a single
+    /// response carries every provider it knows about.
+    async fn by_command(
+        &self,
+        command_name: impl AsRef<str> + Send + Sync,
+        system: api_types::PackageSystem,
+    ) -> Result<ByCommandResult, ByCommandError>;
+
     /// Get all versions of an attr_path.
     async fn package_versions(
         &self,
@@ -418,6 +428,29 @@ impl CatalogClientTrait for FloxhubClient {
         let search_results = SearchResults { results, count };
 
         Ok(search_results)
+    }
+
+    async fn by_command(
+        &self,
+        command_name: impl AsRef<str> + Send + Sync,
+        system: api_types::PackageSystem,
+    ) -> Result<ByCommandResult, ByCommandError> {
+        tracing::debug!(
+            command_name = command_name.as_ref().to_string(),
+            ?system,
+            "sending by-command request"
+        );
+        let command_name = api_types::Name::from_str(command_name.as_ref())
+            .map_err(ByCommandError::InvalidCommandName)?;
+
+        let response = self
+            .catalog
+            .by_command_api_v1_catalog_by_command_get(&command_name, system)
+            .await
+            .map_api_error()
+            .await?;
+
+        Ok(response.into_inner())
     }
 
     async fn package_versions(
