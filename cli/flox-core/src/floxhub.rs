@@ -151,6 +151,23 @@ impl Floxhub {
         &self.base_url
     }
 
+    /// Whether this FloxHub is the hosted (SaaS) deployment.
+    ///
+    /// Keys on the same `hub.<...>.flox.dev` host shape as
+    /// [`Self::resolve_effective_url`], so staging and preview bases count as
+    /// hosted while enterprise / on-premise deployments never match.
+    pub fn is_hosted(&self) -> bool {
+        let Some(host) = self.base_url.host_str() else {
+            return false;
+        };
+        matches!(host.split('.').collect::<Vec<_>>().as_slice(), [
+            "hub",
+            ..,
+            "flox",
+            "dev"
+        ])
+    }
+
     /// Return the url of the FloxHub api endpoint
     ///
     /// If the environment variable `FLOX_CATALOG_URL` is set,
@@ -272,6 +289,28 @@ mod tests {
                     .as_str(),
                 format!("https://{host}/git"),
             );
+        }
+    }
+
+    #[test]
+    fn is_hosted_keys_on_saas_host_shape() {
+        // Hosted bases match the anchored `hub.<...>.flox.dev` shape,
+        // including staging/preview intermediates; anything else — enterprise
+        // hosts and near-misses on either anchor — is not hosted.
+        for (host, hosted) in [
+            ("hub.flox.dev", true),
+            ("hub.staging.flox.dev", true),
+            ("nothub.flox.dev", false),
+            ("hub.flox.example.com", false),
+            ("floxhub.example.internal", false),
+        ] {
+            let floxhub = Floxhub::new(
+                Url::from_str(&format!("https://{host}")).unwrap(),
+                None,
+                None,
+            )
+            .unwrap();
+            assert_eq!(floxhub.is_hosted(), hosted, "host: {host}");
         }
     }
 
