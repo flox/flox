@@ -56,6 +56,7 @@ pub use core_environment::{
     EditResult,
     SingleSystemUpgradeDiff,
     UpgradeResult,
+    reactivate_required,
 };
 
 pub mod fetcher;

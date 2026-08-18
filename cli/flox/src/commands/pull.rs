@@ -6,6 +6,7 @@ use bpaf::Bpaf;
 use flox_core::data::environment_ref::RemoteEnvironmentRef;
 use flox_events::{CliEnvironmentPayload, EnvDetail, EventKind, EventsHub};
 use flox_manifest::interfaces::{AsLatestSchema, AsWritableManifest, WriteManifest};
+use flox_manifest::lockfile::Lockfile;
 use flox_manifest::raw::SyncTypedToRaw;
 use flox_manifest::{Manifest, Migrated};
 use flox_rust_sdk::flox::{AuthFailure, Flox};
@@ -24,14 +25,16 @@ use flox_rust_sdk::models::environment::{
     Environment,
     EnvironmentError,
     ManagedPointer,
+    UninitializedEnvironment,
     create_dot_flox_gitignore,
+    reactivate_required,
 };
 use flox_rust_sdk::providers::buildenv::BuildEnvError;
 use indoc::{formatdoc, indoc};
 use tracing::{debug, info_span, instrument};
 
 use super::services::warn_manifest_changes_for_services;
-use super::{ConcreteEnvironment, open_path};
+use super::{ConcreteEnvironment, activated_environments, open_path};
 use crate::commands::{EnvironmentSelect, environment_description, environment_select};
 use crate::utils::dialog::{Dialog, Select};
 use crate::utils::errors::{display_chain, format_core_error};
@@ -206,6 +209,9 @@ impl Pull {
                     return Ok(());
                 };
 
+                let uninitialized =
+                    UninitializedEnvironment::from_concrete_environment(&environment);
+
                 match environment {
                     ConcreteEnvironment::Path(_) => {
                         unreachable!("patch environments should be filtered out")
@@ -214,6 +220,7 @@ impl Pull {
                         Self::pull_managed_environment_updates(
                             &flox,
                             managed_environment,
+                            &uninitialized,
                             self.force,
                         )?
                     },
@@ -221,6 +228,7 @@ impl Pull {
                         Self::pull_remote_environment_updates(
                             &flox,
                             remote_environment,
+                            &uninitialized,
                             self.force,
                         )?
                     },
@@ -238,21 +246,28 @@ impl Pull {
     fn pull_managed_environment_updates(
         flox: &Flox,
         mut env: ManagedEnvironment,
+        uninitialized: &UninitializedEnvironment,
         force: bool,
     ) -> Result<(), EnvironmentError> {
+        let lockfile_before = read_existing_lockfile(flox, &env);
+
         let state = env.pull(flox, force)?;
 
         match state {
             PullResult::Updated => {
-                message::updated(formatdoc! {"
-                    Pulled {env_ref} from {floxhub_host}{suffix}
-
-                    You can activate this environment with 'flox activate'
-                    ",
+                message::updated(format!(
+                    "Pulled {env_ref} from {floxhub_host}{suffix}{next_step}",
                     env_ref = env.env_ref(),
                     floxhub_host = flox.floxhub.base_url(),
-                    suffix = if force { " (forced)" } else { "" }
-                });
+                    suffix = if force { " (forced)" } else { "" },
+                    next_step = format_next_step(next_step_after_pull(
+                        flox,
+                        &env,
+                        uninitialized,
+                        lockfile_before.as_ref(),
+                        "flox activate",
+                    )),
+                ));
 
                 warn_manifest_changes_for_services(flox, &env);
             },
@@ -272,10 +287,13 @@ impl Pull {
     fn pull_remote_environment_updates(
         flox: &Flox,
         mut env: RemoteEnvironment,
+        uninitialized: &UninitializedEnvironment,
         force: bool,
     ) -> Result<()> {
         // Open the remote environment and pull updates
         let env_ref = env.env_ref();
+
+        let lockfile_before = read_existing_lockfile(flox, &env);
 
         let pull_result = env.pull(flox, force)?;
 
@@ -283,14 +301,18 @@ impl Pull {
             PullResult::Updated => {
                 // Note: RemoteEnvironment::pull() already updates the out links via update_out_link()
 
-                message::updated(formatdoc! {"
-                    Pulled {env_ref} from {floxhub_host}{suffix}
-
-                    You can activate this environment with 'flox activate -r {env_ref}'
-                    ",
+                message::updated(format!(
+                    "Pulled {env_ref} from {floxhub_host}{suffix}{next_step}",
                     floxhub_host = flox.floxhub.base_url(),
-                    suffix = if force { " (forced)" } else { "" }
-                });
+                    suffix = if force { " (forced)" } else { "" },
+                    next_step = format_next_step(next_step_after_pull(
+                        flox,
+                        &env,
+                        uninitialized,
+                        lockfile_before.as_ref(),
+                        &format!("flox activate -r {env_ref}"),
+                    )),
+                ));
 
                 warn_manifest_changes_for_services(flox, &env);
             },
@@ -739,6 +761,62 @@ impl Pull {
             anyhow!(message)
         }
     }
+}
+
+/// Reads an environment's lockfile from disk, taken on either side of a pull so
+/// that [next_step_after_pull] can tell what the pull changed.
+///
+/// Reads without locking, so this costs nothing beyond a file read. A read that
+/// fails degrades to `None`, which at worst makes the pull suggest a
+/// re-activation that was not needed.
+fn read_existing_lockfile(flox: &Flox, env: &impl Environment) -> Option<Lockfile> {
+    env.existing_lockfile(flox)
+        .inspect_err(|err| debug!(%err, "could not read lockfile around pull"))
+        .ok()
+        .flatten()
+}
+
+/// The next-step line to print after a successful pull, or `None` when there is
+/// nothing useful to say.
+///
+/// An environment that is not active in this shell gets the usual activation
+/// hint. One that is already active is usable as it is — package changes reach a
+/// running activation on their own, because its `$FLOX_ENV` symlink is
+/// re-pointed when the environment is rebuilt — so the only thing worth
+/// mentioning is a change that [reactivate_required] flags.
+fn next_step_after_pull(
+    flox: &Flox,
+    env: &impl Environment,
+    uninitialized: &UninitializedEnvironment,
+    lockfile_before: Option<&Lockfile>,
+    activate_command: &str,
+) -> Option<String> {
+    if !activated_environments().is_active(uninitialized) {
+        return Some(format!(
+            "You can activate this environment with '{activate_command}'"
+        ));
+    }
+
+    let lockfile_after = read_existing_lockfile(flox, env)?;
+
+    match reactivate_required(lockfile_before, &lockfile_after) {
+        Ok(true) => Some(format!(
+            "Exit the shell and run '{activate_command}' to apply the changes."
+        )),
+        Ok(false) => None,
+        Err(err) => {
+            debug!(%err, "could not compare lockfiles after pull");
+            None
+        },
+    }
+}
+
+/// Renders the line from [next_step_after_pull] as the tail of the pull message,
+/// separated from it by a blank line. Absent when there is no next step.
+fn format_next_step(next_step: Option<String>) -> String {
+    next_step
+        .map(|line| format!("\n\n{line}\n"))
+        .unwrap_or_default()
 }
 
 /// Additional (user facing) context for the result of [Pull::handle_pull_result].

@@ -382,6 +382,44 @@ function add_incompatible_package() {
 
 # ---------------------------------------------------------------------------- #
 
+# bats test_tags=pull:active
+# The hint is for a user who still has to activate. Inside an activation of the
+# environment being pulled it is noise, and the packages it fetched are already
+# on PATH, so there is nothing to say at all.
+@test "pull inside an activation of the same environment omits the activation hint" {
+  make_dummy_env "owner" "name"
+
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.yaml"
+  "$FLOX_BIN" pull owner/name
+
+  unset _FLOX_USE_CATALOG_MOCK
+  update_dummy_env "owner" "name"
+
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/gzip.yaml" \
+    run "$FLOX_BIN" activate -- "$FLOX_BIN" pull
+  assert_success
+  assert_line --partial "Pulled owner/name"
+  refute_output --partial "You can activate this environment"
+}
+
+# bats test_tags=pull:active
+@test "pull outside an activation still suggests activating" {
+  make_dummy_env "owner" "name"
+
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.yaml"
+  "$FLOX_BIN" pull owner/name
+
+  unset _FLOX_USE_CATALOG_MOCK
+  update_dummy_env "owner" "name"
+
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/gzip.yaml" \
+    run "$FLOX_BIN" pull
+  assert_success
+  assert_line --partial "You can activate this environment with 'flox activate'"
+}
+
+# ---------------------------------------------------------------------------- #
+
 # bats test_tags=pull:catalog:unsupported:warning
 # An environment that is not compatible with the current system
 # due to the current system missing <system> in `option.systems`

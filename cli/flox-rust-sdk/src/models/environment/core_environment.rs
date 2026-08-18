@@ -1016,28 +1016,37 @@ impl EditResult {
                 old_lockfile,
                 new_lockfile,
                 ..
-            } => {
-                let new_migrated = new_lockfile.migrated_manifest()?;
-                let new_manifest = new_migrated.as_latest_schema();
-
-                let old_migrated = old_lockfile
-                    .as_ref()
-                    .as_ref()
-                    .map(|lockfile| lockfile.migrated_manifest())
-                    .transpose()?;
-                let old_manifest = old_migrated.as_ref().map(|m| m.as_latest_schema());
-
-                let hook_changed =
-                    old_manifest.and_then(|m| m.hook.as_ref()) != new_manifest.hook.as_ref();
-                let vars_changed =
-                    old_manifest.map(|m| m.vars.clone()).unwrap_or_default() != new_manifest.vars;
-                let profile_changed =
-                    old_manifest.and_then(|m| m.profile.as_ref()) != new_manifest.profile.as_ref();
-
-                Ok(hook_changed || vars_changed || profile_changed)
-            },
+            } => reactivate_required(old_lockfile.as_ref().as_ref(), new_lockfile),
         }
     }
+}
+
+/// Whether the changes between two lockfiles only take effect once the user
+/// re-activates.
+///
+/// Package changes reach a running activation on their own, because the
+/// activation's `$FLOX_ENV` is a symlink that gets re-pointed when the
+/// environment is rebuilt. `hook`, `vars`, and `profile` ran once at activation
+/// time and cannot be re-run in place.
+pub fn reactivate_required(
+    old_lockfile: Option<&Lockfile>,
+    new_lockfile: &Lockfile,
+) -> Result<bool, ManifestError> {
+    let new_migrated = new_lockfile.migrated_manifest()?;
+    let new_manifest = new_migrated.as_latest_schema();
+
+    let old_migrated = old_lockfile
+        .map(|lockfile| lockfile.migrated_manifest())
+        .transpose()?;
+    let old_manifest = old_migrated.as_ref().map(|m| m.as_latest_schema());
+
+    let hook_changed = old_manifest.and_then(|m| m.hook.as_ref()) != new_manifest.hook.as_ref();
+    let vars_changed =
+        old_manifest.map(|m| m.vars.clone()).unwrap_or_default() != new_manifest.vars;
+    let profile_changed =
+        old_manifest.and_then(|m| m.profile.as_ref()) != new_manifest.profile.as_ref();
+
+    Ok(hook_changed || vars_changed || profile_changed)
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
@@ -1549,6 +1558,31 @@ mod tests {
         let result = env_view.edit(&flox, new_env_str.to_string(), None).unwrap();
 
         assert!(result.reactivate_required().unwrap());
+    }
+
+    /// With no previous lockfile to compare against — the case `flox pull`
+    /// reaches when it cannot read the pre-pull lockfile — a `hook` in the new
+    /// lockfile still requires re-activation, and a lockfile compared against
+    /// itself never does.
+    #[test]
+    fn reactivate_required_without_old_lockfile() {
+        let (mut env_view, flox, _temp_dir_handle) = empty_core_environment();
+
+        let with_hook = r#"
+        version = 1
+
+        [hook]
+        on-activate = ""
+        "#;
+
+        let EditResult::Changed { new_lockfile, .. } =
+            env_view.edit(&flox, with_hook.to_string(), None).unwrap()
+        else {
+            panic!("adding a hook should change the manifest");
+        };
+
+        assert!(reactivate_required(None, &new_lockfile).unwrap());
+        assert!(!reactivate_required(Some(&new_lockfile), &new_lockfile).unwrap());
     }
 
     /// Check that with an empty list of packages to upgrade, all packages are upgraded
