@@ -158,6 +158,10 @@ pub trait Publisher {
 }
 
 /// Simple struct to hold the information of a locked URL.
+///
+/// Built only by `gather_build_repo_meta`, so `url` has already been through
+/// `parse_publishable_remote_url`.
+#[allow(clippy::manual_non_exhaustive)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RemoteBuildRepoMetadata {
     pub url: Url,
@@ -165,6 +169,7 @@ pub struct RemoteBuildRepoMetadata {
     pub rev: String,
     pub rev_count: u64,
     pub rev_date: DateTime<Utc>,
+    _private: (),
 }
 
 /// Ensures that the required metadata for publishing is consistent from the environment
@@ -1210,26 +1215,31 @@ fn check_env_files_tracked(
     Ok(())
 }
 
-/// Parse a git remote URL into the form published to FloxHub, dropping the
+/// Parse a git remote URL into the form published to FloxHub, dropping any
 /// userinfo the URL type can address.
 ///
-/// The URL identifies the source repo; userinfo is not needed for that. The
-/// setters only ever remove, and they decline to act on URLs that cannot
-/// carry userinfo, so this never publishes more than it did before.
-///
 /// The username is kept for ssh-family schemes: there it is the login
-/// (`git@github.com`) and the URL does not clone without it. Telling a login
-/// from any other value would be a guess, and a wrong guess breaks
-/// publishing.
-fn parse_publishable_remote_url(raw: &str) -> Result<Url, PublishError> {
-    let mut url = GitUrl::parse_to_url(raw)
-        .map_err(|err| build_repo_err(&format!("Could not parse the remote URL: {err}")))?;
+/// (`git@github.com`) and the URL does not clone without it. A login and a
+/// token are indistinguishable in that position. `GitUrl::trim_auth` is no
+/// substitute because it drops the user too.
+///
+/// Not every credential is reachable. `parse_to_url` returns `git://` with no
+/// host, and a remote-helper address like `hg::https://…` as
+/// `ssh://hg/:https://…` with the credential in the path. Those still publish
+/// in full; `publish_url_still_carries_userinfo_for_shapes_the_parser_mangles`
+/// pins them. An ssh remote with no path panics inside the parser rather than
+/// returning an error.
+fn parse_publishable_remote_url(raw: &str, remote_name: &str) -> Result<Url, PublishError> {
+    let mut url = GitUrl::parse_to_url(raw).map_err(|err| {
+        build_repo_err(&format!(
+            "Could not parse the URL for remote '{remote_name}': {err}"
+        ))
+    })?;
 
     let _ = url.set_password(None);
-    // Exhaustive for the ssh family: the parser folds every lowercase
-    // ssh-bearing scheme to plain `ssh`, and `url` lowercases the rest, so a
-    // mixed-case `GIT+SSH://` arrives as one of these three. A substring test
-    // would also match `notssh` and friends and keep their username.
+    // Every ssh remote lands on one of these: the parser folds lowercase
+    // schemes containing "ssh" to plain `ssh`, and `url` lowercases the rest,
+    // so `GIT+SSH://` arrives as `git+ssh`.
     if !matches!(url.scheme(), "ssh" | "git+ssh" | "ssh+git") {
         let _ = url.set_username("");
     }
@@ -1319,7 +1329,7 @@ fn gather_build_repo_meta(
         }));
     }
 
-    let url = parse_publishable_remote_url(&remote_info.url)?;
+    let url = parse_publishable_remote_url(&remote_info.url, &remote_info.name)?;
 
     Ok(RemoteBuildRepoMetadata {
         url,
@@ -1327,14 +1337,14 @@ fn gather_build_repo_meta(
         rev_count: status.rev_count,
         rev_date: status.rev_date,
         ref_: remote_info.reference,
+        _private: (),
     })
 }
 
 // TODO: remove after discussion reg UX of this change.
 //
-// SECURITY: if re-enabled, route the return value through
-// `parse_publishable_remote_url`. It returns raw `git remote get-url` output,
-// which can carry a credential in its userinfo.
+// SECURITY: returns raw `git remote get-url` output, which can carry a
+// credential. If re-enabled, pass the result through `parse_publishable_remote_url`.
 #[allow(unused)]
 fn url_for_remote_containing_current_rev(
     git: &impl GitProvider,
@@ -2236,6 +2246,7 @@ pub mod tests {
                 ref_: "dummy".to_string(),
                 rev_count: 0,
                 rev_date: "2025-01-01T12:00:00Z".parse::<DateTime<Utc>>().unwrap(),
+                _private: (),
             },
 
             _private: (),
@@ -2914,12 +2925,20 @@ pub mod tests {
     /// Fails GitHub's token checksum, so no scanner mistakes it for live.
     const FAKE_TOKEN: &str = "ghs_EXAMPLEnotarealtoken0000000000000";
 
-    /// Asserted on the whole serialized URL; component-only assertions hid a
-    /// mangled path in an earlier revision.
+    /// Whole serialized URL, so a mangled path cannot hide behind a passing
+    /// component check.
     fn published(raw: &str) -> String {
-        parse_publishable_remote_url(raw)
+        parse_publishable_remote_url(raw, "origin")
             .unwrap_or_else(|e| panic!("refused {raw}: {e}"))
             .to_string()
+    }
+
+    /// The message shown when the parser will not accept a remote at all.
+    fn refused(raw: &str) -> String {
+        match parse_publishable_remote_url(raw, "origin") {
+            Ok(url) => panic!("expected {raw} to be refused, got {url}"),
+            Err(err) => err.to_string(),
+        }
     }
 
     #[test]
@@ -2947,9 +2966,8 @@ pub mod tests {
 
     #[test]
     fn publish_url_retains_any_ssh_username() {
-        // scp syntax normalizes to scheme ssh, so every username in that
-        // position is kept, not just a login. Unchanged from before; telling
-        // them apart would be a guess.
+        // scp syntax normalizes to scheme ssh, so any username in that
+        // position is kept; a login and a token look the same there.
         let raw = format!("{FAKE_TOKEN}@github.com:org/repo.git");
 
         assert_eq!(
@@ -2972,13 +2990,12 @@ pub mod tests {
                 "http://github.com/floxy/myrepo",
             ),
         ] {
-            assert_eq!(published(&raw), expected);
+            assert_eq!(published(&raw), expected, "for {raw}");
         }
     }
 
     #[test]
     fn publish_url_leaves_an_at_sign_in_the_path_alone() {
-        // `myprofile` in the codecommit form is an AWS CLI profile name.
         for (raw, expected) in [
             (
                 "/srv/git/team@acme/repo.git",
@@ -2992,12 +3009,8 @@ pub mod tests {
                 "https://github.com/o/r-with@sign.git",
                 "https://github.com/o/r-with@sign.git",
             ),
-            (
-                "codecommit::us-east-1://myprofile@myrepo",
-                "ssh://codecommit/:us-east-1://myprofile@myrepo",
-            ),
         ] {
-            assert_eq!(published(raw), expected);
+            assert_eq!(published(raw), expected, "for {raw}");
         }
     }
 
@@ -3026,28 +3039,79 @@ pub mod tests {
     }
 
     #[test]
-    fn publish_url_passes_through_shapes_the_parser_mangles() {
-        // These come back re-spelled, with the original address in the path or
-        // with no host at all, so the URL type has no userinfo to address and
-        // the setters decline. Returned exactly as before this change.
-        for raw in [
-            format!("hg::https://x-access-token:{FAKE_TOKEN}@bitbucket.org/o/r"),
-            format!("git://x-access-token:{FAKE_TOKEN}@corp.example/o/r"),
-            "codecommit::us-east-1://myprofile@myrepo".to_string(),
+    fn publish_url_still_carries_userinfo_for_shapes_the_parser_mangles() {
+        // These shapes still ship the credential: the parser moves it into the
+        // path or drops the host, out of the setters' reach. Expected values
+        // are literals so a parser change fails here rather than moving both
+        // sides of the comparison.
+        for (raw, expected) in [
+            (
+                format!("git://x-access-token:{FAKE_TOKEN}@corp.example/o/r"),
+                format!("git:////x-access-token:{FAKE_TOKEN}@corp.example/o/r"),
+            ),
+            (
+                format!("hg::https://x-access-token:{FAKE_TOKEN}@bitbucket.org/o/r"),
+                format!("ssh://hg/:https://x-access-token:{FAKE_TOKEN}@bitbucket.org/o/r"),
+            ),
+            (
+                format!("codecommit::us-east-1://{FAKE_TOKEN}@myrepo"),
+                format!("ssh://codecommit/:us-east-1://{FAKE_TOKEN}@myrepo"),
+            ),
         ] {
-            assert_eq!(
-                published(&raw),
-                GitUrl::parse_to_url(&raw).unwrap().to_string()
+            assert_eq!(published(&raw), expected, "for {raw}");
+            assert!(
+                published(&raw).contains(FAKE_TOKEN),
+                "this test exists to pin that the token still ships: {raw}"
             );
         }
     }
 
     #[test]
+    fn publish_url_refuses_remotes_the_parser_rejects() {
+        // Pre-existing refusals, including Azure DevOps' documented PAT form.
+        // Pinned so a parser that starts accepting one cannot slip it through
+        // the strip untested.
+        for raw in [
+            format!("https://:{FAKE_TOKEN}@dev.azure.com/org/proj/_git/repo"),
+            "https://user:@github.com/o/r.git".to_string(),
+            "https://user%40corp:p%40ss@github.com/o/r.git".to_string(),
+        ] {
+            assert_eq!(
+                refused(&raw),
+                "The environment is in an unsupported state for publishing: \
+                 Could not parse the URL for remote 'origin': Git Url must have a path",
+                "for {raw}"
+            );
+            assert!(
+                !refused(&raw).contains(FAKE_TOKEN),
+                "token echoed for {raw}"
+            );
+        }
+
+        let percent_encoded = "https://x-access-token:tok%2Fen@github.com/o/r";
+        assert_eq!(
+            refused(percent_encoded),
+            "The environment is in an unsupported state for publishing: \
+             Could not parse the URL for remote 'origin': Invalid port number"
+        );
+    }
+
+    #[test]
+    fn publish_url_refusal_names_the_remote_and_not_the_url() {
+        // Echoing the URL would put the credential in the error.
+        let raw = format!("https://:{FAKE_TOKEN}@dev.azure.com/org/proj/_git/repo");
+        let message = parse_publishable_remote_url(&raw, "upstream")
+            .unwrap_err()
+            .to_string();
+
+        assert!(message.contains("remote 'upstream'"), "{message}");
+        assert!(!message.contains(FAKE_TOKEN), "{message}");
+    }
+
+    #[test]
     fn publish_url_covers_every_known_remote_shape() {
-        // One table, exact expected output per shape, so any change in
-        // behaviour shows up here rather than in a property that happens to
-        // stay true. Rows that keep their userinfo are the documented
-        // pass-throughs: the parser leaves them with nothing addressable.
+        // Exact expected output per shape. Rows that keep their userinfo are
+        // the documented pass-throughs.
         for (raw, expected) in [
             (
                 format!("https://x-access-token:{FAKE_TOKEN}@github.com/o/r"),
@@ -3087,8 +3151,8 @@ pub mod tests {
                 format!("GIT+SSH://user:{FAKE_TOKEN}@github.com/o/r.git"),
                 "git+ssh://user@github.com/o/r.git".to_string(),
             ),
-            // Schemes that merely contain "ssh" are not ssh: a substring test
-            // would keep these usernames.
+            // Uppercase schemes that merely contain "ssh" are not ssh, and
+            // the parser leaves them alone, so the exact match strips them.
             (
                 format!("NOTSSH://user:{FAKE_TOKEN}@host/o/r"),
                 "notssh://host/o/r".to_string(),
@@ -3096,6 +3160,16 @@ pub mod tests {
             (
                 format!("SSH-TUNNEL://user:{FAKE_TOKEN}@host/o/r"),
                 "ssh-tunnel://host/o/r".to_string(),
+            ),
+            // Lowercase, the parser folds these to `ssh` before the match runs,
+            // so they keep their username under any test.
+            (
+                format!("notssh://{FAKE_TOKEN}@host/o/r"),
+                format!("ssh://{FAKE_TOKEN}@host/o/r"),
+            ),
+            (
+                format!("ssh-tunnel://{FAKE_TOKEN}@host/o/r"),
+                format!("ssh://{FAKE_TOKEN}@host/o/r"),
             ),
             (
                 format!("{FAKE_TOKEN}@github.com:o/r.git"),
@@ -3120,6 +3194,16 @@ pub mod tests {
             (
                 format!("https://user:{FAKE_TOKEN}@git.example.com:8443/o/r"),
                 "https://git.example.com:8443//o/r".to_string(),
+            ),
+            // An `@` inside the password is not a second delimiter.
+            (
+                "https://user:tok@en@github.com/o/r".to_string(),
+                "https://github.com/o/r".to_string(),
+            ),
+            // Gerrit needs the https username to clone; dropping it is intended.
+            (
+                "https://user@gerrit.example.com/a/project".to_string(),
+                "https://gerrit.example.com/a/project".to_string(),
             ),
         ] {
             assert_eq!(published(&raw), expected, "for {raw}");
