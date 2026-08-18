@@ -428,9 +428,20 @@ impl FloxArgs {
 
         // Warn when the catalog is actually contacted for resolution while
         // unauthenticated (see `FloxhubClient::resolve`). Rate limiting lives
-        // in `warn_unauthenticated_resolve`; like other advisory messages the
-        // warning is suppressed for the prompt-hook flow.
-        let on_unauthenticated_resolve = (!self.is_prompt_hook_flow()).then(|| {
+        // in `warn_unauthenticated_resolve`. The hook is not installed for
+        // the prompt-hook flow (like other advisory messages) or under `-q`:
+        // installing-but-silencing would still write the 8-hour stamp and
+        // mute the next interactive warning the user never saw.
+        //
+        // This deliberately coexists with the once-per-shell-session
+        // logged-out reminder from `resolve_auth_context`: the reminder
+        // reports current status on every command, while this warning fires
+        // only on the resolve that will start failing once catalog auth
+        // gating is enforced — at which point it becomes an error (or an
+        // interactive login prompt) and the overlap gets revisited.
+        let install_resolve_warning =
+            !self.is_prompt_hook_flow() && !matches!(self.verbosity, Verbosity::Quiet);
+        let on_unauthenticated_resolve = install_resolve_warning.then(|| {
             let cache_dir = config.flox.cache_dir.clone();
             UnauthenticatedResolveHook::new(move || {
                 auth_warning::warn_unauthenticated_resolve(&cache_dir)
