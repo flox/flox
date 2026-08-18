@@ -75,6 +75,28 @@ teardown() {
   refute_output --partial "$RESOLVE_AUTH_WARNING"
 }
 
+@test "'-q' does not consume the rate-limit window" {
+  unset FLOX_FLOXHUB_TOKEN
+  flox_init_pinned
+  run "$FLOX_BIN" -q install hello
+  refute_output --partial "$RESOLVE_AUTH_WARNING"
+  # The quiet invocation must not have written the stamp: the next
+  # interactive resolve still warns.
+  rm .flox/env/manifest.lock
+  run "$FLOX_BIN" list
+  assert_success
+  assert_output --partial "$RESOLVE_AUTH_WARNING"
+}
+
+@test "resolving with an expired token prints the auth warning" {
+  # Same shape as the suite token but with exp in the past (2001-09-09).
+  export FLOX_FLOXHUB_TOKEN="eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3guZGV2L2hhbmRsZSI6InRlc3QiLCJleHAiOjEwMDAwMDAwMDB9.6-nbzFzQEjEX7dfWZFLE-I_qW2N_-9W2HFzzfsquI74"
+  flox_init_pinned
+  run "$FLOX_BIN" install hello
+  assert_success
+  assert_output --partial "$RESOLVE_AUTH_WARNING"
+}
+
 # ---------------------------------------------------------------------------- #
 # No resolve, no warning
 # ---------------------------------------------------------------------------- #

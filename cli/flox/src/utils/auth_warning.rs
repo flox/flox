@@ -12,6 +12,7 @@
 use std::path::Path;
 use std::{fs, io};
 
+use indoc::indoc;
 use serde::{Deserialize, Serialize};
 use time::{Duration, OffsetDateTime};
 use tracing::debug;
@@ -23,7 +24,10 @@ const RESOLVE_AUTH_WARNING_EXPIRY: Duration = Duration::hours(8);
 
 // TODO(DEV-200): append the docs URL explaining the auth transition once the
 // explainer page exists.
-const RESOLVE_AUTH_WARNING: &str = "Resolving packages will require authentication to FloxHub in an upcoming release.\nRun 'flox auth login' to authenticate now.";
+const RESOLVE_AUTH_WARNING: &str = indoc! {"
+    Resolving packages will require authentication to FloxHub in an upcoming release.
+    Run 'flox auth login' to authenticate now.\
+"};
 
 /// Timestamp serialized to a file to track when the user was last warned.
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -36,8 +40,11 @@ struct LastResolveAuthWarning {
 /// [`RESOLVE_AUTH_WARNING_EXPIRY`] per user (tracked by a timestamp file in
 /// the cache directory).
 ///
-/// Emitted via [`message::warning`], so `-q` silences it through the logger
-/// filter and it lands on stderr like every other advisory message.
+/// Emitted via [`message::warning`], landing on stderr like every other
+/// advisory message. The stamp is only written when the warning is actually
+/// emitted: invocations that suppress it (`-q`, the prompt-hook flow) never
+/// install the hook that calls this (see `FloxArgs::handle`), so they cannot
+/// consume the 8-hour window.
 pub(crate) fn warn_unauthenticated_resolve(cache_dir: impl AsRef<Path>) {
     let stamp_file = cache_dir.as_ref().join(RESOLVE_AUTH_WARNING_FILE_NAME);
     let now = OffsetDateTime::now_utc();
