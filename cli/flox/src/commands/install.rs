@@ -160,40 +160,50 @@ impl Install {
             bail!("Must specify at least one package");
         }
 
-        let mut concrete_environment = match self
-            .environment
-            .detect_concrete_environment(&mut flox, "Install to")
-            .await
+        // Zero-setup: `flox install -D` names the default environment
+        // explicitly, so resolve it with creation allowed rather than through
+        // the read-only detection path, which never creates and instead
+        // forces a login when logged out with nothing to resolve.
+        let mut concrete_environment = if flox.features.auto_default
+            && matches!(self.environment, EnvironmentSelect::Default)
         {
-            Ok(concrete_environment) => concrete_environment,
-            Err(EnvironmentSelectError::EnvironmentError(EnvironmentError::DotFloxNotFound(
-                ref dir,
-            ))) => {
-                let parent = dir.parent().unwrap_or(dir).display().to_string();
-                Err(NoEnvironmentError::Directory(parent))?
-            },
-            // Zero-setup: installing a package is an explicit request for an
-            // environment to exist, so resolve or create the default
-            // environment without prompting. Covers both no-env variants
-            // (`EnvNotFound` from detection, `EnvNotFoundInCurrentDirectory`
-            // from direct resolution).
-            Err(
-                EnvironmentSelectError::EnvNotFoundInCurrentDirectory
-                | EnvironmentSelectError::EnvNotFound,
-            ) if flox.features.auto_default => {
-                auto_default::open_or_create_default_environment(&mut flox).await?
-            },
-            Err(e @ EnvironmentSelectError::EnvNotFoundInCurrentDirectory) => {
-                try_create_default_environment_interactive(
-                    &mut flox,
-                    e,
-                    &self.packages,
-                    &packages_to_install,
-                )
-                .await?
-            },
-            Err(EnvironmentSelectError::Anyhow(e)) => Err(e)?,
-            Err(e) => Err(e)?,
+            auto_default::open_or_create_default_environment(&mut flox).await?
+        } else {
+            match self
+                .environment
+                .detect_concrete_environment(&mut flox, "Install to")
+                .await
+            {
+                Ok(concrete_environment) => concrete_environment,
+                Err(EnvironmentSelectError::EnvironmentError(
+                    EnvironmentError::DotFloxNotFound(ref dir),
+                )) => {
+                    let parent = dir.parent().unwrap_or(dir).display().to_string();
+                    Err(NoEnvironmentError::Directory(parent))?
+                },
+                // Zero-setup: installing a package is an explicit request for an
+                // environment to exist, so resolve or create the default
+                // environment without prompting. Covers both no-env variants
+                // (`EnvNotFound` from detection, `EnvNotFoundInCurrentDirectory`
+                // from direct resolution).
+                Err(
+                    EnvironmentSelectError::EnvNotFoundInCurrentDirectory
+                    | EnvironmentSelectError::EnvNotFound,
+                ) if flox.features.auto_default => {
+                    auto_default::open_or_create_default_environment(&mut flox).await?
+                },
+                Err(e @ EnvironmentSelectError::EnvNotFoundInCurrentDirectory) => {
+                    try_create_default_environment_interactive(
+                        &mut flox,
+                        e,
+                        &self.packages,
+                        &packages_to_install,
+                    )
+                    .await?
+                },
+                Err(EnvironmentSelectError::Anyhow(e)) => Err(e)?,
+                Err(e) => Err(e)?,
+            }
         };
         environment_subcommand_metric!("install", concrete_environment);
         if let Err(err) = EventsHub::global().record_event(EventKind::CliEnvironmentInstall(

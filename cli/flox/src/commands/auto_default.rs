@@ -53,6 +53,7 @@ use flox_rust_sdk::providers::git::GitRemoteCommandError;
 use tracing::debug;
 
 use crate::commands::install::prompt_to_modify_rc_file;
+use crate::utils::active_environments::activated_environments;
 use crate::utils::dialog::Dialog;
 use crate::utils::message;
 
@@ -95,17 +96,26 @@ pub(crate) async fn resolve_default_environment(
     }
 }
 
-/// Open the default environment for `flox install` when no environment is
-/// found, creating it if necessary. Creation is allowed even without a TTY:
-/// installing a package is an explicit request for an environment to exist.
-/// A user who previously declined the default-environment offer keeps that
-/// choice: resolution still works, creation does not.
+/// Open the default environment for `flox install` — both `flox install -D`
+/// and the fallback when no environment is found — creating it if necessary.
+/// Creation is allowed even without a TTY: installing a package is an
+/// explicit request for an environment to exist. A user who previously
+/// declined the default-environment offer keeps that choice: resolution
+/// still works, creation does not.
 pub(crate) async fn open_or_create_default_environment(
     flox: &mut Flox,
 ) -> Result<ConcreteEnvironment> {
     let source = owner_source(flox).await;
     let allow_create = !declined_default_env(flox);
-    resolve_auto(flox, source, None, allow_create).await
+    let env = resolve_auto(flox, source, None, allow_create).await?;
+    // Reopen at the active generation the way `detect_concrete_environment`
+    // does: an environment activated at a specific generation must keep the
+    // generation-immutability guard on mutations.
+    let uninit = UninitializedEnvironment::from_concrete_environment(&env);
+    match activated_environments().is_active_with_generation(&uninit) {
+        Some(generation) => Ok(uninit.into_concrete_environment(flox, Some(generation))?),
+        None => Ok(env),
+    }
 }
 
 /// Whether the user answered "No" to the pre-flag default-environment offer.
