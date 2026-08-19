@@ -11,7 +11,7 @@
 use std::path::Path;
 
 use anyhow::Result;
-use flox_core::activations::{ActivationState, write_activations_json};
+use flox_core::activations::{ActivationState, StartIdentifier, write_activations_json};
 use flox_core::proc_status::pid_is_running;
 use fslock::LockFile;
 use time::OffsetDateTime;
@@ -24,45 +24,50 @@ type Error = anyhow::Error;
 /// TODO: there's probably a cleaner way to do this
 pub type LockedActivationState = (ActivationState, LockFile);
 
+/// Outcome of [cleanup_pid].
+pub enum CleanupPidResult {
+    /// All PIDs have terminated; the caller should run full cleanup while
+    /// still holding the lock.
+    AllDetached(LockedActivationState),
+    /// PIDs remain and the lock has been released. Starts left without
+    /// attachments were removed from state.json and must be torn down by the
+    /// caller (running their `hook.on-deactivate`).
+    Remaining { orphaned: Vec<StartIdentifier> },
+}
+
 /// Check if the provided PID is still running and clean it up if not.
 ///
 /// Takes the state already locked rather than reading it, so that whether
 /// state.json still exists is decided by the caller. Every arm of the event
 /// loop answers that the same way, and it is not this function's policy to set.
-///
-/// Returns `Some(LockedActivationState)` if all PIDs have terminated and
-/// cleanup should proceed.
-/// Returns `None` if there are still active PIDs.
 pub fn cleanup_pid(
     locked_activations: LockedActivationState,
     state_json_path: &Path,
     pid: i32,
-) -> Result<Option<LockedActivationState>, Error> {
+) -> Result<CleanupPidResult, Error> {
     let (mut activations, lock) = locked_activations;
 
     let now = OffsetDateTime::now_utc();
-    let (empty_start_id, modified) = activations.cleanup_pid(pid, pid_is_running, now);
+    let modified = activations.cleanup_pid(pid, pid_is_running, now);
 
     // If there are no more attached PIDs for any start, return early and
     // cleanup the entirety of the activation state directory
     if activations.attached_pids_is_empty() {
-        return Ok(Some((activations, lock)));
+        return Ok(CleanupPidResult::AllDetached((activations, lock)));
     }
 
-    // A start emptied by this PID is not torn down here: the caller sweeps it
-    // (running hook.on-deactivate first) after this function's lock has been
-    // released.
-    trace!(
-        ?empty_start_id,
-        "PID cleanup left start with no attachments"
-    );
+    // Remove starts left without attachments from state.json under the same
+    // lock that detached the PID, so they are handed to the caller's sweep
+    // exactly once. The sweep itself must run after the lock is released.
+    let orphaned = activations.remove_orphaned_starts();
+    trace!(?orphaned, "PID cleanup left starts with no attachments");
 
-    if modified {
+    if modified || !orphaned.is_empty() {
         trace!(?activations, "writing PID changes to activation");
         write_activations_json(&activations, state_json_path, lock)?;
     }
 
-    Ok(None)
+    Ok(CleanupPidResult::Remaining { orphaned })
 }
 
 #[cfg(test)]
@@ -84,7 +89,7 @@ pub mod test {
     use flox_core::proc_status::{ProcStatus, pid_is_running, read_pid_status};
 
     use super::*;
-    use crate::on_deactivate::{orphaned_start_ids, sweep_orphaned_starts};
+    use crate::on_deactivate::sweep_orphaned_starts;
 
     /// Create minimal context for testing.
     /// The actual values don't matter since tests don't trigger SIGUSR1.
@@ -202,16 +207,21 @@ pub mod test {
         let activation_state_dir = activation_state_dir_path(runtime_dir.path(), &dot_flox_path);
         let state_json_path = state_json_path(&activation_state_dir);
 
-        // Clean up first PID - should not trigger full cleanup yet
+        // Clean up first PID - should not trigger full cleanup yet, and the
+        // start still has pid2 attached so nothing is orphaned.
         stop_process(proc1);
         let result = cleanup_pid(locked_state(&state_json_path), &state_json_path, pid1).unwrap();
-        assert!(result.is_none(), "should not cleanup after first PID");
+        let CleanupPidResult::Remaining { orphaned } = result else {
+            panic!("should not cleanup after first PID");
+        };
+        assert_eq!(orphaned, Vec::new());
 
         // Clean up second PID - should trigger full cleanup
         stop_process(proc2);
-        let (state, _lock) = cleanup_pid(locked_state(&state_json_path), &state_json_path, pid2)
-            .unwrap()
-            .expect("should return cleanup result");
+        let result = cleanup_pid(locked_state(&state_json_path), &state_json_path, pid2).unwrap();
+        let CleanupPidResult::AllDetached((state, _lock)) = result else {
+            panic!("should return cleanup result");
+        };
         assert_eq!(
             state.attachments_by_start_id(),
             BTreeMap::new(),
@@ -260,27 +270,25 @@ pub mod test {
 
         write_activation_state(runtime_dir.path(), &dot_flox_path, state);
 
-        // Create both state directories with their start id markers
+        // Create both state directories
         let activation_state_dir = activation_state_dir_path(runtime_dir.path(), &dot_flox_path);
         let state_dir_1 = start_id_1.start_state_dir(&activation_state_dir).unwrap();
         let state_dir_2 = start_id_2.start_state_dir(&activation_state_dir).unwrap();
         std::fs::create_dir_all(&state_dir_1).unwrap();
         std::fs::create_dir_all(&state_dir_2).unwrap();
-        start_id_1
-            .write_to_start_state_dir(&activation_state_dir)
-            .unwrap();
-        start_id_2
-            .write_to_start_state_dir(&activation_state_dir)
-            .unwrap();
         assert!(state_dir_1.exists());
         assert!(state_dir_2.exists());
 
         let state_json_path = state_json_path(&activation_state_dir);
 
-        // Terminate proc1 and call cleanup_pid
+        // Terminate proc1 and call cleanup_pid: the emptied start is removed
+        // from state.json under the lock and returned for the sweep.
         stop_process(proc1);
         let result = cleanup_pid(locked_state(&state_json_path), &state_json_path, pid1).unwrap();
-        assert!(result.is_none(), "should not cleanup while pid2 is running");
+        let CleanupPidResult::Remaining { orphaned } = result else {
+            panic!("should not cleanup while pid2 is running");
+        };
+        assert_eq!(orphaned, vec![start_id_1.clone()]);
 
         // cleanup_pid leaves the emptied start's directory for the caller's
         // sweep, which runs hook.on-deactivate before removing it.
@@ -289,9 +297,6 @@ pub mod test {
             "state directory 1 should be handed off to the sweep, not removed"
         );
 
-        let (activations, lock) = read_activations_json(&state_json_path).unwrap();
-        let orphaned = orphaned_start_ids(&activation_state_dir, &activations.unwrap());
-        drop(lock);
         let (attach, project) = test_context(&dot_flox_path, &flox_env.to_string_lossy());
         sweep_orphaned_starts(0, &attach, &project, &activation_state_dir, orphaned);
 
@@ -299,11 +304,21 @@ pub mod test {
         assert!(!state_dir_1.exists(), "state directory 1 should be removed");
         assert!(state_dir_2.exists(), "state directory 2 should still exist");
 
+        // A second pass finds nothing: the orphaned start is gone from
+        // state.json, so it is only ever handed to the sweep once.
+        let (mut activations, lock) = {
+            let (activations, lock) = read_activations_json(&state_json_path).unwrap();
+            (activations.expect("state.json should exist"), lock)
+        };
+        assert_eq!(activations.remove_orphaned_starts(), Vec::new());
+        drop(lock);
+
         // Clean up
         stop_process(proc2);
-        let (state, _lock) = cleanup_pid(locked_state(&state_json_path), &state_json_path, pid2)
-            .unwrap()
-            .expect("should return cleanup result");
+        let result = cleanup_pid(locked_state(&state_json_path), &state_json_path, pid2).unwrap();
+        let CleanupPidResult::AllDetached((state, _lock)) = result else {
+            panic!("should return cleanup result");
+        };
         assert_eq!(
             state.attachments_by_start_id(),
             BTreeMap::new(),

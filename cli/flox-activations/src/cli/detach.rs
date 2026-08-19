@@ -51,20 +51,20 @@ impl DetachArgs {
             return Ok(());
         };
 
-        let empty_start_id = state.detach(self.pid)?;
+        state.detach(self.pid)?;
 
-        // An emptied start is normally handed off to the executive, which
-        // runs its hook.on-deactivate and then removes the start state dir
-        // once woken by the state.json write below. Without a running
-        // executive (e.g. containerize uses its own PID) nothing would ever
-        // sweep the directory, so remove it inline; no hook runs in that
-        // case.
-        if let Some(ref start_id) = empty_start_id
-            && !state.executive_running()
-        {
-            start_id
-                .remove_start_state_dir(&self.activation_state_dir)
-                .context("failed to remove start state dir after detach")?;
+        // An emptied start is normally torn down by the executive, woken by
+        // the state.json write below: it removes the start from state.json,
+        // runs its hook.on-deactivate, and removes the start state dir.
+        // Without a running executive (e.g. containerize uses its own PID)
+        // nothing would ever do that, so tear orphaned starts down inline; no
+        // hook runs in that case.
+        if !state.executive_running() {
+            for start_id in state.remove_orphaned_starts() {
+                start_id
+                    .remove_start_state_dir(&self.activation_state_dir)
+                    .context("failed to remove start state dir after detach")?;
+            }
         }
 
         // This should trigger the executive to check if it needs to cleanup
@@ -158,6 +158,10 @@ mod test {
         else {
             panic!("expected Start for pid");
         };
+        // Mirror the real lifecycle: the activation completes its hooks and
+        // marks the start ready before any detach happens. A start still in
+        // `Starting` is never torn down by detach.
+        state.set_ready(&start_id);
 
         write_activation_state(tmp.path(), dot_flox_path, state);
 

@@ -13,7 +13,7 @@ use std::process::{Command, Stdio};
 
 use anyhow::{Context, Result};
 use flox_core::activate::context::{AttachCtx, AttachProjectCtx};
-use flox_core::activations::{ActivationState, StartIdentifier, read_start_ids_from_disk};
+use flox_core::activations::StartIdentifier;
 use tracing::{debug, info, warn};
 
 use crate::attach_diff::AttachDiff;
@@ -26,35 +26,14 @@ const BASH_BIN: &str = env!("X_BASH_BIN");
 /// environment's store path.
 const HOOK_ON_DEACTIVATE: &str = "activate.d/hook-on-deactivate";
 
-/// Enumerate the start state directories whose start has no remaining
-/// attachments.
-///
-/// This MUST be called while holding the state.json lock: a start being
-/// created writes its directory before registering itself in state.json
-/// (under the same lock), so enumerating without the lock could catch a
-/// directory whose start isn't visible in `state` yet. The returned starts
-/// can then be torn down after the lock drops — a start with no attachments
-/// can never gain new ones (only `ready` starts can be attached to, and an
-/// emptied start is never `ready`).
-pub fn orphaned_start_ids(
-    activation_state_dir: &Path,
-    state: &ActivationState,
-) -> Vec<StartIdentifier> {
-    let live = state.live_start_ids();
-    read_start_ids_from_disk(activation_state_dir)
-        .into_iter()
-        .filter(|start_id| !live.contains(start_id))
-        .collect()
-}
-
 /// Tear down the given start state directories, running each start's
 /// `hook.on-deactivate` first.
 ///
-/// The `orphaned` list must come from [orphaned_start_ids], but the lock must
-/// be dropped before calling this: the hook has no timeout and must not block
-/// new activations. The sweep is idempotent — a start is torn down exactly
-/// once because its directory is removed immediately after its hook runs,
-/// and everything here runs on the executive's single event loop thread.
+/// The `orphaned` list must come from
+/// `ActivationState::remove_orphaned_starts`, called under the state.json
+/// lock and persisted so a start is only ever handed to this sweep once. The
+/// lock must be dropped before calling this: the hook has no timeout and must
+/// not block new activations.
 pub fn sweep_orphaned_starts(
     subsystem_verbosity: u32,
     attach_ctx: &AttachCtx,
@@ -214,9 +193,6 @@ mod test {
         let start_id = StartIdentifier::new(&store_path);
         let start_state_dir = start_id.start_state_dir(&activation_state_dir).unwrap();
         std::fs::create_dir_all(&start_state_dir).unwrap();
-        start_id
-            .write_to_start_state_dir(&activation_state_dir)
-            .unwrap();
         // Trace recorded during activation: hook.on-activate exported
         // ON_ACTIVATE_VAR. Fields are timestamp, op, exported flags, name,
         // old value (@ = none), and operand, separated by US (0x1f).
@@ -249,44 +225,6 @@ mod test {
         assert!(
             !start_state_dir.exists(),
             "start state dir should be removed after the hook ran"
-        );
-    }
-
-    /// A start is orphaned once its last attachment detaches, and not before.
-    #[test]
-    fn orphaned_start_ids_excludes_live_starts() {
-        let tmp = TempDir::new().unwrap();
-        let activation_state_dir = tmp.path().join("activations");
-        let store_path = tmp.path().join("store-path");
-        let pid = std::process::id() as i32;
-
-        let mut state = flox_core::activations::ActivationState::new(
-            &flox_core::activate::mode::ActivateMode::default(),
-            Some(tmp.path().join(".flox")),
-            &store_path,
-        );
-        let flox_core::activations::StartOrAttachResult::Start { start_id } =
-            state.start_or_attach(pid, &store_path)
-        else {
-            panic!("expected Start");
-        };
-        state.set_ready(&start_id);
-        std::fs::create_dir_all(start_id.start_state_dir(&activation_state_dir).unwrap()).unwrap();
-        start_id
-            .write_to_start_state_dir(&activation_state_dir)
-            .unwrap();
-
-        assert_eq!(
-            orphaned_start_ids(&activation_state_dir, &state),
-            Vec::new(),
-            "a start with an attachment is not orphaned"
-        );
-
-        state.detach(pid).unwrap();
-        assert_eq!(
-            orphaned_start_ids(&activation_state_dir, &state),
-            vec![start_id],
-            "a start becomes orphaned when its last attachment detaches"
         );
     }
 

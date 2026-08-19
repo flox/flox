@@ -28,7 +28,7 @@ use watcher::LockedActivationState;
 
 use crate::cli::activate::NO_REMOVE_ACTIVATION_FILES;
 use crate::logger::init_executive_logger;
-use crate::on_deactivate::{orphaned_start_ids, sweep_orphaned_starts};
+use crate::on_deactivate::sweep_orphaned_starts;
 use crate::process_compose::{process_compose_down, start_process_compose_no_services};
 
 mod event_coordinator;
@@ -255,7 +255,7 @@ fn run_event_loop(
             Ok(ExecutiveEvent::StateFileChanged) => {
                 debug!("state.json changed, checking for new PIDs to monitor");
                 let (state, lock) = read_activations_json(&state_json_path)?;
-                let Some(activations) = state else {
+                let Some(mut activations) = state else {
                     // state.json went away between the watcher observing it and
                     // this read. There is nothing left to monitor, so take the
                     // same exit as StateFileRemoved rather than erroring.
@@ -297,19 +297,24 @@ fn run_event_loop(
                 } else {
                     // A detach may have emptied a start while other
                     // attachments remain (e.g. an explicit `flox deactivate`
-                    // hands the start state dir off to the executive). Tear
-                    // down any such start, dropping the lock first: its
-                    // hook.on-deactivate has no timeout and must not block
-                    // new activations.
-                    let orphaned = orphaned_start_ids(&activation_state_dir, &activations);
-                    drop(lock);
-                    sweep_orphaned_starts(
-                        subsystem_verbosity,
-                        &initial_attach_ctx,
-                        &project_ctx,
-                        &activation_state_dir,
-                        orphaned,
-                    );
+                    // defers teardown to the executive). Remove any such
+                    // start from state.json under the lock, then tear it down
+                    // with the lock released: its hook.on-deactivate has no
+                    // timeout and must not block new activations. The write
+                    // retriggers StateFileChanged, which finds no orphans.
+                    let orphaned = activations.remove_orphaned_starts();
+                    if orphaned.is_empty() {
+                        drop(lock);
+                    } else {
+                        write_activations_json(&activations, &state_json_path, lock)?;
+                        sweep_orphaned_starts(
+                            subsystem_verbosity,
+                            &initial_attach_ctx,
+                            &project_ctx,
+                            &activation_state_dir,
+                            orphaned,
+                        );
+                    }
                 }
             },
             Ok(ExecutiveEvent::StateFileRemoved) => {
@@ -427,7 +432,7 @@ fn handle_process_exited(
 
     // Use PidWatcher to clean up the state
     match watcher::cleanup_pid((activations, lock), state_json_path, pid) {
-        Ok(None) => {
+        Ok(watcher::CleanupPidResult::Remaining { orphaned }) => {
             // Still have active PIDs - check if this PID re-attached
             // and needs to be monitored again.
             //
@@ -522,13 +527,14 @@ fn handle_process_exited(
             coordinator
                 .ensure_monitoring_pids(other_attached_pids)
                 .context("failed to ensure monitoring PIDs")?;
+            drop(lock);
 
             // The exited PID may have been the last attachment for its start
-            // even though other starts still have attachments. Tear down any
-            // such start, dropping the lock first: its hook.on-deactivate has
-            // no timeout and must not block new activations.
-            let orphaned = orphaned_start_ids(activation_state_dir, &activations);
-            drop(lock);
+            // even though other starts still have attachments. cleanup_pid
+            // removed any such start from state.json under its lock; tear
+            // them down now that no lock is held, because their
+            // hook.on-deactivate has no timeout and must not block new
+            // activations.
             sweep_orphaned_starts(
                 subsystem_verbosity,
                 initial_attach_ctx,
@@ -539,7 +545,7 @@ fn handle_process_exited(
 
             Ok(false)
         },
-        Ok(Some(locked_activations)) => {
+        Ok(watcher::CleanupPidResult::AllDetached(locked_activations)) => {
             info!("running cleanup after all PIDs terminated");
             let cleaned_up = cleanup_all(
                 locked_activations,
@@ -739,7 +745,7 @@ fn cleanup_all(
 ) -> Result<bool> {
     info!("running cleanup");
 
-    let (activations_json, _hold_the_lock) = locked_activations;
+    let (mut activations_json, hold_the_lock) = locked_activations;
 
     if !activations_json.attached_pids_is_empty() {
         warn!("cleanup called with PIDs still attached, skipping");
@@ -748,14 +754,18 @@ fn cleanup_all(
 
     shut_down_process_compose(process_compose_bin, socket_path.as_ref());
     let cleanup_path = rename_state_for_removal(activation_state_dir_path.as_ref())?;
+    // The rename already detached the state from new activations (they
+    // recreate the directory under its original name), so the lock guards
+    // nothing anymore; release it before running hooks.
+    drop(hold_the_lock);
 
     // Run hook.on-deactivate for the remaining start(s), mirroring the
     // activation order in reverse: services were shut down above, the hook
-    // bookends close last. This runs after the rename so a hanging hook can't
-    // block new activations — they recreate the directory under its original
-    // name — and it also covers starts handed off by an explicit detach that
-    // the executive never got to sweep.
-    let orphaned = orphaned_start_ids(&cleanup_path, &activations_json);
+    // bookends close last. With no attachments left every start in the state
+    // is orphaned, including starts deferred by an explicit detach that the
+    // executive never got to sweep. No state.json write is needed — the whole
+    // directory is removed below.
+    let orphaned = activations_json.remove_orphaned_starts();
     sweep_orphaned_starts(
         subsystem_verbosity,
         initial_attach_ctx,
