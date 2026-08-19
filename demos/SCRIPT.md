@@ -14,8 +14,12 @@ The prototype spans two branches, both named `prototype/default-env-onboarding`:
 
 | Repo | What changed |
 |------|--------------|
-| `flox` | DEV-269 offline/logged-out `-D` fallback (always on) + zero-setup ladder, login auto-sync, post-install auto-push (behind `FLOX_FEATURES_AUTO_DEFAULT`) |
+| `flox` | DEV-269 offline/logged-out `-D` fallback (always on) + zero-setup ladder (`flox install [-D]` creates the default env), login auto-sync, post-install auto-push (behind `FLOX_FEATURES_AUTO_DEFAULT`) |
 | `floxhub` | web-bff reports onboarding complete when `<handle>/default` exists with ≥1 generation (and heals the Auth0 flag); `PATCH /user/:handle/onboarding-completed` accepts `{"completed": false}` for demo resets |
+
+Every CLI step below was machine-verified on 2026-08-19 against the local
+stack unless marked **[code-verified]** (behavior confirmed in the source, but
+the step needs a login or a browser and so wasn't executed) — see §6.
 
 ## 1. One-time setup
 
@@ -49,52 +53,71 @@ Verify the web UI loads at <https://hub.local.flox.dev:8000/>.
 
 ### Test accounts
 
-Auth is the real Auth0 **dev tenant** (`auth.dev.flox.dev`). You'll want two
-fresh accounts (sign up with email+password during the first login):
+Auth is the real Auth0 **dev tenant** (`auth.dev.flox.dev`). The tenant has
+**no email+password connection** — login options are GitHub, Google, GitLab,
+and SSO. You'll want two fresh identities:
 
 - one for **Path A** (never touches web onboarding until the end),
 - one for **Path B** (starts in web onboarding).
 
-Re-running a path with the *same* account requires the reset steps in §4.
+Using e.g. your GitHub account for one persona and a Google account for the
+other works. Re-running a path with the *same* account requires the reset
+steps in §4.
 
-### Demo shell setup (each new terminal)
+### Snapshot the stack environment (once)
 
-Each persona runs with an isolated `$HOME` so the machine looks factory-fresh
-and none of your real Flox state is touched.
+The flox CLI is pointed at the local stack by env vars that the floxhub
+environment's activation hook exports (`FLOX_FLOXHUB_URL`, `FLOX_CATALOG_URL`,
+`_FLOX_FLOXHUB_GIT_URL`, the `_FLOX_OAUTH_*` dev-tenant config, and
+`SSL_CERT_FILE` for the mkcert TLS certs). **Don't run the demo inside that
+activated shell**: with auto-activation, leaving `~/Code/floxhub` deactivates
+the environment and strips those vars, and while inside it every `flox`
+command targets the floxhub environment.
 
-First, activate the floxhub environment — its activation exports everything
-that points the CLI at the local stack (`FLOX_FLOXHUB_URL`,
-`_FLOX_FLOXHUB_GIT_URL`, `FLOX_CATALOG_URL`, the `_FLOX_OAUTH_*` dev-tenant
-config, and `SSL_CERT_FILE` for the mkcert TLS certs):
+Instead, snapshot the vars to a file. In any shell where the floxhub
+environment is active (e.g. the `just serve-all` terminal before starting the
+services, or a second terminal that auto-activated on cd):
 
 ```bash
-cd ~/Code/floxhub && flox activate
+env | grep -E '^(FLOX_FLOXHUB_URL|FLOX_CATALOG_URL|_FLOX_FLOXHUB_GIT_URL|_FLOX_OAUTH_(AUTH_URL|TOKEN_URL|DEVICE_AUTH_URL|CLIENT_ID)|SSL_CERT_FILE|NIX_SSL_CERT_FILE)=' \
+  | sed 's/^/export /' > /tmp/flox-demo-stack.env
 ```
 
-Then paste the persona setup **inside that activated shell**:
+The snapshot survives any cd and any number of terminals.
+
+### Demo persona shell (each new terminal)
+
+Each persona runs in a **bare shell** with an isolated `$HOME`, so the machine
+looks factory-fresh, none of your real Flox state is touched, and your shell
+RC's auto-activation hooks stay out of the picture:
 
 ```bash
-# ---- demo persona shell setup ----
+/bin/zsh -f                          # bare shell: no RC files, no auto-activation
+source /tmp/flox-demo-stack.env
 export DEMO_ROOT="$TMPDIR/flox-demo"; mkdir -p "$DEMO_ROOT/home-a"
-export HOME="$DEMO_ROOT/home-a"                     # fresh machine simulation
+export HOME="$DEMO_ROOT/home-a"      # fresh machine simulation
 alias flox=~/Code/flox/target/debug/flox
-
-# MUST come after `flox activate` — the activation itself sets these, and
-# `flox install` targets the last-activated env when the cwd has none, so
-# leaving them set would install into the floxhub env instead of creating
-# the demo default env
-unset FLOX_FLOXHUB_TOKEN FLOX_CONFIG_DIR _FLOX_ACTIVE_ENVIRONMENTS \
-      FLOX_ENV FLOX_ENV_CACHE FLOX_ENV_PROJECT FLOX_ENV_DIRS \
-      FLOX_ENV_DESCRIPTION FLOX_PROMPT_ENVIRONMENTS
-
-# Feature flag for the zero-setup prototype (not exported by the activation)
-export FLOX_FEATURES_AUTO_DEFAULT=true
-# ----------------------------------
+export FLOX_FEATURES_AUTO_DEFAULT=true   # zero-setup prototype flag
+cd "$HOME"
 ```
 
-> **Catalog note:** package resolution goes through the local catalog-server.
-> If `flox search jq` errors (e.g. the local test catalog lacks the package or
-> rejects anonymous access), drop the local catalog for the demo:
+Notes:
+
+- Keep `DEMO_ROOT` short. Activation creates a unix socket under
+  `$HOME/.cache/flox/run/`, and socket paths are capped at ~104 characters —
+  a deeply nested `$HOME` fails with "path for services socket is too long".
+- Because nothing is activated in this shell, you can cd anywhere; `-D`
+  always names the default environment regardless of cwd.
+- **Output noise to expect:** every command prints a two-line
+  `Using … as the FloxHub git endpoint … intended for testing only` warning
+  (an artifact of `_FLOX_FLOXHUB_GIT_URL`; harmless), and — while logged
+  out — `! You are not logged in to FloxHub. Run 'flox auth login' to log
+  in.` once per command (it's suppressed inside an activated shell). The
+  expected outputs below omit both.
+
+> **Catalog note:** package resolution goes through the local catalog-server,
+> which serves at least `jq` and `ripgrep` anonymously (verified). If some
+> other package fails to resolve, drop the local catalog for the demo:
 > `unset FLOX_CATALOG_URL` (falls back to the production catalog while
 > environment hosting stays on the local stack).
 
@@ -105,45 +128,49 @@ export FLOX_FEATURES_AUTO_DEFAULT=true
 ### A1. Install a package with zero setup
 
 ```bash
-cd $HOME
-flox install jq
+flox install -D jq        # the `mise use --global` moment
 ```
 
-Expected: **no prompt, no `flox init`**. The CLI prints something like
+Expected: **no prompt, no `flox init`, no login** — works from any directory.
 
 ```
 ⚡︎ Created your default environment at '~/.flox'. Log in with 'flox auth login' to sync it with FloxHub.
-✔  'jq' installed to environment default
+✔ 'jq' installed to environment 'default'
+ℹ 'jq' has additional outputs, use 'flox list -a' to see more
 ```
 
-(In an interactive terminal it also offers to add
+Plain `flox install jq` does the same **when no environment is in reach**
+(none in cwd or active); with an environment in cwd it installs there
+instead — `-D` is the unambiguous form.
+
+In an interactive terminal, creation also offers to add
 `eval "$(flox activate --default -m run)"` to your shell RC files — the fake
-`$HOME` means it edits the demo home, so saying *Yes* is safe.)
+`$HOME` means it edits the demo home, so saying *Yes* is safe.
 
 ```bash
 flox activate -D -- jq --version     # the default env works immediately
-flox envs                            # shows: default at ~/.flox
+flox envs                            # shows: default at $HOME
 ```
 
 This is the Mise moment: install → use, no environment ceremony, no account.
 
-### A2. Log in — the default environment follows you to FloxHub
+### A2. Log in — the default environment follows you to FloxHub **[code-verified]**
 
 ```bash
 flox auth login
 ```
 
-Expected after the device-flow dance:
+Expected after the device-flow dance (log in with persona A's identity):
 
 ```
-✔  Authentication complete
-✔  Logged in as <handle>
-✔  Synced your default environment to FloxHub as '<handle>/default'. It will now sync across your machines.
+✔ Authentication complete
+✔ Logged in as <handle>
+✔ Synced your default environment to FloxHub as '<handle>/default'. It will now sync across your machines.
 ```
 
 `~/.flox` is now a checkout of `<handle>/default` (see `cat ~/.flox/env.json`).
 
-### A3. Web onboarding is skipped
+### A3. Web onboarding is skipped **[browser]**
 
 Open <https://hub.local.flox.dev:8000/> in a private browser window and log in
 as the same account (complete the profile step if prompted).
@@ -152,7 +179,7 @@ Expected: **you land on the dashboard, not the onboarding wizard** — the
 BFF saw `<handle>/default` exists and marked onboarding complete. The
 environment page shows `jq`.
 
-### A4. Installs keep FloxHub in sync
+### A4. Installs keep FloxHub in sync **[code-verified]**
 
 ```bash
 flox install -D ripgrep
@@ -161,8 +188,8 @@ flox install -D ripgrep
 Expected:
 
 ```
-✔  'ripgrep' installed to environment default
-✔  Synced your default environment to FloxHub.
+✔ 'ripgrep' installed to environment 'default'
+✔ Synced your default environment to FloxHub.
 ```
 
 Refresh the environment page on the web — `ripgrep` is there, no `flox push`
@@ -176,27 +203,31 @@ eval "$(flox activate -D -m run)"    # what the shell RC line runs
 jq --version && rg --version         # still works
 ```
 
-Expected: activation succeeds from local state. No forced login, no
-"You are not logged in" hard error — at most an informational line.
+Expected: activation succeeds from the `~/.flox` checkout, silently — no
+forced login, no "You are not logged in" hard error (the once-per-shell
+logged-out reminder still appears). Resolution knows the checkout is yours
+because logout records your handle.
 
 Also try it with FloxHub fully unreachable: stop the stack (Ctrl-C on
 `just serve-all`) and activate again — still works. Restart the stack
-afterwards.
+afterwards. (Verified for the logged-out-from-the-start case with all
+FloxHub endpoints pointed at a dead port; the post-login variant is
+code-verified.)
 
 ## 3. Path B — FloxHub-first
 
-*Persona: developer invited to FloxHub by a teammate. Uses a second account
-and a second fake home:*
+*Persona: developer invited to FloxHub by a teammate. Uses a second identity
+and a second fake home. In a NEW terminal, repeat the §1 persona block but
+with:*
 
 ```bash
-# in a NEW terminal: repeat the §1 setup (flox activate + persona block), but with
 export HOME="$DEMO_ROOT/home-b"; mkdir -p "$HOME"
 ```
 
-### B1. Onboard on the web
+### B1. Onboard on the web **[browser]**
 
 In a private browser window, sign up at <https://hub.local.flox.dev:8000/>
-with the second account. The onboarding wizard appears; on the *Select
+with the second identity. The onboarding wizard appears; on the *Select
 packages* step keep/select a couple of packages and continue — this creates
 `<handle-b>/default` on FloxHub.
 
@@ -205,22 +236,21 @@ packages* step keep/select a couple of packages and continue — this creates
 > generations does not count as onboarded** (by design), so retry after
 > fixing the catalog.
 
-### B2. First contact with the CLI
+### B2. First contact with the CLI **[code-verified]**
 
 ```bash
-cd $HOME
-flox auth login                      # log in as the second account
+flox auth login                      # log in as the second identity
 ```
 
 Expected:
 
 ```
-✔  Authentication complete
-✔  Logged in as <handle-b>
-ℹ  Fetched your default environment '<handle-b>/default' from FloxHub. Activate it with 'flox activate --default'.
+✔ Authentication complete
+✔ Logged in as <handle-b>
+ℹ Fetched your default environment '<handle-b>/default' from FloxHub. Activate it with 'flox activate --default'.
 ```
 
-### B3. Use it
+### B3. Use it **[code-verified]**
 
 ```bash
 flox activate -D                     # packages picked in the wizard are on PATH
@@ -229,20 +259,25 @@ flox activate -D                     # packages picked in the wizard are on PATH
 The wizard's *Install Flox / Activate* steps map exactly onto what just
 happened — one login and the environment was already there.
 
-### B4. Offline / logged out
+### B4. Offline / logged out **[code-verified]**
 
 ```bash
 flox auth logout
 flox activate -D -- true && echo "still works"
 ```
 
-Expected: activation from the cached checkout, logged out (DEV-269 again,
-this time via the `~/.cache/flox/remote/<handle-b>/default` checkout).
+Expected: activation from the cached checkout at
+`~/.cache/flox/remote/<handle-b>/default`, with one info line:
+
+```
+ℹ Using the cached default environment '<handle-b>/default'. Run 'flox auth login' to sync with FloxHub.
+```
 
 ## 4. Resetting between runs
 
 ```bash
-# CLI side: wipe a persona's fake home
+# CLI side: wipe a persona's fake home (config, cache, and ~/.flox all live
+# under it, so this is a complete reset)
 rm -rf "$DEMO_ROOT/home-a"          # or home-b
 
 # FloxHub side: delete <handle>/default via the web UI
@@ -287,13 +322,15 @@ Known prototype limitations (deliberate scope cuts, confirmed by review):
 - Auto-sync-on-mutation covers `install`/`uninstall`, not `edit`/`upgrade` —
   and it triggers for *any* checkout of `<handle>/default` (including one you
   explicitly `flox pull`ed elsewhere), not just `~/.flox` and the `-D` cache.
-- `flox install -D` with *no* default env anywhere still errors instead of
-  creating one (plain `flox install` and `flox activate -D` cover creation).
+- `flox uninstall -D` (unlike `install -D`) never creates a default
+  environment — there is nothing to uninstall from — so with no default env
+  anywhere it requires a login to resolve.
 - Login auto-sync doesn't offer RC-file setup; only env creation does.
 - Web-side deletion of the default env doesn't stick while a local checkout
   keeps auto-pushing (a tombstone needs designing).
-- Info-line noise: the logged-out cached-use line prints on every activation,
-  and the "local + FloxHub default both exist" explainer prints on every `-D`
+- Info-line noise: the logged-out reminder prints once per shell outside
+  activations, the B4 cached-use line prints on every activation, and the
+  "local + FloxHub default both exist" explainer prints on every `-D`
   resolution until the conflict is resolved (needs announce-once state).
 - A failed FloxHub probe during authed `-D` resolution says "Could not reach
   FloxHub" even when the real cause is an auth rejection; classifying
@@ -306,3 +343,23 @@ Known prototype limitations (deliberate scope cuts, confirmed by review):
 - `confirmed_create_default_env` (the old prompt's answer) is reused as the
   opt-out for both auto-creation and login auto-push; a dedicated field
   should replace that overload.
+
+## 6. Verification status (2026-08-19)
+
+Machine-verified by execution against the local stack (fresh fake homes,
+logged out, `FLOX_FEATURES_AUTO_DEFAULT=true`):
+
+- `flox install -D jq` in a fresh home creates `~/.flox` + installs (A1),
+  including from inside another environment's directory (installs to
+  `default`, not the cwd env).
+- Plain `flox install jq` with no env in reach behaves identically.
+- `flox install -D ripgrep` into the existing default; `flox uninstall -D`.
+- `flox activate -D -- <cmd>`, `flox envs`, and
+  `eval "$(flox activate -D -m run)"` in a bare zsh.
+- Activation with all FloxHub endpoints unreachable (dead port).
+- Local catalog resolves `jq`/`ripgrep` anonymously.
+
+Code-verified only (need a dev-tenant login and/or a browser; the tenant has
+no email+password connection, so these can't run headlessly): A2, A4 sync
+line, B2, B3, B4, and both web steps (A3, B1). Message texts quoted above are
+copied from the source.
