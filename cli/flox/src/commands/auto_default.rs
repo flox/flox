@@ -23,6 +23,7 @@ use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::floxmeta_branch::FloxmetaBranchError;
 use flox_rust_sdk::models::environment::generations::GenerationId;
 use flox_rust_sdk::models::environment::managed_environment::{
+    GENERATION_LOCK_FILENAME,
     ManagedEnvironment,
     ManagedEnvironmentError,
     PushResult,
@@ -97,11 +98,23 @@ pub(crate) async fn resolve_default_environment(
 /// Open the default environment for `flox install` when no environment is
 /// found, creating it if necessary. Creation is allowed even without a TTY:
 /// installing a package is an explicit request for an environment to exist.
+/// A user who previously declined the default-environment offer keeps that
+/// choice: resolution still works, creation does not.
 pub(crate) async fn open_or_create_default_environment(
     flox: &mut Flox,
 ) -> Result<ConcreteEnvironment> {
     let source = owner_source(flox).await;
-    resolve_auto(flox, source, None, true).await
+    let allow_create = !declined_default_env(flox);
+    resolve_auto(flox, source, None, allow_create).await
+}
+
+/// Whether the user answered "No" to the pre-flag default-environment offer.
+fn declined_default_env(flox: &Flox) -> bool {
+    read_user_state_file(user_state_path(flox))
+        .ok()
+        .flatten()
+        .and_then(|state| state.confirmed_create_default_env)
+        == Some(false)
 }
 
 /// The pre-`auto_default` behavior plus the DEV-269 fallback: when the
@@ -115,13 +128,13 @@ async fn resolve_classic(
     match source {
         OwnerSource::Authed(handle) => open_remote_default(flox, &handle, generation),
         OwnerSource::Unverified => {
-            if let Some(env) = open_cached_default(flox, generation)? {
+            if let Some(env) = open_cached_default(flox, generation, false)? {
                 return Ok(env);
             }
             open_remote_default(flox, floxhub_client::UNKNOWN_HANDLE, generation)
         },
         OwnerSource::LoggedOut => {
-            if let Some(env) = open_cached_default(flox, generation)? {
+            if let Some(env) = open_cached_default(flox, generation, true)? {
                 return Ok(env);
             }
             let handle = super::ensure_auth(flox).await?;
@@ -174,29 +187,29 @@ async fn resolve_auto(
     match source {
         OwnerSource::Authed(handle) => match open_remote_default(flox, &handle, generation) {
             Ok(env) => Ok(env),
-            Err(err) if allow_create && error_is_upstream_not_found(&err) => {
+            // A specific generation can only come from FloxHub history, so a
+            // missing environment stays an error rather than creating a
+            // brand-new environment that cannot honor the request.
+            Err(err)
+                if allow_create && generation.is_none() && error_is_upstream_not_found(&err) =>
+            {
                 let env = create_default_on_floxhub(flox, &handle)?;
                 maybe_offer_rc_setup();
-                // Reopen with the requested generation, though a brand-new
-                // environment only has generation 1.
-                if generation.is_some() {
-                    return open_remote_default(flox, &handle, generation);
-                }
                 Ok(env)
             },
             Err(err) => Err(err),
         },
         OwnerSource::Unverified => {
-            if let Some(env) = open_cached_default(flox, generation)? {
+            if let Some(env) = open_cached_default(flox, generation, false)? {
                 return Ok(env);
             }
             open_remote_default(flox, floxhub_client::UNKNOWN_HANDLE, generation)
         },
         OwnerSource::LoggedOut => {
-            if let Some(env) = open_cached_default(flox, generation)? {
+            if let Some(env) = open_cached_default(flox, generation, true)? {
                 return Ok(env);
             }
-            if allow_create {
+            if allow_create && generation.is_none() {
                 let env = create_default_at_home(flox, generation)?;
                 maybe_offer_rc_setup();
                 return Ok(env);
@@ -313,22 +326,60 @@ fn open_remote_default(
 
 /// Open the locally cached checkout of the default environment, when the
 /// owner can be determined without a credential and the checkout exists.
+///
+/// Returns `Ok(None)` — letting the caller continue its resolution ladder —
+/// whenever the cache cannot serve the request, including when a checkout
+/// exists but fails to open: a broken cache must degrade to the ladder's next
+/// step (login or creation), never dead-end the command.
 fn open_cached_default(
     flox: &Flox,
     generation: Option<GenerationId>,
+    suggest_login: bool,
 ) -> Result<Option<ConcreteEnvironment>> {
     let Some(owner) = offline_default_owner(flox) else {
         return Ok(None);
     };
     let pointer = ManagedPointer::new(owner.clone(), default_name(), &flox.floxhub);
-    if !RemoteEnvironment::is_cached(flox, &pointer) {
+    if !cached_default_checkout_is_valid(flox, &pointer) {
         return Ok(None);
     }
-    message::info(format!(
-        "Using the cached default environment '{owner}/{DEFAULT_NAME}'. Run 'flox auth login' to sync with FloxHub.",
-    ));
-    let env = RemoteEnvironment::new(flox, pointer, generation).map_err(anyhow::Error::new)?;
-    Ok(Some(ConcreteEnvironment::Remote(env)))
+    match RemoteEnvironment::new(flox, pointer, generation) {
+        Ok(env) => {
+            let hint = if suggest_login {
+                "Run 'flox auth login' to sync with FloxHub."
+            } else {
+                "Changes will sync when FloxHub is reachable."
+            };
+            message::info(format!(
+                "Using the cached default environment '{owner}/{DEFAULT_NAME}'. {hint}",
+            ));
+            Ok(Some(ConcreteEnvironment::Remote(env)))
+        },
+        Err(err) => {
+            debug!(%err, "could not open cached default environment");
+            Ok(None)
+        },
+    }
+}
+
+/// Whether the cache holds a genuinely usable checkout for `pointer`.
+///
+/// `RemoteEnvironment::new` creates the checkout directory before any
+/// validation, so a failed open leaves an empty `.flox` behind; a bare
+/// existence check would mistake that phantom for a cached environment. A
+/// real checkout has a pointer file matching `pointer` and a generation lock
+/// (both written only after a successful open).
+fn cached_default_checkout_is_valid(flox: &Flox, pointer: &ManagedPointer) -> bool {
+    let dot_flox = RemoteEnvironment::checkout_path(flox, pointer).join(DOT_FLOX);
+    let pointer_matches = std::fs::read_to_string(dot_flox.join(ENVIRONMENT_POINTER_FILENAME))
+        .ok()
+        .and_then(|contents| serde_json::from_str::<ManagedPointer>(&contents).ok())
+        .is_some_and(|on_disk| {
+            on_disk.owner == pointer.owner
+                && on_disk.name == pointer.name
+                && on_disk.floxhub_base_url == pointer.floxhub_base_url
+        });
+    pointer_matches && dot_flox.join(GENERATION_LOCK_FILENAME).exists()
 }
 
 /// Determine the default environment's owner without a credential.
@@ -471,21 +522,31 @@ pub(crate) async fn sync_default_env_to_floxhub(flox: &Flox, env: &mut ConcreteE
     if !flox.features.auto_default {
         return;
     }
-    let Ok(Some(identity)) = flox.get_identity().await else {
-        return;
-    };
-    if identity.handle == floxhub_client::UNKNOWN_HANDLE {
-        return;
-    }
+    // Cheap structural checks first; identity resolution can hit the network
+    // for personal access tokens.
     let pointer = match env {
         ConcreteEnvironment::Managed(managed) => managed.pointer().clone(),
         ConcreteEnvironment::Remote(remote) => remote.pointer().clone(),
         ConcreteEnvironment::Path(_) => return,
     };
-    if pointer.name.as_ref() != DEFAULT_NAME
-        || pointer.owner.as_str() != identity.handle
-        || pointer.floxhub_base_url != *flox.floxhub.base_url()
+    if pointer.name.as_ref() != DEFAULT_NAME || pointer.floxhub_base_url != *flox.floxhub.base_url()
     {
+        return;
+    }
+    let Ok(Some(identity)) = flox.get_identity().await else {
+        return;
+    };
+    if identity.handle == floxhub_client::UNKNOWN_HANDLE
+        || pointer.owner.as_str() != identity.handle
+    {
+        return;
+    }
+    // An expired token cannot push; skip with one actionable hint rather
+    // than warning with a failed-push error on every mutation.
+    if identity.is_expired() {
+        message::info(
+            "Not syncing your default environment because your FloxHub token has expired. Run 'flox auth login' to resume syncing.",
+        );
         return;
     }
 
@@ -580,13 +641,24 @@ pub(crate) async fn sync_default_env_after_login(flox: &mut Flox, handle: &str) 
         },
         None => {
             // Pre-fetch a FloxHub default so '--default' works immediately
-            // (and offline later).
+            // (and offline later). A warm cache means nothing was actually
+            // fetched, so no message in that case.
+            let owner = match EnvironmentOwner::from_str(handle) {
+                Ok(owner) => owner,
+                Err(err) => {
+                    debug!(%err, "login handle is not a valid environment owner");
+                    return;
+                },
+            };
+            let pointer = ManagedPointer::new(owner, default_name(), &flox.floxhub);
+            let was_cached = cached_default_checkout_is_valid(flox, &pointer);
             match open_remote_default(flox, handle, None) {
-                Ok(_) => {
+                Ok(_) if !was_cached => {
                     message::info(format!(
                         "Fetched your default environment '{handle}/{DEFAULT_NAME}' from FloxHub. Activate it with 'flox activate --default'.",
                     ));
                 },
+                Ok(_) => {},
                 Err(err) if error_is_upstream_not_found(&err) => {},
                 Err(err) => {
                     debug!(%err, "could not check FloxHub for a default environment");

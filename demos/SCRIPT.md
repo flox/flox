@@ -285,14 +285,27 @@ While walking through, judge the experience against these questions:
 5. **Failure honesty**: unplug the stack mid-flow — are the warnings
    actionable, and does the primary command still succeed?
 
-Known prototype limitations (deliberate scope cuts):
+Known prototype limitations (deliberate scope cuts, confirmed by review):
 
-- Auto-sync-on-mutation covers `install`/`uninstall`, not `edit`/`upgrade`.
+- Auto-sync-on-mutation covers `install`/`uninstall`, not `edit`/`upgrade` —
+  and it triggers for *any* checkout of `<handle>/default` (including one you
+  explicitly `flox pull`ed elsewhere), not just `~/.flox` and the `-D` cache.
 - `flox install -D` with *no* default env anywhere still errors instead of
   creating one (plain `flox install` and `flox activate -D` cover creation).
 - Login auto-sync doesn't offer RC-file setup; only env creation does.
 - Web-side deletion of the default env doesn't stick while a local checkout
   keeps auto-pushing (a tombstone needs designing).
-- The activation-time info line for logged-out cached use prints on every
-  activation; merging it with the existing "not logged in" startup warning
-  is a polish item.
+- Info-line noise: the logged-out cached-use line prints on every activation,
+  and the "local + FloxHub default both exist" explainer prints on every `-D`
+  resolution until the conflict is resolved (needs announce-once state).
+- A failed FloxHub probe during authed `-D` resolution says "Could not reach
+  FloxHub" even when the real cause is an auth rejection; classifying
+  AccessDenied vs NetworkUnreachable in that message is a follow-up.
+- The SDK's stale-fetch fallback logs via tracing only; a product-level
+  "using the last fetched version" message needs plumbing.
+- The web-bff onboarding heal probes floxem on every `/auth/me` for
+  not-yet-onboarded users with no timeout/negative-cache — fine locally,
+  needs bounding before production.
+- `confirmed_create_default_env` (the old prompt's answer) is reused as the
+  opt-out for both auto-creation and login auto-push; a dedicated field
+  should replace that overload.

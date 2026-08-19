@@ -1421,7 +1421,18 @@ impl EnvironmentSelect {
                     // Never create environments from this path: it serves
                     // read-only commands too. `flox install` requests creation
                     // itself when no environment is found.
-                    auto_default::resolve_default_environment(flox, None, false).await?
+                    let env = auto_default::resolve_default_environment(flox, None, false).await?;
+                    // Re-establish the active-generation pin the way the
+                    // other arms do: an environment activated at a specific
+                    // generation must be reopened at that generation so the
+                    // generation-immutability guard applies to mutations.
+                    let uninit = UninitializedEnvironment::from_concrete_environment(&env);
+                    match activated_environments().is_active_with_generation(&uninit) {
+                        Some(generation) => {
+                            uninit.into_concrete_environment(flox, Some(generation))?
+                        },
+                        None => env,
+                    }
                 } else {
                     let user_handle = ensure_auth(flox).await?;
 
