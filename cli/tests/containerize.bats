@@ -28,6 +28,7 @@ project_teardown() {
 }
 
 env_setup_catalog() {
+  skip_x86_64_darwin_replay
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml"
   "$FLOX_BIN" init
   "$FLOX_BIN" edit -f "$TESTS_DIR/container/manifest1.toml"
@@ -419,6 +420,7 @@ EOF
 }
 
 @test "cmd can run binary from activated environment" {
+  skip_x86_64_darwin_replay
   "$FLOX_BIN" init
 
   MANIFEST_CONTENTS="$(cat << "EOF"
@@ -428,9 +430,6 @@ EOF
 
     [containerize.config]
     cmd = [ "hello" ]
-
-    [options]
-    systems = ["aarch64-darwin", "aarch64-linux", "x86_64-darwin", "x86_64-linux"]
 EOF
   )"
 

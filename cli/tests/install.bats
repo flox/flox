@@ -45,15 +45,17 @@ teardown() {
 }
 
 @test "'flox install' displays confirmation message" {
+  skip_x86_64_darwin_replay
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml"
-  flox_init_pinned
+  "$FLOX_BIN" init
   run "$FLOX_BIN" install hello
   assert_success
   assert_output --partial "✔ 'hello' installed to environment 'test'"
 }
 
 @test "'flox install' warns (preserving order) for already installed packages" {
-  flox_init_pinned
+  skip_x86_64_darwin_replay
+  "$FLOX_BIN" init
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
     run "$FLOX_BIN" install hello
   assert_success
@@ -67,8 +69,9 @@ EOF
 }
 
 @test "'flox install' edits manifest" {
+  skip_x86_64_darwin_replay
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml"
-  flox_init_pinned
+  "$FLOX_BIN" init
   run "$FLOX_BIN" install hello
   assert_success
   run grep 'hello.pkg-path = "hello"' "$PROJECT_DIR/.flox/env/manifest.toml"
@@ -76,7 +79,8 @@ EOF
 }
 
 @test "'flox install' provides suggestions when package not found" {
-  flox_init_pinned
+  skip_x86_64_darwin_replay
+  "$FLOX_BIN" init
   # This package doesn't exist but *does* have suggestions
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/package_suggestions.yaml" \
     run "$FLOX_BIN" install package
@@ -120,8 +124,9 @@ EOF
 }
 
 @test "'flox install' creates link to installed binary" {
+  skip_x86_64_darwin_replay
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml"
-  flox_init_pinned
+  "$FLOX_BIN" init
   run "$FLOX_BIN" install hello
   assert_success
   assert_output --partial "✔ 'hello' installed to environment"
@@ -132,8 +137,9 @@ EOF
 }
 
 @test "'flox install' installs by path" {
+  skip_x86_64_darwin_replay
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml"
-  run flox_init_pinned
+  run "$FLOX_BIN" init
   assert_success
   run "$FLOX_BIN" install hello
   assert_success
@@ -143,8 +149,9 @@ EOF
 }
 
 @test "'flox install' infers install ID" {
+  skip_x86_64_darwin_replay
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/rubyPackages_3_2.rails.yaml"
-  run flox_init_pinned
+  run "$FLOX_BIN" init
   assert_success
   run "$FLOX_BIN" install rubyPackages_3_2.rails
   assert_success
@@ -155,8 +162,9 @@ EOF
 
 @test "'flox install' overrides install ID with '-i'" {
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/envs/hello_as_greeting/hello_as_greeting.yaml"
-  run flox_init_pinned
+  run "$FLOX_BIN" init
   assert_success
+  pin_all_systems
   run "$FLOX_BIN" install -i greeting hello
   assert_success
   manifest=$(cat "$PROJECT_DIR/.flox/env/manifest.toml")
@@ -165,8 +173,9 @@ EOF
 
 @test "'flox install' overrides install ID with '--id'" {
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/envs/hello_as_greeting/hello_as_greeting.yaml"
-  run flox_init_pinned
+  run "$FLOX_BIN" init
   assert_success
+  pin_all_systems
   run "$FLOX_BIN" install --id greeting hello
   assert_success
   manifest=$(cat "$PROJECT_DIR/.flox/env/manifest.toml")
@@ -174,8 +183,9 @@ EOF
 }
 
 @test "'flox install' accepts mix of inferred and supplied install IDs" {
+  skip_x86_64_darwin_replay
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/webmention_ripgrep_rails.yaml"
-  run flox_init_pinned
+  run "$FLOX_BIN" init
   assert_success
   run "$FLOX_BIN" install -i foo rubyPackages_3_2.webmention ripgrep -i bar rubyPackages_3_2.rails
   assert_success
@@ -186,8 +196,9 @@ EOF
 }
 
 @test "'flox i' aliases to 'install'" {
+  skip_x86_64_darwin_replay
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml"
-  run flox_init_pinned
+  run "$FLOX_BIN" init
   assert_success
   run "$FLOX_BIN" i hello
   assert_success
@@ -200,9 +211,9 @@ EOF
 # - Merging outputs
 # More specific cases are unit tested
 @test "'flox install' with outputs selected" {
+  skip_x86_64_darwin_replay
   # Included environment with bash already installed for the first output.
   "$FLOX_BIN" init -d included
-  pin_recorded_systems included/.flox/env/manifest.toml
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/envs/bash_v1_10_0_out.yaml" \
     "$FLOX_BIN" install -d included -i bash "bashNonInteractive^out"
 
@@ -247,7 +258,8 @@ EOF
 
 # This is also checking we can build an unfree package
 @test "'flox install' warns about unfree packages" {
-  flox_init_pinned
+  skip_x86_64_darwin_replay
+  "$FLOX_BIN" init
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello_unfree.yaml"
   run "$FLOX_BIN" install hello-unfree
   assert_success
@@ -266,6 +278,7 @@ EOF
 }
 
 @test "'flox install' can build a broken package when allowed" {
+  skip_x86_64_darwin_replay
   "$FLOX_BIN" init
   MANIFEST_CONTENTS="$(
     cat << "EOF"
@@ -276,7 +289,6 @@ EOF
   )"
 
   echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f -
-  pin_recorded_systems
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/tabula_allowed.yaml" \
     run "$FLOX_BIN" install tabula
   assert_success
@@ -286,7 +298,8 @@ EOF
 
 # bats test_tags=resolution:single-package-not-found
 @test "resolution message: single package not found, without curation" {
-  flox_init_pinned
+  skip_x86_64_darwin_replay
+  "$FLOX_BIN" init
 
   # disable backtrace; we expect this to fail and assert output
   RUST_BACKTRACE=0 \
@@ -305,7 +318,8 @@ EOF
 }
 
 @test "resolution message: multiple packages not found, without curation" {
-  flox_init_pinned
+  skip_x86_64_darwin_replay
+  "$FLOX_BIN" init
 
   # disable backtrace; we expect this to fail and assert output
   RUST_BACKTRACE=0 \
@@ -326,7 +340,8 @@ EOF
 
 # bats test_tags=resolution:single-package-not-found
 @test "resolution message: single package not found, with curation" {
-  flox_init_pinned
+  skip_x86_64_darwin_replay
+  "$FLOX_BIN" init
 
   # disable backtrace; we expect this to fail and assert output
   RUST_BACKTRACE=0 \
@@ -349,7 +364,8 @@ EOF
 
 # bats test_tags=install:single-not-on-all-systems
 @test "resolution fixup: package not available on all systems installs with looser constraints" {
-  flox_init_pinned
+  "$FLOX_BIN" init
+  pin_all_systems
 
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/bpftrace.yaml" \
     run "$FLOX_BIN" install bpftrace
@@ -364,7 +380,8 @@ EOF
 
 # bats test_tags=install:multiple-not-on-all-systems
 @test "resolution fixup: multiple packages not available on all systems install with looser constraints" {
-  flox_init_pinned
+  skip_x86_64_darwin_replay
+  "$FLOX_BIN" init
 
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/bpftrace_systemd.yaml" \
     run "$FLOX_BIN" install bpftrace systemd
@@ -384,7 +401,8 @@ EOF
 
 # bats test_tags=install:not-on-all-systems-and-other-error
 @test "resolution message: package not available on all systems with no fix when there is another error" {
-  flox_init_pinned
+  skip_x86_64_darwin_replay
+  "$FLOX_BIN" init
 
   # disable backtrace; we expect this to fail and assert output
   RUST_BACKTRACE=0 \
@@ -397,7 +415,6 @@ EOF
 ✘ ERROR: resolution failed: multiple resolution failures:
 - package 'bpftrace' not available for
       - aarch64-darwin
-      - x86_64-darwin
     but it is available for
       - aarch64-linux
       - x86_64-linux
@@ -411,7 +428,8 @@ EOF
 }
 
 @test "resolution message: version not found" {
-  flox_init_pinned
+  skip_x86_64_darwin_replay
+  "$FLOX_BIN" init
 
   # disable backtrace; we expect this to fail and assert output
   RUST_BACKTRACE=0 \
@@ -429,7 +447,10 @@ EOF
 }
 
 @test "resolution message: systems not on same page" {
-  flox_init_pinned
+  "$FLOX_BIN" init
+  # x86_64-darwin is the system with no page in common with the others, so this
+  # error only occurs when it is asked for explicitly.
+  pin_all_systems
 
   # disable backtrace; we expect this to fail and assert output
   RUST_BACKTRACE=0 \
@@ -441,7 +462,7 @@ EOF
   assert_output --partial "$(
     cat << EOF
 ✘ ERROR: resolution failed:$SPACE
-The package 'python311Packages.torchvision-bin' is not found for all requested systems on the same page, consider package groups with the following system groupings: (x86_64-darwin), (aarch64-linux), (aarch64-linux,x86_64-darwin), (aarch64-darwin,aarch64-linux,x86_64-darwin).
+The package 'python311Packages.torchvision-bin' is not found for all requested systems on the same page, consider package groups with the following system groupings: (aarch64-linux), (x86_64-darwin), (aarch64-linux,x86_64-darwin), (aarch64-darwin,aarch64-linux,x86_64-darwin).
 EOF
   )"
 }
@@ -511,9 +532,9 @@ EOF
 # ---------------------------------------------------------------------------- #
 
 @test "'flox install' info message when overriding included package" {
+  skip_x86_64_darwin_replay
   # This will be an included environment
   "$FLOX_BIN" init -d included
-  pin_recorded_systems included/.flox/env/manifest.toml
 
   # Install a package that will be overridden by the composer later
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
@@ -531,9 +552,6 @@ version = 1
 environments = [
   { dir = "included" }
 ]
-
-[options]
-systems = ["aarch64-darwin", "x86_64-darwin", "aarch64-linux", "x86_64-linux"]
 EOF
 
   # Install the overriding package to the composer
@@ -568,6 +586,7 @@ EOF
 
 # bats test_tags=install,install:default-flag
 @test "install -D installs to default environment" {
+  skip_x86_64_darwin_replay
   project_setup
   floxhub_setup "test"
 
@@ -578,7 +597,6 @@ EOF
   # Create and push test/default environment
   run "$FLOX_BIN" init -d "$DEFAULT_ENV_DIR" --name default
   assert_success
-  pin_recorded_systems "$DEFAULT_ENV_DIR/.flox/env/manifest.toml"
   run "$FLOX_BIN" push -d "$DEFAULT_ENV_DIR" --owner test
   assert_success
 

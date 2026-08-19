@@ -80,15 +80,13 @@ check_manifest_updated() {
 # ---------------------------------------------------------------------------- #
 
 @test "'flox edit' confirms successful edit" {
+  skip_x86_64_darwin_replay
   "$FLOX_BIN" init
   cp "$MANIFEST_PATH" "$TMP_MANIFEST_PATH"
   cat << "EOF" > "$TMP_MANIFEST_PATH"
 version = 1
 [install]
 hello.pkg-path = "hello"
-
-[options]
-systems = ["aarch64-darwin", "aarch64-linux", "x86_64-darwin", "x86_64-linux"]
 EOF
 
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
@@ -123,6 +121,7 @@ EOF
 
 # bats test_tags=edit:manifest:file
 @test "'flox edit' accepts contents via filename" {
+  skip_x86_64_darwin_replay
   NEW_MANIFEST_CONTENTS="$(cat "$EXTERNAL_MANIFEST_PATH")"
   "$FLOX_BIN" init
 
@@ -138,6 +137,7 @@ EOF
 
 # bats test_tags=edit:manifest:stdin
 @test "'flox edit' accepts contents via pipe to stdin" {
+  skip_x86_64_darwin_replay
   NEW_MANIFEST_CONTENTS="$(cat "$EXTERNAL_MANIFEST_PATH")"
   "$FLOX_BIN" init
 
@@ -250,6 +250,7 @@ EOF
 
 # bats test_tags=edit:unchanged
 @test "'flox edit' returns if it does not detect changes" {
+  skip_x86_64_darwin_replay
   "$FLOX_BIN" init
 
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
@@ -265,6 +266,7 @@ EOF
 
 # bats test_tags=edit:unlocked
 @test "'flox edit' locks when there are no changes and no lockfile" {
+  skip_x86_64_darwin_replay
   "$FLOX_BIN" init
 
   # Lock once and delete the lock.
@@ -282,6 +284,7 @@ EOF
 
 # bats test_tags=edit:priority
 @test "'flox edit' priority" {
+  skip_x86_64_darwin_replay
   "$FLOX_BIN" init
 
 WITHOUT_PRIORITY=$(cat <<EOF
@@ -289,9 +292,6 @@ version = 1
 [install]
 vim.pkg-path = "vim"
 vim-full.pkg-path = "vim-full"
-
-[options]
-systems = ["aarch64-darwin", "aarch64-linux", "x86_64-darwin", "x86_64-linux"]
 EOF
 )
 
@@ -301,9 +301,6 @@ version = 1
 vim.pkg-path = "vim"
 vim-full.pkg-path = "vim-full"
 vim-full.priority = 4
-
-[options]
-systems = ["aarch64-darwin", "aarch64-linux", "x86_64-darwin", "x86_64-linux"]
 EOF
 )
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/vim-vim-full-conflict.yaml"
@@ -326,6 +323,7 @@ EOF
 # When bar is installed, bar's own bin/collide must win over foo's propagated one.
 # bats test_tags=edit:priority-propagated-deps
 @test "'flox edit' explicit package wins over propagated dependency" {
+  skip_x86_64_darwin_replay
   "$FLOX_BIN" init
 
   MANIFEST=$(cat << "EOF"
@@ -347,9 +345,6 @@ bar.command = """
   chmod +x $out/bin/collide
   echo ${foo} > $out/nix-support/propagated-build-inputs
 """
-
-[options]
-systems = ["aarch64-darwin", "aarch64-linux", "x86_64-darwin", "x86_64-linux"]
 EOF
   )
 
@@ -380,6 +375,7 @@ EOF
 # iteration).
 # bats test_tags=edit:priority-propagated-deps-transitive
 @test "'flox edit' propagated dependencies drain transitively" {
+  skip_x86_64_darwin_replay
   "$FLOX_BIN" init
 
   MANIFEST=$(cat << "EOF"
@@ -408,9 +404,6 @@ top.command = """
   chmod +x $out/bin/top-bin
   echo ${middle} > $out/nix-support/propagated-build-inputs
 """
-
-[options]
-systems = ["aarch64-darwin", "aarch64-linux", "x86_64-darwin", "x86_64-linux"]
 EOF
   )
 

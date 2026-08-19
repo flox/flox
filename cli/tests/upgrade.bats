@@ -88,7 +88,8 @@ function old_hello_response_version() {
 
 # bats test_tags=upgrade:hello
 @test "upgrade hello" {
-  flox_init_pinned
+  skip_x86_64_darwin_replay
+  "$FLOX_BIN" init
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/old_hello.yaml" "$FLOX_BIN" install hello
 
   old_hello_locked_drv=$(jq -r '.packages.[0].derivation' "$LOCK_PATH")
@@ -109,7 +110,8 @@ function old_hello_response_version() {
 }
 
 @test "upgrade by group (toplevel)" {
-  flox_init_pinned
+  skip_x86_64_darwin_replay
+  "$FLOX_BIN" init
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/old_hello.yaml" "$FLOX_BIN" install hello
 
   old_hello_locked_drv=$(jq -r '.packages.[0].derivation' "$LOCK_PATH")
@@ -129,7 +131,8 @@ function old_hello_response_version() {
 }
 
 @test "upgrade by iid" {
-  flox_init_pinned
+  skip_x86_64_darwin_replay
+  "$FLOX_BIN" init
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/old_hello.yaml" "$FLOX_BIN" install hello
 
   old_hello_locked_drv=$(jq -r '.packages.[0].derivation' "$LOCK_PATH")
@@ -149,7 +152,8 @@ function old_hello_response_version() {
 }
 
 @test "upgrade errors on iid in group with other packages" {
-  flox_init_pinned
+  skip_x86_64_darwin_replay
+  "$FLOX_BIN" init
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/curl_hello.yaml" "$FLOX_BIN" install curl hello
 
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.yaml" \
@@ -160,7 +164,8 @@ function old_hello_response_version() {
 
 # bats test_tags=upgrade:page-not-upgraded
 @test "page changes should not be considered an upgrade" {
-  flox_init_pinned
+  skip_x86_64_darwin_replay
+  "$FLOX_BIN" init
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/curl_hello.yaml" \
     "$FLOX_BIN" install curl hello
   prev_lock=$(jq --sort-keys . "$LOCK_PATH")
@@ -178,7 +183,8 @@ function old_hello_response_version() {
 
 # bats test_tags=upgrade:dry-run
 @test "'upgrade --dry-run' does not update the lockfile" {
-  flox_init_pinned
+  skip_x86_64_darwin_replay
+  "$FLOX_BIN" init
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/old_hello.yaml" "$FLOX_BIN" install hello
 
   old_hello_locked_drv=$(jq -r '.packages.[0].derivation' "$LOCK_PATH")
@@ -238,6 +244,7 @@ To apply these changes, run upgrade without the '--dry-run' flag."
 
 # bats test_tags=upgrade,regression
 @test "upgrade migrates the on-disk manifest with the lockfile" {
+  skip_x86_64_darwin_replay
   # Init environment, then overwrite with pre-built v1 fixtures
   # (created by flox v1.9.1 with curl+hello installed, then adjusted so
   # hello is older than the version returned by the catalog mock).
@@ -249,11 +256,9 @@ To apply these changes, run upgrade without the '--dry-run' flag."
   run grep -c '^version = 1' "$MANIFEST_PATH"
   assert_success
 
-  # The fixture doesn't set `options.systems`, so pin the recorded systems to
-  # keep the resolve request matching now that the implicit default set is
-  # smaller. Files copied from the store are read-only.
+  # The migration below rewrites the manifest in place, and files copied from
+  # the store are read-only.
   chmod +w "$MANIFEST_PATH"
-  pin_recorded_systems "$MANIFEST_PATH"
 
   # The catalog mock upgrades hello and requires the outputs migration for
   # curl, so both the lockfile and the on-disk manifest must migrate.

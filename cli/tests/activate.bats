@@ -190,8 +190,8 @@ EOF
 
 # bats test_tags=activate,activate:path,activate:path:bash
 @test "bash: interactive activate puts package in path" {
+  skip_x86_64_darwin_replay
   project_setup
-  pin_recorded_systems
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml"
   run "$FLOX_BIN" install -d "$PROJECT_DIR" hello
   assert_success
@@ -203,8 +203,8 @@ EOF
 
 # bats test_tags=activate,activate:path,activate:path:fish
 @test "fish: interactive activate puts package in path" {
+  skip_x86_64_darwin_replay
   project_setup
-  pin_recorded_systems
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml"
   run "$FLOX_BIN" install -d "$PROJECT_DIR" hello
   assert_success
@@ -215,8 +215,8 @@ EOF
 
 # bats test_tags=activate,activate:path,activate:path:tcsh
 @test "tcsh: interactive activate puts package in path" {
+  skip_x86_64_darwin_replay
   project_setup
-  pin_recorded_systems
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml"
   run "$FLOX_BIN" install -d "$PROJECT_DIR" hello
   assert_success
@@ -228,8 +228,8 @@ EOF
 
 # bats test_tags=activate,activate:path,activate:path:zsh
 @test "zsh: interactive activate puts package in path" {
+  skip_x86_64_darwin_replay
   project_setup
-  pin_recorded_systems
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml"
   run "$FLOX_BIN" install -d "$PROJECT_DIR" hello
   assert_success
@@ -243,8 +243,8 @@ EOF
 # ---------------------------------------------------------------------------- #
 
 @test "zsh: interactive activate works with VCS plugins" {
+  skip_x86_64_darwin_replay
   project_setup
-  pin_recorded_systems
 
   # TODO: https://github.com/flox/flox/issues/2164
   run find "${HOME}" -type f -exec grep -qs 'Setting PATH' {} \; -delete
@@ -370,8 +370,8 @@ EOF
 
 # bats test_tags=activate:standalone
 @test "activation script can use packages from PATH when run directly" {
+  skip_x86_64_darwin_replay
   project_setup
-  pin_recorded_systems
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" "$FLOX_BIN" install hello
 
   # Verify that running the activate script directly can access installed packages.
@@ -385,8 +385,8 @@ EOF
 
 # bats test_tags=activate:standalone
 @test "activation works with env -i (empty environment)" {
+  skip_x86_64_darwin_replay
   project_setup
-  pin_recorded_systems
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" "$FLOX_BIN" install hello
 
   # Current recommendation for isolating environments:
@@ -974,8 +974,8 @@ EOF
 
 # bats test_tags=activate,activate:rc:zsh
 @test "zsh: uses environment specific completion cache" {
+  skip_x86_64_darwin_replay
   project_setup
-  pin_recorded_systems
 
   # First activation should generate the .zcompdump file.
   FLOX_SHELL="zsh" run "$FLOX_BIN" activate -v -c 'stat "$FLOX_ENV_CACHE/.zcompdump"'
@@ -997,11 +997,11 @@ EOF
 
 # bats test_tags=activate,activate:rc:zsh
 @test "zsh: deactivate restores pre-activation completions" {
+  skip_x86_64_darwin_replay
   # `deactivate --print-script` needs the marker that hook registration
   # exports, so opt out of the suite-wide `disable_hook = true`.
   enable_prompt_hook
   project_setup
-  pin_recorded_systems
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/fd.yaml" \
     "$FLOX_BIN" install fd
 
@@ -1029,6 +1029,7 @@ EOF
 
 # bats test_tags=activate,activate:rc:zsh
 @test "zsh: deactivate inner activation cleans up completions" {
+  skip_x86_64_darwin_replay
   # `deactivate --print-script` needs the marker that hook registration
   # exports, so opt out of the suite-wide `disable_hook = true`.
   enable_prompt_hook
@@ -1040,7 +1041,6 @@ EOF
   local inner_dir="${BATS_TEST_TMPDIR}/inner-${BATS_TEST_NUMBER}"
   mkdir -p "$inner_dir"
   "$FLOX_BIN" init --dir "$inner_dir"
-  pin_recorded_systems "$inner_dir/.flox/env/manifest.toml"
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/fd.yaml" \
     "$FLOX_BIN" install --dir "$inner_dir" fd
 
@@ -1189,8 +1189,8 @@ EOF
 
 # bats test_tags=activate,activate:path,activate:path:bash
 @test "'flox activate' modifies path (bash)" {
+  skip_x86_64_darwin_replay
   project_setup
-  pin_recorded_systems
   original_path="$PATH"
   FLOX_SHELL="bash" run "$FLOX_BIN" activate -c "echo '\$PATH'"
   assert_success
@@ -1210,8 +1210,8 @@ EOF
 
 # bats test_tags=activate,activate:path,activate:path:fish
 @test "'flox activate' modifies path (fish)" {
+  skip_x86_64_darwin_replay
   project_setup
-  pin_recorded_systems
   original_path="$PATH"
   FLOX_SHELL="fish" run "$FLOX_BIN" activate -c "echo '\$PATH'"
   assert_success
@@ -1231,8 +1231,8 @@ EOF
 
 # bats test_tags=activate,activate:path,activate:path:tcsh
 @test "'flox activate' modifies path (tcsh)" {
+  skip_x86_64_darwin_replay
   project_setup
-  pin_recorded_systems
   original_path="$PATH"
   FLOX_SHELL="tcsh" run "$FLOX_BIN" activate -c "echo '\$PATH'"
   assert_success
@@ -1252,8 +1252,8 @@ EOF
 
 # bats test_tags=activate,activate:path,activate:path:zsh
 @test "'flox activate' modifies path (zsh)" {
+  skip_x86_64_darwin_replay
   project_setup
-  pin_recorded_systems
   original_path="$PATH"
   FLOX_SHELL="zsh" run "$FLOX_BIN" activate -c "echo '\$PATH'"
   assert_success
@@ -1310,8 +1310,8 @@ sets_NIX_SSL_CERT_FILE() {
 
 # bats test_tags=activate,activate:inplace-modifies,activate:inplace-modifies:bash
 @test "'flox activate' modifies the current shell (bash)" {
+  skip_x86_64_darwin_replay
   project_setup
-  pin_recorded_systems
   # set profile scripts
   sed -i -e "s/^\[profile\]/${HELLO_PROFILE_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
   # set a hook
@@ -1334,8 +1334,8 @@ EOF
 
 # bats test_tags=activate,activate:inplace-modifies,activate:inplace-modifies:fish
 @test "'flox activate' modifies the current shell (fish)" {
+  skip_x86_64_darwin_replay
   project_setup
-  pin_recorded_systems
   # set profile scripts
   sed -i -e "s/^\[profile\]/${HELLO_PROFILE_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
   # set a hook
@@ -1360,8 +1360,8 @@ EOF
 
 # bats test_tags=activate,activate:inplace-modifies,activate:inplace-modifies:tcsh
 @test "'flox activate' modifies the current shell (tcsh)" {
+  skip_x86_64_darwin_replay
   project_setup
-  pin_recorded_systems
   # set profile scripts
   sed -i -e "s/^\[profile\]/${HELLO_PROFILE_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
   # set a hook
@@ -1386,8 +1386,8 @@ EOF
 
 # bats test_tags=activate,activate:inplace-modifies,activate:inplace-modifies:zsh
 @test "'flox activate' modifies the current shell (zsh)" {
+  skip_x86_64_darwin_replay
   project_setup
-  pin_recorded_systems
   # set profile scripts
   sed -i -e "s/^\[profile\]/${HELLO_PROFILE_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
   # set a hook
@@ -1517,8 +1517,8 @@ EOF
 
 # bats test_tags=activate,activate:python-detects-installed-python
 @test "'flox activate' sets python vars if python is installed" {
+  skip_x86_64_darwin_replay
   project_setup
-  pin_recorded_systems
   # unset python vars if any
   unset PYTHONPATH
   unset PIP_CONFIG_FILE
@@ -1558,16 +1558,17 @@ EOF
 
 # bats test_tags=activate:flox-uses-default-env
 @test "'flox *' uses local environment over 'default' environment" {
+  skip_x86_64_darwin_replay
   project_setup # TODO: we need PROJECT_DIR, but not flox init
   "$FLOX_BIN" delete -f
   mkdir default
   pushd default >/dev/null || return
-  flox_init_pinned
+  "$FLOX_BIN" init
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/vim.yaml"
   "$FLOX_BIN" install vim
   popd >/dev/null || return
 
-  flox_init_pinned
+  "$FLOX_BIN" init
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/emacs.yaml"
   "$FLOX_BIN" install emacs
 
@@ -2648,8 +2649,8 @@ EOF
 # ---------------------------------------------------------------------------- #
 
 @test "profile: RUST_SRC_PATH set when rustPlatform.rustLibSrc installed" {
+  skip_x86_64_darwin_replay
   project_setup
-  pin_recorded_systems
 
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/rust-lib-src.yaml" \
     "$FLOX_BIN" install rustPlatform.rustLibSrc
@@ -2686,6 +2687,7 @@ EOF
 }
 
 @test "profile: JUPYTER_PATH is modified when Jupyter is installed" {
+  skip_x86_64_darwin_replay
   # We don't need an environment, but we do need wait_for_activations to have a
   # PROJECT_DIR to look for
   project_setup_common
@@ -2699,7 +2701,6 @@ EOF
 
   # Test outer project by itself.
   "$FLOX_BIN" init --dir=outer
-  pin_recorded_systems outer/.flox/env/manifest.toml
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/jupyterlabs_widgets.yaml" \
     run "$FLOX_BIN" install --dir=outer $PACKAGES_OUTER
   assert_success
@@ -2713,7 +2714,6 @@ EOF
 
   # Test outer and inner project combined.
   "$FLOX_BIN" init --dir=inner
-  pin_recorded_systems inner/.flox/env/manifest.toml
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/jupyterlabs_git.yaml" \
     run "$FLOX_BIN" install --dir=inner $PACKAGES_INNER
   assert_success
@@ -2743,11 +2743,12 @@ EOF
 }
 
 @test "profile: CMAKE_PREFIX_PATH is modified when cmake is installed" {
+  skip_x86_64_darwin_replay
   # We don't need an environment, but we do need wait_for_activations to have a
   # PROJECT_DIR to look for
   project_setup_common
 
-  flox_init_pinned
+  "$FLOX_BIN" init
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/cmake-gnumake.yaml" \
     run "$FLOX_BIN" install cmake gnumake
   assert_success
@@ -2896,6 +2897,7 @@ EOF
 
 # bats test_tags=activate,activate:plugins
 @test "plugins: flox_plugin_data works in build mode" {
+  skip_x86_64_darwin_replay
   project_setup
   setup_test_plugin
 
@@ -2903,8 +2905,6 @@ EOF
   # instead of querying the catalog for base catalog information.
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
     "$FLOX_BIN" edit -f - <<< "$(with_latest_schema "$(cat <<EOF
-[options]
-systems = ["aarch64-darwin", "aarch64-linux", "x86_64-darwin", "x86_64-linux"]
 
 [install]
 hello.pkg-path = "hello"
@@ -2929,6 +2929,7 @@ EOF
 }
 
 @test "activate works with fish 3.2.2" {
+  skip_x86_64_darwin_replay
   if [ "$NIX_SYSTEM" == aarch64-linux ]; then
     # running fish at all on aarch64-linux throws:
     # terminate called after throwing an instance of 'std::bad_alloc'
@@ -2936,7 +2937,6 @@ EOF
     skip "fish 3.2.2 is broken on aarch64-linux"
   fi
   project_setup
-  pin_recorded_systems
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/fish_3_2_2.yaml" \
     "$FLOX_BIN" install fish@3.2.2
 
@@ -2948,15 +2948,13 @@ EOF
 }
 
 @test "in-place activate works with bash 3" {
+  skip_x86_64_darwin_replay
   if ! /bin/bash --version | grep -q "GNU bash, version 3"; then
     skip "No bash 3 at /bin/bash"
   fi
   project_setup
   MANIFEST_CONTENTS="$(cat << "EOF"
     version = 1
-
-    [options]
-    systems = ["aarch64-darwin", "aarch64-linux", "x86_64-darwin", "x86_64-linux"]
 
     [install]
     hello.pkg-path = "hello"
@@ -3579,8 +3577,8 @@ EOF
 # ---------------------------------------------------------------------------- #
 
 @test "in-place: repeat activations work after modifying environment" {
+  skip_x86_64_darwin_replay
   project_setup
-  pin_recorded_systems
 
   # TODO: https://github.com/flox/flox/issues/2164
   # Clutters the `assert_output`.
@@ -3746,6 +3744,7 @@ PIDs of the running activations: ${ACTIVATION_PID}"
 
 # bats test_tags=activate,activate:attach
 @test "attach doesn't break MANPATH" {
+  skip_x86_64_darwin_replay
   project_setup
 
   # Ensure that an empty MANPATH is replaced with something with a trailing
@@ -3755,11 +3754,9 @@ PIDs of the running activations: ${ACTIVATION_PID}"
   assert_output --regexp ".*:$"
 
   "$FLOX_BIN" init -d vim
-  pin_recorded_systems vim/.flox/env/manifest.toml
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/vim.yaml" "$FLOX_BIN" install -d vim vim
 
   "$FLOX_BIN" init -d emacs
-  pin_recorded_systems emacs/.flox/env/manifest.toml
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/emacs.yaml" "$FLOX_BIN" install -d emacs emacs
 
   mkfifo activate_started_fifo
@@ -3834,16 +3831,15 @@ PIDs of the running activations: ${ACTIVATION_PID}"
 
 # bats test_tags=activate,activate:attach
 @test "attach doesn't break PATH" {
+  skip_x86_64_darwin_replay
   # We don't need an environment, but we do need wait_for_activations to have a
   # PROJECT_DIR to look for
   project_setup_common
 
   "$FLOX_BIN" init -d vim
-  pin_recorded_systems vim/.flox/env/manifest.toml
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/vim.yaml" "$FLOX_BIN" install -d vim vim
 
   "$FLOX_BIN" init -d emacs
-  pin_recorded_systems emacs/.flox/env/manifest.toml
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/emacs.yaml" "$FLOX_BIN" install -d emacs emacs
 
   mkfifo activate_started_fifo
@@ -4992,9 +4988,10 @@ Setting PATH from .bashrc"
 
 # bats test_tags=activate:upgrade-checks
 @test "runs upgrade checks in the background on activate" {
+  skip_x86_64_darwin_replay
     project_setup_common
     unset _FLOX_TESTING_DISABLE_BG_SIDE_EFFECTS # allow background checks for this test
-    flox_init_pinned
+    "$FLOX_BIN" init
     _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/old_hello.yaml" "$FLOX_BIN" install hello
     _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" "$FLOX_BIN" activate -c true
 
@@ -5896,10 +5893,11 @@ success"
 
 # bats test_tags=activate,activate:idempotent
 @test "activate is idempotent for an already-locked already-built environment" {
+  skip_x86_64_darwin_replay
   # Ensure flox activate does not re-lock or re-build when the lockfile is
   # already current and the rendered link is already valid.
   project_setup_common
-  flox_init_pinned
+  "$FLOX_BIN" init
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
     "$FLOX_BIN" install hello
 

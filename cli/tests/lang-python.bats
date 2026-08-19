@@ -53,7 +53,8 @@ teardown() {
 
 # bats test_tags=catalog
 @test "install requests with pip" {
-  flox_init_pinned
+  skip_x86_64_darwin_replay
+  "$FLOX_BIN" init
 
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/python3_pip.yaml" \
       run "$FLOX_BIN" install -i pip python311Packages.pip python3
