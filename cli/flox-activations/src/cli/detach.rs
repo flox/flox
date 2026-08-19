@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use anyhow::Context;
 use clap::Args;
 use flox_core::activations::{read_activations_json, state_json_path, write_activations_json};
-use tracing::debug;
+use tracing::{debug, warn};
 
 use crate::Error;
 
@@ -58,12 +58,14 @@ impl DetachArgs {
         // runs its hook.on-deactivate, and removes the start state dir.
         // Without a running executive (e.g. containerize uses its own PID)
         // nothing would ever do that, so tear orphaned starts down inline; no
-        // hook runs in that case.
+        // hook runs in that case. Removal is best-effort, like the
+        // executive's sweep: a failure must not abort the detach before the
+        // state.json write below persists it.
         if !state.executive_running() {
-            for start_id in state.remove_orphaned_starts() {
-                start_id
-                    .remove_start_state_dir(&self.activation_state_dir)
-                    .context("failed to remove start state dir after detach")?;
+            for start_id in state.remove_orphaned_starts().orphaned {
+                if let Err(err) = start_id.remove_start_state_dir(&self.activation_state_dir) {
+                    warn!(%err, ?start_id, "failed to remove start state dir after detach");
+                }
             }
         }
 
@@ -222,6 +224,34 @@ mod test {
         assert!(
             !start_state_dir.exists(),
             "start state dir should be removed inline when no executive is running"
+        );
+    }
+
+    /// A start state dir that is already gone (e.g. removed by an earlier
+    /// crashed detach) must not wedge the detach: the PID removal still has
+    /// to be persisted to state.json.
+    #[test]
+    fn detach_persists_even_when_start_state_dir_is_missing() {
+        let tmp = TempDir::new().unwrap();
+        let dot_flox_path = tmp.path().join(".flox");
+        let pid = 12345_i32;
+
+        let dead_executive = start_dead_pid();
+        let (activation_state_dir, start_state_dir) =
+            setup_single_attachment(&tmp, &dot_flox_path, pid, dead_executive);
+        std::fs::remove_dir_all(&start_state_dir).unwrap();
+
+        let args = DetachArgs {
+            activation_state_dir,
+            pid,
+        };
+        args.handle()
+            .expect("detach should succeed despite the missing start state dir");
+
+        let updated = read_activation_state(tmp.path(), &dot_flox_path);
+        assert!(
+            updated.attached_pids_is_empty(),
+            "the detach should be persisted to state.json"
         );
     }
 

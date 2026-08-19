@@ -340,13 +340,24 @@ impl StartIdentifier {
         })?;
         Ok(())
     }
-
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct Attachment {
     start_id: StartIdentifier,
     expiration: Option<OffsetDateTime>,
+}
+
+/// Result of [ActivationState::remove_orphaned_starts].
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct OrphanedStarts {
+    /// Starts removed from the state; their state directories should be torn
+    /// down (running any `hook.on-deactivate`) once the state has been
+    /// persisted and the lock released.
+    pub orphaned: Vec<StartIdentifier>,
+    /// Whether the state was mutated (starts removed or `ready` cleared) and
+    /// must be persisted before the lock is released.
+    pub modified: bool,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
@@ -421,6 +432,7 @@ impl ActivationState {
     }
 
     /// Returns a mapping of StartIdentifier to info for each attachment to that StartIdentifier
+    #[cfg(any(test, feature = "tests"))]
     pub fn attachments_by_start_id(
         &self,
     ) -> BTreeMap<StartIdentifier, Vec<(Pid, Option<OffsetDateTime>)>> {
@@ -442,20 +454,25 @@ impl ActivationState {
         self.attached_pids.is_empty()
     }
 
-    /// Remove and return every start with no remaining attachments, clearing
-    /// `ready` if it names one of them.
+    /// Remove every start with no remaining attachments, clearing `ready` if
+    /// it names a start without attachments.
     ///
     /// `detach` leaves `ready` and the starts list untouched so that a new
     /// activation arriving before this runs can still attach; once a start is
     /// removed here that window is closed. The caller (normally the
-    /// executive) must persist the state and release the lock before tearing
-    /// the returned starts down, so a hanging `hook.on-deactivate` can't
-    /// block new activations.
+    /// executive) must persist the state whenever `modified` is set and
+    /// release the lock before tearing the orphaned starts down, so a hanging
+    /// `hook.on-deactivate` can't block new activations.
     ///
-    /// A `Ready::Starting` start is never returned even without an
-    /// attachment (its PID may have died mid-start): it stays owned by the
-    /// next `start_or_attach`.
-    pub fn remove_orphaned_starts(&mut self) -> Vec<StartIdentifier> {
+    /// `ready` is cleared based on attachments rather than membership in the
+    /// starts list, so state where `ready` names an untracked start (e.g.
+    /// written by an earlier binary without the starts field) still heals —
+    /// that is why `modified` can be set even when `orphaned` is empty.
+    ///
+    /// A `Ready::Starting` start is never orphaned even without an attachment
+    /// (its PID may have died mid-start): it stays owned by the next
+    /// `start_or_attach`.
+    pub fn remove_orphaned_starts(&mut self) -> OrphanedStarts {
         let mut live: BTreeSet<StartIdentifier> = self
             .attached_pids
             .values()
@@ -476,14 +493,19 @@ impl ActivationState {
             self.starts.remove(start_id);
         }
 
+        let mut ready_cleared = false;
         if let Ready::True(ref start_id) = self.ready
             && !live.contains(start_id)
         {
             debug!(?start_id, "ready start has no attachments, marking as not ready");
             self.ready = Ready::False;
+            ready_cleared = true;
         }
 
-        orphaned
+        OrphanedStarts {
+            modified: !orphaned.is_empty() || ready_cleared,
+            orphaned,
+        }
     }
 
     /// Returns all attached PIDs and their expirations, flattened from all start IDs
@@ -579,16 +601,13 @@ impl ActivationState {
         pid_is_running: impl Fn(Pid) -> bool,
         now: OffsetDateTime,
     ) -> bool {
-        // Get the attachment for this PID
-        let attachment = self.attached_pids.get(&pid).cloned();
-
-        let Some(attachment) = attachment else {
+        let Some(expiration) = self.attached_pids.get(&pid).map(|a| a.expiration) else {
             debug!(pid, "PID not found in attached_pids");
             return false;
         };
 
         // Check if we should keep this attachment
-        let keep_attachment = if let Some(expiration) = attachment.expiration {
+        let keep_attachment = if let Some(expiration) = expiration {
             // If the PID has an unreached expiration, retain it even if it isn't running
             now < expiration || pid_is_running(pid)
         } else {
@@ -598,18 +617,13 @@ impl ActivationState {
         if keep_attachment {
             // info so that Sentry breadcrumbs show why an exit event didn't
             // detach the PID, mirroring "detaching terminated PID" below
-            info!(pid, expiration = ?attachment.expiration, "keeping attached PID");
+            info!(pid, ?expiration, "keeping attached PID");
             return false;
         }
 
         info!(pid, "detaching terminated PID");
-        if self.detach(pid).is_err() {
-            debug!(
-                pid,
-                "PID not found in attached_pids, this should be unreachable"
-            );
-            return false;
-        }
+        self.detach(pid)
+            .expect("attachment was just observed under &mut self");
 
         true
     }
@@ -1353,12 +1367,18 @@ mod tests {
 
             assert_eq!(
                 activations.remove_orphaned_starts(),
-                Vec::new(),
+                OrphanedStarts {
+                    orphaned: Vec::new(),
+                    modified: false,
+                },
                 "both starts still have an attachment"
             );
 
             activations.detach(100).unwrap();
-            assert_eq!(activations.remove_orphaned_starts(), vec![old]);
+            assert_eq!(activations.remove_orphaned_starts(), OrphanedStarts {
+                orphaned: vec![old],
+                modified: true,
+            });
             assert_eq!(activations.starts, BTreeSet::from([new.clone()]));
             assert_eq!(
                 activations.ready,
@@ -1383,9 +1403,28 @@ mod tests {
             activations.detach(100).unwrap();
             assert_eq!(activations.ready, Ready::True(start_id.clone()));
 
-            assert_eq!(activations.remove_orphaned_starts(), vec![start_id]);
+            assert_eq!(activations.remove_orphaned_starts(), OrphanedStarts {
+                orphaned: vec![start_id],
+                modified: true,
+            });
             assert_eq!(activations.ready, Ready::False);
             assert_eq!(activations.starts, BTreeSet::new());
+        }
+
+        /// `ready` naming a start missing from the starts list (e.g. state
+        /// written by an earlier binary without the field) is still cleared
+        /// once it has no attachments, and the mutation is reported so
+        /// callers persist it despite having no starts to sweep.
+        #[test]
+        fn clears_ready_missing_from_starts_and_reports_modified() {
+            let start_id = StartIdentifier::new("/nix/store/path1");
+            let mut activations = make_activations(Ready::True(start_id));
+
+            assert_eq!(activations.remove_orphaned_starts(), OrphanedStarts {
+                orphaned: Vec::new(),
+                modified: true,
+            });
+            assert_eq!(activations.ready, Ready::False);
         }
 
         /// An attach arriving in the window between last detach and executive
@@ -1399,7 +1438,10 @@ mod tests {
             activations.detach(100).unwrap();
             activations.attach(200, make_attachment(start_id.clone()));
 
-            assert_eq!(activations.remove_orphaned_starts(), Vec::new());
+            assert_eq!(activations.remove_orphaned_starts(), OrphanedStarts {
+                orphaned: Vec::new(),
+                modified: false,
+            });
             assert_eq!(activations.starts, BTreeSet::from([start_id.clone()]));
             assert_eq!(activations.ready, Ready::True(start_id));
         }
@@ -1412,7 +1454,10 @@ mod tests {
             let mut activations = make_activations(Ready::Starting(100, start_id.clone()));
             activations.starts.insert(start_id.clone());
 
-            assert_eq!(activations.remove_orphaned_starts(), Vec::new());
+            assert_eq!(activations.remove_orphaned_starts(), OrphanedStarts {
+                orphaned: Vec::new(),
+                modified: false,
+            });
             assert_eq!(activations.starts, BTreeSet::from([start_id.clone()]));
             assert_eq!(activations.ready, Ready::Starting(100, start_id));
         }

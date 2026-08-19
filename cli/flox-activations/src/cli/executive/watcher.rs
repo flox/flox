@@ -59,15 +59,20 @@ pub fn cleanup_pid(
     // Remove starts left without attachments from state.json under the same
     // lock that detached the PID, so they are handed to the caller's sweep
     // exactly once. The sweep itself must run after the lock is released.
-    let orphaned = activations.remove_orphaned_starts();
-    trace!(?orphaned, "PID cleanup left starts with no attachments");
+    let removal = activations.remove_orphaned_starts();
+    trace!(
+        orphaned = ?removal.orphaned,
+        "PID cleanup left starts with no attachments"
+    );
 
-    if modified || !orphaned.is_empty() {
+    if modified || removal.modified {
         trace!(?activations, "writing PID changes to activation");
         write_activations_json(&activations, state_json_path, lock)?;
     }
 
-    Ok(CleanupPidResult::Remaining { orphaned })
+    Ok(CleanupPidResult::Remaining {
+        orphaned: removal.orphaned,
+    })
 }
 
 #[cfg(test)]
@@ -306,11 +311,8 @@ pub mod test {
 
         // A second pass finds nothing: the orphaned start is gone from
         // state.json, so it is only ever handed to the sweep once.
-        let (mut activations, lock) = {
-            let (activations, lock) = read_activations_json(&state_json_path).unwrap();
-            (activations.expect("state.json should exist"), lock)
-        };
-        assert_eq!(activations.remove_orphaned_starts(), Vec::new());
+        let (mut activations, lock) = locked_state(&state_json_path);
+        assert_eq!(activations.remove_orphaned_starts().orphaned, Vec::new());
         drop(lock);
 
         // Clean up

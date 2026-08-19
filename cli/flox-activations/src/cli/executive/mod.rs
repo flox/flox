@@ -301,19 +301,20 @@ fn run_event_loop(
                     // start from state.json under the lock, then tear it down
                     // with the lock released: its hook.on-deactivate has no
                     // timeout and must not block new activations. The write
-                    // retriggers StateFileChanged, which finds no orphans.
-                    let orphaned = activations.remove_orphaned_starts();
-                    if orphaned.is_empty() {
-                        drop(lock);
-                    } else {
+                    // retriggers StateFileChanged, which finds nothing
+                    // modified and takes the write-free branch.
+                    let removal = activations.remove_orphaned_starts();
+                    if removal.modified {
                         write_activations_json(&activations, &state_json_path, lock)?;
                         sweep_orphaned_starts(
                             subsystem_verbosity,
                             &initial_attach_ctx,
                             &project_ctx,
                             &activation_state_dir,
-                            orphaned,
+                            removal.orphaned,
                         );
+                    } else {
+                        drop(lock);
                     }
                 }
             },
@@ -765,7 +766,7 @@ fn cleanup_all(
     // is orphaned, including starts deferred by an explicit detach that the
     // executive never got to sweep. No state.json write is needed — the whole
     // directory is removed below.
-    let orphaned = activations_json.remove_orphaned_starts();
+    let orphaned = activations_json.remove_orphaned_starts().orphaned;
     sweep_orphaned_starts(
         subsystem_verbosity,
         initial_attach_ctx,
