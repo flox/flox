@@ -3398,6 +3398,11 @@
               "$ref": "#/components/schemas/LockedInputEntry"
             },
             "type": "object"
+          },
+          "cascade_update": {
+            "type": "boolean",
+            "title": "Cascade Update",
+            "default": false
           }
         },
         "type": "object",
