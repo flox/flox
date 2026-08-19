@@ -256,6 +256,10 @@ case "$_FLOX_ENV_ACTIVATION_MODE" in
     ;;
 esac
 
+# Re-export [vars] so that they take precedence over same-named variables
+# exported by profile.d scripts.
+set_manifest_vars "$_FLOX_ENV"
+
 if [ "$_skip_hook_on_activate" = "false" ]; then
   # Source the hook-on-activate script if it exists.
   if [ -e "$_FLOX_ENV/activate.d/hook-on-activate" ]; then
