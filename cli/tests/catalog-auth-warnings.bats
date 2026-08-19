@@ -19,6 +19,7 @@ load test_support.bash
 # ---------------------------------------------------------------------------- #
 
 RESOLVE_AUTH_WARNING="Resolving packages will require authentication to FloxHub in an upcoming release."
+RESOLVE_AUTH_DOCS_URL="https://go.flox.dev/auth"
 STAMP_FILE_NAME="resolve-auth-warning-timestamp.json"
 
 project_setup() {
@@ -58,6 +59,16 @@ teardown() {
   run "$FLOX_BIN" install hello
   assert_success
   assert_output --partial "$RESOLVE_AUTH_WARNING"
+}
+
+# DEV-236: the warning must carry the auth explainer link, not the install docs.
+@test "the auth warning links to the auth explainer page" {
+  unset FLOX_FLOXHUB_TOKEN
+  flox_init_pinned
+  run "$FLOX_BIN" install hello
+  assert_success
+  assert_output --partial "$RESOLVE_AUTH_DOCS_URL"
+  refute_output --partial "flox.dev/docs/install-flox"
 }
 
 @test "resolving while logged in does NOT print the auth warning" {

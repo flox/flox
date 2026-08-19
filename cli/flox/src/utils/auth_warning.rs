@@ -22,10 +22,9 @@ use crate::utils::message;
 const RESOLVE_AUTH_WARNING_FILE_NAME: &str = "resolve-auth-warning-timestamp.json";
 const RESOLVE_AUTH_WARNING_EXPIRY: Duration = Duration::hours(8);
 
-// TODO(DEV-200): append the docs URL explaining the auth transition once the
-// explainer page exists.
 const RESOLVE_AUTH_WARNING: &str = indoc! {"
     Resolving packages will require authentication to FloxHub in an upcoming release.
+    See https://go.flox.dev/auth for more info.
     Run 'flox auth login' to authenticate now.\
 "};
 
