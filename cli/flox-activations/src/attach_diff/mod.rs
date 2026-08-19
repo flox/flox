@@ -72,14 +72,13 @@ pub struct AttachDiff {
     ///    This ensures we re-apply these variables after they could have been
     ///    changed, particularly if user RC files contain flox activations
     double_sets: EnvDiff,
-    /// Pre-encoded diff string for _FLOX_HOOK_DIFF. None if snapshot unavailable.
-    encoded_diff: Option<String>,
+    /// Pre-encoded diff string for _FLOX_HOOK_DIFF.
+    encoded_diff: String,
 }
 
 impl AttachDiff {
     /// Assemble all environment variable sets and unsets needed for
-    /// activation, and compute the activation diff if a pre-activation
-    /// snapshot is available.
+    /// activation, and compute the activation diff.
     pub fn new(
         context: &AttachCtx,
         project: Option<&AttachProjectCtx>,
@@ -89,7 +88,7 @@ impl AttachDiff {
         is_in_place: bool,
     ) -> Result<Self> {
         // Extract the pre-activation snapshot before consuming vars_from_env.
-        let full_env = vars_from_env.full_env.take();
+        let full_env = std::mem::take(&mut vars_from_env.full_env);
 
         let single_sets: HashMap<String, String> = single_set_envs(context)
             .into_iter()
@@ -116,8 +115,7 @@ impl AttachDiff {
             .deletions
             .extend(start_diff.deletions().iter().cloned());
 
-        // Compute the activation diff if we have a pre-activation snapshot.
-        let encoded_diff = if let Some(ref current_env) = full_env {
+        let encoded_diff = {
             let mut intended_sets = if is_in_place {
                 // These variables are computed by set-env-dirs and fix-paths,
                 // for which values must be computed dynamically at runtime.
@@ -138,7 +136,7 @@ impl AttachDiff {
             intended_sets.extend(double_sets.additions.keys().cloned());
             let intended_removals: HashSet<String> =
                 double_sets.deletions.iter().cloned().collect();
-            let diff = diff_env(current_env, &intended_sets, &intended_removals);
+            let diff = diff_env(&full_env, &intended_sets, &intended_removals);
             let encoded = diff.encode()?;
             debug!(
                 "captured activation diff: {} added, {} modified, {} removed ({} bytes encoded)",
@@ -147,9 +145,7 @@ impl AttachDiff {
                 diff.removed.len(),
                 encoded.len(),
             );
-            Some(encoded)
-        } else {
-            None
+            encoded
         };
 
         Ok(Self {
@@ -160,17 +156,16 @@ impl AttachDiff {
         })
     }
 
-    /// The encoded `_FLOX_HOOK_DIFF` string, if a pre-activation snapshot
-    /// was available when this `AttachDiff` was constructed.
+    /// The encoded `_FLOX_HOOK_DIFF` string.
     #[cfg(test)]
-    pub fn encoded_diff(&self) -> Option<&str> {
-        self.encoded_diff.as_deref()
+    pub fn encoded_diff(&self) -> &str {
+        &self.encoded_diff
     }
 
     /// Apply the activation environment to a Command.
     ///
     /// Sets all accumulated variables, removes all accumulated unsets,
-    /// and sets the _FLOX_HOOK_DIFF env var if a diff was computed.
+    /// and sets the _FLOX_HOOK_DIFF env var.
     pub fn apply_to_command(&self, command: &mut Command) {
         command.envs(&self.non_in_place_sets);
         command.envs(&self.single_sets);
@@ -181,9 +176,7 @@ impl AttachDiff {
         for var in &self.double_sets.deletions {
             command.env_remove(var);
         }
-        if let Some(ref encoded) = self.encoded_diff {
-            command.env(FLOX_HOOK_DIFF_VAR, encoded);
-        }
+        command.env(FLOX_HOOK_DIFF_VAR, &self.encoded_diff);
     }
 
     /// Generate statements that apply the environment in a gen_rc script
@@ -198,9 +191,10 @@ impl AttachDiff {
             for (k, v) in self.single_sets.iter().sorted_by_key(|(k, _)| *k) {
                 stmts.push(set_exported_unexpanded(k, v));
             }
-            if let Some(ref encoded) = self.encoded_diff {
-                stmts.push(set_exported_unexpanded(FLOX_HOOK_DIFF_VAR, encoded));
-            }
+            stmts.push(set_exported_unexpanded(
+                FLOX_HOOK_DIFF_VAR,
+                &self.encoded_diff,
+            ));
         }
         // double_sets includes user variables which we want to override
         // single_sets, so set them after single_sets.

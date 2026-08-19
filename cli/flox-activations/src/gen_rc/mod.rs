@@ -197,7 +197,7 @@ pub(crate) mod test_helpers {
             sbin_env_dirs: None,
             path: None,
             manpath: None,
-            full_env: Some(full_env),
+            full_env,
         };
         let rc_path = Some(PathBuf::from("/path/to/rc/file"));
         startup_ctx(
@@ -222,11 +222,7 @@ pub(crate) mod test_helpers {
     /// have captured.
     pub fn test_deactivate_ctx(shell: ShellWithPath, is_in_place: bool) -> DeactivateCtx {
         let startup = test_startup_ctx(shell, is_in_place);
-        let encoded_diff = startup
-            .attach_diff
-            .encoded_diff()
-            .expect("test_startup_ctx should produce an encoded diff")
-            .to_string();
+        let encoded_diff = startup.attach_diff.encoded_diff().to_string();
         let restore_diff =
             DiffSerializer::decode(&encoded_diff).expect("encoded diff should decode successfully");
         DeactivateCtx {
