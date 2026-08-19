@@ -876,6 +876,8 @@ Flox plugins work by convention:
 - Plugins have access to the entire manifest.
   By convention, plugins should only access data under `[plugins.<plugin name>]`,
   but Flox does not enforce this.
+- Plugin scripts run with the variables from `[vars]` already exported,
+  so a plugin may also be configured via `[vars]`.
 
 
 # SEE ALSO

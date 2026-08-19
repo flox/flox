@@ -189,7 +189,7 @@ flowchart TB
     match_activation_mode -- "flox activate -- cmd args" --> apply_activation_env_exec
     match_activation_mode -- interactive --> apply_activation_env_interactive
     apply_activation_env_exec --> exec_cmd
-    nd --> n173
+    n6 --> n173
     A(["Parent PID<br>flox activate<br>"]) -- fork() &amp;&amp; exec(flox) --> n88
     n88 --> n89
     n89 --> n36
@@ -219,8 +219,8 @@ flowchart TB
     apply_activation_env_interactive --> n37
     n7 -- no --> n167
     n7 -- yes --> n172
-    n167 --> n6
-    n6 --> nd
+    n167 --> nd
+    nd --> n6
     n160(["Container entrypoint"]) --> Start
     n36 --> Start
     n63 ~~~ LockAfterHooks
@@ -231,7 +231,7 @@ flowchart TB
     ny --> n164
     n110 ~~~ n165
     n166(["flox-build.mk"]) -- "activate -- cmd args<br>activate -c 'cmd &amp;&amp; args'" --> activate
-    n170 --> n6
+    n170 --> nd
     n172 --> n170
     n173 --> n174 & n171
     n174 -- no --> n63

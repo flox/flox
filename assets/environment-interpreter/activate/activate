@@ -233,6 +233,10 @@ if [ "$_command_mode" = "false" ]; then
   $_jq -nS env > "$_start_env_json"
 fi
 
+# Set static environment variables from the manifest before sourcing
+# profile.d scripts so that plugin scripts can read [vars] entries.
+set_manifest_vars "$_FLOX_ENV"
+
 case "$_FLOX_ENV_ACTIVATION_MODE" in
   dev)
     # shellcheck disable=SC1090 # from rendered environment
@@ -251,9 +255,6 @@ case "$_FLOX_ENV_ACTIVATION_MODE" in
     exit 1
     ;;
 esac
-
-# Set static environment variables from the manifest.
-set_manifest_vars "$_FLOX_ENV"
 
 if [ "$_skip_hook_on_activate" = "false" ]; then
   # Source the hook-on-activate script if it exists.

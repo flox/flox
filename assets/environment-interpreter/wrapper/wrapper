@@ -124,7 +124,7 @@ export PATH="$FLOX_ENV/bin:$FLOX_ENV/sbin:$PATH"
 
 if [ "${SET_VARS-}" = "1" ]; then
  # Set static environment variables from the manifest.
- set_vars "$FLOX_ENV"
+ set_manifest_vars "$FLOX_ENV"
 fi
 
 # source profile.d scripts
