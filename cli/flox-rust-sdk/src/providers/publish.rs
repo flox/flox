@@ -123,6 +123,16 @@ pub enum PublishError {
     UnsupportedSystem(String),
 }
 
+/// Behavior of a single publish, as selected by the user on the command line.
+#[derive(Clone, Copy, Debug)]
+pub struct PublishOptions {
+    /// Publish only the metadata of the package, without uploading the
+    /// artifact itself.
+    pub metadata_only: bool,
+    /// Whether the hub should rebuild the packages that depend on this one.
+    pub cascade_update: bool,
+}
+
 /// The `Publish` trait describes the high level behavior of publishing a package to a catalog.
 /// Authentication, upload, builds etc, are implementation details of the specific provider.
 /// Modeling the behavior as a trait allows us to swap out the provider, e.g. a mock for testing.
@@ -146,7 +156,7 @@ pub trait Publisher {
         package_created: PackageCreatedGuard,
         build_metadata: &CheckedBuildMetadata,
         key_file: Option<PathBuf>,
-        metadata_only: bool,
+        options: PublishOptions,
     ) -> Result<bool, PublishError>;
     async fn wait_for_publish_completion(
         &self,
@@ -631,7 +641,7 @@ where
         _package_created: PackageCreatedGuard,
         build_metadata: &CheckedBuildMetadata,
         key_file: Option<PathBuf>,
-        metadata_only: bool,
+        options: PublishOptions,
     ) -> Result<bool, PublishError> {
         // Step 2 hit /publish
         // Catalogs are configured with their "store".
@@ -647,7 +657,7 @@ where
             .map_err(PublishError::CatalogError)?;
 
         let catalog_store_config = get_client_side_catalog_store_config(
-            metadata_only,
+            options.metadata_only,
             key_file,
             &self.auth,
             publish_response,
@@ -685,6 +695,11 @@ where
             // map when the build resolved none. Older CLIs that omit the field
             // are coalesced to empty server-side (floxhub#1791).
             locked_inputs: Some(build_metadata.direct_catalog_inputs.clone()),
+            // Whether the hub should rebuild dependents of this package.
+            // Always sent explicitly: the server default is `false`, so an
+            // omitted field would silently disable cascading rather than
+            // fall back to the CLI's default of cascading.
+            cascade_update: options.cascade_update,
             base_catalog_rev_count: None,
             base_catalog_rev_date: None,
             url: self.env_metadata.build_repo_meta.url.to_string(),
@@ -1978,7 +1993,10 @@ pub mod tests {
                 package_created,
                 &build_metadata,
                 None,
-                false,
+                PublishOptions {
+                    metadata_only: false,
+                    cascade_update: true,
+                },
             )
             .await;
 
@@ -2261,7 +2279,10 @@ pub mod tests {
                 package_created,
                 &build_metadata,
                 None,
-                false,
+                PublishOptions {
+                    metadata_only: false,
+                    cascade_update: true,
+                },
             )
             .await;
 
@@ -2426,7 +2447,10 @@ pub mod tests {
                 package_created,
                 &build_metadata,
                 cache.local_signing_key_path(),
-                false,
+                PublishOptions {
+                    metadata_only: false,
+                    cascade_update: true,
+                },
             )
             .await
             .unwrap();
@@ -2705,7 +2729,10 @@ pub mod tests {
                 None,
                 // Server returns meta-only store config; narinfo collected
                 // from FIXED_TEST_STORE_PATH in the local daemon store.
-                false,
+                PublishOptions {
+                    metadata_only: false,
+                    cascade_update: true,
+                },
             )
             .await
             .expect("failed to do publish");
@@ -2745,7 +2772,10 @@ pub mod tests {
                 None,
                 // Server returns meta-only store config; narinfo collected
                 // from FIXED_TEST_STORE_PATH in the local daemon store.
-                false,
+                PublishOptions {
+                    metadata_only: false,
+                    cascade_update: true,
+                },
             )
             .await
             .expect("failed to do publish");
@@ -2812,7 +2842,10 @@ pub mod tests {
                 None,
                 // Server returns meta-only store config; narinfo collected
                 // from FIXED_TEST_STORE_PATH in the local daemon store.
-                false,
+                PublishOptions {
+                    metadata_only: false,
+                    cascade_update: true,
+                },
             )
             .await
             .expect("failed to do publish");
@@ -2827,7 +2860,10 @@ pub mod tests {
                 None,
                 // Server returns meta-only store config; narinfo collected
                 // from FIXED_TEST_STORE_PATH in the local daemon store.
-                false,
+                PublishOptions {
+                    metadata_only: false,
+                    cascade_update: true,
+                },
             )
             .await
             .expect("failed to do publish");
@@ -2861,7 +2897,10 @@ pub mod tests {
                 None,
                 // Server returns meta-only store config; narinfo collected
                 // from FIXED_TEST_STORE_PATH in the local daemon store.
-                false,
+                PublishOptions {
+                    metadata_only: false,
+                    cascade_update: true,
+                },
             )
             .await
             .unwrap_err();
