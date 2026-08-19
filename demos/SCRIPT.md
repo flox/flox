@@ -57,10 +57,21 @@ fresh accounts (sign up with email+password during the first login):
 
 Re-running a path with the *same* account requires the reset steps in §4.
 
-### Demo shell setup (paste into each new terminal)
+### Demo shell setup (each new terminal)
 
 Each persona runs with an isolated `$HOME` so the machine looks factory-fresh
-and none of your real Flox state is touched:
+and none of your real Flox state is touched.
+
+First, activate the floxhub environment — its activation exports everything
+that points the CLI at the local stack (`FLOX_FLOXHUB_URL`,
+`_FLOX_FLOXHUB_GIT_URL`, `FLOX_CATALOG_URL`, the `_FLOX_OAUTH_*` dev-tenant
+config, and `SSL_CERT_FILE` for the mkcert TLS certs):
+
+```bash
+cd ~/Code/floxhub && flox activate
+```
+
+Then paste the persona setup **inside that activated shell**:
 
 ```bash
 # ---- demo persona shell setup ----
@@ -68,30 +79,16 @@ export DEMO_ROOT="$TMPDIR/flox-demo"; mkdir -p "$DEMO_ROOT/home-a"
 export HOME="$DEMO_ROOT/home-a"                     # fresh machine simulation
 alias flox=~/Code/flox/target/debug/flox
 
-# Shed Flox state inherited from your real shell (an activated default env
-# would otherwise be detected as "the" environment inside the demo)
+# MUST come after `flox activate` — the activation itself sets these, and
+# `flox install` targets the last-activated env when the cwd has none, so
+# leaving them set would install into the floxhub env instead of creating
+# the demo default env
 unset FLOX_FLOXHUB_TOKEN FLOX_CONFIG_DIR _FLOX_ACTIVE_ENVIRONMENTS \
       FLOX_ENV FLOX_ENV_CACHE FLOX_ENV_PROJECT FLOX_ENV_DIRS \
       FLOX_ENV_DESCRIPTION FLOX_PROMPT_ENVIRONMENTS
 
-# Feature flag for the zero-setup prototype
+# Feature flag for the zero-setup prototype (not exported by the activation)
 export FLOX_FEATURES_AUTO_DEFAULT=true
-
-# Point the CLI at the local FloxHub stack (values from floxhub's dev shell)
-export FLOX_FLOXHUB_URL="https://hub.local.flox.dev:8000"
-export _FLOX_FLOXHUB_GIT_URL="https://api.local.flox.dev:8000/floxem-gitolite"
-export FLOX_CATALOG_URL="https://api.local.flox.dev:8000"
-
-# OAuth against the dev tenant
-export _FLOX_OAUTH_AUTH_URL="https://auth.dev.flox.dev/authorize"
-export _FLOX_OAUTH_TOKEN_URL="https://auth.dev.flox.dev/oauth/token"
-export _FLOX_OAUTH_DEVICE_AUTH_URL="https://auth.dev.flox.dev/oauth/device/code"
-export _FLOX_OAUTH_CLIENT_ID="e8BGlekBE8w88LyrqGifts588wHtw03Q"
-
-# Trust the local stack's TLS certs (mkcert root + standard bundle)
-export SSL_CERT_FILE=~/Code/floxhub/.flox/cache/nginx/ssl/ca-certificates.crt
-export NIX_SSL_CERT_FILE="$SSL_CERT_FILE"
-export GIT_SSL_CAINFO="$SSL_CERT_FILE"
 # ----------------------------------
 ```
 
@@ -192,7 +189,7 @@ afterwards.
 and a second fake home:*
 
 ```bash
-# in a NEW terminal: repeat the setup block from §1, but with
+# in a NEW terminal: repeat the §1 setup (flox activate + persona block), but with
 export HOME="$DEMO_ROOT/home-b"; mkdir -p "$HOME"
 ```
 
