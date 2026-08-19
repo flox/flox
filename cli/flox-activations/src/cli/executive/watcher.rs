@@ -25,6 +25,7 @@ type Error = anyhow::Error;
 pub type LockedActivationState = (ActivationState, LockFile);
 
 /// Outcome of [cleanup_pid].
+#[derive(Debug)]
 pub enum CleanupPidResult {
     /// All PIDs have terminated; the caller should run full cleanup while
     /// still holding the lock.
@@ -231,6 +232,45 @@ pub mod test {
             state.attachments_by_start_id(),
             BTreeMap::new(),
             "should return empty state after cleanup"
+        );
+    }
+
+    /// A `ready` clear with no orphaned starts (e.g. state written by an
+    /// earlier binary without the starts field) is still persisted by
+    /// `cleanup_pid`, even when the PID itself is kept.
+    #[test]
+    fn persists_ready_clear_without_orphans() {
+        let runtime_dir = tempfile::tempdir().unwrap();
+        let dot_flox_path = PathBuf::from(".flox");
+        let flox_env = dot_flox_path.join("run/test");
+        let pid = std::process::id() as i32;
+
+        let mut state =
+            ActivationState::new(&ActivateMode::default(), Some(&dot_flox_path), &flox_env);
+        state.set_executive_pid(1);
+        let result = state.start_or_attach(pid, "attached_store_path");
+        assert!(matches!(result, StartOrAttachResult::Start { .. }));
+        // `ready` names a start absent from the starts list, standing in for
+        // state written by an earlier binary without the field.
+        state.set_ready(&StartIdentifier::new("untracked_store_path"));
+        write_activation_state(runtime_dir.path(), &dot_flox_path, state);
+
+        let activation_state_dir = activation_state_dir_path(runtime_dir.path(), &dot_flox_path);
+        let state_json_path = state_json_path(&activation_state_dir);
+
+        // The attached PID is this test process, so it is kept and nothing is
+        // orphaned; only the ready clear needs persisting.
+        let result = cleanup_pid(locked_state(&state_json_path), &state_json_path, pid).unwrap();
+        let CleanupPidResult::Remaining { orphaned } = result else {
+            panic!("PID is running, cleanup must not trigger");
+        };
+        assert_eq!(orphaned, Vec::new());
+
+        let (activations, _lock) = locked_state(&state_json_path);
+        assert_eq!(
+            activations.ready_start_id(),
+            None,
+            "the ready clear must be persisted to state.json"
         );
     }
 

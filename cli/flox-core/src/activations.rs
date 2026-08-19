@@ -497,7 +497,10 @@ impl ActivationState {
         if let Ready::True(ref start_id) = self.ready
             && !live.contains(start_id)
         {
-            debug!(?start_id, "ready start has no attachments, marking as not ready");
+            debug!(
+                ?start_id,
+                "ready start has no attachments, marking as not ready"
+            );
             self.ready = Ready::False;
             ready_cleared = true;
         }
@@ -506,6 +509,17 @@ impl ActivationState {
             modified: !orphaned.is_empty() || ready_cleared,
             orphaned,
         }
+    }
+
+    /// Remove and return every start, including a `Ready::Starting` one.
+    ///
+    /// Only for terminal teardown, when no attachments remain and the whole
+    /// activation state is about to be removed: unlike
+    /// [Self::remove_orphaned_starts] there is no next `start_or_attach` to
+    /// hand a `Starting` start to, and its `hook.on-deactivate` bookend still
+    /// has to run if its `hook.on-activate` completed.
+    pub fn drain_starts(&mut self) -> Vec<StartIdentifier> {
+        std::mem::take(&mut self.starts).into_iter().collect()
     }
 
     /// Returns all attached PIDs and their expirations, flattened from all start IDs
@@ -1460,6 +1474,18 @@ mod tests {
             });
             assert_eq!(activations.starts, BTreeSet::from([start_id.clone()]));
             assert_eq!(activations.ready, Ready::Starting(100, start_id));
+        }
+
+        /// Terminal teardown drains every start, including a `Starting` one
+        /// that `remove_orphaned_starts` would protect.
+        #[test]
+        fn drain_starts_returns_starting_starts_too() {
+            let start_id = StartIdentifier::new("/nix/store/path1");
+            let mut activations = make_activations(Ready::Starting(100, start_id.clone()));
+            activations.starts.insert(start_id.clone());
+
+            assert_eq!(activations.drain_starts(), vec![start_id]);
+            assert_eq!(activations.starts, BTreeSet::new());
         }
     }
 

@@ -58,20 +58,25 @@ impl DetachArgs {
         // runs its hook.on-deactivate, and removes the start state dir.
         // Without a running executive (e.g. containerize uses its own PID)
         // nothing would ever do that, so tear orphaned starts down inline; no
-        // hook runs in that case. Removal is best-effort, like the
-        // executive's sweep: a failure must not abort the detach before the
-        // state.json write below persists it.
-        if !state.executive_running() {
-            for start_id in state.remove_orphaned_starts().orphaned {
-                if let Err(err) = start_id.remove_start_state_dir(&self.activation_state_dir) {
-                    warn!(%err, ?start_id, "failed to remove start state dir after detach");
-                }
-            }
-        }
+        // hook runs in that case.
+        let orphaned = if state.executive_running() {
+            Vec::new()
+        } else {
+            state.remove_orphaned_starts().orphaned
+        };
 
         // This should trigger the executive to check if it needs to cleanup
         write_activations_json(&state, &activations_json_path, lock)
             .context("failed to write state.json after detach")?;
+
+        // Remove the orphaned starts' dirs only after their removal has been
+        // persisted, mirroring the executive's mutate -> write -> remove
+        // ordering. Removal is best-effort, like the executive's sweep.
+        for start_id in orphaned {
+            if let Err(err) = start_id.remove_start_state_dir(&self.activation_state_dir) {
+                warn!(%err, ?start_id, "failed to remove start state dir after detach");
+            }
+        }
 
         Ok(())
     }
@@ -224,6 +229,53 @@ mod test {
         assert!(
             !start_state_dir.exists(),
             "start state dir should be removed inline when no executive is running"
+        );
+    }
+
+    /// With two starts and no executive, detaching the last PID of one start
+    /// removes only that start's dir; the still-attached start survives.
+    #[test]
+    fn inline_teardown_only_removes_emptied_start() {
+        let tmp = TempDir::new().unwrap();
+        let dot_flox_path = tmp.path().join(".flox");
+
+        let mut state = ActivationState::new(
+            &ActivateMode::default(),
+            Some(&dot_flox_path),
+            dot_flox_path.join("run/default"),
+        );
+        state.set_executive_pid(start_dead_pid());
+        let StartOrAttachResult::Start { start_id: start_1 } =
+            state.start_or_attach(111, "/nix/store/one")
+        else {
+            panic!("expected Start");
+        };
+        state.set_ready(&start_1);
+        // A second activation supersedes the first with a new store path.
+        let StartOrAttachResult::Start { start_id: start_2 } =
+            state.start_or_attach(222, "/nix/store/two")
+        else {
+            panic!("expected Start");
+        };
+        state.set_ready(&start_2);
+
+        write_activation_state(tmp.path(), &dot_flox_path, state);
+        let activation_state_dir = activation_state_dir_path(tmp.path(), &dot_flox_path);
+        let dir_1 = start_1.start_state_dir(&activation_state_dir).unwrap();
+        let dir_2 = start_2.start_state_dir(&activation_state_dir).unwrap();
+        std::fs::create_dir_all(&dir_1).unwrap();
+        std::fs::create_dir_all(&dir_2).unwrap();
+
+        let args = DetachArgs {
+            activation_state_dir,
+            pid: 111,
+        };
+        args.handle().expect("detach should succeed");
+
+        assert!(!dir_1.exists(), "the emptied start's dir should be removed");
+        assert!(
+            dir_2.exists(),
+            "the still-attached start's dir should survive"
         );
     }
 

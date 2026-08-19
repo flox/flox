@@ -66,13 +66,22 @@ teardown() {
 # many times as there are lines) and that it sees the environment as
 # hook.on-activate left it.
 _write_on_deactivate_manifest() {
+  _write_on_deactivate_manifest_with_foo "from-activate"
+}
+
+# Same manifest with a caller-chosen FOO, so tests with several starts can
+# tell from $MARKER which start's hook ran. Editing the value also changes
+# the rendered store path, forcing the next activation to start rather than
+# attach.
+_write_on_deactivate_manifest_with_foo() {
+  local foo_value="$1"
   cat <<EOF | "$FLOX_BIN" edit -f -
 schema-version = "1.15.0"
 
 [options]
 
 [hook]
-on-activate = 'export FOO="from-activate"'
+on-activate = 'export FOO="$foo_value"'
 on-deactivate = 'echo "\$FOO" >> "$MARKER"'
 EOF
 }
@@ -134,6 +143,38 @@ EOF
   run cat "$MARKER"
   assert_success
   assert_output "from-activate"
+}
+
+# bats test_tags=on-deactivate:multi-start
+@test "hook.on-deactivate runs for a superseded start while another start remains attached" {
+  project_setup
+  _write_on_deactivate_manifest_with_foo "first-start"
+
+  mkfifo started1 hold1 started2
+  # Will get cat'ed in teardown
+  TEARDOWN_FIFO="$PROJECT_DIR/teardown_activate"
+  mkfifo "$TEARDOWN_FIFO"
+
+  # The timeout self-heals a failed test; on success `echo > hold1` below
+  # releases it immediately.
+  FLOX_SHELL=bash "$FLOX_BIN" activate -c "echo > started1 && timeout 30 cat hold1" > output1 2>&1 &
+  cat started1
+
+  # Editing the manifest gives the next activation a new store path, so it
+  # starts a second start instead of attaching to the first.
+  _write_on_deactivate_manifest_with_foo "second-start"
+  FLOX_SHELL=bash "$FLOX_BIN" activate -c "echo > started2 && echo > \"$TEARDOWN_FIFO\"" > output2 2>&1 &
+  cat started2
+
+  # Release the first activation: its start is emptied while the second
+  # start's attachment keeps the executive alive.
+  echo > hold1
+
+  # The executive sweeps the emptied start asynchronously; wait for its hook.
+  timeout 10 bash -c "until [ -e \"$MARKER\" ]; do sleep 0.1; done"
+  run cat "$MARKER"
+  assert_success
+  assert_output "first-start"
 }
 
 # bats test_tags=on-deactivate:failure

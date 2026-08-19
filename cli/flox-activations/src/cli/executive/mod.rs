@@ -763,10 +763,11 @@ fn cleanup_all(
     // Run hook.on-deactivate for the remaining start(s), mirroring the
     // activation order in reverse: services were shut down above, the hook
     // bookends close last. With no attachments left every start in the state
-    // is orphaned, including starts deferred by an explicit detach that the
-    // executive never got to sweep. No state.json write is needed — the whole
-    // directory is removed below.
-    let orphaned = activations_json.remove_orphaned_starts().orphaned;
+    // is torn down, including starts deferred by an explicit detach that the
+    // executive never got to sweep and a `Starting` start whose PID died —
+    // its hook only runs if hook.on-activate completed. No state.json write
+    // is needed — the whole directory is removed below.
+    let orphaned = activations_json.drain_starts();
     sweep_orphaned_starts(
         subsystem_verbosity,
         initial_attach_ctx,
