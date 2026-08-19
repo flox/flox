@@ -8,6 +8,7 @@ use chrono::{DateTime, Duration};
 use flox_config::{Config, FLOX_CONFIG_FILE, TokenStorageMode};
 use flox_events::{EventKind, EventsHub};
 use flox_rust_sdk::flox::{FLOX_VERSION, Flox, FloxhubToken};
+use flox_rust_sdk::models::user_state::remember_floxhub_auth;
 use floxhub_client::{AuthContext, AuthFailure};
 use indoc::{formatdoc, indoc};
 use oauth2::basic::{
@@ -36,6 +37,7 @@ use serde::Serialize;
 use tracing::{debug, instrument};
 use url::Url;
 
+use crate::commands::auto_default;
 use crate::commands::general::update_config;
 use crate::utils::credential_store::{CredentialSource, CredentialStores, TokenStorage};
 use crate::utils::dialog::{Checkpoint, Dialog, WaitResult};
@@ -281,7 +283,7 @@ impl Auth {
                 if once && !insecure_storage {
                     bail!("'--once' has no effect without '--insecure-storage'.");
                 }
-                match token_file {
+                let handle = match token_file {
                     Some(path) => {
                         login_with_token_file(
                             &mut flox,
@@ -290,7 +292,7 @@ impl Auth {
                             once,
                             config.flox.floxhub_token_storage,
                         )
-                        .await?;
+                        .await?
                     },
                     None => {
                         login_flox(
@@ -299,9 +301,13 @@ impl Auth {
                             once,
                             config.flox.floxhub_token_storage,
                         )
-                        .await?;
+                        .await?
                     },
-                }
+                };
+                // Only explicit logins reconcile the default environment;
+                // implicit re-auth in the middle of another command must not
+                // grow side effects.
+                auto_default::sync_default_env_after_login(&mut flox, &handle).await;
                 Ok(())
             },
             Auth::Logout => {
@@ -317,6 +323,15 @@ impl Auth {
                 // the active token, so logout can say when clearing the stores
                 // is not enough to end the session.
                 let source = stores.probe_source(&config);
+
+                // The credential is the last live source of the user's
+                // handle; record it before removal so the default
+                // environment stays resolvable while logged out (DEV-269).
+                if let Some(handle) = flox.auth_context.handle()
+                    && let Err(err) = remember_floxhub_auth(&flox, &handle)
+                {
+                    debug!(%err, "could not record identity at logout");
+                }
 
                 stores
                     .remove_all()
@@ -497,6 +512,12 @@ fn complete_login(
     }
 
     let _ = flox.set_auth_context(auth_context);
+
+    // Record the identity so the default environment stays resolvable after
+    // logout (DEV-269). Failure to record must not fail the login.
+    if let Err(err) = remember_floxhub_auth(flox, &handle) {
+        debug!(%err, "could not record login identity");
+    }
 
     print_login_success(&handle);
 

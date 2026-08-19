@@ -54,6 +54,7 @@ use crate::commands::{
     ConcreteEnvironment,
     EnvironmentSelectError,
     NoEnvironmentError,
+    auto_default,
     ensure_auth,
     environment_description,
 };
@@ -170,6 +171,17 @@ impl Install {
             ))) => {
                 let parent = dir.parent().unwrap_or(dir).display().to_string();
                 Err(NoEnvironmentError::Directory(parent))?
+            },
+            // Zero-setup: installing a package is an explicit request for an
+            // environment to exist, so resolve or create the default
+            // environment without prompting. Covers both no-env variants
+            // (`EnvNotFound` from detection, `EnvNotFoundInCurrentDirectory`
+            // from direct resolution).
+            Err(
+                EnvironmentSelectError::EnvNotFoundInCurrentDirectory
+                | EnvironmentSelectError::EnvNotFound,
+            ) if flox.features.auto_default => {
+                auto_default::open_or_create_default_environment(&mut flox).await?
             },
             Err(e @ EnvironmentSelectError::EnvNotFoundInCurrentDirectory) => {
                 try_create_default_environment_interactive(
@@ -302,6 +314,10 @@ impl Install {
             )) {
                 debug!(error = %err, "Failed to record v2 event");
             }
+        }
+
+        if !installation.modifications.is_empty() {
+            auto_default::sync_default_env_to_floxhub(&flox, &mut concrete_environment).await;
         }
 
         Ok(())
@@ -707,7 +723,7 @@ fn package_list_for_prompt(packages: &[PackageToInstall]) -> Option<String> {
     }
 }
 
-fn prompt_to_modify_rc_file() -> Result<bool, anyhow::Error> {
+pub(crate) fn prompt_to_modify_rc_file() -> Result<bool, anyhow::Error> {
     let shell = detect_shell_for_in_place()?;
     let shell_cmd = match shell {
         // TODO: should we use source <(flox activate --default) for bash?

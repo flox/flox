@@ -14,6 +14,7 @@ use super::{EnvironmentSelect, environment_select};
 use crate::commands::{
     EnvironmentSelectError,
     NoEnvironmentError,
+    auto_default,
     ensure_auth,
     environment_description,
 };
@@ -146,6 +147,10 @@ impl Uninstall {
             )) {
                 debug!(error = %err, "Failed to record v2 event");
             }
+        }
+
+        if !attempt.modifications.is_empty() {
+            auto_default::sync_default_env_to_floxhub(&flox, &mut concrete_environment).await;
         }
 
         Ok(())

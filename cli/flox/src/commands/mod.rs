@@ -1,6 +1,7 @@
 mod activate;
 mod activation_state;
 mod auth;
+mod auto_default;
 mod beta;
 mod build;
 mod check_for_upgrades;
@@ -45,7 +46,6 @@ use flox_events::{EventKind, EventsHub};
 use flox_manifest::interfaces::AsLatestSchema;
 use flox_manifest::{Manifest, TypedOnly};
 use flox_rust_sdk::flox::{AuthContext, FLOX_VERSION, Flox, FloxhubTokenError};
-use flox_rust_sdk::models::env_registry;
 use flox_rust_sdk::models::env_registry::{ENV_REGISTRY_FILENAME, EnvRegistry};
 use flox_rust_sdk::models::environment::generations::GenerationId;
 use flox_rust_sdk::models::environment::managed_environment::ManagedEnvironment;
@@ -61,6 +61,7 @@ use flox_rust_sdk::models::environment::{
     find_dot_flox,
     open_path,
 };
+use flox_rust_sdk::models::{env_registry, user_state};
 use indoc::{formatdoc, indoc};
 use tempfile::TempDir;
 use thiserror::Error;
@@ -1366,25 +1367,12 @@ impl EnvironmentSelect {
                 ConcreteEnvironment::Remote(env)
             },
             EnvironmentSelect::Default => {
-                let user_handle = ensure_auth_allowing_expired(flox).await?;
-
-                debug!(
-                    user = %user_handle,
-                    "getting default environment for logged-in user"
-                );
-
-                let env_ref = RemoteEnvironmentRef::new(user_handle, DEFAULT_NAME)
-                    .context("Failed to construct default environment reference")?;
-
-                let pointer = ManagedPointer::new(
-                    env_ref.owner().clone(),
-                    env_ref.name().clone(),
-                    &flox.floxhub,
-                );
-
-                let env = RemoteEnvironment::new(flox, pointer, generation)
-                    .map_err(anyhow::Error::new)?;
-                ConcreteEnvironment::Remote(env)
+                // Creation of a missing default environment (auto_default
+                // feature) is reserved for interactive invocations, so that
+                // shell-RC activations and scripts never create environments
+                // as a side effect.
+                auto_default::resolve_default_environment(flox, generation, Dialog::can_prompt())
+                    .await?
             },
         };
         warn_minimum_cli_version(&env, flox);
@@ -1429,29 +1417,37 @@ impl EnvironmentSelect {
             },
 
             EnvironmentSelect::Default => {
-                let user_handle = ensure_auth(flox).await?;
+                if flox.features.auto_default {
+                    // Never create environments from this path: it serves
+                    // read-only commands too. `flox install` requests creation
+                    // itself when no environment is found.
+                    auto_default::resolve_default_environment(flox, None, false).await?
+                } else {
+                    let user_handle = ensure_auth(flox).await?;
 
-                debug!(
-                    user = %user_handle,
-                    "getting default environment for logged-in user"
-                );
+                    debug!(
+                        user = %user_handle,
+                        "getting default environment for logged-in user"
+                    );
 
-                let env_ref = RemoteEnvironmentRef::new(user_handle, DEFAULT_NAME)
-                    .context("Failed to construct default environment reference")?;
+                    let env_ref = RemoteEnvironmentRef::new(user_handle, DEFAULT_NAME)
+                        .context("Failed to construct default environment reference")?;
 
-                let pointer = ManagedPointer::new(
-                    env_ref.owner().clone(),
-                    env_ref.name().clone(),
-                    &flox.floxhub,
-                );
+                    let pointer = ManagedPointer::new(
+                        env_ref.owner().clone(),
+                        env_ref.name().clone(),
+                        &flox.floxhub,
+                    );
 
-                let generation = activated_environments()
-                    .is_active_with_generation(&UninitializedEnvironment::Remote(pointer.clone()));
+                    let generation = activated_environments().is_active_with_generation(
+                        &UninitializedEnvironment::Remote(pointer.clone()),
+                    );
 
-                let env = RemoteEnvironment::new(flox, pointer, generation)
-                    .map_err(anyhow::Error::new)?;
+                    let env = RemoteEnvironment::new(flox, pointer, generation)
+                        .map_err(anyhow::Error::new)?;
 
-                ConcreteEnvironment::Remote(env)
+                    ConcreteEnvironment::Remote(env)
+                }
             },
         };
         warn_minimum_cli_version(&env, flox);
@@ -1629,6 +1625,16 @@ pub(super) async fn ensure_environment_trust(
     let handle = flox.auth_context.handle();
     if handle.as_deref() == Some(env_ref.owner().as_str()) {
         debug!("{env_prefixed_name} is trusted by auth handle");
+        return Ok(());
+    }
+
+    // After logout the credential no longer carries a handle; the identity
+    // recorded at login/logout stands in so a user's own default environment
+    // does not dead-end on a trust prompt while logged out (DEV-269).
+    if handle.is_none()
+        && user_state::last_floxhub_handle(flox).as_deref() == Some(env_ref.owner().as_str())
+    {
+        debug!("{env_prefixed_name} is trusted by last recorded auth handle");
         return Ok(());
     }
 
@@ -1832,27 +1838,6 @@ pub(super) async fn ensure_auth(flox: &mut Flox) -> Result<String> {
             };
             bail!("{message}");
         },
-    }
-}
-
-/// Validate authentication for the default-environment activate path and return
-/// the user's handle.
-///
-/// Unlike [`ensure_auth`], an expired Auth0 token is not a hard failure: the
-/// handle is still readable from the token, and [`FloxArgs::resolve_auth_context`]
-/// has already warned that the user is not logged in, so activation proceeds
-/// with the handle rather than blocking. FloxHub still validates the token on
-/// the actual request. Missing credentials (not logged in / no Kerberos ticket) fall back
-/// to [`ensure_auth`] and its recovery flow.
-async fn ensure_auth_allowing_expired(flox: &mut Flox) -> Result<String> {
-    // An expired identity still carries its handle; only a missing identity
-    // (not logged in, no ticket, or a server-rejected token) falls back to
-    // the recovery flow.
-    match flox.get_identity().await {
-        Ok(Some(identity)) => Ok(identity.handle),
-        // Identity unknown: proceed under the UNKNOWN display handle.
-        Ok(None) => Ok(floxhub_client::UNKNOWN_HANDLE.to_string()),
-        Err(_) => ensure_auth(flox).await,
     }
 }
 
