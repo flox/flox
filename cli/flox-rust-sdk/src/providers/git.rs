@@ -163,6 +163,28 @@ impl GitCommandError {
                     || stderr.contains("Permission denied")
         )
     }
+
+    /// Whether this error indicates the remote host could not be reached at
+    /// the network level (DNS, connect, timeout), as opposed to the server
+    /// answering with an error. Matches the messages curl/git emit for HTTP(S)
+    /// remotes; these are English-only in git, but localized system messages
+    /// merely degrade to the generic error rather than misclassifying.
+    pub fn is_network_unreachable(&self) -> bool {
+        const NETWORK_ERR_MARKERS: &[&str] = &[
+            "Could not resolve host",
+            "Failed to connect to",
+            "Couldn't connect to server",
+            "Connection timed out",
+            "Operation timed out",
+            "Network is unreachable",
+            "Temporary failure in name resolution",
+        ];
+        matches!(
+            self,
+            GitCommandError::BadExit(_, _, stderr)
+                if NETWORK_ERR_MARKERS.iter().any(|marker| stderr.contains(marker))
+        )
+    }
 }
 
 /// Representation of the git push status.
@@ -816,6 +838,8 @@ pub enum GitRemoteCommandError {
     Diverged,
     #[error("ref not found")]
     RefNotFound(String),
+    #[error("could not reach the remote host")]
+    NetworkUnreachable(#[source] GitCommandError),
 }
 
 /// Failure message when _fetching_ a specific ref
@@ -830,6 +854,10 @@ impl From<GitCommandError> for GitRemoteCommandError {
             ref e if e.is_access_denied() => {
                 debug!("Access denied: {err}");
                 GitRemoteCommandError::AccessDenied
+            },
+            ref e if e.is_network_unreachable() => {
+                debug!("Network unreachable: {err}");
+                GitRemoteCommandError::NetworkUnreachable(err)
             },
             GitCommandError::BadExit(_, ref stdout, _)
                 if stdout.contains("[rejected] (fetch first)") =>
@@ -1453,6 +1481,33 @@ pub mod tests {
         fs::write(&file, filename).unwrap();
         repo.add(&[&file]).unwrap();
         repo.commit(filename).unwrap();
+    }
+
+    #[test]
+    fn classifies_network_failures_as_network_unreachable() {
+        let network_stderrs = [
+            "fatal: unable to access 'https://api.flox.dev/git/owner/floxmeta/': Could not resolve host: api.flox.dev",
+            "fatal: unable to access 'https://api.flox.dev/git/owner/floxmeta/': Failed to connect to api.flox.dev port 443 after 10 ms: Connection refused",
+            "ssh: connect to host github.com port 22: Network is unreachable",
+        ];
+        for stderr in network_stderrs {
+            let err = GitCommandError::BadExit(128, String::new(), stderr.to_string());
+            assert!(
+                matches!(
+                    GitRemoteCommandError::from(err),
+                    GitRemoteCommandError::NetworkUnreachable(_)
+                ),
+                "stderr should classify as network-unreachable: {stderr}"
+            );
+        }
+
+        // Auth failures must keep classifying as access-denied, not network.
+        let auth_err =
+            GitCommandError::BadExit(128, String::new(), "remote: DENIED by fallthru".to_string());
+        assert!(matches!(
+            GitRemoteCommandError::from(auth_err),
+            GitRemoteCommandError::AccessDenied
+        ));
     }
 
     pub fn repo_local_url(repo: &impl GitProvider) -> String {

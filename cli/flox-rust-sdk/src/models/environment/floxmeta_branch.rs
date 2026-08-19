@@ -5,7 +5,7 @@ use flox_core::data::environment_ref::RemoteEnvironmentRef;
 use fslock::LockFile;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
-use tracing::debug;
+use tracing::{debug, warn};
 
 use super::{ManagedPointer, path_hash};
 use crate::data::CanonicalPath;
@@ -178,7 +178,13 @@ impl FloxmetaBranch {
         // Ensure generation is locked
         let remote_branch = remote_branch_name(pointer);
         let local_branch = branch_name(pointer, dot_flox_path);
-        let lock = ensure_generation_locked(&remote_branch, &local_branch, &floxmeta, maybe_lock)?;
+        let lock = ensure_generation_locked(
+            &remote_branch,
+            &local_branch,
+            &floxmeta,
+            maybe_lock,
+            flox.auth_context.is_unauthenticated(),
+        )?;
 
         // Set up branch
         ensure_branch(&local_branch, &lock, &floxmeta)?;
@@ -397,6 +403,23 @@ pub fn branch_name(pointer: &ManagedPointer, dot_flox_path: &CanonicalPath) -> S
 
 /// Ensure generation is locked and commit exists in floxmeta
 ///
+/// Whether a failed fetch may fall back to previously fetched local state.
+///
+/// A network-unreachable failure is always eligible: the environment data from
+/// an earlier fetch is the best available answer when FloxHub cannot be
+/// contacted. An access-denied failure is only eligible when no credential was
+/// sent at all: FloxHub rejects unauthenticated fetches of private
+/// environments, which must not invalidate data fetched while logged in
+/// (DEV-269). With a credential present, access-denied is a real answer and
+/// stays fatal.
+fn fetch_failure_allows_stale(err: &GitRemoteCommandError, unauthenticated: bool) -> bool {
+    match err {
+        GitRemoteCommandError::NetworkUnreachable(_) => true,
+        GitRemoteCommandError::AccessDenied => unauthenticated,
+        _ => false,
+    }
+}
+
 /// Takes an optional GenerationLock (read from disk by caller) and validates that:
 /// - If local_rev is set, it exists in the floxmeta repo
 /// - If only rev is set, it exists (fetching if necessary)
@@ -408,6 +431,7 @@ fn ensure_generation_locked(
     local_branch: &str,
     floxmeta: &FloxMeta,
     maybe_lock: Option<GenerationLock>,
+    unauthenticated: bool,
 ) -> Result<GenerationLock, FloxmetaBranchError> {
     Ok(match maybe_lock {
         // Use local_rev if we have it
@@ -445,10 +469,22 @@ fn ensure_generation_locked(
                 );
                 let _guard = span.enter();
 
-                floxmeta
+                if let Err(err) = floxmeta
                     .git
                     .fetch_ref("dynamicorigin", &format!("+{0}:{0}", remote_branch))
-                    .map_err(FloxmetaBranchError::Fetch)?;
+                {
+                    if !fetch_failure_allows_stale(&err, unauthenticated)
+                        || !floxmeta
+                            .git
+                            .has_branch(remote_branch)
+                            .map_err(FloxmetaBranchError::CheckBranchExists)?
+                    {
+                        return Err(FloxmetaBranchError::Fetch(err));
+                    }
+                    // The verification below still decides whether the locked
+                    // revision is actually present in the stale local state.
+                    warn!(%err, "could not fetch from FloxHub, falling back to previously fetched state");
+                }
             }
 
             // Verify commit exists after fetch
@@ -471,12 +507,22 @@ fn ensure_generation_locked(
             );
             let _guard = span.enter();
 
-            floxmeta
+            if let Err(err) = floxmeta
                 .git
                 .fetch_ref("dynamicorigin", &format!("+{0}:{0}", remote_branch))
-                .map_err(FloxmetaBranchError::Fetch)?;
+            {
+                if !fetch_failure_allows_stale(&err, unauthenticated)
+                    || !floxmeta
+                        .git
+                        .has_branch(remote_branch)
+                        .map_err(FloxmetaBranchError::CheckBranchExists)?
+                {
+                    return Err(FloxmetaBranchError::Fetch(err));
+                }
+                warn!(%err, "could not fetch from FloxHub, locking to the last fetched generation");
+            }
 
-            // Get the hash of the remote branch
+            // Get the hash of the (possibly last-fetched) remote branch
             let rev = floxmeta
                 .git
                 .branch_hash(remote_branch)
@@ -835,8 +881,8 @@ mod tests {
         let local_branch = branch_name(&test_pointer, &dot_flox_path);
 
         // No lockfile, should fetch latest
-        let lock =
-            ensure_generation_locked(&remote_branch, &local_branch, &floxmeta, None).unwrap();
+        let lock = ensure_generation_locked(&remote_branch, &local_branch, &floxmeta, None, false)
+            .unwrap();
 
         let expected = GenerationLock {
             rev: hash_2.clone(),
@@ -882,9 +928,14 @@ mod tests {
         };
 
         let expected_lock = input_lock.clone();
-        let lock =
-            ensure_generation_locked(&remote_branch, &local_branch, &floxmeta, Some(input_lock))
-                .unwrap();
+        let lock = ensure_generation_locked(
+            &remote_branch,
+            &local_branch,
+            &floxmeta,
+            Some(input_lock),
+            false,
+        )
+        .unwrap();
 
         // Should return unchanged
         assert_eq!(lock, expected_lock);
@@ -932,9 +983,14 @@ mod tests {
         };
 
         let expected_lock = input_lock.clone();
-        let lock =
-            ensure_generation_locked(&remote_branch, &local_branch, &floxmeta, Some(input_lock))
-                .unwrap();
+        let lock = ensure_generation_locked(
+            &remote_branch,
+            &local_branch,
+            &floxmeta,
+            Some(input_lock),
+            false,
+        )
+        .unwrap();
 
         // Should return unchanged, no fetch needed
         assert_eq!(lock, expected_lock);
@@ -973,8 +1029,13 @@ mod tests {
             version: flox_core::Version::<1>,
         };
 
-        let result =
-            ensure_generation_locked(&remote_branch, &local_branch, &floxmeta, Some(input_lock));
+        let result = ensure_generation_locked(
+            &remote_branch,
+            &local_branch,
+            &floxmeta,
+            Some(input_lock),
+            false,
+        );
 
         assert!(matches!(
             result,
@@ -1025,9 +1086,14 @@ mod tests {
         };
 
         let expected_lock = input_lock.clone();
-        let lock =
-            ensure_generation_locked(&remote_branch, &local_branch, &floxmeta, Some(input_lock))
-                .unwrap();
+        let lock = ensure_generation_locked(
+            &remote_branch,
+            &local_branch,
+            &floxmeta,
+            Some(input_lock),
+            false,
+        )
+        .unwrap();
 
         // Should fetch and find the rev in remote
         assert_eq!(lock, expected_lock);
@@ -1073,8 +1139,13 @@ mod tests {
             version: flox_core::Version::<1>,
         };
 
-        let result =
-            ensure_generation_locked(&remote_branch, &local_branch, &floxmeta, Some(input_lock));
+        let result = ensure_generation_locked(
+            &remote_branch,
+            &local_branch,
+            &floxmeta,
+            Some(input_lock),
+            false,
+        );
 
         assert!(matches!(result, Err(FloxmetaBranchError::RevDoesNotExist)));
     }
@@ -1114,9 +1185,14 @@ mod tests {
         };
 
         let expected_lock = input_lock.clone();
-        let lock =
-            ensure_generation_locked(&remote_branch, &local_branch, &floxmeta, Some(input_lock))
-                .unwrap();
+        let lock = ensure_generation_locked(
+            &remote_branch,
+            &local_branch,
+            &floxmeta,
+            Some(input_lock),
+            false,
+        )
+        .unwrap();
 
         // Should fetch and find the rev in remote
         assert_eq!(lock, expected_lock);
@@ -1155,8 +1231,13 @@ mod tests {
             version: flox_core::Version::<1>,
         };
 
-        let result =
-            ensure_generation_locked(&remote_branch, &local_branch, &floxmeta, Some(input_lock));
+        let result = ensure_generation_locked(
+            &remote_branch,
+            &local_branch,
+            &floxmeta,
+            Some(input_lock),
+            false,
+        );
 
         assert!(matches!(result, Err(FloxmetaBranchError::RevDoesNotExist)));
     }

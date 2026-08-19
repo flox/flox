@@ -115,6 +115,12 @@ impl RemoteEnvironment {
         Self::checkout_path(flox, pointer).join(DOT_FLOX).exists()
     }
 
+    /// The directory containing all remote environment checkouts,
+    /// i.e. the parent of every `<owner>/<name>` checkout.
+    pub fn cache_base_dir(flox: &Flox) -> PathBuf {
+        flox.cache_dir.join(REMOTE_ENVIRONMENT_BASE_DIR)
+    }
+
     /// Pull a remote environment into a flox-provided managed environment
     /// at [RemoteEnvironment::checkout_path].
     ///
