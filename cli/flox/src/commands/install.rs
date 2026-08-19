@@ -160,10 +160,10 @@ impl Install {
             bail!("Must specify at least one package");
         }
 
-        // Zero-setup: `flox install -D` names the default environment
-        // explicitly, so resolve it with creation allowed rather than through
-        // the read-only detection path, which never creates and instead
-        // forces a login when logged out with nothing to resolve.
+        // `flox install -D` names the default environment explicitly, so
+        // resolve it with creation allowed rather than through the read-only
+        // detection path. Resolution authenticates first — the default
+        // environment lives on FloxHub and installs sync to it.
         let mut concrete_environment = if flox.features.auto_default
             && matches!(self.environment, EnvironmentSelect::Default)
         {
@@ -181,11 +181,12 @@ impl Install {
                     let parent = dir.parent().unwrap_or(dir).display().to_string();
                     Err(NoEnvironmentError::Directory(parent))?
                 },
-                // Zero-setup: installing a package is an explicit request for an
-                // environment to exist, so resolve or create the default
-                // environment without prompting. Covers both no-env variants
-                // (`EnvNotFound` from detection, `EnvNotFoundInCurrentDirectory`
-                // from direct resolution).
+                // Installing a package is an explicit request for an
+                // environment to exist, so fall back to the default
+                // environment (authenticating and creating it on FloxHub as
+                // needed). Covers both no-env variants (`EnvNotFound` from
+                // detection, `EnvNotFoundInCurrentDirectory` from direct
+                // resolution).
                 Err(
                     EnvironmentSelectError::EnvNotFoundInCurrentDirectory
                     | EnvironmentSelectError::EnvNotFound,

@@ -5,14 +5,16 @@
 //! prerequisite for naming the environment at all (DEV-269). This module
 //! resolves the default environment from local state when no credential is
 //! available, and — behind the `auto_default` feature flag — implements
-//! zero-setup defaults: create the default environment on first use, prefer a
-//! `~/.flox` checkout as the single working copy, and keep it synced with
-//! FloxHub around login and mutating commands.
+//! auth-first defaults: creating or installing into the default environment
+//! authenticates first (catalog resolution will require it anyway, DEV-236)
+//! and creates `<handle>/default` on FloxHub, while *using* an existing
+//! default keeps working from local state after logout or offline. A
+//! `~/.flox` checkout from the earlier zero-setup design is still honored
+//! and converted to a FloxHub environment on the next authenticated touch.
 
 use std::str::FromStr;
 
 use anyhow::{Context, Result};
-use flox_core::activate::mode::ActivateMode;
 use flox_core::data::environment_ref::{
     DEFAULT_NAME,
     EnvironmentName,
@@ -28,7 +30,6 @@ use flox_rust_sdk::models::environment::managed_environment::{
     ManagedEnvironmentError,
     PushResult,
 };
-use flox_rust_sdk::models::environment::path_environment::{InitCustomization, PathEnvironment};
 use flox_rust_sdk::models::environment::remote_environment::{
     RemoteEnvironment,
     RemoteEnvironmentError,
@@ -41,7 +42,6 @@ use flox_rust_sdk::models::environment::{
     EnvironmentError,
     EnvironmentPointer,
     ManagedPointer,
-    PathPointer,
     UninitializedEnvironment,
 };
 use flox_rust_sdk::models::user_state::{
@@ -79,10 +79,11 @@ async fn owner_source(flox: &Flox) -> OwnerSource {
 
 /// Resolve the environment that `--default` refers to.
 ///
-/// `allow_create` permits creating a missing default environment as a side
-/// effect (on FloxHub when authenticated, at `~/.flox` otherwise). Pass it
-/// only from interactive or mutating contexts so that read-only commands and
-/// non-interactive shell-RC activations never create environments.
+/// `allow_create` permits creating a missing default environment on FloxHub
+/// as a side effect (authenticating first when necessary). Pass it only from
+/// interactive or mutating contexts so that read-only commands and
+/// non-interactive shell-RC activations never create environments or prompt
+/// for a login.
 pub(crate) async fn resolve_default_environment(
     flox: &mut Flox,
     generation: Option<GenerationId>,
@@ -105,6 +106,13 @@ pub(crate) async fn resolve_default_environment(
 pub(crate) async fn open_or_create_default_environment(
     flox: &mut Flox,
 ) -> Result<ConcreteEnvironment> {
+    // Authenticate before resolving: installs into the default environment
+    // sync it to FloxHub, and catalog resolution is about to require
+    // authentication anyway (DEV-236), so the login happens up front rather
+    // than after a half-finished install. When the credential cannot be
+    // verified (e.g. FloxHub unreachable), this degrades to the cached
+    // checkout below instead of blocking the install.
+    super::ensure_auth(flox).await?;
     let source = owner_source(flox).await;
     let allow_create = !declined_default_env(flox);
     let env = resolve_auto(flox, source, None, allow_create).await?;
@@ -154,9 +162,10 @@ async fn resolve_classic(
 }
 
 /// The `auto_default` resolution ladder. A default environment checked out at
-/// `~/.flox` always wins — it is the single working copy both the
-/// authenticated and logged-out paths agree on — followed by the FloxHub
-/// environment (or its local cache when logged out), followed by creation.
+/// `~/.flox` (from the earlier zero-setup design) always wins — it is the
+/// single working copy both the authenticated and logged-out paths agree
+/// on — followed by the FloxHub environment (or its local cache when logged
+/// out), followed by authentication and creation on FloxHub.
 async fn resolve_auto(
     flox: &mut Flox,
     source: OwnerSource,
@@ -195,20 +204,7 @@ async fn resolve_auto(
 
     // No usable ~/.flox checkout.
     match source {
-        OwnerSource::Authed(handle) => match open_remote_default(flox, &handle, generation) {
-            Ok(env) => Ok(env),
-            // A specific generation can only come from FloxHub history, so a
-            // missing environment stays an error rather than creating a
-            // brand-new environment that cannot honor the request.
-            Err(err)
-                if allow_create && generation.is_none() && error_is_upstream_not_found(&err) =>
-            {
-                let env = create_default_on_floxhub(flox, &handle)?;
-                maybe_offer_rc_setup();
-                Ok(env)
-            },
-            Err(err) => Err(err),
-        },
+        OwnerSource::Authed(handle) => resolve_authed(flox, &handle, generation, allow_create),
         OwnerSource::Unverified => {
             if let Some(env) = open_cached_default(flox, generation, false)? {
                 return Ok(env);
@@ -219,14 +215,38 @@ async fn resolve_auto(
             if let Some(env) = open_cached_default(flox, generation, true)? {
                 return Ok(env);
             }
-            if allow_create && generation.is_none() {
-                let env = create_default_at_home(flox, generation)?;
-                maybe_offer_rc_setup();
-                return Ok(env);
-            }
+            // The default environment lives on FloxHub; with nothing usable
+            // locally, authenticate (interactively when possible) instead of
+            // creating a local-only environment that an account would have
+            // to reconcile later.
             let handle = super::ensure_auth(flox).await?;
-            open_remote_default(flox, &handle, generation)
+            if handle == floxhub_client::UNKNOWN_HANDLE {
+                return open_remote_default(flox, &handle, generation);
+            }
+            resolve_authed(flox, &handle, generation, allow_create)
         },
+    }
+}
+
+/// Open `<handle>/default` on FloxHub, creating it when absent and permitted.
+///
+/// A specific generation can only come from FloxHub history, so a missing
+/// environment stays an error rather than creating a brand-new environment
+/// that cannot honor the request.
+fn resolve_authed(
+    flox: &Flox,
+    handle: &str,
+    generation: Option<GenerationId>,
+    allow_create: bool,
+) -> Result<ConcreteEnvironment> {
+    match open_remote_default(flox, handle, generation) {
+        Ok(env) => Ok(env),
+        Err(err) if allow_create && generation.is_none() && error_is_upstream_not_found(&err) => {
+            let env = create_default_on_floxhub(flox, handle)?;
+            maybe_offer_rc_setup();
+            Ok(env)
+        },
+        Err(err) => Err(err),
     }
 }
 
@@ -448,34 +468,6 @@ fn create_default_on_floxhub(flox: &Flox, handle: &str) -> Result<ConcreteEnviro
         "Created your default environment '{handle}/{DEFAULT_NAME}' on FloxHub.",
     ));
     Ok(ConcreteEnvironment::Remote(env))
-}
-
-/// Create a local default environment at `~/.flox`.
-fn create_default_at_home(
-    flox: &Flox,
-    generation: Option<GenerationId>,
-) -> Result<ConcreteEnvironment> {
-    if generation.is_some() {
-        anyhow::bail!("The '--generation' option requires a default environment on FloxHub.");
-    }
-    let home = dirs::home_dir().context("failed to locate home directory")?;
-    // `~/.flox` may be occupied by an environment this resolution could not
-    // use (another owner's checkout, another FloxHub, a differently named
-    // environment); creating over it is never right.
-    if home.join(DOT_FLOX).exists() {
-        anyhow::bail!(
-            "An environment already exists at '~/{DOT_FLOX}' but it is not your default environment.\nActivate it directly with 'flox activate -d ~', or log in with 'flox auth login'."
-        );
-    }
-    let customization = InitCustomization {
-        activate_mode: Some(ActivateMode::Run),
-        ..Default::default()
-    };
-    let env = PathEnvironment::init(PathPointer::new(default_name()), home, &customization, flox)?;
-    message::created(format!(
-        "Created your default environment at '~/{DOT_FLOX}'. Log in with 'flox auth login' to sync it with FloxHub.",
-    ));
-    Ok(ConcreteEnvironment::Path(env))
 }
 
 /// Convert the `~/.flox` path environment into `<handle>/default` on FloxHub.
