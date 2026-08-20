@@ -59,9 +59,11 @@ impl Uninstall {
         // to FloxHub, so authenticate up front the way 'flox install -D'
         // does — using the default environment stays free, changing it goes
         // through FloxHub. Never create: uninstalling from a missing
-        // environment is an error.
+        // environment is an error. With syncing disabled the mutation stays
+        // local, so resolution stays on the ordinary (auth-free) path.
         let mut concrete_environment = if flox.features.auto_default
             && matches!(self.environment, EnvironmentSelect::Default)
+            && auto_default::sync_enabled(&config)
         {
             auto_default::open_default_environment_authed(&mut flox, false).await?
         } else {

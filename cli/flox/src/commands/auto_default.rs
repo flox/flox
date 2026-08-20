@@ -40,6 +40,7 @@ use flox_rust_sdk::models::environment::{
     DOT_FLOX,
     DotFlox,
     ENVIRONMENT_POINTER_FILENAME,
+    Environment,
     EnvironmentError,
     EnvironmentPointer,
     ManagedPointer,
@@ -131,10 +132,12 @@ pub(crate) async fn open_default_environment_authed(
     // does: an environment activated at a specific generation must keep the
     // generation-immutability guard on mutations.
     let uninit = UninitializedEnvironment::from_concrete_environment(&env);
-    match activated_environments().is_active_with_generation(&uninit) {
-        Some(generation) => Ok(uninit.into_concrete_environment(flox, Some(generation))?),
-        None => Ok(env),
-    }
+    let env = match activated_environments().is_active_with_generation(&uninit) {
+        Some(generation) => uninit.into_concrete_environment(flox, Some(generation))?,
+        None => env,
+    };
+    super::warn_minimum_cli_version(&env, flox);
+    Ok(env)
 }
 
 /// Whether the user answered "No" to the pre-flag default-environment offer.
@@ -197,6 +200,7 @@ async fn resolve_auto(
             if matches_user {
                 let env = UninitializedEnvironment::DotFlox(dot_flox)
                     .into_concrete_environment(flox, generation)?;
+                warn_if_stale_fallback(&env, pointer.owner.as_str());
                 return Ok(env);
             }
             if let OwnerSource::Authed(handle) = &source {
@@ -361,15 +365,27 @@ fn open_remote_default(
         env_ref.name().clone(),
         &flox.floxhub,
     );
-    let env = RemoteEnvironment::new(flox, pointer, generation).map_err(anyhow::Error::new)?;
-    // The SDK falls back to the last fetched state when a required fetch
-    // fails; say so at the product level instead of only in trace logs.
-    if env.used_stale_fallback() {
+    let env = ConcreteEnvironment::Remote(
+        RemoteEnvironment::new(flox, pointer, generation).map_err(anyhow::Error::new)?,
+    );
+    warn_if_stale_fallback(&env, handle);
+    Ok(env)
+}
+
+/// The SDK falls back to the last fetched state when a required fetch fails;
+/// say so at the product level instead of only in trace logs. A warm cache
+/// with a valid generation lock attempts no fetch and stays silent.
+fn warn_if_stale_fallback(env: &ConcreteEnvironment, owner: &str) {
+    let stale = match env {
+        ConcreteEnvironment::Managed(managed) => managed.used_stale_fallback(),
+        ConcreteEnvironment::Remote(remote) => remote.used_stale_fallback(),
+        ConcreteEnvironment::Path(_) => false,
+    };
+    if stale {
         message::warning(format!(
-            "Could not reach FloxHub. Using the last fetched state of '{handle}/{DEFAULT_NAME}'.",
+            "Could not reach FloxHub. Using the last fetched state of '{owner}/{DEFAULT_NAME}'.",
         ));
     }
-    Ok(ConcreteEnvironment::Remote(env))
 }
 
 /// Open the locally cached checkout of the default environment, when the
@@ -563,6 +579,17 @@ pub(crate) async fn sync_default_env_to_floxhub(
     if pointer.name.as_ref() != DEFAULT_NAME || pointer.floxhub_base_url != *flox.floxhub.base_url()
     {
         return;
+    }
+    // Only the canonical checkouts sync automatically: the `-D` cache
+    // (Remote) and the `~/.flox` home default. A '<handle>/default' pulled
+    // into some other directory is a deliberate working copy — it pushes
+    // explicitly. Compare canonicalized paths: the checkout path is
+    // canonical, `$HOME` may not be (e.g. under a symlinked temp dir).
+    if let ConcreteEnvironment::Managed(managed) = env {
+        let home = dirs::home_dir().and_then(|home| std::fs::canonicalize(home).ok());
+        if home.is_none() || managed.parent_path().ok() != home {
+            return;
+        }
     }
     let Ok(Some(identity)) = flox.get_identity().await else {
         return;
