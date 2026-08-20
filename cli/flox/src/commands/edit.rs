@@ -194,12 +194,8 @@ impl Edit {
                         message::updated("Environment successfully synced to a new generation.");
                         // The new generation is a mutation like any other, so
                         // the default environment pushes it to FloxHub.
-                        let mut concrete_environment = match generations_environment {
-                            GenerationsEnvironment::Managed(env) => {
-                                ConcreteEnvironment::Managed(env)
-                            },
-                            GenerationsEnvironment::Remote(env) => ConcreteEnvironment::Remote(env),
-                        };
+                        let mut concrete_environment =
+                            ConcreteEnvironment::from(generations_environment);
                         auto_default::sync_default_env_to_floxhub(
                             &config,
                             &flox,

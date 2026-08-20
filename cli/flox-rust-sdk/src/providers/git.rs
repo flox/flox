@@ -151,7 +151,7 @@ pub enum GitCommandError {
     InvalidOutput(String),
     #[error("Remote URL was invalid")]
     InvalidUrl(#[source] url::ParseError),
-    #[error("git command timed out after {}s", .0.as_secs())]
+    #[error("Git command timed out after {0:?}")]
     Timeout(Duration),
 }
 
@@ -398,14 +398,20 @@ impl GitCommandProvider {
         let mut child = command.spawn()?;
         let deadline = Instant::now() + timeout;
         loop {
-            match child.try_wait()? {
-                Some(_) => break,
-                None if Instant::now() >= deadline => {
+            match child.try_wait() {
+                Ok(Some(_)) => break,
+                Ok(None) if Instant::now() >= deadline => {
                     let _ = child.kill();
                     let _ = child.wait();
                     return Err(GitCommandError::Timeout(timeout));
                 },
-                None => std::thread::sleep(Duration::from_millis(50)),
+                Ok(None) => std::thread::sleep(Duration::from_millis(50)),
+                // Never leave the child running unsupervised.
+                Err(err) => {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return Err(err.into());
+                },
             }
         }
         let out = child.wait_with_output()?;

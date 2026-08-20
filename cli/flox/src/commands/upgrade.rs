@@ -182,8 +182,6 @@ impl Upgrade {
             }
         });
 
-        // `store_path` is the signal that the upgrade actually wrote a new
-        // lockfile (dry runs and no-op upgrades returned earlier).
         if result.store_path.is_some() {
             auto_default::sync_default_env_to_floxhub(&config, &flox, &mut concrete_environment)
                 .await;

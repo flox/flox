@@ -716,6 +716,15 @@ pub enum GenerationsEnvironment {
     Remote(RemoteEnvironment),
 }
 
+impl From<GenerationsEnvironment> for ConcreteEnvironment {
+    fn from(env: GenerationsEnvironment) -> Self {
+        match env {
+            GenerationsEnvironment::Managed(env) => ConcreteEnvironment::Managed(env),
+            GenerationsEnvironment::Remote(env) => ConcreteEnvironment::Remote(env),
+        }
+    }
+}
+
 impl TryFrom<ConcreteEnvironment> for GenerationsEnvironment {
     type Error = GenerationsError;
 
