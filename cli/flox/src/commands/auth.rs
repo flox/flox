@@ -1,5 +1,6 @@
 use std::io::Read;
 use std::path::{Path, PathBuf};
+use std::process::Stdio;
 
 use anyhow::{Context, Result, bail};
 use bpaf::Bpaf;
@@ -40,7 +41,7 @@ use url::Url;
 use crate::commands::auto_default;
 use crate::commands::general::update_config;
 use crate::utils::credential_store::{CredentialSource, CredentialStores, TokenStorage};
-use crate::utils::dialog::{Checkpoint, Dialog, WaitResult};
+use crate::utils::dialog::{Dialog, TransientBlock, WaitResult, wait_for_enter};
 use crate::utils::message;
 use crate::utils::openers::Browser;
 use crate::{Exit, subcommand_metric};
@@ -99,7 +100,11 @@ fn create_oauth_client() -> Result<ConfiguredClient> {
     Ok(client)
 }
 
-pub async fn authorize(client: ConfiguredClient, floxhub_url: &Url) -> Result<Credential> {
+pub async fn authorize(
+    client: ConfiguredClient,
+    floxhub_url: &Url,
+    intro: Option<&str>,
+) -> Result<Credential> {
     if !Dialog::can_prompt() {
         bail!("Cannot prompt for user input")
     }
@@ -141,38 +146,40 @@ pub async fn authorize(client: ConfiguredClient, floxhub_url: &Url) -> Result<Cr
     );
     tokio::pin!(token_future);
 
-    let token_result = match opener {
+    // The device-flow UI only matters while the login is in flight: on
+    // success the block is erased and the "Logged in as ..." line printed by
+    // `complete_login` becomes its only record. `intro` carries the reason an
+    // implicit login interrupted another command; it is transient too.
+    let intro = intro
+        .map(|reason| format!("{reason}\n"))
+        .unwrap_or_default();
+
+    let (block, token_result) = match opener {
         Ok(opener) => {
             let message = formatdoc! {"
-            Logging in to {url}
-            Your one-time activation code is: {code}
-
-            Open this URL in any browser:
-            {verification_uri}
-
-            Or press Enter to open your default browser...
-            ",
+                {intro}Logging in to {url} — your one-time code is {code}
+                Press Enter to log in with your browser, or open this URL in any browser:
+                {verification_uri}",
                 url = floxhub_url.host_str().unwrap_or(floxhub_url.as_str()),
             };
+            let block = TransientBlock::print(&message);
+            // Set when something printed below the block, making its row
+            // accounting stale; the block is then left on screen.
+            let mut block_disturbed = false;
 
             debug!(
                 "Waiting for user to enter code (timeout: {}s)",
                 details.expires_in().as_secs()
             );
 
-            let enter_future = Dialog {
-                message: &message,
-                help_message: None,
-                typed: Checkpoint,
-            }
-            .checkpoint_async();
+            let enter_future = wait_for_enter();
             tokio::pin!(enter_future);
 
             // Race token polling against Enter-key listening.
             //   - Enter pressed  → open the browser, then await the token
             //   - Token received → drop enter_future (RawModeGuard cleans up)
             //   - Ctrl-C         → bail with cancellation message
-            tokio::select! {
+            let token_result = tokio::select! {
                 enter_result = &mut enter_future => {
                     if enter_result == WaitResult::Interrupted {
                         bail!("Authentication cancelled.");
@@ -180,30 +187,42 @@ pub async fn authorize(client: ConfiguredClient, floxhub_url: &Url) -> Result<Cr
 
                     let mut command = opener.to_command();
                     command.arg(verification_uri);
+                    // Detach the opener from the terminal: openers chat on
+                    // stdout/stderr (xdg-open, chromium), which would land
+                    // below the transient block and desync its row
+                    // accounting, and an inherited stdin could eat keys.
+                    command
+                        .stdin(Stdio::null())
+                        .stdout(Stdio::null())
+                        .stderr(Stdio::null());
                     if command.spawn().is_err() {
                         message::warning(format!(
                             "Could not open browser. \
                              Please open the following URL manually: \
                              {verification_uri}"
                         ));
+                        block_disturbed = true;
                     }
 
                     token_future.await
                 },
                 token_result = &mut token_future => token_result,
-            }
+            };
+
+            ((!block_disturbed).then_some(block), token_result)
         },
         Err(e) => {
             debug!("Unable to open browser: {e}");
 
-            message::plain(formatdoc! {"
-            Go to {verification_uri} in your browser
+            let message = formatdoc! {"
+                {intro}Logging in to {url} — your one-time code is {code}
+                Open this URL in any browser to continue:
+                {verification_uri}",
+                url = floxhub_url.host_str().unwrap_or(floxhub_url.as_str()),
+            };
+            let block = TransientBlock::print(&message);
 
-            Your one-time activation code is: {code}
-            "
-            });
-
-            token_future.await
+            (Some(block), token_future.await)
         },
     };
 
@@ -218,6 +237,12 @@ pub async fn authorize(client: ConfiguredClient, floxhub_url: &Url) -> Result<Cr
         },
         _ => token_result?,
     };
+
+    // Success: collapse the transient login UI. Failures above leave it on
+    // screen as context for the error.
+    if let Some(block) = block {
+        block.erase();
+    }
 
     Ok(Credential {
         token: token.access_token().secret().to_string(),
@@ -300,6 +325,7 @@ impl Auth {
                             insecure_storage,
                             once,
                             config.flox.floxhub_token_storage,
+                            None,
                         )
                         .await?
                     },
@@ -438,9 +464,10 @@ pub async fn login_flox(
     insecure_storage: bool,
     once: bool,
     storage_pref: TokenStorageMode,
+    intro: Option<&str>,
 ) -> Result<String> {
     let client = create_oauth_client()?;
-    let cred = authorize(client, flox.floxhub.base_url())
+    let cred = authorize(client, flox.floxhub.base_url(), intro)
         .await
         .context("Could not authorize via oauth")?;
 
@@ -577,7 +604,6 @@ fn user_config_sets_token_storage(config_dir: &Path) -> bool {
 
 /// Print the success message shared by all login flows.
 fn print_login_success(handle: &str) {
-    message::updated("Authentication complete");
     message::updated(format!("Logged in as {handle}"));
 }
 

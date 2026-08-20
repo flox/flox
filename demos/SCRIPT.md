@@ -151,22 +151,33 @@ flox install -D jq        # the global-install moment (`mise use --global`, plus
 
 Expected: the CLI notices you're logged out and runs the device flow inline —
 authenticate in the browser tab it opens with persona A's identity — then
-creates the environment on FloxHub, installs, and syncs:
+creates the environment on FloxHub, installs, and syncs. The login UI and the
+RC-file offer are *transient*: while the login is in flight you see
 
 ```
-You are not logged in to FloxHub. Re-authenticating...
-Logging in to https://hub.local.flox.dev:8000
-Your one-time activation code is: XXXX-XXXX
-✔ Authentication complete
+You are not logged in to FloxHub.
+Logging in to hub.local.flox.dev — your one-time code is XXXX-XXXX
+Press Enter to log in with your browser, or open this URL in any browser:
+https://auth.dev.flox.dev/activate?user_code=XXXX-XXXX
+```
+
+but once each step succeeds its block is erased, leaving one line per step:
+
+```
 ✔ Logged in as <handle>
 ⚡︎ Created your default environment '<handle>/default' on FloxHub.
-✔ 'jq' installed to environment 'default'
+✔ Configuration added to .zshrc and .zprofile. Restart your shell to apply.
+✔ 'jq' installed to environment '<handle>/default' (local)
 ✔ Synced your default environment to FloxHub.
 ```
 
-Between creation and install, an interactive terminal also offers to add
+The RC-file line comes from the interactive offer to add
 `eval "$(flox activate --default -m run)"` to your shell RC files — the fake
-`$HOME` means it edits the demo home, so saying *Yes* is safe.
+`$HOME` means it edits the demo home, so saying *Yes* is safe. Answering *No*
+keeps the explainer on screen as manual-setup instructions instead. Login
+failures leave their block on screen as context for the error; an RC-file
+write failure prints a warning naming the file that failed and any file
+already modified.
 
 Plain `flox install jq` behaves identically **when no environment is in
 reach** (none in cwd or active); with an environment in cwd it installs there
@@ -202,7 +213,7 @@ flox install -D ripgrep
 Expected (no login prompt — the token from A1 is in the keychain):
 
 ```
-✔ 'ripgrep' installed to environment 'default'
+✔ 'ripgrep' installed to environment '<handle>/default' (local)
 ✔ Synced your default environment to FloxHub.
 ```
 
@@ -274,10 +285,9 @@ packages* step keep/select a couple of packages and continue — this creates
 flox auth login                      # log in as the second identity
 ```
 
-Expected:
+Expected (the device-flow block erases itself on success):
 
 ```
-✔ Authentication complete
 ✔ Logged in as <handle-b>
 ℹ Fetched your default environment '<handle-b>/default' from FloxHub. Activate it with 'flox activate --default'.
 ```
@@ -411,6 +421,18 @@ the same feature flag):
   by a 10s timeout when the stale state can actually serve the lock (gated
   on the feature flag) — authed `flox activate -D` no longer has any
   unbounded leading network wait.
+- First-run output consolidated to one line per step (2026-08-20): the
+  device-flow block and the RC-file explainer are transient (erased on
+  success via a new `TransientBlock` in `utils/dialog.rs`), "Authentication
+  complete" is gone, the implicit-login reason moved into the transient
+  block, and the RC-file confirmations collapsed into a single
+  "Configuration added to ... Restart your shell to apply." line. Failure
+  paths keep their block on screen, and a partial RC-file failure warns
+  about the file that failed and any file already modified; non-tty output
+  is unchanged in shape (no erasing). The block writes directly to stderr
+  (not through the tracing filter), rows are recomputed at erase time so
+  terminal resizes stay accurate on reflowing terminals, and the spawned
+  browser's stdio is nulled so opener chatter cannot desync the erase.
 
 ## 6. Verification status (2026-08-19)
 
@@ -442,3 +464,12 @@ identity cache, bounded repair fetches) are **[code-verified]** — unit
 tests cover the PAT cache, the fetch timeout, and the generation-lock
 plumbing, but the end-to-end flows have not been re-run against the local
 stack.
+
+The 2026-08-20 output consolidation is machine-verified to the extent
+possible without a browser login: the compact device-flow block renders
+correctly in a pty and Ctrl-C leaves it on screen with the error; the
+erase-and-summarize mechanics (explainer + inquire prompt collapsing to the
+one ✔ line, including wrapped rows at narrow widths) were verified in a pty
+with a byte-identical standalone reproduction of `TransientBlock`; wrap
+accounting has a unit test. The erase after a *successful* device-flow
+login is **[code-verified]** (same `TransientBlock::erase` path).

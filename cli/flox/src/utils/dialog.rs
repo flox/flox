@@ -1,12 +1,12 @@
 use std::fmt::Display;
-use std::io::IsTerminal;
+use std::io::{IsTerminal, Write};
 
 use crossterm::event::{Event, EventStream, KeyCode, KeyEvent, KeyModifiers};
-use crossterm::terminal;
+use crossterm::{QueueableCommand, cursor, terminal};
 use futures::StreamExt;
 use inquire::ui::{Attributes, RenderConfig, StyleSheet, Styled};
 
-use super::{TERMINAL_STDERR, colors, message};
+use super::{TERMINAL_STDERR, colors};
 
 /// Outcome of waiting for the user to press Enter.
 #[derive(Debug, PartialEq, Eq)]
@@ -42,7 +42,7 @@ impl Drop for RawModeGuard {
 /// Returns [`WaitResult::Enter`] when Enter is pressed,
 /// or [`WaitResult::Interrupted`] when Ctrl-C is pressed or the
 /// event stream ends unexpectedly.
-async fn wait_for_enter() -> WaitResult {
+pub async fn wait_for_enter() -> WaitResult {
     // Enable raw mode so we receive individual keystrokes.
     // The guard ensures raw mode is disabled on any exit path.
     let _guard = match RawModeGuard::enable() {
@@ -82,10 +82,6 @@ pub struct Select<T> {
     pub options: Vec<T>,
 }
 
-/// Marker type for a dialog that waits for the user to press Enter.
-#[derive(Debug, Clone)]
-pub struct Checkpoint;
-
 #[derive(Debug, Clone)]
 pub struct Dialog<'a, Type> {
     pub message: &'a str,
@@ -93,14 +89,78 @@ pub struct Dialog<'a, Type> {
     pub typed: Type,
 }
 
-impl Dialog<'_, Checkpoint> {
-    /// Print the dialog message and wait for the user to press Enter.
+/// Terminal rows `text` occupies when printed at `width` columns, accounting
+/// for line wrapping. Column counting is by `char`, which is exact for the
+/// ASCII text this is used on.
+fn visual_rows(text: &str, width: u16) -> u16 {
+    let width = width.max(1);
+    text.split('\n')
+        .map(|line| (line.chars().count().max(1) as u16).div_ceil(width))
+        .sum()
+}
+
+/// A block of stderr lines that is erased once the interaction it supported
+/// has finished, so multi-line transient UI (a login code, a consent
+/// explainer) collapses into a single summary line in the scrollback.
+///
+/// Row accounting assumes nothing else prints below the block while it is on
+/// screen. A caller that does print below it (e.g. an unexpected warning)
+/// must drop the block instead of calling [`TransientBlock::erase`].
+#[derive(Debug)]
+pub struct TransientBlock {
+    texts: Vec<String>,
+}
+
+impl TransientBlock {
+    /// Print `text` to stderr and start tracking it.
     ///
-    /// Returns [`WaitResult::Enter`] when Enter is pressed,
-    /// or [`WaitResult::Interrupted`] when Ctrl-C is pressed.
-    pub async fn checkpoint_async(self) -> WaitResult {
-        message::plain(self.message);
-        wait_for_enter().await
+    /// The block is written directly to stderr rather than through the
+    /// message tracing layer: like inquire's own rendering, it is
+    /// interactive terminal UI tied to a prompt, so verbosity filters must
+    /// not drop it while the prompt still shows, and [`TransientBlock::erase`]
+    /// must know exactly what reached the terminal.
+    pub fn print(text: &str) -> Self {
+        {
+            let _stderr_lock = TERMINAL_STDERR.lock();
+            let _ = writeln!(std::io::stderr(), "{text}");
+        }
+        TransientBlock {
+            texts: vec![text.to_string()],
+        }
+    }
+
+    /// Account for a line rendered below the block by someone else
+    /// (e.g. a prompt's answered line).
+    pub fn track(&mut self, text: &str) {
+        self.texts.push(text.to_string());
+    }
+
+    /// Erase the tracked rows from the terminal.
+    ///
+    /// Rows are computed here, with the current terminal width, so that a
+    /// resize during the interaction stays accurate on terminals that
+    /// reflow soft-wrapped lines (the common behavior).
+    ///
+    /// No-op when stderr is not a tty: the block then simply remains in the
+    /// output, which is the right behavior for logs and CI.
+    pub fn erase(self) {
+        if !std::io::stderr().is_terminal() {
+            return;
+        }
+        let width = terminal::size().map(|(w, _)| w).unwrap_or(80);
+        let rows: u16 = self.texts.iter().map(|text| visual_rows(text, width)).sum();
+        if rows == 0 {
+            return;
+        }
+        // Hold the same stderr lock the tracing layer and inquire use.
+        // Erasure is cosmetic: failures are ignored, leaving the block on
+        // screen.
+        let _stderr_lock = TERMINAL_STDERR.lock();
+        let mut stderr = std::io::stderr();
+        let _ = stderr
+            .queue(cursor::MoveToPreviousLine(rows))
+            .and_then(|s| s.queue(terminal::Clear(terminal::ClearType::FromCursorDown)))
+            .and_then(|s| s.flush());
     }
 }
 
@@ -232,4 +292,21 @@ pub fn flox_theme() -> RenderConfig<'static> {
     }
 
     render_config
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn visual_rows_counts_wrapped_and_empty_lines() {
+        // One row per line that fits, an extra row per wrap, and empty lines
+        // still occupy a row.
+        assert_eq!(visual_rows("short", 80), 1);
+        assert_eq!(visual_rows("", 80), 1);
+        assert_eq!(visual_rows("a\nb\nc", 80), 3);
+        assert_eq!(visual_rows(&"x".repeat(80), 80), 1);
+        assert_eq!(visual_rows(&"x".repeat(81), 80), 2);
+        assert_eq!(visual_rows(&format!("{}\nshort", "x".repeat(200)), 80), 4);
+    }
 }

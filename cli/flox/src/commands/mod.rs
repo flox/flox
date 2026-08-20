@@ -1810,18 +1810,21 @@ pub(super) async fn ensure_auth(flox: &mut Flox) -> Result<String> {
         Err(ref failure @ (AuthFailure::TokenExpired | AuthFailure::NotLoggedIn))
             if Dialog::can_prompt() =>
         {
-            message::plain(format!("{} Re-authenticating...", match failure {
+            // The reason the login interrupted another command is shown as
+            // part of the transient login UI, so a successful login leaves a
+            // single "Logged in as ..." line behind.
+            let reason = match failure {
                 AuthFailure::TokenExpired => "Your FloxHub token has expired.",
                 AuthFailure::NotLoggedIn => "You are not logged in to FloxHub.",
                 _ => unreachable!(),
-            }));
+            };
             // Implicit re-authentication stores to the secure default (keyring).
             // The standing storage preference is not threaded through the many
             // `ensure_auth` call sites, so an implicit re-login does not honor a
             // `plaintext` preference; an explicit `flox auth login` does. This is
             // an accepted limitation; see
             // docs/superpowers/specs/2026-06-22-implicit-reauth-token-storage-followup.md.
-            auth::login_flox(flox, false, false, TokenStorageMode::Keyring).await
+            auth::login_flox(flox, false, false, TokenStorageMode::Keyring, Some(reason)).await
         },
         Err(failure) => {
             let message = match failure {

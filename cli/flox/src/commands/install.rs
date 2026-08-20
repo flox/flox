@@ -60,7 +60,7 @@ use crate::commands::{
     environment_description,
 };
 use crate::utils::detect_shell::detect_shell_for_in_place;
-use crate::utils::dialog::{Dialog, Select};
+use crate::utils::dialog::{Dialog, Select, TransientBlock};
 use crate::utils::didyoumean::{DidYouMean, InstallSuggestion};
 use crate::utils::errors::format_error;
 use crate::utils::events::env_detail_from_concrete;
@@ -756,18 +756,23 @@ pub(crate) fn prompt_to_modify_rc_file() -> Result<bool, anyhow::Error> {
         ShellWithPath::Fish(_) => vec!["config.fish"],
     };
     let joined = rc_file_names.join(" and ");
-    let msg = |files: &[&str]| {
-        let file_or_files = if files.len() > 1 { "files" } else { "file" };
-        formatdoc! {"
-            The 'default' environment can be activated automatically for every new shell
-            by adding one line to your {joined} {file_or_files}:
-            {shell_cmd}
-        "}
+    let file_or_files = if rc_file_names.len() > 1 {
+        "files"
+    } else {
+        "file"
     };
 
-    message::plain(msg(&rc_file_names));
+    // The explainer and prompt only matter while the user decides: a Yes
+    // collapses them into a single summary line, a No keeps them on screen
+    // as the instructions for setting this up manually.
+    let explainer = formatdoc! {"
+        The 'default' environment can be activated automatically for every new shell
+        by adding one line to your {joined} {file_or_files}:
+        {shell_cmd}"};
+    let mut block = TransientBlock::print(&explainer);
+
     let prompt = format!("Would you like Flox to add this configuration to {joined} now?");
-    let (choice_idx, _) = Dialog {
+    let (choice_idx, answer) = Dialog {
         message: &prompt,
         help_message: None,
         typed: Select {
@@ -775,27 +780,44 @@ pub(crate) fn prompt_to_modify_rc_file() -> Result<bool, anyhow::Error> {
         },
     }
     .raw_prompt()?;
+    // After submission inquire leaves one answered line below the explainer.
+    block.track(&format!("> {prompt} {answer}"));
     let should_modify_rc_file = choice_idx == 0;
 
-    let read_more_msg = formatdoc! {"
-        -> Read more about the 'default' environment at:
-           https://flox.dev/docs/tutorials/default-environment/"};
-    let restart_msg = formatdoc! {"
-        The 'default' environment will be activated for every new shell.
-        -> Restart your shell to continue using the default environment."};
     if !should_modify_rc_file {
-        message::plain(&read_more_msg);
+        message::plain(formatdoc! {"
+            -> Read more about the 'default' environment at:
+               https://flox.dev/docs/tutorials/default-environment/"});
         return Ok(false);
     }
+    let mut modified: Vec<&str> = Vec::new();
     for rc_file_name in rc_file_names.iter() {
-        let rc_file_path = locate_rc_file(&shell, rc_file_name)?;
-        ensure_rc_file_exists(&rc_file_path)?;
-        add_activation_to_rc_file(&rc_file_path, &shell_cmd)?;
-        message::updated(format!("Configuration added to your {rc_file_name} file."));
+        let result = locate_rc_file(&shell, rc_file_name).and_then(|rc_file_path| {
+            ensure_rc_file_exists(&rc_file_path)?;
+            add_activation_to_rc_file(&rc_file_path, &shell_cmd)
+        });
+        if let Err(err) = result {
+            // Report here, not just via the returned error: the auto-default
+            // caller downgrades the error to debug logging, and a silent
+            // partial modification would leave RC files changed with no
+            // on-screen record.
+            message::warning(format!(
+                "Could not add the configuration to {rc_file_name}: {err:#}"
+            ));
+            if !modified.is_empty() {
+                message::warning(format!(
+                    "The configuration was already added to {}.",
+                    modified.join(" and ")
+                ));
+            }
+            return Err(err);
+        }
+        modified.push(*rc_file_name);
     }
-    message::plain(&restart_msg);
-    message::plain(&read_more_msg);
-    message::plain(""); // need a blank line before package installation result
+    block.erase();
+    message::updated(format!(
+        "Configuration added to {joined}. Restart your shell to apply."
+    ));
     Ok(true)
 }
 
