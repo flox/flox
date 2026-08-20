@@ -2888,7 +2888,7 @@ EOF
 }
 
 # bats test_tags=activate,activate:plugins
-@test "plugins: [vars] win over same-named variables exported by plugin scripts" {
+@test "plugins: variables exported by plugin scripts win over same-named [vars]" {
   project_setup
 
   mkdir -p "$BATS_TEST_TMPDIR/clobber-plugin/etc/profile.d"
@@ -2914,7 +2914,7 @@ EOF
   run "$FLOX_BIN" activate -c \
     "bash -c 'echo plugin saw: \${TEST_PLUGIN_SEES_VAR:-unset}, final: \${MY_VAR:-unset}'"
   assert_success
-  assert_output --partial 'plugin saw: user-value, final: user-value'
+  assert_output --partial 'plugin saw: user-value, final: plugin-value'
 }
 
 # bats test_tags=activate,activate:plugins

@@ -71,6 +71,40 @@ function source_profile_d {
   unset -f setup_cmake
 }
 
+# source_plugin_profile_d <env profile.d directory> <interpreter profile.d directory>
+#
+# Source the profile.d scripts provided by installed packages (plugins):
+# the scripts in the environment's merged profile.d that the interpreter
+# does not itself provide. The interpreter's own scripts are sourced
+# separately from the interpreter package, before [vars] are exported,
+# so that [vars] can override their variables while remaining readable
+# by plugin scripts.
+function source_plugin_profile_d {
+  local _profile_d="${1?}"
+  shift
+  local _interpreter_profile_d="${1?}"
+  shift
+
+  # make sure the directory exists
+  [ -d "$_profile_d" ] || {
+    echo "'$_profile_d' is not a directory" >&2
+    return 1
+  }
+
+  declare -a _profile_scripts
+  read -r -a _profile_scripts < <(
+    cd "$_profile_d" || exit
+    shopt -s nullglob
+    echo *.sh
+  )
+  for profile_script in "${_profile_scripts[@]}"; do
+    if [ ! -e "$_interpreter_profile_d/$profile_script" ]; then
+      # shellcheck disable=SC1090 # from rendered environment
+      source "$_profile_d/$profile_script"
+    fi
+  done
+}
+
 # set_manifest_vars <flox_env>
 #
 # Set static environment variables from the manifest.

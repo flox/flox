@@ -93,9 +93,9 @@ flowchart TB
   end
  subgraph activate["activate (bash)"]
         n7["cmd mode?"]
-        n6["source etc-profiles"]
+        n6["source interpreter profile.d"]
         nd["set_manifest_vars"]
-        nd2["set_manifest_vars (again — [vars] win)"]
+        nd2["source plugin profile.d"]
         n171["hook.on-activate"]
         n63[["Capture end.env.json"]]
         n167["Capture start.env.json"]
@@ -190,7 +190,7 @@ flowchart TB
     match_activation_mode -- "flox activate -- cmd args" --> apply_activation_env_exec
     match_activation_mode -- interactive --> apply_activation_env_interactive
     apply_activation_env_exec --> exec_cmd
-    n6 --> nd2
+    nd --> nd2
     nd2 --> n173
     A(["Parent PID<br>flox activate<br>"]) -- fork() &amp;&amp; exec(flox) --> n88
     n88 --> n89
@@ -221,8 +221,8 @@ flowchart TB
     apply_activation_env_interactive --> n37
     n7 -- no --> n167
     n7 -- yes --> n172
-    n167 --> nd
-    nd --> n6
+    n167 --> n6
+    n6 --> nd
     n160(["Container entrypoint"]) --> Start
     n36 --> Start
     n63 ~~~ LockAfterHooks
@@ -233,7 +233,7 @@ flowchart TB
     ny --> n164
     n110 ~~~ n165
     n166(["flox-build.mk"]) -- "activate -- cmd args<br>activate -c 'cmd &amp;&amp; args'" --> activate
-    n170 --> nd
+    n170 --> n6
     n172 --> n170
     n173 --> n174 & n171
     n174 -- no --> n63
