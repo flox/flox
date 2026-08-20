@@ -25,7 +25,7 @@ The prototype spans two branches, both named `prototype/default-env-onboarding`:
 
 | Repo | What changed |
 |------|--------------|
-| `flox` | DEV-269 offline/logged-out `-D` fallback (always on) + auth-first defaults (`flox install [-D]` logs in, creates `<handle>/default` on FloxHub, auto-syncs mutations; behind `FLOX_FEATURES_AUTO_DEFAULT`) |
+| `flox` | DEV-269 offline/logged-out `-D` fallback (always on) + auth-first defaults (`flox install [-D]` logs in, creates `<handle>/default` on FloxHub, auto-syncs mutations — install/uninstall/edit/upgrade; behind `FLOX_FEATURES_AUTO_DEFAULT`). Sync mode is governed by the `sync_default_env` config option (default true; `FLOX_SYNC_DEFAULT_ENV=false` reverts to manual push/pull). In sync mode each `flox activate -D` also triggers a detached background fetch of upstream state so the *next* activation can report "behind FloxHub". |
 | `floxhub` | web-bff reports onboarding complete when `<handle>/default` exists with ≥1 generation (and heals the Auth0 flag); `PATCH /user/:handle/onboarding-completed` accepts `{"completed": false}` for demo resets |
 
 CLI steps below were machine-verified on 2026-08-19 against the local stack
@@ -209,6 +209,11 @@ Expected (no login prompt — the token from A1 is in the keychain):
 Refresh the environment page on the web — `ripgrep` is there, no `flox push`
 needed.
 
+> **Opting out of sync mode:** `flox config --set sync_default_env false`
+> (or `FLOX_SYNC_DEFAULT_ENV=false` per invocation) reverts to manual
+> syncing — mutations stay local until an explicit `flox push`, and login
+> stops reconciling. The default is on.
+
 ### A4. Logout does not break your shell (DEV-269)
 
 ```bash
@@ -349,17 +354,15 @@ While walking through, judge the experience against these questions:
 
 Known prototype limitations (deliberate scope cuts, confirmed by review):
 
-- Auto-sync-on-mutation covers `install`/`uninstall`, not `edit`/`upgrade` —
-  and it triggers for *any* checkout of `<handle>/default` (including one you
-  explicitly `flox pull`ed elsewhere), not just the `-D` cache.
+- Auto-sync-on-mutation triggers for *any* checkout of `<handle>/default`
+  (including one you explicitly `flox pull`ed elsewhere), not just the `-D`
+  cache. (It covers `install`/`uninstall`/`edit`/`upgrade` since
+  2026-08-20.)
 - The implicit login inside `flox install` does not run the login-time
   reconcile that explicit `flox auth login` does (push local-only default /
   pre-fetch remote-only); by design, implicit re-auth must not grow side
   effects. A `~/.flox` default from the earlier zero-setup build converts to
   FloxHub on the next authenticated `install -D`, or on explicit login.
-- `flox uninstall -D` is not auth-gated up front; with a cached checkout it
-  works logged out (and skips the sync). End-state `/resolve` gating
-  (DEV-236) will cover it.
 - Login auto-sync doesn't offer RC-file setup; only env creation does.
 - Web-side deletion of the default env doesn't stick while a local checkout
   keeps auto-pushing (a tombstone needs designing).
@@ -368,15 +371,36 @@ Known prototype limitations (deliberate scope cuts, confirmed by review):
   login (needs announce-once state).
 - A failed FloxHub probe during authed `-D` resolution says "Could not reach
   FloxHub" even when the real cause is an auth rejection; classifying
-  AccessDenied vs NetworkUnreachable in that message is a follow-up.
-- The SDK's stale-fetch fallback logs via tracing only; a product-level
-  "using the last fetched version" message needs plumbing.
+  AccessDenied vs NetworkUnreachable in that message is a follow-up. (The
+  new stale-state warning has the same coarseness for the logged-out
+  private-env case.)
 - The web-bff onboarding heal probes floxem on every `/auth/me` for
   not-yet-onboarded users with no timeout/negative-cache — fine locally,
   needs bounding before production.
-- `confirmed_create_default_env` (the old prompt's answer) is reused as the
-  opt-out for both auto-creation and login auto-push; a dedicated field
-  should replace that overload.
+- The end-state UX for surfacing a new upstream generation leans on the
+  two-level GC-root stack ([#4361](https://github.com/flox/flox/pull/4361)
+  et seq.) for jitter-free pointer flips; until it lands, "behind FloxHub"
+  stays a notification plus an explicit `flox pull -D`.
+- Activating a *specific* generation (`-g N`) of an already-cached
+  environment still fails for generations newer than the pinned lock
+  (fetch policy is not generation-aware) — tracked as DEV-281,
+  independent of this prototype.
+
+Resolved since the 2026-08-19 review (2026-08-20 refinements, all behind
+the same feature flag):
+
+- `edit`/`upgrade` now auto-sync like install/uninstall, and
+  `flox uninstall -D` is auth-gated up front (using stays free, changing
+  goes through FloxHub).
+- `sync_default_env` (default true) is the dedicated sync opt-out;
+  `confirmed_create_default_env` is back to creation consent only.
+- The stale-fetch fallback prints a product-level warning ("Could not
+  reach FloxHub. Using the last fetched state of '<handle>/default'.").
+- Sync mode fetches upstream state on every activation (detached), so
+  "behind FloxHub" surfaces on the next activation instead of within 24h.
+- A personal-access-token identity is cached on disk for 24h, and repair
+  fetches are bounded by a 10s timeout when fallback state exists — authed
+  `flox activate -D` no longer has any unbounded leading network wait.
 
 ## 6. Verification status (2026-08-19)
 
@@ -401,3 +425,10 @@ Code-verified only (need an interactive device-flow login and/or a browser;
 the dev tenant has no email+password connection, so these can't run
 headlessly): the interactive halves of A1 and A3, and A2, B1–B4. Message
 texts quoted above are copied from the source.
+
+The 2026-08-20 refinements (sync coverage for edit/upgrade, uninstall auth
+gate, `sync_default_env`, per-activation fetch, stale-state warning, PAT
+identity cache, bounded repair fetches) are **[code-verified]** — unit
+tests cover the PAT cache, the fetch timeout, and the generation-lock
+plumbing, but the end-to-end flows have not been re-run against the local
+stack.
