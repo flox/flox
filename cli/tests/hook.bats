@@ -170,32 +170,6 @@ EXPIRED_FLOXHUB_TOKEN="eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3gu
   assert_output ""
 }
 
-# An invalid token is normally surfaced and removed from the user's config;
-# both must be deferred to the next user-invoked command rather than printing
-# and rewriting config on every prompt.
-# bats test_tags=hook:hook-env
-@test "'flox hook-env' defers invalid token cleanup to user-invoked commands" {
-  # See the empty-cwd note in the first hook-env test.
-  cd "$BATS_TEST_TMPDIR"
-  # The suite-wide env token would shadow the invalid file token (env wins over
-  # the user config file), so drop it for this test.
-  unset FLOX_FLOXHUB_TOKEN
-  mkdir -p "$FLOX_CONFIG_DIR"
-  echo 'floxhub_token = "not-a-jwt"' >> "$FLOX_CONFIG_DIR/flox.toml"
-
-  run --separate-stderr "$FLOX_BIN" hook-env --shell bash --shell-pid "$$"
-  assert_success
-  assert_equal "$stderr" ""
-  run grep floxhub_token "$FLOX_CONFIG_DIR/flox.toml"
-  assert_success
-
-  run --separate-stderr "$FLOX_BIN" config
-  assert_success
-  assert_regex "$stderr" "Your FloxHub token is invalid"
-  run grep floxhub_token "$FLOX_CONFIG_DIR/flox.toml"
-  assert_failure
-}
-
 # 'flox deactivate' hands the deactivation off to the prompt hook, so its
 # preamble advisories are suppressed like hook-env's. Without an active
 # environment the command prints "No environment active!", but the advisories

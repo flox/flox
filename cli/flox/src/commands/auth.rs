@@ -7,7 +7,7 @@ use chrono::offset::Utc;
 use chrono::{DateTime, Duration};
 use flox_config::{Config, FLOX_CONFIG_FILE, TokenStorageMode};
 use flox_events::{EventKind, EventsHub};
-use flox_rust_sdk::flox::{FLOX_VERSION, Flox, FloxhubToken};
+use flox_rust_sdk::flox::{FLOX_VERSION, Flox};
 use floxhub_client::{AuthContext, AuthFailure};
 use indoc::{formatdoc, indoc};
 use oauth2::basic::{
@@ -413,7 +413,7 @@ impl Auth {
 ///
 /// * updates the config file with the received token
 /// * updates the floxhub_token field in the config struct
-// TODO: `flox auth login` is currently Auth0-specific. It should be abstracted
+// TODO: `flox auth login` is currently OAuth-specific. It should be abstracted
 // to handle different auth methods — for Kerberos, it should print a warning
 // that login is not needed (Kerberos authentication is handled externally via
 // `kinit`).
@@ -429,17 +429,28 @@ pub async fn login_flox(
         .context("Could not authorize via oauth")?;
 
     debug!("Credentials received: {cred:#?}");
-    debug!("Writing token to config");
 
-    // set the token in the runtime config
-    let token = FloxhubToken::new(cred.token)?;
-    let handle = token.handle().to_string();
+    // Route by what the issuer minted: an Auth0-shaped JWT answers its
+    // handle locally, a bare JWT or opaque token resolves it from /me. An
+    // unresolvable identity fails the login — it exists to produce a usable
+    // credential, and every handle consumer needs the same server.
+    let auth_context = AuthContext::new_from_token(Some(&cred.token));
+    let _ = flox.set_auth_context(auth_context.clone());
+    let handle = match flox.get_identity().await {
+        Ok(Some(identity)) => identity.handle,
+        Ok(None) => bail!(indoc! {"
+            Could not reach FloxHub to verify the login.
+            Try again."
+        }),
+        Err(_) => bail!(indoc! {"
+            FloxHub rejected the login token.
+            Try again."
+        }),
+    };
 
-    // The OAuth flow always yields an Auth0 JWT, parsed above — no token
-    // routing or identity resolution applies.
     complete_login(
         flox,
-        AuthContext::Auth0(Some(token)),
+        auth_context,
         handle,
         insecure_storage,
         once,
@@ -562,14 +573,16 @@ fn print_login_success(handle: &str) {
 /// Log in non-interactively with a token read from a file, or from stdin if
 /// the path is `-`.
 ///
-/// * validates the token and rejects expired (or, for a personal access
-///   token, revoked) tokens
+/// * validates the token and rejects expired (or, for a server-verified
+///   token, revoked and invalid) tokens
 /// * stores the token like an interactive login (OS keyring, plaintext
 ///   fallback, or forced plaintext via `--insecure-storage`)
 /// * updates the auth context of the [Flox] instance
 ///
-/// The token may be an Auth0 JWT or a `flox_pat_` personal access token;
-/// [AuthContext::new_from_token] routes by the token's form.
+/// [AuthContext::new_from_token] routes by what the credential's claims
+/// answer locally: Auth0-shaped JWTs identify themselves, bare JWTs and
+/// opaque tokens resolve their identity via `/me`. No token is rejected
+/// locally — validity is the server's call.
 pub async fn login_with_token_file(
     flox: &mut Flox,
     token_file: &Path,
@@ -590,8 +603,7 @@ pub async fn login_with_token_file(
 
     let secret = contents.trim();
 
-    let auth_context = AuthContext::new_from_token(Some(secret))
-        .context("The provided token is not a valid FloxHub token.")?;
+    let auth_context = AuthContext::new_from_token(Some(secret));
     let _ = flox.set_auth_context(auth_context.clone());
 
     // Validates locally for a JWT; via /me for a personal access token,
@@ -611,9 +623,11 @@ pub async fn login_with_token_file(
             Could not reach FloxHub to verify the token.
             Try again."
         }),
-        // The server rejected the token — expired and revoked alike.
+        // The server rejected the token — invalid, expired, and revoked
+        // alike; nothing distinguishes them locally now that any string
+        // parses as a credential.
         Err(_) => bail!(indoc! {"
-            The provided token is expired.
+            FloxHub rejected the provided token: it is invalid, expired, or revoked.
             Obtain a fresh token from FloxHub and try again."
         }),
     };
@@ -634,6 +648,7 @@ mod tests {
 
     use flox_config::FLOX_CONFIG_FILE;
     use flox_events::{EventsBuffer, EventsClient, SharedMetadataTemplate};
+    use flox_rust_sdk::flox::FloxhubToken;
     use flox_rust_sdk::flox::test_helpers::{create_test_token, flox_instance};
     use floxhub_client::test_helpers::{FAKE_EXPIRED_TOKEN, FAKE_TOKEN_WITH_SUB};
     use httpmock::MockServer;
@@ -743,7 +758,7 @@ mod tests {
             .expect("Auth0 login completes");
             complete_login(
                 &mut flox,
-                AuthContext::new_from_token(Some("flox_pat_secret")).expect("PAT parses"),
+                AuthContext::new_from_token(Some("flox_pat_secret")),
                 "pat-user".to_string(),
                 false,
                 false,
@@ -802,9 +817,20 @@ mod tests {
         assert!(!flox.config_dir.join(FLOX_CONFIG_FILE).exists());
     }
 
-    #[tokio::test]
-    async fn login_with_token_file_rejects_malformed_token() {
+    /// A non-JWT token can no longer be rejected locally — it may be an
+    /// issuer's opaque access token — so it is verified via /me like a PAT,
+    /// and the server's rejection fails the login.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn login_with_token_file_rejects_opaque_token_the_server_rejects() {
+        let server = MockServer::start();
+        server.mock(|when, then| {
+            when.method(httpmock::Method::GET)
+                .path("/accounts/api/v1/accounts/me");
+            then.status(401);
+        });
+
         let (mut flox, _temp_dir) = flox_instance();
+        override_client(&mut flox, &server);
         let token_file = flox.temp_dir.join("token");
         fs::write(&token_file, "not-a-jwt").unwrap();
 
@@ -820,7 +846,7 @@ mod tests {
 
         assert_eq!(
             err.to_string(),
-            "The provided token is not a valid FloxHub token."
+            "FloxHub rejected the provided token: it is invalid, expired, or revoked.\nObtain a fresh token from FloxHub and try again."
         );
         assert!(!flox.config_dir.join(FLOX_CONFIG_FILE).exists());
     }
@@ -926,7 +952,7 @@ mod tests {
 
         assert_eq!(
             err.to_string(),
-            "The provided token is expired.\nObtain a fresh token from FloxHub and try again."
+            "FloxHub rejected the provided token: it is invalid, expired, or revoked.\nObtain a fresh token from FloxHub and try again."
         );
         assert!(!flox.config_dir.join(FLOX_CONFIG_FILE).exists());
     }

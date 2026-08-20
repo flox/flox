@@ -214,7 +214,7 @@ fn build_client(config: &Config, floxhub_token: Option<String>) -> Result<Floxhu
 
     let auth_context = match config.flox.floxhub_authn_mode {
         Some(flox_config::AuthnMode::Kerberos) => AuthContext::new_kerberos(),
-        _ => AuthContext::new_from_token(floxhub_token.as_deref())?,
+        _ => AuthContext::new_from_token(floxhub_token.as_deref()),
     };
 
     let config = FloxhubClientConfig {

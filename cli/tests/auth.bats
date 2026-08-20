@@ -116,12 +116,30 @@ EXPIRED_TOKEN="eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3guZGV2L2hh
 }
 
 # bats test_tags=auth,auth:login:token-file
-@test "auth login --token-file fails for a malformed token" {
+@test "auth login --token-file fails for a token the server rejects" {
+  # A non-JWT token cannot be rejected locally — it may be an issuer's
+  # opaque access token — so it is verified via /me, which answers 401 here.
+  export _FLOX_USE_CATALOG_MOCK="$MANUALLY_GENERATED/auth/me_revoked.yaml"
   echo "not-a-jwt" > "$PROJECT_DIR/token"
 
   run "$FLOX_BIN" auth login --token-file "$PROJECT_DIR/token"
   assert_failure
-  assert_output --partial "The provided token is not a valid FloxHub token."
+  assert_output --partial "FloxHub rejected the provided token: it is invalid, expired, or revoked."
+}
+
+# bats test_tags=auth
+@test "an opaque stored token is not discarded as invalid" {
+  # No token can be rejected locally — an issuer may mint opaque access
+  # tokens — so a non-JWT stored token is kept, counts as logged in like a
+  # flox_pat_ token, and the server stays the authority for its validity.
+  echo 'floxhub_token = "not-a-jwt"' >> "$FLOX_CONFIG_DIR/flox.toml"
+
+  run "$FLOX_BIN" config
+  assert_success
+  refute_output --partial "token is invalid"
+  refute_output --partial "not logged in to FloxHub"
+  run grep floxhub_token "$FLOX_CONFIG_DIR/flox.toml"
+  assert_success
 }
 
 # bats test_tags=auth,auth:login:token-file

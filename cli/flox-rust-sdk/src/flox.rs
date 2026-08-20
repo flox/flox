@@ -5,14 +5,7 @@ use std::sync::LazyLock;
 use flox_core::features::Features;
 use flox_core::floxhub::Floxhub;
 use flox_core::vars::FLOX_VERSION_STRING;
-pub use floxhub_client::{
-    AccessToken,
-    AuthContext,
-    AuthFailure,
-    FloxhubToken,
-    FloxhubTokenError,
-    UserIdentity,
-};
+pub use floxhub_client::{AccessToken, AuthContext, AuthFailure, FloxhubToken, UserIdentity};
 use floxhub_client::{FloxhubClient, FloxhubClientError, IdentityError};
 use url::Url;
 use uuid::Uuid;
@@ -96,9 +89,10 @@ impl Flox {
     }
 
     /// The identity behind the current credential — the one uniform way to
-    /// answer "who is authenticated": JWT claims for Auth0, `GET
-    /// /api/v1/accounts/me` for a personal access token (a successful
-    /// resolution is cached for the process), and the principal for
+    /// answer "who is authenticated": JWT claims for an Auth0-shaped token,
+    /// `GET /api/v1/accounts/me` for any credential that doesn't identify
+    /// its owner — a bare JWT or an opaque access token (a successful
+    /// resolution is cached for the process) — and the principal for
     /// Kerberos.
     ///
     /// - `Ok(Some(identity))` — authenticated. Expiry is reported *in* the
@@ -120,8 +114,22 @@ impl Flox {
                 expires_at: Some(token.expires_at()),
             })),
             AuthContext::Auth0(None) => Err(AuthFailure::NotLoggedIn),
+            // A bare token resolves from /me like an opaque access token.
+            // Its own exp claim wins over the server's expires_at — /me
+            // describes stored credentials like PATs, while a JWT carries
+            // its expiry with it.
+            AuthContext::Bare(token) => {
+                match self.floxhub_client.resolve_identity(token.secret()).await {
+                    Ok(identity) => Ok(Some(UserIdentity {
+                        expires_at: token.expires_at().or(identity.expires_at),
+                        ..identity
+                    })),
+                    Err(IdentityError::Unauthorized) => Err(AuthFailure::TokenExpired),
+                    Err(_) => Ok(None),
+                }
+            },
             AuthContext::AccessToken(token) => {
-                match self.floxhub_client.resolve_identity(token).await {
+                match self.floxhub_client.resolve_identity(token.secret()).await {
                     Ok(identity) => Ok(Some(identity)),
                     Err(IdentityError::Unauthorized) => Err(AuthFailure::TokenExpired),
                     Err(_) => Ok(None),
@@ -275,7 +283,7 @@ pub mod test_helpers {
             Url::from_directory_path(mock_floxhub_git_dir).unwrap()
         });
 
-        let auth_context = AuthContext::new_from_token(None).expect("no token to parse");
+        let auth_context = AuthContext::new_from_token(None);
 
         let flox = Flox {
             system: env!("NIX_TARGET_SYSTEM").to_string(),
@@ -308,21 +316,25 @@ pub mod test_helpers {
 
 #[cfg(test)]
 pub mod tests {
-    use floxhub_client::test_helpers::{FAKE_EXPIRED_TOKEN, FAKE_TOKEN};
+    use floxhub_client::test_helpers::{
+        FAKE_EXPIRED_TOKEN,
+        FAKE_TOKEN,
+        FAKE_TOKEN_NO_HANDLE,
+        test_bare_token,
+    };
 
     use super::test_helpers::flox_instance;
     use super::*;
 
     #[tokio::test]
     async fn test_get_username() {
-        let token = FloxhubToken::new(FAKE_TOKEN.to_string()).unwrap();
+        let token = FloxhubToken::new(FAKE_TOKEN.to_string()).expect("token parses");
         assert_eq!(token.handle(), "test");
     }
 
     #[tokio::test]
     async fn test_detect_expired() {
-        let token =
-            FloxhubToken::new(FAKE_EXPIRED_TOKEN.to_string()).expect("Expired token should parse");
+        let token = FloxhubToken::new(FAKE_EXPIRED_TOKEN.to_string()).expect("token parses");
         assert!(token.is_expired(), "Token should be marked as expired");
         assert_eq!(token.handle(), "test", "Handle should still be accessible");
         assert!(
@@ -366,5 +378,71 @@ pub mod tests {
         let identity = flox.get_identity().await.unwrap().unwrap();
         assert_eq!(identity.handle, "test");
         assert!(identity.is_expired(), "expiry is data, not an error");
+    }
+
+    /// A bare token (an issuer other than the Auth0 tenant) resolves its
+    /// identity from /me, with the token's own exp claim carried into the
+    /// identity over the server's null.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn get_identity_resolves_bare_token_via_me() {
+        let server = httpmock::MockServer::start();
+        server.mock(|when, then| {
+            when.method(httpmock::Method::GET)
+                .path("/accounts/api/v1/accounts/me")
+                .header("authorization", format!("bearer {FAKE_TOKEN_NO_HANDLE}"));
+            then.status(200).json_body(serde_json::json!({
+                "user_id": "oidc|dexter",
+                "handle": "dexter",
+                "expires_at": null,
+            }));
+        });
+
+        let (mut flox, _temp_dir) = flox_instance();
+        flox.floxhub_client = FloxhubClient::new(
+            floxhub_client::client::test_helpers::client_config(&server.base_url()),
+        )
+        .unwrap();
+        let AuthContext::Bare(token) = AuthContext::new_from_token(Some(FAKE_TOKEN_NO_HANDLE))
+        else {
+            panic!("a claim-less JWT routes to Bare");
+        };
+        let expires_at = token.expires_at();
+        assert!(expires_at.is_some(), "test premise: the token carries exp");
+        let _ = flox.set_auth_context(AuthContext::Bare(token));
+
+        assert_eq!(
+            flox.get_identity().await.unwrap(),
+            Some(UserIdentity {
+                handle: "dexter".to_string(),
+                expires_at,
+            })
+        );
+    }
+
+    /// The server rejecting a claim-less token is affirmative: the login is
+    /// expired or revoked, not merely unverifiable.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn get_identity_maps_401_for_bare_token_to_token_expired() {
+        let server = httpmock::MockServer::start();
+        server.mock(|when, then| {
+            when.method(httpmock::Method::GET)
+                .path("/accounts/api/v1/accounts/me");
+            then.status(401);
+        });
+
+        let (mut flox, _temp_dir) = flox_instance();
+        flox.floxhub_client = FloxhubClient::new(
+            floxhub_client::client::test_helpers::client_config(&server.base_url()),
+        )
+        .unwrap();
+        // A unique sub keeps the token's secret unique: the process-wide
+        // identity cache would otherwise satisfy the resolve after another
+        // test cached this token.
+        let _ = flox.set_auth_context(AuthContext::Bare(test_bare_token("identity-401-test")));
+
+        assert!(matches!(
+            flox.get_identity().await,
+            Err(AuthFailure::TokenExpired)
+        ));
     }
 }

@@ -93,7 +93,7 @@ impl NixAuth {
     /// Construct a new auth provider from a Flox instance
     pub fn from_flox(flox: &Flox) -> Result<Self, AuthError> {
         let netrc_tempdir = match &flox.auth_context {
-            AuthContext::Auth0(_) | AuthContext::AccessToken(_) => {
+            AuthContext::Auth0(_) | AuthContext::Bare(_) | AuthContext::AccessToken(_) => {
                 Some(tempdir_in(&flox.temp_dir).map_err(AuthError::CreateTempDir)?)
             },
             AuthContext::Kerberos(_) => None,
@@ -180,7 +180,7 @@ mod tests {
     use crate::flox::FloxhubToken;
 
     fn test_auth() -> NixAuth {
-        let token = FloxhubToken::new(FAKE_TOKEN.to_string()).unwrap();
+        let token = FloxhubToken::new(FAKE_TOKEN.to_string()).expect("token parses");
         NixAuth::from_tempdir_and_context(tempdir().unwrap(), AuthContext::Auth0(Some(token)))
     }
 
