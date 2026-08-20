@@ -449,12 +449,15 @@ impl Auth {
                 let span = tracing::info_span!("token");
                 let _guard = span.enter();
 
-                let AuthContext::Auth0(Some(token)) = flox.auth_context else {
+                // Any bearer credential prints — Auth0-shaped, bare, or
+                // opaque alike. Kerberos carries no token, so it reports
+                // as not logged in here.
+                let Some(secret) = flox.auth_context.token_secret() else {
                     message::warning("You are not currently logged in to FloxHub.");
                     return Err(Exit(1).into());
                 };
 
-                println!("{}", token.secret());
+                println!("{secret}");
                 Ok(())
             },
         }
