@@ -147,15 +147,20 @@ impl AuthContext {
         }
     }
 
-    /// Returns true when no authentication material is available and a
+    /// Returns true when no valid authentication material is available and a
     /// future catalog-auth-gated call would fail.
     ///
-    /// Currently only `Auth0(None)` (not logged in via the default flow) is
-    /// considered unauthenticated for the purpose of Milestone 1 deprecation
-    /// warnings. `Kerberos(None)`, `AccessToken`, and `Auth0(Some(expired))`
-    /// are outside the scope of this milestone.
+    /// `Auth0(None)` (not logged in) and `Auth0(Some(expired))` both count —
+    /// neither carries a credential that will pass once gating is enforced.
+    /// `Kerberos(..)` does not require a FloxHub login, and `AccessToken` is
+    /// opaque (validity unknown until resolved via /me), so neither is
+    /// treated as unauthenticated here.
     pub fn is_unauthenticated(&self) -> bool {
-        matches!(self, AuthContext::Auth0(None))
+        match self {
+            AuthContext::Auth0(None) => true,
+            AuthContext::Auth0(Some(token)) => token.is_expired(),
+            AuthContext::AccessToken(_) | AuthContext::Kerberos(_) => false,
+        }
     }
 
     /// Create a Kerberos [`AuthContext`]: resolves the principal and embeds
@@ -221,6 +226,19 @@ mod tests {
         assert_eq!(AuthContext::Auth0(Some(token)).user_subject(), None);
         assert_eq!(AuthContext::Auth0(None).user_subject(), None);
         assert_eq!(AuthContext::Kerberos(None).user_subject(), None);
+    }
+
+    #[test]
+    fn is_unauthenticated_covers_missing_and_expired_auth0_tokens() {
+        let valid = FloxhubToken::from_str(FAKE_TOKEN).expect("token parses");
+        let expired = FloxhubToken::from_str(FAKE_EXPIRED_TOKEN_WITH_SUB).expect("token parses");
+        assert!(expired.is_expired(), "test premise: token is expired");
+
+        assert!(AuthContext::Auth0(None).is_unauthenticated());
+        assert!(AuthContext::Auth0(Some(expired)).is_unauthenticated());
+        assert!(!AuthContext::Auth0(Some(valid)).is_unauthenticated());
+        assert!(!pat_unresolved().is_unauthenticated());
+        assert!(!AuthContext::Kerberos(None).is_unauthenticated());
     }
 
     fn pat_unresolved() -> AuthContext {

@@ -2,7 +2,13 @@ use std::collections::BTreeMap;
 
 use flox_rust_sdk::flox::FLOX_VERSION;
 use flox_rust_sdk::utils::{HEADER_DEVICE_UUID, INVOCATION_SOURCES};
-use floxhub_client::{AuthContext, FloxhubClient, FloxhubClientConfig, FloxhubMockMode};
+use floxhub_client::{
+    AuthContext,
+    FloxhubClient,
+    FloxhubClientConfig,
+    FloxhubMockMode,
+    UnauthenticatedResolveHook,
+};
 use tracing::debug;
 use uuid::Uuid;
 
@@ -21,6 +27,7 @@ pub fn init_floxhub_client(
     base_url: String,
     auth_context: AuthContext,
     metrics_device_uuid: Option<Uuid>,
+    on_unauthenticated_resolve: Option<UnauthenticatedResolveHook>,
 ) -> Result<FloxhubClient, anyhow::Error> {
     let mut extra_headers = BTreeMap::new();
 
@@ -44,6 +51,7 @@ pub fn init_floxhub_client(
         auth_context,
         user_agent: Some(format!("flox-cli/{}", &*FLOX_VERSION)),
         stability: FloxhubClientConfig::stability_from_env(),
+        on_unauthenticated_resolve,
     };
 
     debug!("using catalog client with url: {}", client_config.base_url);

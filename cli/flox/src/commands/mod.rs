@@ -61,6 +61,7 @@ use flox_rust_sdk::models::environment::{
     find_dot_flox,
     open_path,
 };
+use floxhub_client::UnauthenticatedResolveHook;
 use indoc::{formatdoc, indoc};
 use tempfile::TempDir;
 use thiserror::Error;
@@ -82,9 +83,9 @@ use crate::utils::dialog::{Dialog, Select};
 use crate::utils::errors::display_chain;
 use crate::utils::events::{build_events_client, resolve_invocation_id};
 use crate::utils::init::init_floxhub_client;
-use crate::utils::message;
 use crate::utils::metrics::{AWSDatalakeConnection, Client, Hub, read_metrics_uuid};
 use crate::utils::update_notifications::UpdateNotification;
+use crate::utils::{auth_warning, message};
 
 pub(crate) const SHELL_COMPLETION_DIR: ShellComp = ShellComp::Dir { mask: None };
 const SHELL_COMPLETION_FILE: ShellComp = ShellComp::File { mask: None };
@@ -425,10 +426,33 @@ impl FloxArgs {
             .then(|| read_metrics_uuid(&config).ok())
             .flatten();
 
+        // Warn when the catalog is actually contacted for resolution while
+        // unauthenticated (see `FloxhubClient::resolve`). Rate limiting lives
+        // in `warn_unauthenticated_resolve`. The hook is not installed for
+        // the prompt-hook flow (like other advisory messages) or under `-q`:
+        // installing-but-silencing would still write the 8-hour stamp and
+        // mute the next interactive warning the user never saw.
+        //
+        // This deliberately coexists with the once-per-shell-session
+        // logged-out reminder from `resolve_auth_context`: the reminder
+        // reports current status on every command, while this warning fires
+        // only on the resolve that will start failing once catalog auth
+        // gating is enforced — at which point it becomes an error (or an
+        // interactive login prompt) and the overlap gets revisited.
+        let install_resolve_warning =
+            !self.is_prompt_hook_flow() && !matches!(self.verbosity, Verbosity::Quiet);
+        let on_unauthenticated_resolve = install_resolve_warning.then(|| {
+            let cache_dir = config.flox.cache_dir.clone();
+            UnauthenticatedResolveHook::new(move || {
+                auth_warning::warn_unauthenticated_resolve(&cache_dir)
+            })
+        });
+
         let floxhub_client = init_floxhub_client(
             floxhub.api_url_str(),
             credential.clone(),
             metrics_device_uuid,
+            on_unauthenticated_resolve,
         )?;
 
         // we already make sure $USER corresponds to **euid** earlier on in the process.

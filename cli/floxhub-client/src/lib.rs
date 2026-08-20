@@ -25,6 +25,7 @@
 //!     auth_context: AuthContext::new_from_token(floxhub_token)?,
 //!     user_agent: Some("flox-cli/1.0".to_string()),
 //!     stability: FloxhubClientConfig::stability_from_env(),
+//!     on_unauthenticated_resolve: None,
 //! };
 //!
 //! let client = FloxhubClient::new(config)?;
@@ -71,7 +72,7 @@ pub use client::{
     str_to_catalog_name,
     str_to_package_name,
 };
-pub use config::{FloxhubClientConfig, FloxhubMockMode};
+pub use config::{FloxhubClientConfig, FloxhubMockMode, UnauthenticatedResolveHook};
 // Errors
 pub use error::*;
 // Re-export factory types so consumers depend only on floxhub-client.
