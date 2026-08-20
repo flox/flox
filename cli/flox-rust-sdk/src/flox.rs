@@ -114,6 +114,21 @@ impl Flox {
     ///   ([`AuthFailure::NoKerberosTicket`]), or the server rejected the
     ///   token ([`AuthFailure::TokenExpired`]).
     pub async fn get_identity(&self) -> Result<Option<UserIdentity>, AuthFailure> {
+        self.get_identity_impl(true).await
+    }
+
+    /// Like [Flox::get_identity], but never answers a personal access token
+    /// from the disk cache. For surfaces that report credential validity
+    /// (e.g. 'flox auth status'), where a revoked token must not look
+    /// logged in for the cache's lifetime.
+    pub async fn get_identity_uncached(&self) -> Result<Option<UserIdentity>, AuthFailure> {
+        self.get_identity_impl(false).await
+    }
+
+    async fn get_identity_impl(
+        &self,
+        use_pat_cache: bool,
+    ) -> Result<Option<UserIdentity>, AuthFailure> {
         match &self.auth_context {
             AuthContext::Auth0(Some(token)) => Ok(Some(UserIdentity {
                 handle: token.handle().to_string(),
@@ -123,7 +138,9 @@ impl Flox {
             AuthContext::AccessToken(token) => {
                 // A fresh disk cache answers without a leading, blocking
                 // FloxHub request (see [pat_identity_cache]).
-                if let Some(identity) = pat_identity_cache::read(self, token.secret()) {
+                if use_pat_cache
+                    && let Some(identity) = pat_identity_cache::read(self, token.secret())
+                {
                     return Ok(Some(identity));
                 }
                 match self.floxhub_client.resolve_identity(token).await {
@@ -217,18 +234,24 @@ mod pat_identity_cache {
             expires_at: identity.expires_at,
             resolved_at: Utc::now(),
         };
-        if let Err(err) = std::fs::create_dir_all(&flox.cache_dir) {
-            debug!(%err, "could not create cache dir for PAT identity cache");
-            return;
+        if let Err(err) = write_cache_file(flox, &cached) {
+            debug!(%err, "could not write PAT identity cache");
         }
-        match serde_json::to_string(&cached) {
-            Ok(contents) => {
-                if let Err(err) = std::fs::write(cache_path(flox), contents) {
-                    debug!(%err, "could not write PAT identity cache");
-                }
-            },
-            Err(err) => debug!(%err, "could not serialize PAT identity cache"),
-        }
+    }
+
+    /// Owner-only permissions (the file names the account behind the token)
+    /// and a rename so concurrent flox processes never observe a partial
+    /// write.
+    fn write_cache_file(flox: &Flox, cached: &CachedPatIdentity) -> std::io::Result<()> {
+        use std::os::unix::fs::PermissionsExt;
+
+        std::fs::create_dir_all(&flox.cache_dir)?;
+        let contents = serde_json::to_string(cached)?;
+        let path = cache_path(flox);
+        let temp_path = path.with_extension("json.tmp");
+        std::fs::write(&temp_path, contents)?;
+        std::fs::set_permissions(&temp_path, std::fs::Permissions::from_mode(0o600))?;
+        std::fs::rename(&temp_path, path)
     }
 
     /// Drop the cache, e.g. after the server rejected the token.

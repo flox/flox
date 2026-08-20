@@ -356,8 +356,9 @@ impl Auth {
                 // The startup resolver may already have read the keyring; this
                 // guard avoids an *additional* keyring read (and a possible
                 // unlock prompt) during source probing when the user is not
-                // logged in.
-                match flox.get_identity().await {
+                // logged in. Status reports credential validity, so it must
+                // ask FloxHub rather than the PAT identity cache.
+                match flox.get_identity_uncached().await {
                     Ok(Some(identity)) => {
                         message::plain(format!(
                             "You are logged in as {} on {}",
