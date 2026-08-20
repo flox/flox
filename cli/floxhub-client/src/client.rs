@@ -445,7 +445,7 @@ impl CatalogClientTrait for FloxhubClient {
 
         let response = self
             .catalog
-            .by_command_api_v1_catalog_by_command_get(&command_name, system)
+            .by_command_api_v1_catalog_by_command_get(&command_name, None, None, system)
             .await
             .map_api_error()
             .await?;
