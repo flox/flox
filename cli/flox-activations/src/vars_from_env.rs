@@ -13,33 +13,19 @@ pub struct VarsFromEnvironment {
     pub sbin_env_dirs: Option<String>,
     pub path: Option<String>,
     pub manpath: Option<String>,
-    /// Full environment snapshot for activation diff computation.
-    /// Populated by [`VarsFromEnvironment::get_with_snapshot`].
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub full_env: Option<HashMap<String, String>>,
+    /// The environment as it stood before this activation applied anything,
+    /// which is the baseline the `_FLOX_HOOK_DIFF` restored by
+    /// `flox deactivate` is measured against.
+    // TODO: should we drop the individual fields and just keep this one?
+    pub full_env: HashMap<String, String>,
 }
 
 impl VarsFromEnvironment {
+    /// Capture the pre-activation environment.
+    ///
+    /// Call this before mutating the process environment, so that the
+    /// snapshot reflects the true pre-activation state.
     pub fn get() -> Result<Self> {
-        let flox_env_dirs = std::env::var(FLOX_ENV_DIRS_VAR).ok();
-        let sbin_env_dirs = std::env::var(FLOX_ENV_DIRS_ADD_SBIN_VAR).ok();
-        let path = std::env::var("PATH").ok();
-        let manpath = std::env::var("MANPATH").ok();
-
-        Ok(Self {
-            flox_env_dirs,
-            sbin_env_dirs,
-            path,
-            manpath,
-            full_env: None,
-        })
-    }
-
-    /// Capture path-related vars plus full env snapshot.
-    /// Used on activation so the diff can restore the full environment on
-    /// deactivation; [`VarsFromEnvironment::get`] captures only the
-    /// path-related vars.
-    pub fn get_with_snapshot() -> Result<Self> {
         // TODO(performance): is it faster to copy the entirety of env, or just get every environment variable we need?
         let all_vars: HashMap<String, String> = std::env::vars().collect();
         Ok(Self {
@@ -47,7 +33,7 @@ impl VarsFromEnvironment {
             sbin_env_dirs: all_vars.get(FLOX_ENV_DIRS_ADD_SBIN_VAR).cloned(),
             path: all_vars.get("PATH").cloned(),
             manpath: all_vars.get("MANPATH").cloned(),
-            full_env: Some(all_vars),
+            full_env: all_vars,
         })
     }
 }

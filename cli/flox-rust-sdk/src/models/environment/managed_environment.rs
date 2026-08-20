@@ -1775,9 +1775,9 @@ mod test {
     use flox_manifest::lockfile::test_helpers::fake_catalog_package_lock;
     use flox_manifest::parsed::Inner;
     use flox_manifest::parsed::latest::{self, ManifestLatest};
+    use flox_manifest::raw::DEFAULT_SYSTEMS_STR;
     use flox_manifest::{MANIFEST_FILENAME, Manifest};
     use flox_test_utils::GENERATED_DATA;
-    use flox_test_utils::manifests::ALL_SYSTEMS_OPTIONS;
     use indoc::{formatdoc, indoc};
     use test_helpers::{
         mock_managed_environment_from_env_files,
@@ -2040,6 +2040,10 @@ mod test {
     /// A managed environment locked with packages reports its lineage: the
     /// combined read returns the current generation and a lockfile whose
     /// per-system package count matches what was installed.
+    #[cfg_attr(
+        all(target_os = "macos", target_arch = "x86_64"),
+        ignore = "catalog recordings don't cover x86_64-darwin"
+    )]
     #[tokio::test(flavor = "multi_thread")]
     async fn generation_and_lockfile_reads_locked_packages() {
         let owner = "owner".parse().unwrap();
@@ -2048,7 +2052,6 @@ mod test {
         let initial_manifest = formatdoc! {r#"
             version = 1
             [install]
-            {ALL_SYSTEMS_OPTIONS}
         "#};
         let mut environment = mock_managed_environment_in(
             &flox,
@@ -2145,6 +2148,10 @@ mod test {
     }
 
     /// Test that a lockfile is created when a generation is created from a local environment
+    #[cfg_attr(
+        all(target_os = "macos", target_arch = "x86_64"),
+        ignore = "catalog recordings don't cover x86_64-darwin"
+    )]
     #[tokio::test(flavor = "multi_thread")]
     async fn create_generation_from_local_env_builds_and_locks() {
         let owner = EnvironmentOwner::from_str("owner").unwrap();
@@ -2164,14 +2171,6 @@ mod test {
             catalog_replay_client(GENERATED_DATA.join("resolve/hello.yaml")).await;
 
         let mut new_manifest = ManifestLatest::default();
-        // Pin the systems the recording was made with so the resolve request
-        // matches on every build host.
-        new_manifest.options.systems = Some(vec![
-            "aarch64-darwin".to_string(),
-            "aarch64-linux".to_string(),
-            "x86_64-darwin".to_string(),
-            "x86_64-linux".to_string(),
-        ]);
         new_manifest.install.inner_mut().insert(
             "hello".to_string(),
             latest::PackageDescriptorCatalog {
@@ -2201,7 +2200,8 @@ mod test {
         let lockfile: Lockfile = serde_json::from_str(&lockfile_content).unwrap();
 
         assert_eq!(lockfile.manifest, new_manifest);
-        assert_eq!(lockfile.packages.len(), 4); // 1 package x 4 pinned systems
+        // 1 package x each default system
+        assert_eq!(lockfile.packages.len(), DEFAULT_SYSTEMS_STR.len());
 
         let lockfile_in_generation_content =
             fs::read_to_string(managed_env.lockfile_path(&flox).unwrap()).unwrap();
@@ -2620,6 +2620,10 @@ mod test {
         );
     }
 
+    #[cfg_attr(
+        all(target_os = "macos", target_arch = "x86_64"),
+        ignore = "catalog recordings don't cover x86_64-darwin"
+    )]
     #[tokio::test(flavor = "multi_thread")]
     async fn install_generations() {
         let owner = "owner".parse().unwrap();
@@ -2628,13 +2632,7 @@ mod test {
         flox.floxhub_client =
             catalog_replay_client(GENERATED_DATA.join("resolve/hello.yaml")).await;
 
-        let mut env = mock_managed_environment_in(
-            &flox,
-            &format!("version = 1\n{ALL_SYSTEMS_OPTIONS}"),
-            owner,
-            &temp_dir,
-            None,
-        );
+        let mut env = mock_managed_environment_in(&flox, "version = 1", owner, &temp_dir, None);
         assert_eq!(
             env.generations_metadata().unwrap().current_gen().as_deref(),
             Some(&1),
@@ -2660,6 +2658,10 @@ mod test {
         );
     }
 
+    #[cfg_attr(
+        all(target_os = "macos", target_arch = "x86_64"),
+        ignore = "catalog recordings don't cover x86_64-darwin"
+    )]
     #[tokio::test(flavor = "multi_thread")]
     async fn uninstall_generations() {
         let owner = "owner".parse().unwrap();
@@ -2674,7 +2676,6 @@ mod test {
 
             [install]
             {package}.pkg-path = "{package}"
-            {ALL_SYSTEMS_OPTIONS}
         "#};
 
         let mut env = mock_managed_environment_in(&flox, &manifest, owner, &temp_dir, None);
@@ -2747,6 +2748,10 @@ mod test {
         );
     }
 
+    #[cfg_attr(
+        all(target_os = "macos", target_arch = "x86_64"),
+        ignore = "catalog recordings don't cover x86_64-darwin"
+    )]
     #[tokio::test(flavor = "multi_thread")]
     async fn upgrade_generations() {
         let owner = "owner".parse().unwrap();
@@ -2757,7 +2762,6 @@ mod test {
 
             [install]
             hello.pkg-path = "hello"
-            {ALL_SYSTEMS_OPTIONS}
         "#};
 
         flox.floxhub_client =
@@ -2847,6 +2851,10 @@ mod test {
     }
 
     /// Test that remote_lockfile_contents_for_current_generation returns remote data, not local
+    #[cfg_attr(
+        all(target_os = "macos", target_arch = "x86_64"),
+        ignore = "catalog recordings don't cover x86_64-darwin"
+    )]
     #[tokio::test(flavor = "multi_thread")]
     async fn remote_lockfile_contents_returns_remote_not_local() {
         let owner = "owner".parse().unwrap();
@@ -2856,7 +2864,6 @@ mod test {
         let initial_manifest = formatdoc! {r#"
             version = 1
             [install]
-            {ALL_SYSTEMS_OPTIONS}
         "#};
 
         let mut environment = mock_managed_environment_in(

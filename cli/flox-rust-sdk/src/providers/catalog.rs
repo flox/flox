@@ -1,8 +1,10 @@
 use std::collections::{HashMap, VecDeque};
 use std::fmt::Debug;
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 use std::sync::{Arc, LazyLock, Mutex};
 
+use flox_manifest::raw::DEFAULT_SYSTEMS_STR;
 use floxhub_client::{
     ApiResponseValue,
     BaseCatalogInfo,
@@ -428,13 +430,22 @@ impl CatalogClientTrait for MockClient {
 /// An alias so the flox crate doesn't have to depend on the catalog-api crate
 pub type SystemEnum = PackageSystem;
 
-/// All available systems.
-pub static ALL_SYSTEMS: [SystemEnum; 4] = [
-    SystemEnum::Aarch64Darwin,
-    SystemEnum::Aarch64Linux,
-    SystemEnum::X8664Darwin,
-    SystemEnum::X8664Linux,
-];
+/// The systems a manifest is locked for when it doesn't set
+/// `options.systems`, as [SystemEnum] rather than strings.
+///
+/// Resolving against anything wider than this asks the catalog for systems the
+/// environment being built will never contain, which can narrow the result to a
+/// page all of them share and so report an older version than is actually
+/// available.
+pub static DEFAULT_SYSTEMS: LazyLock<Vec<SystemEnum>> = LazyLock::new(|| {
+    DEFAULT_SYSTEMS_STR
+        .iter()
+        .map(|system| {
+            SystemEnum::from_str(system)
+                .unwrap_or_else(|_| panic!("'{system}' is not a known system"))
+        })
+        .collect()
+});
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum SearchTerm {
@@ -630,10 +641,13 @@ pub mod test_helpers {
     /// allow the `MockServer` to run in another thread.
     pub fn auto_recording_catalog_client(filename: &str) -> FloxhubClient {
         let record = get_record_directive();
+        // This client records against the production catalog unauthenticated,
+        // so it must not run the catalog setup, which writes to whichever
+        // server it records against and needs a token to do so.
         auto_recording_client_inner(
             filename,
             DEFAULT_CATALOG_URL,
-            PublishTestUser::NoCatalogs,
+            PublishTestUser::Unauthenticated,
             &AuthContext::Auth0(None),
             record,
         )
@@ -664,6 +678,11 @@ pub mod test_helpers {
     }
 
     /// Generic handler for creating a replay/record FloxhubClient.
+    ///
+    /// `user` is the test user whose catalogs are set up before recording
+    /// starts. That setup writes to the same server the recording is taken
+    /// against, so it only applies to a dev stack a test user is authenticated
+    /// with; [PublishTestUser::Unauthenticated] covers everything else.
     fn auto_recording_client_inner(
         filename: &str,
         base_url: &str,
@@ -737,12 +756,13 @@ pub mod test_helpers {
         ]);
         if matches!(mock_mode, FloxhubMockMode::Record(_)) {
             match user {
-                PublishTestUser::WithCatalogs => {
+                PublishTestUser::Unauthenticated => {},
+                PublishTestUser::WithOrgCatalogs => {
                     ensure_test_catalogs_exist(&client, &base_url_str).block_on();
                     // Delete all of the setup operations from the recording.
                     client.reset_recording();
                 },
-                PublishTestUser::NoCatalogs => {
+                PublishTestUser::PersonalCatalogOnly => {
                     // Pre-configure the personal catalog with meta-only so the
                     // server does not return a publisher store config with
                     // rotating STS credentials (which would make every
@@ -757,7 +777,7 @@ pub mod test_helpers {
                     let config = CatalogStoreConfig::MetaOnly;
                     create_catalog_with_config(&client, TEST_USER_NO_CATALOG, &config, true)
                         .block_on()
-                        .expect("failed to pre-configure no-catalogs personal catalog");
+                        .expect("failed to pre-configure the personal catalog");
                     // Delete the setup from the recording so it does not
                     // appear in the mock file.
                     client.reset_recording();
@@ -974,7 +994,7 @@ mod tests {
         let (flox, _tmpdir) = flox_instance();
         let (flox, _auth) = auto_recording_catalog_client_for_authed_local_services(
             flox,
-            PublishTestUser::NoCatalogs,
+            PublishTestUser::PersonalCatalogOnly,
             "creates_new_catalog",
         );
         let catalog_name_raw = "test_cli_creates_new_catalog";

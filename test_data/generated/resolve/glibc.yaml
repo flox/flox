@@ -6,13 +6,13 @@ then:
   status: 200
   header:
   - name: date
-    value: Tue, 21 Apr 2026 21:58:52 GMT
+    value: Thu, 13 Aug 2026 22:38:36 GMT
   - name: content-type
     value: application/json
   - name: content-length
-    value: '1432'
+    value: '1416'
   - name: server
     value: uvicorn
   - name: apigw-requestid
-    value: cMLshjGmoAMEVOQ=
-  body: '{"items":[{"name":"toplevel","page":{"page":982522,"url":"","packages":[{"catalog":"nixpkgs","attr_path":"glibc","pkg_path":"glibc","derivation":"/nix/store/j96x1lgha869bnfxxgrlqa7r6smvfgir-glibc-2.42-51.drv","name":"glibc-2.42-51","pname":"glibc","version":"2.42-51","system":"x86_64-linux","outputs":[{"name":"bin","store_path":"/nix/store/9hm3jdm6kk4m4ppwjcxz4s1dsdvd6fin-glibc-2.42-51-bin"},{"name":"dev","store_path":"/nix/store/h0ip0h6qp7kc2wm7mwjaglkxxbzmjri4-glibc-2.42-51-dev"},{"name":"out","store_path":"/nix/store/jms7zxzm7w1whczwny5m3gkgdjghmi2r-glibc-2.42-51"},{"name":"debug","store_path":"/nix/store/9lamkfbldcgx9bdsm3wfrd0fhykmi0gy-glibc-2.42-51-debug"},{"name":"getent","store_path":"/nix/store/12b76l1jmwnyll5g9kd2amni99751gf3-glibc-2.42-51-getent"},{"name":"static","store_path":"/nix/store/j3qmic0j5df9qr54cv4p3hsd6cmprcdk-glibc-2.42-51-static"}],"outputs_to_install":["bin","bin","bin","bin","bin","bin"],"description":"GNU C Library","license":"LGPL-2.0-or-later","locked_url":"https://github.com/flox/nixpkgs?rev=b12141ef619e0a9c1c84dc8c684040326f27cdcc","rev":"b12141ef619e0a9c1c84dc8c684040326f27cdcc","rev_count":982522,"rev_date":"2026-04-18T21:33:21Z","broken":false,"insecure":false,"unfree":false,"missing_builds":false,"stabilities":["unstable"],"scrape_date":"2026-04-21T07:44:41.384675Z","cache_uri":null,"install_id":"glibc"}],"messages":[],"complete":true},"candidate_pages":null,"messages":[]}]}'
+    value: CEAY7jYKIAMEMTQ=
+  body: '{"items":[{"name":"toplevel","page":{"page":1051473,"url":"","packages":[{"catalog":"nixpkgs","attr_path":"glibc","pkg_path":"glibc","derivation":"/nix/store/v5prphdwl6wifg0w97ji583d24q2rcxa-glibc-2.42-67.drv","name":"glibc-2.42-67","pname":"glibc","version":"2.42-67","system":"x86_64-linux","outputs":[{"name":"bin","store_path":"/nix/store/8i8vavxai9s80xlx6y5kmiw7l63491m0-glibc-2.42-67-bin"},{"name":"dev","store_path":"/nix/store/29isvm6vfq10c528i31igdiy3fnvjcm3-glibc-2.42-67-dev"},{"name":"out","store_path":"/nix/store/qqiqd3ah10x8hzsif4j1y4xc1miw23nx-glibc-2.42-67"},{"name":"debug","store_path":"/nix/store/rzzhwplk4spcac91qs7hplznl9w6b9iv-glibc-2.42-67-debug"},{"name":"getent","store_path":"/nix/store/v38i7va2mnw0hh3rz3lfp5s11ynghliq-glibc-2.42-67-getent"},{"name":"static","store_path":"/nix/store/58n1yhwrahza1p2f6py4z5iay13yd0mr-glibc-2.42-67-static"}],"outputs_to_install":["bin","bin","bin"],"description":"GNU C Library","license":"LGPL-2.0-or-later","locked_url":"https://github.com/flox/nixpkgs?rev=2fcb964de67fcf60b43471c55d5d99e61a9ccb5a","rev":"2fcb964de67fcf60b43471c55d5d99e61a9ccb5a","rev_count":1051473,"rev_date":"2026-08-10T17:52:38Z","broken":false,"insecure":false,"unfree":false,"missing_builds":false,"stabilities":["unstable"],"scrape_date":"2026-08-12T06:14:58.767046Z","cache_uri":null,"install_id":"glibc"}],"messages":[],"complete":true},"candidate_pages":null,"messages":[]}]}'

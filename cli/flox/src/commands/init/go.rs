@@ -504,6 +504,10 @@ mod tests {
         assert!(module_system.is_none());
     }
 
+    #[cfg_attr(
+        all(target_os = "macos", target_arch = "x86_64"),
+        ignore = "catalog recordings don't cover x86_64-darwin"
+    )]
     #[tokio::test(flavor = "multi_thread")]
     async fn go_work_system_from_env_var_with_catalog() {
         let (mut flox, temp_dir_handle) = flox_instance();
@@ -536,6 +540,10 @@ mod tests {
         .await;
     }
 
+    #[cfg_attr(
+        all(target_os = "macos", target_arch = "x86_64"),
+        ignore = "catalog recordings don't cover x86_64-darwin"
+    )]
     #[tokio::test]
     async fn go_version_from_content_returns_compatible_version_with_catalog() {
         let (mut flox, _temp_dir_handle) = flox_instance();
@@ -570,6 +578,10 @@ mod tests {
         });
     }
 
+    #[cfg_attr(
+        all(target_os = "macos", target_arch = "x86_64"),
+        ignore = "catalog recordings don't cover x86_64-darwin"
+    )]
     #[tokio::test]
     async fn go_version_from_content_returns_none_on_incompatible_version_with_catalog() {
         let (mut flox, _temp_dir_handle) = flox_instance();

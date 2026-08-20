@@ -123,7 +123,8 @@ EOF
 
 # bats test_tags=list
 @test "'flox list' lists packages of environment in the current dir; One package from nixpkgs" {
-  flox_init_pinned
+  skip_x86_64_darwin_replay
+  "$FLOX_BIN" init
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
     "$FLOX_BIN" install hello
 
@@ -153,11 +154,11 @@ EOF
 
 # bats test_tags=list,list:config
 @test "'flox list --config' shows manifest content for composed environments" {
+  skip_x86_64_darwin_replay
   "$FLOX_BIN" init -d included
   INCLUDED_CONTENTS="$(with_latest_schema '[install]
 hello.pkg-path = "hello"')"
   echo "$INCLUDED_CONTENTS" > included/.flox/env/manifest.toml
-  pin_recorded_systems included/.flox/env/manifest.toml
 
   "$FLOX_BIN" init -d composer
 
@@ -176,10 +177,7 @@ environments = [
   assert_success
   # TODO: Unspecified tables and empty vecs should be omitted.
   expected="$(with_latest_schema '[install]
-hello.pkg-path = "hello"
-
-[options]
-systems = ["aarch64-darwin", "aarch64-linux", "x86_64-darwin", "x86_64-linux"]')"
+hello.pkg-path = "hello"')"
   assert_equal "$output" "$expected"
   assert_equal "$stderr" 'ℹ Displaying merged manifest.'
 }

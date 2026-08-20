@@ -2667,7 +2667,7 @@ pub mod tests {
         let (flox, _tmpdir) = flox_instance();
         let (flox, _auth) = auto_recording_catalog_client_for_authed_local_services(
             flox,
-            PublishTestUser::NoCatalogs,
+            PublishTestUser::PersonalCatalogOnly,
             "get_base_catalog_nixpkgs_url",
         );
         let _url = get_base_nixpkgs_url(&flox, Some("stable"), &env_meta)
@@ -2687,7 +2687,7 @@ pub mod tests {
         let (flox, _tmpdir) = flox_instance();
         let (flox, auth) = auto_recording_catalog_client_for_authed_local_services(
             flox,
-            PublishTestUser::NoCatalogs,
+            PublishTestUser::PersonalCatalogOnly,
             recording_name,
         );
         let user_handle = flox.auth_context.handle().unwrap();
@@ -2723,7 +2723,7 @@ pub mod tests {
         let (flox, _tmpdir) = flox_instance();
         let (flox, auth) = auto_recording_catalog_client_for_authed_local_services(
             flox,
-            PublishTestUser::WithCatalogs,
+            PublishTestUser::WithOrgCatalogs,
             recording_name,
         );
         let publish_provider = PublishProvider::new(env_meta, pkg_meta, auth);
@@ -2763,7 +2763,7 @@ pub mod tests {
         let (flox, _tmpdir) = flox_instance();
         let (flox, auth) = auto_recording_catalog_client_for_authed_local_services(
             flox,
-            PublishTestUser::WithCatalogs,
+            PublishTestUser::WithOrgCatalogs,
             recording_name,
         );
         let publish_provider = PublishProvider::new(env_meta, pkg_meta, auth);
@@ -2792,7 +2792,7 @@ pub mod tests {
         let (flox, _tmpdir) = flox_instance();
         let (flox, auth) = auto_recording_catalog_client_for_authed_local_services(
             flox,
-            PublishTestUser::WithCatalogs,
+            PublishTestUser::WithOrgCatalogs,
             recording_name,
         );
         let publish_provider = PublishProvider::new(env_meta, pkg_meta, auth);
@@ -2847,7 +2847,7 @@ pub mod tests {
         let (flox, _tmpdir) = flox_instance();
         let (flox, auth) = auto_recording_catalog_client_for_authed_local_services(
             flox,
-            PublishTestUser::WithCatalogs,
+            PublishTestUser::WithOrgCatalogs,
             recording_name,
         );
         let user_handle = flox.auth_context.handle().unwrap();

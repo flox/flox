@@ -1,16 +1,9 @@
-//! Example manifests
-
-/// An `[options]` table pinning the systems that the resolution recordings in
-/// `test_data/generated` were made with (the old implicit default set).
+/// An empty manifest that opts in to `x86_64-darwin`, which is no longer one of
+/// the implicit default systems.
 ///
-/// Append this to fixture manifests that replay recordings so that their
-/// resolve requests keep matching the recordings byte-for-byte on every build
-/// host, now that the implicit default set includes the current system.
-pub const ALL_SYSTEMS_OPTIONS: &str = r#"
-[options]
-systems = ["aarch64-darwin", "x86_64-darwin", "aarch64-linux", "x86_64-linux"]
-"#;
-
+/// Use it with the recordings that were deliberately made for the full
+/// four-system set (`resolve/bpftrace.yaml`, `resolve/darwin_ps_all.yaml`) to
+/// cover resolution against explicitly requested non-default systems.
 pub const EMPTY_ALL_SYSTEMS: &str = r#"
     version = 1
 
@@ -23,7 +16,4 @@ pub const HELLO: &str = r#"
 
     [install]
     hello.pkg-path = "hello"
-
-    [options]
-    systems = ["aarch64-darwin", "x86_64-darwin", "aarch64-linux", "x86_64-linux"]
 "#;

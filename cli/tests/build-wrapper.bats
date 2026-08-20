@@ -46,6 +46,7 @@ teardown() {
 # ---------------------------------------------------------------------------- #
 
 @test "Build wrapper doesn't modify FLOX_ENV_DIRS" {
+  skip_x86_64_darwin_replay
   MANIFEST_CONTENTS="$(cat << "EOF"
     version = 1
     [install]
@@ -62,9 +63,6 @@ teardown() {
 
       chmod +x "$out/bin/print-FLOX_ENV_DIRS"
     """
-
-    [options]
-    systems = ["aarch64-darwin", "aarch64-linux", "x86_64-darwin", "x86_64-linux"]
 EOF
   )"
 
@@ -93,6 +91,7 @@ EOF
 # - A built package can't find Python modules from an environment it's installed
 #   to
 @test "Build wrapper provides Python modules" {
+  skip_x86_64_darwin_replay
   cp "$GENERATED_DATA"/envs/build_with_requests/* "$PROJECT_DIR/.flox/env"
 
   "$FLOX_BIN" build
@@ -100,25 +99,24 @@ EOF
   run ./result-print-modules/bin/print-modules
   assert_success
   # requests can be found
-  assert_output --regexp "\['/nix/store/.*-environment-build-print-modules/lib/python3.13/site-packages/requests'\]"
+  assert_output --regexp "\['/nix/store/.*-environment-build-print-modules/lib/python3.14/site-packages/requests'\]"
   # Confirm toml cannot be found
   assert_output --partial "Cannot import toml"
 
   "$FLOX_BIN" init -d consumer
-  pin_recorded_systems consumer/.flox/env/manifest.toml
   "$FLOX_BIN" install -d consumer ./result-print-modules/bin/print-modules
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/python-toml.yaml" \
-    "$FLOX_BIN" install -d consumer python313Packages.toml
+    "$FLOX_BIN" install -d consumer python314Packages.toml
 
   # Double check toml module can be found with environment activated
   run "$FLOX_BIN" activate -d consumer -- python3 -c "import toml; print(toml.__path__)"
   assert_success
-  assert_output --regexp "\['.*consumer/.flox/run/$NIX_SYSTEM.consumer-dev/lib/python3.13/site-packages/toml'\]"
+  assert_output --regexp "\['.*consumer/.flox/run/$NIX_SYSTEM.consumer-dev/lib/python3.14/site-packages/toml'\]"
 
   # Wrapped program can find requests but not toml
   run "$FLOX_BIN" activate -d consumer -- print-modules
   assert_success
-  assert_output --regexp "\['/nix/store/.*-environment-build-print-modules/lib/python3.13/site-packages/requests'\]"
+  assert_output --regexp "\['/nix/store/.*-environment-build-print-modules/lib/python3.14/site-packages/requests'\]"
   assert_output --partial "Cannot import toml"
 }
 

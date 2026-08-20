@@ -183,15 +183,16 @@ pub mod test_helpers {
         set_test_token(flox, create_test_token(handle));
     }
 
-    /// Describes which test user to load:
-    /// - One that has an existing personal catalog and access to other test
-    ///   catalogs.
-    /// - No access to org catalogs, and a personal catalog that doesn't exist
-    ///   yet.
+    /// Describes which test user to load (if any), each of which has a
+    /// different catalog setup
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub enum PublishTestUser {
-        WithCatalogs,
-        NoCatalogs,
+        /// Both org test catalogs, plus the user's own personal catalog.
+        WithOrgCatalogs,
+        /// A personal catalog configured meta-only
+        PersonalCatalogOnly,
+        /// No catalog setup
+        Unauthenticated,
     }
 
     /// Look up a token from the test-users file by handle.
@@ -225,9 +226,15 @@ pub mod test_helpers {
     }
 
     pub fn test_token_from_floxhub_test_users_file(user: PublishTestUser) -> FloxhubToken {
+        // The `test_user_no_catalogs` handle is fixture data shared with
+        // floxhub, so it keeps its original name even though that user
+        // now has a meta-only catalog
         let handle = match user {
-            PublishTestUser::WithCatalogs => "test1",
-            PublishTestUser::NoCatalogs => "test_user_no_catalogs",
+            PublishTestUser::WithOrgCatalogs => "test1",
+            PublishTestUser::PersonalCatalogOnly => "test_user_no_catalogs",
+            PublishTestUser::Unauthenticated => {
+                panic!("'Unauthenticated' has no test user to look up a token for")
+            },
         };
         test_token_for_handle(handle)
     }

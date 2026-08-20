@@ -371,6 +371,20 @@ mod tests {
         let floxmeta_path = floxhub_base_path.join(format!("{}/floxmeta", pointer.owner));
         fs::create_dir_all(&floxmeta_path).unwrap();
         let git = GitCommandProvider::init(floxmeta_path, false).unwrap();
+        GitCommandProvider::run_command(git.new_command().args([
+            "config",
+            "--local",
+            "user.name",
+            "Test User",
+        ]))
+        .unwrap();
+        GitCommandProvider::run_command(git.new_command().args([
+            "config",
+            "--local",
+            "user.email",
+            "test@example.com",
+        ]))
+        .unwrap();
         git.rename_branch(&remote_branch_name(pointer)).unwrap();
         fs::write(git.path().join("test.txt"), "test").unwrap();
         git.add(&[Path::new("test.txt")]).unwrap();

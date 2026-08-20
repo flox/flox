@@ -50,9 +50,8 @@ teardown() {
 
 # init path environment and push to remote
 function make_empty_managed_env() {
-  # Pin the recorded systems so that later re-locks of this environment
-  # (e.g. installing packages) match the recordings.
-  flox_init_pinned
+  skip_x86_64_darwin_replay
+  "$FLOX_BIN" init
   "$FLOX_BIN" push --owner "$OWNER"
 }
 
@@ -101,6 +100,7 @@ dot_flox_exists() {
 
 # bats test_tags=edit,managed
 @test "m3: edit a package from a managed environment" {
+  skip_x86_64_darwin_replay
   make_empty_managed_env
 
   TMP_MANIFEST_PATH="$BATS_TEST_TMPDIR/manifest.toml"
@@ -110,9 +110,6 @@ version = 1
 
 [install]
 hello.pkg-path = "hello"
-
-[options]
-systems = ["aarch64-darwin", "aarch64-linux", "x86_64-darwin", "x86_64-linux"]
 EOF
 
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
@@ -145,13 +142,14 @@ EOF
 
 # bats test_tags=managed,pull,managed:pull
 @test "m4: pushed environment can be pulled" {
+  skip_x86_64_darwin_replay
   mkdir a a_data
   mkdir b b_data
 
   # on machine a, create and push the environment
   export FLOX_DATA_DIR="$(pwd)/a_data"
   pushd a > /dev/null || return
-  flox_init_pinned
+  "$FLOX_BIN" init
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
     "$FLOX_BIN" install hello
   "$FLOX_BIN" push --owner "$OWNER"
@@ -170,13 +168,14 @@ EOF
 
 # bats test_tags=managed,update,managed:update
 @test "m5: updated environment can be pulled" {
+  skip_x86_64_darwin_replay
   mkdir a a_data
   mkdir b b_data
 
   # on machine a, create and push the (empty) environment
   export FLOX_DATA_DIR="$(pwd)/a_data"
   pushd a > /dev/null || return
-  flox_init_pinned
+  "$FLOX_BIN" init
   "$FLOX_BIN" push --owner "$OWNER"
   popd > /dev/null || return
 
@@ -208,13 +207,14 @@ EOF
 
 # bats test_tags=managed,diverged,managed:diverged
 @test "m7: remote cannot be pulled into diverged environment" {
+  skip_x86_64_darwin_replay
   mkdir a a_data
   mkdir b b_data
 
   # on machine a, create and push the (empty) environment
   export FLOX_DATA_DIR="$(pwd)/a_data"
   pushd a > /dev/null || return
-  flox_init_pinned
+  "$FLOX_BIN" init
   "$FLOX_BIN" push --owner "$OWNER"
   popd > /dev/null || return
 
@@ -267,12 +267,13 @@ Upstream:
 
 # bats test_tags=managed,diverged,managed:diverged-upstream
 @test "m8: remote can be force pulled into diverged environment" {
+  skip_x86_64_darwin_replay
   mkdir a
   mkdir b
 
   # on machine a, create and push the (empty) environment
   pushd a > /dev/null || return
-  flox_init_pinned
+  "$FLOX_BIN" init
   FLOX_DATA_DIR="$(pwd)/a_data" "$FLOX_BIN" push --owner "$OWNER"
   popd > /dev/null || return
 

@@ -3,6 +3,3 @@ schema-version = "1.10.0"
 [install]
 hello.pkg-path = "hello"
 hello.outputs = "all"
-
-[options]
-systems = ["aarch64-darwin", "aarch64-linux", "x86_64-darwin", "x86_64-linux"]

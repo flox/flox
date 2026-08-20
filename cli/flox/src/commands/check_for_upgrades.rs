@@ -347,6 +347,10 @@ mod tests {
         assert_eq!(exit_branch, ExitBranch::LockTaken);
     }
 
+    #[cfg_attr(
+        all(target_os = "macos", target_arch = "x86_64"),
+        ignore = "catalog recordings don't cover x86_64-darwin"
+    )]
     #[tokio::test(flavor = "multi_thread")]
     async fn checks_if_not_recently_checked() {
         let (mut flox, _tempdir) = flox_instance();

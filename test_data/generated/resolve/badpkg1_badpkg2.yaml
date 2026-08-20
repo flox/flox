@@ -1,12 +1,12 @@
 when:
   path: /api/v1/catalog/resolve
   method: POST
-  body: '{"items":[{"descriptors":[{"allow_broken":null,"allow_insecure":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"badpkg1","install_id":"badpkg1","systems":["aarch64-darwin"]},{"allow_broken":null,"allow_insecure":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"badpkg1","install_id":"badpkg1","systems":["aarch64-linux"]},{"allow_broken":null,"allow_insecure":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"badpkg1","install_id":"badpkg1","systems":["x86_64-darwin"]},{"allow_broken":null,"allow_insecure":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"badpkg1","install_id":"badpkg1","systems":["x86_64-linux"]},{"allow_broken":null,"allow_insecure":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"badpkg2","install_id":"badpkg2","systems":["aarch64-darwin"]},{"allow_broken":null,"allow_insecure":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"badpkg2","install_id":"badpkg2","systems":["aarch64-linux"]},{"allow_broken":null,"allow_insecure":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"badpkg2","install_id":"badpkg2","systems":["x86_64-darwin"]},{"allow_broken":null,"allow_insecure":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"badpkg2","install_id":"badpkg2","systems":["x86_64-linux"]}],"name":"toplevel"}]}'
+  body: '{"items":[{"descriptors":[{"allow_broken":null,"allow_insecure":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"badpkg1","install_id":"badpkg1","systems":["aarch64-darwin"]},{"allow_broken":null,"allow_insecure":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"badpkg1","install_id":"badpkg1","systems":["aarch64-linux"]},{"allow_broken":null,"allow_insecure":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"badpkg1","install_id":"badpkg1","systems":["x86_64-linux"]},{"allow_broken":null,"allow_insecure":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"badpkg2","install_id":"badpkg2","systems":["aarch64-darwin"]},{"allow_broken":null,"allow_insecure":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"badpkg2","install_id":"badpkg2","systems":["aarch64-linux"]},{"allow_broken":null,"allow_insecure":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"badpkg2","install_id":"badpkg2","systems":["x86_64-linux"]}],"name":"toplevel"}]}'
 then:
   status: 200
   header:
   - name: date
-    value: Tue, 21 Apr 2026 21:57:43 GMT
+    value: Thu, 13 Aug 2026 22:38:21 GMT
   - name: content-type
     value: application/json
   - name: content-length
@@ -14,7 +14,7 @@ then:
   - name: server
     value: uvicorn
   - name: apigw-requestid
-    value: cMLhvjjVIAMEYgQ=
+    value: CEAWpikzoAMEY4w=
   body: '{"items":[{"name":"toplevel","page":null,"candidate_pages":null,"messages":[{"level":"error","type":"attr_path_not_found.not_in_catalog","message":"The package ''badpkg1'' is not found in the catalog.","context":{"attr_path":"badpkg1","install_id":"badpkg1"}},{"level":"error","type":"attr_path_not_found.not_in_catalog","message":"The package ''badpkg2'' is not found in the catalog.","context":{"attr_path":"badpkg2","install_id":"badpkg2"}},{"level":"trace","type":"resolution_logic","message":"TRACE (GROUP): Group ''toplevel'' could not be resolved with strategy: Stage 1: Only allow missing builds for packages without current locked derivations.","context":{"install_id":"GROUP","message":"Group ''toplevel'' could not be resolved with strategy: Stage 1: Only allow missing builds for packages without current locked derivations."}},{"level":"trace","type":"resolution_logic","message":"TRACE (GROUP): Group ''toplevel'' could not be resolved with strategy: Stage 2: Unlock existing derivations but require known builds.","context":{"install_id":"GROUP","message":"Group ''toplevel'' could not be resolved with strategy: Stage 2: Unlock existing derivations but require known builds."}},{"level":"trace","type":"resolution_logic","message":"TRACE (GROUP): Group ''toplevel'' could not be resolved with strategy: Stage 3: Unlock existing derivations and allow missing builds.","context":{"install_id":"GROUP","message":"Group ''toplevel'' could not be resolved with strategy: Stage 3: Unlock existing derivations and allow missing builds."}}]}]}'
 ---
 when:
@@ -24,7 +24,7 @@ then:
   status: 200
   header:
   - name: date
-    value: Tue, 21 Apr 2026 21:57:45 GMT
+    value: Thu, 13 Aug 2026 22:38:22 GMT
   - name: content-type
     value: application/json
   - name: content-length
@@ -32,7 +32,7 @@ then:
   - name: server
     value: uvicorn
   - name: apigw-requestid
-    value: cMLhxjVfIAMEYvg=
+    value: CEAWqijMIAMEY3A=
   body: '{"items":[],"total_count":0}'
 ---
 when:
@@ -42,7 +42,7 @@ then:
   status: 200
   header:
   - name: date
-    value: Tue, 21 Apr 2026 21:57:46 GMT
+    value: Thu, 13 Aug 2026 22:38:23 GMT
   - name: content-type
     value: application/json
   - name: content-length
@@ -50,5 +50,5 @@ then:
   - name: server
     value: uvicorn
   - name: apigw-requestid
-    value: cMLiAjdcoAMEYFA=
+    value: CEAW1i6VoAMEM6A=
   body: '{"items":[],"total_count":0}'
