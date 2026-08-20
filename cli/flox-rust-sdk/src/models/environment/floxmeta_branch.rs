@@ -188,6 +188,10 @@ impl FloxmetaBranch {
             &floxmeta,
             maybe_lock,
             flox.auth_context.is_unauthenticated(),
+            // Bounding fetches trades slow-network fidelity for
+            // never-stall opens; only the auto-default prototype makes
+            // that trade for now.
+            flox.features.auto_default,
         )?;
 
         // Set up branch
@@ -438,15 +442,16 @@ fn fetch_failure_allows_stale(err: &GitRemoteCommandError, unauthenticated: bool
 const STALE_FALLBACK_FETCH_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Fetch the remote branch, bounding the fetch with a timeout when local
-/// fallback state exists. Without fallback state the fetch must be given
-/// every chance to succeed, so it runs unbounded.
+/// fallback state can actually serve the caller (and bounding is allowed).
+/// Otherwise the fetch must be given every chance to succeed, so it runs
+/// unbounded.
 fn fetch_remote_branch(
     floxmeta: &FloxMeta,
     remote_branch: &str,
-    can_fall_back: bool,
+    bounded: bool,
 ) -> Result<(), GitRemoteCommandError> {
     let refspec = format!("+{0}:{0}", remote_branch);
-    if can_fall_back {
+    if bounded {
         floxmeta
             .git
             .fetch_ref_with_timeout("dynamicorigin", &refspec, STALE_FALLBACK_FETCH_TIMEOUT)
@@ -468,6 +473,7 @@ fn ensure_generation_locked(
     floxmeta: &FloxMeta,
     maybe_lock: Option<GenerationLock>,
     unauthenticated: bool,
+    allow_bounded_fetch: bool,
 ) -> Result<(GenerationLock, bool), FloxmetaBranchError> {
     let mut used_stale_fallback = false;
     let lock = match maybe_lock {
@@ -510,7 +516,17 @@ fn ensure_generation_locked(
                     .git
                     .has_branch(remote_branch)
                     .map_err(FloxmetaBranchError::CheckBranchExists)?;
-                if let Err(err) = fetch_remote_branch(floxmeta, remote_branch, can_fall_back) {
+                // This fetch exists to obtain the locked rev; bounding it is
+                // only safe when the stale state can actually satisfy the
+                // lock -- a mere stale branch that lacks the rev would turn a
+                // slow fetch into RevDoesNotExist.
+                let stale_satisfies_lock = can_fall_back
+                    && floxmeta
+                        .git
+                        .branch_contains_commit(&lock.rev, remote_branch)
+                        .map_err(FloxmetaBranchError::CheckGitRevision)?;
+                let bounded = allow_bounded_fetch && stale_satisfies_lock;
+                if let Err(err) = fetch_remote_branch(floxmeta, remote_branch, bounded) {
                     if !fetch_failure_allows_stale(&err, unauthenticated) || !can_fall_back {
                         return Err(FloxmetaBranchError::Fetch(err));
                     }
@@ -545,7 +561,10 @@ fn ensure_generation_locked(
                 .git
                 .has_branch(remote_branch)
                 .map_err(FloxmetaBranchError::CheckBranchExists)?;
-            if let Err(err) = fetch_remote_branch(floxmeta, remote_branch, can_fall_back) {
+            // The stale branch tip itself serves as the fallback lock here,
+            // so its presence is sufficient for a bounded fetch.
+            let bounded = allow_bounded_fetch && can_fall_back;
+            if let Err(err) = fetch_remote_branch(floxmeta, remote_branch, bounded) {
                 if !fetch_failure_allows_stale(&err, unauthenticated) || !can_fall_back {
                     return Err(FloxmetaBranchError::Fetch(err));
                 }
@@ -914,9 +933,10 @@ mod tests {
         let local_branch = branch_name(&test_pointer, &dot_flox_path);
 
         // No lockfile, should fetch latest
-        let (lock, _) =
-            ensure_generation_locked(&remote_branch, &local_branch, &floxmeta, None, false)
+        let (lock, used_stale_fallback) =
+            ensure_generation_locked(&remote_branch, &local_branch, &floxmeta, None, false, false)
                 .unwrap();
+        assert!(!used_stale_fallback);
 
         let expected = GenerationLock {
             rev: hash_2.clone(),
@@ -962,14 +982,16 @@ mod tests {
         };
 
         let expected_lock = input_lock.clone();
-        let (lock, _) = ensure_generation_locked(
+        let (lock, used_stale_fallback) = ensure_generation_locked(
             &remote_branch,
             &local_branch,
             &floxmeta,
             Some(input_lock),
             false,
+            false,
         )
         .unwrap();
+        assert!(!used_stale_fallback);
 
         // Should return unchanged
         assert_eq!(lock, expected_lock);
@@ -1017,14 +1039,16 @@ mod tests {
         };
 
         let expected_lock = input_lock.clone();
-        let (lock, _) = ensure_generation_locked(
+        let (lock, used_stale_fallback) = ensure_generation_locked(
             &remote_branch,
             &local_branch,
             &floxmeta,
             Some(input_lock),
             false,
+            false,
         )
         .unwrap();
+        assert!(!used_stale_fallback);
 
         // Should return unchanged, no fetch needed
         assert_eq!(lock, expected_lock);
@@ -1068,6 +1092,7 @@ mod tests {
             &local_branch,
             &floxmeta,
             Some(input_lock),
+            false,
             false,
         );
 
@@ -1120,14 +1145,16 @@ mod tests {
         };
 
         let expected_lock = input_lock.clone();
-        let (lock, _) = ensure_generation_locked(
+        let (lock, used_stale_fallback) = ensure_generation_locked(
             &remote_branch,
             &local_branch,
             &floxmeta,
             Some(input_lock),
             false,
+            false,
         )
         .unwrap();
+        assert!(!used_stale_fallback);
 
         // Should fetch and find the rev in remote
         assert_eq!(lock, expected_lock);
@@ -1179,6 +1206,7 @@ mod tests {
             &floxmeta,
             Some(input_lock),
             false,
+            false,
         );
 
         assert!(matches!(result, Err(FloxmetaBranchError::RevDoesNotExist)));
@@ -1219,14 +1247,16 @@ mod tests {
         };
 
         let expected_lock = input_lock.clone();
-        let (lock, _) = ensure_generation_locked(
+        let (lock, used_stale_fallback) = ensure_generation_locked(
             &remote_branch,
             &local_branch,
             &floxmeta,
             Some(input_lock),
             false,
+            false,
         )
         .unwrap();
+        assert!(!used_stale_fallback);
 
         // Should fetch and find the rev in remote
         assert_eq!(lock, expected_lock);
@@ -1270,6 +1300,7 @@ mod tests {
             &local_branch,
             &floxmeta,
             Some(input_lock),
+            false,
             false,
         );
 
