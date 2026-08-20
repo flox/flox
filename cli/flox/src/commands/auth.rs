@@ -307,7 +307,7 @@ impl Auth {
                 // Only explicit logins reconcile the default environment;
                 // implicit re-auth in the middle of another command must not
                 // grow side effects.
-                auto_default::sync_default_env_after_login(&mut flox, &handle).await;
+                auto_default::sync_default_env_after_login(&config, &mut flox, &handle).await;
                 Ok(())
             },
             Auth::Logout => {

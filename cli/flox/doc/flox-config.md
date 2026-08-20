@@ -154,6 +154,17 @@ flox config --set 'trusted_environments."owner/name"' trust
     shouldn't be able to be freely deleted like data in the cache directory.
     (default: `$XDG_STATE_HOME/flox` e.g. `~/.local/state/flox`)
 
+`sync_default_env`
+:   Automatically keep the default environment in sync with FloxHub:
+    push mutations (`flox install`, `flox uninstall`, `flox edit`,
+    `flox upgrade`) when they land, reconcile local and FloxHub state on
+    `flox auth login`, and refresh upstream state in the background on
+    `flox activate`.
+    Set to `false` to make syncing manual; explicit `flox push` and
+    `flox pull` always work.
+
+    (default: true)
+
 `trusted_environments`
 :   Remote environments that are trusted for activation.
     Keys are of the form `"<owner>/<name>"` or can include a wildcard for environment names `"<owner>/*"`.

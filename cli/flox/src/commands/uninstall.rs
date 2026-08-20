@@ -1,5 +1,6 @@
 use anyhow::Result;
 use bpaf::Bpaf;
+use flox_config::Config;
 use flox_events::{CliEnvironmentPayload, CliPackagePayload, EventKind, EventsHub, Outcome};
 use flox_manifest::parsed::latest::SelectedOutputs;
 use flox_manifest::raw::PackageModification;
@@ -37,7 +38,7 @@ pub struct Uninstall {
 
 impl Uninstall {
     #[instrument(name = "uninstall", skip_all)]
-    pub async fn handle(self, mut flox: Flox) -> Result<()> {
+    pub async fn handle(self, config: Config, mut flox: Flox) -> Result<()> {
         // Record subcommand metric prior to environment_subcommand_metric below in case we error
         subcommand_metric!("uninstall");
 
@@ -150,7 +151,8 @@ impl Uninstall {
         }
 
         if !attempt.modifications.is_empty() {
-            auto_default::sync_default_env_to_floxhub(&flox, &mut concrete_environment).await;
+            auto_default::sync_default_env_to_floxhub(&config, &flox, &mut concrete_environment)
+                .await;
         }
 
         Ok(())

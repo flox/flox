@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, anyhow, bail};
 use bpaf::Bpaf;
+use flox_config::Config;
 use flox_core::data::environment_ref::DEFAULT_NAME;
 use flox_events::{CliEnvironmentPayload, CliPackagePayload, EventKind, EventsHub, Outcome};
 use flox_manifest::compose::{
@@ -125,7 +126,7 @@ struct PartitionedPackages {
 
 impl Install {
     #[instrument(name = "install", skip_all)]
-    pub async fn handle(self, mut flox: Flox) -> Result<()> {
+    pub async fn handle(self, config: Config, mut flox: Flox) -> Result<()> {
         subcommand_metric!("install");
 
         debug!(
@@ -328,7 +329,8 @@ impl Install {
         }
 
         if !installation.modifications.is_empty() {
-            auto_default::sync_default_env_to_floxhub(&flox, &mut concrete_environment).await;
+            auto_default::sync_default_env_to_floxhub(&config, &flox, &mut concrete_environment)
+                .await;
         }
 
         Ok(())
@@ -845,6 +847,7 @@ fn add_activation_to_rc_file(
 
 #[cfg(test)]
 mod tests {
+    use flox_config::Config;
     use flox_manifest::lockfile::test_helpers::fake_catalog_package_lock;
     use flox_manifest::lockfile::{LockedPackage, LockedPackageCatalog, Lockfile};
     use flox_manifest::raw::{CatalogPackage, PackageToInstall, RawSelectedOutputs};
@@ -1065,7 +1068,7 @@ mod tests {
             packages: vec![pkg_path.to_string()],
         };
         install_cmd
-            .handle(flox)
+            .handle(Config::default(), flox)
             .with_subscriber(subscriber)
             .await
             .expect("installation failed");
@@ -1105,7 +1108,7 @@ mod tests {
             id: vec![],
             packages: vec!["curl".to_string()],
         }
-        .handle(flox)
+        .handle(Config::default(), flox)
         .with_subscriber(subscriber)
         .await
         .expect("installation failed");

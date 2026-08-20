@@ -141,6 +141,13 @@ pub struct FloxConfig {
     /// (default: true)
     pub upgrade_notifications: Option<bool>,
 
+    /// Automatically keep the default environment in sync with FloxHub:
+    /// push mutations (install, uninstall, edit, upgrade) when they land,
+    /// reconcile local and FloxHub state on 'flox auth login', and refresh
+    /// upstream state in the background on activation. Explicit 'flox push'
+    /// and 'flox pull' are unaffected. (default: true)
+    pub sync_default_env: Option<bool>,
+
     /// Configuration for 'flox publish'.
     pub publish: Option<PublishConfig>,
 

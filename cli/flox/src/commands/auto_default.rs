@@ -15,6 +15,7 @@
 use std::str::FromStr;
 
 use anyhow::{Context, Result};
+use flox_config::Config;
 use flox_core::data::environment_ref::{
     DEFAULT_NAME,
     EnvironmentName,
@@ -517,11 +518,22 @@ fn maybe_offer_rc_setup() {
     }
 }
 
+/// Whether the user has disabled automatic syncing of the default environment
+/// (`sync_default_env`, default true). Explicit 'flox push'/'flox pull' are
+/// unaffected by this setting.
+pub(crate) fn sync_enabled(config: &Config) -> bool {
+    config.flox.sync_default_env.unwrap_or(true)
+}
+
 /// After a mutating command on the user's own default environment, push the
 /// change to FloxHub so other machines and the web UI reflect it without a
 /// manual 'flox push'. Failures never fail the primary command.
-pub(crate) async fn sync_default_env_to_floxhub(flox: &Flox, env: &mut ConcreteEnvironment) {
-    if !flox.features.auto_default {
+pub(crate) async fn sync_default_env_to_floxhub(
+    config: &Config,
+    flox: &Flox,
+    env: &mut ConcreteEnvironment,
+) {
+    if !flox.features.auto_default || !sync_enabled(config) {
         return;
     }
     // Cheap structural checks first; identity resolution can hit the network
@@ -592,8 +604,8 @@ fn error_is_diverged(err: &EnvironmentError) -> bool {
 /// the default environment: push a local-only default, pre-fetch a
 /// remote-only one, and explain the situation when both exist. Every failure
 /// is a warning — authentication already succeeded.
-pub(crate) async fn sync_default_env_after_login(flox: &mut Flox, handle: &str) {
-    if !flox.features.auto_default {
+pub(crate) async fn sync_default_env_after_login(config: &Config, flox: &mut Flox, handle: &str) {
+    if !flox.features.auto_default || !sync_enabled(config) {
         return;
     }
     if handle == floxhub_client::UNKNOWN_HANDLE {
@@ -612,12 +624,9 @@ pub(crate) async fn sync_default_env_after_login(flox: &mut Flox, handle: &str) 
             // resolves to it, and mutations sync as they happen.
         },
         Some(HomeDefault::Path(dot_flox)) => {
-            let declined = read_user_state_file(user_state_path(flox))
-                .ok()
-                .flatten()
-                .and_then(|state| state.confirmed_create_default_env)
-                == Some(false);
-            if declined {
+            // Pushing the local default creates `<handle>/default` upstream,
+            // so a recorded "No" to the creation offer applies here too.
+            if declined_default_env(flox) {
                 message::info(format!(
                     "Found a local default environment at '~/{DOT_FLOX}'. Not syncing it to FloxHub because you previously declined; run 'flox push' from your home directory to sync it.",
                 ));
