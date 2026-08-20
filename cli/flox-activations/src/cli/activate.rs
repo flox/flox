@@ -116,7 +116,7 @@ impl ActivateArgs {
 
         // Capture env snapshot *before* modifying the process environment so
         // the diff reflects the true pre-activation state.
-        let vars_from_env = VarsFromEnvironment::get_with_snapshot()?;
+        let vars_from_env = VarsFromEnvironment::get()?;
 
         // Unset FLOX_SHELL to detect the parent shell anew with each flox invocation.
         unsafe { std::env::remove_var("FLOX_SHELL") };
