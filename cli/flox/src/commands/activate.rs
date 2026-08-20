@@ -59,6 +59,7 @@ use crate::commands::{
     NoEnvironmentError,
     SHELL_COMPLETION_COMMAND,
     SHELL_COMPLETION_FILE,
+    auto_default,
     ensure_environment_trust,
     render_composition_manifest,
     uninitialized_environment_description,
@@ -305,13 +306,25 @@ impl Activate {
         }
 
         // Spawn a detached process to check for upgrades in the background.
+        // With sync mode on, the default environment fetches upstream state on
+        // every activation (still detached, never blocking this activation)
+        // instead of once a day, so a generation pushed from another machine
+        // or the web UI surfaces on the next activation.
+        let check_timeout = if flox.features.auto_default
+            && matches!(self.environment, EnvironmentSelect::Default)
+            && auto_default::sync_enabled(&config)
+        {
+            Some(0)
+        } else {
+            None
+        };
         let environment =
             UninitializedEnvironment::from_concrete_environment(&concrete_environment);
         spawn_detached_check_for_upgrades_process(
             &environment,
             None,
             &concrete_environment.log_path()?,
-            None,
+            check_timeout,
         )?;
 
         options
