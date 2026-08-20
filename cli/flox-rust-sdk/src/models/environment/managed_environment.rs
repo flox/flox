@@ -1200,6 +1200,12 @@ impl ManagedEnvironment {
         &self.pointer
     }
 
+    /// Whether opening this environment fell back to previously fetched
+    /// upstream state because FloxHub could not be reached.
+    pub fn used_stale_fallback(&self) -> bool {
+        self.floxmeta_branch.used_stale_fallback()
+    }
+
     pub(crate) fn generations(&self) -> Generations {
         self.floxmeta_branch.generations()
     }

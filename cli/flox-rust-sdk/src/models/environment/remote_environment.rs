@@ -295,6 +295,12 @@ impl RemoteEnvironment {
         self.inner.pointer()
     }
 
+    /// Whether opening this environment fell back to previously fetched
+    /// upstream state because FloxHub could not be reached.
+    pub fn used_stale_fallback(&self) -> bool {
+        self.inner.used_stale_fallback()
+    }
+
     /// Push local changes to FloxHub for this remote environment
     ///
     /// This pushes any local changes made to the cached remote environment back to FloxHub.

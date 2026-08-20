@@ -362,6 +362,13 @@ fn open_remote_default(
         &flox.floxhub,
     );
     let env = RemoteEnvironment::new(flox, pointer, generation).map_err(anyhow::Error::new)?;
+    // The SDK falls back to the last fetched state when a required fetch
+    // fails; say so at the product level instead of only in trace logs.
+    if env.used_stale_fallback() {
+        message::warning(format!(
+            "Could not reach FloxHub. Using the last fetched state of '{handle}/{DEFAULT_NAME}'.",
+        ));
+    }
     Ok(ConcreteEnvironment::Remote(env))
 }
 

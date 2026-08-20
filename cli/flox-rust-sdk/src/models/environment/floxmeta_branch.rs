@@ -86,6 +86,9 @@ pub struct FloxmetaBranch {
     floxmeta: FloxMeta,
     branch: String,
     remote_branch: String,
+    /// Whether opening fell back to previously fetched state because a
+    /// required fetch from FloxHub failed (e.g. network unreachable).
+    stale_fallback: bool,
 }
 
 #[derive(Debug, Error)]
@@ -178,7 +181,7 @@ impl FloxmetaBranch {
         // Ensure generation is locked
         let remote_branch = remote_branch_name(pointer);
         let local_branch = branch_name(pointer, dot_flox_path);
-        let lock = ensure_generation_locked(
+        let (lock, stale_fallback) = ensure_generation_locked(
             &remote_branch,
             &local_branch,
             &floxmeta,
@@ -194,9 +197,16 @@ impl FloxmetaBranch {
                 floxmeta,
                 branch: local_branch,
                 remote_branch,
+                stale_fallback,
             },
             lock,
         ))
+    }
+
+    /// Whether opening fell back to previously fetched state because a
+    /// required fetch from FloxHub failed (e.g. network unreachable).
+    pub fn used_stale_fallback(&self) -> bool {
+        self.stale_fallback
     }
 
     /// Access the underlying git provider
@@ -425,15 +435,17 @@ fn fetch_failure_allows_stale(err: &GitRemoteCommandError, unauthenticated: bool
 /// - If only rev is set, it exists (fetching if necessary)
 /// - If no lock provided, fetches latest from remote and creates new lock data
 ///
-/// Returns validated GenerationLock data that caller should write to disk
+/// Returns validated GenerationLock data that caller should write to disk,
+/// plus whether a failed fetch fell back to previously fetched state.
 fn ensure_generation_locked(
     remote_branch: &str,
     local_branch: &str,
     floxmeta: &FloxMeta,
     maybe_lock: Option<GenerationLock>,
     unauthenticated: bool,
-) -> Result<GenerationLock, FloxmetaBranchError> {
-    Ok(match maybe_lock {
+) -> Result<(GenerationLock, bool), FloxmetaBranchError> {
+    let mut used_stale_fallback = false;
+    let lock = match maybe_lock {
         // Use local_rev if we have it
         Some(lock) if lock.local_rev.is_some() => {
             // Verify local_rev exists in floxmeta
@@ -483,6 +495,7 @@ fn ensure_generation_locked(
                     }
                     // The verification below still decides whether the locked
                     // revision is actually present in the stale local state.
+                    used_stale_fallback = true;
                     warn!(%err, "could not fetch from FloxHub, falling back to previously fetched state");
                 }
             }
@@ -519,6 +532,7 @@ fn ensure_generation_locked(
                 {
                     return Err(FloxmetaBranchError::Fetch(err));
                 }
+                used_stale_fallback = true;
                 warn!(%err, "could not fetch from FloxHub, locking to the last fetched generation");
             }
 
@@ -534,7 +548,8 @@ fn ensure_generation_locked(
                 version: flox_core::Version::<1> {},
             }
         },
-    })
+    };
+    Ok((lock, used_stale_fallback))
 }
 
 /// Ensure the branch exists and points at rev or local_rev
@@ -777,6 +792,7 @@ pub mod test_helpers {
             },
             branch: "example.hash".into(),
             remote_branch: "example".into(),
+            stale_fallback: false,
         }
     }
 }
@@ -881,8 +897,9 @@ mod tests {
         let local_branch = branch_name(&test_pointer, &dot_flox_path);
 
         // No lockfile, should fetch latest
-        let lock = ensure_generation_locked(&remote_branch, &local_branch, &floxmeta, None, false)
-            .unwrap();
+        let (lock, _) =
+            ensure_generation_locked(&remote_branch, &local_branch, &floxmeta, None, false)
+                .unwrap();
 
         let expected = GenerationLock {
             rev: hash_2.clone(),
@@ -928,7 +945,7 @@ mod tests {
         };
 
         let expected_lock = input_lock.clone();
-        let lock = ensure_generation_locked(
+        let (lock, _) = ensure_generation_locked(
             &remote_branch,
             &local_branch,
             &floxmeta,
@@ -983,7 +1000,7 @@ mod tests {
         };
 
         let expected_lock = input_lock.clone();
-        let lock = ensure_generation_locked(
+        let (lock, _) = ensure_generation_locked(
             &remote_branch,
             &local_branch,
             &floxmeta,
@@ -1086,7 +1103,7 @@ mod tests {
         };
 
         let expected_lock = input_lock.clone();
-        let lock = ensure_generation_locked(
+        let (lock, _) = ensure_generation_locked(
             &remote_branch,
             &local_branch,
             &floxmeta,
@@ -1185,7 +1202,7 @@ mod tests {
         };
 
         let expected_lock = input_lock.clone();
-        let lock = ensure_generation_locked(
+        let (lock, _) = ensure_generation_locked(
             &remote_branch,
             &local_branch,
             &floxmeta,
