@@ -6,6 +6,7 @@ use std::process::Command;
 
 use anyhow::{Context, Result, bail};
 use bpaf::Bpaf;
+use flox_config::Config;
 use flox_core::data::environment_ref::EnvironmentName;
 use flox_events::{CliEnvironmentEditPayload, EnvDetail, EventKind, EventsHub};
 use flox_manifest::interfaces::{AsWritableManifest, WriteManifest};
@@ -36,7 +37,7 @@ use super::{
     activated_environments,
     environment_select,
 };
-use crate::commands::{EnvironmentSelectError, SHELL_COMPLETION_FILE, ensure_auth};
+use crate::commands::{EnvironmentSelectError, SHELL_COMPLETION_FILE, auto_default, ensure_auth};
 use crate::utils::dialog::{Confirm, Dialog};
 use crate::utils::errors::format_error;
 use crate::utils::events::env_detail_from_concrete;
@@ -81,7 +82,7 @@ pub enum EditAction {
 
 impl Edit {
     #[instrument(name = "edit", skip_all)]
-    pub async fn handle(self, mut flox: Flox) -> Result<()> {
+    pub async fn handle(self, config: Config, mut flox: Flox) -> Result<()> {
         // Record subcommand metric prior to environment_subcommand_metric below
         // in case we error before then
         subcommand_metric!("edit");
@@ -119,7 +120,17 @@ impl Edit {
 
                 let contents = Self::provided_manifest_contents(file)?;
 
-                Self::edit_manifest(&flox, &mut detected_environment, contents, env_detail).await?
+                let changed =
+                    Self::edit_manifest(&flox, &mut detected_environment, contents, env_detail)
+                        .await?;
+                if changed {
+                    auto_default::sync_default_env_to_floxhub(
+                        &config,
+                        &flox,
+                        &mut detected_environment,
+                    )
+                    .await;
+                }
             },
             EditAction::Rename { name } => {
                 let span = tracing::info_span!("rename");
@@ -180,7 +191,21 @@ impl Edit {
                 match sync_result {
                     SyncToGenerationResult::UpToDate => message::plain("No local changes to sync."),
                     SyncToGenerationResult::Synced => {
-                        message::updated("Environment successfully synced to a new generation.")
+                        message::updated("Environment successfully synced to a new generation.");
+                        // The new generation is a mutation like any other, so
+                        // the default environment pushes it to FloxHub.
+                        let mut concrete_environment = match generations_environment {
+                            GenerationsEnvironment::Managed(env) => {
+                                ConcreteEnvironment::Managed(env)
+                            },
+                            GenerationsEnvironment::Remote(env) => ConcreteEnvironment::Remote(env),
+                        };
+                        auto_default::sync_default_env_to_floxhub(
+                            &config,
+                            &flox,
+                            &mut concrete_environment,
+                        )
+                        .await;
                     },
                 }
             },
@@ -207,12 +232,13 @@ impl Edit {
         Ok(())
     }
 
+    /// Returns whether the edit changed the environment.
     async fn edit_manifest(
         flox: &Flox,
         environment: &mut ConcreteEnvironment,
         contents: Option<String>,
         env_detail: EnvDetail,
-    ) -> Result<()> {
+    ) -> Result<bool> {
         if let ConcreteEnvironment::Managed(environment) = environment
             && environment.has_local_changes(flox)?
             && contents.is_none()
@@ -289,7 +315,7 @@ impl Edit {
             },
         }
 
-        Ok(())
+        Ok(matches!(result, EditResult::Changed { .. }))
     }
 
     /// Interactively edit the manifest file
@@ -947,7 +973,7 @@ mod tests {
                 file: Some(composer_new_manifest_path),
             },
         }
-        .handle(flox)
+        .handle(Config::default(), flox)
         .with_subscriber(subscriber)
         .await
         .unwrap();
@@ -1000,7 +1026,7 @@ mod tests {
                 file: Some(composer_new_manifest_path),
             },
         }
-        .handle(flox)
+        .handle(Config::default(), flox)
         .with_subscriber(subscriber)
         .await
         .unwrap();

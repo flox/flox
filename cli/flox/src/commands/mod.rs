@@ -959,9 +959,9 @@ impl ModifyCommands {
         match self {
             ModifyCommands::Install(args) => args.handle(config, flox).await?,
             ModifyCommands::List(args) => args.handle(flox).await?,
-            ModifyCommands::Edit(args) => args.handle(flox).await?,
+            ModifyCommands::Edit(args) => args.handle(config, flox).await?,
             ModifyCommands::Include(args) => args.handle(flox).await?,
-            ModifyCommands::Upgrade(args) => args.handle(flox).await?,
+            ModifyCommands::Upgrade(args) => args.handle(config, flox).await?,
             ModifyCommands::Uninstall(args) => args.handle(config, flox).await?,
             ModifyCommands::Generations(args) => args.handle(config, flox).await?,
         }

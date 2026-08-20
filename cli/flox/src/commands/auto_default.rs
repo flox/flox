@@ -107,15 +107,25 @@ pub(crate) async fn resolve_default_environment(
 pub(crate) async fn open_or_create_default_environment(
     flox: &mut Flox,
 ) -> Result<ConcreteEnvironment> {
-    // Authenticate before resolving: installs into the default environment
-    // sync it to FloxHub, and catalog resolution is about to require
-    // authentication anyway (DEV-236), so the login happens up front rather
-    // than after a half-finished install. When the credential cannot be
-    // verified (e.g. FloxHub unreachable), this degrades to the cached
-    // checkout below instead of blocking the install.
+    let allow_create = !declined_default_env(flox);
+    open_default_environment_authed(flox, allow_create).await
+}
+
+/// Open the default environment for a mutating command, authenticating first.
+///
+/// Mutations of the default environment sync to FloxHub, and catalog
+/// resolution is about to require authentication anyway (DEV-236), so the
+/// login happens up front rather than after a half-finished mutation. When
+/// the credential cannot be verified (e.g. FloxHub unreachable), this
+/// degrades to the cached checkout instead of blocking the command.
+/// `allow_create` decides whether a missing environment may be created on
+/// FloxHub as a side effect.
+pub(crate) async fn open_default_environment_authed(
+    flox: &mut Flox,
+    allow_create: bool,
+) -> Result<ConcreteEnvironment> {
     super::ensure_auth(flox).await?;
     let source = owner_source(flox).await;
-    let allow_create = !declined_default_env(flox);
     let env = resolve_auto(flox, source, None, allow_create).await?;
     // Reopen at the active generation the way `detect_concrete_environment`
     // does: an environment activated at a specific generation must keep the

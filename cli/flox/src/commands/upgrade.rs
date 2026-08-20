@@ -1,6 +1,7 @@
 use anyhow::Result;
 use bpaf::Bpaf;
 use crossterm::style::Stylize;
+use flox_config::Config;
 use flox_events::{CliEnvironmentPayload, CliPackageUpgradePayload, EventKind, EventsHub, Outcome};
 use flox_manifest::interfaces::{AsLatestSchema, PackageLookup};
 use flox_manifest::lockfile::LockedPackage;
@@ -13,7 +14,7 @@ use tracing::{debug, info_span, instrument};
 
 use super::services::warn_manifest_changes_for_services;
 use super::{EnvironmentSelect, environment_select};
-use crate::commands::{ensure_auth, environment_description};
+use crate::commands::{auto_default, ensure_auth, environment_description};
 use crate::utils::events::env_detail_from_concrete;
 use crate::utils::message::{self, stderr_supports_color};
 use crate::utils::upgrade_output::{count_upgrade_categories, format_upgrade_summary};
@@ -35,7 +36,7 @@ pub struct Upgrade {
 }
 impl Upgrade {
     #[instrument(name = "upgrade", skip_all)]
-    pub async fn handle(self, mut flox: Flox) -> Result<()> {
+    pub async fn handle(self, config: Config, mut flox: Flox) -> Result<()> {
         // Record subcommand metric prior to environment_subcommand_metric below
         // in case we error before then
         subcommand_metric!("upgrade");
@@ -180,6 +181,13 @@ impl Upgrade {
                 }
             }
         });
+
+        // `store_path` is the signal that the upgrade actually wrote a new
+        // lockfile (dry runs and no-op upgrades returned earlier).
+        if result.store_path.is_some() {
+            auto_default::sync_default_env_to_floxhub(&config, &flox, &mut concrete_environment)
+                .await;
+        }
 
         Ok(())
     }
@@ -386,7 +394,7 @@ mod tests {
             dry_run: false,
             groups_or_iids: Vec::new(),
         }
-        .handle(flox)
+        .handle(Config::default(), flox)
         .await
         .unwrap();
 
@@ -459,7 +467,7 @@ mod tests {
             dry_run: true,
             groups_or_iids: Vec::new(),
         }
-        .handle(flox)
+        .handle(Config::default(), flox)
         .with_subscriber(subscriber)
         .await
         .unwrap();
@@ -501,7 +509,7 @@ mod tests {
             dry_run,
             groups_or_iids: Vec::new(),
         }
-        .handle(flox)
+        .handle(Config::default(), flox)
         .with_subscriber(subscriber)
         .await
         .unwrap();
@@ -744,7 +752,7 @@ mod tests {
             dry_run: true,
             groups_or_iids: Vec::new(),
         }
-        .handle(flox)
+        .handle(Config::default(), flox)
         .with_subscriber(subscriber)
         .await
         .unwrap();

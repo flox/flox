@@ -55,22 +55,33 @@ impl Uninstall {
             ensure_auth(&mut flox).await?;
         };
 
-        let mut concrete_environment = match self
-            .environment
-            .detect_concrete_environment(&mut flox, "Uninstall from")
-            .await
+        // Uninstalling mutates the default environment and syncs the result
+        // to FloxHub, so authenticate up front the way 'flox install -D'
+        // does — using the default environment stays free, changing it goes
+        // through FloxHub. Never create: uninstalling from a missing
+        // environment is an error.
+        let mut concrete_environment = if flox.features.auto_default
+            && matches!(self.environment, EnvironmentSelect::Default)
         {
-            Ok(concrete_environment) => concrete_environment,
-            Err(EnvironmentSelectError::EnvironmentError(EnvironmentError::DotFloxNotFound(
-                ref dir,
-            ))) => {
-                let parent = dir.parent().unwrap_or(dir).display().to_string();
-                Err(NoEnvironmentError::Directory(parent))?
-            },
-            Err(EnvironmentSelectError::EnvNotFoundInCurrentDirectory) => Err(
-                NoEnvironmentError::CurrentDirectoryUninstall(self.packages.join(" ")),
-            )?,
-            Err(e) => Err(e)?,
+            auto_default::open_default_environment_authed(&mut flox, false).await?
+        } else {
+            match self
+                .environment
+                .detect_concrete_environment(&mut flox, "Uninstall from")
+                .await
+            {
+                Ok(concrete_environment) => concrete_environment,
+                Err(EnvironmentSelectError::EnvironmentError(
+                    EnvironmentError::DotFloxNotFound(ref dir),
+                )) => {
+                    let parent = dir.parent().unwrap_or(dir).display().to_string();
+                    Err(NoEnvironmentError::Directory(parent))?
+                },
+                Err(EnvironmentSelectError::EnvNotFoundInCurrentDirectory) => Err(
+                    NoEnvironmentError::CurrentDirectoryUninstall(self.packages.join(" ")),
+                )?,
+                Err(e) => Err(e)?,
+            }
         };
         environment_subcommand_metric!("uninstall", concrete_environment);
         if let Err(err) = EventsHub::global().record_event(EventKind::CliEnvironmentUninstall(
