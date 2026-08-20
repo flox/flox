@@ -53,9 +53,10 @@ teardown() {
 # ---------------------------------------------------------------------------- #
 
 @test "resolving while logged out prints the auth warning" {
+  skip_x86_64_darwin_replay
   # The suite runs "logged in" by default; this test needs the logged-out state.
   unset FLOX_FLOXHUB_TOKEN
-  flox_init_pinned
+  "$FLOX_BIN" init
   run "$FLOX_BIN" install hello
   assert_success
   assert_output --partial "$RESOLVE_AUTH_WARNING"
@@ -63,8 +64,9 @@ teardown() {
 
 # DEV-236: the warning must carry the auth explainer link, not the install docs.
 @test "the auth warning links to the auth explainer page" {
+  skip_x86_64_darwin_replay
   unset FLOX_FLOXHUB_TOKEN
-  flox_init_pinned
+  "$FLOX_BIN" init
   run "$FLOX_BIN" install hello
   assert_success
   assert_output --partial "$RESOLVE_AUTH_DOCS_URL"
@@ -72,23 +74,26 @@ teardown() {
 }
 
 @test "resolving while logged in does NOT print the auth warning" {
-  flox_init_pinned
+  skip_x86_64_darwin_replay
+  "$FLOX_BIN" init
   run "$FLOX_BIN" install hello
   assert_success
   refute_output --partial "$RESOLVE_AUTH_WARNING"
 }
 
 @test "'-q' suppresses the auth warning" {
+  skip_x86_64_darwin_replay
   unset FLOX_FLOXHUB_TOKEN
-  flox_init_pinned
+  "$FLOX_BIN" init
   run "$FLOX_BIN" -q install hello
   assert_success
   refute_output --partial "$RESOLVE_AUTH_WARNING"
 }
 
 @test "'-q' does not consume the rate-limit window" {
+  skip_x86_64_darwin_replay
   unset FLOX_FLOXHUB_TOKEN
-  flox_init_pinned
+  "$FLOX_BIN" init
   run "$FLOX_BIN" -q install hello
   refute_output --partial "$RESOLVE_AUTH_WARNING"
   # The quiet invocation must not have written the stamp: the next
@@ -100,9 +105,10 @@ teardown() {
 }
 
 @test "resolving with an expired token prints the auth warning" {
+  skip_x86_64_darwin_replay
   # Same shape as the suite token but with exp in the past (2001-09-09).
   export FLOX_FLOXHUB_TOKEN="eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3guZGV2L2hhbmRsZSI6InRlc3QiLCJleHAiOjEwMDAwMDAwMDB9.6-nbzFzQEjEX7dfWZFLE-I_qW2N_-9W2HFzzfsquI74"
-  flox_init_pinned
+  "$FLOX_BIN" init
   run "$FLOX_BIN" install hello
   assert_success
   assert_output --partial "$RESOLVE_AUTH_WARNING"
@@ -120,10 +126,11 @@ teardown() {
 }
 
 @test "'flox activate' with existing lockfile does NOT print the auth warning" {
+  skip_x86_64_darwin_replay
   # Lock the environment while logged in, then activate logged out: the
   # lockfile means no resolve happens, so no warning — the case that must
   # stay quiet for `flox activate` in shell rc files.
-  flox_init_pinned
+  "$FLOX_BIN" init
   "$FLOX_BIN" install hello
   unset FLOX_FLOXHUB_TOKEN
   run "$FLOX_BIN" activate -- true
@@ -136,8 +143,9 @@ teardown() {
 # ---------------------------------------------------------------------------- #
 
 @test "a second resolve within the rate-limit window does NOT warn again" {
+  skip_x86_64_darwin_replay
   unset FLOX_FLOXHUB_TOKEN
-  flox_init_pinned
+  "$FLOX_BIN" init
   run "$FLOX_BIN" install hello
   assert_output --partial "$RESOLVE_AUTH_WARNING"
   # Force a fresh resolve by removing the lockfile.
@@ -148,8 +156,9 @@ teardown() {
 }
 
 @test "a resolve after the rate-limit window expires warns again" {
+  skip_x86_64_darwin_replay
   unset FLOX_FLOXHUB_TOKEN
-  flox_init_pinned
+  "$FLOX_BIN" init
   "$FLOX_BIN" install hello
   # Backdate the stamp beyond the 8 hour window.
   echo '{"last_warning":"2020-01-01T00:00:00Z"}' > "$FLOX_CACHE_DIR/$STAMP_FILE_NAME"
