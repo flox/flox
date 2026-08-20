@@ -79,7 +79,7 @@ pub enum ResolveError {
     // todo: this should probably part of some validation logic of the manifest file
     //       rather than occurring during the locking process creation
     #[error(
-        "'{install_id}' specifies disabled or unknown system '{system}' (enabled systems: {enabled_systems})",
+        "'{install_id}' specifies disabled or unknown system '{system}' (enabled systems: {enabled_systems}).\n\nAdd '{system}' to 'options.systems' in manifest.toml",
         enabled_systems=enabled_systems.join(", ")
     )]
     SystemUnavailableInManifest {
