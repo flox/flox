@@ -141,6 +141,14 @@ pub struct FloxConfig {
     /// (default: true)
     pub upgrade_notifications: Option<bool>,
 
+    /// Print the advisory FloxHub login reminder when not logged in
+    /// ("You are not logged in to FloxHub. Run 'flox auth login' to
+    /// log in."). Authentication *errors* — from commands such as
+    /// 'flox push' that genuinely require a login — are unaffected.
+    ///
+    /// (default: true)
+    pub auth_notifications: Option<bool>,
+
     /// Configuration for 'flox publish'.
     pub publish: Option<PublishConfig>,
 

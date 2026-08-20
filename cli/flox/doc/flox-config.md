@@ -70,6 +70,19 @@ flox config --set 'trusted_environments."owner/name"' trust
 
 # SUPPORTED CONFIGURATION OPTIONS
 
+`auth_notifications`
+:   Print the advisory reminder shown after a command when you are not
+    logged in to FloxHub:
+    ```console
+    You are not logged in to FloxHub. Run 'flox auth login' to log in.
+    ```
+
+    Set to `false` to quiet it.
+    Authentication *errors* are unaffected: commands that require a
+    login, such as `flox push`, still fail with an explanation.
+
+    (default: true)
+
 `auto_activate`
 :   How auto-activation treats environments you have not yet allowed or denied.
     Possible values are `prompt` (default), `allowlist`, and `disabled`.

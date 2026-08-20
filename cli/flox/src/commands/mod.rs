@@ -592,8 +592,9 @@ impl FloxArgs {
     ///
     /// A user who is not logged in — no token, or a parsed token that has
     /// expired — is reminded to run 'flox auth login'. The reminder is
-    /// suppressed for `flox auth` subcommands, the prompt-hook flow, and
-    /// invocations nested inside an activation.
+    /// suppressed for `flox auth` subcommands, the prompt-hook flow,
+    /// invocations nested inside an activation, and when the
+    /// `auth_notifications` config key is set to `false`.
     ///
     /// The token is not consumed when the configured authn mode does not use
     /// it (e.g. Kerberos) — construction cannot fail there, so warning about
@@ -660,7 +661,8 @@ impl FloxArgs {
                     // shell, including in-place `eval "$(flox activate)"` ones, so
                     // it is a reliable signal even across the parent shell.
                     let nested = activated_environments().last_active().is_some();
-                    if !is_auth_command && !self.is_prompt_hook_flow() && !nested {
+                    let quieted = !config.flox.auth_notifications.unwrap_or(true);
+                    if !is_auth_command && !self.is_prompt_hook_flow() && !nested && !quieted {
                         message::warning(
                             "You are not logged in to FloxHub. Run 'flox auth login' to log in.",
                         );
