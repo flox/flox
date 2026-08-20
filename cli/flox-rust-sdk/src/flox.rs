@@ -121,9 +121,20 @@ impl Flox {
             })),
             AuthContext::Auth0(None) => Err(AuthFailure::NotLoggedIn),
             AuthContext::AccessToken(token) => {
+                // A fresh disk cache answers without a leading, blocking
+                // FloxHub request (see [pat_identity_cache]).
+                if let Some(identity) = pat_identity_cache::read(self, token.secret()) {
+                    return Ok(Some(identity));
+                }
                 match self.floxhub_client.resolve_identity(token).await {
-                    Ok(identity) => Ok(Some(identity)),
-                    Err(IdentityError::Unauthorized) => Err(AuthFailure::TokenExpired),
+                    Ok(identity) => {
+                        pat_identity_cache::write(self, token.secret(), &identity);
+                        Ok(Some(identity))
+                    },
+                    Err(IdentityError::Unauthorized) => {
+                        pat_identity_cache::invalidate(self);
+                        Err(AuthFailure::TokenExpired)
+                    },
                     Err(_) => Ok(None),
                 }
             },
@@ -132,6 +143,140 @@ impl Flox {
                 expires_at: None,
             })),
             AuthContext::Kerberos(None) => Err(AuthFailure::NoKerberosTicket),
+        }
+    }
+}
+
+/// Disk cache for personal-access-token identities.
+///
+/// A PAT is opaque: its identity can only come from
+/// `GET /api/v1/accounts/me`, which would put a leading, blocking FloxHub
+/// request in front of every command — including `flox activate`, which must
+/// stay a straight-line local path. A token's identity never changes, so a
+/// resolved identity is cached on disk and trusted for 24 hours; the server
+/// remains the authority for whether the token still authenticates actual
+/// requests, so the TTL only bounds how long a revoked token's handle is
+/// still displayed.
+mod pat_identity_cache {
+    use std::path::PathBuf;
+
+    use chrono::{DateTime, Duration, Utc};
+    use serde::{Deserialize, Serialize};
+    use tracing::debug;
+    use url::Url;
+
+    use super::{Flox, UserIdentity};
+
+    const PAT_IDENTITY_CACHE_FILENAME: &str = "pat-identity.json";
+
+    fn ttl() -> Duration {
+        Duration::hours(24)
+    }
+
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    struct CachedPatIdentity {
+        token_fingerprint: String,
+        floxhub_base_url: Url,
+        handle: String,
+        expires_at: Option<DateTime<Utc>>,
+        resolved_at: DateTime<Utc>,
+    }
+
+    fn cache_path(flox: &Flox) -> PathBuf {
+        flox.cache_dir.join(PAT_IDENTITY_CACHE_FILENAME)
+    }
+
+    fn fingerprint(secret: &str) -> String {
+        flox_core::blake3_hex(secret.as_bytes())
+    }
+
+    /// Read the cached identity for `secret` on the configured FloxHub,
+    /// if fresh.
+    pub(super) fn read(flox: &Flox, secret: &str) -> Option<UserIdentity> {
+        let contents = std::fs::read_to_string(cache_path(flox)).ok()?;
+        let cached: CachedPatIdentity = serde_json::from_str(&contents).ok()?;
+        if cached.token_fingerprint != fingerprint(secret)
+            || cached.floxhub_base_url != *flox.floxhub.base_url()
+            || Utc::now() - cached.resolved_at > ttl()
+        {
+            return None;
+        }
+        Some(UserIdentity {
+            handle: cached.handle,
+            expires_at: cached.expires_at,
+        })
+    }
+
+    /// Cache a resolved identity. Best effort: the cache is an optimization,
+    /// so failures are logged and ignored.
+    pub(super) fn write(flox: &Flox, secret: &str, identity: &UserIdentity) {
+        let cached = CachedPatIdentity {
+            token_fingerprint: fingerprint(secret),
+            floxhub_base_url: flox.floxhub.base_url().clone(),
+            handle: identity.handle.clone(),
+            expires_at: identity.expires_at,
+            resolved_at: Utc::now(),
+        };
+        if let Err(err) = std::fs::create_dir_all(&flox.cache_dir) {
+            debug!(%err, "could not create cache dir for PAT identity cache");
+            return;
+        }
+        match serde_json::to_string(&cached) {
+            Ok(contents) => {
+                if let Err(err) = std::fs::write(cache_path(flox), contents) {
+                    debug!(%err, "could not write PAT identity cache");
+                }
+            },
+            Err(err) => debug!(%err, "could not serialize PAT identity cache"),
+        }
+    }
+
+    /// Drop the cache, e.g. after the server rejected the token.
+    pub(super) fn invalidate(flox: &Flox) {
+        if let Err(err) = std::fs::remove_file(cache_path(flox))
+            && err.kind() != std::io::ErrorKind::NotFound
+        {
+            debug!(%err, "could not remove PAT identity cache");
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use flox_core::floxhub::Floxhub;
+        use floxhub_client::test_helpers::test_identity;
+
+        use super::*;
+        use crate::flox::test_helpers::flox_instance;
+
+        #[test]
+        fn cache_round_trips_and_is_keyed_by_token_and_floxhub() {
+            let (mut flox, _tempdir) = flox_instance();
+            let identity = test_identity("somebody");
+
+            assert_eq!(read(&flox, "flox_pat_secret"), None);
+
+            write(&flox, "flox_pat_secret", &identity);
+            assert_eq!(read(&flox, "flox_pat_secret"), Some(identity.clone()));
+
+            // A different token must not reuse the cached identity.
+            assert_eq!(read(&flox, "flox_pat_other"), None);
+
+            // A different FloxHub must not reuse the cached identity.
+            flox.floxhub = Floxhub::new(
+                Url::parse("https://hub.other.example.com").unwrap(),
+                None,
+                None,
+            )
+            .unwrap();
+            assert_eq!(read(&flox, "flox_pat_secret"), None);
+        }
+
+        #[test]
+        fn invalidate_removes_the_cache() {
+            let (flox, _tempdir) = flox_instance();
+            write(&flox, "flox_pat_secret", &test_identity("somebody"));
+            invalidate(&flox);
+            assert_eq!(read(&flox, "flox_pat_secret"), None);
         }
     }
 }
