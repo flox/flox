@@ -55,7 +55,6 @@ let
       # oauth client id
       OAUTH_CLIENT_ID = "fGrotHBfQr9X1PHGbFoifEWaDPyWZDmc";
       OAUTH_BASE_URL = "${auth0BaseUrl}";
-      OAUTH_AUTH_URL = "${auth0BaseUrl}/authorize";
       OAUTH_TOKEN_URL = "${auth0BaseUrl}/oauth/token";
       OAUTH_DEVICE_AUTH_URL = "${auth0BaseUrl}/oauth/device/code";
 

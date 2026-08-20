@@ -280,7 +280,6 @@ gen-unit-data-for-publish floxhub_repo_path force="": (reset-floxhub-db floxhub_
 
     # Grab configuration variables from the FloxHub repo's environment
     # (Only needed if you want to use Auth0 instead of the test users)
-    # export _FLOX_OAUTH_AUTH_URL="$(flox activate -d "{{ floxhub_repo_path }}" -- bash -c 'echo $_FLOX_OAUTH_AUTH_URL')"
     # export _FLOX_OAUTH_TOKEN_URL="$(flox activate -d "{{ floxhub_repo_path }}" -- bash -c 'echo $_FLOX_OAUTH_TOKEN_URL')"
     # export _FLOX_OAUTH_DEVICE_AUTH_URL="$(flox activate -d "{{ floxhub_repo_path }}" -- bash -c 'echo $_FLOX_OAUTH_DEVICE_AUTH_URL')"
     # export _FLOX_OAUTH_CLIENT_ID="$(flox activate -d "{{ floxhub_repo_path }}" -- bash -c 'echo $_FLOX_OAUTH_CLIENT_ID')"
