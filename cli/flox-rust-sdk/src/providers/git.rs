@@ -3,9 +3,10 @@ use std::env;
 use std::ffi::{OsStr, OsString};
 use std::os::unix::ffi::OsStringExt;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
 use std::str::FromStr;
 use std::sync::LazyLock;
+use std::time::{Duration, Instant};
 
 use chrono::{DateTime, Utc};
 use thiserror::Error;
@@ -150,6 +151,8 @@ pub enum GitCommandError {
     InvalidOutput(String),
     #[error("Remote URL was invalid")]
     InvalidUrl(#[source] url::ParseError),
+    #[error("git command timed out after {}s", .0.as_secs())]
+    Timeout(Duration),
 }
 
 impl GitCommandError {
@@ -355,6 +358,57 @@ impl GitCommandProvider {
     pub(crate) fn run_command(command: &mut Command) -> Result<OsString, GitCommandError> {
         debug!("running git command: {}", command.display());
         let out = command.output()?;
+
+        if !out.status.success() {
+            let stdout = String::from_utf8_lossy(&out.stdout).trim().to_string();
+            let stderr = String::from_utf8_lossy(&out.stderr).trim().to_string();
+
+            return Err(GitCommandError::BadExit(
+                out.status.code().unwrap_or(-1),
+                stdout,
+                stderr,
+            ));
+        }
+
+        Ok(OsString::from_vec(out.stdout))
+    }
+
+    /// Like [GitCommandProvider::run_command], but kill the command and
+    /// return [GitCommandError::Timeout] if it does not finish within
+    /// `timeout`. Use for network commands that must not stall the caller
+    /// when a fallback exists -- a black-holed connection can hang a fetch
+    /// far longer than any interactive command may block.
+    ///
+    /// Output is collected through pipes that are only drained after exit;
+    /// commands whose output exceeds the pipe buffer stall and get killed at
+    /// the deadline, so this is only suitable for commands with small output.
+    pub(crate) fn run_command_with_timeout(
+        command: &mut Command,
+        timeout: Duration,
+    ) -> Result<OsString, GitCommandError> {
+        debug!(
+            ?timeout,
+            "running git command with timeout: {}",
+            command.display()
+        );
+        command
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+        let mut child = command.spawn()?;
+        let deadline = Instant::now() + timeout;
+        loop {
+            match child.try_wait()? {
+                Some(_) => break,
+                None if Instant::now() >= deadline => {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return Err(GitCommandError::Timeout(timeout));
+                },
+                None => std::thread::sleep(Duration::from_millis(50)),
+            }
+        }
+        let out = child.wait_with_output()?;
 
         if !out.status.success() {
             let stdout = String::from_utf8_lossy(&out.stdout).trim().to_string();
@@ -683,6 +737,22 @@ impl GitCommandProvider {
         Ok(())
     }
 
+    /// Like [GitCommandProvider::fetch_ref], but bounded by `timeout`.
+    /// A timeout classifies as [GitRemoteCommandError::NetworkUnreachable],
+    /// so callers with previously fetched state fall back to it.
+    pub fn fetch_ref_with_timeout(
+        &self,
+        repository: &str,
+        r#ref: &str,
+        timeout: Duration,
+    ) -> Result<(), GitRemoteCommandError> {
+        GitCommandProvider::run_command_with_timeout(
+            self.new_command().arg("fetch").arg(repository).arg(r#ref),
+            timeout,
+        )?;
+        Ok(())
+    }
+
     /// Like [GitCommandProvider::push] but allows to specify the refspec explicitly
     /// and returns the (push status flag)[https://git-scm.com/docs/git-push#Documentation/git-push.txt-flag]
     /// if successful.
@@ -893,6 +963,12 @@ impl From<GitCommandError> for GitRemoteCommandError {
                     .unwrap_or(branch_name);
                 debug!("Could not find remote branch in upstream: {branch_name}");
                 GitRemoteCommandError::RefNotFound(branch_name.to_string())
+            },
+            // A black-holed connection is a form of network unreachability;
+            // classifying a timeout as such lets stale-state fallbacks engage.
+            e @ GitCommandError::Timeout(_) => {
+                debug!("Git command timed out: {e}");
+                GitRemoteCommandError::NetworkUnreachable(e)
             },
             e => GitRemoteCommandError::Command(e),
         }
@@ -1891,6 +1967,21 @@ pub mod tests {
         // repo_2 has branch_2 but not the commit on branch_3
         assert_eq!(repo_2.branch_hash("branch_2").unwrap(), hash_branch_2);
         assert!(!repo_2.contains_commit(&hash_branch_3).unwrap());
+    }
+
+    /// A stalled command is killed at the deadline and classified as a
+    /// timeout; a fast command completes normally.
+    #[test]
+    fn run_command_with_timeout_kills_stalled_commands() {
+        let mut stalled = Command::new("sleep");
+        stalled.arg("5");
+        let err =
+            GitCommandProvider::run_command_with_timeout(&mut stalled, Duration::from_millis(100))
+                .unwrap_err();
+        assert!(matches!(err, GitCommandError::Timeout(_)));
+
+        let mut fast = Command::new("true");
+        GitCommandProvider::run_command_with_timeout(&mut fast, Duration::from_secs(5)).unwrap();
     }
 
     #[test]

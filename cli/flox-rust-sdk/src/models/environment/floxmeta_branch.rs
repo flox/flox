@@ -1,5 +1,6 @@
 use std::fs;
 use std::path::Path;
+use std::time::Duration;
 
 use flox_core::data::environment_ref::RemoteEnvironmentRef;
 use fslock::LockFile;
@@ -430,6 +431,30 @@ fn fetch_failure_allows_stale(err: &GitRemoteCommandError, unauthenticated: bool
     }
 }
 
+/// How long a fetch may take when previously fetched state can serve as a
+/// fallback. Without a bound, a black-holed connection hangs the fetch on
+/// git's own (much longer) limits, and opening an already-fetched
+/// environment must not stall on the network (DEV-269).
+const STALE_FALLBACK_FETCH_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// Fetch the remote branch, bounding the fetch with a timeout when local
+/// fallback state exists. Without fallback state the fetch must be given
+/// every chance to succeed, so it runs unbounded.
+fn fetch_remote_branch(
+    floxmeta: &FloxMeta,
+    remote_branch: &str,
+    can_fall_back: bool,
+) -> Result<(), GitRemoteCommandError> {
+    let refspec = format!("+{0}:{0}", remote_branch);
+    if can_fall_back {
+        floxmeta
+            .git
+            .fetch_ref_with_timeout("dynamicorigin", &refspec, STALE_FALLBACK_FETCH_TIMEOUT)
+    } else {
+        floxmeta.git.fetch_ref("dynamicorigin", &refspec)
+    }
+}
+
 /// Takes an optional GenerationLock (read from disk by caller) and validates that:
 /// - If local_rev is set, it exists in the floxmeta repo
 /// - If only rev is set, it exists (fetching if necessary)
@@ -481,16 +506,12 @@ fn ensure_generation_locked(
                 );
                 let _guard = span.enter();
 
-                if let Err(err) = floxmeta
+                let can_fall_back = floxmeta
                     .git
-                    .fetch_ref("dynamicorigin", &format!("+{0}:{0}", remote_branch))
-                {
-                    if !fetch_failure_allows_stale(&err, unauthenticated)
-                        || !floxmeta
-                            .git
-                            .has_branch(remote_branch)
-                            .map_err(FloxmetaBranchError::CheckBranchExists)?
-                    {
+                    .has_branch(remote_branch)
+                    .map_err(FloxmetaBranchError::CheckBranchExists)?;
+                if let Err(err) = fetch_remote_branch(floxmeta, remote_branch, can_fall_back) {
+                    if !fetch_failure_allows_stale(&err, unauthenticated) || !can_fall_back {
                         return Err(FloxmetaBranchError::Fetch(err));
                     }
                     // The verification below still decides whether the locked
@@ -520,16 +541,12 @@ fn ensure_generation_locked(
             );
             let _guard = span.enter();
 
-            if let Err(err) = floxmeta
+            let can_fall_back = floxmeta
                 .git
-                .fetch_ref("dynamicorigin", &format!("+{0}:{0}", remote_branch))
-            {
-                if !fetch_failure_allows_stale(&err, unauthenticated)
-                    || !floxmeta
-                        .git
-                        .has_branch(remote_branch)
-                        .map_err(FloxmetaBranchError::CheckBranchExists)?
-                {
+                .has_branch(remote_branch)
+                .map_err(FloxmetaBranchError::CheckBranchExists)?;
+            if let Err(err) = fetch_remote_branch(floxmeta, remote_branch, can_fall_back) {
+                if !fetch_failure_allows_stale(&err, unauthenticated) || !can_fall_back {
                     return Err(FloxmetaBranchError::Fetch(err));
                 }
                 used_stale_fallback = true;
