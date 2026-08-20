@@ -23,6 +23,7 @@ use std::str::FromStr;
 
 use anyhow::Result;
 use bpaf::Bpaf;
+use flox_config::Config;
 use flox_manifest::raw::{CatalogPackage, RawManifestError};
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::providers::buildenv::{
@@ -43,9 +44,12 @@ use floxhub_client::{
 };
 use indoc::indoc;
 use thiserror::Error;
+use toml_edit::Key;
 use tracing::{debug, info_span};
 
+use crate::commands::general::{remove_config_key_with_query, update_config_with_query};
 use crate::subcommand_metric;
+use crate::utils::message;
 
 // ---------------------------------------------------------------------------
 // Error types
@@ -78,6 +82,24 @@ pub enum RunError {
     /// The value passed to `-p`/`--package` was not valid UTF-8.
     #[error("Package specs must be valid UTF-8.")]
     PackageSpecNotUtf8,
+
+    /// `--reselect` appeared without a value.
+    #[error(
+        "Missing value for '--reselect'.\n\
+         Use '--reselect <COMMAND>' to clear the saved package preference for a command."
+    )]
+    MissingReselectValue,
+
+    /// The value passed to `--reselect` was not valid UTF-8.
+    #[error("Command names must be valid UTF-8.")]
+    CommandNameNotUtf8,
+
+    /// `--reselect` was combined with a command to run.
+    #[error(
+        "'--reselect' cannot be combined with a command to run.\n\
+         Run 'flox run --reselect <COMMAND>' on its own to clear a saved package preference."
+    )]
+    ReselectWithCommand,
 
     /// `CatalogPackage::from_str` failed.
     #[error(
@@ -162,6 +184,9 @@ pub enum RunError {
 pub enum ParsedArgs {
     /// `-h`/`--help` was seen before the first positional or `--`.
     Help,
+    /// `--reselect <COMMAND>` was seen; clear that command's saved preference
+    /// and run nothing.
+    Reselect(String),
     /// A fully-specified run invocation.
     Run(RunArgs),
 }
@@ -169,8 +194,11 @@ pub enum ParsedArgs {
 /// Validated arguments produced by the POSIX state machine.
 #[derive(Debug, Clone, PartialEq)]
 pub struct RunArgs {
-    /// Package spec from `-p`/`--package` (required, plain form only).
-    pub package: String,
+    /// Package spec from `-p`/`--package` (plain form only).
+    ///
+    /// `None` when no `-p` was given. Parsing accepts that; [`exec_run`]
+    /// rejects it, because it is the only consumer that needs a package.
+    pub package: Option<String>,
     /// Command name (first positional argument).
     pub executable: OsString,
     /// Remaining arguments forwarded verbatim to the command.
@@ -194,7 +222,7 @@ pub struct Run {
 impl Run {
     /// Entry point: parse args with POSIX stop-at-first-positional semantics,
     /// then resolve, download, and exec.
-    pub async fn handle(self, flox: Flox) -> Result<()> {
+    pub async fn handle(self, config: Config, flox: Flox) -> Result<()> {
         subcommand_metric!("run");
 
         // Re-read raw OS args. bpaf has already consumed the first `--`, so
@@ -216,9 +244,57 @@ impl Run {
                 print_help();
                 Ok(())
             },
+            ParsedArgs::Reselect(command) => {
+                subcommand_metric!("run::reselect");
+                let cleared = clear_run_preference(&config.flox.config_dir, &command)?;
+                if cleared {
+                    message::updated(format!(
+                        "Cleared the saved package preference for '{command}'."
+                    ));
+                } else {
+                    message::updated(format!("No saved package preference for '{command}'."));
+                }
+                Ok(())
+            },
             ParsedArgs::Run(run_args) => exec_run(run_args, &flox).await,
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// run_preferences config helpers
+// ---------------------------------------------------------------------------
+
+/// Build the `run_preferences.<command>` key path.
+///
+/// Both segments are `Key::new`, never `Key::parse`: a command name can
+/// contain `.`, and dotted-key parsing would shatter it into nested tables
+/// instead of writing one literal key. `flox-config`'s
+/// `writing_auto_activate_preference_for_path_with_dot` in `src/write.rs` is
+/// the regression test for the equivalent hazard on the auto-activation path.
+fn run_preference_query(command: &str) -> [Key; 2] {
+    [Key::new("run_preferences"), Key::new(command)]
+}
+
+/// Record the package the user chose to provide `command`.
+///
+/// Only the interactive disambiguation prompt calls this; see
+/// [`flox_config::FloxConfig::run_preferences`]. That prompt does not exist
+/// yet, so nothing but the tests calls this today — the writer ships with the
+/// config field so the two stay in step.
+#[allow(dead_code)]
+pub fn write_run_preference(config_dir: &Path, command: &str, attr_path: &str) -> Result<()> {
+    update_config_with_query(config_dir, &run_preference_query(command), Some(attr_path))?;
+    Ok(())
+}
+
+/// Forget the package the user chose to provide `command`.
+///
+/// Returns whether an entry was actually removed. Clearing an absent
+/// preference is a success, not an error: the caller asked to be prompted
+/// again next time, and that is already true.
+pub fn clear_run_preference(config_dir: &Path, command: &str) -> Result<bool> {
+    remove_config_key_with_query(config_dir, &run_preference_query(command))
 }
 
 // ---------------------------------------------------------------------------
@@ -233,14 +309,17 @@ impl Run {
 /// - `-p` / `--package` (space form only) → consume next arg as package spec
 /// - `-p=…` / `--package=…` / bundled forms → `UnknownFlag`
 /// - `--` → force positional mode; next arg is the command even if it starts with `-`
+/// - `--reselect` (space form only) → consume next arg as a command name
 /// - any other `"-…"` → `UnknownFlag`
 ///
 /// After the first positional (or after `--`), everything is forwarded
 /// verbatim including any literal `--`.
 ///
-/// After the loop: missing `-p` is reported before missing command.
+/// A missing `-p` is not an error here — [`RunArgs::package`] is optional and
+/// [`exec_run`] enforces it. Only a missing command is rejected.
 pub fn parse_run_args(args: Vec<OsString>) -> Result<ParsedArgs, RunError> {
     let mut package: Option<String> = None;
+    let mut reselect: Option<String> = None;
     let mut executable: Option<OsString> = None;
     let mut passthrough: Vec<OsString> = Vec::new();
 
@@ -274,6 +353,13 @@ pub fn parse_run_args(args: Vec<OsString>) -> Result<ParsedArgs, RunError> {
                     .map_err(|_| RunError::PackageSpecNotUtf8)?;
                 package = Some(value);
             },
+            Some("--reselect") => {
+                let value_os = iter.next().ok_or(RunError::MissingReselectValue)?;
+                let value = value_os
+                    .into_string()
+                    .map_err(|_| RunError::CommandNameNotUtf8)?;
+                reselect = Some(value);
+            },
             Some(s) if s.starts_with('-') => {
                 return Err(RunError::UnknownFlag(s.to_owned()));
             },
@@ -287,8 +373,15 @@ pub fn parse_run_args(args: Vec<OsString>) -> Result<ParsedArgs, RunError> {
         }
     }
 
-    // Report missing package before missing command.
-    let package = package.ok_or(RunError::MissingPackage)?;
+    // `--reselect` is a one-shot config edit, so it cannot also name a command
+    // to run.
+    if let Some(command) = reselect {
+        if executable.is_some() {
+            return Err(RunError::ReselectWithCommand);
+        }
+        return Ok(ParsedArgs::Reselect(command));
+    }
+
     let executable = executable.ok_or(RunError::NoExecutable)?;
 
     Ok(ParsedArgs::Run(RunArgs {
@@ -381,7 +474,7 @@ async fn download_custom_catalog_package(
 
 /// Resolve, download, and exec the requested command.
 async fn exec_run(run_args: RunArgs, flox: &Flox) -> Result<()> {
-    let pkg_spec = run_args.package.clone();
+    let pkg_spec = run_args.package.clone().ok_or(RunError::MissingPackage)?;
 
     // 1. Parse the package spec and reject unsupported syntax.
     let catalog_pkg = CatalogPackage::from_str(&pkg_spec)
@@ -854,9 +947,11 @@ pub fn print_help() {
         Run a command from a Flox Catalog package
 
         Usage: flox run -p <PACKAGE> -- <COMMAND> [ARGS...]
+               flox run --reselect <COMMAND>
 
         Options:
           -p, --package <PACKAGE>   Package that provides the command (required)
+              --reselect <COMMAND>  Forget the saved package preference for a command
           -h, --help                Print this help
 
         Always use '--' to separate flox flags from the command and its arguments.
@@ -871,7 +966,7 @@ pub fn print_help() {
 
         Limitations:
           Version constraints (@) and output selectors (^) are not supported.
-          The -p flag is always required.
+          The -p flag is always required to run a command.
 
         Caching:
           Downloaded store paths are registered as GC roots under
@@ -891,6 +986,8 @@ mod tests {
     use std::ffi::OsString;
     #[cfg(unix)]
     use std::os::unix::ffi::OsStringExt;
+
+    use flox_config::FLOX_CONFIG_FILE;
 
     use super::*;
 
@@ -913,7 +1010,7 @@ mod tests {
         assert_eq!(
             result,
             ParsedArgs::Run(RunArgs {
-                package: "binutils".to_string(),
+                package: Some("binutils".to_string()),
                 executable: os("readelf"),
                 args: os_vec(&["-a", "/bin/ls"]),
             })
@@ -926,7 +1023,7 @@ mod tests {
         assert_eq!(
             result,
             ParsedArgs::Run(RunArgs {
-                package: "binutils".to_string(),
+                package: Some("binutils".to_string()),
                 executable: os("readelf"),
                 args: vec![],
             })
@@ -939,7 +1036,7 @@ mod tests {
         assert_eq!(
             result,
             ParsedArgs::Run(RunArgs {
-                package: "somepkg".to_string(),
+                package: Some("somepkg".to_string()),
                 executable: os("-weirdname"),
                 args: vec![],
             })
@@ -953,7 +1050,7 @@ mod tests {
         assert_eq!(
             result,
             ParsedArgs::Run(RunArgs {
-                package: "x".to_string(),
+                package: Some("x".to_string()),
                 executable: os("cmd"),
                 args: os_vec(&["--", "-z"]),
             })
@@ -961,24 +1058,40 @@ mod tests {
     }
 
     #[test]
-    fn no_args_returns_missing_package_error() {
+    fn no_args_returns_no_executable_error() {
+        // Parsing no longer rejects a missing -p, so the command name is the
+        // only thing left to complain about.
         let result = parse_run_args(vec![]);
-        assert!(matches!(result, Err(RunError::MissingPackage)));
+        assert!(matches!(result, Err(RunError::NoExecutable)));
     }
 
     #[test]
-    fn no_package_flag_returns_missing_package() {
-        // A bare command with no -p/--package must report MissingPackage.
-        let result = parse_run_args(os_vec(&["curl", "http://example.com"]));
-        assert!(matches!(result, Err(RunError::MissingPackage)));
+    fn no_package_flag_parses_with_none_package() {
+        // A bare command with no -p/--package parses; exec_run rejects it.
+        let result = parse_run_args(os_vec(&["curl", "http://example.com"])).unwrap();
+        assert_eq!(
+            result,
+            ParsedArgs::Run(RunArgs {
+                package: None,
+                executable: os("curl"),
+                args: os_vec(&["http://example.com"]),
+            })
+        );
     }
 
     #[test]
     fn posix_order_dependence_curl_minus_p_curl() {
-        // After the first positional `curl`, -p belongs to curl (not flox).
-        // The absence of a flox -p flag should yield MissingPackage.
-        let result = parse_run_args(os_vec(&["curl", "-p", "curl"]));
-        assert!(matches!(result, Err(RunError::MissingPackage)));
+        // After the first positional `curl`, -p belongs to curl (not flox),
+        // so flox is left with no package of its own.
+        let result = parse_run_args(os_vec(&["curl", "-p", "curl"])).unwrap();
+        assert_eq!(
+            result,
+            ParsedArgs::Run(RunArgs {
+                package: None,
+                executable: os("curl"),
+                args: os_vec(&["-p", "curl"]),
+            })
+        );
     }
 
     #[test]
@@ -1031,7 +1144,7 @@ mod tests {
         assert_eq!(
             result,
             ParsedArgs::Run(RunArgs {
-                package: "curl".to_string(),
+                package: Some("curl".to_string()),
                 executable: os("curl"),
                 args: os_vec(&["--help"]),
             })
@@ -1045,7 +1158,7 @@ mod tests {
         assert_eq!(
             result,
             ParsedArgs::Run(RunArgs {
-                package: "hello".to_string(),
+                package: Some("hello".to_string()),
                 executable: os("hello"),
                 args: os_vec(&["--help"]),
             })
@@ -1064,6 +1177,54 @@ mod tests {
         assert!(matches!(result, Err(RunError::MissingPackageValue(_))));
     }
 
+    #[test]
+    fn reselect_parses_to_reselect() {
+        let result = parse_run_args(os_vec(&["--reselect", "vi"])).unwrap();
+        assert_eq!(result, ParsedArgs::Reselect("vi".to_string()));
+    }
+
+    #[test]
+    fn reselect_without_value_rejected() {
+        let result = parse_run_args(os_vec(&["--reselect"]));
+        assert!(matches!(result, Err(RunError::MissingReselectValue)));
+    }
+
+    #[test]
+    fn reselect_with_command_rejected() {
+        let result = parse_run_args(os_vec(&["--reselect", "vi", "vim"]));
+        assert!(matches!(result, Err(RunError::ReselectWithCommand)));
+    }
+
+    #[test]
+    fn reselect_equals_form_rejected() {
+        let result = parse_run_args(os_vec(&["--reselect=vi"]));
+        assert!(matches!(result, Err(RunError::UnknownFlag(_))));
+    }
+
+    #[test]
+    fn reselect_after_command_stays_in_passthrough() {
+        // `flox run vi --reselect foo` — after the first positional,
+        // `--reselect` belongs to the command, not to flox.
+        let result = parse_run_args(os_vec(&["-p", "vim", "vi", "--reselect", "foo"])).unwrap();
+        assert_eq!(
+            result,
+            ParsedArgs::Run(RunArgs {
+                package: Some("vim".to_string()),
+                executable: os("vi"),
+                args: os_vec(&["--reselect", "foo"]),
+            })
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn non_utf8_reselect_value() {
+        let bad = OsString::from_vec(vec![0xff]);
+        let args = vec![os("--reselect"), bad];
+        let result = parse_run_args(args);
+        assert!(matches!(result, Err(RunError::CommandNameNotUtf8)));
+    }
+
     #[cfg(unix)]
     #[test]
     fn non_utf8_package_value() {
@@ -1071,6 +1232,101 @@ mod tests {
         let args = vec![os("-p"), bad, os("cmd")];
         let result = parse_run_args(args);
         assert!(matches!(result, Err(RunError::PackageSpecNotUtf8)));
+    }
+
+    // -----------------------------------------------------------------------
+    // run_preferences config helper tests
+    // -----------------------------------------------------------------------
+
+    fn config_contents(config_dir: &Path) -> String {
+        std::fs::read_to_string(config_dir.join(FLOX_CONFIG_FILE)).unwrap()
+    }
+
+    /// Read back the `[run_preferences]` table.
+    ///
+    /// `FloxConfig` cannot be deserialized from the user config file alone —
+    /// it carries resolved fields like `cache_dir` that only the full config
+    /// assembly supplies — so assert against the TOML directly.
+    fn run_preferences_table(config_dir: &Path) -> toml::Table {
+        let document: toml::Table = toml::from_str(&config_contents(config_dir)).unwrap();
+        document
+            .get("run_preferences")
+            .and_then(|value| value.as_table())
+            .cloned()
+            .unwrap_or_default()
+    }
+
+    #[test]
+    fn write_run_preference_writes_command_as_one_literal_key() {
+        let dir = tempfile::tempdir().unwrap();
+        // A dotted command name must land as a single quoted key rather than
+        // being shattered into `[run_preferences.my]` / `tool`.
+        write_run_preference(dir.path(), "my.tool", "python311Packages.pip").unwrap();
+
+        let contents = config_contents(dir.path());
+        assert!(
+            contents.contains(r#""my.tool" = "python311Packages.pip""#),
+            "expected one literal key, got:\n{contents}"
+        );
+    }
+
+    #[test]
+    fn write_run_preference_round_trips_dotted_attr_path() {
+        let dir = tempfile::tempdir().unwrap();
+        write_run_preference(dir.path(), "pip", "python311Packages.pip").unwrap();
+
+        let expected: toml::Table = toml::from_str(r#"pip = "python311Packages.pip""#).unwrap();
+        assert_eq!(run_preferences_table(dir.path()), expected);
+    }
+
+    #[test]
+    fn clear_run_preference_removes_existing_key() {
+        let dir = tempfile::tempdir().unwrap();
+        write_run_preference(dir.path(), "vi", "vim").unwrap();
+
+        assert!(clear_run_preference(dir.path(), "vi").unwrap());
+
+        // Clearing the last entry leaves an empty `[run_preferences]` table
+        // behind. `auto_activate_environments` behaves the same way; the
+        // contents are what matters.
+        assert_eq!(run_preferences_table(dir.path()), toml::Table::new());
+    }
+
+    #[test]
+    fn clear_run_preference_absent_key_in_existing_table_is_ok_false() {
+        let dir = tempfile::tempdir().unwrap();
+        // `[run_preferences]` exists but holds a different command, so the
+        // parent-segment walk in `write_to` succeeds and only the leaf is
+        // missing.
+        write_run_preference(dir.path(), "vi", "vim").unwrap();
+
+        assert!(!clear_run_preference(dir.path(), "emacs").unwrap());
+    }
+
+    #[test]
+    fn clear_run_preference_absent_table_is_ok_false() {
+        let dir = tempfile::tempdir().unwrap();
+        // No config file at all: `write_to` creates the `[run_preferences]`
+        // table on the way down, then fails to find the leaf. Nothing reaches
+        // disk on that path.
+        assert!(!clear_run_preference(dir.path(), "vi").unwrap());
+        assert!(!dir.path().join(FLOX_CONFIG_FILE).exists());
+    }
+
+    #[test]
+    fn remove_config_key_with_query_propagates_read_failures() {
+        let dir = tempfile::tempdir().unwrap();
+        // A directory where the config file belongs makes the read fail with
+        // something other than NotFound, which must not be flattened into
+        // `Ok(false)`.
+        std::fs::create_dir(dir.path().join(FLOX_CONFIG_FILE)).unwrap();
+
+        let err = clear_run_preference(dir.path(), "vi").unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("Could not read current config file"),
+            "unexpected error: {err}"
+        );
     }
 
     // -----------------------------------------------------------------------
