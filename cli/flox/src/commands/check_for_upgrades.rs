@@ -29,6 +29,11 @@ pub struct CheckForUpgrades {
     #[bpaf(long, argument("seconds"), fallback(DEFAULT_TIMEOUT_SECONDS))]
     check_timeout: i64,
 
+    /// Fetch remote environment state even when the upgrade check is
+    /// throttled or fails
+    #[bpaf(long)]
+    force_fetch_remote: bool,
+
     #[bpaf(external(parse_uninitialized_environment_json))]
     environment: UninitializedEnvironment,
 }
@@ -70,23 +75,33 @@ impl CheckForUpgrades {
         })?;
 
         let mut environment = self.environment.into_concrete_environment(&flox, None)?;
-        let check_exit_branch = check_for_package_upgrades(
+        let check_result = check_for_package_upgrades(
             &flox,
             &mut environment,
             Duration::seconds(self.check_timeout),
-        )?;
-        match check_exit_branch {
-            ExitBranch::Checked => update_remote_environment_state(&flox, &environment)?,
-            // `check_exit_branch` determined,
-            // that we are already concurrently checking for updates (LockTaken)
-            // or we have `AlreadyChecked` for updates recently (within self.check_timeout)
-            // and there have been no local changes (to the lockfile).
-            //
-            // Use either case, use this to throttle environment fetches.
-            ExitBranch::LockTaken | ExitBranch::AlreadyChecked => {},
+        );
+        if should_fetch_remote_state(&check_result, self.force_fetch_remote) {
+            update_remote_environment_state(&flox, &environment)?;
         }
+        check_result?;
 
         Ok(())
+    }
+}
+
+/// Whether to fetch the environment's remote state after the upgrade check.
+///
+/// A performed check always refreshes remote state. With
+/// `--force-fetch-remote` the fetch is the invocation's primary purpose
+/// (sync mode keeps the default environment fresh per activation), so a
+/// throttled (recently-checked) or failed dry-upgrade must not skip it —
+/// only a taken lock does, because the concurrent invocation is already
+/// responsible for the fetch.
+fn should_fetch_remote_state(check_result: &Result<ExitBranch>, force_fetch_remote: bool) -> bool {
+    match check_result {
+        Ok(ExitBranch::Checked) => true,
+        Ok(ExitBranch::AlreadyChecked) | Err(_) => force_fetch_remote,
+        Ok(ExitBranch::LockTaken) => false,
     }
 }
 
@@ -179,6 +194,7 @@ pub fn spawn_detached_check_for_upgrades_process(
     self_executable: Option<PathBuf>,
     log_dir: &Path,
     check_timeout: Option<u64>,
+    force_fetch_remote: bool,
 ) -> Result<()> {
     // Avoid race conditions in integration tests
     if let Ok(true) = std::env::var("_FLOX_TESTING_DISABLE_BG_SIDE_EFFECTS")
@@ -231,6 +247,10 @@ pub fn spawn_detached_check_for_upgrades_process(
     if let Some(timeout) = check_timeout {
         command.arg("--check-timeout").arg(timeout.to_string());
     };
+
+    if force_fetch_remote {
+        command.arg("--force-fetch-remote");
+    }
 
     command.arg("-vv"); // enable debug logging
 
@@ -345,6 +365,33 @@ mod tests {
             check_for_package_upgrades(&flox, &mut environment.into(), Duration::MIN).unwrap();
 
         assert_eq!(exit_branch, ExitBranch::LockTaken);
+    }
+
+    /// A performed check always fetches; a throttled or failed check fetches
+    /// only when forced; a taken lock never fetches (the concurrent holder is
+    /// responsible).
+    #[test]
+    fn fetch_follows_check_unless_lock_taken_or_unforced_throttle() {
+        assert!(should_fetch_remote_state(&Ok(ExitBranch::Checked), false));
+        assert!(should_fetch_remote_state(&Ok(ExitBranch::Checked), true));
+        assert!(!should_fetch_remote_state(
+            &Ok(ExitBranch::AlreadyChecked),
+            false
+        ));
+        assert!(should_fetch_remote_state(
+            &Ok(ExitBranch::AlreadyChecked),
+            true
+        ));
+        assert!(!should_fetch_remote_state(
+            &Ok(ExitBranch::LockTaken),
+            false
+        ));
+        assert!(!should_fetch_remote_state(&Ok(ExitBranch::LockTaken), true));
+        assert!(!should_fetch_remote_state(
+            &Err(anyhow::anyhow!("e")),
+            false
+        ));
+        assert!(should_fetch_remote_state(&Err(anyhow::anyhow!("e")), true));
     }
 
     #[tokio::test(flavor = "multi_thread")]
