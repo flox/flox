@@ -354,10 +354,13 @@ While walking through, judge the experience against these questions:
 
 Known prototype limitations (deliberate scope cuts, confirmed by review):
 
-- Auto-sync-on-mutation triggers for *any* checkout of `<handle>/default`
-  (including one you explicitly `flox pull`ed elsewhere), not just the `-D`
-  cache. (It covers `install`/`uninstall`/`edit`/`upgrade` since
-  2026-08-20.)
+- The per-activation background fetch can, in a narrow window, contend
+  with an interactive `flox pull`/`push` on the shared floxmeta ref lock;
+  the loser fails with a git lock error. Rare and transient, but worth a
+  retry-on-lock before production.
+- With syncing enabled, `flox uninstall -D` (like `install -D`) demands a
+  live login even when the token merely expired; with
+  `sync_default_env false` it stays on the auth-free path.
 - The implicit login inside `flox install` does not run the login-time
   reconcile that explicit `flox auth login` does (push local-only default /
   pre-fetch remote-only); by design, implicit re-auth must not grow side
@@ -389,18 +392,25 @@ Known prototype limitations (deliberate scope cuts, confirmed by review):
 Resolved since the 2026-08-19 review (2026-08-20 refinements, all behind
 the same feature flag):
 
-- `edit`/`upgrade` now auto-sync like install/uninstall, and
-  `flox uninstall -D` is auth-gated up front (using stays free, changing
-  goes through FloxHub).
+- `edit`/`upgrade` now auto-sync like install/uninstall, and — when
+  syncing is enabled — `flox uninstall -D` is auth-gated up front (using
+  stays free, changing goes through FloxHub).
+- Auto-sync triggers only for the canonical checkouts: the `-D` cache and
+  a `~/.flox` home default. A `<handle>/default` pulled into another
+  directory is treated as a deliberate working copy and pushes explicitly.
 - `sync_default_env` (default true) is the dedicated sync opt-out;
   `confirmed_create_default_env` is back to creation consent only.
 - The stale-fetch fallback prints a product-level warning ("Could not
-  reach FloxHub. Using the last fetched state of '<handle>/default'.").
-- Sync mode fetches upstream state on every activation (detached), so
-  "behind FloxHub" surfaces on the next activation instead of within 24h.
-- A personal-access-token identity is cached on disk for 24h, and repair
-  fetches are bounded by a 10s timeout when fallback state exists — authed
-  `flox activate -D` no longer has any unbounded leading network wait.
+  reach FloxHub. Using the last fetched state of '<handle>/default'.")
+  for both the cache and `~/.flox` checkouts.
+- Sync mode fetches upstream state on every activation (detached, via
+  `check-for-upgrades --force-fetch-remote`); the catalog dry-upgrade
+  keeps its daily throttle, and a catalog failure cannot skip the fetch.
+- A personal-access-token identity is cached on disk for 24h
+  (`flox auth status` always re-verifies), and repair fetches are bounded
+  by a 10s timeout when the stale state can actually serve the lock (gated
+  on the feature flag) — authed `flox activate -D` no longer has any
+  unbounded leading network wait.
 
 ## 6. Verification status (2026-08-19)
 
