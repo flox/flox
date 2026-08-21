@@ -349,6 +349,9 @@ impl Auth {
                             identity.handle,
                             flox.floxhub.base_url()
                         ));
+                        if let Some(expires_at) = identity.expires_at {
+                            message::plain(format!("Expires at: {}.", expires_at.to_rfc3339()));
+                        }
                     },
                     Ok(None) => {
                         message::warning(
