@@ -2004,7 +2004,9 @@ mod tests {
             args: vec![],
         };
 
-        let err = resolve_command(&run_args, &config, &flox).await.unwrap_err();
+        let err = resolve_command(&run_args, &config, &flox)
+            .await
+            .unwrap_err();
         assert!(
             matches!(err, RunError::InvalidCommandName { .. }),
             "expected InvalidCommandName for single-char command, got: {err:?}"
