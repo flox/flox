@@ -5794,11 +5794,12 @@ Required Query Parameters:
 - **system**: The system architecture to search for (e.g., x86_64-linux)
 - **name**: The command name to look up (e.g., readelf, rg, gcc-13)
 
+Optional Query Parameters:
+- **page**: Page number for pagination (default: 0)
+- **pageSize**: Page size for pagination (default: 10)
+
 Returns:
 - **ByCommandResult**: Providers of the command and total count
-
-Note: first pass returns a hardcoded mock so the OpenAPI contract can
-freeze before the command_index table lands. No database query yet.
 
 Sends a `GET` request to `/api/v1/catalog/by-command`
 
@@ -5806,6 +5807,8 @@ Sends a `GET` request to `/api/v1/catalog/by-command`
     pub async fn by_command_api_v1_catalog_by_command_get<'a>(
         &'a self,
         name: &'a types::Name,
+        page: Option<i64>,
+        page_size: Option<i64>,
         system: types::PackageSystem,
     ) -> Result<ResponseValue<types::ByCommandResult>, Error<types::ErrorResponse>> {
         let url = format!("{}/api/v1/catalog/by-command", self.baseurl);
@@ -5824,6 +5827,8 @@ Sends a `GET` request to `/api/v1/catalog/by-command`
                 ::reqwest::header::HeaderValue::from_static("application/json"),
             )
             .query(&progenitor_client::QueryParam::new("name", &name))
+            .query(&progenitor_client::QueryParam::new("page", &page))
+            .query(&progenitor_client::QueryParam::new("pageSize", &page_size))
             .query(&progenitor_client::QueryParam::new("system", &system))
             .headers(header_map)
             .build()?;
