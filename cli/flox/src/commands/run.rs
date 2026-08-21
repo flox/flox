@@ -907,14 +907,21 @@ async fn exec_run(run_args: RunArgs, flox: &Flox) -> Result<()> {
 // Resolution error classification
 // ---------------------------------------------------------------------------
 
-/// Map a `ByCommandError` to a `RunError`.
+/// Map a `ByCommandError` to the most accurate `RunError`.
 ///
-/// Both variants (`InvalidCommandName` and `FloxhubClientError`) are
-/// transport-level failures from the caller's perspective — the user should
-/// retry with an explicit `-p` flag rather than waiting for the catalog.
+/// `InvalidCommandName` is a client-side validation error that fires before
+/// any network request — the catalog's `Name` type requires 2–200 characters,
+/// so very short command names (e.g. `w`) cannot be queried at all.
+/// `CommandNotIndexed` is the best available variant: the command genuinely
+/// is not in the index because its name cannot be looked up.
+///
+/// `FloxhubClientError` is a transport failure; `LookupUnavailable` is
+/// appropriate here because the catalog could not be reached.
 fn classify_by_command_error(err: ByCommandError, command: String) -> RunError {
-    let _ = err;
-    RunError::LookupUnavailable { command }
+    match err {
+        ByCommandError::InvalidCommandName(_) => RunError::CommandNotIndexed { command },
+        ByCommandError::FloxhubClientError(_) => RunError::LookupUnavailable { command },
+    }
 }
 
 /// Map a typed `ResolutionMessage` to the appropriate `RunError`.
@@ -1983,6 +1990,20 @@ mod tests {
         assert!(
             !msg.contains("flox search"),
             "NoCommandProvider message must not suggest 'flox search': {msg}"
+        );
+    }
+
+    // classify_by_command_error: InvalidCommandName maps to CommandNotIndexed,
+    // not LookupUnavailable, because the rejection is a client-side name
+    // validation failure — the catalog was never contacted.
+    #[test]
+    fn invalid_command_name_maps_to_command_not_indexed() {
+        use catalog_api_v1::types::error::ConversionError;
+        let err = ByCommandError::InvalidCommandName(ConversionError::from("name too short"));
+        let result = classify_by_command_error(err, "w".to_string());
+        assert!(
+            matches!(result, RunError::CommandNotIndexed { .. }),
+            "expected CommandNotIndexed for InvalidCommandName, got: {result:?}"
         );
     }
 }
