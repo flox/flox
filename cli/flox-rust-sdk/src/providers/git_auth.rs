@@ -45,6 +45,20 @@ impl GitCommandOptionsExt for GitCommandOptions {
                     ),
                 );
             },
+            AuthContext::Bare(token) => {
+                if token.is_expired() {
+                    tracing::debug!("bare FloxHub token is expired, sending for identification");
+                } else {
+                    tracing::debug!("using bare FloxHub token");
+                }
+                self.add_env_var(FLOXHUB_TOKEN_ENV_VAR, token.secret());
+                self.add_config_flag(
+                    &format!("credential.{git_url}.helper"),
+                    format!(
+                        r#"!f(){{ echo "username=oauth"; echo "password=${FLOXHUB_TOKEN_ENV_VAR}"; }}; f"#
+                    ),
+                );
+            },
             AuthContext::AccessToken(token) => {
                 tracing::debug!("using FloxHub personal access token");
                 self.add_env_var(FLOXHUB_TOKEN_ENV_VAR, token.secret());

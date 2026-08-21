@@ -12,21 +12,26 @@
 //!
 //! One file per type:
 //! - [`auth_context`]: [`AuthContext`] and its failure types
+//! - [`discovery`]: per-deployment login discovery
+//!   ([`discover_login_config`])
 //! - [`identity`]: [`UserIdentity`] and its resolution errors
-//! - [`token`]: [`FloxhubToken`] (decoded Auth0 JWT) and
-//!   [`AccessToken`] (opaque `flox_`-prefixed token with lazy identity
-//!   resolution)
+//! - [`token`]: one type per credential capability — [`FloxhubToken`]
+//!   (Auth0-shaped JWT, identity local), [`BareToken`] (JWT without the
+//!   handle claim, identity via /me), [`AccessToken`] (opaque, everything
+//!   via /me)
 //! - [`kerberos`]: [`KerberosMaterial`] and SPNEGO token generation
 
 mod auth_context;
+mod discovery;
 pub(crate) mod identity;
 mod kerberos;
 mod token;
 
 pub use auth_context::{AuthContext, AuthFailure, AuthHeaderError};
+pub use discovery::{DiscoveredLoginConfig, LoginDiscoveryError, discover_login_config};
 pub use identity::{IdentityError, UNKNOWN_HANDLE, UserIdentity};
 pub use kerberos::{KerberosMaterial, TokenGenerator};
-pub use token::{AccessToken, FloxhubToken, FloxhubTokenError};
+pub use token::{AccessToken, BareToken, FloxhubToken, InvalidTokenError};
 
 /// Test fixtures, re-exported from each type's own module.
 #[cfg(any(test, feature = "tests"))]

@@ -152,5 +152,5 @@ teardown() {
 
   run "$FLOX_BIN" auth login --token-file "$BATS_TEST_TMPDIR/token"
   assert_failure
-  assert_output --partial "The provided token is expired."
+  assert_output --partial "FloxHub rejected the provided token: it is invalid, expired, or revoked."
 }
