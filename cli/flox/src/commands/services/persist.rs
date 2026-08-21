@@ -7,7 +7,7 @@ use flox_core::data::environment_ref::ActivateEnvironmentRef;
 use flox_events::{CliEnvironmentPayload, EventKind, EventsHub};
 use flox_manifest::interfaces::AsLatestSchema;
 use flox_manifest::parsed::Inner;
-use flox_manifest::parsed::common::ServiceDescriptor;
+use flox_manifest::parsed::v1_14_0::ServiceDescriptor;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::providers::services::systemd::render_systemd_unit_file;
 use tracing::{debug, instrument};

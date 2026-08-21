@@ -113,6 +113,20 @@ setup_start_counter_services() {
   assert_success
 }
 
+setup_depends_on_services() {
+  run "$FLOX_BIN" init
+  assert_success
+  run "$FLOX_BIN" edit -f "${TESTS_DIR}/services/depends_on_services.toml"
+  assert_success
+}
+
+setup_shutdown_signal_services() {
+  run "$FLOX_BIN" init
+  assert_success
+  run "$FLOX_BIN" edit -f "${TESTS_DIR}/services/shutdown_signal_services.toml"
+  assert_success
+}
+
 # ---------------------------------------------------------------------------- #
 #
 # NOTE: The following functionality is tested elsewhere:
@@ -138,6 +152,52 @@ EOF
 )
   assert_success
   [ -e hello.txt ]
+}
+
+# The unit tests cover the config Flox writes. These cover what
+# `process-compose` does with it, which is the half that would go unnoticed if
+# we picked a key or a condition string it doesn't honour.
+
+# bats test_tags=services:depends-on
+@test "process-compose honours generated depends-on" {
+  setup_depends_on_services
+
+  run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
+    set -euo pipefail
+    "${TESTS_DIR}"/services/wait_for_service_status.sh gate:Running
+    # `gate` has not completed, so `gated` must not have been started.
+    "$FLOX_BIN" services status
+    [ ! -e gated.txt ]
+
+    # Let `gate` exit successfully, which releases `gated`.
+    touch open-gate
+    "${TESTS_DIR}"/services/wait_for_service_status.sh gate:Completed gated:Running
+    [ -e gated.txt ]
+EOF
+)
+  assert_success
+  # A service still waiting on a dependency is reported as `Disabled`, with no
+  # PID assigned, rather than being launched and held.
+  assert_output --regexp "gated +Disabled \(0\) +\[0\]"
+}
+
+# bats test_tags=services:shutdown
+@test "process-compose honours generated shutdown signal" {
+  setup_shutdown_signal_services
+
+  run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
+    set -euo pipefail
+    "${TESTS_DIR}"/services/wait_for_service_status.sh trapper:Running
+    "$FLOX_BIN" services stop trapper
+    "${TESTS_DIR}"/services/wait_for_service_status.sh trapper:Completed
+    cat trapper-signal.txt
+EOF
+)
+  assert_success
+  # The manifest asks for signal 2, so the SIGTERM trap must not be the one
+  # that fired.
+  assert_output --partial "SIGINT"
+  refute_output --partial "SIGTERM"
 }
 
 @test "can start redis-server and access it using redis-cli" {
