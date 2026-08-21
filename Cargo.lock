@@ -1550,7 +1550,6 @@ dependencies = [
  "anyhow",
  "apple-native-keyring-store",
  "bpaf",
- "catalog-api-v1",
  "chrono",
  "close_fds",
  "crossterm 0.29.0",

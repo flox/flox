@@ -20,7 +20,6 @@ use std::os::unix::fs::PermissionsExt;
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
-use std::time::Duration;
 
 use anyhow::Result;
 use bpaf::Bpaf;
@@ -47,7 +46,6 @@ use floxhub_client::{
 };
 use indoc::indoc;
 use thiserror::Error;
-use tokio::time::timeout;
 use toml_edit::Key;
 use tracing::{debug, info_span};
 
@@ -58,10 +56,6 @@ use crate::utils::message;
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
-
-/// Maximum time to wait for the by-command catalog lookup before treating the
-/// catalog as unreachable and returning a user-actionable error.
-const LOOKUP_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// Maximum number of candidates shown when the disambiguation prompt lists
 /// packages. Beyond this count a "(N shown, M total)" line is appended.
@@ -210,6 +204,15 @@ pub enum RunError {
          Use 'flox run --package <PACKAGE> {command}' to run it directly."
     )]
     CommandNotIndexed { command: String },
+
+    /// The command name fails catalog validation (e.g. too short or too long)
+    /// so it cannot be looked up. This is a client-side check — the catalog
+    /// was never contacted.
+    #[error(
+        "'{command}' is not a valid catalog command name.\n\
+         Use 'flox run --package <PACKAGE> {command}' to run it directly."
+    )]
+    InvalidCommandName { command: String },
 
     /// Multiple packages provide the command and the session is non-interactive.
     #[error("{}", render_ambiguous(command, providers, *total))]
@@ -532,25 +535,20 @@ async fn resolve_command(
         return Ok(attr_path.clone());
     }
 
-    // Branch 3: call by_command with a timeout so a slow or unreachable catalog
-    // degrades gracefully to a user-actionable error.
-    let system: PackageSystem =
-        flox.system
-            .clone()
-            .try_into()
-            .map_err(|_| RunError::LookupUnavailable {
-                command: command.clone(),
-            })?;
+    // Branch 3: call by_command; networking timeouts are handled by the client.
+    // system.try_into() only fails for unrecognized system strings, which
+    // cannot occur in practice — Flox validates the system at startup.
+    let system: PackageSystem = flox
+        .system
+        .clone()
+        .try_into()
+        .expect("flox.system is always a valid PackageSystem");
 
-    let result = timeout(
-        LOOKUP_TIMEOUT,
-        flox.floxhub_client.by_command(&command, system),
-    )
-    .await
-    .map_err(|_| RunError::LookupUnavailable {
-        command: command.clone(),
-    })
-    .and_then(|r| r.map_err(|e| classify_by_command_error(e, command.clone())))?;
+    let result = flox
+        .floxhub_client
+        .by_command(&command, system)
+        .await
+        .map_err(|e| classify_by_command_error(e, command.clone()))?;
 
     // Branches 3a/3b: empty provider list — tristate on listing_known.
     if result.providers.is_empty() {
@@ -912,15 +910,15 @@ async fn exec_run(run_args: RunArgs, flox: &Flox) -> Result<()> {
 /// `InvalidCommandName` is a client-side validation error that fires before
 /// any network request — the catalog's `Name` type requires 2–200 characters,
 /// so very short command names (e.g. `w`) cannot be queried at all.
-/// `CommandNotIndexed` is the best available variant: the command genuinely
-/// is not in the index because its name cannot be looked up.
 ///
-/// `FloxhubClientError` is a transport failure; `LookupUnavailable` is
-/// appropriate here because the catalog could not be reached.
+/// `FloxhubClientError` covers transport failures and server errors.
 fn classify_by_command_error(err: ByCommandError, command: String) -> RunError {
     match err {
-        ByCommandError::InvalidCommandName(_) => RunError::CommandNotIndexed { command },
-        ByCommandError::FloxhubClientError(_) => RunError::LookupUnavailable { command },
+        ByCommandError::InvalidCommandName(_) => RunError::InvalidCommandName { command },
+        ByCommandError::FloxhubClientError(e) => {
+            debug!(error = ?e, %command, "by_command lookup failed");
+            RunError::LookupUnavailable { command }
+        },
     }
 }
 
@@ -1993,17 +1991,23 @@ mod tests {
         );
     }
 
-    // classify_by_command_error: InvalidCommandName maps to CommandNotIndexed,
-    // not LookupUnavailable, because the rejection is a client-side name
-    // validation failure — the catalog was never contacted.
-    #[test]
-    fn invalid_command_name_maps_to_command_not_indexed() {
-        use catalog_api_v1::types::error::ConversionError;
-        let err = ByCommandError::InvalidCommandName(ConversionError::from("name too short"));
-        let result = classify_by_command_error(err, "w".to_string());
+    // A single-character command like "w" fails the catalog's Name validation
+    // (minimum 2 chars) before any network request. resolve_command should
+    // surface InvalidCommandName, not LookupUnavailable or CommandNotIndexed.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn single_char_command_gives_invalid_name_error() {
+        let (flox, _dir) = flox_instance();
+        let config = make_config(Default::default());
+        let run_args = RunArgs {
+            package: None,
+            executable: OsString::from("w"),
+            args: vec![],
+        };
+
+        let err = resolve_command(&run_args, &config, &flox).await.unwrap_err();
         assert!(
-            matches!(result, RunError::CommandNotIndexed { .. }),
-            "expected CommandNotIndexed for InvalidCommandName, got: {result:?}"
+            matches!(err, RunError::InvalidCommandName { .. }),
+            "expected InvalidCommandName for single-char command, got: {err:?}"
         );
     }
 }
