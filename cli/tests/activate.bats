@@ -3873,6 +3873,268 @@ PIDs of the running activations: ${ACTIVATION_PID}"
   assert_output "$(realpath "$PROJECT_DIR")/emacs/.flox/run/$NIX_SYSTEM.emacs-dev/bin/emacs"
 }
 
+# An environment first activated under one stack of other environments and
+# then attached under a different stack must not replay the first stack's
+# PATH-like values: the attach context keeps its own entries and does not
+# gain entries from the start context.
+#
+# This is the customer-reported layering bug: with shells #1 and #2 in the
+# same directory, shell #1 activates first+shared and holds them open;
+# shell #2 activates second+shared, and shared's attach replays absolute
+# values recorded under first's stack — clobbering second's entries and
+# leaking first's. CPATH probes the pure profile.d path (matching the
+# original bare-environment reproducer); PATH additionally covers
+# hook.on-activate additions; XDG_DATA_DIRS covers a profile.d var not
+# recomputed by fix-paths at attach.
+# bats test_tags=activate,activate:attach
+@test "attach under a different stack doesn't leak the start context" {
+  # We don't need an environment, but we do need wait_for_activations to have a
+  # PROJECT_DIR to look for
+  project_setup_common
+
+  MANIFEST_CONTENTS="$(cat << "EOF"
+    version = 1
+
+    [hook]
+    on-activate = """
+      export PATH="$FLOX_ENV_PROJECT/tools:$PATH"
+    """
+EOF
+  )"
+
+  for env in shared first second; do
+    "$FLOX_BIN" init -d "$env"
+    mkdir -p "$env/tools"
+    echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -d "$env" -f -
+  done
+
+  mkfifo activate_started_fifo
+  # Will get cat'ed in teardown
+  TEARDOWN_FIFO="$PROJECT_DIR/teardown_activate"
+  mkfifo "$TEARDOWN_FIFO"
+
+  # Start `shared` inside an activation of `first` and hold it open so a
+  # later activation of `shared` attaches to this start.
+  FLOX_SHELL=bash "$FLOX_BIN" activate -d first -c \
+    "\"$FLOX_BIN\" activate -d shared -c 'echo > activate_started_fifo && echo > \"$TEARDOWN_FIFO\"'" &
+  cat activate_started_fifo
+
+  # Attach `shared` inside an activation of `second`, probing the attach in
+  # both command mode (rc script runs) and exec mode (no rc script).
+  FLOX_SHELL=bash "$FLOX_BIN" activate -d second -c \
+    '"$FLOX_BIN" activate -d shared -c "echo \$PATH > path_cmd; echo \$XDG_DATA_DIRS > xdg_cmd; echo \$CPATH > cpath_cmd"; "$FLOX_BIN" activate -d shared -- sh -c "echo \$PATH > path_exec; echo \$XDG_DATA_DIRS > xdg_exec; echo \$CPATH > cpath_exec"'
+
+  REAL_PROJECT_DIR="$(realpath "$PROJECT_DIR")"
+  for probe in path_cmd path_exec; do
+    run cat "$probe"
+    assert_success
+    # The hook dirs of the attached env and the attach context survive.
+    assert_output --regexp ".*$REAL_PROJECT_DIR/shared/tools.*"
+    assert_output --regexp ".*$REAL_PROJECT_DIR/second/tools.*"
+    # Both stacked envs' bin dirs are on PATH.
+    assert_output --regexp ".*$REAL_PROJECT_DIR/shared/.flox/run/$NIX_SYSTEM.shared-dev/bin.*"
+    assert_output --regexp ".*$REAL_PROJECT_DIR/second/.flox/run/$NIX_SYSTEM.second-dev/bin.*"
+    # Nothing from the start context leaks in.
+    refute_output --partial "$REAL_PROJECT_DIR/first/"
+    refute_output --partial "$PROJECT_DIR/first/"
+  done
+
+  for probe in xdg_cmd xdg_exec; do
+    run cat "$probe"
+    assert_success
+    assert_output --regexp ".*$REAL_PROJECT_DIR/shared/.flox/run/$NIX_SYSTEM.shared-dev/share.*"
+    assert_output --regexp ".*$REAL_PROJECT_DIR/second/.flox/run/$NIX_SYSTEM.second-dev/share.*"
+    refute_output --partial "$REAL_PROJECT_DIR/first/"
+    refute_output --partial "$PROJECT_DIR/first/"
+  done
+
+  # The customer reproducer's exact probe:
+  #   echo $CPATH | grep shell-2-dev/include || echo FAIL
+  #   echo $CPATH | grep shell-1-dev/include && echo FAIL
+  for probe in cpath_cmd cpath_exec; do
+    run cat "$probe"
+    assert_success
+    assert_output --regexp ".*$REAL_PROJECT_DIR/shared/.flox/run/$NIX_SYSTEM.shared-dev/include.*"
+    assert_output --regexp ".*$REAL_PROJECT_DIR/second/.flox/run/$NIX_SYSTEM.second-dev/include.*"
+    refute_output --partial "$REAL_PROJECT_DIR/first/"
+    refute_output --partial "$PROJECT_DIR/first/"
+  done
+}
+
+# An assignment performed by the activation is intent, even when the start
+# context coincidentally already held the assigned value: a manifest var
+# `FOO = "defined"` started from a shell that happened to have
+# FOO=defined must still define FOO for a shell that attaches without it.
+# bats test_tags=activate,activate:attach
+@test "attach applies vars that were same-value assignments at start" {
+  # We don't need an environment, but we do need wait_for_activations to have a
+  # PROJECT_DIR to look for
+  project_setup_common
+
+  "$FLOX_BIN" init -d proj
+  MANIFEST_CONTENTS="$(cat << "EOF"
+    version = 1
+
+    [vars]
+    FOO = "defined"
+EOF
+  )"
+  echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -d proj -f -
+
+  mkfifo activate_started_fifo
+  # Will get cat'ed in teardown
+  TEARDOWN_FIFO="$PROJECT_DIR/teardown_activate"
+  mkfifo "$TEARDOWN_FIFO"
+
+  # Shell #1: FOO is already exported with the very value the manifest
+  # sets, so the activation's assignment is a same-value one. Hold the
+  # start open so shell #2 attaches to it.
+  export FOO=defined
+  FLOX_SHELL=bash "$FLOX_BIN" activate -d proj -c \
+    "echo > activate_started_fifo && echo > \"$TEARDOWN_FIFO\"" &
+  unset FOO
+  cat activate_started_fifo
+
+  # Shell #2: no FOO. Attaching must still define it. The command also
+  # counts the starts registered while both activations are live: exactly
+  # one start proves shell #2 attached to shell #1's start — a second
+  # start would make any FOO outcome prove nothing.
+  env -u FOO FLOX_SHELL=bash "$FLOX_BIN" activate -d proj -c \
+    'echo "FOO=$FOO" > output; find "$("$FLOX_BIN" activation-state -d proj)" -name envtrace.log | wc -l > start_count'
+  run cat start_count
+  assert_success
+  assert_output --regexp "^ *1\$"
+  run cat output
+  assert_success
+  assert_output "FOO=defined"
+
+  # Shell #3: FOO holds a *different* value. The [vars] application runs
+  # under declared reset intent (BASH_ENVTRACE_RESET), so its records are
+  # `reset` and the manifest value overwrites the shell's own.
+  FOO=something-else FLOX_SHELL=bash "$FLOX_BIN" activate -d proj -c \
+    'echo "FOO=$FOO" > output_different'
+  run cat output_different
+  assert_success
+  assert_output "FOO=defined"
+}
+
+# The complement of the test above: a same-value assignment made by user
+# hook code carries no declared intent and records `set-if-absent`. An
+# attaching shell without the variable receives it; one holding a
+# different value keeps its own.
+# bats test_tags=activate,activate:attach
+@test "attach defers to the shell's value for undeclared same-value hook assignments" {
+  # We don't need an environment, but we do need wait_for_activations to have a
+  # PROJECT_DIR to look for
+  project_setup_common
+
+  "$FLOX_BIN" init -d proj
+  MANIFEST_CONTENTS="$(cat << "EOF"
+    version = 1
+
+    [hook]
+    on-activate = """
+      export HOOKVAR=hookval
+    """
+EOF
+  )"
+  echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -d proj -f -
+
+  mkfifo activate_started_fifo
+  # Will get cat'ed in teardown
+  TEARDOWN_FIFO="$PROJECT_DIR/teardown_activate"
+  mkfifo "$TEARDOWN_FIFO"
+
+  # Shell #1: HOOKVAR already exported with the very value the hook
+  # assigns, so the assignment is a same-value one without declared
+  # intent. Hold the start open so later activations attach to it.
+  export HOOKVAR=hookval
+  FLOX_SHELL=bash "$FLOX_BIN" activate -d proj -c \
+    "echo > activate_started_fifo && echo > \"$TEARDOWN_FIFO\"" &
+  unset HOOKVAR
+  cat activate_started_fifo
+
+  # Shell #2: no HOOKVAR — receives the hook's value.
+  env -u HOOKVAR FLOX_SHELL=bash "$FLOX_BIN" activate -d proj -c \
+    'echo "HOOKVAR=$HOOKVAR" > output_absent; find "$("$FLOX_BIN" activation-state -d proj)" -name envtrace.log | wc -l > start_count'
+  run cat start_count
+  assert_success
+  assert_output --regexp "^ *1\$"
+  run cat output_absent
+  assert_success
+  assert_output "HOOKVAR=hookval"
+
+  # Shell #3: HOOKVAR holds a different value — the shell's own value
+  # wins over the undeclared same-value assignment.
+  HOOKVAR=mine FLOX_SHELL=bash "$FLOX_BIN" activate -d proj -c \
+    'echo "HOOKVAR=$HOOKVAR" > output_mine'
+  run cat output_mine
+  assert_success
+  assert_output "HOOKVAR=mine"
+}
+
+# Export-attribute changes made through `declare -x`, `declare +x`, and
+# function-local `local -x` funnel through different code paths in bash
+# than the `export` builtin. An attaching shell must see their net
+# effect: a variable exported via `declare -x` arrives with its value, a
+# variable un-exported via `declare +x` does not leak, and a
+# function-local export vanishes with its scope.
+# bats test_tags=activate,activate:attach
+@test "attach reflects export-attribute changes made via declare and local" {
+  # We don't need an environment, but we do need wait_for_activations to have a
+  # PROJECT_DIR to look for
+  project_setup_common
+
+  "$FLOX_BIN" init -d proj
+  MANIFEST_CONTENTS="$(cat << "EOF"
+    version = 1
+
+    [hook]
+    on-activate = """
+      GAP_A=from-hook
+      declare -x GAP_A
+
+      export GAP_B=leaky
+      declare +x GAP_B
+
+      setup() {
+        local -x GAP_C=scratch
+        true   # GAP_C is genuinely exported to children spawned here
+      }
+      setup
+    """
+EOF
+  )"
+  echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -d proj -f -
+
+  mkfifo activate_started_fifo
+  # Will get cat'ed in teardown
+  TEARDOWN_FIFO="$PROJECT_DIR/teardown_activate"
+  mkfifo "$TEARDOWN_FIFO"
+
+  # Shell #1 starts the activation and holds it open.
+  FLOX_SHELL=bash "$FLOX_BIN" activate -d proj -c \
+    "echo > activate_started_fifo && echo > \"$TEARDOWN_FIFO\"" &
+  cat activate_started_fifo
+
+  # Shell #2 attaches; the start-count guard proves it attached rather
+  # than starting anew.
+  env -u GAP_A -u GAP_B -u GAP_C FLOX_SHELL=bash "$FLOX_BIN" activate -d proj -c \
+    'echo "GAP_A=${GAP_A:-}" > out_a; echo "GAP_B=${GAP_B:-}" > out_b; echo "GAP_C=${GAP_C:-}" > out_c; find "$("$FLOX_BIN" activation-state -d proj)" -name envtrace.log | wc -l > start_count'
+  run cat start_count
+  assert_success
+  assert_output --regexp "^ *1\$"
+  run cat out_a
+  assert_success
+  assert_output "GAP_A=from-hook"
+  run cat out_b
+  assert_success
+  assert_output "GAP_B="
+  run cat out_c
+  assert_success
+  assert_output "GAP_C="
+}
+
 # ---------------------------------------------------------------------------- #
 
 @test "bash: repeat activation in .bashrc doesn't break aliases" {
@@ -4297,9 +4559,9 @@ attach_previous_release() {
   # writes the bumped schema version (both versions share the same schema, so
   # attach should succeed).
   #
-  # The activation state schema is still Version<3> in this release (same as
-  # v1.12.1), so the current binary can attach to a previous-release activation.
-  incrementing_version_this_release="false"
+  # This release bumps the activation state schema to Version<4>, so an
+  # activation started by the previous release cannot be attached to.
+  incrementing_version_this_release="true"
 
   # Set to "true" whenever the buildenv format changes and FLOX_LATEST_VERSION
   # still points to a release that uses the old format.  Set back to "false"

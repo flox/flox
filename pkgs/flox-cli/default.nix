@@ -98,7 +98,11 @@ craneLib.buildPackage (
     #
     # See: <https://github.com/flox/flox/issues/1820>
     propagatedBuildInputs = rust-internal-deps.propagatedBuildInputs ++ [
-      bash
+      # .out like nix.out below: propagating the bare multi-output
+      # derivation would prefer its dev output, dragging headers and
+      # pkg-config files into the runtime closure. The binary embeds
+      # ${bash}/bin/bash (the out output) paths.
+      bash.out
       nix.out
       flox-interpreter
     ];

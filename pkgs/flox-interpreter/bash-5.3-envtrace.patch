@@ -1,0 +1,1114 @@
+--- ../bash-5.3/builtins/declare.def
++++ builtins/declare.def
+@@ -985,8 +985,23 @@ restart_new_var_name:
+       offref = (flags_off & att_nameref);
+       flags_off &= ~att_nameref;
+ 
+-      VSETATTR (var, flags_on);
+-      VUNSETATTR (var, flags_off);
++      {
++	/* Trace export-attribute changes made by declare/local, which set
++	   attributes directly rather than through set_var_attribute.  The
++	   value assignment (if any) has not happened yet, so a bare
++	   `declare -x NAME' on a valued variable reports here (flushing
++	   any buffered history), while `declare -x NAME=value' reports
++	   nothing here (no value yet) and is traced by the binding. */
++	int et_oldexp = exported_p (var) ? 1 : 0;
++
++	VSETATTR (var, flags_on);
++	VUNSETATTR (var, flags_off);
++
++	if ((flags_on & att_exported) && et_oldexp == 0)
++	  bash_envtrace_export_change (var, 0, 0);
++	else if ((flags_off & att_exported) && et_oldexp)
++	  bash_envtrace_export_change (var, 1, 1);
++      }
+ 
+ #if defined (ARRAY_VARS)
+       if (offset && compound_array_assign)
+--- ../bash-5.3/builtins/setattr.def
++++ builtins/setattr.def
+@@ -673,8 +673,23 @@ set_var_attribute (char *name, int attribute, int undo)
+     }
+ 
+   if (var)
+-    SETVARATTR (var, attribute, undo);
++    {
++      /* Snapshot the export state before the attribute change; the tracer
++	 records pre- and post-op membership so the change is invertible. */
++      int et_oldexp = exported_p (var) ? 1 : 0;
++
++      SETVARATTR (var, attribute, undo);
++
++      if (exported_p (var) || (attribute & att_exported))
++	array_needs_making++;	/* XXX */
+ 
+-  if (var && (exported_p (var) || (attribute & att_exported)))
+-    array_needs_making++;	/* XXX */
++      /* Trace a change to the export attribute (env membership) that carries
++	 no value change: `export NAME' / `export -n NAME' on an existing
++	 variable.  `export NAME=value' also passes through here, but the
++	 value change was already traced by the preceding bind_variable(), so
++	 we only report the membership change when the export attribute is
++	 actually involved. */
++      if (attribute & att_exported)
++	bash_envtrace_export_change (var, undo, et_oldexp);
++    }
+ }
+--- ../bash-5.3/variables.c
++++ variables.c
+@@ -188,6 +188,828 @@ static SHELL_VAR nameref_maxloop_value;
+ static HASH_TABLE *last_table_searched;	/* hash_lookup sets this */
+ static VAR_CONTEXT *last_context_searched;
+ 
++/* ======================================================================= */
++/* Environment-variable activity tracer.                                   */
++/*                                                                         */
++/* Emits one newline-delimited record to a file or file descriptor every  */
++/* time a shell variable is created, modified (even to an identical        */
++/* value), unset, or has its export attribute toggled, and for temporary-  */
++/* environment assignments of the form `FOO=bar cmd'.  This is compiled    */
++/* unconditionally and is inert unless activated at run time.              */
++/*                                                                         */
++/* Activation and runtime control (the variables need only be SET -- the   */
++/* tracer reads bash's own variable table, so no export is required):      */
++/*   BASH_ENVTRACE_FD=<n>     write to already-open descriptor <n>         */
++/*   BASH_ENVTRACE_FILE=<path> open <path> O_WRONLY|O_CREAT|O_APPEND       */
++/* Both are read lazily at the first traced mutation (BASH_ENVTRACE_FD     */
++/* wins if both are set), and re-read whenever the script itself assigns   */
++/* or unsets either variable:                                              */
++/*   - assigning one replaces the current sink ("most recent wins"); an    */
++/*     empty or unusable value leaves tracing disabled;                    */
++/*   - `unset' of the variable that configured the active sink stops       */
++/*     tracing.  Control-variable mutations are themselves never recorded  */
++/*     (see below), so the stream carries no window-marker records.        */
++/* This makes windowed capture of one section of a script trivial:         */
++/*   BASH_ENVTRACE_FILE=$t; ...critical section...; unset BASH_ENVTRACE_FILE */
++/* If neither variable is ever set the tracer stays disabled with no       */
++/* measurable overhead beyond one integer test per mutation.               */
++/*                                                                         */
++/* Records are suppressed until shell_initialized != 0, which excludes the */
++/* initial import of the inherited environment and any startup files, so   */
++/* the stream reflects only the activity of the script/-c body itself.     */
++/*                                                                         */
++/* Exactly ONE process ever writes a given trace: forked subshells          */
++/* ( (...), $(...), cmd &, process substitution ) inherit the tracer state  */
++/* but are suppressed at emit time via bash's subshell globals (plus an     */
++/* owner-pid guard), and the control variables are excluded from the        */
++/* export environment built for children even if the user exports them,     */
++/* so an exec'd patched bash can never activate on an inherited setting.    */
++/* Subshell mutations cannot reach this shell's environment anyway; the     */
++/* stream records exactly the mutations that can.                           */
++/*                                                                          */
++/* Record format (fields separated by 0x1f, record terminated by 0x0a):   */
++/*   <sec>.<usec> <op> <exported> <name> <old> <operand>                    */
++/* <op> is one of:                                                          */
++/*   set      entry appears in the environment: creation of an exported     */
++/*            variable, or `export NAME' on a variable built up while       */
++/*            unexported (its accumulated value is reported here -- the     */
++/*            variable table itself is the buffer, so unexported            */
++/*            modifications are never reported piecemeal)                   */
++/*   reset    member reassigned a byte-identical value                      */
++/*   prepend  member grew at the front                                      */
++/*   append   member grew at the end                                        */
++/*   updated  member changed any other way (shrink, rewrite, both ends)     */
++/*   unset    entry removed: `unset' of a member, or `export -n'            */
++/*   tempenv  `FOO=bar cmd' overlay (child-only, parent env untouched)      */
++/* There is no `export' op: the export builtin's effect is reported as the  */
++/* `set' (or `unset' for -n) it amounts to; a redundant re-export changes   */
++/* nothing and reports nothing.                                             */
++/*                                                                          */
++/* <old> is the full prior value.  <operand> is the argument to <op>: the   */
++/* full assigned value for set/reset/updated/tempenv, ONLY the added text   */
++/* for prepend/append (so a replaying shell can apply the delta to its own  */
++/* current value, e.g. append `:/usr/sbin' to its own PATH), and `@' for    */
++/* unset.                                                                   */
++/* An empty old value classifies as `append' (it is trivially a prefix of   */
++/* the new value); when the old value is both a proper prefix and a proper  */
++/* suffix of the new one, prefix wins and the op is `append'.               */
++/*                                                                          */
++/* <exported> is two digits, the PRE- and POST-operation export state, so   */
++/* every record is invertible: `01' = newly exported, `11' = was and still  */
++/* is, `10' = removed from the environment.  Records are emitted ONLY for   */
++/* mutations visible to child-process environments (pre or post is 1), so   */
++/* `00' never appears; plain unexported shell-variable activity -- and any  */
++/* mutation of the control variables themselves -- is not recorded.  For    */
++/* `unset' the post digit is always 0; for `tempenv' it is `01' (an entry  */
++/* appears in the child's environment; the parent is untouched).  The      */
++/* digits report actual environment membership -- export attribute AND a   */
++/* value -- so an invisible `declare -x' placeholder is not a member.      */
++/* <exported> is two digits: pre- and post-operation state (see below).    */
++/* <name> is escaped.  <old>/<new> are either the single byte '@' meaning  */
++/* "did not exist", or ':' followed by the escaped value (which may be     */
++/* empty).  Escaping renders \\, 0x0a, 0x0d, 0x1f and bytes < 0x20 as      */
++/* \xHH / \n / \r / \\, so every record occupies exactly one line and no   */
++/* value byte can be confused with a delimiter.                            */
++/* ======================================================================= */
++
++#include <sys/time.h>
++#include <errno.h>
++#include <limits.h>
++#include <glob/strmatch.h>	/* strmatch for the reset-intent registry */
++
++#define ENVTRACE_FS	'\037'		/* unit separator, field delimiter */
++#define ENVTRACE_UNINIT	(-2)
++#define ENVTRACE_OFF	(-1)
++
++#define ENVTRACE_SRC_NONE 0
++#define ENVTRACE_SRC_FILE 1
++#define ENVTRACE_SRC_FD   2
++#define ENVTRACE_CTL_RESET 3	/* intent marker, never a sink */
++
++static int envtrace_fd = ENVTRACE_UNINIT;
++static int envtrace_owned = 0;		/* did we open envtrace_fd ourselves? */
++static int envtrace_active = 0;		/* nonzero once fd is usable */
++static int envtrace_busy = 0;		/* re-entrancy guard */
++static int envtrace_source = ENVTRACE_SRC_NONE;	/* which control var configured the sink */
++static pid_t envtrace_owner = 0;	/* pid that configured the sink; sole writer */
++
++/* Is NAME one of the tracer's own control variables?  Returns
++   ENVTRACE_SRC_FILE / ENVTRACE_SRC_FD (the sink controls),
++   ENVTRACE_CTL_RESET (the always-reset intent marker), or
++   ENVTRACE_SRC_NONE. */
++static int
++envtrace_ctlvar (const char *name)
++{
++  if (name == 0 || name[0] != 'B' || strncmp (name, "BASH_ENVTRACE_", 14) != 0)
++    return ENVTRACE_SRC_NONE;
++  if (STREQ (name + 14, "FILE"))
++    return ENVTRACE_SRC_FILE;
++  if (STREQ (name + 14, "FD"))
++    return ENVTRACE_SRC_FD;
++  if (STREQ (name + 14, "RESET"))
++    return ENVTRACE_CTL_RESET;
++  return ENVTRACE_SRC_NONE;
++}
++
++/* Does the script currently declare always-reset intent covering NAME?
++   The marker is BASH_ENVTRACE_RESET, honored in every form the shell can
++   set it:
++     - per-command temporary-environment prefix:
++         BASH_ENVTRACE_RESET=1 export FOO=bar
++     - region toggle (also what a wrapper function uses):
++         BASH_ENVTRACE_RESET=1; ...; BASH_ENVTRACE_RESET=
++     - registry: a whitespace-separated list of shell patterns naming the
++       variables it covers ("1" covers everything):
++         BASH_ENVTRACE_RESET='PATH MANPATH FOO*'
++   Like the other control variables it is never recorded and never
++   exported to child processes. */
++static int
++envtrace_reset_intent (const char *name)
++{
++  SHELL_VAR *var;
++  char *v, *t, *e, *pat;
++  int match;
++
++  var = find_tempenv_variable ("BASH_ENVTRACE_RESET");
++  if (var == 0)
++    var = find_variable ("BASH_ENVTRACE_RESET");
++  if (var == 0)
++    return 0;
++  v = value_cell (var);
++  if (v == 0 || *v == '\0')
++    return 0;
++  if (v[0] == '1' && v[1] == '\0')
++    return 1;
++  match = 0;
++  for (t = v; *t && match == 0; t = e)
++    {
++      while (*t == ' ' || *t == '\t')
++	t++;
++      if (*t == '\0')
++	break;
++      for (e = t; *e && *e != ' ' && *e != '\t'; e++)
++	;
++      pat = (char *)xmalloc ((size_t)(e - t) + 1);
++      memcpy (pat, t, (size_t)(e - t));
++      pat[e - t] = '\0';
++      if (strmatch (pat, (char *)name, FNMATCH_EXTFLAG) == 0)
++	match = 1;
++      free (pat);
++    }
++  return match;
++}
++
++/* Tear down the current sink, closing the descriptor if we opened it. */
++static void envtrace_buf_drop_all (void);
++
++static void
++envtrace_disable (void)
++{
++  if (envtrace_owned && envtrace_fd >= 0)
++    close (envtrace_fd);
++  envtrace_fd = ENVTRACE_OFF;
++  envtrace_owned = 0;
++  envtrace_active = 0;
++  envtrace_source = ENVTRACE_SRC_NONE;
++  envtrace_buf_drop_all ();	/* unflushed history dies with its window */
++}
++
++/* (Re)configure the sink from a control-variable value.  CTL says which
++   variable was assigned; VALUE is its just-assigned value.  The assignment
++   always replaces the current sink; an empty or unusable value leaves the
++   tracer disabled. */
++static void
++envtrace_control_set (int ctl, const char *value)
++{
++  char *ep;
++  long fdnum;
++  int fd;
++
++  envtrace_disable ();			/* most recent assignment wins */
++
++  if (value == 0 || *value == '\0')
++    return;
++
++  if (ctl == ENVTRACE_SRC_FD)
++    {
++      errno = 0;
++      fdnum = strtol (value, &ep, 10);
++      if (errno == 0 && ep != value && *ep == '\0'
++	  && fdnum >= 0 && fdnum <= INT_MAX
++	  && fcntl ((int)fdnum, F_GETFD) != -1)	/* fd must actually be open */
++	{
++	  envtrace_fd = (int)fdnum;
++	  envtrace_owned = 0;
++	  envtrace_active = 1;
++	  envtrace_source = ENVTRACE_SRC_FD;
++	  envtrace_owner = getpid ();
++	}
++      return;
++    }
++
++  fd = open (value, O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC, 0600);
++  if (fd >= 0)
++    {
++      envtrace_fd = fd;
++      envtrace_owned = 1;
++      envtrace_active = 1;
++      envtrace_source = ENVTRACE_SRC_FILE;
++      envtrace_owner = getpid ();
++    }
++}
++
++/* Startup activation.  Reads the shell's own variable table (not the
++   process environment), so the control variables work whether or not they
++   are exported; variables inherited from the environment are in the table
++   too, so `BASH_ENVTRACE_FILE=x bash script' still activates as before. */
++static void
++envtrace_init (void)
++{
++  char *s;
++
++  envtrace_fd = ENVTRACE_OFF;		/* default: disabled */
++
++  s = get_string_value ("BASH_ENVTRACE_FD");
++  if (s && *s)
++    {
++      envtrace_control_set (ENVTRACE_SRC_FD, s);
++      return;				/* explicit FD requested; FD wins */
++    }
++
++  s = get_string_value ("BASH_ENVTRACE_FILE");
++  if (s && *s)
++    envtrace_control_set (ENVTRACE_SRC_FILE, s);
++}
++
++static void envtrace_emit (const char *, const char *, const char *, const char *, int, int);
++static const char *envtrace_scalar (SHELL_VAR *);
++static int envtrace_wants (const char *);
++
++/* ---- function-scope teardown ------------------------------------------ */
++/* Locals are disposed wholesale when a function returns, without passing
++   through makunbound, so exported locals (`local -x') would vanish from
++   the environment without a record.  pop_var_context snapshots the dying
++   context's environment members with these helpers and, after the pop,
++   reconciles each against whatever the name resolves to in the enclosing
++   scope: nothing if an outer member holds the same value (covers vars
++   propagated down), a value-change record if an outer member differs
++   (an exported local shadowing an exported outer variable), or `unset'
++   if the name is no longer a member. */
++
++static int
++envtrace_collect_members (HASH_TABLE *table, char ***namesp, char ***valsp)
++{
++  register int i;
++  BUCKET_CONTENTS *elt;
++  SHELL_VAR *var;
++  const char *v;
++  char **names, **vals;
++  int n;
++
++  names = strvec_create (table->nentries + 1);
++  vals = strvec_create (table->nentries + 1);
++  n = 0;
++  for (i = 0; i < table->nbuckets; i++)
++    for (elt = hash_items (i, table); elt; elt = elt->next)
++      {
++	var = (SHELL_VAR *)elt->data;
++	v = envtrace_scalar (var);
++	if (v && exported_p (var))
++	  {
++	    names[n] = savestring (name_cell (var));
++	    vals[n] = savestring (v);
++	    n++;
++	  }
++      }
++  names[n] = vals[n] = 0;
++  *namesp = names;
++  *valsp = vals;
++  return n;
++}
++
++static void
++envtrace_scope_pop_emit (int n, char **names, char **vals)
++{
++  SHELL_VAR *var;
++  const char *v;
++  int i;
++
++  for (i = 0; i < n; i++)
++    {
++      var = find_variable (names[i]);
++      v = var ? envtrace_scalar (var) : (const char *)0;
++      if (v && exported_p (var))
++	{
++	  if (STREQ (v, vals[i]) == 0)
++	    envtrace_emit ("set", names[i], vals[i], v, 1, 1);
++	}
++      else
++	envtrace_emit ("unset", names[i], vals[i], (const char *)0, 1, 0);
++    }
++  strvec_dispose (names);
++  strvec_dispose (vals);
++}
++
++/* Write one complete record with a single write() call so a crash
++   mid-record cannot tear the stream.  Retry on EINTR and short writes;
++   give up silently on other errors. */
++static void
++envtrace_write_all (const char *data, size_t len)
++{
++  size_t off = 0;
++
++  while (off < len)
++    {
++      ssize_t w = write (envtrace_fd, data + off, len - off);
++      if (w < 0)
++	{
++	  if (errno == EINTR)
++	    continue;
++	  break;
++	}
++      off += (size_t)w;
++    }
++}
++
++/* ---- deferred reporting for not-yet-exported variables ---------------- */
++/* Mutations of variables that are not environment members are formatted
++   but BUFFERED, per variable, rather than written: if the variable is
++   later exported, its accumulated history is flushed to the trace (so the
++   exact sequence of operations -- and their deltas -- is preserved, with
++   the timestamps of when they actually happened); if it is unset first,
++   or never exported, the history is discarded.  On flush the first
++   record's pre-digit is patched to 0 -- that is the moment the entry
++   appeared in the environment -- and the rest to 1, keeping the stream
++   invertible. */
++
++typedef struct envtrace_brec
++{
++  struct envtrace_brec *next;
++  char *line;			/* complete formatted record, incl. newline */
++  size_t len;
++  size_t exp_off;		/* offset of the pre-digit within line */
++} ENVTRACE_BREC;
++
++typedef struct envtrace_bvar
++{
++  struct envtrace_bvar *next;
++  char *name;
++  ENVTRACE_BREC *head, *tail;
++} ENVTRACE_BVAR;
++
++static ENVTRACE_BVAR *envtrace_buffers = 0;
++
++static ENVTRACE_BVAR *
++envtrace_buf_find (const char *name)
++{
++  ENVTRACE_BVAR *b;
++
++  for (b = envtrace_buffers; b; b = b->next)
++    if (STREQ (b->name, name))
++      return b;
++  return 0;
++}
++
++/* Take ownership of LINE and queue it as NAME's next buffered record. */
++static void
++envtrace_buf_add (const char *name, char *line, size_t len, size_t exp_off)
++{
++  ENVTRACE_BVAR *b;
++  ENVTRACE_BREC *r;
++
++  b = envtrace_buf_find (name);
++  if (b == 0)
++    {
++      b = (ENVTRACE_BVAR *)xmalloc (sizeof (ENVTRACE_BVAR));
++      b->name = savestring (name);
++      b->head = b->tail = 0;
++      b->next = envtrace_buffers;
++      envtrace_buffers = b;
++    }
++  r = (ENVTRACE_BREC *)xmalloc (sizeof (ENVTRACE_BREC));
++  r->line = line;
++  r->len = len;
++  r->exp_off = exp_off;
++  r->next = 0;
++  if (b->tail)
++    b->tail->next = r;
++  else
++    b->head = r;
++  b->tail = r;
++}
++
++static void
++envtrace_buf_free (ENVTRACE_BVAR *b)
++{
++  ENVTRACE_BVAR **pp;
++  ENVTRACE_BREC *r, *rn;
++
++  for (pp = &envtrace_buffers; *pp; pp = &(*pp)->next)
++    if (*pp == b)
++      {
++	*pp = b->next;
++	break;
++      }
++  for (r = b->head; r; r = rn)
++    {
++      rn = r->next;
++      free (r->line);
++      free (r);
++    }
++  free (b->name);
++  free (b);
++}
++
++/* Discard NAME's buffered history (it was unset before being exported). */
++static void
++envtrace_buf_drop (const char *name)
++{
++  ENVTRACE_BVAR *b;
++
++  b = envtrace_buf_find (name);
++  if (b)
++    envtrace_buf_free (b);
++}
++
++/* Discard everything (the sink is going away). */
++static void
++envtrace_buf_drop_all (void)
++{
++  while (envtrace_buffers)
++    envtrace_buf_free (envtrace_buffers);
++}
++
++static void envtrace_write_all (const char *, size_t);
++
++/* NAME is becoming an environment member: write its buffered history,
++   patching the membership digits (first record 01, the rest 11).
++   Returns nonzero if any records were flushed. */
++static int
++envtrace_buf_flush (const char *name)
++{
++  ENVTRACE_BVAR *b;
++  ENVTRACE_BREC *r;
++  int first, flushed;
++
++  b = envtrace_buf_find (name);
++  if (b == 0)
++    return 0;
++  flushed = 0;
++  for (r = b->head, first = 1; r; r = r->next, first = 0)
++    {
++      r->line[r->exp_off] = first ? '0' : '1';
++      r->line[r->exp_off + 1] = '1';
++      envtrace_write_all (r->line, r->len);
++      flushed = 1;
++    }
++  envtrace_buf_free (b);
++  return flushed;
++}
++
++/* Append the escaped form of the NUL-terminated string S to *BUFP, growing
++   the buffer as needed.  *LENP is the current length, *SIZEP the capacity. */
++static void
++envtrace_append_escaped (char **bufp, size_t *lenp, size_t *sizep, const char *s)
++{
++  const unsigned char *p;
++  char *buf;
++  size_t len, size;
++  static const char hexdigits[] = "0123456789abcdef";
++
++  buf = *bufp; len = *lenp; size = *sizep;
++  for (p = (const unsigned char *)s; p && *p; p++)
++    {
++      /* Worst case a single input byte expands to 4 output bytes (\xHH). */
++      if (len + 5 > size)
++	{
++	  size = (size * 2) + 32;
++	  buf = (char *)xrealloc (buf, size);
++	}
++      switch (*p)
++	{
++	case '\\':	buf[len++] = '\\'; buf[len++] = '\\'; break;
++	case '\n':	buf[len++] = '\\'; buf[len++] = 'n'; break;
++	case '\r':	buf[len++] = '\\'; buf[len++] = 'r'; break;
++	default:
++	  if (*p < 0x20 || *p == (unsigned char)ENVTRACE_FS)
++	    {
++	      buf[len++] = '\\';
++	      buf[len++] = 'x';
++	      buf[len++] = hexdigits[(*p >> 4) & 0xf];
++	      buf[len++] = hexdigits[*p & 0xf];
++	    }
++	  else
++	    buf[len++] = (char)*p;
++	  break;
++	}
++    }
++  *bufp = buf; *lenp = len; *sizep = size;
++}
++
++static void
++envtrace_append_raw (char **bufp, size_t *lenp, size_t *sizep, const char *s, size_t n)
++{
++  if (*lenp + n > *sizep)
++    {
++      *sizep = (*lenp + n) * 2 + 32;
++      *bufp = (char *)xrealloc (*bufp, *sizep);
++    }
++  memcpy (*bufp + *lenp, s, n);
++  *lenp += n;
++}
++
++/* Refine a generic value-assignment into the precise mutation kind, from
++   the old/new value pair alone.  See the op table in the banner comment.
++   The containment checks are exact byte comparisons; anything that is not
++   pure growth at one end reports as "updated". */
++static const char *
++envtrace_classify_set (const char *oldval, const char *newval)
++{
++  size_t ol, nl;
++
++  if (oldval == 0)
++    return "set";		/* did not exist before */
++  if (newval == 0)
++    return "updated";		/* value disappeared without an unset */
++  if (STREQ (oldval, newval))
++    return "reset";
++  ol = strlen (oldval);
++  nl = strlen (newval);
++  if (nl > ol && memcmp (newval, oldval, ol) == 0)
++    return "append";		/* old is a prefix: text added at the end */
++  if (nl > ol && memcmp (newval + (nl - ol), oldval, ol) == 0)
++    return "prepend";		/* old is a suffix: text added at the front */
++  return "updated";
++}
++
++/* Emit one record.  OP is the operation name; NAME the variable; OLDVAL and
++   NEWVAL are the values before and after (NULL meaning "did not exist");
++   OLDEXP and NEWEXP are the pre- and post-operation export states. */
++static void
++envtrace_emit (const char *op, const char *name,
++	       const char *oldval, const char *newval, int oldexp, int newexp)
++{
++  char *buf;
++  size_t len, size;
++  char hdr[128];
++  int n, ctl, to_buffer;
++  struct timeval tv;
++
++  /* Inert until the shell is running the script/-c body, and never
++     re-enter (nothing we call binds variables, but be defensive).  Forked
++     subshells -- ( ... ), $(...), async commands, process substitution --
++     inherit this state but must not write: their mutations cannot reach
++     this shell's environment, and a second writer would interleave with
++     the owner.  bash's subshell globals cover every fork path. */
++  if (shell_initialized == 0 || envtrace_busy
++      || subshell_level > 0 || subshell_environment != 0)
++    return;
++
++  /* A `set' that neither had a prior value nor produced one is an invisible
++     placeholder (e.g. `declare -x NAME' with no value): it is not yet an
++     environment entry and carries no value delta, so drop it as noise.  Its
++     eventual value assignment and any export-attribute change are traced
++     separately. */
++  if (oldval == 0 && newval == 0 && op[0] == 's' && op[1] == 'e' && op[2] == 't' && op[3] == '\0')
++    return;
++
++  /* Mutating a control variable reconfigures the tracer.  Assignment is
++     applied *before* emitting so the record below lands in the sink it just
++     configured; removal is applied after (see the bottom of this function).
++     A `tempenv' overlay of a control variable is a child-only value and does
++     not reconfigure this shell's tracer. */
++  ctl = envtrace_ctlvar (name);
++  if ((ctl == ENVTRACE_SRC_FILE || ctl == ENVTRACE_SRC_FD)
++      && STREQ (op, "set"))
++    {
++      envtrace_busy = 1;
++      envtrace_control_set (ctl, newval);
++      envtrace_busy = 0;
++    }
++  else if (envtrace_fd == ENVTRACE_UNINIT)
++    {
++      envtrace_busy = 1;
++      envtrace_init ();
++      envtrace_busy = 0;
++    }
++  if (envtrace_active == 0)
++    return;
++
++  /* Belt and braces for any fork the globals above might not describe:
++     only the process that configured the sink ever writes to it. */
++  if (envtrace_owner != getpid ())
++    return;
++
++  /* The exported digits report actual environment MEMBERSHIP, not just
++     the export attribute: a variable carrying the attribute but no value
++     (an invisible `declare -x NAME' placeholder) has no environ entry, so
++     it is not a member.  This also makes the visibility filter below drop
++     placeholder-only attribute churn. */
++  oldexp = oldexp && oldval != 0;
++  newexp = newexp && newval != 0;
++
++  /* The tracer's own control variables are never recorded: they are
++     excluded from child environments by construction, so no mutation of
++     theirs is ever environment-visible.  Removing the control variable
++     that owns the active sink still stops tracing; it just writes no
++     record of its own. */
++  if (ctl != ENVTRACE_SRC_NONE)
++    {
++      if (ctl == envtrace_source && STREQ (op, "unset"))
++	envtrace_disable ();
++      return;
++    }
++
++  /* Mutations of variables that are environment members neither before
++     nor after the operation are BUFFERED, not written: their history is
++     reported only if the variable is later exported (see the flush below),
++     and discarded if it is unset first.  `00' never appears in a stream. */
++  to_buffer = 0;
++  if (oldexp == 0 && newexp == 0)
++    {
++      if (STREQ (op, "unset"))
++	{
++	  envtrace_buf_drop (name);
++	  return;
++	}
++      to_buffer = 1;
++    }
++  else if (oldexp == 0 && newexp != 0)
++    {
++      /* The variable is becoming an environment member.  If it carries
++	 buffered history, flush that first: it reports exactly how the
++	 value was built up, and its first record is the moment the entry
++	 appeared.  A bare `export NAME' (reported by the caller as a
++	 synthetic `set' with no old value) is then fully told by the
++	 history and writes nothing further; an assignment that itself
++	 makes the variable a member continues below as a member op. */
++      if (envtrace_buf_flush (name))
++	{
++	  if (oldval == 0 && op[0] == 's' && STREQ (op, "set"))
++	    return;
++	  oldexp = 1;
++	}
++    }
++
++  /* The hook sites report every value assignment as a generic "set"; refine
++     it here, where old and new are both in hand.  (The control-variable
++     logic above still keys on the generic op names.) */
++  if (op[0] == 's' && op[1] == 'e' && op[2] == 't' && op[3] == '\0')
++    op = envtrace_classify_set (oldval, newval);
++
++  /* A same-value assignment is ambiguous: it may mean "default this
++     variable" or "always force this value".  Without declared intent it
++     reports as `set-if-absent' (a replayer keeps its own value); with
++     BASH_ENVTRACE_RESET intent covering the name it reports as `reset'
++     (a replayer overwrites).  Intent is evaluated now, at mutation time,
++     so buffered histories carry the intent in force when they happened. */
++  if (op[0] == 'r' && STREQ (op, "reset") && envtrace_reset_intent (name) == 0)
++    op = "set-if-absent";
++
++  /* Reduce the new value to the op's operand: prepend/append record only
++     the added text, everything else the full value (NULL for unset). */
++  {
++    const char *operand;
++    char *opbuf = 0;
++
++    if (op[0] == 'a' && STREQ (op, "append"))
++      operand = newval + strlen (oldval ? oldval : "");
++    else if (op[0] == 'p' && STREQ (op, "prepend"))
++      {
++	size_t plen = strlen (newval) - strlen (oldval ? oldval : "");
++	opbuf = (char *)xmalloc (plen + 1);
++	memcpy (opbuf, newval, plen);
++	opbuf[plen] = '\0';
++	operand = opbuf;
++      }
++    else
++      operand = newval;
++    newval = operand;
++    /* opbuf freed below, after the record is written */
++
++  envtrace_busy = 1;
++
++  gettimeofday (&tv, (void *)0);
++
++  size = 128;
++  buf = (char *)xmalloc (size);
++  len = 0;
++
++  n = snprintf (hdr, sizeof (hdr), "%ld.%06ld%c%s%c%d%d%c",
++		(long)tv.tv_sec, (long)tv.tv_usec, ENVTRACE_FS,
++		op, ENVTRACE_FS,
++		oldexp ? 1 : 0, newexp ? 1 : 0, ENVTRACE_FS);
++  if (n < 0)
++    { free (buf); envtrace_busy = 0; return; }
++  envtrace_append_raw (&buf, &len, &size, hdr, (size_t)n);
++
++  envtrace_append_escaped (&buf, &len, &size, name);
++
++  {
++    char fs = ENVTRACE_FS;
++    envtrace_append_raw (&buf, &len, &size, &fs, 1);
++    if (oldval == 0)
++      envtrace_append_raw (&buf, &len, &size, "@", 1);
++    else
++      {
++	envtrace_append_raw (&buf, &len, &size, ":", 1);
++	envtrace_append_escaped (&buf, &len, &size, oldval);
++      }
++    envtrace_append_raw (&buf, &len, &size, &fs, 1);
++    if (newval == 0)
++      envtrace_append_raw (&buf, &len, &size, "@", 1);
++    else
++      {
++	envtrace_append_raw (&buf, &len, &size, ":", 1);
++	envtrace_append_escaped (&buf, &len, &size, newval);
++      }
++    envtrace_append_raw (&buf, &len, &size, "\n", 1);
++  }
++
++  if (to_buffer)
++    envtrace_buf_add (name, buf, len, (size_t)n - 3);	/* buf ownership moves */
++  else
++    {
++      envtrace_write_all (buf, len);
++      free (buf);
++    }
++  FREE (opbuf);
++  envtrace_busy = 0;
++  }
++}
++
++/* Cheap predicate answering "should a hook site bother capturing the old
++   value and calling envtrace_emit?".  NAME is the variable about to be
++   mutated: the tracer's own control variables always pass the gate (even
++   while tracing is off) so their mutations reach envtrace_emit and can
++   reconfigure the tracer.  Resolves lazy initialization on first use so
++   that, once tracing is determined to be off, every later call is a name
++   check plus a single integer comparison.  Returns 0 before the script body
++   starts. */
++static int
++envtrace_wants (const char *name)
++{
++  if (shell_initialized == 0
++      || subshell_level > 0 || subshell_environment != 0)
++    return 0;
++  if (envtrace_ctlvar (name))
++    return 1;
++  if (envtrace_fd == ENVTRACE_UNINIT)
++    {
++      envtrace_busy = 1;
++      envtrace_init ();
++      envtrace_busy = 0;
++    }
++  return envtrace_active;
++}
++
++/* Convenience: read the current scalar value of VAR as a C string for the
++   tracer, or NULL if it is unset/invisible or not a plain string (arrays and
++   assoc arrays cannot be exported, so we report them as having no scalar
++   value rather than trying to serialize them here). */
++static const char *
++envtrace_scalar (SHELL_VAR *var)
++{
++  if (var == 0 || invisible_p (var) || var_isset (var) == 0)
++    return (const char *)0;
++#if defined (ARRAY_VARS)
++  if (array_p (var) || assoc_p (var))
++    return (const char *)0;
++#endif
++  return (const char *)value_cell (var);
++}
++
++/* Public entry point for other translation units (e.g. builtins/setattr.def)
++   to record a change to a variable's export attribute: `export NAME' /
++   `export -n NAME'.  UNDO is nonzero when the attribute is being removed.
++   OLDEXP is the attribute state BEFORE the change (captured by the caller,
++   since the change has already been applied by the time this runs).
++   The attribute change is reported as the environment mutation it amounts
++   to: `export NAME' on a variable with a value that was not previously a
++   member is the moment its (possibly built-up) value enters the
++   environment, reported as a `set'; `export -n' on a member is an `unset'.
++   Attribute churn with no environment effect (redundant re-export,
++   unexport of a non-member, placeholders with no value) reports nothing. */
++void
++bash_envtrace_export_change (SHELL_VAR *var, int undo, int oldexp)
++{
++  const char *v;
++
++  /* Attribute changes on the tracer's own control variables mean nothing
++     here (they are never environment members), and must not be mistaken
++     for the real assignment/unset operations that reconfigure the sink. */
++  if (var == 0 || envtrace_ctlvar (name_cell (var))
++      || envtrace_wants (name_cell (var)) == 0)
++    return;
++  v = envtrace_scalar (var);
++  if (v == 0)
++    return;
++  if (undo == 0 && oldexp == 0)
++    envtrace_emit ("set", name_cell (var), (const char *)0, v, 0, 1);
++  else if (undo && oldexp)
++    envtrace_emit ("unset", name_cell (var), v, (const char *)0, 1, 0);
++}
++
+ /* Some forward declarations. */
+ static void create_variable_tables (void);
+ 
+@@ -3055,6 +3877,9 @@ bind_variable_internal (const char *name, const char *value, HASH_TABLE *table,
+ {
+   char *newval, *tname;
+   SHELL_VAR *entry, *tentry;
++  char *et_old = 0;		/* snapshot of prior scalar value for tracer */
++  int et_emit = 0;		/* set at scalar-mutation sites reaching bottom */
++  int et_oldexp = 0;		/* pre-mutation export state (0 for new vars) */
+ 
+   entry = (hflags & HASH_NOSRCH) ? (SHELL_VAR *)NULL : hash_lookup (name, table);
+   /* Follow the nameref chain here if this is the global variables table */
+@@ -3118,12 +3943,14 @@ bind_variable_internal (const char *name, const char *value, HASH_TABLE *table,
+ 	{
+ 	  entry = make_new_variable (newval, table);
+ 	  var_setvalue (entry, make_variable_value (entry, value, aflags));
++	  et_emit = 1;		/* newly created nameref target: old is NULL */
+ 	}
+     }
+   else if (entry == 0)
+     {
+       entry = make_new_variable (name, table);
+       var_setvalue (entry, make_variable_value (entry, value, aflags)); /* XXX */
++      et_emit = 1;		/* newly created variable: old value is NULL */
+     }
+   else if (entry->assign_func)	/* array vars have assign functions now */
+     {
+@@ -3159,6 +3986,22 @@ assign_value:
+       /* Variables which are bound are visible. */
+       VUNSETATTR (entry, att_invisible);
+ 
++      /* Snapshot the prior scalar value before any in-place modification or
++	 free, so the tracer can report old vs. new (including same-value
++	 assignments).  Arrays/assoc arrays are not exportable, so they are
++	 not traced here.  Only pays the savestring cost when tracing is on. */
++      if (envtrace_wants (name_cell (entry))
++#if defined (ARRAY_VARS)
++	  && array_p (entry) == 0 && assoc_p (entry) == 0
++#endif
++	 )
++	{
++	  const char *ov = envtrace_scalar (entry);
++	  et_old = ov ? savestring (ov) : 0;
++	  et_oldexp = exported_p (entry) ? 1 : 0;
++	  et_emit = 1;
++	}
++
+       /* If we can optimize the assignment, do so and return.  Right now, we
+ 	 optimize appends to string variables. */
+       if (can_optimize_assignment (entry, value, aflags))
+@@ -3172,6 +4015,13 @@ assign_value:
+ 	  if (exported_p (entry))
+ 	    array_needs_making = 1;
+ 
++	  if (et_emit)
++	    {
++	      envtrace_emit ("set", name_cell (entry), et_old,
++			     envtrace_scalar (entry), et_oldexp,
++			     exported_p (entry) ? 1 : 0);
++	      FREE (et_old);
++	    }
+ 	  return (entry);
+ 	}
+ 
+@@ -3214,6 +4064,18 @@ assign_value:
+   if (exported_p (entry))
+     array_needs_making = 1;
+ 
++  /* Trace scalar creations and assignments (including same-value ones) that
++     reached this shared exit.  et_emit was set at the mutation site; for the
++     entry==0 / nameref-target-creation paths et_old is NULL and et_oldexp 0
++     by construction, which correctly renders as "did not exist". */
++  if (et_emit)
++    {
++      envtrace_emit ("set", name_cell (entry), et_old,
++		     envtrace_scalar (entry), et_oldexp,
++		     exported_p (entry) ? 1 : 0);
++      FREE (et_old);
++    }
++
+   return (entry);
+ }
+ 	
+@@ -3321,10 +4183,28 @@ bind_variable_value (SHELL_VAR *var, char *value, int aflags)
+ {
+   char *t;
+   int invis;
++  char *et_old = 0;		/* prior scalar value snapshot for tracer */
++  int et_want = 0;
++  int et_oldexp = 0;		/* pre-mutation export state */
+ 
+   invis = invisible_p (var);
+   VUNSETATTR (var, att_invisible);
+ 
++  /* Snapshot before make_variable_value/free below.  `declare NAME=value' on
++     an existing variable reaches the shell through this function rather than
++     bind_variable_internal, so it must be traced here too. */
++  if (envtrace_wants (name_cell (var))
++#if defined (ARRAY_VARS)
++      && array_p (var) == 0 && assoc_p (var) == 0
++#endif
++      && var->assign_func == 0)
++    {
++      const char *ov = envtrace_scalar (var);
++      et_old = ov ? savestring (ov) : 0;
++      et_oldexp = exported_p (var) ? 1 : 0;
++      et_want = 1;
++    }
++
+   if (var->assign_func)
+     {
+       /* If we're appending, we need the old value, so use
+@@ -3347,6 +4227,7 @@ bind_variable_value (SHELL_VAR *var, char *value, int aflags)
+ 	      free (t);
+ 	      if (invis)
+ 		VSETATTR (var, att_invisible);	/* XXX */
++	      FREE (et_old);
+ 	      return ((SHELL_VAR *)NULL);
+ 	    }
+ 	}
+@@ -3355,6 +4236,7 @@ bind_variable_value (SHELL_VAR *var, char *value, int aflags)
+ 	  free (t);
+ 	  if (invis)
+ 	    VSETATTR (var, att_invisible);	/* XXX */
++	  FREE (et_old);
+ 	  return ((SHELL_VAR *)NULL);
+ 	}
+       FREE (value_cell (var));
+@@ -3369,6 +4251,14 @@ bind_variable_value (SHELL_VAR *var, char *value, int aflags)
+   if (exported_p (var))
+     array_needs_making = 1;
+ 
++  if (et_want)
++    {
++      envtrace_emit ("set", name_cell (var), et_old,
++		     envtrace_scalar (var), et_oldexp,
++		     exported_p (var) ? 1 : 0);
++      FREE (et_old);
++    }
++
+   return (var);
+ }
+ 
+@@ -3646,6 +4536,12 @@ assign_in_env (const WORD_DESC *word, int flags)
+ 	so we do too. */
+     xtrace_print_assignment (name, value, 0, 1);
+ 
++  /* Trace the temporary-environment assignment (`FOO=bar cmd').  This never
++     mutates the parent shell's environment, so it is reported under its own
++     op name; the value is always exported into the child's environment. */
++  if (envtrace_wants (newname))
++    envtrace_emit ("tempenv", newname, (const char *)0, value, 1, 1);
++
+   free (name);
+   return 1;
+ }
+@@ -3975,6 +4871,14 @@ makunbound (const char *name, VAR_CONTEXT *vc)
+   if (old_var && exported_p (old_var))
+     array_needs_making++;
+ 
++  /* Trace the removal.  The pre-op export state says whether an actual
++     environment entry is going away; the post-op state of a removed
++     variable is always 0.  Reached by all of unset/unbind_variable/
++     unbind_*_noref. */
++  if (old_var && envtrace_wants (name_cell (old_var)))
++    envtrace_emit ("unset", name_cell (old_var), envtrace_scalar (old_var),
++		   (const char *)0, exported_p (old_var) ? 1 : 0, 0);
++
+   /* If we're unsetting a local variable and we're still executing inside
+      the function, just mark the variable as invisible.  The function
+      eventually called by pop_var_context() will clean it up later.  This
+@@ -4857,6 +5761,13 @@ make_env_array_from_var_list (SHELL_VAR **vars)
+ 
+   for (i = 0, list_index = 0; var = vars[i]; i++)
+     {
++      /* The envtrace control variables are never placed in the export
++	 environment, even if the user exports them: the trace sink belongs
++	 to this shell alone, and a child shell activating on an inherited
++	 control variable would become a second concurrent writer. */
++      if (envtrace_ctlvar (name_cell (var)))
++	continue;
++
+ #if defined (__CYGWIN__)
+       /* We don't use the exportstr stuff on Cygwin at all. */
+       INVALIDATE_EXPORTSTR (var);
+@@ -5345,6 +6256,8 @@ void
+ pop_var_context (void)
+ {
+   VAR_CONTEXT *ret, *vcxt;
++  char **et_names, **et_vals;
++  int et_n;
+ 
+   vcxt = shell_variables;
+   if (vc_isfuncenv (vcxt) == 0)
+@@ -5357,11 +6270,21 @@ pop_var_context (void)
+ 
+   if (ret = vcxt->down)
+     {
++      /* Snapshot exported locals for the tracer before they are torn
++	 down; reconciled against the enclosing scope after the pop. */
++      et_n = 0;
++      et_names = et_vals = 0;
++      if (vcxt->table && envtrace_wants ((const char *)0))
++	et_n = envtrace_collect_members (vcxt->table, &et_names, &et_vals);
++
+       ret->up = (VAR_CONTEXT *)NULL;
+       shell_variables = ret;
+       if (vcxt->table)
+ 	hash_flush (vcxt->table, push_func_var);
+       dispose_var_context (vcxt);
++
++      if (et_names)
++	envtrace_scope_pop_emit (et_n, et_names, et_vals);
+     }
+   else
+     internal_error (_("pop_var_context: no global_variables context"));
+--- ../bash-5.3/variables.h
++++ variables.h
+@@ -332,6 +332,9 @@ extern char *sh_get_env_value (const char *);
+ extern char *make_variable_value (SHELL_VAR *, const char *, int);
+ 
+ extern SHELL_VAR *bind_variable_value (SHELL_VAR *, char *, int);
++
++/* Environment-variable activity tracer (see variables.c). */
++extern void bash_envtrace_export_change (SHELL_VAR *, int, int);
+ extern SHELL_VAR *bind_int_variable (const char *, const char *, int);
+ extern SHELL_VAR *bind_var_to_int (const char *, intmax_t, int);
+ 

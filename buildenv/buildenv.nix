@@ -56,12 +56,33 @@ let
   vars =
     if (builtins.hasAttr "vars" manifest) then
       let
-        varNames = builtins.fromJSON varsOrder;
+        # The BASH_ENVTRACE_* names are envtrace control variables: a
+        # manifest assigning one could redirect or disable the mutation
+        # trace mid-activation, so they are refused at build time.
+        varNames = builtins.map (
+          n:
+          if (builtins.match "BASH_ENVTRACE_.*" n) != null then
+            throw "manifest [vars] may not set reserved variable '${n}'"
+          else
+            n
+        ) (builtins.fromJSON varsOrder);
       in
+      # Manifest [vars] are unconditional assignments, so declare
+      # always-reset intent for the envtrace-patched bash sourcing this
+      # region: a same-value assignment then records `reset` (replayed as
+      # an overwrite when attaching) rather than the default
+      # `set-if-absent`. Deliberately not exported — plain assignment is
+      # the contract; the patched bash never records the marker and never
+      # lets it reach child environments, and under an unpatched bash it
+      # is an inert unexported shell variable. `unset` (rather than an
+      # empty assignment) closes the region so no residue is visible to
+      # hook code that runs later.
       (builtins.toFile "envrc-vars" (
-        builtins.concatStringsSep "" (
+        "BASH_ENVTRACE_RESET=1\n"
+        + builtins.concatStringsSep "" (
           builtins.map (n: "export ${n}=\"${builtins.getAttr n manifest.vars}\"\n") varNames
         )
+        + "unset BASH_ENVTRACE_RESET\n"
       ))
     else
       null;

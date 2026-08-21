@@ -371,7 +371,7 @@ struct EnvironmentInfo {
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct ActivationState {
-    version: Version<3>,
+    version: Version<4>,
     info: EnvironmentInfo,
     mode: ActivateMode,
     ready: Ready,
@@ -748,12 +748,14 @@ fn parse_versioned_activation_state(content: &str) -> Result<Option<ActivationSt
 
     match version_check.version.as_u64() {
         // Current version.
-        Some(3) => {
+        Some(4) => {
             let state: ActivationState =
                 serde_json::from_str(content).context("Failed to parse state.json")?;
             Ok(Some(state))
         },
-        // Versions 1 and 2 were stored in a different path so we don't need to handle migrations.
+        // Versions 1 and 2 were stored in a different path, and a version 3
+        // start state directory holds no environment trace to attach with, so
+        // we don't need to handle migrations.
         // This also handles the case where someone upgrades and then downgrades Flox.
         _ => {
             let running = extract_running_pids_from_json(content)?;
@@ -1289,7 +1291,7 @@ mod tests {
         /// directory as soon as the last PID detaches, so a re-activation that
         /// beats the executive's `cleanup_all` must start fresh. Leaving
         /// `ready` as `Ready::True(start_id)` sends it down the attach path
-        /// instead, to read a `start.env.json` that is already gone.
+        /// instead, to read an `envtrace.log` that is already gone.
         #[test]
         fn reactivation_after_last_detach_starts_instead_of_attaching() {
             let start_id = StartIdentifier::new("/nix/store/path1");
@@ -1357,10 +1359,9 @@ mod tests {
     mod version_handling {
         use super::*;
 
-        // Technically we'd never encounter this exact Version because we
-        // changed the path of the state file during the 2025-12/2026-01
-        // activation rewrite.
-        const OLD_VERSION: Version<2> = Version;
+        // The version written before start state directories carried an
+        // environment trace.
+        const OLD_VERSION: Version<3> = Version;
 
         #[test]
         fn parse_versioned_activation_state_roundtrip() {

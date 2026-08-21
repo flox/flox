@@ -1,5 +1,9 @@
-#!/usr/bin/env bash
+#!@bash_envtrace@/bin/bash
 # shellcheck shell=bash
+#
+# This script must run under the envtrace-patched bash provided by the
+# flox-interpreter package so that the BASH_ENVTRACE_FILE window below
+# records the environment mutations made while activating.
 
 # Trace levels supported by activation scripts:
 #   1. (-v) top-level activate script
@@ -25,10 +29,17 @@ fi
 "$_flox_activate_tracer" "${BASH_SOURCE[0]}" "$@" START
 
 _getopt="@getopt@/bin/getopt"
-_jq="@jq@/bin/jq"
 _flox_activations="@flox_activations@"
 
 set -euo pipefail
+
+# Clear inherited envtrace control variables. An exported sink — which can
+# only come from an unpatched caller, since the patched bash never lets the
+# control variables reach child environments — would otherwise capture the
+# mutations made between here and the window this script opens below, and
+# inherited reset intent would mislabel same-value assignments. The two
+# exports above this point remain visible to such a sink.
+unset BASH_ENVTRACE_FILE BASH_ENVTRACE_FD BASH_ENVTRACE_RESET
 
 # The activation helper scripts derive from the `flox-interpreter` package.
 export _activate_d="__OUT__/activate.d"
@@ -227,10 +238,16 @@ fi
 if [ "$_command_mode" = "false" ]; then
   # Set umask to ensure files are created with 0600 (may contain secrets)
   umask 077
-  _start_env_json="$_start_state_dir/start.env.json"
-  _end_env_json="$_start_state_dir/end.env.json"
-  # First activation of this environment. Snapshot environment to start.
-  $_jq -nS env > "$_start_env_json"
+  _envtrace_log="$_start_state_dir/envtrace.log"
+  _activate_complete="$_start_state_dir/complete"
+  # Open the envtrace window: from here until BASH_ENVTRACE_FILE is unset,
+  # the patched bash appends a record of every environment-visible variable
+  # mutation to $_envtrace_log (format spec: the header comment of the
+  # vendored pkgs/flox-interpreter/bash-5.3-envtrace.patch).
+  # Records are appended, so start from an empty file.
+  : > "$_envtrace_log"
+  # shellcheck disable=SC2034 # consumed by the patched bash itself
+  BASH_ENVTRACE_FILE="$_envtrace_log"
 fi
 
 case "$_FLOX_ENV_ACTIVATION_MODE" in
@@ -282,8 +299,13 @@ if [ "$_command_mode" = "true" ]; then
 fi
 
 if [ "$_command_mode" = "false" ]; then
-  # Capture ending environment.
-  $_jq -nS env > "$_end_env_json"
+  # Close the envtrace window: nothing past this point belongs to the
+  # activation's environment changes.
+  unset BASH_ENVTRACE_FILE
+  # Record that the script ran to completion. `flox-activations start` reads
+  # this to tell a hook that returned normally from one that exited or
+  # exec'd out, taking the rest of the script with it.
+  : > "$_activate_complete"
 fi
 
 "$_flox_activate_tracer" "${BASH_SOURCE[0]}" "$@" END
