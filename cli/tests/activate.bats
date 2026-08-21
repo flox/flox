@@ -2859,6 +2859,65 @@ EOF
 }
 
 # bats test_tags=activate,activate:plugins
+@test "plugins: plugin scripts can read variables from [vars]" {
+  project_setup
+
+  mkdir -p "$BATS_TEST_TMPDIR/vars-plugin/etc/profile.d"
+  cat > "$BATS_TEST_TMPDIR/vars-plugin/etc/profile.d/0900_vars-plugin.sh" <<'EOF'
+# shellcheck shell=bash
+export TEST_PLUGIN_SEES_VAR="${MY_VAR:-unset}"
+EOF
+  pkg_store_path="$(nix --extra-experimental-features nix-command \
+    store add --name vars-plugin "$BATS_TEST_TMPDIR/vars-plugin")"
+
+  # The init template already declares a [vars] table, so write a complete
+  # manifest rather than appending a duplicate one.
+  "$FLOX_BIN" edit -f - <<< "$(with_latest_schema "$(cat <<EOF
+[install]
+vars-plugin.store-path = "$pkg_store_path"
+
+[vars]
+MY_VAR = "from-vars"
+EOF
+  )")"
+
+  run "$FLOX_BIN" activate -c \
+    "bash -c 'echo TEST_PLUGIN_SEES_VAR is: \${TEST_PLUGIN_SEES_VAR:-unset}'"
+  assert_success
+  assert_output --partial 'TEST_PLUGIN_SEES_VAR is: from-vars'
+}
+
+# bats test_tags=activate,activate:plugins
+@test "plugins: variables exported by plugin scripts win over same-named [vars]" {
+  project_setup
+
+  mkdir -p "$BATS_TEST_TMPDIR/clobber-plugin/etc/profile.d"
+  cat > "$BATS_TEST_TMPDIR/clobber-plugin/etc/profile.d/0900_clobber-plugin.sh" <<'EOF'
+# shellcheck shell=bash
+export TEST_PLUGIN_SEES_VAR="${MY_VAR:-unset}"
+export MY_VAR="plugin-value"
+EOF
+  pkg_store_path="$(nix --extra-experimental-features nix-command \
+    store add --name clobber-plugin "$BATS_TEST_TMPDIR/clobber-plugin")"
+
+  # The init template already declares a [vars] table, so write a complete
+  # manifest rather than appending a duplicate one.
+  "$FLOX_BIN" edit -f - <<< "$(with_latest_schema "$(cat <<EOF
+[install]
+clobber-plugin.store-path = "$pkg_store_path"
+
+[vars]
+MY_VAR = "user-value"
+EOF
+  )")"
+
+  run "$FLOX_BIN" activate -c \
+    "bash -c 'echo plugin saw: \${TEST_PLUGIN_SEES_VAR:-unset}, final: \${MY_VAR:-unset}'"
+  assert_success
+  assert_output --partial 'plugin saw: user-value, final: plugin-value'
+}
+
+# bats test_tags=activate,activate:plugins
 @test "plugins: a failing plugin script blocks activation" {
   project_setup
   setup_test_plugin

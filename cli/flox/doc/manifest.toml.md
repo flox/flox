@@ -919,6 +919,11 @@ Flox plugins work by convention:
 - Plugins have access to the entire manifest.
   By convention, plugins should only access data under `[plugins.<plugin name>]`,
   but Flox does not enforce this.
+- Plugin scripts run with the variables from `[vars]` already exported,
+  so a plugin may also be configured via `[vars]`.
+  If a plugin script exports a variable with the same name as a `[vars]`
+  entry, the plugin's value wins;
+  use the `hook.on-activate` script to override variables set by a plugin.
 
 
 # SEE ALSO

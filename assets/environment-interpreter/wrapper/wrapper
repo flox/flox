@@ -113,22 +113,29 @@ if [ -z "${FLOX_ENV-}" ]; then
   exit 1
 fi
 
-# Source profile.d scripts from the rendered environment rather than the
-# interpreter package so that scripts provided by installed packages are
-# processed in addition to the interpreter's own scripts, which are
-# symlinked into the environment as it is built.
+# The rendered environment's profile.d merges the interpreter's own
+# scripts with scripts provided by installed packages (plugins). The
+# interpreter's scripts are sourced from the wrapper package below; the
+# rendered directory is used for the plugin scripts.
 _profile_d="$FLOX_ENV/etc/profile.d"
+_interpreter_profile_d="__OUT__/etc/profile.d"
 
 # prepend path
 export PATH="$FLOX_ENV/bin:$FLOX_ENV/sbin:$PATH"
 
+# source the interpreter's profile.d scripts
+source_profile_d "$_interpreter_profile_d" "set" ""
+
 if [ "${SET_VARS-}" = "1" ]; then
- # Set static environment variables from the manifest.
- set_vars "$FLOX_ENV"
+ # Set static environment variables from the manifest: after the
+ # interpreter's profile.d scripts so that [vars] can override variables
+ # they set, and before plugin scripts so that plugins can read [vars]
+ # entries.
+ set_manifest_vars "$FLOX_ENV"
 fi
 
-# source profile.d scripts
-source_profile_d "$_profile_d" "set" ""
+# source plugin-provided profile.d scripts
+source_plugin_profile_d "$_profile_d" "$_interpreter_profile_d"
 
 "$_flox_activate_tracer" "${BASH_SOURCE[0]}" "$@" END
 
