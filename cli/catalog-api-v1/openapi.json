@@ -63,6 +63,7 @@
             "required": false,
             "schema": {
               "type": "integer",
+              "minimum": 0,
               "default": 0,
               "title": "Page"
             }
@@ -73,6 +74,7 @@
             "required": false,
             "schema": {
               "type": "integer",
+              "minimum": 0,
               "default": 10,
               "title": "Pagesize"
             }
@@ -108,7 +110,7 @@
           "catalog"
         ],
         "summary": "Find packages that provide a command",
-        "description": "Reverse lookup: which package(s) provide the given command name.\n\nRequired Query Parameters:\n- **system**: The system architecture to search for (e.g., x86_64-linux)\n- **name**: The command name to look up (e.g., readelf, rg, gcc-13)\n\nReturns:\n- **ByCommandResult**: Providers of the command and total count\n\nNote: first pass returns a hardcoded mock so the OpenAPI contract can\nfreeze before the command_index table lands. No database query yet.",
+        "description": "Reverse lookup: which package(s) provide the given command name.\n\nRequired Query Parameters:\n- **system**: The system architecture to search for (e.g., x86_64-linux)\n- **name**: The command name to look up (e.g., readelf, rg, gcc-13)\n\nOptional Query Parameters:\n- **page**: Page number for pagination (default: 0)\n- **pageSize**: Page size for pagination (default: 10)\n\nReturns:\n- **ByCommandResult**: Providers of the command and total count",
         "operationId": "by_command_api_v1_catalog_by_command_get",
         "security": [
           {
@@ -136,6 +138,26 @@
               "minLength": 2,
               "maxLength": 200,
               "title": "Name"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 0,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 10,
+              "title": "Pagesize"
             }
           }
         ],
@@ -195,6 +217,7 @@
             "required": false,
             "schema": {
               "type": "integer",
+              "minimum": 0,
               "default": 0,
               "title": "Page"
             }
@@ -205,6 +228,7 @@
             "required": false,
             "schema": {
               "type": "integer",
+              "minimum": 0,
               "default": 10,
               "title": "Pagesize"
             }
@@ -1454,6 +1478,7 @@
             "required": false,
             "schema": {
               "type": "integer",
+              "minimum": 0,
               "default": 0,
               "title": "Page"
             }
@@ -1464,6 +1489,7 @@
             "required": false,
             "schema": {
               "type": "integer",
+              "minimum": 0,
               "default": 10,
               "title": "Pagesize"
             }
@@ -2891,6 +2917,55 @@
         ],
         "title": "HealthCheck"
       },
+      "LifecyclePolicy": {
+        "properties": {
+          "visible_in_discovery": {
+            "type": "boolean",
+            "title": "Visible In Discovery",
+            "description": "Whether the package appears where users browse: search results, listings, and package summaries."
+          },
+          "allows_name_resolution": {
+            "type": "boolean",
+            "title": "Allows Name Resolution",
+            "description": "Whether name-based resolution may select this package. False does not mean the package is gone; a manifest naming it resolves to some other package or fails outright."
+          },
+          "allows_exact_pin": {
+            "type": "boolean",
+            "title": "Allows Exact Pin",
+            "description": "Whether a lockfile pinning this exact package still resolves. Environments locked before the state changed keep resolving."
+          },
+          "allows_publish": {
+            "type": "boolean",
+            "title": "Allows Publish",
+            "description": "Whether a new build may be published to this package."
+          },
+          "warning_required": {
+            "type": "boolean",
+            "title": "Warning Required",
+            "description": "Whether a consumer that honors the package anyway, in practice the exact-pin path, must surface a warning."
+          }
+        },
+        "type": "object",
+        "required": [
+          "visible_in_discovery",
+          "allows_name_resolution",
+          "allows_exact_pin",
+          "allows_publish",
+          "warning_required"
+        ],
+        "title": "LifecyclePolicy",
+        "description": "What a lifecycle state permits, one boolean per capability.\n\nClients should branch on these capabilities rather than on the\nstate name, so a state added later renders correct affordances\nwithout a client release."
+      },
+      "LifecycleSource": {
+        "type": "string",
+        "title": "LifecycleSource",
+        "description": "The authority that placed the package in its lifecycle state, for example 'publisher'. New sources may be added over time."
+      },
+      "LifecycleState": {
+        "type": "string",
+        "title": "LifecycleState",
+        "description": "The lifecycle state a package is in, for example 'archived'. New states may be added over time; clients should branch on policy rather than on this value."
+      },
       "LockedGitSource": {
         "properties": {
           "type": {
@@ -3071,7 +3146,8 @@
           "unfree",
           "insecure",
           "broken",
-          "version_not_found"
+          "version_not_found",
+          "archived"
         ],
         "title": "MessageType"
       },
@@ -3796,6 +3872,53 @@
           "version": "1.0"
         }
       },
+      "PackageLifecycleInfo": {
+        "properties": {
+          "state": {
+            "$ref": "#/components/schemas/LifecycleState"
+          },
+          "source": {
+            "$ref": "#/components/schemas/LifecycleSource"
+          },
+          "effective_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Effective At",
+            "description": "When the state took effect."
+          },
+          "reason": {
+            "title": "Reason",
+            "description": "Why the package entered this state, as recorded by the source.",
+            "nullable": true,
+            "type": "string"
+          },
+          "replacement": {
+            "title": "Replacement",
+            "description": "Installable reference to a suggested substitute: catalog_name/attr_path for a catalog package, a bare attr_path for a base-catalog package.",
+            "nullable": true,
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "description": "Publisher-authored note to show alongside the state.",
+            "nullable": true,
+            "type": "string"
+          },
+          "policy": {
+            "$ref": "#/components/schemas/LifecyclePolicy",
+            "description": "What this state permits. Clients should branch on these capabilities rather than on the state name."
+          }
+        },
+        "type": "object",
+        "required": [
+          "state",
+          "source",
+          "effective_at",
+          "policy"
+        ],
+        "title": "PackageLifecycleInfo",
+        "description": "Lifecycle state a package has been placed in, with the policy that\nstate implies. Absent (null) means ordinary circulation."
+      },
       "PackageOutput": {
         "properties": {
           "name": {
@@ -4032,6 +4155,11 @@
           "deprecation": {
             "nullable": true,
             "$ref": "#/components/schemas/DeprecationInfo"
+          },
+          "lifecycle": {
+            "description": "Lifecycle state of the requested package; null means no lifecycle state is recorded.",
+            "nullable": true,
+            "$ref": "#/components/schemas/PackageLifecycleInfo"
           }
         },
         "type": "object",
@@ -4735,6 +4863,11 @@
             "deprecated": true,
             "nullable": true,
             "type": "string"
+          },
+          "lifecycle": {
+            "description": "Lifecycle state of the package; null means no lifecycle state is recorded. Populated on the single-package read; the package listing never fills it.",
+            "nullable": true,
+            "$ref": "#/components/schemas/PackageLifecycleInfo"
           }
         },
         "type": "object",

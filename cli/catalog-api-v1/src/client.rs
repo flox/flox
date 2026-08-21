@@ -1450,6 +1450,188 @@ cleanly (mirrors how unresolvable defaults).*/
             value.clone()
         }
     }
+    /**What a lifecycle state permits, one boolean per capability.
+
+Clients should branch on these capabilities rather than on the
+state name, so a state added later renders correct affordances
+without a client release.*/
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "LifecyclePolicy",
+    ///  "description": "What a lifecycle state permits, one boolean per capability.\n\nClients should branch on these capabilities rather than on the\nstate name, so a state added later renders correct affordances\nwithout a client release.",
+    ///  "type": "object",
+    ///  "required": [
+    ///    "allows_exact_pin",
+    ///    "allows_name_resolution",
+    ///    "allows_publish",
+    ///    "visible_in_discovery",
+    ///    "warning_required"
+    ///  ],
+    ///  "properties": {
+    ///    "allows_exact_pin": {
+    ///      "title": "Allows Exact Pin",
+    ///      "description": "Whether a lockfile pinning this exact package still resolves. Environments locked before the state changed keep resolving.",
+    ///      "type": "boolean"
+    ///    },
+    ///    "allows_name_resolution": {
+    ///      "title": "Allows Name Resolution",
+    ///      "description": "Whether name-based resolution may select this package. False does not mean the package is gone; a manifest naming it resolves to some other package or fails outright.",
+    ///      "type": "boolean"
+    ///    },
+    ///    "allows_publish": {
+    ///      "title": "Allows Publish",
+    ///      "description": "Whether a new build may be published to this package.",
+    ///      "type": "boolean"
+    ///    },
+    ///    "visible_in_discovery": {
+    ///      "title": "Visible In Discovery",
+    ///      "description": "Whether the package appears where users browse: search results, listings, and package summaries.",
+    ///      "type": "boolean"
+    ///    },
+    ///    "warning_required": {
+    ///      "title": "Warning Required",
+    ///      "description": "Whether a consumer that honors the package anyway, in practice the exact-pin path, must surface a warning.",
+    ///      "type": "boolean"
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
+    pub struct LifecyclePolicy {
+        ///Whether a lockfile pinning this exact package still resolves. Environments locked before the state changed keep resolving.
+        pub allows_exact_pin: bool,
+        ///Whether name-based resolution may select this package. False does not mean the package is gone; a manifest naming it resolves to some other package or fails outright.
+        pub allows_name_resolution: bool,
+        ///Whether a new build may be published to this package.
+        pub allows_publish: bool,
+        ///Whether the package appears where users browse: search results, listings, and package summaries.
+        pub visible_in_discovery: bool,
+        ///Whether a consumer that honors the package anyway, in practice the exact-pin path, must surface a warning.
+        pub warning_required: bool,
+    }
+    impl ::std::convert::From<&LifecyclePolicy> for LifecyclePolicy {
+        fn from(value: &LifecyclePolicy) -> Self {
+            value.clone()
+        }
+    }
+    ///The authority that placed the package in its lifecycle state, for example 'publisher'. New sources may be added over time.
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "LifecycleSource",
+    ///  "description": "The authority that placed the package in its lifecycle state, for example 'publisher'. New sources may be added over time.",
+    ///  "type": "string"
+    ///}
+    /// ```
+    /// </details>
+    #[derive(
+        ::serde::Deserialize,
+        ::serde::Serialize,
+        Clone,
+        Debug,
+        Eq,
+        Hash,
+        Ord,
+        PartialEq,
+        PartialOrd
+    )]
+    #[serde(transparent)]
+    pub struct LifecycleSource(pub ::std::string::String);
+    impl ::std::ops::Deref for LifecycleSource {
+        type Target = ::std::string::String;
+        fn deref(&self) -> &::std::string::String {
+            &self.0
+        }
+    }
+    impl ::std::convert::From<LifecycleSource> for ::std::string::String {
+        fn from(value: LifecycleSource) -> Self {
+            value.0
+        }
+    }
+    impl ::std::convert::From<&LifecycleSource> for LifecycleSource {
+        fn from(value: &LifecycleSource) -> Self {
+            value.clone()
+        }
+    }
+    impl ::std::convert::From<::std::string::String> for LifecycleSource {
+        fn from(value: ::std::string::String) -> Self {
+            Self(value)
+        }
+    }
+    impl ::std::str::FromStr for LifecycleSource {
+        type Err = ::std::convert::Infallible;
+        fn from_str(value: &str) -> ::std::result::Result<Self, Self::Err> {
+            Ok(Self(value.to_string()))
+        }
+    }
+    impl ::std::fmt::Display for LifecycleSource {
+        fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+            self.0.fmt(f)
+        }
+    }
+    ///The lifecycle state a package is in, for example 'archived'. New states may be added over time; clients should branch on policy rather than on this value.
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "LifecycleState",
+    ///  "description": "The lifecycle state a package is in, for example 'archived'. New states may be added over time; clients should branch on policy rather than on this value.",
+    ///  "type": "string"
+    ///}
+    /// ```
+    /// </details>
+    #[derive(
+        ::serde::Deserialize,
+        ::serde::Serialize,
+        Clone,
+        Debug,
+        Eq,
+        Hash,
+        Ord,
+        PartialEq,
+        PartialOrd
+    )]
+    #[serde(transparent)]
+    pub struct LifecycleState(pub ::std::string::String);
+    impl ::std::ops::Deref for LifecycleState {
+        type Target = ::std::string::String;
+        fn deref(&self) -> &::std::string::String {
+            &self.0
+        }
+    }
+    impl ::std::convert::From<LifecycleState> for ::std::string::String {
+        fn from(value: LifecycleState) -> Self {
+            value.0
+        }
+    }
+    impl ::std::convert::From<&LifecycleState> for LifecycleState {
+        fn from(value: &LifecycleState) -> Self {
+            value.clone()
+        }
+    }
+    impl ::std::convert::From<::std::string::String> for LifecycleState {
+        fn from(value: ::std::string::String) -> Self {
+            Self(value)
+        }
+    }
+    impl ::std::str::FromStr for LifecycleState {
+        type Err = ::std::convert::Infallible;
+        fn from_str(value: &str) -> ::std::result::Result<Self, Self::Err> {
+            Ok(Self(value.to_string()))
+        }
+    }
+    impl ::std::fmt::Display for LifecycleState {
+        fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+            self.0.fmt(f)
+        }
+    }
     /**A locked git flakeref, in its attribute form.
 
 Locked inputs are only ever tracked as git flakerefs, so this models a git
@@ -3282,6 +3464,88 @@ catalog) or '<owner>.<pkgset>.*' (package set) — e.g. 'brantley.*'
             value.clone()
         }
     }
+    /**Lifecycle state a package has been placed in, with the policy that
+state implies. Absent (null) means ordinary circulation.*/
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "PackageLifecycleInfo",
+    ///  "description": "Lifecycle state a package has been placed in, with the policy that\nstate implies. Absent (null) means ordinary circulation.",
+    ///  "type": "object",
+    ///  "required": [
+    ///    "effective_at",
+    ///    "policy",
+    ///    "source",
+    ///    "state"
+    ///  ],
+    ///  "properties": {
+    ///    "effective_at": {
+    ///      "title": "Effective At",
+    ///      "description": "When the state took effect.",
+    ///      "type": "string",
+    ///      "format": "date-time"
+    ///    },
+    ///    "message": {
+    ///      "title": "Message",
+    ///      "description": "Publisher-authored note to show alongside the state.",
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ]
+    ///    },
+    ///    "policy": {
+    ///      "$ref": "#/components/schemas/LifecyclePolicy"
+    ///    },
+    ///    "reason": {
+    ///      "title": "Reason",
+    ///      "description": "Why the package entered this state, as recorded by the source.",
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ]
+    ///    },
+    ///    "replacement": {
+    ///      "title": "Replacement",
+    ///      "description": "Installable reference to a suggested substitute: catalog_name/attr_path for a catalog package, a bare attr_path for a base-catalog package.",
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ]
+    ///    },
+    ///    "source": {
+    ///      "$ref": "#/components/schemas/LifecycleSource"
+    ///    },
+    ///    "state": {
+    ///      "$ref": "#/components/schemas/LifecycleState"
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
+    pub struct PackageLifecycleInfo {
+        ///When the state took effect.
+        pub effective_at: ::chrono::DateTime<::chrono::offset::Utc>,
+        ///Publisher-authored note to show alongside the state.
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub message: ::std::option::Option<::std::string::String>,
+        pub policy: LifecyclePolicy,
+        ///Why the package entered this state, as recorded by the source.
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub reason: ::std::option::Option<::std::string::String>,
+        ///Installable reference to a suggested substitute: catalog_name/attr_path for a catalog package, a bare attr_path for a base-catalog package.
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub replacement: ::std::option::Option<::std::string::String>,
+        pub source: LifecycleSource,
+        pub state: LifecycleState,
+    }
+    impl ::std::convert::From<&PackageLifecycleInfo> for PackageLifecycleInfo {
+        fn from(value: &PackageLifecycleInfo) -> Self {
+            value.clone()
+        }
+    }
     ///`PackageName`
     ///
     /// <details><summary>JSON schema</summary>
@@ -3866,6 +4130,9 @@ catalog) or '<owner>.<pkgset>.*' (package set) — e.g. 'brantley.*'
     ///        "$ref": "#/components/schemas/PackageResolutionInfo"
     ///      }
     ///    },
+    ///    "lifecycle": {
+    ///      "$ref": "#/components/schemas/PackageLifecycleInfo"
+    ///    },
     ///    "total_count": {
     ///      "title": "Total Count",
     ///      "type": "integer"
@@ -3879,6 +4146,8 @@ catalog) or '<owner>.<pkgset>.*' (package set) — e.g. 'brantley.*'
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
         pub deprecation: ::std::option::Option<DeprecationInfo>,
         pub items: ::std::vec::Vec<PackageResolutionInfo>,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub lifecycle: ::std::option::Option<PackageLifecycleInfo>,
         pub total_count: i64,
     }
     impl ::std::convert::From<&PackagesResult> for PackagesResult {
@@ -5503,6 +5772,9 @@ detail, introduce a typed `reason` field here.*/
     ///      "title": "Catalog",
     ///      "type": "string"
     ///    },
+    ///    "lifecycle": {
+    ///      "$ref": "#/components/schemas/PackageLifecycleInfo"
+    ///    },
     ///    "name": {
     ///      "title": "Name",
     ///      "type": "string"
@@ -5522,6 +5794,8 @@ detail, introduce a typed `reason` field here.*/
     #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
     pub struct UserPackage {
         pub catalog: ::std::string::String,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub lifecycle: ::std::option::Option<PackageLifecycleInfo>,
         pub name: ::std::string::String,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
         pub original_url: ::std::option::Option<::std::string::String>,
@@ -5794,11 +6068,12 @@ Required Query Parameters:
 - **system**: The system architecture to search for (e.g., x86_64-linux)
 - **name**: The command name to look up (e.g., readelf, rg, gcc-13)
 
+Optional Query Parameters:
+- **page**: Page number for pagination (default: 0)
+- **pageSize**: Page size for pagination (default: 10)
+
 Returns:
 - **ByCommandResult**: Providers of the command and total count
-
-Note: first pass returns a hardcoded mock so the OpenAPI contract can
-freeze before the command_index table lands. No database query yet.
 
 Sends a `GET` request to `/api/v1/catalog/by-command`
 
@@ -5806,6 +6081,8 @@ Sends a `GET` request to `/api/v1/catalog/by-command`
     pub async fn by_command_api_v1_catalog_by_command_get<'a>(
         &'a self,
         name: &'a types::Name,
+        page: Option<i64>,
+        page_size: Option<i64>,
         system: types::PackageSystem,
     ) -> Result<ResponseValue<types::ByCommandResult>, Error<types::ErrorResponse>> {
         let url = format!("{}/api/v1/catalog/by-command", self.baseurl);
@@ -5824,6 +6101,8 @@ Sends a `GET` request to `/api/v1/catalog/by-command`
                 ::reqwest::header::HeaderValue::from_static("application/json"),
             )
             .query(&progenitor_client::QueryParam::new("name", &name))
+            .query(&progenitor_client::QueryParam::new("page", &page))
+            .query(&progenitor_client::QueryParam::new("pageSize", &page_size))
             .query(&progenitor_client::QueryParam::new("system", &system))
             .headers(header_map)
             .build()?;
@@ -6036,8 +6315,8 @@ Sends a `GET` request to `/api/v1/catalog/catalogs/{catalog_name}/locked-sources
     >(
         &'a self,
         catalog_name: &'a types::CatalogName,
-        page: Option<i64>,
-        page_size: Option<i64>,
+        page: Option<u64>,
+        page_size: Option<u64>,
     ) -> Result<
         ResponseValue<types::LockedSourcesResponse>,
         Error<types::ErrorResponse>,
@@ -6813,8 +7092,8 @@ Sends a `GET` request to `/api/v1/catalog/packages/{attr_path}`
     pub async fn packages_api_v1_catalog_packages_attr_path_get<'a>(
         &'a self,
         attr_path: &'a str,
-        page: Option<i64>,
-        page_size: Option<i64>,
+        page: Option<u64>,
+        page_size: Option<u64>,
     ) -> Result<ResponseValue<types::PackagesResult>, Error<types::ErrorResponse>> {
         let url = format!(
             "{}/api/v1/catalog/packages/{}",
@@ -7107,8 +7386,8 @@ Sends a `GET` request to `/api/v1/catalog/search`
     pub async fn search_api_v1_catalog_search_get<'a>(
         &'a self,
         catalogs: Option<&'a str>,
-        page: Option<i64>,
-        page_size: Option<i64>,
+        page: Option<u64>,
+        page_size: Option<u64>,
         search_term: Option<&'a types::SearchTerm>,
         system: types::PackageSystem,
     ) -> Result<ResponseValue<types::PackageSearchResult>, Error<types::ErrorResponse>> {
