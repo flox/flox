@@ -10,6 +10,7 @@ use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment};
 use flox_rust_sdk::providers::build::{COMMON_NIXPKGS_URL, CatalogLock, PackageTarget};
 use flox_rust_sdk::providers::nix_auth::NixAuth;
 use flox_rust_sdk::providers::publish::{
+    PublishOptions,
     PublishProvider,
     Publisher,
     build_repo_err,
@@ -89,6 +90,10 @@ pub struct Publish {
     #[bpaf(long, hide)]
     metadata_only: bool,
 
+    /// Do not rebuild packages that depend on the published package.
+    #[bpaf(long, hide)]
+    no_cascade_update: bool,
+
     #[bpaf(external(base_catalog_url_select), optional)]
     base_catalog_url_select: Option<BaseCatalogUrlSelect>,
 
@@ -129,7 +134,7 @@ struct PublishTarget {
 /// Configuration options for the publish command
 #[derive(Debug, Clone)]
 struct PublishConfig {
-    metadata_only: bool,
+    options: PublishOptions,
     cache_args: CacheArgs,
     base_catalog_url_select: Option<BaseCatalogUrlSelect>,
     system_override: SystemOverride,
@@ -148,7 +153,13 @@ impl Publish {
         }
 
         let publish_config = PublishConfig {
-            metadata_only: self.metadata_only,
+            options: PublishOptions {
+                metadata_only: self.metadata_only,
+                // The flag suppresses; the wire field enables. Invert here so
+                // the rest of the publish path only deals with the wire
+                // polarity.
+                cascade_update: !self.no_cascade_update,
+            },
             cache_args: self.cache,
             base_catalog_url_select: self.base_catalog_url_select,
             system_override: self.system_override,
@@ -432,7 +443,7 @@ impl Publish {
                 package_created,
                 &build_metadata,
                 key_file,
-                publish_config.metadata_only,
+                publish_config.options,
             )
             .await
         {

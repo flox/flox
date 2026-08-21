@@ -2633,6 +2633,11 @@ catalog) or '<owner>.<pkgset>.*' (package set) — e.g. 'brantley.*'
     ///        "null"
     ///      ]
     ///    },
+    ///    "cascade_update": {
+    ///      "title": "Cascade Update",
+    ///      "default": false,
+    ///      "type": "boolean"
+    ///    },
     ///    "derivation": {
     ///      "$ref": "#/components/schemas/PackageDerivation"
     ///    },
@@ -2715,6 +2720,8 @@ catalog) or '<owner>.<pkgset>.*' (package set) — e.g. 'brantley.*'
         pub build_type: ::std::option::Option<BuildType>,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
         pub cache_uri: ::std::option::Option<::std::string::String>,
+        #[serde(default)]
+        pub cascade_update: bool,
         pub derivation: PackageDerivation,
         #[serde(default = "defaults::package_build_with_nar_info_dot_flox_dir")]
         pub dot_flox_dir: ::std::string::String,

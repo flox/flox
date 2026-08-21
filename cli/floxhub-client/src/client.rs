@@ -1741,4 +1741,92 @@ pub mod tests {
         mock.assert();
         assert!(result.is_err(), "expected Err from 5xx, got: {result:?}");
     }
+    // ---------------------------------------------------------------------------
+    // publish_build — cascade_update is always on the wire
+    // ---------------------------------------------------------------------------
+
+    const PUBLISH_BUILD_PATH: &str = "/api/v1/catalog/catalogs/myorg/packages/mypkg/builds";
+
+    /// The smallest build payload the endpoint accepts, so the tests below
+    /// assert on `cascade_update` and nothing else.
+    fn minimal_build_info(cascade_update: bool) -> UserBuildPublish {
+        use catalog_api_v1::types as api_types;
+
+        UserBuildPublish {
+            cascade_update,
+            derivation: api_types::PackageDerivation {
+                broken: None,
+                description: None,
+                drv_path: "/nix/store/aaa-mypkg.drv".to_string(),
+                license: None,
+                licenses: None,
+                name: "mypkg".to_string(),
+                outputs: api_types::PackageOutputs(vec![]),
+                outputs_to_install: None,
+                pname: None,
+                system: api_types::PackageSystem::X8664Linux,
+                unfree: None,
+                version: None,
+            },
+            url: "https://example.com/repo".to_string(),
+            rev: "deadbeef".to_string(),
+            rev_count: 1,
+            rev_date: "2024-01-01T00:00:00Z".parse().unwrap(),
+            base_catalog_rev_count: None,
+            base_catalog_rev_date: None,
+            build_type: None,
+            cache_uri: None,
+            dot_flox_dir: ".flox".to_string(),
+            locked_base_catalog_url: None,
+            locked_inputs: None,
+            narinfos: None,
+            narinfos_source_url: None,
+            narinfos_source_version: None,
+            ref_: None,
+        }
+    }
+
+    /// A publish that should cascade sends `cascade_update: true` explicitly.
+    /// The server defaults the field to `false`, so omitting it would disable
+    /// cascading rather than fall back to the CLI's default.
+    #[tokio::test]
+    async fn publish_build_sends_cascade_update_true() {
+        let server = MockServer::start_async().await;
+        let mock = server.mock(|when, then| {
+            when.method("POST")
+                .path(PUBLISH_BUILD_PATH)
+                .json_body_includes(json!({ "cascade_update": true }).to_string());
+            then.status(200).json_body(json!({}));
+        });
+
+        let client = FloxhubClient::new(client_config(server.base_url().as_str())).unwrap();
+
+        let result = client
+            .publish_build("myorg", "mypkg", &minimal_build_info(true))
+            .await;
+
+        mock.assert();
+        assert!(result.is_ok(), "expected Ok, got: {result:?}");
+    }
+
+    /// `flox publish --no-cascade-update` sends `cascade_update: false`.
+    #[tokio::test]
+    async fn publish_build_sends_cascade_update_false() {
+        let server = MockServer::start_async().await;
+        let mock = server.mock(|when, then| {
+            when.method("POST")
+                .path(PUBLISH_BUILD_PATH)
+                .json_body_includes(json!({ "cascade_update": false }).to_string());
+            then.status(200).json_body(json!({}));
+        });
+
+        let client = FloxhubClient::new(client_config(server.base_url().as_str())).unwrap();
+
+        let result = client
+            .publish_build("myorg", "mypkg", &minimal_build_info(false))
+            .await;
+
+        mock.assert();
+        assert!(result.is_ok(), "expected Ok, got: {result:?}");
+    }
 }
