@@ -212,10 +212,13 @@ pub enum RunError {
     CommandNotIndexed { command: String },
 
     /// Multiple packages provide the command and the session is non-interactive.
-    #[error("{}", render_ambiguous(command, providers, providers.len() as u64))]
+    #[error("{}", render_ambiguous(command, providers, *total))]
     AmbiguousCommandNonInteractive {
         command: String,
         providers: Vec<CommandProvider>,
+        /// Catalog-reported total count of providers, used to render the
+        /// "(N shown, M total)" trailer when the list is truncated.
+        total: u64,
     },
 
     /// Writing the user's package preference to the config file failed.
@@ -588,6 +591,7 @@ async fn resolve_command(
     Err(RunError::AmbiguousCommandNonInteractive {
         command,
         providers: result.providers,
+        total: result.total_count as u64,
     })
 }
 
@@ -1750,6 +1754,12 @@ mod tests {
     // resolve_command tests
     // -----------------------------------------------------------------------
 
+    use flox_rust_sdk::flox::test_helpers::flox_instance;
+    use flox_rust_sdk::providers::catalog::test_helpers::{
+        UNIT_TEST_GENERATED,
+        catalog_replay_client,
+    };
+
     /// Build a minimal Config with an optional saved run preference.
     fn make_config(
         run_preferences: std::collections::HashMap<String, String>,
@@ -1763,53 +1773,11 @@ mod tests {
         }
     }
 
-    /// Build a Flox instance with its catalog client pointed at a mock server URL.
-    fn make_flox_with_mock_url(server_url: &str) -> (flox_rust_sdk::flox::Flox, tempfile::TempDir) {
-        use flox_rust_sdk::flox::test_helpers::flox_instance;
-        let (mut flox, tempdir) = flox_instance();
-        flox.floxhub_client = floxhub_client::FloxhubClient::new(
-            floxhub_client::client::test_helpers::client_config(server_url),
-        )
-        .unwrap();
-        (flox, tempdir)
-    }
-
-    /// Build a minimal `CommandProvider` for test assertions.
-    fn make_provider(pname: &str, attr_path: &str, exact_name_match: bool) -> CommandProvider {
-        CommandProvider {
-            pname: pname.to_string(),
-            attr_path: attr_path.to_string(),
-            exact_name_match,
-            system: floxhub_client::PackageSystem::Aarch64Darwin,
-        }
-    }
-
-    /// Build the JSON body for a by-command response.
-    fn by_command_json(listing_known: bool, providers: &[CommandProvider]) -> serde_json::Value {
-        let providers_json: Vec<serde_json::Value> = providers
-            .iter()
-            .map(|p| {
-                serde_json::json!({
-                    "pname": p.pname,
-                    "attr_path": p.attr_path,
-                    "exact_name_match": p.exact_name_match,
-                    "system": p.system.to_string(),
-                })
-            })
-            .collect();
-        serde_json::json!({
-            "command_name": "curl",
-            "listing_known": listing_known,
-            "providers": providers_json,
-            "total_count": providers.len() as i64,
-        })
-    }
-
     // Branch 1: -p supplied — the resolver never contacts the catalog.
     #[tokio::test(flavor = "multi_thread")]
     async fn return_package_spec_when_dash_p_supplied() {
-        // No mock server needed — the by_command endpoint must not be called.
-        let (flox, _dir) = make_flox_with_mock_url("http://localhost:0");
+        // No catalog call — client is never exercised here.
+        let (flox, _dir) = flox_instance();
         let config = make_config(Default::default());
         let run_args = RunArgs {
             package: Some("curl".to_string()),
@@ -1824,7 +1792,7 @@ mod tests {
     // Branch 2: saved preference — the resolver returns it without a network call.
     #[tokio::test(flavor = "multi_thread")]
     async fn return_saved_preference_when_present() {
-        let (flox, _dir) = make_flox_with_mock_url("http://localhost:0");
+        let (flox, _dir) = flox_instance();
         let mut prefs = std::collections::HashMap::new();
         prefs.insert("vi".to_string(), "vim".to_string());
         let config = make_config(prefs);
@@ -1838,20 +1806,13 @@ mod tests {
         assert_eq!(result, "vim");
     }
 
-    // Branch 3 error: by_command returns an HTTP error → LookupUnavailable.
+    // Branch 3 error: by_command returns an HTTP 500 → LookupUnavailable.
     #[tokio::test(flavor = "multi_thread")]
     async fn return_lookup_unavailable_on_by_command_error() {
-        use httpmock::MockServer;
-        let server = MockServer::start_async().await;
-        server
-            .mock_async(|when, then| {
-                when.method(httpmock::Method::GET)
-                    .path("/api/v1/catalog/by-command");
-                then.status(500);
-            })
-            .await;
-
-        let (flox, _dir) = make_flox_with_mock_url(&server.base_url());
+        let (mut flox, _dir) = flox_instance();
+        flox.floxhub_client =
+            catalog_replay_client(UNIT_TEST_GENERATED.join("resolve_command_lookup_error.yaml"))
+                .await;
         let config = make_config(Default::default());
         let run_args = RunArgs {
             package: None,
@@ -1871,17 +1832,10 @@ mod tests {
     // Branch 3a: listing_known=false, providers=[] → CommandNotIndexed.
     #[tokio::test(flavor = "multi_thread")]
     async fn return_command_not_indexed_when_listing_unknown() {
-        use httpmock::MockServer;
-        let server = MockServer::start_async().await;
-        server
-            .mock_async(|when, then| {
-                when.method(httpmock::Method::GET)
-                    .path("/api/v1/catalog/by-command");
-                then.status(200).json_body(by_command_json(false, &[]));
-            })
-            .await;
-
-        let (flox, _dir) = make_flox_with_mock_url(&server.base_url());
+        let (mut flox, _dir) = flox_instance();
+        flox.floxhub_client =
+            catalog_replay_client(UNIT_TEST_GENERATED.join("resolve_command_not_indexed.yaml"))
+                .await;
         let config = make_config(Default::default());
         let run_args = RunArgs {
             package: None,
@@ -1901,17 +1855,11 @@ mod tests {
     // Branch 3b: listing_known=true, providers=[] → NoCommandProvider.
     #[tokio::test(flavor = "multi_thread")]
     async fn return_no_command_provider_when_listing_known_empty() {
-        use httpmock::MockServer;
-        let server = MockServer::start_async().await;
-        server
-            .mock_async(|when, then| {
-                when.method(httpmock::Method::GET)
-                    .path("/api/v1/catalog/by-command");
-                then.status(200).json_body(by_command_json(true, &[]));
-            })
-            .await;
-
-        let (flox, _dir) = make_flox_with_mock_url(&server.base_url());
+        let (mut flox, _dir) = flox_instance();
+        flox.floxhub_client = catalog_replay_client(
+            UNIT_TEST_GENERATED.join("resolve_command_no_provider_known.yaml"),
+        )
+        .await;
         let config = make_config(Default::default());
         let run_args = RunArgs {
             package: None,
@@ -1931,19 +1879,10 @@ mod tests {
     // Branch 4: single provider → return its attr_path silently.
     #[tokio::test(flavor = "multi_thread")]
     async fn return_attr_path_for_single_provider() {
-        use httpmock::MockServer;
-        let providers = vec![make_provider("curl", "curlFull", false)];
-        let server = MockServer::start_async().await;
-        server
-            .mock_async(|when, then| {
-                when.method(httpmock::Method::GET)
-                    .path("/api/v1/catalog/by-command");
-                then.status(200)
-                    .json_body(by_command_json(true, &providers));
-            })
-            .await;
-
-        let (flox, _dir) = make_flox_with_mock_url(&server.base_url());
+        let (mut flox, _dir) = flox_instance();
+        flox.floxhub_client =
+            catalog_replay_client(UNIT_TEST_GENERATED.join("resolve_command_single_provider.yaml"))
+                .await;
         let config = make_config(Default::default());
         let run_args = RunArgs {
             package: None,
@@ -1958,22 +1897,10 @@ mod tests {
     // Branch 5: two providers, one exact_name_match=true → return exact match.
     #[tokio::test(flavor = "multi_thread")]
     async fn return_exact_match_when_one_exact_name_match() {
-        use httpmock::MockServer;
-        let providers = vec![
-            make_provider("curlFull", "curlFull", true),
-            make_provider("curl-impersonate", "curl-impersonate", false),
-        ];
-        let server = MockServer::start_async().await;
-        server
-            .mock_async(|when, then| {
-                when.method(httpmock::Method::GET)
-                    .path("/api/v1/catalog/by-command");
-                then.status(200)
-                    .json_body(by_command_json(true, &providers));
-            })
-            .await;
-
-        let (flox, _dir) = make_flox_with_mock_url(&server.base_url());
+        let (mut flox, _dir) = flox_instance();
+        flox.floxhub_client =
+            catalog_replay_client(UNIT_TEST_GENERATED.join("resolve_command_exact_match.yaml"))
+                .await;
         let config = make_config(Default::default());
         let run_args = RunArgs {
             package: None,
@@ -1988,22 +1915,11 @@ mod tests {
     // Multiple exact_name_match=true → ambiguous (branch 6/7 stub).
     #[tokio::test(flavor = "multi_thread")]
     async fn return_ambiguous_when_two_exact_name_matches() {
-        use httpmock::MockServer;
-        let providers = vec![
-            make_provider("curl", "curlFull", true),
-            make_provider("curl", "curl-alt", true),
-        ];
-        let server = MockServer::start_async().await;
-        server
-            .mock_async(|when, then| {
-                when.method(httpmock::Method::GET)
-                    .path("/api/v1/catalog/by-command");
-                then.status(200)
-                    .json_body(by_command_json(true, &providers));
-            })
-            .await;
-
-        let (flox, _dir) = make_flox_with_mock_url(&server.base_url());
+        let (mut flox, _dir) = flox_instance();
+        flox.floxhub_client = catalog_replay_client(
+            UNIT_TEST_GENERATED.join("resolve_command_ambiguous_two_exact.yaml"),
+        )
+        .await;
         let config = make_config(Default::default());
         let run_args = RunArgs {
             package: None,
@@ -2023,22 +1939,11 @@ mod tests {
     // Multiple providers, none exact → ambiguous.
     #[tokio::test(flavor = "multi_thread")]
     async fn return_ambiguous_when_multiple_no_exact() {
-        use httpmock::MockServer;
-        let providers = vec![
-            make_provider("curlFull", "curlFull", false),
-            make_provider("curl-impersonate", "curl-impersonate", false),
-        ];
-        let server = MockServer::start_async().await;
-        server
-            .mock_async(|when, then| {
-                when.method(httpmock::Method::GET)
-                    .path("/api/v1/catalog/by-command");
-                then.status(200)
-                    .json_body(by_command_json(true, &providers));
-            })
-            .await;
-
-        let (flox, _dir) = make_flox_with_mock_url(&server.base_url());
+        let (mut flox, _dir) = flox_instance();
+        flox.floxhub_client = catalog_replay_client(
+            UNIT_TEST_GENERATED.join("resolve_command_ambiguous_no_exact.yaml"),
+        )
+        .await;
         let config = make_config(Default::default());
         let run_args = RunArgs {
             package: None,
@@ -2059,17 +1964,11 @@ mod tests {
     // command-index lookup and package search are independent catalogs.
     #[tokio::test(flavor = "multi_thread")]
     async fn no_command_provider_message_does_not_mention_flox_search() {
-        use httpmock::MockServer;
-        let server = MockServer::start_async().await;
-        server
-            .mock_async(|when, then| {
-                when.method(httpmock::Method::GET)
-                    .path("/api/v1/catalog/by-command");
-                then.status(200).json_body(by_command_json(true, &[]));
-            })
-            .await;
-
-        let (flox, _dir) = make_flox_with_mock_url(&server.base_url());
+        let (mut flox, _dir) = flox_instance();
+        flox.floxhub_client = catalog_replay_client(
+            UNIT_TEST_GENERATED.join("resolve_command_no_provider_known.yaml"),
+        )
+        .await;
         let config = make_config(Default::default());
         let run_args = RunArgs {
             package: None,
