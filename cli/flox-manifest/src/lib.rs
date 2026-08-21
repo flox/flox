@@ -47,6 +47,7 @@ use crate::parsed::v1_11_0::ManifestV1_11_0;
 use crate::parsed::v1_12_0::ManifestV1_12_0;
 use crate::parsed::v1_13_0::ManifestV1_13_0;
 use crate::parsed::v1_14_0::ManifestV1_14_0;
+use crate::parsed::v1_15_0::ManifestV1_15_0;
 use crate::raw::{
     SyncTypedToRaw,
     TomlEditError,
@@ -238,13 +239,14 @@ enum Parsed {
     V1_12_0(ManifestV1_12_0),
     V1_13_0(ManifestV1_13_0),
     V1_14_0(ManifestV1_14_0),
+    V1_15_0(ManifestV1_15_0),
 }
 
 impl Parsed {
     /// A helper function for creating a [`Parsed`] from whatever the latest
     /// manifest schema version happens to be.
     pub(crate) fn from_latest(manifest: ManifestLatest) -> Self {
-        Self::V1_14_0(manifest)
+        Self::V1_15_0(manifest)
     }
 
     /// Returns the known schema version of the contained manifest.
@@ -259,6 +261,7 @@ impl Parsed {
             Parsed::V1_12_0(_) => KnownSchemaVersion::V1_12_0,
             Parsed::V1_13_0(_) => KnownSchemaVersion::V1_13_0,
             Parsed::V1_14_0(_) => KnownSchemaVersion::V1_14_0,
+            Parsed::V1_15_0(_) => KnownSchemaVersion::V1_15_0,
         }
     }
 }
@@ -521,6 +524,11 @@ impl<S: ManifestState> Manifest<S> {
                     .map_err(ManifestError::Invalid)?;
                 Ok(Parsed::V1_14_0(manifest))
             },
+            KnownSchemaVersion::V1_15_0 => {
+                let manifest = toml_edit::de::from_document::<ManifestV1_15_0>(toml.clone())
+                    .map_err(ManifestError::Invalid)?;
+                Ok(Parsed::V1_15_0(manifest))
+            },
         }
     }
 }
@@ -616,6 +624,16 @@ impl<'de> Deserialize<'de> for Manifest<TypedOnly> {
                 Ok(Manifest {
                     inner: TypedOnly {
                         parsed: Parsed::V1_14_0(manifest),
+                    },
+                })
+            },
+            KnownSchemaVersion::V1_15_0 => {
+                let d = untyped.into_deserializer();
+                let manifest = ManifestV1_15_0::deserialize(d)
+                    .map_err(|err| serde::de::Error::custom(err.to_string()))?;
+                Ok(Manifest {
+                    inner: TypedOnly {
+                        parsed: Parsed::V1_15_0(manifest),
                     },
                 })
             },

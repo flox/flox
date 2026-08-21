@@ -2436,9 +2436,45 @@ mod buildenv_tests {
 
         let runtime = &result.run;
         assert!(runtime.join("activate.d/hook-on-activate").exists());
+        assert!(!runtime.join("activate.d/hook-on-deactivate").exists());
 
         let develop = &result.dev;
         assert!(develop.join("activate.d/hook-on-activate").exists());
+        assert!(!develop.join("activate.d/hook-on-deactivate").exists());
+    }
+
+    #[test]
+    fn build_contains_on_deactivate_script() {
+        // The generated kitchen_sink lockfile predates `hook.on-deactivate`,
+        // so inject the field (and the schema version that introduced it)
+        // instead of regenerating the mock data.
+        let lockfile_path = GENERATED_DATA.join("envs/kitchen_sink/manifest.lock");
+        let mut lockfile_json: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&lockfile_path).unwrap()).unwrap();
+        let manifest = lockfile_json
+            .get_mut("manifest")
+            .and_then(|manifest| manifest.as_object_mut())
+            .unwrap();
+        manifest.insert("schema-version".into(), "1.15.0".into());
+        manifest
+            .get_mut("hook")
+            .and_then(|hook| hook.as_object_mut())
+            .unwrap()
+            .insert("on-deactivate".into(), "echo running on-deactivate".into());
+
+        let tempdir = tempfile::tempdir().unwrap();
+        let lockfile_path = tempdir.path().join("manifest.lock");
+        std::fs::write(&lockfile_path, lockfile_json.to_string()).unwrap();
+
+        let buildenv = buildenv_instance();
+        let client = MockClient::new();
+        let result = buildenv.build(&client, &lockfile_path, None, None).unwrap();
+
+        let runtime = &result.run;
+        assert!(runtime.join("activate.d/hook-on-deactivate").exists());
+
+        let develop = &result.dev;
+        assert!(develop.join("activate.d/hook-on-deactivate").exists());
     }
 
     #[test]

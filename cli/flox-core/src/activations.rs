@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs::DirBuilder;
 use std::ops::Deref;
 use std::os::unix::fs::DirBuilderExt;
@@ -348,6 +348,18 @@ pub struct Attachment {
     expiration: Option<OffsetDateTime>,
 }
 
+/// Result of [ActivationState::remove_orphaned_starts].
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct OrphanedStarts {
+    /// Starts removed from the state; their state directories should be torn
+    /// down (running any `hook.on-deactivate`) once the state has been
+    /// persisted and the lock released.
+    pub orphaned: Vec<StartIdentifier>,
+    /// Whether the state was mutated (starts removed or `ready` cleared) and
+    /// must be persisted before the lock is released.
+    pub modified: bool,
+}
+
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 enum Ready {
     #[default]
@@ -379,6 +391,13 @@ pub struct ActivationState {
     executive_pid: Pid,
     current_process_compose_store_path: Option<StartIdentifier>,
     attached_pids: BTreeMap<Pid, Attachment>,
+    /// Every start whose state directory has not been torn down yet.
+    ///
+    /// A start stays listed after its last attachment detaches; the executive
+    /// removes it via [Self::remove_orphaned_starts] when it tears the start
+    /// down (running `hook.on-deactivate` after releasing the lock).
+    #[serde(default)]
+    starts: BTreeSet<StartIdentifier>,
 }
 
 impl ActivationState {
@@ -398,6 +417,7 @@ impl ActivationState {
             executive_pid: EXECUTIVE_NOT_STARTED,
             current_process_compose_store_path: None,
             attached_pids: BTreeMap::new(),
+            starts: BTreeSet::new(),
         }
     }
 
@@ -412,6 +432,7 @@ impl ActivationState {
     }
 
     /// Returns a mapping of StartIdentifier to info for each attachment to that StartIdentifier
+    #[cfg(any(test, feature = "tests"))]
     pub fn attachments_by_start_id(
         &self,
     ) -> BTreeMap<StartIdentifier, Vec<(Pid, Option<OffsetDateTime>)>> {
@@ -431,6 +452,74 @@ impl ActivationState {
 
     pub fn attached_pids_is_empty(&self) -> bool {
         self.attached_pids.is_empty()
+    }
+
+    /// Remove every start with no remaining attachments, clearing `ready` if
+    /// it names a start without attachments.
+    ///
+    /// `detach` leaves `ready` and the starts list untouched so that a new
+    /// activation arriving before this runs can still attach; once a start is
+    /// removed here that window is closed. The caller (normally the
+    /// executive) must persist the state whenever `modified` is set and
+    /// release the lock before tearing the orphaned starts down, so a hanging
+    /// `hook.on-deactivate` can't block new activations.
+    ///
+    /// `ready` is cleared based on attachments rather than membership in the
+    /// starts list, so state where `ready` names an untracked start (e.g.
+    /// written by an earlier binary without the starts field) still heals —
+    /// that is why `modified` can be set even when `orphaned` is empty.
+    ///
+    /// A `Ready::Starting` start is never orphaned even without an attachment
+    /// (its PID may have died mid-start): it stays owned by the next
+    /// `start_or_attach`.
+    pub fn remove_orphaned_starts(&mut self) -> OrphanedStarts {
+        let mut live: BTreeSet<StartIdentifier> = self
+            .attached_pids
+            .values()
+            .map(|attachment| attachment.start_id.clone())
+            .collect();
+        if let Ready::Starting(_, ref start_id) = self.ready {
+            live.insert(start_id.clone());
+        }
+
+        let orphaned: Vec<StartIdentifier> = self
+            .starts
+            .iter()
+            .filter(|start_id| !live.contains(start_id))
+            .cloned()
+            .collect();
+        for start_id in &orphaned {
+            debug!(?start_id, "removing start with no remaining attachments");
+            self.starts.remove(start_id);
+        }
+
+        let mut ready_cleared = false;
+        if let Ready::True(ref start_id) = self.ready
+            && !live.contains(start_id)
+        {
+            debug!(
+                ?start_id,
+                "ready start has no attachments, marking as not ready"
+            );
+            self.ready = Ready::False;
+            ready_cleared = true;
+        }
+
+        OrphanedStarts {
+            modified: !orphaned.is_empty() || ready_cleared,
+            orphaned,
+        }
+    }
+
+    /// Remove and return every start, including a `Ready::Starting` one.
+    ///
+    /// Only for terminal teardown, when no attachments remain and the whole
+    /// activation state is about to be removed: unlike
+    /// [Self::remove_orphaned_starts] there is no next `start_or_attach` to
+    /// hand a `Starting` start to, and its `hook.on-deactivate` bookend still
+    /// has to run if its `hook.on-activate` completed.
+    pub fn drain_starts(&mut self) -> Vec<StartIdentifier> {
+        std::mem::take(&mut self.starts).into_iter().collect()
     }
 
     /// Returns all attached PIDs and their expirations, flattened from all start IDs
@@ -495,32 +584,21 @@ impl ActivationState {
         self.ready = Ready::True(start_id.clone());
     }
 
-    /// Detach a PID from an activation, updating ready as needed.
+    /// Detach a PID from an activation.
     ///
-    /// Returns `Some(start_id)` if this was the last attachment for that
-    /// `StartIdentifier` (i.e. the caller should clean up the start state
-    /// directory), or `None` if there are still other PIDs attached to the
-    /// same start.
-    pub fn detach(&mut self, pid: Pid) -> Result<Option<StartIdentifier>, Error> {
+    /// `ready` and the starts list are deliberately left untouched even when
+    /// this was the last attachment for its start: teardown is deferred to
+    /// [Self::remove_orphaned_starts], and until that runs a new activation
+    /// of the same store path can still attach to the emptied start.
+    pub fn detach(&mut self, pid: Pid) -> Result<(), Error> {
         let removed = self.attached_pids.remove(&pid);
         debug!(pid, ?removed, "detaching from activation");
 
-        let Some(attachment) = removed else {
+        if removed.is_none() {
             bail!("PID {} is not attached to the activation", pid);
-        };
-
-        let start_id = attachment.start_id;
-
-        // Return the start_id only when no remaining attachment references it.
-        let has_remaining = self.attached_pids.values().any(|a| a.start_id == start_id);
-
-        self.update_ready_after_detach();
-
-        if has_remaining {
-            Ok(None)
-        } else {
-            Ok(Some(start_id))
         }
+
+        Ok(())
     }
 
     /// Clean up a specific terminated PID
@@ -530,24 +608,20 @@ impl ActivationState {
     /// is not protected by the state.json lock. Between detecting the exit and acquiring
     /// the lock, the PID could have been reused by another process.
     ///
-    /// Returns the start ID that needs to be cleaned up if it has no more attached PIDs
-    /// and a boolean indicating if the PID was detached.
+    /// Returns whether the PID was detached.
     pub fn cleanup_pid(
         &mut self,
         pid: Pid,
         pid_is_running: impl Fn(Pid) -> bool,
         now: OffsetDateTime,
-    ) -> (Option<StartIdentifier>, bool) {
-        // Get the attachment for this PID
-        let attachment = self.attached_pids.get(&pid).cloned();
-
-        let Some(attachment) = attachment else {
+    ) -> bool {
+        let Some(expiration) = self.attached_pids.get(&pid).map(|a| a.expiration) else {
             debug!(pid, "PID not found in attached_pids");
-            return (None, false);
+            return false;
         };
 
         // Check if we should keep this attachment
-        let keep_attachment = if let Some(expiration) = attachment.expiration {
+        let keep_attachment = if let Some(expiration) = expiration {
             // If the PID has an unreached expiration, retain it even if it isn't running
             now < expiration || pid_is_running(pid)
         } else {
@@ -557,44 +631,15 @@ impl ActivationState {
         if keep_attachment {
             // info so that Sentry breadcrumbs show why an exit event didn't
             // detach the PID, mirroring "detaching terminated PID" below
-            info!(pid, expiration = ?attachment.expiration, "keeping attached PID");
-            return (None, false);
+            info!(pid, ?expiration, "keeping attached PID");
+            return false;
         }
 
         info!(pid, "detaching terminated PID");
-        let Ok(empty_start_id) = self.detach(pid) else {
-            debug!(
-                pid,
-                "PID not found in attached_pids, this should be unreachable"
-            );
-            return (None, false);
-        };
+        self.detach(pid)
+            .expect("attachment was just observed under &mut self");
 
-        (empty_start_id, true)
-    }
-
-    /// Set ready to False if there are no more PIDs attached to the current start
-    ///
-    /// This includes the case where nothing is attached at all: `detach`'s
-    /// caller removes the emptied start's state directory before dropping the
-    /// lock, so a `ready` left naming that start would send the next
-    /// activation down the attach path to read files that are already gone.
-    /// The whole activation state directory is torn down shortly afterwards by
-    /// the executive, but not under the same lock, so the state has to be
-    /// self-consistent in the meantime.
-    fn update_ready_after_detach(&mut self) {
-        match self.ready {
-            Ready::True(ref start_id) => {
-                if !self.attachments_by_start_id().contains_key(start_id) {
-                    debug!(?start_id, "no more attached PIDs, marking as not ready");
-                    self.ready = Ready::False;
-                }
-            },
-            // we'll let the starting process (or a subsequent start or
-            // attach) handle cleanup for a dead Starting PID
-            Ready::Starting(_, _) => {},
-            Ready::False => {}, // no-op
-        }
+        true
     }
 
     fn start(&mut self, pid: Pid, store_path: impl AsRef<Path>) -> StartIdentifier {
@@ -607,6 +652,7 @@ impl ActivationState {
         debug!(pid, ?start_id, "starting new activation");
         self.ready = Ready::Starting(pid, start_id.clone());
         self.attached_pids.insert(pid, attachment);
+        self.starts.insert(start_id.clone());
         start_id
     }
 
@@ -902,6 +948,7 @@ mod tests {
             executive_pid: 1, // Not used, but will be running.
             current_process_compose_store_path: None,
             attached_pids: BTreeMap::new(),
+            starts: BTreeSet::new(),
         }
     }
 
@@ -1256,10 +1303,9 @@ mod tests {
         activations.attach(pid, attachment);
 
         // Cleanup with PID still running - should be kept
-        let (empty_start, modified) = activations.cleanup_pid(pid, |_| true, now);
+        let modified = activations.cleanup_pid(pid, |_| true, now);
         assert!(activations.attached_pids.contains_key(&pid));
         assert!(!modified);
-        assert!(empty_start.is_none());
     }
 
     #[test]
@@ -1278,39 +1324,168 @@ mod tests {
         activations.attach(pid, attachment);
 
         // Cleanup with PID not running but unexpired expiration - should be kept
-        let (empty_start, modified) = activations.cleanup_pid(pid, |_| false, now);
+        let modified = activations.cleanup_pid(pid, |_| false, now);
         assert!(activations.attached_pids.contains_key(&pid));
         assert!(!modified);
-        assert!(empty_start.is_none());
     }
 
     mod detach {
         use super::*;
 
-        /// `flox-activations detach` deletes the emptied start's state
-        /// directory as soon as the last PID detaches, so a re-activation that
-        /// beats the executive's `cleanup_all` must start fresh. Leaving
-        /// `ready` as `Ready::True(start_id)` sends it down the attach path
-        /// instead, to read an `envtrace.log` that is already gone.
+        /// Detach leaves `ready` set even when the last PID detaches: the
+        /// start's state directory is still on disk until the executive tears
+        /// it down, so a re-activation of the same store path in that window
+        /// can attach and avoid the teardown entirely.
         #[test]
-        fn reactivation_after_last_detach_starts_instead_of_attaching() {
+        fn reactivation_after_last_detach_attaches_within_window() {
             let start_id = StartIdentifier::new("/nix/store/path1");
             let mut activations = make_activations(Ready::True(start_id.clone()));
             let pid = 123;
             activations.attach(pid, make_attachment(start_id.clone()));
             activations.detach(pid).unwrap();
 
-            // Deliberately no assertion on the new StartIdentifier: it is
-            // millisecond-stamped, so a fast run mints one equal to the old.
-            // Taking the Start arm is the invariant that matters — it re-runs
-            // the activation and recreates the directory, where Attach would
-            // read the files detach removed.
             let result = activations.start_or_attach(456, &start_id.store_path);
 
-            assert!(
-                matches!(result, StartOrAttachResult::Start { .. }),
-                "Expected StartOrAttachResult::Start, got {result:?}"
+            assert_eq!(result, StartOrAttachResult::Attach {
+                start_id: start_id.clone()
+            });
+            assert_eq!(activations.ready, Ready::True(start_id));
+        }
+    }
+
+    mod remove_orphaned_starts {
+        use super::*;
+
+        /// A start with no remaining attachments is removed and returned, and
+        /// a `ready` naming it is cleared; a start that still has an
+        /// attachment is kept.
+        #[test]
+        fn removes_attachmentless_starts_and_clears_ready() {
+            let mut activations =
+                ActivationState::new(&ActivateMode::default(), Some("/test/.flox"), "/test/env");
+            activations.set_executive_pid(1);
+
+            let StartOrAttachResult::Start { start_id: old } =
+                activations.start_or_attach(100, "/nix/store/path1")
+            else {
+                panic!("expected Start");
+            };
+            activations.set_ready(&old);
+            // A second activation supersedes the first with a new store path.
+            let StartOrAttachResult::Start { start_id: new } =
+                activations.start_or_attach(200, "/nix/store/path2")
+            else {
+                panic!("expected Start");
+            };
+            activations.set_ready(&new);
+
+            assert_eq!(
+                activations.remove_orphaned_starts(),
+                OrphanedStarts {
+                    orphaned: Vec::new(),
+                    modified: false,
+                },
+                "both starts still have an attachment"
             );
+
+            activations.detach(100).unwrap();
+            assert_eq!(activations.remove_orphaned_starts(), OrphanedStarts {
+                orphaned: vec![old],
+                modified: true,
+            });
+            assert_eq!(activations.starts, BTreeSet::from([new.clone()]));
+            assert_eq!(
+                activations.ready,
+                Ready::True(new),
+                "ready names the live start and must be kept"
+            );
+        }
+
+        /// When the last attachment of the ready start detaches, teardown of
+        /// that start (and the clearing of `ready`) happens here, not in
+        /// `detach`.
+        #[test]
+        fn clears_ready_deferred_from_last_detach() {
+            let mut activations =
+                ActivationState::new(&ActivateMode::default(), Some("/test/.flox"), "/test/env");
+            let StartOrAttachResult::Start { start_id } =
+                activations.start_or_attach(100, "/nix/store/path1")
+            else {
+                panic!("expected Start");
+            };
+            activations.set_ready(&start_id);
+            activations.detach(100).unwrap();
+            assert_eq!(activations.ready, Ready::True(start_id.clone()));
+
+            assert_eq!(activations.remove_orphaned_starts(), OrphanedStarts {
+                orphaned: vec![start_id],
+                modified: true,
+            });
+            assert_eq!(activations.ready, Ready::False);
+            assert_eq!(activations.starts, BTreeSet::new());
+        }
+
+        /// `ready` naming a start missing from the starts list (e.g. state
+        /// written by an earlier binary without the field) is still cleared
+        /// once it has no attachments, and the mutation is reported so
+        /// callers persist it despite having no starts to sweep.
+        #[test]
+        fn clears_ready_missing_from_starts_and_reports_modified() {
+            let start_id = StartIdentifier::new("/nix/store/path1");
+            let mut activations = make_activations(Ready::True(start_id));
+
+            assert_eq!(activations.remove_orphaned_starts(), OrphanedStarts {
+                orphaned: Vec::new(),
+                modified: true,
+            });
+            assert_eq!(activations.ready, Ready::False);
+        }
+
+        /// An attach arriving in the window between last detach and executive
+        /// cleanup keeps the start alive.
+        #[test]
+        fn attach_in_window_prevents_orphaning() {
+            let start_id = StartIdentifier::new("/nix/store/path1");
+            let mut activations = make_activations(Ready::True(start_id.clone()));
+            activations.starts.insert(start_id.clone());
+            activations.attach(100, make_attachment(start_id.clone()));
+            activations.detach(100).unwrap();
+            activations.attach(200, make_attachment(start_id.clone()));
+
+            assert_eq!(activations.remove_orphaned_starts(), OrphanedStarts {
+                orphaned: Vec::new(),
+                modified: false,
+            });
+            assert_eq!(activations.starts, BTreeSet::from([start_id.clone()]));
+            assert_eq!(activations.ready, Ready::True(start_id));
+        }
+
+        /// A `Starting` start is owned by the next `start_or_attach` even if
+        /// its starting PID's attachment is gone; it is never torn down here.
+        #[test]
+        fn starting_start_is_not_orphaned() {
+            let start_id = StartIdentifier::new("/nix/store/path1");
+            let mut activations = make_activations(Ready::Starting(100, start_id.clone()));
+            activations.starts.insert(start_id.clone());
+
+            assert_eq!(activations.remove_orphaned_starts(), OrphanedStarts {
+                orphaned: Vec::new(),
+                modified: false,
+            });
+            assert_eq!(activations.starts, BTreeSet::from([start_id.clone()]));
+            assert_eq!(activations.ready, Ready::Starting(100, start_id));
+        }
+
+        /// Terminal teardown drains every start, including a `Starting` one
+        /// that `remove_orphaned_starts` would protect.
+        #[test]
+        fn drain_starts_returns_starting_starts_too() {
+            let start_id = StartIdentifier::new("/nix/store/path1");
+            let mut activations = make_activations(Ready::Starting(100, start_id.clone()));
+            activations.starts.insert(start_id.clone());
+
+            assert_eq!(activations.drain_starts(), vec![start_id]);
+            assert_eq!(activations.starts, BTreeSet::new());
         }
     }
 
