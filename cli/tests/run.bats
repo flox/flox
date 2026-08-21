@@ -54,12 +54,6 @@ teardown() {
   assert_output --partial "No command specified"
 }
 
-@test "'flox run <command>' without -p reports missing package" {
-  run "$FLOX_BIN" run cowsay
-  assert_failure
-  assert_output --partial "No package specified"
-}
-
 @test "'flox run -p' without a value reports missing package value" {
   run "$FLOX_BIN" run -p
   assert_failure

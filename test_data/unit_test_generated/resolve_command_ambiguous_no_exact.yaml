@@ -1,0 +1,9 @@
+when:
+  path: /api/v1/catalog/by-command
+  method: GET
+then:
+  status: 200
+  header:
+  - name: content-type
+    value: application/json
+  body: '{"command_name":"curl","listing_known":true,"providers":[{"attr_path":"curlFull","exact_name_match":false,"pname":"curlFull","system":"aarch64-darwin"},{"attr_path":"curl-impersonate","exact_name_match":false,"pname":"curl-impersonate","system":"aarch64-darwin"}],"total_count":2}'
