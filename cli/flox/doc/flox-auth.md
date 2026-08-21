@@ -20,6 +20,22 @@ flox [<general-options>] auth
 
 Authenticate with FloxHub so that you can push and pull environments.
 
+## Quieting login reminders
+
+Flox reminds you to log in when you run a command without a FloxHub
+account.
+To turn this reminder off:
+
+```bash
+flox config --set auth_notifications false
+```
+
+This suppresses advisory messages only.
+Commands that require a login, such as `flox push`, still fail with
+an explanation of what to do.
+
+See [`flox-config(1)`](./flox-config.md).
+
 # SUBCOMMANDS
 
 ## `login`
