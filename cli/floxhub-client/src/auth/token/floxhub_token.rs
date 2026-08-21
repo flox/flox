@@ -2,6 +2,7 @@
 //! FloxHub.  The token is decoded (without signature verification) at
 //! construction time so that the handle and expiration are available cheaply.
 
+use std::fmt;
 use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
@@ -24,12 +25,21 @@ struct FloxTokenClaims {
 }
 
 /// A token authenticating a user with FloxHub
-#[derive(Debug, Clone, DeserializeFromStr)]
+#[derive(Clone, DeserializeFromStr)]
 pub struct FloxhubToken {
     /// The entire token as a string
     token: String,
     /// Assertions about the identity of the token's owner
     token_data: FloxTokenClaims,
+}
+
+impl fmt::Debug for FloxhubToken {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("FloxhubToken")
+            .field("token", &"***")
+            .field("token_data", &self.token_data)
+            .finish()
+    }
 }
 
 impl FloxhubToken {
@@ -181,4 +191,20 @@ pub mod test_helpers {
     /// .
     /// AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
     pub const FAKE_EXPIRED_TOKEN_WITH_SUB: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3guZGV2L2hhbmRsZSI6InRlc3QiLCJleHAiOjE3MDQwNjM2MDAsInN1YiI6ImdpdGh1Ynw0MjQyNDIifQ.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+}
+
+#[cfg(test)]
+mod tests {
+    use super::test_helpers::FAKE_TOKEN;
+    use super::*;
+
+    #[test]
+    fn floxhub_token_debug_redacts_secret() {
+        let token = FloxhubToken::new(FAKE_TOKEN.to_string()).expect("synthetic token parses");
+
+        assert_eq!(
+            format!("{token:?}"),
+            "FloxhubToken { token: \"***\", token_data: FloxTokenClaims { handle: \"test\", exp: 9999999999, sub: None } }"
+        );
+    }
 }
