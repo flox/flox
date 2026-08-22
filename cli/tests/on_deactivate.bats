@@ -157,13 +157,13 @@ EOF
 
   # The timeout self-heals a failed test; on success `echo > hold1` below
   # releases it immediately.
-  FLOX_SHELL=bash "$FLOX_BIN" activate -c "echo > started1 && timeout 30 cat hold1" > output1 2>&1 &
+  FLOX_SHELL=bash "$FLOX_BIN" activate -c "echo > started1 && timeout 30 cat hold1" > output1 2>&1 3>&- &
   cat started1
 
   # Editing the manifest gives the next activation a new store path, so it
   # starts a second start instead of attaching to the first.
   _write_on_deactivate_manifest_with_foo "second-start"
-  FLOX_SHELL=bash "$FLOX_BIN" activate -c "echo > started2 && echo > \"$TEARDOWN_FIFO\"" > output2 2>&1 &
+  FLOX_SHELL=bash "$FLOX_BIN" activate -c "echo > started2 && echo > \"$TEARDOWN_FIFO\"" > output2 2>&1 3>&- &
   cat started2
 
   # Release the first activation: its start is emptied while the second
