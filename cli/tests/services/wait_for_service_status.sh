@@ -28,4 +28,10 @@ check_status() {
 }
 
 export -f check_status
-timeout 1s bash -c "while ! check_status ${*}; do sleep 0.1; done"
+# Polling stops as soon as every service reports the expected status, so the
+# budget only bounds how long a genuine failure takes to report. 1s was under
+# what a healthy CI runner needs to move a service between states while it is
+# also running the rest of the suite, which showed up as "status
+# current=Stopped, expected=Completed" on runs where the service did reach the
+# expected status a moment later.
+timeout 10s bash -c "while ! check_status ${*}; do sleep 0.1; done"
