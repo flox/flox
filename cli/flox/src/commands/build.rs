@@ -1088,15 +1088,15 @@ mod test {
         assert!(!package_file.exists());
 
         // Import the package
-        let result = Build::import_nixpkgs(
+        Build::import_nixpkgs(
             flox,
             ConcreteEnvironment::Path(env),
             package_name.to_string(),
             false,
             None,
         )
-        .await;
-        assert!(result.is_ok());
+        .await
+        .unwrap();
 
         // Verify the package file was created
         assert!(package_file.exists());
@@ -1125,15 +1125,15 @@ mod test {
         assert!(!pkgs_dir.exists());
 
         // Import a package
-        let result = Build::import_nixpkgs(
+        Build::import_nixpkgs(
             flox,
             ConcreteEnvironment::Path(env),
             "hello".to_string(),
             false,
             None,
         )
-        .await;
-        assert!(result.is_ok());
+        .await
+        .unwrap();
 
         // Verify the pkgs directory was created
         assert!(pkgs_dir.exists());
@@ -1204,15 +1204,15 @@ mod test {
         std::thread::sleep(std::time::Duration::from_millis(10));
 
         // Import the same package with --force (should succeed and overwrite)
-        let result = Build::import_nixpkgs(
+        Build::import_nixpkgs(
             flox,
             ConcreteEnvironment::Path(env),
             package_name.to_string(),
             true,
             None,
         )
-        .await;
-        assert!(result.is_ok());
+        .await
+        .unwrap();
 
         // Verify the file was overwritten (different modification time)
         let new_metadata = std::fs::metadata(&package_file).unwrap();
@@ -1259,7 +1259,7 @@ mod test {
                 None,
             )
             .await;
-            assert!(result.is_ok(), "Failed to import package: {}", package_name);
+            result.unwrap_or_else(|err| panic!("failed to import '{package_name}': {err:?}"));
 
             // Verify the package file was created
             assert!(
