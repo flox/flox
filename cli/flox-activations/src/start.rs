@@ -224,6 +224,30 @@ fn spawn_executive(
         .stdout(Stdio::null())
         .stderr(Stdio::null());
 
+    // The executive outlives the shell that started it, so it must not keep
+    // the descriptors that shell happened to have open. Anything it holds
+    // stays open for whoever is on the other end: under bats that is FD 3,
+    // which the runner waits on before it finishes, so one executive
+    // outliving its test turns a failed test into a run that hangs until CI
+    // kills it. It also inherits the activation state lock, which it has no
+    // use for and re-acquires for itself when it needs one.
+    //
+    // ## SAFETY:
+    //
+    // [pre_exec](std::os::unix::process::CommandExt::pre_exec) is unsafe
+    // because it runs in the forked child, in an environment where many of
+    // the guarantees provided by the Rust ownership model do not hold. The
+    // closure is limited to marking inherited descriptors close-on-exec,
+    // which is safer than closing them after exec, where the process may
+    // already have opened descriptors of its own.
+    unsafe {
+        use std::os::unix::process::CommandExt as _;
+        executive.pre_exec(|| {
+            close_fds::CloseFdsBuilder::new().cloexecfrom(3);
+            Ok(())
+        });
+    }
+
     debug!(
         "Spawning executive process to start activation: {:?}",
         executive
