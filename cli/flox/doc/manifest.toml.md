@@ -53,6 +53,8 @@ Valid string values are:
 - `1.13.0`: introduced `profile.deactivate` and build `sandbox-allow`
 - `1.14.0`: introduced `plugins`
 - `1.15.0`: introduced `hook.on-deactivate`
+- `1.16.0`: introduced services `depends-on`, and
+  `shutdown.timeout-seconds` / `shutdown.signal`
 
 Existing manifest schemas, including the older `version = 1` format, are
 automatically forward-migrated when using features that require a newer schema

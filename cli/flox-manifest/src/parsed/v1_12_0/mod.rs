@@ -122,8 +122,8 @@ impl SchemaVersion for ManifestV1_12_0 {
 /// alongside the map of service names to service definitions.
 ///
 /// The `service_map` field is a `parsed::common::Services` (BTreeMap tuple
-/// struct) to allow the internal `CommonFields::services()` accessor on
-/// `Parsed` to return a uniform `&common::Services` across all versions.
+/// struct) rather than a plain `BTreeMap`, matching the shape shared with
+/// earlier schema versions that migrate into this one.
 #[skip_serializing_none]
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, JsonSchema)]
 #[cfg_attr(any(test, feature = "tests"), derive(proptest_derive::Arbitrary))]
