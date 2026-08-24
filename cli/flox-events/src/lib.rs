@@ -495,6 +495,14 @@ pub struct CliEnvironmentActivatePayload {
     manifest_version: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     shell: Option<String>,
+    /// How the activation was invoked: `interactive`, `inplace`,
+    /// `shellcommand`, or `execcommand`. The caller supplies the
+    /// `InvocationKind` projection of the activation's invocation type
+    /// (`flox-core`), so the command a user passed to `-c` or `--` never
+    /// travels with it. Rides the same emit as `shell`, so the two
+    /// cross-tabulate without a join.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    invocation_type: Option<String>,
 }
 
 impl CliEnvironmentActivatePayload {
@@ -509,6 +517,7 @@ impl CliEnvironmentActivatePayload {
             lockfile_version: None,
             manifest_version: None,
             shell: None,
+            invocation_type: None,
         }
     }
 
@@ -539,6 +548,11 @@ impl CliEnvironmentActivatePayload {
 
     pub fn with_shell(mut self, value: impl Into<String>) -> Self {
         self.shell = Some(value.into());
+        self
+    }
+
+    pub fn with_invocation_type(mut self, value: impl Into<String>) -> Self {
+        self.invocation_type = Some(value.into());
         self
     }
 }
@@ -1265,7 +1279,8 @@ mod tests {
         let payload = CliEnvironmentActivatePayload::new(env_detail("path", "myenv"))
             .with_lockfile_version("1")
             .with_manifest_version("1")
-            .with_shell("bash");
+            .with_shell("bash")
+            .with_invocation_type("interactive");
         let value = serde_json::to_value(fixed_event(EventKind::CliEnvironmentActivate(payload)))
             .expect("event serializes");
         let expected = activate_envelope_json(json!({
@@ -1274,6 +1289,7 @@ mod tests {
             "lockfile_version": "1",
             "manifest_version": "1",
             "shell": "bash",
+            "invocation_type": "interactive",
         }));
         assert_eq!(value, expected);
     }
