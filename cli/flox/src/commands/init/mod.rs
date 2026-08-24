@@ -742,7 +742,7 @@ mod tests {
     use flox_events::test_helpers::MockEventsConnection;
     use flox_events::{EnvDetail, Event, EventsClient, SharedMetadataTemplate};
     use flox_rust_sdk::flox::test_helpers::{flox_instance, flox_instance_with_optional_floxhub};
-    use flox_rust_sdk::models::environment::{DOT_FLOX, ManagedPointer};
+    use flox_rust_sdk::models::environment::{DOT_FLOX, EnvJson, ManagedPointer};
     use flox_rust_sdk::utils::logging::test_helpers::test_subscriber_message_only;
     use indoc::indoc;
     use pretty_assertions::assert_eq;
@@ -1105,9 +1105,8 @@ mod tests {
             .await
             .expect("environment initializes");
 
-        let minted = std::fs::read_to_string(dir.path().join(DOT_FLOX).join("telemetry_id"))
-            .expect("id file written");
-        let minted = Uuid::try_parse(minted.trim()).expect("id is a uuid");
+        let env_json = EnvJson::read_from(dir.path().join(DOT_FLOX)).expect("env.json parses");
+        let minted = env_json.env_id.expect("id minted into env.json");
 
         assert_eq!(hub.create_payloads(), vec![CliEnvironmentPayload::new(
             EnvDetail::path(name.to_string(), Some(minted)).with_package_count(0)
