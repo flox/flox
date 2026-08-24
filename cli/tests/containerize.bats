@@ -254,7 +254,7 @@ function skip_if_linux() {
   assert_failure
   assert_output "✘ ERROR: No container runtime found in PATH.
 
-Exporting a container on macOS requires Docker or Podman to be installed."
+Exporting a container on macOS requires Docker, Podman, or Apple's 'container' to be installed."
 }
 
 # bats test_tags=containerize:default-to-runtime
@@ -264,9 +264,13 @@ Exporting a container on macOS requires Docker or Podman to be installed."
   # Check that podman is installed
   which podman
 
+  # Which runtime is detected depends on the host: on macOS 26 and later Apple's
+  # `container` is preferred over Podman when it is installed. This test is
+  # about defaulting to a runtime rather than to a file, so it accepts any of
+  # them; `containerize:runtime` covers selecting a specific one.
   run "$FLOX_BIN" containerize
   assert_success
-  assert_line "⚡︎ 'test:latest' written to Podman runtime"
+  assert_regex "$output" "'test:latest' written to (Podman|Docker|Apple container) runtime"
 }
 
 # bats test_tags=containerize:default-to-file
@@ -287,7 +291,9 @@ Exporting a container on macOS requires Docker or Podman to be installed."
   # Check that podman is installed
   which podman
 
-  run "$FLOX_BIN" containerize --tag 'sometag'
+  # Pinned to Podman so the assertion stays deterministic regardless of which
+  # runtime the host prefers; this test is about the tag.
+  run "$FLOX_BIN" containerize --tag 'sometag' --runtime podman
   assert_success
   assert_line "⚡︎ 'test:sometag' written to Podman runtime"
 }
@@ -302,6 +308,32 @@ Exporting a container on macOS requires Docker or Podman to be installed."
 
   run --separate-stderr podman run -q -i "localhost/test:runtime" echo '$foo'
   assert_success
+}
+
+# Apple's runtime needs macOS 26 and its background services running, neither
+# of which the CI builders provide, so this is a local-only check.
+function skip_unless_apple_container() {
+  skip_if_linux
+  if ! command -v container > /dev/null; then
+    skip "Apple's 'container' is not installed"
+  fi
+  if ! container system status > /dev/null 2>&1; then
+    skip "Apple container services are not running ('container system start')"
+  fi
+}
+
+# bats test_tags=containerize:apple-container
+@test "container is written to Apple's runtime when '--runtime container' is passed" {
+  skip_unless_apple_container
+  env_setup_catalog
+
+  run bash -c '"$FLOX_BIN" containerize --tag "apple" --runtime container' 3>&-
+  assert_success
+  assert_line "⚡︎ 'test:apple' written to Apple container runtime"
+
+  run --separate-stderr container run --rm -i "localhost/test:apple" echo '$foo'
+  assert_success
+  assert_container_output
 }
 
 # bats test_tags=containerize:file-and-runtime

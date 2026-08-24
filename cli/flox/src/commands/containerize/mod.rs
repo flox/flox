@@ -1,7 +1,7 @@
 use std::convert::Infallible;
 use std::fmt::Display;
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::str::FromStr;
 use std::{fs, io};
@@ -19,6 +19,7 @@ use flox_rust_sdk::providers::container_builder::{ContainerBuilder, MkContainerN
 use flox_rust_sdk::utils::{ReaderExt, WireTap};
 use indoc::indoc;
 use macos_containerize_proxy::ContainerizeProxy;
+use tempfile::NamedTempFile;
 use tracing::{debug, info, instrument};
 
 use super::{EnvironmentSelect, environment_select};
@@ -27,6 +28,7 @@ use crate::environment_subcommand_metric;
 use crate::utils::events::env_detail_from_concrete;
 use crate::utils::message;
 use crate::utils::openers::first_in_path;
+use crate::utils::platform::macos_major_version;
 
 mod macos_containerize_proxy;
 
@@ -39,8 +41,10 @@ pub struct Containerize {
     /// Container runtime to
     /// store the image (when '--file' is not specified)
     /// or build the image (when on macOS).
-    /// Defaults to detecting the first available on PATH.
-    #[bpaf(long, argument("docker|podman"))]
+    /// One of 'docker', 'podman', or 'container' (Apple's runtime, macOS only).
+    /// Defaults to detecting the first available on PATH,
+    /// except on macOS 26 and later, where 'container' is preferred.
+    #[bpaf(long, argument("docker|podman|container"))]
     runtime: Option<Runtime>,
 
     /// File to write the container image to.
@@ -130,14 +134,14 @@ impl Containerize {
                 bail!(indoc! {r#"
                     No container runtime found in PATH.
 
-                    Exporting a container on macOS requires Docker or Podman to be installed.
+                    Exporting a container on macOS requires Docker, Podman, or Apple's 'container' to be installed.
                 "#});
             };
             let builder = ContainerizeProxy::new(env_path, proxy_runtime, self.labels, self.mode);
             builder.create_container_source(&flox, env_name.as_ref(), output_tag)?
         };
 
-        let mut writer = output.to_writer()?;
+        let mut writer = output.to_writer(&flox.cache_dir)?;
         source.stream_container(&mut writer)?;
         writer.wait()?;
 
@@ -198,7 +202,7 @@ impl OutputTarget {
         ))))
     }
 
-    fn to_writer(&self) -> Result<Box<dyn ContainerSink + '_>> {
+    fn to_writer(&self, cache_dir: &Path) -> Result<Box<dyn ContainerSink + '_>> {
         let writer: Box<dyn ContainerSink> = match self {
             OutputTarget::File(FileOrStdout::File(path)) => {
                 let file = fs::OpenOptions::new()
@@ -211,7 +215,7 @@ impl OutputTarget {
                 Box::new(file)
             },
             OutputTarget::File(FileOrStdout::Stdout) => Box::new(io::stdout()),
-            OutputTarget::Runtime(runtime) => Box::new(runtime.to_writer()?),
+            OutputTarget::Runtime(runtime) => runtime.to_writer(cache_dir)?,
         };
 
         Ok(writer)
@@ -294,12 +298,76 @@ impl ContainerSink for RuntimeSink {
     }
 }
 
+/// A sink for runtimes whose `load` reads a file rather than stdin.
+///
+/// The image is spooled to a temporary file and handed to the runtime once
+/// [ContainerSink::wait] is called. The file lives under the Flox cache
+/// directory rather than `$TMPDIR` because container images routinely run to
+/// gigabytes and `$TMPDIR` is a memory-backed filesystem on some hosts.
+#[derive(Debug)]
+struct TempFileSink {
+    image: NamedTempFile,
+    command: Command,
+}
+
+impl TempFileSink {
+    fn new(command: Command, cache_dir: &Path) -> Result<Self> {
+        fs::create_dir_all(cache_dir).context("Could not create cache directory")?;
+        let image = NamedTempFile::new_in(cache_dir)
+            .context("Could not create temporary file for the container image")?;
+
+        Ok(Self { image, command })
+    }
+}
+
+impl Write for TempFileSink {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.image.write(buf)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        self.image.flush()
+    }
+}
+
+impl ContainerSink for TempFileSink {
+    fn wait(&mut self) -> Result<()> {
+        self.flush()?;
+        self.image.as_file().sync_all()?;
+
+        let output = self
+            .command
+            .args(["image", "load", "--input"])
+            .arg(self.image.path())
+            .output()
+            .context("Failed to call runtime container")?;
+
+        String::from_utf8_lossy(&output.stdout)
+            .lines()
+            .for_each(|line| info!("{line}"));
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+            return Err(anyhow!("Writing to runtime was unsuccessful").context(stderr));
+        }
+
+        Ok(())
+    }
+}
+
+/// The macOS release in which Apple's `container` gained the networking and
+/// runtime support that make it usable as a default. It runs on earlier
+/// releases with limitations, so there it stays a fallback behind Docker and
+/// Podman rather than the preferred choice.
+const APPLE_CONTAINER_PREFERRED_MACOS_MAJOR: u32 = 26;
+
 /// The container registry to load the container into
-/// Currently only supports Docker and Podman
+/// Supports Docker, Podman, and Apple's `container` (macOS only).
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Runtime {
     Docker,
     Podman,
+    AppleContainer,
 }
 
 impl Runtime {
@@ -313,18 +381,48 @@ impl Runtime {
             Ok(path) => path,
         };
 
-        let Some((_, runtime)) =
-            first_in_path(["docker", "podman"], std::env::split_paths(&path_var))
-        else {
-            debug!("No container runtime found in PATH");
-            return None;
+        let prefer_apple_container = macos_major_version()
+            .is_some_and(|major| major >= APPLE_CONTAINER_PREFERRED_MACOS_MAJOR);
+
+        Self::detect_in_paths(
+            prefer_apple_container,
+            std::env::split_paths(&path_var).collect(),
+        )
+    }
+
+    /// Detection split from environment lookup so both sides of the
+    /// version-dependent preference are testable on any host.
+    ///
+    /// The Docker/Podman lookup is deliberately left as a single
+    /// [first_in_path] call: that function iterates PATH entries on the
+    /// outside, so which of the two wins is decided by PATH order, and
+    /// splitting it into per-runtime lookups would silently change that.
+    /// Apple's runtime therefore gets its own stage on one side or the other
+    /// rather than joining the candidate list.
+    fn detect_in_paths(prefer_apple_container: bool, paths: Vec<PathBuf>) -> Option<Self> {
+        let apple_container = cfg!(target_os = "macos")
+            .then(|| {
+                first_in_path([Runtime::AppleContainer.to_cmd()], paths.iter().cloned())
+                    .map(|_| Runtime::AppleContainer)
+            })
+            .flatten();
+
+        let detected = if prefer_apple_container && apple_container.is_some() {
+            apple_container
+        } else {
+            first_in_path(["docker", "podman"], paths)
+                .map(|(_, runtime)| {
+                    Runtime::from_str(runtime).expect("Should search for valid runtime names only")
+                })
+                .or(apple_container)
         };
 
-        debug!(runtime, "Detected container runtime");
-        let runtime =
-            Runtime::from_str(runtime).expect("Should search for valid runtime names only");
+        match &detected {
+            Some(runtime) => debug!(runtime = runtime.to_cmd(), "Detected container runtime"),
+            None => debug!("No container runtime found in PATH"),
+        }
 
-        Some(runtime)
+        detected
     }
 
     /// Get the unqualified command name for the runtime.
@@ -332,6 +430,7 @@ impl Runtime {
         match self {
             Runtime::Docker => "docker",
             Runtime::Podman => "podman",
+            Runtime::AppleContainer => "container",
         }
     }
 
@@ -348,10 +447,16 @@ impl Runtime {
         }
     }
 
-    /// Get a writer to the registry,
-    /// Essentially spawns a `docker load` or `podman load` process
-    /// and returns a handle to its stdin.
-    fn to_writer(&self) -> Result<impl ContainerSink> {
+    /// Get a writer that loads the image into the runtime.
+    ///
+    /// Docker and Podman read the archive from `load`'s stdin, so the image
+    /// streams straight through. Apple's `container image load` only accepts
+    /// `--input <file>`, so that image has to be spooled to disk first.
+    fn to_writer(&self, cache_dir: &Path) -> Result<Box<dyn ContainerSink>> {
+        if self == &Runtime::AppleContainer {
+            return Ok(Box::new(TempFileSink::new(self.to_command(), cache_dir)?));
+        }
+
         let cmd = self.to_cmd();
         let mut child = Command::new(cmd)
             .arg("load")
@@ -373,19 +478,14 @@ impl Runtime {
             .expect("Stdout is piped")
             .tap_lines(|line| info!("{line}"));
 
-        Ok(RuntimeSink {
+        Ok(Box::new(RuntimeSink {
             child,
             stderr: Some(stderr_tap),
-        })
+        }))
     }
 
     fn to_command(&self) -> Command {
-        let cmd = match self {
-            Runtime::Docker => "docker",
-            Runtime::Podman => "podman",
-        };
-
-        Command::new(cmd)
+        Command::new(self.to_cmd())
     }
 }
 
@@ -394,6 +494,7 @@ impl Display for Runtime {
         match self {
             Runtime::Docker => write!(f, "Docker runtime"),
             Runtime::Podman => write!(f, "Podman runtime"),
+            Runtime::AppleContainer => write!(f, "Apple container runtime"),
         }
     }
 }
@@ -405,7 +506,10 @@ impl FromStr for Runtime {
         match s {
             "docker" => Ok(Runtime::Docker),
             "podman" => Ok(Runtime::Podman),
-            _ => Err(anyhow!("Runtime must be 'docker' or 'podman'")),
+            "container" => Ok(Runtime::AppleContainer),
+            _ => Err(anyhow!(
+                "Runtime must be 'docker', 'podman', or 'container'"
+            )),
         }
     }
 }
@@ -416,9 +520,76 @@ mod tests {
 
     #[test]
     fn runtime_parse() {
-        "docker".parse::<Runtime>().unwrap();
-        "podman".parse::<Runtime>().unwrap();
+        assert_eq!("docker".parse::<Runtime>().unwrap(), Runtime::Docker);
+        assert_eq!("podman".parse::<Runtime>().unwrap(), Runtime::Podman);
+        assert_eq!(
+            "container".parse::<Runtime>().unwrap(),
+            Runtime::AppleContainer
+        );
         assert!("invalid".parse::<Runtime>().is_err());
+    }
+
+    /// Apple's runtime is preferred on macOS 26 and later, where it is fully
+    /// supported, and is a last resort everywhere else. Both branches are
+    /// exercised here rather than only the one matching the test host.
+    #[test]
+    #[cfg(target_os = "macos")]
+    fn apple_container_preference_depends_on_macos_version() {
+        let tempdir = tempfile::tempdir().unwrap();
+
+        let container_bin = tempdir.path().join("container-bin");
+        let podman_bin = tempdir.path().join("podman-bin");
+        fs::create_dir(&container_bin).unwrap();
+        fs::create_dir(&podman_bin).unwrap();
+        fs::write(container_bin.join("container"), "").unwrap();
+        fs::write(podman_bin.join("podman"), "").unwrap();
+
+        // Podman deliberately sits *earlier* in PATH: preference must come from
+        // the version check, not from PATH order.
+        let paths = vec![podman_bin, container_bin];
+
+        assert_eq!(
+            Runtime::detect_in_paths(true, paths.clone()),
+            Some(Runtime::AppleContainer),
+            "macOS 26+ should prefer Apple's runtime over an earlier Podman"
+        );
+        assert_eq!(
+            Runtime::detect_in_paths(false, paths),
+            Some(Runtime::Podman),
+            "older macOS should fall back to Apple's runtime only when nothing else is present"
+        );
+    }
+
+    /// Apple's runtime is macOS-only, and adding it must not disturb which of
+    /// Docker and Podman wins — that is decided by PATH order, in both
+    /// preference modes.
+    #[test]
+    fn docker_podman_path_order_is_unchanged_by_apple_container() {
+        let tempdir = tempfile::tempdir().unwrap();
+
+        let docker_bin = tempdir.path().join("docker-bin");
+        let podman_bin = tempdir.path().join("podman-bin");
+        fs::create_dir(&docker_bin).unwrap();
+        fs::create_dir(&podman_bin).unwrap();
+        fs::write(docker_bin.join("docker"), "").unwrap();
+        fs::write(podman_bin.join("podman"), "").unwrap();
+
+        for prefer_apple_container in [true, false] {
+            assert_eq!(
+                Runtime::detect_in_paths(prefer_apple_container, vec![
+                    podman_bin.clone(),
+                    docker_bin.clone()
+                ]),
+                Some(Runtime::Podman)
+            );
+            assert_eq!(
+                Runtime::detect_in_paths(prefer_apple_container, vec![
+                    docker_bin.clone(),
+                    podman_bin.clone()
+                ]),
+                Some(Runtime::Docker)
+            );
+        }
     }
 
     #[test]

@@ -27,6 +27,7 @@ use uuid::Uuid;
 use crate::utils::detect_shell::detect_shell_name_for_metrics;
 use crate::utils::local_environment_id;
 use crate::utils::metrics::read_metrics_uuid;
+use crate::utils::platform::macos_product_version;
 
 /// Stores the invocation_id resolved by [`resolve_invocation_id`] so detached
 /// subprocess spawn sites can propagate it via [`FLOX_INVOCATION_ID_VAR`].
@@ -106,24 +107,6 @@ fn shared_metadata_template() -> SharedMetadataTemplate {
         empty_flags: vec![],
         invocation_sources: INVOCATION_SOURCES.clone(),
     }
-}
-
-/// macOS product version (e.g. `15.5`) via [`sysinfo::System::os_version`]
-/// — NOT the kernel release that the near-identically-named
-/// `sys_info::os_release()` puts in `os_family_release`. Best-effort `None`.
-fn macos_product_version() -> Option<String> {
-    #[cfg(target_os = "macos")]
-    let raw = sysinfo::System::os_version();
-    #[cfg(not(target_os = "macos"))]
-    let raw = None;
-    normalize_macos_product_version(raw)
-}
-
-/// A binary linked against a pre-macOS-11 SDK (or run under the system's
-/// version-compat shim) reads back a constant `10.16`. No real macOS ever
-/// reported that — Big Sur is 11.x — so treat it as unknown, not a version.
-fn normalize_macos_product_version(raw: Option<String>) -> Option<String> {
-    raw.filter(|version| version != "10.16" && !version.starts_with("10.16."))
 }
 
 /// Arch component of a Nix system double (`aarch64-darwin` → `aarch64`).
@@ -353,25 +336,6 @@ mod tests {
             let id = resolve_invocation_id();
             assert_ne!(id, Uuid::nil());
         });
-    }
-
-    #[test]
-    fn normalize_macos_product_version_drops_compat_shim_sentinel() {
-        // `10.16` is the version-compat shim's constant, never a real
-        // product version — it must read as unknown, not ship on the wire.
-        assert_eq!(
-            normalize_macos_product_version(Some("10.16".to_string())),
-            None
-        );
-        assert_eq!(
-            normalize_macos_product_version(Some("10.16.0".to_string())),
-            None
-        );
-        assert_eq!(
-            normalize_macos_product_version(Some("15.5".to_string())).as_deref(),
-            Some("15.5")
-        );
-        assert_eq!(normalize_macos_product_version(None), None);
     }
 
     #[test]

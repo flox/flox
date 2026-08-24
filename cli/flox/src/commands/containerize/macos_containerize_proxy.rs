@@ -1,8 +1,9 @@
-use std::env;
 use std::ffi::OsString;
-use std::path::PathBuf;
+use std::os::unix::fs::PermissionsExt;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::LazyLock;
+use std::{env, fs};
 
 use flox_config::FLOX_CONFIG_FILE;
 use flox_core::activate::context::ActivateMode;
@@ -27,6 +28,8 @@ const FLOX_PROXY_IMAGE_FLOX_CONFIG_DIR: &str = "/root/.config/flox";
 static FLOX_CONTAINERIZE_FLAKE_REF_OR_REV: LazyLock<Option<String>> =
     LazyLock::new(|| env::var("_FLOX_CONTAINERIZE_FLAKE_REF_OR_REV").ok());
 const CONTAINER_NIX_CACHE_VOLUME: &str = "flox-nix";
+/// Where `flox.toml` is staged for runtimes that can only mount directories.
+const PROXY_CONFIG_STAGING_DIR: &str = "containerize-proxy-config";
 
 const MOUNT_ENV: &str = "/flox_env";
 
@@ -34,6 +37,12 @@ const MOUNT_ENV: &str = "/flox_env";
 pub enum ContainerizeProxyError {
     #[error("failed to populate proxy container cache volume")]
     PopulateCacheVolume(#[source] std::io::Error),
+    #[error(
+        "Apple container services are not running.\n\nStart them with 'container system start'."
+    )]
+    AppleContainerServicesNotRunning,
+    #[error("failed to stage the Flox config for the proxy container")]
+    StageFloxConfig(#[source] std::io::Error),
 }
 
 /// An implementation of [ContainerBuilder] for macOS that uses `flox
@@ -92,6 +101,29 @@ impl ContainerizeProxy {
         ]);
     }
 
+    /// Apple's runtime refuses every command until its background services are
+    /// running, and reports that as a connection failure from whichever
+    /// subcommand happened to run first. Ask it directly so the user gets the
+    /// one next step instead of the runtime's own diagnostics.
+    fn check_runtime_available(&self) -> Result<(), ContainerizeProxyError> {
+        if self.container_runtime != Runtime::AppleContainer {
+            return Ok(());
+        }
+
+        let status = self
+            .container_runtime
+            .to_command()
+            .args(["system", "status"])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status();
+
+        match status {
+            Ok(status) if status.success() => Ok(()),
+            _ => Err(ContainerizeProxyError::AppleContainerServicesNotRunning),
+        }
+    }
+
     /// Copy the Nix store from the container image to the cache volume.
     #[instrument(skip_all, fields(progress = "Populating proxy container cache volume"))]
     fn populate_cache_volume(&self) -> Result<(), ContainerizeProxyError> {
@@ -144,8 +176,43 @@ impl ContainerizeProxy {
         Ok(())
     }
 
+    /// Stage `flox.toml` in a directory of its own and return that directory.
+    ///
+    /// Apple's runtime shares host paths over virtiofs, which cannot share a
+    /// single file (apple/containerization#79), so the config has to reach the
+    /// container as a directory. Copying rather than mounting the user's
+    /// config directory keeps the exposure identical to the file mount the
+    /// other runtimes get: this one file and nothing else that happens to live
+    /// alongside it.
+    ///
+    /// Unlike the file mount, writes made inside the container land on the
+    /// copy. Nothing in the proxy writes its config, and a discarded write is
+    /// the safer direction for a file that may hold a FloxHub token.
+    fn stage_flox_config(
+        &self,
+        flox: &Flox,
+        flox_toml: &Path,
+    ) -> Result<PathBuf, ContainerizeProxyError> {
+        let staging_dir = flox.cache_dir.join(PROXY_CONFIG_STAGING_DIR);
+        fs::create_dir_all(&staging_dir).map_err(ContainerizeProxyError::StageFloxConfig)?;
+
+        let staged = staging_dir.join(FLOX_CONFIG_FILE);
+        fs::copy(flox_toml, &staged).map_err(ContainerizeProxyError::StageFloxConfig)?;
+        // The original is `0600` when the plain-text credential backend has
+        // written a token into it; `copy` carries the mode over, but the file
+        // may already exist from an earlier run with a laxer mode.
+        fs::set_permissions(&staged, fs::Permissions::from_mode(0o600))
+            .map_err(ContainerizeProxyError::StageFloxConfig)?;
+
+        Ok(staging_dir)
+    }
+
     /// Inception L1: Container runtime args.
-    fn add_runtime_args(&self, command: &mut Command, flox: &Flox) {
+    fn add_runtime_args(
+        &self,
+        command: &mut Command,
+        flox: &Flox,
+    ) -> Result<(), ContainerizeProxyError> {
         // The `--userns` flag creates a mapping of users in the container,
         // which we need. However, in order to work we also need the user
         // in the container to be `root` otherwise you run into multi-user
@@ -171,11 +238,16 @@ impl ContainerizeProxy {
         if flox_toml.exists() {
             let mut flox_toml_mount = OsString::new();
             flox_toml_mount.push("type=bind,source=");
-            flox_toml_mount.push(flox_toml);
-            flox_toml_mount.push(format!(
-                ",target={}/{}",
-                FLOX_PROXY_IMAGE_FLOX_CONFIG_DIR, FLOX_CONFIG_FILE
-            ));
+            if self.container_runtime == Runtime::AppleContainer {
+                flox_toml_mount.push(self.stage_flox_config(flox, &flox_toml)?);
+                flox_toml_mount.push(format!(",target={FLOX_PROXY_IMAGE_FLOX_CONFIG_DIR}"));
+            } else {
+                flox_toml_mount.push(flox_toml);
+                flox_toml_mount.push(format!(
+                    ",target={}/{}",
+                    FLOX_PROXY_IMAGE_FLOX_CONFIG_DIR, FLOX_CONFIG_FILE
+                ));
+            }
             command.arg("--mount");
             command.arg(flox_toml_mount);
         }
@@ -214,6 +286,8 @@ impl ContainerizeProxy {
         }
 
         command.arg(self.container_image());
+
+        Ok(())
     }
 
     /// Inception L2: Nix args.
@@ -275,10 +349,11 @@ impl ContainerBuilder for ContainerizeProxy {
         _name: impl AsRef<str>,
         tag: impl AsRef<str>,
     ) -> Result<ContainerSource, Self::Error> {
+        self.check_runtime_available()?;
         self.populate_cache_volume()?;
 
         let mut command = self.runtime_base_command();
-        self.add_runtime_args(&mut command, flox);
+        self.add_runtime_args(&mut command, flox)?;
         self.add_nix_args(&mut command);
         self.add_flox_args(&mut command, flox, tag);
 

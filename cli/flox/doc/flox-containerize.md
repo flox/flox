@@ -27,10 +27,14 @@ The image can be written to a container runtime registry, a file, or another pro
 **Note**: Exporting a container from macOS requires a supported runtime
 because a proxy container is used to build the environment and image. You
 may be prompted for permissions to share files into the proxy container.
-Files used in the proxy container are cached using a `docker` or `podman`
-volume named `flox-nix`.
+Files used in the proxy container are cached using a `docker`, `podman`, or
+`container` volume named `flox-nix`.
 It can safely be removed any time a `flox containerize` command is not running
-using either `docker volume rm flox-nix` or `podman volume rm flox-nix`.
+using `docker volume rm flox-nix`, `podman volume rm flox-nix`, or
+`container volume delete flox-nix`.
+
+Apple's `container` runtime requires macOS 26 or later and its background
+services to be running (`container system start`).
 
 Running the container will behave like running `flox activate`.
 Running the container interactively with `docker run -it <container id>`,
@@ -53,7 +57,10 @@ similar to `flox activate --`.
 :   Container runtime to
     store the image (when `--file` is not specified)
     or build the image (when on macOS).
-    Defaults to detecting the first available on PATH.
+    One of `docker`, `podman`, or `container` (Apple's runtime, macOS only).
+    Defaults to detecting the first available on PATH,
+    except on macOS 26 and later,
+    where `container` is preferred when it is installed.
 
 `--label`
 :   Set metadata for the container image.
