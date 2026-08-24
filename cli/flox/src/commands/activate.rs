@@ -586,13 +586,22 @@ impl ActivateOptions {
         } else {
             detect_shell_for_subshell()
         };
-        subcommand_metric!("activate", "shell" = shell.to_string());
+        // `InvocationType`'s Display projects through `InvocationKind`, so the
+        // command behind `-c` / `--` is dropped rather than reported.
+        let invocation_kind = invocation_type.to_string();
+        subcommand_metric!(
+            "activate",
+            "shell" = shell.to_string(),
+            "invocation_type" = invocation_kind.clone()
+        );
 
         // Runs before `command.exec()`, so the buffered event is flushed
         // synchronously by the pre-exec emit + flush block below
         // (spec AC #5).
         if let Err(err) = EventsHub::global().record_event(EventKind::CliEnvironmentActivate(
-            CliEnvironmentActivatePayload::new(v2_env_detail.clone()).with_shell(shell.to_string()),
+            CliEnvironmentActivatePayload::new(v2_env_detail.clone())
+                .with_shell(shell.to_string())
+                .with_invocation_type(invocation_kind),
         )) {
             debug!(error = %err, "Failed to record v2 event");
         }
