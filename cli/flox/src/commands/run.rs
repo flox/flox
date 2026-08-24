@@ -35,7 +35,9 @@ use flox_rust_sdk::providers::buildenv::{
 };
 use flox_rust_sdk::providers::nix_auth::{AuthProvider, NixAuth};
 use floxhub_client::{
+    ByCommandError,
     CatalogClientTrait,
+    CommandProvider,
     MessageLevel,
     PackageDescriptor,
     PackageGroup,
@@ -50,6 +52,14 @@ use tracing::{debug, info_span};
 use crate::commands::general::{remove_config_key_with_query, update_config_with_query};
 use crate::subcommand_metric;
 use crate::utils::message;
+
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
+/// Maximum number of candidates shown when the disambiguation prompt lists
+/// packages. Beyond this count a "(N shown, M total)" line is appended.
+const DISAMBIGUATION_LIMIT: usize = 10;
 
 // ---------------------------------------------------------------------------
 // Error types
@@ -173,6 +183,54 @@ pub enum RunError {
     /// The final `exec` syscall returned (rare — permissions or missing binary).
     #[error("Failed to run '{0}'.")]
     ExecFailed(String, #[source] std::io::Error),
+
+    /// The catalog lookup timed out or returned a transport error.
+    #[error(
+        "Could not reach the Flox Catalog to look up '{command}'.\n\
+         Use 'flox run --package <PACKAGE> {command}' to run it directly."
+    )]
+    LookupUnavailable { command: String },
+
+    /// The catalog is indexed but no package provides this command.
+    #[error(
+        "No package provides the command '{command}'.\n\
+         Use 'flox run --package <PACKAGE> {command}' if you know the package."
+    )]
+    NoCommandProvider { command: String },
+
+    /// The command is not in the current command index (listing not yet scraped).
+    #[error(
+        "The command '{command}' has not been indexed yet.\n\
+         Use 'flox run --package <PACKAGE> {command}' to run it directly."
+    )]
+    CommandNotIndexed { command: String },
+
+    /// The command name fails catalog validation (e.g. too short or too long)
+    /// so it cannot be looked up. This is a client-side check — the catalog
+    /// was never contacted.
+    #[error(
+        "'{command}' is not a valid catalog command name.\n\
+         Use 'flox run --package <PACKAGE> {command}' to run it directly."
+    )]
+    InvalidCommandName { command: String },
+
+    /// Multiple packages provide the command and the session is non-interactive.
+    #[error("{}", render_ambiguous(command, providers, *total))]
+    AmbiguousCommandNonInteractive {
+        command: String,
+        providers: Vec<CommandProvider>,
+        /// Catalog-reported total count of providers, used to render the
+        /// "(N shown, M total)" trailer when the list is truncated.
+        total: u64,
+    },
+
+    /// Writing the user's package preference to the config file failed.
+    ///
+    /// Not yet used — T7 (DEV-185) will call this when persisting a
+    /// disambiguation selection at the interactive prompt.
+    #[allow(dead_code)]
+    #[error("Failed to save the package preference for '{0}'.")]
+    PreferenceWriteFailed(String, #[source] anyhow::Error),
 }
 
 // ---------------------------------------------------------------------------
@@ -256,9 +314,43 @@ impl Run {
                 }
                 Ok(())
             },
-            ParsedArgs::Run(run_args) => exec_run(run_args, &flox).await,
+            ParsedArgs::Run(run_args) => {
+                let pkg_spec = resolve_command(&run_args, &config, &flox)
+                    .await
+                    .map_err(anyhow::Error::from)?;
+                let resolved = RunArgs {
+                    package: Some(pkg_spec),
+                    ..run_args
+                };
+                exec_run(resolved, &flox).await
+            },
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Ambiguous-command rendering
+// ---------------------------------------------------------------------------
+
+/// Format the list of candidates for `AmbiguousCommandNonInteractive`.
+///
+/// Renders up to `DISAMBIGUATION_LIMIT` entries and appends a count line when
+/// `total` exceeds the limit. `total` is passed separately so the caller can
+/// supply either the actual catalog total or `providers.len()`.
+fn render_ambiguous(command: &str, providers: &[CommandProvider], total: u64) -> String {
+    use std::fmt::Write as _;
+    let mut s = format!("Multiple packages provide '{command}'.\n");
+    for p in providers.iter().take(DISAMBIGUATION_LIMIT) {
+        let _ = writeln!(s, "  {:<12} ({})", p.pname, p.attr_path);
+    }
+    if total > DISAMBIGUATION_LIMIT as u64 {
+        let _ = writeln!(s, "  ... ({DISAMBIGUATION_LIMIT} shown, {total} total)");
+    }
+    let _ = write!(
+        s,
+        "Use 'flox run --package <PACKAGE> {command}' to choose one."
+    );
+    s
 }
 
 // ---------------------------------------------------------------------------
@@ -405,6 +497,100 @@ pub fn validate_plain_package(pkg: &CatalogPackage, raw: &str) -> Result<(), Run
         return Err(RunError::UnsupportedPackageSpec(raw.to_string()));
     }
     Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Command resolver
+// ---------------------------------------------------------------------------
+
+/// Resolve a bare command name to a package attr-path, or pass a `-p` spec
+/// through unchanged.
+///
+/// Implements a 7-branch funnel:
+///
+/// 1. `-p` supplied → return it directly, no catalog call.
+/// 2. Saved preference in config → return silently.
+/// 3. `by_command` lookup with a 5-second timeout.
+///    - `listing_known=false`, empty providers → `CommandNotIndexed`.
+///    - `listing_known=true`, empty providers → `NoCommandProvider`.
+/// 4. Single provider → return its `attr_path` silently.
+/// 5. Exactly one `exact_name_match=true` → return its `attr_path` silently.
+/// 6. Multiple candidates → `AmbiguousCommandNonInteractive` for now.
+///    T7 will split into a TTY prompt and a non-interactive fail path.
+async fn resolve_command(
+    run_args: &RunArgs,
+    config: &Config,
+    flox: &Flox,
+) -> Result<String, RunError> {
+    // Branch 1: -p supplied — bypass resolver entirely.
+    if let Some(pkg) = &run_args.package {
+        return Ok(pkg.clone());
+    }
+
+    let command = run_args.executable.to_string_lossy().into_owned();
+
+    // Branch 2: saved preference — return silently, no write.
+    if let Some(attr_path) = config.flox.run_preferences.get(&command) {
+        debug!(branch = "saved", %command, "resolve_command");
+        return Ok(attr_path.clone());
+    }
+
+    // Branch 3: call by_command; networking timeouts are handled by the client.
+    // system.try_into() only fails for unrecognized system strings, which
+    // cannot occur in practice — Flox validates the system at startup.
+    let system: PackageSystem = flox
+        .system
+        .clone()
+        .try_into()
+        .expect("flox.system is always a valid PackageSystem");
+
+    let result = flox
+        .floxhub_client
+        .by_command(&command, system)
+        .await
+        .map_err(|e| classify_by_command_error(e, command.clone()))?;
+
+    // Branches 3a/3b: empty provider list — tristate on listing_known.
+    if result.providers.is_empty() {
+        return Err(if result.listing_known {
+            RunError::NoCommandProvider { command }
+        } else {
+            RunError::CommandNotIndexed { command }
+        });
+    }
+
+    // Branch 4: single provider — silent, no write.
+    if result.providers.len() == 1 {
+        debug!(branch = "single", %command, "resolve_command");
+        return Ok(result.providers[0].attr_path.clone());
+    }
+
+    // Branch 5: exactly one exact_name_match — silent, no write.
+    let exact: Vec<_> = result
+        .providers
+        .iter()
+        .filter(|p| p.exact_name_match)
+        .collect();
+    if exact.len() == 1 {
+        debug!(branch = "exact", %command, "resolve_command");
+        return Ok(exact[0].attr_path.clone());
+    }
+
+    // Branches 6/7: multiple candidates.
+    // T7 will split this into a TTY prompt (branch 6) and the non-interactive
+    // error path (branch 7). For now all multi-candidate cases return the
+    // non-interactive error so the stub compiles and tests can exercise it.
+    debug!(
+        branch = "ambiguous",
+        %command,
+        count = result.providers.len(),
+        "resolve_command"
+    );
+    Err(RunError::AmbiguousCommandNonInteractive {
+        command,
+        providers: result.providers,
+        total: result.total_count as u64,
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -718,6 +904,23 @@ async fn exec_run(run_args: RunArgs, flox: &Flox) -> Result<()> {
 // ---------------------------------------------------------------------------
 // Resolution error classification
 // ---------------------------------------------------------------------------
+
+/// Map a `ByCommandError` to the most accurate `RunError`.
+///
+/// `InvalidCommandName` is a client-side validation error that fires before
+/// any network request — the catalog's `Name` type requires 2–200 characters,
+/// so very short command names (e.g. `w`) cannot be queried at all.
+///
+/// `FloxhubClientError` covers transport failures and server errors.
+fn classify_by_command_error(err: ByCommandError, command: String) -> RunError {
+    match err {
+        ByCommandError::InvalidCommandName(_) => RunError::InvalidCommandName { command },
+        ByCommandError::FloxhubClientError(e) => {
+            debug!(error = ?e, %command, "by_command lookup failed");
+            RunError::LookupUnavailable { command }
+        },
+    }
+}
 
 /// Map a typed `ResolutionMessage` to the appropriate `RunError`.
 fn classify_resolution_message(msg: &ResolutionMessage, pkg_spec: &str, system: &str) -> RunError {
@@ -1550,5 +1753,263 @@ mod tests {
         // When no dirs are passed, the result should equal the current PATH.
         let current = std::env::var_os("PATH").unwrap_or_default();
         assert_eq!(result, current);
+    }
+
+    // -----------------------------------------------------------------------
+    // resolve_command tests
+    // -----------------------------------------------------------------------
+
+    use flox_rust_sdk::flox::test_helpers::flox_instance;
+    use flox_rust_sdk::providers::catalog::test_helpers::{
+        UNIT_TEST_GENERATED,
+        catalog_replay_client,
+    };
+
+    /// Build a minimal Config with an optional saved run preference.
+    fn make_config(
+        run_preferences: std::collections::HashMap<String, String>,
+    ) -> flox_config::Config {
+        flox_config::Config {
+            flox: flox_config::FloxConfig {
+                run_preferences,
+                ..Default::default()
+            },
+            ..Default::default()
+        }
+    }
+
+    // Branch 1: -p supplied — the resolver never contacts the catalog.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn return_package_spec_when_dash_p_supplied() {
+        // No catalog call — client is never exercised here.
+        let (flox, _dir) = flox_instance();
+        let config = make_config(Default::default());
+        let run_args = RunArgs {
+            package: Some("curl".to_string()),
+            executable: OsString::from("curl"),
+            args: vec![],
+        };
+
+        let result = resolve_command(&run_args, &config, &flox).await.unwrap();
+        assert_eq!(result, "curl");
+    }
+
+    // Branch 2: saved preference — the resolver returns it without a network call.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn return_saved_preference_when_present() {
+        let (flox, _dir) = flox_instance();
+        let mut prefs = std::collections::HashMap::new();
+        prefs.insert("vi".to_string(), "vim".to_string());
+        let config = make_config(prefs);
+        let run_args = RunArgs {
+            package: None,
+            executable: OsString::from("vi"),
+            args: vec![],
+        };
+
+        let result = resolve_command(&run_args, &config, &flox).await.unwrap();
+        assert_eq!(result, "vim");
+    }
+
+    // Branch 3 error: by_command returns an HTTP 500 → LookupUnavailable.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn return_lookup_unavailable_on_by_command_error() {
+        let (mut flox, _dir) = flox_instance();
+        flox.floxhub_client =
+            catalog_replay_client(UNIT_TEST_GENERATED.join("resolve_command_lookup_error.yaml"))
+                .await;
+        let config = make_config(Default::default());
+        let run_args = RunArgs {
+            package: None,
+            executable: OsString::from("curl"),
+            args: vec![],
+        };
+
+        let err = resolve_command(&run_args, &config, &flox)
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(err, RunError::LookupUnavailable { .. }),
+            "expected LookupUnavailable, got: {err:?}"
+        );
+    }
+
+    // Branch 3a: listing_known=false, providers=[] → CommandNotIndexed.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn return_command_not_indexed_when_listing_unknown() {
+        let (mut flox, _dir) = flox_instance();
+        flox.floxhub_client =
+            catalog_replay_client(UNIT_TEST_GENERATED.join("resolve_command_not_indexed.yaml"))
+                .await;
+        let config = make_config(Default::default());
+        let run_args = RunArgs {
+            package: None,
+            executable: OsString::from("curl"),
+            args: vec![],
+        };
+
+        let err = resolve_command(&run_args, &config, &flox)
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(err, RunError::CommandNotIndexed { .. }),
+            "expected CommandNotIndexed, got: {err:?}"
+        );
+    }
+
+    // Branch 3b: listing_known=true, providers=[] → NoCommandProvider.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn return_no_command_provider_when_listing_known_empty() {
+        let (mut flox, _dir) = flox_instance();
+        flox.floxhub_client = catalog_replay_client(
+            UNIT_TEST_GENERATED.join("resolve_command_no_provider_known.yaml"),
+        )
+        .await;
+        let config = make_config(Default::default());
+        let run_args = RunArgs {
+            package: None,
+            executable: OsString::from("curl"),
+            args: vec![],
+        };
+
+        let err = resolve_command(&run_args, &config, &flox)
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(err, RunError::NoCommandProvider { .. }),
+            "expected NoCommandProvider, got: {err:?}"
+        );
+    }
+
+    // Branch 4: single provider → return its attr_path silently.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn return_attr_path_for_single_provider() {
+        let (mut flox, _dir) = flox_instance();
+        flox.floxhub_client =
+            catalog_replay_client(UNIT_TEST_GENERATED.join("resolve_command_single_provider.yaml"))
+                .await;
+        let config = make_config(Default::default());
+        let run_args = RunArgs {
+            package: None,
+            executable: OsString::from("curl"),
+            args: vec![],
+        };
+
+        let result = resolve_command(&run_args, &config, &flox).await.unwrap();
+        assert_eq!(result, "curlFull");
+    }
+
+    // Branch 5: two providers, one exact_name_match=true → return exact match.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn return_exact_match_when_one_exact_name_match() {
+        let (mut flox, _dir) = flox_instance();
+        flox.floxhub_client =
+            catalog_replay_client(UNIT_TEST_GENERATED.join("resolve_command_exact_match.yaml"))
+                .await;
+        let config = make_config(Default::default());
+        let run_args = RunArgs {
+            package: None,
+            executable: OsString::from("curl"),
+            args: vec![],
+        };
+
+        let result = resolve_command(&run_args, &config, &flox).await.unwrap();
+        assert_eq!(result, "curlFull");
+    }
+
+    // Multiple exact_name_match=true → ambiguous (branch 6/7 stub).
+    #[tokio::test(flavor = "multi_thread")]
+    async fn return_ambiguous_when_two_exact_name_matches() {
+        let (mut flox, _dir) = flox_instance();
+        flox.floxhub_client = catalog_replay_client(
+            UNIT_TEST_GENERATED.join("resolve_command_ambiguous_two_exact.yaml"),
+        )
+        .await;
+        let config = make_config(Default::default());
+        let run_args = RunArgs {
+            package: None,
+            executable: OsString::from("curl"),
+            args: vec![],
+        };
+
+        let err = resolve_command(&run_args, &config, &flox)
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(err, RunError::AmbiguousCommandNonInteractive { .. }),
+            "expected AmbiguousCommandNonInteractive, got: {err:?}"
+        );
+    }
+
+    // Multiple providers, none exact → ambiguous.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn return_ambiguous_when_multiple_no_exact() {
+        let (mut flox, _dir) = flox_instance();
+        flox.floxhub_client = catalog_replay_client(
+            UNIT_TEST_GENERATED.join("resolve_command_ambiguous_no_exact.yaml"),
+        )
+        .await;
+        let config = make_config(Default::default());
+        let run_args = RunArgs {
+            package: None,
+            executable: OsString::from("curl"),
+            args: vec![],
+        };
+
+        let err = resolve_command(&run_args, &config, &flox)
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(err, RunError::AmbiguousCommandNonInteractive { .. }),
+            "expected AmbiguousCommandNonInteractive, got: {err:?}"
+        );
+    }
+
+    // The NoCommandProvider error message must not suggest 'flox search' because
+    // command-index lookup and package search are independent catalogs.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn no_command_provider_message_does_not_mention_flox_search() {
+        let (mut flox, _dir) = flox_instance();
+        flox.floxhub_client = catalog_replay_client(
+            UNIT_TEST_GENERATED.join("resolve_command_no_provider_known.yaml"),
+        )
+        .await;
+        let config = make_config(Default::default());
+        let run_args = RunArgs {
+            package: None,
+            executable: OsString::from("curl"),
+            args: vec![],
+        };
+
+        let err = resolve_command(&run_args, &config, &flox)
+            .await
+            .unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            !msg.contains("flox search"),
+            "NoCommandProvider message must not suggest 'flox search': {msg}"
+        );
+    }
+
+    // A single-character command like "w" fails the catalog's Name validation
+    // (minimum 2 chars) before any network request. resolve_command should
+    // surface InvalidCommandName, not LookupUnavailable or CommandNotIndexed.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn single_char_command_gives_invalid_name_error() {
+        let (flox, _dir) = flox_instance();
+        let config = make_config(Default::default());
+        let run_args = RunArgs {
+            package: None,
+            executable: OsString::from("w"),
+            args: vec![],
+        };
+
+        let err = resolve_command(&run_args, &config, &flox)
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(err, RunError::InvalidCommandName { .. }),
+            "expected InvalidCommandName for single-char command, got: {err:?}"
+        );
     }
 }

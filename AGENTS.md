@@ -188,6 +188,11 @@ internal Linear issue instead.
       if it improves readability
     - Add `use` statements to modules; don't add to nearest function
     - Always update `use` statements when moving code between modules; don't re-export existing names
+    - **DO NOT** import `catalog-api-v1` directly in `cli/flox/` (the main
+      binary crate) or its tests. All catalog API types and errors must be
+      accessed through `floxhub-client` or `flox-rust-sdk` re-exports.
+      `catalog-api-v1` is generated code and its types are deliberately
+      wrapped to keep generated-code churn inside one crate.
   - **Error handling architecture:**
     - When improving error messages, first understand the existing
       error type hierarchy before adding string-matching at call
