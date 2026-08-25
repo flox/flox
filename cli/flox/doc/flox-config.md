@@ -71,13 +71,19 @@ flox config --set 'trusted_environments."owner/name"' trust
 # SUPPORTED CONFIGURATION OPTIONS
 
 `auth_notifications`
-:   Print the advisory reminder shown after a command when you are not
-    logged in to FloxHub:
+:   Print the advisory FloxHub authentication messages.
+    The reminder shown after a command when you are not logged in:
     ```console
     You are not logged in to FloxHub. Run 'flox auth login' to log in.
     ```
 
-    Set to `false` to quiet it.
+    And the warning shown when packages are resolved against the
+    catalog without being logged in:
+    ```console
+    Resolving packages will require authentication to FloxHub in an upcoming release.
+    ```
+
+    Set to `false` to quiet them.
     Authentication *errors* are unaffected: commands that require a
     login, such as `flox push`, still fail with an explanation.
 
