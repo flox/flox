@@ -210,6 +210,15 @@ jobs:
         if: ${{ needs.scope.outputs.heavy != 'false' }}
         run: nix develop -L --no-update-lock-file --command just test-nix-plugins
 
+      # The sticky-disk post step must unmount /nix to commit the
+      # snapshot; the multi-user nix-daemon keeps the mount busy, so
+      # stop it as the job's last act.
+      - name: "Stop nix-daemon for sticky disk commit"
+        if: ${{ always() && runner.os == 'Linux' }}
+        run: |
+          sudo systemctl stop nix-daemon.socket nix-daemon.service 2>/dev/null || true
+          sudo pkill -9 nix-daemon 2>/dev/null || true
+
   nef-dev:
     name: "Nix expression tests"
     # Skip on push to main; already run in the merge queue. Safe as a job-level
@@ -263,6 +272,15 @@ jobs:
 
       - name: "Test buildenvLib"
         run: nix develop -L --no-update-lock-file --command just test-buildenvLib
+
+      # The sticky-disk post step must unmount /nix to commit the
+      # snapshot; the multi-user nix-daemon keeps the mount busy, so
+      # stop it as the job's last act.
+      - name: "Stop nix-daemon for sticky disk commit"
+        if: ${{ always() && runner.os == 'Linux' }}
+        run: |
+          sudo systemctl stop nix-daemon.socket nix-daemon.service 2>/dev/null || true
+          sudo pkill -9 nix-daemon 2>/dev/null || true
 
   cli-unit:
     name: "unit"
@@ -371,6 +389,15 @@ jobs:
             git diff
             exit 1
           fi
+
+      # The sticky-disk post step must unmount /nix to commit the
+      # snapshot; the multi-user nix-daemon keeps the mount busy, so
+      # stop it as the job's last act.
+      - name: "Stop nix-daemon for sticky disk commit"
+        if: ${{ always() && runner.os == 'Linux' }}
+        run: |
+          sudo systemctl stop nix-daemon.socket nix-daemon.service 2>/dev/null || true
+          sudo pkill -9 nix-daemon 2>/dev/null || true
 
   nix-build:
     name: "Nix build"

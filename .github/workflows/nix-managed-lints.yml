@@ -122,6 +122,15 @@ jobs:
               --from-ref "$( git rev-parse "target" )" \
               --to-ref   "$( git rev-parse "head" )";
 
+      # The sticky-disk post step must unmount /nix to commit the
+      # snapshot; the multi-user nix-daemon keeps the mount busy, so
+      # stop it as the job's last act.
+      - name: "Stop nix-daemon for sticky disk commit"
+        if: ${{ always() && runner.os == 'Linux' }}
+        run: |
+          sudo systemctl stop nix-daemon.socket nix-daemon.service 2>/dev/null || true
+          sudo pkill -9 nix-daemon 2>/dev/null || true
+
 # ---------------------------------------------------------------------------- #
 #
 #
