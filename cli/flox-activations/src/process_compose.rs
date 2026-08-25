@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -55,16 +55,61 @@ pub fn wait_for_socket_ready(
         {
             let status = parsed[0].get("status");
             if status.is_some() {
+                debug!(
+                    waited_ms = start.elapsed().as_millis(),
+                    "socket became ready"
+                );
                 return Ok(true);
             }
         }
 
         if start.elapsed() >= timeout {
+            debug!(
+                waited_ms = start.elapsed().as_millis(),
+                "gave up waiting for socket"
+            );
             return Ok(false);
         }
 
         thread::sleep(poll_interval);
     }
+}
+
+/// The most recent `services.*.log` in `log_dir`, if there is one.
+///
+/// `process-compose` is spawned by the executive, which reports neither the log
+/// path nor the outcome back to the process that asked for the start. Names are
+/// timestamped by [start_process_compose_no_services] in a format that sorts
+/// chronologically, so the greatest name is the instance whose startup was just
+/// waited on. Sorting by name rather than mtime keeps this independent of
+/// filesystems with coarse or skewed timestamps.
+pub fn latest_services_log(log_dir: &Path) -> Option<PathBuf> {
+    std::fs::read_dir(log_dir)
+        .ok()?
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .filter(|path| {
+            path.file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name.starts_with("services.") && name.ends_with(".log"))
+        })
+        .max()
+}
+
+/// The last `lines` lines of `path`, or `None` if it is missing or empty.
+pub fn log_tail(path: &Path, lines: usize) -> Option<String> {
+    let contents = std::fs::read_to_string(path).ok()?;
+    let tail = contents
+        .lines()
+        .rev()
+        .take(lines)
+        .collect::<Vec<_>>()
+        .into_iter()
+        .rev()
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    (!tail.trim().is_empty()).then_some(tail)
 }
 
 /// Start process-compose with only the flox_never_exit service.
@@ -202,4 +247,63 @@ pub fn process_compose_down(process_compose_bin: &Path, socket_path: &Path) -> R
         let stderr = String::from_utf8_lossy(&output.stderr);
         anyhow::anyhow!("process-compose down failed: {}", stderr)
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn latest_services_log_picks_the_newest_timestamped_name() {
+        let dir = tempfile::tempdir().unwrap();
+        for name in [
+            "services.20260825120000000000.log",
+            "services.20260825120001000000.log",
+            "services.20260824235959000000.log",
+        ] {
+            std::fs::write(dir.path().join(name), "").unwrap();
+        }
+
+        assert_eq!(
+            latest_services_log(dir.path()),
+            Some(dir.path().join("services.20260825120001000000.log"))
+        );
+    }
+
+    #[test]
+    fn latest_services_log_ignores_other_files() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("services.log.old"), "").unwrap();
+        std::fs::write(dir.path().join("activation.log"), "").unwrap();
+
+        assert_eq!(latest_services_log(dir.path()), None);
+    }
+
+    #[test]
+    fn latest_services_log_without_a_log_dir() {
+        assert_eq!(latest_services_log(Path::new("/does_not_exist")), None);
+    }
+
+    #[test]
+    fn log_tail_returns_the_last_lines() {
+        let dir = tempfile::tempdir().unwrap();
+        let log = dir.path().join("services.log");
+        std::fs::write(&log, "one\ntwo\nthree\nfour\n").unwrap();
+
+        assert_eq!(log_tail(&log, 2), Some("three\nfour".to_string()));
+    }
+
+    #[test]
+    fn log_tail_of_an_empty_log() {
+        let dir = tempfile::tempdir().unwrap();
+        let log = dir.path().join("services.log");
+        std::fs::write(&log, "\n \n").unwrap();
+
+        assert_eq!(log_tail(&log, 10), None);
+    }
+
+    #[test]
+    fn log_tail_of_a_missing_log() {
+        assert_eq!(log_tail(Path::new("/does_not_exist.log"), 10), None);
+    }
 }

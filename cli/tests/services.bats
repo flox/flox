@@ -906,7 +906,11 @@ EOF
   # when running this test as root.
   export _FLOX_SERVICES_SOCKET_OVERRIDE="/nonexistent_dir/does_not_exist.sock"
   run "$FLOX_BIN" activate -s -- true
-  assert_output "✘ ERROR: Failed to start services: process-compose socket not ready"
+  assert_output --partial "✘ ERROR: Failed to start services: the service manager did not respond within"
+  # Why it didn't come up is only recorded in the process-compose log, so the
+  # error is useless without it.
+  assert_output --partial "bind: no such file or directory"
+  assert_output --partial "The full log is at"
 }
 
 @test "blocking: activation blocks on process list" {
