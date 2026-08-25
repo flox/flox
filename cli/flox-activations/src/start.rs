@@ -5,7 +5,7 @@
 //! managing process-compose for services.
 
 use std::fs::DirBuilder;
-use std::os::unix::fs::DirBuilderExt;
+use std::os::unix::fs::{DirBuilderExt, FileTypeExt};
 use std::path::Path;
 use std::process::{Command, Stdio};
 use std::time::Duration;
@@ -28,11 +28,12 @@ use nix::sys::wait::{WaitPidFlag, WaitStatus, waitpid};
 use nix::unistd::{Pid, getpid};
 use signal_hook::consts::{SIGCHLD, SIGUSR1};
 use signal_hook::iterator::Signals;
-use tracing::{debug, error};
+use tracing::{debug, error, info};
 use uuid::Uuid;
 
 use crate::attach_diff::assemble_activate_command;
 use crate::cli::executive::ExecutiveCtx;
+use crate::message::updated;
 use crate::process_compose::{
     latest_services_log,
     log_tail,
@@ -195,7 +196,7 @@ fn signal_new_process_compose(
         if let Err(err) = process_compose_down(process_compose_bin, socket_path) {
             error!(%err, "failed to stop process-compose");
             if !wait_for_socket_removed(socket_path, SOCKET_SHUTDOWN_GRACE) {
-                bail!(stale_socket_message(socket_path));
+                remove_stale_socket(socket_path)?;
             }
         }
         // The executive treats a socket that is still on disk as an instance
@@ -233,6 +234,40 @@ fn signal_new_process_compose(
     }
 
     Ok(())
+}
+
+/// Remove a socket that no `process-compose` is listening on.
+///
+/// The file only appears once an instance has bound it, so one that refuses a
+/// connection and is still there after [SOCKET_SHUTDOWN_GRACE] belongs to an
+/// instance that is gone. Nothing can bind the path while the file remains, and
+/// every later activation of the environment fails the same way, so remove it
+/// rather than leaving the user to find and delete it by hand.
+///
+/// Only unlinks an actual socket: anything else at that path was not left by
+/// `process-compose`, and deleting a file this code doesn't recognise is worse
+/// than failing.
+fn remove_stale_socket(socket_path: &Path) -> Result<(), anyhow::Error> {
+    let is_socket = std::fs::symlink_metadata(socket_path)
+        .map(|metadata| metadata.file_type().is_socket())
+        .unwrap_or(false);
+    if !is_socket {
+        bail!(stale_socket_message(socket_path));
+    }
+
+    match std::fs::remove_file(socket_path) {
+        // Another activation recovering from the same socket got there first.
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(err) => {
+            error!(%err, "failed to remove stale socket");
+            bail!(stale_socket_message(socket_path));
+        },
+        Ok(()) => {
+            info!(socket = ?socket_path, "removed stale socket");
+            updated("Removed a service manager socket that nothing was listening on.");
+            Ok(())
+        },
+    }
 }
 
 /// Explain a socket that outlived the `process-compose` it belonged to.

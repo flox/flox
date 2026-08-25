@@ -913,6 +913,32 @@ EOF
   assert_output --partial "The full log is at"
 }
 
+@test "start: recovers from a socket left behind by a dead process-compose" {
+  setup_sleeping_services
+  export _FLOX_SERVICES_SOCKET_OVERRIDE="$PWD/stale.sock"
+
+  # Stage the socket with `process-compose` itself, then SIGKILL it so that it
+  # never gets to unlink the socket. This is what a crash or a reboot leaves
+  # behind, and until it is removed nothing can bind the path again.
+  cat > stale.yaml <<'EOF'
+version: "0.5"
+processes:
+  sleeping:
+    command: "sleep 999999"
+EOF
+  "$PROCESS_COMPOSE_BIN" up -f stale.yaml -u "$_FLOX_SERVICES_SOCKET_OVERRIDE" \
+    --tui=false -L stale-pc.log &
+  local pc_pid="$!"
+  timeout 10s bash -c 'while [ ! -S "$_FLOX_SERVICES_SOCKET_OVERRIDE" ]; do sleep .1; done'
+  kill -9 "$pc_pid"
+  pkill -9 -P "$pc_pid" || true
+  [ -S "$_FLOX_SERVICES_SOCKET_OVERRIDE" ]
+
+  run "$FLOX_BIN" activate -s -- true
+  assert_success
+  assert_output --partial "Removed a service manager socket that nothing was listening on"
+}
+
 @test "blocking: activation blocks on process list" {
   setup_sleeping_services
   # This is run immediately after activation starts, which is about as good as
