@@ -69,7 +69,7 @@ jobs:
   # request on a status-check timeout.
   scope:
     name: "Scope"
-    runs-on: "ubuntu-latest"
+    runs-on: "blacksmith-2vcpu-ubuntu-2404"
     timeout-minutes: 10
 
     # Only `pull_request` and `merge_group` can be scoped down at all; the
@@ -157,8 +157,8 @@ jobs:
       fail-fast: false
       matrix:
         os:
-          - "ubuntu-22.04-8core"
-          - "macos-14-xlarge"
+          - "blacksmith-8vcpu-ubuntu-2204"
+          - "blacksmith-12vcpu-macos-15"
 
     # Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
     permissions:
@@ -169,6 +169,19 @@ jobs:
     steps:
       - name: "Checkout"
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - name: "Create Nix store mount point"
+        if: ${{ runner.os == 'Linux' }}
+        run: |
+          sudo mkdir -p /nix/store
+          sudo chmod -R 777 /nix
+
+      - name: "Mount Nix store"
+        if: ${{ runner.os == 'Linux' }}
+        uses: useblacksmith/stickydisk@74f3f01ab1392726dd6ee06904f0452b0ec1e151 # v1
+        with:
+          key: "${{ github.repository }}-nix-${{ runner.arch }}"
+          path: "/nix"
 
       - name: "Setup upterm session"
         if: ${{ (true == inputs.enableUpterm) && (inputs.breakOnJob == github.job) }}
@@ -204,7 +217,7 @@ jobs:
     # checks, so this doesn't hit the branch-protection issue `scope` guards
     # against.
     if: ${{ !(github.event_name == 'push' && github.ref == 'refs/heads/main') }}
-    runs-on: "ubuntu-22.04-8core"
+    runs-on: "blacksmith-8vcpu-ubuntu-2204"
     timeout-minutes: 15 # eval only tests should be plenty fast
 
     permissions:
@@ -213,6 +226,19 @@ jobs:
     steps:
       - name: "Checkout"
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - name: "Create Nix store mount point"
+        if: ${{ runner.os == 'Linux' }}
+        run: |
+          sudo mkdir -p /nix/store
+          sudo chmod -R 777 /nix
+
+      - name: "Mount Nix store"
+        if: ${{ runner.os == 'Linux' }}
+        uses: useblacksmith/stickydisk@74f3f01ab1392726dd6ee06904f0452b0ec1e151 # v1
+        with:
+          key: "${{ github.repository }}-nix-${{ runner.arch }}"
+          path: "/nix"
 
       - name: "Setup upterm session"
         if: ${{ (true == inputs.enableUpterm) && (inputs.breakOnJob == github.job) }}
@@ -264,12 +290,25 @@ jobs:
       fail-fast: false
       matrix:
         os:
-          - "ubuntu-22.04-8core"
-          - "macos-14-xlarge"
+          - "blacksmith-8vcpu-ubuntu-2204"
+          - "blacksmith-12vcpu-macos-15"
 
     steps:
       - name: "Checkout"
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - name: "Create Nix store mount point"
+        if: ${{ runner.os == 'Linux' }}
+        run: |
+          sudo mkdir -p /nix/store
+          sudo chmod -R 777 /nix
+
+      - name: "Mount Nix store"
+        if: ${{ runner.os == 'Linux' }}
+        uses: useblacksmith/stickydisk@74f3f01ab1392726dd6ee06904f0452b0ec1e151 # v1
+        with:
+          key: "${{ github.repository }}-nix-${{ runner.arch }}"
+          path: "/nix"
 
       - name: "Setup upterm session"
         if: ${{ (true == inputs.enableUpterm) && (inputs.breakOnJob == github.job) }}
@@ -343,7 +382,7 @@ jobs:
     # See `scope`: `!cancelled()` keeps the pre-existing fork condition as the
     # *only* reason this job is ever skipped.
     if: ${{ !cancelled() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
-    runs-on: "ubuntu-latest"
+    runs-on: "blacksmith-4vcpu-ubuntu-2404"
     timeout-minutes: 120
 
     needs:
@@ -437,7 +476,7 @@ jobs:
   trigger-flox-installers-workflow:
     name: "Build installers"
     if: ${{ (github.base_ref == 'refs/heads/main' || github.ref == 'refs/heads/main') && github.event_name == 'push' }}
-    runs-on: "ubuntu-latest"
+    runs-on: "blacksmith-2vcpu-ubuntu-2404"
     timeout-minutes: 120
 
     needs:
@@ -490,7 +529,7 @@ jobs:
 
   report-failure:
     name: "Report Failure"
-    runs-on: "ubuntu-latest"
+    runs-on: "blacksmith-2vcpu-ubuntu-2404"
     timeout-minutes: 30
 
     if: ${{ failure() && (github.base_ref == 'refs/heads/main' || github.ref == 'refs/heads/main') && github.event_name == 'push' }}
@@ -526,7 +565,7 @@ jobs:
 
   nix-build-bats-tests:
     name: "remote"
-    runs-on: "ubuntu-latest"
+    runs-on: "blacksmith-2vcpu-ubuntu-2404"
     timeout-minutes: 90
 
     permissions:

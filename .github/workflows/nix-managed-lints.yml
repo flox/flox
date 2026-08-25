@@ -25,12 +25,23 @@ env:
 jobs:
   nix-git-hooks:
     name: "Nix Git Hooks"
-    runs-on: "ubuntu-latest"
+    runs-on: "blacksmith-4vcpu-ubuntu-2404"
     timeout-minutes: 30
 
     steps:
       - name: "Checkout"
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - name: "Create Nix store mount point"
+        run: |
+          sudo mkdir -p /nix/store
+          sudo chmod -R 777 /nix
+
+      - name: "Mount Nix store"
+        uses: useblacksmith/stickydisk@74f3f01ab1392726dd6ee06904f0452b0ec1e151 # v1
+        with:
+          key: "${{ github.repository }}-nix-${{ runner.arch }}"
+          path: "/nix"
 
       - name: "Setup Nix"
         uses: "./.github/actions/common-setup"
