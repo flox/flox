@@ -213,7 +213,12 @@ impl EventCoordinator {
                     if !owned_state_json_path.exists() {
                         debug!(?event, "state.json is gone, sending removal event to main loop");
                         if sender.send(ExecutiveEvent::StateFileRemoved).is_err() {
-                            error!("failed to send StateFileRemoved event, channel closed");
+                            // Cleanup removes the very directory this watcher
+                            // is watching, so a removal event racing the main
+                            // loop's exit is the normal shutdown, not a failure.
+                            debug!(
+                                "failed to send StateFileRemoved event, channel closed during shutdown"
+                            );
                         }
                         return;
                     }

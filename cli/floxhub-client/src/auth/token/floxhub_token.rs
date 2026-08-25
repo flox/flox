@@ -1,12 +1,21 @@
-//! [`FloxhubToken`] — a parsed Auth0 JWT that authenticates a user with
-//! FloxHub.  The token is decoded (without signature verification) at
-//! construction time so that the handle and expiration are available cheaply.
+//! [`FloxhubToken`] — the Auth0-shaped bearer credential: a JWT whose
+//! claims carry the FloxHub handle and expiry. The token is decoded
+//! (without signature verification) at construction time so that identity
+//! and expiry are answered locally, with no request to FloxHub.
+//!
+//! A JWT without these claims is not an error — it is a [`BareToken`],
+//! whose identity resolves from `/me` instead; [`AuthContext::new_from_token`]
+//! routes between the two.
+//!
+//! [`BareToken`]: crate::auth::token::BareToken
+//! [`AuthContext::new_from_token`]: crate::auth::AuthContext::new_from_token
 
 use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
 use serde_with::DeserializeFromStr;
-use thiserror::Error;
+
+use crate::auth::token::InvalidTokenError;
 
 /// Assertions about the owner of this token
 #[derive(Debug, Clone, Deserialize)]
@@ -23,7 +32,8 @@ struct FloxTokenClaims {
     sub: Option<String>,
 }
 
-/// A token authenticating a user with FloxHub
+/// A token authenticating a user with FloxHub, identifying its owner
+/// locally through the Auth0 tenant's handle claim.
 #[derive(Debug, Clone, DeserializeFromStr)]
 pub struct FloxhubToken {
     /// The entire token as a string
@@ -33,9 +43,21 @@ pub struct FloxhubToken {
 }
 
 impl FloxhubToken {
-    /// Create a new floxhub token from a string
-    pub fn new(token: String) -> Result<Self, FloxhubTokenError> {
-        token.parse()
+    /// Decode an Auth0-shaped JWT: the handle claim and `exp` are
+    /// required. Errors for anything else — which may still be a valid
+    /// credential of another kind (bare or opaque); routing is
+    /// `AuthContext::new_from_token`'s job, not the caller's.
+    pub fn new(token: String) -> Result<Self, InvalidTokenError> {
+        // Client side we don't need to verify the signature,
+        // as all privileged access is guarded server side.
+        // We still decode the token to extract claims like handle and expiration.
+        let decoded = jsonwebtoken::dangerous::insecure_decode::<FloxTokenClaims>(&token)
+            .map_err(InvalidTokenError)?;
+
+        Ok(FloxhubToken {
+            token,
+            token_data: decoded.claims,
+        })
     }
 
     /// Return the token as a string
@@ -88,27 +110,11 @@ impl Serialize for FloxhubToken {
 }
 
 impl FromStr for FloxhubToken {
-    type Err = FloxhubTokenError;
+    type Err = InvalidTokenError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        // Client side we don't need to verify the signature,
-        // as all privileged access is guarded server side.
-        // We still decode the token to extract claims like handle and expiration.
-
-        let token = jsonwebtoken::dangerous::insecure_decode::<FloxTokenClaims>(s)
-            .map_err(FloxhubTokenError::InvalidToken)?;
-
-        Ok(FloxhubToken {
-            token: s.to_string(),
-            token_data: token.claims,
-        })
+        FloxhubToken::new(s.to_string())
     }
-}
-
-#[derive(Debug, Clone, Error, Eq, PartialEq)]
-pub enum FloxhubTokenError {
-    #[error("invalid token")]
-    InvalidToken(#[source] jsonwebtoken::errors::Error),
 }
 
 /// Test fixtures for [FloxhubToken].
@@ -181,4 +187,37 @@ pub mod test_helpers {
     /// .
     /// AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
     pub const FAKE_EXPIRED_TOKEN_WITH_SUB: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3guZGV2L2hhbmRsZSI6InRlc3QiLCJleHAiOjE3MDQwNjM2MDAsInN1YiI6ImdpdGh1Ynw0MjQyNDIifQ.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+}
+
+#[cfg(test)]
+mod tests {
+    use super::test_helpers::*;
+    use super::*;
+    use crate::auth::token::test_helpers::FAKE_TOKEN_NO_HANDLE;
+
+    #[test]
+    fn auth0_shaped_jwt_answers_identity_locally() {
+        let token = FloxhubToken::new(FAKE_TOKEN.to_string()).expect("token parses");
+        assert_eq!(token.handle(), "test");
+        assert!(!token.is_expired());
+    }
+
+    /// A JWT without the handle claim is not an invalid FloxhubToken so
+    /// much as a different kind of credential — routing sends it to
+    /// [`BareToken`](crate::auth::token::BareToken).
+    #[test]
+    fn jwt_without_handle_claim_is_rejected() {
+        FloxhubToken::new(FAKE_TOKEN_NO_HANDLE.to_string()).unwrap_err();
+    }
+
+    #[test]
+    fn non_jwt_is_rejected() {
+        FloxhubToken::new("not-a-jwt".to_string()).unwrap_err();
+    }
+
+    #[test]
+    fn expired_jwt_reports_expiry() {
+        let token = FloxhubToken::new(FAKE_EXPIRED_TOKEN.to_string()).expect("token parses");
+        assert!(token.is_expired());
+    }
 }

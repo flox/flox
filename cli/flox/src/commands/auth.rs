@@ -7,8 +7,8 @@ use chrono::offset::Utc;
 use chrono::{DateTime, Duration};
 use flox_config::{Config, FLOX_CONFIG_FILE, TokenStorageMode};
 use flox_events::{EventKind, EventsHub};
-use flox_rust_sdk::flox::{FLOX_VERSION, Flox, FloxhubToken};
-use floxhub_client::{AuthContext, AuthFailure};
+use flox_rust_sdk::flox::{FLOX_VERSION, Flox};
+use floxhub_client::{AuthContext, AuthFailure, DiscoveredLoginConfig, discover_login_config};
 use indoc::{formatdoc, indoc};
 use oauth2::basic::{
     BasicClient,
@@ -18,7 +18,6 @@ use oauth2::basic::{
     BasicTokenResponse,
 };
 use oauth2::{
-    AuthUrl,
     ClientId,
     DeviceAuthorizationUrl,
     DeviceCodeErrorResponseType,
@@ -46,11 +45,16 @@ use crate::{Exit, subcommand_metric};
 #[derive(Debug, Default, Clone, Serialize)]
 pub struct Credential {
     pub token: String,
-    pub expiry: String,
+    /// Wall-clock expiry derived from the token response's `expires_in`,
+    /// which RFC 6749 makes optional; the token's own `exp` claim and /me
+    /// are the authorities on expiry, so absence is not an error.
+    pub expiry: Option<String>,
 }
 
+// The device flow never touches the authorization endpoint, so the client
+// carries no auth URL.
 type ConfiguredClient<
-    HasAuthUrl = EndpointSet,
+    HasAuthUrl = EndpointNotSet,
     HasDeviceAuthUrl = EndpointSet,
     HasIntrospectionUrl = EndpointNotSet,
     HasRevocationUrl = EndpointNotSet,
@@ -68,54 +72,100 @@ type ConfiguredClient<
     HasTokenUrl,
 >;
 
-/// construct an oauth client using compile time constants or environment variables
-///
-/// Environment variables can be used to override the compile time constants during testing.
-/// For use in production, the compile time constants should be used.
-/// For multitenancy, we will integrate with the config subsystem later.
-fn create_oauth_client() -> Result<ConfiguredClient> {
-    let auth_url = AuthUrl::new(
-        std::env::var("_FLOX_OAUTH_AUTH_URL").unwrap_or(env!("OAUTH_AUTH_URL").to_string()),
-    )
-    .context("Invalid auth url")?;
-    let token_url = TokenUrl::new(
-        std::env::var("_FLOX_OAUTH_TOKEN_URL").unwrap_or(env!("OAUTH_TOKEN_URL").to_string()),
-    )
-    .context("Invalid token url")?;
-    let device_auth_url = DeviceAuthorizationUrl::new(
-        std::env::var("_FLOX_OAUTH_DEVICE_AUTH_URL")
-            .unwrap_or(env!("OAUTH_DEVICE_AUTH_URL").to_string()),
-    )
-    .context("Invalid device auth url")?;
-    let client_id = ClientId::new(
-        std::env::var("_FLOX_OAUTH_CLIENT_ID").unwrap_or(env!("OAUTH_CLIENT_ID").to_string()),
-    );
-    let client = BasicClient::new(client_id)
-        .set_auth_uri(auth_url)
-        .set_token_uri(token_url)
-        .set_device_authorization_url(device_auth_url);
-    Ok(client)
+/// Audience sent with the device-code request when the deployment serves no
+/// login configuration — the value the SaaS Auth0 tenant expects, matching
+/// the compiled-in endpoints used on that same path.
+const FALLBACK_AUDIENCE: &str = "https://hub.flox.dev/api";
+
+/// Where `flox auth login` runs the device grant: endpoints, client id, and
+/// the audience to send (none when the deployment's document omits it).
+#[derive(Debug, Clone, PartialEq)]
+struct LoginConfig {
+    device_auth_url: DeviceAuthorizationUrl,
+    token_url: TokenUrl,
+    client_id: ClientId,
+    audience: Option<String>,
 }
 
-pub async fn authorize(client: ConfiguredClient, floxhub_url: &Url) -> Result<Credential> {
-    if !Dialog::can_prompt() {
-        bail!("Cannot prompt for user input")
+impl LoginConfig {
+    fn oauth_client(&self) -> ConfiguredClient {
+        BasicClient::new(self.client_id.clone())
+            .set_token_uri(self.token_url.clone())
+            .set_device_authorization_url(self.device_auth_url.clone())
     }
+}
 
+/// Resolve each login value by precedence: an explicit `_FLOX_OAUTH_*`
+/// environment override, then the deployment's discovered document, then the
+/// compiled-in constants. Env vars on top preserves the debugging escape
+/// hatch, at the accepted cost that a stale override silently beats a
+/// correct advertisement.
+///
+/// The audience has no override variable: a discovered document decides it
+/// (absent member means send none — Dex has no audience concept), and only
+/// the no-document path sends the compiled-in Auth0 value.
+fn merge_login_config(discovered: Option<DiscoveredLoginConfig>) -> Result<LoginConfig> {
+    let (device_endpoint, token_endpoint, client_id, audience) = match discovered {
+        Some(discovered) => (
+            Some(discovered.device_authorization_endpoint.to_string()),
+            Some(discovered.token_endpoint.to_string()),
+            Some(discovered.client_id),
+            discovered.audience,
+        ),
+        None => (None, None, None, Some(FALLBACK_AUDIENCE.to_string())),
+    };
+
+    let device_auth_url = DeviceAuthorizationUrl::new(
+        std::env::var("_FLOX_OAUTH_DEVICE_AUTH_URL")
+            .ok()
+            .or(device_endpoint)
+            .unwrap_or_else(|| env!("OAUTH_DEVICE_AUTH_URL").to_string()),
+    )
+    .context("Invalid device auth url")?;
+    let token_url = TokenUrl::new(
+        std::env::var("_FLOX_OAUTH_TOKEN_URL")
+            .ok()
+            .or(token_endpoint)
+            .unwrap_or_else(|| env!("OAUTH_TOKEN_URL").to_string()),
+    )
+    .context("Invalid token url")?;
+    let client_id = ClientId::new(
+        std::env::var("_FLOX_OAUTH_CLIENT_ID")
+            .ok()
+            .or(client_id)
+            .unwrap_or_else(|| env!("OAUTH_CLIENT_ID").to_string()),
+    );
+
+    Ok(LoginConfig {
+        device_auth_url,
+        token_url,
+        client_id,
+        audience,
+    })
+}
+
+pub async fn authorize(
+    client: ConfiguredClient,
+    audience: Option<&str>,
+    floxhub_url: &Url,
+) -> Result<Credential> {
     let http_client = reqwest::ClientBuilder::new()
         .redirect(redirect::Policy::none())
         .user_agent(format!("flox-cli/{}", &*FLOX_VERSION))
         .build()
         .expect("Failed to build OAuth HTTP client");
 
-    let details: StandardDeviceAuthorizationResponse = client
+    let mut request = client
         .exchange_device_code()
         .add_scope(Scope::new("openid".to_string()))
         .add_scope(Scope::new("profile".to_string()))
-        .add_extra_param(
-            "audience".to_string(),
-            "https://hub.flox.dev/api".to_string(),
-        )
+        .add_scope(Scope::new("email".to_string()));
+    // An Auth0 extension parameter; a document without the member — or a
+    // Dex issuer — gets a bare RFC 8628 request.
+    if let Some(audience) = audience {
+        request = request.add_extra_param("audience".to_string(), audience.to_string());
+    }
+    let details: StandardDeviceAuthorizationResponse = request
         .request_async(&http_client)
         .await
         .context("Could not request device code")?;
@@ -219,7 +269,9 @@ pub async fn authorize(client: ConfiguredClient, floxhub_url: &Url) -> Result<Cr
 
     Ok(Credential {
         token: token.access_token().secret().to_string(),
-        expiry: calculate_expiry(token.expires_in().unwrap().as_secs() as i64),
+        expiry: token
+            .expires_in()
+            .map(|expires_in| calculate_expiry(expires_in.as_secs() as i64)),
     })
 }
 
@@ -397,12 +449,15 @@ impl Auth {
                 let span = tracing::info_span!("token");
                 let _guard = span.enter();
 
-                let AuthContext::Auth0(Some(token)) = flox.auth_context else {
+                // Any bearer credential prints — Auth0-shaped, bare, or
+                // opaque alike. Kerberos carries no token, so it reports
+                // as not logged in here.
+                let Some(secret) = flox.auth_context.token_secret() else {
                     message::warning("You are not currently logged in to FloxHub.");
                     return Err(Exit(1).into());
                 };
 
-                println!("{}", token.secret());
+                println!("{secret}");
                 Ok(())
             },
         }
@@ -413,7 +468,7 @@ impl Auth {
 ///
 /// * updates the config file with the received token
 /// * updates the floxhub_token field in the config struct
-// TODO: `flox auth login` is currently Auth0-specific. It should be abstracted
+// TODO: `flox auth login` is currently OAuth-specific. It should be abstracted
 // to handle different auth methods — for Kerberos, it should print a warning
 // that login is not needed (Kerberos authentication is handled externally via
 // `kinit`).
@@ -423,23 +478,50 @@ pub async fn login_flox(
     once: bool,
     storage_pref: TokenStorageMode,
 ) -> Result<String> {
-    let client = create_oauth_client()?;
-    let cred = authorize(client, flox.floxhub.base_url())
+    // Checked before discovery so a non-interactive invocation fails fast
+    // instead of probing the network first.
+    if !Dialog::can_prompt() {
+        bail!("Cannot prompt for user input")
+    }
+
+    let floxhub_url = flox.floxhub.base_url();
+    let discovered = discover_login_config(floxhub_url)
         .await
-        .context("Could not authorize via oauth")?;
+        .with_context(|| format!("Could not discover the login configuration for {floxhub_url}"))?;
+    let login_config = merge_login_config(discovered)?;
+    debug!(?login_config, "resolved login configuration");
+
+    let cred = authorize(
+        login_config.oauth_client(),
+        login_config.audience.as_deref(),
+        floxhub_url,
+    )
+    .await
+    .context("Could not authorize via oauth")?;
 
     debug!("Credentials received: {cred:#?}");
-    debug!("Writing token to config");
 
-    // set the token in the runtime config
-    let token = FloxhubToken::new(cred.token)?;
-    let handle = token.handle().to_string();
+    // Route by what the issuer minted: an Auth0-shaped JWT answers its
+    // handle locally, a bare JWT or opaque token resolves it from /me. An
+    // unresolvable identity fails the login — it exists to produce a usable
+    // credential, and every handle consumer needs the same server.
+    let auth_context = AuthContext::new_from_token(Some(&cred.token));
+    let _ = flox.set_auth_context(auth_context.clone());
+    let handle = match flox.get_identity().await {
+        Ok(Some(identity)) => identity.handle,
+        Ok(None) => bail!(indoc! {"
+            Could not reach FloxHub to verify the login.
+            Try again."
+        }),
+        Err(_) => bail!(indoc! {"
+            FloxHub rejected the login token.
+            Try again."
+        }),
+    };
 
-    // The OAuth flow always yields an Auth0 JWT, parsed above — no token
-    // routing or identity resolution applies.
     complete_login(
         flox,
-        AuthContext::Auth0(Some(token)),
+        auth_context,
         handle,
         insecure_storage,
         once,
@@ -562,14 +644,16 @@ fn print_login_success(handle: &str) {
 /// Log in non-interactively with a token read from a file, or from stdin if
 /// the path is `-`.
 ///
-/// * validates the token and rejects expired (or, for a personal access
-///   token, revoked) tokens
+/// * validates the token and rejects expired (or, for a server-verified
+///   token, revoked and invalid) tokens
 /// * stores the token like an interactive login (OS keyring, plaintext
 ///   fallback, or forced plaintext via `--insecure-storage`)
 /// * updates the auth context of the [Flox] instance
 ///
-/// The token may be an Auth0 JWT or a `flox_pat_` personal access token;
-/// [AuthContext::new_from_token] routes by the token's form.
+/// [AuthContext::new_from_token] routes by what the credential's claims
+/// answer locally: Auth0-shaped JWTs identify themselves, bare JWTs and
+/// opaque tokens resolve their identity via `/me`. No token is rejected
+/// locally — validity is the server's call.
 pub async fn login_with_token_file(
     flox: &mut Flox,
     token_file: &Path,
@@ -590,8 +674,7 @@ pub async fn login_with_token_file(
 
     let secret = contents.trim();
 
-    let auth_context = AuthContext::new_from_token(Some(secret))
-        .context("The provided token is not a valid FloxHub token.")?;
+    let auth_context = AuthContext::new_from_token(Some(secret));
     let _ = flox.set_auth_context(auth_context.clone());
 
     // Validates locally for a JWT; via /me for a personal access token,
@@ -611,9 +694,11 @@ pub async fn login_with_token_file(
             Could not reach FloxHub to verify the token.
             Try again."
         }),
-        // The server rejected the token — expired and revoked alike.
+        // The server rejected the token — invalid, expired, and revoked
+        // alike; nothing distinguishes them locally now that any string
+        // parses as a credential.
         Err(_) => bail!(indoc! {"
-            The provided token is expired.
+            FloxHub rejected the provided token: it is invalid, expired, or revoked.
             Obtain a fresh token from FloxHub and try again."
         }),
     };
@@ -634,6 +719,7 @@ mod tests {
 
     use flox_config::FLOX_CONFIG_FILE;
     use flox_events::{EventsBuffer, EventsClient, SharedMetadataTemplate};
+    use flox_rust_sdk::flox::FloxhubToken;
     use flox_rust_sdk::flox::test_helpers::{create_test_token, flox_instance};
     use floxhub_client::test_helpers::{FAKE_EXPIRED_TOKEN, FAKE_TOKEN_WITH_SUB};
     use httpmock::MockServer;
@@ -683,6 +769,108 @@ mod tests {
             floxhub_client::client::test_helpers::client_config(&server.base_url()),
         )
         .unwrap();
+    }
+
+    const OAUTH_OVERRIDE_VARS: [&str; 3] = [
+        "_FLOX_OAUTH_DEVICE_AUTH_URL",
+        "_FLOX_OAUTH_TOKEN_URL",
+        "_FLOX_OAUTH_CLIENT_ID",
+    ];
+
+    /// Run `f` with every `_FLOX_OAUTH_*` override unset.
+    fn without_oauth_overrides<R>(f: impl FnOnce() -> R) -> R {
+        temp_env::with_vars(OAUTH_OVERRIDE_VARS.map(|var| (var, None::<&str>)), f)
+    }
+
+    fn discovered_dex_config() -> DiscoveredLoginConfig {
+        DiscoveredLoginConfig {
+            client_id: "floxhub-cli".to_string(),
+            audience: None,
+            device_authorization_endpoint: "https://floxhub.example/dex/device/code"
+                .parse()
+                .unwrap(),
+            token_endpoint: "https://floxhub.example/dex/token".parse().unwrap(),
+        }
+    }
+
+    #[test]
+    fn merge_login_config_falls_back_to_compiled_constants() {
+        without_oauth_overrides(|| {
+            let config = merge_login_config(None).unwrap();
+            assert_eq!(config, LoginConfig {
+                device_auth_url: DeviceAuthorizationUrl::new(
+                    env!("OAUTH_DEVICE_AUTH_URL").to_string()
+                )
+                .unwrap(),
+                token_url: TokenUrl::new(env!("OAUTH_TOKEN_URL").to_string()).unwrap(),
+                client_id: ClientId::new(env!("OAUTH_CLIENT_ID").to_string()),
+                audience: Some(FALLBACK_AUDIENCE.to_string()),
+            });
+        });
+    }
+
+    /// A discovered document supplies every value, and its missing audience
+    /// member means "send none" — not the compiled-in Auth0 audience.
+    #[test]
+    fn merge_login_config_prefers_the_discovered_document() {
+        without_oauth_overrides(|| {
+            let config = merge_login_config(Some(discovered_dex_config())).unwrap();
+            assert_eq!(config, LoginConfig {
+                device_auth_url: DeviceAuthorizationUrl::new(
+                    "https://floxhub.example/dex/device/code".to_string()
+                )
+                .unwrap(),
+                token_url: TokenUrl::new("https://floxhub.example/dex/token".to_string()).unwrap(),
+                client_id: ClientId::new("floxhub-cli".to_string()),
+                audience: None,
+            });
+        });
+    }
+
+    #[test]
+    fn merge_login_config_carries_the_document_audience() {
+        without_oauth_overrides(|| {
+            let discovered = DiscoveredLoginConfig {
+                audience: Some("https://hub.preview.example/api".to_string()),
+                ..discovered_dex_config()
+            };
+            let config = merge_login_config(Some(discovered)).unwrap();
+            assert_eq!(
+                config.audience,
+                Some("https://hub.preview.example/api".to_string())
+            );
+        });
+    }
+
+    #[test]
+    fn merge_login_config_prefers_env_overrides_over_the_document() {
+        temp_env::with_vars(
+            [
+                (
+                    "_FLOX_OAUTH_DEVICE_AUTH_URL",
+                    Some("https://override.example/device"),
+                ),
+                (
+                    "_FLOX_OAUTH_TOKEN_URL",
+                    Some("https://override.example/token"),
+                ),
+                ("_FLOX_OAUTH_CLIENT_ID", Some("override-client")),
+            ],
+            || {
+                let config = merge_login_config(Some(discovered_dex_config())).unwrap();
+                assert_eq!(config, LoginConfig {
+                    device_auth_url: DeviceAuthorizationUrl::new(
+                        "https://override.example/device".to_string()
+                    )
+                    .unwrap(),
+                    token_url: TokenUrl::new("https://override.example/token".to_string()).unwrap(),
+                    client_id: ClientId::new("override-client".to_string()),
+                    // The audience has no override variable; the document
+                    // still decides it.
+                    audience: None,
+                });
+            },
+        );
     }
 
     /// A token-file login persists through the credential stores like an
@@ -743,7 +931,7 @@ mod tests {
             .expect("Auth0 login completes");
             complete_login(
                 &mut flox,
-                AuthContext::new_from_token(Some("flox_pat_secret")).expect("PAT parses"),
+                AuthContext::new_from_token(Some("flox_pat_secret")),
                 "pat-user".to_string(),
                 false,
                 false,
@@ -802,9 +990,20 @@ mod tests {
         assert!(!flox.config_dir.join(FLOX_CONFIG_FILE).exists());
     }
 
-    #[tokio::test]
-    async fn login_with_token_file_rejects_malformed_token() {
+    /// A non-JWT token can no longer be rejected locally — it may be an
+    /// issuer's opaque access token — so it is verified via /me like a PAT,
+    /// and the server's rejection fails the login.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn login_with_token_file_rejects_opaque_token_the_server_rejects() {
+        let server = MockServer::start();
+        server.mock(|when, then| {
+            when.method(httpmock::Method::GET)
+                .path("/accounts/api/v1/accounts/me");
+            then.status(401);
+        });
+
         let (mut flox, _temp_dir) = flox_instance();
+        override_client(&mut flox, &server);
         let token_file = flox.temp_dir.join("token");
         fs::write(&token_file, "not-a-jwt").unwrap();
 
@@ -820,7 +1019,7 @@ mod tests {
 
         assert_eq!(
             err.to_string(),
-            "The provided token is not a valid FloxHub token."
+            "FloxHub rejected the provided token: it is invalid, expired, or revoked.\nObtain a fresh token from FloxHub and try again."
         );
         assert!(!flox.config_dir.join(FLOX_CONFIG_FILE).exists());
     }
@@ -926,7 +1125,7 @@ mod tests {
 
         assert_eq!(
             err.to_string(),
-            "The provided token is expired.\nObtain a fresh token from FloxHub and try again."
+            "FloxHub rejected the provided token: it is invalid, expired, or revoked.\nObtain a fresh token from FloxHub and try again."
         );
         assert!(!flox.config_dir.join(FLOX_CONFIG_FILE).exists());
     }
