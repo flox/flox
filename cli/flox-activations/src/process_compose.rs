@@ -75,6 +75,40 @@ pub fn wait_for_socket_ready(
     }
 }
 
+/// Wait for `process-compose` to unlink its socket after being shut down.
+///
+/// `process-compose down` returns once the shutdown request has been answered,
+/// not once the daemon is gone: stopping each service and reaping it happens
+/// after that, and the socket is unlinked at the end of it. On an idle machine
+/// the gap is too small to observe, but it widens with load.
+///
+/// Returns `true` once the socket is gone, `false` if it is still there when
+/// `timeout` expires.
+pub fn wait_for_socket_removed(socket_file: &Path, timeout: Duration) -> bool {
+    let start = Instant::now();
+    let poll_interval = Duration::from_millis(20);
+
+    loop {
+        if !socket_file.exists() {
+            debug!(
+                waited_ms = start.elapsed().as_millis(),
+                "socket was removed"
+            );
+            return true;
+        }
+
+        if start.elapsed() >= timeout {
+            debug!(
+                waited_ms = start.elapsed().as_millis(),
+                "socket was not removed"
+            );
+            return false;
+        }
+
+        thread::sleep(poll_interval);
+    }
+}
+
 /// The most recent `services.*.log` in `log_dir`, if there is one.
 ///
 /// `process-compose` is spawned by the executive, which reports neither the log
@@ -252,6 +286,33 @@ pub fn process_compose_down(process_compose_bin: &Path, socket_path: &Path) -> R
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn wait_for_socket_removed_returns_once_the_socket_is_gone() {
+        let dir = tempfile::tempdir().unwrap();
+        let socket = dir.path().join("flox.sock");
+        std::fs::write(&socket, "").unwrap();
+
+        let removing = std::thread::spawn({
+            let socket = socket.clone();
+            move || {
+                std::thread::sleep(Duration::from_millis(60));
+                std::fs::remove_file(&socket).unwrap();
+            }
+        });
+
+        assert!(wait_for_socket_removed(&socket, Duration::from_secs(5)));
+        removing.join().unwrap();
+    }
+
+    #[test]
+    fn wait_for_socket_removed_gives_up_on_a_socket_that_stays() {
+        let dir = tempfile::tempdir().unwrap();
+        let socket = dir.path().join("flox.sock");
+        std::fs::write(&socket, "").unwrap();
+
+        assert!(!wait_for_socket_removed(&socket, Duration::from_millis(50)));
+    }
 
     #[test]
     fn latest_services_log_picks_the_newest_timestamped_name() {

@@ -39,6 +39,7 @@ use crate::process_compose::{
     process_compose_down,
     start_services_via_socket,
     wait_for_socket_ready,
+    wait_for_socket_removed,
 };
 use crate::vars_from_env::VarsFromEnvironment;
 
@@ -50,10 +51,23 @@ const ACTIVATE_COMPLETE_MARKER: &str = "complete";
 /// How long to wait for a newly spawned `process-compose` to answer on its
 /// socket before giving up.
 ///
-/// Only reached when something is wrong or the machine is heavily loaded: the
-/// wait ends as soon as the socket answers, which is a few hundred
-/// milliseconds on an idle machine.
+/// Only reached when something is wrong: the wait ends as soon as the socket
+/// answers, which is a few hundred milliseconds on an idle machine.
 const DEFAULT_ACTIVATE_TIMEOUT: Duration = Duration::from_secs(2);
+
+/// How long `process-compose` may take to unlink its socket after being told to
+/// shut down.
+///
+/// Generous because it covers a whole shutdown sequence — stopping each service
+/// and reaping it — on a machine loaded enough that all of it is slow.
+const SOCKET_REMOVAL_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// How long to keep waiting on a socket that refused a connection.
+///
+/// Only covers the tail of someone else's shutdown, between `process-compose`
+/// closing its listener and unlinking the socket. Anything longer than this is
+/// a socket nobody owns, and no amount of waiting will remove it.
+const SOCKET_SHUTDOWN_GRACE: Duration = Duration::from_secs(2);
 
 /// Start a new activation because we either have a:
 /// - different store path
@@ -172,10 +186,31 @@ fn signal_new_process_compose(
     // Stop first, if running, to ensure that we wait on the socket from the new instance.
     if socket_path.exists() {
         debug!("shutting down old process-compose");
+        // A shutdown that fails means nothing answered on the socket. Usually
+        // that is a stale socket, which no `process-compose` is going to
+        // remove, so waiting the full timeout only delays the same failure.
+        // But an instance that is already shutting down stops listening before
+        // it unlinks, and during that window a refused connection is not stale
+        // at all, so allow for one to finish.
         if let Err(err) = process_compose_down(process_compose_bin, socket_path) {
             error!(%err, "failed to stop process-compose");
+            if !wait_for_socket_removed(socket_path, SOCKET_SHUTDOWN_GRACE) {
+                bail!(stale_socket_message(socket_path));
+            }
+        }
+        // The executive treats a socket that is still on disk as an instance
+        // that is already running and declines to start another one, so
+        // signalling before the old socket is gone drops the start on the floor
+        // and leaves nothing to wait for below.
+        if !wait_for_socket_removed(socket_path, SOCKET_REMOVAL_TIMEOUT) {
+            bail!(stale_socket_message(socket_path));
         }
     }
+
+    // Note which log is the newest before asking for a start, so that the log
+    // of the instance that just shut down can't be mistaken for the log of the
+    // instance being waited on.
+    let log_before_start = latest_services_log(&project.flox_env_log_dir);
 
     debug!(
         executive_pid,
@@ -192,6 +227,7 @@ fn signal_new_process_compose(
     if !socket_ready {
         bail!(socket_not_ready_message(
             &project.flox_env_log_dir,
+            log_before_start.as_deref(),
             activation_timeout
         ));
     }
@@ -199,18 +235,51 @@ fn signal_new_process_compose(
     Ok(())
 }
 
+/// Explain a socket that outlived the `process-compose` it belonged to.
+///
+/// Reached when shutting down the old instance left the socket behind, which
+/// after [SOCKET_REMOVAL_TIMEOUT] means no `process-compose` is going to remove
+/// it: either it is long gone and the socket is stale, or it is wedged. Nothing
+/// can start while the file is there, so say what to delete.
+fn stale_socket_message(socket_path: &Path) -> String {
+    formatdoc! {"
+        Failed to start services: a service manager socket is still in place after shutting down.
+        No process is going to remove it.
+        Remove {socket_path} and try again.",
+        socket_path = socket_path.display(),
+    }
+}
+
 /// Explain a service startup that never produced a usable socket.
 ///
 /// The executive is what spawns `process-compose`, and it reports neither the
 /// outcome nor the log path back here, so the log it wrote is the only account
-/// of what went wrong. Without it the two failures that reach this point — a
-/// `process-compose` that died on startup and one that is merely slower than
-/// the timeout — are indistinguishable to the reader.
-fn socket_not_ready_message(log_dir: &Path, waited: Duration) -> String {
-    let log = latest_services_log(log_dir);
-    let tail = log.as_deref().and_then(|path| log_tail(path, 10));
+/// of what went wrong. Without it the failures that reach this point — a
+/// `process-compose` that died on startup, one that is merely slower than the
+/// timeout, and one that was never spawned at all — are indistinguishable to
+/// the reader.
+///
+/// `log_before_start` is the newest log from before the start was requested.
+/// A newer one means an instance was spawned and its log describes this start;
+/// no newer one means the executive never spawned anything, which is a
+/// different problem and worth saying plainly.
+fn socket_not_ready_message(
+    log_dir: &Path,
+    log_before_start: Option<&Path>,
+    waited: Duration,
+) -> String {
+    let Some(log) =
+        latest_services_log(log_dir).filter(|log| Some(log.as_path()) != log_before_start)
+    else {
+        return formatdoc! {"
+            Failed to start services: no service manager was started within {waited:.1?}.
+            Nothing was written to {log_dir}, so nothing tried to start.
+            Try again.",
+            log_dir = log_dir.display(),
+        };
+    };
 
-    let Some(tail) = tail else {
+    let Some(tail) = log_tail(&log, 10) else {
         return formatdoc! {"
             Failed to start services: the service manager did not respond within {waited:.1?}.
             It may still be starting.
@@ -228,7 +297,7 @@ fn socket_not_ready_message(log_dir: &Path, waited: Duration) -> String {
         Its log ends with:
         {indented}
         The full log is at {log}.",
-        log = log.unwrap_or_default().display(),
+        log = log.display(),
     }
 }
 
@@ -349,5 +418,49 @@ fn wait_for_executive(child_pid: Pid, mut signals: Signals) -> Result<(), anyhow
         } else {
             unreachable!("Received unexpected signal or empty iterator over signals");
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A log left behind by the instance that just shut down must not be
+    /// reported as the log of the start being waited on: the two failures read
+    /// identically, and the leftover one describes a clean shutdown, which
+    /// sends the reader looking in the wrong place.
+    #[test]
+    fn socket_not_ready_message_ignores_a_log_from_before_the_start() {
+        let dir = tempfile::tempdir().unwrap();
+        let previous = dir.path().join("services.20260825120000000000.log");
+        std::fs::write(&previous, "INF Thank you for using process-compose\n").unwrap();
+
+        let message = socket_not_ready_message(dir.path(), Some(&previous), Duration::from_secs(2));
+
+        assert_eq!(message, formatdoc! {"
+            Failed to start services: no service manager was started within 2.0s.
+            Nothing was written to {log_dir}, so nothing tried to start.
+            Try again.",
+            log_dir = dir.path().display(),
+        });
+    }
+
+    #[test]
+    fn socket_not_ready_message_quotes_a_log_from_this_start() {
+        let dir = tempfile::tempdir().unwrap();
+        let previous = dir.path().join("services.20260825120000000000.log");
+        std::fs::write(&previous, "INF Thank you for using process-compose\n").unwrap();
+        let current = dir.path().join("services.20260825120001000000.log");
+        std::fs::write(&current, "ERR error=\"bind: no such file or directory\"\n").unwrap();
+
+        let message = socket_not_ready_message(dir.path(), Some(&previous), Duration::from_secs(2));
+
+        assert_eq!(message, formatdoc! {"
+            Failed to start services: the service manager did not respond within 2.0s.
+            Its log ends with:
+              ERR error=\"bind: no such file or directory\"
+            The full log is at {current}.",
+            current = current.display(),
+        });
     }
 }
