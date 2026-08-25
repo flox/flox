@@ -331,7 +331,9 @@ function skip_unless_apple_container() {
   assert_success
   assert_line "⚡︎ 'test:apple' written to Apple container runtime"
 
-  run --separate-stderr container run --rm -i "localhost/test:apple" echo '$foo'
+  # Unqualified, unlike Podman: `container image load` keeps the reference the
+  # OCI archive carries rather than prefixing `localhost/`.
+  run --separate-stderr container run --rm -i "test:apple" echo '$foo'
   assert_success
   assert_container_output
 }

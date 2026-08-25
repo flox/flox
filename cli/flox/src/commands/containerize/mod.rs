@@ -18,8 +18,7 @@ use flox_rust_sdk::models::environment::Environment;
 use flox_rust_sdk::providers::container_builder::{ContainerBuilder, MkContainerNix};
 use flox_rust_sdk::utils::{ReaderExt, WireTap};
 use indoc::indoc;
-use macos_containerize_proxy::ContainerizeProxy;
-use tempfile::NamedTempFile;
+use macos_containerize_proxy::{ContainerizeProxy, convert_to_oci_archive};
 use tracing::{debug, info, instrument};
 
 use super::{EnvironmentSelect, environment_select};
@@ -141,7 +140,7 @@ impl Containerize {
             builder.create_container_source(&flox, env_name.as_ref(), output_tag)?
         };
 
-        let mut writer = output.to_writer(&flox.cache_dir)?;
+        let mut writer = output.to_writer(&flox.cache_dir, format!("{env_name}:{output_tag}"))?;
         source.stream_container(&mut writer)?;
         writer.wait()?;
 
@@ -202,7 +201,11 @@ impl OutputTarget {
         ))))
     }
 
-    fn to_writer(&self, cache_dir: &Path) -> Result<Box<dyn ContainerSink + '_>> {
+    fn to_writer(
+        &self,
+        cache_dir: &Path,
+        reference: String,
+    ) -> Result<Box<dyn ContainerSink + '_>> {
         let writer: Box<dyn ContainerSink> = match self {
             OutputTarget::File(FileOrStdout::File(path)) => {
                 let file = fs::OpenOptions::new()
@@ -215,7 +218,7 @@ impl OutputTarget {
                 Box::new(file)
             },
             OutputTarget::File(FileOrStdout::Stdout) => Box::new(io::stdout()),
-            OutputTarget::Runtime(runtime) => runtime.to_writer(cache_dir)?,
+            OutputTarget::Runtime(runtime) => runtime.to_writer(cache_dir, reference)?,
         };
 
         Ok(writer)
@@ -298,29 +301,45 @@ impl ContainerSink for RuntimeSink {
     }
 }
 
-/// A sink for runtimes whose `load` reads a file rather than stdin.
+const DOCKER_ARCHIVE_NAME: &str = "image.tar";
+const OCI_ARCHIVE_NAME: &str = "image-oci.tar";
+
+/// A sink for Apple's `container`, which neither streams nor speaks
+/// docker-archive.
 ///
-/// The image is spooled to a temporary file and handed to the runtime once
-/// [ContainerSink::wait] is called. The file lives under the Flox cache
-/// directory rather than `$TMPDIR` because container images routinely run to
-/// gigabytes and `$TMPDIR` is a memory-backed filesystem on some hosts.
+/// `container image load` reads `--input <file>` rather than stdin, so the
+/// image is spooled to disk, and it accepts only an OCI layout, so the
+/// docker-archive is converted before it is loaded. Both archives live in a
+/// working directory under the Flox cache rather than `$TMPDIR`, because they
+/// routinely run to gigabytes and the conversion needs to bind-mount the
+/// directory into a container.
 #[derive(Debug)]
-struct TempFileSink {
-    image: NamedTempFile,
-    command: Command,
+struct AppleContainerSink {
+    work_dir: PathBuf,
+    image: fs::File,
+    reference: String,
+    runtime: Runtime,
 }
 
-impl TempFileSink {
-    fn new(command: Command, cache_dir: &Path) -> Result<Self> {
-        fs::create_dir_all(cache_dir).context("Could not create cache directory")?;
-        let image = NamedTempFile::new_in(cache_dir)
-            .context("Could not create temporary file for the container image")?;
+impl AppleContainerSink {
+    fn new(runtime: Runtime, cache_dir: &Path, reference: String) -> Result<Self> {
+        let work_dir = cache_dir.join("containerize-image");
+        fs::create_dir_all(&work_dir)
+            .context("Could not create the container image working directory")?;
 
-        Ok(Self { image, command })
+        let image = fs::File::create(work_dir.join(DOCKER_ARCHIVE_NAME))
+            .context("Could not create the container image file")?;
+
+        Ok(Self {
+            work_dir,
+            image,
+            reference,
+            runtime,
+        })
     }
 }
 
-impl Write for TempFileSink {
+impl Write for AppleContainerSink {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         self.image.write(buf)
     }
@@ -330,17 +349,26 @@ impl Write for TempFileSink {
     }
 }
 
-impl ContainerSink for TempFileSink {
+impl ContainerSink for AppleContainerSink {
     fn wait(&mut self) -> Result<()> {
         self.flush()?;
-        self.image.as_file().sync_all()?;
+        self.image.sync_all()?;
+
+        convert_to_oci_archive(
+            &self.runtime,
+            &self.work_dir,
+            DOCKER_ARCHIVE_NAME,
+            OCI_ARCHIVE_NAME,
+            &self.reference,
+        )?;
 
         let output = self
-            .command
+            .runtime
+            .to_command()
             .args(["image", "load", "--input"])
-            .arg(self.image.path())
+            .arg(self.work_dir.join(OCI_ARCHIVE_NAME))
             .output()
-            .context("Failed to call runtime container")?;
+            .context(format!("Failed to call runtime {}", self.runtime.to_cmd()))?;
 
         String::from_utf8_lossy(&output.stdout)
             .lines()
@@ -450,11 +478,15 @@ impl Runtime {
     /// Get a writer that loads the image into the runtime.
     ///
     /// Docker and Podman read the archive from `load`'s stdin, so the image
-    /// streams straight through. Apple's `container image load` only accepts
-    /// `--input <file>`, so that image has to be spooled to disk first.
-    fn to_writer(&self, cache_dir: &Path) -> Result<Box<dyn ContainerSink>> {
+    /// streams straight through. Apple's runtime needs it on disk and in a
+    /// different archive format; see [AppleContainerSink].
+    fn to_writer(&self, cache_dir: &Path, reference: String) -> Result<Box<dyn ContainerSink>> {
         if self == &Runtime::AppleContainer {
-            return Ok(Box::new(TempFileSink::new(self.to_command(), cache_dir)?));
+            return Ok(Box::new(AppleContainerSink::new(
+                self.clone(),
+                cache_dir,
+                reference,
+            )?));
         }
 
         let cmd = self.to_cmd();

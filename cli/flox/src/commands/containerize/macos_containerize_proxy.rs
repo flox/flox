@@ -10,6 +10,7 @@ use flox_core::activate::context::ActivateMode;
 use flox_core::vars::FLOX_DISABLE_METRICS_VAR;
 use flox_rust_sdk::flox::{AuthContext, FLOX_VERSION, Flox};
 use flox_rust_sdk::models::floxmeta::FLOXHUB_TOKEN_ENV_VAR;
+use flox_rust_sdk::providers::build::COMMON_NIXPKGS_URL;
 use flox_rust_sdk::providers::container_builder::{ContainerBuilder, ContainerSource};
 use flox_rust_sdk::providers::nix::{NIX_VERSION, NixSubstituterConfig};
 use flox_rust_sdk::utils::ReaderExt;
@@ -43,6 +44,109 @@ pub enum ContainerizeProxyError {
     AppleContainerServicesNotRunning,
     #[error("failed to stage the Flox config for the proxy container")]
     StageFloxConfig(#[source] std::io::Error),
+    #[error("failed to convert the container image to an OCI archive")]
+    ConvertToOciArchive(#[source] std::io::Error),
+}
+
+// Use a Nix container that matches the version of Nix that this Flox
+// has been built with because it's smaller and changes less frequently
+// than a Flox container of the corresponding version, which result in less
+// container image pulls. It also prevents the chicken-and-egg problem when
+// we bump `VERSION` in Flox but haven't published the container image yet.
+fn proxy_container_image() -> String {
+    format!(
+        "{}:{}",
+        NIX_PROXY_IMAGE,
+        NIX_PROXY_IMAGE_REF
+            .clone()
+            .unwrap_or(NIX_VERSION.to_string())
+    )
+}
+
+/// Add a cache volume mount to the container runtime command.
+fn add_cache_mount(command: &mut Command, path: &str) {
+    command.args([
+        "--mount",
+        &format!("type=volume,src={CONTAINER_NIX_CACHE_VOLUME},dst={path}"),
+    ]);
+}
+
+/// Nix invocation shared by every command run inside the proxy container.
+fn add_nix_run_args(command: &mut Command, installable: &str) {
+    command.args([
+        "nix",
+        "--extra-experimental-features",
+        "nix-command flakes",
+        "--accept-flake-config",
+        "run",
+        installable,
+        "--",
+    ]);
+}
+
+/// Rewrite a docker-archive as an OCI archive, in place beside it.
+///
+/// Apple's `container image load` accepts only an OCI layout — it unpacks the
+/// archive and looks for `oci-layout`, which a docker-archive does not have —
+/// and `dockerTools.streamLayeredImage` emits a docker-archive. macOS hosts
+/// have no `skopeo`, so the conversion borrows the proxy image, which already
+/// carries Nix. The Nix cache volume comes along so `skopeo` is fetched once
+/// rather than on every containerize.
+///
+/// `work_dir` is bind-mounted rather than the archives themselves: Apple
+/// shares host paths over virtiofs, which cannot share a single file.
+/// Everything is passed as argv, so a `--tag` or `--label` value never reaches
+/// a shell.
+pub(crate) fn convert_to_oci_archive(
+    runtime: &Runtime,
+    work_dir: &Path,
+    docker_archive_name: &str,
+    oci_archive_name: &str,
+    reference: &str,
+) -> Result<(), ContainerizeProxyError> {
+    const WORK_MOUNT: &str = "/work";
+
+    let mut command = runtime.to_command();
+    command.args(["run", "--rm"]);
+    command.args([
+        "--mount",
+        &format!(
+            "type=bind,source={},target={WORK_MOUNT}",
+            work_dir.to_string_lossy()
+        ),
+    ]);
+    add_cache_mount(&mut command, "/nix");
+    command.arg(proxy_container_image());
+
+    let skopeo = format!("{}#skopeo", COMMON_NIXPKGS_URL.as_str());
+    add_nix_run_args(&mut command, &skopeo);
+    command.args([
+        // The proxy image ships no `policy.json`, and skopeo refuses to run
+        // without one. There is nothing for a trust policy to decide here:
+        // both sides are local archives, and the source is the image this
+        // command just built.
+        "--insecure-policy",
+        "copy",
+        &format!("docker-archive:{WORK_MOUNT}/{docker_archive_name}"),
+        &format!("oci-archive:{WORK_MOUNT}/{oci_archive_name}:{reference}"),
+    ]);
+
+    debug!(?command, "running container image conversion command");
+    let output = command
+        .output()
+        .map_err(ContainerizeProxyError::ConvertToOciArchive)?;
+
+    String::from_utf8_lossy(&output.stderr)
+        .lines()
+        .for_each(|line| info!("{line}"));
+
+    if !output.status.success() {
+        return Err(ContainerizeProxyError::ConvertToOciArchive(
+            std::io::Error::other(String::from_utf8_lossy(&output.stderr).trim().to_string()),
+        ));
+    }
+
+    Ok(())
 }
 
 /// An implementation of [ContainerBuilder] for macOS that uses `flox
@@ -78,29 +182,6 @@ impl ContainerizeProxy {
         command
     }
 
-    // Use a Nix container that matches the version of Nix that this Flox
-    // has been built with because it's smaller and changes less frequently
-    // than a Flox container of the corresponding version, which result in less
-    // container image pulls. It also prevents the chicken-and-egg problem when
-    // we bump `VERSION` in Flox but haven't published the container image yet.
-    fn container_image(&self) -> String {
-        format!(
-            "{}:{}",
-            NIX_PROXY_IMAGE,
-            NIX_PROXY_IMAGE_REF
-                .clone()
-                .unwrap_or(NIX_VERSION.to_string())
-        )
-    }
-
-    /// Add a cache volume mount to the container runtime command.
-    fn add_cache_mount(&self, command: &mut Command, path: &str) {
-        command.args([
-            "--mount",
-            &format!("type=volume,src={CONTAINER_NIX_CACHE_VOLUME},dst={path}"),
-        ]);
-    }
-
     /// Apple's runtime refuses every command until its background services are
     /// running, and reports that as a connection failure from whichever
     /// subcommand happened to run first. Ask it directly so the user gets the
@@ -133,9 +214,9 @@ impl ContainerizeProxy {
         // `/nix` and at a prefix where it can be treated as a new local root:
         // https://nix.dev/manual/nix/2.24/command-ref/new-cli/nix3-help-stores#local-store
         let cache_root = "/cache";
-        self.add_cache_mount(&mut command, &format!("{cache_root}/nix"));
+        add_cache_mount(&mut command, &format!("{cache_root}/nix"));
 
-        command.arg(self.container_image());
+        command.arg(proxy_container_image());
         // We have to additionally copy some parts of `/nix/var/nix` so that the
         // container isn't broken when the cache volume shadows its `/nix`.
         command.args(["bash", "-c", &formatdoc! {"
@@ -230,7 +311,7 @@ impl ContainerizeProxy {
             ),
         ]);
 
-        self.add_cache_mount(command, "/nix");
+        add_cache_mount(command, "/nix");
 
         // Honour config from the user's flox.toml
         // This could include things like floxhub_token and floxhub_url
@@ -285,20 +366,13 @@ impl ContainerizeProxy {
             },
         }
 
-        command.arg(self.container_image());
+        command.arg(proxy_container_image());
 
         Ok(())
     }
 
     /// Inception L2: Nix args.
     fn add_nix_args(&self, command: &mut Command) {
-        command.arg("nix");
-        command.args([
-            "--extra-experimental-features",
-            "nix-command flakes",
-            "--accept-flake-config",
-        ]);
-
         let flox_version = &*FLOX_VERSION;
         let flox_version_tag = format!("v{}", flox_version.base_semver());
         let flox_flake = format!(
@@ -309,7 +383,7 @@ impl ContainerizeProxy {
                 .clone()
                 .unwrap_or(flox_version.commit_sha().unwrap_or(flox_version_tag))
         );
-        command.args(["run", &flox_flake, "--"]);
+        add_nix_run_args(command, &flox_flake);
     }
 
     /// Inception L3: Flox args.
