@@ -4614,16 +4614,21 @@ attach_previous_release() {
   # Set to "true" in the PR that bumps activations.json schema version (e.g.
   # Version<3> -> Version<4>), so the previous-release tests assert the
   # incompatible-version error instead of a successful attach.
-  # Set back to "false" once FLOX_LATEST_VERSION is a release that already
-  # writes the bumped schema version (both versions share the same schema, so
-  # attach should succeed).
+  #
+  # Flip back to "false" as soon as the release process pushes the vX.Y.Z tag.
+  # FLOX_LATEST_VERSION is ./VERSION, so from the moment that tag resolves these
+  # tests build *this* release as the "previous" one; both sides then write the
+  # same schema and attach succeeds. Until the tag is pushed they skip as
+  # "likely a release commit", so a green release PR is not evidence that this
+  # is set correctly.
   #
   # This release bumps the activation state schema to Version<4>, so an
   # activation started by the previous release cannot be attached to.
   incrementing_version_this_release="true"
 
   # Set to "true" whenever the buildenv format changes and FLOX_LATEST_VERSION
-  # still points to a release that uses the old format.  Set back to "false"
+  # still points to a release that uses the old format.  Flip back to "false"
+  # on the same tag-push trigger as incrementing_version_this_release above,
   # once FLOX_LATEST_VERSION is a release that already uses the new format
   # (so both sides use the same GC root symlink paths and attachment succeeds).
   buildenv_format_changed_this_release="false"
