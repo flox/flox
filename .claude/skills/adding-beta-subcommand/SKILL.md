@@ -78,8 +78,10 @@ Two modules are involved, by design:
 
 - Beta commands may freely depend on `flox-rust-sdk`, but when adding beta commands, strive to leave `flox-rust-sdk` code unchanged. Any code in the beta module doesn't need to be reviewed for stability, but any code changes in other crates will require more thorough review which will make it slower to add the beta command.
 - Reaching into the rest of the `flox` crate (`crate::utils::message`,
-  `crate::subcommand_metric!`, …) is fine and needs no factoring out. Prefer
-  it over duplicating a helper inside `beta/`.
+  `crate::utils::events`, …) is fine and needs no factoring out. Prefer
+  it over duplicating a helper inside `beta/`. For telemetry, use the
+  v2 events pipeline (see the `adding-metrics-events` skill) — don't
+  add new `subcommand_metric!` calls.
 - Don't put beta-only logic in `commands/`, elsewhere in `flox`, or in
   `flox-rust-sdk`; keep it in the `beta` module.
 - Integration tests are not required for beta commands while they
