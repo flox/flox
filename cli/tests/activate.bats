@@ -4622,9 +4622,9 @@ attach_previous_release() {
   # "likely a release commit", so a green release PR is not evidence that this
   # is set correctly.
   #
-  # This release bumps the activation state schema to Version<4>, so an
-  # activation started by the previous release cannot be attached to.
-  incrementing_version_this_release="true"
+  # The tag for this release is pushed, so FLOX_LATEST_VERSION writes Version<4>
+  # like this build and attach succeeds.
+  incrementing_version_this_release="false"
 
   # Set to "true" whenever the buildenv format changes and FLOX_LATEST_VERSION
   # still points to a release that uses the old format.  Flip back to "false"
