@@ -30,6 +30,25 @@ project_teardown() {
 
 # ---------------------------------------------------------------------------- #
 
+# How long the polls below wait before giving up.
+#
+# They return as soon as the content appears, so this only bounds how long a
+# genuine failure takes to report. The bound has to hold on a healthy machine
+# carrying the suite's own `--jobs 4` load, not just an idle one: the
+# executive's cleanup (event delivery, `process-compose down`, removing the
+# activation state) takes ~0.5s idle, but 1s expired on darwin runners whose
+# median test was 574ms — the fastest machines in the failing set, not slow
+# ones — pushing a 1.4s test to 5.7s.
+#
+# 10s matches `wait_for_activations`, which is what observed cleanup completing
+# on those same runs. Keeping the two equal means a cleanup that really is
+# stuck fails here, with the file's contents, rather than surviving this poll
+# and failing in teardown with a less useful message.
+#
+# Exported because "services stop after auto-activated environment is
+# deactivated" runs the poll inside a `bash -c`.
+export WAIT_FOR_FILE_CONTENT_TIMEOUT="10s"
+
 # Wait, with a poll and timeout, for a file to match some contents.
 #
 # This can be used to prevent race conditions where we expect something to
@@ -38,7 +57,7 @@ wait_for_file_content() {
   file="${1?}"
   expected="${2?}"
 
-  run timeout 1s bash -c "
+  run timeout "$WAIT_FOR_FILE_CONTENT_TIMEOUT" bash -c "
     while [ \"\$(cat \"$file\")\" != \"$expected\" ]; do
       sleep 0.1s
     done
@@ -51,11 +70,22 @@ wait_for_partial_file_content() {
   file="${1?}"
   expected="${2?}"
 
-  timeout 1s bash -c "
+  if timeout "$WAIT_FOR_FILE_CONTENT_TIMEOUT" bash -c "
     while ! grep -q \"$expected\" \"$file\"; do
       sleep 0.1s
     done
-  "
+  "; then
+    return 0
+  fi
+
+  # Without this the caller only sees status 124 and has to guess how far the
+  # file got.
+  {
+    echo "wait_for_partial_file_content: '$expected' did not appear in $file within $WAIT_FOR_FILE_CONTENT_TIMEOUT"
+    echo "contents of $file:"
+    cat "$file"
+  } >&2
+  return 1
 }
 
 setup() {
@@ -64,6 +94,13 @@ setup() {
   project_setup
 
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.yaml"
+
+  # Starting services waits this long for process-compose to create its socket.
+  # The 2s default is a reasonable thing to make a user wait but is not enough
+  # for a healthy CI runner that is also running the rest of the suite, where it
+  # surfaced as "Failed to start services: process-compose socket not ready"
+  # (CLI-73). Tests that assert on the timeout itself override this.
+  export _FLOX_SERVICES_ACTIVATE_TIMEOUT=10
 }
 
 teardown() {
@@ -1642,12 +1679,12 @@ EOF
   run "$FLOX_BIN" activate -s -- bash <(cat <<'EOF'
     set -euxo pipefail
 
-    timeout 2 bash -c 'set -x; while [ ! -e "$(pwd)/pidfile" ]; do sleep .1; done'
+    timeout 10 bash -c 'set -x; while [ ! -e "$(pwd)/pidfile" ]; do sleep .1; done'
 
     "$FLOX_BIN" services status
     "$FLOX_BIN" services stop
 
-    timeout 2 bash -c 'set -x; while kill -0 "$(cat "$(pwd)/pidfile")"; do sleep .1; done'
+    timeout 10 bash -c 'set -x; while kill -0 "$(cat "$(pwd)/pidfile")"; do sleep .1; done'
 EOF
   )
   assert_success
@@ -1695,7 +1732,7 @@ EOF
   # Wait for 2nd activation to start before tearing down the 1st
   # otherwise services might get stopped
   TEARDOWN_FIFO="$PROJECT_DIR/finished_2"
-  timeout 2 cat finished_1
+  timeout 10 cat finished_1
   run cat output
   assert_output --partial "! Skipped starting services, services are already running"
 
@@ -1709,9 +1746,7 @@ EOF
   wait_for_partial_file_content "$executive_log" "finished cleanup"
 
   # Make sure services have stopped
-  timeout 1s bash -c '
-    "${TESTS_DIR}"/services/wait_for_service_status.sh one:Stopped two:Stopped
-  '
+  "${TESTS_DIR}"/services/wait_for_service_status.sh one:Stopped two:Stopped
 }
 
 # bats test_tags=services:auto-deactivate
@@ -1854,7 +1889,7 @@ EOF
     echo > "$TEARDOWN_FIFO"
 EOF
   ) &
-  timeout 2 cat started
+  timeout 10 cat started
 
   "${TESTS_DIR}"/services/wait_for_service_status.sh initial:Completed
   run cat initial_values
