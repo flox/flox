@@ -7,17 +7,17 @@
 //! `config.flox.disable_metrics` silences both.
 //!
 //! Authenticated invocations additionally carry a pseudonymous subject
-//! identifier as `auth_subject`, resolved by the caller from the auth
-//! context (`AuthContext::user_subject`) — see
-//! [`flox_events::EventsClient`] for the field's semantics.
+//! identifier as `auth_subject`. This wrapper derives it and `credential_type`
+//! from the invocation's `AuthContext`; the events client retains only those
+//! sanitized values.
 
 use std::env;
 use std::str::FromStr;
 use std::sync::{LazyLock, OnceLock};
 
 use flox_config::Config;
-use flox_events::{EnvDetail, EventsClient, EventsHub, SharedMetadataTemplate};
-use flox_rust_sdk::flox::{FLOX_VERSION, Flox};
+use flox_events::{CredentialType, EnvDetail, EventsClient, EventsHub, SharedMetadataTemplate};
+use flox_rust_sdk::flox::{AuthContext, FLOX_VERSION, Flox};
 use flox_rust_sdk::models::environment::generations::GenerationsExt;
 use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment};
 use flox_rust_sdk::utils::INVOCATION_SOURCES;
@@ -86,13 +86,28 @@ pub(crate) fn duration_to_ms(elapsed: std::time::Duration) -> u64 {
     u64::try_from(elapsed.as_millis()).unwrap_or(u64::MAX)
 }
 
+fn credential_type_from_context(auth_context: &AuthContext) -> CredentialType {
+    match auth_context {
+        AuthContext::Auth0(Some(_)) | AuthContext::Bare(_) => CredentialType::OAuthAccessToken,
+        AuthContext::AccessToken(token) if token.secret().starts_with("flox_pat_") => {
+            CredentialType::Pat
+        },
+        AuthContext::AccessToken(token) if token.secret().starts_with("flox_sat_") => {
+            CredentialType::ServiceToken
+        },
+        AuthContext::AccessToken(_) => CredentialType::OAuthAccessToken,
+        AuthContext::Auth0(None) | AuthContext::Kerberos(_) => CredentialType::None,
+    }
+}
+
 /// Build the [`SharedMetadataTemplate`] stamped onto every v2 event emitted
 /// by this process. The fields mirror the legacy
 /// [`crate::utils::metrics::MetricEntry`] so downstream consumers can
 /// reconstruct the existing columns.
-fn shared_metadata_template() -> SharedMetadataTemplate {
+fn shared_metadata_template(credential_type: CredentialType) -> SharedMetadataTemplate {
     let linux_release = sys_info::linux_os_release().ok();
     SharedMetadataTemplate {
+        credential_type,
         flox_version: FLOX_VERSION.to_string(),
         os_family: sys_info::os_type()
             .ok()
@@ -145,10 +160,10 @@ fn architecture_from_system(system: &str) -> Option<String> {
 /// a) metrics are disabled by config, or
 /// b) reading the metrics uuid fails.
 ///
-/// `auth_subject` is the caller-resolved pseudonymous subject identifier
-/// (`AuthContext::user_subject`) — the returned client snapshots it at
-/// construction (see [`flox_events::EventsClient`] for the snapshot
-/// semantics).
+/// `auth_context` is the credential selected for the invocation. The
+/// returned client snapshots its pseudonymous subject and local credential
+/// kind at construction (see [`flox_events::EventsClient`] for the snapshot
+/// semantics); credential material is never retained by the events client.
 ///
 /// Ordering invariant: [`shared_metadata_template`] performs machine-context
 /// detection, so it must stay behind the `disable_metrics` early return —
@@ -156,7 +171,7 @@ fn architecture_from_system(system: &str) -> Option<String> {
 pub fn build_events_client(
     config: &Config,
     invocation_id: Uuid,
-    auth_subject: Option<String>,
+    auth_context: &AuthContext,
 ) -> Option<EventsClient> {
     if config.flox.disable_metrics {
         debug!("v2 events: disable_metrics is true; not installing client");
@@ -171,6 +186,8 @@ pub fn build_events_client(
         },
     };
 
+    let auth_subject = auth_context.user_subject().map(String::from);
+    let credential_type = credential_type_from_context(auth_context);
     Some(EventsClient::new(
         device_id,
         &config.flox.data_dir,
@@ -178,7 +195,7 @@ pub fn build_events_client(
         METRICS_EVENTS_API_KEY_V2.clone(),
         invocation_id,
         auth_subject,
-        shared_metadata_template(),
+        shared_metadata_template(credential_type),
     ))
 }
 
@@ -294,6 +311,7 @@ mod tests {
     use flox_config::FloxConfig;
     use flox_events::test_helpers::MockEventsConnection;
     use flox_events::{EVENTS_BUFFER_FILE_NAME, EventsHub, LifecycleFields};
+    use floxhub_client::test_helpers::{FAKE_TOKEN, FAKE_TOKEN_NO_HANDLE, FAKE_TOKEN_WITH_SUB};
     use serial_test::serial;
     use temp_env::with_var;
     use tempfile::TempDir;
@@ -388,7 +406,7 @@ mod tests {
 
     #[test]
     fn shared_metadata_template_populates_machine_context() {
-        let template = shared_metadata_template();
+        let template = shared_metadata_template(CredentialType::OAuthAccessToken);
 
         // Whole-struct compare: machine-dependent fields are cloned from the
         // actual value, architecture is pinned from the compile-time target,
@@ -396,6 +414,7 @@ mod tests {
         // behavior is pinned in the detect_shell tests; the value-domain
         // assertion below guards the wire here.
         let expected = SharedMetadataTemplate {
+            credential_type: CredentialType::OAuthAccessToken,
             flox_version: FLOX_VERSION.to_string(),
             os_family: template.os_family.clone(),
             os_family_release: template.os_family_release.clone(),
@@ -445,6 +464,34 @@ mod tests {
     }
 
     #[test]
+    fn credential_type_reflects_local_auth_context() {
+        let contexts = [
+            AuthContext::new_from_token(Some(FAKE_TOKEN)),
+            AuthContext::new_from_token(Some(FAKE_TOKEN_NO_HANDLE)),
+            AuthContext::new_from_token(Some("flox_pat_test")),
+            AuthContext::new_from_token(Some("flox_sat_test")),
+            AuthContext::new_from_token(Some("opaque-access-token")),
+            AuthContext::new_from_token(Some("flox_unknown_test")),
+            AuthContext::new_from_token(None),
+            AuthContext::Kerberos(None),
+        ];
+
+        assert_eq!(
+            contexts.map(|context| credential_type_from_context(&context)),
+            [
+                CredentialType::OAuthAccessToken,
+                CredentialType::OAuthAccessToken,
+                CredentialType::Pat,
+                CredentialType::ServiceToken,
+                CredentialType::OAuthAccessToken,
+                CredentialType::OAuthAccessToken,
+                CredentialType::None,
+                CredentialType::None,
+            ]
+        );
+    }
+
+    #[test]
     #[serial(v2_events_wrapper_env)]
     fn build_events_client_returns_none_when_disable_metrics_is_true() {
         let tempdir = tempfile::tempdir().expect("tempdir");
@@ -454,7 +501,8 @@ mod tests {
             /* disable_metrics */ true,
         );
 
-        let client = build_events_client(&config, Uuid::new_v4(), None);
+        let auth_context = AuthContext::new_from_token(None);
+        let client = build_events_client(&config, Uuid::new_v4(), &auth_context);
         assert!(client.is_none(), "disable_metrics must take priority");
     }
 
@@ -467,7 +515,8 @@ mod tests {
         // No metrics-uuid file written: read_metrics_uuid errors.
         let config = test_config(&tempdir, data_dir, /* disable_metrics */ false);
 
-        let client = build_events_client(&config, Uuid::new_v4(), None);
+        let auth_context = AuthContext::new_from_token(None);
+        let client = build_events_client(&config, Uuid::new_v4(), &auth_context);
         assert!(client.is_none(), "missing uuid must short-circuit");
     }
 
@@ -478,26 +527,28 @@ mod tests {
         let uuid = Uuid::new_v4();
         let config = test_config_with_uuid(&tempdir, uuid);
 
-        let client = build_events_client(&config, Uuid::new_v4(), None);
+        let auth_context = AuthContext::new_from_token(None);
+        let client = build_events_client(&config, Uuid::new_v4(), &auth_context);
         assert!(client.is_some(), "v2 is enabled by default");
         assert_eq!(client.unwrap().device_id, uuid);
     }
 
-    /// The wrapper stamps whatever subject the caller resolved — which
-    /// subjects resolve for which auth states is pinned where that logic
-    /// lives (`AuthContext::user_subject` / `FloxhubToken::sub`).
+    /// The wrapper derives the subject from the same auth context used for
+    /// the credential type.
     #[test]
     #[serial(v2_events_wrapper_env)]
-    fn build_events_client_stamps_provided_auth_subject() {
+    fn build_events_client_derives_auth_subject_from_context() {
         let tempdir = tempfile::tempdir().expect("tempdir");
         let config = test_config_with_uuid(&tempdir, Uuid::new_v4());
 
+        let authenticated = AuthContext::new_from_token(Some(FAKE_TOKEN_WITH_SUB));
         let client =
-            build_events_client(&config, Uuid::new_v4(), Some("github|3670948".to_string()))
-                .expect("client installs");
-        assert_eq!(client.auth_subject.as_deref(), Some("github|3670948"));
+            build_events_client(&config, Uuid::new_v4(), &authenticated).expect("client installs");
+        assert_eq!(client.auth_subject.as_deref(), Some("github|424242"));
 
-        let client = build_events_client(&config, Uuid::new_v4(), None).expect("client installs");
+        let unauthenticated = AuthContext::new_from_token(None);
+        let client = build_events_client(&config, Uuid::new_v4(), &unauthenticated)
+            .expect("client installs");
         assert_eq!(client.auth_subject, None, "anonymous use stays anonymous");
     }
 
@@ -513,6 +564,7 @@ mod tests {
         let invocation_id = Uuid::new_v4();
 
         let template = SharedMetadataTemplate {
+            credential_type: CredentialType::None,
             flox_version: "0.0.0-test".to_string(),
             os_family: Some("Linux".to_string()),
             os_family_release: None,

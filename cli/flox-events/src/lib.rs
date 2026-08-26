@@ -199,6 +199,25 @@ pub enum EventKind {
     CliUpdatePrompted {},
 }
 
+/// Authentication material available to the CLI for this invocation.
+///
+/// This reports the local credential kind only. It never resolves token
+/// identity or includes credential contents.
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum CredentialType {
+    /// OAuth access token issued by a supported OIDC provider.
+    #[serde(rename = "oauth_access_token")]
+    OAuthAccessToken,
+    /// FloxHub personal access token.
+    Pat,
+    /// FloxHub service account token.
+    ServiceToken,
+    /// No supported token authentication. This includes Kerberos mode.
+    #[default]
+    None,
+}
+
 /// Shared metadata fields stamped onto every `cli.*` command event payload.
 ///
 /// These fields drive existing `cli.telemetry` reporting downstream, so the
@@ -212,6 +231,9 @@ pub struct CommandPayload {
     /// `activate`, or nested `services::start` using the `parent::child`
     /// join encoding).
     subcommand: String,
+    /// Authentication material available when the invocation started.
+    #[serde(default)]
+    credential_type: CredentialType,
     /// Flox CLI version string.
     flox_version: String,
     /// Coarse operating system family (e.g. `Mac OS`, `Linux`).
@@ -262,6 +284,7 @@ pub struct CommandPayload {
 /// [`SharedMetadataTemplate::into_payload`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SharedMetadataTemplate {
+    pub credential_type: CredentialType,
     pub flox_version: String,
     pub os_family: Option<String>,
     pub os_family_release: Option<String>,
@@ -280,6 +303,7 @@ impl SharedMetadataTemplate {
     pub fn into_payload(&self, subcommand: String) -> CommandPayload {
         CommandPayload {
             subcommand,
+            credential_type: self.credential_type,
             flox_version: self.flox_version.clone(),
             os_family: self.os_family.clone(),
             os_family_release: self.os_family_release.clone(),
@@ -892,6 +916,7 @@ mod tests {
     fn command_payload(subcommand: &str) -> CommandPayload {
         CommandPayload {
             subcommand: subcommand.to_string(),
+            credential_type: CredentialType::OAuthAccessToken,
             flox_version: "0.0.0-test".to_string(),
             os_family: Some("Linux".to_string()),
             os_family_release: Some("6.10.0".to_string()),
@@ -908,6 +933,7 @@ mod tests {
     fn expected_payload_json(subcommand: &str) -> serde_json::Value {
         json!({
             "subcommand": subcommand,
+            "credential_type": "oauth_access_token",
             "flox_version": "0.0.0-test",
             "os_family": "Linux",
             "os_family_release": "6.10.0",
@@ -942,6 +968,21 @@ mod tests {
     }
 
     #[test]
+    fn credential_type_serializes_to_contract_values() {
+        let value = serde_json::to_value([
+            CredentialType::OAuthAccessToken,
+            CredentialType::Pat,
+            CredentialType::ServiceToken,
+            CredentialType::None,
+        ])
+        .expect("credential types serialize");
+        assert_eq!(
+            value,
+            json!(["oauth_access_token", "pat", "service_token", "none"])
+        );
+    }
+
+    #[test]
     fn command_run_machine_context_envelope_golden() {
         // macOS-shaped run row: product version distinct from the kernel
         // release in `os_family_release`.
@@ -959,6 +1000,7 @@ mod tests {
         .expect("event serializes");
         let expected = command_run_envelope_json(json!({
             "subcommand": "install",
+            "credential_type": "oauth_access_token",
             "flox_version": "0.0.0-test",
             "os_family": "Mac OS",
             "os_family_release": "24.5.0",
@@ -980,6 +1022,20 @@ mod tests {
         let payload: CommandPayload = serde_json::from_value(expected_payload_json("install"))
             .expect("payload without machine-context keys deserializes");
         assert_eq!(payload, command_payload("install"));
+    }
+
+    #[test]
+    fn command_payload_without_credential_type_defaults_to_none() {
+        let mut json = expected_payload_json("install");
+        json.as_object_mut()
+            .expect("payload object")
+            .remove("credential_type");
+
+        let payload: CommandPayload =
+            serde_json::from_value(json).expect("payload without credential_type deserializes");
+        let mut expected = command_payload("install");
+        expected.credential_type = CredentialType::None;
+        assert_eq!(payload, expected);
     }
 
     #[test]
@@ -1163,6 +1219,7 @@ mod tests {
     /// Template fixture matching [`command_payload`].
     fn shared_metadata_for_payload_tests() -> SharedMetadataTemplate {
         SharedMetadataTemplate {
+            credential_type: CredentialType::OAuthAccessToken,
             flox_version: "0.0.0-test".to_string(),
             os_family: Some("Linux".to_string()),
             os_family_release: Some("6.10.0".to_string()),
@@ -1832,6 +1889,7 @@ mod pipeline_tests {
 
     fn shared_metadata() -> SharedMetadataTemplate {
         SharedMetadataTemplate {
+            credential_type: CredentialType::OAuthAccessToken,
             flox_version: "0.0.0-test".to_string(),
             os_family: Some("Linux".to_string()),
             os_family_release: Some("6.10.0".to_string()),

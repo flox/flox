@@ -728,7 +728,7 @@ mod tests {
     use std::fs;
 
     use flox_config::FLOX_CONFIG_FILE;
-    use flox_events::{EventsBuffer, EventsClient, SharedMetadataTemplate};
+    use flox_events::{CredentialType, EventsBuffer, EventsClient, SharedMetadataTemplate};
     use flox_rust_sdk::flox::FloxhubToken;
     use flox_rust_sdk::flox::test_helpers::{create_test_token, flox_instance};
     use floxhub_client::test_helpers::{FAKE_EXPIRED_TOKEN, FAKE_TOKEN_WITH_SUB};
@@ -774,6 +774,7 @@ mod tests {
             Uuid::new_v4(),
             Some("previous-subject".to_string()),
             SharedMetadataTemplate {
+                credential_type: CredentialType::None,
                 flox_version: "0.0.0-test".to_string(),
                 os_family: None,
                 os_family_release: None,

@@ -18,6 +18,8 @@ pub use invocation_sources::INVOCATION_SOURCES;
 
 /// HTTP header name for the device UUID telemetry header.
 pub const HEADER_DEVICE_UUID: &str = "flox-device-uuid";
+/// HTTP header name for the CLI invocation UUID telemetry header.
+pub const HEADER_INVOCATION_ID: &str = "flox-invocation-id";
 /// HTTP header name for the invocation source telemetry header.
 pub const HEADER_INVOCATION_SOURCE: &str = "flox-invocation-source";
 

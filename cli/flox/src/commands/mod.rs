@@ -297,8 +297,11 @@ impl FloxArgs {
             )
             .await;
             if update_prompted
-                && let Some(events_client) =
-                    build_events_client(&config, resolve_invocation_id(), None)
+                && let Some(events_client) = build_events_client(
+                    &config,
+                    resolve_invocation_id(),
+                    &AuthContext::new_from_token(None),
+                )
                 && let Err(err) = events_client.record_event(EventKind::CliUpdatePrompted {})
             {
                 debug!(error = %err, "Failed to record v2 cli.update_prompted event");
@@ -368,9 +371,9 @@ impl FloxArgs {
         // `resolve_auth_context` is deliberately not behind this gate — it
         // still runs in the hook flow (returning the token, suppressing
         // messages) and gates on the auth mode alone. Consequently, hook-flow
-        // invocations by keyring-storage users emit with `auth_subject`
-        // absent — an accepted gap; a prompt hook must never trigger a
-        // keyring unlock.
+        // invocations by keyring-storage users emit with `auth_subject` absent
+        // and `credential_type` set to `none` — an accepted gap; a prompt hook
+        // must never trigger a keyring unlock.
         let stores = CredentialStores::new(floxhub.base_url(), &config.flox.config_dir);
         let is_auth0 = !matches!(
             config.flox.floxhub_authn_mode,
@@ -391,12 +394,9 @@ impl FloxArgs {
         }
 
         let credential = self.resolve_auth_context(&config);
+        let invocation_id = resolve_invocation_id();
 
-        if let Some(events_client) = build_events_client(
-            &config,
-            resolve_invocation_id(),
-            credential.user_subject().map(String::from),
-        ) {
+        if let Some(events_client) = build_events_client(&config, invocation_id, &credential) {
             EventsHub::global().set_client(events_client);
         }
 
@@ -405,8 +405,8 @@ impl FloxArgs {
         // `activate` before it replaces the process); the hub deduplicates.
         //
         // "Dispatch start" sits after credential resolution so the event
-        // carries `auth_subject` (see the block above). The cost: an
-        // invocation that dies upstream — on the fallible FloxHub-URL
+        // carries `auth_subject` and `credential_type` (see the block above). The
+        // cost: an invocation that dies upstream — on the fallible FloxHub-URL
         // construction, killed while `resolve_into` waits on an OS keyring
         // unlock, or killed during credential resolution (e.g. kerberos
         // ticket I/O) — records neither `cli.command_run` nor the matching
@@ -455,6 +455,7 @@ impl FloxArgs {
             floxhub.api_url_str(),
             credential.clone(),
             metrics_device_uuid,
+            invocation_id,
             on_unauthenticated_resolve,
         )?;
 
