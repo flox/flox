@@ -3099,7 +3099,7 @@ attach_runs_hooks_once() {
   TEARDOWN_FIFO="$PROJECT_DIR/teardown_activate"
   mkfifo "$TEARDOWN_FIFO"
 
-  FLOX_SHELL=bash "$FLOX_BIN" activate -c "echo > activate_started_fifo && echo > \"$TEARDOWN_FIFO\"" 2> output &
+  FLOX_SHELL=bash "$FLOX_BIN" activate -c "echo > activate_started_fifo && echo > \"$TEARDOWN_FIFO\"" 2> output 3>&- &
 
   cat activate_started_fifo
   run cat output
@@ -3160,7 +3160,7 @@ attach_runs_profile_twice() {
   mkfifo "$TEARDOWN_FIFO"
 
   # Our tcsh quoting appears to be broken so don't quote $TEARDOWN_FIFO
-  FLOX_SHELL="$shell" "$FLOX_BIN" activate -c "bash -c \"echo > activate_started_fifo && echo > $TEARDOWN_FIFO\"" >> output 2>&1 &
+  FLOX_SHELL="$shell" "$FLOX_BIN" activate -c "bash -c \"echo > activate_started_fifo && echo > $TEARDOWN_FIFO\"" >> output 2>&1 3>&- &
 
   cat activate_started_fifo
   run cat output
@@ -3288,7 +3288,7 @@ EOF
   mkfifo "$TEARDOWN_FIFO"
 
   # Our tcsh quoting appears to be broken so don't quote $TEARDOWN_FIFO
-  FLOX_SHELL="$shell" "$FLOX_BIN" activate -c "bash -c \"echo > activate_started_fifo && echo > $TEARDOWN_FIFO\"" >> output 2>&1 &
+  FLOX_SHELL="$shell" "$FLOX_BIN" activate -c "bash -c \"echo > activate_started_fifo && echo > $TEARDOWN_FIFO\"" >> output 2>&1 3>&- &
 
   cat activate_started_fifo
 
@@ -3404,7 +3404,7 @@ attach_sets_profile_vars() {
   mkfifo "$TEARDOWN_FIFO"
 
   # Our tcsh quoting appears to be broken so don't quote $TEARDOWN_FIFO
-  FLOX_SHELL="$shell" "$FLOX_BIN" activate -c "bash -c \"echo > activate_started_fifo && echo > $TEARDOWN_FIFO\"" &
+  FLOX_SHELL="$shell" "$FLOX_BIN" activate -c "bash -c \"echo > activate_started_fifo && echo > $TEARDOWN_FIFO\"" 3>&- &
 
   cat activate_started_fifo
 
@@ -3591,10 +3591,10 @@ EOF
   # Start a first_activation which sets FOO=first_activation
   case "$mode" in
     command)
-      FLOX_SHELL=bash injected="first_activation" "$FLOX_BIN" activate -c "echo \$FOO > output && echo > activate_started_fifo && echo > $TEARDOWN_FIFO" &
+      FLOX_SHELL=bash injected="first_activation" "$FLOX_BIN" activate -c "echo \$FOO > output && echo > activate_started_fifo && echo > $TEARDOWN_FIFO" 3>&- &
       ;;
     in-place)
-      TEARDOWN_FIFO="$TEARDOWN_FIFO" injected="first_activation" bash -c 'eval "$("$FLOX_BIN" activate)" && echo $FOO > output && echo > activate_started_fifo && echo > "$TEARDOWN_FIFO"' &
+      TEARDOWN_FIFO="$TEARDOWN_FIFO" injected="first_activation" bash -c 'eval "$("$FLOX_BIN" activate)" && echo $FOO > output && echo > activate_started_fifo && echo > "$TEARDOWN_FIFO"' 3>&- &
       ;;
   esac
 
@@ -3839,7 +3839,7 @@ PIDs of the running activations: ${ACTIVATION_PID}"
       refute_output --regexp ".*$PROJECT_DIR/emacs/.flox/run/$NIX_SYSTEM.emacs-dev/share/man.*"
 
       # vim gets added to MANPATH
-      _man=$_man FLOX_SHELL=bash "$FLOX_BIN" activate -d vim -c "$_man --path vim > output; echo > activate_started_fifo && echo > \"$TEARDOWN_FIFO\"" &
+      _man=$_man FLOX_SHELL=bash "$FLOX_BIN" activate -d vim -c "$_man --path vim > output; echo > activate_started_fifo && echo > \"$TEARDOWN_FIFO\"" 3>&- &
       cat activate_started_fifo
       run cat output
       assert_success
@@ -3864,7 +3864,7 @@ PIDs of the running activations: ${ACTIVATION_PID}"
       refute_output --regexp ".*$PROJECT_DIR/emacs/.flox/run/$NIX_SYSTEM.emacs-dev/share/man.*"
 
       # vim gets added to MANPATH
-      FLOX_SHELL=bash "$FLOX_BIN" activate -d vim -c "/usr/bin/manpath > output && echo > activate_started_fifo && echo > \"$TEARDOWN_FIFO\"" &
+      FLOX_SHELL=bash "$FLOX_BIN" activate -d vim -c "/usr/bin/manpath > output && echo > activate_started_fifo && echo > \"$TEARDOWN_FIFO\"" 3>&- &
       cat activate_started_fifo
       run cat output
       assert_success
@@ -3912,7 +3912,7 @@ PIDs of the running activations: ${ACTIVATION_PID}"
   run command -v emacs
   refute_output "$(realpath "$PROJECT_DIR")/emacs/.flox/run/$NIX_SYSTEM.emacs-dev/bin/emacs"
 
-  FLOX_SHELL=bash "$FLOX_BIN" activate -d vim -c "command -v vim > output; echo > activate_started_fifo && echo > \"$TEARDOWN_FIFO\"" &
+  FLOX_SHELL=bash "$FLOX_BIN" activate -d vim -c "command -v vim > output; echo > activate_started_fifo && echo > \"$TEARDOWN_FIFO\"" 3>&- &
   cat activate_started_fifo
 
   run cat output
@@ -3975,7 +3975,7 @@ EOF
   # Start `shared` inside an activation of `first` and hold it open so a
   # later activation of `shared` attaches to this start.
   FLOX_SHELL=bash "$FLOX_BIN" activate -d first -c \
-    "\"$FLOX_BIN\" activate -d shared -c 'echo > activate_started_fifo && echo > \"$TEARDOWN_FIFO\"'" &
+    "\"$FLOX_BIN\" activate -d shared -c 'echo > activate_started_fifo && echo > \"$TEARDOWN_FIFO\"'" 3>&- &
   cat activate_started_fifo
 
   # Attach `shared` inside an activation of `second`, probing the attach in
@@ -4050,7 +4050,7 @@ EOF
   # start open so shell #2 attaches to it.
   export FOO=defined
   FLOX_SHELL=bash "$FLOX_BIN" activate -d proj -c \
-    "echo > activate_started_fifo && echo > \"$TEARDOWN_FIFO\"" &
+    "echo > activate_started_fifo && echo > \"$TEARDOWN_FIFO\"" 3>&- &
   unset FOO
   cat activate_started_fifo
 
@@ -4109,7 +4109,7 @@ EOF
   # intent. Hold the start open so later activations attach to it.
   export HOOKVAR=hookval
   FLOX_SHELL=bash "$FLOX_BIN" activate -d proj -c \
-    "echo > activate_started_fifo && echo > \"$TEARDOWN_FIFO\"" &
+    "echo > activate_started_fifo && echo > \"$TEARDOWN_FIFO\"" 3>&- &
   unset HOOKVAR
   cat activate_started_fifo
 
@@ -4173,7 +4173,7 @@ EOF
 
   # Shell #1 starts the activation and holds it open.
   FLOX_SHELL=bash "$FLOX_BIN" activate -d proj -c \
-    "echo > activate_started_fifo && echo > \"$TEARDOWN_FIFO\"" &
+    "echo > activate_started_fifo && echo > \"$TEARDOWN_FIFO\"" 3>&- &
   cat activate_started_fifo
 
   # Shell #2 attaches; the start-count guard proves it attached rather
@@ -4685,8 +4685,8 @@ Setting PATH from ${rc_file}"
   #       instead of JSON mock files.
   env -u _FLOX_USE_CATALOG_MOCK -u FLOX_INTERPRETER -u FLOX_ACTIVATIONS_BIN \
     setsid ./result/bin/flox activate -c \
-    "echo > activate_started_fifo && echo > $TEARDOWN_FIFO" > output 2>&1 &
-  timeout 15s tail -f output &
+    "echo > activate_started_fifo && echo > $TEARDOWN_FIFO" > output 2>&1 3>&- &
+  timeout 15s tail -f output 3>&- &
 
   # Longer timeout to allow for `nix run` locking.
   background_pid="$!"

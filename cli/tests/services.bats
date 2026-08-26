@@ -812,7 +812,7 @@ EOF
     read < ./resume-one.pipe
     read < ./resume-mostly-deterministic.pipe
 
-    "$FLOX_BIN" services logs --follow > logs &
+    "$FLOX_BIN" services logs --follow > logs 3>&- &
     logs_pid="$!"
 
     timeout 5s bash -c '
@@ -851,7 +851,7 @@ EOF
     read < ./resume-one.pipe
     read < ./resume-mostly-deterministic.pipe
 
-    "$FLOX_BIN" services logs --follow > logs &
+    "$FLOX_BIN" services logs --follow > logs 3>&- &
     logs_pid="$!"
 
     timeout 5s bash -c '
@@ -920,7 +920,7 @@ EOF
   mkfifo activate_started_fifo
   TEARDOWN_FIFO="$PROJECT_DIR/finished"
   mkfifo "$TEARDOWN_FIFO"
-  "$FLOX_BIN" activate -s -- bash -c "echo > activate_started_fifo && echo > $TEARDOWN_FIFO" &
+  "$FLOX_BIN" activate -s -- bash -c "echo > activate_started_fifo && echo > $TEARDOWN_FIFO" 3>&- &
 
   # Make sure the first `process-compose` gets up and running
   cat activate_started_fifo
@@ -1098,7 +1098,7 @@ EOF
     echo > started
     echo > finished
 EOF
-  ) &
+  ) 3>&- &
   timeout 8 cat started
 
   run "$FLOX_BIN" activate --start-services -r "${OWNER}/${PROJECT_NAME}" -- true
@@ -1118,7 +1118,7 @@ EOF
     echo > started
     timeout 8 cat finished
 EOF
-  ) &
+  ) 3>&- &
   timeout 8 cat started
 
   run "$FLOX_BIN" services status -r "${OWNER}/${PROJECT_NAME}"
@@ -1475,7 +1475,7 @@ EOF
   # Start a background activation with an initial value of FOO.
   TEARDOWN_FIFO="$PROJECT_DIR/finished"
   mkfifo "$TEARDOWN_FIFO"
-  "$FLOX_BIN" activate -s -c "echo > \"$TEARDOWN_FIFO\"" &
+  "$FLOX_BIN" activate -s -c "echo > \"$TEARDOWN_FIFO\"" 3>&- &
 
   # The initial value of FOO should be written.
   wait_for_file_content out foo_one
@@ -1699,7 +1699,7 @@ EOF
   # Will get cat'ed in teardown
   TEARDOWN_FIFO="$PROJECT_DIR/finished_1"
   mkfifo "$TEARDOWN_FIFO"
-  "$FLOX_BIN" activate --start-services -- bash -c "echo > started_1 && echo > $TEARDOWN_FIFO" &
+  "$FLOX_BIN" activate --start-services -- bash -c "echo > started_1 && echo > $TEARDOWN_FIFO" 3>&- &
   timeout 10 cat started_1
 
   # Check that services and executive are both running
@@ -1725,7 +1725,7 @@ EOF
   mkfifo started_2
   mkfifo finished_2
 
-  "$FLOX_BIN" activate --start-services -- bash -c "echo > started_2 && echo > finished_2" 2>output &
+  "$FLOX_BIN" activate --start-services -- bash -c "echo > started_2 && echo > finished_2" 2>output 3>&- &
 
   timeout 10 cat started_2
   # Swap out teardown fifo and immediately teardown first activation
@@ -1888,7 +1888,7 @@ EOF
     echo > started
     echo > "$TEARDOWN_FIFO"
 EOF
-  ) &
+  ) 3>&- &
   timeout 10 cat started
 
   "${TESTS_DIR}"/services/wait_for_service_status.sh initial:Completed
