@@ -314,14 +314,20 @@ wait_for_activations() {
 
       echo "Activation state dir: $activation_state_dir" >&3
 
-      echo "state.json"
-      cat "${activation_state_dir}"/state.json >&3
+      # Cleanup finishing between the check above and here means the wait was
+      # only just too short, which is worth knowing before reading any further.
+      if [ ! -d "$activation_state_dir" ]; then
+        echo "(cleaned up while this output was being collected)" >&3
+      fi
+
+      echo "state.json:" >&3
+      cat "${activation_state_dir}"/state.json >&3 2>&3 || true
 
       echo "Executive logs:" >&3
-      cat "${project_dir}"/.flox/log/executive.* >&3
+      cat "${project_dir}"/.flox/log/executive.* >&3 2>&3 || true
 
       echo "Bats processes:" >&3
-      pstree -ws "$BATS_RUN_TMPDIR" >&3
+      pstree -ws "$BATS_RUN_TMPDIR" >&3 2>&3 || true
 
       return 1
     fi
