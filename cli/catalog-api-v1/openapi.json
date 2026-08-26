@@ -108,7 +108,7 @@
           "catalog"
         ],
         "summary": "Find packages that provide a command",
-        "description": "Reverse lookup: which package(s) provide the given command name.\n\nRequired Query Parameters:\n- **system**: The system architecture to search for (e.g., x86_64-linux)\n- **name**: The command name to look up (e.g., readelf, rg, gcc-13)\n\nReturns:\n- **ByCommandResult**: Providers of the command and total count\n\nNote: first pass returns a hardcoded mock so the OpenAPI contract can\nfreeze before the command_index table lands. No database query yet.",
+        "description": "Reverse lookup: which package(s) provide the given command name.\n\nRequired Query Parameters:\n- **system**: The system architecture to search for (e.g., x86_64-linux)\n- **name**: The command name to look up (e.g., readelf, rg, gcc-13)\n\nOptional Query Parameters:\n- **page**: Page number for pagination (default: 0)\n- **pageSize**: Page size for pagination (default: 10)\n\nReturns:\n- **ByCommandResult**: Providers of the command and total count",
         "operationId": "by_command_api_v1_catalog_by_command_get",
         "security": [
           {
@@ -136,6 +136,26 @@
               "minLength": 2,
               "maxLength": 200,
               "title": "Name"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 0,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 10,
+              "title": "Pagesize"
             }
           }
         ],
@@ -3071,7 +3091,8 @@
           "unfree",
           "insecure",
           "broken",
-          "version_not_found"
+          "version_not_found",
+          "archived"
         ],
         "title": "MessageType"
       },

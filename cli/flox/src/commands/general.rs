@@ -174,6 +174,27 @@ pub(super) fn update_config_with_query<V: Serialize>(
     Ok(())
 }
 
+/// Like [`update_config_with_query`], but removes the key and reports whether
+/// there was anything to remove.
+///
+/// Absence is `Ok(false)`, not an error. [`Config::write_to`]'s removal branch
+/// raises `ReadWriteError::NotAUserValue` exactly when the key is missing —
+/// that is the only place in `flox-config` which constructs the variant — so
+/// mapping it to `false` cannot mask an unrelated failure. Genuine failures,
+/// including an unreadable or malformed config, still propagate.
+pub(super) fn remove_config_key_with_query(config_dir: &Path, query: &[Key]) -> Result<bool> {
+    let config_file_path = config_dir.join(FLOX_CONFIG_FILE);
+
+    match Config::write_to_in(config_file_path, query, None::<()>) {
+        Ok(()) => Ok(true),
+        Err(ReadWriteError::NotAUserValue(_)) => Ok(false),
+        Err(err @ ReadWriteError::ReadConfig(_)) => Err(err).context(
+            "Could not read current config file.\nPlease verify the format or reset using `flox config --reset`",
+        ),
+        Err(err) => Err(err.into()),
+    }
+}
+
 /// Parse a TOML key from a string, quoting any segments where necessary, so
 /// that a user doesn't need to understand the intricacies of TOML.
 fn parse_toml_key(key: &str) -> Result<Vec<Key>, TomlError> {

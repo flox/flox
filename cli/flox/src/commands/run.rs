@@ -23,6 +23,7 @@ use std::str::FromStr;
 
 use anyhow::Result;
 use bpaf::Bpaf;
+use flox_config::Config;
 use flox_manifest::raw::{CatalogPackage, RawManifestError};
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::providers::buildenv::{
@@ -34,7 +35,9 @@ use flox_rust_sdk::providers::buildenv::{
 };
 use flox_rust_sdk::providers::nix_auth::{AuthProvider, NixAuth};
 use floxhub_client::{
+    ByCommandError,
     CatalogClientTrait,
+    CommandProvider,
     MessageLevel,
     PackageDescriptor,
     PackageGroup,
@@ -43,9 +46,20 @@ use floxhub_client::{
 };
 use indoc::indoc;
 use thiserror::Error;
+use toml_edit::Key;
 use tracing::{debug, info_span};
 
+use crate::commands::general::{remove_config_key_with_query, update_config_with_query};
 use crate::subcommand_metric;
+use crate::utils::message;
+
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
+/// Maximum number of candidates shown when the disambiguation prompt lists
+/// packages. Beyond this count a "(N shown, M total)" line is appended.
+const DISAMBIGUATION_LIMIT: usize = 10;
 
 // ---------------------------------------------------------------------------
 // Error types
@@ -78,6 +92,24 @@ pub enum RunError {
     /// The value passed to `-p`/`--package` was not valid UTF-8.
     #[error("Package specs must be valid UTF-8.")]
     PackageSpecNotUtf8,
+
+    /// `--reselect` appeared without a value.
+    #[error(
+        "Missing value for '--reselect'.\n\
+         Use '--reselect <COMMAND>' to clear the saved package preference for a command."
+    )]
+    MissingReselectValue,
+
+    /// The value passed to `--reselect` was not valid UTF-8.
+    #[error("Command names must be valid UTF-8.")]
+    CommandNameNotUtf8,
+
+    /// `--reselect` was combined with a command to run.
+    #[error(
+        "'--reselect' cannot be combined with a command to run.\n\
+         Run 'flox run --reselect <COMMAND>' on its own to clear a saved package preference."
+    )]
+    ReselectWithCommand,
 
     /// `CatalogPackage::from_str` failed.
     #[error(
@@ -151,6 +183,54 @@ pub enum RunError {
     /// The final `exec` syscall returned (rare — permissions or missing binary).
     #[error("Failed to run '{0}'.")]
     ExecFailed(String, #[source] std::io::Error),
+
+    /// The catalog lookup timed out or returned a transport error.
+    #[error(
+        "Could not reach the Flox Catalog to look up '{command}'.\n\
+         Use 'flox run --package <PACKAGE> {command}' to run it directly."
+    )]
+    LookupUnavailable { command: String },
+
+    /// The catalog is indexed but no package provides this command.
+    #[error(
+        "No package provides the command '{command}'.\n\
+         Use 'flox run --package <PACKAGE> {command}' if you know the package."
+    )]
+    NoCommandProvider { command: String },
+
+    /// The command is not in the current command index (listing not yet scraped).
+    #[error(
+        "The command '{command}' has not been indexed yet.\n\
+         Use 'flox run --package <PACKAGE> {command}' to run it directly."
+    )]
+    CommandNotIndexed { command: String },
+
+    /// The command name fails catalog validation (e.g. too short or too long)
+    /// so it cannot be looked up. This is a client-side check — the catalog
+    /// was never contacted.
+    #[error(
+        "'{command}' is not a valid catalog command name.\n\
+         Use 'flox run --package <PACKAGE> {command}' to run it directly."
+    )]
+    InvalidCommandName { command: String },
+
+    /// Multiple packages provide the command and the session is non-interactive.
+    #[error("{}", render_ambiguous(command, providers, *total))]
+    AmbiguousCommandNonInteractive {
+        command: String,
+        providers: Vec<CommandProvider>,
+        /// Catalog-reported total count of providers, used to render the
+        /// "(N shown, M total)" trailer when the list is truncated.
+        total: u64,
+    },
+
+    /// Writing the user's package preference to the config file failed.
+    ///
+    /// Not yet used — T7 (DEV-185) will call this when persisting a
+    /// disambiguation selection at the interactive prompt.
+    #[allow(dead_code)]
+    #[error("Failed to save the package preference for '{0}'.")]
+    PreferenceWriteFailed(String, #[source] anyhow::Error),
 }
 
 // ---------------------------------------------------------------------------
@@ -162,6 +242,9 @@ pub enum RunError {
 pub enum ParsedArgs {
     /// `-h`/`--help` was seen before the first positional or `--`.
     Help,
+    /// `--reselect <COMMAND>` was seen; clear that command's saved preference
+    /// and run nothing.
+    Reselect(String),
     /// A fully-specified run invocation.
     Run(RunArgs),
 }
@@ -169,8 +252,11 @@ pub enum ParsedArgs {
 /// Validated arguments produced by the POSIX state machine.
 #[derive(Debug, Clone, PartialEq)]
 pub struct RunArgs {
-    /// Package spec from `-p`/`--package` (required, plain form only).
-    pub package: String,
+    /// Package spec from `-p`/`--package` (plain form only).
+    ///
+    /// `None` when no `-p` was given. Parsing accepts that; [`exec_run`]
+    /// rejects it, because it is the only consumer that needs a package.
+    pub package: Option<String>,
     /// Command name (first positional argument).
     pub executable: OsString,
     /// Remaining arguments forwarded verbatim to the command.
@@ -194,7 +280,7 @@ pub struct Run {
 impl Run {
     /// Entry point: parse args with POSIX stop-at-first-positional semantics,
     /// then resolve, download, and exec.
-    pub async fn handle(self, flox: Flox) -> Result<()> {
+    pub async fn handle(self, config: Config, flox: Flox) -> Result<()> {
         subcommand_metric!("run");
 
         // Re-read raw OS args. bpaf has already consumed the first `--`, so
@@ -216,9 +302,91 @@ impl Run {
                 print_help();
                 Ok(())
             },
-            ParsedArgs::Run(run_args) => exec_run(run_args, &flox).await,
+            ParsedArgs::Reselect(command) => {
+                subcommand_metric!("run::reselect");
+                let cleared = clear_run_preference(&config.flox.config_dir, &command)?;
+                if cleared {
+                    message::updated(format!(
+                        "Cleared the saved package preference for '{command}'."
+                    ));
+                } else {
+                    message::updated(format!("No saved package preference for '{command}'."));
+                }
+                Ok(())
+            },
+            ParsedArgs::Run(run_args) => {
+                let pkg_spec = resolve_command(&run_args, &config, &flox)
+                    .await
+                    .map_err(anyhow::Error::from)?;
+                let resolved = RunArgs {
+                    package: Some(pkg_spec),
+                    ..run_args
+                };
+                exec_run(resolved, &flox).await
+            },
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Ambiguous-command rendering
+// ---------------------------------------------------------------------------
+
+/// Format the list of candidates for `AmbiguousCommandNonInteractive`.
+///
+/// Renders up to `DISAMBIGUATION_LIMIT` entries and appends a count line when
+/// `total` exceeds the limit. `total` is passed separately so the caller can
+/// supply either the actual catalog total or `providers.len()`.
+fn render_ambiguous(command: &str, providers: &[CommandProvider], total: u64) -> String {
+    use std::fmt::Write as _;
+    let mut s = format!("Multiple packages provide '{command}'.\n");
+    for p in providers.iter().take(DISAMBIGUATION_LIMIT) {
+        let _ = writeln!(s, "  {:<12} ({})", p.pname, p.attr_path);
+    }
+    if total > DISAMBIGUATION_LIMIT as u64 {
+        let _ = writeln!(s, "  ... ({DISAMBIGUATION_LIMIT} shown, {total} total)");
+    }
+    let _ = write!(
+        s,
+        "Use 'flox run --package <PACKAGE> {command}' to choose one."
+    );
+    s
+}
+
+// ---------------------------------------------------------------------------
+// run_preferences config helpers
+// ---------------------------------------------------------------------------
+
+/// Build the `run_preferences.<command>` key path.
+///
+/// Both segments are `Key::new`, never `Key::parse`: a command name can
+/// contain `.`, and dotted-key parsing would shatter it into nested tables
+/// instead of writing one literal key. `flox-config`'s
+/// `writing_auto_activate_preference_for_path_with_dot` in `src/write.rs` is
+/// the regression test for the equivalent hazard on the auto-activation path.
+fn run_preference_query(command: &str) -> [Key; 2] {
+    [Key::new("run_preferences"), Key::new(command)]
+}
+
+/// Record the package the user chose to provide `command`.
+///
+/// Only the interactive disambiguation prompt calls this; see
+/// [`flox_config::FloxConfig::run_preferences`]. That prompt does not exist
+/// yet, so nothing but the tests calls this today — the writer ships with the
+/// config field so the two stay in step.
+#[allow(dead_code)]
+pub fn write_run_preference(config_dir: &Path, command: &str, attr_path: &str) -> Result<()> {
+    update_config_with_query(config_dir, &run_preference_query(command), Some(attr_path))?;
+    Ok(())
+}
+
+/// Forget the package the user chose to provide `command`.
+///
+/// Returns whether an entry was actually removed. Clearing an absent
+/// preference is a success, not an error: the caller asked to be prompted
+/// again next time, and that is already true.
+pub fn clear_run_preference(config_dir: &Path, command: &str) -> Result<bool> {
+    remove_config_key_with_query(config_dir, &run_preference_query(command))
 }
 
 // ---------------------------------------------------------------------------
@@ -233,14 +401,17 @@ impl Run {
 /// - `-p` / `--package` (space form only) → consume next arg as package spec
 /// - `-p=…` / `--package=…` / bundled forms → `UnknownFlag`
 /// - `--` → force positional mode; next arg is the command even if it starts with `-`
+/// - `--reselect` (space form only) → consume next arg as a command name
 /// - any other `"-…"` → `UnknownFlag`
 ///
 /// After the first positional (or after `--`), everything is forwarded
 /// verbatim including any literal `--`.
 ///
-/// After the loop: missing `-p` is reported before missing command.
+/// A missing `-p` is not an error here — [`RunArgs::package`] is optional and
+/// [`exec_run`] enforces it. Only a missing command is rejected.
 pub fn parse_run_args(args: Vec<OsString>) -> Result<ParsedArgs, RunError> {
     let mut package: Option<String> = None;
+    let mut reselect: Option<String> = None;
     let mut executable: Option<OsString> = None;
     let mut passthrough: Vec<OsString> = Vec::new();
 
@@ -274,6 +445,13 @@ pub fn parse_run_args(args: Vec<OsString>) -> Result<ParsedArgs, RunError> {
                     .map_err(|_| RunError::PackageSpecNotUtf8)?;
                 package = Some(value);
             },
+            Some("--reselect") => {
+                let value_os = iter.next().ok_or(RunError::MissingReselectValue)?;
+                let value = value_os
+                    .into_string()
+                    .map_err(|_| RunError::CommandNameNotUtf8)?;
+                reselect = Some(value);
+            },
             Some(s) if s.starts_with('-') => {
                 return Err(RunError::UnknownFlag(s.to_owned()));
             },
@@ -287,8 +465,15 @@ pub fn parse_run_args(args: Vec<OsString>) -> Result<ParsedArgs, RunError> {
         }
     }
 
-    // Report missing package before missing command.
-    let package = package.ok_or(RunError::MissingPackage)?;
+    // `--reselect` is a one-shot config edit, so it cannot also name a command
+    // to run.
+    if let Some(command) = reselect {
+        if executable.is_some() {
+            return Err(RunError::ReselectWithCommand);
+        }
+        return Ok(ParsedArgs::Reselect(command));
+    }
+
     let executable = executable.ok_or(RunError::NoExecutable)?;
 
     Ok(ParsedArgs::Run(RunArgs {
@@ -312,6 +497,100 @@ pub fn validate_plain_package(pkg: &CatalogPackage, raw: &str) -> Result<(), Run
         return Err(RunError::UnsupportedPackageSpec(raw.to_string()));
     }
     Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Command resolver
+// ---------------------------------------------------------------------------
+
+/// Resolve a bare command name to a package attr-path, or pass a `-p` spec
+/// through unchanged.
+///
+/// Decision funnel (6 branches; branch 3 has two sub-paths):
+///
+/// 1. `-p` supplied → return it directly, no catalog call.
+/// 2. Saved preference in config → return silently.
+/// 3. `by_command` lookup.
+///    - `listing_known=false`, empty providers → `CommandNotIndexed`.
+///    - `listing_known=true`, empty providers → `NoCommandProvider`.
+/// 4. Single provider → return its `attr_path` silently.
+/// 5. Exactly one `exact_name_match=true` → return its `attr_path` silently.
+/// 6. Multiple candidates → `AmbiguousCommandNonInteractive` for now.
+///    T7 will split into a TTY prompt and a non-interactive fail path.
+async fn resolve_command(
+    run_args: &RunArgs,
+    config: &Config,
+    flox: &Flox,
+) -> Result<String, RunError> {
+    // Branch 1: -p supplied — bypass resolver entirely.
+    if let Some(pkg) = &run_args.package {
+        return Ok(pkg.clone());
+    }
+
+    let command = run_args.executable.to_string_lossy().into_owned();
+
+    // Branch 2: saved preference — return silently, no write.
+    if let Some(attr_path) = config.flox.run_preferences.get(&command) {
+        debug!(branch = "saved", %command, "resolve_command");
+        return Ok(attr_path.clone());
+    }
+
+    // Branch 3: call by_command; networking timeouts are handled by the client.
+    // system.try_into() only fails for unrecognized system strings, which
+    // cannot occur in practice — Flox validates the system at startup.
+    let system: PackageSystem = flox
+        .system
+        .clone()
+        .try_into()
+        .expect("flox.system is always a valid PackageSystem");
+
+    let result = flox
+        .floxhub_client
+        .by_command(&command, system)
+        .await
+        .map_err(|e| classify_by_command_error(e, command.clone()))?;
+
+    // Branches 3a/3b: empty provider list — tristate on listing_known.
+    if result.providers.is_empty() {
+        return Err(if result.listing_known {
+            RunError::NoCommandProvider { command }
+        } else {
+            RunError::CommandNotIndexed { command }
+        });
+    }
+
+    // Branch 4: single provider — silent, no write.
+    if result.providers.len() == 1 {
+        debug!(branch = "single", %command, "resolve_command");
+        return Ok(result.providers[0].attr_path.clone());
+    }
+
+    // Branch 5: exactly one exact_name_match — silent, no write.
+    let exact: Vec<_> = result
+        .providers
+        .iter()
+        .filter(|p| p.exact_name_match)
+        .collect();
+    if exact.len() == 1 {
+        debug!(branch = "exact", %command, "resolve_command");
+        return Ok(exact[0].attr_path.clone());
+    }
+
+    // Branches 6/7: multiple candidates.
+    // T7 will split this into a TTY prompt (branch 6) and the non-interactive
+    // error path (branch 7). For now all multi-candidate cases return the
+    // non-interactive error so the stub compiles and tests can exercise it.
+    debug!(
+        branch = "ambiguous",
+        %command,
+        count = result.providers.len(),
+        "resolve_command"
+    );
+    Err(RunError::AmbiguousCommandNonInteractive {
+        command,
+        providers: result.providers,
+        total: result.total_count as u64,
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -381,7 +660,7 @@ async fn download_custom_catalog_package(
 
 /// Resolve, download, and exec the requested command.
 async fn exec_run(run_args: RunArgs, flox: &Flox) -> Result<()> {
-    let pkg_spec = run_args.package.clone();
+    let pkg_spec = run_args.package.clone().ok_or(RunError::MissingPackage)?;
 
     // 1. Parse the package spec and reject unsupported syntax.
     let catalog_pkg = CatalogPackage::from_str(&pkg_spec)
@@ -626,6 +905,23 @@ async fn exec_run(run_args: RunArgs, flox: &Flox) -> Result<()> {
 // Resolution error classification
 // ---------------------------------------------------------------------------
 
+/// Map a `ByCommandError` to the most accurate `RunError`.
+///
+/// `InvalidCommandName` is a client-side validation error that fires before
+/// any network request — the catalog's `Name` type requires 2–200 characters,
+/// so very short command names (e.g. `w`) cannot be queried at all.
+///
+/// `FloxhubClientError` covers transport failures and server errors.
+fn classify_by_command_error(err: ByCommandError, command: String) -> RunError {
+    match err {
+        ByCommandError::InvalidCommandName(_) => RunError::InvalidCommandName { command },
+        ByCommandError::FloxhubClientError(e) => {
+            debug!(error = ?e, %command, "by_command lookup failed");
+            RunError::LookupUnavailable { command }
+        },
+    }
+}
+
 /// Map a typed `ResolutionMessage` to the appropriate `RunError`.
 fn classify_resolution_message(msg: &ResolutionMessage, pkg_spec: &str, system: &str) -> RunError {
     match msg {
@@ -853,10 +1149,14 @@ pub fn print_help() {
     print!(indoc! {"
         Run a command from a Flox Catalog package
 
-        Usage: flox run -p <PACKAGE> -- <COMMAND> [ARGS...]
+        Usage: flox run [<COMMAND> [ARGS...]]
+               flox run -p <PACKAGE> -- <COMMAND> [ARGS...]
+               flox run --reselect <COMMAND>
 
         Options:
-          -p, --package <PACKAGE>   Package that provides the command (required)
+          -p, --package <PACKAGE>   Package that provides the command (optional;
+                                    looked up from the Flox Catalog when omitted)
+              --reselect <COMMAND>  Forget the saved package preference for a command
           -h, --help                Print this help
 
         Always use '--' to separate flox flags from the command and its arguments.
@@ -864,6 +1164,7 @@ pub fn print_help() {
         reach the command rather than flox.
 
         Examples:
+          flox run readelf                          # resolved from catalog
           flox run -p curl -- curl http://example.com
           flox run -p binutils -- readelf -a /bin/ls
           flox run -p hello -- hello --help
@@ -871,7 +1172,6 @@ pub fn print_help() {
 
         Limitations:
           Version constraints (@) and output selectors (^) are not supported.
-          The -p flag is always required.
 
         Caching:
           Downloaded store paths are registered as GC roots under
@@ -891,6 +1191,8 @@ mod tests {
     use std::ffi::OsString;
     #[cfg(unix)]
     use std::os::unix::ffi::OsStringExt;
+
+    use flox_config::FLOX_CONFIG_FILE;
 
     use super::*;
 
@@ -913,7 +1215,7 @@ mod tests {
         assert_eq!(
             result,
             ParsedArgs::Run(RunArgs {
-                package: "binutils".to_string(),
+                package: Some("binutils".to_string()),
                 executable: os("readelf"),
                 args: os_vec(&["-a", "/bin/ls"]),
             })
@@ -926,7 +1228,7 @@ mod tests {
         assert_eq!(
             result,
             ParsedArgs::Run(RunArgs {
-                package: "binutils".to_string(),
+                package: Some("binutils".to_string()),
                 executable: os("readelf"),
                 args: vec![],
             })
@@ -939,7 +1241,7 @@ mod tests {
         assert_eq!(
             result,
             ParsedArgs::Run(RunArgs {
-                package: "somepkg".to_string(),
+                package: Some("somepkg".to_string()),
                 executable: os("-weirdname"),
                 args: vec![],
             })
@@ -953,7 +1255,7 @@ mod tests {
         assert_eq!(
             result,
             ParsedArgs::Run(RunArgs {
-                package: "x".to_string(),
+                package: Some("x".to_string()),
                 executable: os("cmd"),
                 args: os_vec(&["--", "-z"]),
             })
@@ -961,24 +1263,40 @@ mod tests {
     }
 
     #[test]
-    fn no_args_returns_missing_package_error() {
+    fn no_args_returns_no_executable_error() {
+        // Parsing no longer rejects a missing -p, so the command name is the
+        // only thing left to complain about.
         let result = parse_run_args(vec![]);
-        assert!(matches!(result, Err(RunError::MissingPackage)));
+        assert!(matches!(result, Err(RunError::NoExecutable)));
     }
 
     #[test]
-    fn no_package_flag_returns_missing_package() {
-        // A bare command with no -p/--package must report MissingPackage.
-        let result = parse_run_args(os_vec(&["curl", "http://example.com"]));
-        assert!(matches!(result, Err(RunError::MissingPackage)));
+    fn no_package_flag_parses_with_none_package() {
+        // A bare command with no -p/--package parses; exec_run rejects it.
+        let result = parse_run_args(os_vec(&["curl", "http://example.com"])).unwrap();
+        assert_eq!(
+            result,
+            ParsedArgs::Run(RunArgs {
+                package: None,
+                executable: os("curl"),
+                args: os_vec(&["http://example.com"]),
+            })
+        );
     }
 
     #[test]
     fn posix_order_dependence_curl_minus_p_curl() {
-        // After the first positional `curl`, -p belongs to curl (not flox).
-        // The absence of a flox -p flag should yield MissingPackage.
-        let result = parse_run_args(os_vec(&["curl", "-p", "curl"]));
-        assert!(matches!(result, Err(RunError::MissingPackage)));
+        // After the first positional `curl`, -p belongs to curl (not flox),
+        // so flox is left with no package of its own.
+        let result = parse_run_args(os_vec(&["curl", "-p", "curl"])).unwrap();
+        assert_eq!(
+            result,
+            ParsedArgs::Run(RunArgs {
+                package: None,
+                executable: os("curl"),
+                args: os_vec(&["-p", "curl"]),
+            })
+        );
     }
 
     #[test]
@@ -1031,7 +1349,7 @@ mod tests {
         assert_eq!(
             result,
             ParsedArgs::Run(RunArgs {
-                package: "curl".to_string(),
+                package: Some("curl".to_string()),
                 executable: os("curl"),
                 args: os_vec(&["--help"]),
             })
@@ -1045,7 +1363,7 @@ mod tests {
         assert_eq!(
             result,
             ParsedArgs::Run(RunArgs {
-                package: "hello".to_string(),
+                package: Some("hello".to_string()),
                 executable: os("hello"),
                 args: os_vec(&["--help"]),
             })
@@ -1064,6 +1382,54 @@ mod tests {
         assert!(matches!(result, Err(RunError::MissingPackageValue(_))));
     }
 
+    #[test]
+    fn reselect_parses_to_reselect() {
+        let result = parse_run_args(os_vec(&["--reselect", "vi"])).unwrap();
+        assert_eq!(result, ParsedArgs::Reselect("vi".to_string()));
+    }
+
+    #[test]
+    fn reselect_without_value_rejected() {
+        let result = parse_run_args(os_vec(&["--reselect"]));
+        assert!(matches!(result, Err(RunError::MissingReselectValue)));
+    }
+
+    #[test]
+    fn reselect_with_command_rejected() {
+        let result = parse_run_args(os_vec(&["--reselect", "vi", "vim"]));
+        assert!(matches!(result, Err(RunError::ReselectWithCommand)));
+    }
+
+    #[test]
+    fn reselect_equals_form_rejected() {
+        let result = parse_run_args(os_vec(&["--reselect=vi"]));
+        assert!(matches!(result, Err(RunError::UnknownFlag(_))));
+    }
+
+    #[test]
+    fn reselect_after_command_stays_in_passthrough() {
+        // `flox run vi --reselect foo` — after the first positional,
+        // `--reselect` belongs to the command, not to flox.
+        let result = parse_run_args(os_vec(&["-p", "vim", "vi", "--reselect", "foo"])).unwrap();
+        assert_eq!(
+            result,
+            ParsedArgs::Run(RunArgs {
+                package: Some("vim".to_string()),
+                executable: os("vi"),
+                args: os_vec(&["--reselect", "foo"]),
+            })
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn non_utf8_reselect_value() {
+        let bad = OsString::from_vec(vec![0xff]);
+        let args = vec![os("--reselect"), bad];
+        let result = parse_run_args(args);
+        assert!(matches!(result, Err(RunError::CommandNameNotUtf8)));
+    }
+
     #[cfg(unix)]
     #[test]
     fn non_utf8_package_value() {
@@ -1071,6 +1437,101 @@ mod tests {
         let args = vec![os("-p"), bad, os("cmd")];
         let result = parse_run_args(args);
         assert!(matches!(result, Err(RunError::PackageSpecNotUtf8)));
+    }
+
+    // -----------------------------------------------------------------------
+    // run_preferences config helper tests
+    // -----------------------------------------------------------------------
+
+    fn config_contents(config_dir: &Path) -> String {
+        std::fs::read_to_string(config_dir.join(FLOX_CONFIG_FILE)).unwrap()
+    }
+
+    /// Read back the `[run_preferences]` table.
+    ///
+    /// `FloxConfig` cannot be deserialized from the user config file alone —
+    /// it carries resolved fields like `cache_dir` that only the full config
+    /// assembly supplies — so assert against the TOML directly.
+    fn run_preferences_table(config_dir: &Path) -> toml::Table {
+        let document: toml::Table = toml::from_str(&config_contents(config_dir)).unwrap();
+        document
+            .get("run_preferences")
+            .and_then(|value| value.as_table())
+            .cloned()
+            .unwrap_or_default()
+    }
+
+    #[test]
+    fn write_run_preference_writes_command_as_one_literal_key() {
+        let dir = tempfile::tempdir().unwrap();
+        // A dotted command name must land as a single quoted key rather than
+        // being shattered into `[run_preferences.my]` / `tool`.
+        write_run_preference(dir.path(), "my.tool", "python311Packages.pip").unwrap();
+
+        let contents = config_contents(dir.path());
+        assert!(
+            contents.contains(r#""my.tool" = "python311Packages.pip""#),
+            "expected one literal key, got:\n{contents}"
+        );
+    }
+
+    #[test]
+    fn write_run_preference_round_trips_dotted_attr_path() {
+        let dir = tempfile::tempdir().unwrap();
+        write_run_preference(dir.path(), "pip", "python311Packages.pip").unwrap();
+
+        let expected: toml::Table = toml::from_str(r#"pip = "python311Packages.pip""#).unwrap();
+        assert_eq!(run_preferences_table(dir.path()), expected);
+    }
+
+    #[test]
+    fn clear_run_preference_removes_existing_key() {
+        let dir = tempfile::tempdir().unwrap();
+        write_run_preference(dir.path(), "vi", "vim").unwrap();
+
+        assert!(clear_run_preference(dir.path(), "vi").unwrap());
+
+        // Clearing the last entry leaves an empty `[run_preferences]` table
+        // behind. `auto_activate_environments` behaves the same way; the
+        // contents are what matters.
+        assert_eq!(run_preferences_table(dir.path()), toml::Table::new());
+    }
+
+    #[test]
+    fn clear_run_preference_absent_key_in_existing_table_is_ok_false() {
+        let dir = tempfile::tempdir().unwrap();
+        // `[run_preferences]` exists but holds a different command, so the
+        // parent-segment walk in `write_to` succeeds and only the leaf is
+        // missing.
+        write_run_preference(dir.path(), "vi", "vim").unwrap();
+
+        assert!(!clear_run_preference(dir.path(), "emacs").unwrap());
+    }
+
+    #[test]
+    fn clear_run_preference_absent_table_is_ok_false() {
+        let dir = tempfile::tempdir().unwrap();
+        // No config file at all: `write_to` creates the `[run_preferences]`
+        // table on the way down, then fails to find the leaf. Nothing reaches
+        // disk on that path.
+        assert!(!clear_run_preference(dir.path(), "vi").unwrap());
+        assert!(!dir.path().join(FLOX_CONFIG_FILE).exists());
+    }
+
+    #[test]
+    fn remove_config_key_with_query_propagates_read_failures() {
+        let dir = tempfile::tempdir().unwrap();
+        // A directory where the config file belongs makes the read fail with
+        // something other than NotFound, which must not be flattened into
+        // `Ok(false)`.
+        std::fs::create_dir(dir.path().join(FLOX_CONFIG_FILE)).unwrap();
+
+        let err = clear_run_preference(dir.path(), "vi").unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("Could not read current config file"),
+            "unexpected error: {err}"
+        );
     }
 
     // -----------------------------------------------------------------------
@@ -1294,5 +1755,263 @@ mod tests {
         // When no dirs are passed, the result should equal the current PATH.
         let current = std::env::var_os("PATH").unwrap_or_default();
         assert_eq!(result, current);
+    }
+
+    // -----------------------------------------------------------------------
+    // resolve_command tests
+    // -----------------------------------------------------------------------
+
+    use flox_rust_sdk::flox::test_helpers::flox_instance;
+    use flox_rust_sdk::providers::catalog::test_helpers::{
+        UNIT_TEST_GENERATED,
+        catalog_replay_client,
+    };
+
+    /// Build a minimal Config with an optional saved run preference.
+    fn make_config(
+        run_preferences: std::collections::HashMap<String, String>,
+    ) -> flox_config::Config {
+        flox_config::Config {
+            flox: flox_config::FloxConfig {
+                run_preferences,
+                ..Default::default()
+            },
+            ..Default::default()
+        }
+    }
+
+    // Branch 1: -p supplied — the resolver never contacts the catalog.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn return_package_spec_when_dash_p_supplied() {
+        // No catalog call — client is never exercised here.
+        let (flox, _dir) = flox_instance();
+        let config = make_config(Default::default());
+        let run_args = RunArgs {
+            package: Some("curl".to_string()),
+            executable: OsString::from("curl"),
+            args: vec![],
+        };
+
+        let result = resolve_command(&run_args, &config, &flox).await.unwrap();
+        assert_eq!(result, "curl");
+    }
+
+    // Branch 2: saved preference — the resolver returns it without a network call.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn return_saved_preference_when_present() {
+        let (flox, _dir) = flox_instance();
+        let mut prefs = std::collections::HashMap::new();
+        prefs.insert("vi".to_string(), "vim".to_string());
+        let config = make_config(prefs);
+        let run_args = RunArgs {
+            package: None,
+            executable: OsString::from("vi"),
+            args: vec![],
+        };
+
+        let result = resolve_command(&run_args, &config, &flox).await.unwrap();
+        assert_eq!(result, "vim");
+    }
+
+    // Branch 3 error: by_command returns an HTTP 500 → LookupUnavailable.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn return_lookup_unavailable_on_by_command_error() {
+        let (mut flox, _dir) = flox_instance();
+        flox.floxhub_client =
+            catalog_replay_client(UNIT_TEST_GENERATED.join("resolve_command_lookup_error.yaml"))
+                .await;
+        let config = make_config(Default::default());
+        let run_args = RunArgs {
+            package: None,
+            executable: OsString::from("curl"),
+            args: vec![],
+        };
+
+        let err = resolve_command(&run_args, &config, &flox)
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(err, RunError::LookupUnavailable { .. }),
+            "expected LookupUnavailable, got: {err:?}"
+        );
+    }
+
+    // Branch 3a: listing_known=false, providers=[] → CommandNotIndexed.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn return_command_not_indexed_when_listing_unknown() {
+        let (mut flox, _dir) = flox_instance();
+        flox.floxhub_client =
+            catalog_replay_client(UNIT_TEST_GENERATED.join("resolve_command_not_indexed.yaml"))
+                .await;
+        let config = make_config(Default::default());
+        let run_args = RunArgs {
+            package: None,
+            executable: OsString::from("curl"),
+            args: vec![],
+        };
+
+        let err = resolve_command(&run_args, &config, &flox)
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(err, RunError::CommandNotIndexed { .. }),
+            "expected CommandNotIndexed, got: {err:?}"
+        );
+    }
+
+    // Branch 3b: listing_known=true, providers=[] → NoCommandProvider.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn return_no_command_provider_when_listing_known_empty() {
+        let (mut flox, _dir) = flox_instance();
+        flox.floxhub_client = catalog_replay_client(
+            UNIT_TEST_GENERATED.join("resolve_command_no_provider_known.yaml"),
+        )
+        .await;
+        let config = make_config(Default::default());
+        let run_args = RunArgs {
+            package: None,
+            executable: OsString::from("curl"),
+            args: vec![],
+        };
+
+        let err = resolve_command(&run_args, &config, &flox)
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(err, RunError::NoCommandProvider { .. }),
+            "expected NoCommandProvider, got: {err:?}"
+        );
+    }
+
+    // Branch 4: single provider → return its attr_path silently.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn return_attr_path_for_single_provider() {
+        let (mut flox, _dir) = flox_instance();
+        flox.floxhub_client =
+            catalog_replay_client(UNIT_TEST_GENERATED.join("resolve_command_single_provider.yaml"))
+                .await;
+        let config = make_config(Default::default());
+        let run_args = RunArgs {
+            package: None,
+            executable: OsString::from("curl"),
+            args: vec![],
+        };
+
+        let result = resolve_command(&run_args, &config, &flox).await.unwrap();
+        assert_eq!(result, "curlFull");
+    }
+
+    // Branch 5: two providers, one exact_name_match=true → return exact match.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn return_exact_match_when_one_exact_name_match() {
+        let (mut flox, _dir) = flox_instance();
+        flox.floxhub_client =
+            catalog_replay_client(UNIT_TEST_GENERATED.join("resolve_command_exact_match.yaml"))
+                .await;
+        let config = make_config(Default::default());
+        let run_args = RunArgs {
+            package: None,
+            executable: OsString::from("curl"),
+            args: vec![],
+        };
+
+        let result = resolve_command(&run_args, &config, &flox).await.unwrap();
+        assert_eq!(result, "curlFull");
+    }
+
+    // Multiple exact_name_match=true → ambiguous (branch 6/7 stub).
+    #[tokio::test(flavor = "multi_thread")]
+    async fn return_ambiguous_when_two_exact_name_matches() {
+        let (mut flox, _dir) = flox_instance();
+        flox.floxhub_client = catalog_replay_client(
+            UNIT_TEST_GENERATED.join("resolve_command_ambiguous_two_exact.yaml"),
+        )
+        .await;
+        let config = make_config(Default::default());
+        let run_args = RunArgs {
+            package: None,
+            executable: OsString::from("curl"),
+            args: vec![],
+        };
+
+        let err = resolve_command(&run_args, &config, &flox)
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(err, RunError::AmbiguousCommandNonInteractive { .. }),
+            "expected AmbiguousCommandNonInteractive, got: {err:?}"
+        );
+    }
+
+    // Multiple providers, none exact → ambiguous.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn return_ambiguous_when_multiple_no_exact() {
+        let (mut flox, _dir) = flox_instance();
+        flox.floxhub_client = catalog_replay_client(
+            UNIT_TEST_GENERATED.join("resolve_command_ambiguous_no_exact.yaml"),
+        )
+        .await;
+        let config = make_config(Default::default());
+        let run_args = RunArgs {
+            package: None,
+            executable: OsString::from("curl"),
+            args: vec![],
+        };
+
+        let err = resolve_command(&run_args, &config, &flox)
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(err, RunError::AmbiguousCommandNonInteractive { .. }),
+            "expected AmbiguousCommandNonInteractive, got: {err:?}"
+        );
+    }
+
+    // The NoCommandProvider error message must not suggest 'flox search' because
+    // command-index lookup and package search are independent catalogs.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn no_command_provider_message_does_not_mention_flox_search() {
+        let (mut flox, _dir) = flox_instance();
+        flox.floxhub_client = catalog_replay_client(
+            UNIT_TEST_GENERATED.join("resolve_command_no_provider_known.yaml"),
+        )
+        .await;
+        let config = make_config(Default::default());
+        let run_args = RunArgs {
+            package: None,
+            executable: OsString::from("curl"),
+            args: vec![],
+        };
+
+        let err = resolve_command(&run_args, &config, &flox)
+            .await
+            .unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            !msg.contains("flox search"),
+            "NoCommandProvider message must not suggest 'flox search': {msg}"
+        );
+    }
+
+    // A single-character command like "w" fails the catalog's Name validation
+    // (minimum 2 chars) before any network request. resolve_command should
+    // surface InvalidCommandName, not LookupUnavailable or CommandNotIndexed.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn single_char_command_gives_invalid_name_error() {
+        let (flox, _dir) = flox_instance();
+        let config = make_config(Default::default());
+        let run_args = RunArgs {
+            package: None,
+            executable: OsString::from("w"),
+            args: vec![],
+        };
+
+        let err = resolve_command(&run_args, &config, &flox)
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(err, RunError::InvalidCommandName { .. }),
+            "expected InvalidCommandName for single-char command, got: {err:?}"
+        );
     }
 }
