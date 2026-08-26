@@ -506,11 +506,11 @@ pub fn validate_plain_package(pkg: &CatalogPackage, raw: &str) -> Result<(), Run
 /// Resolve a bare command name to a package attr-path, or pass a `-p` spec
 /// through unchanged.
 ///
-/// Implements a 7-branch funnel:
+/// Decision funnel (6 branches; branch 3 has two sub-paths):
 ///
 /// 1. `-p` supplied → return it directly, no catalog call.
 /// 2. Saved preference in config → return silently.
-/// 3. `by_command` lookup with a 5-second timeout.
+/// 3. `by_command` lookup.
 ///    - `listing_known=false`, empty providers → `CommandNotIndexed`.
 ///    - `listing_known=true`, empty providers → `NoCommandProvider`.
 /// 4. Single provider → return its `attr_path` silently.
@@ -1149,11 +1149,13 @@ pub fn print_help() {
     print!(indoc! {"
         Run a command from a Flox Catalog package
 
-        Usage: flox run -p <PACKAGE> -- <COMMAND> [ARGS...]
+        Usage: flox run [<COMMAND> [ARGS...]]
+               flox run -p <PACKAGE> -- <COMMAND> [ARGS...]
                flox run --reselect <COMMAND>
 
         Options:
-          -p, --package <PACKAGE>   Package that provides the command (required)
+          -p, --package <PACKAGE>   Package that provides the command (optional;
+                                    looked up from the Flox Catalog when omitted)
               --reselect <COMMAND>  Forget the saved package preference for a command
           -h, --help                Print this help
 
@@ -1162,6 +1164,7 @@ pub fn print_help() {
         reach the command rather than flox.
 
         Examples:
+          flox run readelf                          # resolved from catalog
           flox run -p curl -- curl http://example.com
           flox run -p binutils -- readelf -a /bin/ls
           flox run -p hello -- hello --help
@@ -1169,7 +1172,6 @@ pub fn print_help() {
 
         Limitations:
           Version constraints (@) and output selectors (^) are not supported.
-          The -p flag is always required to run a command.
 
         Caching:
           Downloaded store paths are registered as GC roots under

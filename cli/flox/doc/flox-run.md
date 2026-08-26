@@ -12,7 +12,10 @@ flox-run - run a command from a Flox Catalog package
 
 ```text
 flox [<general-options>] run
-     -p <package>
+     [<command> [<arguments>]]
+
+flox [<general-options>] run
+     [-p <package>]
      -- <command> [<arguments>]
 
 flox [<general-options>] run
@@ -31,8 +34,15 @@ no `flox init`, `flox install`, or environment cleanup needed.
 
 ## Specifying the Package
 
-The `-p`/`--package` flag is required and names the package explicitly.
-For example:
+When `-p`/`--package` is omitted,
+`flox run` looks up the command name in the Flox Catalog
+and resolves the package automatically:
+
+```bash
+$ flox run grep "pattern" file.txt
+```
+
+To name the package explicitly, use `-p`:
 
 ```bash
 $ flox run -p gnugrep -- grep "pattern" file.txt
