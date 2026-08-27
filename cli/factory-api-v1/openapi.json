@@ -523,7 +523,11 @@
           },
           "task": {
             "nullable": true,
-            "$ref": "#/components/schemas/TaskResponse"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TaskResponse"
+              }
+            ]
           }
         },
         "type": "object",
@@ -600,7 +604,11 @@
           },
           "error_class": {
             "nullable": true,
-            "$ref": "#/components/schemas/TaskErrorClass"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TaskErrorClass"
+              }
+            ]
           },
           "created_at": {
             "type": "string",

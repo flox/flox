@@ -63,6 +63,7 @@
             "required": false,
             "schema": {
               "type": "integer",
+              "minimum": 0,
               "default": 0,
               "title": "Page"
             }
@@ -73,6 +74,7 @@
             "required": false,
             "schema": {
               "type": "integer",
+              "minimum": 0,
               "default": 10,
               "title": "Pagesize"
             }
@@ -215,6 +217,7 @@
             "required": false,
             "schema": {
               "type": "integer",
+              "minimum": 0,
               "default": 0,
               "title": "Page"
             }
@@ -225,6 +228,7 @@
             "required": false,
             "schema": {
               "type": "integer",
+              "minimum": 0,
               "default": 10,
               "title": "Pagesize"
             }
@@ -1474,6 +1478,7 @@
             "required": false,
             "schema": {
               "type": "integer",
+              "minimum": 0,
               "default": 0,
               "title": "Page"
             }
@@ -1484,6 +1489,7 @@
             "required": false,
             "schema": {
               "type": "integer",
+              "minimum": 0,
               "default": 10,
               "title": "Pagesize"
             }
@@ -2239,7 +2245,11 @@
           },
           "reference_point": {
             "nullable": true,
-            "$ref": "#/components/schemas/ReferencePoint"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ReferencePoint"
+              }
+            ]
           },
           "groups": {
             "items": {
@@ -2911,6 +2921,55 @@
         ],
         "title": "HealthCheck"
       },
+      "LifecyclePolicy": {
+        "properties": {
+          "visible_in_discovery": {
+            "type": "boolean",
+            "title": "Visible In Discovery",
+            "description": "Whether the package appears where users browse: search results, listings, and package summaries."
+          },
+          "allows_name_resolution": {
+            "type": "boolean",
+            "title": "Allows Name Resolution",
+            "description": "Whether name-based resolution may select this package. False does not mean the package is gone; a manifest naming it resolves to some other package or fails outright."
+          },
+          "allows_exact_pin": {
+            "type": "boolean",
+            "title": "Allows Exact Pin",
+            "description": "Whether a lockfile pinning this exact package still resolves. Environments locked before the state changed keep resolving."
+          },
+          "allows_publish": {
+            "type": "boolean",
+            "title": "Allows Publish",
+            "description": "Whether a new build may be published to this package."
+          },
+          "warning_required": {
+            "type": "boolean",
+            "title": "Warning Required",
+            "description": "Whether a consumer that honors the package anyway, in practice the exact-pin path, must surface a warning."
+          }
+        },
+        "type": "object",
+        "required": [
+          "visible_in_discovery",
+          "allows_name_resolution",
+          "allows_exact_pin",
+          "allows_publish",
+          "warning_required"
+        ],
+        "title": "LifecyclePolicy",
+        "description": "What a lifecycle state permits, one boolean per capability.\n\nClients should branch on these capabilities rather than on the\nstate name, so a state added later renders correct affordances\nwithout a client release."
+      },
+      "LifecycleSource": {
+        "type": "string",
+        "title": "LifecycleSource",
+        "description": "The authority that placed the package in its lifecycle state, for example 'publisher'. New sources may be added over time."
+      },
+      "LifecycleState": {
+        "type": "string",
+        "title": "LifecycleState",
+        "description": "The lifecycle state a package is in, for example 'archived'. New states may be added over time; clients should branch on policy rather than on this value."
+      },
       "LockedGitSource": {
         "properties": {
           "type": {
@@ -3213,7 +3272,11 @@
       "NarInfos": {
         "additionalProperties": {
           "nullable": true,
-          "$ref": "#/components/schemas/NarInfo"
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/NarInfo"
+            }
+          ]
         },
         "type": "object",
         "title": "NarInfos"
@@ -3273,7 +3336,11 @@
           },
           "build_type": {
             "nullable": true,
-            "$ref": "#/components/schemas/BuildType"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/BuildType"
+              }
+            ]
           }
         },
         "type": "object",
@@ -3396,11 +3463,19 @@
           },
           "build_type": {
             "nullable": true,
-            "$ref": "#/components/schemas/BuildType"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/BuildType"
+              }
+            ]
           },
           "narinfos": {
             "nullable": true,
-            "$ref": "#/components/schemas/NarInfos"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/NarInfos"
+              }
+            ]
           },
           "narinfos_source_url": {
             "title": "Narinfos Source Url",
@@ -3786,7 +3861,11 @@
           },
           "deprecation": {
             "nullable": true,
-            "$ref": "#/components/schemas/DeprecationInfo"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DeprecationInfo"
+              }
+            ]
           }
         },
         "type": "object",
@@ -3816,6 +3895,53 @@
           "system": "x86_64-linux",
           "version": "1.0"
         }
+      },
+      "PackageLifecycleInfo": {
+        "properties": {
+          "state": {
+            "$ref": "#/components/schemas/LifecycleState"
+          },
+          "source": {
+            "$ref": "#/components/schemas/LifecycleSource"
+          },
+          "effective_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Effective At",
+            "description": "When the state took effect."
+          },
+          "reason": {
+            "title": "Reason",
+            "description": "Why the package entered this state, as recorded by the source.",
+            "nullable": true,
+            "type": "string"
+          },
+          "replacement": {
+            "title": "Replacement",
+            "description": "Installable reference to a suggested substitute: catalog_name/attr_path for a catalog package, a bare attr_path for a base-catalog package.",
+            "nullable": true,
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "description": "Publisher-authored note to show alongside the state.",
+            "nullable": true,
+            "type": "string"
+          },
+          "policy": {
+            "$ref": "#/components/schemas/LifecyclePolicy",
+            "description": "What this state permits. Clients should branch on these capabilities rather than on the state name."
+          }
+        },
+        "type": "object",
+        "required": [
+          "state",
+          "source",
+          "effective_at",
+          "policy"
+        ],
+        "title": "PackageLifecycleInfo",
+        "description": "Lifecycle state a package has been placed in, with the policy that\nstate implies. Absent (null) means ordinary circulation."
       },
       "PackageOutput": {
         "properties": {
@@ -4052,7 +4178,20 @@
           },
           "deprecation": {
             "nullable": true,
-            "$ref": "#/components/schemas/DeprecationInfo"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DeprecationInfo"
+              }
+            ]
+          },
+          "lifecycle": {
+            "description": "Lifecycle state of the requested package; null means no lifecycle state is recorded.",
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PackageLifecycleInfo"
+              }
+            ]
           }
         },
         "type": "object",
@@ -4230,7 +4369,11 @@
           },
           "as_of_build": {
             "nullable": true,
-            "$ref": "#/components/schemas/BuildRef"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/BuildRef"
+              }
+            ]
           }
         },
         "type": "object",
@@ -4417,7 +4560,11 @@
           },
           "page": {
             "nullable": true,
-            "$ref": "#/components/schemas/CatalogPage"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CatalogPage"
+              }
+            ]
           },
           "candidate_pages": {
             "title": "Candidate Pages",
@@ -4756,6 +4903,15 @@
             "deprecated": true,
             "nullable": true,
             "type": "string"
+          },
+          "lifecycle": {
+            "description": "Lifecycle state of the package; null means no lifecycle state is recorded. Populated on the single-package read; the package listing never fills it.",
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PackageLifecycleInfo"
+              }
+            ]
           }
         },
         "type": "object",
