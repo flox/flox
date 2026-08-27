@@ -783,7 +783,7 @@ impl<T> From<T> for StreamItem<T> {
 /// Takes a function that returns `(total_count, items)` for a given page, and
 /// yields `TotalCount` once followed by all `Result` items across pages.
 pub(crate) fn make_depaging_stream<T, E, Fut>(
-    generator: impl Fn(i64, i64) -> Fut,
+    generator: impl Fn(u64, u64) -> Fut,
     page_size: NonZeroU32,
 ) -> impl Stream<Item = Result<StreamItem<T>, E>>
 where
@@ -810,7 +810,7 @@ where
             if items_on_page < page_size.get() as usize {
                 break;
             }
-            if total_count == (page_number+1) * page_size.get() as i64 {
+            if total_count == ((page_number + 1) * u64::from(page_size.get())) as i64 {
                 break;
             }
             page_number += 1;
@@ -1483,7 +1483,7 @@ pub mod tests {
         let results = &results;
         let stream = make_depaging_stream(
             |page_number, _page_size| async move {
-                if page_number >= results.len() as i64 {
+                if page_number >= results.len() as u64 {
                     return Ok((total_results, vec![]));
                 }
                 // This is a bad response from the server since 9 should actually be 3
@@ -1514,7 +1514,7 @@ pub mod tests {
         let page_size = NonZeroU32::new(3).unwrap();
         let stream = make_depaging_stream(
             |page_number, _page_size| async move {
-                if page_number >= results.len() as i64 {
+                if page_number >= results.len() as u64 {
                     return Ok((total_count, vec![]));
                 }
                 Ok::<_, VersionsError>((total_count, results[page_number as usize].clone()))
