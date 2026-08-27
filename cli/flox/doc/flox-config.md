@@ -101,6 +101,21 @@ flox config --set 'trusted_environments."owner/name"' trust
     These are normally written for you by `flox activate allow` and
     `flox activate deny` rather than edited by hand.
 
+    A key may also be a glob pattern, so that one entry covers many
+    directories:
+    `*` matches a single directory name and `**` matches any depth.
+    An exact path always wins over patterns.
+    If several patterns match a directory and disagree, the directory is
+    denied.
+    Patterns are matched against the canonical (symlink-resolved) directory
+    path.
+    Set patterns with `flox config --set`, quoting the key:
+
+    ```bash
+    flox config --set 'auto_activate_environments."/home/me/work/*"' allow
+    flox config --set 'auto_activate_environments."/home/me/work/vendor/**"' deny
+    ```
+
 `auto_activate_fish_mode`
 :   Controls how the `fish` shell hook responds to directory changes during
     auto-activation, mirroring direnv's `direnv_fish_mode`.

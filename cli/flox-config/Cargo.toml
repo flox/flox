@@ -7,6 +7,7 @@ edition.workspace = true
 anyhow.workspace = true
 config.workspace = true
 flox-core.workspace = true
+glob.workspace = true
 itertools.workspace = true
 serde.workspace = true
 thiserror.workspace = true

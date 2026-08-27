@@ -6,7 +6,12 @@ use anyhow::{Context, Result, bail};
 use bpaf::Bpaf;
 use flox_activations::attach_diff::diff_serializer::FLOX_HOOK_DIFF_VAR;
 use flox_activations::deactivate::embedded_hook_diff;
-use flox_config::{AutoActivate, AutoActivationPreference, Config};
+use flox_config::{
+    AutoActivate,
+    AutoActivationPreference,
+    Config,
+    resolve_auto_activation_preference,
+};
 use flox_core::activate::context::{InvocationKind, InvocationTypes};
 use flox_core::activate::vars::{
     FLOX_AUTO_ACTIVATED_ENVIRONMENTS_VAR,
@@ -466,12 +471,11 @@ struct AutoActivateContext {
     auto_activated: Vec<PathBuf>,
     /// Project directories suppressed from auto-activation in this shell.
     suppressed: Vec<PathBuf>,
-    /// Project directories the user has allowed auto-activation for via the
-    /// consent prompt or `flox activate allow` (config
-    /// `auto_activate_environments`).
+    /// Discovered project directories whose resolved preference (config
+    /// `auto_activate_environments`, exact key or pattern) is allow.
     allowed: Vec<PathBuf>,
-    /// Project directories the user has denied auto-activation for via
-    /// `flox activate deny` (config `auto_activate_environments`).
+    /// Discovered project directories whose resolved preference (config
+    /// `auto_activate_environments`, exact key or pattern) is deny.
     denied: Vec<PathBuf>,
     /// The user's `auto_activate` config value. Drives whether the planner
     /// activates allowed environments and whether it prompts for
@@ -835,7 +839,7 @@ fn gather_auto_activate_context(
     pending_deactivations: bool,
 ) -> Result<AutoActivateContext> {
     let cwd = std::env::current_dir().context("failed to read current directory")?;
-    let discovered = find_all_dot_flox(&cwd)
+    let discovered: Vec<PathBuf> = find_all_dot_flox(&cwd)
         .context("failed to discover environments for auto-activation")?
         .into_iter()
         .filter_map(|dot_flox| dot_flox.path.parent().map(Path::to_path_buf))
@@ -855,20 +859,19 @@ fn gather_auto_activate_context(
         .map(|env| env.path().and_then(Path::parent).map(Path::to_path_buf))
         .collect();
     // `flox activate allow`/`deny` key the config by the environment's parent
-    // path, which they derive by popping `.flox` off a `CanonicalPath`. Those
+    // path, which they derive by popping `.flox` off a `CanonicalPath`. Exact
     // keys are therefore already canonical and comparable to `discovered`
-    // without re-canonicalizing here.
-    let preference = |want: AutoActivationPreference| {
-        config
-            .flox
-            .auto_activate_environments
-            .iter()
-            .filter(move |(_, pref)| **pref == want)
-            .map(|(path, _)| path.clone())
-            .collect::<Vec<_>>()
-    };
-    let allowed = preference(AutoActivationPreference::Allow);
-    let denied = preference(AutoActivationPreference::Deny);
+    // without re-canonicalizing here; pattern keys are matched against the
+    // same canonical directories.
+    let mut allowed = Vec::new();
+    let mut denied = Vec::new();
+    for path in &discovered {
+        match resolve_auto_activation_preference(&config.flox.auto_activate_environments, path) {
+            Some(AutoActivationPreference::Allow) => allowed.push(path.clone()),
+            Some(AutoActivationPreference::Deny) => denied.push(path.clone()),
+            None => {},
+        }
+    }
     let auto_activate = config.flox.auto_activate.clone().unwrap_or_default();
     Ok(AutoActivateContext {
         cwd,

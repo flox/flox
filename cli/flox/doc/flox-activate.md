@@ -146,6 +146,17 @@ Manage these decisions ahead of time with the
 [`flox-activate-deny(1)`](./flox-activate-deny.md) subcommands.
 Decisions are stored in the user config file under `auto_activate_environments`.
 
+To allow or deny many directories at once,
+add a glob pattern to `auto_activate_environments` with `flox config --set`
+(`*` matches one directory name, `**` any depth):
+
+```bash
+flox config --set 'auto_activate_environments."/home/me/work/*"' allow
+```
+
+An exact path always wins over patterns;
+if matching patterns disagree, the directory is denied.
+
 See [`flox-config(1)`](./flox-config.md) for the `auto_activate`,
 `auto_activate_environments`, `auto_activate_fish_mode`, and `disable_hook`
 options.

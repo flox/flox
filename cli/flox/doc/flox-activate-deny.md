@@ -27,6 +27,9 @@ The preference is stored in the user config file under
 `auto_activate_environments`,
 keyed by the absolute path of the directory that contains the `.flox`
 directory.
+To cover many directories with one entry,
+set a glob pattern with `flox config --set` instead
+(see `auto_activate_environments` in [`flox-config(1)`](./flox-config.md)).
 
 Denying an environment does not deactivate it if it is already active;
 it only prevents future auto-activation.

@@ -22,5 +22,6 @@ pub use config::{
     PublishConfig,
     SearchLimit,
     TokenStorageMode,
+    resolve_auto_activation_preference,
 };
 pub use write::ReadWriteError;

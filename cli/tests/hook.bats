@@ -636,6 +636,77 @@ EXPIRED_FLOXHUB_TOKEN="eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3gu
 }
 
 # ---------------------------------------------------------------------------- #
+# Config: glob patterns in `auto_activate_environments` cover many directories
+# ---------------------------------------------------------------------------- #
+
+# Write a pattern entry for the directory containing the per-test projects.
+# The key is double-quoted so a `.` in the tmpdir path is not split into
+# nested tables, and `realpath` matches the canonical directories the hook
+# discovers (macOS tmpdirs live under a `/var` -> `/private/var` symlink).
+set_auto_activate_pattern() {
+  local parent
+  parent="$(dirname "$(realpath "${PROJECT2_DIR?}")")"
+  "$FLOX_BIN" config --set "auto_activate_environments.\"$parent/*\"" "$1"
+}
+
+# bats test_tags=hook:pattern:bash
+@test "bash: hook auto-activates an environment allowed by a pattern" {
+  project_setup
+  project2_setup
+  set_auto_activate_pattern allow
+
+  run --separate-stderr bash -c "
+    export FLOX_SHELL=\$(which bash)
+    eval \"\$($FLOX_BIN activate -d $PROJECT_DIR)\"
+    cd $PROJECT2_DIR
+    _flox_hook
+    echo \"var2:\${TEST_VAR2:-unset}\"
+    echo \"tracked:\${_FLOX_AUTO_ACTIVATED_ENVIRONMENTS:-unset}\"
+  "
+  assert_success
+  # Activated without a consent prompt, and tracked as an auto-activation.
+  assert_output --partial "var2:auto2"
+  assert_output --partial "$(realpath "$PROJECT2_DIR")"
+}
+
+# bats test_tags=hook:pattern:bash
+@test "bash: hook skips an environment denied by a pattern" {
+  project_setup
+  project2_setup
+  set_auto_activate_pattern deny
+
+  run --separate-stderr bash -c "
+    export FLOX_SHELL=\$(which bash)
+    eval \"\$($FLOX_BIN activate -d $PROJECT_DIR)\"
+    cd $PROJECT2_DIR
+    _flox_hook
+    echo \"var2:\${TEST_VAR2:-unset}\"
+    echo \"tracked:\${_FLOX_AUTO_ACTIVATED_ENVIRONMENTS:-unset}\"
+  "
+  assert_success
+  assert_output --partial "var2:unset"
+  assert_output --partial "tracked:unset"
+}
+
+# bats test_tags=hook:pattern:bash
+@test "bash: exact 'flox activate allow' overrides a deny pattern" {
+  project_setup
+  project2_setup
+  set_auto_activate_pattern deny
+  "$FLOX_BIN" activate allow -d "$PROJECT2_DIR"
+
+  run --separate-stderr bash -c "
+    export FLOX_SHELL=\$(which bash)
+    eval \"\$($FLOX_BIN activate -d $PROJECT_DIR)\"
+    cd $PROJECT2_DIR
+    _flox_hook
+    echo \"var2:\${TEST_VAR2:-unset}\"
+  "
+  assert_success
+  assert_output --partial "var2:auto2"
+}
+
+# ---------------------------------------------------------------------------- #
 # Config: 'prompt' mode (the default) asks for consent before auto-activating
 # ---------------------------------------------------------------------------- #
 
