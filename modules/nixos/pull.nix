@@ -7,13 +7,14 @@
 
 let
   inherit (config.programs.flox) package;
-  inherit (config.services.flox) stateDir workingDirectoryMode;
+  inherit (config.services.flox) enable stateDir workingDirectoryMode;
   inherit (lib)
     escapeShellArg
     escapeShellArgs
     filterAttrs
     mapAttrs'
     mapAttrsToList
+    mkIf
     mkOption
     nameValuePair
     optionalString
@@ -202,10 +203,11 @@ in
     };
   };
 
-  config = {
-    # The templates are inert without instances, so they are declared
-    # unconditionally. Gating them on `pullConfigs != { }` would make the
-    # merge of `systemd.services` depend on its own values and diverge.
+  config = mkIf enable {
+    # The templates are inert without instances, so instances are not part
+    # of the condition here. It must stay a plain user-set flag: gating on
+    # `pullConfigs != { }` would make the merge of `systemd.services`
+    # depend on its own values and diverge.
     systemd.services."flox-pull@" = templateUnit "start";
     systemd.services."flox-autopull@" = templateUnit "timer";
 
