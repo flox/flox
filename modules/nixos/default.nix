@@ -40,6 +40,7 @@ in
          environment.
 
          Enabled with:
+           services.flox.enable = true;
            systemd.services.echoip.flox = {
              environment = "flox/echoip";
              trustEnvironment = true;

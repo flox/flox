@@ -66,12 +66,39 @@ let
   serviceOptionDocs = descriptionsOf sys.options.services.flox;
   overridesOptionDocs = descriptionsOf (sys.options.systemd.services.type.getSubOptions [ ]).flox;
 
+  # With the services subsystem disabled nothing is added to the system:
+  # the `programs.flox` half only installs the CLI and sets substituters.
+  disabledSys = lib.nixosSystem {
+    system = "x86_64-linux";
+    modules = [
+      module
+      {
+        system.stateVersion = "25.05";
+        systemd.services.sample-override.flox = {
+          environment = "flox/sample";
+          execStart = "sample --flag";
+        };
+      }
+    ];
+  };
+  disabledUnits = lib.filter (lib.hasPrefix "flox-") (lib.attrNames disabledSys.config.systemd.units);
+  disabledTmpfiles = lib.filter (lib.hasInfix "flox") disabledSys.config.systemd.tmpfiles.rules;
+
+  # An override configured without `services.flox.enable` is reported
+  # rather than left to fail at runtime on a missing flox-pull@ unit.
+  disabledAssertions = lib.filter (
+    assertion: !assertion.assertion && lib.hasInfix "services.flox.enable" assertion.message
+  ) disabledSys.config.assertions;
+
   moduleAssertions = lib.filter (
     assertion: !assertion.assertion && lib.hasInfix "flox" assertion.message
   ) sys.config.assertions;
 
 in
 assert moduleAssertions == [ ];
+assert disabledUnits == [ ];
+assert disabledTmpfiles == [ ];
+assert lib.length disabledAssertions == 1;
 builtins.deepSeq (unitTexts ++ serviceOptionDocs ++ overridesOptionDocs) (
   pkgs.writeText "flox-nixos-module-check" "ok"
 )
