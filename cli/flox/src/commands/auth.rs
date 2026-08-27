@@ -1,3 +1,4 @@
+use std::fmt;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
@@ -42,13 +43,22 @@ use crate::utils::message;
 use crate::utils::openers::Browser;
 use crate::{Exit, subcommand_metric};
 
-#[derive(Debug, Default, Clone, Serialize)]
+#[derive(Default, Clone, Serialize)]
 pub struct Credential {
     pub token: String,
     /// Wall-clock expiry derived from the token response's `expires_in`,
     /// which RFC 6749 makes optional; the token's own `exp` claim and /me
     /// are the authorities on expiry, so absence is not an error.
     pub expiry: Option<String>,
+}
+
+impl fmt::Debug for Credential {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Credential")
+            .field("token", &"***")
+            .field("expiry", &self.expiry)
+            .finish()
+    }
 }
 
 // The device flow never touches the authorization endpoint, so the client
@@ -727,6 +737,22 @@ mod tests {
     use uuid::Uuid;
 
     use super::*;
+
+    #[test]
+    fn credential_debug_redacts_token() {
+        let credential = Credential {
+            token: "synthetic-token".to_string(),
+            expiry: Some("2026-08-13T12:00:00Z".to_string()),
+        };
+
+        assert_eq!(format!("{credential:#?}"), indoc! {r#"
+                Credential {
+                    token: "***",
+                    expiry: Some(
+                        "2026-08-13T12:00:00Z",
+                    ),
+                }"#});
+    }
 
     struct EventsClientReset(Option<EventsClient>);
 
