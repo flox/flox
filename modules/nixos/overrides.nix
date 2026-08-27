@@ -8,7 +8,7 @@
 
 let
   inherit (config.programs.flox) package;
-  inherit (config.services.flox) stateDir;
+  inherit (config.services.flox) enable stateDir;
   inherit (utils.systemdUtils.lib) makeJobScript;
   inherit (lib)
     escapeShellArgs
@@ -118,7 +118,7 @@ let
         };
       };
 
-      config = mkIf (fCfg.environment != null) {
+      config = mkIf (enable && fCfg.environment != null) {
         # The pull unit provisions the environment on first start and
         # refreshes it thereafter (see pullAtServiceStart). A failed
         # refresh of an existing environment exits successfully, so this
@@ -158,7 +158,11 @@ in
 
   config = {
     assertions =
-      mapAttrsToList (name: svc: {
+      mapAttrsToList (name: _: {
+        assertion = enable;
+        message = "systemd.services.${name}.flox.environment is set but services.flox.enable is false. Set services.flox.enable = true to run units from Flox environments.";
+      }) floxManagedServices
+      ++ mapAttrsToList (name: svc: {
         assertion = svc.flox.execStart != "" || svc.flox.script != "" || svc.script != "";
         message = "systemd.services.${name}.flox.environment is set but there is no command to run. Set systemd.services.${name}.flox.execStart or systemd.services.${name}.flox.script.";
       }) floxManagedServices
@@ -169,21 +173,23 @@ in
 
     # Provisioning, scheduled pulls and restart-on-change are handled by
     # the flox-pull@/flox-autopull@ template units; see pull.nix.
-    services.flox.pull.configs = mapAttrs (name: svc: {
-      unit = "${name}.service";
-      user = toString (svc.serviceConfig.User or "root");
-      group = toString (svc.serviceConfig.Group or "");
-      environment = svc.flox.environment;
-      workingDirectory = workingDirectory name;
-      inherit (svc.flox)
-        extraFloxArgs
-        extraFloxPullArgs
-        pullAtServiceStart
-        floxHubTokenFile
-        ;
-      autoPull = svc.flox.autoPull.enable;
-      autoPullDates = svc.flox.autoPull.dates;
-      autoRestart = svc.flox.autoRestart.enable;
-    }) floxManagedServices;
+    services.flox.pull.configs = mkIf enable (
+      mapAttrs (name: svc: {
+        unit = "${name}.service";
+        user = toString (svc.serviceConfig.User or "root");
+        group = toString (svc.serviceConfig.Group or "");
+        environment = svc.flox.environment;
+        workingDirectory = workingDirectory name;
+        inherit (svc.flox)
+          extraFloxArgs
+          extraFloxPullArgs
+          pullAtServiceStart
+          floxHubTokenFile
+          ;
+        autoPull = svc.flox.autoPull.enable;
+        autoPullDates = svc.flox.autoPull.dates;
+        autoRestart = svc.flox.autoRestart.enable;
+      }) floxManagedServices
+    );
   };
 }

@@ -42,6 +42,7 @@ from the activated Flox environment.
 
 Example:
 ```nix
+  services.flox.enable = true;
   systemd.services.echoip.flox = {
     environment = "flox/echoip";
     trustEnvironment = true;
@@ -49,6 +50,10 @@ Example:
     execStart = "echoip -l 127.0.0.1:8080 -H X-Real-IP";
   };
 ```
+
+`services.flox.enable` switches on the units and state directory that both
+methods share, so it is required for this method as well.
+Without it nothing is added to the system and the override is not applied.
 
 While the Services method presents the easiest/most intuitive interface
 from a Flox perspective, the overrides approach makes it possible to leverage the
