@@ -536,6 +536,19 @@ impl ClientSideCatalogStoreConfig {
         }
         let narinfos = serde_json::from_slice::<NarInfos>(&output.stdout)
             .map_err(PublishError::ParseNarInfo)?;
+        // `nix path-info --json` reports a path it cannot describe as null and
+        // exits zero, so a null value means the store lacks that path. Report
+        // the lowest one, since HashMap iteration order varies between runs.
+        if let Some(missing) = narinfos
+            .iter()
+            .filter(|(_, info)| info.is_none())
+            .map(|(path, _)| path)
+            .min()
+        {
+            return Err(PublishError::GetNarInfo(formatdoc! {
+                "NAR info missing for store path '{missing}' in the closure of '{store_path}'."
+            }));
+        }
         if !narinfos.contains_key(store_path) {
             return Err(PublishError::GetNarInfo(formatdoc! {
                 "NAR info for store path '{store_path}' not found in response: {narinfos:?}"
@@ -2673,7 +2686,9 @@ pub mod tests {
             narinfos.contains_key(store_path_str),
             "Expected narinfos to contain the queried store path"
         );
-        let narinfo = &narinfos[store_path_str];
+        let narinfo = narinfos[store_path_str]
+            .as_ref()
+            .expect("the queried store path is valid, so its NAR info is present");
         assert!(
             narinfo.closure_size.is_some(),
             "Expected narinfo to have a closure size"

@@ -313,8 +313,9 @@ impl FactoryClientTrait for crate::FloxhubClient {
                     .list_builds_api_v1_factory_builds_get(
                         attr_path,
                         None,
-                        Some(page_number),
-                        NonZeroU64::new(page_size as u64),
+                        // The Factory API types `page` as `i64`.
+                        Some(page_number as i64),
+                        NonZeroU64::new(page_size),
                         since,
                         None,
                         source_commit_sha,

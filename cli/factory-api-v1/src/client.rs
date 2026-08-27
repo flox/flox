@@ -267,7 +267,18 @@ coordinator-reported status appears.*/
     ///      "type": "string"
     ///    },
     ///    "task": {
-    ///      "$ref": "#/components/schemas/TaskResponse"
+    ///      "oneOf": [
+    ///        {
+    ///          "type": "null"
+    ///        },
+    ///        {
+    ///          "allOf": [
+    ///            {
+    ///              "$ref": "#/components/schemas/TaskResponse"
+    ///            }
+    ///          ]
+    ///        }
+    ///      ]
     ///    }
     ///  }
     ///}
@@ -627,7 +638,18 @@ while the build-level status reads 'timed_out'.*/
     ///      "format": "date-time"
     ///    },
     ///    "error_class": {
-    ///      "$ref": "#/components/schemas/TaskErrorClass"
+    ///      "oneOf": [
+    ///        {
+    ///          "type": "null"
+    ///        },
+    ///        {
+    ///          "allOf": [
+    ///            {
+    ///              "$ref": "#/components/schemas/TaskErrorClass"
+    ///            }
+    ///          ]
+    ///        }
+    ///      ]
     ///    },
     ///    "error_message": {
     ///      "title": "Error Message",
