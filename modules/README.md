@@ -28,7 +28,7 @@ at `/etc/nixos/configuration.nix`) enable Flox by adding the following line:
 {...}: {
 
   imports = [
-    /etc/nixos/flox/modules/nixos.nix
+    /etc/nixos/flox/modules/nixos
   ]
 
   # The rest of your NixOS configuration
