@@ -2673,7 +2673,9 @@ pub mod tests {
             narinfos.contains_key(store_path_str),
             "Expected narinfos to contain the queried store path"
         );
-        let narinfo = &narinfos[store_path_str];
+        let narinfo = narinfos[store_path_str]
+            .as_ref()
+            .expect("the queried store path is valid, so its NAR info is present");
         assert!(
             narinfo.closure_size.is_some(),
             "Expected narinfo to have a closure size"
