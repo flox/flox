@@ -17,7 +17,6 @@ use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment};
 use flox_rust_sdk::providers::build::{
     COMMON_NIXPKGS_URL,
-    CatalogLock,
     FloxBuildMk,
     ManifestBuilder,
     ManifestBuilderError,
@@ -313,13 +312,9 @@ impl Build {
 
         prefetch_expression_build_flake_ref(&packages_to_build, &base_nixpkgs_url)?;
 
-        // `flox build` names no lock file, so every package's catalog lock is
-        // resolved into the builder's own temporary directory. Reusing an
-        // in-tree lock here is separate work: producing one is not supported
-        // yet.
-        let build_targets = packages_to_build
+        let target_names = packages_to_build
             .iter()
-            .map(|target| (target.name(), CatalogLock::Ephemeral))
+            .map(|target| target.name())
             .collect::<Vec<_>>();
 
         let has_expression_build = packages_to_build
@@ -346,7 +341,7 @@ impl Build {
         let results = builder.build(
             &base_nixpkgs_url,
             &FLOX_INTERPRETER,
-            &build_targets,
+            &target_names,
             nef_stability,
             None,
             system_override,

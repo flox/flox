@@ -7,7 +7,7 @@ use flox_events::{CliEnvironmentPublishPayload, EventKind, EventsHub};
 use flox_manifest::{Manifest, MigratedTypedOnly};
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment};
-use flox_rust_sdk::providers::build::{COMMON_NIXPKGS_URL, CatalogLock, PackageTarget};
+use flox_rust_sdk::providers::build::{COMMON_NIXPKGS_URL, PackageTarget};
 use flox_rust_sdk::providers::nix_auth::NixAuth;
 use flox_rust_sdk::providers::publish::{
     PublishProvider,
@@ -16,13 +16,10 @@ use flox_rust_sdk::providers::publish::{
     check_build_metadata,
     check_environment_metadata,
     check_package_metadata,
-    lock_build_inputs,
-    render_build_source,
 };
 use floxhub_client::{CatalogClientTrait, CheckBuildQuery, CheckBuildResponse, FloxhubClientError};
 use indoc::formatdoc;
 use nef_lock_catalog::NixFlakeref;
-use tempfile::TempDir;
 use tracing::{debug, info_span, instrument, warn};
 
 use super::{DirEnvironmentSelect, dir_environment_select};
@@ -297,38 +294,19 @@ impl Publish {
 
         let system_override_inner = publish_config.system_override.into_inner();
 
-        // Render the build source exactly once and share it between the lock
-        // and build phases below, so the source is not built twice.
-        let rendered = render_build_source(
+        let build_metadata = check_build_metadata(
             &flox,
+            &selected_base_nixpkgs_url,
+            system_override_inner,
             &publish_provider.env_metadata,
             &publish_provider.package_metadata.package,
-        )?;
-
-        // Publish owns the catalog lock's location: the lock phase resolves
-        // it here and the build phase consumes exactly this file, so the
-        // closure identity checked against the server is the one that gets
-        // built. The lock is scoped to this publish, hence a temporary
-        // directory rather than a path in the user's checkout.
-        let catalog_lock_dir = TempDir::new_in(&flox.temp_dir)
-            .context("could not create a directory for the catalog lock")?;
-        let catalog_lock = CatalogLock::File(catalog_lock_dir.path().join("catalog.lock"));
-
-        // Compute the catalog lock (the closure identity) without building,
-        // so the dedup pre-check below can run before the package build.
-        let locked = lock_build_inputs(
-            &flox,
-            &rendered,
-            &publish_provider.package_metadata.package,
-            &catalog_lock,
             nef_stability,
-            system_override_inner,
         )?;
 
         // Dedup check: ask the catalog server if this exact build has already
-        // been published, BEFORE spending time on the package build. The
-        // closure identity (direct_catalog_inputs) comes from the lock phase
-        // above, enabling a closure-aware match on the server.
+        // been published before spending time on the upload. The closure
+        // identity (direct_catalog_inputs) is available after
+        // check_build_metadata, enabling a closure-aware match on the server.
         let nixpkgs_rev = publish_provider.package_metadata.base_catalog_ref.rev();
         let nixpkgs_rev = nixpkgs_rev.as_deref().unwrap_or_else(|| {
             warn!(
@@ -346,12 +324,11 @@ impl Publish {
                 source_url: &publish_provider.env_metadata.build_repo_meta.url,
                 source_rev: &publish_provider.env_metadata.build_repo_meta.rev,
                 nixpkgs_rev,
-                system: locked.system,
-                locked_inputs: &locked.direct_catalog_inputs,
+                system: build_metadata.system,
+                locked_inputs: &build_metadata.direct_catalog_inputs,
             })
             .await;
 
-        // A true duplicate stops here, before the build.
         match dedup_outcome(check_result) {
             DedupOutcome::AlreadyPublished(resp) => {
                 message::updated(formatdoc! {"
@@ -376,41 +353,6 @@ impl Publish {
                     "Dedup pre-check failed, proceeding with publish"
                 );
             },
-        }
-
-        // Not a duplicate, so pay for the build — over the lock the phase above
-        // already resolved, rather than resolving the catalog a second time.
-        // Handing the build the lock phase's own result is what ties the two
-        // together: the lock, the stability and the system come from `locked`,
-        // so there is no second set of lock arguments to drift.
-        let build_metadata = check_build_metadata(
-            &flox,
-            &selected_base_nixpkgs_url,
-            &rendered,
-            &publish_provider.package_metadata.package,
-            &locked,
-        )?;
-
-        // The dedup verdict above was decided on the closure the lock phase
-        // resolved, so the build has to have built that same closure. The two
-        // agree by construction — the build reads the very lock `locked`
-        // names — but a lock that was not in fact reused, or a lock directory
-        // that went away underneath the build, would silently publish a
-        // package whose recorded closure was never the one checked, and every
-        // later dedup for this package would be decided against it. Fail here
-        // instead.
-        if build_metadata.system != locked.system
-            || build_metadata.direct_catalog_inputs != locked.direct_catalog_inputs
-        {
-            bail!(formatdoc! {"
-                The package that was built is not the one that was checked against the catalog.
-                Checked {locked_system} with {locked_inputs} catalog input(s), built {built_system} with {built_inputs} catalog input(s).
-                Run 'flox publish' again, and report this if it persists.",
-                locked_system = locked.system,
-                locked_inputs = locked.direct_catalog_inputs.len(),
-                built_system = build_metadata.system,
-                built_inputs = build_metadata.direct_catalog_inputs.len(),
-            });
         }
 
         // CLI args take precedence over config

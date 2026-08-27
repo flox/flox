@@ -34,14 +34,6 @@ define mkVarname =
   $(subst -,_,$(1))
 endef
 
-# CATALOG_LOCKS names where each package's catalog lock lives, as a
-# space-separated list of "<attrpath>=<lockfile>" pairs. It is how the caller
-# controls the lock artifact rather than discovering one this Makefile chose:
-# a named lock is used as-is when it exists and resolved into when it does
-# not ("use if present, create if absent"). Packages with no entry lock into
-# PROJECT_TMPDIR and always resolve fresh.
-catalogLockFor = $(strip $(patsubst $(1)=%,%,$(filter $(1)=%,$(CATALOG_LOCKS))))
-
 # Substitute Nix store paths for packages required by this Makefile.
 __bash := @bash@
 __coreutils := @coreutils@
@@ -210,36 +202,23 @@ usage:
 	@echo "Targets:"
 	@echo "  build: build all packages"
 	@echo "  build/[pname]: build the specified package"
-	@echo "  lock: compute the catalog lock for all packages without building"
 	@echo "  clean: clean all build artifacts"
 	@echo "  clean/[pname]: clean build artifacts for the specified package"
 
 # Verify certain prerequisites and touch a timestamped file to
-# act as a root prerequisite before kicking off the build DAG. Accepts
-# either BUILD_RESULT_FILE (the `build` goal) or LOCK_RESULT_FILE (the
-# `lock` goal, which stops at the catalog lock and never builds a
-# package), so EXPRESSION_BUILD_NIXPKGS_URL is only required when
-# actually building.
+# act as a root prerequisite before kicking off the build DAG.
 .PHONY: $(PROJECT_TMPDIR)/check-build-prerequisites
 $(PROJECT_TMPDIR)/check-build-prerequisites:
-	@# At least one of BUILD_RESULT_FILE or LOCK_RESULT_FILE must be defined.
-	$(if $(or $(BUILD_RESULT_FILE),$(LOCK_RESULT_FILE)),, \
-	  $(error neither BUILD_RESULT_FILE nor LOCK_RESULT_FILE defined))
-	$(if $(BUILD_RESULT_FILE),$(if $(wildcard $(BUILD_RESULT_FILE)),, \
-	  $(error BUILD_RESULT_FILE $(BUILD_RESULT_FILE) not found)))
-	$(if $(LOCK_RESULT_FILE),$(if $(wildcard $(LOCK_RESULT_FILE)),, \
-	  $(error LOCK_RESULT_FILE $(LOCK_RESULT_FILE) not found)))
-	@# BUILDTIME_NIXPKGS_URL is needed by both goals (NEF attr-path
-	@# reflection at parse time); EXPRESSION_BUILD_NIXPKGS_URL only
-	@# when a build is actually being performed.
-	$(if $(BUILDTIME_NIXPKGS_URL),,$(error BUILDTIME_NIXPKGS_URL not defined))
+	@# The BUILD_RESULT_FILE must be defined and exist.
 	$(if $(BUILD_RESULT_FILE), \
-	  $(if $(EXPRESSION_BUILD_NIXPKGS_URL),,$(error EXPRESSION_BUILD_NIXPKGS_URL not defined)))
+	  $(if $(wildcard $(BUILD_RESULT_FILE)),, \
+	    $(error BUILD_RESULT_FILE $(BUILD_RESULT_FILE) not found), \
+	  $(error BUILD_RESULT_FILE not defined)))
+	@# Check that the BUILDTIME_NIXPKGS_URL and EXPRESSION_BUILD_NIXPKGS_URL are defined.
+	$(if $(BUILDTIME_NIXPKGS_URL),,$(error BUILDTIME_NIXPKGS_URL not defined))
+	$(if $(EXPRESSION_BUILD_NIXPKGS_URL),,$(error EXPRESSION_BUILD_NIXPKGS_URL not defined))
 	@# Check that the FLOX_ENV_CACHE is defined, and create it because the
 	@# activate script requires --env-cache to be an existing directory.
-	@# Both goals need it: a manifest build's version.command runs in a
-	@# build-mode activation while the makefile parses, whichever goal was
-	@# asked for.
 	$(if $(FLOX_ENV_CACHE),,$(error FLOX_ENV_CACHE not defined))
 	@$(_mkdir) -p $(FLOX_ENV_CACHE)
 	@$(_mkdir) -p $(@D)
@@ -297,13 +276,7 @@ define COMMON_BUILD_VARS_template =
   $(eval $(_pvarname)_evalJSON = $($(_pvarname)_tmpBasename)/eval.json)
   $(eval $(_pvarname)_buildJSON = $($(_pvarname)_tmpBasename)/build.json)
   $(eval $(_pvarname)_buildMetaJSON = $($(_pvarname)_tmpBasename)/build-meta.json)
-  # A caller-supplied catalog lock (see CATALOG_LOCKS) lives wherever the
-  # caller put it and is theirs to manage; clean/$(_pname) only removes
-  # $(_pvarname)_tmpBasename, so it is left alone.
-  $(eval $(_pvarname)_suppliedCatalogLockfile = $(call catalogLockFor,$(_pname)))
-  $(eval $(_pvarname)_catalogLockfile = \
-    $(or $($(_pvarname)_suppliedCatalogLockfile),$($(_pvarname)_tmpBasename)/catalog.lock))
-  $(eval $(_pvarname)_lockJSON = $($(_pvarname)_tmpBasename)/lock.json)
+  $(eval $(_pvarname)_catalogLockfile = $($(_pvarname)_tmpBasename)/catalog.lock)
 
   # Create a temporary file for collecting log output from the build.
   $(eval $(_pvarname)_logfile = $($(_pvarname)_tmpBasename)/build.log)
@@ -705,18 +678,6 @@ define MANIFEST_BUILD_template =
   # Calculate name.
   $(eval _name = $(_pname)-$(_version))
 
-  # Manifest builds resolve no catalog inputs of their own, so the lock JSON
-  # is a build-free constant emission consistent with the empty
-  # direct_catalog_inputs manifest builds already record at build time.
-  # No `catalog_lockfile` is emitted either: no lock is written, so there is no
-  # path to report and the field is absent (parsed as null).
-  # A manifest build that depends on a NEF package does inherit that
-  # package's catalog inputs; aggregating them here is tracked separately.
-  $($(_pvarname)_lockJSON): $(PROJECT_TMPDIR)/check-build-prerequisites
-	$(_V_) $(_mkdir) -p $$(@D)
-	$(_V_) $(_jq) -n --arg pname '$(_pname)' --arg system '$(NIX_SYSTEM)' \
-	  '{ pname: $$$$pname, system: $$$$system, direct_catalog_inputs: {} }' > $$@
-
   # By the time this rule will be evaluated all of its package dependencies
   # will have been added to the set of rule prerequisites in $^, using their
   # "safe" name (with "-" characters replaced with "_"), and these targets
@@ -867,36 +828,14 @@ define NIX_EXPRESSION_BUILD_template =
   # this with "_" for use in variable names.
   $(eval _pvarname = $(call mkVarname,$(_pname)))
 
-  # Start by calculating the catalog inputs lock. A lock the caller named via
-  # CATALOG_LOCKS is used as-is when it already exists, which is how a `build`
-  # following a `lock` over the same lock file avoids resolving the catalog
-  # twice. Without a caller-supplied path the lock is always resolved fresh,
-  # so `flox build` never picks up a leftover lock from an earlier run.
+  # Start by calculating the catalog inputs lock.
   $($(_pvarname)_catalogLockfile): $(PROJECT_TMPDIR)/check-build-prerequisites
 	$(_V_) $(_mkdir) -p $$(@D)
-	$(_V_) if [ -n '$($(_pvarname)_suppliedCatalogLockfile)' ] && [ -f '$$@' ]; then \
-	  : "using the catalog lock supplied at $$@"; \
-	else \
-	  $(_lock) \
-	    --base-dir '$$(NIX_EXPRESSION_ABSDIRPATH_$(_pvarname))' \
-	    --rel-path '$$(NIX_EXPRESSION_RELFILEPATH_$(_pvarname))' \
-	    --stability '$(EXPRESSION_BUILD_STABILITY)' \
-	    --out '$$@'; \
-	fi
-
-  # Project the catalog lock into the
-  # {pname, catalog_lockfile, system, direct_catalog_inputs} shape consumed by
-  # the `lock` goal's LOCK_RESULT_FILE, mirroring build-meta.json's equivalent
-  # fields. `pname` keys the entry to its package so callers locking several
-  # packages can tell the results apart. `catalog_lockfile` is the on-disk path
-  # of the lock this rule wrote (`$<`), which is the only way a caller that
-  # named no lock of its own learns where the lock ended up.
-  $($(_pvarname)_lockJSON): $($(_pvarname)_catalogLockfile)
-	$(_V_) $(_mkdir) -p $$(@D)
-	$(_V_) $(_jq) -n --arg pname '$(_pname)' --arg system '$(NIX_SYSTEM)' \
-	  --arg catalog_lockfile '$$<' \
-	  --slurpfile lock '$$<' \
-	  '{ pname: $$$$pname, catalog_lockfile: $$$$catalog_lockfile, system: $$$$system, direct_catalog_inputs: $$$$lock[0].direct_catalog_inputs }' > $$@
+	$(_V_) $(_lock) \
+	  --base-dir '$$(NIX_EXPRESSION_ABSDIRPATH_$(_pvarname))' \
+	  --rel-path '$$(NIX_EXPRESSION_RELFILEPATH_$(_pvarname))' \
+	  --stability '$(EXPRESSION_BUILD_STABILITY)' \
+	  --out '$$@'
 
   # Continue by evaluating the build
   $($(_pvarname)_evalJSON): $($(_pvarname)_catalogLockfile)
@@ -989,18 +928,6 @@ $(BUILD_RESULT_FILE): $(foreach pname,$(PACKAGES),$($(subst -,_,$(pname))_buildM
 # target which has the effect of building all requested $(PACKAGES).
 .PHONY: build
 build: $(BUILD_RESULT_FILE)
-
-# Combine JSON lock data for each build and write to LOCK_RESULT_FILE. This
-# mirrors BUILD_RESULT_FILE above, but stops at the catalog-lock targets and
-# never invokes a package build.
-$(LOCK_RESULT_FILE): $(foreach pname,$(PACKAGES),$($(subst -,_,$(pname))_lockJSON))
-	$(_VV_) [ -n "$^" ] || ( echo "ERROR: PACKAGES not defined or empty" 1>&2; exit 1 )
-	$(_VV_) $(_jq) -s . $^ > $@
-
-# The "lock" target computes just the closure identity (catalog lock) for
-# all requested $(PACKAGES), without building anything.
-.PHONY: lock
-lock: $(LOCK_RESULT_FILE)
 
 # Add a target for cleaning up the build artifacts.
 .PHONY: clean

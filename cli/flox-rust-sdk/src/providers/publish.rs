@@ -34,7 +34,6 @@ use url::Url;
 
 use super::build::{
     BuildResult,
-    CatalogLock,
     FloxBuildMk,
     ManifestBuilder,
     ManifestBuilderError,
@@ -64,9 +63,6 @@ use crate::utils::CommandExt;
 pub enum PublishError {
     #[error("The outputs from the build do not exist: {0}")]
     NonexistentOutputs(String),
-
-    #[error("Locking a single package returned {0} results.")]
-    UnexpectedLockResults(usize),
 
     #[error("The environment is in an unsupported state for publishing: {0}")]
     UnsupportedEnvironmentState(String),
@@ -116,11 +112,6 @@ pub enum PublishError {
 
     #[error("Timed out waiting for publish completion")]
     PublishTimeout,
-
-    #[error(
-        "'{0}' is not a system Flox can publish for.\nSupported systems are 'aarch64-darwin', 'aarch64-linux', 'x86_64-darwin' and 'x86_64-linux'."
-    )]
-    UnsupportedSystem(String),
 }
 
 /// The `Publish` trait describes the high level behavior of publishing a package to a catalog.
@@ -904,39 +895,34 @@ fn convert_build_result_to_build_metadata(
     })
 }
 
-/// The rendered build source shared by the lock and build phases of a
-/// publish: the flake ref used as the Nix source, the working directory it
-/// was rendered into, and the built dev/build environment outputs.
+/// Collect metadata needed for publishing that is obtained from the build output.
 ///
-/// Rendering happens exactly once per publish (see [`render_build_source`]);
-/// [`lock_build_inputs`] and [`check_build_metadata`] are both called against
-/// the same `RenderedSource` so their catalog-lock paths coincide and the
-/// build phase can reuse the lock phase's catalog lock.
+/// Notably, [CheckedBuildMetadata] obtained from this function testifies:
+/// * That the package can be built
 ///
-/// Opaque to callers: it is produced by [`render_build_source`] and consumed
-/// by this module's build entry points, and nothing outside has a reason to
-/// take it apart.
-#[derive(Debug, Clone)]
-pub struct RenderedSource {
-    expression_ref: NixFlakeref,
-    base_dir: PathBuf,
-    built_environments: BuildEnvOutputs,
-    flox_env_cache: PathBuf,
-}
-
-/// Render the build source for `pkg` exactly once, choosing the build
-/// working directory based on `pkg`'s sandbox mode (see [`sandbox_is_local`]
-/// and [`BuildWorkdir`]).
+/// A `git+file://` flake ref pinned to the committed revision is always used as
+/// the Nix source reference.  Nix's git fetcher imports only the files returned
+/// by `git ls-files` — never the `.git` directory — so source copies in the
+/// store never contain git metadata.
 ///
-/// Callers should render once per publish and share the result between
-/// [`lock_build_inputs`] and [`check_build_metadata`]: rendering twice would
-/// create two independent workdirs and defeat catalog-lock reuse between the
-/// lock and build phases.
-pub fn render_build_source(
+/// The build working directory differs by sandbox mode:
+///
+/// * `sandbox = "off"` (or unset): an ephemeral `git clone --shared` provides
+///   a clean working tree (only tracked files, no extraneous workspace state).
+///   `--shared` is safe here because `sandbox = "off"` builds run without Nix
+///   filesystem namespace isolation, so the alternates pointer back to the
+///   source repository is always reachable.
+///
+/// * `sandbox = "pure"` or any expression build: the original local checkout is
+///   used as the build working directory.
+pub fn check_build_metadata(
     flox: &Flox,
+    base_nixpkgs_url: &BaseCatalogUrl,
+    system_override: Option<String>,
     env_metadata: &CheckedEnvironmentMetadata,
     pkg: &PackageTarget,
-) -> Result<RenderedSource, PublishError> {
+    nef_stability: Option<String>,
+) -> Result<CheckedBuildMetadata, PublishError> {
     let workdir = if sandbox_is_local(pkg) {
         BuildWorkdir::SharedClone
     } else {
@@ -948,150 +934,23 @@ pub fn render_build_source(
     // so the environment cache is derived from the build working directory
     // instead of the environment's own cache path.
     let flox_env_cache = base_dir.join(DOT_FLOX).join(CACHE_DIR_NAME);
-
-    Ok(RenderedSource {
-        expression_ref,
-        base_dir,
-        built_environments,
-        flox_env_cache,
-    })
-}
-
-/// The lock phase's result: the catalog lock's closure identity for a
-/// package, computed ahead of a build so that publish dedup can
-/// short-circuit before paying the build cost, together with the lock and
-/// the lock arguments that produced it.
-///
-/// This is what makes the closure the dedup decision was made on the closure
-/// that gets built, and it does so in the types rather than by call
-/// ordering: [`lock_build_inputs`] is the only way to obtain one — the reuse
-/// fields below are private, so the type cannot be forged from outside this
-/// module — and [`check_build_metadata`] takes one instead of the lock
-/// arguments, so a build cannot be run against any lock but the one a lock
-/// phase resolved.
-#[derive(Debug, Clone, PartialEq)]
-pub struct LockedBuildInputs {
-    pub system: PackageSystem,
-    pub direct_catalog_inputs: HashMap<String, LockedInputEntry>,
-    /// The lock this closure identity was resolved into. The following build
-    /// consumes exactly this lock rather than resolving the catalog again.
-    catalog_lock: CatalogLock,
-    /// The stability the NEF catalog inputs were locked at, carried so the
-    /// build locks any input the lock phase did not at the same stability.
-    nef_stability: Option<String>,
-    /// The `--system` the lock was resolved for, carried so the build is run
-    /// for that same system.
-    system_override: Option<String>,
-}
-
-/// Compute the catalog lock for `pkg` against the already-rendered
-/// `rendered` source, without building it.
-///
-/// `catalog_lock` names where the lock is written. The returned
-/// [`LockedBuildInputs`] carries it to the following [`check_build_metadata`],
-/// whose build consumes exactly this lock.
-///
-/// Manifest builds never reach the builder: the lock goal emits a constant for
-/// them, and running it is not free (see below).
-pub fn lock_build_inputs(
-    flox: &Flox,
-    rendered: &RenderedSource,
-    pkg: &PackageTarget,
-    catalog_lock: &CatalogLock,
-    nef_stability: Option<String>,
-    system_override: Option<String>,
-) -> Result<LockedBuildInputs, PublishError> {
-    // A manifest build resolves no catalog inputs of its own, so the lock goal
-    // only ever emits an empty map for it. Spawning the builder to obtain a
-    // constant would not be free: the Makefile evaluates every manifest build's
-    // `version.command` in a build-mode activation while it parses, on every
-    // invocation, so a lock pass would run each of those user-supplied commands
-    // a second time per publish. Answer directly instead.
-    //
-    // TODO: a manifest build that depends on a NEF package inherits that
-    // package's catalog inputs, so once the Makefile aggregates them this
-    // shortcut becomes wrong and has to go — the lock goal will have a real
-    // answer to give for manifest builds too. Until then it would only pay the
-    // double `version.command` cost to be handed back the empty map below.
-    if pkg.kind().is_manifest_build() {
-        let system = system_override.as_deref().unwrap_or(&flox.system);
-        return Ok(LockedBuildInputs {
-            system: PackageSystem::from_str(system)
-                .map_err(|_| PublishError::UnsupportedSystem(system.to_string()))?,
-            direct_catalog_inputs: HashMap::new(),
-            catalog_lock: catalog_lock.clone(),
-            nef_stability,
-            system_override,
-        });
-    }
-
     let builder = FloxBuildMk::new(
         flox,
-        &rendered.base_dir,
-        &rendered.expression_ref,
-        &rendered.built_environments,
-        &rendered.flox_env_cache,
-    );
-
-    let lock_results = builder.lock(
-        &[(pkg.name(), catalog_lock.clone())],
-        nef_stability.clone(),
-        system_override.clone(),
-    )?;
-
-    let [lock_result] = &lock_results[..] else {
-        return Err(PublishError::UnexpectedLockResults(lock_results.len()));
-    };
-
-    Ok(LockedBuildInputs {
-        system: lock_result.system,
-        direct_catalog_inputs: lock_result.direct_catalog_inputs.clone(),
-        catalog_lock: catalog_lock.clone(),
-        nef_stability,
-        system_override,
-    })
-}
-
-/// Collect metadata needed for publishing that is obtained from the build output.
-///
-/// Notably, [CheckedBuildMetadata] obtained from this function testifies:
-/// * That the package can be built
-///
-/// `rendered` MUST come from [`render_build_source`] for `pkg`; it is passed
-/// in (rather than rendered internally) so that a preceding
-/// [`lock_build_inputs`] call shares this build's working directory instead
-/// of rendering the source a second time.
-///
-/// `locked` is the [`lock_build_inputs`] result this build is run against: it
-/// names the lock to consume and the arguments it was resolved under, so the
-/// closure built here is the one that call resolved. Requiring it is what
-/// makes that reuse a property of the types rather than of the order the two
-/// are called in — a build with no lock phase to reuse still has to go
-/// through [`lock_build_inputs`], passing [`CatalogLock::Ephemeral`].
-pub fn check_build_metadata(
-    flox: &Flox,
-    base_nixpkgs_url: &BaseCatalogUrl,
-    rendered: &RenderedSource,
-    pkg: &PackageTarget,
-    locked: &LockedBuildInputs,
-) -> Result<CheckedBuildMetadata, PublishError> {
-    let builder = FloxBuildMk::new(
-        flox,
-        &rendered.base_dir,
-        &rendered.expression_ref,
-        &rendered.built_environments,
-        &rendered.flox_env_cache,
+        &base_dir,
+        &expression_ref,
+        &built_environments,
+        &flox_env_cache,
     );
 
     let build_results = builder.build(
         &base_nixpkgs_url.as_flake_ref()?,
-        &rendered.built_environments.dev,
-        &[(pkg.name(), locked.catalog_lock.clone())],
+        &built_environments.dev,
+        &[pkg.name()],
         // Lock the NEF catalog inputs at the stability selected for publish, so
         // the recorded inputs match the build the user intends to publish.
-        locked.nef_stability.clone(),
+        nef_stability,
         Some(false),
-        locked.system_override.clone(),
+        system_override,
     )?;
 
     if build_results.len() != 1 {
@@ -1774,25 +1633,15 @@ pub mod tests {
         let (env, _build_repo) = example_path_environment(&flox, Some(&remote_uri));
 
         let env_metadata = check_environment_metadata(&flox, &env).unwrap();
-        let rendered =
-            render_build_source(&flox, &env_metadata, &EXAMPLE_MANIFEST_PACKAGE_TARGET).unwrap();
-        let locked = lock_build_inputs(
-            &flox,
-            &rendered,
-            &EXAMPLE_MANIFEST_PACKAGE_TARGET,
-            &CatalogLock::Ephemeral,
-            None,
-            None,
-        )
-        .unwrap();
 
         // This will actually run the build
         let meta = check_build_metadata(
             &flox,
             env_metadata.toplevel_catalog_ref.as_ref().unwrap(),
-            &rendered,
+            None,
+            &env_metadata,
             &EXAMPLE_MANIFEST_PACKAGE_TARGET,
-            &locked,
+            None,
         )
         .unwrap();
 
@@ -1831,29 +1680,15 @@ pub mod tests {
         let (env, _build_repo) = example_path_environment(&flox, Some(&remote_uri));
 
         let env_metadata = check_environment_metadata(&flox, &env).unwrap();
-        let rendered = render_build_source(
-            &flox,
-            &env_metadata,
-            &EXAMPLE_MANIFEST_PACKAGE_TARGET_MISSING_FIELDS,
-        )
-        .unwrap();
-        let locked = lock_build_inputs(
-            &flox,
-            &rendered,
-            &EXAMPLE_MANIFEST_PACKAGE_TARGET_MISSING_FIELDS,
-            &CatalogLock::Ephemeral,
-            None,
-            None,
-        )
-        .unwrap();
 
         // This will actually run the build
         let meta = check_build_metadata(
             &flox,
             env_metadata.toplevel_catalog_ref.as_ref().unwrap(),
-            &rendered,
+            None,
+            &env_metadata,
             &EXAMPLE_MANIFEST_PACKAGE_TARGET_MISSING_FIELDS,
-            &locked,
+            None,
         )
         .unwrap();
 
@@ -1896,7 +1731,7 @@ pub mod tests {
         git.commit("set sandbox=pure").unwrap();
         git.push("origin", false).unwrap();
 
-        // Pass a PackageTarget with sandbox=Pure so render_build_source
+        // Pass a PackageTarget with sandbox=Pure so check_build_metadata
         // takes the OriginalCheckout path without re-reading the manifest.
         let pure_pkg =
             PackageTarget::new_unchecked(EXAMPLE_PACKAGE_NAME, PackageTargetKind::ManifestBuild {
@@ -1904,22 +1739,13 @@ pub mod tests {
             });
 
         let env_metadata = check_environment_metadata(&flox, &env).unwrap();
-        let rendered = render_build_source(&flox, &env_metadata, &pure_pkg).unwrap();
-        let locked = lock_build_inputs(
-            &flox,
-            &rendered,
-            &pure_pkg,
-            &CatalogLock::Ephemeral,
-            None,
-            None,
-        )
-        .unwrap();
         let meta = check_build_metadata(
             &flox,
             env_metadata.toplevel_catalog_ref.as_ref().unwrap(),
-            &rendered,
+            None,
+            &env_metadata,
             &pure_pkg,
-            &locked,
+            None,
         )
         .unwrap();
 
@@ -1934,39 +1760,6 @@ pub mod tests {
         assert_eq!(meta.pname, EXAMPLE_PACKAGE_NAME.to_string());
         assert_eq!(meta.system.to_string(), flox.system);
         assert_eq!(meta.version, Some("1.0.2a".to_string()));
-    }
-
-    /// `lock_build_inputs` for a manifest build reports the current system and
-    /// an empty `direct_catalog_inputs` without invoking the builder at all —
-    /// the named lock file is never created, which is the observable proof
-    /// that no `make lock` ran and so no `version.command` was re-executed.
-    #[test]
-    fn lock_build_inputs_for_a_manifest_build_does_not_spawn_the_builder() {
-        let (flox, _temp_dir_handle) = flox_instance();
-        let (_tempdir_handle, _remote_repo, remote_uri) = example_git_remote_repo();
-        let (env, _build_repo) = example_path_environment(&flox, Some(&remote_uri));
-
-        let env_metadata = check_environment_metadata(&flox, &env).unwrap();
-        let rendered =
-            render_build_source(&flox, &env_metadata, &EXAMPLE_MANIFEST_PACKAGE_TARGET).unwrap();
-
-        let lock_file = flox.temp_dir.join("manifest-build-catalog.lock");
-        let locked = lock_build_inputs(
-            &flox,
-            &rendered,
-            &EXAMPLE_MANIFEST_PACKAGE_TARGET,
-            &CatalogLock::File(lock_file.clone()),
-            None,
-            None,
-        )
-        .unwrap();
-
-        assert_eq!(locked.system.to_string(), flox.system);
-        assert!(locked.direct_catalog_inputs.is_empty());
-        assert!(
-            !lock_file.exists(),
-            "a manifest build must not spawn the builder to learn it has no catalog inputs"
-        );
     }
 
     #[tokio::test]
@@ -1986,23 +1779,13 @@ pub mod tests {
         )
         .unwrap();
 
-        let rendered =
-            render_build_source(&flox, &env_metadata, &package_metadata.package).unwrap();
-        let locked = lock_build_inputs(
-            &flox,
-            &rendered,
-            &package_metadata.package,
-            &CatalogLock::Ephemeral,
-            None,
-            None,
-        )
-        .unwrap();
         let build_metadata = check_build_metadata(
             &flox,
             env_metadata.toplevel_catalog_ref.as_ref().unwrap(),
-            &rendered,
+            None,
+            &env_metadata,
             &package_metadata.package,
-            &locked,
+            None,
         )
         .unwrap();
 
@@ -2058,23 +1841,13 @@ pub mod tests {
         )
         .unwrap();
 
-        let rendered =
-            render_build_source(&flox, &env_metadata, &package_metadata.package).unwrap();
-        let locked = lock_build_inputs(
-            &flox,
-            &rendered,
-            &package_metadata.package,
-            &CatalogLock::Ephemeral,
-            None,
-            None,
-        )
-        .unwrap();
         let build_metadata = check_build_metadata(
             &flox,
             env_metadata.toplevel_catalog_ref.as_ref().unwrap(),
-            &rendered,
+            None,
+            &env_metadata,
             &package_metadata.package,
-            &locked,
+            None,
         )
         .unwrap();
 
@@ -2418,23 +2191,13 @@ pub mod tests {
         )
         .unwrap();
 
-        let rendered =
-            render_build_source(&flox, &env_metadata, &package_metadata.package).unwrap();
-        let locked = lock_build_inputs(
-            &flox,
-            &rendered,
-            &package_metadata.package,
-            &CatalogLock::Ephemeral,
-            None,
-            None,
-        )
-        .unwrap();
         let build_metadata = check_build_metadata(
             &flox,
             env_metadata.toplevel_catalog_ref.as_ref().unwrap(),
-            &rendered,
+            None,
+            &env_metadata,
             &package_metadata.package,
-            &locked,
+            None,
         )
         .unwrap();
 
