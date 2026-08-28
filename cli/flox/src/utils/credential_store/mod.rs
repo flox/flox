@@ -10,6 +10,10 @@ mod auth_cache;
 mod keyring;
 mod mock;
 mod plaintext;
+/// macOS-only in production; compiled under `test` everywhere so the backend
+/// is exercised against a recording fake on Linux CI.
+#[cfg(any(target_os = "macos", test))]
+mod security_cli;
 
 use std::path::{Path, PathBuf};
 
@@ -31,10 +35,9 @@ use crate::utils::message;
 
 /// Errors from credential storage operations.
 ///
-/// Per the project conventions, credential redaction and backend-availability
-/// classification belong here rather than at call sites. The underlying writes
-/// (`update_config`) never interpolate the token into their messages, so no
-/// variant carries the secret.
+/// Per the project conventions, credential redaction belongs here rather than
+/// at call sites: the underlying writes (`update_config`) never interpolate
+/// the token into their messages, and no variant carries the secret.
 #[derive(Debug, Error)]
 pub enum CredentialStoreError {
     /// A read or write against the plaintext `flox.toml` failed.
@@ -53,17 +56,21 @@ pub enum CredentialStoreError {
     #[error("could not parse the plaintext credential file")]
     ParsePlaintext(#[source] toml_edit::TomlError),
 
-    /// No usable OS keyring backend is available (no default store, platform
-    /// failure, or the store could not be accessed). Callers treat this as the
-    /// signal to fall back to plaintext storage. The underlying keyring error
-    /// never carries the secret.
-    #[error("no OS keyring backend is available")]
-    NoBackend(#[source] keyring_core::Error),
+    /// An OS keyring failure. `NoDefaultStore`, `PlatformFailure`, and
+    /// `NoStorageAccess` mean no usable backend is available (logout treats
+    /// those as "nothing of ours is stored"). macOS has no `keyring-core`
+    /// backend (it goes through the `security` tool), so the variant only
+    /// exists elsewhere. The underlying keyring error never carries the
+    /// secret.
+    #[cfg(not(target_os = "macos"))]
+    #[error(transparent)]
+    Keyring(#[from] keyring_core::Error),
 
-    /// An unclassified OS keyring failure that is neither "no entry" nor a
-    /// known no-backend condition.
-    #[error("the OS keyring operation failed")]
-    Keyring(#[source] keyring_core::Error),
+    /// The macOS `security` tool reported a Keychain failure. Its message is
+    /// an OSStatus description and never carries the secret.
+    #[cfg(target_os = "macos")]
+    #[error(transparent)]
+    SecurityTool(#[from] security_cli::SecurityCliError),
 
     /// The OS keyring is disabled via `_FLOX_DISABLE_KEYRING`. Treated like a
     /// no-backend condition: writes fail so callers fall back to plaintext, and
