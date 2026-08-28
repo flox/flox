@@ -303,7 +303,9 @@ The CLI emits telemetry events through the `cli/flox-events` crate.
 If your change adds or modifies an event or one of its fields, read
 [`cli/flox-events/README.md`](cli/flox-events/README.md) first — it
 documents the wire contract, naming and stability rules, and how to
-verify what is actually emitted. Event and field names are frozen once
+verify what is actually emitted — and see
+[`.claude/skills/adding-metrics-events/SKILL.md`](.claude/skills/adding-metrics-events/SKILL.md)
+for the step-by-step procedure. Event and field names are frozen once
 shipped, and the golden tests in that crate pin the wire shape; a
 failing golden is a contract signal — read the README before touching
 the expected JSON.

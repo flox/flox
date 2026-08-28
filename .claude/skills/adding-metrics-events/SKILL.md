@@ -41,10 +41,12 @@ Answer these, and put the answers in the PR description:
    the invocation's `cli.command_run` row, don't emit it), caps with
    true counts, faithful values at every emit site.
 3. **Name and privacy**, per the README's "Naming" and "Privacy"
-   sections: `cli.<entity>.<verb>`, bare snake_case payload fields
-   (`event_type` is the namespace), `success`/`failure` outcomes; and
-   a value domain structurally unable to carry user data — plan the
-   projection now (an enum's `Display`, a `strum` slug), not a scrub.
+   sections: `cli.<entity>.<verb>` when there is an entity, `cli.<verb>`
+   for CLI-level actions with none (`cli.build`, `cli.update_prompted`);
+   bare snake_case payload fields (`event_type` is the namespace),
+   `success`/`failure` outcomes; and a value domain structurally unable
+   to carry user data — plan the projection now (an enum's `Display`, a
+   `strum` slug), not a scrub.
 
 For anything beyond a straightforward additive field, share the
 proposed shape (fields, sources, deliberate exclusions — ~10 lines)
@@ -91,7 +93,8 @@ Model: commit `0eec48c2a` (added `cli.authenticated` and
 
 1. **Add the variant** to `EventKind` in
    `cli/flox-events/src/lib.rs` with the dotted name on
-   `#[serde(rename = "cli.<entity>.<verb>")]`. That rename string is
+   `#[serde(rename = "...")]` — `cli.<entity>.<verb>` when there is an
+   entity, `cli.<verb>` when there is none. That rename string is
    the single source of truth for the wire name — no `Display`, no
    `as_str`, no string literals at call sites.
 2. **Pick the payload type.** Reuse an existing payload struct when
@@ -131,10 +134,10 @@ Model: commit `0eec48c2a` (added `cli.authenticated` and
    `json!({...})` literal, using the `fixed_event` fixture. Plus one
    absent-optional golden if the payload has optionals.
 5. **Add a call-site test** if the emit logic has branches worth
-   pinning: install the `MockHub` harness (see
-   `cli/flox/src/commands/upgrade.rs`), run the handler, filter
-   `sent_batches` by `EventKind`. Mark it
-   `#[serial(global_events_client)]`.
+   pinning: copy the `MockHub` pattern from
+   `cli/flox/src/commands/upgrade.rs` (a private test struct, not an
+   importable helper), run the handler, filter `sent_batches` by
+   `EventKind`. Mark it `#[serial(global_events_client)]`.
 
 ## Verify
 
@@ -157,18 +160,21 @@ that silently produce no output (wrong override var, buffering,
 `flox --version`). Inspect the NDJSON for each branch that matters:
 success, a typed failure, a non-1 exit code, and any exec/hand-off
 path. Confirm the field carries the real value on each, and is absent
-(not `null`, not `""`) where unknown.
+(not `null`, not `""`) where unknown. For every string field, read its
+actual emitted value and name the closed value set it belongs to — if
+you cannot name the set, the field can leak user data and needs
+redesign, not shipping.
 
 ## Red flags — stop and re-read the README
 
 | Thought | Reality |
 |---|---|
-| "I'll just rename this field/event to something better" | Renames break nothing locally and silently produce empty data downstream forever. Shipped names are frozen; an incompatible shape is a new event type. |
-| "The golden test fails — I'll update the expected JSON" | A failing golden means the contract moved. Update it only for the intentional addition you made; if it fails for a rename/retype, that's the signal working. |
+| "I'll just rename this field/event to something better" | Shipped names are frozen — a rename silently yields empty data downstream forever. An incompatible shape is a new event type. |
+| "The golden test fails — I'll update the expected JSON" | A failing golden is the signal working. Update it only for the intentional change you made. |
 | "The spec / the legacy stream did it this way" | Specs and legacy precedent are inputs to challenge. Parity with a legacy mistake is a chance to fix it, not a justification. |
 | "I'll hardcode this value here; it's always 1 anyway" | A stand-in value at one emit site poisons the data for every consumer. Plumb the real value. |
 | "The consumer could compute this, but emitting it is convenient" | Don't. Derived fields at the producer drift; consumers join to `cli.command_run` on `invocation_id`. |
 | "I'll scrub the string before emitting" | Denylists are unsound by construction. Redesign so user data is structurally absent (type-derived slug, closed-set projection). |
 | "I'll add the field now and populate it in a follow-up" | Every PR is a complete vertical slice: defined → populated → tested → verifiable in the same PR. No builders without call sites. |
 | "It compiled and unit tests pass, so it works" | The consumer is not in the test loop. Run the local-collector check and look at the bytes. |
-| "I'll note in the PR which internal system/dashboard needs this" | This is a public repo. PR text, commits, and comments describe the events and fields on their own technical terms — never name or link internal systems, tools, or trackers. |
+| "I'll note in the PR which internal system/dashboard needs this" | Public repo — PR text describes events and fields on their own terms. See the README's "Coordinating changes" section. |

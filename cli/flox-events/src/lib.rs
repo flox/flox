@@ -3,6 +3,10 @@
 //! This crate contains the v2 event envelope and the self-contained
 //! pipeline for buffering and sending `cli.*` events. The global hub is dormant
 //! until a client is installed by the CLI.
+//!
+//! The contributor-facing contract reference — wire shape, naming and
+//! stability rules, and the procedure for adding an event or field — is
+//! this crate's `README.md`.
 
 mod buffer;
 mod client;

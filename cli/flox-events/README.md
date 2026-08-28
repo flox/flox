@@ -14,9 +14,13 @@ the rules that procedure enforces and why they exist.
 
 Telemetry can be disabled entirely with
 `flox config --set disable_metrics true` (or `FLOX_DISABLE_METRICS=true`).
-When disabled, no events are constructed and nothing is sent — the
-global hub stays dormant. See `flox config --help` and the first-run
-notice for the user-facing description of what is collected.
+When disabled, no client is installed, no `Event` envelope is created,
+and nothing is sent — but payload construction at a call site still
+happens, since the payload is built as the `record_event` argument.
+That is why expensive payload-only work must go behind
+`when_client_set` (see Emission mechanics). Telemetry is on by
+default with a first-run notice; see `flox config --help` for the
+user-facing description of what is collected.
 
 ## The two streams
 
@@ -93,9 +97,16 @@ Rules the envelope encodes:
 - **Every CLI event starts with `cli.`** — consumers select this
   producer's events by that prefix, so an event named outside it is
   invisible to them.
-- Group by the **entity**, not the caller: `cli.environment.install`
-  (the environment is what changed), so a whole domain can be selected
-  by prefix.
+- The template is `cli.<entity>.<verb>` when there is an entity, and
+  `cli.<verb>` for CLI-level actions with none (`cli.build`,
+  `cli.search`, `cli.authenticated`, `cli.update_prompted`). Group by
+  the **entity**, not the caller: `cli.environment.install` (the
+  environment is what changed), so a whole domain can be selected by
+  prefix.
+- `cli.environment.install` and `cli.package.install` are different
+  **grains**, not competing names: the environment event is one row
+  per invocation, the package events one row per package. Pick the
+  grain that matches what a consumer counts.
 - Payload field names are **bare**, discriminated by `event_type`:
   `outcome`, `duration_ms`, `error_kind` — not `build_outcome`,
   `build_duration_ms`. Shared meanings keep shared names across
@@ -110,7 +121,10 @@ Rules the envelope encodes:
 The consumers of these events live outside this repository and have
 **no compile-time link back to this crate**. Nothing here breaks
 locally when the contract moves — which is exactly why these rules
-exist.
+exist. Statements here about downstream behavior (unknown envelope
+keys dropped, de-duplication on `event_id`, no backfill of data never
+sent) are the ingestion side's contract, asserted for producers rather
+than verifiable from this repo.
 
 Safe, no coordination needed:
 
@@ -175,17 +189,30 @@ scrub is safe only against the leak shapes someone thought to
 enumerate; a closed set of compile-time values is safe by
 construction.
 
-Never on the wire:
+Three buckets govern what a field may carry:
 
-- Email addresses, usernames, or handles.
-- Tokens or any token bytes.
-- Filesystem paths and hostnames.
-- Free-form user text: error messages, descriptions, command lines.
+- **Never in a new field:** email addresses, tokens or token bytes,
+  filesystem paths, hostnames, and free-form user text (error
+  messages, descriptions, command lines).
+- **Allowed, and often the point:** low-cardinality identifiers the
+  user chose that *are* the usage signal — package coordinates,
+  environment names, manifest install ids, subcommand and flag names.
+  These are identifiers, not prose: a field in this bucket must not
+  be able to carry arbitrary sentences, paths, or secrets.
+- **Pseudonymous, handled carefully:** `auth_subject` (the opaque
+  OIDC/JWT `sub` claim) and `device_id`. Never substitute an email or
+  handle for either.
 
-One shipped exception: `cli.search`'s `search_term` carries the user's
-search text verbatim, for parity with the legacy stream. It is frozen
-into the contract and is not a precedent — new fields don't get to
-cite it.
+Some shipped fields carry user-controlled text that a new field would
+not be allowed. They are frozen as-is and are **not precedents**:
+
+| Field | Events | What it carries |
+|---|---|---|
+| `search_term` | `cli.search` | The search text verbatim (legacy parity). |
+| `env_ref_or_name` | `cli.environment.*` | `owner/name` for managed/remote environments — the owner segment is a FloxHub handle; the environment name for path environments. |
+| `package` | `cli.package.*` | The coordinate as written: a catalog path, a store path (canonicalized under `/nix/store`), or a flake URL — which can embed a hostname or a local path. |
+| `install_id` | `cli.package.upgrade` | The user-chosen manifest install id. |
+| `invocation_sources` | `cli.command_run` | Launcher tokens, including any supplied via `FLOX_INVOCATION_SOURCE` — an open set by design. |
 
 Patterns that make this structural:
 
@@ -245,8 +272,9 @@ chance to fix the mistake, not a reason to carry it forward.
 
 ## Emission mechanics
 
-Call sites record events through the global hub and never construct
-transport-level shapes themselves:
+Call sites record events through the global hub — with one sanctioned
+exception noted below — and never construct transport-level shapes
+themselves:
 
 ```rust
 use flox_events::{CliEnvironmentPayload, EventKind, EventsHub};
@@ -269,13 +297,36 @@ if let Err(err) = EventsHub::global().record_event(EventKind::CliEnvironmentDele
 - Events are buffered on disk (`events-v2.json` in the data dir, one
   JSON object per line) and sent in batches of 100 once the buffer is
   older than two minutes, from a flush-on-drop guard in `main`. A
-  failed send keeps events buffered for a later retry.
+  failed send keeps events buffered for a later retry. Two buffer
+  consequences shape the contract: the buffer caps at 1000 events with
+  oldest-first eviction, so a domain or completion row can outlive the
+  `cli.command_run` row it would join to — the join consumers are told
+  to design around is best-effort, and they must tolerate its absence.
+  And lines the running binary cannot parse (events from a newer flox
+  sharing the data dir) are kept verbatim and sent only once a binary
+  that understands them runs — so on a machine with several flox
+  versions, an event can land later than the release that minted it.
 - Lifecycle placement matters. `flox activate` replaces the process
   with `exec()`: anything recorded after that line is dead code in the
-  parent, which is why `activate.rs` records completion and flushes
-  before exec'ing. When instrumenting a new path, confirm the
-  emission is reached on every branch — including early exits and
-  hand-off paths.
+  parent, which is why `activate.rs` records completion and requests a
+  flush before exec'ing. (An unforced flush still waits for buffer
+  expiry — events not yet due are delivered by a later invocation.)
+  When instrumenting a new path, confirm the emission is reached on
+  every branch — including early exits and hand-off paths.
+- `record_command_completed` is single-shot per client install: the
+  first recorder wins and later calls are silently dropped, so the
+  pre-exec emit and the dispatcher cannot double-count. Over-emission
+  is as real a hazard as under-emission — the first writer must carry
+  the richest payload it can.
+- One sanctioned exception to "always through the hub": the
+  no-subcommand welcome path in `cli/flox/src/commands/mod.rs` builds
+  a client directly with `build_events_client`, because it returns
+  before dispatch installs the global client. Events recorded that way
+  are buffered and drained by a later invocation. Don't copy this
+  shape onto paths the dispatcher reaches.
+- `record_event_with_auth_subject` exists for the login flow, where
+  the authenticated subject becomes known mid-invocation and the
+  client's snapshot is stale by construction.
 - Propagating `invocation_id` to child flox processes is explicit,
   per spawn site: set `FLOX_INVOCATION_ID` on the child's `Command`
   from `current_invocation_id()` (`cli/flox/src/utils/events.rs`), so
@@ -287,21 +338,38 @@ if let Err(err) = EventsHub::global().record_event(EventKind::CliEnvironmentDele
 The integration layer in `cli/flox/src/utils/events.rs` provides
 `env_detail_from_concrete` / `env_detail_from_concrete_without_lineage`
 for building the shared `EnvDetail` payload half, and
-`build_events_client` for client construction.
+`build_events_client` for client construction. `EnvDetail` — flattened
+into every `cli.environment.*` payload — serializes as `env_kind`
+(`path`, `managed`, or `remote`) plus `env_ref_or_name`, with
+`local_environment_id` for path environments and `generation_number`
+for managed/remote ones (path environments structurally cannot carry a
+generation number), plus an optional `package_count`.
 
 ## Verifying what is actually sent
 
 Reading the code is not enough — exercise the instrumented path and
-inspect the emitted JSON. Three gotchas silently produce no output:
+inspect the emitted JSON. Build first (`just build-cli`, inside
+`nix develop` — the endpoint and key defaults are compiled in and the
+build tools are not on bare PATH). Four gotchas leave your collector
+silent:
 
 1. Use `_FLOX_METRICS_URL_V2_OVERRIDE` (and
    `_FLOX_METRICS_API_KEY_V2_OVERRIDE`) to point the v2 stream at a
    local collector. The unsuffixed `_FLOX_METRICS_URL_OVERRIDE`
-   redirects only the **legacy** stream.
+   redirects only the **legacy** stream — with only it set, your
+   collector stays quiet while your test events go to the production
+   endpoint, which is worse than no output.
 2. Set `_FLOX_FORCE_FLUSH_METRICS=true`. Without it a single command
    sends nothing — the buffer flushes on expiry and in batches.
 3. Use a real dispatched subcommand. `flox --version` returns before
    the events client is installed and emits nothing by construction.
+4. Check that metrics aren't disabled (`flox config --get
+   disable_metrics`, `FLOX_DISABLE_METRICS`) — many developers have
+   the opt-out set, and with it on no client is installed and nothing
+   is sent, with no error. Also look in the right buffer: the v2
+   stream buffers to `events-v2.json` in the data dir; the
+   similarly-named `metrics-events-v2.json` in the cache dir belongs
+   to the legacy stream.
 
 ```bash
 # terminal 1: a local collector that acknowledges each send
@@ -321,14 +389,22 @@ first — and BSD `nc` (the macOS default) exits after one connection
 anyway. The loop above acknowledges each request, so each run prints
 only its own events.
 
+Set the override variables per command, as above — never export them
+from a shell profile, `.envrc`, or CI config. An exported override
+silently redirects that machine's real telemetry to whatever the value
+says, over plain HTTP if the URL does. And `nc -l` listens on all
+interfaces, so stop the loop when you're done.
+
 Check the branches that matter: a success, a typed failure, a non-1
 exit code, and (for activate) the exec hand-off path. A test that
 asserts a constant you hardcoded is a claim, not evidence.
 
 In unit tests, install a mock-backed client on the global hub and
-assert on the sent events — see the `MockHub` harness in
-`cli/flox/src/commands/upgrade.rs`. Any test touching the global hub
-must be marked `#[serial(global_events_client)]`.
+assert on the sent events — copy the `MockHub` pattern from
+`cli/flox/src/commands/upgrade.rs` (it also appears in
+`commands/init/mod.rs`; it is a private test struct, not an importable
+helper). Any test touching the global hub must be marked
+`#[serial(global_events_client)]`.
 
 ## Coordinating changes
 
@@ -356,4 +432,6 @@ This is a public repository. Code, comments, commit messages, and PR
 text describe the change on its own technical terms — the events and
 fields themselves. Don't name or link internal systems, tools,
 dashboards, or issue trackers, and don't explain which internal report
-a field powers.
+a field powers. (A few pre-existing comments in this crate name
+specific downstream systems; they are grandfathered, not license for
+new text.)
