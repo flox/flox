@@ -27,6 +27,7 @@ fn read_legacy(dot_flox: &CanonicalPath) -> Option<Uuid> {
 /// missing value stays `None` rather than being re-minted.
 pub(crate) fn read(dot_flox: &CanonicalPath) -> Option<Uuid> {
     EnvJson::read_from(dot_flox)
+        .ok()
         .and_then(|env_json| env_json.env_id)
         .or_else(|| read_legacy(dot_flox))
 }
@@ -48,7 +49,7 @@ pub(crate) enum Origin {
 /// logged and leaves that environment without an id for its lifetime, since
 /// only creation mints.
 pub(crate) fn ensure(dot_flox: &CanonicalPath) -> Origin {
-    let env_json = EnvJson::read_from(dot_flox);
+    let env_json = EnvJson::read_from(dot_flox).ok();
     let existing_id = env_json
         .as_ref()
         .and_then(|env_json| env_json.env_id)
@@ -109,13 +110,10 @@ mod tests {
 
         let minted = read(&dot_flox);
         assert_ne!(minted, None, "env.json carries the minted id");
-        assert_eq!(
-            EnvJson::read_from(&dot_flox),
-            Some(EnvJson {
-                pointer: test_pointer(),
-                env_id: minted,
-            })
-        );
+        assert_eq!(EnvJson::read_from(&dot_flox).unwrap(), EnvJson {
+            pointer: test_pointer(),
+            env_id: minted,
+        });
         assert!(
             !dir.path().join(TELEMETRY_ID_FILENAME).exists(),
             "the legacy file is never written"
@@ -166,11 +164,11 @@ mod tests {
         );
 
         assert_eq!(
-            EnvJson::read_from(&dot_flox),
-            Some(EnvJson {
+            EnvJson::read_from(&dot_flox).unwrap(),
+            EnvJson {
                 pointer: test_pointer(),
                 env_id: None,
-            }),
+            },
             "an existing legacy id is not migrated into env.json"
         );
     }

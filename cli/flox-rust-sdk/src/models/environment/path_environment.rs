@@ -174,7 +174,7 @@ impl PathEnvironment {
 
         // Rewrite from the full [EnvJson] rather than the bare pointer so
         // the sibling `env_id` survives the rename.
-        let previous = EnvJson::read_from(&self.path);
+        let previous = EnvJson::read_from(&self.path).ok();
         if previous.is_none() {
             debug!("could not read or parse env.json before rename, dropping any env_id");
         }
@@ -822,13 +822,10 @@ pub mod tests {
 
         environment.rename("renamed".parse().unwrap()).unwrap();
 
-        assert_eq!(
-            EnvJson::read_from(&environment.path),
-            Some(EnvJson {
-                pointer: EnvironmentPointer::Path(PathPointer::new("renamed".parse().unwrap())),
-                env_id: Some(env_id),
-            })
-        );
+        assert_eq!(EnvJson::read_from(&environment.path).unwrap(), EnvJson {
+            pointer: EnvironmentPointer::Path(PathPointer::new("renamed".parse().unwrap())),
+            env_id: Some(env_id),
+        });
     }
 
     #[test]

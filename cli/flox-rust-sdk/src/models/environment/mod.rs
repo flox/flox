@@ -432,7 +432,7 @@ impl RenderedEnvironmentLinks {
 
 /// A pointer to an environment, either managed or path.
 /// This is used to determine the type of an environment at a given path.
-/// See [EnvironmentPointer::open].
+/// See [EnvJson::read_from].
 #[derive(
     Clone, Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, derive_more::From,
 )]
@@ -519,17 +519,42 @@ impl From<ManagedPointer> for RemoteEnvironmentRef {
 pub struct EnvJson {
     #[serde(flatten)]
     pub pointer: EnvironmentPointer,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_env_id"
+    )]
     pub env_id: Option<Uuid>,
 }
 
+/// Read `env_id`, treating an unparseable value as absent. Opening an
+/// environment goes through [EnvJson], so a corrupted id must degrade to
+/// "no id" rather than making the environment unopenable.
+fn deserialize_env_id<'de, D>(deserializer: D) -> Result<Option<Uuid>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let raw = Option::<serde_json::Value>::deserialize(deserializer)?;
+    Ok(raw
+        .as_ref()
+        .and_then(serde_json::Value::as_str)
+        .and_then(|id| Uuid::try_parse(id).ok()))
+}
+
 impl EnvJson {
-    /// Read the full `env.json` from a `.flox` directory. A malformed file
-    /// reads as `None`, the same as a missing one.
-    pub fn read_from(dot_flox_path: impl AsRef<Path>) -> Option<Self> {
-        let contents =
-            fs::read_to_string(dot_flox_path.as_ref().join(ENVIRONMENT_POINTER_FILENAME)).ok()?;
-        serde_json::from_str(&contents).ok()
+    /// Read the full `env.json` from a `.flox` directory. Callers that treat
+    /// a missing or malformed file as "no data" rather than an error can
+    /// discard the error with `ok()`.
+    pub fn read_from(dot_flox_path: impl AsRef<Path>) -> Result<Self, EnvironmentError> {
+        let path = dot_flox_path.as_ref().join(ENVIRONMENT_POINTER_FILENAME);
+        let contents = fs::read_to_string(&path).map_err(|err| match err.kind() {
+            io::ErrorKind::NotFound => {
+                debug!(path = traceable_path(&path), "couldn't find env.json");
+                EnvironmentError::EnvPointerNotFound
+            },
+            _ => EnvironmentError::ReadEnvironmentMetadata(err),
+        })?;
+        serde_json::from_str(&contents).map_err(EnvironmentError::ParseEnvJson)
     }
 
     /// Serialize to the on-disk representation of `env.json`. Without an
@@ -539,7 +564,7 @@ impl EnvJson {
         serialize_json_with_newline(self)
     }
 
-    /// Rewrite `<dot_flox>/env.json` atomically, keeping the file's existing
+    /// Rewrite an existing `<dot_flox>/env.json` atomically, keeping its
     /// permissions so a shared checkout stays readable by other users, and
     /// carrying over any top-level fields a newer flox may have written that
     /// this version does not model.
@@ -549,11 +574,16 @@ impl EnvJson {
     /// simultaneous flox invocations in one directory.
     pub fn write_to(&self, dot_flox_path: impl AsRef<Path>) -> Result<(), EnvironmentError> {
         let path = dot_flox_path.as_ref().join(ENVIRONMENT_POINTER_FILENAME);
-        let permissions = fs::metadata(&path).ok().map(|m| m.permissions());
+        // Rewrites only. Creating the file here would give it the tempfile's
+        // owner-only mode rather than one derived from the umask, so the
+        // permissions to keep are always read off the file being replaced.
+        let permissions = fs::metadata(&path)
+            .map_err(|_| EnvironmentError::EnvPointerNotFound)?
+            .permissions();
         let contents = self
             .serialize_merging(fs::read_to_string(&path).ok().as_deref())
             .map_err(EnvironmentError::SerializeEnvJson)?;
-        write_atomically_with_permissions(&path, contents, permissions)
+        write_atomically_with_permissions(&path, contents, Some(permissions))
             .map_err(|e| EnvironmentError::WriteEnvJson(Box::new(e)))?;
         Ok(())
     }
@@ -589,41 +619,21 @@ impl EnvJson {
             serde_json::from_str(contents).ok()?;
         let modeled = serde_json::to_value(serde_json::from_str::<Self>(contents).ok()?).ok()?;
         let modeled = modeled.as_object()?;
+        // Fields this type owns but did not serialize (an absent or corrupt
+        // `env_id`) are omitted deliberately and must not be carried back.
+        const OWNED_WHEN_ABSENT: &[&str] = &["env_id", "floxhub_git_url_override"];
         Some(
             on_disk
                 .into_iter()
-                .filter(|(field, _)| !modeled.contains_key(field))
+                .filter(|(field, _)| {
+                    !modeled.contains_key(field) && !OWNED_WHEN_ABSENT.contains(&field.as_str())
+                })
                 .collect(),
         )
     }
 }
 
 impl EnvironmentPointer {
-    /// Attempt to read an environment pointer file ([ENVIRONMENT_POINTER_FILENAME])
-    /// in the specified `.flox` directory.
-    ///
-    /// If the file is found and its contents can be deserialized,
-    /// the function returns an [EnvironmentPointer] containing information about the environment.
-    /// If reading or parsing fails, an [EnvironmentError] is returned.
-    ///
-    /// If you want to operate on the [Environment] at the given path then use
-    /// [open_path] on a project path instead.
-    fn open(dot_flox_path: &CanonicalPath) -> Result<EnvironmentPointer, EnvironmentError> {
-        let pointer_path = dot_flox_path.join(ENVIRONMENT_POINTER_FILENAME);
-        let pointer_contents = match fs::read(&pointer_path) {
-            Ok(contents) => contents,
-            Err(err) => match err.kind() {
-                io::ErrorKind::NotFound => {
-                    debug!("couldn't find env.json at {}", pointer_path.display());
-                    Err(EnvironmentError::EnvPointerNotFound)?
-                },
-                _ => Err(EnvironmentError::ReadEnvironmentMetadata(err))?,
-            },
-        };
-
-        serde_json::from_slice(&pointer_contents).map_err(EnvironmentError::ParseEnvJson)
-    }
-
     pub fn name(&self) -> &EnvironmentName {
         match self {
             EnvironmentPointer::Managed(pointer) => &pointer.name,
@@ -666,7 +676,7 @@ impl DotFlox {
         let dot_flox_path = CanonicalPath::new(&dot_flox_path)
             .map_err(|_| EnvironmentError::DotFloxNotFound(dot_flox_path))?;
 
-        let pointer = EnvironmentPointer::open(&dot_flox_path)?;
+        let pointer = EnvJson::read_from(&dot_flox_path)?.pointer;
 
         Ok(Self {
             path: dot_flox_path.to_path_buf(),
@@ -1477,6 +1487,21 @@ mod test {
     }
 
     #[test]
+    fn garbage_env_id_does_not_break_opening_an_environment() {
+        // Opening reads through EnvJson, so a corrupted id has to degrade to
+        // "no id" rather than making the environment unopenable.
+        let contents = r#"{"name": "name", "version": 1, "env_id": "not-a-uuid"}"#;
+        let env_json: EnvJson = serde_json::from_str(contents).unwrap();
+        assert_eq!(env_json, EnvJson {
+            pointer: EnvironmentPointer::Path(PathPointer {
+                name: EnvironmentName::from_str("name").unwrap(),
+                version: Version::<1> {},
+            }),
+            env_id: None,
+        });
+    }
+
+    #[test]
     fn garbage_env_id_does_not_break_pointer_parsing() {
         // Guards against adding `deny_unknown_fields` to the pointer types:
         // a malformed `env_id` would then break opening the environment.
@@ -1492,11 +1517,6 @@ mod test {
                 name: EnvironmentName::from_str("name").unwrap(),
                 version: Version::<1> {},
             })
-        );
-
-        assert!(
-            serde_json::from_str::<EnvJson>(contents).is_err(),
-            "the typed EnvJson parse rejects the malformed id, so best-effort readers see None"
         );
     }
 
