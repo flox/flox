@@ -95,11 +95,22 @@ pub fn start(
         wait_for_executive(exec_pid, signals)?;
     }
 
+    // Plugin env hooks contribute variables at activation start, before the
+    // activate script (hook.on-activate, profile.d) runs; this process
+    // later execs the user's shell, so its pid is the session root.
+    let injected_env = crate::env_hooks::run_env_hooks(
+        &context.attach_ctx.env_hooks,
+        context.project_ctx.as_ref(),
+        Path::new(&context.flox_activate_store_path),
+        crate::env_hooks::EnvHookPhase::Start,
+        std::process::id() as i32,
+    )?;
     let mut start_command = assemble_activate_command(
         context,
         subsystem_verbosity,
         vars_from_env.clone(),
         &start_state_dir,
+        &injected_env,
     );
     debug!("spawning activate script: {:?}", start_command);
     let status = start_command.spawn()?.wait()?;

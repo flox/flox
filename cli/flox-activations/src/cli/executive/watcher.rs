@@ -112,6 +112,8 @@ pub mod test {
             flox_env_cuda_detection: "".to_string(),
             add_sbin: false,
             plugin_hooks: false,
+            env_hooks: Vec::new(),
+            sidecar_hooks: Vec::new(),
             flox_active_environments: "".to_string(),
         };
         let project = AttachProjectCtx {

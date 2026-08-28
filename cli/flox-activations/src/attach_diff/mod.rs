@@ -31,6 +31,7 @@ pub(super) fn assemble_activate_command(
     subsystem_verbosity: u32,
     vars_from_env: VarsFromEnvironment,
     start_state_dir: &Path,
+    injected_env: &[(String, String)],
 ) -> Command {
     let mut command = Command::new(context.attach_ctx.interpreter_path.join("activate"));
     command.envs(single_set_envs(&context.attach_ctx));
@@ -44,6 +45,9 @@ pub(super) fn assemble_activate_command(
         subsystem_verbosity,
         vars_from_env,
     ));
+    // Plugin env-hook contributions apply last so the activate script and
+    // its children see the injected values.
+    command.envs(injected_env.iter().map(|(k, v)| (k.as_str(), v.as_str())));
     add_activate_script_options(&mut command, context, start_state_dir);
     command
 }
@@ -86,6 +90,7 @@ impl AttachDiff {
         mut vars_from_env: VarsFromEnvironment,
         env_trace: &EnvTrace,
         is_in_place: bool,
+        injected_env: &[(String, String)],
     ) -> Result<Self> {
         // Extract the pre-activation snapshot before consuming vars_from_env.
         let full_env = std::mem::take(&mut vars_from_env.full_env);
@@ -141,6 +146,16 @@ impl AttachDiff {
         double_sets
             .deletions
             .extend(resolved.deletions.iter().cloned());
+
+        // Plugin env-hook contributions land in the double sets — the same
+        // channel as the activation's own env — so they reach the initial
+        // process tree and re-assert after user RC files in every attaching
+        // shell. Applied after the trace replay: an injecting plugin wins
+        // over profile/hook script mutations, in hook order.
+        for (key, value) in injected_env {
+            double_sets.deletions.retain(|deleted| deleted != key);
+            double_sets.additions.insert(key.clone(), value.clone());
+        }
 
         let encoded_diff = {
             let mut intended_sets = if is_in_place {
@@ -597,6 +612,8 @@ mod tests {
             flox_env_cuda_detection: "0".to_string(),
             add_sbin: false,
             plugin_hooks: false,
+            env_hooks: Vec::new(),
+            sidecar_hooks: Vec::new(),
             interpreter_path: PathBuf::from("/interpreter"),
         }
     }
@@ -640,6 +657,7 @@ mod tests {
             growth_vars_from_env(),
             &growth_env_trace(),
             false,
+            &[],
         )
         .unwrap();
 
@@ -667,6 +685,7 @@ mod tests {
             growth_vars_from_env(),
             &growth_env_trace(),
             true,
+            &[],
         )
         .unwrap();
 

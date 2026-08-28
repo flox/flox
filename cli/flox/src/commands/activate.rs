@@ -526,6 +526,18 @@ impl ActivateOptions {
             session_wrap::SessionWrap::NoWrap => {},
         }
 
+        // Declared `env` and `sidecar` hooks are resolved here (same
+        // validation as session-wrap) and recorded into the attach ctx;
+        // flox-activations and the executive execute what was recorded.
+        let (resolved_env_hooks, resolved_sidecar_hooks) =
+            session_wrap::resolve_exec_hooks(session_wrap::ExecHooksArgs {
+                manifest: manifest.as_latest_schema(),
+                lockfile: &lockfile,
+                rendered_env: store_path.clone(),
+                system: &flox.system,
+                feature_enabled: flox.features.plugin_hooks,
+            })?;
+
         // read the currently active environments from the environment
         let mut flox_active_environments = activated_environments();
 
@@ -646,6 +658,8 @@ impl ActivateOptions {
             add_sbin,
             interpreter_path,
             plugin_hooks: flox.features.plugin_hooks,
+            env_hooks: resolved_env_hooks,
+            sidecar_hooks: resolved_sidecar_hooks,
         };
 
         let dot_flox_path = concrete_environment.dot_flox_path().to_path_buf();

@@ -20,15 +20,23 @@
 //!
 //! Design: docs/plugin-lifecycle-hooks.md.
 
+use std::collections::BTreeSet;
 use std::convert::Infallible;
 use std::io::{BufWriter, IsTerminal};
 use std::os::unix::fs::PermissionsExt;
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
-use std::sync::LazyLock;
 
 use anyhow::{Context, Result, bail};
-use flox_core::activate::context::InvocationType;
+use flox_core::activate::context::{InvocationType, PluginHookExec};
+use flox_core::activate::hooks::{
+    FLOX_BIN_VAR,
+    FLOX_HOOK_CTX_VAR,
+    FLOX_HOOK_JQ_VAR,
+    FLOX_HOOK_VAR,
+    FLOX_PLUGIN_NAME_VAR,
+    JQ_BIN,
+};
 use flox_core::path_hash;
 use flox_manifest::lockfile::{LockedPackage, Lockfile};
 use flox_manifest::parsed::Inner;
@@ -39,18 +47,6 @@ use tracing::debug;
 
 use crate::utils::message;
 
-/// Environment variable holding the path to the serialized [`SessionWrapCtx`].
-pub const FLOX_HOOK_CTX_VAR: &str = "FLOX_HOOK_CTX";
-/// Environment variable naming the hook being invoked (`session-wrap`).
-pub const FLOX_HOOK_VAR: &str = "FLOX_HOOK";
-/// Environment variable naming the plugin whose hook is invoked.
-pub const FLOX_PLUGIN_NAME_VAR: &str = "FLOX_PLUGIN_NAME";
-/// Environment variable pointing at the invoking flox binary.
-pub const FLOX_BIN_VAR: &str = "FLOX_BIN";
-/// Environment variable pointing at a jq the hook may rely on for parsing
-/// its ctx, so shell-scripted hooks need not depend on one themselves.
-pub const FLOX_HOOK_JQ_VAR: &str = "FLOX_HOOK_JQ";
-
 /// Marker exported by a session-wrap hook on the wrapped (inner) process.
 ///
 /// Its value is the ctx's `wrap_scope`; dispatch is skipped on a match and
@@ -58,14 +54,10 @@ pub const FLOX_HOOK_JQ_VAR: &str = "FLOX_HOOK_JQ";
 /// cross-plugin protocol visible in one place.
 pub const SESSION_WRAPPED_VAR: &str = "_FLOX_SESSION_WRAPPED";
 
-/// Hook directory inside the rendered environment, relative to `$FLOX_ENV`.
+/// Hook directories inside the rendered environment, relative to `$FLOX_ENV`.
 const SESSION_WRAP_HOOK_DIR: &str = "etc/flox/hooks/session-wrap.d";
-
-/// jq bundled at build time for hook consumption (`FLOX_HOOK_JQ`), following
-/// the `PROCESS_COMPOSE_BIN` pattern of using our own binaries by absolute
-/// path rather than relying on the user's `PATH`.
-static JQ_BIN: LazyLock<String> =
-    LazyLock::new(|| std::env::var("JQ_BIN").unwrap_or(env!("JQ_BIN").to_string()));
+const ENV_HOOK_DIR: &str = "etc/flox/hooks/env.d";
+const SIDECAR_HOOK_DIR: &str = "etc/flox/hooks/sidecar.d";
 
 /// Everything a session-wrap hook needs to re-enter the activation under its
 /// boundary. Serialized as JSON to a `0600` file whose path is passed via
@@ -160,22 +152,97 @@ fn package_store_paths(package: &LockedPackage) -> Vec<PathBuf> {
     }
 }
 
-/// Warn about session-wrap hook files shipped by installed packages that are
-/// not armed by a `[plugin-hooks]` declaration. Ignoring them is what makes
+/// Warn about hook files shipped by installed packages that are not armed
+/// by a `[plugin-hooks]` declaration. Ignoring them is what makes
 /// declarations meaningful; saying so keeps it from looking like breakage.
-fn warn_undeclared_hook_files(hook_dir: &Path, declared: Option<&str>) {
+fn warn_undeclared_hook_files(hook_dir: &Path, kind_label: &str, declared: &BTreeSet<&str>) {
     let Ok(entries) = std::fs::read_dir(hook_dir) else {
         return;
     };
     for entry in entries.flatten() {
         let name = entry.file_name();
         let name = name.to_string_lossy();
-        if Some(name.as_ref()) != declared {
+        if !declared.contains(name.as_ref()) {
             message::warning(formatdoc! {"
-                Ignored session-wrap hook '{name}' shipped by an installed package.
+                Ignored {kind_label} hook '{name}' shipped by an installed package.
                 Declare it under [plugin-hooks] in the manifest to enable it."});
         }
     }
+}
+
+/// Resolve and validate one declared hook participant: the hook file must
+/// exist in the rendered environment, be shipped by the declared plugin's
+/// own locked package, and be executable. Shared by every hook kind.
+fn resolve_hook_exec(
+    hook_dir: &Path,
+    hook_dir_rel: &str,
+    kind_label: &str,
+    plugin_name: &str,
+    manifest: &ManifestLatest,
+    lockfile: &Lockfile,
+    system: &str,
+) -> Result<PluginHookExec> {
+    let hook_path = hook_dir.join(plugin_name);
+    if !hook_path.is_file() {
+        bail!(formatdoc! {"
+            Plugin '{plugin_name}' declares a {kind_label} hook but the environment provides none.
+            Expected an executable at {path}.
+            Ensure the plugin package is installed and provides the hook, or remove the [plugin-hooks] declaration.",
+        path = hook_path.display()});
+    }
+
+    let package = lockfile
+        .packages
+        .iter()
+        .filter(|package| package.system() == system)
+        .find(|package| package.install_id() == plugin_name);
+    let Some(package) = package else {
+        bail!(formatdoc! {"
+            Plugin '{plugin_name}' is declared in [plugin-hooks] but not installed in this environment.
+            Add a package with install id '{plugin_name}' to [install] before declaring its hooks."});
+    };
+
+    let canonical_hook = hook_path.canonicalize().with_context(|| {
+        format!(
+            "could not resolve the {kind_label} hook at {}",
+            hook_path.display()
+        )
+    })?;
+    let store_paths = package_store_paths(package);
+    if !store_paths
+        .iter()
+        .any(|store_path| canonical_hook.starts_with(store_path))
+    {
+        bail!(formatdoc! {"
+            The {kind_label} hook for plugin '{plugin_name}' is provided by a different package.
+            Hooks must be shipped by the declared plugin's own package.
+            Remove the conflicting package or fix the [plugin-hooks] declaration."});
+    }
+
+    let metadata = canonical_hook.metadata().with_context(|| {
+        format!(
+            "could not read the {kind_label} hook at {}",
+            canonical_hook.display()
+        )
+    })?;
+    if metadata.permissions().mode() & 0o111 == 0 {
+        bail!(formatdoc! {"
+            The {kind_label} hook for plugin '{plugin_name}' is not executable.
+            The plugin package must ship {hook_dir_rel}/{plugin_name} with the executable bit set."});
+    }
+
+    let plugin_table = manifest
+        .plugins
+        .inner()
+        .get(plugin_name)
+        .cloned()
+        .unwrap_or(serde_json::Value::Null);
+
+    Ok(PluginHookExec {
+        plugin_name: plugin_name.to_string(),
+        hook_path: canonical_hook,
+        plugin_table,
+    })
 }
 
 /// Decide whether this activation is wrapped, enforcing the declaration
@@ -188,7 +255,12 @@ pub fn resolve(args: SessionWrapArgs<'_>) -> Result<SessionWrap> {
         .and_then(|hooks| hooks.session_wrap.as_deref());
 
     if !args.feature_enabled {
-        if declared.is_some() {
+        let hooks_declared = args
+            .manifest
+            .plugin_hooks
+            .as_ref()
+            .is_some_and(|hooks| !hooks.is_empty());
+        if hooks_declared {
             message::warning(formatdoc! {"
                 Ignored [plugin-hooks] because the 'plugin_hooks' feature is not enabled.
                 Enable it with 'flox config --set features.plugin_hooks true'."});
@@ -197,7 +269,11 @@ pub fn resolve(args: SessionWrapArgs<'_>) -> Result<SessionWrap> {
     }
 
     let hook_dir = args.rendered_env.join(SESSION_WRAP_HOOK_DIR);
-    warn_undeclared_hook_files(&hook_dir, declared);
+    warn_undeclared_hook_files(
+        &hook_dir,
+        "session-wrap",
+        &declared.iter().copied().collect::<BTreeSet<&str>>(),
+    );
 
     let Some(plugin_name) = declared else {
         return Ok(SessionWrap::NoWrap);
@@ -235,63 +311,17 @@ pub fn resolve(args: SessionWrapArgs<'_>) -> Result<SessionWrap> {
             Run 'flox activate' to enter a wrapped session instead."});
     }
 
-    let hook_path = hook_dir.join(plugin_name);
-    if !hook_path.is_file() {
-        bail!(formatdoc! {"
-            Plugin '{plugin_name}' declares a session-wrap hook but the environment provides none.
-            Expected an executable at {path}.
-            Ensure the plugin package is installed and provides the hook, or remove the [plugin-hooks] declaration.",
-        path = hook_path.display()});
-    }
-
-    let package = args
-        .lockfile
-        .packages
-        .iter()
-        .filter(|package| package.system() == args.system)
-        .find(|package| package.install_id() == plugin_name);
-    let Some(package) = package else {
-        bail!(formatdoc! {"
-            Plugin '{plugin_name}' is declared in [plugin-hooks] but not installed in this environment.
-            Add a package with install id '{plugin_name}' to [install] before declaring its hooks."});
-    };
-
-    let canonical_hook = hook_path.canonicalize().with_context(|| {
-        format!(
-            "could not resolve the session-wrap hook at {}",
-            hook_path.display()
-        )
-    })?;
-    let store_paths = package_store_paths(package);
-    if !store_paths
-        .iter()
-        .any(|store_path| canonical_hook.starts_with(store_path))
-    {
-        bail!(formatdoc! {"
-            The session-wrap hook for plugin '{plugin_name}' is provided by a different package.
-            Hooks must be shipped by the declared plugin's own package.
-            Remove the conflicting package or fix the [plugin-hooks] declaration."});
-    }
-
-    let metadata = canonical_hook.metadata().with_context(|| {
-        format!(
-            "could not read the session-wrap hook at {}",
-            canonical_hook.display()
-        )
-    })?;
-    if metadata.permissions().mode() & 0o111 == 0 {
-        bail!(formatdoc! {"
-            The session-wrap hook for plugin '{plugin_name}' is not executable.
-            The plugin package must ship {SESSION_WRAP_HOOK_DIR}/{plugin_name} with the executable bit set."});
-    }
-
-    let plugin_table = args
-        .manifest
-        .plugins
-        .inner()
-        .get(plugin_name)
-        .cloned()
-        .unwrap_or(serde_json::Value::Null);
+    let hook_exec = resolve_hook_exec(
+        &hook_dir,
+        SESSION_WRAP_HOOK_DIR,
+        "session-wrap",
+        plugin_name,
+        args.manifest,
+        args.lockfile,
+        args.system,
+    )?;
+    let canonical_hook = hook_exec.hook_path;
+    let plugin_table = hook_exec.plugin_table;
 
     let inner_argv = std::iter::once(
         std::env::current_exe()
@@ -322,6 +352,69 @@ pub fn resolve(args: SessionWrapArgs<'_>) -> Result<SessionWrap> {
         plugin_name: plugin_name.to_string(),
         ctx,
     })))
+}
+
+/// Inputs to [`resolve_exec_hooks`] that activate.rs already has in scope.
+pub struct ExecHooksArgs<'a> {
+    pub manifest: &'a ManifestLatest,
+    pub lockfile: &'a Lockfile,
+    pub rendered_env: PathBuf,
+    pub system: &'a str,
+    pub feature_enabled: bool,
+}
+
+/// Resolve the declared `env` and `sidecar` hooks for recording into the
+/// attach ctx, with the same per-plugin validation as session-wrap.
+/// [`resolve`] always runs first and owns the feature-off warning, so a
+/// disabled feature resolves silently to nothing here. Names are
+/// deduplicated and returned in lexical order, matching the contract that
+/// env hooks apply in lexical plugin-name order.
+pub fn resolve_exec_hooks(
+    args: ExecHooksArgs<'_>,
+) -> Result<(Vec<PluginHookExec>, Vec<PluginHookExec>)> {
+    if !args.feature_enabled {
+        return Ok((Vec::new(), Vec::new()));
+    }
+    let (env_names, sidecar_names) = match args.manifest.plugin_hooks.as_ref() {
+        Some(hooks) => (
+            hooks
+                .env
+                .iter()
+                .map(String::as_str)
+                .collect::<BTreeSet<_>>(),
+            hooks
+                .sidecar
+                .iter()
+                .map(String::as_str)
+                .collect::<BTreeSet<_>>(),
+        ),
+        None => (BTreeSet::new(), BTreeSet::new()),
+    };
+
+    let env_dir = args.rendered_env.join(ENV_HOOK_DIR);
+    warn_undeclared_hook_files(&env_dir, "env", &env_names);
+    let sidecar_dir = args.rendered_env.join(SIDECAR_HOOK_DIR);
+    warn_undeclared_hook_files(&sidecar_dir, "sidecar", &sidecar_names);
+
+    let resolve_all = |names: &BTreeSet<&str>, dir: &Path, dir_rel: &str, label: &str| {
+        names
+            .iter()
+            .map(|name| {
+                resolve_hook_exec(
+                    dir,
+                    dir_rel,
+                    label,
+                    name,
+                    args.manifest,
+                    args.lockfile,
+                    args.system,
+                )
+            })
+            .collect::<Result<Vec<_>>>()
+    };
+    let env_hooks = resolve_all(&env_names, &env_dir, ENV_HOOK_DIR, "env")?;
+    let sidecar_hooks = resolve_all(&sidecar_names, &sidecar_dir, SIDECAR_HOOK_DIR, "sidecar")?;
+    Ok((env_hooks, sidecar_hooks))
 }
 
 impl SessionWrapExec {

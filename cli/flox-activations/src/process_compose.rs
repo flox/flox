@@ -75,6 +75,7 @@ pub fn start_process_compose_no_services(
     project: &AttachProjectCtx,
     start_id: &StartIdentifier,
     activation_state_dir: &Path,
+    session_root_pid: i32,
 ) -> Result<(), Error> {
     let start_state_dir = start_id.start_state_dir(activation_state_dir)?;
     let config_file = start_id.store_path.join("service-config.yaml");
@@ -97,6 +98,15 @@ pub fn start_process_compose_no_services(
     let vars_from_env = VarsFromEnvironment::get()?;
     // Load the environment trace for the activation that we're attaching to.
     let env_trace = EnvTrace::from_state_dir(&start_state_dir)?;
+    // Services live at activation scope, so env hooks run here with the
+    // start phase — a sidecar's peer processes see the same injections.
+    let injected_env = crate::env_hooks::run_env_hooks(
+        &attach_ctx.env_hooks,
+        Some(project),
+        &start_id.store_path,
+        crate::env_hooks::EnvHookPhase::Start,
+        session_root_pid,
+    )?;
     let attach_diff = AttachDiff::new(
         attach_ctx,
         Some(project),
@@ -104,6 +114,7 @@ pub fn start_process_compose_no_services(
         vars_from_env,
         &env_trace,
         false,
+        &injected_env,
     )?;
     attach_diff.apply_to_command(&mut command);
 

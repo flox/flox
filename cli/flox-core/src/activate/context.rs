@@ -54,6 +54,33 @@ pub struct AttachCtx {
     /// recorded. Defaults to false for contexts serialized by older versions.
     #[serde(default)]
     pub plugin_hooks: bool,
+
+    /// Declared `env` hooks, resolved and validated by the CLI at activation
+    /// time (declaration↔install binding, store containment, executable
+    /// bit). Already in lexical plugin-name order. Empty for contexts
+    /// serialized by older versions and for containers.
+    #[serde(default)]
+    pub env_hooks: Vec<PluginHookExec>,
+
+    /// Declared `sidecar` hooks, resolved the same way; spawned and
+    /// supervised by the executive.
+    #[serde(default)]
+    pub sidecar_hooks: Vec<PluginHookExec>,
+}
+
+/// One resolved `[plugin-hooks]` participant: everything the executor
+/// needs to invoke the hook without re-reading manifest or lockfile.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PluginHookExec {
+    /// The plugin name (its install id and `[plugins.<name>]` key).
+    pub plugin_name: String,
+
+    /// Canonical path of the hook executable inside the plugin's package.
+    pub hook_path: PathBuf,
+
+    /// The plugin's own `[plugins.<name>]` table, verbatim. `Null` when
+    /// the manifest carries no table for the plugin.
+    pub plugin_table: serde_json::Value,
 }
 
 /// Additional context for project-based activations.

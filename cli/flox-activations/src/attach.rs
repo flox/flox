@@ -17,6 +17,7 @@ use tracing::debug;
 use crate::attach_diff::{AttachDiff, activate_tracer};
 use crate::cli::activate::NO_REMOVE_ACTIVATION_FILES;
 use crate::cli::attach::{AttachArgs, AttachExclusiveArgs};
+use crate::env_hooks;
 use crate::env_trace::EnvTrace;
 use crate::gen_rc::bash::{BashStartupArgs, generate_bash_profile_commands};
 use crate::gen_rc::fish::{FishStartupArgs, generate_fish_profile_commands};
@@ -125,6 +126,15 @@ pub(crate) fn startup_ctx(
         None
     };
 
+    // Plugin env hooks contribute variables on every attach; this process
+    // execs into the user's shell, so its pid is the session root.
+    let injected_env = env_hooks::run_env_hooks(
+        &ctx.attach_ctx.env_hooks,
+        ctx.project_ctx.as_ref(),
+        Path::new(&ctx.flox_activate_store_path),
+        env_hooks::EnvHookPhase::Attach,
+        std::process::id() as i32,
+    )?;
     let attach_diff = AttachDiff::new(
         &ctx.attach_ctx,
         ctx.project_ctx.as_ref(),
@@ -132,6 +142,7 @@ pub(crate) fn startup_ctx(
         vars_from_env,
         &env_trace,
         invocation_type.is_in_place(),
+        &injected_env,
     )?;
 
     let set_prompt = ctx.attach_ctx.set_prompt;

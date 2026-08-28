@@ -151,6 +151,8 @@ pub(crate) mod test_helpers {
             flox_env_cuda_detection: "0".to_string(),
             add_sbin: false,
             plugin_hooks: false,
+            env_hooks: Vec::new(),
+            sidecar_hooks: Vec::new(),
             interpreter_path: PathBuf::from("/interpreter"),
         };
         let project_ctx = Some(AttachProjectCtx {

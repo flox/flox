@@ -34,6 +34,7 @@ use crate::process_compose::{process_compose_down, start_process_compose_no_serv
 mod event_coordinator;
 mod log_gc;
 mod reaper;
+mod sidecar;
 mod watcher;
 
 #[cfg(target_os = "linux")]
@@ -121,6 +122,15 @@ impl ExecutiveArgs {
             EventCoordinator::new().context("failed to create event coordinator")?;
         coordinator.spawn_all_watchers(state_json_path)?;
 
+        // Step 6b: Spawn plugin sidecars. This runs before the readiness
+        // handshake so a spawn failure fails the activation.
+        let sidecars = if attach_ctx.plugin_hooks && !attach_ctx.sidecar_hooks.is_empty() {
+            sidecar::spawn_sidecars(&attach_ctx.sidecar_hooks, &project_ctx, parent_pid)?
+        } else {
+            Vec::new()
+        };
+        sidecar::record_sidecars(sidecars);
+
         // Step 7: Signal SIGUSR1 when all setup and possible errors have passed.
         info!("sending SIGUSR1 to parent {}", parent_pid);
         kill(Pid::from_raw(parent_pid), SIGUSR1)?;
@@ -137,6 +147,7 @@ impl ExecutiveArgs {
             activation_state_dir,
             coordinator,
             subsystem_verbosity,
+            parent_pid,
         );
         info!("executive exiting: {:?}", &result);
         result
@@ -179,6 +190,7 @@ fn run_event_loop(
     activation_state_dir: PathBuf,
     coordinator: EventCoordinator,
     subsystem_verbosity: u32,
+    session_root_pid: i32,
 ) -> Result<()> {
     let state_json_path = state_json_path(&activation_state_dir);
 
@@ -242,6 +254,7 @@ fn run_event_loop(
                     &initial_attach_ctx,
                     &project_ctx,
                     &activation_state_dir,
+                    session_root_pid,
                 ) {
                     Ok(Some((activations, lock))) => {
                         write_activations_json(&activations, &state_json_path, lock)?;
@@ -603,6 +616,7 @@ fn handle_start_services_signal(
     attach_ctx: &AttachCtx,
     project_ctx: &AttachProjectCtx,
     activation_state_dir: &Path,
+    session_root_pid: i32,
 ) -> Result<Option<LockedActivationState>> {
     let (mut activations, lock) = locked_activations;
 
@@ -630,6 +644,7 @@ fn handle_start_services_signal(
         project_ctx,
         &ready_start_id,
         activation_state_dir,
+        session_root_pid,
     )?;
 
     activations.set_current_process_compose_start_id(ready_start_id);
@@ -699,6 +714,7 @@ fn shut_down_and_remove_state(
     activation_state_dir_path: impl AsRef<Path>,
 ) -> Result<()> {
     shut_down_process_compose(process_compose_bin, socket_path.as_ref());
+    sidecar::terminate_recorded_sidecars();
     let cleanup_path = rename_state_for_removal(activation_state_dir_path.as_ref())?;
     fs::remove_dir_all(&cleanup_path).context("couldn't remove activations dir")?;
     Ok(())
@@ -754,6 +770,9 @@ fn cleanup_all(
     }
 
     shut_down_process_compose(process_compose_bin, socket_path.as_ref());
+    // Sidecars die after services and before the on-deactivate hooks below,
+    // mirroring activation order in reverse.
+    sidecar::terminate_recorded_sidecars();
     let cleanup_path = rename_state_for_removal(activation_state_dir_path.as_ref())?;
     // The rename already detached the state from new activations (they
     // recreate the directory under its original name), so the lock guards
@@ -841,6 +860,7 @@ mod test {
             activation_state_directory.clone(),
             coordinator,
             0,
+            1,
         )
         .unwrap();
 
@@ -896,6 +916,7 @@ mod test {
             activation_state_directory.clone(),
             coordinator,
             0,
+            1,
         );
 
         // Verify the loop exited normally (a termination signal is not an error)
@@ -1258,6 +1279,7 @@ mod test {
             activation_state_directory.clone(),
             coordinator,
             0,
+            1,
         )
         .expect("event loop should exit cleanly after cleanup");
 

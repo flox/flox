@@ -173,6 +173,9 @@ fn run_plugin_scripts(
         vars_from_env,
         &env_trace,
         false,
+        // Teardown replays the recorded activation env; env hooks are not
+        // re-run here.
+        &[],
     )?;
 
     let helpers = attach_ctx.interpreter_path.join(INTERPRETER_HELPERS);
@@ -237,6 +240,9 @@ fn run_hook_script(
         vars_from_env,
         &env_trace,
         false,
+        // Teardown replays the recorded activation env; env hooks are not
+        // re-run here.
+        &[],
     )?;
 
     let mut command = Command::new(BASH_BIN);
@@ -294,6 +300,8 @@ mod test {
             add_sbin: false,
             flox_active_environments: "".to_string(),
             plugin_hooks: true,
+            env_hooks: Vec::new(),
+            sidecar_hooks: Vec::new(),
         };
         let project = AttachProjectCtx {
             env_project: dot_flox_path.to_path_buf(),
