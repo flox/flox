@@ -573,6 +573,19 @@ as above):
   (their data is baked into the image's lockfile and read by their
   profile.d scripts at container start).
 
+**Wave C outcomes** (2026-08-28; all ten handoff slices on the
+flox-plugins branch, each validated through a real activation): every
+port preserves its old module's contract — same preflight gates and
+guidance, same policy compilation with the same declared lossiness,
+same artifacts at the same paths, and a bail at exactly the point the
+old backend bailed. Seven bail at CLI preflight on this machine class
+(coder, modal, docker-sbx, e2b, daytona, cursor, vercel-sandbox);
+three compile policy, write their handoff artifacts, and bail at the
+launch boundary (ona, cognition-devin, anjuna). The shared toolkit
+stayed *duplicated* across the bash hooks for now — factoring a
+common library inside flox-plugins is deferred to the migration-out
+step, when the per-plugin branch layout is settled.
+
 The shared toolkit (`preflight.rs`, `bake.rs`, `handoff.rs` pure
 helpers) ports to a shared library *inside flox-plugins* (a common
 package or vendored module the plugin builds consume) — not into
