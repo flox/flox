@@ -1689,6 +1689,7 @@ dependencies = [
  "indoc",
  "itertools 0.14.0",
  "log",
+ "nix",
  "proptest",
  "proptest-derive",
  "regex",
