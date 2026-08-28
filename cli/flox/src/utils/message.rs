@@ -318,6 +318,19 @@ pub(crate) fn print_overridden_manifest_fields(lockfile: &Lockfile) {
         };
         info(message);
     }
+
+    // Hook participation is consent and must be authored in the top-level
+    // manifest, so include-declared `[plugin-hooks]` sections are dropped
+    // during composition; tell the user how to opt in deliberately.
+    for warning_context in &compose.warnings {
+        if matches!(warning_context.warning, Warning::IgnoredPluginHooks(_)) {
+            info(formatdoc! {"
+                Ignored [plugin-hooks] declared by included environment '{}'.
+                Declare plugin hooks in this environment's manifest to enable them.",
+                warning_context.higher_priority_name
+            });
+        }
+    }
 }
 
 /// Report when re-locking changed the implicit default systems the environment

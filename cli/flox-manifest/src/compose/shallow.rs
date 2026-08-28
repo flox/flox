@@ -22,7 +22,7 @@ use crate::parsed::common::{
 };
 // merge_hook operates on the latest schema's Hook (which carries
 // `on-deactivate`), so composing environments preserves the field.
-use crate::parsed::latest::{Hook, Install, ManifestLatest, MinimumCliVersion};
+use crate::parsed::latest::{Hook, Install, ManifestLatest, MinimumCliVersion, PluginHooks};
 // merge_build operates on the latest schema's Build (which carries
 // `sandbox-allow`), so composing environments preserves the field.
 use crate::parsed::v1_13_0::{Build, Profile, ProfileDeactivate, Services};
@@ -300,6 +300,22 @@ impl ShallowMerger {
         Ok((Build(merged), warnings))
     }
 
+    /// Keeps only the higher-priority manifest's `[plugin-hooks]` section.
+    ///
+    /// Hook participation is consent and must be authored in the top-level
+    /// manifest, so declarations never flow through includes: because the
+    /// composer is the final (highest-priority) manifest in the fold, taking
+    /// the high-priority side at every step leaves exactly the composer's
+    /// section in the merged manifest. `merge_all` warns about each include
+    /// whose section is dropped, since only it knows the include names.
+    #[instrument(skip_all)]
+    fn merge_plugin_hooks(
+        _low_priority: Option<&PluginHooks>,
+        high_priority: Option<&PluginHooks>,
+    ) -> Result<(Option<PluginHooks>, Vec<Warning>), MergeError> {
+        Ok((high_priority.cloned(), vec![]))
+    }
+
     /// Merges plugin data whole-table per plugin name: the higher priority
     /// manifest's table for a given plugin wins outright rather than being
     /// merged key-by-key, since plugin data is opaque to Flox and partial
@@ -392,6 +408,12 @@ impl ManifestMergeTrait for ShallowMerger {
         let (plugins, plugins_warnings) =
             Self::merge_plugins(&low_priority.plugins, &high_priority.plugins)?;
 
+        trace!(section = "plugin-hooks", "merging manifest section");
+        let (plugin_hooks, plugin_hooks_warnings) = Self::merge_plugin_hooks(
+            low_priority.plugin_hooks.as_ref(),
+            high_priority.plugin_hooks.as_ref(),
+        )?;
+
         debug!("manifest pair merged successfully");
 
         let warnings = [
@@ -403,6 +425,7 @@ impl ManifestMergeTrait for ShallowMerger {
             build_warnings,
             containerize_warnings,
             plugins_warnings,
+            plugin_hooks_warnings,
         ]
         .into_iter()
         .flatten()
@@ -421,6 +444,7 @@ impl ManifestMergeTrait for ShallowMerger {
             containerize,
             include: Include::default(),
             plugins,
+            plugin_hooks,
         };
 
         Ok((merged_manifest, warnings))

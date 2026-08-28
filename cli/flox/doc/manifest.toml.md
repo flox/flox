@@ -34,6 +34,7 @@ tables:
 - [`[build]`](#build)
 - [`[options]`](#options)
 - [`[plugins]`](#plugins) - experimental, see below
+- [`[plugin-hooks]`](#plugin-hooks) - experimental, see below
 - [`containerize`] - see [`flox-containerize(1)`](./flox-containerize.md)
 
 ## `schema-version`
@@ -53,6 +54,7 @@ Valid string values are:
 - `1.13.0`: introduced `profile.deactivate` and build `sandbox-allow`
 - `1.14.0`: introduced `plugins`
 - `1.15.0`: introduced `hook.on-deactivate`
+- `1.16.0`: introduced `plugin-hooks`
 
 Existing manifest schemas, including the older `version = 1` format, are
 automatically forward-migrated when using features that require a newer schema
@@ -924,6 +926,38 @@ Flox plugins work by convention:
   If a plugin script exports a variable with the same name as a `[vars]`
   entry, the plugin's value wins;
   use the `hook.on-activate` script to override variables set by a plugin.
+
+## `[plugin-hooks]`
+
+**Experimental: the `[plugin-hooks]` section is under active development
+and its behavior may change.** It requires `schema-version = "1.16.0"`
+and currently has no effect unless the `plugin_hooks` feature flag is
+enabled.
+
+The `[plugin-hooks]` section declares which installed plugins participate
+in lifecycle hooks beyond `profile.d` scripts.
+Declaring a hook is consent: only hooks declared here run, and a hook
+file shipped by a package that is not declared is ignored.
+
+```
+[plugin-hooks]
+session-wrap = "my-sandbox"
+env = ["my-injector"]
+sidecar = ["my-broker"]
+```
+
+- `session-wrap`: the plugin that re-enters the activation under an
+  enforcement boundary. At most one plugin may wrap the session.
+- `env`: plugins that contribute environment variables at activation
+  start and on every attach.
+- `sidecar`: plugins that run a supervised process for the lifetime of
+  the activation.
+
+Values name plugins, i.e. keys of `[plugins.<name>]` provided by
+packages in `[install]`.
+Only the top-level manifest's `[plugin-hooks]` section takes effect:
+declarations in included environments are ignored with a warning, and
+must be restated in the including manifest to enable them.
 
 
 # SEE ALSO
