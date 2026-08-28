@@ -8,7 +8,7 @@
 
 let
   inherit (config.programs.flox) package;
-  inherit (config.services.flox) enable stateDir;
+  inherit (config.services.flox) enable metrics stateDir;
   inherit (utils.systemdUtils.lib) makeJobScript;
   inherit (lib)
     escapeShellArgs
@@ -127,9 +127,9 @@ let
         requires = [ "flox-pull@${name}.service" ];
         serviceConfig = mkMerge [
           {
-            Environment = common.serviceEnvironment pkgs.runtimeShell WorkingDirectory (
-              toString (config.serviceConfig.User or "root")
-            );
+            Environment = common.serviceEnvironment pkgs.runtimeShell WorkingDirectory (toString (
+              config.serviceConfig.User or "root"
+            )) metrics.enable;
             ExecStart = mkForce "${execStart}";
             # Upstream modules commonly harden their units with
             # ProtectSystem=strict; the activation must still be able to

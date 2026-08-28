@@ -212,7 +212,7 @@ the Services method only:
     - _Default_: `null`
     - _Example_: "Foobar Web Server"
 
-The Services method also supports the following module-wide options:
+Both methods also support the following module-wide options:
 
 * `services.flox.stateDir`
     Path containing all state pertaining to Flox-managed services.
@@ -225,6 +225,14 @@ The Services method also supports the following module-wide options:
 
     - _Type_: string
     - _Default_: `0700`
+
+* `services.flox.metrics.enable`
+    Whether to let `flox` submit metrics for Flox-managed services.
+    Each service runs with its own Flox configuration directory,
+    so this is the only place the setting can be made for them.
+
+    - _Type_: boolean
+    - _Default_: `true`
 
 ## Flox Overrides configuration attributes
 

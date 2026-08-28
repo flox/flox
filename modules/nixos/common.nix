@@ -1,7 +1,7 @@
 { lib, ... }:
 
 let
-  inherit (lib) mkOption types;
+  inherit (lib) boolToString mkOption types;
 
   # Options shared by both the Services method (`services.flox.activations`)
   # and the Overrides method (`systemd.services.<name>.flox`). The
@@ -108,6 +108,15 @@ let
         The mode of each service's working directory in numeric format.
       '';
     };
+    metrics.enable = mkOption {
+      type = types.bool;
+      default = true;
+      description = ''
+        Whether to let `flox` submit metrics for Flox-managed services.
+        Each service runs with its own Flox configuration directory, so
+        this is the only place the setting can be made for them.
+      '';
+    };
   };
 
   # Environment for every process that invokes flox on behalf of a service.
@@ -116,8 +125,11 @@ let
   # passwd database, discarding the working-directory HOME set here. The
   # XDG variables are additionally pinned beneath the working directory so
   # flox state stays with the service even if HOME is reset anyway.
-  serviceEnvironment = shell: workingDirectory: user: [
-    "FLOX_DISABLE_METRICS=true"
+  # The pinned XDG_CONFIG_HOME gives each service an empty Flox
+  # configuration directory, so FLOX_DISABLE_METRICS is the only way
+  # `services.flox.metrics.enable` can reach it.
+  serviceEnvironment = shell: workingDirectory: user: metrics: [
+    "FLOX_DISABLE_METRICS=${boolToString (!metrics)}"
     "HOME=${workingDirectory}"
     "LOGNAME=${user}"
     "SHELL=${shell}"

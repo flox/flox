@@ -7,7 +7,12 @@
 
 let
   inherit (config.programs.flox) package;
-  inherit (config.services.flox) enable stateDir workingDirectoryMode;
+  inherit (config.services.flox)
+    enable
+    metrics
+    stateDir
+    workingDirectoryMode
+    ;
   inherit (lib)
     escapeShellArg
     escapeShellArgs
@@ -76,7 +81,9 @@ let
       as_user() {
         setpriv --reuid "$user" --regid "$group" --init-groups \
           env ${
-            escapeShellArgs (common.serviceEnvironment pkgs.runtimeShell cfg.workingDirectory cfg.user)
+            escapeShellArgs (
+              common.serviceEnvironment pkgs.runtimeShell cfg.workingDirectory cfg.user metrics.enable
+            )
           } "$@"
       }
 
