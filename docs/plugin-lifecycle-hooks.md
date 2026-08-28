@@ -96,8 +96,8 @@ the "today" column is cited from `main` (8f5162872).
 | 1 | init / edit / lock / build-render | `commands/init`, `commands/edit.rs`, `lock_manifest.rs`, `buildenv.nix` | none (declaration only) | *(design only)* `post-init`, `pre-lock`, `post-lock` |
 | 2a | activate: resolve & render | `commands/activate.rs` | none | **`session-wrap`** *(build now)* |
 | 2b | activate: start | interpreter `activate` script | interpreter profile.d → `[vars]` → plugin `etc/profile.d` → `hook.on-activate` | — (existing surface is sufficient) |
-| 2c | activate: per-shell attach | `flox-activations` `gen_rc/*` | `[profile]` scripts, prompt hooks | **`env` hook** *(build later in this prototype — libsandbox wave)*; *(design only)* `on-attach` |
-| 3 | in-session | executive daemon, `hook-env` prompt hook | auto-activate allow/deny config | **`sidecar`** *(build later — libsandbox wave)*; *(design only)* in-session event hooks |
+| 2c | activate: per-shell attach | `flox-activations` `gen_rc/*` | `[profile]` scripts, prompt hooks | **`env` hook** *(built — core wave 2)*; *(design only)* `on-attach` |
+| 3 | in-session | executive daemon, `hook-env` prompt hook | auto-activate allow/deny config | **`sidecar`** *(built — core wave 2)*; *(design only)* in-session event hooks |
 | 4 | deactivate / exit | emitted teardown scripts; executive | `[profile.deactivate]` (v1.13.0), `hook.on-deactivate` (v1.15.0) | **plugin `on-deactivate.d`** *(build now)*; *(design only)* `pre-deactivate` in-shell |
 | 5 | delete / push / pull / containerize / gc | respective commands | none | *(design only)* `pre-push`, `post-pull`, `pre-containerize`, `on-delete` |
 | 6 | services | executive + process-compose | `shutdown.command` | *(design only)* `pre-start`/`post-stop` per service, crash notification |
@@ -290,7 +290,7 @@ teardown, and documented for plugin authors. Undeclared, like
 profile.d: teardown scripts have no session-capture or injection
 powers.
 
-### 3.4 `env` hook *(build in the libsandbox wave)*
+### 3.4 `env` hook *(built — core wave 2)*
 
 An executable contributing environment variables at activation start
 and every attach, inside `flox-activations` — the seam the old branch
@@ -324,7 +324,18 @@ Attach-conflict handling ports as config-hash comparison: an env hook
 whose `plugin_table` changed since the activation started errors
 rather than silently diverging.
 
-### 3.5 `sidecar` hook *(build in the libsandbox wave)*
+Implementation notes (core wave 2, 2026-08-28): the CLI resolves and
+validates declarations with the session-wrap machinery and records
+them (`AttachCtx.env_hooks`, resolved paths + tables); dispatch runs
+at three sites — activation start before the activate script, services
+start in the executive (both `phase: start`), and every shell attach —
+with the contributions folded into the double-set channel after the
+trace replay, so an injecting plugin wins over profile/hook mutations.
+Teardown's env replay for `on-deactivate` scripts does not re-run
+hooks. The attach-conflict config-hash comparison remains a wave-D
+item. Covered end to end by `cli/tests/plugin_hooks_exec.bats`.
+
+### 3.5 `sidecar` hook *(built — core wave 2)*
 
 A long-running process with the activation's lifetime, hosted by the
 executive next to process-compose — the generic form of the old
@@ -351,6 +362,19 @@ Supervision contract:
 - Terminated and reaped during teardown before `on-deactivate.d`;
   its runtime dir (including any ctx file) is removed by the
   executive.
+
+Implementation notes (core wave 2, 2026-08-28): sidecars spawn in the
+executive between watcher setup and the readiness handshake, so spawn
+failure fails the activation; the private `0700` runtime dir is
+`sc.<executive-pid>.<n>` beside the services socket (short, for the
+104-byte `sun_path` cap) and holds the ctx file. Exits are logged by a
+per-sidecar watch thread (crash non-fatal, no restart; the signal
+thread reaps). Teardown SIGTERMs with a 5s grace then SIGKILLs, after
+services shut down and before `on-deactivate.d`, on both the normal
+and the state-removed paths; the executive's deliberate
+exit-without-cleanup on a termination signal leans on
+`PR_SET_PDEATHSIG`/the macOS parent-watch obligation, as designed.
+Covered end to end by `cli/tests/plugin_hooks_exec.bats`.
 
 ## 4. Hook tree layout and rendering
 
