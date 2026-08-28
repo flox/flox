@@ -504,7 +504,7 @@ string-mangling). Ordered by migration wave:
 | B | oci | session-wrap (+ on-deactivate.d for cache GC) | bake via `flox containerize` + docker; see the honest-gaps list below |
 | B | openshell | session-wrap, on-deactivate.d | policy YAML compiled from its own `[plugins.openshell]` table; binary→store-path resolution from the lockfile; version preflight ≥ 0.0.62; retags under its own `<env>-openshell` repo. **First released plugin** (Flox Catalog, `flox` org) |
 | C | coder, modal, docker-sbx, ona, e2b, daytona, cognition-devin, anjuna, cursor, vercel-sandbox | session-wrap | the OCI-handoff/artifact-writer slices; port artifact generation + declared-lossiness policy compilation as-is; each bails where it bailed before |
-| D | libsandbox (+ `flox-sandbox` extension) | env, sidecar, on-deactivate.d | C engine ships as a package library; env hook injects preload + policy env; sidecar hosts the broker (peer-cred guard moves with it); grants store moves under the plugin cache dir; review UI becomes the `flox-sandbox` extension. Open design items: SIP shell-swap, grants seeding (§3.4) |
+| D | libsandbox (+ `flox-sandbox` extension) | env, sidecar | **DONE** — C engine ships as a package library; env hook injects preload + policy env; sidecar hosts the broker (peer-cred guard moved with it); grants store under the plugin cache dir; review UI is the `flox-sandbox` beta extension. `on-deactivate.d` proved unnecessary (grants/audit persist; the broker self-cleans its sockets). Remaining follow-ups: SIP shell-swap, Linux leg (§6 wave-D outcomes) |
 
 **Wave A outcomes** (2026-08-27; both plugins live on the local
 `daniel/wave-a-session-wrap` branch of flox-plugins, validated end to
@@ -609,6 +609,53 @@ launch boundary (ona, cognition-devin, anjuna). The shared toolkit
 stayed *duplicated* across the bash hooks for now — factoring a
 common library inside flox-plugins is deferred to the migration-out
 step, when the per-plugin branch layout is settled.
+
+**Wave D outcomes** (2026-08-28; `plugin-libsandbox` on the flox-plugins
+branch, validated end to end on macOS): the advisory engine is now a
+plugin with no sandbox-specific code left in core — it rides only the
+generic env + sidecar hooks built in core wave 2.
+
+- The C engine (`sandbox.c` + `closure.c`) ships **unchanged** as the
+  plugin's package library, compiled in the build env (`clang`,
+  `-pthread`, `-dynamiclib`/`-shared`). Repackaging the engine was the
+  easy part; the work was replacing the in-tree Rust injection and
+  broker with hook executables.
+- The **env hook** (bash) composes the engine's policy environment.
+  Two facts made it correct: it must be idempotent (it runs at start
+  and every attach — the preload compose checks for the lib before
+  appending), and the seed allow-set is reproduced from the reference
+  `SeedAllowSet` (system dirs + `/nix/store` as allow-dirs, shell /
+  interpreter / flox-config trees as globs), folded with saved grants
+  by shape.
+- The **broker** (C) is the sidecar — the load-bearing new code. It
+  binds the verdict and control sockets, both derived from the
+  services-socket path in its ctx (the same pure function the env hook
+  holds, so the rendezvous needs no second channel). The
+  peer-credential self-approval guard moved into it verbatim
+  (`LOCAL_PEERPID`/`SO_PEERCRED`, refuse when the peer is the
+  session-root pid or a descendant), using the `session_root_pid` the
+  sidecar ctx carries; validated refusing in-session and permitting
+  out-of-session. Sockets self-clean on the teardown SIGTERM.
+- The **review UI** is a self-contained C `flox-sandbox` binary
+  installed as a beta subcommand extension
+  (`flox extension install --from-path share/flox-sandbox`, dispatched
+  as `flox sandbox`). It reads the NDJSON grants/audit store off disk
+  and reaches the broker's control socket derived via
+  `flox services-socket` — never from the session env, so an
+  in-session process cannot find it.
+- Grants persist as **NDJSON** under
+  `.flox/cache/plugins/plugin-libsandbox/` (the plugin owns the
+  format; the engine's `audit.ndjson` sits beside it). `on-deactivate.d`
+  proved unnecessary and was dropped — grants and audit persist by
+  design and the broker cleans its own sockets.
+- Two follow-ups remain, both documented in the plugin README: the
+  macOS **SIP shell-swap** (a SIP-protected session shell strips
+  `DYLD_INSERT_LIBRARIES`, so its own builtins escape mediation while
+  non-SIP children and `flox activate -- <tool>` are covered — the
+  automatic swap-in of a bundled bash is not yet ported), and the
+  **Linux `LD_PRELOAD` leg** (builds from the same sources, not yet
+  exercised here). The "grants seeding" open item from §3.4 landed as
+  the env hook's reproduction of the seed allow-set.
 
 The shared toolkit (`preflight.rs`, `bake.rs`, `handoff.rs` pure
 helpers) ports to a shared library *inside flox-plugins* (a common
