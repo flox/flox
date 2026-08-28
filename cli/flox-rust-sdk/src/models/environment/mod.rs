@@ -540,7 +540,9 @@ impl EnvJson {
     }
 
     /// Rewrite `<dot_flox>/env.json` atomically, keeping the file's existing
-    /// permissions so a shared checkout stays readable by other users.
+    /// permissions so a shared checkout stays readable by other users, and
+    /// carrying over any top-level fields a newer flox may have written that
+    /// this version does not model.
     ///
     /// Nothing serializes a `read_from`/`write_to` pair against concurrent
     /// writers: a rewrite landing in between is lost. That needs two
@@ -549,11 +551,50 @@ impl EnvJson {
         let path = dot_flox_path.as_ref().join(ENVIRONMENT_POINTER_FILENAME);
         let permissions = fs::metadata(&path).ok().map(|m| m.permissions());
         let contents = self
-            .to_pretty_string()
+            .serialize_merging(fs::read_to_string(&path).ok().as_deref())
             .map_err(EnvironmentError::SerializeEnvJson)?;
         write_atomically_with_permissions(&path, contents, permissions)
             .map_err(|e| EnvironmentError::WriteEnvJson(Box::new(e)))?;
         Ok(())
+    }
+
+    /// Serialize for disk, re-attaching any field of `existing` that this
+    /// version does not model so a newer flox's additions survive the
+    /// rewrite. Merging goes through [serde_json::Value], whose map sorts
+    /// keys, so it is used only when there is something to carry over —
+    /// otherwise the field order of [Self::to_pretty_string] is kept.
+    fn serialize_merging(&self, existing: Option<&str>) -> Result<String, serde_json::Error> {
+        let unmodeled = existing
+            .and_then(Self::unmodeled_fields)
+            .unwrap_or_default();
+        if unmodeled.is_empty() {
+            return self.to_pretty_string();
+        }
+        let mut value = serde_json::to_value(self)?;
+        if let serde_json::Value::Object(fields) = &mut value {
+            // Only fill gaps: what this version writes stays authoritative,
+            // so e.g. an `env_id: null` on disk cannot clobber a real id.
+            for (field, carried) in unmodeled {
+                fields.entry(field).or_insert(carried);
+            }
+        }
+        serialize_json_with_newline(&value)
+    }
+
+    /// The top-level fields of `contents` that [EnvJson] does not round-trip.
+    /// `None` when the file cannot be parsed, in which case it is replaced
+    /// rather than merged.
+    fn unmodeled_fields(contents: &str) -> Option<serde_json::Map<String, serde_json::Value>> {
+        let on_disk: serde_json::Map<String, serde_json::Value> =
+            serde_json::from_str(contents).ok()?;
+        let modeled = serde_json::to_value(serde_json::from_str::<Self>(contents).ok()?).ok()?;
+        let modeled = modeled.as_object()?;
+        Some(
+            on_disk
+                .into_iter()
+                .filter(|(field, _)| !modeled.contains_key(field))
+                .collect(),
+        )
     }
 }
 
@@ -1320,6 +1361,88 @@ mod test {
             env_id: None,
         };
         assert_eq!(env_json.to_pretty_string().unwrap(), bare_pointer_content);
+    }
+
+    #[test]
+    fn write_to_preserves_fields_this_version_does_not_model() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join(ENVIRONMENT_POINTER_FILENAME);
+        std::fs::write(
+            &path,
+            r#"{
+            "name": "name",
+            "version": 1,
+            "env_id": "0f836d5e-6ff8-4de9-a37a-27b8a3f152b2",
+            "forked_from": "abc",
+            "future_table": {"nested": [1, 2]}
+        }"#,
+        )
+        .unwrap();
+
+        let mut env_json = EnvJson::read_from(dir.path()).unwrap();
+        env_json.pointer = EnvironmentPointer::Path(PathPointer::new(
+            EnvironmentName::from_str("renamed").unwrap(),
+        ));
+        env_json.write_to(dir.path()).unwrap();
+
+        let written: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(written["name"], "renamed", "modeled fields are rewritten");
+        assert_eq!(written["forked_from"], "abc", "unmodeled scalar survives");
+        assert_eq!(
+            written["future_table"],
+            serde_json::json!({"nested": [1, 2]}),
+            "unmodeled nested value survives"
+        );
+    }
+
+    #[test]
+    fn write_to_does_not_let_a_null_field_overwrite_a_real_value() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join(ENVIRONMENT_POINTER_FILENAME);
+        // `env_id: null` parses as absent, so it is not a modeled field on
+        // disk; it must not clobber the id being written.
+        std::fs::write(&path, r#"{"name": "name", "version": 1, "env_id": null}"#).unwrap();
+
+        let id = Uuid::from_str("0f836d5e-6ff8-4de9-a37a-27b8a3f152b2").unwrap();
+        EnvJson {
+            pointer: EnvironmentPointer::Path(PathPointer {
+                name: EnvironmentName::from_str("name").unwrap(),
+                version: Version::<1> {},
+            }),
+            env_id: Some(id),
+        }
+        .write_to(dir.path())
+        .unwrap();
+
+        assert_eq!(EnvJson::read_from(dir.path()).unwrap().env_id, Some(id));
+    }
+
+    #[test]
+    fn write_to_drops_a_malformed_env_id() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join(ENVIRONMENT_POINTER_FILENAME);
+        std::fs::write(
+            &path,
+            r#"{"name": "name", "version": 1, "env_id": "not-a-uuid"}"#,
+        )
+        .unwrap();
+
+        EnvJson {
+            pointer: EnvironmentPointer::Path(PathPointer {
+                name: EnvironmentName::from_str("name").unwrap(),
+                version: Version::<1> {},
+            }),
+            env_id: None,
+        }
+        .write_to(dir.path())
+        .unwrap();
+
+        assert_eq!(
+            std::fs::read_to_string(&path).unwrap(),
+            "{\n  \"name\": \"name\",\n  \"version\": 1\n}\n",
+            "an unparseable file is replaced rather than merged"
+        );
     }
 
     #[cfg(unix)]
