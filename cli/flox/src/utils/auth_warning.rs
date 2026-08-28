@@ -41,9 +41,9 @@ struct LastResolveAuthWarning {
 ///
 /// Emitted via [`message::warning`], landing on stderr like every other
 /// advisory message. The stamp is only written when the warning is actually
-/// emitted: invocations that suppress it (`-q`, the prompt-hook flow) never
-/// install the hook that calls this (see `FloxArgs::handle`), so they cannot
-/// consume the 8-hour window.
+/// emitted: invocations that suppress it (`-q`, `auth_notifications = false`,
+/// the prompt-hook flow) never install the hook that calls this (see
+/// `FloxArgs::handle`), so they cannot consume the 8-hour window.
 pub(crate) fn warn_unauthenticated_resolve(cache_dir: impl AsRef<Path>) {
     let stamp_file = cache_dir.as_ref().join(RESOLVE_AUTH_WARNING_FILE_NAME);
     let now = OffsetDateTime::now_utc();

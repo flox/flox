@@ -23,8 +23,9 @@ Authenticate with FloxHub so that you can push and pull environments.
 ## Quieting login reminders
 
 Flox reminds you to log in when you run a command without a FloxHub
-account.
-To turn this reminder off:
+account, and warns when it resolves packages against the catalog
+without a login.
+To turn these messages off:
 
 ```bash
 flox config --set auth_notifications false

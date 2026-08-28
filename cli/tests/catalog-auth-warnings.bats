@@ -104,6 +104,34 @@ teardown() {
   assert_output --partial "$RESOLVE_AUTH_WARNING"
 }
 
+@test "'auth_notifications = false' suppresses the auth warning" {
+  skip_x86_64_darwin_replay
+  unset FLOX_FLOXHUB_TOKEN
+  mkdir -p "$FLOX_CONFIG_DIR"
+  echo 'auth_notifications = false' >> "$FLOX_CONFIG_DIR/flox.toml"
+  "$FLOX_BIN" init
+  run "$FLOX_BIN" install hello
+  assert_success
+  refute_output --partial "$RESOLVE_AUTH_WARNING"
+}
+
+@test "'auth_notifications = false' does not consume the rate-limit window" {
+  skip_x86_64_darwin_replay
+  unset FLOX_FLOXHUB_TOKEN
+  mkdir -p "$FLOX_CONFIG_DIR"
+  echo 'auth_notifications = false' >> "$FLOX_CONFIG_DIR/flox.toml"
+  "$FLOX_BIN" init
+  run "$FLOX_BIN" install hello
+  refute_output --partial "$RESOLVE_AUTH_WARNING"
+  # Quieting must not have written the stamp: a user who turns the key back
+  # on still gets the next warning rather than an already-consumed window.
+  rm .flox/env/manifest.lock
+  rm "$FLOX_CONFIG_DIR/flox.toml"
+  run "$FLOX_BIN" list
+  assert_success
+  assert_output --partial "$RESOLVE_AUTH_WARNING"
+}
+
 @test "resolving with an expired token prints the auth warning" {
   skip_x86_64_darwin_replay
   # Same shape as the suite token but with exp in the past (2001-09-09).
