@@ -1,0 +1,17 @@
+when:
+  path: /api/v1/catalog/by-command
+  method: GET
+then:
+  status: 200
+  header:
+  - name: date
+    value: Fri, 28 Aug 2026 21:25:09 GMT
+  - name: content-type
+    value: application/json
+  - name: content-length
+    value: '664'
+  - name: server
+    value: uvicorn
+  - name: apigw-requestid
+    value: C1Rsghf_oAMEMoQ=
+  body: '{"command_name":"vi","providers":[{"attr_path":"open-watcom-v2","pname":"open-watcom-v2","exact_name_match":false,"system":"aarch64-darwin"},{"attr_path":"vim","pname":"vim","exact_name_match":false,"system":"aarch64-darwin"},{"attr_path":"vim_configurable","pname":"vim_configurable","exact_name_match":false,"system":"aarch64-darwin"},{"attr_path":"vim-darwin","pname":"vim-darwin","exact_name_match":false,"system":"aarch64-darwin"},{"attr_path":"vim-full","pname":"vim-full","exact_name_match":false,"system":"aarch64-darwin"},{"attr_path":"vimHugeX","pname":"vimHugeX","exact_name_match":false,"system":"aarch64-darwin"}],"total_count":6,"listing_known":true}'

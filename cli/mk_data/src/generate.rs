@@ -23,6 +23,8 @@ pub struct Config {
     pub resolve: Option<HashMap<String, RawSpec>>,
     /// Specs for the search command
     pub search: Option<HashMap<String, RawSpec>>,
+    /// Specs for the run command
+    pub run: Option<HashMap<String, RawSpec>>,
     /// Specs for the show command
     pub show: Option<HashMap<String, RawSpec>>,
     /// Specs for the init command
@@ -115,6 +117,7 @@ pub fn create_output_dir(output_dir: &Path) -> Result<(), Error> {
     let init_dir = output_dir.join("init");
     let resolve_dir = output_dir.join("resolve");
     let search_dir = output_dir.join("search");
+    let run_dir = output_dir.join("run");
     let show_dir = output_dir.join("show");
     let envs_dir = output_dir.join("envs");
     let build_dir = output_dir.join("build");
@@ -122,6 +125,7 @@ pub fn create_output_dir(output_dir: &Path) -> Result<(), Error> {
         &init_dir,
         &resolve_dir,
         &search_dir,
+        &run_dir,
         &show_dir,
         &envs_dir,
         &build_dir,
@@ -193,6 +197,12 @@ pub fn generate_jobs(
         jobs.push(
             generate_category_jobs("search", search.iter(), output_dir, force)
                 .context("failed to generate search jobs")?,
+        );
+    }
+    if let Some(run) = config.run.as_ref() {
+        jobs.push(
+            generate_category_jobs("run", run.iter(), output_dir, force)
+                .context("failed to generate run jobs")?,
         );
     }
     if let Some(show) = config.show.as_ref() {

@@ -61,28 +61,37 @@ teardown() {
 }
 
 # ---------------------------------------------------------------------------- #
-# --reselect (config state, no network or store required)
+# --reselect (config state, mock catalog, no store required)
 # ---------------------------------------------------------------------------- #
 
-@test "'flox run --reselect' clears a saved preference" {
+# --reselect clears the saved preference and falls through to re-resolution.
+# Without a TTY the re-resolution degrades to the non-interactive candidate
+# list instead of a prompt.
+@test "'flox run --reselect' clears a saved preference and re-resolves" {
   mkdir -p "$FLOX_CONFIG_DIR"
   cat > "$FLOX_CONFIG_DIR/flox.toml" <<'EOF'
 [run_preferences]
 vi = "vim"
 EOF
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/run/by_command_vi.yaml"
 
   run "$FLOX_BIN" run --reselect vi
-  assert_success
+  assert_failure
   assert_output --partial "Cleared the saved package preference for 'vi'."
+  assert_output --partial "Multiple packages provide 'vi'."
+  assert_output --partial "vim_configurable"
 
   run cat "$FLOX_CONFIG_DIR/flox.toml"
   refute_output --partial "vim"
 }
 
-@test "'flox run --reselect' on an absent preference succeeds" {
+@test "'flox run --reselect' on an absent preference still re-resolves" {
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/run/by_command_vi.yaml"
+
   run "$FLOX_BIN" run --reselect vi
-  assert_success
+  assert_failure
   assert_output --partial "No saved package preference for 'vi'."
+  assert_output --partial "Multiple packages provide 'vi'."
 }
 
 @test "'flox run --reselect' leaves other preferences untouched" {
@@ -92,25 +101,35 @@ EOF
 vi = "vim"
 pip = "python311Packages.pip"
 EOF
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/run/by_command_vi.yaml"
 
   run "$FLOX_BIN" run --reselect vi
-  assert_success
+  assert_failure
 
   run cat "$FLOX_CONFIG_DIR/flox.toml"
   refute_output --partial "vim"
   assert_output --partial 'pip = "python311Packages.pip"'
 }
 
-@test "'flox run --reselect' with a command is rejected" {
-  run "$FLOX_BIN" run --reselect vi vim
+@test "'flox run --reselect' forwards arguments to the command" {
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/run/by_command_vi.yaml"
+
+  run "$FLOX_BIN" run --reselect vi file.txt
   assert_failure
-  assert_output --partial "cannot be combined with a command"
+  assert_output --partial "No saved package preference for 'vi'."
+  assert_output --partial "Multiple packages provide 'vi'."
 }
 
-@test "'flox run --reselect' without a value is rejected" {
+@test "'flox run --reselect' without a command is rejected" {
   run "$FLOX_BIN" run --reselect
   assert_failure
-  assert_output --partial "Missing value for '--reselect'"
+  assert_output --partial "No command specified."
+}
+
+@test "'flox run --reselect' with '--package' is rejected" {
+  run "$FLOX_BIN" run -p vim --reselect vi
+  assert_failure
+  assert_output --partial "'--reselect' cannot be combined with '--package'."
 }
 
 # ---------------------------------------------------------------------------- #

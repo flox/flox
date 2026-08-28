@@ -590,6 +590,13 @@ post_cmd = '''
 [search.java_suggestions]
 cmd = "flox search java"
 
+# Records the by-command lookup for an ambiguous command. Without a TTY the
+# command exits with the candidate list, which is expected — the response is
+# captured before the failure.
+[run.by_command_vi]
+cmd = "flox run vi"
+ignore_cmd_errors = true
+
 [show.hello]
 cmd = "flox show hello"
 
