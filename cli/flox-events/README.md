@@ -116,6 +116,30 @@ Rules the envelope encodes:
 - Keep names neutral and technical, matching the vocabulary already in
   this crate. When unsure, choose the most boring, descriptive name.
 
+## Event inventory
+
+The full set of shipped event types. The
+`readme_lists_every_event_type` test in [`src/lib.rs`](src/lib.rs)
+fails if an `EventKind` wire name is missing from this file, so adding
+an event means adding its row here.
+
+| Event type | Payload |
+|---|---|
+| `cli.command_run` | `CliCommandRunPayload` — subcommand plus machine context |
+| `cli.command_completed` | `CliCommandCompletedPayload` — exit code, duration, `error_kind` |
+| `cli.environment.activate` | `CliEnvironmentActivatePayload` |
+| `cli.environment.create`, `cli.environment.delete`, `cli.environment.push`, `cli.environment.pull`, `cli.environment.containerize`, `cli.environment.install`, `cli.environment.uninstall`, `cli.environment.upgrade`, `cli.environment.include.upgrade`, `cli.environment.list` | `CliEnvironmentPayload` — env detail only; the variant is the discriminant |
+| `cli.environment.edit` | `CliEnvironmentEditPayload` |
+| `cli.environment.publish` | `CliEnvironmentPublishPayload` |
+| `cli.environment.services.start`, `cli.environment.services.stop`, `cli.environment.services.restart`, `cli.environment.services.status`, `cli.environment.services.logs`, `cli.environment.services.persist` | `CliEnvironmentPayload` |
+| `cli.environment.generations.history`, `cli.environment.generations.rollback`, `cli.environment.generations.switch` | `CliEnvironmentPayload` |
+| `cli.environment.generations.list` | `CliEnvironmentGenerationsListPayload` |
+| `cli.package.install`, `cli.package.uninstall` | `CliPackagePayload` — one event per package |
+| `cli.package.upgrade` | `CliPackageUpgradePayload` — one event per package |
+| `cli.build` | `CliBuildPayload` |
+| `cli.search` | `CliSearchPayload` |
+| `cli.authenticated`, `cli.update_prompted` | payload-less (`{}`) |
+
 ## Stability: what is safe and what is breaking
 
 The consumers of these events live outside this repository and have

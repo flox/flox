@@ -94,6 +94,13 @@ is_inert() {
     # inside a nix `src`.
     cli/flox/doc/*) return 1 ;;
 
+    # Read at test time by
+    # `cli/flox-events/src/lib.rs::readme_lists_every_event_type`, which pins
+    # the event inventory in the README to the `EventKind` wire names.
+    # Without this arm, editing the README would skip `cli-unit` — the job
+    # containing the very test that guards it.
+    cli/flox-events/README.md) return 1 ;;
+
     *.md) return 0 ;;
     docs/*) return 0 ;;
 

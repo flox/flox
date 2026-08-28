@@ -874,6 +874,66 @@ mod tests {
     // consumer needs a migration. Update the expected JSON once that is
     // arranged, not to make the test pass.
 
+    /// Wire names scraped from this file's `#[serde(rename = "cli...")]`
+    /// attributes — that pattern is unique to [`EventKind`] variants.
+    /// Scraped from source rather than enumerated at runtime because the
+    /// variants carry payloads, so there is no cheap way to iterate them.
+    fn event_kind_wire_names() -> Vec<&'static str> {
+        const SOURCE: &str = include_str!("lib.rs");
+        let names: Vec<_> = SOURCE
+            .lines()
+            .filter_map(|line| line.trim().strip_prefix(r#"#[serde(rename = ""#))
+            .filter_map(|rest| rest.split('"').next())
+            .filter(|name| name.starts_with("cli."))
+            .collect();
+        assert!(!names.is_empty(), "found no EventKind rename attributes");
+        names
+    }
+
+    #[test]
+    fn event_wire_names_follow_the_naming_grammar() {
+        for name in event_kind_wire_names() {
+            let mut segments = name.split('.');
+            assert_eq!(
+                segments.next(),
+                Some("cli"),
+                "{name}: every event type starts with the `cli.` namespace"
+            );
+            let mut trailing_segments = 0;
+            for segment in segments {
+                trailing_segments += 1;
+                assert!(
+                    !segment.is_empty()
+                        && segment
+                            .chars()
+                            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_'),
+                    "{name}: segment {segment:?} must be lowercase snake_case"
+                );
+            }
+            assert!(
+                trailing_segments >= 1,
+                "{name}: needs a segment after `cli.`"
+            );
+        }
+    }
+
+    // The README is the contributor-facing contract reference and carries an
+    // inventory of every event type; a variant added or renamed without a
+    // matching README update must fail here, since nothing else links them.
+    #[test]
+    fn readme_lists_every_event_type() {
+        const README: &str = include_str!("../README.md");
+        let missing: Vec<_> = event_kind_wire_names()
+            .into_iter()
+            .filter(|name| !README.contains(name))
+            .collect();
+        assert_eq!(
+            missing,
+            Vec::<&str>::new(),
+            "event types missing from cli/flox-events/README.md"
+        );
+    }
+
     /// The wire form of `OffsetDateTime::from_unix_timestamp(0)` under
     /// `TimestampMilliSeconds<i64>` — milliseconds since the Unix
     /// epoch, where 1970-01-01T00:00:00Z is exactly 0.
