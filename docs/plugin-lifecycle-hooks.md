@@ -377,6 +377,19 @@ against `[plugin-hooks]` declarations (sections 3.1–3.2).
 
 Other contract details plugin authors need on day one:
 
+- **Execution environment:** hooks run with the invoking user's
+  environment and `PATH`, before any activation setup. On macOS
+  `/usr/bin/env bash` can resolve to the system bash 3.2, so shell
+  hooks must stay 3.2-compatible — notably, bash 3.2 cannot parse a
+  heredoc inside `$(...)` when the body has unbalanced parentheses
+  (which SBPL profiles always do); write such payloads to a temp
+  file instead.
+- **What a boundary must admit (macOS):** the wrapped activation's
+  executive binds unix sockets under Flox's cache dir and watches
+  its state via FSEvents, so a wrapping boundary must allow local
+  socket binds and the `com.apple.FSEvents` mach-lookup, or the
+  activation fails after entry. (Discovered by the wave-A srt port;
+  its hook is the reference policy.)
 - **Cache/state:** blessed location is
   `<dot_flox_path>/cache/plugins/<plugin-name>/` (the old branch's
   grants store precedent, one level down).
@@ -468,6 +481,27 @@ string-mangling). Ordered by migration wave:
 | B | openshell | session-wrap, on-deactivate.d | policy YAML compiled from its own `[plugins.openshell]` table; binary→store-path resolution from the lockfile; version preflight ≥ 0.0.62; retags under its own `<env>-openshell` repo. **First released plugin** (Flox Catalog, `flox` org) |
 | C | coder, modal, docker-sbx, ona, e2b, daytona, cognition-devin, anjuna, cursor, vercel-sandbox | session-wrap | the OCI-handoff/artifact-writer slices; port artifact generation + declared-lossiness policy compilation as-is; each bails where it bailed before |
 | D | libsandbox (+ `flox-sandbox` extension) | env, sidecar, on-deactivate.d | C engine ships as a package library; env hook injects preload + policy env; sidecar hosts the broker (peer-cred guard moves with it); grants store moves under the plugin cache dir; review UI becomes the `flox-sandbox` extension. Open design items: SIP shell-swap, grants seeding (§3.4) |
+
+**Wave A outcomes** (2026-08-27; both plugins live on the local
+`daniel/wave-a-session-wrap` branch of flox-plugins, validated end to
+end on macOS — wrapped entry, re-entry marker skip, deny-home /
+project / `.env` / network probes; the srt Linux leg is not yet
+exercised):
+
+- The ports surfaced one core incompatibility: `flox-core`'s
+  `proc_status` shelled out to `/bin/ps`, which Seatbelt-based
+  boundaries refuse to exec, killing the executive. Fixed in core
+  wave 1 by reading process status via `proc_pidinfo` + a
+  `kill(pid, 0)` zombie probe — syscalls the boundaries permit.
+- srt (0.0.71) needs three policy grants beyond the old branch's
+  settings — `allowLocalBinding`, `allowUnixSockets` for Flox's run
+  sockets, and the `com.apple.FSEvents` mach-lookup (§4) — and an
+  explicit `--` terminator so its CLI does not consume the one
+  inside `inner_argv`.
+- One accepted policy delta: srt's read rules have no pattern
+  matching and its allow list wins inside the project, so
+  host-native's `.env` deny cannot be replicated there (documented
+  in the plugin README).
 
 **Wave B honest gaps** (main's containerize is thinner than the old
 branch's private pipeline; each is a wave-B work item, and
@@ -585,3 +619,7 @@ explicitly, don't strand it.
   deletes its 0600 ctx file deterministically; it lives in flox's
   temp dir and is cleaned with it. If that proves unsatisfying,
   hand the ctx on an inherited fd instead of a path.
+- **Duplicate warnings on re-entry**: the wrapped inner activation
+  re-runs session-wrap resolution (skipping via the marker), so
+  advisory output like the undeclared-hook warning prints twice per
+  wrapped activation. Cosmetic; dedupe if it grates.
