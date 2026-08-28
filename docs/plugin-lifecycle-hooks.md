@@ -503,9 +503,48 @@ exercised):
   host-native's `.env` deny cannot be replicated there (documented
   in the plugin README).
 
-**Wave B honest gaps** (main's containerize is thinner than the old
-branch's private pipeline; each is a wave-B work item, and
-"compat-layer parity validated" is the wave's exit criterion):
+**Wave B outcomes** (2026-08-27/28; both plugins on the flox-plugins
+`daniel/wave-a-session-wrap` branch, validated end to end on macOS —
+bake, digest-tag caching, staleness decision table, wrapped entry,
+project rw at its host path, host home absent; openshell additionally:
+gateway preflight, session as the sandbox user, deny-all egress, a
+binary-scoped allow rule reaching its endpoint with everything else
+403, policy edits applying without a rebake, `--no-keep` teardown):
+
+- **Shim-less guests it is** (the §6 decision recorded): the plugins
+  ride main's `flox containerize` unmodified, so guests carry no flox
+  CLI — no in-guest `flox list`/services, a documented regression vs.
+  the old demos. Revisit only if a catalog-served guest flox makes the
+  entrypoint rewrite worth owning.
+- The old branch's frozen-builder pins, sanitized-view machinery, and
+  release-guard collapsed into one small mechanism: bake from a /tmp
+  view rewritten to schema 1.15.0 with `[plugin-hooks]` and the
+  wrapper's own install entry stripped, and pin the macOS proxy to the
+  cached `v1.15.0` release builder. Stripping the wrapper's install
+  entry is load-bearing twice over: its host-only store path cannot be
+  realised for the guest, and hashing the stripped lockfile keeps
+  plugin upgrades from invalidating images (`strip your own footprint`
+  now includes the install entry, not just the data table).
+- The openshell compat layer ported from Nix to a plain Dockerfile on
+  top of the shared base image, with two deltas: `/etc/hosts` is left
+  alone (BuildKit mounts it read-only during builds and Docker injects
+  one at runtime), and the guest-arch `ip`/`nsenter` come from a
+  pre-locked tools environment bundled in the plugin package,
+  containerized once and multi-staged in — the 0.0.82 supervisor
+  refuses to start without a trusted `ip`.
+- Two upstream drifts absorbed in plugin code: OpenShell 0.0.8x runs
+  its policy engine in binary-identity mode, so egress rules
+  effectively require `binary` now, and its CLI needs an explicit
+  `--` so it does not consume the one inside a composed command.
+- Neither plugin needs `on-deactivate.d` after all: the policy file is
+  regenerated per activation and the docker images are the cache
+  (never GC'd by flox, matching the old backends).
+- Not yet exercised: the Linux host leg, interactive-tty sessions
+  (command mode validated), and in-guest services (no
+  `PROCESS_COMPOSE_BIN` in the compat layer).
+
+The original gap list, kept for the record (all items now dispositioned
+as above):
 
 - Main's `flox containerize` has no `include_guest_flox`, no compat
   knobs, and its baked activate-ctx JSON lives in `/nix/store` behind
