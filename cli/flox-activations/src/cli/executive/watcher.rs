@@ -111,6 +111,7 @@ pub mod test {
             set_prompt: false,
             flox_env_cuda_detection: "".to_string(),
             add_sbin: false,
+            plugin_hooks: false,
             flox_active_environments: "".to_string(),
         };
         let project = AttachProjectCtx {

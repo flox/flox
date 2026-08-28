@@ -645,6 +645,7 @@ impl ActivateOptions {
             flox_env_cuda_detection: flox_env_cuda_detection.to_string(),
             add_sbin,
             interpreter_path,
+            plugin_hooks: flox.features.plugin_hooks,
         };
 
         let dot_flox_path = concrete_environment.dot_flox_path().to_path_buf();

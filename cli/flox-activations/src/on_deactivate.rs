@@ -26,6 +26,17 @@ const BASH_BIN: &str = env!("X_BASH_BIN");
 /// environment's store path.
 const HOOK_ON_DEACTIVATE: &str = "activate.d/hook-on-deactivate";
 
+/// Relative path of the plugin teardown hook directory within an
+/// environment's store path. Scripts here are shipped by installed plugin
+/// packages and sourced in lexical order before the user's
+/// `hook.on-deactivate`, with `flox_plugin_data` available via the
+/// interpreter's helpers.
+const PLUGIN_ON_DEACTIVATE_DIR: &str = "etc/flox/hooks/on-deactivate.d";
+
+/// Relative path of the activation helpers within the interpreter, sourced
+/// before plugin teardown scripts so they can call `flox_plugin_data`.
+const INTERPRETER_HELPERS: &str = "activate.d/helpers.bash";
+
 /// Tear down the given start state directories, running each start's
 /// `hook.on-deactivate` first.
 ///
@@ -71,6 +82,14 @@ pub fn run_on_deactivate_hook(
     start_id: &StartIdentifier,
     activation_state_dir: &Path,
 ) {
+    run_plugin_on_deactivate_scripts(
+        subsystem_verbosity,
+        attach_ctx,
+        project,
+        start_id,
+        activation_state_dir,
+    );
+
     let script = start_id.store_path.join(HOOK_ON_DEACTIVATE);
     if !script.exists() {
         debug!(?script, "no hook.on-deactivate script, skipping");
@@ -86,6 +105,113 @@ pub fn run_on_deactivate_hook(
     ) {
         warn!(%err, ?script, "failed to run hook.on-deactivate; continuing cleanup");
     }
+}
+
+/// Source the plugin teardown scripts shipped in the rendered environment's
+/// `etc/flox/hooks/on-deactivate.d`, in lexical order, in a single bash with
+/// the interpreter's helpers preloaded (functions don't replay from the env
+/// trace, so `flox_plugin_data` needs explicit wiring). Runs before the
+/// user's `hook.on-deactivate` and shares its posture: replayed activation
+/// environment, output to the executive log, failures swallowed.
+///
+/// Gated on the activation's recorded `plugin_hooks` flag; there is nothing
+/// to do for activations that never armed plugin hooks.
+fn run_plugin_on_deactivate_scripts(
+    subsystem_verbosity: u32,
+    attach_ctx: &AttachCtx,
+    project: &AttachProjectCtx,
+    start_id: &StartIdentifier,
+    activation_state_dir: &Path,
+) {
+    if !attach_ctx.plugin_hooks {
+        return;
+    }
+    let hook_dir = start_id.store_path.join(PLUGIN_ON_DEACTIVATE_DIR);
+    let Ok(entries) = std::fs::read_dir(&hook_dir) else {
+        debug!(?hook_dir, "no plugin on-deactivate.d directory, skipping");
+        return;
+    };
+    let mut scripts: Vec<_> = entries
+        .flatten()
+        .map(|entry| entry.path())
+        .filter(|path| path.extension().is_some_and(|ext| ext == "sh"))
+        .collect();
+    if scripts.is_empty() {
+        return;
+    }
+    scripts.sort();
+
+    if let Err(err) = run_plugin_scripts(
+        subsystem_verbosity,
+        attach_ctx,
+        project,
+        start_id,
+        activation_state_dir,
+        &scripts,
+    ) {
+        warn!(%err, ?hook_dir, "failed to run plugin on-deactivate scripts; continuing cleanup");
+    }
+}
+
+fn run_plugin_scripts(
+    subsystem_verbosity: u32,
+    attach_ctx: &AttachCtx,
+    project: &AttachProjectCtx,
+    start_id: &StartIdentifier,
+    activation_state_dir: &Path,
+    scripts: &[std::path::PathBuf],
+) -> Result<()> {
+    let start_state_dir = start_id.start_state_dir(activation_state_dir)?;
+
+    let vars_from_env = VarsFromEnvironment::get()?;
+    let env_trace = EnvTrace::from_state_dir(&start_state_dir)
+        .context("start has no usable env trace; hook.on-activate never completed")?;
+    let attach_diff = AttachDiff::new(
+        attach_ctx,
+        Some(project),
+        subsystem_verbosity,
+        vars_from_env,
+        &env_trace,
+        false,
+    )?;
+
+    let helpers = attach_ctx.interpreter_path.join(INTERPRETER_HELPERS);
+
+    let mut command = Command::new(BASH_BIN);
+    attach_diff.apply_to_command(&mut command);
+    // Paths are passed as arguments rather than interpolated into the script
+    // text so they need no quoting.
+    command
+        .arg("-c")
+        .arg(r#"helpers="$1"; shift; if [ -e "$helpers" ]; then source "$helpers"; fi; for script in "$@"; do source "$script"; done"#)
+        .arg("plugin-on-deactivate")
+        .arg(&helpers)
+        .args(scripts);
+    command
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+
+    info!(?scripts, "running plugin on-deactivate scripts");
+    let output = command
+        .output()
+        .context("failed to spawn plugin on-deactivate scripts")?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    if !stdout.is_empty() {
+        info!(%stdout, "plugin on-deactivate stdout");
+    }
+    if !stderr.is_empty() {
+        info!(%stderr, "plugin on-deactivate stderr");
+    }
+    if !output.status.success() {
+        warn!(
+            status = %output.status,
+            "plugin on-deactivate scripts failed; continuing cleanup"
+        );
+    }
+    Ok(())
 }
 
 fn run_hook_script(
@@ -167,6 +293,7 @@ mod test {
             flox_env_cuda_detection: "".to_string(),
             add_sbin: false,
             flox_active_environments: "".to_string(),
+            plugin_hooks: true,
         };
         let project = AttachProjectCtx {
             env_project: dot_flox_path.to_path_buf(),
@@ -238,6 +365,75 @@ mod test {
         sweep_orphaned_starts(0, &attach, &project, &activation_state_dir, vec![start_id]);
 
         assert!(!start_state_dir.exists());
+    }
+
+    /// Write plugin teardown scripts into the fake rendered environment.
+    fn add_plugin_scripts(tmp: &TempDir, scripts: &[(&str, &str)]) {
+        let hook_dir = tmp
+            .path()
+            .join("store-path")
+            .join("etc/flox/hooks/on-deactivate.d");
+        std::fs::create_dir_all(&hook_dir).unwrap();
+        for (name, contents) in scripts {
+            std::fs::write(hook_dir.join(name), contents).unwrap();
+        }
+    }
+
+    /// Plugin on-deactivate.d scripts run in lexical order, with the
+    /// replayed activation environment, before the user's
+    /// hook.on-deactivate.
+    #[test]
+    fn sweep_runs_plugin_teardown_scripts_in_order_before_user_hook() {
+        let tmp = TempDir::new().unwrap();
+        let marker = tmp.path().join("marker");
+        let user_hook = format!("echo \"user:$ON_ACTIVATE_VAR\" >> '{}'\n", marker.display());
+        let (start_id, activation_state_dir, _) = setup_start(&tmp, Some(&user_hook));
+        add_plugin_scripts(&tmp, &[
+            (
+                "2000_second.sh",
+                &format!("echo second >> '{}'\n", marker.display()),
+            ),
+            (
+                "1000_first.sh",
+                &format!(
+                    "echo \"first:$ON_ACTIVATE_VAR\" >> '{}'\n",
+                    marker.display()
+                ),
+            ),
+        ]);
+
+        let (attach, project) = test_context(tmp.path());
+        sweep_orphaned_starts(0, &attach, &project, &activation_state_dir, vec![start_id]);
+
+        assert_eq!(
+            std::fs::read_to_string(&marker).expect("scripts should have run"),
+            "first:from-on-activate\nsecond\nuser:from-on-activate\n",
+            "plugin scripts run in lexical order, with the replayed env, before the user hook"
+        );
+    }
+
+    /// Without the recorded plugin_hooks gate, plugin teardown scripts are
+    /// skipped while the user hook still runs.
+    #[test]
+    fn sweep_skips_plugin_teardown_scripts_when_gate_is_off() {
+        let tmp = TempDir::new().unwrap();
+        let marker = tmp.path().join("marker");
+        let user_hook = format!("echo user >> '{}'\n", marker.display());
+        let (start_id, activation_state_dir, _) = setup_start(&tmp, Some(&user_hook));
+        add_plugin_scripts(&tmp, &[(
+            "1000_plugin.sh",
+            &format!("echo plugin >> '{}'\n", marker.display()),
+        )]);
+
+        let (mut attach, project) = test_context(tmp.path());
+        attach.plugin_hooks = false;
+        sweep_orphaned_starts(0, &attach, &project, &activation_state_dir, vec![start_id]);
+
+        assert_eq!(
+            std::fs::read_to_string(&marker).expect("user hook should have run"),
+            "user\n",
+            "plugin scripts must not run when the activation never armed plugin hooks"
+        );
     }
 
     /// A failing hook doesn't block removal of the start state dir.

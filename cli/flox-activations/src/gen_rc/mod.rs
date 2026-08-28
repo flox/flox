@@ -150,6 +150,7 @@ pub(crate) mod test_helpers {
             set_prompt: true,
             flox_env_cuda_detection: "0".to_string(),
             add_sbin: false,
+            plugin_hooks: false,
             interpreter_path: PathBuf::from("/interpreter"),
         };
         let project_ctx = Some(AttachProjectCtx {

@@ -47,6 +47,13 @@ pub struct AttachCtx {
 
     /// Path to the interpreter (activate scripts)
     pub interpreter_path: PathBuf,
+
+    /// Whether `[plugin-hooks]` execution is armed for this activation.
+    /// Resolved from `features.plugin_hooks` by the CLI at activation time;
+    /// `flox-activations` has no config plumbing and executes what was
+    /// recorded. Defaults to false for contexts serialized by older versions.
+    #[serde(default)]
+    pub plugin_hooks: bool,
 }
 
 /// Additional context for project-based activations.
