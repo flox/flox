@@ -1,0 +1,23 @@
+#!/bin/sh
+#
+# ExecStart for flox@<instance>.service: activate the environment with its
+# services and follow their logs in the foreground.
+#
+# Process supervision belongs to Flox; systemd supervises this log follower.
+set -eu
+
+. /usr/libexec/flox/flox-common.sh
+
+name=${1:?usage: flox-activate <instance>}
+flox_load_conf "$name"
+
+flox_export_token_from_credential
+flox_clear_stale_sockets
+
+set -- "$FLOX_BIN" $FLOX_ARGS activate --dir "$flox_workdir"
+if [ "$FLOX_TRUST" = 1 ]; then
+  set -- "$@" --trust
+fi
+set -- "$@" $FLOX_ACTIVATE_ARGS --start-services
+
+exec "$@" -- "$FLOX_BIN" $FLOX_ARGS services logs --follow

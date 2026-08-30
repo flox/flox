@@ -1,0 +1,16 @@
+# Provision and refresh the Flox environment for %i.
+#
+# Ordered before the service it supports and pulled in by it, so the
+# environment exists before anything tries to run from it. Runs as root to
+# create the service account and working directory; every flox invocation
+# inside drops privileges to the service user.
+[Unit]
+Description=Flox environment pull for %i (service start)
+Documentation=https://flox.dev/docs
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=no
+ExecStart=/usr/libexec/flox/flox-pull %i start
