@@ -20,10 +20,16 @@ flox_load_conf "$name"
 flox_export_token_from_credential
 flox_clear_stale_sockets
 
-set -- "$FLOX_BIN" $FLOX_ARGS activate --dir "$flox_workdir"
+# The argument lists are shell-quoted in the conf file, so the command is
+# assembled with a single eval; the fixed parts stay quoted and are expanded
+# by it rather than being interpolated.
+trust=
 if [ "$FLOX_TRUST" = 1 ]; then
-  set -- "$@" --trust
+  trust=--trust
 fi
-set -- "$@" $FLOX_ACTIVATE_ARGS --start-services
 
-exec env $(flox_service_env) "$@" -- "$FLOX_BIN" $FLOX_ARGS services logs --follow
+eval "set -- \"\$FLOX_BIN\" $FLOX_ARGS activate --dir \"\$flox_workdir\" \
+  $trust $FLOX_ACTIVATE_ARGS --start-services \
+  -- \"\$FLOX_BIN\" $FLOX_ARGS services logs --follow"
+
+exec env $(flox_service_env) "$@"

@@ -88,6 +88,11 @@ One `/etc/flox/services/<name>.conf` per service, shell-sourced `KEY=value`.
 | `FLOX_ACTIVATE_ARGS` | — | Extra arguments for `flox activate` |
 | `FLOX_PULL_ARGS` | — | Extra arguments for `flox pull` |
 
+The three `*_ARGS` values hold a **shell-quoted argument list**, expanded with
+`eval`. The simple case needs no thought — `FLOX_ARGS="-v -v"` is two
+arguments — and an argument containing whitespace is quoted within the value:
+`FLOX_ACTIVATE_ARGS="--mode 'dev mode'"` is `--mode` followed by `dev mode`.
+
 `FLOX_STATE_DIR` (default `/var/lib/flox`), `FLOX_BIN` (default
 `/usr/bin/flox`), `FLOX_CONF_DIR` and `FLOX_LIBEXEC` may be overridden in the
 unit environment for testing.

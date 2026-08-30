@@ -6,8 +6,8 @@
 
 let
   inherit (lib)
-    concatStringsSep
     escapeShellArg
+    escapeShellArgs
     optionalString
     ;
 
@@ -17,6 +17,10 @@ in
 {
   # `cfg` carries the union of what both methods can set; every field has a
   # default so each caller only supplies what applies to it.
+  #
+  # Argument lists are quoted twice: `escapeShellArgs` so each argument
+  # survives the eval that expands them at the call site, and `escapeShellArg`
+  # so the assignment itself survives being sourced.
   mkConf =
     {
       environment,
@@ -44,9 +48,9 @@ in
       FLOX_TRUST=${bool trustEnvironment}
       FLOX_PULL_AT_SERVICE_START=${bool pullAtServiceStart}
       FLOX_AUTORESTART=${bool autoRestart}
-      FLOX_ARGS=${escapeShellArg (concatStringsSep " " extraFloxArgs)}
-      FLOX_ACTIVATE_ARGS=${escapeShellArg (concatStringsSep " " extraFloxActivateArgs)}
-      FLOX_PULL_ARGS=${escapeShellArg (concatStringsSep " " extraFloxPullArgs)}
+      FLOX_ARGS=${escapeShellArg (escapeShellArgs extraFloxArgs)}
+      FLOX_ACTIVATE_ARGS=${escapeShellArg (escapeShellArgs extraFloxActivateArgs)}
+      FLOX_PULL_ARGS=${escapeShellArg (escapeShellArgs extraFloxPullArgs)}
       FLOX_EXEC_START=${escapeShellArg execStart}
     ''
     + optionalString (floxHubTokenFile != null) ''

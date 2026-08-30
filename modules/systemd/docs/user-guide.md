@@ -202,6 +202,10 @@ Two rules are worth repeating because they cause confusing failures:
 - **Quote any value containing whitespace.** The file is sourced by `/bin/sh`,
   so `FLOX_EXEC_START=server --port 80` is an assignment followed by an
   attempt to run `--port`.
+- **`FLOX_ARGS`, `FLOX_ACTIVATE_ARGS` and `FLOX_PULL_ARGS` are shell-quoted
+  argument lists.** `FLOX_ARGS="-v -v"` is two arguments; an argument that
+  itself contains whitespace is quoted inside the value, as in
+  `FLOX_ACTIVATE_ARGS="--mode 'dev mode'"`.
 - **`User=`, `Group=`, `ExecStart=`, `OnCalendar=` and `LoadCredential=`
   cannot be read from the conf file.** systemd resolves them before any of
   our scripts run. Change them with `systemctl edit`.

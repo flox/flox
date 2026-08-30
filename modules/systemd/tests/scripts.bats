@@ -355,3 +355,24 @@ stub_invocations() {
   run stub_args
   [[ "$output" == *"flox/elsewhere"* ]]
 }
+
+@test "an argument containing whitespace survives to flox" {
+  # The lists are shell-quoted in the conf file and expanded with eval, so a
+  # quoted argument reaches flox as one argument rather than two.
+  write_conf svc \
+    "FLOX_ENVIRONMENT=flox/svc" \
+    "FLOX_ACTIVATE_ARGS=\"--mode 'dev mode'\""
+  provision svc
+  run "$LIBEXEC/flox-activate" svc
+  [ "$status" -eq 0 ]
+  grep -q "^arg=dev mode$" "$FLOX_STUB_LOG"
+}
+
+@test "a whitespace argument survives the pull path too" {
+  write_conf svc \
+    "FLOX_ENVIRONMENT=flox/svc" \
+    "FLOX_PULL_ARGS=\"--note 'two words'\""
+  run "$LIBEXEC/flox-pull" svc start
+  [ "$status" -eq 0 ]
+  grep -q "^arg=two words$" "$FLOX_STUB_LOG"
+}

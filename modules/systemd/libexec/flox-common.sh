@@ -23,9 +23,10 @@ die() {
 # Defaults mirror the NixOS module: a per-service `flox-<name>` system user,
 # a working directory under the state dir, and a refresh on every start.
 #
-# The FLOX_*_ARGS values stay as strings and are used unquoted at the call
-# sites: they are operator-supplied argument lists, not filenames, and this
-# is the conventional shape for a sysconfig-style file.
+# The FLOX_*_ARGS values hold a shell-quoted argument list, which the call
+# sites expand with eval. That keeps the conventional sysconfig shape for the
+# simple case (FLOX_ARGS="-v -v") while still allowing an argument that
+# contains whitespace (FLOX_ACTIVATE_ARGS="--mode 'dev mode'").
 flox_load_conf() {
   flox_name=${1:?usage: flox_load_conf <instance>}
 

@@ -71,16 +71,25 @@ as_user() {
   fi
 }
 
+# Run flox as the service user with the configured global arguments. Those
+# arguments are shell-quoted in the conf file, so they are expanded with eval
+# to keep an argument containing whitespace intact.
+run_flox() {
+  eval "set -- \"\$FLOX_BIN\" $FLOX_ARGS \"\$@\""
+  as_user "$@"
+}
+
 # Fingerprint of the local generation history, used to detect whether a pull
 # fetched a new generation.
 generation_state() {
-  as_user "$FLOX_BIN" $FLOX_ARGS generations list --json 2>/dev/null | sha256sum
+  run_flox generations list --json 2>/dev/null | sha256sum
 }
 
 if [ ! -e "$flox_workdir/.flox" ]; then
   # First start: provision the environment. Failure is fatal - there is
   # nothing to run without an environment.
-  as_user "$FLOX_BIN" $FLOX_ARGS pull $FLOX_PULL_ARGS "$flox_env"
+  eval "set -- $FLOX_PULL_ARGS"
+  run_flox pull "$@" "$flox_env"
   exit 0
 fi
 
@@ -90,7 +99,8 @@ if [ "$mode" = start ] && [ "$FLOX_PULL_AT_SERVICE_START" != 1 ]; then
 fi
 
 before="$(generation_state)" || before=""
-if ! as_user "$FLOX_BIN" $FLOX_ARGS pull --force $FLOX_PULL_ARGS; then
+eval "set -- $FLOX_PULL_ARGS"
+if ! run_flox pull --force "$@"; then
   if [ "$mode" = timer ]; then
     echo "ERROR: failed to pull updates for $flox_env." >&2
     exit 1

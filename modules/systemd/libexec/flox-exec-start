@@ -24,10 +24,14 @@ flox_load_conf "$name"
 flox_export_token_from_credential
 flox_clear_stale_sockets
 
-set -- "$FLOX_BIN" $FLOX_ARGS activate --dir "$flox_workdir"
+# See flox-activate for why this is a single eval.
+trust=
 if [ "$FLOX_TRUST" = 1 ]; then
-  set -- "$@" --trust
+  trust=--trust
 fi
-set -- "$@" $FLOX_ACTIVATE_ARGS
 
-exec env $(flox_service_env) "$@" -- /bin/sh -c "$FLOX_EXEC_START"
+eval "set -- \"\$FLOX_BIN\" $FLOX_ARGS activate --dir \"\$flox_workdir\" \
+  $trust $FLOX_ACTIVATE_ARGS \
+  -- /bin/sh -c \"\$FLOX_EXEC_START\""
+
+exec env $(flox_service_env) "$@"

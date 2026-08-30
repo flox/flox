@@ -191,12 +191,6 @@ in
   };
 
   config = mkIf enable {
-    assertions = mapAttrsToList (name: cfg: {
-      assertion =
-        !(lib.any (a: lib.hasInfix " " a || lib.hasInfix "\t" a) (conf.whitespaceSensitiveArgs cfg));
-      message = "services.flox: extra argument lists for '${name}' contain an argument with whitespace. Arguments reach the Flox systemd scripts through a word-split configuration file and cannot contain whitespace.";
-    }) serviceConfigs;
-
     # The templates are inert without instances, so instances are not part
     # of the condition here. It must stay a plain user-set flag: gating on
     # `serviceConfigs != { }` would make the merge of `systemd.services`
