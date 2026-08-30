@@ -86,8 +86,12 @@ One `/etc/flox/services/<name>.conf` per service, shell-sourced `KEY=value`.
 | `FLOX_PULL_ARGS` | — | Extra arguments for `flox pull` |
 
 `FLOX_STATE_DIR` (default `/var/lib/flox`), `FLOX_BIN` (default
-`/usr/bin/flox`) and `FLOX_CONF_DIR` may be overridden in the unit
-environment for testing.
+`/usr/bin/flox`), `FLOX_CONF_DIR` and `FLOX_LIBEXEC` may be overridden in the
+unit environment for testing.
+
+**Quote any value containing whitespace.** The file is sourced by `/bin/sh`,
+so `FLOX_EXEC_START=myserver --port 8080` is an assignment followed by an
+attempt to run `--port`. Write `FLOX_EXEC_START="myserver --port 8080"`.
 
 ## Things systemd cannot read from the conf file
 
@@ -112,12 +116,30 @@ runs:
 - `setpriv` from util-linux 2.31+ (RHEL 8 ships 2.32).
 - `flox` on the host, and a `/bin/sh`.
 
+## Testing
+
+```sh
+make check   # parse the units, syntax-check the scripts
+make test    # run the scripts against a stub flox (needs bats)
+```
+
+`tests/scripts.bats` covers conf parsing, the argv each script assembles, the
+pull/refresh/skip decisions, the asymmetric failure semantics between service
+start and the timer, and restart-on-new-generation. It needs no systemd, no
+root and no real `flox`, so it costs milliseconds.
+
+What it does not cover, because it needs a running service manager: `%i`
+instantiation, `Requires=`/`After=` ordering, the drop-in `ExecStart=` reset
+against a real unit, and timers firing. Those are reachable with
+`systemd --user` and units in `~/.config/systemd/user/` — the scripts now run
+unprivileged for exactly this reason — but that harness is not written yet.
+
 ## Not done yet
 
-- No runtime test. Needs a container or VM harness; see INVESTIGATION.md.
+- No service-manager test; see Testing above.
 - SELinux is untested. Units executing from `/nix/store` and writing under
   `/var/lib/flox` will likely need policy work on RHEL/Fedora in enforcing
-  mode.
+  mode. This needs a real host in enforcing mode, not a test harness.
 - Multi-`ExecStart` vendor units need every `ExecStart=` re-listed after the
   drop-in's reset; nothing detects or warns about this.
 - The scripts here duplicate logic that `../nixos` generates with

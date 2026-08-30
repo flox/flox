@@ -10,25 +10,37 @@
 # the service user.
 set -eu
 
-. /usr/libexec/flox/flox-common.sh
+# Resolve the shared library next to this script, so the entry points work
+# both installed under /usr/libexec/flox and straight from a checkout.
+FLOX_LIBEXEC=${FLOX_LIBEXEC:-$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)}
+. "$FLOX_LIBEXEC/flox-common.sh"
 
 name=${1:?usage: flox-pull <instance> (start|timer)}
 mode=${2:?usage: flox-pull <instance> (start|timer)}
 
 flox_load_conf "$name"
 
-# Create the service account on first use. sysusers.d cannot do this: it is
-# static, and instance names are not known until an operator enables one.
-if ! getent group "$flox_group" >/dev/null 2>&1; then
-  groupadd --system "$flox_group"
-fi
-if ! getent passwd "$flox_user" >/dev/null 2>&1; then
-  useradd --system --gid "$flox_group" --home-dir "$flox_workdir" \
-    --shell /sbin/nologin --comment "Flox service $name" "$flox_user"
+# Account creation and ownership only apply to the system manager. Running
+# unprivileged the service user is the invoking user, so there is nothing to
+# create and nothing to chown.
+if [ "$(id -u)" = 0 ]; then
+  # sysusers.d cannot do this: it is static, and instance names are not known
+  # until an operator enables one.
+  if ! getent group "$flox_group" >/dev/null 2>&1; then
+    groupadd --system "$flox_group"
+  fi
+  if ! getent passwd "$flox_user" >/dev/null 2>&1; then
+    useradd --system --gid "$flox_group" --home-dir "$flox_workdir" \
+      --shell /sbin/nologin --comment "Flox service $name" "$flox_user"
+  fi
+elif [ "$flox_user" != "$(id -un)" ]; then
+  die "cannot run as $flox_user: not running as root, and FLOX_USER is not $(id -un)"
 fi
 
 mkdir -p "$flox_workdir"
-chown "$flox_user:$flox_group" "$flox_workdir"
+if [ "$(id -u)" = 0 ]; then
+  chown "$flox_user:$flox_group" "$flox_workdir"
+fi
 chmod "${FLOX_WORKDIR_MODE:-0700}" "$flox_workdir"
 cd "$flox_workdir"
 
@@ -51,8 +63,12 @@ fi
 # exported FLOX_FLOXHUB_TOKEN).
 as_user() {
   # shellcheck disable=SC2046
-  setpriv --reuid "$flox_user" --regid "$flox_group" --init-groups \
+  if [ "$(id -u)" = 0 ]; then
+    setpriv --reuid "$flox_user" --regid "$flox_group" --init-groups \
+      env $(flox_service_env) "$@"
+  else
     env $(flox_service_env) "$@"
+  fi
 }
 
 # Fingerprint of the local generation history, used to detect whether a pull

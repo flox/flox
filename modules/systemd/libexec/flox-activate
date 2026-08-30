@@ -6,7 +6,10 @@
 # Process supervision belongs to Flox; systemd supervises this log follower.
 set -eu
 
-. /usr/libexec/flox/flox-common.sh
+# Resolve the shared library next to this script, so the entry points work
+# both installed under /usr/libexec/flox and straight from a checkout.
+FLOX_LIBEXEC=${FLOX_LIBEXEC:-$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)}
+. "$FLOX_LIBEXEC/flox-common.sh"
 
 name=${1:?usage: flox-activate <instance>}
 flox_load_conf "$name"

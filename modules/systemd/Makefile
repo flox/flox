@@ -20,7 +20,7 @@ INSTALL ?= install
 UNITS   := $(wildcard units/*)
 SCRIPTS := libexec/flox-pull libexec/flox-activate libexec/flox-exec-start
 
-.PHONY: install uninstall check
+.PHONY: install uninstall check test
 
 install:
 	$(INSTALL) -d $(DESTDIR)$(UNITDIR) $(DESTDIR)$(LIBEXECDIR) \
@@ -44,3 +44,7 @@ check:
 	@for s in $(SCRIPTS) libexec/flox-common.sh; do \
 	  sh -n "$$s" && echo "$$s: ok"; \
 	done
+
+# Exercise the scripts against a stub flox. No systemd, no root, no real flox.
+test:
+	bats tests/scripts.bats

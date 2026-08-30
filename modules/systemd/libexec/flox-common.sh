@@ -50,11 +50,33 @@ flox_load_conf() {
   [ -n "$FLOX_ENVIRONMENT" ] || die "FLOX_ENVIRONMENT is not set in $flox_conf"
 
   flox_env=$FLOX_ENVIRONMENT
-  flox_user=${FLOX_USER:-flox-$flox_name}
-  flox_group=${FLOX_GROUP:-$flox_user}
+
+  # As root (the system manager) each service gets its own `flox-<name>`
+  # account, created on first pull. Unprivileged - a `systemd --user` service,
+  # or a script run by hand - there is no account to create and no privilege
+  # to drop, so the invoking user is the service user. Defaulting to
+  # `flox-<name>` there would break the USER/passwd invariant below.
+  if [ -n "$FLOX_USER" ]; then
+    flox_user=$FLOX_USER
+  elif [ "$(id -u)" = 0 ]; then
+    flox_user=flox-$flox_name
+  else
+    flox_user=$(id -un)
+  fi
+  flox_group=${FLOX_GROUP:-$(flox_default_group)}
   flox_workdir="$FLOX_STATE_DIR/$flox_name"
   flox_token_file=$FLOX_TOKEN_FILE
   flox_unit=$flox_name.service
+}
+
+# Primary group for the service account: the matching per-service group as
+# root, the invoking user's own group otherwise.
+flox_default_group() {
+  if [ "$(id -u)" = 0 ]; then
+    echo "$flox_user"
+  else
+    id -gn
+  fi
 }
 
 # Environment for every process that invokes flox on behalf of a service.
