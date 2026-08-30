@@ -8,6 +8,9 @@ This is Layer 0 as described in [INVESTIGATION.md](./INVESTIGATION.md): static
 template units plus per-instance config files, installable by hand or by a
 distro package. No Nix evaluation is involved.
 
+**New here?** Start with the [user guide](./docs/user-guide.md), which walks
+through both methods on Ubuntu 24.04. This page is the reference.
+
 ## What gets installed
 
 | Path | Purpose |
