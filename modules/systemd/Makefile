@@ -20,7 +20,7 @@ INSTALL ?= install
 UNITS   := $(wildcard units/*)
 SCRIPTS := libexec/flox-pull libexec/flox-activate libexec/flox-exec-start
 
-.PHONY: install uninstall check test
+.PHONY: install uninstall check test test-user test-all
 
 install:
 	$(INSTALL) -d $(DESTDIR)$(UNITDIR) $(DESTDIR)$(LIBEXECDIR) \
@@ -48,3 +48,10 @@ check:
 # Exercise the scripts against a stub flox. No systemd, no root, no real flox.
 test:
 	bats tests/scripts.bats
+
+# Load the units into the caller's own `systemd --user` manager and start them.
+# Skips itself if no user manager is reachable.
+test-user:
+	bats tests/user-manager.bats
+
+test-all: check test test-user

@@ -29,4 +29,15 @@ case "$*" in
     ;;
 esac
 
+# A service-manager test needs the activation to stay up: try-restart is a
+# no-op on an inactive unit, so a stub that exited immediately could never
+# demonstrate a restart.
+case "$*" in
+  *activate*)
+    if [ -n "${FLOX_STUB_SLEEP:-}" ]; then
+      exec sleep "$FLOX_STUB_SLEEP"
+    fi
+    ;;
+esac
+
 exit "${FLOX_STUB_EXIT:-0}"

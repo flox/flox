@@ -119,8 +119,10 @@ runs:
 ## Testing
 
 ```sh
-make check   # parse the units, syntax-check the scripts
-make test    # run the scripts against a stub flox (needs bats)
+make check      # parse the units, syntax-check the scripts
+make test       # run the scripts against a stub flox (needs bats)
+make test-user  # load the units into your own systemd --user manager
+make test-all   # all three
 ```
 
 `tests/scripts.bats` covers conf parsing, the argv each script assembles, the
@@ -128,15 +130,18 @@ pull/refresh/skip decisions, the asymmetric failure semantics between service
 start and the timer, and restart-on-new-generation. It needs no systemd, no
 root and no real `flox`, so it costs milliseconds.
 
-What it does not cover, because it needs a running service manager: `%i`
+`tests/user-manager.bats` covers what needs a real service manager: `%i`
 instantiation, `Requires=`/`After=` ordering, the drop-in `ExecStart=` reset
-against a real unit, and timers firing. Those are reachable with
-`systemd --user` and units in `~/.config/systemd/user/` — the scripts now run
-unprivileged for exactly this reason — but that harness is not written yet.
+against a unit that already exists, and the scheduled pull restarting its
+unit. It transforms the units for a user manager with
+`tests/mk-user-units.sh` — renamed `floxtest-*`, `User=`/`Group=` stripped,
+paths redirected — and skips itself when no user manager is reachable.
+
+Still uncovered, and only reachable with root on a real host: account
+creation, `setpriv`, `/var/lib` paths, and SELinux.
 
 ## Not done yet
 
-- No service-manager test; see Testing above.
 - SELinux is untested. Units executing from `/nix/store` and writing under
   `/var/lib/flox` will likely need policy work on RHEL/Fedora in enforcing
   mode. This needs a real host in enforcing mode, not a test harness.

@@ -39,6 +39,7 @@ flox_load_conf() {
   FLOX_TOKEN_FILE=
   FLOX_PULL_AT_SERVICE_START=1
   FLOX_AUTORESTART=0
+  FLOX_UNIT=
   FLOX_ARGS=
   FLOX_ACTIVATE_ARGS=
   FLOX_PULL_ARGS=
@@ -66,7 +67,11 @@ flox_load_conf() {
   flox_group=${FLOX_GROUP:-$(flox_default_group)}
   flox_workdir="$FLOX_STATE_DIR/$flox_name"
   flox_token_file=$FLOX_TOKEN_FILE
-  flox_unit=$flox_name.service
+
+  # The unit autoRestart restarts. Method 1 runs the instance as
+  # flox@<name>.service; an override (method 2) is attached to a unit that
+  # already exists under its own name, so those conf files set FLOX_UNIT.
+  flox_unit=${FLOX_UNIT:-flox@$flox_name.service}
 }
 
 # Primary group for the service account: the matching per-service group as

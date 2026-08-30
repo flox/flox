@@ -104,5 +104,17 @@ after="$(generation_state)" || after=""
 
 if [ "$FLOX_AUTORESTART" = 1 ] && [ "$mode" = timer ] && [ "$before" != "$after" ]; then
   echo "Flox environment $flox_env changed; restarting $flox_unit" >&2
-  systemctl try-restart "$flox_unit"
+  # --no-block is required, not an optimisation. The unit being restarted
+  # depends on flox-pull@<name>.service, which takes the same lock this script
+  # is holding. Waiting for the restart to finish would deadlock: the restart
+  # cannot proceed until the lock is released, and the lock is not released
+  # until this script exits.
+  #
+  # Restart through the manager that owns the unit: the system manager as
+  # root, the caller's own user manager otherwise.
+  if [ "$(id -u)" = 0 ]; then
+    systemctl --no-block try-restart "$flox_unit"
+  else
+    systemctl --user --no-block try-restart "$flox_unit"
+  fi
 fi

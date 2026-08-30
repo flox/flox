@@ -185,7 +185,7 @@ stub_invocations() {
   FLOX_STUB_GENERATION_CHANGES=1 run "$LIBEXEC/flox-pull" svc timer
   [ "$status" -eq 0 ]
   [[ "$output" == *"changed"* ]]
-  grep -q "try-restart svc.service" "$FLOX_STUB_SYSTEMCTL_LOG"
+  grep -q "try-restart flox@svc.service" "$FLOX_STUB_SYSTEMCTL_LOG"
 }
 
 @test "pull: a changed generation does not restart on service start" {
@@ -312,4 +312,17 @@ stub_invocations() {
   [ "$status" -eq 0 ]
   run stub_args
   [[ "$output" == *"one two three"* ]]
+}
+
+@test "pull: FLOX_UNIT overrides which unit autorestart restarts" {
+  # An override (method 2) is attached to a unit that already exists under its
+  # own name, rather than to flox@<name>.service.
+  write_conf svc \
+    "FLOX_ENVIRONMENT=flox/svc" \
+    "FLOX_AUTORESTART=1" \
+    "FLOX_UNIT=echoip.service"
+  provision svc
+  FLOX_STUB_GENERATION_CHANGES=1 run "$LIBEXEC/flox-pull" svc timer
+  [ "$status" -eq 0 ]
+  grep -q "try-restart echoip.service" "$FLOX_STUB_SYSTEMCTL_LOG"
 }
