@@ -14,6 +14,9 @@ FLOX_LIBEXEC=${FLOX_LIBEXEC:-$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)}
 name=${1:?usage: flox-activate <instance>}
 flox_load_conf "$name"
 
+# The service environment is applied here rather than in the unit so that
+# every caller gets it from one definition - the units under ../units, the
+# NixOS module in ../../nixos, and a script run by hand all behave alike.
 flox_export_token_from_credential
 flox_clear_stale_sockets
 
@@ -23,4 +26,4 @@ if [ "$FLOX_TRUST" = 1 ]; then
 fi
 set -- "$@" $FLOX_ACTIVATE_ARGS --start-services
 
-exec "$@" -- "$FLOX_BIN" $FLOX_ARGS services logs --follow
+exec env $(flox_service_env) "$@" -- "$FLOX_BIN" $FLOX_ARGS services logs --follow

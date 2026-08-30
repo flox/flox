@@ -14,127 +14,60 @@ let
     workingDirectoryMode
     ;
   inherit (lib)
-    escapeShellArg
-    escapeShellArgs
+    boolToString
     filterAttrs
     mapAttrs'
     mapAttrsToList
     mkIf
     mkOption
     nameValuePair
-    optionalString
     types
     ;
 
-  # Options common to both Flox module types.
-  common = import ./common.nix { inherit lib; };
+  serviceConfigs = config.services.flox.pull.configs;
 
-  pullConfigs = config.services.flox.pull.configs;
+  conf = import ./conf.nix { inherit lib; };
 
-  # One pull script per managed service, keyed by systemd instance name.
-  # `flox-pull@<name>.service` runs it with "start" as a dependency of the
-  # main unit; `flox-autopull@<name>.service` runs it with "timer" on the
-  # autoPull schedule. The script runs as root so it can create the working
-  # directory and restart the main unit, but every `flox` invocation drops
-  # privileges to the service user.
-  pullScript =
-    name: cfg:
-    let
-      flox = escapeShellArgs ([ "${package}/bin/flox" ] ++ cfg.extraFloxArgs);
-      pullArgs = escapeShellArgs cfg.extraFloxPullArgs;
-    in
-    pkgs.writeShellScript "flox-pull-${name}" ''
-      set -euo pipefail
+  # The entry points are shared verbatim with the distro-agnostic integration
+  # in ../systemd, so NixOS and a Debian or RHEL host run the same code. This
+  # module's remaining job is to render each service's configuration file and
+  # point the units at these scripts; see ../systemd/README.md for what the
+  # scripts expect.
+  scripts = pkgs.runCommand "flox-systemd-scripts" { } ''
+    mkdir -p "$out/libexec/flox"
+    cp ${../systemd/libexec}/* "$out/libexec/flox/"
+    chmod +x "$out/libexec/flox/flox-pull" \
+             "$out/libexec/flox/flox-activate" \
+             "$out/libexec/flox/flox-exec-start"
+    patchShebangs "$out/libexec/flox"
+  '';
 
-      mode="''${1:?usage: flox-pull-${name} (start|timer)}"
+  libexec = "${scripts}/libexec/flox";
 
-      workdir=${escapeShellArg cfg.workingDirectory}
-      user=${escapeShellArg cfg.user}
-      group=${escapeShellArg cfg.group}
-      if [ -z "$group" ]; then
-        group="$(id -gn "$user")"
-      fi
-
-      # Ensure the working directory exists and is owned by the service user.
-      mkdir -p "$workdir"
-      chown "$user:$group" "$workdir"
-      chmod ${workingDirectoryMode} "$workdir"
-      cd "$workdir"
-
-      # Serialize pulls against this working directory: a service-start pull
-      # (flox-pull@) and a scheduled pull (flox-autopull@) are separate
-      # units and may otherwise run concurrently, e.g. when a persistent
-      # timer fires its catch-up run around boot.
-      exec 9>.flox-pull.lock
-      flock 9
-
-      ${optionalString (cfg.floxHubTokenFile != null) ''
-        # Export the FloxHub token for the flox invocations below. The token
-        # must only ever travel through the environment: putting it on a
-        # command line would expose it in /proc.
-        FLOX_FLOXHUB_TOKEN="$(cat ${escapeShellArg cfg.floxHubTokenFile})"
-        export FLOX_FLOXHUB_TOKEN
-      ''}
-
-      # Run a command as the service user, preserving the environment
-      # (including an exported FLOX_FLOXHUB_TOKEN).
-      as_user() {
-        setpriv --reuid "$user" --regid "$group" --init-groups \
-          env ${
-            escapeShellArgs (
-              common.serviceEnvironment pkgs.runtimeShell cfg.workingDirectory cfg.user metrics.enable
-            )
-          } "$@"
-      }
-
-      # Fingerprint of the local generation history, used to detect whether
-      # a pull fetched a new generation.
-      generation_state() {
-        as_user ${flox} generations list --json 2>/dev/null | sha256sum
-      }
-
-      if [ ! -e "$workdir/.flox" ]; then
-        # First start: provision the environment. Failure is fatal - there
-        # is nothing to run without an environment.
-        as_user ${flox} pull ${pullArgs} ${escapeShellArg cfg.environment}
-        exit 0
-      fi
-
-      ${optionalString (!cfg.pullAtServiceStart) ''
-        if [ "$mode" = "start" ]; then
-          # The environment is provisioned and pullAtServiceStart is
-          # disabled: nothing to do at service start.
-          exit 0
-        fi
-      ''}
-
-      before="$(generation_state)" || before=""
-      if ! as_user ${flox} pull --force ${pullArgs}; then
-        if [ "$mode" = "timer" ]; then
-          echo "ERROR: failed to pull updates for ${cfg.environment}." >&2
-          exit 1
-        fi
-        # The environment is already present; a failed refresh must not
-        # prevent the service from (re)starting.
-        echo "WARNING: failed to pull updates for ${cfg.environment}; starting with the existing environment." >&2
-        exit 0
-      fi
-      after="$(generation_state)" || after=""
-
-      ${optionalString cfg.autoRestart ''
-        if [ "$mode" = "timer" ] && [ "$before" != "$after" ]; then
-          echo "Flox environment ${cfg.environment} changed; restarting ${cfg.unit}" >&2
-          systemctl try-restart ${escapeShellArg cfg.unit}
-        fi
-      ''}
-    '';
-
-  scriptsDir = pkgs.linkFarm "flox-pull-scripts" (
+  # The rendered per-service configuration. This lives in the store rather
+  # than /etc: defining `environment.etc` in terms of `pull.configs` makes it
+  # depend on `config.systemd.services`, and other NixOS modules' services
+  # read `environment.etc` back, which is an evaluation cycle.
+  confDir = pkgs.linkFarm "flox-service-configs" (
     mapAttrsToList (name: cfg: {
-      inherit name;
-      path = pullScript name cfg;
-    }) pullConfigs
+      name = "${name}.conf";
+      path = pkgs.writeText "flox-service-${name}.conf" (conf.mkConf cfg);
+    }) serviceConfigs
   );
+
+  # Everything the scripts need in order to find flox, their configuration and
+  # the state directory. The per-service settings travel in the conf files
+  # rather than here, so these are identical for every unit.
+  staticScriptEnvironment = [
+    "FLOX_BIN=${package}/bin/flox"
+    "FLOX_DISABLE_METRICS=${boolToString (!metrics.enable)}"
+    "FLOX_LIBEXEC=${libexec}"
+    "FLOX_STATE_DIR=${stateDir}"
+    "FLOX_WORKDIR_MODE=${workingDirectoryMode}"
+    "SHELL=${pkgs.runtimeShell}"
+  ];
+
+  scriptEnvironment = staticScriptEnvironment ++ [ "FLOX_CONF_DIR=${confDir}" ];
 
   templateUnit = mode: {
     description = "Flox environment pull for %i (${mode})";
@@ -148,7 +81,8 @@ let
     ];
     serviceConfig = {
       Type = "oneshot";
-      ExecStart = "${scriptsDir}/%i ${mode}";
+      Environment = scriptEnvironment;
+      ExecStart = "${libexec}/flox-pull %i ${mode}";
     };
   };
 
@@ -160,9 +94,10 @@ in
       visible = false;
       default = { };
       description = ''
-        Per-service pull configuration, contributed by the Services and
-        Overrides modules and consumed by the `flox-pull@` and
-        `flox-autopull@` template units.
+        Per-service configuration, contributed by the Services and Overrides
+        modules, rendered to `/etc/flox/services/<name>.conf` and consumed by
+        the shared entry points and the `flox-pull@` and `flox-autopull@`
+        template units.
       '';
       type = types.attrsOf (
         types.submodule {
@@ -175,8 +110,21 @@ in
               default = "";
             };
             environment = mkOption { type = types.str; };
-            workingDirectory = mkOption { type = types.str; };
+            trustEnvironment = mkOption {
+              type = types.bool;
+              default = false;
+            };
+            # Method 2 only: the command to run inside the activation. Empty
+            # for an activation that starts the environment's own services.
+            execStart = mkOption {
+              type = types.str;
+              default = "";
+            };
             extraFloxArgs = mkOption {
+              type = types.listOf types.str;
+              default = [ ];
+            };
+            extraFloxActivateArgs = mkOption {
               type = types.listOf types.str;
               default = [ ];
             };
@@ -208,12 +156,50 @@ in
         }
       );
     };
+
+    services.flox.libexec = mkOption {
+      internal = true;
+      visible = false;
+      readOnly = true;
+      type = types.str;
+      default = libexec;
+      description = "Directory holding the shared Flox systemd entry points.";
+    };
+
+    services.flox.staticScriptEnvironment = mkOption {
+      internal = true;
+      visible = false;
+      readOnly = true;
+      type = types.listOf types.str;
+      default = staticScriptEnvironment;
+      description = ''
+        The part of the entry-point environment that does not depend on
+        `pull.configs`. The Overrides method must use this: it derives its
+        configs from `systemd.services`, so referencing anything built from
+        `pull.configs` inside a unit would be self-referential.
+      '';
+    };
+
+    services.flox.scriptEnvironment = mkOption {
+      internal = true;
+      visible = false;
+      readOnly = true;
+      type = types.listOf types.str;
+      default = scriptEnvironment;
+      description = "Environment the shared entry points need in every unit.";
+    };
   };
 
   config = mkIf enable {
+    assertions = mapAttrsToList (name: cfg: {
+      assertion =
+        !(lib.any (a: lib.hasInfix " " a || lib.hasInfix "\t" a) (conf.whitespaceSensitiveArgs cfg));
+      message = "services.flox: extra argument lists for '${name}' contain an argument with whitespace. Arguments reach the Flox systemd scripts through a word-split configuration file and cannot contain whitespace.";
+    }) serviceConfigs;
+
     # The templates are inert without instances, so instances are not part
     # of the condition here. It must stay a plain user-set flag: gating on
-    # `pullConfigs != { }` would make the merge of `systemd.services`
+    # `serviceConfigs != { }` would make the merge of `systemd.services`
     # depend on its own values and diverge.
     systemd.services."flox-pull@" = templateUnit "start";
     systemd.services."flox-autopull@" = templateUnit "timer";
@@ -228,7 +214,7 @@ in
           Persistent = true;
         };
       }
-    ) (filterAttrs (_: cfg: cfg.autoPull) pullConfigs);
+    ) (filterAttrs (_: cfg: cfg.autoPull) serviceConfigs);
 
     # Parent directory for the per-service working directories. The pull
     # script creates and owns each service's directory beneath it.

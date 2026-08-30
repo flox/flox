@@ -18,6 +18,9 @@ flox_load_conf "$name"
 
 [ -n "$FLOX_EXEC_START" ] || die "FLOX_EXEC_START is not set in $FLOX_CONF_DIR/$name.conf"
 
+# The service environment is applied here rather than in the unit so that
+# every caller gets it from one definition - the units under ../units, the
+# NixOS module in ../../nixos, and a script run by hand all behave alike.
 flox_export_token_from_credential
 flox_clear_stale_sockets
 
@@ -27,4 +30,4 @@ if [ "$FLOX_TRUST" = 1 ]; then
 fi
 set -- "$@" $FLOX_ACTIVATE_ARGS
 
-exec "$@" -- /bin/sh -c "$FLOX_EXEC_START"
+exec env $(flox_service_env) "$@" -- /bin/sh -c "$FLOX_EXEC_START"

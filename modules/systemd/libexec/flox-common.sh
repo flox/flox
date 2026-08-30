@@ -29,7 +29,10 @@ die() {
 flox_load_conf() {
   flox_name=${1:?usage: flox_load_conf <instance>}
 
-  flox_conf="$FLOX_CONF_DIR/$flox_name.conf"
+  # FLOX_CONF_FILE names the file directly, for a caller that has one unit per
+  # service and no directory to scan. Otherwise it is <instance>.conf in the
+  # configuration directory, which is what the template units need.
+  flox_conf=${FLOX_CONF_FILE:-$FLOX_CONF_DIR/$flox_name.conf}
   [ -r "$flox_conf" ] || die "no readable configuration at $flox_conf"
 
   FLOX_ENVIRONMENT=

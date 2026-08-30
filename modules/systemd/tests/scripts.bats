@@ -326,3 +326,32 @@ stub_invocations() {
   [ "$status" -eq 0 ]
   grep -q "try-restart echoip.service" "$FLOX_STUB_SYSTEMCTL_LOG"
 }
+
+@test "activate: the service environment is pinned for the activation too" {
+  # The units do not set HOME/USER/XDG_*; the entry points apply them, so the
+  # NixOS module and the plain units cannot drift apart.
+  write_conf svc "FLOX_ENVIRONMENT=flox/svc"
+  provision svc
+  HOME=/somewhere/else run "$LIBEXEC/flox-activate" svc
+  [ "$status" -eq 0 ]
+  grep -q "^home=$FLOX_STATE_DIR/svc$" "$FLOX_STUB_LOG"
+  grep -q "^user=$(id -un)$" "$FLOX_STUB_LOG"
+}
+
+@test "exec-start: the service environment is pinned for the command too" {
+  write_conf svc "FLOX_ENVIRONMENT=flox/svc" "FLOX_EXEC_START=true"
+  provision svc
+  HOME=/somewhere/else run "$LIBEXEC/flox-exec-start" svc
+  [ "$status" -eq 0 ]
+  grep -q "^home=$FLOX_STATE_DIR/svc$" "$FLOX_STUB_LOG"
+}
+
+@test "FLOX_CONF_FILE names the configuration directly" {
+  # A caller with one unit per service points at the file rather than relying
+  # on <instance>.conf being present in a directory.
+  printf '%s\n' "FLOX_ENVIRONMENT=flox/elsewhere" > "$BATS_TEST_TMPDIR/other.conf"
+  FLOX_CONF_FILE="$BATS_TEST_TMPDIR/other.conf" run "$LIBEXEC/flox-pull" svc start
+  [ "$status" -eq 0 ]
+  run stub_args
+  [[ "$output" == *"flox/elsewhere"* ]]
+}
