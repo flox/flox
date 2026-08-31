@@ -7,8 +7,10 @@ use anyhow::Result;
 use flox_core::activate::context::AutoActivateFishMode;
 use flox_core::data::environment_ref::RemoteEnvironmentRef;
 use flox_core::features::Features;
+use glob::{MatchOptions, Pattern};
 use serde::{Deserialize, Serialize};
 use toml_edit::Key;
+use tracing::debug;
 use url::Url;
 use xdg::BaseDirectories;
 
@@ -172,7 +174,12 @@ pub struct FloxConfig {
     pub auto_activate_fish_mode: Option<AutoActivateFishMode>,
 
     /// Per-directory auto-activation preferences.
-    /// Maps absolute paths to explicit allow/deny decisions.
+    ///
+    /// Keys are absolute project directories (the parent of `.flox`) or
+    /// shell-style glob patterns over such directories (`*` matches one path
+    /// component, `**` any depth), each mapping to an explicit allow/deny
+    /// decision. See [`resolve_auto_activation_preference`] for how a
+    /// directory is matched against the entries.
     #[serde(default)]
     pub auto_activate_environments: HashMap<PathBuf, AutoActivationPreference>,
 
@@ -255,6 +262,60 @@ pub enum AutoActivationPreference {
     Deny,
 }
 
+/// Resolve the auto-activation preference for `path` (a canonical project
+/// directory) from the `auto_activate_environments` config.
+///
+/// An exact key always wins. Otherwise every key is tried as a shell-style
+/// glob against `path`: `*` matches exactly one path component and `**`
+/// matches any depth, so `/home/me/work/*` covers the repositories directly
+/// under `work` but not `work` itself or anything nested deeper. When several
+/// patterns match and disagree, the result is `Deny`: auto-activation runs
+/// hooks, so an ambiguous configuration must not activate. Exact keys (as
+/// written by `flox activate allow`/`deny` and the consent prompt) remain the
+/// way to carve out a single directory from a pattern.
+///
+/// Keys that aren't valid UTF-8 or don't compile as a pattern are skipped so
+/// that one bad hand-edited entry can't fail every shell prompt.
+pub fn resolve_auto_activation_preference(
+    preferences: &HashMap<PathBuf, AutoActivationPreference>,
+    path: &Path,
+) -> Option<AutoActivationPreference> {
+    if let Some(preference) = preferences.get(path) {
+        return Some(preference.clone());
+    }
+
+    // A literal directory name containing a glob metacharacter is still
+    // served by the exact lookup above; it may additionally match siblings
+    // as a pattern, which is accepted rather than escaping keys on write.
+    let options = MatchOptions {
+        case_sensitive: true,
+        require_literal_separator: true,
+        require_literal_leading_dot: false,
+    };
+    let matching = preferences.iter().filter(|(key, _)| {
+        let Some(key) = key.to_str() else {
+            debug!(?key, "skipping non-UTF-8 auto_activate_environments key");
+            return false;
+        };
+        match Pattern::new(key) {
+            Ok(pattern) => pattern.matches_path_with(path, options),
+            Err(err) => {
+                debug!(key, %err, "skipping invalid auto_activate_environments pattern");
+                false
+            },
+        }
+    });
+
+    matching.fold(None, |resolved, (_, preference)| {
+        match (resolved, preference) {
+            (_, AutoActivationPreference::Deny) | (Some(AutoActivationPreference::Deny), _) => {
+                Some(AutoActivationPreference::Deny)
+            },
+            (_, AutoActivationPreference::Allow) => Some(AutoActivationPreference::Allow),
+        }
+    })
+}
+
 impl Display for InstallerChannel {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -323,5 +384,123 @@ mod tests {
             let serialized = serde_json::to_string(&channel).unwrap();
             prop_assert_eq!(display_quoted, serialized);
         }
+    }
+
+    fn preferences(
+        entries: &[(&str, AutoActivationPreference)],
+    ) -> HashMap<PathBuf, AutoActivationPreference> {
+        entries
+            .iter()
+            .map(|(key, preference)| (PathBuf::from(key), preference.clone()))
+            .collect()
+    }
+
+    fn resolve(
+        entries: &[(&str, AutoActivationPreference)],
+        path: &str,
+    ) -> Option<AutoActivationPreference> {
+        resolve_auto_activation_preference(&preferences(entries), Path::new(path))
+    }
+
+    #[test]
+    fn exact_key_matches() {
+        let entries = [("/w/a", AutoActivationPreference::Allow)];
+        assert_eq!(
+            resolve(&entries, "/w/a"),
+            Some(AutoActivationPreference::Allow)
+        );
+    }
+
+    #[test]
+    fn no_match_is_unregistered() {
+        let entries = [
+            ("/w/a", AutoActivationPreference::Allow),
+            ("/w/b/*", AutoActivationPreference::Deny),
+        ];
+        assert_eq!(resolve(&entries, "/w/c"), None);
+    }
+
+    #[test]
+    fn star_matches_single_component_only() {
+        let entries = [("/w/*", AutoActivationPreference::Allow)];
+        assert_eq!(
+            resolve(&entries, "/w/a"),
+            Some(AutoActivationPreference::Allow)
+        );
+        assert_eq!(resolve(&entries, "/w/a/b"), None);
+        assert_eq!(resolve(&entries, "/w"), None);
+    }
+
+    #[test]
+    fn double_star_matches_any_depth() {
+        let entries = [("/w/**", AutoActivationPreference::Allow)];
+        assert_eq!(
+            resolve(&entries, "/w/a"),
+            Some(AutoActivationPreference::Allow)
+        );
+        assert_eq!(
+            resolve(&entries, "/w/a/b/c"),
+            Some(AutoActivationPreference::Allow)
+        );
+    }
+
+    #[test]
+    fn exact_allow_beats_pattern_deny() {
+        let entries = [
+            ("/w/*", AutoActivationPreference::Deny),
+            ("/w/a", AutoActivationPreference::Allow),
+        ];
+        assert_eq!(
+            resolve(&entries, "/w/a"),
+            Some(AutoActivationPreference::Allow)
+        );
+        assert_eq!(
+            resolve(&entries, "/w/b"),
+            Some(AutoActivationPreference::Deny)
+        );
+    }
+
+    #[test]
+    fn exact_deny_beats_pattern_allow() {
+        let entries = [
+            ("/w/*", AutoActivationPreference::Allow),
+            ("/w/a", AutoActivationPreference::Deny),
+        ];
+        assert_eq!(
+            resolve(&entries, "/w/a"),
+            Some(AutoActivationPreference::Deny)
+        );
+        assert_eq!(
+            resolve(&entries, "/w/b"),
+            Some(AutoActivationPreference::Allow)
+        );
+    }
+
+    #[test]
+    fn conflicting_patterns_deny() {
+        let entries = [
+            ("/w/**", AutoActivationPreference::Allow),
+            ("/w/vendor/*", AutoActivationPreference::Deny),
+        ];
+        assert_eq!(
+            resolve(&entries, "/w/vendor/x"),
+            Some(AutoActivationPreference::Deny)
+        );
+        assert_eq!(
+            resolve(&entries, "/w/app"),
+            Some(AutoActivationPreference::Allow)
+        );
+    }
+
+    #[test]
+    fn invalid_pattern_is_skipped() {
+        let entries = [
+            ("/w/[", AutoActivationPreference::Deny),
+            ("/w/*", AutoActivationPreference::Allow),
+        ];
+        assert_eq!(
+            resolve(&entries, "/w/a"),
+            Some(AutoActivationPreference::Allow)
+        );
     }
 }

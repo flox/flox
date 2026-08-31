@@ -1662,6 +1662,7 @@ dependencies = [
  "anyhow",
  "config",
  "flox-core",
+ "glob",
  "indoc",
  "itertools 0.14.0",
  "proptest",

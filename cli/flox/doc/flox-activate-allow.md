@@ -28,6 +28,9 @@ The preference is stored in the user config file under
 `auto_activate_environments`,
 keyed by the absolute path of the directory that contains the `.flox`
 directory.
+To cover many directories with one entry,
+set a glob pattern with `flox config --set` instead
+(see `auto_activate_environments` in [`flox-config(1)`](./flox-config.md)).
 
 By default `flox activate allow` targets the environment in the current
 directory.
