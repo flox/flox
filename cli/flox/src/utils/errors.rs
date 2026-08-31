@@ -1,6 +1,7 @@
 use std::error::Error as _;
 use std::ops::Deref;
 
+use flox_core::data::environment_ref::RemoteEnvironmentRef;
 use flox_rust_sdk::data::CanonicalizeError;
 use flox_rust_sdk::models::environment::floxmeta_branch::FloxmetaBranchError;
 use flox_rust_sdk::models::environment::generations::{
@@ -319,6 +320,33 @@ pub fn format_core_error(err: &CoreEnvironmentError) -> String {
     }
 }
 
+/// Format an `UpstreamNotFound` error, shared by [ManagedEnvironmentError],
+/// [FloxmetaBranchError], and the `RemoteEnvironmentError` fan-in below —
+/// all three surface the same underlying "not found" condition and carry
+/// the same `env_ref`/`user` pair.
+///
+/// `user` comes from `AuthContext::handle()`, which is `None` when the
+/// user is logged out. A logged-out user gets pointed at logging in
+/// rather than at 'flox push', since we can't tell whether they own the
+/// (possibly still-existing) environment without a token to check.
+fn format_upstream_not_found(env_ref: &RemoteEnvironmentRef, user: &Option<String>) -> String {
+    let message = "Environment not found in FloxHub.";
+
+    match user {
+        None => formatdoc! {"
+            {message}
+
+            The environment may have been deleted, or you need to log in.
+        "},
+        Some(handle) if handle == env_ref.owner().as_str() => formatdoc! {"
+            {message}
+
+            You can run 'flox push' to push the environment back to FloxHub.
+        "},
+        Some(_) => message.to_string(),
+    }
+}
+
 pub fn format_managed_error(err: &ManagedEnvironmentError) -> String {
     trace!("formatting managed_environment_error: {err:?}");
 
@@ -399,22 +427,7 @@ pub fn format_managed_error(err: &ManagedEnvironmentError) -> String {
             env_ref,
             upstream: _,
             user,
-        } => {
-            let by_current_user = user
-                .as_ref()
-                .map(|u| u == env_ref.owner().as_str())
-                .unwrap_or_default();
-            let message = "Environment not found in FloxHub.";
-            if by_current_user {
-                formatdoc! {"
-                    {message}
-
-                    You can run 'flox push' to push the environment back to FloxHub.
-                "}
-            } else {
-                message.to_string()
-            }
-        },
+        } => format_upstream_not_found(env_ref, user),
         ManagedEnvironmentError::UpstreamAlreadyExists { .. } => display_chain(err),
         ManagedEnvironmentError::Push(_) => display_chain(err),
         ManagedEnvironmentError::PushWithLocalIncludes => display_chain(err),
@@ -505,22 +518,7 @@ pub fn format_floxmeta_branch_error(err: &FloxmetaBranchError) -> String {
             env_ref,
             upstream: _,
             user,
-        } => {
-            let by_current_user = user
-                .as_ref()
-                .map(|u| u == env_ref.owner().as_str())
-                .unwrap_or_default();
-            let message = "Environment not found in FloxHub.";
-            if by_current_user {
-                formatdoc! {"
-                    {message}
-
-                    You can run 'flox push' to push the environment back to FloxHub.
-                "}
-            } else {
-                message.to_string()
-            }
-        },
+        } => format_upstream_not_found(env_ref, user),
 
         FloxmetaBranchError::CheckGitRevision(_) => display_chain(err),
         FloxmetaBranchError::CheckBranchExists(_) => display_chain(err),
@@ -608,14 +606,20 @@ pub fn format_remote_error(err: &RemoteEnvironmentError) -> String {
         RemoteEnvironmentError::ResetManagedEnvironment(ManagedEnvironmentError::FetchUpdates(
             GitRemoteCommandError::RefNotFound(_),
         ))
-        | RemoteEnvironmentError::GetLatestVersion(FloxmetaBranchError::UpstreamNotFound {
-            ..
-        })
         | RemoteEnvironmentError::GetLatestVersion(FloxmetaBranchError::AccessDenied) => {
             formatdoc! {"
             Environment not found in FloxHub.
             "}
         },
+
+        // Split out from the fan-in above so `user` is available: unlike
+        // the other two arms, this one carries enough context to tell a
+        // logged-out user apart from one who simply isn't the owner.
+        RemoteEnvironmentError::GetLatestVersion(FloxmetaBranchError::UpstreamNotFound {
+            env_ref,
+            upstream: _,
+            user,
+        }) => format_upstream_not_found(env_ref, user),
 
         RemoteEnvironmentError::ResetManagedEnvironment(err) => formatdoc! {"
             Failed to reset remote environment to latest upstream version:
@@ -826,5 +830,67 @@ mod tests {
             formatted.contains("install.hello"),
             "Error should reference the invalid install descriptor, got: {formatted}"
         );
+    }
+
+    fn owner_env_ref() -> RemoteEnvironmentRef {
+        "owner/env".parse().expect("valid owner/name pair")
+    }
+
+    #[test]
+    fn upstream_not_found_hints_login_when_logged_out() {
+        let formatted = format_upstream_not_found(&owner_env_ref(), &None);
+
+        assert!(formatted.contains("Environment not found in FloxHub."));
+        assert!(formatted.contains("you need to log in"));
+    }
+
+    #[test]
+    fn upstream_not_found_suggests_push_for_owner() {
+        let formatted = format_upstream_not_found(&owner_env_ref(), &Some("owner".to_string()));
+
+        assert!(formatted.contains("Environment not found in FloxHub."));
+        assert!(formatted.contains("flox push"));
+        assert!(!formatted.contains("log in"));
+    }
+
+    #[test]
+    fn upstream_not_found_is_bare_for_non_owner() {
+        let formatted =
+            format_upstream_not_found(&owner_env_ref(), &Some("someone-else".to_string()));
+
+        assert_eq!(formatted, "Environment not found in FloxHub.");
+    }
+
+    #[test]
+    fn managed_environment_error_upstream_not_found_routes_to_shared_message() {
+        let err = ManagedEnvironmentError::UpstreamNotFound {
+            env_ref: owner_env_ref(),
+            upstream: "https://hub.flox.dev".to_string(),
+            user: None,
+        };
+
+        assert!(format_managed_error(&err).contains("you need to log in"));
+    }
+
+    #[test]
+    fn floxmeta_branch_error_upstream_not_found_routes_to_shared_message() {
+        let err = FloxmetaBranchError::UpstreamNotFound {
+            env_ref: owner_env_ref(),
+            upstream: "https://hub.flox.dev".to_string(),
+            user: None,
+        };
+
+        assert!(format_floxmeta_branch_error(&err).contains("you need to log in"));
+    }
+
+    #[test]
+    fn remote_environment_error_upstream_not_found_routes_to_shared_message() {
+        let err = RemoteEnvironmentError::GetLatestVersion(FloxmetaBranchError::UpstreamNotFound {
+            env_ref: owner_env_ref(),
+            upstream: "https://hub.flox.dev".to_string(),
+            user: None,
+        });
+
+        assert!(format_remote_error(&err).contains("you need to log in"));
     }
 }

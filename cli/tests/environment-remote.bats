@@ -403,6 +403,15 @@ EOF
   assert_output --partial "Environment not found in FloxHub."
 }
 
+# bats test_tags=remote,remote:not-found,remote:auth-required
+@test "activate --reference hints at logging in when logged out" {
+  unset FLOX_FLOXHUB_TOKEN # logout, effectively
+  run "$FLOX_BIN" activate -r "$OWNER/i-dont-exist"
+  assert_failure
+  assert_output --partial "Environment not found in FloxHub."
+  assert_output --partial "you need to log in"
+}
+
 # ---------------------------------------------------------------------------- #
 
 # bats test_tags=remote,remote:auth-required,remote:auth-required:install
