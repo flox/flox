@@ -1,7 +1,7 @@
 # Flox systemd integration for non-NixOS Linux
 
 Run services from FloxHub-managed environments on any distro that uses
-systemd, with the same self-updating behaviour as the NixOS module in
+systemd, with the same self-updating behavior as the NixOS module in
 `../nixos`.
 
 This is Layer 0 as described in [INVESTIGATION.md](./INVESTIGATION.md): static

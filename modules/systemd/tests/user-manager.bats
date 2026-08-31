@@ -6,7 +6,7 @@
 #
 # These load the units into the caller's own `systemd --user` manager and
 # actually start them. They cover what the stub-flox tests in scripts.bats
-# cannot: %i instantiation, Requires=/After= ordering being honoured, the
+# cannot: %i instantiation, Requires=/After= ordering being honored, the
 # drop-in ExecStart= reset against a unit that already exists, and timers.
 #
 # The units are transformed for the user manager by tests/mk-user-units.sh -

@@ -33,7 +33,7 @@ both backed by one shared provisioning mechanism:
    before the unit, `Requires=`) provisions on first start and refreshes
    on later starts; `flox-autopull@<name>.service` + a `.timer` refresh on
    a schedule and optionally `systemctl try-restart` the unit when the
-   generation changed. A `flock` on `<workdir>/.flox-pull.lock` serialises
+   generation changed. A `flock` on `<workdir>/.flox-pull.lock` serializes
    the two.
 
 Everything the units *do* at runtime is plain systemd + coreutils +
@@ -137,7 +137,7 @@ echoip.service` is the command an admin reaches for, and we can document
 - **`USER` must match the invoking uid's passwd entry** or `flox` resets
   `HOME` from the passwd db (see the comment in `common.nix`). The pinned
   `XDG_*` under the working directory is what makes that survivable. This
-  constraint is a flox-CLI behaviour, fully portable, and must be kept.
+  constraint is a flox-CLI behavior, fully portable, and must be kept.
 - **Stale process-compose socket removal** (`rm -f
   <workdir>/.cache/flox/run/*.sock`) — portable, keep.
 
@@ -156,7 +156,7 @@ Nix:
   (shell-sourced `KEY=value`)
 
 `pull.nix`'s internal `services.flox.pull.configs` submodule is already
-almost exactly that conf schema — it is a serialisable struct today. The
+almost exactly that conf schema — it is a serializable struct today. The
 scripts become parametric over `$1` (the instance name) instead of being
 generated per-service; `linkFarm` disappears.
 
