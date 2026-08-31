@@ -56,14 +56,14 @@ function make_dummy_env() {
 
   pushd "$(mktemp -d)" >/dev/null || return
   "$FLOX_BIN" init --name "$ENV_NAME"
-  SOURCE_LOCAL_ENVIRONMENT_ID="$(cat .flox/telemetry_id)"
+  SOURCE_LOCAL_ENVIRONMENT_ID="$(jq -r '.env_id' .flox/env.json)"
   "$FLOX_BIN" push --owner "$OWNER"
   "$FLOX_BIN" delete --force
   popd >/dev/null || return
 }
 
 function assert_fresh_local_environment_id() {
-  run cat .flox/telemetry_id
+  run jq -r '.env_id' .flox/env.json
   assert_success
   assert_output --regexp '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
   assert_not_equal "$output" "$SOURCE_LOCAL_ENVIRONMENT_ID"
@@ -442,7 +442,7 @@ function add_incompatible_package() {
   assert [ -e ".flox/env.lock" ]
   assert [ $(cat .flox/env.json | jq -r '.name') == "name" ]
   assert [ $(cat .flox/env.json | jq -r '.owner') == "owner" ]
-  assert [ ! -e ".flox/telemetry_id" ]
+  assert [ $(cat .flox/env.json | jq -r '.env_id') == "null" ]
 
   run "$FLOX_BIN" pull --copy
   assert_success

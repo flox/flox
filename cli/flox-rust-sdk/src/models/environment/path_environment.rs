@@ -19,7 +19,6 @@ use std::path::{Path, PathBuf};
 
 use flox_core::activate::mode::ActivateMode;
 use flox_core::data::environment_ref::EnvironmentName;
-use flox_core::write_atomically;
 use flox_manifest::interfaces::{AsWritableManifest, WriteManifest};
 use flox_manifest::lockfile::{LOCKFILE_FILENAME, Lockfile};
 use flox_manifest::parsed::common::KnownSchemaVersion;
@@ -38,6 +37,7 @@ use super::{
     DotFlox,
     ENVIRONMENT_POINTER_FILENAME,
     EditResult,
+    EnvJson,
     Environment,
     EnvironmentError,
     EnvironmentPointer,
@@ -171,17 +171,19 @@ impl PathEnvironment {
 
     pub fn rename(&mut self, new_name: EnvironmentName) -> Result<(), EnvironmentError> {
         self.pointer.name = new_name;
-        let mut pointer_content = serde_json::to_string_pretty(&self.pointer)
-            .map_err(EnvironmentError::SerializeEnvJson)?;
-        pointer_content.push('\n');
 
-        write_atomically(
-            self.path.join(ENVIRONMENT_POINTER_FILENAME),
-            pointer_content,
-        )
-        .map_err(|e| EnvironmentError::WriteEnvJson(Box::new(e)))?;
-
-        Ok(())
+        // Rewrite from the full [EnvJson] rather than the bare pointer so
+        // the sibling `env_id` survives the rename.
+        let previous = EnvJson::read_from(&self.path).ok();
+        if previous.is_none() {
+            debug!("could not read or parse env.json before rename, dropping any env_id");
+        }
+        let env_id = previous.and_then(|env_json| env_json.env_id);
+        let env_json = EnvJson {
+            pointer: EnvironmentPointer::Path(self.pointer.clone()),
+            env_id,
+        };
+        env_json.write_to(&self.path)
     }
 
     /// Returns a unique identifier for the location of the environment.
@@ -803,6 +805,27 @@ pub mod tests {
                     (flox, tempdir, environments)
                 })
         })
+    }
+
+    #[test]
+    fn rename_preserves_env_id() {
+        let (flox, _temp_dir) = flox_instance();
+        let mut environment = new_path_environment(&flox, &with_latest_schema(""));
+
+        let env_id = uuid::Uuid::new_v4();
+        let env_json_path = environment.path.join(ENVIRONMENT_POINTER_FILENAME);
+        let stamped = EnvJson {
+            pointer: EnvironmentPointer::Path(environment.pointer.clone()),
+            env_id: Some(env_id),
+        };
+        fs::write(&env_json_path, stamped.to_pretty_string().unwrap()).unwrap();
+
+        environment.rename("renamed".parse().unwrap()).unwrap();
+
+        assert_eq!(EnvJson::read_from(&environment.path).unwrap(), EnvJson {
+            pointer: EnvironmentPointer::Path(PathPointer::new("renamed".parse().unwrap())),
+            env_id: Some(env_id),
+        });
     }
 
     #[test]

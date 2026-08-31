@@ -55,6 +55,8 @@ pub enum WriteError {
     SerdeWriteTmpFile(#[source] serde_json::Error),
     #[error("failed to write temporary file")]
     WriteTmpFile(#[source] std::io::Error),
+    #[error("failed to set permissions on temporary file")]
+    SetTmpFilePermissions(#[source] std::io::Error),
 }
 
 /// Serialize a value and write it to disk atomically.
@@ -90,10 +92,22 @@ where
 
 // At the moment this could be in flox-rust-sdk but I think it should be
 // co-located with serialize_atomically
-/// Write contents to a file atomically by renaming a tempfile
+/// Write contents to a file atomically by renaming a tempfile.
+///
+/// The persisted file inherits the tempfile's owner-only permissions.
 pub fn write_atomically(
     path: impl AsRef<Path>,
     contents: impl AsRef<[u8]>,
+) -> Result<(), WriteError> {
+    write_atomically_with_permissions(path, contents, None)
+}
+
+/// Write contents to a file atomically, applying `permissions` before the
+/// rename so the destination never exists with the owner-only default.
+pub fn write_atomically_with_permissions(
+    path: impl AsRef<Path>,
+    contents: impl AsRef<[u8]>,
+    permissions: Option<std::fs::Permissions>,
 ) -> Result<(), WriteError> {
     // Create the tempfile in the same directory as the file so persist()
     // doesn't run into a cross device linking error
@@ -107,6 +121,13 @@ pub fn write_atomically(
     tempfile
         .write_all(contents.as_ref())
         .map_err(WriteError::WriteTmpFile)?;
+
+    if let Some(permissions) = permissions {
+        tempfile
+            .as_file()
+            .set_permissions(permissions)
+            .map_err(WriteError::SetTmpFilePermissions)?;
+    }
 
     tempfile
         .persist(path.as_ref())

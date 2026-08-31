@@ -222,12 +222,18 @@ EOF
 
   BEFORE="$(jq -r .name .flox/env.json)"
   assert_equal "$BEFORE" "before"
+  BEFORE_ENV_ID="$(jq -r .env_id .flox/env.json)"
+  assert_not_equal "$BEFORE_ENV_ID" "null"
 
   run "$FLOX_BIN" edit --name "after"
   assert_success
 
   AFTER="$(jq -r .name .flox/env.json)"
   assert_equal "$AFTER" "after"
+
+  # The rename rewrites env.json but keeps the environment's id
+  AFTER_ENV_ID="$(jq -r .env_id .flox/env.json)"
+  assert_equal "$AFTER_ENV_ID" "$BEFORE_ENV_ID"
 }
 
 # bats test_tags=edit:rename-remote

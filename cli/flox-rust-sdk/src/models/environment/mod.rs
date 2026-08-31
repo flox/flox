@@ -11,8 +11,8 @@ use flox_core::data::environment_ref::{
     RemoteEnvironmentRef,
 };
 use flox_core::floxhub::Floxhub;
-use flox_core::traceable_path;
 pub use flox_core::{Version, path_hash};
+use flox_core::{traceable_path, write_atomically_with_permissions};
 use flox_manifest::lockfile::{LockedInclude, Lockfile, LockfileError};
 use flox_manifest::raw::{PackageToInstall, PackageToModify};
 use flox_manifest::{Manifest, ManifestError, Migrated, Validated};
@@ -27,6 +27,7 @@ use thiserror::Error;
 use tracing::debug;
 use uninstall::UninstallSpec;
 use url::{ParseError, Url};
+use uuid::Uuid;
 use walkdir::WalkDir;
 
 use self::managed_environment::ManagedEnvironmentError;
@@ -45,7 +46,7 @@ use crate::providers::git::{
 use crate::providers::lock_manifest::{LockResult, RecoverableMergeError};
 use crate::providers::manifest_init::ManifestInitError;
 use crate::providers::nix_auth::AuthError;
-use crate::utils::copy_file_without_permissions;
+use crate::utils::{copy_file_without_permissions, serialize_json_with_newline};
 
 mod core_environment;
 #[cfg(any(test, feature = "tests"))]
@@ -431,7 +432,7 @@ impl RenderedEnvironmentLinks {
 
 /// A pointer to an environment, either managed or path.
 /// This is used to determine the type of an environment at a given path.
-/// See [EnvironmentPointer::open].
+/// See [EnvJson::read_from].
 #[derive(
     Clone, Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, derive_more::From,
 )]
@@ -510,32 +511,129 @@ impl From<ManagedPointer> for RemoteEnvironmentRef {
     }
 }
 
-impl EnvironmentPointer {
-    /// Attempt to read an environment pointer file ([ENVIRONMENT_POINTER_FILENAME])
-    /// in the specified `.flox` directory.
-    ///
-    /// If the file is found and its contents can be deserialized,
-    /// the function returns an [EnvironmentPointer] containing information about the environment.
-    /// If reading or parsing fails, an [EnvironmentError] is returned.
-    ///
-    /// If you want to operate on the [Environment] at the given path then use
-    /// [open_path] on a project path instead.
-    fn open(dot_flox_path: &CanonicalPath) -> Result<EnvironmentPointer, EnvironmentError> {
-        let pointer_path = dot_flox_path.join(ENVIRONMENT_POINTER_FILENAME);
-        let pointer_contents = match fs::read(&pointer_path) {
-            Ok(contents) => contents,
-            Err(err) => match err.kind() {
-                io::ErrorKind::NotFound => {
-                    debug!("couldn't find env.json at {}", pointer_path.display());
-                    Err(EnvironmentError::EnvPointerNotFound)?
-                },
-                _ => Err(EnvironmentError::ReadEnvironmentMetadata(err))?,
-            },
-        };
+/// The full contents of `env.json`: the environment pointer plus `env_id`
+/// as a sibling field, kept off the pointer types so their equality and
+/// ordering stay derived. Versions predating `env_id` tolerate it on read
+/// but drop it when they rewrite the file.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct EnvJson {
+    #[serde(flatten)]
+    pub pointer: EnvironmentPointer,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_env_id"
+    )]
+    pub env_id: Option<Uuid>,
+}
 
-        serde_json::from_slice(&pointer_contents).map_err(EnvironmentError::ParseEnvJson)
+/// Read `env_id`, treating an unparseable value as absent. Opening an
+/// environment goes through [EnvJson], so a corrupted id must degrade to
+/// "no id" rather than making the environment unopenable.
+fn deserialize_env_id<'de, D>(deserializer: D) -> Result<Option<Uuid>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let raw = Option::<serde_json::Value>::deserialize(deserializer)?;
+    Ok(raw
+        .as_ref()
+        .and_then(serde_json::Value::as_str)
+        .and_then(|id| Uuid::try_parse(id).ok()))
+}
+
+impl EnvJson {
+    /// Read the full `env.json` from a `.flox` directory. Callers that treat
+    /// a missing or malformed file as "no data" rather than an error can
+    /// discard the error with `ok()`.
+    pub fn read_from(dot_flox_path: impl AsRef<Path>) -> Result<Self, EnvironmentError> {
+        let path = dot_flox_path.as_ref().join(ENVIRONMENT_POINTER_FILENAME);
+        let contents = fs::read_to_string(&path).map_err(|err| match err.kind() {
+            io::ErrorKind::NotFound => {
+                debug!(path = traceable_path(&path), "couldn't find env.json");
+                EnvironmentError::EnvPointerNotFound
+            },
+            _ => EnvironmentError::ReadEnvironmentMetadata(err),
+        })?;
+        serde_json::from_str(&contents).map_err(EnvironmentError::ParseEnvJson)
     }
 
+    /// Serialize to the on-disk representation of `env.json`. Without an
+    /// `env_id` the output is byte-identical to serializing the bare
+    /// pointer, so files written before the field existed are unchanged.
+    pub fn to_pretty_string(&self) -> Result<String, serde_json::Error> {
+        serialize_json_with_newline(self)
+    }
+
+    /// Rewrite an existing `<dot_flox>/env.json` atomically, keeping its
+    /// permissions so a shared checkout stays readable by other users, and
+    /// carrying over any top-level fields a newer flox may have written that
+    /// this version does not model.
+    ///
+    /// Nothing serializes a `read_from`/`write_to` pair against concurrent
+    /// writers: a rewrite landing in between is lost. That needs two
+    /// simultaneous flox invocations in one directory.
+    pub fn write_to(&self, dot_flox_path: impl AsRef<Path>) -> Result<(), EnvironmentError> {
+        let path = dot_flox_path.as_ref().join(ENVIRONMENT_POINTER_FILENAME);
+        // Rewrites only. Creating the file here would give it the tempfile's
+        // owner-only mode rather than one derived from the umask, so the
+        // permissions to keep are always read off the file being replaced.
+        let permissions = fs::metadata(&path)
+            .map_err(|_| EnvironmentError::EnvPointerNotFound)?
+            .permissions();
+        let contents = self
+            .serialize_merging(fs::read_to_string(&path).ok().as_deref())
+            .map_err(EnvironmentError::SerializeEnvJson)?;
+        write_atomically_with_permissions(&path, contents, Some(permissions))
+            .map_err(|e| EnvironmentError::WriteEnvJson(Box::new(e)))?;
+        Ok(())
+    }
+
+    /// Serialize for disk, re-attaching any field of `existing` that this
+    /// version does not model so a newer flox's additions survive the
+    /// rewrite. Merging goes through [serde_json::Value], whose map sorts
+    /// keys, so it is used only when there is something to carry over —
+    /// otherwise the field order of [Self::to_pretty_string] is kept.
+    fn serialize_merging(&self, existing: Option<&str>) -> Result<String, serde_json::Error> {
+        let unmodeled = existing
+            .and_then(Self::unmodeled_fields)
+            .unwrap_or_default();
+        if unmodeled.is_empty() {
+            return self.to_pretty_string();
+        }
+        let mut value = serde_json::to_value(self)?;
+        if let serde_json::Value::Object(fields) = &mut value {
+            // Only fill gaps: what this version writes stays authoritative,
+            // so e.g. an `env_id: null` on disk cannot clobber a real id.
+            for (field, carried) in unmodeled {
+                fields.entry(field).or_insert(carried);
+            }
+        }
+        serialize_json_with_newline(&value)
+    }
+
+    /// The top-level fields of `contents` that [EnvJson] does not round-trip.
+    /// `None` when the file cannot be parsed, in which case it is replaced
+    /// rather than merged.
+    fn unmodeled_fields(contents: &str) -> Option<serde_json::Map<String, serde_json::Value>> {
+        let on_disk: serde_json::Map<String, serde_json::Value> =
+            serde_json::from_str(contents).ok()?;
+        let modeled = serde_json::to_value(serde_json::from_str::<Self>(contents).ok()?).ok()?;
+        let modeled = modeled.as_object()?;
+        // Fields this type owns but did not serialize (an absent or corrupt
+        // `env_id`) are omitted deliberately and must not be carried back.
+        const OWNED_WHEN_ABSENT: &[&str] = &["env_id", "floxhub_git_url_override"];
+        Some(
+            on_disk
+                .into_iter()
+                .filter(|(field, _)| {
+                    !modeled.contains_key(field) && !OWNED_WHEN_ABSENT.contains(&field.as_str())
+                })
+                .collect(),
+        )
+    }
+}
+
+impl EnvironmentPointer {
     pub fn name(&self) -> &EnvironmentName {
         match self {
             EnvironmentPointer::Managed(pointer) => &pointer.name,
@@ -578,7 +676,7 @@ impl DotFlox {
         let dot_flox_path = CanonicalPath::new(&dot_flox_path)
             .map_err(|_| EnvironmentError::DotFloxNotFound(dot_flox_path))?;
 
-        let pointer = EnvironmentPointer::open(&dot_flox_path)?;
+        let pointer = EnvJson::read_from(&dot_flox_path)?.pointer;
 
         Ok(Self {
             path: dot_flox_path.to_path_buf(),
@@ -1160,6 +1258,12 @@ mod test {
         "version": 1
     }"#;
 
+    const PATH_ENV_JSON_WITH_ENV_ID: &'_ str = r#"{
+        "name": "name",
+        "version": 1,
+        "env_id": "0f836d5e-6ff8-4de9-a37a-27b8a3f152b2"
+    }"#;
+
     static MANAGED_ENV_POINTER: LazyLock<EnvironmentPointer> = LazyLock::new(|| {
         EnvironmentPointer::Managed(ManagedPointer {
             name: EnvironmentName::from_str("name").unwrap(),
@@ -1217,6 +1321,219 @@ mod test {
                 version: Version::<1> {},
             })
         );
+    }
+
+    #[test]
+    fn env_json_without_env_id_field_parses_as_absent() {
+        let env_json: EnvJson = serde_json::from_str(PATH_ENV_JSON).unwrap();
+        assert_eq!(env_json, EnvJson {
+            pointer: EnvironmentPointer::Path(PathPointer {
+                name: EnvironmentName::from_str("name").unwrap(),
+                version: Version::<1> {},
+            }),
+            env_id: None,
+        });
+    }
+
+    #[test]
+    fn env_json_parses_managed_pointer() {
+        let env_json: EnvJson = serde_json::from_str(MANAGED_ENV_JSON).unwrap();
+        assert_eq!(env_json, EnvJson {
+            pointer: MANAGED_ENV_POINTER.clone(),
+            env_id: None,
+        });
+    }
+
+    #[test]
+    fn env_json_round_trips_env_id() {
+        let env_json: EnvJson = serde_json::from_str(PATH_ENV_JSON_WITH_ENV_ID).unwrap();
+        assert_eq!(env_json, EnvJson {
+            pointer: EnvironmentPointer::Path(PathPointer {
+                name: EnvironmentName::from_str("name").unwrap(),
+                version: Version::<1> {},
+            }),
+            env_id: Some(Uuid::from_str("0f836d5e-6ff8-4de9-a37a-27b8a3f152b2").unwrap()),
+        });
+
+        let serialized: serde_json::Value =
+            serde_json::from_str(&serde_json::to_string(&env_json).unwrap()).unwrap();
+        let expected: serde_json::Value = serde_json::from_str(PATH_ENV_JSON_WITH_ENV_ID).unwrap();
+        assert_eq!(serialized, expected);
+    }
+
+    #[test]
+    fn env_json_without_env_id_serializes_identically_to_bare_managed_pointer() {
+        let mut bare_pointer_content = serde_json::to_string_pretty(&*MANAGED_ENV_POINTER).unwrap();
+        bare_pointer_content.push('\n');
+
+        let env_json = EnvJson {
+            pointer: MANAGED_ENV_POINTER.clone(),
+            env_id: None,
+        };
+        assert_eq!(env_json.to_pretty_string().unwrap(), bare_pointer_content);
+    }
+
+    #[test]
+    fn write_to_preserves_fields_this_version_does_not_model() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join(ENVIRONMENT_POINTER_FILENAME);
+        std::fs::write(
+            &path,
+            r#"{
+            "name": "name",
+            "version": 1,
+            "env_id": "0f836d5e-6ff8-4de9-a37a-27b8a3f152b2",
+            "forked_from": "abc",
+            "future_table": {"nested": [1, 2]}
+        }"#,
+        )
+        .unwrap();
+
+        let mut env_json = EnvJson::read_from(dir.path()).unwrap();
+        env_json.pointer = EnvironmentPointer::Path(PathPointer::new(
+            EnvironmentName::from_str("renamed").unwrap(),
+        ));
+        env_json.write_to(dir.path()).unwrap();
+
+        let written: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(written["name"], "renamed", "modeled fields are rewritten");
+        assert_eq!(written["forked_from"], "abc", "unmodeled scalar survives");
+        assert_eq!(
+            written["future_table"],
+            serde_json::json!({"nested": [1, 2]}),
+            "unmodeled nested value survives"
+        );
+    }
+
+    #[test]
+    fn write_to_does_not_let_a_null_field_overwrite_a_real_value() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join(ENVIRONMENT_POINTER_FILENAME);
+        // `env_id: null` parses as absent, so it is not a modeled field on
+        // disk; it must not clobber the id being written.
+        std::fs::write(&path, r#"{"name": "name", "version": 1, "env_id": null}"#).unwrap();
+
+        let id = Uuid::from_str("0f836d5e-6ff8-4de9-a37a-27b8a3f152b2").unwrap();
+        EnvJson {
+            pointer: EnvironmentPointer::Path(PathPointer {
+                name: EnvironmentName::from_str("name").unwrap(),
+                version: Version::<1> {},
+            }),
+            env_id: Some(id),
+        }
+        .write_to(dir.path())
+        .unwrap();
+
+        assert_eq!(EnvJson::read_from(dir.path()).unwrap().env_id, Some(id));
+    }
+
+    #[test]
+    fn write_to_drops_a_malformed_env_id() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join(ENVIRONMENT_POINTER_FILENAME);
+        std::fs::write(
+            &path,
+            r#"{"name": "name", "version": 1, "env_id": "not-a-uuid"}"#,
+        )
+        .unwrap();
+
+        EnvJson {
+            pointer: EnvironmentPointer::Path(PathPointer {
+                name: EnvironmentName::from_str("name").unwrap(),
+                version: Version::<1> {},
+            }),
+            env_id: None,
+        }
+        .write_to(dir.path())
+        .unwrap();
+
+        assert_eq!(
+            std::fs::read_to_string(&path).unwrap(),
+            "{\n  \"name\": \"name\",\n  \"version\": 1\n}\n",
+            "an unparseable file is replaced rather than merged"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn env_json_write_to_replaces_contents_and_keeps_permissions() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = tempfile::tempdir().unwrap();
+        let env_json_path = dir.path().join(ENVIRONMENT_POINTER_FILENAME);
+        std::fs::write(&env_json_path, PATH_ENV_JSON).unwrap();
+        std::fs::set_permissions(&env_json_path, std::fs::Permissions::from_mode(0o644)).unwrap();
+
+        let env_json = EnvJson {
+            pointer: EnvironmentPointer::Path(PathPointer {
+                name: EnvironmentName::from_str("name").unwrap(),
+                version: Version::<1> {},
+            }),
+            env_id: Some(Uuid::from_str("0f836d5e-6ff8-4de9-a37a-27b8a3f152b2").unwrap()),
+        };
+        env_json.write_to(dir.path()).unwrap();
+
+        assert_eq!(
+            std::fs::read_to_string(&env_json_path).unwrap(),
+            env_json.to_pretty_string().unwrap()
+        );
+        let mode = std::fs::metadata(&env_json_path)
+            .unwrap()
+            .permissions()
+            .mode()
+            & 0o777;
+        assert_eq!(mode, 0o644, "rewriting keeps the file's permissions");
+    }
+
+    #[test]
+    fn garbage_env_id_does_not_break_opening_an_environment() {
+        // Opening reads through EnvJson, so a corrupted id has to degrade to
+        // "no id" rather than making the environment unopenable.
+        let contents = r#"{"name": "name", "version": 1, "env_id": "not-a-uuid"}"#;
+        let env_json: EnvJson = serde_json::from_str(contents).unwrap();
+        assert_eq!(env_json, EnvJson {
+            pointer: EnvironmentPointer::Path(PathPointer {
+                name: EnvironmentName::from_str("name").unwrap(),
+                version: Version::<1> {},
+            }),
+            env_id: None,
+        });
+    }
+
+    #[test]
+    fn garbage_env_id_does_not_break_pointer_parsing() {
+        // Guards against adding `deny_unknown_fields` to the pointer types:
+        // a malformed `env_id` would then break opening the environment.
+        let contents = r#"{
+            "name": "name",
+            "version": 1,
+            "env_id": "not-a-uuid"
+        }"#;
+        let pointer: EnvironmentPointer = serde_json::from_str(contents).unwrap();
+        assert_eq!(
+            pointer,
+            EnvironmentPointer::Path(PathPointer {
+                name: EnvironmentName::from_str("name").unwrap(),
+                version: Version::<1> {},
+            })
+        );
+    }
+
+    #[test]
+    fn env_json_without_env_id_serializes_identically_to_bare_pointer() {
+        let pointer = EnvironmentPointer::Path(PathPointer {
+            name: EnvironmentName::from_str("name").unwrap(),
+            version: Version::<1> {},
+        });
+        let mut bare_pointer_content = serde_json::to_string_pretty(&pointer).unwrap();
+        bare_pointer_content.push('\n');
+
+        let env_json = EnvJson {
+            pointer,
+            env_id: None,
+        };
+        assert_eq!(env_json.to_pretty_string().unwrap(), bare_pointer_content);
     }
 
     #[test]
