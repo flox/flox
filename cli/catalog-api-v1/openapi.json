@@ -3395,6 +3395,16 @@
             },
             "type": "array",
             "title": "Items"
+          },
+          "commands_by_output": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "type": "object",
+            "title": "Commands By Output"
           }
         },
         "type": "object",
