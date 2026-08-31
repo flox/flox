@@ -206,13 +206,12 @@ pub enum EventKind {
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum CredentialType {
-    /// OAuth access token issued by a supported OIDC provider.
-    #[serde(rename = "oauth_access_token")]
-    OAuthAccessToken,
+    /// JSON Web Token issued by a supported OIDC provider.
+    Jwt,
     /// FloxHub personal access token.
     Pat,
     /// FloxHub service account token.
-    ServiceToken,
+    Sat,
     /// No supported token authentication. This includes Kerberos mode.
     #[default]
     None,
@@ -916,7 +915,7 @@ mod tests {
     fn command_payload(subcommand: &str) -> CommandPayload {
         CommandPayload {
             subcommand: subcommand.to_string(),
-            credential_type: CredentialType::OAuthAccessToken,
+            credential_type: CredentialType::Jwt,
             flox_version: "0.0.0-test".to_string(),
             os_family: Some("Linux".to_string()),
             os_family_release: Some("6.10.0".to_string()),
@@ -933,7 +932,7 @@ mod tests {
     fn expected_payload_json(subcommand: &str) -> serde_json::Value {
         json!({
             "subcommand": subcommand,
-            "credential_type": "oauth_access_token",
+            "credential_type": "jwt",
             "flox_version": "0.0.0-test",
             "os_family": "Linux",
             "os_family_release": "6.10.0",
@@ -970,16 +969,13 @@ mod tests {
     #[test]
     fn credential_type_serializes_to_contract_values() {
         let value = serde_json::to_value([
-            CredentialType::OAuthAccessToken,
+            CredentialType::Jwt,
             CredentialType::Pat,
-            CredentialType::ServiceToken,
+            CredentialType::Sat,
             CredentialType::None,
         ])
         .expect("credential types serialize");
-        assert_eq!(
-            value,
-            json!(["oauth_access_token", "pat", "service_token", "none"])
-        );
+        assert_eq!(value, json!(["jwt", "pat", "sat", "none"]));
     }
 
     #[test]
@@ -1000,7 +996,7 @@ mod tests {
         .expect("event serializes");
         let expected = command_run_envelope_json(json!({
             "subcommand": "install",
-            "credential_type": "oauth_access_token",
+            "credential_type": "jwt",
             "flox_version": "0.0.0-test",
             "os_family": "Mac OS",
             "os_family_release": "24.5.0",
@@ -1219,7 +1215,7 @@ mod tests {
     /// Template fixture matching [`command_payload`].
     fn shared_metadata_for_payload_tests() -> SharedMetadataTemplate {
         SharedMetadataTemplate {
-            credential_type: CredentialType::OAuthAccessToken,
+            credential_type: CredentialType::Jwt,
             flox_version: "0.0.0-test".to_string(),
             os_family: Some("Linux".to_string()),
             os_family_release: Some("6.10.0".to_string()),
@@ -1889,7 +1885,7 @@ mod pipeline_tests {
 
     fn shared_metadata() -> SharedMetadataTemplate {
         SharedMetadataTemplate {
-            credential_type: CredentialType::OAuthAccessToken,
+            credential_type: CredentialType::Jwt,
             flox_version: "0.0.0-test".to_string(),
             os_family: Some("Linux".to_string()),
             os_family_release: Some("6.10.0".to_string()),

@@ -88,14 +88,14 @@ pub(crate) fn duration_to_ms(elapsed: std::time::Duration) -> u64 {
 
 fn credential_type_from_context(auth_context: &AuthContext) -> CredentialType {
     match auth_context {
-        AuthContext::Auth0(Some(_)) | AuthContext::Bare(_) => CredentialType::OAuthAccessToken,
+        AuthContext::Auth0(Some(_)) | AuthContext::Bare(_) => CredentialType::Jwt,
         AuthContext::AccessToken(token) if token.secret().starts_with("flox_pat_") => {
             CredentialType::Pat
         },
         AuthContext::AccessToken(token) if token.secret().starts_with("flox_sat_") => {
-            CredentialType::ServiceToken
+            CredentialType::Sat
         },
-        AuthContext::AccessToken(_) => CredentialType::OAuthAccessToken,
+        AuthContext::AccessToken(_) => CredentialType::Jwt,
         AuthContext::Auth0(None) | AuthContext::Kerberos(_) => CredentialType::None,
     }
 }
@@ -406,7 +406,7 @@ mod tests {
 
     #[test]
     fn shared_metadata_template_populates_machine_context() {
-        let template = shared_metadata_template(CredentialType::OAuthAccessToken);
+        let template = shared_metadata_template(CredentialType::Jwt);
 
         // Whole-struct compare: machine-dependent fields are cloned from the
         // actual value, architecture is pinned from the compile-time target,
@@ -414,7 +414,7 @@ mod tests {
         // behavior is pinned in the detect_shell tests; the value-domain
         // assertion below guards the wire here.
         let expected = SharedMetadataTemplate {
-            credential_type: CredentialType::OAuthAccessToken,
+            credential_type: CredentialType::Jwt,
             flox_version: FLOX_VERSION.to_string(),
             os_family: template.os_family.clone(),
             os_family_release: template.os_family_release.clone(),
@@ -479,12 +479,12 @@ mod tests {
         assert_eq!(
             contexts.map(|context| credential_type_from_context(&context)),
             [
-                CredentialType::OAuthAccessToken,
-                CredentialType::OAuthAccessToken,
+                CredentialType::Jwt,
+                CredentialType::Jwt,
                 CredentialType::Pat,
-                CredentialType::ServiceToken,
-                CredentialType::OAuthAccessToken,
-                CredentialType::OAuthAccessToken,
+                CredentialType::Sat,
+                CredentialType::Jwt,
+                CredentialType::Jwt,
                 CredentialType::None,
                 CredentialType::None,
             ]
