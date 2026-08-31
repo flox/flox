@@ -2,16 +2,16 @@
 
 ## Quick Start
 ```console
-$ cd git clone git@github.com/flox/flox.git;
-$ cd flox;
+$ git clone https://github.com/flox/flox.git
+$ cd flox
 # Enter Dev Shell
-$ nix develop;
+$ nix develop
 # Build `flox' and its subsystems
-$ just build;
+$ just build
 # Run the build
-$ ./target/debug/flox --help;
+$ ./target/debug/flox --help
 # Run the test suite
-$ just test-all;
+$ just test-all
 ```
 
 ## PR Guidelines
