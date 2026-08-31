@@ -409,7 +409,7 @@ EOF
   run "$FLOX_BIN" activate -r "$OWNER/i-dont-exist"
   assert_failure
   assert_output --partial "Environment not found in FloxHub."
-  assert_output --partial "you need to log in"
+  assert_output --partial "you may need to run 'flox auth login'"
 }
 
 # ---------------------------------------------------------------------------- #

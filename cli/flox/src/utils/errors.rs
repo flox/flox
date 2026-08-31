@@ -325,10 +325,14 @@ pub fn format_core_error(err: &CoreEnvironmentError) -> String {
 /// all three surface the same underlying "not found" condition and carry
 /// the same `env_ref`/`user` pair.
 ///
-/// `user` comes from `AuthContext::handle()`, which is `None` when the
-/// user is logged out. A logged-out user gets pointed at logging in
-/// rather than at 'flox push', since we can't tell whether they own the
-/// (possibly still-existing) environment without a token to check.
+/// `user` comes from `AuthContext::handle()`, which is `None` whenever no
+/// FloxHub handle has been resolved locally. That covers a genuine logout,
+/// but also an authenticated `Bare`/`AccessToken` session whose identity
+/// has not been fetched from `/me` and cached yet, and `Kerberos(None)`.
+/// Since we can't check ownership of the (possibly still-existing)
+/// environment either way, that branch points at logging in rather than at
+/// 'flox push', and hedges the wording so it doesn't tell an already
+/// authenticated user they are logged out.
 fn format_upstream_not_found(env_ref: &RemoteEnvironmentRef, user: &Option<String>) -> String {
     let message = "Environment not found in FloxHub.";
 
@@ -336,7 +340,7 @@ fn format_upstream_not_found(env_ref: &RemoteEnvironmentRef, user: &Option<Strin
         None => formatdoc! {"
             {message}
 
-            The environment may have been deleted, or you need to log in.
+            The environment may have been deleted, or you may need to run 'flox auth login'.
         "},
         Some(handle) if handle == env_ref.owner().as_str() => formatdoc! {"
             {message}
@@ -841,7 +845,7 @@ mod tests {
         let formatted = format_upstream_not_found(&owner_env_ref(), &None);
 
         assert!(formatted.contains("Environment not found in FloxHub."));
-        assert!(formatted.contains("you need to log in"));
+        assert!(formatted.contains("you may need to run 'flox auth login'"));
     }
 
     #[test]
@@ -850,7 +854,7 @@ mod tests {
 
         assert!(formatted.contains("Environment not found in FloxHub."));
         assert!(formatted.contains("flox push"));
-        assert!(!formatted.contains("log in"));
+        assert!(!formatted.contains("flox auth login"));
     }
 
     #[test]
@@ -869,7 +873,7 @@ mod tests {
             user: None,
         };
 
-        assert!(format_managed_error(&err).contains("you need to log in"));
+        assert!(format_managed_error(&err).contains("'flox auth login'"));
     }
 
     #[test]
@@ -880,7 +884,7 @@ mod tests {
             user: None,
         };
 
-        assert!(format_floxmeta_branch_error(&err).contains("you need to log in"));
+        assert!(format_floxmeta_branch_error(&err).contains("'flox auth login'"));
     }
 
     #[test]
@@ -891,6 +895,6 @@ mod tests {
             user: None,
         });
 
-        assert!(format_remote_error(&err).contains("you need to log in"));
+        assert!(format_remote_error(&err).contains("'flox auth login'"));
     }
 }
