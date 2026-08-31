@@ -12,14 +12,11 @@ flox-run - run a command from a Flox Catalog package
 
 ```text
 flox [<general-options>] run
-     [<command> [<arguments>]]
+     [--reselect] [<command> [<arguments>]]
 
 flox [<general-options>] run
      [-p <package>]
      -- <command> [<arguments>]
-
-flox [<general-options>] run
-     --reselect <command>
 ```
 
 # DESCRIPTION
@@ -50,6 +47,20 @@ $ flox run -p gnugrep -- grep "pattern" file.txt
 
 The package name is a plain Flox Catalog attribute path
 (e.g. `curl`, `python3Packages.requests`).
+
+## Disambiguation
+
+When several packages provide the same command,
+`flox run` prompts for a selection (up to 10 candidates are listed).
+The selection is stored as a saved preference,
+so later runs of the same command resolve silently.
+Only a selection made at the prompt is saved;
+silent resolutions and `-p` overrides never write a preference.
+Use `--reselect <command>` to forget the saved preference and choose again.
+
+Without a terminal, `flox run` never prompts:
+it prints the candidate list to stderr and exits,
+suggesting `--package` to specify the package.
 
 ## Flags Before and After the Command
 
@@ -108,15 +119,19 @@ Repeated invocations of the same package skip the download step.
 ## Run Options
 
 `-p <package>`, `--package <package>`
-:   Required. The Flox Catalog package that provides the command.
-    Accepts plain package names only (e.g. `curl`, `ripgrep`).
-    Version constraints (`@`), output selectors (`^`), and custom
-    catalogs (`/`) are not supported in this release.
+:   The Flox Catalog package that provides the command.
+    Optional: when omitted, the package is resolved from the command
+    name (see "Specifying the Package").
+    Accepts plain package names (e.g. `curl`, `ripgrep`) and custom
+    catalog packages (e.g. `mycatalog/vim`).
+    Version constraints (`@`) and output selectors (`^`) are not
+    supported in this release.
 
-`--reselect <command>`
-:   Forget the saved package preference for `<command>` and exit without
-    running anything.
-    Cannot be combined with a command to run.
+`--reselect`
+:   Forget the saved package preference for `<command>`, resolve it again
+    (prompting when multiple packages provide it), and run it with any
+    `<arguments>`.
+    Cannot be combined with `--package`, which bypasses the prompt.
     Clearing a command that has no saved preference is not an error.
 
 `-- <command> [<arguments>]`
@@ -162,15 +177,11 @@ $ flox run -p hello -- hello --version
 
 # LIMITATIONS
 
-This release (phase 1) requires the `-p`/`--package` flag.
 The following features are not yet supported and will be available
 in a future release:
 
-- Defaulting the package to the command name (`flox run readelf`)
 - Version constraints: `flox run -p curl@8.0 -- curl …`
 - Output selectors: `flox run -p foo^dev …`
-- Custom catalogs: `flox run -p mycatalog/vim -- vim …`
-- Executable-to-package lookup and disambiguation
 
 ## Binary cache requirement
 

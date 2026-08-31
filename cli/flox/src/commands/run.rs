@@ -44,13 +44,14 @@ use floxhub_client::{
     PackageSystem,
     ResolutionMessage,
 };
-use indoc::indoc;
+use indoc::{formatdoc, indoc};
 use thiserror::Error;
 use toml_edit::Key;
 use tracing::{debug, info_span};
 
 use crate::commands::general::{remove_config_key_with_query, update_config_with_query};
 use crate::subcommand_metric;
+use crate::utils::dialog::{Dialog, Select};
 use crate::utils::message;
 
 // ---------------------------------------------------------------------------
@@ -93,23 +94,12 @@ pub enum RunError {
     #[error("Package specs must be valid UTF-8.")]
     PackageSpecNotUtf8,
 
-    /// `--reselect` appeared without a value.
+    /// `--reselect` was combined with `-p`/`--package`.
     #[error(
-        "Missing value for '--reselect'.\n\
-         Use '--reselect <COMMAND>' to clear the saved package preference for a command."
+        "'--reselect' cannot be combined with '--package'.\n\
+         '--package' already picks the package; use 'flox run --reselect <COMMAND>' to choose one interactively."
     )]
-    MissingReselectValue,
-
-    /// The value passed to `--reselect` was not valid UTF-8.
-    #[error("Command names must be valid UTF-8.")]
-    CommandNameNotUtf8,
-
-    /// `--reselect` was combined with a command to run.
-    #[error(
-        "'--reselect' cannot be combined with a command to run.\n\
-         Run 'flox run --reselect <COMMAND>' on its own to clear a saved package preference."
-    )]
-    ReselectWithCommand,
+    ReselectWithPackage,
 
     /// `CatalogPackage::from_str` failed.
     #[error(
@@ -225,12 +215,13 @@ pub enum RunError {
     },
 
     /// Writing the user's package preference to the config file failed.
-    ///
-    /// Not yet used — T7 (DEV-185) will call this when persisting a
-    /// disambiguation selection at the interactive prompt.
-    #[allow(dead_code)]
     #[error("Failed to save the package preference for '{0}'.")]
     PreferenceWriteFailed(String, #[source] anyhow::Error),
+
+    /// The interactive disambiguation prompt did not produce a selection
+    /// (cancelled, or the terminal interaction failed).
+    #[error("No package was selected for '{0}'.")]
+    PromptFailed(String, #[source] inquire::InquireError),
 }
 
 // ---------------------------------------------------------------------------
@@ -242,9 +233,9 @@ pub enum RunError {
 pub enum ParsedArgs {
     /// `-h`/`--help` was seen before the first positional or `--`.
     Help,
-    /// `--reselect <COMMAND>` was seen; clear that command's saved preference
-    /// and run nothing.
-    Reselect(String),
+    /// `--reselect` was seen; clear the command's saved preference, then
+    /// resolve (prompting again) and run as usual.
+    Reselect(RunArgs),
     /// A fully-specified run invocation.
     Run(RunArgs),
 }
@@ -280,7 +271,7 @@ pub struct Run {
 impl Run {
     /// Entry point: parse args with POSIX stop-at-first-positional semantics,
     /// then resolve, download, and exec.
-    pub async fn handle(self, config: Config, flox: Flox) -> Result<()> {
+    pub async fn handle(self, mut config: Config, flox: Flox) -> Result<()> {
         subcommand_metric!("run");
 
         // Re-read raw OS args. bpaf has already consumed the first `--`, so
@@ -297,14 +288,17 @@ impl Run {
 
         let parsed = parse_run_args(after_run).map_err(anyhow::Error::from)?;
 
-        match parsed {
+        let run_args = match parsed {
             ParsedArgs::Help => {
                 print_help();
-                Ok(())
+                return Ok(());
             },
-            ParsedArgs::Reselect(command) => {
+            ParsedArgs::Reselect(run_args) => {
                 subcommand_metric!("run::reselect");
-                let cleared = clear_run_preference(&config.flox.config_dir, &command)?;
+                // Lossy matches how `resolve_command` derives the
+                // preference key from the executable.
+                let command = run_args.executable.to_string_lossy().into_owned();
+                let cleared = clear_run_preference(&mut config, &command)?;
                 if cleared {
                     message::updated(format!(
                         "Cleared the saved package preference for '{command}'."
@@ -312,19 +306,19 @@ impl Run {
                 } else {
                     message::updated(format!("No saved package preference for '{command}'."));
                 }
-                Ok(())
+                run_args
             },
-            ParsedArgs::Run(run_args) => {
-                let pkg_spec = resolve_command(&run_args, &config, &flox)
-                    .await
-                    .map_err(anyhow::Error::from)?;
-                let resolved = RunArgs {
-                    package: Some(pkg_spec),
-                    ..run_args
-                };
-                exec_run(resolved, &flox).await
-            },
-        }
+            ParsedArgs::Run(run_args) => run_args,
+        };
+
+        let pkg_spec = resolve_command(&run_args, &config, &flox)
+            .await
+            .map_err(anyhow::Error::from)?;
+        let resolved = RunArgs {
+            package: Some(pkg_spec),
+            ..run_args
+        };
+        exec_run(resolved, &flox).await
     }
 }
 
@@ -334,23 +328,50 @@ impl Run {
 
 /// Format the list of candidates for `AmbiguousCommandNonInteractive`.
 ///
-/// Renders up to `DISAMBIGUATION_LIMIT` entries and appends a count line when
-/// `total` exceeds the limit. `total` is passed separately so the caller can
-/// supply either the actual catalog total or `providers.len()`.
+/// Renders up to `DISAMBIGUATION_LIMIT` entries, one `attr_path` per line so
+/// the list matches the 'flox search --command' output format, followed by
+/// the truncation footer when `total` exceeds the limit and the closing '-p'
+/// suggestion. `total` is passed separately so the caller can supply either
+/// the actual catalog total or `providers.len()`.
 fn render_ambiguous(command: &str, providers: &[CommandProvider], total: u64) -> String {
     use std::fmt::Write as _;
     let mut s = format!("Multiple packages provide '{command}'.\n");
-    for p in providers.iter().take(DISAMBIGUATION_LIMIT) {
-        let _ = writeln!(s, "  {:<12} ({})", p.pname, p.attr_path);
+    let options = disambiguation_options(providers);
+    let shown = options.len();
+    for attr_path in options {
+        let _ = writeln!(s, "  {attr_path}");
     }
     if total > DISAMBIGUATION_LIMIT as u64 {
-        let _ = writeln!(s, "  ... ({DISAMBIGUATION_LIMIT} shown, {total} total)");
+        let _ = writeln!(s, "{}", render_truncation_footer(command, shown, total));
+        let _ = writeln!(s);
     }
-    let _ = write!(
+    let _ = writeln!(
         s,
         "Use 'flox run --package <PACKAGE> {command}' to choose one."
     );
     s
+}
+
+/// The footer shown when more packages supply a command than the candidate
+/// list displays. Mirrors `flox search`'s truncation hint
+/// ([`DisplaySearchResults::search_results_truncated_hint`]) — keep the two
+/// in style-sync, and 'flox search --command' must render its own list the
+/// same way.
+fn render_truncation_footer(command: &str, shown: usize, total: u64) -> String {
+    format!(
+        "Showing {shown} of {total} results. Use 'flox search --command {command} --all' to see the full list."
+    )
+}
+
+/// Options shown by the interactive disambiguation prompt: one `attr_path`
+/// per candidate, capped at `DISAMBIGUATION_LIMIT` to match the
+/// non-interactive candidate list.
+fn disambiguation_options(providers: &[CommandProvider]) -> Vec<String> {
+    providers
+        .iter()
+        .take(DISAMBIGUATION_LIMIT)
+        .map(|p| p.attr_path.clone())
+        .collect()
 }
 
 // ---------------------------------------------------------------------------
@@ -371,10 +392,8 @@ fn run_preference_query(command: &str) -> [Key; 2] {
 /// Record the package the user chose to provide `command`.
 ///
 /// Only the interactive disambiguation prompt calls this; see
-/// [`flox_config::FloxConfig::run_preferences`]. That prompt does not exist
-/// yet, so nothing but the tests calls this today — the writer ships with the
-/// config field so the two stay in step.
-#[allow(dead_code)]
+/// [`flox_config::FloxConfig::run_preferences`]. Silent resolutions and `-p`
+/// overrides never write.
 pub fn write_run_preference(config_dir: &Path, command: &str, attr_path: &str) -> Result<()> {
     update_config_with_query(config_dir, &run_preference_query(command), Some(attr_path))?;
     Ok(())
@@ -382,11 +401,16 @@ pub fn write_run_preference(config_dir: &Path, command: &str, attr_path: &str) -
 
 /// Forget the package the user chose to provide `command`.
 ///
-/// Returns whether an entry was actually removed. Clearing an absent
-/// preference is a success, not an error: the caller asked to be prompted
-/// again next time, and that is already true.
-pub fn clear_run_preference(config_dir: &Path, command: &str) -> Result<bool> {
-    remove_config_key_with_query(config_dir, &run_preference_query(command))
+/// Removes the entry from the config file and from the in-memory `config`,
+/// so resolution later in the same invocation can't return the stale
+/// preference. Returns whether an entry was actually removed on disk.
+/// Clearing an absent preference is a success, not an error: the caller
+/// asked to be prompted again next time, and that is already true.
+pub fn clear_run_preference(config: &mut Config, command: &str) -> Result<bool> {
+    let removed =
+        remove_config_key_with_query(&config.flox.config_dir, &run_preference_query(command))?;
+    config.flox.run_preferences.remove(command);
+    Ok(removed)
 }
 
 // ---------------------------------------------------------------------------
@@ -401,7 +425,8 @@ pub fn clear_run_preference(config_dir: &Path, command: &str) -> Result<bool> {
 /// - `-p` / `--package` (space form only) → consume next arg as package spec
 /// - `-p=…` / `--package=…` / bundled forms → `UnknownFlag`
 /// - `--` → force positional mode; next arg is the command even if it starts with `-`
-/// - `--reselect` (space form only) → consume next arg as a command name
+/// - `--reselect` → boolean modifier: forget the command's saved preference
+///   and force the prompt; the command comes from the normal positional slot
 /// - any other `"-…"` → `UnknownFlag`
 ///
 /// After the first positional (or after `--`), everything is forwarded
@@ -411,7 +436,7 @@ pub fn clear_run_preference(config_dir: &Path, command: &str) -> Result<bool> {
 /// [`exec_run`] enforces it. Only a missing command is rejected.
 pub fn parse_run_args(args: Vec<OsString>) -> Result<ParsedArgs, RunError> {
     let mut package: Option<String> = None;
-    let mut reselect: Option<String> = None;
+    let mut reselect = false;
     let mut executable: Option<OsString> = None;
     let mut passthrough: Vec<OsString> = Vec::new();
 
@@ -446,11 +471,7 @@ pub fn parse_run_args(args: Vec<OsString>) -> Result<ParsedArgs, RunError> {
                 package = Some(value);
             },
             Some("--reselect") => {
-                let value_os = iter.next().ok_or(RunError::MissingReselectValue)?;
-                let value = value_os
-                    .into_string()
-                    .map_err(|_| RunError::CommandNameNotUtf8)?;
-                reselect = Some(value);
+                reselect = true;
             },
             Some(s) if s.starts_with('-') => {
                 return Err(RunError::UnknownFlag(s.to_owned()));
@@ -465,22 +486,23 @@ pub fn parse_run_args(args: Vec<OsString>) -> Result<ParsedArgs, RunError> {
         }
     }
 
-    // `--reselect` is a one-shot config edit, so it cannot also name a command
-    // to run.
-    if let Some(command) = reselect {
-        if executable.is_some() {
-            return Err(RunError::ReselectWithCommand);
-        }
-        return Ok(ParsedArgs::Reselect(command));
+    // `-p` bypasses the disambiguation prompt that `--reselect` exists to
+    // force, so combining them is contradictory.
+    if reselect && package.is_some() {
+        return Err(RunError::ReselectWithPackage);
     }
 
     let executable = executable.ok_or(RunError::NoExecutable)?;
-
-    Ok(ParsedArgs::Run(RunArgs {
+    let run_args = RunArgs {
         package,
         executable,
         args: passthrough,
-    }))
+    };
+
+    if reselect {
+        return Ok(ParsedArgs::Reselect(run_args));
+    }
+    Ok(ParsedArgs::Run(run_args))
 }
 
 // ---------------------------------------------------------------------------
@@ -506,7 +528,7 @@ pub fn validate_plain_package(pkg: &CatalogPackage, raw: &str) -> Result<(), Run
 /// Resolve a bare command name to a package attr-path, or pass a `-p` spec
 /// through unchanged.
 ///
-/// Decision funnel (6 branches; branch 3 has two sub-paths):
+/// Decision funnel (7 branches; branch 3 has two sub-paths):
 ///
 /// 1. `-p` supplied → return it directly, no catalog call.
 /// 2. Saved preference in config → return silently.
@@ -515,8 +537,9 @@ pub fn validate_plain_package(pkg: &CatalogPackage, raw: &str) -> Result<(), Run
 ///    - `listing_known=true`, empty providers → `NoCommandProvider`.
 /// 4. Single provider → return its `attr_path` silently.
 /// 5. Exactly one `exact_name_match=true` → return its `attr_path` silently.
-/// 6. Multiple candidates → `AmbiguousCommandNonInteractive` for now.
-///    T7 will split into a TTY prompt and a non-interactive fail path.
+/// 6. Multiple candidates and a TTY → disambiguation prompt; the selection
+///    persists to `run_preferences`. Only this branch ever writes.
+/// 7. Multiple candidates, no TTY → `AmbiguousCommandNonInteractive`.
 async fn resolve_command(
     run_args: &RunArgs,
     config: &Config,
@@ -576,12 +599,31 @@ async fn resolve_command(
         return Ok(exact[0].attr_path.clone());
     }
 
-    // Branches 6/7: multiple candidates.
-    // T7 will split this into a TTY prompt (branch 6) and the non-interactive
-    // error path (branch 7). For now all multi-candidate cases return the
-    // non-interactive error so the stub compiles and tests can exercise it.
+    // Branch 6: multiple candidates and a TTY — prompt, then persist the
+    // selection. This is the only branch that writes a preference.
+    if Dialog::can_prompt() {
+        debug!(
+            branch = "prompt",
+            %command,
+            count = result.providers.len(),
+            "resolve_command"
+        );
+        let attr_path =
+            prompt_for_command_provider(&command, &result.providers, result.total_count as u64)
+                .await?;
+        write_run_preference(&config.flox.config_dir, &command, &attr_path)
+            .map_err(|e| RunError::PreferenceWriteFailed(command.clone(), e))?;
+        message::updated(formatdoc! {"
+            Saved '{attr_path}' as the package to run for '{command}'
+            Run 'flox run --reselect {command}' to choose another package.
+        "});
+        return Ok(attr_path);
+    }
+
+    // Branch 7: multiple candidates, no TTY — fail fast with the candidate
+    // list; never prompt, never hang.
     debug!(
-        branch = "ambiguous",
+        branch = "no_tty_fail",
         %command,
         count = result.providers.len(),
         "resolve_command"
@@ -591,6 +633,36 @@ async fn resolve_command(
         providers: result.providers,
         total: result.total_count as u64,
     })
+}
+
+/// Show the interactive disambiguation prompt and return the chosen
+/// `attr_path`.
+///
+/// The candidate list is capped at [`DISAMBIGUATION_LIMIT`]; when the catalog
+/// reports more providers than that, the help text leads with the truncation
+/// footer. Everything goes to stderr — the invoked command's stdout stays
+/// clean.
+async fn prompt_for_command_provider(
+    command: &str,
+    providers: &[CommandProvider],
+    total: u64,
+) -> Result<String, RunError> {
+    let message = format!("Multiple packages provide '{command}'. Select one to run:");
+    let options = disambiguation_options(providers);
+    // Just the truncation footer; the `--reselect` and `-p` escape hatches
+    // made the help too wordy — both are documented in `flox run --help`
+    // and the man page.
+    let help_message = (total > DISAMBIGUATION_LIMIT as u64)
+        .then(|| render_truncation_footer(command, options.len(), total));
+    let dialog = Dialog {
+        message: &message,
+        help_message: help_message.as_deref(),
+        typed: Select { options },
+    };
+    dialog
+        .prompt()
+        .await
+        .map_err(|e| RunError::PromptFailed(command.to_string(), e))
 }
 
 // ---------------------------------------------------------------------------
@@ -1149,14 +1221,14 @@ pub fn print_help() {
     print!(indoc! {"
         Run a command from a Flox Catalog package
 
-        Usage: flox run [<COMMAND> [ARGS...]]
+        Usage: flox run [--reselect] [<COMMAND> [ARGS...]]
                flox run -p <PACKAGE> -- <COMMAND> [ARGS...]
-               flox run --reselect <COMMAND>
 
         Options:
           -p, --package <PACKAGE>   Package that provides the command (optional;
                                     looked up from the Flox Catalog when omitted)
-              --reselect <COMMAND>  Forget the saved package preference for a command
+              --reselect            Forget the saved package preference for the
+                                    command, choose again, and run it
           -h, --help                Print this help
 
         Always use '--' to separate flox flags from the command and its arguments.
@@ -1188,11 +1260,12 @@ pub fn print_help() {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
     use std::ffi::OsString;
     #[cfg(unix)]
     use std::os::unix::ffi::OsStringExt;
 
-    use flox_config::FLOX_CONFIG_FILE;
+    use flox_config::{FLOX_CONFIG_FILE, FloxConfig};
 
     use super::*;
 
@@ -1385,19 +1458,42 @@ mod tests {
     #[test]
     fn reselect_parses_to_reselect() {
         let result = parse_run_args(os_vec(&["--reselect", "vi"])).unwrap();
-        assert_eq!(result, ParsedArgs::Reselect("vi".to_string()));
+        assert_eq!(
+            result,
+            ParsedArgs::Reselect(RunArgs {
+                package: None,
+                executable: os("vi"),
+                args: vec![],
+            })
+        );
     }
 
     #[test]
-    fn reselect_without_value_rejected() {
+    fn reselect_forwards_command_args() {
+        // `--reselect` is a modifier on a normal run, so trailing
+        // positionals are the command's arguments.
+        let result = parse_run_args(os_vec(&["--reselect", "vi", "file.txt"])).unwrap();
+        assert_eq!(
+            result,
+            ParsedArgs::Reselect(RunArgs {
+                package: None,
+                executable: os("vi"),
+                args: os_vec(&["file.txt"]),
+            })
+        );
+    }
+
+    #[test]
+    fn reselect_without_command_rejected() {
         let result = parse_run_args(os_vec(&["--reselect"]));
-        assert!(matches!(result, Err(RunError::MissingReselectValue)));
+        assert!(matches!(result, Err(RunError::NoExecutable)));
     }
 
     #[test]
-    fn reselect_with_command_rejected() {
-        let result = parse_run_args(os_vec(&["--reselect", "vi", "vim"]));
-        assert!(matches!(result, Err(RunError::ReselectWithCommand)));
+    fn reselect_with_package_rejected() {
+        // `-p` bypasses the prompt that `--reselect` exists to force.
+        let result = parse_run_args(os_vec(&["-p", "vim", "--reselect", "vi"]));
+        assert!(matches!(result, Err(RunError::ReselectWithPackage)));
     }
 
     #[test]
@@ -1423,15 +1519,6 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    fn non_utf8_reselect_value() {
-        let bad = OsString::from_vec(vec![0xff]);
-        let args = vec![os("--reselect"), bad];
-        let result = parse_run_args(args);
-        assert!(matches!(result, Err(RunError::CommandNameNotUtf8)));
-    }
-
-    #[cfg(unix)]
-    #[test]
     fn non_utf8_package_value() {
         let bad = OsString::from_vec(vec![0xff]);
         let args = vec![os("-p"), bad, os("cmd")];
@@ -1452,6 +1539,17 @@ mod tests {
     /// `FloxConfig` cannot be deserialized from the user config file alone —
     /// it carries resolved fields like `cache_dir` that only the full config
     /// assembly supplies — so assert against the TOML directly.
+    /// A `Config` whose `config_dir` points at a test directory.
+    fn config_in(config_dir: &Path) -> Config {
+        Config {
+            flox: FloxConfig {
+                config_dir: config_dir.to_path_buf(),
+                ..Default::default()
+            },
+            ..Default::default()
+        }
+    }
+
     fn run_preferences_table(config_dir: &Path) -> toml::Table {
         let document: toml::Table = toml::from_str(&config_contents(config_dir)).unwrap();
         document
@@ -1488,13 +1586,19 @@ mod tests {
     fn clear_run_preference_removes_existing_key() {
         let dir = tempfile::tempdir().unwrap();
         write_run_preference(dir.path(), "vi", "vim").unwrap();
+        let mut config = config_in(dir.path());
+        config
+            .flox
+            .run_preferences
+            .insert("vi".to_string(), "vim".to_string());
 
-        assert!(clear_run_preference(dir.path(), "vi").unwrap());
+        assert!(clear_run_preference(&mut config, "vi").unwrap());
 
         // Clearing the last entry leaves an empty `[run_preferences]` table
         // behind. `auto_activate_environments` behaves the same way; the
         // contents are what matters.
         assert_eq!(run_preferences_table(dir.path()), toml::Table::new());
+        assert_eq!(config.flox.run_preferences, HashMap::new());
     }
 
     #[test]
@@ -1505,7 +1609,7 @@ mod tests {
         // missing.
         write_run_preference(dir.path(), "vi", "vim").unwrap();
 
-        assert!(!clear_run_preference(dir.path(), "emacs").unwrap());
+        assert!(!clear_run_preference(&mut config_in(dir.path()), "emacs").unwrap());
     }
 
     #[test]
@@ -1514,7 +1618,7 @@ mod tests {
         // No config file at all: `write_to` creates the `[run_preferences]`
         // table on the way down, then fails to find the leaf. Nothing reaches
         // disk on that path.
-        assert!(!clear_run_preference(dir.path(), "vi").unwrap());
+        assert!(!clear_run_preference(&mut config_in(dir.path()), "vi").unwrap());
         assert!(!dir.path().join(FLOX_CONFIG_FILE).exists());
     }
 
@@ -1526,7 +1630,7 @@ mod tests {
         // `Ok(false)`.
         std::fs::create_dir(dir.path().join(FLOX_CONFIG_FILE)).unwrap();
 
-        let err = clear_run_preference(dir.path(), "vi").unwrap_err();
+        let err = clear_run_preference(&mut config_in(dir.path()), "vi").unwrap_err();
         assert!(
             err.to_string()
                 .contains("Could not read current config file"),
@@ -1990,6 +2094,84 @@ mod tests {
         assert!(
             !msg.contains("flox search"),
             "NoCommandProvider message must not suggest 'flox search': {msg}"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // Disambiguation rendering tests
+    // -----------------------------------------------------------------------
+
+    fn mk_provider(attr_path: &str) -> CommandProvider {
+        CommandProvider {
+            attr_path: attr_path.to_string(),
+            exact_name_match: false,
+            pname: attr_path.to_string(),
+            system: PackageSystem::Aarch64Linux,
+        }
+    }
+
+    // The non-interactive candidate list is one attr_path per line so it stays
+    // in sync with the 'flox search --command' output format.
+    #[test]
+    fn ambiguous_error_lists_one_attr_path_per_line() {
+        let providers = vec![mk_provider("vim"), mk_provider("neovim")];
+        let rendered = render_ambiguous("vi", &providers, 2);
+        assert_eq!(rendered, indoc! {"
+            Multiple packages provide 'vi'.
+              vim
+              neovim
+            Use 'flox run --package <PACKAGE> vi' to choose one.
+        "});
+    }
+
+    // Beyond DISAMBIGUATION_LIMIT entries the list is capped and the footer
+    // reports the catalog's total count in the same style as
+    // `flox search`'s truncation hint.
+    #[test]
+    fn ambiguous_error_truncates_at_limit_with_footer() {
+        let providers: Vec<_> = (0..14)
+            .map(|i| mk_provider(&format!("pkg{i:02}")))
+            .collect();
+        let rendered = render_ambiguous("vi", &providers, 14);
+        assert_eq!(rendered, indoc! {"
+            Multiple packages provide 'vi'.
+              pkg00
+              pkg01
+              pkg02
+              pkg03
+              pkg04
+              pkg05
+              pkg06
+              pkg07
+              pkg08
+              pkg09
+            Showing 10 of 14 results. Use 'flox search --command vi --all' to see the full list.
+
+            Use 'flox run --package <PACKAGE> vi' to choose one.
+        "});
+    }
+
+    // The interactive prompt shows the same capped candidate list, one
+    // attr_path per option.
+    #[test]
+    fn disambiguation_options_are_attr_paths_capped_at_limit() {
+        let providers: Vec<_> = (0..14)
+            .map(|i| mk_provider(&format!("pkg{i:02}")))
+            .collect();
+        let expected = vec![
+            "pkg00", "pkg01", "pkg02", "pkg03", "pkg04", "pkg05", "pkg06", "pkg07", "pkg08",
+            "pkg09",
+        ];
+        assert_eq!(disambiguation_options(&providers), expected);
+    }
+
+    // The footer is shared between the non-interactive error and the
+    // prompt's help text, and mirrors `flox search`'s truncation hint.
+    #[test]
+    fn truncation_footer_matches_search_hint_style() {
+        assert_eq!(
+            render_truncation_footer("vi", 10, 33),
+            "Showing 10 of 33 results. Use 'flox search --command vi --all' to see the full list."
         );
     }
 
