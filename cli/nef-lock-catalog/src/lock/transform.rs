@@ -21,7 +21,7 @@ use crate::lock::tree::PackageTreeBuilder;
 /// [`LockedInputEntry::attr_path`]. The wire `source` is stored **verbatim** —
 /// no nix invocation.
 #[instrument(skip(locked, direct_keys), fields(packages = locked.len()))]
-pub(crate) fn build_lock_from_locked_inputs<'d>(
+pub fn build_lock_from_locked_inputs<'d>(
     locked: HashMap<String, LockedInputEntry>,
     direct_keys: impl IntoIterator<Item = &'d String>,
 ) -> Result<BuildLock> {
@@ -35,7 +35,7 @@ pub(crate) fn build_lock_from_locked_inputs<'d>(
             })?;
             Ok((key.clone(), entry))
         })
-        .collect::<Result<HashMap<String, LockedInputEntry>>>()?;
+        .collect::<Result<BTreeMap<String, LockedInputEntry>>>()?;
 
     for entry in locked.into_values() {
         let LockedInputEntry {

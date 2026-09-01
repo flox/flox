@@ -10,12 +10,10 @@ use flox_core::floxhub::{DEFAULT_FLOXHUB_URL, Floxhub};
 use flox_core::util::message::format_error;
 use floxhub_client::{
     AuthContext,
-    BaseCatalogInfo,
     FloxhubClient,
     FloxhubClientConfig,
     FloxhubClientError,
     FloxhubMockMode,
-    Stability,
 };
 use nef_lock_catalog::{
     BuildLock,
@@ -54,10 +52,6 @@ struct Cli {
     /// printed to stdout.
     #[arg(long)]
     out: Option<PathBuf>,
-
-    /// Catalog stability channel.
-    #[arg(long, default_value = BaseCatalogInfo::DEFAULT_STABILITY)]
-    stability: Stability,
 
     /// Explain each step: files read, catalog references found (with source
     /// locations), the resolved catalog endpoint, and the full lookup request
@@ -117,7 +111,6 @@ async fn main() -> ExitCode {
         base_dir = %cli.base_dir.display(),
         rel_paths = cli.rel_paths.len(),
         out = cli.out.as_deref().map(|out| out.display().to_string()).unwrap_or_else(|| "<stdout>".to_string()),
-        stability = cli.stability.as_str(),
     )
 )]
 async fn run(cli: Cli) -> Result<()> {
@@ -149,7 +142,7 @@ async fn run(cli: Cli) -> Result<()> {
     // Lock references via the catalog or produce an empty lock file if no references were found.
     let lock = if !references.is_empty() {
         // Render each failure to its message body at the CLI boundary.
-        match lock_references(&client, references, cli.stability).await {
+        match lock_references(&client, references).await {
             Ok(lock) => lock,
             // REQ-013: surface the unresolvable dependency chains.
             Err(LockError::Unresolvable(entries)) => bail!(render_unresolvable(&entries)),

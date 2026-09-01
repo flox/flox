@@ -96,8 +96,20 @@ An expression references a catalog package as `catalogs.<catalog>.<package>`,
 where the package receives a `catalogs` argument.
 The referenced packages are the ones published to a FloxHub catalog with
 `flox publish`.
-These references are resolved and locked automatically during `flox build`.
-There is no separate declaration file and no separate lock step.
+There is no separate declaration file: the references are discovered by
+scanning the expressions themselves.
+
+A project may commit a catalog lock at `.flox/catalog.lock`, created or
+refreshed with `flox build update-catalogs`.
+A committed lock pins the source of every catalog reference in the project,
+so every build of a revision resolves the same inputs; it is used exactly as
+found, and is only ever rewritten by `flox build update-catalogs`.
+Without a committed lock, `flox build` resolves the references of the
+packages being built fresh on every invocation ("lockless" builds);
+nothing is written into the project tree.
+Catalog references resolve to the latest published versions and are
+independent of `--stability`, which selects only the nixpkgs base
+package set.
 
 # OPTIONS
 
@@ -212,5 +224,6 @@ npx serve result-app
 
 [`flox-build-clean(1)`](./flox-build-clean.md)
 [`flox-build-import-nixpkgs(1)`](./flox-build-import-nixpkgs.md)
+[`flox-build-update-catalogs(1)`](./flox-build-update-catalogs.md)
 [`flox-activate(1)`](./flox-activate.md)
 [`manifest.toml(5)`](./manifest.toml.md)

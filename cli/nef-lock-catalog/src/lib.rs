@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 
 mod lock;
 mod nix;
+mod project;
 mod scan;
 
 /// Common identifier for a catalog and its `CatalogLock` in a build lock.
@@ -23,8 +24,25 @@ impl Display for CatalogId {
     }
 }
 
-pub use lock::build_lock::{BuildLock, render_lock, write_lock};
+pub use lock::build_lock::{
+    BuildLock,
+    LockfileError,
+    StaleLockError,
+    read_lock,
+    render_lock,
+    subset_direct_inputs,
+    write_lock,
+};
 pub use lock::flakeref::NixFlakeref;
 pub use lock::lookup::{LockError, lock_references};
 pub use lock::render::render_unresolvable;
+pub use lock::transform::build_lock_from_locked_inputs;
+pub use project::{
+    CATALOG_LOCKFILE_NAME,
+    CatalogLockError,
+    catalog_lockfile_path,
+    lock_project_catalog,
+    resolve_lock,
+    scan_references,
+};
 pub use scan::{CatalogRef, ImportSite, ScanError, scan_package, scan_package_with_roots};
