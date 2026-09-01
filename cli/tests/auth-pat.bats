@@ -133,6 +133,17 @@ teardown() {
   assert_output --partial "You are logged in as owner"
 }
 
+# bats test_tags=auth:pat:status,auth:sat
+@test "sat: auth status reports the handle and expiry from /me" {
+  export FLOX_FLOXHUB_TOKEN="flox_sat_expiring-secret"
+  export _FLOX_USE_CATALOG_MOCK="$MANUALLY_GENERATED/auth/me_service_expiring.yaml"
+
+  run "$FLOX_BIN" auth status
+  assert_success
+  assert_output --partial "You are logged in as owner"
+  assert_output --partial "Expires at: 2030-01-01 00:00:00 UTC."
+}
+
 # bats test_tags=auth:pat:login
 @test "pat: auth login --token-file logs in with a pat" {
   unset FLOX_FLOXHUB_TOKEN

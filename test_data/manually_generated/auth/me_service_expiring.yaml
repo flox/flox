@@ -1,0 +1,12 @@
+when:
+  method: GET
+  path: /accounts/api/v1/accounts/me
+  header:
+  - name: authorization
+    value: bearer flox_sat_expiring-secret
+then:
+  status: 200
+  header:
+  - name: content-type
+    value: application/json
+  body: '{"user_id":"service|expiring","handle":"owner","expires_at":"2030-01-01T00:00:00Z"}'
