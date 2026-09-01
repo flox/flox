@@ -59,7 +59,8 @@ use crate::utils::message;
 
 /// Maximum number of candidates shown when the disambiguation prompt lists
 /// packages. Beyond this count a "(N shown, M total)" line is appended.
-const DISAMBIGUATION_LIMIT: usize = 10;
+/// Also used by `flox search --command` to cap its provider list.
+pub(crate) const DISAMBIGUATION_LIMIT: usize = 10;
 
 // ---------------------------------------------------------------------------
 // Error types
