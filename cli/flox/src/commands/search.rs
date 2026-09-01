@@ -56,7 +56,7 @@ impl Search {
             None => {
                 message::error(indoc! {"
                     No search term provided.
-                    Try searching with a search term. For example, 'flox search curl'"});
+                    Try searching for a package. For example, 'flox search curl'"});
                 return Err(crate::Exit(1).into());
             },
         };
@@ -208,7 +208,7 @@ impl Search {
             eprintln!(
                 "\nℹ️  There are {} packages that supply '{}'.\n\
                  Use 'flox search --command {} --all' or\n\
-                 'flox run --package <PACKAGE> {}' to specify.",
+                 'flox run --package <PACKAGE> {}' to choose a specific package.",
                 result.total_count, command_name, command_name, command_name
             );
         }
@@ -237,9 +237,9 @@ fn render_command_providers(command: &str, result: &ByCommandResult) -> String {
 
     // Header: always mention exact match count so "exact matches" is present.
     let exact_str = match exact_count {
-        0 => " (0 exact matches)".to_string(),
-        1 => " (1 exact match)".to_string(),
-        n => format!(" ({n} exact matches)"),
+        0 => " — 0 exact matches (*)".to_string(),
+        1 => " — 1 exact match (*)".to_string(),
+        n => format!(" — {n} exact matches (*)"),
     };
     let plural = if total == 1 { "" } else { "s" };
     let _ = writeln!(s, "{total} package{plural} provide '{command}'{exact_str}:");
