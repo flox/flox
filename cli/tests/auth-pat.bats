@@ -141,7 +141,7 @@ teardown() {
   run "$FLOX_BIN" auth status
   assert_success
   assert_output --partial "You are logged in as owner"
-  assert_output --partial "Expires at: 2030-01-01T00:00:00+00:00."
+  assert_output --partial "Expires at: 2030-01-01 00:00:00 UTC."
 }
 
 # bats test_tags=auth:pat:login
