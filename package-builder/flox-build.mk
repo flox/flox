@@ -62,6 +62,7 @@ _cp := $(call __package_bin,$(__coreutils),cp)
 _cpio := $(call __package_bin,$(__cpio),cpio)
 _cut := $(call __package_bin,$(__coreutils),cut)
 _daemonize := $(call __package_bin,$(__daemonize),daemonize)
+_date := $(call __package_bin,$(__coreutils),date)
 _env := $(call __package_bin,$(__coreutils),env)
 _find := $(call __package_bin,$(__findutils),find)
 _git := $(call __package_bin,$(__gitMinimal),git)
@@ -240,6 +241,7 @@ $(foreach _build,$(BUILDGOALS),\
   $(eval _pname = $(notdir $(_build)))\
   $(eval _pvarname = $(call mkVarname,$(_pname))) \
   $(foreach _buildtype,local sandbox,\
+    $(eval .PHONY: $(_pvarname)_$(_buildtype)_build) \
     $(eval $(_pvarname)_$(_buildtype)_build: $(PROJECT_TMPDIR)/check-build-prerequisites)))
 
 # Template for setting variables common to manifest and NEF builds.
@@ -435,7 +437,12 @@ define BUILD_local_template =
   # environment, so that following a successful build we can replace references
   # to the former with the latter as we copy the output to its final path.
 
-  $($(_pvarname)_out) $($(_pvarname)_logfile): $($(_pvarname)_buildScript)
+  # A grouped target rule (&:): one execution of the recipe produces both
+  # files. An ordinary multi-target rule would run the recipe once per
+  # target, which the .PHONY marking would otherwise turn into two
+  # executions per invocation.
+  .PHONY: $($(_pvarname)_out) $($(_pvarname)_logfile)
+  $($(_pvarname)_out) $($(_pvarname)_logfile) &: $($(_pvarname)_buildScript)
 	@# $(if $(FLOX_INTERPRETER),,$$(error FLOX_INTERPRETER not defined))
 	@#
 	@# Create a copy of the "develop" environment at a storepath with the
@@ -519,6 +526,7 @@ define BUILD_local_template =
 
   # Having built the package to $($(_pvarname)_out) outside of Nix, call
   # build-manifest.nix to turn it into a Nix package.
+  .PHONY: $($(_pvarname)_buildJSON)
   $($(_pvarname)_buildJSON): $($(_pvarname)_out)
 	$(_V_) $(_nix) build -L --file $(_libexec_dir)/build-manifest.nix \
 	  --argstr pname "$(_pname)" \
@@ -567,6 +575,7 @@ define BUILD_nix_sandbox_template =
   # but allows to _only_ show deleted files, use 'comm' to do the filtering for
   # us.
   $(eval $(_pvarname)_src_list = $($(_pvarname)_tmpBasename)/src-list)
+  .PHONY: $($(_pvarname)_src_list)
   $($(_pvarname)_src_list): $(PROJECT_TMPDIR)/check-build-prerequisites
 	$(_comm) -23z <($(_git) ls-files -cz | $(_sort) -z) <($(_git) ls-files -dz | $(_sort) -z) > $$@
 
@@ -574,11 +583,13 @@ define BUILD_nix_sandbox_template =
   # builds, so we create a tarball at a stable temporary path and pass that
   # to the derivation instead.
   $(eval $(_pvarname)_src_tar = $($(_pvarname)_tmpBasename)/src.tar)
+  .PHONY: $($(_pvarname)_src_tar)
   $($(_pvarname)_src_tar): $($(_pvarname)_src_list)
 	$(_V_) $(_tar) -cf $$@ --no-recursion --null --files-from $$<
 
   # The buildCache value needs to be similarly stable when nothing changes across
   $(eval $(_pvarname)_buildCache = $($(_pvarname)_tmpBasename)/buildCache.tar)
+  .PHONY: $($(_pvarname)_buildCache)
   $($(_pvarname)_buildCache): $(PROJECT_TMPDIR)/check-build-prerequisites
 	-$(_V_) $(_rm) -f $$@
 	@# If a previous buildCache exists, then copy, don't link to the
@@ -587,12 +598,16 @@ define BUILD_nix_sandbox_template =
 	@# of storePaths. And if it does not exist, then create a new
 	@# tarball containing only a single file indicating the time that
 	@# the buildCache was created to differentiate it from other
-	@# prior otherwise-empty buildCaches.
+	@# prior otherwise-empty buildCaches. The marker needs nanosecond
+	@# resolution: tar records whole-second mtimes, so a seconds-granular
+	@# marker makes two caches initialized within the same second
+	@# byte-identical, and nix then reuses the previous build's output
+	@# instead of rebuilding.
 	$(_VV_) if [ -f "$($(_pvarname)_result)-buildCache" ]; then \
 	  $(_cp) $($(_pvarname)_result)-buildCache $$@; \
 	else \
 	  tmpdir=$$$$($(_mktemp) -d); \
-	  echo "Build cache initialized on $$$$(date)" > $$$$tmpdir/.buildCache.init; \
+	  echo "Build cache initialized on $$$$($(_date) '+%Y-%m-%dT%H:%M:%S.%N')" > $$$$tmpdir/.buildCache.init; \
 	  $(_tar) -cf $$@ -C $$$$tmpdir .buildCache.init; \
 	  $(_find) $$$$tmpdir -type d -exec $(_chmod) +w {} \; && \
 	  $(_rm) -rf $$$$tmpdir; \
@@ -602,6 +617,7 @@ define BUILD_nix_sandbox_template =
   $(eval $(call CLEAN_result_link_template,$($(_pvarname)_result)-buildCache))
 
   # Perform the build, creating the JSON output as a result.
+  .PHONY: $($(_pvarname)_buildJSON)
   $($(_pvarname)_buildJSON): $($(_pvarname)_buildScript) $($(_pvarname)_src_tar) \
     $(if $(_do_buildCache),$($(_pvarname)_buildCache))
 	@echo "Building $(_name) in Nix sandbox (pure) mode"
@@ -686,7 +702,7 @@ define MANIFEST_BUILD_template =
   # will have successfully built the corresponding result-$(_pname) symlinks.
   # Iterate through this list, replacing all instances of "${package}" with the
   # corresponding storePath as identified by the result-* symlink.
-  .PRECIOUS: $($(_pvarname)_buildScript)
+  .PHONY: $($(_pvarname)_buildScript)
   $($(_pvarname)_buildScript): $(build) $(PROJECT_TMPDIR)/check-build-prerequisites
 	@# Identify _at runtime_ the build wrapper environment with which
 	@# to wrap the contents of bin, sbin.
@@ -836,7 +852,11 @@ define NIX_EXPRESSION_BUILD_template =
   # the absent file without that context. The committed lock's path is
   # relative to the project directory this make was started in with -C, so
   # the recipe absolutizes it — nix coerces the argument to a path, which
-  # must be absolute.
+  # must be absolute. The eval must run each invocation
+  # (the expressions the eval reads are not prerequisites make can see), so
+  # the target is .PHONY: the recipe is triggered irrespective of the
+  # eval.json file's presence or timestamp.
+  .PHONY: $($(_pvarname)_evalJSON)
   $($(_pvarname)_evalJSON): $(CATALOG_LOCKFILE) $(PROJECT_TMPDIR)/check-build-prerequisites
 	$(_V_) $(_mkdir) -p $$(@D)
 	$(_V_) $(_nix) eval -L --file $(_nef) \
@@ -920,6 +940,11 @@ $(foreach _pname,$(NIX_EXPRESSION_BUILDS), \
   $(eval $(call NIX_EXPRESSION_BUILD_template)))
 
 # Combine JSON build data for each build and write to BUILD_RESULT_FILE.
+# The result file is a per-invocation temp file the CLI pre-creates, and it
+# must be regenerated unconditionally: marking it .PHONY makes make trigger
+# the recipe irrespective of the file's presence or timestamp, so the
+# aggregation can never tie with prerequisites written in the same second.
+.PHONY: $(BUILD_RESULT_FILE)
 $(BUILD_RESULT_FILE): $(foreach pname,$(PACKAGES),$($(subst -,_,$(pname))_buildMetaJSON))
 	$(_VV_) [ -n "$^" ] || ( echo "ERROR: PACKAGES not defined or empty" 1>&2; exit 1 )
 	$(_VV_) $(_jq) -s . $^ > $@

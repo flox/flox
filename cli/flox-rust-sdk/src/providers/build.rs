@@ -1827,6 +1827,30 @@ mod tests {
         let cache_dir = cache_dir(&env_path, &package_name);
         assert!(cache_dir.exists());
 
+        // Pin the sub-second cache-init marker deterministically: a fresh
+        // cache is differentiated from other otherwise-empty caches by a
+        // timestamped marker, and tar records whole-second mtimes, so a
+        // seconds-granular marker would make two caches initialized within
+        // one second byte-identical — and nix would then reuse the previous
+        // build's output after an invalidation. The tarball is uncompressed,
+        // so the marker is greppable in place.
+        let cache_tar = fs::read(fs::canonicalize(&cache_dir).unwrap()).unwrap();
+        let cache_text = String::from_utf8_lossy(&cache_tar);
+        let marker = cache_text
+            .split("Build cache initialized on ")
+            .nth(1)
+            .expect("the fresh cache carries an init marker");
+        assert!(
+            marker
+                .split_once('\n')
+                .is_some_and(|(stamp, _)| stamp.contains('.')
+                    && stamp.rsplit('.').next().is_some_and(|frac| {
+                        frac.trim_end().chars().all(|c| c.is_ascii_digit())
+                            && frac.trim_end().len() >= 3
+                    })),
+            "the cache-init marker must carry sub-second digits, got: {marker:.60}"
+        );
+
         fs::remove_file(cache_dir).unwrap();
 
         assert_build_status(&flox, &mut env, &package_name, None, true);
