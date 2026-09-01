@@ -12,6 +12,7 @@
   glibcLocalesUtf8,
   gnumake,
   inputs,
+  jq,
   lib,
   nixpkgsInputLockedURL,
   nix,
@@ -39,6 +40,7 @@ let
       NIX_VERSION = nix.version;
       GNUMAKE_BIN = "${gnumake}/bin/make";
       SLEEP_BIN = "${coreutils}/bin/sleep";
+      JQ_BIN = "${jq}/bin/jq";
       PROCESS_COMPOSE_BIN = "${process-compose}/bin/process-compose";
       FLOX_ACTIVATIONS_BIN = "${flox-activations}/libexec/flox-activations";
       # used internally to ensure CA certificates are available

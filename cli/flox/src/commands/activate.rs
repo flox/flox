@@ -61,6 +61,7 @@ use crate::commands::{
     SHELL_COMPLETION_FILE,
     ensure_environment_trust,
     render_composition_manifest,
+    session_wrap,
     uninitialized_environment_description,
 };
 use crate::utils::detect_shell::{detect_shell_for_in_place, detect_shell_for_subshell};
@@ -501,6 +502,30 @@ impl ActivateOptions {
             path
         };
 
+        let is_ephemeral = !services_for_ephemeral_activation.is_empty();
+
+        // A `[plugin-hooks].session-wrap` plugin re-enters the activation
+        // under its enforcement boundary: `wrap.exec()` replaces this
+        // process and never returns on success. Dispatch sits after render
+        // (hooks are discovered in the rendered environment) and before any
+        // in-process activation state is touched.
+        match session_wrap::resolve(session_wrap::SessionWrapArgs {
+            manifest: manifest.as_latest_schema(),
+            lockfile: &lockfile,
+            lockfile_path: concrete_environment.lockfile_path(&flox)?,
+            dot_flox_path: concrete_environment.dot_flox_path().to_path_buf(),
+            env_name: now_active.name().as_ref().to_string(),
+            activation_mode: mode.to_string(),
+            rendered_env: store_path.clone(),
+            system: &flox.system,
+            invocation_type: &invocation_type,
+            is_ephemeral,
+            feature_enabled: flox.features.plugin_hooks,
+        })? {
+            session_wrap::SessionWrap::Wrap(wrap) => match wrap.exec(&flox.temp_dir)? {},
+            session_wrap::SessionWrap::NoWrap => {},
+        }
+
         // read the currently active environments from the environment
         let mut flox_active_environments = activated_environments();
 
@@ -569,7 +594,6 @@ impl ActivateOptions {
         let add_sbin = self.add_sbin;
 
         // Determine services to start with a new process-compose
-        let is_ephemeral = !services_for_ephemeral_activation.is_empty();
         let services_to_start = if is_ephemeral {
             services_for_ephemeral_activation
         } else {
