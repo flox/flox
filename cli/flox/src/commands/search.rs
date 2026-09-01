@@ -21,13 +21,6 @@ use crate::utils::tracing::sentry_set_tag;
 pub(crate) const DEFAULT_SEARCH_LIMIT: Option<NonZeroU8> = NonZeroU8::new(10);
 const FLOX_SHOW_HINT: &str = "Use 'flox show <package>' to see available versions";
 
-fn missing_search_term<T>() -> Result<T> {
-    bail!(indoc! {"
-        No search term provided.
-
-        Try searching with a search term. For example, 'flox search curl'"});
-}
-
 // Search for packages to install
 #[derive(Debug, Bpaf, Clone)]
 pub struct Search {
@@ -60,7 +53,12 @@ impl Search {
         // Regular search path — require a search term.
         let search_term = match &self.search_term {
             Some(t) => t.clone(),
-            None => missing_search_term()?,
+            None => {
+                message::error(indoc! {"
+                    No search term provided.
+                    Try searching with a search term. For example, 'flox search curl'"});
+                return Err(crate::Exit(1).into());
+            },
         };
 
         sentry_set_tag("json", self.json);
