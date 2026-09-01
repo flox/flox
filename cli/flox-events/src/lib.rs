@@ -55,10 +55,10 @@ pub struct Event {
     pub invocation_id: Uuid,
     /// Stable per-installation id.
     pub device_id: Uuid,
-    /// Pseudonymous authenticated-subject identifier — the OIDC/JWT
-    /// `sub` claim (sourced from the auth token) when known. Must not
-    /// contain email addresses, raw user handles, or token bytes — those
-    /// are PII and a different category from this field's pseudonymous-
+    /// Pseudonymous authenticated-subject identifier — the OIDC/JWT `sub`
+    /// claim or the equivalent accounts `/me.user_id` for an opaque token.
+    /// Must not contain email addresses, raw user handles, or token bytes —
+    /// those are PII and a different category from this field's pseudonymous-
     /// identifier contract.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub auth_subject: Option<String>,

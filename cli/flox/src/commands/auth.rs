@@ -622,10 +622,10 @@ fn complete_login(
         }
     }
 
-    if let Err(err) = EventsHub::global().record_event_with_auth_subject(
-        EventKind::CliAuthenticated {},
-        flox.auth_context.user_subject(),
-    ) {
+    let auth_subject = flox.auth_context.user_subject();
+    if let Err(err) = EventsHub::global()
+        .record_event_with_auth_subject(EventKind::CliAuthenticated {}, auth_subject.as_deref())
+    {
         debug!(error = %err, "Failed to record v2 cli.authenticated event");
     }
 

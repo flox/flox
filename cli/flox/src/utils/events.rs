@@ -21,6 +21,7 @@ use flox_rust_sdk::flox::{AuthContext, FLOX_VERSION, Flox};
 use flox_rust_sdk::models::environment::generations::GenerationsExt;
 use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment};
 use flox_rust_sdk::utils::INVOCATION_SOURCES;
+use floxhub_client::FloxhubClient;
 use tracing::debug;
 use uuid::Uuid;
 
@@ -48,6 +49,10 @@ static METRICS_EVENTS_API_KEY_V2: LazyLock<String> = LazyLock::new(|| {
     std::env::var("_FLOX_METRICS_API_KEY_V2_OVERRIDE")
         .unwrap_or(env!("METRICS_EVENTS_API_KEY_V2").to_string())
 });
+
+/// Identity enrichment is useful telemetry, never a reason to delay a CLI
+/// command for the FloxHub client's full request timeout.
+const AUTH_SUBJECT_RESOLUTION_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(2);
 
 /// Resolve the invocation id for the current process.
 ///
@@ -160,18 +165,21 @@ fn architecture_from_system(system: &str) -> Option<String> {
 /// a) metrics are disabled by config, or
 /// b) reading the metrics uuid fails.
 ///
-/// `auth_context` is the credential selected for the invocation. The
-/// returned client snapshots its pseudonymous subject and local credential
-/// kind at construction (see [`flox_events::EventsClient`] for the snapshot
+/// `auth_context` is the credential selected for the invocation. The returned
+/// client snapshots its pseudonymous subject and local credential kind at
+/// construction (see [`flox_events::EventsClient`] for the snapshot
 /// semantics); credential material is never retained by the events client.
+/// `floxhub_client` is optional for flows that never initialize the API client;
+/// it is used only to resolve the subject of opaque PAT/SAT credentials.
 ///
 /// Ordering invariant: [`shared_metadata_template`] performs machine-context
 /// detection, so it must stay behind the `disable_metrics` early return —
 /// opted-out runs do no metrics-only metadata work.
-pub fn build_events_client(
+pub async fn build_events_client(
     config: &Config,
     invocation_id: Uuid,
     auth_context: &AuthContext,
+    floxhub_client: Option<&FloxhubClient>,
 ) -> Option<EventsClient> {
     if config.flox.disable_metrics {
         debug!("v2 events: disable_metrics is true; not installing client");
@@ -186,8 +194,9 @@ pub fn build_events_client(
         },
     };
 
-    let auth_subject = auth_context.user_subject().map(String::from);
     let credential_type = credential_type_from_context(auth_context);
+    let auth_subject =
+        auth_subject_from_context(auth_context, credential_type, floxhub_client).await;
     Some(EventsClient::new(
         device_id,
         &config.flox.data_dir,
@@ -197,6 +206,50 @@ pub fn build_events_client(
         auth_subject,
         shared_metadata_template(credential_type),
     ))
+}
+
+/// Return the pseudonymous subject for telemetry without making identity
+/// resolution part of command success.
+///
+/// JWT subjects are read locally. PATs and SATs are opaque, so their subject
+/// comes from the accounts `/me` response. A failed lookup leaves the field
+/// absent and never fails the invocation.
+async fn auth_subject_from_context(
+    auth_context: &AuthContext,
+    credential_type: CredentialType,
+    floxhub_client: Option<&FloxhubClient>,
+) -> Option<String> {
+    if let Some(subject) = auth_context.user_subject() {
+        return Some(subject);
+    }
+    if !matches!(credential_type, CredentialType::Pat | CredentialType::Sat) {
+        return None;
+    }
+
+    let Some(floxhub_client) = floxhub_client else {
+        debug!("v2 events: no FloxHub client available to resolve token subject");
+        return None;
+    };
+    let Some(secret) = auth_context.token_secret() else {
+        return None;
+    };
+
+    match tokio::time::timeout(
+        AUTH_SUBJECT_RESOLUTION_TIMEOUT,
+        floxhub_client.resolve_identity(secret),
+    )
+    .await
+    {
+        Ok(Ok(identity)) => identity.sub,
+        Ok(Err(err)) => {
+            debug!(error = %err, "v2 events: could not resolve token subject");
+            None
+        },
+        Err(err) => {
+            debug!(error = %err, "v2 events: token subject resolution timed out");
+            None
+        },
+    }
 }
 
 /// Lineage fields for the environment the current invocation operates on.
@@ -491,65 +544,181 @@ mod tests {
         );
     }
 
-    #[test]
+    #[tokio::test(flavor = "multi_thread")]
     #[serial(v2_events_wrapper_env)]
-    fn build_events_client_returns_none_when_disable_metrics_is_true() {
+    async fn build_events_client_returns_none_when_disable_metrics_is_true() {
         let tempdir = tempfile::tempdir().expect("tempdir");
         let config = test_config(
             &tempdir,
             tempdir.path().join("data"),
             /* disable_metrics */ true,
         );
+        let server = httpmock::MockServer::start();
+        let request = server.mock(|when, then| {
+            when.method(httpmock::Method::GET)
+                .path("/accounts/api/v1/accounts/me");
+            then.status(200).json_body(serde_json::json!({
+                "user_id": "auth0|123",
+                "handle": "testuser",
+                "expires_at": null,
+            }));
+        });
+        let floxhub_client = floxhub_client::FloxhubClient::new(
+            floxhub_client::client::test_helpers::client_config(&server.base_url()),
+        )
+        .expect("client initializes");
 
-        let auth_context = AuthContext::new_from_token(None);
-        let client = build_events_client(&config, Uuid::new_v4(), &auth_context);
+        let auth_context = AuthContext::new_from_token(Some("flox_pat_metrics-disabled"));
+        let client = build_events_client(
+            &config,
+            Uuid::new_v4(),
+            &auth_context,
+            Some(&floxhub_client),
+        )
+        .await;
         assert!(client.is_none(), "disable_metrics must take priority");
+        request.assert_hits(0);
     }
 
-    #[test]
+    #[tokio::test]
     #[serial(v2_events_wrapper_env)]
-    fn build_events_client_returns_none_when_uuid_unreadable() {
+    async fn build_events_client_returns_none_when_uuid_unreadable() {
         let tempdir = tempfile::tempdir().expect("tempdir");
         let data_dir = tempdir.path().join("data");
         std::fs::create_dir_all(&data_dir).expect("data dir");
         // No metrics-uuid file written: read_metrics_uuid errors.
         let config = test_config(&tempdir, data_dir, /* disable_metrics */ false);
+        let server = httpmock::MockServer::start();
+        let request = server.mock(|when, then| {
+            when.method(httpmock::Method::GET)
+                .path("/accounts/api/v1/accounts/me");
+            then.status(200).json_body(serde_json::json!({
+                "user_id": "auth0|123",
+                "handle": "testuser",
+                "expires_at": null,
+            }));
+        });
+        let floxhub_client = floxhub_client::FloxhubClient::new(
+            floxhub_client::client::test_helpers::client_config(&server.base_url()),
+        )
+        .expect("client initializes");
 
-        let auth_context = AuthContext::new_from_token(None);
-        let client = build_events_client(&config, Uuid::new_v4(), &auth_context);
+        let auth_context = AuthContext::new_from_token(Some("flox_pat_uuid-unreadable"));
+        let client = build_events_client(
+            &config,
+            Uuid::new_v4(),
+            &auth_context,
+            Some(&floxhub_client),
+        )
+        .await;
         assert!(client.is_none(), "missing uuid must short-circuit");
+        request.assert_hits(0);
     }
 
-    #[test]
+    #[tokio::test]
     #[serial(v2_events_wrapper_env)]
-    fn build_events_client_returns_some_by_default() {
+    async fn build_events_client_returns_some_by_default() {
         let tempdir = tempfile::tempdir().expect("tempdir");
         let uuid = Uuid::new_v4();
         let config = test_config_with_uuid(&tempdir, uuid);
 
         let auth_context = AuthContext::new_from_token(None);
-        let client = build_events_client(&config, Uuid::new_v4(), &auth_context);
+        let client = build_events_client(&config, Uuid::new_v4(), &auth_context, None).await;
         assert!(client.is_some(), "v2 is enabled by default");
         assert_eq!(client.unwrap().device_id, uuid);
     }
 
     /// The wrapper derives the subject from the same auth context used for
     /// the credential type.
-    #[test]
+    #[tokio::test(flavor = "multi_thread")]
     #[serial(v2_events_wrapper_env)]
-    fn build_events_client_derives_auth_subject_from_context() {
+    async fn build_events_client_derives_auth_subject_from_context() {
         let tempdir = tempfile::tempdir().expect("tempdir");
         let config = test_config_with_uuid(&tempdir, Uuid::new_v4());
 
         let authenticated = AuthContext::new_from_token(Some(FAKE_TOKEN_WITH_SUB));
-        let client =
-            build_events_client(&config, Uuid::new_v4(), &authenticated).expect("client installs");
+        let client = build_events_client(&config, Uuid::new_v4(), &authenticated, None)
+            .await
+            .expect("client installs");
         assert_eq!(client.auth_subject.as_deref(), Some("github|424242"));
 
         let unauthenticated = AuthContext::new_from_token(None);
-        let client = build_events_client(&config, Uuid::new_v4(), &unauthenticated)
+        let client = build_events_client(&config, Uuid::new_v4(), &unauthenticated, None)
+            .await
             .expect("client installs");
         assert_eq!(client.auth_subject, None, "anonymous use stays anonymous");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    #[serial(v2_events_wrapper_env)]
+    async fn build_events_client_resolves_pat_and_sat_subjects_from_me() {
+        for (token, sub) in [
+            ("flox_pat_events-subject-test", "auth0|123"),
+            ("flox_sat_events-subject-test", "service|456"),
+        ] {
+            let tempdir = tempfile::tempdir().expect("tempdir");
+            let config = test_config_with_uuid(&tempdir, Uuid::new_v4());
+            let server = httpmock::MockServer::start();
+            let invocation_id = Uuid::new_v4();
+            let request = server.mock(|when, then| {
+                when.method(httpmock::Method::GET)
+                    .path("/accounts/api/v1/accounts/me")
+                    .header("authorization", format!("bearer {token}"))
+                    .header("flox-invocation-id", invocation_id.to_string());
+                then.status(200).json_body(serde_json::json!({
+                    "user_id": sub,
+                    "handle": "testuser",
+                    "expires_at": null,
+                }));
+            });
+            let auth_context = AuthContext::new_from_token(Some(token));
+            let floxhub_client = crate::utils::init::floxhub_client::init_floxhub_client(
+                server.base_url(),
+                auth_context.clone(),
+                Some(Uuid::new_v4()),
+                invocation_id,
+                None,
+            )
+            .expect("client initializes");
+
+            let client =
+                build_events_client(&config, invocation_id, &auth_context, Some(&floxhub_client))
+                    .await
+                    .expect("client installs");
+
+            request.assert();
+            assert_eq!(client.auth_subject.as_deref(), Some(sub));
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    #[serial(v2_events_wrapper_env)]
+    async fn build_events_client_omits_subject_when_me_rejects_token() {
+        let tempdir = tempfile::tempdir().expect("tempdir");
+        let config = test_config_with_uuid(&tempdir, Uuid::new_v4());
+        let server = httpmock::MockServer::start();
+        let request = server.mock(|when, then| {
+            when.method(httpmock::Method::GET)
+                .path("/accounts/api/v1/accounts/me");
+            then.status(401);
+        });
+        let auth_context = AuthContext::new_from_token(Some("flox_pat_rejected-subject-test"));
+        let floxhub_client = floxhub_client::FloxhubClient::new(
+            floxhub_client::client::test_helpers::client_config(&server.base_url()),
+        )
+        .expect("client initializes");
+
+        let client = build_events_client(
+            &config,
+            Uuid::new_v4(),
+            &auth_context,
+            Some(&floxhub_client),
+        )
+        .await
+        .expect("identity enrichment must not block client installation");
+
+        request.assert();
+        assert_eq!(client.auth_subject, None);
     }
 
     /// End-to-end: install a hub-owned client backed by a

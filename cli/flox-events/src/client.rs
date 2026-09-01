@@ -30,9 +30,9 @@ pub const BATCH_SIZE: usize = 100;
 /// (e.g. `github|3670948`). It is never the user's email, handle, or
 /// display name.
 /// Setting this is the caller's responsibility. In practice we use the
-/// OIDC `sub` field. Invocations using PAT machine tokens or kerberos,
-/// or that aren't logged in yet, pass `None`, causing every emitted
-/// [`Event`] to omit the field.
+/// OIDC `sub` field directly for JWTs and the accounts `/me` identity for
+/// PATs and SATs. Kerberos and logged-out invocations pass `None`, causing
+/// every emitted [`Event`] to omit the field.
 ///
 /// Like `device_id` and `invocation_id`, the value is a per-process
 /// snapshot: a token change mid-invocation does not re-stamp events.
