@@ -465,7 +465,7 @@ mod tests {
             ##
             ## -------------------------------------------------------------------
             # Flox manifest version managed by Flox CLI
-            schema-version = "1.15.0"
+            schema-version = "1.16.0"
 
 
             ## Install Packages --------------------------------------------------
@@ -589,7 +589,7 @@ mod tests {
             ##
             ## -------------------------------------------------------------------
             # Flox manifest version managed by Flox CLI
-            schema-version = "1.15.0"
+            schema-version = "1.16.0"
 
 
             ## Install Packages --------------------------------------------------
@@ -716,7 +716,7 @@ mod tests {
             ##
             ## -------------------------------------------------------------------
             # Flox manifest version managed by Flox CLI
-            schema-version = "1.15.0"
+            schema-version = "1.16.0"
 
 
             ## Install Packages --------------------------------------------------
@@ -840,7 +840,7 @@ mod tests {
             ##
             ## -------------------------------------------------------------------
             # Flox manifest version managed by Flox CLI
-            schema-version = "1.15.0"
+            schema-version = "1.16.0"
 
 
             ## Install Packages --------------------------------------------------
@@ -953,7 +953,7 @@ mod tests {
             ##
             ## -------------------------------------------------------------------
             # Flox manifest version managed by Flox CLI
-            schema-version = "1.15.0"
+            schema-version = "1.16.0"
 
 
             ## Install Packages --------------------------------------------------

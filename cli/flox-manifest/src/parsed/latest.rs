@@ -16,8 +16,10 @@ pub use crate::parsed::v1_13_0::BuildSandbox;
 // Hook is version-specific from V1_15_0 on (it adds `on-deactivate`),
 // so the latest schema re-exports that copy rather than common's.
 pub use crate::parsed::v1_15_0::Hook;
+// PluginHooks is introduced in V1_16_0.
+pub use crate::parsed::v1_16_0::PluginHooks;
 use crate::{Manifest, ManifestError, TypedOnly};
-pub type ManifestLatest = crate::parsed::v1_15_0::ManifestV1_15_0;
+pub type ManifestLatest = crate::parsed::v1_16_0::ManifestV1_16_0;
 
 impl ManifestLatest {
     /// Try to return a manifest in its original schema
@@ -88,6 +90,15 @@ impl ManifestLatest {
                 untyped
             },
             KnownSchemaVersion::V1_15_0 => {
+                let mut untyped =
+                    serde_json::to_value(self).map_err(ManifestError::SerializeJson)?;
+                let map = untyped
+                    .as_object_mut()
+                    .expect("all valid manifests should serialize to JSON objects");
+                map.insert("schema-version".into(), "1.15.0".into());
+                untyped
+            },
+            KnownSchemaVersion::V1_16_0 => {
                 return Ok(Some(self.as_typed_only()));
             },
         };
@@ -691,6 +702,64 @@ mod tests {
 
         let compat = manifest
             .as_maybe_backwards_compatible(KnownSchemaVersion::V1_13_0, None)
+            .unwrap();
+
+        assert_eq!(compat.get_schema_version(), KnownSchemaVersion::latest());
+    }
+
+    #[test]
+    fn plugin_hooks_rejected_by_v1_15_0_schema() {
+        let manifest = indoc! {r#"
+            schema-version = "1.15.0"
+
+            [plugin-hooks]
+            session-wrap = "my-plugin"
+        "#};
+
+        let err = Manifest::parse_toml_typed(manifest)
+            .expect_err("'plugin-hooks' should be rejected by the v1.15.0 schema");
+
+        let ManifestError::Invalid(err) = err else {
+            panic!("expected ManifestError::Invalid, got: {err:?}");
+        };
+        assert!(
+            err.message()
+                .starts_with("unknown field `plugin-hooks`, expected one of"),
+            "unexpected error message: {err}",
+        );
+    }
+
+    #[test]
+    fn downgrades_to_v1_15_0_when_plugin_hooks_unused() {
+        let manifest = ManifestLatest {
+            plugins: Plugins(
+                [(
+                    "my-plugin".to_string(),
+                    serde_json::json!({"MY_TOKEN": "demo/my-token"}),
+                )]
+                .into(),
+            ),
+            ..Default::default()
+        };
+
+        let compat = manifest
+            .as_maybe_backwards_compatible(KnownSchemaVersion::V1_15_0, None)
+            .unwrap();
+
+        assert_eq!(compat.get_schema_version(), KnownSchemaVersion::V1_15_0);
+    }
+
+    #[test]
+    fn stays_latest_schema_when_plugin_hooks_used() {
+        let manifest = ManifestLatest {
+            plugin_hooks: Some(PluginHooks {
+                session_wrap: Some("my-plugin".to_string()),
+            }),
+            ..Default::default()
+        };
+
+        let compat = manifest
+            .as_maybe_backwards_compatible(KnownSchemaVersion::V1_15_0, None)
             .unwrap();
 
         assert_eq!(compat.get_schema_version(), KnownSchemaVersion::latest());

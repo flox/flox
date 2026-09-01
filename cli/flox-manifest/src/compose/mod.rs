@@ -81,6 +81,11 @@ impl_into_inner!(KeyPath, Vec<String>);
 #[non_exhaustive]
 pub enum Warning {
     Overriding(KeyPath),
+    /// An included manifest declared `[plugin-hooks]`, which is ignored:
+    /// hook participation is consent and must be authored in the top-level
+    /// manifest. The accompanying [`WarningWithContext`] names the include
+    /// whose declaration was ignored.
+    IgnoredPluginHooks(KeyPath),
 }
 
 /// A warning that occurred during the merge of two manifests,
@@ -143,6 +148,24 @@ impl CompositeManifest {
             .clone();
 
         let mut warnings = Vec::new();
+
+        // Hook participation is consent: only the composer's `[plugin-hooks]`
+        // section is effective. The pairwise merge below always keeps the
+        // higher-priority section, which drops include declarations without
+        // knowing whose they were — so name each ignored include here, where
+        // the manifest ids are in scope.
+        for (manifest_id, manifest) in &self.deps {
+            if manifest
+                .plugin_hooks
+                .as_ref()
+                .is_some_and(|hooks| !hooks.is_empty())
+            {
+                warnings.push(WarningWithContext {
+                    warning: Warning::IgnoredPluginHooks(KeyPath::from_iter(["plugin-hooks"])),
+                    higher_priority_name: manifest_id.clone(),
+                });
+            }
+        }
 
         for (manifest_id, manifest) in merges {
             debug!(name = manifest_id, "merging new manifest");
@@ -359,6 +382,7 @@ pub fn package_overrides_for_manifest_id(
                     None
                 }
             },
+            _ => None,
         })
         .collect::<Vec<_>>();
     // Make sure we emit the install IDs in a stable order
@@ -432,6 +456,77 @@ mod tests {
                 ..Default::default()
             })
         );
+    }
+
+    #[test]
+    fn include_declared_plugin_hooks_are_ignored_with_warning() {
+        use crate::parsed::latest::PluginHooks;
+
+        let composer = ManifestLatest {
+            plugin_hooks: Some(PluginHooks {
+                session_wrap: Some("composer-plugin".to_string()),
+            }),
+            ..Default::default()
+        };
+        let dep_with_hooks = ManifestLatest {
+            plugin_hooks: Some(PluginHooks {
+                session_wrap: Some("sneaky-plugin".to_string()),
+            }),
+            ..Default::default()
+        };
+        let dep_without_hooks = ManifestLatest::default();
+        let composite = CompositeManifest {
+            composer,
+            deps: vec![
+                ("dep1".to_string(), dep_with_hooks),
+                ("dep2".to_string(), dep_without_hooks),
+            ],
+        };
+
+        let (merged, warnings) = composite
+            .merge_all(ManifestMerger::Shallow(ShallowMerger))
+            .unwrap();
+
+        assert_eq!(
+            merged.plugin_hooks,
+            Some(PluginHooks {
+                session_wrap: Some("composer-plugin".to_string()),
+            }),
+            "only the composer's [plugin-hooks] should survive composition"
+        );
+        assert_eq!(warnings, vec![WarningWithContext {
+            warning: Warning::IgnoredPluginHooks(KeyPath::from_iter(["plugin-hooks"])),
+            higher_priority_name: "dep1".to_string(),
+        }]);
+    }
+
+    #[test]
+    fn composer_without_plugin_hooks_drops_include_declarations() {
+        use crate::parsed::latest::PluginHooks;
+
+        let dep_with_hooks = ManifestLatest {
+            plugin_hooks: Some(PluginHooks {
+                session_wrap: Some("sneaky-plugin".to_string()),
+            }),
+            ..Default::default()
+        };
+        let composite = CompositeManifest {
+            composer: ManifestLatest::default(),
+            deps: vec![("dep1".to_string(), dep_with_hooks)],
+        };
+
+        let (merged, warnings) = composite
+            .merge_all(ManifestMerger::Shallow(ShallowMerger))
+            .unwrap();
+
+        assert_eq!(
+            merged.plugin_hooks, None,
+            "an include must not smuggle hook declarations into the composed environment"
+        );
+        assert_eq!(warnings, vec![WarningWithContext {
+            warning: Warning::IgnoredPluginHooks(KeyPath::from_iter(["plugin-hooks"])),
+            higher_priority_name: "dep1".to_string(),
+        }]);
     }
 
     #[test]
