@@ -244,15 +244,7 @@ fn render_command_providers(command: &str, result: &ByCommandResult) -> String {
     let plural = if total == 1 { "" } else { "s" };
     let _ = writeln!(s, "{total} package{plural} provide '{command}'{exact_str}:");
 
-    // Sort: exact matches first, then alphabetically by pname.
-    let mut sorted = providers.clone();
-    sorted.sort_by(|a, b| {
-        b.exact_name_match
-            .cmp(&a.exact_name_match)
-            .then_with(|| a.pname.cmp(&b.pname))
-    });
-
-    for p in &sorted {
+    for p in providers {
         let marker = if p.exact_name_match { " *" } else { "  " };
         let _ = writeln!(s, " {marker} {:<12} ({})", p.pname, p.attr_path);
     }
@@ -330,14 +322,16 @@ mod tests {
         assert!(output.contains("2 exact matches"), "output: {output}");
     }
 
-    // render_command_providers: exact matches appear before non-exact.
+    // render_command_providers: server ordering is preserved (no client-side sort).
+    // The server returns exact_name_match DESC, attr_path ASC, so we pass
+    // through whatever order providers arrive in.
     #[test]
-    fn render_exact_matches_first() {
+    fn render_preserves_server_order() {
         let result = make_result(
             "vi",
             vec![
-                make_provider("neovim", "neovim", false),
                 make_provider("vim", "vim", true),
+                make_provider("neovim", "neovim", false),
             ],
             true,
         );
@@ -346,7 +340,7 @@ mod tests {
         let neovim_row_pos = output.find("(neovim)").unwrap();
         assert!(
             vim_row_pos < neovim_row_pos,
-            "exact match should sort before non-exact"
+            "server order should be preserved"
         );
     }
 
