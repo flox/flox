@@ -547,7 +547,7 @@ async fn resolve_command(
 
     let result = flox
         .floxhub_client
-        .by_command(&command, system)
+        .by_command(&command, system, None)
         .await
         .map_err(|e| classify_by_command_error(e, command.clone()))?;
 
@@ -913,7 +913,7 @@ async fn exec_run(run_args: RunArgs, flox: &Flox) -> Result<()> {
 /// so very short command names (e.g. `w`) cannot be queried at all.
 ///
 /// `FloxhubClientError` covers transport failures and server errors.
-fn classify_by_command_error(err: ByCommandError, command: String) -> RunError {
+pub(crate) fn classify_by_command_error(err: ByCommandError, command: String) -> RunError {
     match err {
         ByCommandError::InvalidCommandName(_) => RunError::InvalidCommandName { command },
         ByCommandError::FloxhubClientError(e) => {

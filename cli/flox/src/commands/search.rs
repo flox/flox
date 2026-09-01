@@ -1,5 +1,5 @@
 use std::fmt::Write;
-use std::num::NonZeroU8;
+use std::num::{NonZeroU8, NonZeroU32};
 
 use anyhow::{Result, bail};
 use bpaf::Bpaf;
@@ -7,17 +7,11 @@ use flox_config::Config;
 use flox_events::{CliSearchPayload, EventKind, EventsHub};
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::providers::catalog::SearchTerm;
-use floxhub_client::{
-    ByCommandError,
-    ByCommandResult,
-    CatalogClientTrait,
-    PackageSystem,
-    SearchResults,
-};
+use floxhub_client::{ByCommandResult, CatalogClientTrait, PackageSystem, SearchResults};
 use indoc::{formatdoc, indoc};
 use tracing::{debug, instrument};
 
-use crate::commands::run::DISAMBIGUATION_LIMIT;
+use crate::commands::run::{DISAMBIGUATION_LIMIT, classify_by_command_error};
 use crate::subcommand_metric;
 use crate::utils::didyoumean::{DidYouMean, SearchSuggestion};
 use crate::utils::message::{self, stderr_supports_color, stdout_supports_color};
@@ -171,17 +165,22 @@ impl Search {
         subcommand_metric!("search", command = command_name);
         debug!("searching for command providers: {}", command_name);
 
-        let system: PackageSystem = flox
-            .system
-            .clone()
-            .try_into()
-            .expect("flox.system is always a valid PackageSystem");
+        let system: PackageSystem = flox.system.clone().try_into()?;
+
+        // Pass None (all pages) when --all is requested; otherwise fetch a
+        // single page of DISAMBIGUATION_LIMIT rows (cheap, total_count is
+        // still the full catalog total for the truncation hint).
+        let api_limit = if self.all {
+            None
+        } else {
+            NonZeroU32::new(DISAMBIGUATION_LIMIT as u32)
+        };
 
         let result = flox
             .floxhub_client
-            .by_command(command_name, system)
+            .by_command(command_name, system, api_limit)
             .await
-            .map_err(|e| classify_by_command_error(e, command_name))?;
+            .map_err(|e| classify_by_command_error(e, command_name.to_string()))?;
 
         if self.json {
             let json = serde_json::to_string(&result)?;
@@ -190,27 +189,29 @@ impl Search {
         }
 
         if result.providers.is_empty() {
-            if result.listing_known {
-                bail!("No packages provide '{command_name}'.");
+            return if result.listing_known {
+                Err(crate::commands::run::RunError::NoCommandProvider {
+                    command: command_name.to_string(),
+                }
+                .into())
             } else {
-                bail!("'{command_name}' has not been indexed yet.");
-            }
+                Err(crate::commands::run::RunError::CommandNotIndexed {
+                    command: command_name.to_string(),
+                }
+                .into())
+            };
         }
 
-        let limit = if self.all {
-            None
-        } else {
-            Some(DISAMBIGUATION_LIMIT)
-        };
-        println!("{}", render_command_providers(command_name, &result, limit));
+        println!("{}", render_command_providers(command_name, &result));
 
-        if let Some(cap) = limit
-            && result.total_count > cap as i64
-        {
+        // Truncation hint: shown only when the API total exceeds what we
+        // fetched (i.e. --all was not passed and results were capped).
+        if result.total_count > result.providers.len() as i64 {
             eprintln!(
-                "\nℹ️  There are {} packages that supply '{}'. \
-                 Use 'flox search --command {} --all' and 'flox run --package' to specify.",
-                result.total_count, command_name, command_name
+                "\nℹ️  There are {} packages that supply '{}'.\n\
+                 Use 'flox search --command {} --all' or\n\
+                 'flox run --package <PACKAGE> {}' to specify.",
+                result.total_count, command_name, command_name, command_name
             );
         }
 
@@ -226,23 +227,17 @@ fn render_search_results_json(search_results: SearchResults) -> Result<()> {
 
 /// Render a `by_command` provider list for `flox search --command`.
 ///
-/// Exact matches are listed first and marked with `*`. When `limit` is
-/// `Some(n)`, at most `n` rows are printed and a count line is appended when
-/// the total exceeds that cap. `None` prints all providers.
-fn render_command_providers(
-    command: &str,
-    result: &ByCommandResult,
-    limit: Option<usize>,
-) -> String {
-    use std::fmt::Write as _;
-
+/// Exact matches are listed first and marked with `*`. All providers in
+/// `result.providers` are shown; the caller controls how many were fetched
+/// via the `api_limit` passed to `by_command`.
+fn render_command_providers(command: &str, result: &ByCommandResult) -> String {
     let providers = &result.providers;
     let total = result.total_count;
     let exact_count = providers.iter().filter(|p| p.exact_name_match).count();
 
     let mut s = String::new();
 
-    // Header: always mention exact match count so the output includes the term.
+    // Header: always mention exact match count so "exact matches" is present.
     let exact_str = match exact_count {
         0 => " (0 exact matches)".to_string(),
         1 => " (1 exact match)".to_string(),
@@ -259,33 +254,12 @@ fn render_command_providers(
             .then_with(|| a.pname.cmp(&b.pname))
     });
 
-    let cap = limit.unwrap_or(usize::MAX);
-    let shown = sorted.len().min(cap);
-    for p in sorted.iter().take(cap) {
+    for p in &sorted {
         let marker = if p.exact_name_match { " *" } else { "  " };
         let _ = writeln!(s, " {marker} {:<12} ({})", p.pname, p.attr_path);
     }
 
-    if total > shown as i64 {
-        let _ = writeln!(s, "  ... ({shown} shown, {total} total)");
-    }
-
     s.trim_end().to_string()
-}
-
-fn classify_by_command_error(err: ByCommandError, command: &str) -> anyhow::Error {
-    match err {
-        ByCommandError::InvalidCommandName(e) => {
-            anyhow::anyhow!("Invalid command name '{}': {}", command, e)
-        },
-        ByCommandError::FloxhubClientError(e) => {
-            debug!(error = ?e, %command, "by_command lookup failed");
-            anyhow::anyhow!(
-                "Could not reach the Flox Catalog to look up '{command}'.\n\
-                 Use 'flox run --package <PACKAGE> {command}' to run it directly."
-            )
-        },
-    }
 }
 
 #[cfg(test)]
@@ -321,7 +295,7 @@ mod tests {
     #[test]
     fn render_single_exact_match() {
         let result = make_result("rg", vec![make_provider("ripgrep", "ripgrep", true)], true);
-        let output = render_command_providers("rg", &result, Some(DISAMBIGUATION_LIMIT));
+        let output = render_command_providers("rg", &result);
         assert!(output.contains("1 exact match"), "output: {output}");
         assert!(output.contains("ripgrep"), "output: {output}");
         assert!(!output.contains("2 exact"), "output: {output}");
@@ -338,7 +312,7 @@ mod tests {
             ],
             true,
         );
-        let output = render_command_providers("vi", &result, Some(DISAMBIGUATION_LIMIT));
+        let output = render_command_providers("vi", &result);
         assert!(output.contains("0 exact matches"), "output: {output}");
     }
 
@@ -354,7 +328,7 @@ mod tests {
             ],
             true,
         );
-        let output = render_command_providers("vi", &result, Some(DISAMBIGUATION_LIMIT));
+        let output = render_command_providers("vi", &result);
         assert!(output.contains("2 exact matches"), "output: {output}");
     }
 
@@ -369,7 +343,7 @@ mod tests {
             ],
             true,
         );
-        let output = render_command_providers("vi", &result, Some(DISAMBIGUATION_LIMIT));
+        let output = render_command_providers("vi", &result);
         let vim_row_pos = output.find("(vim)").unwrap();
         let neovim_row_pos = output.find("(neovim)").unwrap();
         assert!(
@@ -378,37 +352,25 @@ mod tests {
         );
     }
 
-    // render_command_providers: truncation line shown when total > cap.
+    // render_command_providers: all providers in result are shown (no internal cap).
+    // The API limit controls how many are fetched; render shows everything it receives.
     #[test]
-    fn render_truncation_line_when_over_limit() {
-        let providers: Vec<_> = (0..12)
-            .map(|i| make_provider(&format!("pkg{i}"), &format!("pkg{i}"), false))
-            .collect();
-        let mut result = make_result("cmd", providers, true);
-        result.total_count = 12;
-        let output = render_command_providers("cmd", &result, Some(10));
-        assert!(output.contains("10 shown"), "output: {output}");
-        assert!(output.contains("12 total"), "output: {output}");
-    }
-
-    // render_command_providers: --all (no limit) shows all rows, no truncation line.
-    #[test]
-    fn render_all_no_truncation() {
+    fn render_shows_all_received_providers() {
         let providers: Vec<_> = (0..15)
             .map(|i| make_provider(&format!("pkg{i}"), &format!("pkg{i}"), false))
             .collect();
         let result = make_result("cmd", providers, true);
-        let output = render_command_providers("cmd", &result, None);
-        assert!(!output.contains("shown"), "should not truncate: {output}");
+        let output = render_command_providers("cmd", &result);
         assert!(output.contains("pkg14"), "all providers shown: {output}");
+        assert!(!output.contains("shown,"), "no truncation line: {output}");
     }
 
     // render_command_providers: output body never mentions "flox search".
-    // The search hint appears only in the eprintln truncation line, not in the body.
+    // The search hint appears only in the eprintln truncation hint, not the body.
     #[test]
     fn render_body_excludes_search_hint() {
         let result = make_result("rg", vec![make_provider("ripgrep", "ripgrep", false)], true);
-        let output = render_command_providers("rg", &result, Some(DISAMBIGUATION_LIMIT));
+        let output = render_command_providers("rg", &result);
         assert!(
             !output.contains("flox search"),
             "body should not mention flox search"

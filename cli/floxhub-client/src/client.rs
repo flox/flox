@@ -234,12 +234,15 @@ pub trait CatalogClientTrait {
 
     /// Find packages that provide a named command.
     ///
-    /// Unlike [`Self::search`], the endpoint is not paginated: a single
-    /// response carries every provider it knows about.
+    /// `limit` controls how many providers are returned:
+    /// - `Some(n)` fetches a single page of at most `n` providers
+    ///   (cheap; total_count is still the full catalog total).
+    /// - `None` pages through the full result set and returns all providers.
     async fn by_command(
         &self,
         command_name: impl AsRef<str> + Send + Sync,
         system: api_types::PackageSystem,
+        limit: Option<NonZeroU32>,
     ) -> Result<ByCommandResult, ByCommandError>;
 
     /// Get all versions of an attr_path.
@@ -434,23 +437,82 @@ impl CatalogClientTrait for FloxhubClient {
         &self,
         command_name: impl AsRef<str> + Send + Sync,
         system: api_types::PackageSystem,
+        limit: Option<NonZeroU32>,
     ) -> Result<ByCommandResult, ByCommandError> {
         tracing::debug!(
             command_name = command_name.as_ref().to_string(),
             ?system,
+            ?limit,
             "sending by-command request"
         );
         let command_name = api_types::Name::from_str(command_name.as_ref())
             .map_err(ByCommandError::InvalidCommandName)?;
 
-        let response = self
-            .catalog
-            .by_command_api_v1_catalog_by_command_get(&command_name, None, None, system)
-            .await
-            .map_api_error()
-            .await?;
-
-        Ok(response.into_inner())
+        match limit {
+            Some(page_size) => {
+                let response = self
+                    .catalog
+                    .by_command_api_v1_catalog_by_command_get(
+                        &command_name,
+                        Some(0),
+                        Some(page_size.get() as i64),
+                        system,
+                    )
+                    .await
+                    .map_api_error()
+                    .await?;
+                Ok(response.into_inner())
+            },
+            None => {
+                // Collect all providers across pages.
+                let page_size = RESPONSE_PAGE_SIZE.get() as i64;
+                // Fetch the first page to initialise the stable fields.
+                let first = self
+                    .catalog
+                    .by_command_api_v1_catalog_by_command_get(
+                        &command_name,
+                        Some(0),
+                        Some(page_size),
+                        system,
+                    )
+                    .await
+                    .map_api_error()
+                    .await?
+                    .into_inner();
+                let listing_known = first.listing_known;
+                let command_name_str = first.command_name;
+                let total_count = first.total_count;
+                let mut all_providers = first.providers;
+                // Fetch subsequent pages until we have all providers.
+                let mut page = 1i64;
+                while (all_providers.len() as i64) < total_count {
+                    let next = self
+                        .catalog
+                        .by_command_api_v1_catalog_by_command_get(
+                            &command_name,
+                            Some(page),
+                            Some(page_size),
+                            system,
+                        )
+                        .await
+                        .map_api_error()
+                        .await?
+                        .into_inner();
+                    let page_len = next.providers.len();
+                    all_providers.extend(next.providers);
+                    if page_len < page_size as usize {
+                        break;
+                    }
+                    page += 1;
+                }
+                Ok(ByCommandResult {
+                    command_name: command_name_str,
+                    listing_known,
+                    providers: all_providers,
+                    total_count,
+                })
+            },
+        }
     }
 
     async fn package_versions(

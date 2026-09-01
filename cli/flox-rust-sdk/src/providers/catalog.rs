@@ -256,6 +256,7 @@ impl CatalogClientTrait for MockClient {
         &self,
         _command_name: impl AsRef<str> + Send + Sync,
         _system: PackageSystem,
+        _limit: Option<std::num::NonZeroU32>,
     ) -> Result<ByCommandResult, ByCommandError> {
         let mock_resp = self
             .mock_responses
