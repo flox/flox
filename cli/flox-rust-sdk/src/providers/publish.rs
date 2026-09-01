@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
 use std::str::FromStr;
@@ -126,16 +126,22 @@ pub trait Publisher {
     ) -> Result<PackageCreatedGuard, PublishError>;
     /// Publish a built package.
     ///
+    /// `locked_inputs` is the subset of the project catalog lock the
+    /// package's expression selects, computed at publish time; empty for
+    /// builds that resolve no catalog inputs.
+    ///
     /// Returns `true` when the caller should wait for an external publisher
     /// to confirm completion (Publisher mode), or `false` when the CLI has
     /// already populated the catalog directly and no wait is needed
     /// (NixCopy and MetadataOnly modes).
+    #[allow(clippy::too_many_arguments)]
     async fn publish(
         &self,
         client: &impl CatalogClientTrait,
         catalog_name: &str,
         package_created: PackageCreatedGuard,
         build_metadata: &CheckedBuildMetadata,
+        locked_inputs: &BTreeMap<String, LockedInputEntry>,
         key_file: Option<PathBuf>,
         metadata_only: bool,
     ) -> Result<bool, PublishError>;
@@ -212,10 +218,6 @@ pub struct CheckedBuildMetadata {
     pub unfree: Option<bool>,
 
     pub version: Option<String>,
-
-    /// The direct catalog inputs the build locked, keyed by locked-input
-    /// reference. Empty for build modes that resolve no catalog inputs.
-    pub direct_catalog_inputs: HashMap<String, LockedInputEntry>,
 
     // This field isn't "pub", so no one outside this module can construct this struct. That helps
     // ensure that we can only make this struct as a result of doing the "right thing."
@@ -633,12 +635,14 @@ where
     ///
     /// Returns `true` when the caller should poll for publisher confirmation,
     /// `false` when the CLI already populated the catalog (NixCopy/MetadataOnly).
+    #[allow(clippy::too_many_arguments)]
     async fn publish(
         &self,
         client: &impl CatalogClientTrait,
         catalog_name: &str,
         _package_created: PackageCreatedGuard,
         build_metadata: &CheckedBuildMetadata,
+        locked_inputs: &BTreeMap<String, LockedInputEntry>,
         key_file: Option<PathBuf>,
         metadata_only: bool,
     ) -> Result<bool, PublishError> {
@@ -690,10 +694,12 @@ where
                 version: build_metadata.version.clone(),
             },
             locked_base_catalog_url: Some(self.package_metadata.base_catalog_ref.to_string()),
-            // Record the build's direct catalog inputs. Always sent: an empty
-            // map when the build resolved none. Older CLIs that omit the field
-            // are coalesced to empty server-side (floxhub#1791).
-            locked_inputs: Some(build_metadata.direct_catalog_inputs.clone()),
+            // Record the subset of the project catalog lock this package's
+            // expression selects. Always sent: an empty map when the build
+            // resolved none. Older CLIs that omit the field are coalesced to
+            // empty server-side (floxhub#1791). The wire type is a HashMap;
+            // ordering on the wire is meaningless.
+            locked_inputs: Some(locked_inputs.clone().into_iter().collect()),
             base_catalog_rev_count: None,
             base_catalog_rev_date: None,
             url: self.env_metadata.build_repo_meta.url.to_string(),
@@ -890,7 +896,6 @@ fn convert_build_result_to_build_metadata(
             PublishError::UnsupportedEnvironmentState("Invalid system".to_string())
         })?,
         version: Some(build_result.version.clone()),
-        direct_catalog_inputs: build_result.direct_catalog_inputs.clone(),
         _private: (),
     })
 }
@@ -921,7 +926,7 @@ pub fn check_build_metadata(
     system_override: Option<String>,
     env_metadata: &CheckedEnvironmentMetadata,
     pkg: &PackageTarget,
-    nef_stability: Option<String>,
+    catalog_lockfile: Option<&Path>,
 ) -> Result<CheckedBuildMetadata, PublishError> {
     let workdir = if sandbox_is_local(pkg) {
         BuildWorkdir::SharedClone
@@ -946,9 +951,9 @@ pub fn check_build_metadata(
         &base_nixpkgs_url.as_flake_ref()?,
         &built_environments.dev,
         &[pkg.name()],
-        // Lock the NEF catalog inputs at the stability selected for publish, so
-        // the recorded inputs match the build the user intends to publish.
-        nef_stability,
+        // The catalog lock the CLI created for this publish; its subset is
+        // what gets submitted, so the build consumes the same inputs.
+        catalog_lockfile,
         Some(false),
         system_override,
     )?;
@@ -1813,6 +1818,7 @@ pub mod tests {
                 &catalog_name,
                 package_created,
                 &build_metadata,
+                &BTreeMap::new(),
                 None,
                 false,
             )
@@ -2015,7 +2021,6 @@ pub mod tests {
             broken: Some(false),
             insecure: None,
             unfree: None,
-            direct_catalog_inputs: HashMap::new(),
             _private: (),
         };
 
@@ -2087,6 +2092,7 @@ pub mod tests {
                 &catalog_name,
                 package_created,
                 &build_metadata,
+                &BTreeMap::new(),
                 None,
                 false,
             )
@@ -2242,6 +2248,7 @@ pub mod tests {
                 &catalog_name,
                 package_created,
                 &build_metadata,
+                &BTreeMap::new(),
                 cache.local_signing_key_path(),
                 false,
             )
@@ -2521,6 +2528,7 @@ pub mod tests {
                 &user_handle,
                 packaged_created_guard,
                 &build_meta,
+                &BTreeMap::new(),
                 None,
                 // Server returns meta-only store config; narinfo collected
                 // from FIXED_TEST_STORE_PATH in the local daemon store.
@@ -2561,6 +2569,7 @@ pub mod tests {
                 TEST_READ_WRITE_CATALOG_NAME,
                 packaged_created_guard,
                 &build_meta,
+                &BTreeMap::new(),
                 None,
                 // Server returns meta-only store config; narinfo collected
                 // from FIXED_TEST_STORE_PATH in the local daemon store.
@@ -2628,6 +2637,7 @@ pub mod tests {
                 TEST_READ_WRITE_CATALOG_NAME,
                 packaged_created_guard,
                 &build_meta,
+                &BTreeMap::new(),
                 None,
                 // Server returns meta-only store config; narinfo collected
                 // from FIXED_TEST_STORE_PATH in the local daemon store.
@@ -2643,6 +2653,7 @@ pub mod tests {
                 // a new one.
                 PackageCreatedGuard { _private: () },
                 &build_meta,
+                &BTreeMap::new(),
                 None,
                 // Server returns meta-only store config; narinfo collected
                 // from FIXED_TEST_STORE_PATH in the local daemon store.
@@ -2677,6 +2688,7 @@ pub mod tests {
                 &user_handle,
                 PackageCreatedGuard { _private: () },
                 &build_meta,
+                &BTreeMap::new(),
                 None,
                 // Server returns meta-only store config; narinfo collected
                 // from FIXED_TEST_STORE_PATH in the local daemon store.

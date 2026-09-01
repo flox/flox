@@ -82,6 +82,20 @@ impl AttrPath {
         self.0.len()
     }
 
+    /// The raw attribute names of this path, in order, with any trailing
+    /// wildcard omitted. Names come back exactly as written (unquoted), for
+    /// comparison against attribute names from other sources — e.g. a locked
+    /// entry's `attr_path` — rather than for rendering.
+    pub(crate) fn attribute_names(&self) -> Vec<&str> {
+        self.0
+            .iter()
+            .filter_map(|component| match component {
+                Component::Attribute(name) => Some(name.as_str()),
+                Component::Wildcard => None,
+            })
+            .collect()
+    }
+
     /// Whether resolution stopped short of naming the path's last component.
     pub(crate) fn is_wildcard(&self) -> bool {
         self.0.last() == Some(&Component::Wildcard)

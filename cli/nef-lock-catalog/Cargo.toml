@@ -23,3 +23,7 @@ flox-core = {path = "../flox-core"}
 rnix.workspace = true
 rowan.workspace = true
 tokio.workspace = true
+
+[dev-dependencies]
+floxhub-client = { path = "../floxhub-client", features = ["tests"] }
+tempfile.workspace = true

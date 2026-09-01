@@ -87,8 +87,11 @@ Published packages on FloxHub are also available as catalog imports for
 Nix expression builds.
 Other environments reference the published packages as
 `catalogs.<catalog>.<package>` in `.nix` expressions under `.flox/pkgs/`.
-These references are resolved and locked automatically during
-`flox build` and `flox publish`.
+These references are pinned by a committed `.flox/catalog.lock` when the
+project has one (see `flox build update-catalogs`), and are otherwise
+resolved fresh during the build.
+`flox publish` submits the entries relevant to the published package along
+with the build.
 
 ## Sharing published packages
 

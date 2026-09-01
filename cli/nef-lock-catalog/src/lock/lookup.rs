@@ -17,7 +17,6 @@ use floxhub_client::{
     FloxhubClientError,
     LookupGroup,
     ReferencesItem,
-    Stability,
     UnresolvableEntry,
 };
 use tracing::{debug, instrument};
@@ -53,19 +52,12 @@ pub enum LockError {
 /// Builds the wire request internally (one synthetic group), performs one
 /// `/build-inputs/lookup` call, and maps the response to a [BuildLock].
 /// Returns [LockError::Unresolvable] if any reference is unresolvable.
-///
-/// `stability` is the typed [Stability] parsed at the CLI boundary, so this
-/// function cannot fail on an invalid stability string.
-#[instrument(
-    skip(client, references),
-    fields(references = references.len(), stability = stability.as_str())
-)]
+#[instrument(skip(client, references), fields(references = references.len()))]
 pub async fn lock_references(
-    client: &(impl CatalogClientTrait + Send + Sync),
+    client: &impl CatalogClientTrait,
     references: BTreeSet<CatalogRef>,
-    stability: Stability,
 ) -> Result<BuildLock, LockError> {
-    let request = build_request(references, stability);
+    let request = build_request(references);
     // The exact JSON POSTed to `/build-inputs/lookup`, for `--verbose`. Guarded
     // so the request is only serialized when the level is enabled.
     if tracing::enabled!(tracing::Level::DEBUG) {
@@ -86,10 +78,7 @@ pub async fn lock_references(
 /// `reference_point` is defaulted to `None` for now. The endpoint is
 /// system-independent: the response carries source revs + DAG edges, which
 /// carry no system, so the request has no system field.
-fn build_request(
-    references: BTreeSet<CatalogRef>,
-    stability: Stability,
-) -> BuildInputsLookupRequest {
+fn build_request(references: BTreeSet<CatalogRef>) -> BuildInputsLookupRequest {
     let group = LookupGroup {
         key: LOOKUP_GROUP_KEY.to_string(),
         references: references.iter().map(wire_reference).collect(),
@@ -98,7 +87,12 @@ fn build_request(
     BuildInputsLookupRequest {
         groups: vec![group],
         reference_point: None,
-        stability,
+        // Catalog-input resolution is independent of the nixpkgs base-catalog
+        // stability, but the OpenAPI spec still marks `stability` as a
+        // required request field. The field is in the process of being
+        // deprecated on the server side and in the spec; until that
+        // coordinated change lands, send the constant "stable".
+        stability: "stable".parse().expect("constant stability parses"),
     }
 }
 
@@ -109,17 +103,13 @@ fn build_request(
 /// namespace is catalog-relative (`<catalog>.<package>`). Drop the leading root
 /// segment so the request matches what the server expects.
 fn wire_reference(reference: &CatalogRef) -> ReferencesItem {
-    // A reference always has a root to drop; that is what makes it one. An
-    // attribute Nix would not read bare goes out quoted, which the dotted wire
-    // format needs to stay unambiguous — it cannot express a name containing a
-    // `.` any other way.
-    let relative = reference
-        .path()
-        .pop_root()
-        .expect("a reference names something under its root")
-        .to_string();
+    // An attribute Nix would not read bare goes out quoted, which the dotted
+    // wire format needs to stay unambiguous — it cannot express a name
+    // containing a `.` any other way.
+    //
     // Catalog paths are well below the 1024-char wire limit.
-    relative
+    reference
+        .wire_key()
         .parse()
         .expect("catalog reference exceeded 1024 chars")
 }
@@ -170,7 +160,7 @@ mod tests {
             CatalogRef::new_unchecked("catalogs.myorg.world"),
         ]);
 
-        let wire = build_request(references, "stable".parse().unwrap());
+        let wire = build_request(references);
 
         // All references collapse into a single wire group, and the leading
         // `catalogs` root segment is dropped — the server's reference namespace
@@ -211,6 +201,33 @@ mod tests {
                 "ref": "refs/heads/main",
                 "dir": "."
             })
+        );
+    }
+
+    /// The reference that produced the lock must select its entry back out
+    /// of it. The server keys `direct_catalog_inputs` canonically
+    /// (`myorg/hello`) while the reference renders dotted (`myorg.hello`) —
+    /// the two namespaces must never be conflated, and only a fixture-shaped
+    /// lock can catch it.
+    #[test]
+    fn success_fixture_subsets_by_its_own_reference() {
+        let response: BuildInputsLookupResponse = serde_json::from_str(include_str!(
+            "../../test_data/build_inputs_lookup/success.json"
+        ))
+        .expect("success fixture deserializes");
+        let lock = lock_from_response(response).expect("success fixture locks");
+
+        let references = BTreeSet::from([CatalogRef::new_unchecked("catalogs.myorg.hello")]);
+        let subset = lock
+            .subset_direct(&references)
+            .expect("the lock's own reference is covered");
+
+        assert_eq!(subset.keys().collect::<Vec<_>>(), vec![
+            &"myorg/hello".to_string()
+        ]);
+        assert_eq!(
+            subset["myorg/hello"],
+            lock.direct_catalog_inputs["myorg/hello"]
         );
     }
 

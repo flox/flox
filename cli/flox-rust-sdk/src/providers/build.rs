@@ -10,7 +10,7 @@ use flox_manifest::parsed::Inner;
 use flox_manifest::parsed::common::DEFAULT_GROUP_NAME;
 use flox_manifest::parsed::latest::BuildSandbox;
 use flox_manifest::{Manifest, MigratedTypedOnly};
-use floxhub_client::{BaseCatalogUrl, LockedInputEntry};
+use floxhub_client::BaseCatalogUrl;
 use indoc::formatdoc;
 use itertools::Itertools;
 use nef_lock_catalog::NixFlakeref;
@@ -65,16 +65,17 @@ pub trait ManifestBuilder {
     /// at Makefile parse time without requiring a second `nix eval` discovery
     /// call.
     ///
-    /// `nef_stability` is the stability used to resolve the catalog build
-    /// inputs of NEF (expression) builds, as selected by the `--stability`
-    /// flag. When [None] the Makefile falls back to its default stability.
+    /// `catalog_lockfile` is the catalog lock the build's NEF evals consume,
+    /// created by the CLI (the committed .flox/catalog.lock, or a fresh
+    /// ephemeral lock) and passed through as `CATALOG_LOCKFILE`. Required
+    /// whenever the project has Nix expression builds.
     #[allow(clippy::too_many_arguments)]
     fn build(
         self,
         expression_build_nixpkgs: &Url,
         flox_interpreter: &Path,
         packages: &[PackageTargetName],
-        nef_stability: Option<String>,
+        catalog_lockfile: Option<&Path>,
         build_cache: Option<bool>,
         system_override: Option<String>,
     ) -> Result<BuildResults, ManifestBuilderError>;
@@ -130,11 +131,6 @@ pub struct BuildResult {
     pub version: String,
     pub system: String,
     pub log: BuiltStorePath,
-    /// The direct catalog inputs the build locked, keyed by locked-input
-    /// reference. Emitted by NEF builds; absent (and so empty) for build modes
-    /// that resolve no catalog inputs.
-    #[serde(rename = "direct_catalog_inputs", default)]
-    pub direct_catalog_inputs: HashMap<String, LockedInputEntry>,
     // TODO: factor out and use buildenv::BuiltStorePath (?)
     #[serde(rename = "resultLinks")]
     pub result_links: BTreeMap<PathBuf, PathBuf>,
@@ -296,6 +292,53 @@ impl FloxBuildMk<'_> {
 
         command
     }
+
+    /// Spawn `command`, mirroring its stdout/stderr into the builder's
+    /// buffers when provided, and wait for it to exit. Consumes the builder,
+    /// so goals call this last, after all arguments are assembled.
+    fn run_to_completion(self, mut command: Command) -> Result<ExitStatus, ManifestBuilderError> {
+        if self.stdout_buffer.is_some() {
+            command.stdout(Stdio::piped());
+        }
+        if self.stderr_buffer.is_some() {
+            command.stderr(Stdio::piped());
+        }
+
+        let mut child = command
+            .spawn()
+            .map_err(ManifestBuilderError::CallBuilderError)?;
+
+        // setup `WireTap` for stdout
+        let stdout_tap_context = self.stdout_buffer.map(|buffer| {
+            let stdout = child
+                .stdout
+                .take()
+                .expect("STDOUT is piped when stdout_buffer is provided");
+            let tap = stdout.tap_lines(|_| {});
+            (tap, buffer)
+        });
+
+        // setup `WireTap` for stderr
+        let stderr_tap_context = self.stderr_buffer.map(|buffer| {
+            let stderr = child
+                .stderr
+                .take()
+                .expect("STDERR is piped when stdout_buffer is provided");
+            let tap = stderr.tap_lines(|_| {});
+            (tap, buffer)
+        });
+
+        // **After** taps have been started for std{out,err},
+        // read until EOF on both outputs, i.e. wait until the process terminates.
+        if let Some((tap, buffer)) = stdout_tap_context {
+            *buffer = tap.wait()
+        }
+        if let Some((tap, buffer)) = stderr_tap_context {
+            *buffer = tap.wait()
+        }
+
+        child.wait().map_err(ManifestBuilderError::CallBuilderError)
+    }
 }
 
 impl ManifestBuilder for FloxBuildMk<'_> {
@@ -329,7 +372,7 @@ impl ManifestBuilder for FloxBuildMk<'_> {
         expression_build_nixpkgs_url: &Url,
         flox_interpreter: &Path,
         packages: &[PackageTargetName],
-        nef_stability: Option<String>,
+        catalog_lockfile: Option<&Path>,
         build_cache: Option<bool>,
         system_override: Option<String>,
     ) -> Result<BuildResults, ManifestBuilderError> {
@@ -340,11 +383,11 @@ impl ManifestBuilder for FloxBuildMk<'_> {
             "EXPRESSION_BUILD_NIXPKGS_URL={expression_build_nixpkgs_url}"
         ));
 
-        // The stability used to resolve NEF catalog build inputs. Only passed
-        // when the caller selected one via `--stability`; otherwise the
-        // Makefile applies its own default.
-        if let Some(nef_stability) = nef_stability {
-            command.arg(format!("EXPRESSION_BUILD_STABILITY={nef_stability}"));
+        // The catalog lock the NEF evals consume. The CLI owns the lock's
+        // lifecycle; the package builder requires the path whenever the
+        // project has expression builds.
+        if let Some(catalog_lockfile) = catalog_lockfile {
+            command.arg(format!("CATALOG_LOCKFILE={}", catalog_lockfile.display()));
         }
 
         if let Some(system_override) = system_override {
@@ -390,52 +433,9 @@ impl ManifestBuilder for FloxBuildMk<'_> {
             command.arg("DISABLE_BUILDCACHE=true");
         }
 
-        if self.stdout_buffer.is_some() {
-            command.stdout(Stdio::piped());
-        }
-
-        if self.stderr_buffer.is_some() {
-            command.stderr(Stdio::piped());
-        }
-
         debug!(command = %command.display(), "running manifest build target");
 
-        let mut child = command
-            .spawn()
-            .map_err(ManifestBuilderError::CallBuilderError)?;
-
-        // setup `WireTap` for stdout
-        let stdout_tap_context = self.stdout_buffer.map(|buffer| {
-            let stdout = child
-                .stdout
-                .take()
-                .expect("STDOUT is piped when stdout_buffer is provided");
-            let tap = stdout.tap_lines(|_| {});
-            (tap, buffer)
-        });
-
-        // setup `WireTap` for stderr
-        let stderr_tap_context = self.stderr_buffer.map(|buffer| {
-            let stderr = child
-                .stderr
-                .take()
-                .expect("STDERR is piped when stdout_buffer is provided");
-            let tap = stderr.tap_lines(|_| {});
-            (tap, buffer)
-        });
-
-        // **After** taps have been started for std{out,err},
-        // read until EOF on both outputs, i.e. wait until the process terminates.
-        if let Some((tap, buffer)) = stdout_tap_context {
-            *buffer = tap.wait()
-        }
-        if let Some((tap, buffer)) = stderr_tap_context {
-            *buffer = tap.wait()
-        }
-
-        let status = child
-            .wait()
-            .map_err(ManifestBuilderError::CallBuilderError)?;
+        let status = self.run_to_completion(command)?;
 
         if !status.success() {
             return Err(ManifestBuilderError::BuildFailure { status });
@@ -549,7 +549,13 @@ impl ManifestBuilder for FloxBuildMk<'_> {
 /// Available expression builds are discovered with in this directory
 /// (see [get_nix_expression_targets] for the discovery results).
 pub fn nix_expression_dir(environment: &impl Environment) -> PathBuf {
-    environment.dot_flox_path().join("pkgs")
+    nix_expression_dir_in(environment.dot_flox_path())
+}
+
+/// The expression directory within a `.flox` directory, for callers that
+/// hold the path rather than the environment.
+pub fn nix_expression_dir_in(dot_flox_path: impl AsRef<Path>) -> PathBuf {
+    dot_flox_path.as_ref().join("pkgs")
 }
 
 pub fn build_symlink_path(
@@ -869,6 +875,7 @@ pub mod test_helpers {
         env: &mut PathEnvironment,
         expression_ref: &NixFlakeref,
         package: &str,
+        catalog_lockfile: Option<&Path>,
         build_cache: Option<bool>,
         expect_success: bool,
     ) -> CollectedOutput {
@@ -876,6 +883,19 @@ pub mod test_helpers {
             find_toplevel_group_nixpkgs(&env.lockfile(flox).unwrap().into())
                 .map(|toplevel_nixpkgs| toplevel_nixpkgs.as_flake_ref().unwrap())
                 .unwrap_or_else(|| COMMON_NIXPKGS_URL.clone());
+
+        // NEF builds require a CLI-provided catalog lock; expressions with no
+        // catalog references consume an empty one, so write that default for
+        // callers that need nothing more.
+        let empty_lock_path = flox.temp_dir.join("empty-catalog.lock");
+        let catalog_lockfile = catalog_lockfile.unwrap_or_else(|| {
+            std::fs::write(
+                &empty_lock_path,
+                "{\"version\": 1, \"direct_catalog_inputs\": {}, \"catalogs\": {}}\n",
+            )
+            .unwrap();
+            &empty_lock_path
+        });
 
         let mut output_stdout = String::new();
         let mut output_stderr = String::new();
@@ -893,7 +913,7 @@ pub mod test_helpers {
             &toplevel_or_common_nixpkgs,
             &env.rendered_env_links(flox).unwrap().dev,
             &[PackageTargetName::new_unchecked(&package)],
-            None,
+            Some(catalog_lockfile),
             build_cache,
             None,
         );
@@ -934,6 +954,7 @@ pub mod test_helpers {
             env,
             &NixFlakeref::from_path(env.dot_flox_path()).unwrap(),
             package_name,
+            None,
             build_cache,
             expect_success,
         )
@@ -1002,7 +1023,17 @@ pub mod test_helpers {
         base: impl AsRef<Path>,
         expressions: &[(&[&str], &str)],
     ) -> NixFlakeref {
-        let all_expressions_base_dir = tempdir_in(&base).unwrap().keep();
+        prepare_nix_expressions_dir_in(base, expressions).1
+    }
+
+    /// As [prepare_nix_expressions_in], additionally returning the directory
+    /// the expressions were written to, for tests that must reach the files
+    /// themselves — e.g. to commit them as a package's fetchable source.
+    pub fn prepare_nix_expressions_dir_in(
+        base: impl AsRef<Path>,
+        expressions: &[(&[&str], &str)],
+    ) -> (PathBuf, NixFlakeref) {
+        let all_expressions_base_dir = tempdir_in(&base).unwrap().keep().canonicalize().unwrap();
 
         for (attr_path, expr) in expressions {
             let expression_dir = all_expressions_base_dir
@@ -1012,7 +1043,8 @@ pub mod test_helpers {
             fs::write(expression_dir.join("default.nix"), expr).unwrap();
         }
 
-        NixFlakeref::from_path(all_expressions_base_dir.canonicalize().unwrap()).unwrap()
+        let expressions_ref = NixFlakeref::from_path(&all_expressions_base_dir).unwrap();
+        (all_expressions_base_dir, expressions_ref)
     }
 
     /// Create a flakeref that provides no expressions
@@ -1794,6 +1826,7 @@ mod tests {
 
         let cache_dir = cache_dir(&env_path, &package_name);
         assert!(cache_dir.exists());
+
         fs::remove_file(cache_dir).unwrap();
 
         assert_build_status(&flox, &mut env, &package_name, None, true);
@@ -3932,9 +3965,12 @@ mod tests {
 
 #[cfg(test)]
 mod nef_tests {
+    use std::collections::HashMap;
     use std::fs;
 
+    use floxhub_client::LockedInputEntry;
     use indoc::{formatdoc, indoc};
+    use nef_lock_catalog::{build_lock_from_locked_inputs, write_lock};
     use pretty_assertions::assert_eq;
 
     use super::*;
@@ -3942,8 +3978,105 @@ mod nef_tests {
     use crate::models::environment::path_environment::test_helpers::new_path_environment;
     use crate::providers::build::test_helpers::{
         assert_build_status_with_nix_expr,
+        prepare_nix_expressions_dir_in,
         prepare_nix_expressions_in,
     };
+    use crate::providers::git::tests::test_git_options;
+    use crate::providers::git::{GitCommandProvider, GitProvider};
+
+    /// Write a catalog lock pinning `catalogs.myorg.hello` to `source_dir`
+    /// at its current revision: the lock the CLI hands the package builder
+    /// as CATALOG_LOCKFILE, assembled from one locked catalog entry the way
+    /// a real resolution assembles it — so the fixture cannot drift from the
+    /// lock format — with no catalog involved. The entry is keyed in the
+    /// server's canonical `<catalog>/<attr-path>` form, which the expression
+    /// references in dot-rendered form.
+    fn write_catalog_lock(path: &Path, repo: &GitCommandProvider, source_dir: &Path) {
+        let status = repo.status().unwrap();
+        let entry: LockedInputEntry = serde_json::from_value(serde_json::json!({
+            "attr_path": ["hello"],
+            "build_type": "nef",
+            "catalog": "myorg",
+            "locked_inputs_hash": "sha256-test-fixture",
+            "source": {
+                "dir": ".",
+                "ref": status
+                    .ref_
+                    .expect("freshly committed repo has a symbolic HEAD ref"),
+                "rev": status.rev,
+                "type": "git",
+                "url": Url::from_file_path(source_dir).unwrap().as_str(),
+            },
+        }))
+        .unwrap();
+
+        let key = "myorg/hello".to_string();
+        let lock =
+            build_lock_from_locked_inputs(HashMap::from([(key.clone(), entry)]), [&key]).unwrap();
+        write_lock(&lock, path).unwrap();
+    }
+
+    /// The build consumes the catalog lock it is handed: the NEF eval reads
+    /// CATALOG_LOCKFILE, fetches the source the lock pins and builds against
+    /// it, leaving the lock file untouched. Where that lock comes from — the
+    /// committed `.flox/catalog.lock` or a fresh ephemeral resolution — is
+    /// the CLI's concern, covered by the lock's own unit tests.
+    #[test]
+    fn nef_build_consumes_the_supplied_catalog_lock() {
+        let pname = "foo";
+
+        let (flox, tempdir) = flox_instance();
+        let manifest = formatdoc! {r#"
+            version = 1
+        "#};
+        let mut env = new_path_environment(&flox, &manifest);
+        let env_path = env.parent_path().unwrap();
+
+        // `foo` references a catalog input; `hello` is the package that
+        // reference resolves to. The directory hosting both doubles as
+        // `hello`'s git-fetchable source, so the build resolves the
+        // reference for real with no network access.
+        let (expressions_dir, expressions_ref) = prepare_nix_expressions_dir_in(&tempdir, &[
+            (&[pname], indoc! {r#"
+                {catalogs, runCommand}: runCommand "foo" {} ''
+                    echo -n "Hello, World!" >> $out
+                    cat ${catalogs.myorg.hello} >> $out
+                ''
+                "#}),
+            (&["hello"], indoc! {r#"
+                {runCommand}: runCommand "hello" {} ''
+                    echo -n "Hello from the catalog" > $out
+                ''
+                "#}),
+        ]);
+        let repo =
+            GitCommandProvider::init_with(test_git_options(), &expressions_dir, false).unwrap();
+        repo.add(&[&expressions_dir]).unwrap();
+        repo.commit("add nef catalog fixtures").unwrap();
+
+        let lockfile = tempdir.path().join("catalog.lock");
+        write_catalog_lock(&lockfile, &repo, &expressions_dir);
+        let lock_bytes = fs::read(&lockfile).unwrap();
+
+        assert_build_status_with_nix_expr(
+            &flox,
+            &mut env,
+            &expressions_ref,
+            pname,
+            Some(&lockfile),
+            None,
+            true,
+        );
+
+        let result_path = env_path.join(format!("result-{pname}"));
+        let content = fs::read_to_string(result_path).unwrap();
+        assert_eq!(content, "Hello, World!Hello from the catalog");
+        assert_eq!(
+            fs::read(&lockfile).unwrap(),
+            lock_bytes,
+            "the build must not rewrite the lock it is handed"
+        );
+    }
 
     #[test]
     fn nef_build_creates_out_link() {
@@ -3971,6 +4104,7 @@ mod nef_tests {
             &mut env,
             &expressions_ref,
             &pname,
+            None,
             None,
             true,
         );
@@ -4017,6 +4151,7 @@ mod nef_tests {
             &expressions_ref,
             &pname,
             None,
+            None,
             true,
         );
 
@@ -4058,6 +4193,7 @@ mod nef_tests {
             &expressions_ref,
             &pname,
             None,
+            None,
             true,
         );
 
@@ -4098,6 +4234,7 @@ mod nef_tests {
             &expressions_ref,
             &eval_failure,
             None,
+            None,
             false,
         );
 
@@ -4107,6 +4244,7 @@ mod nef_tests {
             &mut env,
             &expressions_ref,
             &eval_success,
+            None,
             None,
             true,
         );
@@ -4146,6 +4284,7 @@ mod nef_tests {
             &mut env,
             &expressions_ref,
             pname_manifest_build,
+            None,
             None,
             true,
         );

@@ -62,6 +62,20 @@ impl CatalogRef {
         &self.0
     }
 
+    /// The catalog-relative rendering of this reference: the path with its
+    /// root dropped, dot-joined — the form the catalog server's lookup
+    /// request takes. NOTE: this is not how a lock's `direct_catalog_inputs`
+    /// is keyed; the server keys results canonically as
+    /// `<catalog>/<attr-path>` (see the `matched` map, which relates the two
+    /// namespaces).
+    pub(crate) fn wire_key(&self) -> String {
+        // A reference always has a root to drop; that is what makes it one.
+        self.0
+            .pop_root()
+            .expect("a reference names something under its root")
+            .to_string()
+    }
+
     /// Build a reference without checking the invariant, so tests can state
     /// their expectations as literals.
     #[cfg(test)]

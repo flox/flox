@@ -45,7 +45,6 @@ __gnugrep := @gnugrep@
 __gnused := @gnused@
 __gnutar := @gnutar@
 __jq := @jq@
-__nefLockCatalog := @nefLockCatalog@
 __nix := @nix@
 __t3 := @t3@
 
@@ -55,8 +54,6 @@ __t3 := @t3@
 # substitution was successful, and if not then it will fall back to finding
 # the required tool from the PATH for use in the developer environment.
 __package_bin = $(if $(filter @%@,$(1)),$(2),$(1)/bin/$(2))
-# As __package_bin, but for binaries installed under libexec rather than bin.
-__package_libexec_bin = $(if $(filter @%@,$(1)),$(2),$(1)/libexec/$(2))
 _bash := $(call __package_bin,$(__bash),bash)
 _cat := $(call __package_bin,$(__coreutils),cat)
 _chmod := $(call __package_bin,$(__coreutils),chmod)
@@ -71,7 +68,6 @@ _git := $(call __package_bin,$(__gitMinimal),git)
 _grep := $(call __package_bin,$(__gnugrep),grep)
 _head := $(call __package_bin,$(__coreutils),head)
 _jq := $(call __package_bin,$(__jq),jq)
-_lock := $(call __package_libexec_bin,$(__nefLockCatalog),lock)
 _mkdir := $(call __package_bin,$(__coreutils),mkdir)
 _mktemp := $(call __package_bin,$(__coreutils),mktemp)
 _mv := $(call __package_bin,$(__coreutils),mv)
@@ -119,13 +115,6 @@ OS := $(shell $(_uname) -s)
 NIX_SYSTEM_CURRENT := $(shell $(_nix) config show system)
 ifeq (,$(NIX_SYSTEM))
   NIX_SYSTEM = $(NIX_SYSTEM_CURRENT)
-endif
-
-# Stability used to resolve the catalog build inputs of NEF builds. The flox
-# CLI passes this through from the --stability flag; default to "unstable"
-# when it is not provided.
-ifeq (,$(EXPRESSION_BUILD_STABILITY))
-  EXPRESSION_BUILD_STABILITY = unstable
 endif
 
 # Set the default goal to be all builds if one is not specified.
@@ -210,10 +199,24 @@ usage:
 .PHONY: $(PROJECT_TMPDIR)/check-build-prerequisites
 $(PROJECT_TMPDIR)/check-build-prerequisites:
 	@# The BUILD_RESULT_FILE must be defined and exist.
-	$(if $(BUILD_RESULT_FILE), \
-	  $(if $(wildcard $(BUILD_RESULT_FILE)),, \
-	    $(error BUILD_RESULT_FILE $(BUILD_RESULT_FILE) not found), \
-	  $(error BUILD_RESULT_FILE not defined)))
+	$(if $(BUILD_RESULT_FILE),,$(error BUILD_RESULT_FILE not defined))
+	$(if $(wildcard $(BUILD_RESULT_FILE)),, \
+	  $(error BUILD_RESULT_FILE $(BUILD_RESULT_FILE) not found))
+	@# CATALOG_LOCKFILE is the catalog lock consumed by NEF evals. The flox
+	@# CLI owns the lock's entire lifecycle — creating the committed
+	@# .flox/catalog.lock, resolving a fresh ephemeral lock for lockless
+	@# builds, and cleaning up its own temp files — and passes the path in;
+	@# the package builder only hands the file to the NEF evals, and
+	@# requires it whenever the project has Nix expression builds.
+	@# The value is either relative to the project directory this make was
+	@# started in with -C (the committed lock's '.flox/catalog.lock') or an
+	@# absolute whitespace-free temp path (an ephemeral lock), so it never
+	@# carries whitespace into make's word-splitting positions — the
+	@# $(wildcard) here and the eval rule's prerequisite list. A project
+	@# path with whitespace never appears in either.
+	$(if $(NIX_EXPRESSION_BUILDS),$(if $(CATALOG_LOCKFILE),,$(error CATALOG_LOCKFILE not defined)))
+	$(if $(NIX_EXPRESSION_BUILDS),$(if $(wildcard $(CATALOG_LOCKFILE)),, \
+	  $(error CATALOG_LOCKFILE $(CATALOG_LOCKFILE) not found)))
 	@# Check that the BUILDTIME_NIXPKGS_URL and EXPRESSION_BUILD_NIXPKGS_URL are defined.
 	$(if $(BUILDTIME_NIXPKGS_URL),,$(error BUILDTIME_NIXPKGS_URL not defined))
 	$(if $(EXPRESSION_BUILD_NIXPKGS_URL),,$(error EXPRESSION_BUILD_NIXPKGS_URL not defined))
@@ -276,7 +279,6 @@ define COMMON_BUILD_VARS_template =
   $(eval $(_pvarname)_evalJSON = $($(_pvarname)_tmpBasename)/eval.json)
   $(eval $(_pvarname)_buildJSON = $($(_pvarname)_tmpBasename)/build.json)
   $(eval $(_pvarname)_buildMetaJSON = $($(_pvarname)_tmpBasename)/build-meta.json)
-  $(eval $(_pvarname)_catalogLockfile = $($(_pvarname)_tmpBasename)/catalog.lock)
 
   # Create a temporary file for collecting log output from the build.
   $(eval $(_pvarname)_logfile = $($(_pvarname)_tmpBasename)/build.log)
@@ -828,23 +830,20 @@ define NIX_EXPRESSION_BUILD_template =
   # this with "_" for use in variable names.
   $(eval _pvarname = $(call mkVarname,$(_pname)))
 
-  # Start by calculating the catalog inputs lock.
-  $($(_pvarname)_catalogLockfile): $(PROJECT_TMPDIR)/check-build-prerequisites
-	$(_V_) $(_mkdir) -p $$(@D)
-	$(_V_) $(_lock) \
-	  --base-dir '$$(NIX_EXPRESSION_ABSDIRPATH_$(_pvarname))' \
-	  --rel-path '$$(NIX_EXPRESSION_RELFILEPATH_$(_pvarname))' \
-	  --stability '$(EXPRESSION_BUILD_STABILITY)' \
-	  --out '$$@'
-
-  # Continue by evaluating the build
-  $($(_pvarname)_evalJSON): $($(_pvarname)_catalogLockfile)
+  # Evaluate the build against the project catalog lock, listed as the
+  # first prerequisite so that make itself flags a missing lock in relation
+  # to the target being evaluated, rather than leaving `nix eval` to report
+  # the absent file without that context. The committed lock's path is
+  # relative to the project directory this make was started in with -C, so
+  # the recipe absolutizes it — nix coerces the argument to a path, which
+  # must be absolute.
+  $($(_pvarname)_evalJSON): $(CATALOG_LOCKFILE) $(PROJECT_TMPDIR)/check-build-prerequisites
 	$(_V_) $(_mkdir) -p $$(@D)
 	$(_V_) $(_nix) eval -L --file $(_nef) \
 	  --argstr nixpkgs-url '$(EXPRESSION_BUILD_NIXPKGS_URL)' \
 	  --argstr system '$(NIX_SYSTEM)' \
 	  --argstr source-ref '$(NIX_EXPRESSION_REF)' \
-	  --argstr catalog-lockfile '$$<' \
+	  --argstr catalog-lockfile '$$(abspath $$<)' \
 	  --json \
 	  --apply 'pkg: { \
 	    drvPath = pkg.drvPath; \
@@ -888,16 +887,17 @@ define NIX_EXPRESSION_BUILD_template =
 	$(_V_) $(_nix) build -L --out-link $($(_pvarname)_result)-log \
 	  $$(shell $(_nix) store add-file $($(_pvarname)_logfile))
 
-  # Following a successful build, merge in the eval json.
+  # Following a successful build, merge in the eval json. The catalog lock
+  # is the CLI's concern: it created the lock this build consumed, so
+  # nothing about it needs to travel back in the build results.
   $($(_pvarname)_buildMetaJSON): $($(_pvarname)_evalJSON) $($(_pvarname)_buildJSON) $($(_pvarname)_result)-log
 	$(_V_) $(_jq) -n \
 	  --arg system $(NIX_SYSTEM) \
-	  --slurpfile catalogLock '$$($(_pvarname)_catalogLockfile)' \
 	  --arg logfile $$(shell $(_readlink) $($(_pvarname)_result)-log) \
 	  --argjson resultLinks '$$($(_pvarname)_resultLinks_json)' \
 	  --slurpfile eval $($(_pvarname)_evalJSON) \
 	  --slurpfile build $($(_pvarname)_buildJSON) \
-	  '$$$$build[0][0] * $$$$eval[0] * { system:$$$$system, direct_catalog_inputs:$$$$catalogLock[0].direct_catalog_inputs, log:$$$$logfile, resultLinks:$$$$resultLinks }' > $$@
+	  '$$$$build[0][0] * $$$$eval[0] * { system:$$$$system, log:$$$$logfile, resultLinks:$$$$resultLinks }' > $$@
 	@echo -e "Completed build of $$(_name) in Nix expression mode\n"
 
   # Create targets for cleaning up the result and log symlinks.

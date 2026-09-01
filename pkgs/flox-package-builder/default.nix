@@ -10,7 +10,6 @@
   gnused,
   gnutar,
   jq,
-  nef-lock-catalog,
   nix,
   shellcheck,
   stdenv,
@@ -39,7 +38,6 @@ stdenv.mkDerivation {
       gnused=${gnused} \
       gnutar=${gnutar} \
       jq=${jq} \
-      nefLockCatalog=${nef-lock-catalog} \
       nix=${nix} \
       t3=${t3} substituteAllInPlace $i
     done
