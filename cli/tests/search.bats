@@ -69,7 +69,7 @@ setup_file() {
   assert_failure
   assert_output - <<EOF
 ✘ ERROR: No search term provided.
-Try searching with a search term. For example, 'flox search curl'
+Try searching for a package. For example, 'flox search curl'
 EOF
 }
 
