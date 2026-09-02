@@ -2,7 +2,6 @@
   lib,
   perl,
   perlScript, # Script which determines the modules to keep.
-  stdenv,
 }:
 let
   # Would like to disable the building of _all_ unnecessary extensions but
@@ -102,13 +101,6 @@ perl.overrideAttrs (oldAttrs: {
     man="/no-such-path"
   ''
   + oldAttrs.postInstall
-
-  # Can remove once https://github.com/NixOS/nixpkgs/pull/386700
-  # has flowed through to our build (hence the use of --replace-quiet).
-  + (lib.optionalString ((stdenv.cc.fallback_sdk or null) != null) ''
-    substituteInPlace "$out"/lib/perl5/*/*/Config_heavy.pl \
-      --replace-quiet "${stdenv.cc.fallback_sdk}" /no-such-path;
-  '')
 
   + ''
     (
