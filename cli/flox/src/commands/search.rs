@@ -205,12 +205,13 @@ impl Search {
         // Truncation hint: shown only when the API total exceeds what we
         // fetched (i.e. --all was not passed and results were capped).
         if result.total_count > result.providers.len() as i64 {
-            eprintln!(
-                "\nℹ️  There are {} packages that supply '{}'.\n\
+            message::plain("");
+            message::info(format!(
+                "There are {} packages that supply '{}'.\n\
                  Use 'flox search --command {} --all' or\n\
                  'flox run --package <PACKAGE> {}' to choose a specific package.",
                 result.total_count, command_name, command_name, command_name
-            );
+            ));
         }
 
         Ok(())
