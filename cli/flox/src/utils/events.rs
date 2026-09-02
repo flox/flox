@@ -230,9 +230,7 @@ async fn auth_subject_from_context(
         debug!("v2 events: no FloxHub client available to resolve token subject");
         return None;
     };
-    let Some(secret) = auth_context.token_secret() else {
-        return None;
-    };
+    let secret = auth_context.token_secret()?;
 
     match tokio::time::timeout(
         AUTH_SUBJECT_RESOLUTION_TIMEOUT,
@@ -370,6 +368,7 @@ mod tests {
     use tempfile::TempDir;
 
     use super::*;
+    use crate::utils::init::init_floxhub_client;
 
     /// A `Config` value pointing at a fresh tempdir, with metrics enabled
     /// and a pre-written metrics uuid so the wrapper has everything it
@@ -577,7 +576,7 @@ mod tests {
         )
         .await;
         assert!(client.is_none(), "disable_metrics must take priority");
-        request.assert_hits(0);
+        request.assert_calls(0);
     }
 
     #[tokio::test]
@@ -612,7 +611,7 @@ mod tests {
         )
         .await;
         assert!(client.is_none(), "missing uuid must short-circuit");
-        request.assert_hits(0);
+        request.assert_calls(0);
     }
 
     #[tokio::test]
@@ -672,7 +671,7 @@ mod tests {
                 }));
             });
             let auth_context = AuthContext::new_from_token(Some(token));
-            let floxhub_client = crate::utils::init::floxhub_client::init_floxhub_client(
+            let floxhub_client = init_floxhub_client(
                 server.base_url(),
                 auth_context.clone(),
                 Some(Uuid::new_v4()),
