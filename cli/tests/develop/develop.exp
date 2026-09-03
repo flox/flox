@@ -1,0 +1,109 @@
+# Enter a development shell for a git-tracked Nix expression package and
+# check:
+# - the shell is interactive, with stdenv's build machinery loaded
+# - the prompt names the package and preserves the prior prompt
+# - a host-PATH-only tool stays reachable, and a build-input tool of the
+#   same name as a host tool wins (the `~/.bashrc`-before-env-script
+#   ordering this depends on)
+# - `$src` is a store snapshot: editing the tracked expression file in the
+#   working tree does not change what is already unpacked there
+#
+# Every check below that reports its result via `echo` reads the result
+# back out of a shell-substituted value (`$?`, a case variable) rather
+# than a literal that also appears in the command it just sent: the
+# terminal echoes a sent command's own bytes back before the shell has
+# even run it, so `expect "SENTINEL"` right after `send "... echo
+# SENTINEL\n"` would match that echo unconditionally, regardless of
+# whether the command actually succeeded.
+
+set dir [lindex $argv 0]
+set pname [lindex $argv 1]
+set flox $env(FLOX_BIN)
+set env(NO_COLOR) 1
+set env(TERM) xterm-mono
+set stty_init "cols 1000"
+
+# Matches the repo floor for build-in-test (hook-consent.exp): a cold
+# store can take longer than 30s to realise the eval's inputs.
+set timeout 60
+exp_internal 1
+
+spawn $flox develop --dir $dir $pname
+expect_after {
+  timeout { exit 1 }
+  eof { exit 2 }
+  "*\n" { exp_continue }
+  "*\r" { exp_continue }
+}
+
+# Prompt names the package and preserves the prior (host) prompt.
+expect "flox \\\[develop: $pname\\\]"
+expect $env(KNOWN_PROMPT)
+
+# stdenv's build machinery is loaded -- the only check in this suite that
+# actually invokes a phase function rather than just naming one.
+send "genericBuild >/dev/null 2>&1; echo STDENV_STATUS:\$?\n"
+expect -re {STDENV_STATUS:(\d+)}
+if {$expect_out(1,string) != 0} {
+  puts "FAIL: genericBuild did not run (exit $expect_out(1,string))"
+  exit 1
+}
+expect $env(KNOWN_PROMPT)
+
+# The shell has interactive ergonomics.
+send "case \$- in *i*) r=0;; *) r=1;; esac; echo INTERACTIVE_STATUS:\$r\n"
+expect -re {INTERACTIVE_STATUS:(\d+)}
+if {$expect_out(1,string) != 0} {
+  puts "FAIL: shell is not interactive"
+  exit 1
+}
+expect $env(KNOWN_PROMPT)
+
+# A host-PATH-only tool is still resolvable...
+send "command -v my-marker-tool >/dev/null; echo MARKER_STATUS:\$?\n"
+expect -re {MARKER_STATUS:(\d+)}
+if {$expect_out(1,string) != 0} {
+  puts "FAIL: my-marker-tool not found on PATH"
+  exit 1
+}
+expect $env(KNOWN_PROMPT)
+
+# ...and a build-input tool of the same name as a host tool wins over the
+# host one, which is what the `~/.bashrc`-before-env-script ordering buys.
+send "hello\n"
+expect "Hello, world!"
+expect $env(KNOWN_PROMPT)
+
+# `$src` is a snapshot: it is a store path, and an edit made to the
+# tracked expression file in the working tree *after* entering this shell
+# is not visible inside it.
+send "echo SRC_PATH:\$src\n"
+expect -re {SRC_PATH:(/nix/store/\S+)}
+set src_path $expect_out(1,string)
+expect $env(KNOWN_PROMPT)
+
+send "echo EDIT_MARKER >> .flox/pkgs/$pname/default.nix\n"
+expect $env(KNOWN_PROMPT)
+
+# Distinguish "the snapshot exists but lacks the edit" (expected) from
+# "the snapshot file is missing" (a different failure) -- two separate
+# status checks rather than one combined `||`, since a combined check
+# can't tell which branch produced its literal-text sentinel.
+send "test -f $src_path/default.nix; echo FILE_STATUS:\$?\n"
+expect -re {FILE_STATUS:(\d+)}
+if {$expect_out(1,string) != 0} {
+  puts "FAIL: snapshot file $src_path/default.nix does not exist"
+  exit 1
+}
+expect $env(KNOWN_PROMPT)
+
+send "grep -q EDIT_MARKER $src_path/default.nix; echo GREP_STATUS:\$?\n"
+expect -re {GREP_STATUS:(\d+)}
+if {$expect_out(1,string) == 0} {
+  puts "FAIL: edit marker unexpectedly present in the \$src snapshot"
+  exit 1
+}
+expect $env(KNOWN_PROMPT)
+
+send "exit\n"
+expect eof

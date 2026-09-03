@@ -225,5 +225,6 @@ npx serve result-app
 [`flox-build-clean(1)`](./flox-build-clean.md)
 [`flox-build-import-nixpkgs(1)`](./flox-build-import-nixpkgs.md)
 [`flox-build-update-catalogs(1)`](./flox-build-update-catalogs.md)
+[`flox-develop(1)`](./flox-develop.md)
 [`flox-activate(1)`](./flox-activate.md)
 [`manifest.toml(5)`](./manifest.toml.md)

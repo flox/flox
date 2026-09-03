@@ -84,6 +84,7 @@ Manage environments
 
 Use environments
     activate               Enter the environment, run 'flox deactivate' to leave
+    develop                Enter a development shell for a package build
     deactivate             Deactivate the current environment
     run                    Run a command from a Flox Catalog package
     services               Manage services in an environment

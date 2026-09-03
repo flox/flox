@@ -7,6 +7,7 @@ mod check_for_upgrades;
 mod containerize;
 mod deactivate;
 mod delete;
+mod develop;
 mod edit;
 mod envs;
 mod factory;
@@ -813,7 +814,6 @@ enum UseCommands {
     /// Enter the environment, run 'flox deactivate' to leave
     #[bpaf(
         command,
-        long("develop"),
         header(indoc! {"
             When called with no arguments 'flox activate' will look for a '.flox' directory
             in the current directory. Calling 'flox activate' in your home directory will
@@ -823,6 +823,10 @@ enum UseCommands {
         footer("Run 'man flox-activate' for more details.")
     )]
     Activate(#[bpaf(external(activate::activate))] activate::Activate),
+
+    /// Enter a development shell for a package build
+    #[bpaf(command, footer("Run 'man flox-develop' for more details."))]
+    Develop(#[bpaf(external(develop::develop))] develop::Develop),
 
     /// Deactivate the current environment
     #[bpaf(command, long("exit"))]
@@ -847,6 +851,7 @@ impl UseCommands {
     async fn handle(self, config: Config, flox: Flox) -> Result<()> {
         match self {
             UseCommands::Activate(args) => args.handle(config, flox).await,
+            UseCommands::Develop(args) => args.handle(flox).await,
             UseCommands::Deactivate(args) => args.handle(config, flox),
             UseCommands::Run(args) => args.handle(config, flox).await,
             UseCommands::Services(args) => args.handle(config, flox).await,
@@ -856,6 +861,7 @@ impl UseCommands {
     fn subcommand_name(&self) -> &'static str {
         match self {
             UseCommands::Activate(args) => args.subcommand_name(),
+            UseCommands::Develop(args) => args.subcommand_name(),
             UseCommands::Deactivate(_) => "deactivate",
             UseCommands::Run(_) => "run",
             UseCommands::Services(sub) => sub.subcommand_name(),
@@ -2056,6 +2062,48 @@ mod subcommand_name_tests {
     fn build_update_catalogs_uses_parent_child_join_encoding() {
         let command = parse_command(&["build", "update-catalogs"]);
         assert_eq!(command.subcommand_name(), "build::update-catalogs");
+    }
+
+    /// `flox develop <package>` captures the package name itself, not only
+    /// the wire name it reports.
+    #[test]
+    fn develop_package_form_derives_to_develop() {
+        let command = parse_command(&["develop", "hello"]);
+        assert_eq!(command.subcommand_name(), "develop");
+
+        let Commands::Use(UseCommands::Develop(develop)) = command else {
+            panic!("expected the develop command");
+        };
+        assert_eq!(develop.package.as_deref(), Some("hello"));
+    }
+
+    /// A bare `flox develop` leaves the package positional unset rather
+    /// than falling through to any other command — the deprecated
+    /// `activate` alias no longer exists, so there is nothing else to
+    /// fall through to.
+    #[test]
+    fn develop_without_package_leaves_package_unset() {
+        let command = parse_command(&["develop"]);
+        assert_eq!(command.subcommand_name(), "develop");
+
+        let Commands::Use(UseCommands::Develop(develop)) = command else {
+            panic!("expected the develop command");
+        };
+        assert_eq!(develop.package, None);
+    }
+
+    /// `allow` and `deny` are ordinary package names now that the
+    /// deprecated `activate` alias — the only reason they were ever
+    /// reserved — is gone.
+    #[test]
+    fn develop_allow_and_deny_are_ordinary_package_names() {
+        for name in ["allow", "deny"] {
+            let command = parse_command(&["develop", name]);
+            let Commands::Use(UseCommands::Develop(develop)) = command else {
+                panic!("expected the develop command");
+            };
+            assert_eq!(develop.package.as_deref(), Some(name));
+        }
     }
 }
 
