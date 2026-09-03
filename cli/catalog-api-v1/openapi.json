@@ -146,6 +146,7 @@
             "required": false,
             "schema": {
               "type": "integer",
+              "minimum": 0,
               "default": 0,
               "title": "Page"
             }
@@ -156,6 +157,7 @@
             "required": false,
             "schema": {
               "type": "integer",
+              "minimum": 0,
               "default": 10,
               "title": "Pagesize"
             }
@@ -3395,6 +3397,16 @@
             },
             "type": "array",
             "title": "Items"
+          },
+          "commands_by_output": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "type": "object",
+            "title": "Commands By Output"
           }
         },
         "type": "object",
