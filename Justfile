@@ -75,8 +75,12 @@ version:
         -o $FLOX_INTERPRETER
 
 # Build the flox package builder
-@build-package-builder:
+# `pure-eval` is disabled because `FLOX_NEF_LOCK_CATALOG_BIN`
+
+# is read from the environment.
+@build-package-builder: build-nef-lock-catalog
     nix {{ nix_options }} build \
+        --option pure-eval false \
         ".#floxDevelopmentPackages.flox-package-builder" \
         -o "$FLOX_PACKAGE_BUILDER"
 
@@ -96,6 +100,10 @@ version:
 # Build the flox activations binary
 @build-activations:
     cargo build -p flox-activations
+
+# Build the `lock` binary that the package builder shells out to
+@build-nef-lock-catalog:
+    cargo build -p nef-lock-catalog
 
 # Build the flox activations binary
 @build-activations-release:

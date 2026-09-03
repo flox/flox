@@ -138,6 +138,26 @@
                   mkdir -p $out/libexec
                   cp ${floxActivationsBin} $out/libexec/flox-activations
                 '';
+
+            # As above for the `lock` binary. Without it `just build` compiles
+            # nef-lock-catalog through nix, under the "small" profile.
+            nefLockCatalogBin = "${builtins.path { path = builtins.getEnv "FLOX_NEF_LOCK_CATALOG_BIN"; }}";
+            cargoBuiltNefLockCatalog =
+              prev.runCommandNoCC "nef-lock-catalog"
+                {
+                  # The binary's RPATH points at openssl and krb5 (reqwest ->
+                  # native-tls, gssapi). Nix scans a copied file only for
+                  # references already among the inputs, so without these they
+                  # are missing from the closure.
+                  propagatedBuildInputs = prev.lib.optionals prev.stdenv.isLinux [
+                    prev.openssl.out
+                    prev.krb5.lib
+                  ];
+                }
+                ''
+                  mkdir -p $out/libexec
+                  cp ${nefLockCatalogBin} $out/libexec/lock
+                '';
           in
           prev.lib.makeScope prev.newScope (self: {
             rust-internal-deps = prev.rust-internal-deps.override {
@@ -156,7 +176,9 @@
             flox-interpreter = prev.flox-interpreter.override {
               flox-activations = cargoBuiltFloxActivations;
             };
-            flox-package-builder = prev.flox-package-builder.override { };
+            flox-package-builder = prev.flox-package-builder.override {
+              nef-lock-catalog = cargoBuiltNefLockCatalog;
+            };
             flox-buildenv = prev.flox-buildenv.override {
               flox-interpreter = null;
               flox-activations = cargoBuiltFloxActivations;

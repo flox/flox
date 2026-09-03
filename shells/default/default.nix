@@ -130,6 +130,7 @@ mkShell (
       # cargo built binaries
       define_dev_env_var FLOX_BIN "''${REPO_ROOT}/target/debug/flox";
       define_dev_env_var FLOX_ACTIVATIONS_BIN "''${REPO_ROOT}/target/debug/flox-activations";
+      define_dev_env_var FLOX_NEF_LOCK_CATALOG_BIN "''${REPO_ROOT}/target/debug/lock";
 
       # make built binaries
       define_dev_env_var BUILDENV_BIN "''${REPO_ROOT}/build/flox-buildenv/bin/buildenv";
