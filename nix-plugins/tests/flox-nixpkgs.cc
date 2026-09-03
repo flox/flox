@@ -74,7 +74,8 @@ test_lockedFromUrl( nix::ref<nix::EvalState> & state )
                                          nix::parseURL( url ),
                                          true );
   nix::fetchers::Attrs attrs
-    = inputScheme.getAccessor( state->store, *input ).second.toAttrs();
+    = inputScheme.getAccessor( state->fetchSettings, *state->store, *input )
+        .second.toAttrs();
   auto owner      = nix::fetchers::getStrAttr( attrs, "owner" );
   auto flake_type = nix::fetchers::getStrAttr( attrs, "type" );
   auto rev        = nix::fetchers::getStrAttr( attrs, "rev" );
@@ -104,7 +105,9 @@ test_lockedRepresentation( nix::ref<nix::EvalState> & state )
   auto                      url = "flox-nixpkgs:v0/NixOS/" + nixpkgsRev;
   auto input = inputScheme.inputFromAttrs( state->fetchSettings, attrs );
   EXPECT( input.has_value() );
-  auto locked = inputScheme.getAccessor( state->store, *input ).second;
+  auto locked
+    = inputScheme.getAccessor( state->fetchSettings, *state->store, *input )
+        .second;
   EXPECT( locked.toAttrs() == attrs );
   return true;
 }

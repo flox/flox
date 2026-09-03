@@ -8,6 +8,10 @@
  * -------------------------------------------------------------------------- */
 
 #pragma once
+#include <filesystem>
+#include <map>
+#include <string>
+
 #include <nix/fetchers/fetchers.hh>
 
 /* -------------------------------------------------------------------------- */
@@ -34,6 +38,12 @@ struct WrappedNixpkgsInputScheme : nix::fetchers::InputScheme
     return "flox-nixpkgs";
   }
 
+  [[nodiscard]] std::string
+  schemeDescription() const override
+  {
+    return "a `nixpkgs` input wrapped to allow unfree and broken packages";
+  }
+
   /**
    * Allowed attributes in an attribute set that is converted to an
    * input.
@@ -41,10 +51,18 @@ struct WrappedNixpkgsInputScheme : nix::fetchers::InputScheme
    * `type` is not included from this set, because the `type` field is
    *  parsed first to choose which scheme; `type` is always required.
    */
-  virtual nix::StringSet
+  const std::map<std::string, AttributeInfo> &
   allowedAttrs() const override
   {
-    return { "version", "rev", "ref" };
+    static const std::map<std::string, AttributeInfo> attrs = {
+      { "owner", { .doc = "The GitHub owner, either `NixOS` or `flox`." } },
+      { "ref", { .required = false, .doc = "A Git branch or tag name." } },
+      { "rev", { .required = false, .doc = "A Git commit hash." } },
+      { "narHash", { .required = false, .doc = "The input's NAR hash." } },
+      { "version",
+        { .type = "Int", .doc = "The `flox-nixpkgs` wrapper rules version." } },
+    };
+    return attrs;
   }
 
 
@@ -68,8 +86,9 @@ struct WrappedNixpkgsInputScheme : nix::fetchers::InputScheme
    * attributes like a Git revision or NAR hash that uniquely
    * identify its contents.
    */
-  virtual bool
-  isLocked( const nix::fetchers::Input & input ) const override;
+  bool
+  isLocked( const nix::fetchers::Settings & settings,
+            const nix::fetchers::Input &    input ) const override;
 
   /**
    * @brief Override an input with a different `ref` or `rev`.
@@ -88,13 +107,15 @@ struct WrappedNixpkgsInputScheme : nix::fetchers::InputScheme
    * This function is used by `nix flake archive` to pre-fetch sources.
    */
   void
-  clone( const nix::fetchers::Input & input,
-         const nix::Path &            destDir ) const override;
+  clone( const nix::fetchers::Settings & settings,
+         nix::Store &                    store,
+         const nix::fetchers::Input &    input,
+         const std::filesystem::path &   destDir ) const override;
 
-  [[nodiscard]] virtual std::pair<nix::ref<nix::SourceAccessor>,
-                                  nix::fetchers::Input>
-  getAccessor( nix::ref<nix::Store>         store,
-               const nix::fetchers::Input & input ) const override;
+  [[nodiscard]] std::pair<nix::ref<nix::SourceAccessor>, nix::fetchers::Input>
+  getAccessor( const nix::fetchers::Settings & settings,
+               nix::Store &                    store,
+               const nix::fetchers::Input &    input ) const override;
 
 
 }; /* End class `WrappedNixpkgsInputScheme' */
