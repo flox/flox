@@ -22,7 +22,7 @@
   stdenv,
 }:
 let
-  FLOX_VERSION = lib.fileContents ./../../VERSION;
+  FLOX_VERSION = lib.fileContents "${flox-src}/VERSION";
 
   # crane (<https://crane.dev/>) library for building rust packages
   craneLib = (inputs.crane.mkLib pkgsFor).overrideToolchain rust-toolchain.toolchain;
