@@ -9,7 +9,7 @@ use flox_events::LifecycleFields;
 use flox_manifest::lockfile::Lockfile;
 use flox_manifest::{Manifest, MigratedTypedOnly};
 use flox_rust_sdk::flox::Flox;
-use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment};
+use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment, GCROOTS_DIR_NAME};
 use flox_rust_sdk::providers::build::{
     COMMON_NIXPKGS_URL,
     FloxBuildMk,
@@ -20,7 +20,7 @@ use flox_rust_sdk::providers::build::{
 use flox_rust_sdk::providers::nix;
 use indoc::{formatdoc, indoc};
 use nef_lock_catalog::NixFlakeref;
-use tempfile::NamedTempFile;
+use tempfile::{NamedTempFile, TempDir};
 use thiserror::Error;
 use tracing::debug;
 
@@ -184,7 +184,18 @@ impl Develop {
             .drv_path
             .clone();
 
-        let env_script_path = Self::print_dev_env(&flox, &drv_path, target.name().as_ref())?;
+        // Project-scoped and keyed by system + package name, mirroring the
+        // `<system>.<name>` convention `PathEnvironment`'s own GC roots use
+        // (`flox-rust-sdk/src/models/environment/path_environment.rs`) --
+        // ".develop" keeps this apart from that environment-level root even
+        // when the package name matches the environment name.
+        let gc_root_path = env.dot_flox_path().join(GCROOTS_DIR_NAME).join(format!(
+            "{}.{}.develop",
+            flox.system,
+            target.name()
+        ));
+        let env_script_path =
+            Self::print_dev_env(&flox, &drv_path, target.name().as_ref(), &gc_root_path)?;
 
         // `exec` replaces this process, so the dispatcher's end-of-run
         // `command_completed` emit (main.rs) never runs; record it here
@@ -372,9 +383,47 @@ impl Develop {
     /// derivation that dumps the environment; it does not run the package's
     /// build phases, which is what lets a package that fails to build still
     /// yield a shell.
-    fn print_dev_env(flox: &Flox, drv_path: &Path, pname: &str) -> Result<PathBuf, DevelopError> {
+    ///
+    /// `gc_root_path` is rooted with `nix build --out-link`, the idiom
+    /// `providers/buildenv.rs` already uses elsewhere in this codebase,
+    /// rather than a `nix profile`: a profile's own indirection (`p ->
+    /// p-1-link -> store path`) buys nothing here and appears nowhere else
+    /// in flox. `print-dev-env` is first pointed at a throwaway `--profile`
+    /// under `flox.temp_dir`, purely to learn the realised wrapper
+    /// derivation's store path (`std::fs::canonicalize` resolves the
+    /// profile's symlink chain); `nix build --out-link` then roots that
+    /// store path directly, returning near-instantly since the path is
+    /// already realised (confirmed locally against a warm store). Its
+    /// store references include every realised build input (confirmed with
+    /// `nix-store -q --references`), so rooting it keeps the whole closure
+    /// alive for as long as the shell is open. This is the only root a
+    /// develop shell gets -- `develop()` ends in `exec`, so no flox process
+    /// survives to hold a session-scoped one. `--out-link` overwrites
+    /// exactly its own path on each call, so re-entering the same package
+    /// repoints the existing root rather than adding a new one.
+    fn print_dev_env(
+        flox: &Flox,
+        drv_path: &Path,
+        pname: &str,
+        gc_root_path: &Path,
+    ) -> Result<PathBuf, DevelopError> {
+        let gc_root_dir = gc_root_path
+            .parent()
+            .expect("gc_root_path is always constructed with a parent directory");
+        std::fs::create_dir_all(gc_root_dir).map_err(DevelopError::CreateGcRootDir)?;
+
+        // `--profile` refuses to write over a pre-existing regular file
+        // (verified locally: "filesystem error: in read_symlink: Invalid
+        // argument"), so this needs a path that doesn't exist yet rather
+        // than one `NamedTempFile` has already created. A fresh `TempDir`
+        // gives that for free -- nix creates the symlink itself inside it.
+        let discovery_dir =
+            TempDir::new_in(&flox.temp_dir).map_err(DevelopError::CreateGcRootDir)?;
+        let discovery_profile_path = discovery_dir.path().join("develop-profile");
+
         let mut cmd = nix::nix_base_command();
         cmd.arg("print-dev-env").arg(drv_path);
+        cmd.arg("--profile").arg(&discovery_profile_path);
         cmd.stdout(Stdio::piped());
         // `Command::output()` always pipes both streams (overriding any
         // `Stdio` set beforehand), which buffers nix's build/eval progress
@@ -422,6 +471,24 @@ impl Develop {
             return Err(DevelopError::PrintDevEnv {
                 pname: pname.to_string(),
             });
+        }
+
+        let env_derivation_path = std::fs::canonicalize(&discovery_profile_path)
+            .map_err(DevelopError::CreateGcRootDir)?;
+
+        let mut gc_root_cmd = nix::nix_base_command();
+        gc_root_cmd
+            .arg("build")
+            .arg("--out-link")
+            .arg(gc_root_path)
+            .arg(&env_derivation_path);
+        let gc_root_status = gc_root_cmd
+            .status()
+            .map_err(DevelopError::CreateGcRootDir)?;
+        if !gc_root_status.success() {
+            return Err(DevelopError::CreateGcRootDir(std::io::Error::other(
+                format!("'nix build --out-link' exited with {gc_root_status}"),
+            )));
         }
 
         Ok(env_script_path)
@@ -536,6 +603,9 @@ pub(crate) enum DevelopError {
     #[error("Failed to write the development shell's rcfile.")]
     CreateRcFile(#[source] std::io::Error),
 
+    #[error("Failed to prepare the development shell's GC root.")]
+    CreateGcRootDir(#[source] std::io::Error),
+
     #[error("Failed to build the development environment for '{pname}'.")]
     PrintDevEnv { pname: String },
 
@@ -611,8 +681,10 @@ mod tests {
     fn print_dev_env_reports_a_collected_derivation() {
         let (flox, _temp_dir) = flox_instance();
         let missing_drv_path = flox.temp_dir.join("does-not-exist.drv");
+        let gc_root_path = flox.temp_dir.join("develop-gc-root-test");
 
-        let err = Develop::print_dev_env(&flox, &missing_drv_path, "greet").unwrap_err();
+        let err =
+            Develop::print_dev_env(&flox, &missing_drv_path, "greet", &gc_root_path).unwrap_err();
 
         assert!(matches!(
             err,

@@ -118,6 +118,16 @@ on every entry:
   and only `~/.bashrc` is sourced — a `~/.zshrc`, `~/.config/fish/`, or
   other shell's startup files are not.
 
+## Garbage collection
+
+The shell's build inputs are GC-rooted for as long as the shell stays
+open: entering the shell creates a GC root symlink under
+`.flox/run/<system>.<package>.develop`, keyed to the package, so a
+concurrent `nix-collect-garbage` (or similar) cannot remove them out
+from under a running session. Re-entering the same package's shell
+repoints that symlink rather than adding another one — only the most
+recent `flox develop <package>` invocation is rooted.
+
 ## Omitting `<package>`
 
 `flox develop` without a package argument mirrors part of

@@ -365,3 +365,63 @@ develop_env_script_path() {
   run "$FLOX_BIN" develop -d "$PROJECT_DIR" -c 'exit 7'
   assert_equal "$status" 7
 }
+
+# ---------------------------------------------------------------------------- #
+# GC root: a live shell's build inputs are incidentally immune to GC on Linux
+# because Nix's collector treats runtime roots found by scanning
+# /proc/<pid>/environ as live, independent of any root this command adds.
+# Asserting "a live shell survives a GC" would therefore pass even with the
+# `nix build --out-link` step removed entirely, so these assert the rooting
+# mechanism's own on-disk artifact instead: the GC root symlink exists,
+# resolves into the store, and is repointed rather than duplicated.
+
+# bats test_tags=develop:gc-root
+@test "develop: roots the dev environment under .flox/run, keyed by system and package" {
+  project_setup
+  git_init_project
+  nef_package_setup greet
+  export _FLOX_USE_CATALOG_MOCK="$UNIT_TEST_GENERATED/get_base_catalog_nixpkgs_url.yaml"
+
+  local gc_root="$PROJECT_DIR/.flox/run/$NIX_SYSTEM.greet.develop"
+
+  run "$FLOX_BIN" develop -d "$PROJECT_DIR" greet -c 'true'
+  assert_success
+
+  [ -L "$gc_root" ]
+  run readlink -f "$gc_root"
+  assert_success
+  assert_output --partial "/nix/store/"
+}
+
+# bats test_tags=develop:gc-root
+@test "develop: re-entering the same package replaces its GC root instead of accumulating generations" {
+  project_setup
+  git_init_project
+  nef_package_setup greet
+  export _FLOX_USE_CATALOG_MOCK="$UNIT_TEST_GENERATED/get_base_catalog_nixpkgs_url.yaml"
+
+  local gc_root="$PROJECT_DIR/.flox/run/$NIX_SYSTEM.greet.develop"
+
+  run "$FLOX_BIN" develop -d "$PROJECT_DIR" greet -c 'true'
+  assert_success
+  local first_target
+  first_target="$(readlink -f "$gc_root")"
+  # `nix build --out-link` writes exactly one symlink at its target path --
+  # no generation history the way a `nix profile` root would leave.
+  local link_count
+  link_count="$(find "$PROJECT_DIR/.flox/run" -maxdepth 1 -name "$NIX_SYSTEM.greet.develop*" | wc -l)"
+  assert_equal "$link_count" 1
+
+  # Change the expression so re-evaluation produces a different derivation,
+  # and therefore a different GC root target, on the next entry.
+  echo "# a comment" >>"$PROJECT_DIR/.flox/pkgs/greet/default.nix"
+
+  run "$FLOX_BIN" develop -d "$PROJECT_DIR" greet -c 'true'
+  assert_success
+  local second_target
+  second_target="$(readlink -f "$gc_root")"
+
+  [ "$first_target" != "$second_target" ]
+  link_count="$(find "$PROJECT_DIR/.flox/run" -maxdepth 1 -name "$NIX_SYSTEM.greet.develop*" | wc -l)"
+  assert_equal "$link_count" 1
+}
