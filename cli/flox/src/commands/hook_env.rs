@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::io::{BufWriter, IsTerminal, Write, stdout};
+use std::io::{BufRead, BufWriter, IsTerminal, Write, stdout};
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
@@ -24,8 +24,10 @@ use flox_core::hook_actions::{
     prompt_hook_version_mismatched,
     take_hook_actions,
 };
+use flox_manifest::interfaces::AsLatestSchema;
+use flox_manifest::{MANIFEST_FILENAME, Manifest};
 use flox_rust_sdk::flox::Flox;
-use flox_rust_sdk::models::environment::find_all_dot_flox;
+use flox_rust_sdk::models::environment::{DOT_FLOX, ENV_DIR_NAME, find_all_dot_flox};
 use indoc::formatdoc;
 use shell_gen::{GenerateShell, SetVar, Shell, ShellWithPath, UnsetVar};
 use tracing::debug;
@@ -148,7 +150,8 @@ impl HookEnv {
             }
         }
 
-        let ctx = gather_auto_activate_context(&config, !actions.is_empty())?;
+        let ctx =
+            gather_auto_activate_context(&config, !actions.is_empty(), flox.features.plugin_hooks)?;
         let plan = plan_auto_activation(&ctx);
 
         // The prompt hook the shell registered is out of sync with this binary
@@ -350,6 +353,50 @@ impl HookEnv {
             }
         }
 
+        // For each environment declaring a session-wrap plugin, prompt for
+        // session-entry consent individually. Accepting starts a blocking
+        // foreground session, so each entry needs its own answer; unlike
+        // plain auto-activation, multiple pending sessions cannot share a
+        // single prompt, and at most one session is entered per hook run.
+        for (path, plugin) in &plan.prompt_wrap {
+            match prompt_for_wrap_session(path, plugin, self.shell)? {
+                WrapSessionConsent::Accept => {
+                    // The session runs as a foreground child of the shell.
+                    // The state exports emitted further below are evaluated
+                    // only after the session ends, so the suppression
+                    // recorded for this path lands once the user is back in
+                    // their original shell. Remaining candidates are
+                    // suppressed below and re-prompt after the directory is
+                    // left and re-entered.
+                    write_wrap_session_command(self.shell, path, &mut writer)?;
+                    break;
+                },
+                // Suppress for this shell session (recorded below for every
+                // candidate); the next shell or re-entry asks again.
+                WrapSessionConsent::Decline => {},
+                WrapSessionConsent::NoTerminal | WrapSessionConsent::UnsupportedShell => {
+                    // Cannot start a wrapped session without an interactive
+                    // tty, or from this shell's prompt hook. Emit a notice
+                    // pointing at 'flox activate'.
+                    message::info(formatdoc! {"
+                        Run 'flox activate --dir {dir}' to enter this environment (activation is handled by plugin '{plugin}').",
+                        dir = path.display(),
+                    });
+                },
+            }
+        }
+        // Mark every candidate as suppressed for this shell session, entered
+        // paths included: the wrapped session runs as a foreground child of
+        // the interactive shell, so the shell survives the session and its
+        // prompt hook would immediately re-prompt for the same directory
+        // without the suppression. Leaving the directory clears it, so
+        // re-entering prompts again.
+        for (path, _) in &plan.prompt_wrap {
+            if !suppressed.contains(path) {
+                suppressed.push(path.clone());
+            }
+        }
+
         // Commit the re-insertion target, if any, between the deactivations and
         // the reactivate replay so the diff chain rebuilds in ancestor order:
         // deactivate(descendants) -> activate(target) -> reactivate(descendants).
@@ -464,6 +511,13 @@ struct AutoActivateContext {
     cwd: PathBuf,
     /// Project directories with a discoverable `.flox`, outermost-first.
     discovered: Vec<PathBuf>,
+    /// The session-wrap plugin declared by each discovered directory's
+    /// user-authored manifest, parallel to `discovered`. `None` when the
+    /// manifest declares no wrapper, cannot be read, or the `plugin_hooks`
+    /// feature is off (the gate is applied at gather time so the planner
+    /// stays feature-agnostic). Reading the user manifest alone is correct
+    /// by construction: include-carried declarations are inert.
+    discovered_wrapping: Vec<Option<String>>,
     /// Project directories of active environments, most recently activated
     /// first. `None` for environments without a local directory (remote).
     active: Vec<Option<PathBuf>>,
@@ -495,6 +549,12 @@ struct AutoActivatePlan {
     /// Unregistered project directories to prompt the user about before
     /// activating, outermost-first. Empty unless `auto_activate = "prompt"`.
     prompt: Vec<PathBuf>,
+    /// Project directories declaring a session-wrap plugin, paired with the
+    /// plugin name, outermost-first. These are never in-place activated:
+    /// entering one starts a blocking foreground session, which needs
+    /// explicit consent on every entry — even for allowed directories, since
+    /// a prior allow may predate the wrap declaration.
+    prompt_wrap: Vec<(PathBuf, String)>,
     /// Project directories to deactivate, front of stack first. Includes both
     /// true leavers (gone for good) and survivors that are torn down only to
     /// insert or remove a layer beneath them; the survivors are listed in
@@ -533,6 +593,7 @@ impl AutoActivatePlan {
         !self.deactivate.is_empty()
             || !self.activate.is_empty()
             || !self.prompt.is_empty()
+            || !self.prompt_wrap.is_empty()
             || !self.reactivate.is_empty()
             || self.reinsert.is_some()
             || !self.abandoned.is_empty()
@@ -628,6 +689,7 @@ fn plan_auto_activation(ctx: &AutoActivateContext) -> AutoActivatePlan {
         return AutoActivatePlan {
             activate: Vec::new(),
             prompt: Vec::new(),
+            prompt_wrap: Vec::new(),
             deactivate: Vec::new(),
             reactivate: Vec::new(),
             reinsert: None,
@@ -705,7 +767,17 @@ fn plan_auto_activation(ctx: &AutoActivateContext) -> AutoActivatePlan {
     let unwinding = !reactivate.is_empty() || auto_activated.iter().any(|path| !inside(path));
     let mut activate = Vec::new();
     let mut prompt = Vec::new();
+    let mut prompt_wrap: Vec<(PathBuf, String)> = Vec::new();
     let mut reinsert: Option<PathBuf> = None;
+
+    // The session-wrap plugin declared for a discovered directory, if any.
+    let wrap_plugin = |path: &PathBuf| -> Option<String> {
+        ctx.discovered
+            .iter()
+            .position(|discovered| discovered == path)
+            .and_then(|i| ctx.discovered_wrapping.get(i))
+            .and_then(|plugin| plugin.clone())
+    };
 
     // Whether `path` can be re-inserted in ancestor order this run, and the
     // descendants that would have to be popped to do so.
@@ -773,6 +845,16 @@ fn plan_auto_activation(ctx: &AutoActivateContext) -> AutoActivatePlan {
             {
                 continue;
             }
+            // A directory declaring a session-wrap plugin is never in-place
+            // activated: queue it for session-entry consent instead — even
+            // when allowed, since a prior allow may predate the declaration.
+            // Denied and suppressed directories were already skipped above.
+            if let Some(plugin) = wrap_plugin(path) {
+                if is_allowed(path) || prompt_unregistered {
+                    prompt_wrap.push((path.clone(), plugin));
+                }
+                continue;
+            }
             // An allowed environment with tracked descendants stacked above it
             // (e.g. it was denied, the shell entered a child, then it was
             // re-allowed) must be re-inserted in ancestor order, not activated
@@ -821,6 +903,7 @@ fn plan_auto_activation(ctx: &AutoActivateContext) -> AutoActivatePlan {
     AutoActivatePlan {
         activate,
         prompt,
+        prompt_wrap,
         deactivate,
         reactivate,
         reinsert,
@@ -837,6 +920,7 @@ fn plan_auto_activation(ctx: &AutoActivateContext) -> AutoActivatePlan {
 fn gather_auto_activate_context(
     config: &Config,
     pending_deactivations: bool,
+    plugin_hooks_enabled: bool,
 ) -> Result<AutoActivateContext> {
     let cwd = std::env::current_dir().context("failed to read current directory")?;
     let discovered: Vec<PathBuf> = find_all_dot_flox(&cwd)
@@ -873,9 +957,15 @@ fn gather_auto_activate_context(
         }
     }
     let auto_activate = config.flox.auto_activate.clone().unwrap_or_default();
+    let discovered_wrapping = if plugin_hooks_enabled {
+        discovered.iter().map(|dir| read_wrap_plugin(dir)).collect()
+    } else {
+        vec![None; discovered.len()]
+    };
     Ok(AutoActivateContext {
         cwd,
         discovered,
+        discovered_wrapping,
         active,
         auto_activated: read_path_list_var(FLOX_AUTO_ACTIVATED_ENVIRONMENTS_VAR),
         suppressed: read_path_list_var(FLOX_SUPPRESSED_ENVIRONMENTS_VAR),
@@ -884,6 +974,29 @@ fn gather_auto_activate_context(
         auto_activate,
         pending_deactivations,
     })
+}
+
+/// Read the user-authored manifest at `<project_dir>/.flox/env/manifest.toml`
+/// and return its declared session-wrap plugin, if any.
+///
+/// Only the manifest file is consulted — no lockfile migration — which is
+/// correct by construction: `[plugin-hooks]` declarations in included
+/// manifests are stripped during composition, so the user-authored manifest
+/// is the sole source of hook participation. Falls back to `None` on any I/O
+/// or parse error so a broken manifest does not make every prompt fail.
+fn read_wrap_plugin(project_dir: &Path) -> Option<String> {
+    let manifest_path = project_dir
+        .join(DOT_FLOX)
+        .join(ENV_DIR_NAME)
+        .join(MANIFEST_FILENAME);
+    let contents = std::fs::read_to_string(&manifest_path).ok()?;
+    let manifest = Manifest::parse_and_migrate(&contents, None).ok()?;
+    manifest
+        .as_latest_schema()
+        .plugin_hooks
+        .as_ref()?
+        .session_wrap
+        .clone()
 }
 
 /// Read a JSON array of paths from an environment variable, treating an
@@ -972,6 +1085,112 @@ async fn prompt_for_auto_activation(project_dirs: &[PathBuf]) -> Result<AutoActi
     }
 }
 
+/// The user's answer to the wrapped-session consent prompt.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum WrapSessionConsent {
+    /// Enter the wrapped session now.
+    Accept,
+    /// Don't enter; suppress re-prompting for this shell session only.
+    Decline,
+    /// `/dev/tty` is unavailable, so no prompt was possible.
+    NoTerminal,
+    /// Shell does not support starting the session from the prompt hook
+    /// (fish, tcsh).
+    UnsupportedShell,
+}
+
+/// Ask the user, on the controlling terminal, whether to enter an environment
+/// as a wrapped session run as a foreground child of the current shell.
+///
+/// This is a stronger action than plain auto-activation because it hands the
+/// terminal to a process tree controlled by the plugin for the duration of
+/// the session. The prompt is therefore shown even when the directory is
+/// already on the auto-activate allow list (a prior allow may predate the
+/// declaration), and bare Enter declines: handing over the terminal must be
+/// an affirmative choice.
+fn prompt_for_wrap_session(
+    project_dir: &Path,
+    plugin: &str,
+    shell: Shell,
+) -> Result<WrapSessionConsent> {
+    // Starting an interactive session from the fish and tcsh prompt-hook
+    // eval contexts is not supported. Report the gap and fall back to the
+    // non-tty notice path.
+    if matches!(shell, Shell::Fish | Shell::Tcsh) {
+        return Ok(WrapSessionConsent::UnsupportedShell);
+    }
+
+    let Ok(tty) = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open("/dev/tty")
+    else {
+        return Ok(WrapSessionConsent::NoTerminal);
+    };
+
+    let question = format!(
+        "Enter '{}'? Activation hands this session to plugin '{plugin}'. [y/N] ",
+        project_dir.display(),
+    );
+
+    let mut tty_writer = &tty;
+    tty_writer
+        .write_all(question.as_bytes())
+        .context("failed to write the wrapped-session consent prompt")?;
+    tty_writer
+        .flush()
+        .context("failed to flush the wrapped-session consent prompt")?;
+
+    let mut answer = String::new();
+    std::io::BufReader::new(&tty)
+        .read_line(&mut answer)
+        .context("failed to read the wrapped-session consent response")?;
+    let answer = answer.trim();
+
+    if answer.eq_ignore_ascii_case("y") || answer.eq_ignore_ascii_case("yes") {
+        Ok(WrapSessionConsent::Accept)
+    } else {
+        Ok(WrapSessionConsent::Decline)
+    }
+}
+
+/// Emit a command that runs a wrapped activation of the environment in
+/// `project_dir` as a foreground child of the current shell.
+///
+/// Unlike [`write_activate_command`] (which emits `eval "$(flox activate)"`
+/// for in-place activation), this emits a plain `flox activate --dir <path>`
+/// invocation: the wrapped session takes over the terminal for its duration,
+/// and when it exits the user returns to their original shell. The
+/// environment is never activated unwrapped in the host shell — once the
+/// session ends the host shell has nothing activated, the same posture as
+/// declining.
+///
+/// Only bash and zsh are supported: [`prompt_for_wrap_session`] answers
+/// `UnsupportedShell` for fish and tcsh before this is reached, and the
+/// caller emits a notice instead.
+fn write_wrap_session_command(
+    shell: Shell,
+    project_dir: &Path,
+    writer: &mut impl Write,
+) -> Result<()> {
+    let flox_bin = std::env::current_exe().context("failed to determine flox executable path")?;
+    let flox_bin = flox_bin.to_string_lossy().to_string();
+    let escaped_bin = shell_escape::escape(Cow::Borrowed(&*flox_bin));
+    let dir = project_dir.to_string_lossy().to_string();
+    let escaped_dir = shell_escape::escape(Cow::Borrowed(&*dir));
+    match shell {
+        Shell::Bash | Shell::Zsh => {
+            writeln!(writer, "{escaped_bin} activate --dir {escaped_dir};")?;
+        },
+        // An in-place activation of a wrapping environment is refused by
+        // `flox activate`, so there is no correct command to emit here.
+        Shell::Fish | Shell::Tcsh => {
+            bail!("Wrapped sessions cannot be started from the fish or tcsh prompt hook.");
+        },
+    }
+    Ok(())
+}
+
 /// Emit a command that activates the environment in `project_dir` in place.
 ///
 /// The emitted command is itself evaluated by the shell's prompt hook, and
@@ -1041,6 +1260,9 @@ mod tests {
         AutoActivateContext {
             cwd: PathBuf::from(cwd),
             discovered: Vec::new(),
+            // Shorter than `discovered` in most tests; `wrap_plugin` treats a
+            // missing entry as "no wrapper declared".
+            discovered_wrapping: Vec::new(),
             active: Vec::new(),
             auto_activated: Vec::new(),
             suppressed: Vec::new(),
@@ -1059,6 +1281,7 @@ mod tests {
         AutoActivatePlan {
             activate: Vec::new(),
             prompt: Vec::new(),
+            prompt_wrap: Vec::new(),
             deactivate: Vec::new(),
             reactivate: Vec::new(),
             reinsert: None,
@@ -1066,6 +1289,90 @@ mod tests {
             auto_activated: Vec::new(),
             suppressed: Vec::new(),
         }
+    }
+
+    /// A context discovering one directory that declares `wrapper-plugin`
+    /// as its session-wrap plugin.
+    fn wrapping_ctx(cwd: &str, path: &str) -> AutoActivateContext {
+        AutoActivateContext {
+            discovered: paths(&[path]),
+            discovered_wrapping: vec![Some("wrapper-plugin".to_string())],
+            ..empty_ctx(cwd)
+        }
+    }
+
+    // ── Session-wrap decision table ─────────────────────────────────────────
+
+    #[test]
+    fn wrapping_allowed_env_goes_to_prompt_wrap_not_activate() {
+        // An allowed environment declaring a session-wrap plugin is never
+        // in-place activated; it needs session-entry consent on every entry
+        // even though the directory is already on the allow list.
+        let ctx = AutoActivateContext {
+            allowed: paths(&["/tmp/proj"]),
+            ..wrapping_ctx("/tmp/proj", "/tmp/proj")
+        };
+        assert_eq!(plan_auto_activation(&ctx), AutoActivatePlan {
+            prompt_wrap: vec![(PathBuf::from("/tmp/proj"), "wrapper-plugin".to_string())],
+            ..noop_plan()
+        });
+    }
+
+    #[test]
+    fn wrapping_unregistered_env_prompts_in_prompt_mode() {
+        let ctx = AutoActivateContext {
+            auto_activate: AutoActivate::Prompt,
+            ..wrapping_ctx("/tmp/proj", "/tmp/proj")
+        };
+        assert_eq!(plan_auto_activation(&ctx), AutoActivatePlan {
+            prompt_wrap: vec![(PathBuf::from("/tmp/proj"), "wrapper-plugin".to_string())],
+            ..noop_plan()
+        });
+    }
+
+    #[test]
+    fn wrapping_unregistered_env_skipped_in_allowlist_mode() {
+        let ctx = wrapping_ctx("/tmp/proj", "/tmp/proj");
+        assert_eq!(plan_auto_activation(&ctx), noop_plan());
+    }
+
+    #[test]
+    fn wrapping_denied_env_never_prompts() {
+        let ctx = AutoActivateContext {
+            denied: paths(&["/tmp/proj"]),
+            ..wrapping_ctx("/tmp/proj", "/tmp/proj")
+        };
+        assert_eq!(plan_auto_activation(&ctx), noop_plan());
+    }
+
+    #[test]
+    fn wrapping_suppressed_env_never_prompts() {
+        let ctx = AutoActivateContext {
+            allowed: paths(&["/tmp/proj"]),
+            suppressed: paths(&["/tmp/proj"]),
+            ..wrapping_ctx("/tmp/proj", "/tmp/proj")
+        };
+        assert_eq!(plan_auto_activation(&ctx), AutoActivatePlan {
+            suppressed: paths(&["/tmp/proj"]),
+            ..noop_plan()
+        });
+    }
+
+    #[test]
+    fn no_wrapper_declared_takes_the_plain_activation_path() {
+        // With the feature off (or no declaration), gather passes `None` and
+        // the planner takes today's in-place path.
+        let ctx = AutoActivateContext {
+            discovered: paths(&["/tmp/proj"]),
+            discovered_wrapping: vec![None],
+            allowed: paths(&["/tmp/proj"]),
+            ..empty_ctx("/tmp/proj")
+        };
+        assert_eq!(plan_auto_activation(&ctx), AutoActivatePlan {
+            activate: paths(&["/tmp/proj"]),
+            auto_activated: paths(&["/tmp/proj"]),
+            ..noop_plan()
+        });
     }
 
     #[test]

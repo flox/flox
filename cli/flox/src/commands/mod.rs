@@ -26,6 +26,7 @@ mod run;
 mod search;
 mod services;
 mod services_socket;
+mod session_wrap;
 mod show;
 mod uninstall;
 mod upgrade;

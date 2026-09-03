@@ -7,6 +7,7 @@ pub mod v1_12_0;
 pub mod v1_13_0;
 pub mod v1_14_0;
 pub mod v1_15_0;
+pub mod v1_16_0;
 
 /// An interface codifying how to access types that are just semantic wrappers
 /// around inner types. This impl may be generated with a macro.

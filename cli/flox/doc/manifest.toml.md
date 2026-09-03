@@ -34,6 +34,7 @@ tables:
 - [`[build]`](#build)
 - [`[options]`](#options)
 - [`[plugins]`](#plugins) - experimental, see below
+- [`[plugin-hooks]`](#plugin-hooks) - experimental, see below
 - [`containerize`] - see [`flox-containerize(1)`](./flox-containerize.md)
 
 ## `schema-version`
@@ -53,6 +54,7 @@ Valid string values are:
 - `1.13.0`: introduced `profile.deactivate` and build `sandbox-allow`
 - `1.14.0`: introduced `plugins`
 - `1.15.0`: introduced `hook.on-deactivate`
+- `1.16.0`: introduced `plugin-hooks`
 
 Existing manifest schemas, including the older `version = 1` format, are
 automatically forward-migrated when using features that require a newer schema
@@ -924,6 +926,39 @@ Flox plugins work by convention:
   If a plugin script exports a variable with the same name as a `[vars]`
   entry, the plugin's value wins;
   use the `hook.on-activate` script to override variables set by a plugin.
+
+## `[plugin-hooks]`
+
+**Experimental: the `[plugin-hooks]` section is under active development
+and its behavior may change.** It requires `schema-version = "1.16.0"`
+and currently has no effect unless the `plugin_hooks` feature flag is
+enabled.
+
+The `[plugin-hooks]` section declares which installed plugin participates
+in the `session-wrap` lifecycle hook.
+Declaring the hook is consent: only the declared plugin's hook runs, and a
+hook file shipped by a package that is not declared is ignored.
+
+```
+[plugin-hooks]
+session-wrap = "my-wrapper"
+```
+
+- `session-wrap`: the plugin that re-enters the activation under an
+  enforcement boundary of its own, such as a container or a
+  policy-enforced session. At most one plugin may wrap the session.
+  The plugin package must provide an executable at
+  `etc/flox/hooks/session-wrap.d/<name>`, which `flox activate` runs
+  after the environment is built and rendered.
+  An environment that declares a wrapper cannot be activated in-place
+  with `eval "$(flox activate)"`.
+
+The value names a plugin, i.e. the key of its `[plugins.<name>]` table
+and the install id of the package in `[install]` that ships the hook.
+Only the top-level manifest's `[plugin-hooks]` section takes effect:
+declarations in included environments are ignored with a notice naming
+the include, and must be restated in the including manifest to enable
+them.
 
 
 # SEE ALSO
