@@ -10,7 +10,7 @@ use flox_manifest::parsed::Inner;
 use flox_manifest::parsed::common::DEFAULT_GROUP_NAME;
 use flox_manifest::parsed::latest::BuildSandbox;
 use flox_manifest::{Manifest, MigratedTypedOnly};
-use floxhub_client::BaseCatalogUrl;
+use floxhub_client::{BaseCatalogUrl, PackageSystem};
 use indoc::formatdoc;
 use itertools::Itertools;
 use nef_lock_catalog::NixFlakeref;
@@ -81,6 +81,54 @@ pub trait ManifestBuilder {
     ) -> Result<BuildResults, ManifestBuilderError>;
 
     fn clean(self, package: &[PackageTargetName]) -> Result<(), ManifestBuilderError>;
+
+    /// Resolve `packages` to their store derivation paths without building
+    /// them.
+    ///
+    /// Stops at the Nix expression eval targets in the underlying Makefile
+    /// (the `eval` goal), so no package build is performed and no
+    /// `result-*` symlinks are created. Used to obtain the `drvPath` a
+    /// development shell is built from.
+    ///
+    /// Like [`ManifestBuilder::build`] this reaches the NEF eval and
+    /// therefore requires `expression_build_nixpkgs` and the CLI-created
+    /// `catalog_lockfile` — eval targets are always expression builds, so
+    /// the lock is required rather than optional; unlike `build` it never
+    /// passes `FLOX_INTERPRETER`, which only manifest build recipes
+    /// consume.
+    ///
+    /// A manifest build has no derivation for this to resolve, so
+    /// `packages` takes [`PackageTarget`] rather than [`PackageTargetName`]:
+    /// this method checks each target's kind itself and returns
+    /// [`ManifestBuilderError::NotAnExpressionBuild`] before invoking make
+    /// at all, rather than requiring every caller to filter by kind first
+    /// (the underlying Makefile still refuses a manifest build by name too,
+    /// as a backstop for anything that reaches it directly). It also
+    /// resolves every remaining name against the known Nix expression attr
+    /// paths before invoking make, returning
+    /// [`ManifestBuilderError::NoSuchPackage`] for a name that matches
+    /// none — a name make's own `eval` goal doesn't recognize resolves to
+    /// an empty prerequisite list for the (already-created)
+    /// `EVAL_RESULT_FILE`, so make would otherwise treat it as up to date
+    /// and exit 0 without ever writing to it, surfacing as a JSON parse
+    /// error instead of a clear "no such package" failure.
+    ///
+    /// **GC-window contract**: the returned `drvPath` is not GC-rooted,
+    /// and neither is the input closure it was evaluated from, at the
+    /// moment this call returns. `eval()` does nothing to close that
+    /// window itself; a caller that needs the path to survive past this
+    /// call must realise its closure and root the result itself — e.g.
+    /// `flox develop` roots the realised dev-shell profile with `nix
+    /// build --out-link` once `nix print-dev-env` has run
+    /// (`Develop::print_dev_env`, `cli/flox/src/commands/develop.rs`) —
+    /// or otherwise accept the small race.
+    fn eval(
+        self,
+        expression_build_nixpkgs: &Url,
+        packages: &[PackageTarget],
+        catalog_lockfile: &Path,
+        system_override: Option<String>,
+    ) -> Result<EvalResults, ManifestBuilderError>;
 }
 
 #[derive(Debug, Error, strum::IntoStaticStr)]
@@ -97,6 +145,15 @@ pub enum ManifestBuilderError {
 
     #[error("failed to parse file for build results")]
     ParseBuildResultFile(#[source] serde_json::Error),
+
+    #[error("failed to create file for eval results")]
+    CreateEvalResultFile(#[source] std::io::Error),
+
+    #[error("failed to read file for eval results")]
+    ReadEvalResultFile(#[source] std::io::Error),
+
+    #[error("failed to parse file for eval results")]
+    ParseEvalResultFile(#[source] serde_json::Error),
 
     #[error("failed to call nix to eval NEF")]
     CallNef(#[source] std::io::Error),
@@ -115,6 +172,18 @@ pub enum ManifestBuilderError {
     // whole process group).
     #[error("Build failed")]
     BuildFailure { status: ExitStatus },
+
+    // Carries the child's `ExitStatus`, mirroring `BuildFailure`, so callers
+    // can tell a genuine eval failure (e.g. an expression that fails to
+    // evaluate) from a signal-terminated one (e.g. Ctrl-C).
+    #[error("Failed to resolve the package to a derivation path.")]
+    EvalFailure { status: ExitStatus },
+
+    #[error("'{0}' is a manifest build; the eval goal resolves Nix expression builds only.")]
+    NotAnExpressionBuild(String),
+
+    #[error("'{0}' does not match a known Nix expression build.")]
+    NoSuchPackage(String),
 }
 
 #[derive(Debug, PartialEq, Deserialize, Default, derive_more::Deref)]
@@ -134,6 +203,51 @@ pub struct BuildResult {
     // TODO: factor out and use buildenv::BuiltStorePath (?)
     #[serde(rename = "resultLinks")]
     pub result_links: BTreeMap<PathBuf, PathBuf>,
+}
+
+/// Deserialization mirror of the `eval` goal's `EVAL_RESULT_FILE`: each
+/// expression package's derivation path, computed without building it.
+#[derive(Clone, Debug, PartialEq, Deserialize, Default, derive_more::Deref)]
+pub struct EvalResults(Vec<EvalResult>);
+
+/// One expression package's eval result: everything needed to build a
+/// development shell from a `drvPath` no build was run to produce.
+#[derive(Clone, Debug, PartialEq, Deserialize)]
+pub struct EvalResult {
+    /// The package this eval belongs to, so a caller evaluating several
+    /// packages at once can tell the results apart.
+    pub pname: String,
+    pub name: String,
+    pub version: String,
+    /// A `PathBuf` rather than `BuildResult::drv_path`'s `String`: the only
+    /// caller (`flox develop`, `cli/flox/src/commands/develop.rs`) passes
+    /// this straight to a `&Path` parameter for `nix print-dev-env`, so
+    /// `PathBuf` serves that use with no conversion. `BuildResult`'s
+    /// `String` serves a different caller (JSON output for `flox build`)
+    /// and the two need not track each other.
+    #[serde(rename = "drvPath")]
+    pub drv_path: PathBuf,
+    #[serde(deserialize_with = "deserialize_package_system")]
+    pub system: PackageSystem,
+}
+
+/// Parse an eval result's system, naming the offending value when it is not
+/// a system Flox can build for.
+///
+/// The value comes from the builder's `NIX_SYSTEM`, i.e. from `--system` when
+/// the user passed one. The derived deserializer would report it as an unknown
+/// variant of an internal type, which reads as a malformed eval result rather
+/// than as the unsupported system that actually caused it.
+fn deserialize_package_system<'de, D>(deserializer: D) -> Result<PackageSystem, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let system = String::deserialize(deserializer)?;
+    std::str::FromStr::from_str(&system).map_err(|_| {
+        serde::de::Error::custom(format!(
+            "'{system}' is not a system Flox can build for; expected 'aarch64-darwin', 'aarch64-linux', 'x86_64-darwin' or 'x86_64-linux'"
+        ))
+    })
 }
 
 /// Represents different license formats that can be found in package metadata
@@ -543,6 +657,125 @@ impl ManifestBuilder for FloxBuildMk<'_> {
 
         Ok(())
     }
+
+    /// Resolve `packages` defined in the environment rendered at `flox_env`
+    /// to their store derivation paths, using the [FLOX_BUILD_MK] makefile's
+    /// `eval` goal.
+    ///
+    /// Mirrors [`ManifestBuilder::build`], but targets `make eval` instead of
+    /// `make build`, stopping at the NEF eval: no package is built, so no
+    /// build cache is consulted and no `FLOX_INTERPRETER` is passed, which
+    /// only manifest build recipes consume.
+    fn eval(
+        self,
+        expression_build_nixpkgs_url: &Url,
+        packages: &[PackageTarget],
+        catalog_lockfile: &Path,
+        system_override: Option<String>,
+    ) -> Result<EvalResults, ManifestBuilderError> {
+        // A manifest build has no derivation for the eval goal to resolve.
+        // Refuse it here, before spawning make, so the error is a typed
+        // variant a caller (e.g. `flox develop`) can render as a
+        // product-level message instead of the Makefile's raw stderr. The
+        // Makefile's own manifest arm (the `eval` goal's `evalResultJSON`
+        // rule) still refuses by name too, as a backstop for anything that
+        // invokes `make eval` directly.
+        if let Some(target) = packages
+            .iter()
+            .find(|target| target.kind().is_manifest_build())
+        {
+            return Err(ManifestBuilderError::NotAnExpressionBuild(
+                target.name().to_string(),
+            ));
+        }
+
+        // A name matching no known Nix expression build resolves to an empty
+        // prerequisite list for the Makefile's `$(EVAL_RESULT_FILE)` rule.
+        // Since that file already exists (created below, before make runs),
+        // make treats it as up to date for an empty prerequisite list and
+        // exits 0 without ever running the recipe, leaving Rust to read back
+        // the empty file it created and mistake it for malformed JSON. Reuse
+        // the same attr-path reflection `PackageTargets::new` uses to catch
+        // this before make ever runs, rather than inferring it from what
+        // make did or didn't write.
+        let known_expression_build_names = get_nix_expression_targets(self.expression_ref)?
+            .into_iter()
+            .map(|(name, _)| name)
+            .collect::<Vec<_>>();
+
+        if let Some(target) = packages
+            .iter()
+            .find(|target| !known_expression_build_names.contains(&target.name().to_string()))
+        {
+            return Err(ManifestBuilderError::NoSuchPackage(
+                target.name().to_string(),
+            ));
+        }
+
+        let named_packages = packages
+            .iter()
+            .map(|target| target.name())
+            .collect::<Vec<_>>();
+
+        let mut command = self.base_command(self.base_dir);
+        command.arg("eval");
+        command.arg(format!("BUILDTIME_NIXPKGS_URL={}", &*COMMON_NIXPKGS_URL));
+        command.arg(format!(
+            "EXPRESSION_BUILD_NIXPKGS_URL={expression_build_nixpkgs_url}"
+        ));
+
+        // The catalog lock the NEF evals consume, created by the CLI.
+        command.arg(format!("CATALOG_LOCKFILE={}", catalog_lockfile.display()));
+
+        if let Some(system_override) = system_override {
+            command.arg(format!("NIX_SYSTEM={system_override}"));
+        }
+
+        command.arg(format!(
+            "FLOX_ENV={}",
+            self.built_environments.dev.display()
+        ));
+        command.arg(format!(
+            "FLOX_ENV_OUTPUTS={}",
+            serde_json::json!(self.built_environments)
+        ));
+        command.arg(format!("FLOX_ENV_CACHE={}", self.flox_env_cache.display()));
+
+        let expression_ref = self.expression_ref.as_url();
+        command.arg(format!("NIX_EXPRESSION_REF={expression_ref}"));
+
+        command.arg(format!(
+            "PACKAGES={}",
+            named_packages.iter().map(|name| name.as_ref()).join(" ")
+        ));
+
+        let eval_result_path = NamedTempFile::new_in(self.temp_dir)
+            .map_err(ManifestBuilderError::CreateEvalResultFile)?
+            .into_temp_path();
+
+        // SAFETY: according to the docs, this is fallible on _Windows_
+        let eval_result_path = eval_result_path
+            .keep()
+            .expect("failed to keep eval result file");
+
+        command.arg(format!("EVAL_RESULT_FILE={}", eval_result_path.display()));
+
+        debug!(command = %command.display(), "running manifest eval target");
+
+        let status = self.run_to_completion(command)?;
+
+        if !status.success() {
+            return Err(ManifestBuilderError::EvalFailure { status });
+        }
+
+        let eval_results = std::fs::read_to_string(&eval_result_path)
+            .map_err(ManifestBuilderError::ReadEvalResultFile)?;
+
+        let eval_results = serde_json::from_str(&eval_results)
+            .map_err(ManifestBuilderError::ParseEvalResultFile)?;
+
+        Ok(eval_results)
+    }
 }
 
 /// The canonical path for nix expressions when associated with an environment:
@@ -939,6 +1172,55 @@ pub mod test_helpers {
         }
     }
 
+    /// Runs [`ManifestBuilder::eval`] for `package` against `expression_ref`
+    /// and returns the parsed [`EvalResults`]. Mirrors
+    /// [`assert_build_status_with_nix_expr`], but drives the `eval` goal
+    /// instead of `build`, so no package build occurs and no `result-*`
+    /// symlinks are created.
+    pub fn eval_with_nix_expr(
+        flox: &Flox,
+        env: &mut PathEnvironment,
+        expression_ref: &NixFlakeref,
+        package: &str,
+    ) -> EvalResults {
+        let toplevel_or_common_nixpkgs =
+            find_toplevel_group_nixpkgs(&env.lockfile(flox).unwrap().into())
+                .map(|toplevel_nixpkgs| toplevel_nixpkgs.as_flake_ref().unwrap())
+                .unwrap_or_else(|| COMMON_NIXPKGS_URL.clone());
+
+        // NEF evals require a CLI-provided catalog lock; these fixtures make
+        // no catalog references, so an empty lock suffices.
+        let empty_lock_path = flox.temp_dir.join("empty-catalog.lock");
+        std::fs::write(
+            &empty_lock_path,
+            "{\"version\": 1, \"direct_catalog_inputs\": {}, \"catalogs\": {}}\n",
+        )
+        .unwrap();
+
+        let base_dir = env.parent_path().unwrap();
+        let built_environments = env.build(flox).unwrap();
+        let cache_path = env.cache_path().unwrap();
+        FloxBuildMk::new(
+            flox,
+            &base_dir,
+            expression_ref,
+            &built_environments,
+            &cache_path,
+        )
+        .eval(
+            &toplevel_or_common_nixpkgs,
+            &[PackageTarget::new_unchecked(
+                package,
+                PackageTargetKind::ExpressionBuild(ExpressionBuildMetadata {
+                    rel_file_path: PathBuf::new(),
+                }),
+            )],
+            &empty_lock_path,
+            None,
+        )
+        .expect("eval() should succeed")
+    }
+
     /// Runs a build and asserts that the `ExitStatus` matches `expect_status`.
     /// STDOUT and STDERR are returned if you wish to make additional
     /// assertions on the output of the build.
@@ -1303,6 +1585,22 @@ mod tests {
         assert_eq!(slug, "build.build_failure");
     }
 
+    /// An unsupported `--system` reaches Rust as the eval result's `system`
+    /// field, so the parse failure has to name the value the user passed
+    /// rather than report an unknown variant of an internal type.
+    #[test]
+    fn eval_result_parse_error_names_the_unsupported_system() {
+        let err = serde_json::from_str::<EvalResults>(
+            r#"[{"pname": "foo", "name": "foo", "version": "unknown", "drvPath": "/nix/store/x.drv", "system": "riscv64-linux"}]"#,
+        )
+        .unwrap_err();
+
+        assert!(
+            err.to_string().contains("riscv64-linux"),
+            "expected the offending system to be named, got: {err}"
+        );
+    }
+
     #[test]
     fn build_returns_failure_when_package_not_defined() {
         let package_name = String::from("foo");
@@ -1311,6 +1609,56 @@ mod tests {
         let mut env = new_path_environment(&flox, "version = 1");
 
         assert_build_status(&flox, &mut env, &package_name, None, false);
+    }
+
+    /// This environment defines no builds at all, so the requested name
+    /// matches nothing in the (empty) attr-path reflection `eval()` checks
+    /// before invoking make — the same [`ManifestBuilderError::NoSuchPackage`]
+    /// check exercised for an environment with an unrelated valid expression
+    /// build in `nef_tests::eval_returns_no_such_package_for_an_unknown_name`.
+    /// This never reaches make: `build_returns_failure_when_package_not_defined`
+    /// above covers the analogous "no builds at all" case for `build()`,
+    /// which has no such check and so does reach the Makefile's own
+    /// "PACKAGES not defined or empty" failure.
+    #[test]
+    fn eval_returns_failure_when_package_not_defined() {
+        let package_name = String::from("foo");
+
+        let (flox, _temp_dir_handle) = flox_instance();
+        let mut env = new_path_environment(&flox, "version = 1");
+        let expression_ref = NixFlakeref::from_path(env.dot_flox_path()).unwrap();
+
+        let empty_lock_path = flox.temp_dir.join("empty-catalog.lock");
+        fs::write(
+            &empty_lock_path,
+            "{\"version\": 1, \"direct_catalog_inputs\": {}, \"catalogs\": {}}\n",
+        )
+        .unwrap();
+
+        let err = FloxBuildMk::new(
+            &flox,
+            &env.parent_path().unwrap(),
+            &expression_ref,
+            &env.build(&flox).unwrap(),
+            &env.cache_path().unwrap(),
+        )
+        .eval(
+            &COMMON_NIXPKGS_URL,
+            &[PackageTarget::new_unchecked(
+                package_name.clone(),
+                PackageTargetKind::ExpressionBuild(ExpressionBuildMetadata {
+                    rel_file_path: PathBuf::new(),
+                }),
+            )],
+            &empty_lock_path,
+            None,
+        )
+        .expect_err("eval() must fail for an undefined package");
+
+        assert!(
+            matches!(&err, ManifestBuilderError::NoSuchPackage(name) if name == &package_name),
+            "expected a typed no-such-package error, not a parse error, got: {err:?}"
+        );
     }
 
     #[test]
@@ -1335,6 +1683,57 @@ mod tests {
 
         assert_build_status(&flox, &mut env, &package_name, None, true);
         assert_build_file(&env_path, &package_name, &file_name, &file_content);
+    }
+
+    /// A manifest build has no derivation for `eval` to resolve.
+    /// `eval()` checks each target's [`PackageTargetKind`] itself and
+    /// refuses before spawning make at all, so this never reaches the
+    /// Makefile's own backstop refusal (exercised only by invoking `make
+    /// eval` directly, which no caller through this API can do).
+    #[test]
+    fn eval_refuses_a_manifest_build_by_name() {
+        let package_name = String::from("foo");
+
+        let manifest = formatdoc! {r#"
+            version = 1
+
+            [build.{package_name}]
+            command = "mkdir $out"
+        "#};
+
+        let (flox, _temp_dir_handle) = flox_instance();
+        let mut env = new_path_environment(&flox, &manifest);
+        let expression_ref = NixFlakeref::from_path(env.dot_flox_path()).unwrap();
+
+        let empty_lock_path = flox.temp_dir.join("empty-catalog.lock");
+        fs::write(
+            &empty_lock_path,
+            "{\"version\": 1, \"direct_catalog_inputs\": {}, \"catalogs\": {}}\n",
+        )
+        .unwrap();
+
+        let err = FloxBuildMk::new(
+            &flox,
+            &env.parent_path().unwrap(),
+            &expression_ref,
+            &env.build(&flox).unwrap(),
+            &env.cache_path().unwrap(),
+        )
+        .eval(
+            &COMMON_NIXPKGS_URL,
+            &[PackageTarget::new_unchecked(
+                package_name.clone(),
+                PackageTargetKind::ManifestBuild { sandbox: None },
+            )],
+            &empty_lock_path,
+            None,
+        )
+        .expect_err("eval() must refuse a manifest build");
+
+        assert!(
+            matches!(&err, ManifestBuilderError::NotAnExpressionBuild(name) if name == &package_name),
+            "expected a typed manifest-build refusal naming {package_name:?}, got: {err:?}"
+        );
     }
 
     #[test]
@@ -3991,6 +4390,7 @@ mod tests {
 mod nef_tests {
     use std::collections::HashMap;
     use std::fs;
+    use std::str::FromStr;
 
     use floxhub_client::LockedInputEntry;
     use indoc::{formatdoc, indoc};
@@ -4002,6 +4402,7 @@ mod nef_tests {
     use crate::models::environment::path_environment::test_helpers::new_path_environment;
     use crate::providers::build::test_helpers::{
         assert_build_status_with_nix_expr,
+        eval_with_nix_expr,
         prepare_nix_expressions_dir_in,
         prepare_nix_expressions_in,
     };
@@ -4099,6 +4500,183 @@ mod nef_tests {
             fs::read(&lockfile).unwrap(),
             lock_bytes,
             "the build must not rewrite the lock it is handed"
+        );
+    }
+
+    #[test]
+    fn eval_returns_drv_path_for_expression_build() {
+        let pname = "foo".to_string();
+
+        let (flox, tempdir) = flox_instance();
+
+        let manifest = formatdoc! {r#"
+            version = 1
+        "#};
+        let mut env = new_path_environment(&flox, &manifest);
+
+        let expressions_ref = prepare_nix_expressions_in(&tempdir, &[(&[&pname], indoc! {r#"
+            {runCommand}: runCommand "{pname}" {} ''
+                echo -n "Hello, World!" >> $out
+            ''
+            "#})]);
+
+        let eval_results = eval_with_nix_expr(&flox, &mut env, &expressions_ref, &pname);
+        assert_eq!(eval_results.len(), 1);
+
+        // drvPath is a store path with content this fixture does not control,
+        // so it is captured rather than hardcoded; every other field is
+        // asserted against a known value, keeping the whole-struct comparison
+        // this codebase's tests otherwise use everywhere.
+        let drv_path = eval_results[0].drv_path.clone();
+        assert!(
+            drv_path.to_string_lossy().starts_with("/nix/store/")
+                && drv_path.extension().is_some_and(|ext| ext == "drv"),
+            "drvPath must name a derivation in the store, got: {}",
+            drv_path.display()
+        );
+
+        // The fixture's `runCommand "{pname}"` argument is a literal string,
+        // not interpolated (this file's `indoc!` fixtures never are), so the
+        // derivation name is Nix's store-safe rendering of that literal, not
+        // `pname`'s value.
+        assert_eq!(*eval_results, vec![EvalResult {
+            pname: pname.clone(),
+            name: "-pname-".to_string(),
+            version: "unknown".to_string(),
+            drv_path,
+            system: PackageSystem::from_str(&flox.system).unwrap(),
+        }]);
+    }
+
+    #[test]
+    fn eval_creates_no_result_symlink() {
+        let pname = "foo".to_string();
+
+        let (flox, tempdir) = flox_instance();
+
+        let manifest = formatdoc! {r#"
+            version = 1
+        "#};
+        let mut env = new_path_environment(&flox, &manifest);
+        let env_path = env.parent_path().unwrap();
+
+        let expressions_ref = prepare_nix_expressions_in(&tempdir, &[(&[&pname], indoc! {r#"
+            {runCommand}: runCommand "{pname}" {} ''
+                echo -n "Hello, World!" >> $out
+            ''
+            "#})]);
+
+        eval_with_nix_expr(&flox, &mut env, &expressions_ref, &pname);
+
+        let result_path = env_path.join(format!("result-{pname}"));
+        assert!(
+            !result_path.exists(),
+            "eval() must not create a result-* symlink, unlike build()"
+        );
+    }
+
+    /// `eval()` and `build()` must resolve the same fixture to the exact same
+    /// derivation. This is the regression the eval goal exists to prevent: a
+    /// `flox develop` shell built from an eval that named a *different*
+    /// derivation than `build` would actually build is a develop shell for
+    /// the wrong environment. Mirrors
+    /// `nef_lock_matches_build_catalog_inputs_and_skips_build`'s parity
+    /// check, but on `drvPath` rather than `direct_catalog_inputs`.
+    #[test]
+    fn eval_and_build_resolve_the_same_derivation() {
+        let pname = "foo".to_string();
+
+        let (flox, tempdir) = flox_instance();
+
+        let manifest = formatdoc! {r#"
+            version = 1
+        "#};
+        let mut env = new_path_environment(&flox, &manifest);
+
+        let expressions_ref = prepare_nix_expressions_in(&tempdir, &[(&[&pname], indoc! {r#"
+            {runCommand}: runCommand "{pname}" {} ''
+                echo -n "Hello, World!" >> $out
+            ''
+            "#})]);
+
+        let eval_results = eval_with_nix_expr(&flox, &mut env, &expressions_ref, &pname);
+
+        let collected = assert_build_status_with_nix_expr(
+            &flox,
+            &mut env,
+            &expressions_ref,
+            &pname,
+            None,
+            None,
+            true,
+        );
+        let build_results = collected.build_results.unwrap();
+
+        assert_eq!(
+            eval_results[0].drv_path,
+            PathBuf::from(&build_results[0].drv_path),
+            "eval() must resolve the same derivation build() actually builds"
+        );
+    }
+
+    /// A name matching no known Nix expression build must not fall through
+    /// to `make`'s `$(EVAL_RESULT_FILE)` rule: with a real GNU make, that
+    /// rule's prerequisite list expands to nothing for an unknown name, so
+    /// make treats the pre-created (empty) result file as already up to
+    /// date and exits 0 without running the recipe at all — leaving Rust to
+    /// parse an empty file as malformed JSON instead of seeing a make
+    /// failure. This environment defines one real expression build so the
+    /// failure can only come from the name check, not from having no builds
+    /// at all (see `eval_returns_failure_when_package_not_defined`, which
+    /// covers that separate case).
+    #[test]
+    fn eval_returns_no_such_package_for_an_unknown_name() {
+        let pname = "foo".to_string();
+        let unknown_name = "bar".to_string();
+
+        let (flox, tempdir) = flox_instance();
+
+        let manifest = formatdoc! {r#"
+            version = 1
+        "#};
+        let mut env = new_path_environment(&flox, &manifest);
+
+        let expressions_ref = prepare_nix_expressions_in(&tempdir, &[(&[&pname], indoc! {r#"
+            {runCommand}: runCommand "{pname}" {} ''
+                echo -n "Hello, World!" >> $out
+            ''
+            "#})]);
+
+        let empty_lock_path = flox.temp_dir.join("empty-catalog.lock");
+        fs::write(
+            &empty_lock_path,
+            "{\"version\": 1, \"direct_catalog_inputs\": {}, \"catalogs\": {}}\n",
+        )
+        .unwrap();
+
+        let err = FloxBuildMk::new(
+            &flox,
+            &env.parent_path().unwrap(),
+            &expressions_ref,
+            &env.build(&flox).unwrap(),
+            &env.cache_path().unwrap(),
+        )
+        .eval(
+            &COMMON_NIXPKGS_URL,
+            &[PackageTarget::new_unchecked(
+                unknown_name.clone(),
+                PackageTargetKind::ExpressionBuild(ExpressionBuildMetadata {
+                    rel_file_path: PathBuf::new(),
+                }),
+            )],
+            &empty_lock_path,
+            None,
+        )
+        .expect_err("eval() must fail for a name matching no known package");
+
+        assert!(
+            matches!(&err, ManifestBuilderError::NoSuchPackage(name) if name == &unknown_name),
+            "expected a typed no-such-package error naming {unknown_name:?}, got: {err:?}"
         );
     }
 
