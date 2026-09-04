@@ -246,6 +246,7 @@
 
       devShells = builtins.mapAttrs (system: pkgsBase: {
         default = pkgsBase.floxDevelopmentPackages.callPackage ./shells/default { };
+        crate2nix = pkgsBase.floxDevelopmentPackages.callPackage ./shells/crate2nix { };
       }) pkgsContext;
 
       # ------------------------------------------------------------------------ #
