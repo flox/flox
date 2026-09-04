@@ -16,6 +16,7 @@ regress.workspace = true
 regex = { workspace = true, optional = true }
 httpmock = { workspace = true, optional = true }
 tokio.workspace = true
+tracing.workspace = true
 
 [build-dependencies]
 prettyplease.workspace = true
