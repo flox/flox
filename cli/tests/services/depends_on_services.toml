@@ -1,0 +1,11 @@
+schema-version = "1.16.0"
+
+# `gate` completes successfully only once the test creates `open-gate`, so
+# whether `gated` has run is a fact about the dependency edge rather than a
+# race between two services that were started at the same time.
+[services.gate]
+command = 'while [ ! -e "$PWD/open-gate" ]; do sleep 0.1; done'
+
+[services.gated]
+command = 'echo started > "$PWD/gated.txt" && sleep infinity'
+depends-on.gate = { condition = "process_completed_successfully" }

@@ -862,6 +862,11 @@ impl CoreEnvironment<ReadOnly> {
         precomputed_lockfile: Option<Lockfile>,
     ) -> Result<(BuildEnvOutputs, Lockfile), EnvironmentError> {
         debug!("transaction: validating services block");
+        // Deliberately not `validate_depends_on_targets`: `manifest` is the
+        // composer's own, and its includes are not merged in until the lock
+        // below, so a target contributed by an included environment is absent
+        // here and would be reported as a misspelling. The composed manifest is
+        // checked when the service config is generated.
         manifest.as_latest_schema().services.validate()?;
 
         let tempdir = tempfile::tempdir_in(&flox.temp_dir)

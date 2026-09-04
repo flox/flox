@@ -7,9 +7,10 @@ use flox_core::data::environment_ref::ActivateEnvironmentRef;
 use flox_events::{CliEnvironmentPayload, EventKind, EventsHub};
 use flox_manifest::interfaces::AsLatestSchema;
 use flox_manifest::parsed::Inner;
-use flox_manifest::parsed::common::ServiceDescriptor;
+use flox_manifest::parsed::latest::ServiceDescriptor;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::providers::services::systemd::render_systemd_unit_file;
+use indoc::formatdoc;
 use tracing::{debug, instrument};
 use xdg::BaseDirectories;
 
@@ -84,6 +85,77 @@ impl Persist {
     }
 }
 
+/// A manifest field the generated systemd unit does not carry, with the
+/// sentence telling the reader what to do about it.
+///
+/// `remedy` is `None` where the unit types Flox renders have no counterpart at
+/// all, so that the message can say so rather than send the reader looking for
+/// a key that does not exist.
+struct NotCarried {
+    field: &'static str,
+    remedy: Option<String>,
+}
+
+/// Names the fields of `descriptor` that the generated systemd unit does not
+/// carry.
+///
+/// A unit file is rendered from `command`, `vars`, `is-daemon` and
+/// `shutdown.command`. The service orchestration fields are honored by
+/// process-compose, which backs `flox activate` and `flox services`, and Flox
+/// derives no systemd counterpart for them: `depends-on` would have to name
+/// units that may not have been persisted, and ordering and the stop timeout
+/// are reached through the `systemd` passthrough instead.
+fn fields_not_carried_into_unit(
+    service_name: &str,
+    descriptor: &ServiceDescriptor,
+) -> Vec<NotCarried> {
+    // Destructuring here forces a field added to the descriptor to be
+    // classified rather than silently joining the carried set. `systems` is
+    // applied before this point, and `systemd` is the passthrough the remedies
+    // point at.
+    let ServiceDescriptor {
+        command: _,
+        vars: _,
+        is_daemon: _,
+        shutdown,
+        depends_on,
+        systemd: _,
+        systems: _,
+    } = descriptor;
+    let passthrough = format!("[services.{service_name}.systemd]");
+
+    let mut fields = Vec::new();
+    if depends_on.is_some() {
+        fields.push(NotCarried {
+            field: "depends-on",
+            remedy: Some(format!(
+                "Set 'unit.after' or 'unit.requires' under '{passthrough}' to order the unit."
+            )),
+        });
+    }
+    let Some(shutdown) = shutdown.as_ref() else {
+        return fields;
+    };
+    if shutdown.timeout_seconds.is_some() {
+        fields.push(NotCarried {
+            field: "shutdown.timeout-seconds",
+            remedy: Some(format!(
+                "Set 'service.timeout_stop_sec' under '{passthrough}' to bound the stop."
+            )),
+        });
+    }
+    if shutdown.signal.is_some() {
+        // `systemd::unit::Service` has no kill-signal field and denies unknown
+        // keys, so pointing at the passthrough here would send the reader into
+        // a parse error.
+        fields.push(NotCarried {
+            field: "shutdown.signal",
+            remedy: None,
+        });
+    }
+    fields
+}
+
 fn persist_systemd(
     env_ref: ActivateEnvironmentRef,
     services_to_persist: Vec<(&String, &ServiceDescriptor)>,
@@ -103,6 +175,32 @@ fn persist_systemd(
             unit_filename,
             unit_path.display()
         ));
+
+        // After the line naming the unit, so that the warning reads as being
+        // about the unit just written rather than the one before it.
+        let not_carried = fields_not_carried_into_unit(service_name, service_descriptor);
+        if !not_carried.is_empty() {
+            let names = not_carried
+                .iter()
+                .map(|entry| format!("'{}'", entry.field))
+                .collect::<Vec<_>>()
+                .join(", ");
+            let remedies = not_carried
+                .iter()
+                .map(|entry| match &entry.remedy {
+                    Some(remedy) => remedy.clone(),
+                    None => format!(
+                        "There is no systemd equivalent for '{}', so the unit stops with the default signal.",
+                        entry.field
+                    ),
+                })
+                .collect::<Vec<_>>()
+                .join("\n");
+            message::warning(formatdoc! {"
+                Service '{service_name}' sets options that '{unit_filename}' does not carry: {names}.
+                {remedies}
+            "});
+        }
     }
 
     message::info("To apply the changes, run: 'systemctl --user daemon-reload'");

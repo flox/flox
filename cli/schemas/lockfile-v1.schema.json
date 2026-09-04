@@ -1526,7 +1526,7 @@
               "type": "string"
             },
             "services": {
-              "$ref": "#/$defs/Services2",
+              "$ref": "#/$defs/Services3",
               "description": "Service definitions"
             },
             "vars": {
@@ -2374,6 +2374,20 @@
           },
           "type": "object"
         },
+        "ServiceDependency": {
+          "additionalProperties": false,
+          "description": "A single `depends-on` edge for a service: wait for `condition` on the named\nservice before starting.",
+          "properties": {
+            "condition": {
+              "$ref": "#/$defs/ServiceStartCondition",
+              "description": "The state the depended-on service must reach before this service starts."
+            }
+          },
+          "required": [
+            "condition"
+          ],
+          "type": "object"
+        },
         "ServiceDescriptor": {
           "additionalProperties": false,
           "description": "The definition of a service in a manifest",
@@ -2438,6 +2452,80 @@
           ],
           "type": "object"
         },
+        "ServiceDescriptor2": {
+          "additionalProperties": false,
+          "description": "The definition of a service in a manifest.\n\nThis is a version-specific copy of `common::ServiceDescriptor` because\nV1_16_0 adds `depends-on` and a richer [ServiceShutdown]; it is otherwise\nidentical.",
+          "properties": {
+            "command": {
+              "description": "The command to run to start the service",
+              "type": "string"
+            },
+            "depends-on": {
+              "additionalProperties": {
+                "$ref": "#/$defs/ServiceDependency"
+              },
+              "description": "Other services that must reach a given state before this service starts.\n\nMaps the name of a depended-on service to the condition that must be\nsatisfied before this service is started. Passed straight through to\nprocess-compose's `depends_on`.",
+              "type": [
+                "object",
+                "null"
+              ]
+            },
+            "is-daemon": {
+              "description": "Whether the service spawns a background process (daemon)",
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "shutdown": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ServiceShutdown2"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "How to shut down the service"
+            },
+            "systemd": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ServiceUnit"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Additional manual config of the systemd service generated for persistent services"
+            },
+            "systems": {
+              "description": "Systems to allow running the service on",
+              "items": {
+                "type": "string"
+              },
+              "type": [
+                "array",
+                "null"
+              ]
+            },
+            "vars": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Vars"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Service-specific environment variables"
+            }
+          },
+          "required": [
+            "command"
+          ],
+          "type": "object"
+        },
         "ServiceShutdown": {
           "additionalProperties": false,
           "properties": {
@@ -2450,6 +2538,57 @@
             "command"
           ],
           "type": "object"
+        },
+        "ServiceShutdown2": {
+          "additionalProperties": false,
+          "description": "How to shut down a service.\n\nThis is a version-specific copy of `common::ServiceShutdown` because\nV1_16_0 makes `command` optional and adds `timeout-seconds` and `signal`.\nKeeping the new shape out of the common struct is what stops older schema\nversions (whose `ServiceDescriptor` uses `common::ServiceShutdown`) from\naccepting it.",
+          "properties": {
+            "command": {
+              "description": "What command to run to shut down the service instead of delivering a\nsignal. Required when `is-daemon` is `true`.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "signal": {
+              "description": "The signal number to send to shut the service down (for example `15`\nfor `SIGTERM`, `2` for `SIGINT`). Cannot be combined with a shutdown\n`command`: the process manager runs the command instead of delivering\na signal, so a signal set alongside one would be silently ignored.",
+              "format": "int32",
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "timeout-seconds": {
+              "description": "How long to wait, in seconds, for the service to shut down — whether\nvia a shutdown command or a signal — before it is killed. The process\nmanager applies its own default of 10 seconds when unset. Zero is not a\nvalid value because the process manager treats it as unset.",
+              "format": "uint32",
+              "minimum": 1,
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          },
+          "type": "object"
+        },
+        "ServiceStartCondition": {
+          "description": "The state a depended-on service must reach before a dependent service is\nallowed to start.\n\nSerializes to the literal condition strings that process-compose expects in\na `depends_on.<name>.condition` field.\n\nprocess-compose also accepts `process_healthy`, which is deliberately not\noffered here: it only means anything once readiness probes are surfaced in\nthe manifest, so it arrives with them rather than accepting a condition that\ncan never be satisfied.",
+          "oneOf": [
+            {
+              "const": "process_started",
+              "description": "The depended-on service's process has been started.",
+              "type": "string"
+            },
+            {
+              "const": "process_completed",
+              "description": "The depended-on service's process has exited, with any status.",
+              "type": "string"
+            },
+            {
+              "const": "process_completed_successfully",
+              "description": "The depended-on service's process has exited successfully (status 0).",
+              "type": "string"
+            }
+          ]
         },
         "ServiceType": {
           "enum": [
@@ -2502,6 +2641,22 @@
             "$ref": "#/$defs/ServiceDescriptor"
           },
           "description": "Service configuration for V1_12_0: adds optional auto-start behavior\nalongside the map of service names to service definitions.\n\nThe `service_map` field is a `parsed::common::Services` (BTreeMap tuple\nstruct) rather than a plain `BTreeMap`, matching the shape shared with\nearlier schema versions that migrate into this one.",
+          "properties": {
+            "auto-start": {
+              "description": "Whether to start all services automatically on `flox activate`.\nCan be suppressed with `--no-start-services`.",
+              "type": [
+                "boolean",
+                "null"
+              ]
+            }
+          },
+          "type": "object"
+        },
+        "Services3": {
+          "additionalProperties": {
+            "$ref": "#/$defs/ServiceDescriptor2"
+          },
+          "description": "Service configuration for V1_16_0.\n\nThis is a version-specific copy of `v1_12_0::Services` because V1_16_0's\n[ServiceDescriptor] adds `depends-on` and `shutdown.{timeout-seconds,signal}`.\nUnlike v1_12_0 the service map is a plain `BTreeMap` rather than a wrapped\n`common::Services`: the uniform `CommonFields::services()` accessor that\nmotivated the wrapping was replaced by per-version validation dispatch.",
           "properties": {
             "auto-start": {
               "description": "Whether to start all services automatically on `flox activate`.\nCan be suppressed with `--no-start-services`.",

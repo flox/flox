@@ -280,7 +280,17 @@ impl Parsed {
             Parsed::V1_13_0(m) => m.services.validate(),
             Parsed::V1_14_0(m) => m.services.validate(),
             Parsed::V1_15_0(m) => m.services.validate(),
-            Parsed::V1_16_0(m) => m.services.validate(),
+            Parsed::V1_16_0(m) => {
+                m.services.validate()?;
+                // This manifest's own services table is the complete set only
+                // when it includes nothing; otherwise the check belongs to the
+                // composed manifest at build time. See
+                // `Services::validate_depends_on_targets`.
+                if m.include.environments.is_empty() {
+                    m.services.validate_depends_on_targets()?;
+                }
+                Ok(())
+            },
         }
     }
 }
