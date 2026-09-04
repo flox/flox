@@ -11,7 +11,6 @@ use serde_with::skip_serializing_none;
 use crate::interfaces::{AsTypedOnlyManifest, SchemaVersion, impl_pkg_lookup};
 use crate::parsed::common::{Containerize, Include, KnownSchemaVersion, Options, Vars};
 use crate::parsed::v1_10_0::{Install, ManifestPackageDescriptor};
-use crate::parsed::{Inner, SkipSerializing};
 pub use crate::parsed::v1_11_0::MinimumCliVersion;
 pub use crate::parsed::v1_13_0::{
     Build,
@@ -32,6 +31,7 @@ pub use crate::parsed::v1_16_0::{
     ServiceStartCondition,
     Services,
 };
+use crate::parsed::{Inner, SkipSerializing};
 use crate::{Manifest, ManifestError, Parsed, TypedOnly};
 
 /// Not meant for writing manifest files, only for reading them.
