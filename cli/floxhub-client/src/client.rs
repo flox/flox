@@ -969,20 +969,6 @@ pub(crate) fn build_http_client(
     base_url: &str,
 ) -> Result<reqwest::Client, String> {
     let headers = build_header_map(extra_headers)?;
-    let retry_host = Url::parse(base_url)
-        .map_err(|error| format!("invalid base URL '{base_url}': {error}"))?
-        .host_str()
-        .ok_or_else(|| format!("base URL '{base_url}' has no host"))?
-        .to_string();
-    let retry_policy = reqwest::retry::for_host(retry_host)
-        .max_retries_per_request(2)
-        .classify_fn(|request| {
-            if request.status() == Some(StatusCode::SERVICE_UNAVAILABLE) {
-                request.retryable()
-            } else {
-                request.success()
-            }
-        });
 
     debug!(
         base_url = %base_url,
@@ -993,8 +979,7 @@ pub(crate) fn build_http_client(
     let client_builder = reqwest::Client::builder()
         .default_headers(headers)
         .connect_timeout(Duration::from_secs(15))
-        .timeout(Duration::from_secs(60))
-        .retry(retry_policy);
+        .timeout(Duration::from_secs(60));
 
     let client_builder = if let Some(ua) = user_agent {
         client_builder.user_agent(ua)
@@ -1196,6 +1181,7 @@ pub mod tests {
         let mock = server.mock(|when, then| {
             when.method("POST").path("/api/v1/catalog/resolve");
             then.status(StatusCode::SERVICE_UNAVAILABLE.as_u16())
+                .header("retry-after", "0")
                 .json_body(json!({"detail": "try again"}));
         });
         let client = FloxhubClient::new(client_config(&server.base_url())).unwrap();
@@ -1234,21 +1220,6 @@ pub mod tests {
         };
         assert_eq!(error.status(), Some(StatusCode::INTERNAL_SERVER_ERROR));
         mock.assert_calls(1);
-    }
-
-    #[tokio::test]
-    async fn accounts_requests_retry_service_unavailable_responses() {
-        let server = MockServer::start_async().await;
-        let mock = server.mock(|when, then| {
-            when.method("GET").path("/accounts/api/v1/accounts/me");
-            then.status(StatusCode::SERVICE_UNAVAILABLE.as_u16());
-        });
-        let client = FloxhubClient::new(client_config(&server.base_url())).unwrap();
-
-        let result = client.resolve_identity("flox_pat_retry-test").await;
-
-        assert!(result.is_err());
-        mock.assert_calls(3);
     }
 
     /// `resolve()` applies `FloxhubClientConfig::stability` to every
