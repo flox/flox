@@ -1966,7 +1966,7 @@ mod migration_tests {
             .to_string();
 
         expect![[r#"
-            schema-version = "1.15.0"
+            schema-version = "1.16.0"
         "#]]
         .assert_eq(&manifest_contents);
     }

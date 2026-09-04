@@ -150,6 +150,20 @@ setup_start_counter_services() {
   assert_success
 }
 
+setup_depends_on_services() {
+  run "$FLOX_BIN" init
+  assert_success
+  run "$FLOX_BIN" edit -f "${TESTS_DIR}/services/depends_on_services.toml"
+  assert_success
+}
+
+setup_shutdown_signal_services() {
+  run "$FLOX_BIN" init
+  assert_success
+  run "$FLOX_BIN" edit -f "${TESTS_DIR}/services/shutdown_signal_services.toml"
+  assert_success
+}
+
 # ---------------------------------------------------------------------------- #
 #
 # NOTE: The following functionality is tested elsewhere:
@@ -175,6 +189,79 @@ EOF
 )
   assert_success
   [ -e hello.txt ]
+}
+
+# The unit tests cover the config Flox writes. These cover what
+# `process-compose` does with it, which is the half that would go unnoticed if
+# we picked a key or a condition string it doesn't honour.
+
+# bats test_tags=services:depends-on
+@test "process-compose honours generated depends-on" {
+  setup_depends_on_services
+
+  run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
+    set -euo pipefail
+    "${TESTS_DIR}"/services/wait_for_service_status.sh producer:Running
+    # `producer` has not completed, so `consumer` must not have been started.
+    "$FLOX_BIN" services status
+    [ ! -e consumer.txt ]
+
+    # Let `producer` exit successfully, which releases `consumer`.
+    touch open-gate
+    "${TESTS_DIR}"/services/wait_for_service_status.sh producer:Completed consumer:Running
+    [ -e consumer.txt ]
+EOF
+)
+  assert_success
+  # A service still waiting on a dependency is reported as `Disabled`, with no
+  # PID assigned, rather than being launched and held.
+  assert_output --regexp "consumer +Disabled \(0\) +\[0\]"
+}
+
+# bats test_tags=services:depends-on
+@test "starting a single service skips its dependencies" {
+  setup_depends_on_services
+
+  # `flox services start <name>` starts only the named service: a dependency
+  # that was never requested is not started, and its condition is treated as
+  # satisfied. This documents that behaviour as much as it asserts it.
+  run "$FLOX_BIN" activate -- bash <(cat <<'EOF'
+    set -euo pipefail
+    "$FLOX_BIN" services start consumer
+    "${TESTS_DIR}"/services/wait_for_service_status.sh consumer:Running producer:Disabled
+    [ -e consumer.txt ]
+EOF
+)
+  assert_success
+}
+
+# bats test_tags=services:shutdown
+@test "process-compose honours generated shutdown signal" {
+  # process-compose v1.94.0 on darwin never leaves `Terminating` for a process
+  # that catches the shutdown signal and exits on its own: the trap fires and
+  # the process exits, but the stop errors with "no such process" after the
+  # timeout and the state machine wedges. A process that dies *from* the signal
+  # stops cleanly, so this is specific to the catch-and-exit shape this test
+  # needs in order to observe which signal was delivered. Verified against the
+  # bundled binary directly, outside Flox. Linux CI carries this test.
+  if [[ "$NIX_SYSTEM" == *"-darwin" ]]; then
+    skip "process-compose wedges on trap-and-exit signal shutdown on darwin"
+  fi
+  setup_shutdown_signal_services
+
+  run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
+    set -euo pipefail
+    "${TESTS_DIR}"/services/wait_for_service_status.sh trapper:Running
+    "$FLOX_BIN" services stop trapper
+    "${TESTS_DIR}"/services/wait_for_service_status.sh trapper:Completed
+    cat trapper-signal.txt
+EOF
+)
+  assert_success
+  # The manifest asks for signal 2, so the SIGTERM trap must not be the one
+  # that fired.
+  assert_output --partial "SIGINT"
+  refute_output --partial "SIGTERM"
 }
 
 @test "can start redis-server and access it using redis-cli" {

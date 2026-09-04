@@ -57,12 +57,13 @@ pub enum KnownSchemaVersion {
     V1_13_0,
     V1_14_0,
     V1_15_0,
+    V1_16_0,
 }
 
 impl KnownSchemaVersion {
     /// Returns the latest schema version.
     pub fn latest() -> Self {
-        KnownSchemaVersion::V1_15_0
+        KnownSchemaVersion::V1_16_0
     }
 
     /// Returns the oldest supported schema version.
@@ -80,6 +81,7 @@ impl KnownSchemaVersion {
             KnownSchemaVersion::V1_13_0,
             KnownSchemaVersion::V1_14_0,
             KnownSchemaVersion::V1_15_0,
+            KnownSchemaVersion::V1_16_0,
         ]
         .into_iter()
     }
@@ -107,6 +109,7 @@ impl TryFrom<VersionKind> for KnownSchemaVersion {
                 "1.13.0" => Ok(KnownSchemaVersion::V1_13_0),
                 "1.14.0" => Ok(KnownSchemaVersion::V1_14_0),
                 "1.15.0" => Ok(KnownSchemaVersion::V1_15_0),
+                "1.16.0" => Ok(KnownSchemaVersion::V1_16_0),
                 _ => Err(ManifestError::InvalidSchemaVersion(v.to_string())),
             },
         }
@@ -123,6 +126,7 @@ impl std::fmt::Display for KnownSchemaVersion {
             KnownSchemaVersion::V1_13_0 => write!(f, "1.13.0"),
             KnownSchemaVersion::V1_14_0 => write!(f, "1.14.0"),
             KnownSchemaVersion::V1_15_0 => write!(f, "1.15.0"),
+            KnownSchemaVersion::V1_16_0 => write!(f, "1.16.0"),
         }
     }
 }
@@ -762,7 +766,7 @@ pub mod test_helpers {
     /// Generate a single ServiceUnit with just enough fields to test `skip_serializing_none`
     /// Generating more than 1(!) value with proptest,
     /// increases the runtime of `proptest!`s to the point that we exhausted our stack space in CI
-    pub(super) fn service_unit_with_none_fields() -> impl Strategy<Value = Option<ServiceUnit>> {
+    pub(crate) fn service_unit_with_none_fields() -> impl Strategy<Value = Option<ServiceUnit>> {
         Just(Some(ServiceUnit {
             unit: Some(systemd::unit::Unit {
                 ..Default::default()

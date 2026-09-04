@@ -11,7 +11,7 @@ use flox_core::proc_status::is_descendant_of;
 use flox_manifest::interfaces::AsLatestSchema;
 use flox_manifest::lockfile::Lockfile;
 use flox_manifest::parsed::Inner;
-use flox_manifest::parsed::common::Services;
+use flox_manifest::parsed::latest::Services;
 use flox_manifest::{Manifest, MigratedTypedOnly};
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::Environment;
@@ -381,21 +381,16 @@ pub async fn start_services_with_new_process_compose(
 
     let manifest = lockfile.migrated_manifest()?;
     let services = &manifest.as_latest_schema().services;
+    let services_for_system = services.copy_for_system(&system);
     let names: Vec<String> = if names.is_empty() {
-        services
-            .copy_for_system(&system)
-            .inner()
-            .keys()
-            .cloned()
-            .collect()
+        services_for_system.inner().keys().cloned().collect()
     } else {
         // Check any specified names against the locked manifest that we'll use
         // for starting `process-compose`. This does a similar job as
         // `processes_by_name_or_default_to_all` where we don't yet have a
         // running `process-compose` instance.
         let all_services = services.inner();
-        let system_services = services.copy_for_system(&system);
-        let system_services = system_services.inner();
+        let system_services = services_for_system.inner();
 
         for name in names {
             if !all_services.contains_key(name) {
@@ -407,6 +402,9 @@ pub async fn start_services_with_new_process_compose(
         }
         names.to_vec()
     };
+    // Dependencies must be requested before their dependents so the process
+    // manager defers on them; see `Services::start_order`.
+    let names = services_for_system.start_order(names);
 
     ActivateOptions {
         // We currently only check for trust for remote environments,
@@ -468,7 +466,7 @@ fn defined_service_not_active_error(name: &str) -> ServicesCommandsError {
 
 #[cfg(test)]
 mod tests {
-    use flox_manifest::parsed::common::ServiceDescriptor;
+    use flox_manifest::parsed::latest::ServiceDescriptor;
     use flox_rust_sdk::providers::services::process_compose::test_helpers::generate_process_state;
 
     use super::*;
@@ -532,6 +530,7 @@ mod tests {
                 vars: None,
                 is_daemon: None,
                 shutdown: None,
+                depends_on: None,
                 systemd: None,
                 systems: Some(vec!["another-system".to_string()]),
             });
@@ -569,6 +568,7 @@ mod tests {
                 vars: None,
                 is_daemon: None,
                 shutdown: None,
+                depends_on: None,
                 systemd: None,
                 systems: Some(vec!["system".to_string()]),
             });

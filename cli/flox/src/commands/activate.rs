@@ -828,7 +828,10 @@ impl ActivateOptions {
             return Vec::new();
         }
 
-        services_for_system.inner().keys().cloned().collect()
+        let names = services_for_system.inner().keys().cloned().collect();
+        // Dependencies must be requested before their dependents so the
+        // process manager defers on them; see `Services::start_order`.
+        services_for_system.start_order(names)
     }
 
     /// Construct the environment list for the shell prompt

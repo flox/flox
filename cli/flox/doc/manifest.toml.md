@@ -53,6 +53,8 @@ Valid string values are:
 - `1.13.0`: introduced `profile.deactivate` and build `sandbox-allow`
 - `1.14.0`: introduced `plugins`
 - `1.15.0`: introduced `hook.on-deactivate`
+- `1.16.0`: introduced services `depends-on`, and
+  `shutdown.timeout-seconds` / `shutdown.signal`
 
 Existing manifest schemas, including the older `version = 1` format, are
 automatically forward-migrated when using features that require a newer schema
@@ -537,11 +539,20 @@ ServiceDescriptor ::= {
 , vars       = null | Map[STRING, STRING]
 , is-daemon  = null | BOOL
 , shutdown   = null | Shutdown
+, depends-on = null | Map[STRING, Dependency]
 , systems    = null | [<STRING>, ...]
 }
 
 Shutdown ::= {
-  command = STRING
+  command         = null | STRING
+, timeout-seconds = null | INT
+, signal          = null | INT
+}
+
+Dependency ::= {
+  condition = ( "process_started"
+              | "process_completed"
+              | "process_completed_successfully" )
 }
 ```
 
@@ -582,9 +593,61 @@ Shutdown ::= {
     sending a SIGTERM to the service. This field is required if the `is-daemon`
     field is `true`.
 
+`shutdown.timeout-seconds`
+:   How long, in seconds, to wait for the service to shut down before it is
+    forcibly killed with `SIGKILL`. Increase this for services that need more
+    time to flush state and exit cleanly (for example a database that would
+    otherwise be killed mid-write and forced into crash recovery on the next
+    start). If omitted, the process manager's default timeout applies.
+
+`shutdown.signal`
+:   The signal number to send to shut the service down, for example `15` for
+    `SIGTERM` or `2` for `SIGINT`. Cannot be combined with `shutdown.command`:
+    the shutdown command is run instead of delivering a signal. If omitted, the
+    process manager's default (`SIGTERM`) is used. Signal numbers above `15`
+    are not portable — Linux and macOS disagree on their meaning — so an
+    environment shared across systems should stay within `1`-`15`.
+
+`depends-on`
+:   A table describing other services that must reach a given state before this
+    service is started. Each key is the name of another service, and each value
+    is a table with a `condition` field selecting one of:
+
+    - `process_started`: wait until the depended-on service's process has been
+      started.
+    - `process_completed`: wait until the depended-on service's process has
+      exited, with any status.
+    - `process_completed_successfully`: wait until the depended-on service's
+      process has exited successfully (status `0`).
+
+    For example, to start `web` only after the `migrations` service has finished
+    successfully:
+
+    ```toml
+    [services.migrations]
+    command = "run-migrations"
+
+    [services.web]
+    command = "run-web"
+    depends-on.migrations = { condition = "process_completed_successfully" }
+    ```
+
+    Dependencies order services that are started together — at activation with
+    `--start-services` or `auto-start`, or by `flox services start` with no
+    names. Starting a service by name starts only that service: a dependency
+    that has not itself been started is not started implicitly and is not
+    waited for, while one that is already running (or waiting to start) is
+    honored.
+
 `systems`
 :   An optional list of systems on which to run this service.
     If omitted, the service is not restricted.
+
+A `depends-on` target may name a service defined by an environment this one
+`[include]`s. It may also name a service that does not run on every system: a
+service is only started after the dependencies that run alongside it, so a
+dependency on a service excluded from the current system by `systems` is dropped
+rather than preventing the environment from being built.
 
 ## `[include]`
 

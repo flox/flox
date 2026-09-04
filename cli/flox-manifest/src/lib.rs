@@ -33,7 +33,6 @@ use toml_edit::DocumentMut;
 use crate::interfaces::{
     AsTypedOnlyManifest,
     AsWritableManifest,
-    CommonFields,
     OriginalSchemaVersion,
     SchemaVersion,
 };
@@ -48,6 +47,7 @@ use crate::parsed::v1_12_0::ManifestV1_12_0;
 use crate::parsed::v1_13_0::ManifestV1_13_0;
 use crate::parsed::v1_14_0::ManifestV1_14_0;
 use crate::parsed::v1_15_0::ManifestV1_15_0;
+use crate::parsed::v1_16_0::ManifestV1_16_0;
 use crate::raw::{
     SyncTypedToRaw,
     TomlEditError,
@@ -240,13 +240,14 @@ enum Parsed {
     V1_13_0(ManifestV1_13_0),
     V1_14_0(ManifestV1_14_0),
     V1_15_0(ManifestV1_15_0),
+    V1_16_0(ManifestV1_16_0),
 }
 
 impl Parsed {
     /// A helper function for creating a [`Parsed`] from whatever the latest
     /// manifest schema version happens to be.
     pub(crate) fn from_latest(manifest: ManifestLatest) -> Self {
-        Self::V1_15_0(manifest)
+        Self::V1_16_0(manifest)
     }
 
     /// Returns the known schema version of the contained manifest.
@@ -262,6 +263,34 @@ impl Parsed {
             Parsed::V1_13_0(_) => KnownSchemaVersion::V1_13_0,
             Parsed::V1_14_0(_) => KnownSchemaVersion::V1_14_0,
             Parsed::V1_15_0(_) => KnownSchemaVersion::V1_15_0,
+            Parsed::V1_16_0(_) => KnownSchemaVersion::V1_16_0,
+        }
+    }
+
+    /// Validates the services section of the contained manifest.
+    ///
+    /// Dispatched per version because the services types are version-specific
+    /// from V1_14_0 on.
+    pub(crate) fn validate_services(&self) -> Result<(), ManifestError> {
+        match self {
+            Parsed::V1(m) => m.services.validate(),
+            Parsed::V1_10_0(m) => m.services.validate(),
+            Parsed::V1_11_0(m) => m.services.validate(),
+            Parsed::V1_12_0(m) => m.services.validate(),
+            Parsed::V1_13_0(m) => m.services.validate(),
+            Parsed::V1_14_0(m) => m.services.validate(),
+            Parsed::V1_15_0(m) => m.services.validate(),
+            Parsed::V1_16_0(m) => {
+                m.services.validate()?;
+                // This manifest's own services table is the complete set only
+                // when it includes nothing; otherwise the check belongs to the
+                // composed manifest at build time. See
+                // `Services::validate_depends_on_targets`.
+                if m.include.environments.is_empty() {
+                    m.services.validate_depends_on_targets()?;
+                }
+                Ok(())
+            },
         }
     }
 }
@@ -365,7 +394,7 @@ impl Manifest<TomlParsed> {
                 parsed,
             },
         };
-        manifest.inner.parsed.services().validate()?;
+        manifest.inner.parsed.validate_services()?;
         Ok(manifest)
     }
 }
@@ -529,6 +558,11 @@ impl<S: ManifestState> Manifest<S> {
                     .map_err(ManifestError::Invalid)?;
                 Ok(Parsed::V1_15_0(manifest))
             },
+            KnownSchemaVersion::V1_16_0 => {
+                let manifest = toml_edit::de::from_document::<ManifestV1_16_0>(toml.clone())
+                    .map_err(ManifestError::Invalid)?;
+                Ok(Parsed::V1_16_0(manifest))
+            },
         }
     }
 }
@@ -634,6 +668,16 @@ impl<'de> Deserialize<'de> for Manifest<TypedOnly> {
                 Ok(Manifest {
                     inner: TypedOnly {
                         parsed: Parsed::V1_15_0(manifest),
+                    },
+                })
+            },
+            KnownSchemaVersion::V1_16_0 => {
+                let d = untyped.into_deserializer();
+                let manifest = ManifestV1_16_0::deserialize(d)
+                    .map_err(|err| serde::de::Error::custom(err.to_string()))?;
+                Ok(Manifest {
+                    inner: TypedOnly {
+                        parsed: Parsed::V1_16_0(manifest),
                     },
                 })
             },

@@ -6,7 +6,7 @@ use bpaf::Bpaf;
 use flox_config::Config;
 use flox_events::{CliEnvironmentPayload, EventKind, EventsHub};
 use flox_manifest::interfaces::AsLatestSchema;
-use flox_manifest::parsed::common::Services;
+use flox_manifest::parsed::latest::Services;
 use flox_rust_sdk::data::System;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::providers::services::process_compose::{ProcessStates, start_service};
@@ -105,13 +105,24 @@ impl Start {
         names: &[String],
         err_stream: &mut impl std::io::Write,
     ) -> Result<()> {
+        let system: System = system.into();
         let processes = ProcessStates::read(&socket)?;
         let named_processes = super::processes_by_name_or_default_to_all(
             &processes,
             manifest_services,
-            system,
+            system.clone(),
             names,
         )?;
+
+        // Dependencies must be requested before their dependents so the
+        // process manager defers on them; see `Services::start_order`.
+        let order = manifest_services
+            .copy_for_system(&system)
+            .start_order(named_processes.iter().map(|p| p.name.clone()).collect());
+        let named_processes: Vec<_> = order
+            .iter()
+            .filter_map(|name| named_processes.iter().find(|p| p.name == *name).copied())
+            .collect();
 
         let mut failure_count = 0;
         for process in named_processes {

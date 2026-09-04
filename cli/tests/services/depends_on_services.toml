@@ -1,0 +1,15 @@
+schema-version = "1.16.0"
+
+# `producer` completes successfully only once the test creates `open-gate`, so
+# whether `consumer` has run is a fact about the dependency edge rather than a
+# race between two services that were started at the same time.
+#
+# `consumer` deliberately sorts before `producer`: a naive alphabetical start
+# order would request the dependent first, and process-compose treats an edge
+# to a never-requested process as satisfied.
+[services.producer]
+command = 'while [ ! -e "$PWD/open-gate" ]; do sleep 0.1; done'
+
+[services.consumer]
+command = 'echo started > "$PWD/consumer.txt" && sleep infinity'
+depends-on.producer = { condition = "process_completed_successfully" }

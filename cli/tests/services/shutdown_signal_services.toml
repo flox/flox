@@ -1,0 +1,13 @@
+schema-version = "1.16.0"
+
+# Records which signal was actually delivered. `sleep` runs in the background so
+# that the shell can run the trap immediately instead of waiting for a
+# foreground command to return.
+[services.trapper]
+command = '''
+trap 'echo SIGINT > "$PWD/trapper-signal.txt"; exit 0' INT
+trap 'echo SIGTERM > "$PWD/trapper-signal.txt"; exit 0' TERM
+sleep infinity &
+wait $!
+'''
+shutdown = { signal = 2, timeout-seconds = 5 }

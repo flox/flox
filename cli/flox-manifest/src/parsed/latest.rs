@@ -16,8 +16,18 @@ pub use crate::parsed::v1_13_0::BuildSandbox;
 // Hook is version-specific from V1_15_0 on (it adds `on-deactivate`),
 // so the latest schema re-exports that copy rather than common's.
 pub use crate::parsed::v1_15_0::Hook;
+// The services types are version-specific from v1.14.0 on; consumers operate
+// on the latest schema, so the latest copies are re-exported here like `Hook`.
+pub use crate::parsed::v1_16_0::{
+    DroppedDependency,
+    ServiceDependency,
+    ServiceDescriptor,
+    ServiceShutdown,
+    ServiceStartCondition,
+    Services,
+};
 use crate::{Manifest, ManifestError, TypedOnly};
-pub type ManifestLatest = crate::parsed::v1_15_0::ManifestV1_15_0;
+pub type ManifestLatest = crate::parsed::v1_16_0::ManifestV1_16_0;
 
 impl ManifestLatest {
     /// Try to return a manifest in its original schema
@@ -88,6 +98,15 @@ impl ManifestLatest {
                 untyped
             },
             KnownSchemaVersion::V1_15_0 => {
+                let mut untyped =
+                    serde_json::to_value(self).map_err(ManifestError::SerializeJson)?;
+                let map = untyped
+                    .as_object_mut()
+                    .expect("all valid manifests should serialize to JSON objects");
+                map.insert("schema-version".into(), "1.15.0".into());
+                untyped
+            },
+            KnownSchemaVersion::V1_16_0 => {
                 return Ok(Some(self.as_typed_only()));
             },
         };
@@ -142,6 +161,16 @@ mod tests {
     // `sandbox-allow`), so build assertions use the latest schema's types.
     use crate::parsed::v1_13_0::{Build, BuildDescriptor, Profile, ProfileDeactivate};
     use crate::parsed::v1_14_0::Plugins;
+    // ManifestLatest's services section is the version-specific Services
+    // (with `depends-on` and `shutdown.{timeout-seconds,signal}`), so service
+    // assertions use the latest schema's types.
+    use crate::parsed::v1_16_0::{
+        ServiceDependency,
+        ServiceDescriptor,
+        ServiceShutdown,
+        ServiceStartCondition,
+        Services,
+    };
     use crate::test_helpers::{with_latest_schema, with_schema};
 
     #[test]
@@ -694,6 +723,272 @@ mod tests {
             .unwrap();
 
         assert_eq!(compat.get_schema_version(), KnownSchemaVersion::latest());
+    }
+
+    #[test]
+    fn depends_on_rejected_by_v1_15_0_schema() {
+        let manifest = with_schema(KnownSchemaVersion::V1_15_0, indoc! {r#"
+            [services.web]
+            command = "run-web"
+
+            [services.web.depends-on.db]
+            condition = "process_started"
+
+            [services.db]
+            command = "run-db"
+        "#});
+
+        let err = Manifest::parse_toml_typed(&manifest)
+            .expect_err("'services.<name>.depends-on' should be rejected by the v1.15.0 schema");
+
+        let ManifestError::Invalid(err) = err else {
+            panic!("expected ManifestError::Invalid, got: {err:?}");
+        };
+        assert!(
+            err.message()
+                .starts_with("unknown field `depends-on`, expected"),
+            "unexpected error message: {err}",
+        );
+    }
+
+    #[test]
+    fn shutdown_signal_rejected_by_v1_15_0_schema() {
+        let manifest = with_schema(KnownSchemaVersion::V1_15_0, indoc! {r#"
+            [services.web]
+            command = "run-web"
+            shutdown = { command = "stop-web", signal = 2 }
+        "#});
+
+        let err = Manifest::parse_toml_typed(&manifest).expect_err(
+            "'services.<name>.shutdown.signal' should be rejected by the v1.15.0 schema",
+        );
+
+        let ManifestError::Invalid(err) = err else {
+            panic!("expected ManifestError::Invalid, got: {err:?}");
+        };
+        assert!(
+            err.message()
+                .starts_with("unknown field `signal`, expected"),
+            "unexpected error message: {err}",
+        );
+    }
+
+    #[test]
+    fn timeout_seconds_rejected_by_v1_15_0_schema() {
+        let manifest = with_schema(KnownSchemaVersion::V1_15_0, indoc! {r#"
+            [services.web]
+            command = "run-web"
+            shutdown = { command = "stop-web", timeout-seconds = 30 }
+        "#});
+
+        let err = Manifest::parse_toml_typed(&manifest).expect_err(
+            "'services.<name>.shutdown.timeout-seconds' should be rejected by the v1.15.0 schema",
+        );
+
+        let ManifestError::Invalid(err) = err else {
+            panic!("expected ManifestError::Invalid, got: {err:?}");
+        };
+        assert!(
+            err.message()
+                .starts_with("unknown field `timeout-seconds`, expected"),
+            "unexpected error message: {err}",
+        );
+    }
+
+    #[test]
+    fn shutdown_without_command_rejected_by_v1_15_0_schema() {
+        // 1.15.0's `common::ServiceShutdown.command` is a required `String`
+        // (1.16.0 relaxes it to `Option<String>`, which is what lets a
+        // shutdown table set only `timeout-seconds` or `signal`), so an
+        // empty shutdown table hits serde's missing-required-field
+        // rejection rather than the `deny_unknown_fields` path the sibling
+        // tests exercise. A table with an unrecognized key like
+        // `timeout-seconds` present would hit `deny_unknown_fields` first,
+        // before serde ever checks for the missing `command`, so this needs
+        // to omit every 1.15.0 field to reach the rejection it's meant to
+        // cover.
+        let manifest = with_schema(KnownSchemaVersion::V1_15_0, indoc! {r#"
+            [services.web]
+            command = "run-web"
+            shutdown = {}
+        "#});
+
+        let err = Manifest::parse_toml_typed(&manifest).expect_err(
+            "'services.<name>.shutdown' without 'command' should be rejected by the v1.15.0 schema",
+        );
+
+        let ManifestError::Invalid(err) = err else {
+            panic!("expected ManifestError::Invalid, got: {err:?}");
+        };
+        assert!(
+            err.message().starts_with("missing field `command`"),
+            "unexpected error message: {err}",
+        );
+    }
+
+    #[test]
+    fn downgrades_to_v1_15_0_when_new_service_fields_unused() {
+        let manifest = ManifestLatest {
+            services: Services {
+                auto_start: None,
+                service_map: [("web".to_string(), ServiceDescriptor {
+                    command: "run-web".to_string(),
+                    vars: None,
+                    is_daemon: None,
+                    shutdown: None,
+                    depends_on: None,
+                    systemd: None,
+                    systems: None,
+                })]
+                .into(),
+            },
+            ..Default::default()
+        };
+
+        let compat = manifest
+            .as_maybe_backwards_compatible(KnownSchemaVersion::V1_15_0, None)
+            .unwrap();
+
+        // Must assert the literal V1_15_0, not `KnownSchemaVersion::latest()` —
+        // the latter shape auto-follows any future schema bump and catches
+        // nothing.
+        assert_eq!(compat.get_schema_version(), KnownSchemaVersion::V1_15_0);
+    }
+
+    #[test]
+    fn stays_latest_schema_when_depends_on_used() {
+        let manifest = ManifestLatest {
+            services: Services {
+                auto_start: None,
+                service_map: [
+                    ("web".to_string(), ServiceDescriptor {
+                        command: "run-web".to_string(),
+                        vars: None,
+                        is_daemon: None,
+                        shutdown: None,
+                        depends_on: Some(
+                            [("db".to_string(), ServiceDependency {
+                                condition: ServiceStartCondition::ProcessStarted,
+                            })]
+                            .into(),
+                        ),
+                        systemd: None,
+                        systems: None,
+                    }),
+                    ("db".to_string(), ServiceDescriptor {
+                        command: "run-db".to_string(),
+                        vars: None,
+                        is_daemon: None,
+                        shutdown: None,
+                        depends_on: None,
+                        systemd: None,
+                        systems: None,
+                    }),
+                ]
+                .into(),
+            },
+            ..Default::default()
+        };
+
+        let compat = manifest
+            .as_maybe_backwards_compatible(KnownSchemaVersion::V1_15_0, None)
+            .unwrap();
+
+        assert_eq!(compat.get_schema_version(), KnownSchemaVersion::latest());
+    }
+
+    #[test]
+    fn stays_latest_schema_when_timeout_seconds_used() {
+        let manifest = ManifestLatest {
+            services: Services {
+                auto_start: None,
+                service_map: [("web".to_string(), ServiceDescriptor {
+                    command: "run-web".to_string(),
+                    vars: None,
+                    is_daemon: None,
+                    shutdown: Some(ServiceShutdown {
+                        command: None,
+                        timeout_seconds: std::num::NonZeroU32::new(8),
+                        signal: None,
+                    }),
+                    depends_on: None,
+                    systemd: None,
+                    systems: None,
+                })]
+                .into(),
+            },
+            ..Default::default()
+        };
+
+        let compat = manifest
+            .as_maybe_backwards_compatible(KnownSchemaVersion::V1_15_0, None)
+            .unwrap();
+
+        assert_eq!(compat.get_schema_version(), KnownSchemaVersion::latest());
+    }
+
+    #[test]
+    fn stays_latest_schema_when_signal_used() {
+        let manifest = ManifestLatest {
+            services: Services {
+                auto_start: None,
+                service_map: [("web".to_string(), ServiceDescriptor {
+                    command: "run-web".to_string(),
+                    vars: None,
+                    is_daemon: None,
+                    shutdown: Some(ServiceShutdown {
+                        command: None,
+                        timeout_seconds: None,
+                        signal: Some(2),
+                    }),
+                    depends_on: None,
+                    systemd: None,
+                    systems: None,
+                })]
+                .into(),
+            },
+            ..Default::default()
+        };
+
+        let compat = manifest
+            .as_maybe_backwards_compatible(KnownSchemaVersion::V1_15_0, None)
+            .unwrap();
+
+        assert_eq!(compat.get_schema_version(), KnownSchemaVersion::latest());
+    }
+
+    #[test]
+    fn depends_on_target_that_names_no_service_is_rejected_at_parse() {
+        let manifest = with_latest_schema(indoc! {r#"
+            [services.web]
+            command = "run-web"
+            depends-on.db = { condition = "process_started" }
+        "#});
+
+        let err = Manifest::parse_toml_typed(&manifest)
+            .expect_err("a 'depends-on' target naming no service should be rejected");
+
+        assert!(
+            err.to_string().contains("not defined in this environment"),
+            "unexpected error message: {err}",
+        );
+    }
+
+    #[test]
+    fn depends_on_target_may_come_from_an_included_environment() {
+        // `db` is contributed by the included environment, so it is absent from
+        // this manifest's own services table.
+        let manifest = with_latest_schema(indoc! {r#"
+            [[include.environments]]
+            dir = "../database"
+
+            [services.web]
+            command = "run-web"
+            depends-on.db = { condition = "process_started" }
+        "#});
+
+        Manifest::parse_toml_typed(&manifest)
+            .expect("a 'depends-on' target may be defined by an included environment");
     }
 
     /// Generates a mock `TypedManifest` for testing purposes.
