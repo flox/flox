@@ -78,8 +78,19 @@ Two modules are involved, by design:
 
 - Beta commands may freely depend on `flox-rust-sdk`, but when adding beta commands, strive to leave `flox-rust-sdk` code unchanged. Any code in the beta module doesn't need to be reviewed for stability, but any code changes in other crates will require more thorough review which will make it slower to add the beta command.
 - Reaching into the rest of the `flox` crate (`crate::utils::message`,
-  `crate::subcommand_metric!`, …) is fine and needs no factoring out. Prefer
+  `crate::utils::events`, …) is fine and needs no factoring out. Prefer
   it over duplicating a helper inside `beta/`.
+- Telemetry: beta commands go through the normal dispatcher, so
+  `cli.command_run` and `cli.command_completed` are emitted for free —
+  most beta commands need no instrumentation of their own. Add a
+  bespoke v2 event (see the `adding-metrics-events` skill) only when
+  there is domain data worth reporting; that touches `cli/flox-events`
+  and is reviewed as a wire-contract change, so the
+  keep-`flox-rust-sdk`-unchanged guidance above doesn't make it free.
+  Don't add new `subcommand_metric!` calls — the existing beta
+  commands that use the macro predate the v2 pipeline; don't copy
+  them. Event names are frozen once a release that can emit them
+  ships, gated or not.
 - Don't put beta-only logic in `commands/`, elsewhere in `flox`, or in
   `flox-rust-sdk`; keep it in the `beta` module.
 - Integration tests are not required for beta commands while they

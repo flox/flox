@@ -86,6 +86,7 @@ pre-commit run -a              # Run all linters
 | `flox-rust-sdk` | Core SDK: data structures, models, providers |
 | `flox-core` | Low-level utilities (activations, paths, versions) |
 | `flox-activations` | Environment activation binaries and process monitoring |
+| `flox-events` | v2 telemetry events: envelope types, buffering, sending |
 | `catalog-api-v1` | Catalog API client (generated from OpenAPI) |
 | `flox-test-utils` | Shared test helpers |
 | `mk_data` | Test data generator |
@@ -192,6 +193,19 @@ the backticks.** Use the quoted form, never the bare form:
 eval "`flox activate`"   # correct
 eval `flox activate`     # WRONG — output is word-split and brace-expanded
 ```
+
+## Metrics / telemetry
+
+All new CLI telemetry goes through the v2 events pipeline
+(`cli/flox-events`); do not add to the legacy `subcommand_metric!`
+stream. The wire contract — envelope shape, naming, stability and
+privacy rules — is documented in `cli/flox-events/README.md`, and the
+step-by-step procedure for adding an event or field is the
+`adding-metrics-events` skill
+(`.claude/skills/adding-metrics-events/SKILL.md`). Event and field names are frozen once
+shipped: renames and type changes break downstream consumers silently.
+A failing golden test in that crate is a contract signal — read the
+README before touching the expected JSON.
 
 ## Pull Requests
 
