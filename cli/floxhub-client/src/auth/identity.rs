@@ -1,16 +1,16 @@
 //! The identity behind a FloxHub credential.
 //!
 //! [`UserIdentity`] cannot be derived locally from an opaque token; it is
-//! resolved through the FloxHub client (`GET /api/v1/accounts/me`) at the
-//! point of use and cached process-wide, keyed by token secret — a token's
-//! identity never changes. This module defines the data contract and the
-//! cache only — it carries no transport.
+//! resolved through the FloxHub client (the accounts service's
+//! `GET /api/v1/accounts/me`, exposed publicly at
+//! `/accounts/api/v1/accounts/me`) at the point of use and cached process-wide,
+//! keyed by token secret — a token's identity never changes. This module
+//! defines the data contract and the cache only — it carries no transport.
 
 use std::collections::HashMap;
 use std::sync::{LazyLock, Mutex};
 
 use chrono::{DateTime, Utc};
-use serde::Deserialize;
 use thiserror::Error;
 
 /// Placeholder handle shown when a credential could not be verified (e.g.
@@ -21,11 +21,14 @@ pub const UNKNOWN_HANDLE: &str = "UNKNOWN";
 /// The identity behind a credential.
 ///
 /// Uniform across credential kinds: derived from JWT claims for Auth0,
-/// resolved from `/me` for a personal access token, and from the principal
-/// for Kerberos.
-#[derive(Debug, Clone, PartialEq, Deserialize)]
+/// resolved from `/me` for a personal or service account token, and from the
+/// principal for Kerberos.
+#[derive(Debug, Clone, PartialEq)]
 pub struct UserIdentity {
     pub handle: String,
+    /// Pseudonymous authenticated subject. For JWTs this is the `sub`
+    /// claim; for opaque credentials it is `/me.user_id`.
+    pub sub: Option<String>,
     /// Wall-clock expiry of the presenting credential;
     /// `None` when it never expires.
     pub expires_at: Option<DateTime<Utc>>,
@@ -86,6 +89,7 @@ pub mod test_helpers {
     pub fn test_identity(handle: &str) -> UserIdentity {
         UserIdentity {
             handle: handle.to_string(),
+            sub: None,
             expires_at: None,
         }
     }

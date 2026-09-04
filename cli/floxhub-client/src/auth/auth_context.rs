@@ -100,23 +100,26 @@ impl AuthContext {
         }
     }
 
-    /// Return the pseudonymous subject identifier for telemetry
-    /// attribution, if one is available.
+    /// Return the pseudonymous subject identifier for telemetry attribution,
+    /// if one is available locally or in the process-wide identity cache.
     ///
     /// Auth0 tokens carry the OIDC `sub` claim ([`FloxhubToken::sub`]) —
     /// opaque and stable across the user's lifetime, so it remains valid
-    /// attribution even when the token has expired. Kerberos has no
-    /// pseudonymous equivalent today (the principal is directly
-    /// identifying), so kerberos-mode invocations return `None`.
+    /// attribution even when the token has expired. PATs and SATs read the
+    /// `/me.user_id` value after identity resolution has populated the cache.
+    /// Kerberos has no pseudonymous equivalent today (the principal is
+    /// directly identifying), so kerberos-mode invocations return `None`.
     ///
     /// [`FloxhubToken::sub`]: crate::auth::token::FloxhubToken::sub
-    pub fn user_subject(&self) -> Option<&str> {
+    pub fn user_subject(&self) -> Option<String> {
         match self {
-            AuthContext::Auth0(Some(token)) => token.sub(),
+            AuthContext::Auth0(Some(token)) => token.sub().map(str::to_owned),
             AuthContext::Auth0(None) => None,
-            AuthContext::Bare(token) => token.sub(),
-            // An opaque token carries no locally readable subject.
-            AuthContext::AccessToken(_) => None,
+            AuthContext::Bare(token) => token.sub().map(str::to_owned),
+            AuthContext::AccessToken(token) => {
+                crate::auth::identity::cached_identity(token.secret())
+                    .and_then(|identity| identity.sub)
+            },
             AuthContext::Kerberos(_) => None,
         }
     }
@@ -238,7 +241,7 @@ mod tests {
     fn user_subject_returns_sub_for_auth0_token() {
         let token = FloxhubToken::from_str(FAKE_TOKEN_WITH_SUB).expect("token parses");
         assert_eq!(
-            AuthContext::Auth0(Some(token)).user_subject(),
+            AuthContext::Auth0(Some(token)).user_subject().as_deref(),
             Some("github|424242")
         );
     }
@@ -250,7 +253,7 @@ mod tests {
         let token = FloxhubToken::from_str(FAKE_EXPIRED_TOKEN_WITH_SUB).expect("token parses");
         assert!(token.is_expired(), "test premise: token is expired");
         assert_eq!(
-            AuthContext::Auth0(Some(token)).user_subject(),
+            AuthContext::Auth0(Some(token)).user_subject().as_deref(),
             Some("github|424242")
         );
     }
@@ -296,6 +299,19 @@ mod tests {
     }
 
     #[test]
+    fn pat_subject_reads_the_cached_identity() {
+        let token = AccessToken::new("flox_pat_context-subject-test".to_string());
+        crate::auth::identity::cache_identity(token.secret(), &crate::auth::UserIdentity {
+            handle: "testuser".to_string(),
+            sub: Some("auth0|123".to_string()),
+            expires_at: None,
+        });
+        let auth = AuthContext::AccessToken(token);
+
+        assert_eq!(auth.user_subject().as_deref(), Some("auth0|123"));
+    }
+
+    #[test]
     fn pat_authorization_header_is_bearer_secret() {
         let auth = pat_unresolved();
         let url = Url::parse("https://api.flox.dev").unwrap();
@@ -320,8 +336,8 @@ mod tests {
 
     #[test]
     fn new_from_token_routes_flox_prefix_to_access_token() {
-        // Any flox_-prefixed token is an opaque access token: personal
-        // access tokens today, service account tokens to come.
+        // Any flox_-prefixed token is an opaque access token, including
+        // personal and service account tokens.
         for secret in ["flox_pat_abc123", "flox_sat_abc123"] {
             let auth = AuthContext::new_from_token(Some(secret));
             let AuthContext::AccessToken(token) = auth else {
@@ -373,7 +389,10 @@ mod tests {
         // comes from the /me-filled cache, like an opaque token's.
         let token = test_bare_token("context-bare-handle-test");
         let auth = AuthContext::Bare(token.clone());
-        assert_eq!(auth.user_subject(), Some("context-bare-handle-test"));
+        assert_eq!(
+            auth.user_subject().as_deref(),
+            Some("context-bare-handle-test")
+        );
         assert_eq!(auth.handle(), None);
 
         crate::auth::identity::cache_identity(token.secret(), &test_identity("dexter"));

@@ -297,8 +297,13 @@ impl FloxArgs {
             )
             .await;
             if update_prompted
-                && let Some(events_client) =
-                    build_events_client(&config, resolve_invocation_id(), None)
+                && let Some(events_client) = build_events_client(
+                    &config,
+                    resolve_invocation_id(),
+                    &AuthContext::new_from_token(None),
+                    None,
+                )
+                .await
                 && let Err(err) = events_client.record_event(EventKind::CliUpdatePrompted {})
             {
                 debug!(error = %err, "Failed to record v2 cli.update_prompted event");
@@ -368,9 +373,9 @@ impl FloxArgs {
         // `resolve_auth_context` is deliberately not behind this gate — it
         // still runs in the hook flow (returning the token, suppressing
         // messages) and gates on the auth mode alone. Consequently, hook-flow
-        // invocations by keyring-storage users emit with `auth_subject`
-        // absent — an accepted gap; a prompt hook must never trigger a
-        // keyring unlock.
+        // invocations by keyring-storage users emit with `auth_subject` absent
+        // and `credential_type` set to `none` — an accepted gap; a prompt hook
+        // must never trigger a keyring unlock.
         let stores = CredentialStores::new(floxhub.base_url(), &config.flox.config_dir);
         let is_auth0 = !matches!(
             config.flox.floxhub_authn_mode,
@@ -391,36 +396,7 @@ impl FloxArgs {
         }
 
         let credential = self.resolve_auth_context(&config);
-
-        if let Some(events_client) = build_events_client(
-            &config,
-            resolve_invocation_id(),
-            credential.user_subject().map(String::from),
-        ) {
-            EventsHub::global().set_client(events_client);
-        }
-
-        // Emit the v2 `cli.command_run` once at dispatch start. The matching
-        // `cli.command_completed` is emitted when the dispatch finishes (or by
-        // `activate` before it replaces the process); the hub deduplicates.
-        //
-        // "Dispatch start" sits after credential resolution so the event
-        // carries `auth_subject` (see the block above). The cost: an
-        // invocation that dies upstream — on the fallible FloxHub-URL
-        // construction, killed while `resolve_into` waits on an OS keyring
-        // unlock, or killed during credential resolution (e.g. kerberos
-        // ticket I/O) — records neither `cli.command_run` nor the matching
-        // `cli.command_completed` (no client installs, so the invocation is
-        // invisible to v2 telemetry). Accepted: such an invocation errors
-        // out or is aborted before doing any work.
-        let v2_subcommand: &'static str = self
-            .command
-            .as_ref()
-            .map(Commands::subcommand_name)
-            .unwrap_or("help");
-        if let Err(err) = EventsHub::global().record_command_run(v2_subcommand.to_string()) {
-            debug!(error = %err, "Failed to record v2 cli.command_run event");
-        }
+        let invocation_id = resolve_invocation_id();
 
         let metrics_device_uuid = (!config.flox.disable_metrics)
             .then(|| read_metrics_uuid(&config).ok())
@@ -455,8 +431,41 @@ impl FloxArgs {
             floxhub.api_url_str(),
             credential.clone(),
             metrics_device_uuid,
+            invocation_id,
             on_unauthenticated_resolve,
         )?;
+
+        // Prompt hooks must not gain a telemetry-only network dependency.
+        // Their credential type still reflects an explicitly configured
+        // token, but opaque-token subjects remain absent in this flow.
+        let events_floxhub_client = (!self.is_prompt_hook_flow()).then_some(&floxhub_client);
+        if let Some(events_client) =
+            build_events_client(&config, invocation_id, &credential, events_floxhub_client).await
+        {
+            EventsHub::global().set_client(events_client);
+        }
+
+        // Emit the v2 `cli.command_run` once at dispatch start. The matching
+        // `cli.command_completed` is emitted when the dispatch finishes (or by
+        // `activate` before it replaces the process); the hub deduplicates.
+        //
+        // "Dispatch start" sits after credential resolution and best-effort
+        // PAT/SAT subject resolution so the event carries `auth_subject` and
+        // `credential_type`. The cost: an invocation that dies upstream — on
+        // fallible FloxHub setup, killed while `resolve_into` waits on an OS
+        // keyring unlock, or killed during credential resolution (e.g.
+        // kerberos ticket I/O) — records neither `cli.command_run` nor the
+        // matching `cli.command_completed` (no client installs, so the
+        // invocation is invisible to v2 telemetry). Accepted: such an
+        // invocation errors out or is aborted before doing any work.
+        let v2_subcommand: &'static str = self
+            .command
+            .as_ref()
+            .map(Commands::subcommand_name)
+            .unwrap_or("help");
+        if let Err(err) = EventsHub::global().record_command_run(v2_subcommand.to_string()) {
+            debug!(error = %err, "Failed to record v2 cli.command_run event");
+        }
 
         // we already make sure $USER corresponds to **euid** earlier on in the process.
         let system_user_name =
