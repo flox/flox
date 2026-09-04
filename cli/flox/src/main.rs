@@ -228,8 +228,9 @@ fn main() -> ExitCode {
     };
 
     // Emit the v2 `cli.command_completed`. The hub no-ops when no client was
-    // installed (e.g. a bare `flox` invocation) or when `activate.rs`
-    // recorded the pre-exec completion before `exec`.
+    // installed (e.g. a bare `flox` invocation) or when `activate.rs` or
+    // `develop.rs` already recorded the pre-exec completion before their
+    // own `exec`.
     if let Err(err) = flox_events::EventsHub::global().record_command_completed(
         v2_subcommand.to_string(),
         LifecycleFields {
