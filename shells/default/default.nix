@@ -25,6 +25,7 @@
   writeShellScript,
   yamlfmt,
   yq,
+  crate2nix,
   ci ? false,
 }:
 let
@@ -44,6 +45,7 @@ let
     ++ [
       cargo-nextest
       commitizen
+      crate2nix
       daemonize
       flox-cli-tests
       hivemind
