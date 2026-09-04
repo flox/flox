@@ -313,6 +313,12 @@ gen-unit-data-for-publish floxhub_repo_path force="": (reset-floxhub-db floxhub_
 
 # ---------------------------------------------------------------------------- #
 
+# Regenerate the crate2nix build file, after any change to Cargo.lock
+@gen-cargo-nix:
+    crate2nix generate --output pkgs/crate2nix/Cargo.nix
+
+# ---------------------------------------------------------------------------- #
+
 # Run the nix-plugins tests
 @test-nix-plugins: build-nix-plugins
     meson test -C nix-plugins/builddir
