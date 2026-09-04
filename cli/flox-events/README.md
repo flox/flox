@@ -129,8 +129,8 @@ an event means adding its row here.
 | `cli.command_completed` | `CliCommandCompletedPayload` — exit code, duration, `error_kind` |
 | `cli.environment.activate` | `CliEnvironmentActivatePayload` |
 | `cli.environment.create`, `cli.environment.delete`, `cli.environment.push`, `cli.environment.pull`, `cli.environment.containerize`, `cli.environment.install`, `cli.environment.uninstall`, `cli.environment.upgrade`, `cli.environment.include.upgrade`, `cli.environment.list` | `CliEnvironmentPayload` — env detail only; the variant is the discriminant |
-| `cli.environment.edit` | `CliEnvironmentEditPayload` |
-| `cli.environment.publish` | `CliEnvironmentPublishPayload` |
+| `cli.environment.edit` | `CliEnvironmentEditPayload` — **two rows per invocation**, see Sparse merge |
+| `cli.environment.publish` | `CliEnvironmentPublishPayload` — **two rows per invocation**, see Sparse merge |
 | `cli.environment.services.start`, `cli.environment.services.stop`, `cli.environment.services.restart`, `cli.environment.services.status`, `cli.environment.services.logs`, `cli.environment.services.persist` | `CliEnvironmentPayload` |
 | `cli.environment.generations.history`, `cli.environment.generations.rollback`, `cli.environment.generations.switch` | `CliEnvironmentPayload` |
 | `cli.environment.generations.list` | `CliEnvironmentGenerationsListPayload` |
@@ -234,7 +234,8 @@ not be allowed. They are frozen as-is and are **not precedents**:
 |---|---|---|
 | `search_term` | `cli.search` | The search text verbatim (legacy parity). |
 | `env_ref_or_name` | `cli.environment.*` | `owner/name` for managed/remote environments — the owner segment is a FloxHub handle; the environment name for path environments. |
-| `package` | `cli.package.*` | The coordinate as written: a catalog path, a store path (canonicalized under `/nix/store`), or a flake URL — which can embed a hostname or a local path. |
+| `package` | `cli.package.install`, `cli.package.upgrade` | The coordinate as written: a catalog path, a store path (canonicalized under `/nix/store`), or a flake URL — which can embed a hostname or a local path. |
+| `package` | `cli.package.uninstall` | The manifest **install id**, not a coordinate — so the field is not one identity space across the three events, and install and uninstall rows do not join on it. |
 | `install_id` | `cli.package.upgrade` | The user-chosen manifest install id. |
 | `invocation_sources` | `cli.command_run` | Launcher tokens, including any supplied via `FLOX_INVOCATION_SOURCE` — an open set by design. |
 
@@ -368,6 +369,38 @@ into every `cli.environment.*` payload — serializes as `env_kind`
 `local_environment_id` for path environments and `generation_number`
 for managed/remote ones (path environments structurally cannot carry a
 generation number), plus an optional `package_count`.
+
+## Sparse merge: two rows for one action
+
+Two events are emitted from **two call sites** in the same invocation
+rather than one:
+
+| Event | Eager row | Result-known row |
+|---|---|---|
+| `cli.environment.edit` | env detail only | adds `edited_includes` |
+| `cli.environment.publish` | env detail only | adds the publish result fields |
+
+Both rows share their `EventKind` and their `invocation_id`, and each
+populates only what it knows at its call site; a consumer coalesces
+them. Every result field on those payloads is therefore `Option` and is
+absent on the eager row.
+
+Two consequences worth stating, because neither is visible from the
+payload type alone:
+
+- Counting rows for one of these event types gives **twice** the
+  invocation count.
+- Reading a result field off a single row yields `None` about half the
+  time. Coalesce across the invocation instead.
+
+For `cli.environment.edit`, `env_detail` is the **pre-edit** snapshot on
+both rows so the two agree on lineage, while the result row's
+`manifest_version` describes the post-edit manifest. Those are
+deliberately different epochs, not one snapshot.
+
+If you add a second emission site to an existing event, say so on the
+payload type and add the row count here — a consumer has no other way
+to learn it.
 
 ## Verifying what is actually sent
 
