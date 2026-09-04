@@ -2370,7 +2370,7 @@ curl.outputs = [\"bin\", \"man\"]
         manifest.update_raw_packages_from_typed_manifest().unwrap();
         let output = manifest.inner.raw.to_string();
         expect![[r#"
-            schema-version = "1.16.0"
+            schema-version = "1.17.0"
 
             [install]
 
@@ -2408,7 +2408,7 @@ curl.outputs = [\"bin\", \"man\"]
         manifest.update_raw_packages_from_typed_manifest().unwrap();
         let output = manifest.inner.raw.to_string();
         expect![[r#"
-            schema-version = "1.16.0"
+            schema-version = "1.17.0"
 
             [install]
             # my favorite greeting program
@@ -2440,7 +2440,7 @@ curl.outputs = [\"bin\", \"man\"]
         manifest.update_raw_packages_from_typed_manifest().unwrap();
         let output = manifest.inner.raw.to_string();
         expect![[r#"
-            schema-version = "1.16.0"
+            schema-version = "1.17.0"
 
             [install]
             # keep this comment about hello
@@ -2468,7 +2468,7 @@ curl.outputs = [\"bin\", \"man\"]
         manifest.update_raw_packages_from_typed_manifest().unwrap();
         let output = manifest.inner.raw.to_string();
         expect![[r#"
-            schema-version = "1.16.0"
+            schema-version = "1.17.0"
 
             [install]
             hello.pkg-path = "hello" # this is important
@@ -2540,7 +2540,7 @@ curl.outputs = [\"bin\", \"man\"]
         manifest.update_raw_packages_from_typed_manifest().unwrap();
         let output = manifest.inner.raw.to_string();
         expect![[r#"
-            schema-version = "1.16.0"
+            schema-version = "1.17.0"
 
             [install]
             # this comment is above hello
@@ -2586,7 +2586,7 @@ curl.outputs = [\"bin\", \"man\"]
         manifest.update_systems().unwrap();
         let output = manifest.inner.raw.to_string();
         expect![[r#"
-            schema-version = "1.16.0"
+            schema-version = "1.17.0"
 
             [options]
             systems = ["aarch64-darwin", "x86_64-linux"]
@@ -2642,7 +2642,7 @@ curl.outputs = [\"bin\", \"man\"]
         manifest.update_raw_packages_from_typed_manifest().unwrap();
         let output = manifest.inner.raw.to_string();
         expect![[r#"
-            schema-version = "1.16.0"
+            schema-version = "1.17.0"
 
             [install]
             hello.pkg-path = "hello"
@@ -2667,7 +2667,7 @@ curl.outputs = [\"bin\", \"man\"]
         let output = migrated.inner.migrated_raw.to_string();
         expect![[r##"
             # this comment is above version
-            schema-version = "1.16.0"
+            schema-version = "1.17.0"
 
             [install]
             hello.pkg-path = "hello"
