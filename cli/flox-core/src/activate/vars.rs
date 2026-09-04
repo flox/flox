@@ -4,10 +4,6 @@
 // to eventually have feature parity with the CLI, so in future we will need
 // to migrate this logic to the activation script itself.
 
-use std::env;
-use std::path::PathBuf;
-use std::sync::LazyLock;
-
 /// The environments active in this shell, as a JSON array of serialized
 /// environment metadata (`UninitializedEnvironment` in `flox-rust-sdk`), most
 /// recently activated first. Set by `flox activate`; read wherever an active
@@ -68,9 +64,3 @@ pub const FLOX_INVOCATION_TYPES_PUSH_ENV_VAR: &str = "_FLOX_INVOCATION_TYPES_PUS
 /// its directory (e.g. by 'flox deactivate') and removed once the shell
 /// leaves that directory, so a later re-entry auto-activates again.
 pub const FLOX_SUPPRESSED_ENVIRONMENTS_VAR: &str = "_FLOX_SUPPRESSED_ENVIRONMENTS";
-
-pub static FLOX_ACTIVATIONS_BIN: LazyLock<PathBuf> = LazyLock::new(|| {
-    PathBuf::from(
-        env::var("FLOX_ACTIVATIONS_BIN").unwrap_or(env!("FLOX_ACTIVATIONS_BIN").to_string()),
-    )
-});
