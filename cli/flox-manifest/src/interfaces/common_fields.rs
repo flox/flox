@@ -23,6 +23,7 @@ impl CommonFields for Parsed {
             Parsed::V1_14_0(m) => &m.options,
             Parsed::V1_15_0(m) => &m.options,
             Parsed::V1_16_0(m) => &m.options,
+            Parsed::V1_17_0(m) => &m.options,
         }
     }
 
@@ -37,6 +38,7 @@ impl CommonFields for Parsed {
             Parsed::V1_14_0(m) => &mut m.options,
             Parsed::V1_15_0(m) => &mut m.options,
             Parsed::V1_16_0(m) => &mut m.options,
+            Parsed::V1_17_0(m) => &mut m.options,
         }
     }
 }

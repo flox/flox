@@ -47,6 +47,16 @@ impl ShallowMerger {
         Ok(high_priority.to_string())
     }
 
+    /// Only the composing (high-priority) environment's description surfaces.
+    /// An included environment's description is never used as a fallback.
+    #[instrument(skip_all)]
+    fn merge_description(
+        _low_priority: Option<&String>,
+        high_priority: Option<&String>,
+    ) -> Option<String> {
+        high_priority.cloned()
+    }
+
     #[instrument(skip_all)]
     fn merge_minimum_cli_version(
         low_priority: Option<&MinimumCliVersion>,
@@ -414,6 +424,10 @@ impl ManifestMergeTrait for ShallowMerger {
 
         let merged_manifest = ManifestLatest {
             schema_version,
+            description: Self::merge_description(
+                low_priority.description.as_ref(),
+                high_priority.description.as_ref(),
+            ),
             minimum_cli_version,
             install,
             vars,
@@ -1057,5 +1071,22 @@ mod tests {
         assert_eq!(warnings, vec![Warning::Overriding(KeyPath::from_iter([
             "plugins", "plugin-a"
         ]))]);
+    }
+
+    #[test]
+    fn description_composer_wins_when_both_set() {
+        let result = ShallowMerger::merge_description(
+            Some(&"included description".to_string()),
+            Some(&"composer description".to_string()),
+        );
+        assert_eq!(result, Some("composer description".to_string()));
+    }
+
+    #[test]
+    fn description_none_when_composer_has_none() {
+        // An included env's description must never surface as a fallback.
+        let result =
+            ShallowMerger::merge_description(Some(&"included description".to_string()), None);
+        assert_eq!(result, None);
     }
 }
