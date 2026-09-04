@@ -1,0 +1,4 @@
+{
+  "git+https://github.com/flox/httpmock.git#httpmock@0.8.0-beta.1": "1smxlln3kj38cz3ka20kh3cn7rd25bkq40m9krkxg21hg3bjhjvy",
+  "git+https://github.com/flox/stringmetrics#2.2.2": "1j6sdnng77z00dcrn8s8bp4gvpppf4pv90s7xcrj58fz5gwfpy76"
+}

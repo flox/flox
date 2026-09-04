@@ -6,7 +6,7 @@ pub mod diff_serializer;
 
 use anyhow::Result;
 use flox_core::activate::context::{ActivateCtx, AttachCtx, AttachProjectCtx};
-use flox_core::activate::vars::{FLOX_ACTIVATIONS_BIN, FLOX_ACTIVE_ENVIRONMENTS_VAR};
+use flox_core::activate::vars::FLOX_ACTIVE_ENVIRONMENTS_VAR;
 use flox_core::util::default_nix_env_vars;
 use is_executable::IsExecutable;
 use itertools::Itertools;
@@ -18,6 +18,7 @@ use crate::cli::fix_paths::{fix_manpath_var, fix_path_var};
 use crate::cli::set_env_dirs::{fix_env_dirs_var, fix_sbin_dirs_var};
 use crate::env_diff::EnvDiff;
 use crate::env_trace::EnvTrace;
+use crate::vars::FLOX_ACTIVATIONS_BIN;
 use crate::vars_from_env::VarsFromEnvironment;
 pub const FLOX_PROMPT_ENVIRONMENTS_VAR: &str = "FLOX_PROMPT_ENVIRONMENTS";
 

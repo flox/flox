@@ -15,7 +15,7 @@ use flox_core::activate::context::{
     AttachProjectCtx,
     InvocationType,
 };
-use flox_core::activate::vars::{FLOX_ACTIVATIONS_BIN, FLOX_ACTIVATIONS_VERBOSITY_VAR};
+use flox_core::activate::vars::FLOX_ACTIVATIONS_VERBOSITY_VAR;
 use flox_core::activations::activation_state_dir_path;
 use flox_core::data::System;
 use flox_core::data::environment_ref::DEFAULT_NAME;
@@ -66,8 +66,8 @@ use crate::commands::{
 use crate::utils::detect_shell::{detect_shell_for_in_place, detect_shell_for_subshell};
 use crate::utils::errors::format_diverged_metadata;
 use crate::utils::events::{env_detail_from_concrete, env_detail_from_concrete_without_lineage};
-use crate::utils::message;
 use crate::utils::upgrade_output::{count_upgrade_categories, format_upgrade_summary};
+use crate::utils::{FLOX_ACTIVATIONS_BIN, message};
 use crate::{Exit, environment_subcommand_metric, subcommand_metric, utils};
 
 #[derive(Debug, Clone, Bpaf)]

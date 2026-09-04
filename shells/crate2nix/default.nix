@@ -1,17 +1,25 @@
+# Dev shell whose build inputs come from the crate2nix graph instead of the
+# crane packages, for comparison against `shells/default` (CLI-164). One of the
+# two goes away once the migration lands.
+#
+# The difference is `inputsFrom`: crane builds the workspace in one derivation
+# that carries openssl, krb5, pkg-config and bindgen directly, while
+# buildRustCrate attaches those to the crate that needs them. mkShell reads
+# only the direct inputs of what it is given, so this shell is pointed at every
+# crate in the graph rather than at the three binaries. Nothing beyond tooling
+# is listed by hand.
 {
   cargo-nextest,
   commitizen,
+  crate2nix,
+  crate2nix-builds,
   daemonize,
-  flox-activations,
   flox-cli-tests,
-  flox-cli,
   flox-nix-plugins,
   hivemind,
   jq,
   just,
-  krb5,
   lib,
-  rustPlatform,
   mkShell,
   nix-unit,
   nixfmt-rfc-style,
@@ -19,13 +27,14 @@
   pre-commit-check,
   procps,
   pstree,
+  rust-toolchain,
+  rustfmt ? rust-toolchain.rustfmt,
   shfmt,
   system,
   treefmt,
   writeShellScript,
   yamlfmt,
   yq,
-  crate2nix,
   ci ? false,
 }:
 let
@@ -36,31 +45,47 @@ let
     inherit system;
   };
 
-  # For use in GitHub Actions and local development.
-  ciPackages = [ ] ++ flox-nix-plugins.ciPackages;
+  ciPackages = flox-nix-plugins.ciPackages;
 
-  devPackages =
-    flox-nix-plugins.devPackages
-    ++ flox-cli.devPackages
-    ++ [
-      cargo-nextest
-      commitizen
-      crate2nix
-      daemonize
-      flox-cli-tests
-      hivemind
-      jq
-      just
-      nix-unit
-      nixfmt-rfc-style
-      podman
-      procps
-      pstree
-      shfmt
-      treefmt
-      yamlfmt
-      yq
-    ];
+  devPackages = flox-nix-plugins.devPackages ++ [
+    cargo-nextest
+    commitizen
+    crate2nix
+    daemonize
+    flox-cli-tests
+    hivemind
+    jq
+    just
+    nix-unit
+    nixfmt-rfc-style
+    podman
+    procps
+    pstree
+    rustfmt
+    shfmt
+    treefmt
+    yamlfmt
+    yq
+  ];
+
+  # cargo builds the crates in this shell, so it needs what buildRustCrate
+  # would have given each of them: openssl from openssl-sys, krb5 and bindgen
+  # from libgssapi-sys, the toolchain from every crate. Taking the closure of
+  # each workspace member rather than of `flox` alone is what reaches the
+  # build-dependency subtrees, `catalog-api-v1`'s progenitor among them.
+  crateInputs =
+    let
+      crates = lib.concatMap (
+        member: member.build.completeDeps ++ member.build.completeBuildDeps ++ [ member.build ]
+      ) (lib.attrValues crate2nix-builds.workspace.workspaceMembers);
+    in
+    attr: lib.unique (lib.concatMap (crate: crate.${attr} or [ ]) crates);
+
+  # cargo compiles the whole workspace in one invocation here, so the per-crate
+  # `env!()` variables all have to be in scope at once.
+  crateEnvs = lib.foldl' (acc: envs: acc // envs) { } (
+    lib.attrValues crate2nix-builds.crateEnvs
+  );
 
   envWrapper = writeShellScript "wrapper" ''
     BUILD_DIR="$( cd "$( dirname "''${BASH_SOURCE[0]}" )" &> /dev/null && pwd )";
@@ -79,25 +104,16 @@ let
 
     exec $ENV_CMD "$@";
   '';
-
 in
 mkShell (
   {
-    name = "flox-dev";
+    name = "flox-dev-crate2nix";
 
-    # Artifacts not build by nix, i.e. cargo builds
-    # generally all cargo builds should have the same inputs
-    # but in case we add specific ones,
-    # it's good to have them here already.
-    inputsFrom = [
-      flox-nix-plugins
-      flox-cli
-      flox-activations
-    ];
+    inputsFrom = [ flox-nix-plugins ];
 
-    # krb5 is required to build the GSSAPI/Kerberos authentication support
-    buildInputs = [ krb5.dev ];
-    nativeBuildInputs = [ rustPlatform.bindgenHook ];
+    buildInputs = crateInputs "buildInputs";
+
+    nativeBuildInputs = crateInputs "nativeBuildInputs";
 
     packages = ciPackages ++ lib.optionals (!ci) devPackages;
 
@@ -111,8 +127,7 @@ mkShell (
       cp -f ${envWrapper} "$REPO_ROOT/build/wrapper";
 
 
-      # Define a function to set an environment variable
-      # and add it to the .env file.
+      # Define a environment variable and add it to the .env file.
       function define_dev_env_var() {
         local USAGE="Usage: define_dev_env_var <name> <value>";
 
@@ -123,7 +138,6 @@ mkShell (
         echo "$name=$value" >> "$REPO_ROOT/build/.env";
 
         echo "$name => $(printenv "$name")";
-
       }
 
       # Setup mutable paths to all internal subsystems,
@@ -174,6 +188,9 @@ mkShell (
       echo "run 'just build' to build flox and all its subsystems";
     '';
   }
-  // flox-cli.devEnvs
-  // flox-activations.devEnvs
+  // crateEnvs
+  // {
+    RUST_SRC_PATH = "${rust-toolchain.rust-src}/lib/rustlib/src/rust/library";
+    RUSTFMT = "${rustfmt}/bin/rustfmt";
+  }
 )
