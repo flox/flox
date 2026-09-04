@@ -4,12 +4,13 @@ use std::path::PathBuf;
 
 use anyhow::Result;
 use flox_core::activate::context::InvocationType;
-use flox_core::activate::vars::{FLOX_ACTIVATIONS_BIN, FLOX_INVOCATION_TYPES_VAR};
+use flox_core::activate::vars::FLOX_INVOCATION_TYPES_VAR;
 use flox_core::hook_actions::{PROMPT_HOOK_VERSION_ENV, prompt_hook_marker_value};
 use shell_gen::{GenerateShell, Shell, source_file};
 
 use crate::attach_diff::{todo_drop_set_exported_unexpanded, todo_drop_unset};
 use crate::gen_rc::{Action, RM, invocation_types_update_stmt};
+use crate::vars::FLOX_ACTIVATIONS_BIN;
 
 /// Arguments for generating bash startup commands
 #[derive(Debug, Clone)]
