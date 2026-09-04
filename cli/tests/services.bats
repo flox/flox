@@ -201,21 +201,38 @@ EOF
 
   run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
     set -euo pipefail
-    "${TESTS_DIR}"/services/wait_for_service_status.sh gate:Running
-    # `gate` has not completed, so `gated` must not have been started.
+    "${TESTS_DIR}"/services/wait_for_service_status.sh producer:Running
+    # `producer` has not completed, so `consumer` must not have been started.
     "$FLOX_BIN" services status
-    [ ! -e gated.txt ]
+    [ ! -e consumer.txt ]
 
-    # Let `gate` exit successfully, which releases `gated`.
+    # Let `producer` exit successfully, which releases `consumer`.
     touch open-gate
-    "${TESTS_DIR}"/services/wait_for_service_status.sh gate:Completed gated:Running
-    [ -e gated.txt ]
+    "${TESTS_DIR}"/services/wait_for_service_status.sh producer:Completed consumer:Running
+    [ -e consumer.txt ]
 EOF
 )
   assert_success
   # A service still waiting on a dependency is reported as `Disabled`, with no
   # PID assigned, rather than being launched and held.
-  assert_output --regexp "gated +Disabled \(0\) +\[0\]"
+  assert_output --regexp "consumer +Disabled \(0\) +\[0\]"
+}
+
+# bats test_tags=services:depends-on
+@test "starting a single service skips its dependencies" {
+  setup_depends_on_services
+
+  # `flox services start <name>` starts only the named service: a dependency
+  # that was never requested is not started, and its condition is treated as
+  # satisfied. This documents that behaviour as much as it asserts it.
+  run "$FLOX_BIN" activate -- bash <(cat <<'EOF'
+    set -euo pipefail
+    "$FLOX_BIN" services start consumer
+    "${TESTS_DIR}"/services/wait_for_service_status.sh consumer:Running producer:Disabled
+    [ -e consumer.txt ]
+EOF
+)
+  assert_success
 }
 
 # bats test_tags=services:shutdown

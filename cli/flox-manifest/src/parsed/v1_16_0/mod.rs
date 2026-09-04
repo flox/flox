@@ -321,6 +321,52 @@ impl Services {
         dropped
     }
 
+    /// The order in which to start `names`: dependencies before dependents.
+    ///
+    /// The process manager only defers a starting service on a dependency that
+    /// has itself been requested — an edge to a process that was never started
+    /// counts as satisfied. Requesting services in dependency order is what
+    /// makes the deferral engage, so that `depends-on` holds regardless of how
+    /// service names sort.
+    ///
+    /// Names not defined in this set keep their place, and edges leaving
+    /// `names` do not order anything. Should the remaining names ever form a
+    /// cycle they keep their input order; the process manager rejects cyclic
+    /// configs at load, so that is a fallback, not a supported input.
+    pub fn start_order(&self, names: Vec<String>) -> Vec<String> {
+        let requested: BTreeSet<String> = names.iter().cloned().collect();
+        let mut placed: BTreeSet<String> = BTreeSet::new();
+        let mut ordered: Vec<String> = Vec::with_capacity(names.len());
+        let mut remaining = names;
+        while !remaining.is_empty() {
+            let mut blocked = Vec::new();
+            let mut progressed = false;
+            for name in remaining {
+                let deps_placed = self
+                    .service_map
+                    .get(&name)
+                    .and_then(|desc| desc.depends_on.as_ref())
+                    .is_none_or(|deps| {
+                        deps.keys()
+                            .all(|target| !requested.contains(target) || placed.contains(target))
+                    });
+                if deps_placed {
+                    placed.insert(name.clone());
+                    ordered.push(name);
+                    progressed = true;
+                } else {
+                    blocked.push(name);
+                }
+            }
+            if !progressed {
+                ordered.extend(blocked);
+                break;
+            }
+            remaining = blocked;
+        }
+        ordered
+    }
+
     /// Create a new [Services] instance with services for systems other than
     /// `system` filtered out.
     ///
@@ -824,6 +870,111 @@ mod tests {
             auto_start: None,
             service_map: BTreeMap::from([("db".to_string(), db), ("web".to_string(), web)]),
         }
+    }
+
+    #[test]
+    fn start_order_places_dependencies_before_dependents() {
+        // `app` sorts before `db`, so an alphabetical start order would
+        // request the dependent first — which the process manager reads as
+        // "no dependency".
+        let app = ServiceDescriptor {
+            depends_on: Some(BTreeMap::from([("db".to_string(), ServiceDependency {
+                condition: ServiceStartCondition::ProcessStarted,
+            })])),
+            ..descriptor("run-app")
+        };
+        let services = Services {
+            auto_start: None,
+            service_map: BTreeMap::from([
+                ("app".to_string(), app),
+                ("db".to_string(), descriptor("run-db")),
+            ]),
+        };
+
+        assert_eq!(
+            services.start_order(vec!["app".to_string(), "db".to_string()]),
+            vec!["db".to_string(), "app".to_string()],
+        );
+    }
+
+    #[test]
+    fn start_order_orders_chains() {
+        // a -> b -> c by dependency, requested in alphabetical order.
+        let a = ServiceDescriptor {
+            depends_on: Some(BTreeMap::from([("b".to_string(), ServiceDependency {
+                condition: ServiceStartCondition::ProcessCompletedSuccessfully,
+            })])),
+            ..descriptor("run-a")
+        };
+        let b = ServiceDescriptor {
+            depends_on: Some(BTreeMap::from([("c".to_string(), ServiceDependency {
+                condition: ServiceStartCondition::ProcessStarted,
+            })])),
+            ..descriptor("run-b")
+        };
+        let services = Services {
+            auto_start: None,
+            service_map: BTreeMap::from([
+                ("a".to_string(), a),
+                ("b".to_string(), b),
+                ("c".to_string(), descriptor("run-c")),
+            ]),
+        };
+
+        assert_eq!(
+            services.start_order(vec!["a".to_string(), "b".to_string(), "c".to_string()]),
+            vec!["c".to_string(), "b".to_string(), "a".to_string()],
+        );
+    }
+
+    #[test]
+    fn start_order_ignores_dependencies_outside_the_requested_set() {
+        // Only `app` is requested, so its edge to `db` orders nothing and the
+        // input comes back unchanged.
+        let app = ServiceDescriptor {
+            depends_on: Some(BTreeMap::from([("db".to_string(), ServiceDependency {
+                condition: ServiceStartCondition::ProcessStarted,
+            })])),
+            ..descriptor("run-app")
+        };
+        let services = Services {
+            auto_start: None,
+            service_map: BTreeMap::from([
+                ("app".to_string(), app),
+                ("db".to_string(), descriptor("run-db")),
+            ]),
+        };
+
+        assert_eq!(services.start_order(vec!["app".to_string()]), vec![
+            "app".to_string()
+        ]);
+    }
+
+    #[test]
+    fn start_order_keeps_input_order_on_a_cycle() {
+        // The process manager rejects cyclic configs at load, so this only
+        // asserts the fallback: every requested name is still returned.
+        let a = ServiceDescriptor {
+            depends_on: Some(BTreeMap::from([("b".to_string(), ServiceDependency {
+                condition: ServiceStartCondition::ProcessStarted,
+            })])),
+            ..descriptor("run-a")
+        };
+        let b = ServiceDescriptor {
+            depends_on: Some(BTreeMap::from([("a".to_string(), ServiceDependency {
+                condition: ServiceStartCondition::ProcessStarted,
+            })])),
+            ..descriptor("run-b")
+        };
+        let services = Services {
+            auto_start: None,
+            service_map: BTreeMap::from([("a".to_string(), a), ("b".to_string(), b)]),
+        };
+
+        assert_eq!(
+            services.start_order(vec!["a".to_string(), "b".to_string()]),
+            vec!["a".to_string(), "b".to_string()],
+        );
     }
 
     #[test]

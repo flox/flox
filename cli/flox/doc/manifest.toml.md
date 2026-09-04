@@ -632,6 +632,13 @@ Dependency ::= {
     depends-on.migrations = { condition = "process_completed_successfully" }
     ```
 
+    Dependencies order services that are started together — at activation with
+    `--start-services` or `auto-start`, or by `flox services start` with no
+    names. Starting a service by name starts only that service: a dependency
+    that has not itself been started is not started implicitly and is not
+    waited for, while one that is already running (or waiting to start) is
+    honored.
+
 `systems`
 :   An optional list of systems on which to run this service.
     If omitted, the service is not restricted.
