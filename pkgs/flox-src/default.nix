@@ -1,25 +1,27 @@
-{ }:
+# The repository, narrowed to what the Rust builds read: the cargo
+# workspace, plus the VERSION file they compile in.
+#
+# An allowlist rather than a denylist, which had to be extended by hand
+# every time the repository grew a directory, and invalidated every build
+# until someone did.
+#
+# The other packages here build from their own subdirectory and stay out,
+# so an edit to one of them does not rebuild the rest.
+{ lib }:
 let
   root = ./../..;
-  # Top-level entries that are not inputs to any flox-src consumer (the
-  # Rust crate builds under cli/). Keeping them out means commits that
-  # only touch them do not invalidate CLI builds or their caches.
-  exclude = [
-    "flake.nix"
-    "flake.lock"
-    "pkgs"
-    "shells"
-    "target"
-    "modules"
+
+  members = (builtins.fromTOML (builtins.readFile "${toString root}/Cargo.toml")).workspace.members;
+
+  # What cargo reads before it reaches a crate; the crates are `members`.
+  workspaceFiles = [
+    ".cargo"
+    "Cargo.toml"
+    "Cargo.lock"
+    "VERSION"
   ];
-  # The filter receives paths as strings, so the exclusions must be
-  # compared as strings anchored at the source root; comparing against
-  # path values (or paths resolved relative to this file's directory)
-  # never matches.
-  excludePaths = map (f: "${toString root}/${f}") exclude;
 in
-builtins.path {
-  name = "flox-src";
-  path = root;
-  filter = path: type: !builtins.elem path excludePaths;
+lib.fileset.toSource {
+  inherit root;
+  fileset = lib.fileset.unions (map (p: root + "/${p}") (workspaceFiles ++ members));
 }

@@ -34,7 +34,7 @@ let
       # even though the dependencies of the flox-cli haven't changed.
       version = "unversioned";
 
-      src = craneLib.cleanCargoSource (craneLib.path flox-src);
+      src = craneLib.cleanCargoSource flox-src;
 
       # runtime dependencies of the dependent crates
       buildInputs = [
