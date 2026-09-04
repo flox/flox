@@ -92,12 +92,6 @@ teardown() {
 # ---------------------------------------------------------------------------- #
 # Invocation and refusals
 
-@test "develop: appears in 'flox --help' under 'Use environments'" {
-  run "$FLOX_BIN" --help
-  assert_success
-  assert_output --partial "develop                Enter a development shell for a package build"
-}
-
 @test "develop: '--help' documents the package form, not activate's options" {
   run "$FLOX_BIN" develop --help
   assert_success

@@ -53,9 +53,6 @@ sharing environments, and administration.
 `activate`
 :   Enter the environment, run `flox deactivate` to leave.
 
-`develop`
-:   Enter a development shell for a Nix expression package build.
-
 `deactivate`
 :   Deactivate the current environment.
 
@@ -133,7 +130,6 @@ sharing environments, and administration.
 
 [`flox-init(1)`](./flox-init.md),
 [`flox-activate(1)`](./flox-activate.md),
-[`flox-develop(1)`](./flox-develop.md),
 [`flox-run(1)`](./flox-run.md),
 [`flox-install(1)`](./flox-install.md),
 [`flox-uninstall(1)`](./flox-uninstall.md),

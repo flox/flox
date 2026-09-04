@@ -57,7 +57,7 @@ const DISCLOSURE: &str = indoc! {"
         track. A real build sees only tracked files.
       - '$src' is a snapshot in the Nix store, taken when you entered.
         'genericBuild' builds that snapshot, not your working tree; edits
-        reach it only when you re-enter. See 'man flox-develop'.
+        reach it only when you re-enter.
       - '$out' and the other output variables point at placeholder paths,
         not at store paths. Nothing installed there is a real build output.
       - The host PATH stays reachable after the build inputs, and if your

@@ -351,7 +351,6 @@ eval "$(flox activate)"
 
 # SEE ALSO
 [`flox-deactivate(1)`](./flox-deactivate.md),
-[`flox-develop(1)`](./flox-develop.md),
 [`flox-activate-allow(1)`](./flox-activate-allow.md),
 [`flox-activate-deny(1)`](./flox-activate-deny.md),
 [`flox-config(1)`](./flox-config.md),
