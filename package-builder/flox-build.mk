@@ -192,17 +192,24 @@ usage:
 	@echo "Targets:"
 	@echo "  build: build all packages"
 	@echo "  build/[pname]: build the specified package"
+	@echo "  eval: resolve Nix expression builds to their derivation paths without building"
 	@echo "  clean: clean all build artifacts"
 	@echo "  clean/[pname]: clean build artifacts for the specified package"
 
 # Verify certain prerequisites and touch a timestamped file to
-# act as a root prerequisite before kicking off the build DAG.
+# act as a root prerequisite before kicking off the build DAG. Accepts
+# BUILD_RESULT_FILE (the `build` goal) or EVAL_RESULT_FILE (the `eval`
+# goal, which stops at the NEF eval and never builds a package). Both
+# goals reach the NEF eval, so both nixpkgs URLs are always required.
 .PHONY: $(PROJECT_TMPDIR)/check-build-prerequisites
 $(PROJECT_TMPDIR)/check-build-prerequisites:
-	@# The BUILD_RESULT_FILE must be defined and exist.
-	$(if $(BUILD_RESULT_FILE),,$(error BUILD_RESULT_FILE not defined))
-	$(if $(wildcard $(BUILD_RESULT_FILE)),, \
-	  $(error BUILD_RESULT_FILE $(BUILD_RESULT_FILE) not found))
+	@# At least one of BUILD_RESULT_FILE or EVAL_RESULT_FILE must be defined.
+	$(if $(or $(BUILD_RESULT_FILE),$(EVAL_RESULT_FILE)),, \
+	  $(error neither BUILD_RESULT_FILE nor EVAL_RESULT_FILE defined))
+	$(if $(BUILD_RESULT_FILE),$(if $(wildcard $(BUILD_RESULT_FILE)),, \
+	  $(error BUILD_RESULT_FILE $(BUILD_RESULT_FILE) not found)))
+	$(if $(EVAL_RESULT_FILE),$(if $(wildcard $(EVAL_RESULT_FILE)),, \
+	  $(error EVAL_RESULT_FILE $(EVAL_RESULT_FILE) not found)))
 	@# CATALOG_LOCKFILE is the catalog lock consumed by NEF evals. The flox
 	@# CLI owns the lock's entire lifecycle — creating the committed
 	@# .flox/catalog.lock, resolving a fresh ephemeral lock for lockless
@@ -281,6 +288,7 @@ define COMMON_BUILD_VARS_template =
   $(eval $(_pvarname)_evalJSON = $($(_pvarname)_tmpBasename)/eval.json)
   $(eval $(_pvarname)_buildJSON = $($(_pvarname)_tmpBasename)/build.json)
   $(eval $(_pvarname)_buildMetaJSON = $($(_pvarname)_tmpBasename)/build-meta.json)
+  $(eval $(_pvarname)_evalResultJSON = $($(_pvarname)_tmpBasename)/eval-result.json)
 
   # Create a temporary file for collecting log output from the build.
   $(eval $(_pvarname)_logfile = $($(_pvarname)_tmpBasename)/build.log)
@@ -696,6 +704,14 @@ define MANIFEST_BUILD_template =
   # Calculate name.
   $(eval _name = $(_pname)-$(_version))
 
+  # The `eval` goal resolves a Nix expression build to a derivation path; a
+  # manifest build has no derivation to resolve, so it refuses by name
+  # rather than failing with "no rule to make target" when a manifest build
+  # is named.
+  $($(_pvarname)_evalResultJSON): $(PROJECT_TMPDIR)/check-build-prerequisites
+	$(_VV_) echo "ERROR: '$(_pname)' is a manifest build; the eval goal resolves Nix expression builds only" 1>&2; exit 1
+
+
   # By the time this rule will be evaluated all of its package dependencies
   # will have been added to the set of rule prerequisites in $^, using their
   # "safe" name (with "-" characters replaced with "_"), and these targets
@@ -874,6 +890,16 @@ define NIX_EXPRESSION_BUILD_template =
 	  }' \
 	  pkgs.$(_pname) > $$@
 
+  # Project the eval into the {pname, system, name, version, drvPath} shape
+  # consumed by the `eval` goal's EVAL_RESULT_FILE. `pname` keys the entry
+  # to its package so callers evaluating several packages can tell the
+  # results apart.
+  $($(_pvarname)_evalResultJSON): $($(_pvarname)_evalJSON)
+	$(_V_) $(_mkdir) -p $$(@D)
+	$(_V_) $(_jq) --arg pname '$(_pname)' --arg system '$(NIX_SYSTEM)' \
+	  '{ pname: $$$$pname, system: $$$$system, name, version, drvPath }' \
+	  $$< > $$@
+
   # Following a successful eval, carry on with building the drvPath directly.
   $($(_pvarname)_buildJSON): $($(_pvarname)_evalJSON)
 	@# Now that we have the metadata, set the _name.
@@ -953,6 +979,25 @@ $(BUILD_RESULT_FILE): $(foreach pname,$(PACKAGES),$($(subst -,_,$(pname))_buildM
 # target which has the effect of building all requested $(PACKAGES).
 .PHONY: build
 build: $(BUILD_RESULT_FILE)
+
+# Combine JSON eval data for each build and write to EVAL_RESULT_FILE. This
+# mirrors BUILD_RESULT_FILE above — including the .PHONY marking of the
+# per-invocation result file — but stops at the NEF eval targets and never
+# invokes `nix build`. Unlike the `build` goal's GC-window check at
+# $(_pvarname)_buildJSON above, no wildcard check on the drvPath is added
+# here: the goal uses the drvPath for nothing, so there is no window inside
+# make to protect. The caller of `eval` is the one who uses the drvPath
+# afterward, and owns that window instead.
+.PHONY: $(EVAL_RESULT_FILE)
+$(EVAL_RESULT_FILE): $(foreach pname,$(PACKAGES),$($(subst -,_,$(pname))_evalResultJSON))
+	$(_VV_) [ -n "$^" ] || ( echo "ERROR: PACKAGES not defined or empty" 1>&2; exit 1 )
+	$(_VV_) $(_jq) -s . $^ > $@
+
+# The "eval" target resolves all requested $(PACKAGES) to their store
+# derivation paths, without building anything.
+.PHONY: eval
+eval: $(EVAL_RESULT_FILE)
+
 
 # Add a target for cleaning up the build artifacts.
 .PHONY: clean
