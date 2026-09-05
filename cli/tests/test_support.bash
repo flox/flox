@@ -398,7 +398,7 @@ ensure_remote_environment_built() {
 with_latest_schema() {
   body="$1"
   if [ -z "$body" ]; then
-    printf "schema-version = \"1.16.0\"\n"
+    printf "schema-version = \"1.17.0\"\n"
   else
     printf "schema-version = \"1.16.0\"\n\n%s" "$body"
   fi

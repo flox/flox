@@ -27,7 +27,7 @@ pub use crate::parsed::v1_16_0::{
     Services,
 };
 use crate::{Manifest, ManifestError, TypedOnly};
-pub type ManifestLatest = crate::parsed::v1_16_0::ManifestV1_16_0;
+pub type ManifestLatest = crate::parsed::v1_17_0::ManifestV1_17_0;
 
 impl ManifestLatest {
     /// Try to return a manifest in its original schema
@@ -107,6 +107,22 @@ impl ManifestLatest {
                 untyped
             },
             KnownSchemaVersion::V1_16_0 => {
+                let mut untyped =
+                    serde_json::to_value(self).map_err(ManifestError::SerializeJson)?;
+                let map = untyped
+                    .as_object_mut()
+                    .expect("all valid manifests should serialize to JSON objects");
+                // V1_16_0 has `deny_unknown_fields` and no `description`, so
+                // leaving the key would make the re-parse below fail and return
+                // `None`. Removing it lets the parse succeed; either way,
+                // `as_maybe_backwards_compatible` re-migrates and compares
+                // against `self`, so a set `description` still routes to latest
+                // and is never silently dropped.
+                map.remove("description");
+                map.insert("schema-version".into(), "1.16.0".into());
+                untyped
+            },
+            KnownSchemaVersion::V1_17_0 => {
                 return Ok(Some(self.as_typed_only()));
             },
         };
@@ -989,6 +1005,53 @@ mod tests {
 
         Manifest::parse_toml_typed(&manifest)
             .expect("a 'depends-on' target may be defined by an included environment");
+    }
+
+    #[test]
+    fn description_rejected_by_v1_16_0_schema() {
+        let manifest = with_schema(KnownSchemaVersion::V1_16_0, indoc! {r#"
+            description = "my env"
+        "#});
+
+        let err = Manifest::parse_toml_typed(&manifest)
+            .expect_err("'description' should be rejected by the v1.16.0 schema");
+
+        let ManifestError::Invalid(err) = err else {
+            panic!("expected ManifestError::Invalid, got: {err:?}");
+        };
+        assert!(
+            err.message()
+                .starts_with("unknown field `description`, expected"),
+            "unexpected error message: {err}",
+        );
+    }
+
+    #[test]
+    fn downgrades_to_v1_16_0_when_description_unused() {
+        let manifest = ManifestLatest {
+            description: None,
+            ..Default::default()
+        };
+
+        let compat = manifest
+            .as_maybe_backwards_compatible(KnownSchemaVersion::V1_16_0, None)
+            .unwrap();
+
+        assert_eq!(compat.get_schema_version(), KnownSchemaVersion::V1_16_0);
+    }
+
+    #[test]
+    fn stays_latest_schema_when_description_used() {
+        let manifest = ManifestLatest {
+            description: Some("a description".to_string()),
+            ..Default::default()
+        };
+
+        let compat = manifest
+            .as_maybe_backwards_compatible(KnownSchemaVersion::V1_16_0, None)
+            .unwrap();
+
+        assert_eq!(compat.get_schema_version(), KnownSchemaVersion::latest());
     }
 
     /// Generates a mock `TypedManifest` for testing purposes.
