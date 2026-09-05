@@ -1175,6 +1175,53 @@ pub mod tests {
         mock.assert();
     }
 
+    #[tokio::test]
+    async fn resolve_retries_service_unavailable_responses() {
+        let server = MockServer::start_async().await;
+        let mock = server.mock(|when, then| {
+            when.method("POST").path("/api/v1/catalog/resolve");
+            then.status(StatusCode::SERVICE_UNAVAILABLE.as_u16())
+                .header("retry-after", "0")
+                .json_body(json!({"detail": "try again"}));
+        });
+        let client = FloxhubClient::new(client_config(&server.base_url())).unwrap();
+
+        let result = client
+            .resolve(vec![PackageGroup {
+                name: "group".to_string(),
+                descriptors: vec![],
+            }])
+            .await;
+
+        assert!(result.is_err());
+        mock.assert_calls(3);
+    }
+
+    #[tokio::test]
+    async fn resolve_returns_other_error_responses_without_retrying() {
+        let server = MockServer::start_async().await;
+        let mock = server.mock(|when, then| {
+            when.method("POST").path("/api/v1/catalog/resolve");
+            then.status(StatusCode::INTERNAL_SERVER_ERROR.as_u16())
+                .json_body(json!({"detail": "internal error"}));
+        });
+        let client = FloxhubClient::new(client_config(&server.base_url())).unwrap();
+
+        let result = client
+            .resolve(vec![PackageGroup {
+                name: "group".to_string(),
+                descriptors: vec![],
+            }])
+            .await;
+
+        let error = match result.unwrap_err() {
+            ResolveError::FloxhubClientError(FloxhubClientError::APIError(error)) => error,
+            other => panic!("expected an API error, got {other:?}"),
+        };
+        assert_eq!(error.status(), Some(StatusCode::INTERNAL_SERVER_ERROR));
+        mock.assert_calls(1);
+    }
+
     /// `resolve()` applies `FloxhubClientConfig::stability` to every
     /// outgoing group, regardless of what (if anything) `TryFrom` set.
     #[tokio::test]
