@@ -219,6 +219,13 @@ pub struct CheckedBuildMetadata {
 
     pub version: Option<String>,
 
+    /// The build's untouched `meta` document, sent to the catalog
+    /// alongside the flat fields above (which are derived from the lossy
+    /// typed projection, not from this map). Never `Option`: the request
+    /// literal always wraps this in `Some`, so the type itself rules out
+    /// silently omitting the field.
+    pub evaluation_meta: serde_json::Map<String, serde_json::Value>,
+
     // This field isn't "pub", so no one outside this module can construct this struct. That helps
     // ensure that we can only make this struct as a result of doing the "right thing."
     _private: (),
@@ -700,6 +707,11 @@ where
             // empty server-side (floxhub#1791). The wire type is a HashMap;
             // ordering on the wire is meaningless.
             locked_inputs: Some(locked_inputs.clone().into_iter().collect()),
+            // Always sent, never omitted: a `None` `meta_blob_id` already
+            // means "never captured" server-side, and collapsing an empty
+            // document into absence here would recreate that same collapse
+            // one layer out, where the server-side guard can't see it.
+            evaluation_meta: Some(build_metadata.evaluation_meta.clone()),
             base_catalog_rev_count: None,
             base_catalog_rev_date: None,
             url: self.env_metadata.build_repo_meta.url.to_string(),
@@ -867,14 +879,14 @@ fn convert_build_result_to_build_metadata(
         .into();
 
     // Get outputs to install from the build result, or default to all outputs.
-    let outputs_to_install = build_result.meta.outputs_to_install.clone();
+    let outputs_to_install = build_result.meta.typed.outputs_to_install.clone();
 
     // Wrapping `outputs_to_install` in an option to satisfy the API.
     // In practice outputs_to_install are required / must be always `Some`
     // so a future change will update the API to reflect that.
     let outputs_to_install = Some(outputs_to_install);
 
-    let license = match &build_result.meta.license {
+    let license = match &build_result.meta.typed.license {
         Some(lic) => Some(lic.to_catalog_license()?),
         None => None,
     };
@@ -884,11 +896,12 @@ fn convert_build_result_to_build_metadata(
         name: build_result.name.clone(),
         pname: build_result.pname.clone(),
 
-        description: build_result.meta.description.clone(),
+        description: build_result.meta.typed.description.clone(),
         license,
-        broken: build_result.meta.broken,
-        insecure: build_result.meta.insecure,
-        unfree: build_result.meta.unfree,
+        broken: build_result.meta.typed.broken,
+        insecure: build_result.meta.typed.insecure,
+        unfree: build_result.meta.typed.unfree,
+        evaluation_meta: build_result.meta.raw.clone(),
 
         outputs,
         outputs_to_install,
@@ -1831,6 +1844,21 @@ pub mod tests {
             false,
             "MetadataOnly should not require publisher wait"
         );
+
+        // The request sent to the catalog always carries the build's meta
+        // document as an object, never omitted (D18): a `None`
+        // `meta_blob_id` already means "never captured" server-side, so
+        // sending nothing here would be indistinguishable from that.
+        let published = catalog.published_builds();
+        assert_eq!(published.len(), 1);
+        let evaluation_meta = published[0]
+            .evaluation_meta
+            .as_ref()
+            .expect("evaluation_meta must always be sent as Some, never omitted");
+        assert!(
+            !evaluation_meta.is_empty(),
+            "a manifest build's meta always includes at least outputsToInstall"
+        );
     }
 
     #[test]
@@ -2021,6 +2049,13 @@ pub mod tests {
             broken: Some(false),
             insecure: None,
             unfree: None,
+            // A one-key map rather than `Map::new()`, so a test asserting
+            // on this value proves the field's content flows through
+            // `publish()` rather than merely that a `Some` exists.
+            evaluation_meta: serde_json::Map::from_iter([(
+                "outputsToInstall".to_string(),
+                serde_json::json!(["out"]),
+            )]),
             _private: (),
         };
 

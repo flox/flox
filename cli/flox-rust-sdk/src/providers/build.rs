@@ -196,7 +196,7 @@ pub struct BuildResult {
     pub name: String,
     pub pname: String,
     pub outputs: HashMap<String, BuiltStorePath>,
-    pub meta: BuildResultMeta,
+    pub meta: CapturedMeta,
     pub version: String,
     pub system: String,
     pub log: BuiltStorePath,
@@ -327,6 +327,32 @@ pub struct BuildResultMeta {
 
     #[serde(rename = "outputsToInstall")]
     pub outputs_to_install: Vec<String>,
+}
+
+/// The build's `meta` attribute, kept twice: the typed projection the
+/// publish request's flat fields are derived from, and the untouched
+/// document the catalog stores. `BuildResultMeta` is lossy by design
+/// (`NixyLicense::Map` reads one of four license keys and drops the
+/// rest), so the two are not interchangeable.
+#[derive(Debug, PartialEq, Deserialize)]
+#[serde(try_from = "serde_json::Map<String, serde_json::Value>")]
+pub struct CapturedMeta {
+    pub typed: BuildResultMeta,
+    pub raw: serde_json::Map<String, serde_json::Value>,
+}
+
+impl TryFrom<serde_json::Map<String, serde_json::Value>> for CapturedMeta {
+    type Error = serde_json::Error;
+
+    fn try_from(raw: serde_json::Map<String, serde_json::Value>) -> Result<Self, Self::Error> {
+        // A derived deserializer cannot route one input key to two fields:
+        // it generates a single field-name matcher, so a second field
+        // aliased to "meta" would just be dead code behind the first.
+        // Deserializing `typed` from a clone of `raw` is the only way to
+        // keep both the lossy projection and the untouched document.
+        let typed = BuildResultMeta::deserialize(serde_json::Value::Object(raw.clone()))?;
+        Ok(CapturedMeta { typed, raw })
+    }
 }
 
 /// A manifest builder that uses the [FLOX_BUILD_MK] makefile to build packages.
@@ -1544,6 +1570,75 @@ mod license_tests {
         assert_eq!(
             license.to_catalog_license().unwrap(),
             "[ GPL-2.0-or-later, Unfree ]"
+        );
+    }
+
+    #[test]
+    fn captured_meta_keeps_license_keys_the_typed_copy_drops() {
+        // Expression builds merge the eval JSON into `meta` unfiltered
+        // (`package-builder/flox-build.mk:946`), so unlike a manifest
+        // build this document can carry a license as a four-key map.
+        let json = serde_json::json!({
+            "description": "A test package",
+            "license": {
+                "spdxId": "MIT",
+                "fullName": "MIT License",
+                "shortName": "MIT",
+                "url": "https://spdx.org/licenses/MIT.html",
+            },
+            "outputsToInstall": ["out"],
+        });
+        let map = match json {
+            serde_json::Value::Object(map) => map,
+            _ => unreachable!(),
+        };
+
+        let captured = CapturedMeta::try_from(map.clone()).unwrap();
+
+        // The typed projection reads only the first available key and
+        // drops the rest.
+        assert_eq!(
+            captured
+                .typed
+                .license
+                .as_ref()
+                .unwrap()
+                .to_catalog_license()
+                .unwrap(),
+            "MIT"
+        );
+        // The raw document keeps every key the map declared.
+        assert_eq!(captured.raw, map);
+    }
+
+    #[test]
+    fn captured_meta_preserves_a_manifest_document_the_typed_struct_has_no_field_for() {
+        // Manifest builds construct meta as exactly `description`,
+        // `license`, `outputsToInstall`
+        // (`package-builder/flox-build.mk:567,662`), so `homepage` is
+        // always absent from this shape and the typed projection reports
+        // it as `None` without that being a loss.
+        let json = serde_json::json!({
+            "description": "A test package",
+            "license": ["MIT"],
+            "outputsToInstall": ["out"],
+        });
+        let map = match json {
+            serde_json::Value::Object(map) => map,
+            _ => unreachable!(),
+        };
+
+        let captured = CapturedMeta::try_from(map.clone()).unwrap();
+
+        // All three keys the manifest declared survive in `raw`.
+        assert_eq!(captured.raw, map);
+        assert_eq!(captured.raw.len(), 3);
+        assert_eq!(captured.typed.homepage, None);
+        assert_eq!(
+            captured.typed.license,
+            Some(NixyLicense::ComplexList(vec![NixyLicense::String(
+                "MIT".to_string()
+            )]))
         );
     }
 }

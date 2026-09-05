@@ -160,6 +160,9 @@ pub struct MockClient {
     // We use a RefCell here so that we don't have to modify the trait to allow mutable access
     // to `self` just to get mock responses out.
     pub mock_responses: MockField<VecDeque<Response>>,
+    // Recorded verbatim so a test can assert on the request `publish()` sent,
+    // not just on the canned response popped in return.
+    pub published_builds: MockField<Vec<UserBuildPublish>>,
 }
 
 impl MockClient {
@@ -167,6 +170,7 @@ impl MockClient {
     pub fn new() -> Self {
         Self {
             mock_responses: Arc::new(Mutex::new(VecDeque::new())),
+            published_builds: Arc::new(Mutex::new(Vec::new())),
         }
     }
 
@@ -176,6 +180,15 @@ impl MockClient {
             .lock()
             .expect("couldn't acquire mock lock")
             .push_back(Response::GetStoreInfo(resp));
+    }
+
+    /// The [UserBuildPublish] requests recorded by [publish_build], in call
+    /// order.
+    pub fn published_builds(&self) -> Vec<UserBuildPublish> {
+        self.published_builds
+            .lock()
+            .expect("couldn't acquire mock lock")
+            .clone()
     }
 
     /// See [test_helpers::reset_mocks].
@@ -338,8 +351,12 @@ impl CatalogClientTrait for MockClient {
         &self,
         _catalog_name: impl AsRef<str> + Send + Sync,
         _package_name: impl AsRef<str> + Send + Sync,
-        _build_info: &UserBuildPublish,
+        build_info: &UserBuildPublish,
     ) -> Result<(), FloxhubClientError> {
+        self.published_builds
+            .lock()
+            .expect("couldn't acquire mock lock")
+            .push(build_info.clone());
         let mock_resp = self
             .mock_responses
             .lock()
