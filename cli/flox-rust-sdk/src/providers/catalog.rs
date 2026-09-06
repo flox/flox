@@ -967,6 +967,55 @@ mod tests {
     };
 
     #[test]
+    fn reset_mocks_clears_the_recorded_requests_too() {
+        // The recording is mock state: a test that re-seeds mid-run and
+        // then asserts on `published_builds()` must not see requests
+        // sent before the reset. Nothing does that today, which is why
+        // this is here -- the trap is cheap to close and expensive to
+        // find later.
+        let mut client = MockClient::new();
+        test_helpers::reset_mocks(&mut client, vec![Response::PublishBuild]);
+        client
+            .publish_build("catalog", "package", &dummy_user_build_publish())
+            .block_on()
+            .unwrap();
+        assert_eq!(client.published_builds().len(), 1);
+
+        test_helpers::reset_mocks(&mut client, vec![Response::PublishBuild]);
+        assert!(
+            client.published_builds().is_empty(),
+            "a re-seed must clear the recording, not just the responses"
+        );
+    }
+
+    /// The smallest document the generated request type will accept.
+    /// Deserialized rather than constructed: the struct literal is 25
+    /// lines of fields this test says nothing about.
+    fn dummy_user_build_publish() -> UserBuildPublish {
+        serde_json::from_value(serde_json::json!({
+            "derivation": {
+                "description": null,
+                "drv_path": "/nix/store/deadbeef-dummy.drv",
+                "license": null,
+                "name": "dummy",
+                "outputs": [],
+                "outputs_to_install": [],
+                "pname": "dummy",
+                "system": "x86_64-linux",
+                "version": "1.0.0",
+            },
+            "locked_base_catalog_url": null,
+            "narinfos": null,
+            "rev": "0000000000000000000000000000000000000000",
+            "rev_count": 1,
+            "rev_date": "2026-01-01T00:00:00Z",
+            "url": "https://example.invalid/repo",
+            "dot_flox_dir": ".flox",
+        }))
+        .expect("the dummy request must match the generated type")
+    }
+
+    #[test]
     fn can_push_responses_outside_of_client() {
         let client = MockClient::new();
         {
