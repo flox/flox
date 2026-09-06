@@ -219,11 +219,26 @@ pub struct CheckedBuildMetadata {
 
     pub version: Option<String>,
 
-    /// The build's untouched `meta` document, sent to the catalog
-    /// alongside the flat fields above (which are derived from the lossy
-    /// typed projection, not from this map). Never `Option`: the request
-    /// literal always wraps this in `Some`, so the type itself rules out
-    /// silently omitting the field.
+    /// The build's `meta` document as the build wrote it -- verbatim
+    /// content, key order normalised -- sent to the catalog alongside
+    /// the flat fields above (which are derived from the lossy typed
+    /// projection, not from this map).
+    ///
+    /// Not an `Option`, because a `CheckedBuildMetadata` exists only
+    /// because a build parsed, and a build parses only when `meta` was
+    /// an object: the absent case is unreachable here. What rules out an
+    /// omitted WIRE field is separate and is not the type -- the
+    /// generated field is `Option` with `skip_serializing_if`, and the
+    /// unconditional `Some(...)` at the request literal, above every
+    /// store-configuration branch, is what keeps it present.
+    ///
+    /// What the document may contain is decided in the slice, not here:
+    /// `maintainers` and `teams` are captured verbatim with no
+    /// deny-list, and the three position-bearing fields are stripped
+    /// server-side by a generated column rather than by any writer, so
+    /// this layer deliberately applies no allowlist and no redaction.
+    /// See flox/forge#1357, `slices/2026/08-catalog-meta-attributes/`
+    /// (requirements.md "Decisions", D3, D24).
     pub evaluation_meta: serde_json::Map<String, serde_json::Value>,
 
     // This field isn't "pub", so no one outside this module can construct this struct. That helps
@@ -2049,9 +2064,12 @@ pub mod tests {
             broken: Some(false),
             insecure: None,
             unfree: None,
-            // A one-key map rather than `Map::new()`, so a test asserting
-            // on this value proves the field's content flows through
-            // `publish()` rather than merely that a `Some` exists.
+            // A one-key map rather than `Map::new()`: small and
+            // distinctive, so a test that wants to assert the field's
+            // content -- rather than merely that a `Some` exists -- has
+            // something to match. No test does today; the one publish
+            // assertion in this file builds its metadata through
+            // `check_build_metadata` and never reaches this helper.
             evaluation_meta: serde_json::Map::from_iter([(
                 "outputsToInstall".to_string(),
                 serde_json::json!(["out"]),

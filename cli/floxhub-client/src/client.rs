@@ -492,10 +492,18 @@ impl CatalogClientTrait for FloxhubClient {
                 let listing_known = first.listing_known;
                 let command_name_str = first.command_name;
                 let total_count = first.total_count;
+                // One comparison type for the loop. `page`/`page_size` are
+                // u64 since the schema gained `minimum: 0`, `total_count`
+                // is i64, and `len()` is usize -- narrowed once here
+                // rather than cast at each of the two comparisons below.
+                // `max(0)` because a negative count from the server would
+                // otherwise wrap.
+                let total = total_count.max(0) as usize;
+                let page_size_usize = page_size as usize;
                 let mut all_providers = first.providers;
                 // Fetch subsequent pages until we have all providers.
                 let mut page = 1u64;
-                while (all_providers.len() as i64) < total_count {
+                while all_providers.len() < total {
                     let next = self
                         .catalog
                         .by_command_api_v1_catalog_by_command_get(
@@ -510,7 +518,7 @@ impl CatalogClientTrait for FloxhubClient {
                         .into_inner();
                     let page_len = next.providers.len();
                     all_providers.extend(next.providers);
-                    if page_len < page_size as usize {
+                    if page_len < page_size_usize {
                         break;
                     }
                     page += 1;

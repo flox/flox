@@ -161,8 +161,11 @@ pub struct MockClient {
     // to `self` just to get mock responses out.
     pub mock_responses: MockField<VecDeque<Response>>,
     // Recorded verbatim so a test can assert on the request `publish()` sent,
-    // not just on the canned response popped in return.
-    pub published_builds: MockField<Vec<UserBuildPublish>>,
+    // not just on the canned response popped in return. Private, unlike
+    // `mock_responses` above: reads go through `published_builds()`, which
+    // locks and clones rather than handing out a guard a caller could hold
+    // across an await.
+    published_builds: MockField<Vec<UserBuildPublish>>,
 }
 
 impl MockClient {
@@ -199,6 +202,14 @@ impl MockClient {
             .expect("couldn't acquire mock lock");
         locked_mock_responses.clear();
         locked_mock_responses.extend(responses);
+        // The recording is mock state too: leaving it populated would let
+        // a test that re-seeds mid-run assert on requests sent before the
+        // reset. No test does that today, which is what makes it a trap
+        // rather than a bug.
+        self.published_builds
+            .lock()
+            .expect("couldn't acquire mock lock")
+            .clear();
     }
 }
 

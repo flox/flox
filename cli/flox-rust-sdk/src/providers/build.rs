@@ -330,15 +330,35 @@ pub struct BuildResultMeta {
 }
 
 /// The build's `meta` attribute, kept twice: the typed projection the
-/// publish request's flat fields are derived from, and the untouched
-/// document the catalog stores. `BuildResultMeta` is lossy by design
-/// (`NixyLicense::Map` reads one of four license keys and drops the
-/// rest), so the two are not interchangeable.
+/// publish request's flat fields are derived from, and the document the
+/// catalog stores -- verbatim content, key order normalised, since
+/// `serde_json::Map` is a `BTreeMap` unless `preserve_order` is on.
+///
+/// `BuildResultMeta` is lossy by design: it declares a fixed set of
+/// fields, so every other key a derivation wrote is dropped, and even
+/// within a field it narrows -- a nixpkgs license attrset also carries
+/// `free`, `redistributable` and `deprecated`, which `NixyLicense::Map`
+/// has no variant for. (The four keys `Map` DOES declare all survive the
+/// projection; `to_catalog_license` picks one of them later, which is a
+/// different loss in a different place.) So the two halves are not
+/// interchangeable.
+// Same suppression, and for the same `_private: ()` field, as
+// `CheckedBuildMetadata` in publish.rs: a non_exhaustive attribute would
+// only close the type to other crates, and this one must be unbuildable
+// inside this crate too.
+#[allow(clippy::manual_non_exhaustive)]
 #[derive(Debug, PartialEq, Deserialize)]
 #[serde(try_from = "serde_json::Map<String, serde_json::Value>")]
 pub struct CapturedMeta {
     pub typed: BuildResultMeta,
     pub raw: serde_json::Map<String, serde_json::Value>,
+
+    // Not "pub", so nothing outside this module can build a CapturedMeta
+    // whose `typed` is not the projection of its `raw` -- the one
+    // invariant the type exists to hold. `CheckedBuildMetadata` in
+    // publish.rs guards itself the same way. `try_from` below is the
+    // only constructor.
+    _private: (),
 }
 
 impl TryFrom<serde_json::Map<String, serde_json::Value>> for CapturedMeta {
@@ -348,10 +368,41 @@ impl TryFrom<serde_json::Map<String, serde_json::Value>> for CapturedMeta {
         // A derived deserializer cannot route one input key to two fields:
         // it generates a single field-name matcher, so a second field
         // aliased to "meta" would just be dead code behind the first.
-        // Deserializing `typed` from a clone of `raw` is the only way to
-        // keep both the lossy projection and the untouched document.
-        let typed = BuildResultMeta::deserialize(serde_json::Value::Object(raw.clone()))?;
-        Ok(CapturedMeta { typed, raw })
+        // Deserializing `typed` out of the same document is the only way
+        // to keep both the lossy projection and the original.
+        //
+        // Borrowed rather than cloned: serde_json implements
+        // `Deserializer` for `&Value`, so the map moves into a `Value`
+        // once and comes back out, instead of being deep-copied for the
+        // projection and then again for the field.
+        let value = serde_json::Value::Object(raw);
+        // Locate the failure, since routing through `TryFrom` costs the
+        // diagnostics the outer parse had: serde re-wraps this error
+        // through `de::Error::custom`, so the line and column of
+        // `build-meta.json` are gone, and serde_json never carried a
+        // field path in the first place (that is `serde_path_to_error`,
+        // which is not on this path). What is left unaided is
+        // `invalid type: string "x", expected a sequence` -- true, and
+        // unattributable to any file, field or record. Naming the
+        // document and its keys is the cheapest thing that puts the
+        // reader back in the right place.
+        let typed = BuildResultMeta::deserialize(&value).map_err(|err| {
+            let keys = value
+                .as_object()
+                .map(|map| map.keys().cloned().collect::<Vec<_>>().join(", "))
+                .unwrap_or_default();
+            <serde_json::Error as serde::de::Error>::custom(format!(
+                "{err} (while projecting the build's `meta`, whose keys are: {keys})"
+            ))
+        })?;
+        let serde_json::Value::Object(raw) = value else {
+            unreachable!("constructed as Value::Object directly above")
+        };
+        Ok(CapturedMeta {
+            typed,
+            raw,
+            _private: (),
+        })
     }
 }
 
@@ -1572,12 +1623,30 @@ mod license_tests {
             "[ GPL-2.0-or-later, Unfree ]"
         );
     }
+}
+
+/// Unit tests for [CapturedMeta] -- the document kept beside the typed
+/// projection, and the keys the projection has no field for.
+#[cfg(test)]
+mod captured_meta_tests {
+    use super::*;
 
     #[test]
-    fn captured_meta_keeps_license_keys_the_typed_copy_drops() {
+    fn captured_meta_keeps_keys_the_typed_projection_cannot_reproduce() {
         // Expression builds merge the eval JSON into `meta` unfiltered
         // (`package-builder/flox-build.mk:946`), so unlike a manifest
-        // build this document can carry a license as a four-key map.
+        // build this document carries keys `BuildResultMeta` has no
+        // field for. `position` and `maintainers` are the discriminating
+        // ones and the reason this test exists: an implementation that
+        // derived `raw` by re-serializing `typed` would lose exactly
+        // these, and would pass every other assertion in this file.
+        //
+        // The four-key license map is deliberately NOT that
+        // discriminator. `NixyLicense::Map` stores all four keys
+        // (see its definition above); the selection to one happens in
+        // `license_map_to_string`, downstream of the projection. It is
+        // asserted below because it is what the request's flat
+        // `license` field is derived from, not because `raw` rescues it.
         let json = serde_json::json!({
             "description": "A test package",
             "license": {
@@ -1586,17 +1655,47 @@ mod license_tests {
                 "shortName": "MIT",
                 "url": "https://spdx.org/licenses/MIT.html",
             },
+            "maintainers": [{
+                "name": "A Maintainer",
+                "email": "maintainer@example.com",
+                "github": "amaintainer",
+            }],
+            "position": "/nix/store/deadbeef-source/pkgs/example/default.nix:12",
             "outputsToInstall": ["out"],
         });
-        let map = match json {
-            serde_json::Value::Object(map) => map,
-            _ => unreachable!(),
-        };
+        let map = json.as_object().unwrap().clone();
 
         let captured = CapturedMeta::try_from(map.clone()).unwrap();
 
-        // The typed projection reads only the first available key and
-        // drops the rest.
+        // The raw document keeps every key the map declared, including
+        // the two the typed projection has no field for at all.
+        assert_eq!(captured.raw, map);
+        assert!(captured.raw.contains_key("maintainers"));
+        assert!(captured.raw.contains_key("position"));
+
+        // And `typed` is blind to both: the same document with those
+        // two keys removed produces an IDENTICAL typed projection and a
+        // different raw one. That is the property `raw` exists to hold,
+        // stated as the discrimination it makes -- an implementation
+        // deriving `raw` from `typed` could not tell these two inputs
+        // apart. Asserted this way rather than by re-serializing
+        // `typed`, which would need a `Serialize` derive the projection
+        // deliberately does not have.
+        let mut without = map.clone();
+        without.remove("maintainers");
+        without.remove("position");
+        let stripped = CapturedMeta::try_from(without.clone()).unwrap();
+        assert_eq!(
+            stripped.typed, captured.typed,
+            "the typed projection must not see the keys it has no field for"
+        );
+        assert_ne!(
+            stripped.raw, captured.raw,
+            "the raw document is the only half that can tell them apart"
+        );
+
+        // The flat `license` field still comes from the typed copy,
+        // which reads the first available key of the four.
         assert_eq!(
             captured
                 .typed
@@ -1607,12 +1706,10 @@ mod license_tests {
                 .unwrap(),
             "MIT"
         );
-        // The raw document keeps every key the map declared.
-        assert_eq!(captured.raw, map);
     }
 
     #[test]
-    fn captured_meta_preserves_a_manifest_document_the_typed_struct_has_no_field_for() {
+    fn captured_meta_preserves_a_manifest_document_verbatim() {
         // Manifest builds construct meta as exactly `description`,
         // `license`, `outputsToInstall`
         // (`package-builder/flox-build.mk:567,662`), so `homepage` is
@@ -1623,10 +1720,7 @@ mod license_tests {
             "license": ["MIT"],
             "outputsToInstall": ["out"],
         });
-        let map = match json {
-            serde_json::Value::Object(map) => map,
-            _ => unreachable!(),
-        };
+        let map = json.as_object().unwrap().clone();
 
         let captured = CapturedMeta::try_from(map.clone()).unwrap();
 
@@ -1639,6 +1733,42 @@ mod license_tests {
             Some(NixyLicense::ComplexList(vec![NixyLicense::String(
                 "MIT".to_string()
             )]))
+        );
+    }
+
+    #[test]
+    fn a_malformed_meta_says_which_document_failed() {
+        // Routing `Deserialize` through `TryFrom` re-wraps the inner
+        // error via `de::Error::custom`, which drops the line and column
+        // the outer `serde_json::from_str` would have carried. Nothing
+        // pinned what survives that, and `ParseBuildResultFile` is
+        // user-facing on a failed publish -- so this fixes the floor:
+        // the field name is still in the message a user reads.
+        let map = serde_json::json!({
+            "description": "A test package",
+            "outputsToInstall": "not-a-list",
+        })
+        .as_object()
+        .unwrap()
+        .clone();
+
+        let err = CapturedMeta::try_from(map).unwrap_err();
+        let rendered = err.to_string();
+        // What serde gives unaided: the type mismatch, and nothing that
+        // says where. Pinned so a future change to this conversion has
+        // to decide about the message rather than move it by accident.
+        assert!(
+            rendered.contains("invalid type: string"),
+            "the type mismatch must survive; got: {rendered}"
+        );
+        // What this conversion adds back: the document and its keys.
+        assert!(
+            rendered.contains("the build's `meta`"),
+            "the message must say which document failed; got: {rendered}"
+        );
+        assert!(
+            rendered.contains("outputsToInstall"),
+            "the message must name the document's keys; got: {rendered}"
         );
     }
 }
