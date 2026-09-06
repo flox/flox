@@ -1882,6 +1882,17 @@ pub mod tests {
             !evaluation_meta.is_empty(),
             "a manifest build's meta always includes at least outputsToInstall"
         );
+        // And it is THIS build's document, not merely some object. The
+        // unit tests prove `raw` keeps what `typed` cannot reproduce;
+        // without an equality here, an implementation that sent a
+        // re-serialized typed projection -- or any other non-empty map
+        // -- would leave every test in this file green, which is the
+        // threading gap between "captured losslessly" and "transmitted
+        // losslessly".
+        assert_eq!(
+            evaluation_meta, &build_metadata.evaluation_meta,
+            "publish must send the captured document, not a reconstruction"
+        );
     }
 
     #[test]
