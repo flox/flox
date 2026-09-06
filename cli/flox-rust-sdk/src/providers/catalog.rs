@@ -160,6 +160,12 @@ pub struct MockClient {
     // We use a RefCell here so that we don't have to modify the trait to allow mutable access
     // to `self` just to get mock responses out.
     pub mock_responses: MockField<VecDeque<Response>>,
+    // Recorded verbatim so a test can assert on the request `publish()` sent,
+    // not just on the canned response popped in return. Private, unlike
+    // `mock_responses` above: reads go through `published_builds()`, which
+    // locks and clones rather than handing out a guard a caller could hold
+    // across an await.
+    published_builds: MockField<Vec<UserBuildPublish>>,
 }
 
 impl MockClient {
@@ -167,6 +173,7 @@ impl MockClient {
     pub fn new() -> Self {
         Self {
             mock_responses: Arc::new(Mutex::new(VecDeque::new())),
+            published_builds: Arc::new(Mutex::new(Vec::new())),
         }
     }
 
@@ -178,6 +185,15 @@ impl MockClient {
             .push_back(Response::GetStoreInfo(resp));
     }
 
+    /// The [UserBuildPublish] requests recorded by [publish_build], in call
+    /// order.
+    pub fn published_builds(&self) -> Vec<UserBuildPublish> {
+        self.published_builds
+            .lock()
+            .expect("couldn't acquire mock lock")
+            .clone()
+    }
+
     /// See [test_helpers::reset_mocks].
     fn reset_mocks(&mut self, responses: impl IntoIterator<Item = Response>) {
         let mut locked_mock_responses = self
@@ -186,6 +202,20 @@ impl MockClient {
             .expect("couldn't acquire mock lock");
         locked_mock_responses.clear();
         locked_mock_responses.extend(responses);
+        // Dropped before the second lock is taken: `publish_build` locks
+        // published_builds first and mock_responses second, and holding
+        // one across the other in the opposite order is the shape a
+        // deadlock grows from later, even though neither path can reach
+        // it today.
+        drop(locked_mock_responses);
+        // The recording is mock state too: leaving it populated would let
+        // a test that re-seeds mid-run assert on requests sent before the
+        // reset. No test does that today, which is what makes it a trap
+        // rather than a bug.
+        self.published_builds
+            .lock()
+            .expect("couldn't acquire mock lock")
+            .clear();
     }
 }
 
@@ -338,8 +368,12 @@ impl CatalogClientTrait for MockClient {
         &self,
         _catalog_name: impl AsRef<str> + Send + Sync,
         _package_name: impl AsRef<str> + Send + Sync,
-        _build_info: &UserBuildPublish,
+        build_info: &UserBuildPublish,
     ) -> Result<(), FloxhubClientError> {
+        self.published_builds
+            .lock()
+            .expect("couldn't acquire mock lock")
+            .push(build_info.clone());
         let mock_resp = self
             .mock_responses
             .lock()
@@ -937,6 +971,60 @@ mod tests {
         auto_recording_catalog_client_for_authed_local_services,
         create_catalog_with_config,
     };
+
+    #[test]
+    fn reset_mocks_clears_the_recorded_requests_too() {
+        // The recording is mock state: a test that re-seeds mid-run and
+        // then asserts on `published_builds()` must not see requests
+        // sent before the reset. Nothing does that today, which is why
+        // this is here -- the trap is cheap to close and expensive to
+        // find later.
+        let mut client = MockClient::new();
+        test_helpers::reset_mocks(&mut client, vec![Response::PublishBuild]);
+        client
+            .publish_build("catalog", "package", &dummy_user_build_publish())
+            .block_on()
+            .unwrap();
+        assert_eq!(client.published_builds().len(), 1);
+
+        // Nothing armed: clearing the recording is independent of what
+        // the re-seed puts back, and an unconsumed response left behind
+        // is something a future edit could trip over.
+        test_helpers::reset_mocks(&mut client, vec![]);
+        assert!(
+            client.published_builds().is_empty(),
+            "a re-seed must clear the recording, not just the responses"
+        );
+    }
+
+    /// A minimal request, deserialized rather than constructed: the
+    /// struct literal is 25 lines of fields this test says nothing
+    /// about. Not the smallest the type would accept -- most of these
+    /// keys carry serde defaults -- just small enough to be obviously
+    /// irrelevant to what is being asserted.
+    fn dummy_user_build_publish() -> UserBuildPublish {
+        serde_json::from_value(serde_json::json!({
+            "derivation": {
+                "description": null,
+                "drv_path": "/nix/store/deadbeef-dummy.drv",
+                "license": null,
+                "name": "dummy",
+                "outputs": [],
+                "outputs_to_install": [],
+                "pname": "dummy",
+                "system": "x86_64-linux",
+                "version": "1.0.0",
+            },
+            "locked_base_catalog_url": null,
+            "narinfos": null,
+            "rev": "0000000000000000000000000000000000000000",
+            "rev_count": 1,
+            "rev_date": "2026-01-01T00:00:00Z",
+            "url": "https://example.invalid/repo",
+            "dot_flox_dir": ".flox",
+        }))
+        .expect("the dummy request must match the generated type")
+    }
 
     #[test]
     fn can_push_responses_outside_of_client() {

@@ -219,6 +219,30 @@ pub struct CheckedBuildMetadata {
 
     pub version: Option<String>,
 
+    /// The build's whole `meta` document -- every key the build wrote,
+    /// none dropped, though not byte-for-byte (see `CapturedMeta`:
+    /// serde_json sorts keys, collapses duplicates and round-trips
+    /// numbers through `f64`) -- sent to the catalog alongside the flat
+    /// fields above, which are derived from the lossy typed projection
+    /// and not from this map.
+    ///
+    /// Not an `Option`, because a `CheckedBuildMetadata` exists only
+    /// because a build parsed, and a build parses only when `meta` was
+    /// an object: the absent case is unreachable here. What rules out an
+    /// omitted WIRE field is separate and is not the type -- the
+    /// generated field is `Option` with `skip_serializing_if`, and the
+    /// unconditional `Some(...)` at the request literal, above every
+    /// store-configuration branch, is what keeps it present.
+    ///
+    /// What the document may contain is decided in the slice, not here:
+    /// `maintainers` and `teams` are captured verbatim with no
+    /// deny-list, and the three position-bearing fields are stripped
+    /// server-side by a generated column rather than by any writer, so
+    /// this layer deliberately applies no allowlist and no redaction.
+    /// See flox/forge#1357, `slices/2026/08-catalog-meta-attributes/`
+    /// (requirements.md "Decisions", D3, D24).
+    pub evaluation_meta: serde_json::Map<String, serde_json::Value>,
+
     // This field isn't "pub", so no one outside this module can construct this struct. That helps
     // ensure that we can only make this struct as a result of doing the "right thing."
     _private: (),
@@ -700,6 +724,11 @@ where
             // empty server-side (floxhub#1791). The wire type is a HashMap;
             // ordering on the wire is meaningless.
             locked_inputs: Some(locked_inputs.clone().into_iter().collect()),
+            // Always sent, never omitted: a `None` `meta_blob_id` already
+            // means "never captured" server-side, and collapsing an empty
+            // document into absence here would recreate that same collapse
+            // one layer out, where the server-side guard can't see it.
+            evaluation_meta: Some(build_metadata.evaluation_meta.clone()),
             base_catalog_rev_count: None,
             base_catalog_rev_date: None,
             url: self.env_metadata.build_repo_meta.url.to_string(),
@@ -867,14 +896,14 @@ fn convert_build_result_to_build_metadata(
         .into();
 
     // Get outputs to install from the build result, or default to all outputs.
-    let outputs_to_install = build_result.meta.outputs_to_install.clone();
+    let outputs_to_install = build_result.meta.typed.outputs_to_install.clone();
 
     // Wrapping `outputs_to_install` in an option to satisfy the API.
     // In practice outputs_to_install are required / must be always `Some`
     // so a future change will update the API to reflect that.
     let outputs_to_install = Some(outputs_to_install);
 
-    let license = match &build_result.meta.license {
+    let license = match &build_result.meta.typed.license {
         Some(lic) => Some(lic.to_catalog_license()?),
         None => None,
     };
@@ -884,11 +913,18 @@ fn convert_build_result_to_build_metadata(
         name: build_result.name.clone(),
         pname: build_result.pname.clone(),
 
-        description: build_result.meta.description.clone(),
+        description: build_result.meta.typed.description.clone(),
         license,
-        broken: build_result.meta.broken,
-        insecure: build_result.meta.insecure,
-        unfree: build_result.meta.unfree,
+        broken: build_result.meta.typed.broken,
+        insecure: build_result.meta.typed.insecure,
+        unfree: build_result.meta.typed.unfree,
+        // Cloned, not moved: this function takes `&BuildResult`, and
+        // the caller holds `build_results` for its length check. One of
+        // the two structural copies of this document -- the other is
+        // the request literal in `publish()`, which borrows its
+        // metadata. D23 priced one clone; these are the two that a
+        // signature change would be needed to remove.
+        evaluation_meta: build_result.meta.raw.clone(),
 
         outputs,
         outputs_to_install,
@@ -1831,6 +1867,32 @@ pub mod tests {
             false,
             "MetadataOnly should not require publisher wait"
         );
+
+        // The request sent to the catalog always carries the build's meta
+        // document as an object, never omitted (D18): a `None`
+        // `meta_blob_id` already means "never captured" server-side, so
+        // sending nothing here would be indistinguishable from that.
+        let published = catalog.published_builds();
+        assert_eq!(published.len(), 1);
+        let evaluation_meta = published[0]
+            .evaluation_meta
+            .as_ref()
+            .expect("evaluation_meta must always be sent as Some, never omitted");
+        assert!(
+            !evaluation_meta.is_empty(),
+            "a manifest build's meta always includes at least outputsToInstall"
+        );
+        // And it is THIS build's document, not merely some object. The
+        // unit tests prove `raw` keeps what `typed` cannot reproduce;
+        // without an equality here, an implementation that sent a
+        // re-serialized typed projection -- or any other non-empty map
+        // -- would leave every test in this file green, which is the
+        // threading gap between "captured losslessly" and "transmitted
+        // losslessly".
+        assert_eq!(
+            evaluation_meta, &build_metadata.evaluation_meta,
+            "publish must send the captured document, not a reconstruction"
+        );
     }
 
     #[test]
@@ -2021,6 +2083,16 @@ pub mod tests {
             broken: Some(false),
             insecure: None,
             unfree: None,
+            // A one-key map rather than `Map::new()`: small and
+            // distinctive, so a test that wants to assert the field's
+            // content -- rather than merely that a `Some` exists -- has
+            // something to match. No test does today; the one publish
+            // assertion in this file builds its metadata through
+            // `check_build_metadata` and never reaches this helper.
+            evaluation_meta: serde_json::Map::from_iter([(
+                "outputsToInstall".to_string(),
+                serde_json::json!(["out"]),
+            )]),
             _private: (),
         };
 
