@@ -202,6 +202,12 @@ impl MockClient {
             .expect("couldn't acquire mock lock");
         locked_mock_responses.clear();
         locked_mock_responses.extend(responses);
+        // Dropped before the second lock is taken: `publish_build` locks
+        // published_builds first and mock_responses second, and holding
+        // one across the other in the opposite order is the shape a
+        // deadlock grows from later, even though neither path can reach
+        // it today.
+        drop(locked_mock_responses);
         // The recording is mock state too: leaving it populated would let
         // a test that re-seeds mid-run assert on requests sent before the
         // reset. No test does that today, which is what makes it a trap
@@ -981,16 +987,21 @@ mod tests {
             .unwrap();
         assert_eq!(client.published_builds().len(), 1);
 
-        test_helpers::reset_mocks(&mut client, vec![Response::PublishBuild]);
+        // Nothing armed: clearing the recording is independent of what
+        // the re-seed puts back, and an unconsumed response left behind
+        // is something a future edit could trip over.
+        test_helpers::reset_mocks(&mut client, vec![]);
         assert!(
             client.published_builds().is_empty(),
             "a re-seed must clear the recording, not just the responses"
         );
     }
 
-    /// The smallest document the generated request type will accept.
-    /// Deserialized rather than constructed: the struct literal is 25
-    /// lines of fields this test says nothing about.
+    /// A minimal request, deserialized rather than constructed: the
+    /// struct literal is 25 lines of fields this test says nothing
+    /// about. Not the smallest the type would accept -- most of these
+    /// keys carry serde defaults -- just small enough to be obviously
+    /// irrelevant to what is being asserted.
     fn dummy_user_build_publish() -> UserBuildPublish {
         serde_json::from_value(serde_json::json!({
             "derivation": {

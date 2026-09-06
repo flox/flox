@@ -219,10 +219,12 @@ pub struct CheckedBuildMetadata {
 
     pub version: Option<String>,
 
-    /// The build's `meta` document as the build wrote it -- verbatim
-    /// content, key order normalised -- sent to the catalog alongside
-    /// the flat fields above (which are derived from the lossy typed
-    /// projection, not from this map).
+    /// The build's whole `meta` document -- every key the build wrote,
+    /// none dropped, though not byte-for-byte (see `CapturedMeta`:
+    /// serde_json sorts keys, collapses duplicates and round-trips
+    /// numbers through `f64`) -- sent to the catalog alongside the flat
+    /// fields above, which are derived from the lossy typed projection
+    /// and not from this map.
     ///
     /// Not an `Option`, because a `CheckedBuildMetadata` exists only
     /// because a build parsed, and a build parses only when `meta` was
@@ -916,6 +918,12 @@ fn convert_build_result_to_build_metadata(
         broken: build_result.meta.typed.broken,
         insecure: build_result.meta.typed.insecure,
         unfree: build_result.meta.typed.unfree,
+        // Cloned, not moved: this function takes `&BuildResult`, and
+        // the caller holds `build_results` for its length check. One of
+        // the two structural copies of this document -- the other is
+        // the request literal in `publish()`, which borrows its
+        // metadata. D23 priced one clone; these are the two that a
+        // signature change would be needed to remove.
         evaluation_meta: build_result.meta.raw.clone(),
 
         outputs,

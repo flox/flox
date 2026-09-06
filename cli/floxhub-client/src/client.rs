@@ -494,11 +494,18 @@ impl CatalogClientTrait for FloxhubClient {
                 let total_count = first.total_count;
                 // One comparison type for the loop. `page`/`page_size` are
                 // u64 since the schema gained `minimum: 0`, `total_count`
-                // is i64, and `len()` is usize -- narrowed once here
+                // is i64, and `len()` is usize -- converted once here
                 // rather than cast at each of the two comparisons below.
-                // `max(0)` because a negative count from the server would
-                // otherwise wrap.
-                let total = total_count.max(0) as usize;
+                //
+                // Saturating rather than `as`: the old comparison widened
+                // `len()` to i64 and could not lose information, and a
+                // bare `total_count as usize` would narrow instead --
+                // on a 32-bit target a count above u32::MAX would wrap
+                // small and stop the loop early. Clamping to usize::MAX
+                // keeps it going, and the `page_len < page_size` break
+                // below is what actually ends it. A negative count
+                // clamps to 0, which ends it immediately, as before.
+                let total = usize::try_from(total_count).unwrap_or(usize::MAX);
                 let page_size_usize = page_size as usize;
                 let mut all_providers = first.providers;
                 // Fetch subsequent pages until we have all providers.

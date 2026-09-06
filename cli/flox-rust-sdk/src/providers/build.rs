@@ -330,9 +330,18 @@ pub struct BuildResultMeta {
 }
 
 /// The build's `meta` attribute, kept twice: the typed projection the
-/// publish request's flat fields are derived from, and the document the
-/// catalog stores -- verbatim content, key order normalised, since
-/// `serde_json::Map` is a `BTreeMap` unless `preserve_order` is on.
+/// publish request's flat fields are derived from, and the whole
+/// document the catalog stores -- every key the build wrote, none
+/// dropped.
+///
+/// Not byte-for-byte, and the difference is serde_json's rather than
+/// ours: with neither `preserve_order` nor `arbitrary_precision`
+/// enabled (checked in Cargo.lock), `Map` is a `BTreeMap` so keys come
+/// back sorted, duplicate keys collapse last-wins, and numbers
+/// round-trip through `f64` -- measured on this build:
+/// `{"a": 1.50, "b": 1e3, "c": 1, "c": 2}` reads back as
+/// `{"a":1.5,"b":1000.0,"c":2}`. What is preserved is the key set and
+/// the values' meaning, which is what the projection loses.
 ///
 /// `BuildResultMeta` is lossy by design: it declares a fixed set of
 /// fields, so every other key a derivation wrote is dropped, and even
@@ -375,6 +384,11 @@ impl TryFrom<serde_json::Map<String, serde_json::Value>> for CapturedMeta {
         // `Deserializer` for `&Value`, so the map moves into a `Value`
         // once and comes back out, instead of being deep-copied for the
         // projection and then again for the field.
+        // Captured before the map moves: computing it inside the error
+        // arm would need a second `as_object()` whose None branch is
+        // dead, and a dead branch has to either panic or invent an
+        // empty key list. One story instead.
+        let keys = raw.keys().cloned().collect::<Vec<_>>().join(", ");
         let value = serde_json::Value::Object(raw);
         // Locate the failure, since routing through `TryFrom` costs the
         // diagnostics the outer parse had: serde re-wraps this error
@@ -387,12 +401,9 @@ impl TryFrom<serde_json::Map<String, serde_json::Value>> for CapturedMeta {
         // document and its keys is the cheapest thing that puts the
         // reader back in the right place.
         let typed = BuildResultMeta::deserialize(&value).map_err(|err| {
-            let keys = value
-                .as_object()
-                .map(|map| map.keys().cloned().collect::<Vec<_>>().join(", "))
-                .unwrap_or_default();
             <serde_json::Error as serde::de::Error>::custom(format!(
-                "{err} (while projecting the build's `meta`, whose keys are: {keys})"
+                "{err} (while projecting the build's `meta`, whose top-level \
+                 keys are: {keys})"
             ))
         })?;
         let serde_json::Value::Object(raw) = value else {
@@ -1709,7 +1720,7 @@ mod captured_meta_tests {
     }
 
     #[test]
-    fn captured_meta_preserves_a_manifest_document_verbatim() {
+    fn captured_meta_keeps_every_key_a_manifest_document_declared() {
         // Manifest builds construct meta as exactly `description`,
         // `license`, `outputsToInstall`
         // (`package-builder/flox-build.mk:567,662`), so `homepage` is
@@ -1742,8 +1753,11 @@ mod captured_meta_tests {
         // error via `de::Error::custom`, which drops the line and column
         // the outer `serde_json::from_str` would have carried. Nothing
         // pinned what survives that, and `ParseBuildResultFile` is
-        // user-facing on a failed publish -- so this fixes the floor:
-        // the field name is still in the message a user reads.
+        // user-facing on a failed publish -- so this pins the floor: the
+        // type mismatch, plus the document and its TOP-LEVEL keys. Not
+        // a path: a bad value nested inside `license` names `license`
+        // and no further, which would take `serde_path_to_error` as a
+        // direct dependency.
         let map = serde_json::json!({
             "description": "A test package",
             "outputsToInstall": "not-a-list",
@@ -1768,7 +1782,7 @@ mod captured_meta_tests {
         );
         assert!(
             rendered.contains("outputsToInstall"),
-            "the message must name the document's keys; got: {rendered}"
+            "the message must name the document's top-level keys; got: {rendered}"
         );
     }
 }
