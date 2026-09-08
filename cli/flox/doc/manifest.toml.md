@@ -55,6 +55,7 @@ Valid string values are:
 - `1.15.0`: introduced `hook.on-deactivate`
 - `1.16.0`: introduced services `depends-on`, and
   `shutdown.timeout-seconds` / `shutdown.signal`
+- `1.17.0`: introduced `description`
 
 Existing manifest schemas, including the older `version = 1` format, are
 automatically forward-migrated when using features that require a newer schema
@@ -83,6 +84,24 @@ in the emitted warning message:
 version = "1.11.0"
 reason = "Needs feature X"
 ```
+
+## `description`
+
+`description` is an optional top-level field that provides a human-readable
+summary of the environment's purpose.
+
+```toml
+schema-version = "1.17.0"
+description = "Python 3.12 development environment with linting tools"
+```
+
+The value must be a string.
+It has no effect on environment behavior.
+It is intended for documentation purposes only.
+
+When composing environments,
+the composing environment's `description` is used.
+An included environment's `description` is never surfaced.
 
 ## `[install]`
 
