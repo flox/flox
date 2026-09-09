@@ -6,30 +6,22 @@
 //! [`AuthContext::new_from_token`] (routing by the token's form) or
 //! [`AuthContext::new_kerberos`].
 //!
-//! This module carries no transport: the identity behind an opaque token is
-//! resolved at the point of use through `FloxhubClient::resolve_identity`
-//! and surfaced uniformly via `Flox::get_identity`.
-//!
-//! One file per type:
-//! - [`auth_context`]: [`AuthContext`] and its failure types
-//! - [`discovery`]: per-deployment login discovery
-//!   ([`discover_login_config`])
-//! - [`identity`]: [`UserIdentity`] and its resolution errors
-//! - [`token`]: one type per credential capability — [`FloxhubToken`]
-//!   (Auth0-shaped JWT, identity local), [`BareToken`] (JWT without the
-//!   handle claim, identity via /me), [`AccessToken`] (opaque, everything
-//!   via /me)
-//! - [`kerberos`]: [`KerberosMaterial`] and SPNEGO token generation
+//! Credential loading and cached identity resolution are handled by
+//! [`AuthContext`]. Callers request a handle or identity directly.
+//! Storage adapters use the separate [storage] integration API.
 
 mod auth_context;
+mod credential;
 mod discovery;
 pub(crate) mod identity;
 mod kerberos;
+pub mod storage;
 mod token;
 
-pub use auth_context::{AuthContext, AuthFailure, AuthHeaderError};
+pub use auth_context::AuthContext;
+pub use credential::{AuthFailure, AuthHeaderError, CredentialKind};
 pub use discovery::{DiscoveredLoginConfig, LoginDiscoveryError, discover_login_config};
-pub use identity::{IdentityError, UNKNOWN_HANDLE, UserIdentity};
+pub use identity::{UNKNOWN_HANDLE, UserIdentity};
 pub use kerberos::{KerberosMaterial, TokenGenerator};
 pub use token::{AccessToken, BareToken, FloxhubToken, InvalidTokenError};
 

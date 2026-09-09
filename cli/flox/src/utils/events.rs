@@ -17,11 +17,11 @@ use std::sync::{LazyLock, OnceLock};
 
 use flox_config::Config;
 use flox_events::{CredentialType, EnvDetail, EventsClient, EventsHub, SharedMetadataTemplate};
-use flox_rust_sdk::flox::{AuthContext, FLOX_VERSION, Flox};
+use flox_rust_sdk::flox::{FLOX_VERSION, Flox};
 use flox_rust_sdk::models::environment::generations::GenerationsExt;
 use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment};
 use flox_rust_sdk::utils::INVOCATION_SOURCES;
-use floxhub_client::FloxhubClient;
+use floxhub_client::{AuthContext, CredentialKind, FloxhubClient};
 use tracing::debug;
 use uuid::Uuid;
 
@@ -91,17 +91,19 @@ pub(crate) fn duration_to_ms(elapsed: std::time::Duration) -> u64 {
     u64::try_from(elapsed.as_millis()).unwrap_or(u64::MAX)
 }
 
-fn credential_type_from_context(auth_context: &AuthContext) -> CredentialType {
-    match auth_context {
-        AuthContext::Auth0(Some(_)) | AuthContext::Bare(_) => CredentialType::Jwt,
-        AuthContext::AccessToken(token) if token.secret().starts_with("flox_pat_") => {
-            CredentialType::Pat
-        },
-        AuthContext::AccessToken(token) if token.secret().starts_with("flox_sat_") => {
-            CredentialType::Sat
-        },
-        AuthContext::AccessToken(_) => CredentialType::Unknown,
-        AuthContext::Auth0(None) | AuthContext::Kerberos(_) => CredentialType::None,
+/// Map the credential kind onto the wire enum.
+///
+/// Taken from [`CredentialKind`] rather than the [`AuthContext`] variant so
+/// this costs nothing: the kind is a recorded fact, and reading the credential
+/// to learn it would make every invocation pay for the keyring
+/// (see [`floxhub_client::AuthContext`]).
+fn credential_type_from_kind(kind: CredentialKind) -> CredentialType {
+    match kind {
+        CredentialKind::Auth0 | CredentialKind::Bare => CredentialType::Jwt,
+        CredentialKind::OpaqueToken => CredentialType::Unknown,
+        CredentialKind::PersonalAccessToken => CredentialType::Pat,
+        CredentialKind::ServiceAccountToken => CredentialType::Sat,
+        CredentialKind::NotLoggedIn | CredentialKind::Kerberos => CredentialType::None,
     }
 }
 
@@ -194,7 +196,7 @@ pub async fn build_events_client(
         },
     };
 
-    let credential_type = credential_type_from_context(auth_context);
+    let credential_type = credential_type_from_kind(auth_context.kind());
     let auth_subject =
         auth_subject_from_context(auth_context, credential_type, floxhub_client).await;
     Some(EventsClient::new(
@@ -219,6 +221,8 @@ async fn auth_subject_from_context(
     credential_type: CredentialType,
     floxhub_client: Option<&FloxhubClient>,
 ) -> Option<String> {
+    // Return a subject from JWT claims or cached identity facts without loading
+    // credentials or making a request. Deferred facts may be stale.
     if let Some(subject) = auth_context.user_subject() {
         return Some(subject);
     }
@@ -230,15 +234,14 @@ async fn auth_subject_from_context(
         debug!("v2 events: no FloxHub client available to resolve token subject");
         return None;
     };
-    let secret = auth_context.token_secret()?;
 
     match tokio::time::timeout(
         AUTH_SUBJECT_RESOLUTION_TIMEOUT,
-        floxhub_client.resolve_identity(secret),
+        auth_context.identity(floxhub_client),
     )
     .await
     {
-        Ok(Ok(identity)) => identity.sub,
+        Ok(Ok(identity)) => identity.and_then(|identity| identity.sub),
         Ok(Err(err)) => {
             debug!(error = %err, "v2 events: could not resolve token subject");
             None
@@ -528,8 +531,10 @@ mod tests {
             AuthContext::Kerberos(None),
         ];
 
+        // Routed through `AuthContext::kind` so the credential type comes
+        // from a fact a record can carry; the reported values are unchanged.
         assert_eq!(
-            contexts.map(|context| credential_type_from_context(&context)),
+            contexts.map(|context| credential_type_from_kind(context.kind())),
             [
                 CredentialType::Jwt,
                 CredentialType::Jwt,

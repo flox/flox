@@ -56,7 +56,25 @@ pub const FLOX_RESOLVE_STABILITY_VAR: &str = "_FLOX_RESOLVE_STABILITY";
 // Re-export the authentication types so consumers can keep depending only
 // on floxhub-client.
 pub use accounts::{AccountsApiClient, MeError};
-pub use auth::*;
+#[cfg(any(test, feature = "tests"))]
+pub use auth::test_helpers;
+pub use auth::{
+    AccessToken,
+    AuthContext,
+    AuthFailure,
+    AuthHeaderError,
+    BareToken,
+    CredentialKind,
+    DiscoveredLoginConfig,
+    FloxhubToken,
+    InvalidTokenError,
+    KerberosMaterial,
+    LoginDiscoveryError,
+    TokenGenerator,
+    UNKNOWN_HANDLE,
+    UserIdentity,
+    discover_login_config,
+};
 pub use catalog_api_v1::{
     Client as ApiClient,
     Error as ApiError,

@@ -15,8 +15,12 @@ mod access_token;
 mod bare_token;
 mod floxhub_token;
 
-pub(crate) use access_token::ACCESS_TOKEN_PREFIX;
 pub use access_token::AccessToken;
+pub(crate) use access_token::{
+    ACCESS_TOKEN_PREFIX,
+    PERSONAL_ACCESS_TOKEN_PREFIX,
+    SERVICE_ACCOUNT_TOKEN_PREFIX,
+};
 pub use bare_token::BareToken;
 pub use floxhub_token::FloxhubToken;
 use thiserror::Error;

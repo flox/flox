@@ -74,12 +74,12 @@ fn classify_keyring_error(error: keyring_core::Error) -> CredentialStoreError {
 /// The entry is keyed by [KEYRING_SERVICE] plus the FloxHub base URL as the
 /// account, so distinct FloxHub instances do not collide.
 #[derive(Debug, Clone)]
-pub struct KeyringStore {
+pub(super) struct KeyringStore {
     account: String,
 }
 
 impl KeyringStore {
-    pub fn new(floxhub_url: &Url) -> Self {
+    pub(super) fn new(floxhub_url: &Url) -> Self {
         Self {
             account: floxhub_url.as_str().to_string(),
         }

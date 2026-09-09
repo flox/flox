@@ -8,13 +8,19 @@ use crate::auth::identity;
 /// them.
 pub(crate) const ACCESS_TOKEN_PREFIX: &str = "flox_";
 
+/// Prefix of a personal access token.
+pub(crate) const PERSONAL_ACCESS_TOKEN_PREFIX: &str = "flox_pat_";
+
+/// Prefix of a service account token.
+pub(crate) const SERVICE_ACCOUNT_TOKEN_PREFIX: &str = "flox_sat_";
+
 /// An opaque access token (`flox_…`) authenticating a caller with FloxHub,
 /// including `flox_pat_` personal access tokens and `flox_sat_` service
 /// account tokens.
 ///
 /// The CLI cannot decode identity from an opaque token; it is resolved via
 /// the accounts service's `GET /api/v1/accounts/me` (publicly
-/// `/accounts/api/v1/accounts/me`; `FloxhubClient::resolve_identity`) and
+/// `/accounts/api/v1/accounts/me`; [`crate::AuthContext::identity`]) and
 /// cached process-wide, keyed by the secret. Until resolution succeeds,
 /// [`Self::handle`] returns `None` — the server's 401 is the authoritative
 /// backstop.
@@ -40,6 +46,13 @@ impl AccessToken {
     /// network.
     pub fn handle(&self) -> Option<String> {
         identity::cached_identity(&self.token).map(|identity| identity.handle)
+    }
+
+    /// The expiry `/me` reported for this token; `None` until resolution has
+    /// succeeded, and for a token that never expires. Nothing is knowable
+    /// locally — an opaque token has no claims to read.
+    pub fn expires_at(&self) -> Option<chrono::DateTime<chrono::Utc>> {
+        identity::cached_identity(&self.token).and_then(|identity| identity.expires_at)
     }
 }
 
