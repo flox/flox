@@ -21,8 +21,12 @@ flox [<general-options>] config
 
 # DESCRIPTION
 
-Without any flags or when `-l` is passed, `flox config` shows all options with
-their computed value.
+Without any flags or when `-l` is passed, `flox config` shows the merged
+configuration as TOML. Some defaults are added while reading the configuration
+and appear in the output. Other defaults are applied only when a command uses
+the configuration and are omitted until explicitly configured. For example,
+`auto_activate` is omitted when unset even though auto-activation behaves as if
+it were set to `prompt`.
 
 Config values are read from the following sources in order of descending priority:
 
@@ -53,7 +57,8 @@ flox config --set 'trusted_environments."owner/name"' trust
 ## Config Options
 
 `-l`, `--list`
-:   List the current values of all options.
+:   List the merged configuration. Options whose defaults are applied only when
+    used are omitted until explicitly configured.
 
 `-r`, `--reset`
 :   Reset all options to their default values without confirmation.
