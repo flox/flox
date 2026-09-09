@@ -10,12 +10,12 @@ use crate::commands::general::update_config;
 
 /// Plain-text token storage in `<config_dir>/flox.toml`.
 #[derive(Debug, Clone)]
-pub struct PlaintextStore {
+pub(super) struct PlaintextStore {
     config_dir: PathBuf,
 }
 
 impl PlaintextStore {
-    pub fn new(config_dir: impl Into<PathBuf>) -> Self {
+    pub(super) fn new(config_dir: impl Into<PathBuf>) -> Self {
         Self {
             config_dir: config_dir.into(),
         }

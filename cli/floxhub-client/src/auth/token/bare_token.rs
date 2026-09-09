@@ -60,7 +60,7 @@ impl BareToken {
     /// Return the resolved handle; `None` until `/me` resolution has
     /// succeeded. Reads the process-wide cache — never blocks, never
     /// touches the network. For the resolved answer use
-    /// `Flox::get_identity`.
+    /// [`crate::AuthContext::handle`].
     pub fn handle(&self) -> Option<String> {
         identity::cached_identity(&self.token).map(|identity| identity.handle)
     }

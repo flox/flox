@@ -369,20 +369,15 @@ impl Auth {
             Auth::Logout => {
                 let span = tracing::info_span!("logout");
                 let _guard = span.enter();
-                if config.flox.floxhub_token.is_none() {
+                let stores = CredentialStores::from_flox(&flox);
+                let source = stores
+                    .logout(&config)
+                    .context("Could not remove the stored token")?;
+
+                if source == CredentialSource::None {
                     message::warning("You are not logged in");
                     return Ok(());
                 }
-
-                let stores = CredentialStores::from_flox(&flox);
-                // Probe before removal: this identifies which source supplies
-                // the active token, so logout can say when clearing the stores
-                // is not enough to end the session.
-                let source = stores.probe_source(&config);
-
-                stores
-                    .remove_all()
-                    .context("Could not remove the stored token")?;
 
                 match source {
                     CredentialSource::Env => message::warning(indoc! {"
@@ -404,7 +399,17 @@ impl Auth {
                 // guard avoids an *additional* keyring read (and a possible
                 // unlock prompt) during source probing when the user is not
                 // logged in.
-                match flox.get_identity().await {
+                //
+                // Ask the server rather than reciting a cached answer. Nothing
+                // else expires the recorded identity, so a handle renamed
+                // server-side would otherwise be reported wrong indefinitely;
+                // `status` exists to report the truth about a credential, and
+                // it is the one command that can afford the round trip.
+                let identity = flox
+                    .auth_context
+                    .refresh_identity(&flox.floxhub_client)
+                    .await;
+                match identity {
                     Ok(Some(identity)) => {
                         message::plain(format!(
                             "You are logged in as {} on {}",
@@ -554,11 +559,6 @@ fn complete_login(
     once: bool,
     storage_pref: TokenStorageMode,
 ) -> Result<String> {
-    let secret = auth_context
-        .token_secret()
-        .expect("login completes with a bearer credential")
-        .to_string();
-
     // `--insecure-storage` forces plain text for this login; otherwise honor the
     // standing storage preference.
     let target = if insecure_storage {
@@ -572,7 +572,7 @@ fn complete_login(
     // (explicit 0600).
     let stores = CredentialStores::from_flox(flox);
     let storage = stores
-        .persist_login_token(&secret, target)
+        .persist_login(&auth_context, target)
         .context("Could not store token")?;
 
     // Persist the plain-text choice as a standing preference only when
@@ -734,6 +734,8 @@ mod tests {
     use flox_events::{CredentialType, EventsBuffer, EventsClient, SharedMetadataTemplate};
     use flox_rust_sdk::flox::FloxhubToken;
     use flox_rust_sdk::flox::test_helpers::{create_test_token, flox_instance};
+    use flox_rust_sdk::models::floxmeta::FLOXHUB_TOKEN_ENV_VAR;
+    use floxhub_client::auth::storage::credential_fingerprint;
     use floxhub_client::test_helpers::{FAKE_EXPIRED_TOKEN, FAKE_TOKEN_WITH_SUB};
     use httpmock::MockServer;
     use serial_test::serial;
@@ -1095,6 +1097,74 @@ mod tests {
             );
             assert!(matches!(&flox.auth_context, AuthContext::AccessToken(_)));
         })
+        .await;
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn plaintext_logins_persist_resolved_identity() {
+        temp_env::async_with_vars(
+            [
+                ("_FLOX_DISABLE_KEYRING", Some("true")),
+                (FLOXHUB_TOKEN_ENV_VAR, None),
+            ],
+            async {
+                for (prefix, storage_pref) in [
+                    ("pat", TokenStorageMode::Plaintext),
+                    ("sat", TokenStorageMode::Plaintext),
+                    ("pat", TokenStorageMode::Keyring),
+                    ("sat", TokenStorageMode::Keyring),
+                ] {
+                    let secret = format!("flox_{prefix}_plaintext-{storage_pref:?}");
+                    let server = MockServer::start();
+                    let request = server.mock(|when, then| {
+                        when.method(httpmock::Method::GET)
+                            .path("/accounts/api/v1/accounts/me")
+                            .header("authorization", format!("bearer {secret}"));
+                        then.status(200).json_body(serde_json::json!({
+                            "user_id": "account|plaintext",
+                            "handle": "plaintext-user",
+                            "expires_at": null,
+                        }));
+                    });
+                    let (mut flox, _temp_dir) = flox_instance();
+                    override_client(&mut flox, &server);
+                    let token_file = flox.temp_dir.join("token");
+                    fs::write(&token_file, &secret).unwrap();
+
+                    login_with_token_file(&mut flox, &token_file, false, false, storage_pref)
+                        .await
+                        .unwrap();
+
+                    request.assert_calls(1);
+                    let record_path = fs::read_dir(&flox.cache_dir)
+                        .unwrap()
+                        .map(|entry| entry.unwrap().path())
+                        .find(|path| {
+                            path.file_name()
+                                .unwrap()
+                                .to_string_lossy()
+                                .starts_with("auth-state-")
+                        })
+                        .expect("login must persist the resolved identity");
+                    let record: serde_json::Value =
+                        serde_json::from_str(&fs::read_to_string(record_path).unwrap()).unwrap();
+                    assert_eq!(
+                        record,
+                        serde_json::json!({
+                            "version": 1,
+                            "account": flox.floxhub.base_url().as_str(),
+                            "storage": TokenStorage::Plaintext,
+                            "logged_in": true,
+                            "kind": flox.auth_context.kind(),
+                            "requires_login": false,
+                            "subject": "account|plaintext",
+                            "handle": "plaintext-user",
+                            "fingerprint": credential_fingerprint(&secret),
+                        })
+                    );
+                }
+            },
+        )
         .await;
     }
 

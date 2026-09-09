@@ -6,7 +6,7 @@ use flox_core::features::Features;
 use flox_core::floxhub::Floxhub;
 use flox_core::vars::FLOX_VERSION_STRING;
 pub use floxhub_client::{AccessToken, AuthContext, AuthFailure, FloxhubToken, UserIdentity};
-use floxhub_client::{FloxhubClient, FloxhubClientError, IdentityError};
+use floxhub_client::{FloxhubClient, FloxhubClientError};
 use url::Url;
 use uuid::Uuid;
 
@@ -54,7 +54,7 @@ pub struct Flox {
 
     pub floxhub: Floxhub,
 
-    /// The current authentication credential.
+    /// Authentication with deferred credential loading and cached identity lookup.
     pub auth_context: AuthContext,
 
     /// Shared HTTP client for both the catalog and factory API surfaces.
@@ -86,64 +86,6 @@ impl Flox {
             config.auth_context = auth_context;
         })?;
         Ok(())
-    }
-
-    /// The identity behind the current credential — the one uniform way to
-    /// answer "who is authenticated": JWT claims for an Auth0-shaped token,
-    /// the accounts service's `GET /api/v1/accounts/me` for any credential
-    /// that doesn't identify its owner — a bare JWT or an opaque access token
-    /// (a successful resolution is cached for the process) — and the principal
-    /// for Kerberos. The public gateway exposes that endpoint at
-    /// `/accounts/api/v1/accounts/me`.
-    ///
-    /// - `Ok(Some(identity))` — authenticated. Expiry is reported *in* the
-    ///   identity ([`UserIdentity::is_expired`]), not as a failure — what
-    ///   expiry means is each caller's decision.
-    /// - `Ok(None)` — the identity is unknown: there is a credential, but it
-    ///   could not be verified (e.g. FloxHub was unreachable). Typically not
-    ///   fatal: the server stays the authority for whether the credential
-    ///   actually authenticates requests, so callers usually degrade rather
-    ///   than block.
-    /// - `Err(failure)` — affirmatively unauthenticated: no credential
-    ///   ([`AuthFailure::NotLoggedIn`]), no Kerberos ticket
-    ///   ([`AuthFailure::NoKerberosTicket`]), or the server rejected the
-    ///   token ([`AuthFailure::TokenExpired`]).
-    pub async fn get_identity(&self) -> Result<Option<UserIdentity>, AuthFailure> {
-        match &self.auth_context {
-            AuthContext::Auth0(Some(token)) => Ok(Some(UserIdentity {
-                handle: token.handle().to_string(),
-                sub: token.sub().map(str::to_owned),
-                expires_at: Some(token.expires_at()),
-            })),
-            AuthContext::Auth0(None) => Err(AuthFailure::NotLoggedIn),
-            // A bare token resolves from /me like an opaque access token.
-            // Its own exp claim wins over the server's expires_at — /me
-            // describes stored credentials like PATs, while a JWT carries
-            // its expiry with it.
-            AuthContext::Bare(token) => {
-                match self.floxhub_client.resolve_identity(token.secret()).await {
-                    Ok(identity) => Ok(Some(UserIdentity {
-                        expires_at: token.expires_at().or(identity.expires_at),
-                        ..identity
-                    })),
-                    Err(IdentityError::Unauthorized) => Err(AuthFailure::TokenExpired),
-                    Err(_) => Ok(None),
-                }
-            },
-            AuthContext::AccessToken(token) => {
-                match self.floxhub_client.resolve_identity(token.secret()).await {
-                    Ok(identity) => Ok(Some(identity)),
-                    Err(IdentityError::Unauthorized) => Err(AuthFailure::TokenExpired),
-                    Err(_) => Ok(None),
-                }
-            },
-            AuthContext::Kerberos(Some(material)) => Ok(Some(UserIdentity {
-                handle: material.principal.clone(),
-                sub: None,
-                expires_at: None,
-            })),
-            AuthContext::Kerberos(None) => Err(AuthFailure::NoKerberosTicket),
-        }
     }
 }
 

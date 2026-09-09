@@ -10,7 +10,8 @@ use tracing::debug;
 use url::Url;
 
 use super::KerberosMaterial;
-use crate::auth::auth_context::{AuthContext, AuthHeaderError};
+use crate::auth::AuthHeaderError;
+use crate::auth::credential::Credential;
 
 /// Errors from Kerberos credential acquisition.
 #[derive(Debug, Clone, thiserror::Error)]
@@ -25,18 +26,18 @@ enum AuthError {
 /// closure — it is `Clone` (Arc-wrapped) so each SPNEGO context gets a
 /// cheap handle to the same underlying credential.
 ///
-/// Returns `AuthContext::Kerberos(Some)` with a SPNEGO token generator on
-/// success, or `AuthContext::Kerberos(None)` if the principal cannot be
+/// Returns `Credential::Kerberos(Some)` with a SPNEGO token generator on
+/// success, or `Credential::Kerberos(None)` if the principal cannot be
 /// resolved.
-pub(crate) fn kerberos_credential() -> AuthContext {
+pub(crate) fn kerberos_credential() -> Credential {
     match acquire_credential() {
-        Ok((principal, cred)) => AuthContext::Kerberos(Some(KerberosMaterial {
+        Ok((principal, cred)) => Credential::Kerberos(Some(KerberosMaterial {
             principal,
             generate_token: Arc::new(move |url: &Url| generate_spnego_token(&cred, url)),
         })),
         Err(e) => {
             tracing::warn!(error = %e, "Kerberos principal resolution failed");
-            AuthContext::Kerberos(None)
+            Credential::Kerberos(None)
         },
     }
 }

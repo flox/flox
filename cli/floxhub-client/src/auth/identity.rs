@@ -4,14 +4,13 @@
 //! resolved through the FloxHub client (the accounts service's
 //! `GET /api/v1/accounts/me`, exposed publicly at
 //! `/accounts/api/v1/accounts/me`) at the point of use and cached process-wide,
-//! keyed by token secret — a token's identity never changes. This module
+//! keyed by token secret — successful lookups are reused until explicitly refreshed. This module
 //! defines the data contract and the cache only — it carries no transport.
 
 use std::collections::HashMap;
 use std::sync::{LazyLock, Mutex};
 
 use chrono::{DateTime, Utc};
-use thiserror::Error;
 
 /// Placeholder handle shown when a credential could not be verified (e.g.
 /// FloxHub was unreachable). The server is the authority for authn/authz,
@@ -44,22 +43,9 @@ impl UserIdentity {
     }
 }
 
-/// Why an identity could not be resolved.
-#[derive(Debug, Clone, Error)]
-pub enum IdentityError {
-    /// The server rejected the credential (invalid, expired, or revoked).
-    #[error("token is invalid, expired, or revoked")]
-    Unauthorized,
-    /// Resolution failed for another reason (e.g. the server was
-    /// unreachable); the credential may still authenticate requests.
-    #[error("{0}")]
-    Other(String),
-}
-
 /// Process-wide cache of identities resolved for opaque tokens, keyed by
-/// token secret. A token's identity never changes, so a successful
-/// resolution is cached for the process. Failures are not cached — a later
-/// call retries.
+/// token secret. Auth status can refresh entries to detect renamed handles.
+/// Failures are not cached, so a later call retries.
 static RESOLVED_IDENTITIES: LazyLock<Mutex<HashMap<String, UserIdentity>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 

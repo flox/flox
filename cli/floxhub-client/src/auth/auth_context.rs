@@ -1,319 +1,313 @@
-//! [`AuthContext`] — the credential threaded through the CLI.
-//!
-//! [`AuthContext`] is the central authentication type threaded through the CLI.
-//! It captures both the *kind* of credential in use — decided by what the
-//! credential answers locally: Auth0-shaped JWT, bare JWT, opaque token, or
-//! Kerberos — and the material available for that kind (which may be
-//! absent — e.g. no token yet, or no Kerberos ticket).
-//!
-//! Transport layers (HTTP catalog client, git credential helper) inspect the
-//! variant to decide how to authenticate requests. "No material" is an
-//! explicit state rather than a separate variant so that the configured auth
-//! mode is always preserved.
+//! Authentication with credential loading and identity caching handled internally.
+
+use std::fmt;
+use std::sync::{Arc, OnceLock};
 
 use url::Url;
 
-use crate::auth::kerberos::KerberosMaterial;
-use crate::auth::token::{ACCESS_TOKEN_PREFIX, AccessToken, BareToken, FloxhubToken};
+use super::credential::Credential;
+use super::storage::{AuthContextStorageExt, CachedFacts};
+use super::{
+    AccessToken,
+    AuthFailure,
+    AuthHeaderError,
+    BareToken,
+    CredentialKind,
+    FloxhubToken,
+    KerberosMaterial,
+    UserIdentity,
+    identity,
+};
+use crate::FloxhubClient;
+use crate::accounts::MeError;
 
-/// Describes why authentication failed.
-///
-/// The CLI layer decides how to present these failures to the user and whether
-/// interactive recovery is possible.
-#[derive(Debug, Clone, thiserror::Error)]
-pub enum AuthFailure {
-    /// Auth0 token exists but has expired.
-    #[error("token expired")]
-    TokenExpired,
-    /// Auth0 mode but no token is available.
-    #[error("not logged in")]
-    NotLoggedIn,
-    /// Kerberos mode but no ticket is available.
-    #[error("no kerberos ticket")]
-    NoKerberosTicket,
+type IdentityRecorder = Arc<dyn Fn(&CachedFacts) + Send + Sync>;
+
+enum CredentialSource {
+    Resolved(Credential),
+    Deferred {
+        recorded: CachedFacts,
+        resolved: OnceLock<Credential>,
+        resolve: Box<dyn Fn() -> AuthContext + Send + Sync>,
+    },
 }
 
-/// Error from producing an authorization header (e.g. SPNEGO token generation).
-#[derive(Debug, Clone, thiserror::Error)]
-#[error("{0}")]
-pub struct AuthHeaderError(pub String);
-
-/// Authentication context threaded through the CLI.
+/// Authentication for one invocation.
 ///
-/// Each variant corresponds to a kind of authentication and wraps an
-/// `Option` of the material for that kind:
-///
-/// - `Auth0(Some(token))` — an Auth0-shaped JWT, identity answered from
-///   its claims; the token may or may not be expired (checked lazily).
-/// - `Auth0(None)` — interactive-login mode but no token yet (not logged
-///   in).
-/// - `Bare(token)` — a decodable JWT without the handle claim (an issuer
-///   other than the Auth0 tenant, e.g. a deployment's Dex); `exp` and
-///   `sub` read from the claims, identity resolved at the point of use
-///   and cached process-wide.
-/// - `AccessToken(token)` — not decodable at all: a `flox_`-prefixed
-///   token (e.g. a `flox_pat_` personal access token) or any opaque
-///   string an issuer mints; identity is resolved at the point of use
-///   and cached process-wide.
-/// - `Kerberos(Some(material))` — Kerberos mode with a resolved principal
-///   and SPNEGO token generator.
-/// - `Kerberos(None)` — Kerberos mode but no ticket available (`kinit`
-///   hasn't been run).
-///
-/// Transport adapters match on the variant to decide how to authenticate:
-/// the HTTP catalog client calls [`authorization_header`](Self::authorization_header)
-/// to get a bearer or Negotiate header, while the git credential helper
-/// uses the variant to decide between an inline credential helper and a
-/// no-op (kerberized git authenticates via the ccache directly).
+/// Startup checks use recorded non-secret facts. Operations that need a secret
+/// or an identity load the credential automatically, at most once across clones.
+/// Identity lookups reuse a fingerprint-checked cache and record successful
+/// resolutions for later invocations.
 #[derive(Clone)]
-pub enum AuthContext {
-    /// Auth0-shaped JWT — identity answered locally from its claims.
-    /// May or may not have a token; the settled server-side direction is
-    /// that identity comes from accounts, so this is the shape being
-    /// retired as issuers stop emitting the handle claim.
-    Auth0(Option<FloxhubToken>),
-    /// Decodable JWT without the handle claim — identity resolved lazily
-    /// via /me and cached process-wide. No `Option`: "logged-in mode with
-    /// no token" remains `Auth0(None)`.
-    Bare(BareToken),
-    /// Opaque token (`flox_`-prefixed, or any string that doesn't decode
-    /// as a JWT) — identity is resolved lazily and cached process-wide.
-    /// No `Option`, as for `Bare`.
-    AccessToken(AccessToken),
-    /// Kerberos authentication — may or may not have a ticket/principal.
-    Kerberos(Option<KerberosMaterial>),
+pub struct AuthContext {
+    source: Arc<CredentialSource>,
+    record_identity: Option<IdentityRecorder>,
 }
 
 impl AuthContext {
-    /// Return the user's handle, when it is known locally: JWT claims, a
-    /// Kerberos principal, or a token whose identity was already resolved
-    /// and cached. Never blocks and never touches the network — for the
-    /// resolved answer use `Flox::get_identity`.
-    pub fn handle(&self) -> Option<String> {
-        match self {
-            AuthContext::Auth0(Some(token)) => Some(token.handle().to_string()),
-            AuthContext::Auth0(None) => None,
-            AuthContext::Bare(token) => token.handle(),
-            AuthContext::AccessToken(token) => token.handle(),
-            AuthContext::Kerberos(Some(material)) => Some(material.principal.clone()),
-            AuthContext::Kerberos(None) => None,
+    fn from_credential(credential: Credential) -> Self {
+        Self {
+            source: Arc::new(CredentialSource::Resolved(credential)),
+            record_identity: None,
         }
     }
 
-    /// Return the pseudonymous subject identifier for telemetry attribution,
-    /// if one is available locally or in the process-wide identity cache.
-    ///
-    /// Auth0 tokens carry the OIDC `sub` claim ([`FloxhubToken::sub`]) —
-    /// opaque and stable across the user's lifetime, so it remains valid
-    /// attribution even when the token has expired. PATs and SATs read the
-    /// `/me.user_id` value after identity resolution has populated the cache.
-    /// Kerberos has no pseudonymous equivalent today (the principal is
-    /// directly identifying), so kerberos-mode invocations return `None`.
-    ///
-    /// [`FloxhubToken::sub`]: crate::auth::token::FloxhubToken::sub
-    pub fn user_subject(&self) -> Option<String> {
-        match self {
-            AuthContext::Auth0(Some(token)) => token.sub().map(str::to_owned),
-            AuthContext::Auth0(None) => None,
-            AuthContext::Bare(token) => token.sub().map(str::to_owned),
-            AuthContext::AccessToken(token) => {
-                crate::auth::identity::cached_identity(token.secret())
-                    .and_then(|identity| identity.sub)
-            },
-            AuthContext::Kerberos(_) => None,
+    /// Parse a token's locally available claims without contacting FloxHub.
+    pub fn new_from_token(token: Option<&str>) -> Self {
+        Self::from_credential(Credential::new_from_token(token))
+    }
+
+    pub fn from_auth0_token(token: Option<FloxhubToken>) -> Self {
+        Self::from_credential(Credential::Auth0(token))
+    }
+
+    pub fn from_bare_token(token: BareToken) -> Self {
+        Self::from_credential(Credential::Bare(token))
+    }
+
+    pub fn from_access_token(token: AccessToken) -> Self {
+        Self::from_credential(Credential::AccessToken(token))
+    }
+
+    pub fn from_kerberos(material: Option<KerberosMaterial>) -> Self {
+        Self::from_credential(Credential::Kerberos(material))
+    }
+
+    /// Acquire the Kerberos credential only when an operation needs it.
+    pub fn new_kerberos() -> Self {
+        Self::deferred(Credential::Kerberos(None).cached_facts(), || {
+            Self::from_credential(Credential::new_kerberos())
+        })
+    }
+
+    /// Return the credential material, loading it once if necessary.
+    pub fn credential(&self) -> &Credential {
+        match self.source.as_ref() {
+            CredentialSource::Resolved(credential) => credential,
+            CredentialSource::Deferred {
+                recorded,
+                resolved,
+                resolve,
+            } => resolved.get_or_init(|| {
+                let credential = resolve().credential().clone();
+                credential.seed_from(recorded);
+                credential
+            }),
         }
+    }
+
+    pub fn is_unauthenticated(&self) -> bool {
+        self.cached_facts().is_unauthenticated()
+    }
+
+    pub fn user_subject(&self) -> Option<String> {
+        self.cached_facts().subject
+    }
+
+    pub fn kind(&self) -> CredentialKind {
+        self.cached_facts().kind
+    }
+
+    /// Return the bearer secret, loading the credential if necessary.
+    pub fn token_secret(&self) -> Option<&str> {
+        self.credential().token_secret()
     }
 
     /// Produce the value for an HTTP Authorization header targeting the given URL.
     pub fn authorization_header(&self, url: &Url) -> Option<Result<String, AuthHeaderError>> {
-        match self {
-            AuthContext::Auth0(_) | AuthContext::Bare(_) | AuthContext::AccessToken(_) => self
+        match self.credential() {
+            Credential::Auth0(_) | Credential::Bare(_) | Credential::AccessToken(_) => self
                 .token_secret()
                 .map(|secret| Ok(format!("bearer {secret}"))),
-            AuthContext::Kerberos(Some(material)) => {
+            Credential::Kerberos(Some(material)) => {
                 Some((material.generate_token)(url).map(|t| format!("Negotiate {t}")))
             },
-            AuthContext::Kerberos(None) => None,
+            Credential::Kerberos(None) => None,
         }
     }
 
-    /// Return the raw token secret, if this credential carries one.
+    /// Return the currently known handle without loading credentials or doing I/O.
     ///
-    /// Kerberos does not use bearer tokens, so it has no secret.
-    pub fn token_secret(&self) -> Option<&str> {
-        match self {
-            AuthContext::Auth0(Some(token)) => Some(token.secret()),
-            AuthContext::Auth0(None) => None,
-            AuthContext::Bare(token) => Some(token.secret()),
-            AuthContext::AccessToken(token) => Some(token.secret()),
-            AuthContext::Kerberos(_) => None,
-        }
+    /// `None` means the handle is unknown, not necessarily that the user is
+    /// unauthenticated. An environment or manually configured token may never
+    /// have had its identity resolved; its saved record may be missing, corrupt,
+    /// unwritable, or describe a different token. Credentials from before
+    /// identity caching, an unloaded Kerberos principal, and missing credentials
+    /// can also leave the handle unknown.
+    ///
+    /// Before the credential is loaded, a recorded handle is advisory and may
+    /// be stale. Use [`Self::identity`] when the operation requires an identity
+    /// checked against the current credential, rather than an optional hint.
+    pub fn handle(&self) -> Option<String> {
+        self.cached_facts().handle
     }
 
-    /// Create an [`AuthContext`] from a stored token, routing by what the
-    /// credential's claims answer locally:
+    /// Resolve the identity, including expiry and the pseudonymous subject.
     ///
-    /// - `flox_`-prefixed token: [`AuthContext::AccessToken`] — opaque by
-    ///   fiat, never decoded.
-    /// - Auth0-shaped JWT (handle claim and expiry): [`AuthContext::Auth0`].
-    /// - Any other decodable JWT: [`AuthContext::Bare`].
-    /// - Anything else: [`AuthContext::AccessToken`] — an issuer may mint
-    ///   opaque access tokens.
-    /// - No token: `Auth0(None)` (not logged in).
+    /// `Ok(None)` means a FloxHub lookup failed for a reason other than
+    /// unauthorized access. Missing credentials and unauthorized responses are
+    /// errors. Local expiry is returned in the identity so callers decide whether
+    /// it blocks their operation.
     ///
-    /// Routing is total: no local check can reject a token, and the
-    /// server's 401 is the authority on validity.
-    pub fn new_from_token(token: Option<&str>) -> Self {
-        let Some(token) = token else {
-            return AuthContext::Auth0(None);
+    /// Successful network lookups update both the process cache and the
+    /// persistent record. A fingerprint-checked cache hit, JWT identity claims,
+    /// and Kerberos principals answer locally. Use [Self::refresh_identity] to
+    /// check for revoked tokens or renamed handles through a fresh lookup.
+    pub async fn identity(
+        &self,
+        client: &FloxhubClient,
+    ) -> Result<Option<UserIdentity>, AuthFailure> {
+        self.resolve_identity(client, false).await
+    }
+
+    /// Fetch identity from `/me` again and update the caches on success.
+    ///
+    /// Auth status uses this to detect revoked tokens and renamed handles.
+    /// This does not reload or renew the credential. JWT identity claims and
+    /// Kerberos principals still answer locally.
+    pub async fn refresh_identity(
+        &self,
+        client: &FloxhubClient,
+    ) -> Result<Option<UserIdentity>, AuthFailure> {
+        self.resolve_identity(client, true).await
+    }
+
+    async fn resolve_identity(
+        &self,
+        client: &FloxhubClient,
+        refresh: bool,
+    ) -> Result<Option<UserIdentity>, AuthFailure> {
+        let credential = self.credential();
+        let identity = match credential {
+            Credential::Auth0(Some(token)) => UserIdentity {
+                handle: token.handle().to_string(),
+                sub: token.sub().map(str::to_owned),
+                expires_at: Some(token.expires_at()),
+            },
+            Credential::Auth0(None) => return Err(AuthFailure::NotLoggedIn),
+            Credential::Kerberos(Some(material)) => UserIdentity {
+                handle: material.principal.clone(),
+                sub: None,
+                expires_at: None,
+            },
+            Credential::Kerberos(None) => return Err(AuthFailure::NoKerberosTicket),
+            Credential::Bare(_) | Credential::AccessToken(_) => {
+                let secret = credential
+                    .token_secret()
+                    .expect("bearer credential has a token");
+                let cached = (!refresh)
+                    .then(|| identity::cached_identity(secret))
+                    .flatten();
+                let mut resolved = match cached {
+                    Some(identity) => identity,
+                    None => match client.accounts().me(secret).await {
+                        Ok(resolved) => {
+                            identity::cache_identity(secret, &resolved);
+                            resolved
+                        },
+                        Err(MeError::Unauthorized) => return Err(AuthFailure::TokenExpired),
+                        Err(err) => {
+                            tracing::debug!(error = %err, "could not resolve identity");
+                            return Ok(None);
+                        },
+                    },
+                };
+                // JWT expiry describes the presenting credential; /me may
+                // describe a stored access token instead.
+                if let Credential::Bare(token) = credential {
+                    resolved.expires_at = token.expires_at().or(resolved.expires_at);
+                }
+                resolved
+            },
         };
-        if token.starts_with(ACCESS_TOKEN_PREFIX) {
-            return AuthContext::AccessToken(AccessToken::new(token.to_string()));
+        if let Some(record) = &self.record_identity {
+            record(&self.cached_facts());
         }
-        match FloxhubToken::new(token.to_string()) {
-            Ok(parsed) => AuthContext::Auth0(Some(parsed)),
-            Err(_) => match BareToken::new(token.to_string()) {
-                Ok(parsed) => AuthContext::Bare(parsed),
-                Err(_) => AuthContext::AccessToken(AccessToken::new(token.to_string())),
+        Ok(Some(identity))
+    }
+}
+
+impl AuthContextStorageExt for AuthContext {
+    fn deferred(
+        recorded: CachedFacts,
+        resolve: impl Fn() -> AuthContext + Send + Sync + 'static,
+    ) -> Self {
+        Self {
+            source: Arc::new(CredentialSource::Deferred {
+                recorded,
+                resolved: OnceLock::new(),
+                resolve: Box::new(resolve),
+            }),
+            record_identity: None,
+        }
+    }
+
+    fn with_identity_recorder(
+        mut self,
+        record: impl Fn(&CachedFacts) + Send + Sync + 'static,
+    ) -> Self {
+        self.record_identity = Some(Arc::new(record));
+        self
+    }
+
+    fn cached_facts(&self) -> CachedFacts {
+        match self.source.as_ref() {
+            CredentialSource::Resolved(credential) => credential.cached_facts(),
+            CredentialSource::Deferred {
+                recorded, resolved, ..
+            } => resolved
+                .get()
+                .map(Credential::cached_facts)
+                .unwrap_or_else(|| recorded.clone()),
+        }
+    }
+
+    fn seed_from(&self, recorded: &CachedFacts) {
+        match self.source.as_ref() {
+            CredentialSource::Resolved(credential) => credential.seed_from(recorded),
+            CredentialSource::Deferred { resolved, .. } => {
+                if let Some(credential) = resolved.get() {
+                    credential.seed_from(recorded);
+                }
             },
         }
     }
+}
 
-    /// Returns true when no valid authentication material is available and a
-    /// future catalog-auth-gated call would fail.
-    ///
-    /// `Auth0(None)` (not logged in) and `Auth0(Some(expired))` both count —
-    /// neither carries a credential that will pass once gating is enforced —
-    /// and a bare token counts exactly when its exp claim has passed.
-    /// `Kerberos(..)` does not require a FloxHub login, `AccessToken` is
-    /// opaque (validity unknown until resolved via /me), and a bare token
-    /// without the exp claim is equally unknowable, so none of those are
-    /// treated as unauthenticated here.
-    pub fn is_unauthenticated(&self) -> bool {
-        match self {
-            AuthContext::Auth0(None) => true,
-            AuthContext::Auth0(Some(token)) => token.is_expired(),
-            AuthContext::Bare(token) => token.is_expired(),
-            AuthContext::AccessToken(_) | AuthContext::Kerberos(_) => false,
-        }
-    }
-
-    /// Create a Kerberos [`AuthContext`]: resolves the principal and embeds
-    /// a SPNEGO token generator; returns `Kerberos(None)` (with a warning
-    /// log) if the ticket cannot be resolved. FloxHub tokens are not used.
-    pub fn new_kerberos() -> Self {
-        crate::auth::kerberos::kerberos_credential()
+impl Default for AuthContext {
+    fn default() -> Self {
+        Self::from_auth0_token(None)
     }
 }
 
-impl std::fmt::Debug for AuthContext {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            AuthContext::Auth0(Some(_)) => f.debug_tuple("Auth0").field(&"<token>").finish(),
-            AuthContext::Auth0(None) => f.write_str("Auth0(None)"),
-            AuthContext::Bare(token) => f.debug_tuple("Bare").field(&token).finish(),
-            AuthContext::AccessToken(token) => f.debug_tuple("AccessToken").field(&token).finish(),
-            AuthContext::Kerberos(Some(material)) => f
-                .debug_struct("Kerberos")
-                .field("principal", &material.principal)
-                .finish_non_exhaustive(),
-            AuthContext::Kerberos(None) => f.write_str("Kerberos(None)"),
-        }
+impl fmt::Debug for AuthContext {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("AuthContext")
+            .field("facts", &self.cached_facts())
+            .finish_non_exhaustive()
     }
 }
-
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
+    use std::sync::Mutex;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    use httpmock::MockServer;
+    use serde_json::json;
 
     use super::*;
-    use crate::auth::identity::test_helpers::test_identity;
-    use crate::auth::token::FloxhubToken;
-    use crate::auth::token::test_helpers::{
-        FAKE_EXPIRED_TOKEN_WITH_SUB,
-        FAKE_TOKEN,
-        FAKE_TOKEN_NO_HANDLE,
-        FAKE_TOKEN_WITH_SUB,
-        test_bare_token,
-    };
+    use crate::auth::token::test_helpers::test_bare_token;
+    use crate::client::test_helpers::client_config;
 
-    #[test]
-    fn user_subject_returns_sub_for_auth0_token() {
-        let token = FloxhubToken::from_str(FAKE_TOKEN_WITH_SUB).expect("token parses");
-        assert_eq!(
-            AuthContext::Auth0(Some(token)).user_subject().as_deref(),
-            Some("github|424242")
-        );
-    }
-
-    /// Expiry gates authentication, not identity — an expired token's `sub`
-    /// is still the correct attribution.
-    #[test]
-    fn user_subject_returns_sub_for_expired_auth0_token() {
-        let token = FloxhubToken::from_str(FAKE_EXPIRED_TOKEN_WITH_SUB).expect("token parses");
-        assert!(token.is_expired(), "test premise: token is expired");
-        assert_eq!(
-            AuthContext::Auth0(Some(token)).user_subject().as_deref(),
-            Some("github|424242")
-        );
-    }
-
-    #[test]
-    fn user_subject_is_none_without_sub_token_or_auth0() {
-        let token = FloxhubToken::from_str(FAKE_TOKEN).expect("token parses");
-        assert_eq!(AuthContext::Auth0(Some(token)).user_subject(), None);
-        assert_eq!(AuthContext::Auth0(None).user_subject(), None);
-        assert_eq!(AuthContext::Kerberos(None).user_subject(), None);
-    }
-
-    #[test]
-    fn is_unauthenticated_covers_missing_and_expired_auth0_tokens() {
-        let valid = FloxhubToken::from_str(FAKE_TOKEN).expect("token parses");
-        let expired = FloxhubToken::from_str(FAKE_EXPIRED_TOKEN_WITH_SUB).expect("token parses");
-        assert!(expired.is_expired(), "test premise: token is expired");
-
-        assert!(AuthContext::Auth0(None).is_unauthenticated());
-        assert!(AuthContext::Auth0(Some(expired)).is_unauthenticated());
-        assert!(!AuthContext::Auth0(Some(valid)).is_unauthenticated());
-        assert!(!pat_unresolved().is_unauthenticated());
-        assert!(!AuthContext::Kerberos(None).is_unauthenticated());
-    }
-
-    fn pat_unresolved() -> AuthContext {
-        AuthContext::AccessToken(AccessToken::new("flox_pat_secret".to_string()))
-    }
-
-    #[test]
-    fn pat_handle_is_unknown_until_resolved() {
-        let auth = pat_unresolved();
-        assert_eq!(auth.handle(), None);
-    }
-
-    #[test]
-    fn pat_handle_reads_the_cached_identity() {
-        let token = AccessToken::new("flox_pat_context-handle-test".to_string());
-        crate::auth::identity::cache_identity(token.secret(), &test_identity("testuser"));
-        let auth = AuthContext::AccessToken(token);
-
-        assert_eq!(auth.handle(), Some("testuser".to_string()));
-    }
-
-    #[test]
-    fn pat_subject_reads_the_cached_identity() {
-        let token = AccessToken::new("flox_pat_context-subject-test".to_string());
-        crate::auth::identity::cache_identity(token.secret(), &crate::auth::UserIdentity {
-            handle: "testuser".to_string(),
-            sub: Some("auth0|123".to_string()),
-            expires_at: None,
-        });
-        let auth = AuthContext::AccessToken(token);
-
-        assert_eq!(auth.user_subject().as_deref(), Some("auth0|123"));
+    /// The record an invocation writes when nobody is logged in: a FloxHub
+    /// login is what would fix it, so `requires_login` is set.
+    fn logged_out() -> CachedFacts {
+        AuthContext::from_auth0_token(None).cached_facts()
     }
 
     #[test]
     fn pat_authorization_header_is_bearer_secret() {
-        let auth = pat_unresolved();
+        let auth = AuthContext::new_from_token(Some("flox_pat_secret"));
         let url = Url::parse("https://api.flox.dev").unwrap();
 
         assert_eq!(
@@ -323,82 +317,242 @@ mod tests {
     }
 
     #[test]
-    fn pat_debug_redacts_the_secret() {
-        let auth = pat_unresolved();
-        assert!(!format!("{auth:?}").contains("flox_pat_secret"));
+    fn deferred_context_is_not_resolved_until_it_is_needed() {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let counter = Arc::clone(&calls);
+        let lazy = AuthContext::deferred(logged_out(), move || {
+            counter.fetch_add(1, Ordering::SeqCst);
+            AuthContext::from_auth0_token(None)
+        });
+
+        assert!(!lazy.cached_facts().logged_in);
+        assert!(lazy.is_unauthenticated());
+        assert_eq!(lazy.user_subject(), None);
+        assert_eq!(calls.load(Ordering::SeqCst), 0);
+
+        lazy.token_secret();
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+    }
+
+    /// Every clone shares one resolution: the handle is threaded through the
+    /// client, the SDK and the transport adapters, and a read per hop would
+    /// defeat the point.
+    #[test]
+    fn clones_share_a_single_resolution() {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let counter = Arc::clone(&calls);
+        let lazy = AuthContext::deferred(logged_out(), move || {
+            counter.fetch_add(1, Ordering::SeqCst);
+            AuthContext::from_bare_token(test_bare_token("lazy-clone-test"))
+        });
+
+        lazy.clone().token_secret();
+        lazy.clone().token_secret();
+        lazy.token_secret();
+
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+    }
+
+    /// A recorded summary that disagrees with the stored credential is
+    /// superseded once the credential is actually read.
+    #[test]
+    fn resolving_supersedes_stale_recorded_properties() {
+        let lazy = AuthContext::deferred(logged_out(), || {
+            AuthContext::from_bare_token(test_bare_token("lazy-stale-test"))
+        });
+
+        assert!(lazy.is_unauthenticated());
+        lazy.token_secret();
+        assert!(!lazy.is_unauthenticated());
     }
 
     #[test]
-    fn jwt_handle_derives_from_claims() {
-        let auth = AuthContext::Auth0(Some(FAKE_TOKEN.parse().unwrap()));
-        assert_eq!(auth.handle(), Some("test".to_string()));
+    fn deferred_context_exposes_recorded_properties_without_resolving() {
+        let recorded = CachedFacts {
+            logged_in: true,
+            kind: CredentialKind::Auth0,
+            requires_login: true,
+            expires_at: None,
+            subject: Some("cached-subject".to_string()),
+            handle: Some("cached-user".to_string()),
+            fingerprint: Some("cached-fingerprint".to_string()),
+        };
+        let lazy = AuthContext::deferred(recorded.clone(), || {
+            panic!("recorded properties must not resolve the credential")
+        });
+
+        assert_eq!(lazy.handle(), Some("cached-user".into()));
+        assert_eq!(lazy.cached_facts(), recorded);
     }
 
     #[test]
-    fn new_from_token_routes_flox_prefix_to_access_token() {
-        // Any flox_-prefixed token is an opaque access token, including
-        // personal and service account tokens.
-        for secret in ["flox_pat_abc123", "flox_sat_abc123"] {
-            let auth = AuthContext::new_from_token(Some(secret));
-            let AuthContext::AccessToken(token) = auth else {
-                panic!("expected AccessToken, got {auth:?}");
-            };
-            assert_eq!(token.secret(), secret);
+    fn handle_is_none_without_a_known_identity_and_does_not_load_credentials() {
+        let deferred = AuthContext::deferred(logged_out(), || {
+            panic!("reading an optional handle must not load the credential")
+        });
+        for context in [
+            deferred,
+            AuthContext::default(),
+            AuthContext::new_from_token(Some("flox_pat_unknown-handle")),
+            AuthContext::new_from_token(Some("flox_sat_unknown-handle")),
+            AuthContext::from_bare_token(test_bare_token("unknown-handle")),
+            AuthContext::new_kerberos(),
+        ] {
+            assert_eq!(context.handle(), None);
         }
     }
 
+    /// Kerberos carries no bearer secret, so it records `logged_in: false` —
+    /// and without `requires_login` gating the answer that would read as "not
+    /// logged in" for a mode where logging in is not a thing.
     #[test]
-    fn new_from_token_routes_jwt_to_auth0() {
-        let auth = AuthContext::new_from_token(Some(FAKE_TOKEN));
-        let AuthContext::Auth0(Some(token)) = auth else {
-            panic!("expected Auth0, got {auth:?}");
-        };
-        assert_eq!(token.secret(), FAKE_TOKEN);
+    fn kerberos_is_not_unauthenticated_despite_having_no_secret() {
+        let facts = AuthContext::from_kerberos(None).cached_facts();
+
+        assert_eq!(facts, CachedFacts {
+            logged_in: false,
+            kind: CredentialKind::Kerberos,
+            requires_login: false,
+            expires_at: None,
+            subject: None,
+            handle: None,
+            fingerprint: None,
+        });
+        assert!(!facts.is_unauthenticated());
+
+        let lazy = AuthContext::deferred(facts, || {
+            panic!("the recorded facts answer without acquiring a ticket")
+        });
+        assert!(!lazy.is_unauthenticated());
     }
 
-    #[test]
-    fn new_from_token_without_token_is_not_logged_in() {
-        let auth = AuthContext::new_from_token(None);
-        assert!(matches!(auth, AuthContext::Auth0(None)));
+    fn me_response(handle: &str) -> serde_json::Value {
+        json!({"handle": handle, "user_id": "pat|test", "expires_at": null})
     }
 
-    #[test]
-    fn new_from_token_routes_claimless_jwt_to_bare() {
-        let auth = AuthContext::new_from_token(Some(FAKE_TOKEN_NO_HANDLE));
-        let AuthContext::Bare(token) = auth else {
-            panic!("expected Bare, got {auth:?}");
-        };
-        assert_eq!(token.secret(), FAKE_TOKEN_NO_HANDLE);
-    }
+    #[tokio::test]
+    async fn identity_resolves_once_and_records_the_identity() {
+        let server = MockServer::start();
+        let mock = server.mock(|when, then| {
+            when.method(httpmock::Method::GET)
+                .path("/accounts/api/v1/accounts/me")
+                .header("authorization", "bearer flox_pat_context-record");
+            then.status(200).json_body(me_response("testuser"));
+        });
+        let client = FloxhubClient::new(client_config(&server.base_url())).unwrap();
+        let records = Arc::new(Mutex::new(Vec::new()));
+        let recorded = records.clone();
+        let context = AuthContext::new_from_token(Some("flox_pat_context-record"))
+            .with_identity_recorder(move |facts| recorded.lock().unwrap().push(facts.clone()));
 
-    #[test]
-    fn new_from_token_carries_a_non_jwt_opaquely() {
-        // No local check can reject a token — an issuer may mint opaque
-        // access tokens, so a non-decodable string is a credential whose
-        // validity only the server can judge.
-        let auth = AuthContext::new_from_token(Some("not-a-jwt"));
-        let AuthContext::AccessToken(token) = auth else {
-            panic!("expected AccessToken, got {auth:?}");
-        };
-        assert_eq!(token.secret(), "not-a-jwt");
-    }
-
-    #[test]
-    fn bare_token_subject_and_cached_handle() {
-        // A bare token contributes its sub for telemetry, and its handle
-        // comes from the /me-filled cache, like an opaque token's.
-        let token = test_bare_token("context-bare-handle-test");
-        let auth = AuthContext::Bare(token.clone());
+        assert_eq!(context.handle(), None);
+        let expected_identity = Some(UserIdentity {
+            handle: "testuser".into(),
+            sub: Some("pat|test".into()),
+            expires_at: None,
+        });
+        assert_eq!(context.identity(&client).await.unwrap(), expected_identity);
+        assert_eq!(context.handle(), Some("testuser".into()));
         assert_eq!(
-            auth.user_subject().as_deref(),
-            Some("context-bare-handle-test")
+            context.clone().identity(&client).await.unwrap(),
+            expected_identity
         );
-        assert_eq!(auth.handle(), None);
+        assert_eq!(context.clone().handle(), Some("testuser".into()));
+        mock.assert_calls(1);
+        let expected = context.cached_facts();
+        assert_eq!(*records.lock().unwrap(), vec![expected.clone(), expected]);
+    }
 
-        crate::auth::identity::cache_identity(token.secret(), &test_identity("dexter"));
+    #[tokio::test]
+    async fn refresh_replaces_a_cached_handle() {
+        let server = MockServer::start();
+        let mut stale = server.mock(|when, then| {
+            when.method(httpmock::Method::GET)
+                .path("/accounts/api/v1/accounts/me");
+            then.status(200).json_body(me_response("old-handle"));
+        });
+        let client = FloxhubClient::new(client_config(&server.base_url())).unwrap();
+        let context = AuthContext::new_from_token(Some("flox_pat_context-refresh"));
+
+        assert_eq!(context.handle(), None);
+        context.identity(&client).await.unwrap().unwrap();
+        assert_eq!(context.handle(), Some("old-handle".into()));
+        stale.delete();
+        let fresh = server.mock(|when, then| {
+            when.method(httpmock::Method::GET)
+                .path("/accounts/api/v1/accounts/me");
+            then.status(200).json_body(me_response("new-handle"));
+        });
+        assert_eq!(context.handle(), Some("old-handle".into()));
+        fresh.assert_calls(0);
         assert_eq!(
-            AuthContext::Bare(token).handle(),
-            Some("dexter".to_string())
+            context.refresh_identity(&client).await.unwrap(),
+            Some(UserIdentity {
+                handle: "new-handle".into(),
+                sub: Some("pat|test".into()),
+                expires_at: None,
+            })
         );
+        assert_eq!(context.handle(), Some("new-handle".into()));
+        fresh.assert_calls(1);
+    }
+
+    #[tokio::test]
+    async fn failed_identity_lookups_are_retried_and_never_recorded() {
+        let server = MockServer::start();
+        let mut failure = server.mock(|when, then| {
+            when.method(httpmock::Method::GET)
+                .path("/accounts/api/v1/accounts/me");
+            then.status(500);
+        });
+        let client = FloxhubClient::new(client_config(&server.base_url())).unwrap();
+        let context = AuthContext::new_from_token(Some("flox_pat_context-failure"))
+            .with_identity_recorder(|_| panic!("failed lookups must not be recorded"));
+
+        assert_eq!(context.identity(&client).await.unwrap(), None);
+        assert_eq!(context.identity(&client).await.unwrap(), None);
+        failure.assert_calls(2);
+        failure.delete();
+        server.mock(|when, then| {
+            when.method(httpmock::Method::GET)
+                .path("/accounts/api/v1/accounts/me");
+            then.status(401);
+        });
+        assert!(matches!(
+            context.identity(&client).await,
+            Err(AuthFailure::TokenExpired)
+        ));
+    }
+
+    #[tokio::test]
+    async fn identity_checks_the_record_against_the_loaded_credential() {
+        let server = MockServer::start();
+        let request = server.mock(|when, then| {
+            when.method(httpmock::Method::GET)
+                .path("/accounts/api/v1/accounts/me")
+                .header("authorization", "bearer flox_pat_context-replaced");
+            then.status(200).json_body(me_response("current-user"));
+        });
+        let client = FloxhubClient::new(client_config(&server.base_url())).unwrap();
+        let stored = AuthContext::new_from_token(Some("flox_pat_context-matched"));
+        let facts = CachedFacts {
+            handle: Some("recorded-user".into()),
+            subject: Some("pat|recorded".into()),
+            ..stored.cached_facts()
+        };
+        let matched = AuthContext::deferred(facts.clone(), move || stored.clone());
+        matched.identity(&client).await.unwrap().unwrap();
+        assert_eq!(matched.handle(), Some("recorded-user".into()));
+        request.assert_calls(0);
+
+        let replaced = AuthContext::deferred(facts, || {
+            AuthContext::new_from_token(Some("flox_pat_context-replaced"))
+        });
+        assert_eq!(replaced.handle(), Some("recorded-user".into()));
+        replaced.token_secret();
+        assert_eq!(replaced.handle(), None);
+        replaced.identity(&client).await.unwrap().unwrap();
+        assert_eq!(replaced.handle(), Some("current-user".into()));
+        request.assert_calls(1);
     }
 }
