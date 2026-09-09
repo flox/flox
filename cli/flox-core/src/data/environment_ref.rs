@@ -11,6 +11,18 @@ use thiserror::Error;
 pub static DEFAULT_NAME: &str = "default";
 pub static DEFAULT_OWNER: &str = "local";
 
+/// Whether `s` is usable as a single owner or name component.
+///
+/// Owners and names are interpolated directly into filesystem paths — most
+/// visibly the local checkout at `<cache>/remote/<owner>/<name>` — so the
+/// components that carry meaning to the filesystem are rejected here, at the
+/// parse boundary, rather than left for each consumer to re-check. `..` is the
+/// one that matters: `PathBuf::join` does not normalize it, so it would
+/// otherwise resolve outside the directory the reference names.
+fn is_valid_component(s: &str) -> bool {
+    !s.is_empty() && !s.contains([' ', '/']) && s != "." && s != ".."
+}
+
 #[derive(
     Debug,
     Clone,
@@ -32,7 +44,7 @@ impl FromStr for EnvironmentOwner {
     type Err = RemoteEnvironmentRefError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if [' ', '/'].iter().any(|c| s.contains(*c)) {
+        if !is_valid_component(s) {
             Err(RemoteEnvironmentRefError::InvalidOwner(s.to_string()))?
         }
 
@@ -48,7 +60,10 @@ impl proptest::arbitrary::Arbitrary for EnvironmentName {
     fn arbitrary_with(_: Self::Parameters) -> Self::Strategy {
         use proptest::prelude::Strategy;
 
-        "[^ /]".prop_map(|s| EnvironmentName(s.to_string())).boxed()
+        // Leading character excludes '.' so the strategy can never produce
+        // the `.` / `..` that `is_valid_component` rejects, while still
+        // covering dots elsewhere in the component.
+        "[^ /.][^ /]{0,7}".prop_map(EnvironmentName).boxed()
     }
 }
 
@@ -72,7 +87,7 @@ impl FromStr for EnvironmentName {
     type Err = RemoteEnvironmentRefError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if [' ', '/'].iter().any(|c| s.contains(*c)) {
+        if !is_valid_component(s) {
             Err(RemoteEnvironmentRefError::InvalidName(s.to_string()))?
         }
 
@@ -88,9 +103,8 @@ impl proptest::arbitrary::Arbitrary for EnvironmentOwner {
     fn arbitrary_with(_: Self::Parameters) -> Self::Strategy {
         use proptest::prelude::Strategy;
 
-        "[^ /]"
-            .prop_map(|s| EnvironmentOwner(s.to_string()))
-            .boxed()
+        // See the note on `EnvironmentName`'s strategy.
+        "[^ /.][^ /]{0,7}".prop_map(EnvironmentOwner).boxed()
     }
 }
 
@@ -143,12 +157,12 @@ impl JsonSchema for RemoteEnvironmentRef {
 #[derive(Error, Debug)]
 pub enum RemoteEnvironmentRefError {
     #[error(
-        "Name '{0}' is invalid.\nEnvironment names may only contain alphanumeric characters, '.', '_', and '-'."
+        "Name '{0}' is invalid.\nEnvironment names cannot be empty, '.' or '..', and cannot contain spaces or '/'."
     )]
     InvalidName(String),
 
     #[error(
-        "Owner '{0}' is invalid.\nEnvironment owners may only contain alphanumeric characters, '.', '_', and '-'."
+        "Owner '{0}' is invalid.\nEnvironment owners cannot be empty, '.' or '..', and cannot contain spaces or '/'."
     )]
     InvalidOwner(String),
 }
@@ -199,5 +213,36 @@ impl ActivateEnvironmentRef {
                 format!("-r {}", escape(remote.to_string().into()))
             },
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A reference is interpolated into a filesystem path, so a component that
+    /// traverses out of that path must not parse in the first place.
+    #[test]
+    fn rejects_path_traversing_references() {
+        for reference in ["../scratch", "owner/..", "./x", "x/.", "/name", "owner/"] {
+            assert!(
+                RemoteEnvironmentRef::from_str(reference).is_err(),
+                "'{reference}' should not parse as an environment reference"
+            );
+        }
+    }
+
+    #[test]
+    fn accepts_ordinary_references() {
+        assert_eq!(
+            RemoteEnvironmentRef::from_str("owner/name").unwrap(),
+            RemoteEnvironmentRef::new("owner", "name").unwrap()
+        );
+        // A leading dot is only a problem when the component is exactly `.`
+        // or `..`, so hidden-looking names stay valid.
+        assert_eq!(
+            RemoteEnvironmentRef::from_str(".owner/..name").unwrap(),
+            RemoteEnvironmentRef::new(".owner", "..name").unwrap()
+        );
     }
 }
