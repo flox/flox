@@ -21,12 +21,14 @@ flox [<general-options>] config
 
 # DESCRIPTION
 
-Without any flags or when `-l` is passed, `flox config` shows the merged
-configuration as TOML. Some defaults are added while reading the configuration
-and appear in the output. Other defaults are applied only when a command uses
-the configuration and are omitted until explicitly configured. For example,
-`auto_activate` is omitted when unset even though auto-activation behaves as if
-it were set to `prompt`.
+Without any flags or when `-l` is passed, `flox config` shows the parsed
+configuration as TOML, combining the sources listed below.
+The output includes defaults populated when loading the configuration, such as
+`cache_dir` and `disable_metrics`.
+Optional settings that are unset are omitted, even if they have a default
+behavior elsewhere in Flox.
+For example, `auto_activate` is omitted unless set in a configuration file or
+with `FLOX_AUTO_ACTIVATE`, but auto-activation still uses `prompt` when it is unset.
 
 Config values are read from the following sources in order of descending priority:
 
@@ -57,8 +59,7 @@ flox config --set 'trusted_environments."owner/name"' trust
 ## Config Options
 
 `-l`, `--list`
-:   List the merged configuration. Options whose defaults are applied only when
-    used are omitted until explicitly configured.
+:   List the parsed configuration as TOML, omitting unset optional settings.
 
 `-r`, `--reset`
 :   Reset all options to their default values without confirmation.
