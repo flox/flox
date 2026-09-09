@@ -124,6 +124,83 @@ EOF
 }
 
 
+# bats test_tags=delete,remote,remote:delete
+@test "delete --reference removes the local copy of a remote environment" {
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml"
+  make_empty_remote_env
+
+  # Materialize a local copy of the remote environment in the cache.
+  run --separate-stderr "$FLOX_BIN" install hello --reference "$OWNER/test"
+  assert_success
+  assert [ -d "$FLOX_CACHE_DIR/remote/$OWNER/test/.flox" ]
+
+  # Delete only the local copy; the environment on FloxHub is untouched.
+  run "$FLOX_BIN" delete --reference "$OWNER/test" -f
+  assert_success
+  assert [ ! -e "$FLOX_CACHE_DIR/remote/$OWNER/test" ]
+
+  # Upstream still exists: operating on the reference re-creates the copy.
+  run --separate-stderr "$FLOX_BIN" list --name --reference "$OWNER/test"
+  assert_success
+  assert [ -d "$FLOX_CACHE_DIR/remote/$OWNER/test/.flox" ]
+}
+
+# bats test_tags=delete,remote,remote:delete
+@test "delete --reference removes a local copy that can no longer be opened" {
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml"
+  make_empty_remote_env
+
+  run --separate-stderr "$FLOX_BIN" install hello --reference "$OWNER/test"
+  assert_success
+
+  # Leave the checkout directory in place but remove what makes it openable,
+  # as an interrupted first `--reference` command would.
+  rm -rf "$FLOX_CACHE_DIR/remote/$OWNER/test/.flox"
+  assert [ -d "$FLOX_CACHE_DIR/remote/$OWNER/test" ]
+
+  run "$FLOX_BIN" delete --reference "$OWNER/test" -f
+  assert_success
+  assert [ ! -e "$FLOX_CACHE_DIR/remote/$OWNER/test" ]
+}
+
+# bats test_tags=delete,remote,remote:delete
+@test "delete --reference errors when there is no local copy" {
+  run "$FLOX_BIN" delete --reference "$OWNER/test" -f
+  assert_failure
+  assert_output --partial "Did not find a local copy of remote environment"
+}
+
+# bats test_tags=delete,remote,remote:delete
+@test "delete --reference requires -f without a terminal" {
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml"
+  make_empty_remote_env
+
+  run --separate-stderr "$FLOX_BIN" install hello --reference "$OWNER/test"
+  assert_success
+
+  # No terminal to confirm on, and the caller did not pass `-f`: fail rather
+  # than delete unprompted.
+  run "$FLOX_BIN" delete --reference "$OWNER/test"
+  assert_failure
+  assert_output --partial "not an interactive terminal"
+  assert [ -d "$FLOX_CACHE_DIR/remote/$OWNER/test/.flox" ]
+}
+
+# bats test_tags=delete,remote,remote:delete
+@test "delete -r cannot be combined with -d" {
+  run "$FLOX_BIN" delete -r "$OWNER/test" -d "$PROJECT_DIR" -f
+  assert_failure
+  assert_output --partial "cannot be used at the same time as"
+}
+
+# bats test_tags=delete,remote,remote:delete
+@test "delete -r rejects a reference that escapes the cache directory" {
+  run "$FLOX_BIN" delete -r "../escape" -f
+  assert_failure
+  assert_output --partial "is invalid"
+}
+
+
 # bats test_tags=install,remote,remote:install
 @test "m1: install a package to a remote environment" {
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml"
