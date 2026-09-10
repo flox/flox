@@ -404,7 +404,7 @@ pub mod tests {
     /// Build a bearer credential for tests. A personal access token is just a
     /// string, so no JWT construction is needed to test header handling.
     fn make_test_auth(secret: &str) -> AuthContext {
-        AuthContext::AccessToken(AccessToken::new(secret.to_string()))
+        AuthContext::from_access_token(AccessToken::new(secret.to_string()))
     }
 
     #[test]

@@ -62,7 +62,7 @@ use flox_rust_sdk::models::environment::{
     find_dot_flox,
     open_path,
 };
-use floxhub_client::UnauthenticatedResolveHook;
+use floxhub_client::{CredentialKind, UnauthenticatedResolveHook};
 use indoc::{formatdoc, indoc};
 use tempfile::TempDir;
 use thiserror::Error;
@@ -301,7 +301,10 @@ impl FloxArgs {
                 && let Some(events_client) = build_events_client(
                     &config,
                     resolve_invocation_id(),
-                    &AuthContext::new_from_token(None),
+                    // This path runs before any credential is resolved, and
+                    // the event carries none: `AuthContext::default` is
+                    // the not-logged-in credential, already resolved.
+                    &AuthContext::default(),
                     None,
                 )
                 .await
@@ -1800,7 +1803,7 @@ pub(super) async fn ensure_auth(flox: &mut Flox) -> Result<String> {
 
     // Gating authentication is the caller that treats an expired identity
     // as a failure.
-    let identity = match flox.get_identity().await {
+    let identity = match flox.auth_context.identity(&flox.floxhub_client).await {
         Ok(Some(identity)) if identity.is_expired() => Err(AuthFailure::TokenExpired),
         other => other,
     };
@@ -1816,7 +1819,12 @@ pub(super) async fn ensure_auth(flox: &mut Flox) -> Result<String> {
         // cannot mint a new PAT anyway. Warn and let the actual request be
         // the authority.
         Err(AuthFailure::TokenExpired)
-            if matches!(flox.auth_context, AuthContext::AccessToken(_)) =>
+            if matches!(
+                flox.auth_context.kind(),
+                CredentialKind::PersonalAccessToken
+                    | CredentialKind::ServiceAccountToken
+                    | CredentialKind::OpaqueToken
+            ) =>
         {
             message::warning(
                 "Your FloxHub token could not be verified and may be expired or revoked.",
@@ -1881,7 +1889,7 @@ async fn ensure_auth_allowing_expired(flox: &mut Flox) -> Result<String> {
     // An expired identity still carries its handle; only a missing identity
     // (not logged in, no ticket, or a server-rejected token) falls back to
     // the recovery flow.
-    match flox.get_identity().await {
+    match flox.auth_context.identity(&flox.floxhub_client).await {
         Ok(Some(identity)) => Ok(identity.handle),
         // Identity unknown: proceed under the UNKNOWN display handle.
         Ok(None) => Ok(floxhub_client::UNKNOWN_HANDLE.to_string()),

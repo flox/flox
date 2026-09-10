@@ -528,7 +528,7 @@ mod tests {
             AuthContext::new_from_token(Some("opaque-access-token")),
             AuthContext::new_from_token(Some("flox_unknown_test")),
             AuthContext::new_from_token(None),
-            AuthContext::Kerberos(None),
+            AuthContext::from_kerberos(None),
         ];
 
         // Routed through `AuthContext::kind` so the credential type comes
@@ -626,7 +626,7 @@ mod tests {
         let uuid = Uuid::new_v4();
         let config = test_config_with_uuid(&tempdir, uuid);
 
-        let auth_context = AuthContext::new_from_token(None);
+        let auth_context = AuthContext::default();
         let client = build_events_client(&config, Uuid::new_v4(), &auth_context, None).await;
         assert!(client.is_some(), "v2 is enabled by default");
         assert_eq!(client.unwrap().device_id, uuid);
@@ -646,7 +646,7 @@ mod tests {
             .expect("client installs");
         assert_eq!(client.auth_subject.as_deref(), Some("github|424242"));
 
-        let unauthenticated = AuthContext::new_from_token(None);
+        let unauthenticated = AuthContext::default();
         let client = build_events_client(&config, Uuid::new_v4(), &unauthenticated, None)
             .await
             .expect("client installs");

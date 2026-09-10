@@ -1633,8 +1633,10 @@ mod test_helpers {
 
     pub(super) fn buildenv_instance() -> BuildEnvNix<NixAuth> {
         init_tracing();
-        let auth =
-            NixAuth::from_tempdir_and_context(TempDir::new().unwrap(), AuthContext::Auth0(None));
+        let auth = NixAuth::from_tempdir_and_context(
+            TempDir::new().unwrap(),
+            AuthContext::from_auth0_token(None),
+        );
         BuildEnvNix::new(auth)
     }
 

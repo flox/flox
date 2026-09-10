@@ -213,7 +213,7 @@ mod tests {
     #[test]
     fn auth0_with_token_sets_credential_helper() {
         let token = create_test_token("testuser");
-        let auth = AuthContext::Auth0(Some(token.clone()));
+        let auth = AuthContext::from_auth0_token(Some(token.clone()));
         let mut options = GitCommandOptions::default();
 
         let mut expected = GitCommandOptions::default();
@@ -231,7 +231,7 @@ mod tests {
 
     #[test]
     fn auth0_without_token_sets_empty_credential_helper() {
-        let auth = AuthContext::Auth0(None);
+        let auth = AuthContext::from_auth0_token(None);
         let mut options = GitCommandOptions::default();
 
         let mut expected = GitCommandOptions::default();
@@ -250,7 +250,7 @@ mod tests {
     #[test]
     fn pat_sets_credential_helper_with_secret() {
         let token = floxhub_client::AccessToken::new("flox_pat_secret".to_string());
-        let auth = AuthContext::AccessToken(token.clone());
+        let auth = AuthContext::from_access_token(token.clone());
         let mut options = GitCommandOptions::default();
 
         let mut expected = GitCommandOptions::default();
@@ -268,7 +268,7 @@ mod tests {
 
     #[test]
     fn kerberos_with_material_sets_empty_auth() {
-        let auth = AuthContext::Kerberos(Some(floxhub_client::KerberosMaterial {
+        let auth = AuthContext::from_kerberos(Some(floxhub_client::KerberosMaterial {
             principal: "user@REALM".to_string(),
             generate_token: std::sync::Arc::new(|_| Ok("token".to_string())),
         }));
@@ -283,7 +283,7 @@ mod tests {
 
     #[test]
     fn kerberos_without_material_sets_empty_auth() {
-        let auth = AuthContext::Kerberos(None);
+        let auth = AuthContext::from_kerberos(None);
         let mut options = GitCommandOptions::default();
 
         let mut expected = GitCommandOptions::default();

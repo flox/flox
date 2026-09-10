@@ -707,7 +707,7 @@ impl Pull {
 
         // Check if the token is expired (resolving a personal access token's
         // identity if needed) - this might be why authentication failed.
-        let token_expired = match flox.get_identity().await {
+        let token_expired = match flox.auth_context.identity(&flox.floxhub_client).await {
             Ok(Some(identity)) => identity.is_expired(),
             // An unknown identity is not "expired".
             Ok(None) => false,
