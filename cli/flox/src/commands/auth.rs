@@ -625,10 +625,10 @@ fn complete_login(
         }
     }
 
-    if let Err(err) = EventsHub::global().record_event_with_auth_subject(
-        EventKind::CliAuthenticated {},
-        flox.auth_context.user_subject(),
-    ) {
+    let auth_subject = flox.auth_context.user_subject();
+    if let Err(err) = EventsHub::global()
+        .record_event_with_auth_subject(EventKind::CliAuthenticated {}, auth_subject.as_deref())
+    {
         debug!(error = %err, "Failed to record v2 cli.authenticated event");
     }
 
@@ -731,7 +731,7 @@ mod tests {
     use std::fs;
 
     use flox_config::FLOX_CONFIG_FILE;
-    use flox_events::{EventsBuffer, EventsClient, SharedMetadataTemplate};
+    use flox_events::{CredentialType, EventsBuffer, EventsClient, SharedMetadataTemplate};
     use flox_rust_sdk::flox::FloxhubToken;
     use flox_rust_sdk::flox::test_helpers::{create_test_token, flox_instance};
     use floxhub_client::test_helpers::{FAKE_EXPIRED_TOKEN, FAKE_TOKEN_WITH_SUB};
@@ -777,6 +777,7 @@ mod tests {
             Uuid::new_v4(),
             Some("previous-subject".to_string()),
             SharedMetadataTemplate {
+                credential_type: CredentialType::None,
                 flox_version: "0.0.0-test".to_string(),
                 os_family: None,
                 os_family_release: None,

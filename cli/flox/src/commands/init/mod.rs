@@ -740,7 +740,7 @@ mod tests {
 
     use flox_core::data::environment_ref::EnvironmentOwner;
     use flox_events::test_helpers::MockEventsConnection;
-    use flox_events::{EnvDetail, Event, EventsClient, SharedMetadataTemplate};
+    use flox_events::{CredentialType, EnvDetail, Event, EventsClient, SharedMetadataTemplate};
     use flox_rust_sdk::flox::test_helpers::{flox_instance, flox_instance_with_optional_floxhub};
     use flox_rust_sdk::models::environment::{DOT_FLOX, EnvJson, ManagedPointer};
     use flox_rust_sdk::utils::logging::test_helpers::test_subscriber_message_only;
@@ -1048,6 +1048,7 @@ mod tests {
                 Uuid::new_v4(),
                 None,
                 SharedMetadataTemplate {
+                    credential_type: CredentialType::None,
                     flox_version: "0.0.0-test".to_string(),
                     os_family: Some("Linux".to_string()),
                     os_family_release: None,

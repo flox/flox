@@ -265,7 +265,7 @@ mod tests {
     use std::sync::{Arc, Mutex};
 
     use flox_events::test_helpers::MockEventsConnection;
-    use flox_events::{Event, EventsClient, SharedMetadataTemplate};
+    use flox_events::{CredentialType, Event, EventsClient, SharedMetadataTemplate};
     use flox_manifest::lockfile::test_helpers::fake_catalog_package_lock;
     use flox_manifest::parsed::latest::PackageDescriptorCatalog;
     use flox_manifest::raw::PackageToInstall;
@@ -306,6 +306,7 @@ mod tests {
                 Uuid::new_v4(),
                 None,
                 SharedMetadataTemplate {
+                    credential_type: CredentialType::None,
                     flox_version: "0.0.0-test".to_string(),
                     os_family: Some("Linux".to_string()),
                     os_family_release: None,

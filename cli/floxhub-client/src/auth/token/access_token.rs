@@ -3,17 +3,19 @@
 use crate::auth::identity;
 
 /// Prefix identifying an opaque FloxHub access token. Individual kinds carry
-/// a longer prefix (`flox_pat_` personal access tokens, service account
-/// tokens to come), but the CLI treats them uniformly and never parses them.
+/// a longer prefix (`flox_pat_` personal access tokens and `flox_sat_` service
+/// account tokens), but authentication treats them uniformly and never parses
+/// them.
 pub(crate) const ACCESS_TOKEN_PREFIX: &str = "flox_";
 
-/// An opaque access token (`flox_…`) authenticating a caller with FloxHub —
-/// a `flox_pat_` personal access token today; service account tokens to
-/// come.
+/// An opaque access token (`flox_…`) authenticating a caller with FloxHub,
+/// including `flox_pat_` personal access tokens and `flox_sat_` service
+/// account tokens.
 ///
 /// The CLI cannot decode identity from an opaque token; it is resolved via
-/// `GET /api/v1/accounts/me` (`FloxhubClient::resolve_identity`) and cached
-/// process-wide, keyed by the secret. Until resolution succeeds,
+/// the accounts service's `GET /api/v1/accounts/me` (publicly
+/// `/accounts/api/v1/accounts/me`; `FloxhubClient::resolve_identity`) and
+/// cached process-wide, keyed by the secret. Until resolution succeeds,
 /// [`Self::handle`] returns `None` — the server's 401 is the authoritative
 /// backstop.
 #[derive(Clone)]

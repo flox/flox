@@ -90,10 +90,11 @@ impl Flox {
 
     /// The identity behind the current credential — the one uniform way to
     /// answer "who is authenticated": JWT claims for an Auth0-shaped token,
-    /// `GET /api/v1/accounts/me` for any credential that doesn't identify
-    /// its owner — a bare JWT or an opaque access token (a successful
-    /// resolution is cached for the process) — and the principal for
-    /// Kerberos.
+    /// the accounts service's `GET /api/v1/accounts/me` for any credential
+    /// that doesn't identify its owner — a bare JWT or an opaque access token
+    /// (a successful resolution is cached for the process) — and the principal
+    /// for Kerberos. The public gateway exposes that endpoint at
+    /// `/accounts/api/v1/accounts/me`.
     ///
     /// - `Ok(Some(identity))` — authenticated. Expiry is reported *in* the
     ///   identity ([`UserIdentity::is_expired`]), not as a failure — what
@@ -111,6 +112,7 @@ impl Flox {
         match &self.auth_context {
             AuthContext::Auth0(Some(token)) => Ok(Some(UserIdentity {
                 handle: token.handle().to_string(),
+                sub: token.sub().map(str::to_owned),
                 expires_at: Some(token.expires_at()),
             })),
             AuthContext::Auth0(None) => Err(AuthFailure::NotLoggedIn),
@@ -137,6 +139,7 @@ impl Flox {
             },
             AuthContext::Kerberos(Some(material)) => Ok(Some(UserIdentity {
                 handle: material.principal.clone(),
+                sub: None,
                 expires_at: None,
             })),
             AuthContext::Kerberos(None) => Err(AuthFailure::NoKerberosTicket),
@@ -363,6 +366,7 @@ pub mod tests {
             flox.get_identity().await.unwrap(),
             Some(UserIdentity {
                 handle: "test".to_string(),
+                sub: None,
                 expires_at: Some(expires_at),
             })
         );
@@ -414,6 +418,7 @@ pub mod tests {
             flox.get_identity().await.unwrap(),
             Some(UserIdentity {
                 handle: "dexter".to_string(),
+                sub: Some("oidc|dexter".to_string()),
                 expires_at,
             })
         );

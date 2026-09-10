@@ -8,9 +8,27 @@
 //! (the service emits a 3.0.2 schema for exactly this purpose) and replace
 //! the hand-written request, once the CLI grows beyond this one endpoint.
 
+use serde::Deserialize;
 use thiserror::Error;
 
 use crate::auth::UserIdentity;
+
+#[derive(Debug, Deserialize)]
+struct MeResponse {
+    user_id: String,
+    handle: String,
+    expires_at: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+impl From<MeResponse> for UserIdentity {
+    fn from(response: MeResponse) -> Self {
+        Self {
+            handle: response.handle,
+            sub: Some(response.user_id),
+            expires_at: response.expires_at,
+        }
+    }
+}
 
 #[derive(Debug, Error)]
 pub enum MeError {
@@ -61,7 +79,7 @@ impl AccountsApiClient {
             .send()
             .await?;
         match response.status() {
-            reqwest::StatusCode::OK => Ok(response.json().await?),
+            reqwest::StatusCode::OK => Ok(response.json::<MeResponse>().await?.into()),
             reqwest::StatusCode::UNAUTHORIZED => Err(MeError::Unauthorized),
             status => Err(MeError::UnexpectedStatus(status)),
         }
@@ -94,6 +112,7 @@ mod tests {
         mock.assert();
         assert_eq!(identity, UserIdentity {
             handle: "testuser".to_string(),
+            sub: Some("auth0|123".to_string()),
             expires_at: Some("2027-01-01T00:00:00Z".parse().unwrap()),
         });
     }
