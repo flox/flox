@@ -1,3 +1,4 @@
+use floxhub_client::auth::Credential;
 use floxhub_client::{AuthContext, CredentialKind};
 use url::Url;
 
@@ -15,9 +16,9 @@ pub trait GitCommandOptionsExt {
 
 impl GitCommandOptionsExt for GitCommandOptions {
     fn authenticate(&mut self, auth_context: &AuthContext, git_url: &Url) {
-        if auth_context.kind() == CredentialKind::Kerberos {
+        if let Credential::Kerberos(material) = auth_context.credential() {
             self.add_config_flag("http.emptyAuth", "true");
-            match auth_context.kerberos_principal() {
+            match material {
                 Some(_) => {
                     tracing::debug!("Kerberos mode — git auth handled natively via ccache");
                 },
@@ -30,9 +31,9 @@ impl GitCommandOptionsExt for GitCommandOptions {
             return;
         }
         let token = auth_context.token_secret().unwrap_or("");
-        // Read the token first so diagnostics describe the loaded credential,
-        // not potentially stale startup facts. For these JWT kinds, a present
-        // token is locally unauthenticated only when it has expired.
+        // The credential is loaded, so diagnostics use its actual facts.
+        // For these JWT kinds, a present token is locally unauthenticated only
+        // when it has expired.
         match auth_context.kind() {
             CredentialKind::Auth0 if auth_context.is_unauthenticated() => {
                 tracing::debug!("FloxHub token is expired, sending for identification");
@@ -45,6 +46,14 @@ impl GitCommandOptionsExt for GitCommandOptions {
             },
             CredentialKind::Bare => {
                 tracing::debug!("using bare FloxHub token");
+            },
+            CredentialKind::PersonalAccessToken
+            | CredentialKind::ServiceAccountToken
+            | CredentialKind::OpaqueToken => {
+                tracing::debug!(kind = ?auth_context.kind(), "using FloxHub access token");
+            },
+            CredentialKind::NotLoggedIn => {
+                tracing::debug!("no credential available for git auth");
             },
             _ => {},
         }
@@ -213,7 +222,7 @@ mod tests {
     #[test]
     fn auth0_with_token_sets_credential_helper() {
         let token = create_test_token("testuser");
-        let auth = AuthContext::Auth0(Some(token.clone()));
+        let auth = AuthContext::from_auth0_token(Some(token.clone()));
         let mut options = GitCommandOptions::default();
 
         let mut expected = GitCommandOptions::default();
@@ -231,7 +240,7 @@ mod tests {
 
     #[test]
     fn auth0_without_token_sets_empty_credential_helper() {
-        let auth = AuthContext::Auth0(None);
+        let auth = AuthContext::from_auth0_token(None);
         let mut options = GitCommandOptions::default();
 
         let mut expected = GitCommandOptions::default();
@@ -250,7 +259,7 @@ mod tests {
     #[test]
     fn pat_sets_credential_helper_with_secret() {
         let token = floxhub_client::AccessToken::new("flox_pat_secret".to_string());
-        let auth = AuthContext::AccessToken(token.clone());
+        let auth = AuthContext::from_access_token(token.clone());
         let mut options = GitCommandOptions::default();
 
         let mut expected = GitCommandOptions::default();
@@ -268,7 +277,7 @@ mod tests {
 
     #[test]
     fn kerberos_with_material_sets_empty_auth() {
-        let auth = AuthContext::Kerberos(Some(floxhub_client::KerberosMaterial {
+        let auth = AuthContext::from_kerberos(Some(floxhub_client::KerberosMaterial {
             principal: "user@REALM".to_string(),
             generate_token: std::sync::Arc::new(|_| Ok("token".to_string())),
         }));
@@ -283,7 +292,7 @@ mod tests {
 
     #[test]
     fn kerberos_without_material_sets_empty_auth() {
-        let auth = AuthContext::Kerberos(None);
+        let auth = AuthContext::from_kerberos(None);
         let mut options = GitCommandOptions::default();
 
         let mut expected = GitCommandOptions::default();

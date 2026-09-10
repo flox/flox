@@ -7,11 +7,12 @@ use std::sync::LazyLock;
 use flox_config::FLOX_CONFIG_FILE;
 use flox_core::activate::context::ActivateMode;
 use flox_core::vars::FLOX_DISABLE_METRICS_VAR;
-use flox_rust_sdk::flox::{AuthContext, FLOX_VERSION, Flox};
+use flox_rust_sdk::flox::{FLOX_VERSION, Flox};
 use flox_rust_sdk::models::floxmeta::FLOXHUB_TOKEN_ENV_VAR;
 use flox_rust_sdk::providers::container_builder::{ContainerBuilder, ContainerSource};
 use flox_rust_sdk::providers::nix::{NIX_VERSION, NixSubstituterConfig};
 use flox_rust_sdk::utils::ReaderExt;
+use floxhub_client::auth::Credential;
 use indoc::formatdoc;
 use thiserror::Error;
 use tracing::{debug, info, instrument};
@@ -187,7 +188,7 @@ impl ContainerizeProxy {
         // highest precedence (bypassing both stores), restoring prior behaviour
         // regardless of where the host stores the token. Only set when a token
         // is present (skipped in Kerberos mode / logged out).
-        if let AuthContext::Auth0(Some(token)) = &flox.auth_context {
+        if let Credential::Auth0(Some(token)) = flox.auth_context.credential() {
             add_floxhub_token_env(command, token.secret());
         }
 

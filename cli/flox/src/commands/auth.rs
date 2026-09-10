@@ -525,7 +525,11 @@ pub async fn login_flox(
     // credential, and every handle consumer needs the same server.
     let auth_context = AuthContext::new_from_token(Some(&cred.token));
     let _ = flox.set_auth_context(auth_context.clone());
-    let handle = match flox.get_identity().await {
+    let handle = match flox
+        .auth_context
+        .refresh_identity(&flox.floxhub_client)
+        .await
+    {
         Ok(Some(identity)) => identity.handle,
         Ok(None) => bail!(indoc! {"
             Could not reach FloxHub to verify the login.
@@ -694,8 +698,13 @@ pub async fn login_with_token_file(
     // where a 401 covers expired and revoked tokens alike.
     // Elsewhere an unresolvable identity degrades to the UNKNOWN handle, but
     // login exists to verify-and-store the credential — an unverifiable
-    // token is a failure here, not a success.
-    let handle = match flox.get_identity().await {
+    // token is a failure here, not a success. Startup may have seeded a saved
+    // identity for this token, so explicitly refresh it before accepting login.
+    let handle = match flox
+        .auth_context
+        .refresh_identity(&flox.floxhub_client)
+        .await
+    {
         Ok(Some(identity)) if identity.is_expired() => bail!(indoc! {"
             The provided token is expired.
             Obtain a fresh token from FloxHub and try again."
@@ -735,7 +744,12 @@ mod tests {
     use flox_rust_sdk::flox::FloxhubToken;
     use flox_rust_sdk::flox::test_helpers::{create_test_token, flox_instance};
     use flox_rust_sdk::models::floxmeta::FLOXHUB_TOKEN_ENV_VAR;
-    use floxhub_client::auth::storage::credential_fingerprint;
+    use floxhub_client::auth::Credential as AuthCredential;
+    use floxhub_client::auth::storage::{
+        AuthContextStorageExt,
+        CachedFacts,
+        credential_fingerprint,
+    };
     use floxhub_client::test_helpers::{FAKE_EXPIRED_TOKEN, FAKE_TOKEN_WITH_SUB};
     use httpmock::MockServer;
     use serial_test::serial;
@@ -935,7 +949,7 @@ mod tests {
                 Some(token.secret()),
                 "the config stores exactly the provided token"
             );
-            let AuthContext::Auth0(Some(stored)) = &flox.auth_context else {
+            let AuthCredential::Auth0(Some(stored)) = flox.auth_context.credential() else {
                 panic!("expected an Auth0 auth context with a token");
             };
             assert_eq!(stored.secret(), token.secret());
@@ -952,7 +966,7 @@ mod tests {
 
             complete_login(
                 &mut flox,
-                AuthContext::Auth0(Some(
+                AuthContext::from_auth0_token(Some(
                     FloxhubToken::new(FAKE_TOKEN_WITH_SUB.to_string()).expect("token parses"),
                 )),
                 "test".to_string(),
@@ -1095,7 +1109,10 @@ mod tests {
                 Some("flox_pat_secret"),
                 "the config stores exactly the provided token"
             );
-            assert!(matches!(&flox.auth_context, AuthContext::AccessToken(_)));
+            assert_eq!(
+                flox.auth_context.kind(),
+                floxhub_client::CredentialKind::PersonalAccessToken
+            );
         })
         .await;
     }
@@ -1197,6 +1214,59 @@ mod tests {
             "Could not reach FloxHub to verify the token.\nTry again."
         );
         assert!(!flox.config_dir.join(FLOX_CONFIG_FILE).exists());
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn login_with_token_file_refreshes_cached_identity() {
+        temp_env::async_with_vars(
+            [("_FLOX_DISABLE_KEYRING", Some("true")), (FLOXHUB_TOKEN_ENV_VAR, None)],
+            async {
+                for (status, expected) in [
+                    (401, Err("FloxHub rejected the provided token: it is invalid, expired, or revoked.\nObtain a fresh token from FloxHub and try again.".to_string())),
+                    (500, Err("Could not reach FloxHub to verify the token.\nTry again.".to_string())),
+                    (200, Ok("current-user".to_string())),
+                ] {
+                    let server = MockServer::start();
+                    let request = server.mock(|when, then| {
+                        when.method(httpmock::Method::GET)
+                            .path("/accounts/api/v1/accounts/me");
+                        then.status(status).json_body(serde_json::json!({
+                            "user_id": "account|current",
+                            "handle": "current-user",
+                            "expires_at": null,
+                        }));
+                    });
+                    let (mut flox, _temp_dir) = flox_instance();
+                    override_client(&mut flox, &server);
+                    let secret = format!("flox_pat_login-cached-identity-{status}");
+                    let context = AuthContext::new_from_token(Some(&secret));
+                    // Configured tokens are seeded from disk during startup,
+                    // before the login command creates its own auth context.
+                    context.seed_from(&CachedFacts {
+                        handle: Some("cached-user".into()),
+                        subject: Some("account|cached".into()),
+                        ..context.cached_facts()
+                    });
+                    flox.set_auth_context(context).unwrap();
+                    let token_file = flox.temp_dir.join("token");
+                    fs::write(&token_file, &secret).unwrap();
+
+                    let result = login_with_token_file(
+                        &mut flox,
+                        &token_file,
+                        false,
+                        false,
+                        TokenStorageMode::Plaintext,
+                    )
+                    .await
+                    .map_err(|error| error.to_string());
+
+                    assert_eq!(result, expected);
+                    request.assert_calls(1);
+                }
+            },
+        )
+        .await;
     }
 
     #[tokio::test(flavor = "multi_thread")]
