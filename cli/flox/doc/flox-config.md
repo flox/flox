@@ -22,8 +22,7 @@ flox [<general-options>] config
 # DESCRIPTION
 
 Without any flags or when `-l` is passed, `flox config` lists explicitly set values
-and some built-in defaults, but omits unset optional settings even when they have
-default behavior.
+and some built-in defaults.
 
 Config values are read from the following sources in order of descending priority:
 
@@ -54,7 +53,7 @@ flox config --set 'trusted_environments."owner/name"' trust
 ## Config Options
 
 `-l`, `--list`
-:   List the parsed configuration as TOML, omitting unset optional settings.
+:   List explicitly set values and some built-in defaults.
 
 `-r`, `--reset`
 :   Reset all options to their default values without confirmation.
