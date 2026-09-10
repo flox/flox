@@ -100,7 +100,7 @@ fn credential_type_from_context(auth_context: &AuthContext) -> CredentialType {
         AuthContext::AccessToken(token) if token.secret().starts_with("flox_sat_") => {
             CredentialType::Sat
         },
-        AuthContext::AccessToken(_) => CredentialType::Jwt,
+        AuthContext::AccessToken(_) => CredentialType::Unknown,
         AuthContext::Auth0(None) | AuthContext::Kerberos(_) => CredentialType::None,
     }
 }
@@ -535,8 +535,8 @@ mod tests {
                 CredentialType::Jwt,
                 CredentialType::Pat,
                 CredentialType::Sat,
-                CredentialType::Jwt,
-                CredentialType::Jwt,
+                CredentialType::Unknown,
+                CredentialType::Unknown,
                 CredentialType::None,
                 CredentialType::None,
             ]

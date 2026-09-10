@@ -212,6 +212,8 @@ pub enum CredentialType {
     Pat,
     /// FloxHub service account token.
     Sat,
+    /// A token is present, but its credential type is not recognized.
+    Unknown,
     /// No supported token authentication. This includes Kerberos mode.
     #[default]
     None,
@@ -972,10 +974,11 @@ mod tests {
             CredentialType::Jwt,
             CredentialType::Pat,
             CredentialType::Sat,
+            CredentialType::Unknown,
             CredentialType::None,
         ])
         .expect("credential types serialize");
-        assert_eq!(value, json!(["jwt", "pat", "sat", "none"]));
+        assert_eq!(value, json!(["jwt", "pat", "sat", "unknown", "none"]));
     }
 
     #[test]
