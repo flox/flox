@@ -6,7 +6,6 @@ use std::process::Command;
 
 use anyhow::{Result, anyhow};
 use flox_core::activate::context::{ActivateCtx, InvocationType};
-use flox_core::activate::vars::FLOX_ACTIVATIONS_BIN;
 use flox_core::activations::StartIdentifier;
 use indoc::formatdoc;
 use itertools::Itertools;
@@ -23,6 +22,7 @@ use crate::gen_rc::fish::{FishStartupArgs, generate_fish_profile_commands};
 use crate::gen_rc::tcsh::{TcshStartupArgs, generate_tcsh_profile_commands};
 use crate::gen_rc::zsh::{ZshStartupArgs, generate_zsh_profile_commands};
 use crate::gen_rc::{Action, ShellStartupArgs, StartupCtx};
+use crate::vars::FLOX_ACTIVATIONS_BIN;
 use crate::vars_from_env::VarsFromEnvironment;
 
 pub const STARTUP_SCRIPT_PATH_OVERRIDE_VAR: &str = "_FLOX_RC_FILE_PATH";

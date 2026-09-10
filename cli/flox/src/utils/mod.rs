@@ -1,5 +1,6 @@
 use std::env;
 use std::io::Stderr;
+use std::path::PathBuf;
 use std::sync::{LazyLock, Mutex};
 use std::time::Duration;
 
@@ -27,6 +28,16 @@ pub mod upgrade_output;
 
 pub static TERMINAL_STDERR: LazyLock<Mutex<Stderr>> =
     LazyLock::new(|| Mutex::new(std::io::stderr()));
+
+/// Path of the `flox-activations` binary this CLI spawns.
+///
+/// Compiled in, since the binary is a separate package. `FLOX_ACTIVATIONS_BIN`
+/// overrides it, which the dev shell uses to point at the cargo-built binary.
+pub static FLOX_ACTIVATIONS_BIN: LazyLock<PathBuf> = LazyLock::new(|| {
+    PathBuf::from(
+        env::var("FLOX_ACTIVATIONS_BIN").unwrap_or(env!("FLOX_ACTIVATIONS_BIN").to_string()),
+    )
+});
 /// Timeout used for network operations that run after the main flox command has
 /// completed.
 ///

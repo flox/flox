@@ -12,7 +12,6 @@ use std::time::Duration;
 
 use anyhow::{Result, anyhow, bail};
 use flox_core::activate::context::{ActivateCtx, AttachCtx, AttachProjectCtx};
-use flox_core::activate::vars::FLOX_ACTIVATIONS_BIN;
 use flox_core::activations::{
     ActivationState,
     StartIdentifier,
@@ -38,6 +37,7 @@ use crate::process_compose::{
     start_services_via_socket,
     wait_for_socket_ready,
 };
+use crate::vars::FLOX_ACTIVATIONS_BIN;
 use crate::vars_from_env::VarsFromEnvironment;
 
 /// Marker the activate script writes into the start state directory as its

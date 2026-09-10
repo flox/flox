@@ -5,7 +5,6 @@ use std::path::PathBuf;
 use anyhow::Result;
 use flox_core::activate::context::InvocationType;
 use flox_core::activate::vars::{
-    FLOX_ACTIVATIONS_BIN,
     FLOX_INVOCATION_TYPES_PUSH_ENV_VAR,
     FLOX_INVOCATION_TYPES_VAR,
     FLOX_INVOCATION_TYPES_WIRE_VAR,
@@ -15,6 +14,7 @@ use shell_gen::{GenerateShell, SetVar, Shell};
 
 use crate::attach_diff::todo_drop_set_exported_unexpanded;
 use crate::gen_rc::{Action, RM, invocation_types_update_stmt};
+use crate::vars::FLOX_ACTIVATIONS_BIN;
 
 /// Arguments for generating tcsh startup commands
 #[derive(Debug, Clone)]

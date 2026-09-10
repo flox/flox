@@ -8,7 +8,9 @@ options = []
 # Glob pattern of files to include
 includes = [ "*.nix" ]
 # Glob patterns of files to exclude
-excludes = []
+excludes = [
+  "Cargo.nix" # generated
+]
 
 
 [formatter.yaml]

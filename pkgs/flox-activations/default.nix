@@ -19,7 +19,6 @@ let
   envs = {
     # used internally to ensure CA certificates are available
     NIXPKGS_CACERT_BUNDLE_CRT = cacert.outPath + "/etc/ssl/certs/ca-bundle.crt";
-    FLOX_ACTIVATIONS_BIN = "${placeholder "out"}/libexec/flox-activations";
     # Nix will ignore this if it starts with just BASH
     X_BASH_BIN = "${bash}/bin/bash";
     COREUTILS = "${coreutils}";

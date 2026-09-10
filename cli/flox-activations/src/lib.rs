@@ -11,6 +11,7 @@ pub mod message;
 mod on_deactivate;
 mod process_compose;
 mod start;
+pub mod vars;
 mod vars_from_env;
 
 pub type Error = anyhow::Error;

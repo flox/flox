@@ -6,7 +6,7 @@ use anyhow::{Context, Result, anyhow, bail};
 use bpaf::Bpaf;
 use flox_config::Config;
 use flox_core::activate::context::{InvocationKind, InvocationTypes};
-use flox_core::activate::vars::{FLOX_ACTIVATIONS_BIN, FLOX_INVOCATION_TYPES_WIRE_VAR};
+use flox_core::activate::vars::FLOX_INVOCATION_TYPES_WIRE_VAR;
 use flox_core::activations::activation_state_dir_path;
 use flox_core::canonical_path::CanonicalPath;
 use flox_core::hook_actions::{
@@ -34,7 +34,7 @@ use super::activated_environments;
 use crate::subcommand_metric;
 use crate::utils::active_environments::ActiveEnvironment;
 use crate::utils::detect_shell::detect_shell_for_in_place;
-use crate::utils::message;
+use crate::utils::{FLOX_ACTIVATIONS_BIN, message};
 
 #[derive(Bpaf, Clone)]
 pub struct Deactivate {
