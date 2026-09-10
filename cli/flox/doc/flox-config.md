@@ -21,14 +21,9 @@ flox [<general-options>] config
 
 # DESCRIPTION
 
-Without any flags or when `-l` is passed, `flox config` shows the parsed
-configuration as TOML, combining the sources listed below.
-The output includes defaults populated when loading the configuration, such as
-`cache_dir` and `disable_metrics`.
-Optional settings that are unset are omitted, even if they have a default
-behavior elsewhere in Flox.
-For example, `auto_activate` is omitted unless set in a configuration file or
-with `FLOX_AUTO_ACTIVATE`, but auto-activation still uses `prompt` when it is unset.
+Without any flags or when `-l` is passed, `flox config` lists explicitly set values
+and some built-in defaults, but omits unset optional settings even when they have
+default behavior.
 
 Config values are read from the following sources in order of descending priority:
 
