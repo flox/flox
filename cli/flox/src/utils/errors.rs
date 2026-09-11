@@ -716,7 +716,7 @@ pub fn format_service_error(err: &ServiceError) -> String {
             and restart services with 'flox activate --start-services'
             or 'flox services start' from an existing activation.
         ", socket = socket.display()},
-        ServiceError::LoggedError(LoggedError::SocketDoesntExist) => formatdoc! {"
+        ServiceError::LoggedError(LoggedError::ServiceManagerNotRunning) => formatdoc! {"
             Services not started or quit unexpectedly.
 
             To start services, run 'flox services start' in an activated environment,

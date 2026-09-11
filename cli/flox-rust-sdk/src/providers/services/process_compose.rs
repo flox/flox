@@ -14,7 +14,7 @@ use std::process::{Command, Stdio};
 use std::sync::LazyLock;
 use std::sync::mpsc::{Receiver, Sender};
 
-use flox_core::process_compose::PROCESS_NEVER_EXIT_NAME;
+use flox_core::process_compose::{PROCESS_NEVER_EXIT_NAME, socket_state};
 use flox_core::traceable_path;
 use flox_manifest::interfaces::AsLatestSchema;
 use flox_manifest::lockfile::Lockfile;
@@ -434,6 +434,16 @@ impl ProcessStates {
     ///
     /// Note that this strips out our `flox_never_exit` process.
     pub fn read(socket: impl AsRef<Path>) -> Result<ProcessStates, ServiceError> {
+        // A socket with nothing behind it means no manager, not a manager that
+        // failed to answer. Asking `process-compose` would only fork a process
+        // to be refused, and callers would see "unresponsive" for an
+        // environment whose services simply are not running.
+        if !socket_state(socket.as_ref()).is_live() {
+            return Err(ServiceError::LoggedError(
+                LoggedError::ServiceManagerNotRunning,
+            ));
+        }
+
         let mut cmd = base_process_compose_command(socket.as_ref());
         cmd.arg("list").args(["--output", "json"]);
 
@@ -590,7 +600,7 @@ pub enum LoggedError {
     #[error("service manager unresponsive")]
     ServiceManagerUnresponsive(PathBuf),
     #[error("couldn't connect to service manager")]
-    SocketDoesntExist,
+    ServiceManagerNotRunning,
     #[error("service '{0}' is not running")]
     ServiceNotRunning(String),
     #[error("unknown error: {0}")]
@@ -643,10 +653,10 @@ impl From<ProcessComposeLogContents> for LoggedError {
             .cause_msg
             .contains("connect: no such file or directory")
         {
-            return LoggedError::SocketDoesntExist;
+            return LoggedError::ServiceManagerNotRunning;
         }
 
-        let regex = Regex::new(r"dial unix (.+) connect: connection refused")
+        let regex = Regex::new(r"dial unix (.+): connect: connection refused")
             .expect("failed to compile regex");
 
         if let Some(captures) = regex.captures(&contents.cause_msg) {
@@ -1127,6 +1137,21 @@ mod tests {
 
     use super::*;
 
+    /// The remediation text tells the user which file to delete, so a capture
+    /// that swallows the trailing colon names a path that cannot exist.
+    #[test]
+    fn unresponsive_socket_path_excludes_the_trailing_colon() {
+        let contents = ProcessComposeLogContents {
+            err_msg: "failed to read process states".to_string(),
+            cause_msg: "dial unix /run/flox.abc123.sock: connect: connection refused".to_string(),
+        };
+
+        assert_eq!(
+            LoggedError::from(contents),
+            LoggedError::ServiceManagerUnresponsive(PathBuf::from("/run/flox.abc123.sock"))
+        );
+    }
+
     proptest! {
         #[test]
         fn test_process_compose_config_round_trip(config: ProcessComposeConfig) {
@@ -1547,7 +1572,9 @@ mod tests {
         assert!(
             matches!(
                 first_message,
-                Err(ServiceError::LoggedError(LoggedError::SocketDoesntExist))
+                Err(ServiceError::LoggedError(
+                    LoggedError::ServiceManagerNotRunning
+                ))
             ),
             "expected socket error, got {:?}",
             first_message

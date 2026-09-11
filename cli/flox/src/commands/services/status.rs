@@ -56,7 +56,7 @@ impl Status {
             // When services haven't been started, there's no socket yet. Rather than
             // print an error for `flox services status` we should display the process
             // statuses as not yet started.
-            Err(ServiceError::LoggedError(LoggedError::SocketDoesntExist)) => {
+            Err(ServiceError::LoggedError(LoggedError::ServiceManagerNotRunning)) => {
                 let mut states = vec![];
                 let service_names = if self.names.is_empty() {
                     manifest_services

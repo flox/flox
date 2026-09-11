@@ -8,6 +8,7 @@ use flox_core::activate::mode::ActivateMode;
 use flox_core::activations::{activation_state_dir_path, read_activations_json, state_json_path};
 use flox_core::data::System;
 use flox_core::proc_status::is_descendant_of;
+use flox_core::process_compose::socket_state;
 use flox_manifest::interfaces::AsLatestSchema;
 use flox_manifest::lockfile::Lockfile;
 use flox_manifest::parsed::Inner;
@@ -197,9 +198,8 @@ impl ServicesEnvironment {
 
     /// Get the path to the service manager socket.
     ///
-    /// The socket may not exist.
-    /// We currently use the existence of the socket to determine whether services are running,
-    /// but this may change in the future for a more robust solution.
+    /// The socket may not exist, and its existence does not mean a manager is
+    /// running — see [flox_core::process_compose::socket_state].
     pub fn socket(&self) -> &Path {
         &self.socket
     }
@@ -238,7 +238,9 @@ impl ServicesEnvironment {
             return ProcessComposeState::ActivationStartingSelf;
         }
 
-        if !self.socket.exists() {
+        // state.json still names a killed manager as current, so testing the
+        // socket file's existence here would report it as the live one.
+        if !socket_state(&self.socket).is_live() {
             return ProcessComposeState::NotCurrent;
         }
 
@@ -255,19 +257,18 @@ impl ServicesEnvironment {
 /// In this case, to use service commands, we require that the service manager socket exists
 /// or that there are services (compatible with the current system) defined in the environment.
 ///
-/// As described in [Self::socket] using the `socket` to determine whether services are running,
-/// may not be the most robust solution, but is currently used consistently.
+/// Availability is decided by whether a manager is answering, not by whether
+/// its socket file is on disk.
 pub fn guard_service_commands_available(
     services_environment: &ServicesEnvironment,
     system: &System,
 ) -> Result<()> {
     let manifest_services = &services_environment.manifest.as_latest_schema().services;
+    let manager_running = socket_state(&services_environment.socket).is_live();
 
-    if !services_environment.socket.exists() && manifest_services.inner().is_empty() {
+    if !manager_running && manifest_services.inner().is_empty() {
         return Err(ServicesCommandsError::NoDefinedServices.into());
-    } else if !services_environment.socket.exists()
-        && manifest_services.copy_for_system(system).inner().is_empty()
-    {
+    } else if !manager_running && manifest_services.copy_for_system(system).inner().is_empty() {
         return Err(ServicesCommandsError::NoDefinedServicesForSystem {
             system: system.clone(),
         }
@@ -301,12 +302,11 @@ pub fn guard_is_within_activation(
 }
 
 /// Warn about manifest changes that may require services to be restarted, if
-/// the Environment has a service manager running. It doesn't guarantee that the
-/// service manager is working (e.g. hasn't crashed). It is the caller's
+/// the Environment has a service manager running. It is the caller's
 /// responsibility to determine what manifest changes would affect services.
 pub fn warn_manifest_changes_for_services(flox: &Flox, env: &dyn Environment) {
     let has_service_manager = match env.services_socket_path(flox) {
-        Ok(socket) => socket.exists(),
+        Ok(socket) => socket_state(&socket).is_live(),
         Err(_) => false,
     };
     if has_service_manager {
