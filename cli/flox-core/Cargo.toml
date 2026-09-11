@@ -28,6 +28,7 @@ supports-color.workspace = true
 sysinfo.workspace = true
 serde_with.workspace = true
 schemars.workspace = true
+nix = { workspace = true, features = ["socket", "poll", "fs"] }
 tempfile.workspace = true
 thiserror.workspace = true
 time.workspace = true
