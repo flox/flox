@@ -263,17 +263,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "apple-native-keyring-store"
-version = "1.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a7be2f067ccd8d4b4d4a66ddafe0f32a5dff31732f32dbff85fefc40929b1f72"
-dependencies = [
- "keyring-core",
- "log",
- "security-framework 3.7.0",
-]
-
-[[package]]
 name = "arrayref"
 version = "0.3.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1550,7 +1539,7 @@ version = "0.0.0"
 dependencies = [
  "anstream",
  "anyhow",
- "apple-native-keyring-store",
+ "base64",
  "bpaf",
  "chrono",
  "close_fds",
