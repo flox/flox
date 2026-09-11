@@ -36,6 +36,7 @@ pub use lock::build_lock::{
 pub use lock::direct_input::{DirectInput, NotAGitSourceError};
 pub use lock::flakeref::{NixFlakeref, RawNixFlakerefAttrs};
 pub use lock::lookup::{LockError, lock_references};
+pub use lock::r#override::{InputKey, InputKeyError, InputOverride, OverrideError};
 pub use lock::render::render_unresolvable;
 pub use lock::transform::build_lock_from_locked_inputs;
 pub use project::{

@@ -4394,7 +4394,13 @@ mod nef_tests {
 
     use floxhub_client::LockedInputEntry;
     use indoc::{formatdoc, indoc};
-    use nef_lock_catalog::{build_lock_from_locked_inputs, write_lock};
+    use nef_lock_catalog::{
+        InputOverride,
+        RawNixFlakerefAttrs,
+        build_lock_from_locked_inputs,
+        read_lock,
+        write_lock,
+    };
     use pretty_assertions::assert_eq;
 
     use super::*;
@@ -4501,6 +4507,85 @@ mod nef_tests {
             lock_bytes,
             "the build must not rewrite the lock it is handed"
         );
+    }
+
+    /// An overridden input is fetched from the override's source, not the
+    /// one the lock pinned: the lock pins `hello` at its committed git
+    /// revision, the override points a `path` source at the same working
+    /// tree after an uncommitted edit, and the build output carries the
+    /// edit. The NEF needs no knowledge of overrides; it fetches whatever
+    /// flakeref the package leaf carries.
+    #[test]
+    fn nef_build_fetches_an_overridden_input_from_its_override() {
+        let pname = "foo";
+
+        let (flox, tempdir) = flox_instance();
+        let manifest = formatdoc! {r#"
+            version = 1
+        "#};
+        let mut env = new_path_environment(&flox, &manifest);
+        let env_path = env.parent_path().unwrap();
+
+        let (expressions_dir, expressions_ref) = prepare_nix_expressions_dir_in(&tempdir, &[
+            (&[pname], indoc! {r#"
+                {catalogs, runCommand}: runCommand "foo" {} ''
+                    cat ${catalogs.myorg.hello} >> $out
+                ''
+                "#}),
+            (&["hello"], indoc! {r#"
+                {runCommand}: runCommand "hello" {} ''
+                    echo -n "Hello from the catalog" > $out
+                ''
+                "#}),
+        ]);
+        let repo =
+            GitCommandProvider::init_with(test_git_options(), &expressions_dir, false).unwrap();
+        repo.add(&[&expressions_dir]).unwrap();
+        repo.commit("add nef catalog fixtures").unwrap();
+
+        let lockfile = tempdir.path().join("catalog.lock");
+        write_catalog_lock(&lockfile, &repo, &expressions_dir);
+
+        // An uncommitted edit: the locked git revision still says "from
+        // the catalog"; only a fetch of the working tree sees this.
+        fs::write(
+            expressions_dir
+                .join("pkgs")
+                .join("hello")
+                .join("default.nix"),
+            indoc! {r#"
+                {runCommand}: runCommand "hello" {} ''
+                    echo -n "Hello from the override" > $out
+                ''
+            "#},
+        )
+        .unwrap();
+
+        let mut lock = read_lock(&lockfile).unwrap();
+        lock.override_inputs([InputOverride {
+            key: "myorg/hello".parse().unwrap(),
+            source: RawNixFlakerefAttrs::new_unchecked(serde_json::json!({
+                "type": "path",
+                "path": expressions_dir,
+            })),
+        }])
+        .unwrap();
+        let overridden_lockfile = tempdir.path().join("catalog-overridden.lock");
+        write_lock(&lock, &overridden_lockfile).unwrap();
+
+        assert_build_status_with_nix_expr(
+            &flox,
+            &mut env,
+            &expressions_ref,
+            pname,
+            Some(&overridden_lockfile),
+            None,
+            true,
+        );
+
+        let result_path = env_path.join(format!("result-{pname}"));
+        let content = fs::read_to_string(result_path).unwrap();
+        assert_eq!(content, "Hello from the override");
     }
 
     #[test]

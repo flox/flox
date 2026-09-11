@@ -5,7 +5,9 @@
 //! the ownership of an ephemeral lock's file. Without a committed
 //! `.flox/catalog.lock` the project builds locklessly: the CLI resolves a
 //! fresh lock into a temp file that lives exactly as long as the build, and
-//! nothing is ever written into the project tree.
+//! nothing is ever written into the project tree. Input overrides are
+//! applied the same way: whichever lock the invocation starts from, the
+//! overridden copy is ephemeral and the committed file is left as found.
 
 use std::path::{Path, PathBuf};
 
@@ -15,6 +17,7 @@ use floxhub_client::CatalogClientTrait;
 use nef_lock_catalog::{
     BuildLock,
     CATALOG_LOCKFILE_NAME,
+    InputOverride,
     catalog_lockfile_path,
     read_lock,
     resolve_lock,
@@ -33,6 +36,8 @@ pub struct BuildLockGuard {
     /// Keeps an ephemeral lock's temp file alive for as long as this value;
     /// `None` when the lock is the committed file.
     _ephemeral: Option<tempfile::TempPath>,
+    /// The input overrides applied to the lock, in the order given.
+    overrides: Vec<InputOverride>,
 }
 
 impl BuildLockGuard {
@@ -41,33 +46,52 @@ impl BuildLockGuard {
     /// references of the expressions named by `rel_file_paths` (relative to
     /// the project's expression directory), written to a randomly named
     /// temp file that is removed when the returned value is dropped.
+    ///
+    /// With `overrides`, the lock the invocation starts from — committed or
+    /// freshly resolved — has them applied and is always written to an
+    /// ephemeral file; the committed lock is never rewritten. An override
+    /// naming an input the lock does not pin fails before anything is
+    /// written.
     pub async fn new_existing_or_ephemeral(
         client: &impl CatalogClientTrait,
         dot_flox_path: impl AsRef<Path>,
         rel_file_paths: impl IntoIterator<Item = impl AsRef<Path>>,
+        overrides: Vec<InputOverride>,
     ) -> Result<BuildLockGuard> {
         let dot_flox_path = dot_flox_path.as_ref();
         let committed = catalog_lockfile_path(dot_flox_path);
-        if committed.exists() {
+        let lock = if committed.exists() {
             let lock = read_lock(&committed)?;
-            // The path handed to make is *relative to the project
-            // directory* make is started in (`--directory`), composed of
-            // two constant components — so a project path containing
-            // whitespace (or any other character make's word-splitting
-            // positions would mangle) never reaches the makefile.
-            let dot_flox_dir_name = dot_flox_path
-                .file_name()
-                .expect("the .flox path has a final component");
-            debug!(path = %committed.display(), "build consumes the committed catalog lock");
-            return Ok(BuildLockGuard {
-                path: Path::new(dot_flox_dir_name).join(CATALOG_LOCKFILE_NAME),
-                lock,
-                _ephemeral: None,
-            });
-        }
+            if overrides.is_empty() {
+                // The path handed to make is *relative to the project
+                // directory* make is started in (`--directory`), composed
+                // of two constant components — so a project path containing
+                // whitespace (or any other character make's word-splitting
+                // positions would mangle) never reaches the makefile.
+                let dot_flox_dir_name = dot_flox_path
+                    .file_name()
+                    .expect("the .flox path has a final component");
+                debug!(path = %committed.display(), "build consumes the committed catalog lock");
+                return Ok(BuildLockGuard {
+                    path: Path::new(dot_flox_dir_name).join(CATALOG_LOCKFILE_NAME),
+                    lock,
+                    _ephemeral: None,
+                    overrides,
+                });
+            }
+            debug!(path = %committed.display(), "build starts from the committed catalog lock");
+            lock
+        } else {
+            let references = scan_references(nix_expression_dir_in(dot_flox_path), rel_file_paths)?;
+            resolve_lock(client, references).await?
+        };
+        Self::ephemeral(lock, overrides)
+    }
 
-        let references = scan_references(nix_expression_dir_in(dot_flox_path), rel_file_paths)?;
-        let lock = resolve_lock(client, references).await?;
+    /// `lock` with `overrides` applied, written to a temp file that is
+    /// removed when the returned value is dropped.
+    fn ephemeral(mut lock: BuildLock, overrides: Vec<InputOverride>) -> Result<BuildLockGuard> {
+        lock.override_inputs(overrides.iter().cloned())?;
         // The system temp dir, not flox's own temp dir: flox's derives from
         // `$HOME`, which the user may have placed at a path containing
         // whitespace, and the ephemeral path reaches make's word-splitting
@@ -82,11 +106,16 @@ impl BuildLockGuard {
             .context("Could not create a temporary file for the catalog lock.")?
             .into_temp_path();
         write_lock(&lock, &temp_path)?;
-        debug!(path = %temp_path.display(), "build consumes a fresh ephemeral catalog lock");
+        debug!(
+            path = %temp_path.display(),
+            overrides = overrides.len(),
+            "build consumes an ephemeral catalog lock"
+        );
         Ok(BuildLockGuard {
             path: temp_path.to_path_buf(),
             lock,
             _ephemeral: Some(temp_path),
+            overrides,
         })
     }
 
@@ -106,6 +135,13 @@ impl BuildLockGuard {
     /// ephemeral lock, e.g. to select stale-lock messaging.
     pub fn is_existing(&self) -> bool {
         self._ephemeral.is_none()
+    }
+
+    /// The input overrides applied to this lock, in the order given. A
+    /// lock with any is never fit to publish: its sources are not what
+    /// the catalog resolved.
+    pub fn overrides(&self) -> &[InputOverride] {
+        &self.overrides
     }
 }
 
@@ -132,6 +168,16 @@ pub mod test_helpers {
                         .into_temp_path(),
                 ),
             },
+            overrides: Vec::new(),
+        }
+    }
+
+    impl BuildLockGuard {
+        /// This guard with `overrides` recorded, for tests of consumers
+        /// that refuse an overridden lock.
+        pub fn with_overrides(mut self, overrides: Vec<InputOverride>) -> Self {
+            self.overrides = overrides;
+            self
         }
     }
 }
@@ -139,7 +185,7 @@ pub mod test_helpers {
 #[cfg(test)]
 mod tests {
     use floxhub_client::client::test_helpers::new_noop;
-    use nef_lock_catalog::scan_package;
+    use nef_lock_catalog::{RawNixFlakerefAttrs, scan_package};
     use tempfile::tempdir;
 
     use super::*;
@@ -163,9 +209,38 @@ mod tests {
       }
     }
   },
-  "catalogs": {}
+  "catalogs": {
+    "myorg": {
+      "type": "floxhub",
+      "packages": {
+        "type": "package_set",
+        "entries": {
+          "hello": {
+            "type": "package",
+            "build_type": "nef",
+            "source": {
+              "dir": ".",
+              "ref": "refs/heads/main",
+              "rev": "0000000000000000000000000000000000000000",
+              "type": "git",
+              "url": "https://example.com/repo"
+            }
+          }
+        }
+      }
+    }
+  }
 }
 "#;
+
+    fn path_override(key: &str, path: &str) -> InputOverride {
+        InputOverride {
+            key: key.parse().unwrap(),
+            source: RawNixFlakerefAttrs::new_unchecked(
+                serde_json::json!({ "type": "path", "path": path }),
+            ),
+        }
+    }
 
     fn project_with_expression(expression: &str) -> (tempfile::TempDir, PathBuf, PathBuf) {
         let project = tempdir().unwrap();
@@ -184,9 +259,14 @@ mod tests {
     async fn no_references_resolve_without_a_catalog_request() {
         let (_project, dot_flox, _pkgs_dir) =
             project_with_expression("{ runCommand }: runCommand \"hello\" { } \"\"");
-        let lock = BuildLockGuard::new_existing_or_ephemeral(&new_noop(), &dot_flox, ["hello.nix"])
-            .await
-            .unwrap();
+        let lock = BuildLockGuard::new_existing_or_ephemeral(
+            &new_noop(),
+            &dot_flox,
+            ["hello.nix"],
+            vec![],
+        )
+        .await
+        .unwrap();
 
         assert!(!lock.is_existing());
         assert!(
@@ -208,9 +288,14 @@ mod tests {
         let (_project, dot_flox, pkgs_dir) =
             project_with_expression("{ catalogs }: catalogs.myorg.hello");
         std::fs::write(catalog_lockfile_path(&dot_flox), COMMITTED_LOCK).unwrap();
-        let lock = BuildLockGuard::new_existing_or_ephemeral(&new_noop(), &dot_flox, ["hello.nix"])
-            .await
-            .unwrap();
+        let lock = BuildLockGuard::new_existing_or_ephemeral(
+            &new_noop(),
+            &dot_flox,
+            ["hello.nix"],
+            vec![],
+        )
+        .await
+        .unwrap();
 
         assert!(lock.is_existing());
         assert_eq!(lock.path(), Path::new(".flox").join(CATALOG_LOCKFILE_NAME));
@@ -235,9 +320,14 @@ mod tests {
         let (_project, dot_flox, pkgs_dir) =
             project_with_expression("{ catalogs }: catalogs.myorg.world");
         std::fs::write(catalog_lockfile_path(&dot_flox), COMMITTED_LOCK).unwrap();
-        let lock = BuildLockGuard::new_existing_or_ephemeral(&new_noop(), &dot_flox, ["hello.nix"])
-            .await
-            .unwrap();
+        let lock = BuildLockGuard::new_existing_or_ephemeral(
+            &new_noop(),
+            &dot_flox,
+            ["hello.nix"],
+            vec![],
+        )
+        .await
+        .unwrap();
         assert!(lock.is_existing());
 
         let references = scan_package(&pkgs_dir, "hello.nix").unwrap();
@@ -248,6 +338,60 @@ mod tests {
         assert!(
             err.to_string().contains("myorg.world"),
             "the uncovered reference must be named, got: {err}"
+        );
+    }
+
+    /// A committed lock with overrides is never rewritten: the build
+    /// consumes an ephemeral copy carrying the overridden source, and the
+    /// committed file stays byte-identical.
+    #[tokio::test]
+    async fn committed_lock_with_overrides_is_consumed_from_an_ephemeral_copy() {
+        let (_project, dot_flox, _pkgs_dir) =
+            project_with_expression("{ catalogs }: catalogs.myorg.hello");
+        std::fs::write(catalog_lockfile_path(&dot_flox), COMMITTED_LOCK).unwrap();
+
+        let lock =
+            BuildLockGuard::new_existing_or_ephemeral(&new_noop(), &dot_flox, ["hello.nix"], vec![
+                path_override("myorg/hello", "/src/hello"),
+            ])
+            .await
+            .unwrap();
+
+        assert!(!lock.is_existing());
+        assert_ne!(lock.path(), Path::new(".flox").join(CATALOG_LOCKFILE_NAME));
+        assert_eq!(lock.overrides().len(), 1);
+        assert_eq!(
+            std::fs::read_to_string(catalog_lockfile_path(&dot_flox)).unwrap(),
+            COMMITTED_LOCK,
+            "the committed lock must not be rewritten"
+        );
+        let ephemeral: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(lock.path()).unwrap()).unwrap();
+        assert_eq!(
+            ephemeral["catalogs"]["myorg"]["packages"]["entries"]["hello"]["source"],
+            serde_json::json!({ "type": "path", "path": "/src/hello", "dir": "." })
+        );
+    }
+
+    /// An override naming an input the lock does not pin fails by name
+    /// before any lock is written.
+    #[tokio::test]
+    async fn override_of_an_unknown_input_fails_by_name() {
+        let (_project, dot_flox, _pkgs_dir) =
+            project_with_expression("{ catalogs }: catalogs.myorg.hello");
+        std::fs::write(catalog_lockfile_path(&dot_flox), COMMITTED_LOCK).unwrap();
+
+        let err =
+            BuildLockGuard::new_existing_or_ephemeral(&new_noop(), &dot_flox, ["hello.nix"], vec![
+                path_override("myorg/missing", "/src/missing"),
+            ])
+            .await
+            .expect_err("an unknown input cannot be overridden");
+
+        let message = format!("{err:#}");
+        assert!(
+            message.contains("myorg/missing") && message.contains("myorg/hello"),
+            "the unknown key and the available inputs must be named, got: {message}"
         );
     }
 }

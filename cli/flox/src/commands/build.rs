@@ -365,6 +365,7 @@ impl Build {
                     &flox.floxhub_client,
                     env.dot_flox_path(),
                     lock_rel_paths,
+                    vec![],
                 )
                 .await?,
             ),

@@ -127,10 +127,25 @@ async fn dedup_short_circuit(client: &impl CatalogClientTrait, query: CheckBuild
 /// accept back — translated into an actionable error. Only the committed
 /// lock can be either: an ephemeral lock is resolved by the catalog itself
 /// from the same expressions the references were scanned from.
+///
+/// A lock with input overrides is refused outright: its sources are not
+/// what the catalog resolved, so nothing built against it can be
+/// published.
 fn subset_for_publish(
     lock: &BuildLockGuard,
     references: &BTreeSet<CatalogRef>,
 ) -> Result<BTreeMap<String, LockedInputEntry>> {
+    if !lock.overrides().is_empty() {
+        let overridden = lock
+            .overrides()
+            .iter()
+            .map(|input_override| format!("'{}'", input_override.key))
+            .collect::<Vec<_>>()
+            .join(", ");
+        bail!(formatdoc! {"
+            Cannot publish a build whose catalog inputs are overridden: {overridden}.
+            Retry 'flox publish' without input overrides."});
+    }
     let with_update_catalogs_hint = |err: anyhow::Error| {
         if lock.is_existing() {
             anyhow!(formatdoc! {"
@@ -405,6 +420,7 @@ impl Publish {
                     &flox.floxhub_client,
                     path_env.dot_flox_path(),
                     &lock_rel_paths,
+                    vec![],
                 )
                 .await?,
             ),
@@ -536,6 +552,7 @@ mod tests {
     use flox_manifest::test_helpers::with_latest_schema;
     use flox_rust_sdk::providers::build::test_helpers::prepare_empty_expressions_ref;
     use indoc::indoc;
+    use nef_lock_catalog::{InputOverride, RawNixFlakerefAttrs};
 
     use super::*;
     use crate::utils::catalog_lock::test_helpers::build_lock_guard_from_parts;
@@ -567,6 +584,40 @@ mod tests {
         assert!(
             message.contains("myorg.hello"),
             "the uncovered reference must be named, got: {message}"
+        );
+    }
+
+    /// A lock with input overrides cannot be published, whatever it
+    /// covers; the refusal names the overridden inputs.
+    #[test]
+    fn overridden_lock_is_refused_naming_the_overrides() {
+        let expressions_dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            expressions_dir.path().join("hello.nix"),
+            "{ catalogs }: catalogs.myorg.hello",
+        )
+        .unwrap();
+        let references = scan_package(expressions_dir.path(), "hello.nix").unwrap();
+
+        let lock = build_lock_guard_from_parts(
+            "/tmp/flox-catalog.lock.ephemeral",
+            nef_lock_catalog::BuildLock::default(),
+            false,
+        )
+        .with_overrides(vec![InputOverride {
+            key: "myorg/hello".parse().unwrap(),
+            source: RawNixFlakerefAttrs::new_unchecked(serde_json::json!({
+                "type": "path",
+                "path": "/src/hello",
+            })),
+        }]);
+
+        let err = subset_for_publish(&lock, &references)
+            .expect_err("an overridden lock cannot be published");
+        let message = format!("{err:#}");
+        assert!(
+            message.contains("'myorg/hello'"),
+            "the overridden input must be named, got: {message}"
         );
     }
 
