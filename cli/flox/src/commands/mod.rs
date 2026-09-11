@@ -1661,6 +1661,8 @@ pub(super) async fn ensure_environment_trust(
         return Ok(());
     }
 
+    // Load the credential before trusting its identity: a saved handle alone
+    // may belong to a different token. A matching cache avoids the /me request.
     let handle = flox
         .auth_context
         .identity(&flox.floxhub_client)

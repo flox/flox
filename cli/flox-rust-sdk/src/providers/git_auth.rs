@@ -46,6 +46,14 @@ impl GitCommandOptionsExt for GitCommandOptions {
             CredentialKind::Bare => {
                 tracing::debug!("using bare FloxHub token");
             },
+            CredentialKind::PersonalAccessToken
+            | CredentialKind::ServiceAccountToken
+            | CredentialKind::OpaqueToken => {
+                tracing::debug!(kind = ?auth_context.kind(), "using FloxHub access token");
+            },
+            CredentialKind::NotLoggedIn => {
+                tracing::debug!("no credential available for git auth");
+            },
             _ => {},
         }
         self.add_env_var(FLOXHUB_TOKEN_ENV_VAR, token);

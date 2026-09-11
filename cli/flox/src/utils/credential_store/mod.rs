@@ -400,13 +400,16 @@ impl CredentialStores {
         let keyring = self.keyring.clone();
         let cache_for_resolver = cache.clone();
         let read_keyring = move || {
-            let token = keyring.get().unwrap_or_else(|err| {
-                // A keyring that cannot be read is indistinguishable from an
-                // empty one here: the same "not logged in" path follows, and
-                // the loud failures belong to login and logout.
-                tracing::debug!(error = %err, "could not read the credential from the keyring");
-                None
-            });
+            let token = match keyring.get() {
+                Ok(token) => token,
+                Err(err) => {
+                    tracing::debug!(error = %err, "could not read the credential from the keyring");
+                    // A failed read says nothing about the stored credential.
+                    // Retry next invocation instead of caching a logged-out state.
+                    cache_for_resolver.remove();
+                    return AuthContext::default();
+                },
+            };
             let context = cache_for_resolver.configure(
                 AuthContext::new_from_token(token.as_deref()),
                 TokenStorage::Keyring,
@@ -836,6 +839,79 @@ mod tests {
                 (Some(TOKEN), None),
             );
             assert_eq!(config.flox.floxhub_token.as_deref(), None);
+        });
+    }
+
+    #[test]
+    fn keyring_read_failure_is_retried_on_the_next_invocation() {
+        temp_env::with_var(FLOXHUB_TOKEN_ENV_VAR, None::<&str>, || {
+            for cached in [false, true] {
+                let cache_dir = TempDir::new().unwrap();
+                let keyring = MockStore::new();
+                keyring.set(TOKEN).unwrap();
+                keyring.set_error("keyring is locked");
+                let stores = CredentialStores::from_stores(
+                    CredentialStoreImpl::Mock(keyring),
+                    CredentialStoreImpl::Mock(MockStore::new()),
+                    cache_dir.path(),
+                );
+                let expected = AuthContext::new_from_token(Some(TOKEN));
+                if cached {
+                    stores.cache.write(&expected, TokenStorage::Keyring);
+                }
+
+                let failed = stores.resolve(&config_with_token(None)).context;
+                assert_eq!(failed.token_secret(), None);
+                assert_eq!(failed.cached_facts(), AuthContext::default().cached_facts());
+
+                let probe = AuthContext::new_from_token(Some("flox_pat_cache-miss-probe"));
+                assert_eq!(
+                    stores
+                        .cache
+                        .defer_or_resolve(|| {
+                            AuthContext::new_from_token(Some("flox_pat_cache-miss-probe"))
+                        })
+                        .cached_facts(),
+                    probe.cached_facts(),
+                    "a failed read must leave a cache miss"
+                );
+
+                // Startup facts alone must retry, without asking for the secret.
+                let recovered = stores.resolve(&config_with_token(None)).context;
+                assert_eq!(recovered.cached_facts(), expected.cached_facts());
+                assert_eq!(
+                    stores
+                        .cache
+                        .defer_or_resolve(|| panic!("successful read was not cached"))
+                        .cached_facts(),
+                    expected.cached_facts()
+                );
+            }
+        });
+    }
+
+    #[test]
+    fn an_empty_keyring_is_cached_as_logged_out() {
+        temp_env::with_var(FLOXHUB_TOKEN_ENV_VAR, None::<&str>, || {
+            let cache_dir = TempDir::new().unwrap();
+            let stores = CredentialStores::from_stores(
+                CredentialStoreImpl::Mock(MockStore::new()),
+                CredentialStoreImpl::Mock(MockStore::new()),
+                cache_dir.path(),
+            );
+
+            let context = stores.resolve(&config_with_token(None)).context;
+            assert_eq!(
+                context.cached_facts(),
+                AuthContext::default().cached_facts()
+            );
+            assert_eq!(
+                stores
+                    .cache
+                    .defer_or_resolve(|| panic!("empty keyring was not cached"))
+                    .cached_facts(),
+                AuthContext::default().cached_facts()
+            );
         });
     }
 

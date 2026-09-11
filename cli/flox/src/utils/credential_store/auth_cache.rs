@@ -39,7 +39,7 @@
 //! stale one does not survive use.
 
 use std::fs;
-use std::os::unix::fs::PermissionsExt;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use chrono::{DateTime, Utc};
@@ -218,15 +218,15 @@ impl AuthCache {
         if let Some(parent) = self.path.parent() {
             fs::create_dir_all(parent)?;
         }
-        // A distinct temp name per process: two invocations recording at once
-        // must not write into the same file and rename a half-written record
-        // into place.
-        let temp_path = self
-            .path
-            .with_extension(format!("{}.tmp", std::process::id()));
-        fs::write(&temp_path, contents)?;
-        fs::set_permissions(&temp_path, fs::Permissions::from_mode(0o600))?;
-        fs::rename(&temp_path, &self.path)?;
+        // NamedTempFile creates a private file and removes it on error. Keeping
+        // it beside the record lets persist atomically replace the old contents.
+        let mut temp = tempfile::NamedTempFile::new_in(
+            self.path
+                .parent()
+                .expect("auth state has a parent directory"),
+        )?;
+        temp.write_all(contents.as_bytes())?;
+        temp.persist(&self.path)?;
         Ok(())
     }
 }
@@ -269,6 +269,8 @@ fn filename_slug(account: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    use std::os::unix::fs::PermissionsExt;
+
     use chrono::TimeDelta;
     use floxhub_client::auth::storage::credential_fingerprint;
     use pretty_assertions::assert_eq;
@@ -462,6 +464,22 @@ mod tests {
 
         let mode = fs::metadata(&cache.path).unwrap().permissions().mode();
         assert_eq!(mode & 0o777, 0o600);
+    }
+
+    #[test]
+    fn failed_replacement_removes_the_temporary_file() {
+        let dir = TempDir::new().unwrap();
+        let cache = AuthCache::new(dir.path(), &account());
+        // A directory at the destination makes the final rename fail.
+        fs::create_dir(&cache.path).unwrap();
+
+        assert!(cache.try_write(&facts(), TokenStorage::Keyring).is_err());
+
+        let remaining: Vec<_> = fs::read_dir(dir.path())
+            .unwrap()
+            .map(|entry| entry.unwrap().path())
+            .collect();
+        assert_eq!(remaining, vec![cache.path]);
     }
 
     /// The filename is derived from the URL and is not injective — a trailing

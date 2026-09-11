@@ -881,12 +881,6 @@ where
 }
 
 // ---------------------------------------------------------------------------
-// Opaque-credential identity resolution
-// ---------------------------------------------------------------------------
-
-impl FloxhubClient {}
-
-// ---------------------------------------------------------------------------
 // Shared HTTP client construction helpers (pub(crate) for factory module)
 // ---------------------------------------------------------------------------
 
@@ -921,6 +915,8 @@ pub(crate) fn build_pre_request_hook(
                         request
                             .headers_mut()
                             .insert(reqwest::header::AUTHORIZATION, header_value);
+                    } else {
+                        tracing::warn!("Could not encode authorization header");
                     }
                 },
                 Err(e) => {
