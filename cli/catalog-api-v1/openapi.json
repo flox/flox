@@ -146,6 +146,7 @@
             "required": false,
             "schema": {
               "type": "integer",
+              "minimum": 0,
               "default": 0,
               "title": "Page"
             }
@@ -156,6 +157,7 @@
             "required": false,
             "schema": {
               "type": "integer",
+              "minimum": 0,
               "default": 10,
               "title": "Pagesize"
             }
@@ -336,7 +338,7 @@
           "build-inputs"
         ],
         "summary": "Lookup",
-        "description": "Resolve build inputs for one or more reference groups.\n\nDirect references resolve to latest; the transitive closure is taken\nverbatim; a cross-reference conflict yields a per-group conflict result.\n\nFor each group, walks the transitive package_inputs closure (accessor),\nthen applies auth redaction and assembles the flat LockedInputs map.\n\nEach group runs in its own transaction so a single group's timeout,\noverflow, or conflict produces a per-group error without affecting others.",
+        "description": "Resolve build inputs for one or more reference groups.\n\nDirect references resolve to the latest revision of their own source; the\ntransitive closure is taken verbatim; a cross-reference conflict yields a\nper-group conflict result.\n\nFor each group, walks the transitive package_inputs closure (accessor),\nthen applies auth redaction and assembles the flat LockedInputs map.\n\nEach group runs in its own transaction so a single group's timeout,\noverflow, or conflict produces a per-group error without affecting others.",
         "operationId": "lookup_api_v1_catalog_build_inputs_lookup_post",
         "requestBody": {
           "content": {
@@ -1750,6 +1752,37 @@
         }
       }
     },
+    "/api/v1/catalog/info/systems": {
+      "get": {
+        "tags": [
+          "info"
+        ],
+        "summary": "List registered systems",
+        "operationId": "getSystems_api_v1_catalog_info_systems_get",
+        "responses": {
+          "200": {
+            "description": "The names of every system registered in the catalog, sorted by name",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SystemsResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request could not be processed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/catalog/info/published-catalogs": {
       "get": {
         "tags": [
@@ -2239,9 +2272,11 @@
       "BuildInputsLookupRequest": {
         "properties": {
           "stability": {
-            "type": "string",
-            "minLength": 1,
-            "title": "Stability"
+            "title": "Stability",
+            "description": "Accepted and ignored; not used by this endpoint. Deprecated.",
+            "deprecated": true,
+            "nullable": true,
+            "type": "string"
           },
           "reference_point": {
             "nullable": true,
@@ -2262,11 +2297,10 @@
         },
         "type": "object",
         "required": [
-          "stability",
           "groups"
         ],
         "title": "BuildInputsLookupRequest",
-        "description": "Request body for the /build-inputs/lookup endpoint.\n\nA lookup names a `stability` (required) and one or more `groups` of\nreferences to resolve, optionally anchored at a `reference_point`.  It is\nsystem-independent \u2014 the response is source revs + DAG edges, which carry\nno system \u2014 so the request body has no system field."
+        "description": "Request body for the /build-inputs/lookup endpoint.\n\nA lookup names one or more `groups` of references to resolve, optionally\nanchored at a `reference_point`.\n\nThe response is source revisions plus DAG edges: for each reference, the\nlatest revision of its own source together with the transitive non-base\nsources that revision was built against.  That answer carries no system\nand no nixpkgs base revision, so the request body names neither.  A base\nrevision is selected at build time, against which the same lock may be\nbuilt repeatedly."
       },
       "BuildInputsLookupResponse": {
         "properties": {
@@ -3395,6 +3429,16 @@
             },
             "type": "array",
             "title": "Items"
+          },
+          "commands_by_output": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "type": "object",
+            "title": "Commands By Output"
           }
         },
         "type": "object",
@@ -3493,6 +3537,12 @@
             "additionalProperties": {
               "$ref": "#/components/schemas/LockedInputEntry"
             },
+            "type": "object"
+          },
+          "evaluation_meta": {
+            "title": "Evaluation Meta",
+            "nullable": true,
+            "additionalProperties": true,
             "type": "object"
           }
         },
@@ -4826,6 +4876,23 @@
         ],
         "title": "StorepathStatusResponse"
       },
+      "SystemsResult": {
+        "properties": {
+          "registered_systems": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Registered Systems"
+          }
+        },
+        "type": "object",
+        "required": [
+          "registered_systems"
+        ],
+        "title": "SystemsResult",
+        "description": "Every system registered in the catalog, sorted by name."
+      },
       "UnresolvableEntry": {
         "properties": {
           "reference": {
@@ -4862,7 +4929,7 @@
         },
         "type": "object",
         "title": "UnresolvableLeaf",
-        "description": "Uniform shape for an unresolvable dependency.\n\nSerializes as {\"unresolvable\": {}} \u2014 exactly one shape, no cause/reason\nfields at the leaf level. If a future change needs structured error\ndetail, introduce a typed `reason` field here."
+        "description": "Uniform shape for an unresolvable dependency.\n\nSerializes as {\"unresolvable\": {<cause>: <detail>}} \u2014 a single-key cause\nmap, not a typed field.  The current cause vocabulary: \"_handle\" (uniform\nnon-disclosure marker), \"overflow\", \"conflict\", \"timeout\", and\n\"not_lockable\".  A consumer must tolerate an unrecognized key: this type\nmakes no closed-vocabulary guarantee, and a new cause can be added here\nwithout a schema change (the field is `dict[str, Any]`)."
       },
       "UserCatalog": {
         "properties": {
