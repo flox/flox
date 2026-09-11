@@ -33,7 +33,7 @@ pub use lock::build_lock::{
     subset_direct_inputs,
     write_lock,
 };
-pub use lock::flakeref::NixFlakeref;
+pub use lock::flakeref::{NixFlakeref, RawNixFlakerefAttrs, lock_flakeref};
 pub use lock::lookup::{LockError, lock_references};
 pub use lock::render::render_unresolvable;
 pub use lock::transform::build_lock_from_locked_inputs;
