@@ -34,7 +34,7 @@ use floxhub_client::{
     PackageSystem,
 };
 use indoc::formatdoc;
-use nef_lock_catalog::{CatalogRef, NixFlakeref, scan_package};
+use nef_lock_catalog::{CatalogRef, NixFlakeref, NotAGitSourceError, scan_package};
 use tracing::{debug, info_span, instrument, warn};
 
 use super::{DirEnvironmentSelect, dir_environment_select};
@@ -122,24 +122,34 @@ async fn dedup_short_circuit(client: &impl CatalogClientTrait, query: CheckBuild
 }
 
 /// The locked-input subset a publish submits, projected from the lock its
-/// build consumes, with a stale committed lock translated into an
-/// actionable error. Only the committed lock can be stale: an ephemeral
-/// lock is resolved from the same expressions the references were scanned
-/// from.
+/// build consumes and converted to the wire form the catalog accepts, with
+/// a stale committed lock — or one pinning a source the catalog cannot
+/// accept back — translated into an actionable error. Only the committed
+/// lock can be either: an ephemeral lock is resolved by the catalog itself
+/// from the same expressions the references were scanned from.
 fn subset_for_publish(
     lock: &BuildLockGuard,
     references: &BTreeSet<CatalogRef>,
 ) -> Result<BTreeMap<String, LockedInputEntry>> {
-    lock.build_lock().subset_direct(references).map_err(|err| {
+    let with_update_catalogs_hint = |err: anyhow::Error| {
         if lock.is_existing() {
             anyhow!(formatdoc! {"
                 {err}
                 Run '{update_catalogs}' to update '.flox/catalog.lock', then commit the file and retry 'flox publish'.",
-                update_catalogs = UPDATE_CATALOGS_COMMAND})
+            update_catalogs = UPDATE_CATALOGS_COMMAND})
         } else {
-            anyhow::Error::from(err)
+            err
         }
-    })
+    };
+    let subset = lock
+        .build_lock()
+        .subset_direct(references)
+        .map_err(|err| with_update_catalogs_hint(err.into()))?;
+    subset
+        .iter()
+        .map(|(key, input)| Ok((key.clone(), LockedInputEntry::try_from(input)?)))
+        .collect::<Result<_, NotAGitSourceError>>()
+        .map_err(|err| with_update_catalogs_hint(err.into()))
 }
 
 #[derive(Bpaf, Clone)]
@@ -557,6 +567,48 @@ mod tests {
         assert!(
             message.contains("myorg.hello"),
             "the uncovered reference must be named, got: {message}"
+        );
+    }
+
+    /// A committed lock pinning a source the catalog cannot accept back
+    /// (here a `path` flakeref) fails a publish naming the entry and the
+    /// recovery command.
+    #[test]
+    fn non_git_source_in_committed_lock_names_update_catalogs() {
+        let expressions_dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            expressions_dir.path().join("hello.nix"),
+            "{ catalogs }: catalogs.myorg.hello",
+        )
+        .unwrap();
+        let references = scan_package(expressions_dir.path(), "hello.nix").unwrap();
+
+        let build_lock: nef_lock_catalog::BuildLock = serde_json::from_value(serde_json::json!({
+            "version": 1,
+            "direct_catalog_inputs": {
+                "myorg/hello": {
+                    "attr_path": ["hello"],
+                    "build_type": "nef",
+                    "catalog": "myorg",
+                    "locked_inputs_hash": "sha256-test",
+                    "source": { "type": "path", "path": "/src/hello", "dir": ".flox" },
+                }
+            },
+            "catalogs": {}
+        }))
+        .unwrap();
+        let lock = build_lock_guard_from_parts("/project/.flox/catalog.lock", build_lock, true);
+
+        let err = subset_for_publish(&lock, &references)
+            .expect_err("a path source has no wire form to publish");
+        let message = format!("{err:#}");
+        assert!(
+            message.contains("myorg/hello"),
+            "the entry must be named, got: {message}"
+        );
+        assert!(
+            message.contains(UPDATE_CATALOGS_COMMAND),
+            "the hint must name the recovery command, got: {message}"
         );
     }
 
