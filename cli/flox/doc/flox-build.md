@@ -16,6 +16,7 @@ flox-build - Build packages with Flox
 flox [<general-options>] build
      [-d=<path>]
      [--stability <stability>]
+     [--override-input <reference>=<flakeref>]...
      [<package>]...
 ```
 
@@ -107,6 +108,18 @@ found, and is only ever rewritten by `flox build update-catalogs`.
 Without a committed lock, `flox build` resolves the references of the
 packages being built fresh on every invocation ("lockless" builds);
 nothing is written into the project tree.
+
+To build against an unpublished revision of a catalog input, such as a
+local checkout being iterated on, pass
+`--override-input <reference>=<flakeref>`.
+The input's source is replaced for that invocation only, as
+`nix build --override-input` replaces a flake input;
+the committed lock is left unchanged.
+`<reference>` names the input as the expression does, e.g.
+`catalogs.myorg.hello`, and `<flakeref>` is any Nix flake reference.
+A directory is fetched as a `path:` flakeref, so it should be the directory
+holding the input's `.flox`, and uncommitted changes in it are included;
+to fetch only git-tracked files, give a `git+file://` flakeref instead.
 Catalog references resolve to the latest published versions and are
 independent of `--stability`, which selects only the nixpkgs base
 package set.
@@ -128,6 +141,14 @@ package set.
     stability is used by default.
     An explicit `--stability` value overrides both of these defaults.
     Cannot be used with manifest builds.
+
+`--override-input <reference>=<flakeref>`
+:   Fetch the catalog input `<reference>`, as the expression names it
+    (e.g. `catalogs.myorg.hello`), from `<flakeref>` for this invocation
+    instead of its locked source.
+    A directory means a `path:` flakeref.
+    May be given more than once.
+    `.flox/catalog.lock` is not modified.
 
 
 ```{.include}
