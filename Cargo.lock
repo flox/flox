@@ -1692,6 +1692,7 @@ dependencies = [
  "indoc",
  "itertools 0.14.0",
  "log",
+ "nix",
  "proptest",
  "proptest-derive",
  "regex",
@@ -3184,6 +3185,7 @@ dependencies = [
  "cfg-if",
  "cfg_aliases",
  "libc",
+ "memoffset",
 ]
 
 [[package]]

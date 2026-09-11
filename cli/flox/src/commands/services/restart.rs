@@ -60,7 +60,7 @@ impl Restart {
 
         let existing_processes = match ProcessStates::read(socket) {
             Ok(process_states) => process_states,
-            Err(ServiceError::LoggedError(LoggedError::SocketDoesntExist)) => {
+            Err(ServiceError::LoggedError(LoggedError::ServiceManagerNotRunning)) => {
                 ProcessStates::from(vec![])
             },
             Err(e) => return Err(e.into()),

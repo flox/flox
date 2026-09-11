@@ -21,8 +21,9 @@ use flox_core::activations::{
     state_json_path,
     write_activations_json,
 };
+use flox_core::process_compose::socket_state;
 use fslock::LockFile;
-use indoc::indoc;
+use indoc::{formatdoc, indoc};
 use nix::sys::signal::{Signal, kill};
 use nix::sys::wait::{WaitPidFlag, WaitStatus, waitpid};
 use nix::unistd::{Pid, getpid};
@@ -34,6 +35,8 @@ use uuid::Uuid;
 use crate::attach_diff::assemble_activate_command;
 use crate::cli::executive::ExecutiveCtx;
 use crate::process_compose::{
+    latest_services_log,
+    log_tail,
     process_compose_down,
     start_services_via_socket,
     wait_for_socket_ready,
@@ -44,6 +47,12 @@ use crate::vars_from_env::VarsFromEnvironment;
 /// last act, so that a hook which exited or exec'd out — taking the rest of
 /// the script with it — is distinguishable from one that returned normally.
 const ACTIVATE_COMPLETE_MARKER: &str = "complete";
+
+/// How long to wait for a newly spawned `process-compose` to answer.
+///
+/// Only reached when something is wrong: the wait ends as soon as the socket
+/// answers, a few hundred milliseconds on an idle machine.
+const DEFAULT_ACTIVATE_TIMEOUT: Duration = Duration::from_secs(2);
 
 /// Start a new activation because we either have a:
 /// - different store path
@@ -132,9 +141,7 @@ pub fn start(
 /// This function starts process-compose and then starts the specified services.
 pub fn start_services_with_new_process_compose(
     activation_state_dir: &Path,
-    process_compose_bin: &Path,
-    socket_path: &Path,
-    services: &[String],
+    project: &AttachProjectCtx,
 ) -> Result<(), anyhow::Error> {
     let activations_json_path = state_json_path(activation_state_dir);
     let (activations_opt, lock) = read_activations_json(&activations_json_path)?;
@@ -144,20 +151,26 @@ pub fn start_services_with_new_process_compose(
     drop(lock);
 
     debug!("starting new process-compose for services");
-    signal_new_process_compose(process_compose_bin, socket_path, executive_pid)?;
-    start_services_via_socket(process_compose_bin, socket_path, services)?;
+    signal_new_process_compose(project, executive_pid)?;
+    start_services_via_socket(
+        &project.process_compose_bin,
+        &project.flox_services_socket,
+        &project.services_to_start,
+    )?;
 
     Ok(())
 }
 
 /// Start a new process-compose instance by signaling the executive.
 fn signal_new_process_compose(
-    process_compose_bin: &Path,
-    socket_path: &Path,
+    project: &AttachProjectCtx,
     executive_pid: i32,
 ) -> Result<(), anyhow::Error> {
-    // Stop first, if running, to ensure that we wait on the socket from the new instance.
-    if socket_path.exists() {
+    let process_compose_bin = project.process_compose_bin.as_path();
+    let socket_path = project.flox_services_socket.as_path();
+    // Stop first, if one is answering, so that we wait on the socket from the
+    // new instance. A socket with no listener has nothing to shut down.
+    if socket_state(socket_path).is_live() {
         debug!("shutting down old process-compose");
         if let Err(err) = process_compose_down(process_compose_bin, socket_path) {
             error!(%err, "failed to stop process-compose");
@@ -174,16 +187,46 @@ fn signal_new_process_compose(
         .ok()
         .and_then(|t| t.parse().ok())
         .map(Duration::from_secs_f64)
-        .unwrap_or(Duration::from_secs(2));
+        .unwrap_or(DEFAULT_ACTIVATE_TIMEOUT);
     let socket_ready = wait_for_socket_ready(process_compose_bin, socket_path, activation_timeout)?;
     if !socket_ready {
-        // TODO: We used to print the services log (if it exists) here to
-        // help users debug the failure but we no longer have the path
-        // available now that it's started by the executive.
-        bail!("Failed to start services: process-compose socket not ready");
+        bail!(socket_not_ready_message(
+            &project.flox_env_log_dir,
+            activation_timeout
+        ));
     }
 
     Ok(())
+}
+
+/// Explain a service startup that never produced a usable socket.
+///
+/// The executive spawns `process-compose` and reports neither its outcome nor
+/// its log path back here, so the log is the only account of what went wrong.
+fn socket_not_ready_message(log_dir: &Path, waited: Duration) -> String {
+    let log = latest_services_log(log_dir);
+    let tail = log.as_deref().and_then(|path| log_tail(path, 10));
+
+    let Some(tail) = tail else {
+        return formatdoc! {"
+            Failed to start services: the service manager did not respond within {waited:.1?}.
+            It may still be starting.
+            Check with 'flox services status'."};
+    };
+
+    let indented = tail
+        .lines()
+        .map(|line| format!("  {line}"))
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    formatdoc! {"
+        Failed to start services: the service manager did not respond within {waited:.1?}.
+        Its log ends with:
+        {indented}
+        The full log is at {log}.",
+        log = log.unwrap_or_default().display(),
+    }
 }
 
 fn spawn_executive(

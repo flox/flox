@@ -136,6 +136,44 @@ setup_sleeping_services() {
   assert_success
 }
 
+# Bring an activation with services up, then SIGKILL its `process-compose` so
+# it cannot clean up. Leaves the socket on disk and the services running,
+# reparented to init — the state reported in flox/flox#3950.
+#
+# Sets SOCKET and STALE_ORPHANS. Callers must reap STALE_ORPHANS.
+stage_stale_socket() {
+  ps_manager() {
+    ps -ax -o pid=,command= | grep -F "$1" | grep -F "process-compose" | grep -v grep | awk '{print $1}' | head -1
+  }
+  ps_children() { ps -ax -o pid=,ppid= | awk -v p="$1" '$2 == p { print $1 }'; }
+
+  mkfifo activate_started_fifo
+  TEARDOWN_FIFO="$PROJECT_DIR/finished"
+  mkfifo "$TEARDOWN_FIFO"
+  "$FLOX_BIN" activate -s -- bash -c "echo > activate_started_fifo && echo > $TEARDOWN_FIFO" 3>&- &
+  cat activate_started_fifo
+  "${TESTS_DIR}"/services/wait_for_service_status.sh one:Running
+
+  SOCKET="$("$FLOX_BIN" services-socket)"
+  [ -S "$SOCKET" ]
+  local pc_pid
+  pc_pid="$(ps_manager "$SOCKET")"
+  [ -n "$pc_pid" ]
+  STALE_ORPHANS="$(ps_children "$pc_pid" | tr '\n' ' ')"
+
+  kill -9 "$pc_pid"
+  for _ in $(seq 1 100); do
+    kill -0 "$pc_pid" 2>/dev/null || break
+    sleep 0.1
+  done
+  [ -S "$SOCKET" ]
+}
+
+reap_stale_orphans() {
+  # shellcheck disable=SC2086
+  if [ -n "${STALE_ORPHANS// /}" ]; then kill -9 $STALE_ORPHANS 2>/dev/null || true; fi
+}
+
 setup_logging_services() {
   run "$FLOX_BIN" init
   assert_success
@@ -1018,11 +1056,125 @@ EOF
   assert_output --partial "! Skipped starting services, services are already running"
 }
 
+# bats test_tags=services:stale-socket
+@test "stale socket: activation recovers and services run" {
+  setup_sleeping_services
+  stage_stale_socket
+
+  run "$FLOX_BIN" activate -s -- bash -c '"$FLOX_BIN" services status'
+  assert_success
+  assert_output --regexp "one +Running"
+
+  reap_stale_orphans
+}
+
+# bats test_tags=services:stale-socket
+@test "stale socket: status reports stopped rather than unresponsive" {
+  setup_sleeping_services
+  stage_stale_socket
+
+  run "$FLOX_BIN" activate -- bash -c '"$FLOX_BIN" services status'
+  assert_success
+  assert_output --regexp "one +Stopped"
+  refute_output --partial "service manager is unresponsive"
+
+  reap_stale_orphans
+}
+
+# bats test_tags=services:stale-socket
+@test "stale socket: restart brings services back" {
+  setup_sleeping_services
+  stage_stale_socket
+
+  run "$FLOX_BIN" activate -- bash -c '"$FLOX_BIN" services restart'
+  assert_success
+  refute_output --partial "service manager is unresponsive"
+
+  reap_stale_orphans
+}
+
+# bats test_tags=services:stale-socket
+@test "stale socket: stop and logs report not started, not unresponsive" {
+  setup_sleeping_services
+  stage_stale_socket
+
+  for cmd in stop logs; do
+    run "$FLOX_BIN" activate -- bash -c "\"$FLOX_BIN\" services $cmd one"
+    assert_failure
+    assert_output --partial "Services not started or quit unexpectedly."
+    refute_output --partial "service manager is unresponsive"
+  done
+
+  reap_stale_orphans
+}
+
+# A live manager must never be mistaken for a dead one: the cost of that
+# mistake is a second `process-compose` and a stranded first.
+# bats test_tags=services:stale-socket
+@test "live socket: a second activation does not start a second manager" {
+  setup_sleeping_services
+
+  mkfifo activate_started_fifo
+  TEARDOWN_FIFO="$PROJECT_DIR/finished"
+  mkfifo "$TEARDOWN_FIFO"
+  "$FLOX_BIN" activate -s -- bash -c "echo > activate_started_fifo && echo > $TEARDOWN_FIFO" 3>&- &
+  cat activate_started_fifo
+  "${TESTS_DIR}"/services/wait_for_service_status.sh one:Running
+
+  SOCKET="$("$FLOX_BIN" services-socket)"
+  before="$(ps -ax -o command= | grep -F "$SOCKET" | grep -cF "process-compose" || true)"
+
+  run "$FLOX_BIN" activate -s -- true
+  assert_success
+
+  after="$(ps -ax -o command= | grep -F "$SOCKET" | grep -cF "process-compose" || true)"
+  assert_equal "$after" "$before"
+}
+
+# The whole approach rests on `process-compose` resolving the socket when it
+# binds. That is upstream behaviour we depend on and do not control, so pin it.
+# bats test_tags=services:stale-socket
+@test "upstream: process-compose rebinds over a stale socket and refuses a live one" {
+  PC_DIR="$(mktemp -d /tmp/pcpin.XXXX)"
+  cat > "$PC_DIR/p.yaml" <<'EOF'
+version: "0.5"
+processes:
+  svc:
+    command: "exec sleep 191919"
+EOF
+  PC_SOCK="$PC_DIR/pin.sock"
+
+  "$PROCESS_COMPOSE_BIN" up -f "$PC_DIR/p.yaml" -u "$PC_SOCK" --tui=false -L "$PC_DIR/1.log" 3>&- &
+  first=$!
+  for _ in $(seq 1 100); do [ -S "$PC_SOCK" ] && break; sleep 0.1; done
+  kill -9 "$first"
+  sleep 0.5
+  [ -S "$PC_SOCK" ]
+
+  # Stale: comes up over it.
+  "$PROCESS_COMPOSE_BIN" up -f "$PC_DIR/p.yaml" -u "$PC_SOCK" --tui=false -L "$PC_DIR/2.log" 3>&- &
+  second=$!
+  sleep 3
+  run "$PROCESS_COMPOSE_BIN" process list -u "$PC_SOCK" -o json
+  assert_success
+
+  # Live: refuses, leaves the incumbent alone.
+  run "$PROCESS_COMPOSE_BIN" up -f "$PC_DIR/p.yaml" -u "$PC_SOCK" --tui=false -L "$PC_DIR/3.log"
+  assert_failure
+  assert kill -0 "$second"
+
+  kill -9 "$second" 2>/dev/null || true
+  pkill -9 -f "sleep 191919" 2>/dev/null || true
+  rm -rf "$PC_DIR"
+}
+
 # ---------------------------------------------------------------------------- #
 
 @test "blocking: error messages when startup times out" {
   setup_sleeping_services
-  export _FLOX_SERVICES_ACTIVATE_TIMEOUT=0.1
+  # The assertions below are on a log written by a process we spawn, but the
+  # budget is wall-clock, so too short a value fails on a slow machine.
+  export _FLOX_SERVICES_ACTIVATE_TIMEOUT=3
 
   # process-compose will never be able to create this socket,
   # which looks the same as taking a long time to create the socket.
@@ -1030,7 +1182,11 @@ EOF
   # when running this test as root.
   export _FLOX_SERVICES_SOCKET_OVERRIDE="/nonexistent_dir/does_not_exist.sock"
   run "$FLOX_BIN" activate -s -- true
-  assert_output "✘ ERROR: Failed to start services: process-compose socket not ready"
+  assert_output --partial "✘ ERROR: Failed to start services: the service manager did not respond within"
+  # Why it didn't come up is only recorded in the process-compose log, so the
+  # error is useless without it.
+  assert_output --partial "bind: no such file or directory"
+  assert_output --partial "The full log is at"
 }
 
 @test "blocking: activation blocks on process list" {
