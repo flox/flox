@@ -26,9 +26,11 @@ use tracing::debug;
 
 use super::build::{
     BaseCatalogUrlSelect,
+    InputOverrides,
     base_catalog_url_select,
     base_nixpkgs_url_from_url_select,
     check_git_tracking_for_expression_builds,
+    input_overrides,
     packages_to_build,
     prefetch_expression_build_flake_ref,
     prefetch_flake_ref,
@@ -74,6 +76,9 @@ pub struct Develop {
     #[bpaf(external(base_catalog_url_select), optional)]
     base_catalog_url_select: Option<BaseCatalogUrlSelect>,
 
+    #[bpaf(external(input_overrides))]
+    input_overrides: InputOverrides,
+
     /// Shell command string to run in the development shell instead of entering it interactively
     #[bpaf(
         long("command"),
@@ -105,6 +110,7 @@ impl Develop {
         let Develop {
             environment,
             base_catalog_url_select,
+            input_overrides,
             shell_command,
             package,
         } = opts;
@@ -155,7 +161,7 @@ impl Develop {
             &flox.floxhub_client,
             env.dot_flox_path(),
             [&rel_file_path],
-            vec![],
+            input_overrides.resolve()?,
         )
         .await?;
 

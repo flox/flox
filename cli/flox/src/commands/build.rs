@@ -2,6 +2,7 @@ use std::env;
 use std::os::unix::process::ExitStatusExt;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
+use std::str::FromStr;
 use std::time::Instant;
 
 // `::` selects the extern `nix` crate rather than the
@@ -33,13 +34,19 @@ use flox_rust_sdk::utils::{CommandExt, FLOX_INTERPRETER};
 use floxhub_client::{BaseCatalogUrl, CatalogClientTrait};
 use indoc::formatdoc;
 use itertools::Itertools;
-use nef_lock_catalog::{NixFlakeref, catalog_lockfile_path, lock_project_catalog};
+use nef_lock_catalog::{
+    InputKey,
+    InputOverride,
+    NixFlakeref,
+    catalog_lockfile_path,
+    lock_project_catalog,
+};
 use thiserror::Error;
 use tracing::{debug, instrument, trace};
 use url::Url;
 
 use super::{DirEnvironmentSelect, dir_environment_select, needs_project_files_error};
-use crate::utils::catalog_lock::BuildLockGuard;
+use crate::utils::catalog_lock::{BuildLockGuard, ResolvedOverride};
 use crate::utils::events::duration_to_ms;
 use crate::utils::message;
 use crate::{environment_subcommand_metric, subcommand_metric};
@@ -83,6 +90,79 @@ pub struct SystemOverride {
 impl SystemOverride {
     pub fn into_inner(self) -> Option<String> {
         self.system
+    }
+}
+
+/// One `--override-input KEY=FLAKEREF` value, split at the CLI boundary.
+#[derive(Debug, Clone, PartialEq)]
+pub struct InputOverrideArg {
+    key: InputKey,
+    flakeref: String,
+}
+
+impl FromStr for InputOverrideArg {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self> {
+        let Some((key, flakeref)) = s.split_once('=') else {
+            bail!("'{s}' is not of the form '<KEY>=<FLAKEREF>'.");
+        };
+        if flakeref.is_empty() {
+            bail!("'{s}' names no flakeref after '='.");
+        }
+        Ok(InputOverrideArg {
+            key: key.parse()?,
+            flakeref: flakeref.to_string(),
+        })
+    }
+}
+
+// Reusable input-override option for commands that evaluate Nix
+// expression builds against the project catalog lock. Not a doc comment:
+// bpaf renders one on an external group as a header in `--help`.
+#[derive(Debug, Default, Bpaf, Clone)]
+pub struct InputOverrides {
+    /// Fetch catalog input <KEY> from <FLAKEREF> for this invocation instead of its locked source.
+    /// <KEY> is the input's '<catalog>/<package>' key in '.flox/catalog.lock'.
+    /// A directory is fetched as a 'path:' flakeref; '.flox/catalog.lock' is not modified.
+    #[bpaf(long("override-input"), argument("KEY=FLAKEREF"), many)]
+    overrides: Vec<InputOverrideArg>,
+}
+
+impl InputOverrides {
+    pub fn is_empty(&self) -> bool {
+        self.overrides.is_empty()
+    }
+
+    /// Parse every override's flakeref through nix and say what is being
+    /// overridden, so a surprising build result is explainable from the
+    /// terminal.
+    pub fn resolve(self) -> Result<Vec<InputOverride>> {
+        if self.overrides.is_empty() {
+            return Ok(Vec::new());
+        }
+        let resolved = self
+            .overrides
+            .into_iter()
+            .map(|arg| ResolvedOverride::new(arg.key, &arg.flakeref))
+            .collect::<Result<Vec<_>>>()?;
+        let listed = resolved
+            .iter()
+            .map(|input_override| {
+                format!(
+                    "  '{}' from '{}'",
+                    input_override.key(),
+                    input_override.url()
+                )
+            })
+            .join("\n");
+        message::info(formatdoc! {"
+            Overriding catalog inputs for this invocation; '.flox/catalog.lock' is left unchanged.
+            {listed}"});
+        Ok(resolved
+            .into_iter()
+            .map(ResolvedOverride::into_override)
+            .collect())
     }
 }
 
@@ -147,6 +227,9 @@ enum SubcommandOrBuildTargets {
         #[bpaf(external(system_override))]
         system_override: SystemOverride,
 
+        #[bpaf(external(input_overrides))]
+        input_overrides: InputOverrides,
+
         /// The package to build.
         /// Corresponds to entries in the 'build' table in the environment's manifest.toml.
         /// If not specified, all packages are built.
@@ -205,6 +288,7 @@ impl Build {
                 targets,
                 base_catalog_url_select,
                 system_override,
+                input_overrides,
             } => {
                 let env = self
                     .environment
@@ -217,6 +301,7 @@ impl Build {
                     targets,
                     base_catalog_url_select,
                     system_override.into_inner(),
+                    input_overrides,
                 )
                 .await
             },
@@ -273,6 +358,7 @@ impl Build {
         packages: Vec<String>,
         nixpkgs_url_select: Option<BaseCatalogUrlSelect>,
         system_override: Option<String>,
+        input_overrides: InputOverrides,
     ) -> Result<()> {
         match &env {
             ConcreteEnvironment::Path(_) => (),
@@ -358,6 +444,11 @@ impl Build {
         } else {
             expression_rel_paths(&packages_to_build)
         };
+        if lock_rel_paths.is_empty() && !input_overrides.is_empty() {
+            bail!(
+                "'--override-input' applies to Nix expression builds, and none of the packages being built is one."
+            );
+        }
         let catalog_lock = match &*lock_rel_paths {
             [] => None,
             lock_rel_paths => Some(
@@ -365,7 +456,7 @@ impl Build {
                     &flox.floxhub_client,
                     env.dot_flox_path(),
                     lock_rel_paths,
-                    vec![],
+                    input_overrides.resolve()?,
                 )
                 .await?,
             ),
