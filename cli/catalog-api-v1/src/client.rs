@@ -86,21 +86,25 @@ pub mod types {
     }
     /**Request body for the /build-inputs/lookup endpoint.
 
-A lookup names a `stability` (required) and one or more `groups` of
-references to resolve, optionally anchored at a `reference_point`.  It is
-system-independent — the response is source revs + DAG edges, which carry
-no system — so the request body has no system field.*/
+A lookup names one or more `groups` of references to resolve, optionally
+anchored at a `reference_point`.
+
+The response is source revisions plus DAG edges: for each reference, the
+latest revision of its own source together with the transitive non-base
+sources that revision was built against.  That answer carries no system
+and no nixpkgs base revision, so the request body names neither.  A base
+revision is selected at build time, against which the same lock may be
+built repeatedly.*/
     ///
     /// <details><summary>JSON schema</summary>
     ///
     /// ```json
     ///{
     ///  "title": "BuildInputsLookupRequest",
-    ///  "description": "Request body for the /build-inputs/lookup endpoint.\n\nA lookup names a `stability` (required) and one or more `groups` of\nreferences to resolve, optionally anchored at a `reference_point`.  It is\nsystem-independent — the response is source revs + DAG edges, which carry\nno system — so the request body has no system field.",
+    ///  "description": "Request body for the /build-inputs/lookup endpoint.\n\nA lookup names one or more `groups` of references to resolve, optionally\nanchored at a `reference_point`.\n\nThe response is source revisions plus DAG edges: for each reference, the\nlatest revision of its own source together with the transitive non-base\nsources that revision was built against.  That answer carries no system\nand no nixpkgs base revision, so the request body names neither.  A base\nrevision is selected at build time, against which the same lock may be\nbuilt repeatedly.",
     ///  "type": "object",
     ///  "required": [
-    ///    "groups",
-    ///    "stability"
+    ///    "groups"
     ///  ],
     ///  "properties": {
     ///    "groups": {
@@ -127,8 +131,12 @@ no system — so the request body has no system field.*/
     ///    },
     ///    "stability": {
     ///      "title": "Stability",
-    ///      "type": "string",
-    ///      "minLength": 1
+    ///      "description": "Accepted and ignored; not used by this endpoint. Deprecated.",
+    ///      "deprecated": true,
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ]
     ///    }
     ///  }
     ///}
@@ -139,7 +147,9 @@ no system — so the request body has no system field.*/
         pub groups: ::std::vec::Vec<LookupGroup>,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
         pub reference_point: ::std::option::Option<ReferencePoint>,
-        pub stability: Stability,
+        ///Accepted and ignored; not used by this endpoint. Deprecated.
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub stability: ::std::option::Option<::std::string::String>,
     }
     impl ::std::convert::From<&BuildInputsLookupRequest> for BuildInputsLookupRequest {
         fn from(value: &BuildInputsLookupRequest) -> Self {
@@ -2729,6 +2739,16 @@ catalog) or '<owner>.<pkgset>.*' (package set) — e.g. 'brantley.*'
     ///    "items"
     ///  ],
     ///  "properties": {
+    ///    "commands_by_output": {
+    ///      "title": "Commands By Output",
+    ///      "type": "object",
+    ///      "additionalProperties": {
+    ///        "type": "array",
+    ///        "items": {
+    ///          "type": "string"
+    ///        }
+    ///      }
+    ///    },
     ///    "items": {
     ///      "title": "Items",
     ///      "type": "array",
@@ -2742,6 +2762,14 @@ catalog) or '<owner>.<pkgset>.*' (package set) — e.g. 'brantley.*'
     /// </details>
     #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
     pub struct PackageBuildList {
+        #[serde(
+            default,
+            skip_serializing_if = ":: std :: collections :: HashMap::is_empty"
+        )]
+        pub commands_by_output: ::std::collections::HashMap<
+            ::std::string::String,
+            ::std::vec::Vec<::std::string::String>,
+        >,
         pub items: ::std::vec::Vec<PackageBuild>,
     }
     impl ::std::convert::From<&PackageBuildList> for PackageBuildList {
@@ -5417,84 +5445,6 @@ because the two anchors carry different value types.*/
             value.clone()
         }
     }
-    ///`Stability`
-    ///
-    /// <details><summary>JSON schema</summary>
-    ///
-    /// ```json
-    ///{
-    ///  "title": "Stability",
-    ///  "type": "string",
-    ///  "minLength": 1
-    ///}
-    /// ```
-    /// </details>
-    #[derive(::serde::Serialize, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-    #[serde(transparent)]
-    pub struct Stability(::std::string::String);
-    impl ::std::ops::Deref for Stability {
-        type Target = ::std::string::String;
-        fn deref(&self) -> &::std::string::String {
-            &self.0
-        }
-    }
-    impl ::std::convert::From<Stability> for ::std::string::String {
-        fn from(value: Stability) -> Self {
-            value.0
-        }
-    }
-    impl ::std::convert::From<&Stability> for Stability {
-        fn from(value: &Stability) -> Self {
-            value.clone()
-        }
-    }
-    impl ::std::str::FromStr for Stability {
-        type Err = self::error::ConversionError;
-        fn from_str(
-            value: &str,
-        ) -> ::std::result::Result<Self, self::error::ConversionError> {
-            if value.chars().count() < 1usize {
-                return Err("shorter than 1 characters".into());
-            }
-            Ok(Self(value.to_string()))
-        }
-    }
-    impl ::std::convert::TryFrom<&str> for Stability {
-        type Error = self::error::ConversionError;
-        fn try_from(
-            value: &str,
-        ) -> ::std::result::Result<Self, self::error::ConversionError> {
-            value.parse()
-        }
-    }
-    impl ::std::convert::TryFrom<&::std::string::String> for Stability {
-        type Error = self::error::ConversionError;
-        fn try_from(
-            value: &::std::string::String,
-        ) -> ::std::result::Result<Self, self::error::ConversionError> {
-            value.parse()
-        }
-    }
-    impl ::std::convert::TryFrom<::std::string::String> for Stability {
-        type Error = self::error::ConversionError;
-        fn try_from(
-            value: ::std::string::String,
-        ) -> ::std::result::Result<Self, self::error::ConversionError> {
-            value.parse()
-        }
-    }
-    impl<'de> ::serde::Deserialize<'de> for Stability {
-        fn deserialize<D>(deserializer: D) -> ::std::result::Result<Self, D::Error>
-        where
-            D: ::serde::Deserializer<'de>,
-        {
-            ::std::string::String::deserialize(deserializer)?
-                .parse()
-                .map_err(|e: self::error::ConversionError| {
-                    <D::Error as ::serde::de::Error>::custom(e.to_string())
-                })
-        }
-    }
     ///`StabilityInfo`
     ///
     /// <details><summary>JSON schema</summary>
@@ -6155,8 +6105,9 @@ impl Client {
 
 Resolve build inputs for one or more reference groups.
 
-Direct references resolve to latest; the transitive closure is taken
-verbatim; a cross-reference conflict yields a per-group conflict result.
+Direct references resolve to the latest revision of their own source; the
+transitive closure is taken verbatim; a cross-reference conflict yields a
+per-group conflict result.
 
 For each group, walks the transitive package_inputs closure (accessor),
 then applies auth redaction and assembles the flat LockedInputs map.
@@ -6228,8 +6179,8 @@ Sends a `GET` request to `/api/v1/catalog/by-command`
     pub async fn by_command_api_v1_catalog_by_command_get<'a>(
         &'a self,
         name: &'a types::Name,
-        page: Option<i64>,
-        page_size: Option<i64>,
+        page: Option<u64>,
+        page_size: Option<u64>,
         system: types::PackageSystem,
     ) -> Result<ResponseValue<types::ByCommandResult>, Error<types::ErrorResponse>> {
         let url = format!("{}/api/v1/catalog/by-command", self.baseurl);
