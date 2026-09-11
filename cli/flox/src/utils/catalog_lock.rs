@@ -17,7 +17,10 @@ use floxhub_client::CatalogClientTrait;
 use nef_lock_catalog::{
     BuildLock,
     CATALOG_LOCKFILE_NAME,
+    InputKey,
     InputOverride,
+    NixFlakeref,
+    RawNixFlakerefAttrs,
     catalog_lockfile_path,
     read_lock,
     resolve_lock,
@@ -25,6 +28,83 @@ use nef_lock_catalog::{
     write_lock,
 };
 use tracing::debug;
+use url::Url;
+
+/// An input override as given on the command line, with its flakeref
+/// parsed by nix so that what reaches the lock is exactly the attribute
+/// set the NEF will fetch.
+#[derive(Debug, Clone)]
+pub struct ResolvedOverride {
+    key: InputKey,
+    flakeref: NixFlakeref,
+}
+
+impl ResolvedOverride {
+    /// Parse `flakeref` for the input `key`. A bare or `path:` path is
+    /// canonicalized against the working directory first: nix refuses a
+    /// relative path in `fetchTree`, and one through a symlink (`/tmp` on
+    /// macOS), and the eval that fetches runs from the project directory,
+    /// not the user's.
+    pub fn new(key: InputKey, flakeref: &str) -> Result<Self> {
+        let cwd = std::env::current_dir().context("Could not determine the working directory.")?;
+        let canonical = canonicalize_flakeref_path(flakeref, &cwd)?;
+        let flakeref = NixFlakeref::try_from(canonical.as_str())
+            .with_context(|| format!("'{flakeref}' is not a flakeref usable for input '{key}'."))?;
+        Ok(ResolvedOverride { key, flakeref })
+    }
+
+    pub fn key(&self) -> &InputKey {
+        &self.key
+    }
+
+    /// The flakeref as nix renders it, for messages.
+    pub fn url(&self) -> &Url {
+        self.flakeref.as_url()
+    }
+
+    pub fn into_override(self) -> InputOverride {
+        InputOverride {
+            key: self.key,
+            source: RawNixFlakerefAttrs::new_unchecked(self.flakeref.as_parsed().clone()),
+        }
+    }
+}
+
+/// Whether `value` starts with a URL scheme (`git+file:`, `github:`, …),
+/// as opposed to a bare path.
+fn has_url_scheme(value: &str) -> bool {
+    let Some((scheme, _)) = value.split_once(':') else {
+        return false;
+    };
+    let mut chars = scheme.chars();
+    chars.next().is_some_and(|c| c.is_ascii_alphabetic())
+        && chars.all(|c| c.is_ascii_alphanumeric() || "+.-".contains(c))
+}
+
+/// `value` with a bare or `path:` path canonicalized — resolved against
+/// `cwd`, symlinks and `..` resolved — which fails if the path does not
+/// exist. Any other flakeref is returned as given.
+fn canonicalize_flakeref_path(value: &str, cwd: &Path) -> Result<String> {
+    let (prefix, rest) = match value.strip_prefix("path:") {
+        Some(rest) => ("path:", rest),
+        None if has_url_scheme(value) => return Ok(value.to_string()),
+        None => ("", value),
+    };
+    let (path, query) = rest
+        .split_once('?')
+        .map_or((rest, None), |(path, query)| (path, Some(query)));
+    if path.is_empty() {
+        return Ok(value.to_string());
+    }
+    let canonical = cwd
+        .join(path)
+        .canonicalize()
+        .with_context(|| format!("'{path}' does not exist."))?;
+    Ok(match query {
+        Some(query) => format!("{prefix}{}?{query}", canonical.display()),
+        None => format!("{prefix}{}", canonical.display()),
+    })
+}
 
 /// The lock a build consumes, created before the package builder is
 /// invoked and handed to it as `CATALOG_LOCKFILE`. Owns an ephemeral lock's
@@ -249,6 +329,50 @@ mod tests {
         std::fs::create_dir_all(&pkgs_dir).unwrap();
         std::fs::write(pkgs_dir.join("hello.nix"), expression).unwrap();
         (project, dot_flox, pkgs_dir)
+    }
+
+    /// Bare and `path:` values are canonicalized: relative to the working
+    /// directory, `..` and symlinks resolved. Other flakerefs pass through.
+    #[test]
+    fn canonicalize_flakeref_path_resolves_bare_and_path_values_only() {
+        let root = tempdir().unwrap();
+        let root_path = root.path().canonicalize().unwrap();
+        let cwd = root_path.join("project");
+        std::fs::create_dir_all(&cwd).unwrap();
+        std::fs::create_dir_all(root_path.join("desco")).unwrap();
+        std::os::unix::fs::symlink(root_path.join("desco"), root_path.join("link")).unwrap();
+        let desco = root_path.join("desco").display().to_string();
+        let link = root_path.join("link").display().to_string();
+
+        let cases = [
+            ("../desco", desco.clone()),
+            ("../link", desco.clone()),
+            (link.as_str(), desco.clone()),
+            ("path:../desco", format!("path:{desco}")),
+            ("path:../desco?dir=.flox", format!("path:{desco}?dir=.flox")),
+            (
+                "git+file:///abs/desco?dir=.flox",
+                "git+file:///abs/desco?dir=.flox".to_string(),
+            ),
+            (
+                "github:org/repo/branch",
+                "github:org/repo/branch".to_string(),
+            ),
+            ("path:", "path:".to_string()),
+        ];
+        for (given, expected) in cases {
+            assert_eq!(
+                canonicalize_flakeref_path(given, &cwd).unwrap(),
+                expected,
+                "for '{given}'"
+            );
+        }
+
+        let err = canonicalize_flakeref_path("../missing", &cwd).unwrap_err();
+        assert!(
+            err.to_string().contains("'../missing' does not exist"),
+            "got: {err}"
+        );
     }
 
     /// A project whose expressions make no catalog references resolves an
