@@ -5,6 +5,7 @@ edition.workspace = true
 
 [dependencies]
 async-stream.workspace = true
+blake3.workspace = true
 catalog-api-v1.workspace = true
 chrono.workspace = true
 factory-api-v1.workspace = true

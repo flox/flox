@@ -123,8 +123,7 @@ async fn handle_path_environment_push(
         owner
     } else {
         EnvironmentOwner::from_str(
-            &flox
-                .get_identity()
+            &flox.auth_context.identity(&flox.floxhub_client)
                 .await
                 .ok()
                 .flatten()

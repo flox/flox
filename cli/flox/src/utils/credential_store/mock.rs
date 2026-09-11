@@ -6,7 +6,7 @@ use super::{CredentialStore, CredentialStoreError};
 
 /// In-memory credential store for tests, with optional error injection.
 #[derive(Debug, Clone, Default)]
-pub struct MockStore {
+pub(super) struct MockStore {
     inner: Arc<Mutex<MockState>>,
 }
 
@@ -22,13 +22,13 @@ impl MockStore {
     // and this module's tests. `cli/flox` is a binary crate, so `pub` does not
     // exempt it from dead-code analysis (mirrors `set_lock_results` in the SDK).
     #[allow(dead_code)]
-    pub fn new() -> Self {
+    pub(super) fn new() -> Self {
         Self::default()
     }
 
     /// Inject an error returned by the next `get`/`set`/`remove` call.
     #[allow(dead_code)]
-    pub fn set_error(&self, message: impl Into<String>) {
+    pub(super) fn set_error(&self, message: impl Into<String>) {
         self.inner.lock().unwrap().error = Some(message.into());
     }
 
@@ -37,7 +37,7 @@ impl MockStore {
     /// fails — the shape of a plaintext file that is readable but cannot be
     /// rewritten.
     #[allow(dead_code)]
-    pub fn set_remove_error(&self, message: impl Into<String>) {
+    pub(super) fn set_remove_error(&self, message: impl Into<String>) {
         self.inner.lock().unwrap().remove_error = Some(message.into());
     }
 

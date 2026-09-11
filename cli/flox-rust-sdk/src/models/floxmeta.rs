@@ -321,8 +321,12 @@ mod header_tests {
 
             let owner = "testowner";
             let server_url = Url::parse(&server.base_url()).unwrap();
-            let options =
-                floxmeta_git_options(&server_url, owner, &AuthContext::Auth0(None), Some(&uuid));
+            let options = floxmeta_git_options(
+                &server_url,
+                owner,
+                &AuthContext::from_auth0_token(None),
+                Some(&uuid),
+            );
             clone_against_mock(&server, owner, options);
             mock.assert();
         });
@@ -344,7 +348,12 @@ mod header_tests {
 
             let owner = "testowner";
             let server_url = Url::parse(&server.base_url()).unwrap();
-            let options = floxmeta_git_options(&server_url, owner, &AuthContext::Auth0(None), uuid);
+            let options = floxmeta_git_options(
+                &server_url,
+                owner,
+                &AuthContext::from_auth0_token(None),
+                uuid,
+            );
             clone_against_mock(&server, owner, options);
             mock.assert();
         });

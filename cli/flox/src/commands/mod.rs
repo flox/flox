@@ -62,7 +62,7 @@ use flox_rust_sdk::models::environment::{
     find_dot_flox,
     open_path,
 };
-use floxhub_client::UnauthenticatedResolveHook;
+use floxhub_client::{CredentialKind, UnauthenticatedResolveHook};
 use indoc::{formatdoc, indoc};
 use tempfile::TempDir;
 use thiserror::Error;
@@ -79,7 +79,7 @@ use crate::utils::active_environments::{
     activated_environments,
     last_activated_environment,
 };
-use crate::utils::credential_store::{CredentialStores, ResolveOutcome};
+use crate::utils::credential_store::{CredentialMigration, CredentialStores};
 use crate::utils::dialog::{Dialog, Select};
 use crate::utils::errors::display_chain;
 use crate::utils::events::{build_events_client, resolve_invocation_id};
@@ -261,7 +261,7 @@ pub struct Interrupted;
 
 impl FloxArgs {
     /// Initialize the command line by creating an initial FloxBuilder
-    pub async fn handle(self, mut config: Config) -> Result<()> {
+    pub async fn handle(self, config: Config) -> Result<()> {
         // ensure xdg dirs exist
         tokio::fs::create_dir_all(&config.flox.config_dir).await?;
         tokio::fs::create_dir_all(&config.flox.data_dir).await?;
@@ -301,7 +301,10 @@ impl FloxArgs {
                 && let Some(events_client) = build_events_client(
                     &config,
                     resolve_invocation_id(),
-                    &AuthContext::new_from_token(None),
+                    // This path runs before any credential is resolved, and
+                    // the event carries none: `AuthContext::default` is
+                    // the not-logged-in credential, already resolved.
+                    &AuthContext::default(),
                     None,
                 )
                 .await
@@ -359,44 +362,38 @@ impl FloxArgs {
 
         let floxhub = Floxhub::new(floxhub_url, api_url_override, git_url_override)?;
 
-        // Resolve the token string once, upstream: opportunistically migrate an
-        // existing plaintext token into the OS keyring, then — when the merged
-        // config supplied no token — populate it from the keyring so the loud
-        // `resolve_auth_context`, the silent `init_floxhub_client`, and the
-        // v2-events client's `auth_subject` snapshot all see the keyring
-        // value. This block must stay ahead of the token resolution and the
-        // events-client install below.
-        //
-        // Store credentials only in Auth0 mode and outside the prompt/hook
-        // flow: in other modes (e.g. Kerberos) the token is not used for
-        // authentication, so a legacy `floxhub_token` must not be silently
-        // moved or read, and the prompt/hook flow must do no keyring I/O.
-        // `resolve_auth_context` is deliberately not behind this gate — it
-        // still runs in the hook flow (returning the token, suppressing
-        // messages) and gates on the auth mode alone. Consequently, hook-flow
-        // invocations by keyring-storage users emit with `auth_subject` absent
-        // and `credential_type` set to `none` — an accepted gap; a prompt hook
-        // must never trigger a keyring unlock.
-        let stores = CredentialStores::new(floxhub.base_url(), &config.flox.config_dir);
-        let is_auth0 = !matches!(
+        // Share one auth context across warnings, requests, and telemetry.
+        // Prompt hooks must never access the keyring, and Kerberos must not
+        // migrate an unrelated token left in configuration.
+        let stores = CredentialStores::new(
+            floxhub.base_url(),
+            &config.flox.config_dir,
+            &config.flox.cache_dir,
+        );
+        let uses_token_auth = !matches!(
             config.flox.floxhub_authn_mode,
             Some(flox_config::AuthnMode::Kerberos)
         );
-        let should_store_credentials = is_auth0 && !self.is_prompt_hook_flow();
-        if should_store_credentials {
-            match stores.resolve_into(&mut config) {
-                ResolveOutcome::Migrated => message::info(
+        let should_store_credentials = uses_token_auth && !self.is_prompt_hook_flow();
+        let credential = if should_store_credentials {
+            let resolved = stores.resolve(&config);
+            match resolved.migration {
+                Some(CredentialMigration::Migrated) => message::info(
                     "Moved your FloxHub credential from plain text into your system keyring.",
                 ),
-                ResolveOutcome::MigratedButPlaintextRemains => message::warning(indoc! {"
+                Some(CredentialMigration::PlaintextRemains) => message::warning(indoc! {"
                     Stored your credential in the system keyring.
                     The plain-text copy in flox.toml could not be removed.
                     Remove 'floxhub_token' from flox.toml so it does not shadow the keyring."}),
-                ResolveOutcome::PopulatedFromKeyring | ResolveOutcome::Unchanged => {},
+                None => {},
             }
-        }
+            resolved.context
+        } else {
+            auth_context_from_config(&config)
+        };
 
-        let credential = self.resolve_auth_context(&config);
+        self.warn_if_logged_out(&config, &credential);
+
         let invocation_id = resolve_invocation_id();
 
         let metrics_device_uuid = (!config.flox.disable_metrics)
@@ -412,7 +409,7 @@ impl FloxArgs {
         // the user never saw.
         //
         // This deliberately coexists with the once-per-shell-session
-        // logged-out reminder from `resolve_auth_context`: the reminder
+        // logged-out reminder from `warn_if_logged_out`: the reminder
         // reports current status on every command, while this warning fires
         // only on the resolve that will start failing once catalog auth
         // gating is enforced — at which point it becomes an error (or an
@@ -453,7 +450,7 @@ impl FloxArgs {
         // "Dispatch start" sits after credential resolution and best-effort
         // PAT/SAT subject resolution so the event carries `auth_subject` and
         // `credential_type`. The cost: an invocation that dies upstream — on
-        // fallible FloxHub setup, killed while `resolve_into` waits on an OS
+        // fallible FloxHub setup, killed while credential resolution waits on an OS
         // keyring unlock, or killed during credential resolution (e.g.
         // kerberos ticket I/O) — records neither `cli.command_run` nor the
         // matching `cli.command_completed` (no client installs, so the
@@ -600,49 +597,30 @@ impl FloxArgs {
         )
     }
 
-    /// Build the [AuthContext] from the configured `floxhub_token`, emitting
-    /// any user-facing warnings as a side effect.
+    /// Remind a user who is not logged in — no credential, or one whose `exp`
+    /// claim has passed — to run 'flox auth login'. The reminder is suppressed
+    /// for `flox auth` subcommands, the prompt-hook flow, invocations nested
+    /// inside an activation, and when the `auth_notifications` config key is
+    /// set to `false`.
     ///
-    /// A user who is not logged in — no token, or a token whose `exp` claim
-    /// has passed — is reminded to run 'flox auth login'. The reminder is
-    /// suppressed for `flox auth` subcommands, the prompt-hook flow,
-    /// invocations nested inside an activation, and when the
-    /// `auth_notifications` config key is set to `false`.
+    /// The credential is not consumed when the configured authn mode does not
+    /// use it (e.g. Kerberos), so warning about its state never happens there.
     ///
-    /// The token is not consumed when the configured authn mode does not use
-    /// it (e.g. Kerberos), so warning about the token's state never happens
-    /// there.
+    /// For `flox hook-env` the state is reported by the next user-invoked
+    /// command instead; see [Self::is_prompt_hook_flow].
     ///
-    /// For `flox hook-env` the token state is reported by the next
-    /// user-invoked command instead; see [Self::is_prompt_hook_flow].
+    /// No credential can be rejected locally: a `flox_pat_` token is opaque by
+    /// design, and any other string may be an issuer's opaque access token, so
+    /// both count as logged in until the server says otherwise. Expiry is only
+    /// known locally for a token carrying the `exp` claim.
     ///
-    /// No token can be rejected locally: a `flox_pat_` token is opaque by
-    /// design, and any other string may be an issuer's opaque access token,
-    /// so both count as logged in until the server says otherwise. Expiry is
-    /// only known locally for a token carrying the `exp` claim.
-    fn resolve_auth_context(&self, config: &Config) -> AuthContext {
-        // Kerberos does not use FloxHub tokens; the stored token is not
-        // consumed (and none of the token warnings below apply).
-        if let Some(flox_config::AuthnMode::Kerberos) = config.flox.floxhub_authn_mode {
-            return AuthContext::new_kerberos();
-        }
-
-        let raw = config
-            .flox
-            .floxhub_token
-            .as_deref()
-            .filter(|s| !s.is_empty());
-
-        let auth_context = AuthContext::new_from_token(raw);
-        let logged_out = match &auth_context {
-            AuthContext::Auth0(None) => true,
-            AuthContext::Auth0(Some(token)) => token.is_expired(),
-            // A bare token's expiry is known locally only when it carries
-            // the exp claim; an opaque token's never is (like a PAT's).
-            AuthContext::Bare(token) => token.is_expired(),
-            _ => false,
-        };
-        if logged_out {
+    /// This asks [AuthContext] rather than the credential itself, so a
+    /// deferred credential is not read just to decide whether to print a
+    /// reminder. The answer then comes from a record an earlier invocation
+    /// wrote, and a record that disagrees with the keyring misses or invents
+    /// one reminder.
+    fn warn_if_logged_out(&self, config: &Config, credential: &AuthContext) {
+        if credential.is_unauthenticated() {
             // Every `flox auth` subcommand either logs the user in
             // (`login`) or already reports the logged-out state itself
             // (`status`, `logout`, `token`), so the reminder would be
@@ -665,8 +643,32 @@ impl FloxArgs {
                 );
             }
         }
-        auth_context
     }
+}
+
+/// The credential named by the already-merged config.
+///
+/// Kerberos ignores the FloxHub token entirely and resolves a principal from
+/// the ccache instead; every other mode routes the merged `floxhub_token` by
+/// its form (see [AuthContext::new_from_token]). An empty token is treated as
+/// absent — an explicit empty `FLOX_FLOXHUB_TOKEN` masks saved credentials for
+/// one invocation.
+///
+/// Only Kerberos is deferred here. A token is already in hand — the merge read
+/// it from the environment or a config file — so there is nothing to defer;
+/// the keyring is the expensive case and it is handled by
+/// [CredentialStores::resolve].
+fn auth_context_from_config(config: &Config) -> AuthContext {
+    if let Some(flox_config::AuthnMode::Kerberos) = config.flox.floxhub_authn_mode {
+        return AuthContext::new_kerberos();
+    }
+    AuthContext::new_from_token(
+        config
+            .flox
+            .floxhub_token
+            .as_deref()
+            .filter(|token| !token.is_empty()),
+    )
 }
 
 /// Print general welcome message with short usage instructions
@@ -1652,14 +1654,24 @@ pub(super) async fn ensure_environment_trust(
         return Ok(());
     }
 
-    let handle = flox.auth_context.handle();
-    if handle.as_deref() == Some(env_ref.owner().as_str()) {
-        debug!("{env_prefixed_name} is trusted by auth handle");
+    // Configured trust does not depend on the current credential or FloxHub
+    // availability, so honor it before loading credentials or resolving identity.
+    if matches!(trust, Some(EnvironmentTrust::Trust)) {
+        debug!("{env_prefixed_name} is trusted by config");
         return Ok(());
     }
 
-    if matches!(trust, Some(EnvironmentTrust::Trust)) {
-        debug!("{env_prefixed_name} is trusted by config");
+    // Load the credential before trusting its identity: a saved handle alone
+    // may belong to a different token. A matching cache avoids the /me request.
+    let handle = flox
+        .auth_context
+        .identity(&flox.floxhub_client)
+        .await
+        .ok()
+        .flatten()
+        .map(|identity| identity.handle);
+    if handle.as_deref() == Some(env_ref.owner().as_str()) {
+        debug!("{env_prefixed_name} is trusted by auth handle");
         return Ok(());
     }
 
@@ -1793,7 +1805,7 @@ pub(super) async fn ensure_auth(flox: &mut Flox) -> Result<String> {
 
     // Gating authentication is the caller that treats an expired identity
     // as a failure.
-    let identity = match flox.get_identity().await {
+    let identity = match flox.auth_context.identity(&flox.floxhub_client).await {
         Ok(Some(identity)) if identity.is_expired() => Err(AuthFailure::TokenExpired),
         other => other,
     };
@@ -1809,7 +1821,12 @@ pub(super) async fn ensure_auth(flox: &mut Flox) -> Result<String> {
         // cannot mint a new PAT anyway. Warn and let the actual request be
         // the authority.
         Err(AuthFailure::TokenExpired)
-            if matches!(flox.auth_context, AuthContext::AccessToken(_)) =>
+            if matches!(
+                flox.auth_context.kind(),
+                CredentialKind::PersonalAccessToken
+                    | CredentialKind::ServiceAccountToken
+                    | CredentialKind::OpaqueToken
+            ) =>
         {
             message::warning(
                 "Your FloxHub token could not be verified and may be expired or revoked.",
@@ -1865,7 +1882,7 @@ pub(super) async fn ensure_auth(flox: &mut Flox) -> Result<String> {
 /// the user's handle.
 ///
 /// Unlike [`ensure_auth`], an expired Auth0 token is not a hard failure: the
-/// handle is still readable from the token, and [`FloxArgs::resolve_auth_context`]
+/// handle is still readable from the token, and [`FloxArgs::warn_if_logged_out`]
 /// has already warned that the user is not logged in, so activation proceeds
 /// with the handle rather than blocking. FloxHub still validates the token on
 /// the actual request. Missing credentials (not logged in / no Kerberos ticket) fall back
@@ -1874,7 +1891,7 @@ async fn ensure_auth_allowing_expired(flox: &mut Flox) -> Result<String> {
     // An expired identity still carries its handle; only a missing identity
     // (not logged in, no ticket, or a server-rejected token) falls back to
     // the recovery flow.
-    match flox.get_identity().await {
+    match flox.auth_context.identity(&flox.floxhub_client).await {
         Ok(Some(identity)) => Ok(identity.handle),
         // Identity unknown: proceed under the UNKNOWN display handle.
         Ok(None) => Ok(floxhub_client::UNKNOWN_HANDLE.to_string()),
@@ -2120,8 +2137,45 @@ mod subcommand_name_tests {
 mod wildcard_trust_tests {
     use std::collections::HashMap;
 
-    use flox_config::EnvironmentTrust;
+    use flox_config::{Config, EnvironmentTrust};
     use flox_core::data::environment_ref::RemoteEnvironmentRef;
+    use flox_rust_sdk::flox::test_helpers::flox_instance;
+    use floxhub_client::auth::storage::{AuthContextStorageExt, CachedFacts};
+    use floxhub_client::client::test_helpers::client_config;
+    use floxhub_client::{AuthContext, FloxhubClient};
+    use httpmock::MockServer;
+
+    #[tokio::test]
+    async fn configured_trust_does_not_load_credentials_or_resolve_identity() {
+        let server = MockServer::start();
+        let request = server.mock(|when, then| {
+            when.method(httpmock::Method::GET)
+                .path("/accounts/api/v1/accounts/me");
+            then.status(500);
+        });
+        let (mut flox, _temp_dir) = flox_instance();
+        flox.floxhub_client = FloxhubClient::new(client_config(&server.base_url())).unwrap();
+        let env_ref = RemoteEnvironmentRef::new("trusted-owner", "env").unwrap();
+        for name in ["env", "*"] {
+            let mut config = Config::default();
+            config.flox.trusted_environments.insert(
+                RemoteEnvironmentRef::new("trusted-owner", name).unwrap(),
+                EnvironmentTrust::Trust,
+            );
+            for context in [
+                AuthContext::new_from_token(Some("flox_pat_configured-trust")),
+                AuthContext::deferred(CachedFacts::default(), || {
+                    panic!("configured trust must not load the credential")
+                }),
+            ] {
+                flox.set_auth_context(context).unwrap();
+                super::ensure_environment_trust(&mut config, &flox, &env_ref, true, &String::new())
+                    .await
+                    .unwrap();
+            }
+        }
+        request.assert_calls(0);
+    }
 
     #[test]
     fn wildcard_trust_matches_any_env_from_owner() {
@@ -2185,5 +2239,68 @@ mod wildcard_trust_tests {
             super::resolve_trust(&map, &env_ref),
             Some(&EnvironmentTrust::Trust)
         );
+    }
+}
+
+#[cfg(test)]
+mod auth_context_from_config_tests {
+    use floxhub_client::auth::storage::{AuthContextStorageExt, CachedFacts};
+
+    use super::*;
+
+    fn kerberos_config() -> Config {
+        let mut config = Config::default();
+        config.flox.floxhub_authn_mode = Some(flox_config::AuthnMode::Kerberos);
+        config
+    }
+
+    /// Kerberos answers every startup question without a ticket, so the GSSAPI
+    /// acquire must not happen until something needs a SPNEGO token. Reaching
+    /// the ccache here would also make the test depend on a Kerberized host.
+    #[test]
+    fn kerberos_defers_the_ccache_read() {
+        let credential = auth_context_from_config(&kerberos_config());
+
+        assert_eq!(credential.cached_facts(), CachedFacts {
+            logged_in: false,
+            // Stated up front rather than read: both Kerberos arms agree, so
+            // the ccache has nothing to add to the startup facts.
+            kind: floxhub_client::CredentialKind::Kerberos,
+            requires_login: false,
+            expires_at: None,
+            subject: None,
+            // A principal would be a handle, but reading one is exactly the
+            // ccache round trip this defers.
+            handle: None,
+            fingerprint: None,
+        });
+        // The reminder is about logging in to FloxHub, which kerberos mode
+        // never does; answering it must not have cost a ticket.
+        assert!(!credential.is_unauthenticated());
+    }
+
+    /// A token from the merged config is already in hand, so there is nothing
+    /// to defer — deferring it would only add a layer over a value we hold.
+    #[test]
+    fn a_config_token_is_resolved_already() {
+        let mut config = Config::default();
+        config.flox.floxhub_token = Some("flox_pat_config-token".to_string());
+
+        let credential = auth_context_from_config(&config);
+
+        assert_eq!(credential.token_secret(), Some("flox_pat_config-token"));
+    }
+
+    /// An explicit empty `FLOX_FLOXHUB_TOKEN` masks saved credentials for one
+    /// invocation, so an empty merged token is absent, not a credential.
+    #[test]
+    fn an_empty_config_token_is_not_logged_in() {
+        let mut config = Config::default();
+        config.flox.floxhub_token = Some(String::new());
+
+        let credential = auth_context_from_config(&config);
+
+        assert!(!credential.cached_facts().logged_in);
+        assert!(credential.is_unauthenticated());
     }
 }

@@ -649,7 +649,7 @@ pub mod test_helpers {
             filename,
             DEFAULT_CATALOG_URL,
             PublishTestUser::Unauthenticated,
-            &AuthContext::Auth0(None),
+            &AuthContext::from_auth0_token(None),
             record,
         )
     }
@@ -913,7 +913,7 @@ pub mod test_helpers {
             base_url: base_url.to_string(),
             extra_headers: Default::default(),
             mock_mode: FloxhubMockMode::None,
-            auth_context: AuthContext::Auth0(Some(admin_token)),
+            auth_context: AuthContext::from_auth0_token(Some(admin_token)),
             user_agent: None,
             stability: None,
             on_unauthenticated_resolve: None,

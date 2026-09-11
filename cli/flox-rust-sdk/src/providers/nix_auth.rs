@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-use floxhub_client::AuthContext;
+use floxhub_client::{AuthContext, CredentialKind};
 use indoc::formatdoc;
 use tempfile::{NamedTempFile, TempDir, TempPath, tempdir_in};
 
@@ -92,11 +92,10 @@ pub struct NixAuth {
 impl NixAuth {
     /// Construct a new auth provider from a Flox instance
     pub fn from_flox(flox: &Flox) -> Result<Self, AuthError> {
-        let netrc_tempdir = match &flox.auth_context {
-            AuthContext::Auth0(_) | AuthContext::Bare(_) | AuthContext::AccessToken(_) => {
-                Some(tempdir_in(&flox.temp_dir).map_err(AuthError::CreateTempDir)?)
-            },
-            AuthContext::Kerberos(_) => None,
+        let netrc_tempdir = if flox.auth_context.kind() == CredentialKind::Kerberos {
+            None
+        } else {
+            Some(tempdir_in(&flox.temp_dir).map_err(AuthError::CreateTempDir)?)
         };
         Ok(Self {
             netrc_tempdir,
@@ -181,7 +180,10 @@ mod tests {
 
     fn test_auth() -> NixAuth {
         let token = FloxhubToken::new(FAKE_TOKEN.to_string()).expect("token parses");
-        NixAuth::from_tempdir_and_context(tempdir().unwrap(), AuthContext::Auth0(Some(token)))
+        NixAuth::from_tempdir_and_context(
+            tempdir().unwrap(),
+            AuthContext::from_auth0_token(Some(token)),
+        )
     }
 
     /// create_netrc returns a TempPath whose underlying file exists while held
@@ -226,7 +228,10 @@ mod tests {
     /// try_create_netrc returns None when no token is present.
     #[test]
     fn try_create_netrc_returns_none_without_token() {
-        let auth = NixAuth::from_tempdir_and_context(tempdir().unwrap(), AuthContext::Auth0(None));
+        let auth = NixAuth::from_tempdir_and_context(
+            tempdir().unwrap(),
+            AuthContext::from_auth0_token(None),
+        );
         assert!(auth.try_create_netrc().is_none());
     }
 }

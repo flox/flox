@@ -48,6 +48,9 @@ pub struct FloxhubClientConfig {
     pub extra_headers: BTreeMap<String, String>,
     /// Mock mode for testing.
     pub mock_mode: FloxhubMockMode,
+    /// The credential for outgoing requests, resolved on first request rather
+    /// than at construction — a client is built for every invocation, but most
+    /// invocations send nothing.
     pub auth_context: AuthContext,
     pub user_agent: Option<String>,
     /// Stability pin applied to every outgoing `PackageGroup` in

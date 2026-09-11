@@ -1376,6 +1376,7 @@ pub mod tests {
     use flox_manifest::interfaces::{AsWritableManifest, WriteManifest};
     use flox_test_utils::GENERATED_DATA;
     use floxhub_client::AuthContext;
+    use floxhub_client::auth::Credential;
     use pretty_assertions::assert_eq;
 
     use super::*;
@@ -1450,8 +1451,11 @@ pub mod tests {
         let cache_url = format!("file://{}", temp_dir.path().display());
         let parsed_cache_url = Url::parse(&cache_url).unwrap();
         let key_file_path = temp_key_file.path().to_path_buf();
-        let auth_file =
-            write_floxhub_netrc(temp_dir.path(), &AuthContext::Auth0(Some(token.clone()))).unwrap();
+        let auth_file = write_floxhub_netrc(
+            temp_dir.path(),
+            &AuthContext::from_auth0_token(Some(token.clone())),
+        )
+        .unwrap();
         let catalog_store = ClientSideCatalogStoreConfig::NixCopy {
             ingress_uri: parsed_cache_url.clone(),
             egress_uri: parsed_cache_url.clone(),
@@ -2207,13 +2211,10 @@ pub mod tests {
         )
         .unwrap();
 
-        let (_key_file, cache) = local_nix_cache(
-            match &flox.auth_context {
-                AuthContext::Auth0(t) => t.as_ref(),
-                _ => None,
-            }
-            .unwrap(),
-        );
+        let Credential::Auth0(Some(token)) = flox.auth_context.credential() else {
+            panic!("expected an Auth0 credential");
+        };
+        let (_key_file, cache) = local_nix_cache(token);
         let auth = NixAuth::from_flox(&flox).unwrap();
         let publish_provider = PublishProvider::new(env_metadata, package_metadata, auth);
 
@@ -2435,7 +2436,7 @@ pub mod tests {
         let (flox, _temp_dir_handle) = flox_instance();
         let auth_file = write_floxhub_netrc(
             flox.temp_dir.as_path(),
-            &AuthContext::Auth0(Some(token.clone())),
+            &AuthContext::from_auth0_token(Some(token.clone())),
         )
         .unwrap();
 
@@ -2516,7 +2517,13 @@ pub mod tests {
             PublishTestUser::PersonalCatalogOnly,
             recording_name,
         );
-        let user_handle = flox.auth_context.handle().unwrap();
+        let user_handle = flox
+            .auth_context
+            .identity(&flox.floxhub_client)
+            .await
+            .unwrap()
+            .unwrap()
+            .handle;
         let publish_provider = PublishProvider::new(env_meta, pkg_meta, auth);
         let packaged_created_guard = publish_provider
             .create_package_and_possibly_user_catalog(&flox.floxhub_client, &user_handle)
@@ -2680,7 +2687,13 @@ pub mod tests {
             PublishTestUser::WithOrgCatalogs,
             recording_name,
         );
-        let user_handle = flox.auth_context.handle().unwrap();
+        let user_handle = flox
+            .auth_context
+            .identity(&flox.floxhub_client)
+            .await
+            .unwrap()
+            .unwrap()
+            .handle;
         let publish_provider = PublishProvider::new(env_meta, pkg_meta, auth);
         let err = publish_provider
             .publish(

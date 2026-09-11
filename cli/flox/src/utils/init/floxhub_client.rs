@@ -78,7 +78,7 @@ mod tests {
 
         let client = init_floxhub_client(
             server.base_url(),
-            AuthContext::new_from_token(None),
+            AuthContext::default(),
             Some(Uuid::new_v4()),
             invocation_id,
             None,
@@ -99,7 +99,7 @@ mod tests {
 
         let client = init_floxhub_client(
             server.base_url(),
-            AuthContext::new_from_token(None),
+            AuthContext::default(),
             None,
             Uuid::nil(),
             None,
