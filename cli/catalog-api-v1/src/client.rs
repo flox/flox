@@ -2729,6 +2729,16 @@ catalog) or '<owner>.<pkgset>.*' (package set) — e.g. 'brantley.*'
     ///    "items"
     ///  ],
     ///  "properties": {
+    ///    "commands_by_output": {
+    ///      "title": "Commands By Output",
+    ///      "type": "object",
+    ///      "additionalProperties": {
+    ///        "type": "array",
+    ///        "items": {
+    ///          "type": "string"
+    ///        }
+    ///      }
+    ///    },
     ///    "items": {
     ///      "title": "Items",
     ///      "type": "array",
@@ -2742,6 +2752,14 @@ catalog) or '<owner>.<pkgset>.*' (package set) — e.g. 'brantley.*'
     /// </details>
     #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
     pub struct PackageBuildList {
+        #[serde(
+            default,
+            skip_serializing_if = ":: std :: collections :: HashMap::is_empty"
+        )]
+        pub commands_by_output: ::std::collections::HashMap<
+            ::std::string::String,
+            ::std::vec::Vec<::std::string::String>,
+        >,
         pub items: ::std::vec::Vec<PackageBuild>,
     }
     impl ::std::convert::From<&PackageBuildList> for PackageBuildList {
