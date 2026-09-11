@@ -242,7 +242,7 @@
           "builds"
         ],
         "summary": "Cancel Build",
-        "description": "Cancel a build.\n\nHandles both active builds (delegated to Build Coordinator) and\npre-dispatch builds (cancelled FS-only via an atomic row lock).\n\nThe operation is idempotent with respect to terminal state. When\nthe build has already reached a terminal state (``cancelled``,\n``completed``, ``failed``, or ``timed_out``) \u2014 whether Build\nCoordinator reports it or the local task row records it \u2014 the\nresponse is still 200 and the ``status`` field carries that\nterminal state. Coordinator statuses are normalized into the\neffective vocabulary before they are surfaced: BC's ``timed_out``\nsurfaces as ``timed_out``, the same word a subsequent ``GET``\nreconstructs from the footprint the callback path persists\n(status='failed' + error_class='timeout'), so the two surfaces\nalways agree.\n\nCancelling a pre-dispatch build permanently retires its identity\ntuple: ``uq_factory_build_identity`` dedup treats the cancelled\nrow like any other terminal build, so a later event expanding to\nthe same identity inserts nothing. Recovery is manual by design \u2014\na cancel that ambient event traffic could overturn would not be a\ncancel.\n\nOutcomes:\n    200 \u2014 Build cancelled, or already terminal. ``BuildResponse.status``\n          reflects the effective state.\n    404 \u2014 No build with the given ID.\n    502 \u2014 Build Coordinator unreachable or returned an unexpected\n          error; or the coordinator does not know the build yet\n          because its dispatch is in flight (the worker commits\n          its claim before the HTTP submit), or no longer knows it\n          (coordinator restart or purge). In every 502 case the\n          correct client action is retry with backoff.\n\nAn audit log line is emitted on every path, including unhandled\nexceptions (``outcome=internal_error``).",
+        "description": "Cancel a build.\n\nHandles both active builds (delegated to Build Coordinator) and\npre-dispatch builds (cancelled FS-only via an atomic row lock).\n\nThe operation is idempotent with respect to terminal state. When\nthe build has already reached a terminal state (``cancelled``,\n``completed``, ``failed``, or ``timed_out``) \u2014 whether Build\nCoordinator reports it or the local task row records it \u2014 the\nresponse is still 200 and the ``status`` field carries that\nterminal state. Coordinator statuses are normalized into the\neffective vocabulary before they are surfaced: BC's ``timed_out``\nsurfaces as ``timed_out``, the same word a subsequent ``GET``\nreconstructs from the footprint the callback path persists\n(status='failed' + error_class='timeout'), so the two surfaces\nalways agree.\n\nCancelling a pre-dispatch build permanently retires its identity\ntuple: ``uq_factory_build_identity`` dedup treats the cancelled\nrow like any other terminal build, so a later event expanding to\nthe same identity inserts nothing. Recovery is manual by design \u2014\na cancel that ambient event traffic could overturn would not be a\ncancel.\n\nOutcomes:\n    200 \u2014 Build cancelled, or already terminal. ``BuildResponse.status``\n          reflects the effective state.\n    404 \u2014 No build with the given ID.\n    409 \u2014 The coordinator does not know the build yet because its\n          dispatch is in flight (the worker commits its claim\n          before the HTTP submit). Retry with backoff.\n    502 \u2014 Build Coordinator unreachable or returned an unexpected\n          error; or the coordinator has no record of a build whose\n          dispatch window has long passed (lost to a restart or\n          purge, or stranded by a worker that died between claim\n          and submit).\n\nAn audit log line is emitted on every path, including unhandled\nexceptions (``outcome=internal_error``).",
         "operationId": "cancel_build_api_v1_factory_builds__build_id__delete",
         "security": [
           {
@@ -284,6 +284,16 @@
             },
             "description": "Not Found"
           },
+          "409": {
+            "description": "Build's registration with the coordinator is still in flight; retry with backoff",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "422": {
             "content": {
               "application/json": {
@@ -295,7 +305,7 @@
             "description": "Unprocessable Entity"
           },
           "502": {
-            "description": "Build Coordinator unreachable or returned an error, or the build's registration with the coordinator is still in flight; retry with backoff",
+            "description": "Build Coordinator unreachable or returned an error, or has no record of the build",
             "content": {
               "application/json": {
                 "schema": {
