@@ -218,6 +218,10 @@ so don't include one without confirmation.
 
 Update your branch against `main` by rebasing — never a merge commit.
 
+Don't link to Slack threads in PR descriptions — those links don't resolve for
+anyone outside the workspace. If a Linear issue tracks the work, link that
+instead.
+
 **Never mention customer names.** This is a public repository — keep
 customer and prospect names out of everything that lands on GitHub:
 PR titles and descriptions, commit messages, code comments, branch
