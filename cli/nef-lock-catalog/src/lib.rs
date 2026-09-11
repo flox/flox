@@ -27,6 +27,7 @@ impl Display for CatalogId {
 pub use lock::build_lock::{
     BuildLock,
     LockfileError,
+    OverrideInputError,
     StaleLockError,
     read_lock,
     render_lock,
