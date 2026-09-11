@@ -39,7 +39,7 @@ use tracing::{debug, instrument, trace};
 use url::Url;
 
 use super::{DirEnvironmentSelect, dir_environment_select, needs_project_files_error};
-use crate::utils::catalog_lock::BuildLockGuard;
+use crate::utils::catalog_lock::{BuildLockGuard, InputOverride};
 use crate::utils::events::duration_to_ms;
 use crate::utils::message;
 use crate::{environment_subcommand_metric, subcommand_metric};
@@ -84,6 +84,38 @@ impl SystemOverride {
     pub fn into_inner(self) -> Option<String> {
         self.system
     }
+}
+
+// Reusable input-override option for commands that evaluate Nix expression
+// builds against the project catalog lock. Not a doc comment: bpaf renders
+// one on an external group as a header in `--help`.
+#[derive(Debug, Default, Bpaf, Clone)]
+pub struct InputOverrides {
+    /// Fetch catalog input <REFERENCE>, as the expression names it (e.g. 'catalogs.myorg.hello'), from <FLAKEREF> for this invocation instead of its locked source.
+    /// A directory is fetched as a 'path:' flakeref. '.flox/catalog.lock' is not modified.
+    #[bpaf(long("override-input"), argument("REFERENCE=FLAKEREF"), many)]
+    overrides: Vec<InputOverride>,
+}
+
+impl InputOverrides {
+    pub fn into_inner(self) -> Vec<InputOverride> {
+        self.overrides
+    }
+}
+
+/// Say what is being overridden, so a surprising build result is
+/// explainable from the terminal.
+pub(crate) fn announce_input_overrides(overrides: &[InputOverride]) {
+    if overrides.is_empty() {
+        return;
+    }
+    let listed = overrides
+        .iter()
+        .map(|input_override| format!("  {input_override}"))
+        .join("\n");
+    message::info(formatdoc! {"
+        Overriding catalog inputs:
+        {listed}"});
 }
 
 #[derive(Bpaf, Clone)]
@@ -147,6 +179,9 @@ enum SubcommandOrBuildTargets {
         #[bpaf(external(system_override))]
         system_override: SystemOverride,
 
+        #[bpaf(external(input_overrides))]
+        input_overrides: InputOverrides,
+
         /// The package to build.
         /// Corresponds to entries in the 'build' table in the environment's manifest.toml.
         /// If not specified, all packages are built.
@@ -205,6 +240,7 @@ impl Build {
                 targets,
                 base_catalog_url_select,
                 system_override,
+                input_overrides,
             } => {
                 let env = self
                     .environment
@@ -217,6 +253,7 @@ impl Build {
                     targets,
                     base_catalog_url_select,
                     system_override.into_inner(),
+                    input_overrides.into_inner(),
                 )
                 .await
             },
@@ -273,6 +310,7 @@ impl Build {
         packages: Vec<String>,
         nixpkgs_url_select: Option<BaseCatalogUrlSelect>,
         system_override: Option<String>,
+        input_overrides: Vec<InputOverride>,
     ) -> Result<()> {
         match &env {
             ConcreteEnvironment::Path(_) => (),
@@ -358,6 +396,12 @@ impl Build {
         } else {
             expression_rel_paths(&packages_to_build)
         };
+        if lock_rel_paths.is_empty() && !input_overrides.is_empty() {
+            bail!(
+                "'--override-input' applies to Nix expression builds, and none of the packages being built is one."
+            );
+        }
+        announce_input_overrides(&input_overrides);
         let catalog_lock = match &*lock_rel_paths {
             [] => None,
             lock_rel_paths => Some(
@@ -365,6 +409,7 @@ impl Build {
                     &flox.floxhub_client,
                     env.dot_flox_path(),
                     lock_rel_paths,
+                    &input_overrides,
                 )
                 .await?,
             ),
