@@ -141,6 +141,19 @@ impl RawNixFlakerefAttrs {
     pub fn as_value(&self) -> &Value {
         &self.0
     }
+
+    /// This source, carrying `other`'s `dir` when it has none of its own.
+    /// `dir` names the subdirectory holding the package expressions, a
+    /// property of the project rather than of where it is fetched from, so
+    /// a replacement source that does not say otherwise keeps it.
+    pub fn inheriting_dir_from(mut self, other: &Self) -> Self {
+        if let (Value::Object(attrs), Some(dir)) = (&mut self.0, other.0.get("dir"))
+            && !attrs.contains_key("dir")
+        {
+            attrs.insert("dir".to_string(), dir.clone());
+        }
+        self
+    }
 }
 
 impl From<floxhub_client::LockedGitSource> for RawNixFlakerefAttrs {

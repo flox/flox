@@ -10,6 +10,7 @@ pub(crate) mod build_lock;
 pub(crate) mod direct_input;
 pub(crate) mod flakeref;
 pub(crate) mod lookup;
+pub(crate) mod r#override;
 pub(crate) mod render;
 pub(crate) mod transform;
 pub(crate) mod tree;
