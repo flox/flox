@@ -77,12 +77,8 @@ pub fn wait_for_socket_ready(
 
 /// The most recent `services.*.log` in `log_dir`, if there is one.
 ///
-/// `process-compose` is spawned by the executive, which reports neither the log
-/// path nor the outcome back to the process that asked for the start. Names are
-/// timestamped by [start_process_compose_no_services] in a format that sorts
-/// chronologically, so the greatest name is the instance whose startup was just
-/// waited on. Sorting by name rather than mtime keeps this independent of
-/// filesystems with coarse or skewed timestamps.
+/// Compares timestamped names rather than mtimes, which keeps this independent
+/// of filesystems with coarse or skewed timestamps.
 pub fn latest_services_log(log_dir: &Path) -> Option<PathBuf> {
     std::fs::read_dir(log_dir)
         .ok()?

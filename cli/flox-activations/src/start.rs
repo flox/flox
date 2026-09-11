@@ -21,6 +21,7 @@ use flox_core::activations::{
     state_json_path,
     write_activations_json,
 };
+use flox_core::process_compose::socket_state;
 use fslock::LockFile;
 use indoc::{formatdoc, indoc};
 use nix::sys::signal::{Signal, kill};
@@ -47,12 +48,10 @@ use crate::vars_from_env::VarsFromEnvironment;
 /// the script with it — is distinguishable from one that returned normally.
 const ACTIVATE_COMPLETE_MARKER: &str = "complete";
 
-/// How long to wait for a newly spawned `process-compose` to answer on its
-/// socket before giving up.
+/// How long to wait for a newly spawned `process-compose` to answer.
 ///
-/// Only reached when something is wrong or the machine is heavily loaded: the
-/// wait ends as soon as the socket answers, which is a few hundred
-/// milliseconds on an idle machine.
+/// Only reached when something is wrong: the wait ends as soon as the socket
+/// answers, a few hundred milliseconds on an idle machine.
 const DEFAULT_ACTIVATE_TIMEOUT: Duration = Duration::from_secs(2);
 
 /// Start a new activation because we either have a:
@@ -169,8 +168,9 @@ fn signal_new_process_compose(
 ) -> Result<(), anyhow::Error> {
     let process_compose_bin = project.process_compose_bin.as_path();
     let socket_path = project.flox_services_socket.as_path();
-    // Stop first, if running, to ensure that we wait on the socket from the new instance.
-    if socket_path.exists() {
+    // Stop first, if one is answering, so that we wait on the socket from the
+    // new instance. A socket with no listener has nothing to shut down.
+    if socket_state(socket_path).is_live() {
         debug!("shutting down old process-compose");
         if let Err(err) = process_compose_down(process_compose_bin, socket_path) {
             error!(%err, "failed to stop process-compose");
@@ -201,11 +201,8 @@ fn signal_new_process_compose(
 
 /// Explain a service startup that never produced a usable socket.
 ///
-/// The executive is what spawns `process-compose`, and it reports neither the
-/// outcome nor the log path back here, so the log it wrote is the only account
-/// of what went wrong. Without it the two failures that reach this point — a
-/// `process-compose` that died on startup and one that is merely slower than
-/// the timeout — are indistinguishable to the reader.
+/// The executive spawns `process-compose` and reports neither its outcome nor
+/// its log path back here, so the log is the only account of what went wrong.
 fn socket_not_ready_message(log_dir: &Path, waited: Duration) -> String {
     let log = latest_services_log(log_dir);
     let tail = log.as_deref().and_then(|path| log_tail(path, 10));

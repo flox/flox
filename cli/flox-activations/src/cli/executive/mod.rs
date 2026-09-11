@@ -13,6 +13,7 @@ use flox_core::activations::{
     write_activations_json,
 };
 use flox_core::proc_status::read_pid_status;
+use flox_core::process_compose::socket_state;
 use flox_core::sentry::init_sentry;
 use flox_core::traceable_path;
 use fslock::LockFile;
@@ -617,9 +618,11 @@ fn handle_start_services_signal(
         return Ok(None);
     };
 
-    // `flox-activations activate` ensures that `process-compose` is stopped
-    // (and the socket removed) before signaling a restart.
-    if project_ctx.flox_services_socket.exists() {
+    // Decline only when a manager answers. This is where concurrent start
+    // requests serialise: two activations signal independently, and `start.rs`
+    // drops the activation lock before signalling, so nothing upstream sees
+    // both.
+    if socket_state(&project_ctx.flox_services_socket).is_live() {
         info!(reason = "already running", "skipping process-compose start");
         return Ok(None);
     }
@@ -706,8 +709,8 @@ fn shut_down_and_remove_state(
 
 /// Shutdown `process-compose` if its socket is present.
 fn shut_down_process_compose(process_compose_bin: &Path, socket_path: &Path) {
-    if !socket_path.exists() {
-        info!(reason = "no socket", "did not shut down process-compose");
+    if !socket_state(socket_path).is_live() {
+        info!(reason = "no manager", "did not shut down process-compose");
     } else if let Err(err) = process_compose_down(process_compose_bin, socket_path) {
         warn!(%err, "failed to run process-compose shutdown command");
     } else {
