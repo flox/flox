@@ -1,0 +1,36 @@
+# Run a service entirely from a FloxHub-managed environment.
+#
+# Flox owns process supervision: `flox activate --start-services` starts the
+# environment's services and systemd supervises the log follower in the
+# foreground. Enable one instance per service:
+#
+#   $EDITOR /etc/flox/services/myservice.conf
+#   systemctl enable --now flox@myservice.service
+#
+# The service account, working directory and environment are provisioned by
+# flox-pull@%i.service before this unit starts.
+[Unit]
+Description=Flox service %i
+Documentation=https://flox.dev/docs
+Wants=network-online.target
+After=network-online.target flox-pull@%i.service
+Requires=flox-pull@%i.service
+
+[Service]
+# Defaults matching the conf file's own defaults. Override both together
+# with a drop-in if the service needs a different account:
+#   systemctl edit flox@myservice.service
+User=flox-%i
+Group=flox-%i
+WorkingDirectory=/var/lib/flox/%i
+ExecStart=/usr/libexec/flox/flox-activate %i
+Restart=on-failure
+
+# To pass a FloxHub token to the activation, add a drop-in:
+#   [Service]
+#   LoadCredential=floxhub_token:/etc/flox/services/%i.token
+# LoadCredential= has no optional form, so it cannot be declared here without
+# making every tokenless instance fail to start.
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,37 @@
+#!/bin/sh
+#
+# ExecStart for a unit that has been overridden with a Flox drop-in: run the
+# unit's own command inside the activated environment.
+#
+# Unlike flox-activate, supervision stays with systemd - this execs the
+# operator's command directly, so the unit's Restart=, hardening and
+# ordering all keep working as the vendor wrote them.
+set -eu
+
+# Resolve the shared library next to this script, so the entry points work
+# both installed under /usr/libexec/flox and straight from a checkout.
+FLOX_LIBEXEC=${FLOX_LIBEXEC:-$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)}
+. "$FLOX_LIBEXEC/flox-common.sh"
+
+name=${1:?usage: flox-exec-start <instance>}
+flox_load_conf "$name"
+
+[ -n "$FLOX_EXEC_START" ] || die "FLOX_EXEC_START is not set in $FLOX_CONF_DIR/$name.conf"
+
+# The service environment is applied here rather than in the unit so that
+# every caller gets it from one definition - the units under ../units, the
+# NixOS module in ../../nixos, and a script run by hand all behave alike.
+flox_export_token_from_credential
+flox_clear_stale_sockets
+
+# See flox-activate for why this is a single eval.
+trust=
+if [ "$FLOX_TRUST" = 1 ]; then
+  trust=--trust
+fi
+
+eval "set -- \"\$FLOX_BIN\" $FLOX_ARGS activate --dir \"\$flox_workdir\" \
+  $trust $FLOX_ACTIVATE_ARGS \
+  -- /bin/sh -c \"\$FLOX_EXEC_START\""
+
+exec env $(flox_service_env) "$@"

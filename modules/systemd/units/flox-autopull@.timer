@@ -1,0 +1,20 @@
+# Schedule for the flox-autopull@%i.service refresh.
+#
+# Enable per instance:
+#   systemctl enable --now flox-autopull@myservice.timer
+#
+# The schedule is deliberately static here, since systemd cannot read
+# OnCalendar= from the instance's conf file. Change it per instance with:
+#   systemctl edit flox-autopull@myservice.timer
+# adding [Timer] OnCalendar= (empty to reset) followed by the new value.
+[Unit]
+Description=Scheduled Flox environment pull for %i
+Documentation=https://flox.dev/docs
+
+[Timer]
+OnCalendar=daily
+RandomizedDelaySec=15s
+Persistent=true
+
+[Install]
+WantedBy=timers.target
