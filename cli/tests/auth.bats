@@ -179,22 +179,18 @@ EXPIRED_TOKEN="eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3guZGV2L2hh
 }
 
 # bats test_tags=auth,auth:cache
-@test "the auth record is written to the cache dir and dropped at logout" {
-  # With no env token and no plain-text token, the keyring is the only place a
-  # credential could be, so this traverses the deferred path — the one the
-  # record exists to serve, and the one the suite's `FLOX_FLOXHUB_TOKEN`
-  # otherwise short-circuits. The keyring is disabled suite-wide, which reads
-  # as "nothing stored", so what is under test is not the record's contents
-  # but that it lands where a later invocation looks for it and is removed
-  # once the credential it describes is gone.
-  run "$FLOX_BIN" config
+@test "logout caches the empty keyring in the cache dir" {
+  echo "$DUMMY_TOKEN" > "$PROJECT_DIR/token"
+  run "$FLOX_BIN" auth login --token-file "$PROJECT_DIR/token" --insecure-storage
   assert_success
 
-  run ls "$FLOX_CACHE_DIR"/auth-state-*.json
+  run jq -c '[.storage, .handle, .logged_in]' "$FLOX_CACHE_DIR"/auth-state-*.json
   assert_success
+  assert_output '["plaintext","test",true]'
 
   run "$FLOX_BIN" auth logout
   assert_success
-  run ls "$FLOX_CACHE_DIR"/auth-state-*.json
-  assert_failure
+  run jq -c '[.storage, .handle, .logged_in]' "$FLOX_CACHE_DIR"/auth-state-*.json
+  assert_success
+  assert_output '["keyring",null,false]'
 }

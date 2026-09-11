@@ -423,7 +423,8 @@ impl CredentialStores {
 
     /// Clear saved authentication and report the source that was active.
     ///
-    /// Invalidate the record even when no credential remains or removal fails.
+    /// Cache the empty keyring after removal or confirmed absence. Invalidate
+    /// the record when the stored credential's state is unknown or removal fails.
     /// Environment and system-config tokens are not removed; the caller uses
     /// the returned source to explain how to finish logging out.
     pub fn logout(&self, config: &Config) -> Result<CredentialSource, CredentialStoreError> {
@@ -431,7 +432,13 @@ impl CredentialStores {
         self.cache.remove();
         if source != CredentialSource::None {
             self.remove_all()?;
+        } else if !matches!(self.keyring.get(), Ok(None)) {
+            // The source probe also reports None on read errors, so it cannot
+            // establish the empty keyring state on its own.
+            return Ok(source);
         }
+        self.cache
+            .write(&AuthContext::default(), TokenStorage::Keyring);
         Ok(source)
     }
 
@@ -1213,13 +1220,106 @@ mod tests {
                     source,
                     stores
                         .cache
-                        .defer_or_resolve(AuthContext::default)
+                        .defer_or_resolve(|| panic!("logout should cache the empty keyring"))
                         .cached_facts()
                 ),
                 (
                     CredentialSource::None,
                     AuthContext::default().cached_facts()
                 ),
+            );
+        });
+    }
+
+    #[test]
+    fn logout_caches_empty_keyring_and_preserves_config_overrides() {
+        for source in [
+            CredentialSource::Keyring,
+            CredentialSource::UserConfigPlaintext,
+            CredentialSource::Env,
+            CredentialSource::SystemConfig,
+        ] {
+            let env_token = (source == CredentialSource::Env).then_some(TOKEN);
+            temp_env::with_var(FLOXHUB_TOKEN_ENV_VAR, env_token, || {
+                let cache_dir = TempDir::new().unwrap();
+                let keyring = MockStore::new();
+                let plaintext = MockStore::new();
+                if source != CredentialSource::SystemConfig {
+                    keyring.set(TOKEN).unwrap();
+                }
+                if source == CredentialSource::UserConfigPlaintext {
+                    plaintext.set(TOKEN).unwrap();
+                }
+                let stores = CredentialStores::from_stores(
+                    CredentialStoreImpl::Mock(keyring.clone()),
+                    CredentialStoreImpl::Mock(plaintext.clone()),
+                    cache_dir.path(),
+                );
+                stores.cache.write(
+                    &AuthContext::new_from_token(Some(TOKEN)),
+                    TokenStorage::Keyring,
+                );
+
+                let result = stores.logout(&config_with_token(Some(TOKEN))).unwrap();
+                let cached = stores.cache.defer_or_resolve(|| {
+                    panic!("successful logout should cache the empty keyring")
+                });
+                let remaining_token = matches!(
+                    source,
+                    CredentialSource::Env | CredentialSource::SystemConfig
+                )
+                .then_some(TOKEN);
+                let next = stores.resolve(&config_with_token(remaining_token)).context;
+                assert_eq!(
+                    (
+                        result,
+                        keyring.get().unwrap(),
+                        plaintext.get().unwrap(),
+                        cached.cached_facts(),
+                        next.cached_facts(),
+                    ),
+                    (
+                        source,
+                        None,
+                        None,
+                        AuthContext::default().cached_facts(),
+                        AuthContext::new_from_token(remaining_token).cached_facts(),
+                    ),
+                );
+            });
+        }
+    }
+
+    #[test]
+    fn logout_does_not_cache_absence_when_the_source_probe_fails() {
+        temp_env::with_var(FLOXHUB_TOKEN_ENV_VAR, None::<&str>, || {
+            let cache_dir = TempDir::new().unwrap();
+            let keyring = MockStore::new();
+            keyring.set(TOKEN).unwrap();
+            keyring.set_error("keyring read failed");
+            let stores = CredentialStores::from_stores(
+                CredentialStoreImpl::Mock(keyring),
+                CredentialStoreImpl::Mock(MockStore::new()),
+                cache_dir.path(),
+            );
+            stores.cache.write(
+                &AuthContext::new_from_token(Some(TOKEN)),
+                TokenStorage::Keyring,
+            );
+
+            let source = stores.logout(&config_with_token(None)).unwrap();
+            let probe = AuthContext::new_from_token(Some("flox_pat_cache-miss-probe"));
+            assert_eq!(
+                (
+                    source,
+                    stores
+                        .cache
+                        .defer_or_resolve(|| {
+                            AuthContext::new_from_token(Some("flox_pat_cache-miss-probe"))
+                        })
+                        .cached_facts(),
+                ),
+                (CredentialSource::None, probe.cached_facts()),
             );
         });
     }
@@ -1248,6 +1348,7 @@ mod tests {
                 );
 
                 let result = stores.logout(&config_with_token(Some(TOKEN)));
+                let probe = AuthContext::new_from_token(Some("flox_pat_cache-miss-probe"));
 
                 assert_eq!(
                     (
@@ -1256,14 +1357,16 @@ mod tests {
                         plaintext.get().unwrap(),
                         stores
                             .cache
-                            .defer_or_resolve(AuthContext::default)
+                            .defer_or_resolve(|| {
+                                AuthContext::new_from_token(Some("flox_pat_cache-miss-probe"))
+                            })
                             .cached_facts(),
                     ),
                     (
                         true,
                         (failing_store == TokenStorage::Keyring).then(|| TOKEN.to_string()),
                         (failing_store == TokenStorage::Plaintext).then(|| TOKEN.to_string()),
-                        AuthContext::default().cached_facts(),
+                        probe.cached_facts(),
                     ),
                 );
             }
