@@ -113,17 +113,6 @@ impl AuthContext {
         self.credential().token_secret()
     }
 
-    /// Return the Kerberos principal, loading the credential if necessary.
-    ///
-    /// This checks local ticket availability without generating an HTTP auth
-    /// token. `None` means no Kerberos credential is available.
-    pub fn kerberos_principal(&self) -> Option<&str> {
-        match self.credential() {
-            Credential::Kerberos(Some(material)) => Some(&material.principal),
-            _ => None,
-        }
-    }
-
     /// Produce the value for an HTTP Authorization header targeting the given URL.
     pub fn authorization_header(&self, url: &Url) -> Option<Result<String, AuthHeaderError>> {
         match self.credential() {
