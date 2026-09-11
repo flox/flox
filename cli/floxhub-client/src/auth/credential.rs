@@ -1,7 +1,5 @@
 //! Credential material and the facts it can answer locally.
 
-use url::Url;
-
 use crate::auth::kerberos::KerberosMaterial;
 use crate::auth::storage::{CachedFacts, credential_fingerprint};
 use crate::auth::token::{
@@ -63,7 +61,7 @@ pub enum AuthFailure {
 #[error("{0}")]
 pub struct AuthHeaderError(pub String);
 
-/// Authentication context threaded through the CLI.
+/// Credential material resolved by `AuthContext`.
 ///
 /// Each variant corresponds to a kind of authentication and wraps an
 /// `Option` of the material for that kind:
@@ -85,9 +83,10 @@ pub struct AuthHeaderError(pub String);
 /// - `Kerberos(None)` — Kerberos mode but no ticket available (`kinit`
 ///   hasn't been run).
 ///
-/// Private to authentication; callers use the operations on `AuthContext`.
+/// Callers needing a specific token format can inspect this through
+/// `AuthContext::credential`.
 #[derive(Clone)]
-pub(crate) enum Credential {
+pub enum Credential {
     /// Auth0-shaped JWT — identity answered locally from its claims.
     /// May or may not have a token; the settled server-side direction is
     /// that identity comes from accounts, so this is the shape being
@@ -141,19 +140,6 @@ impl Credential {
                     .and_then(|identity| identity.sub)
             },
             Credential::Kerberos(_) => None,
-        }
-    }
-
-    /// Produce the value for an HTTP Authorization header targeting the given URL.
-    pub fn authorization_header(&self, url: &Url) -> Option<Result<String, AuthHeaderError>> {
-        match self {
-            Credential::Auth0(_) | Credential::Bare(_) | Credential::AccessToken(_) => self
-                .token_secret()
-                .map(|secret| Ok(format!("bearer {secret}"))),
-            Credential::Kerberos(Some(material)) => {
-                Some((material.generate_token)(url).map(|t| format!("Negotiate {t}")))
-            },
-            Credential::Kerberos(None) => None,
         }
     }
 
@@ -401,17 +387,6 @@ mod tests {
         let auth = Credential::AccessToken(token);
 
         assert_eq!(auth.user_subject().as_deref(), Some("auth0|123"));
-    }
-
-    #[test]
-    fn pat_authorization_header_is_bearer_secret() {
-        let auth = pat_unresolved();
-        let url = Url::parse("https://api.flox.dev").unwrap();
-
-        assert_eq!(
-            auth.authorization_header(&url).unwrap().unwrap(),
-            "bearer flox_pat_secret"
-        );
     }
 
     #[test]

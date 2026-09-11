@@ -744,6 +744,7 @@ mod tests {
     use flox_rust_sdk::flox::FloxhubToken;
     use flox_rust_sdk::flox::test_helpers::{create_test_token, flox_instance};
     use flox_rust_sdk::models::floxmeta::FLOXHUB_TOKEN_ENV_VAR;
+    use floxhub_client::auth::Credential as AuthCredential;
     use floxhub_client::auth::storage::{
         AuthContextStorageExt,
         CachedFacts,
@@ -948,7 +949,7 @@ mod tests {
                 Some(token.secret()),
                 "the config stores exactly the provided token"
             );
-            let Some(stored) = flox.auth_context.auth0_token() else {
+            let AuthCredential::Auth0(Some(stored)) = flox.auth_context.credential() else {
                 panic!("expected an Auth0 auth context with a token");
             };
             assert_eq!(stored.secret(), token.secret());

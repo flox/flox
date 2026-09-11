@@ -1376,6 +1376,7 @@ pub mod tests {
     use flox_manifest::interfaces::{AsWritableManifest, WriteManifest};
     use flox_test_utils::GENERATED_DATA;
     use floxhub_client::AuthContext;
+    use floxhub_client::auth::Credential;
     use pretty_assertions::assert_eq;
 
     use super::*;
@@ -2210,7 +2211,10 @@ pub mod tests {
         )
         .unwrap();
 
-        let (_key_file, cache) = local_nix_cache(flox.auth_context.auth0_token().unwrap());
+        let Credential::Auth0(Some(token)) = flox.auth_context.credential() else {
+            panic!("expected an Auth0 credential");
+        };
+        let (_key_file, cache) = local_nix_cache(token);
         let auth = NixAuth::from_flox(&flox).unwrap();
         let publish_provider = PublishProvider::new(env_metadata, package_metadata, auth);
 

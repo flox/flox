@@ -19,7 +19,7 @@ pub mod storage;
 mod token;
 
 pub use auth_context::AuthContext;
-pub use credential::{AuthFailure, AuthHeaderError, CredentialKind};
+pub use credential::{AuthFailure, AuthHeaderError, Credential, CredentialKind};
 pub use discovery::{DiscoveredLoginConfig, LoginDiscoveryError, discover_login_config};
 pub use identity::{UNKNOWN_HANDLE, UserIdentity};
 pub use kerberos::{KerberosMaterial, TokenGenerator};

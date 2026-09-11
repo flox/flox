@@ -80,7 +80,8 @@ impl AuthContext {
         })
     }
 
-    fn credential(&self) -> &Credential {
+    /// Return the credential material, loading it once if necessary.
+    pub fn credential(&self) -> &Credential {
         match self.source.as_ref() {
             CredentialSource::Resolved(credential) => credential,
             CredentialSource::Deferred {
@@ -112,14 +113,6 @@ impl AuthContext {
         self.credential().token_secret()
     }
 
-    /// Return the Auth0 token for operations specific to that token format.
-    pub fn auth0_token(&self) -> Option<&FloxhubToken> {
-        match self.credential() {
-            Credential::Auth0(token) => token.as_ref(),
-            _ => None,
-        }
-    }
-
     /// Return the Kerberos principal, loading the credential if necessary.
     ///
     /// This checks local ticket availability without generating an HTTP auth
@@ -131,9 +124,17 @@ impl AuthContext {
         }
     }
 
-    /// Produce authentication for an outgoing request.
+    /// Produce the value for an HTTP Authorization header targeting the given URL.
     pub fn authorization_header(&self, url: &Url) -> Option<Result<String, AuthHeaderError>> {
-        self.credential().authorization_header(url)
+        match self.credential() {
+            Credential::Auth0(_) | Credential::Bare(_) | Credential::AccessToken(_) => self
+                .token_secret()
+                .map(|secret| Ok(format!("bearer {secret}"))),
+            Credential::Kerberos(Some(material)) => {
+                Some((material.generate_token)(url).map(|t| format!("Negotiate {t}")))
+            },
+            Credential::Kerberos(None) => None,
+        }
     }
 
     /// Return the currently known handle without loading credentials or doing I/O.
@@ -154,14 +155,15 @@ impl AuthContext {
 
     /// Resolve the identity, including expiry and the pseudonymous subject.
     ///
-    /// `Ok(None)` means the identity could not be verified because FloxHub was
-    /// unavailable. Missing credentials and server rejection are errors. Local
-    /// expiry is returned in the identity so callers decide whether it blocks
-    /// their operation.
+    /// `Ok(None)` means a FloxHub lookup failed for a reason other than
+    /// unauthorized access. Missing credentials and unauthorized responses are
+    /// errors. Local expiry is returned in the identity so callers decide whether
+    /// it blocks their operation.
     ///
     /// Successful network lookups update both the process cache and the
-    /// persistent record. JWT identity claims and Kerberos principals answer
-    /// locally.
+    /// persistent record. A fingerprint-checked cache hit, JWT identity claims,
+    /// and Kerberos principals answer locally. Use [Self::refresh_identity] to
+    /// check for revoked tokens or renamed handles through a fresh lookup.
     pub async fn identity(
         &self,
         client: &FloxhubClient,
@@ -312,6 +314,17 @@ mod tests {
     /// login is what would fix it, so `requires_login` is set.
     fn logged_out() -> CachedFacts {
         AuthContext::from_auth0_token(None).cached_facts()
+    }
+
+    #[test]
+    fn pat_authorization_header_is_bearer_secret() {
+        let auth = AuthContext::new_from_token(Some("flox_pat_secret"));
+        let url = Url::parse("https://api.flox.dev").unwrap();
+
+        assert_eq!(
+            auth.authorization_header(&url).unwrap().unwrap(),
+            "bearer flox_pat_secret"
+        );
     }
 
     #[test]
