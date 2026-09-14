@@ -7,7 +7,7 @@ use flox_manifest::lockfile::Lockfile;
 use flox_manifest::raw::PackageToInstall;
 use flox_manifest::{Manifest, Migrated, Validated};
 use thiserror::Error;
-use tracing::debug;
+use tracing::{debug, warn};
 
 use super::core_environment::UpgradeResult;
 use super::fetcher::IncludeFetcher;
@@ -24,10 +24,12 @@ use super::{
     CanonicalPath,
     CanonicalizeError,
     DOT_FLOX,
+    DotFlox,
     ENVIRONMENT_POINTER_FILENAME,
     EditResult,
     Environment,
     EnvironmentError,
+    EnvironmentPointer,
     GCROOTS_DIR_NAME,
     InstallationAttempt,
     ManagedPointer,
@@ -35,17 +37,20 @@ use super::{
     UninstallationAttempt,
 };
 use crate::flox::Flox;
+use crate::models::env_registry::{EnvRegistryError, deregister};
 use crate::models::environment::PathPointer;
 use crate::models::environment::floxmeta_branch::{
     BranchOrd,
     FloxmetaBranch,
     FloxmetaBranchError,
     GenerationLock,
+    prune_branches_from_floxmeta_by_pointer,
     write_generation_lock,
 };
 use crate::models::environment::generations::SyncToGenerationResult;
 use crate::models::environment::managed_environment::GENERATION_LOCK_FILENAME;
 use crate::models::environment::path_environment::{InitCustomization, PathEnvironment};
+use crate::models::floxmeta::{FloxMeta, FloxMetaError};
 use crate::providers::lock_manifest::LockResult;
 
 const REMOTE_ENVIRONMENT_BASE_DIR: &str = "remote";
@@ -86,6 +91,9 @@ pub enum RemoteEnvironmentError {
 
     #[error("generations error")]
     Generations(#[source] GenerationsError),
+
+    #[error("could not delete local copy of environment")]
+    DeleteLocalCheckout(#[source] std::io::Error),
 }
 
 #[derive(Debug)]
@@ -113,6 +121,110 @@ impl RemoteEnvironment {
     /// I.e. whether there is a backing managed environment in the cache.
     pub fn is_cached(flox: &Flox, pointer: &ManagedPointer) -> bool {
         Self::checkout_path(flox, pointer).join(DOT_FLOX).exists()
+    }
+
+    /// Check whether anything is present at [RemoteEnvironment::checkout_path].
+    ///
+    /// Weaker than [RemoteEnvironment::is_cached], which additionally requires
+    /// a `.flox` inside the checkout. Deletion gates on this so that a
+    /// directory left behind by a half-finished checkout — the case a user is
+    /// most likely to be cleaning up after — is still removable.
+    pub fn local_checkout_exists(flox: &Flox, pointer: &ManagedPointer) -> bool {
+        Self::checkout_path(flox, pointer).exists()
+    }
+
+    /// Delete the local copy of a remote environment cached at
+    /// [RemoteEnvironment::checkout_path].
+    ///
+    /// This removes the checkout created by `flox activate --reference` /
+    /// `flox pull --reference`, prunes the per-checkout branch from the local
+    /// floxmeta repository, and deregisters it from the environment registry,
+    /// **without** deleting the upstream environment on FloxHub.
+    ///
+    /// This is a purely local filesystem operation: it neither requires
+    /// network access nor that the checkout still be openable, so it can clean
+    /// up a cached copy even when it can no longer be activated.
+    ///
+    /// Removing the checkout is the operation that must succeed; the metadata
+    /// cleanup that follows is best-effort and only warns. Ordering matters
+    /// both ways round. Doing the removal first means a missing or damaged
+    /// registry entry cannot strand a directory the user asked to delete, and
+    /// leaving the registry entry behind on a later failure is recoverable —
+    /// [`EnvRegistry::prune_nonexistent`] sweeps entries whose path is gone,
+    /// so a stale entry is collected on the next `flox envs`. The reverse
+    /// order has no such safety net: an entry deregistered before a failed
+    /// removal leaves a directory nothing will ever reclaim.
+    ///
+    /// [`EnvRegistry::prune_nonexistent`]: crate::models::env_registry::EnvRegistry
+    pub fn delete_local_checkout(
+        flox: &Flox,
+        pointer: &ManagedPointer,
+    ) -> Result<(), RemoteEnvironmentError> {
+        let checkout_path = Self::checkout_path(flox, pointer);
+
+        // Canonicalize `.flox` up front: the floxmeta branch name and the
+        // registry key both derive from the hash of the canonicalized path,
+        // which can no longer be resolved once the directory is gone.
+        let canonical_dot_flox = CanonicalPath::new(checkout_path.join(DOT_FLOX)).ok();
+
+        // Deregistration matches on the whole pointer, including the FloxHub
+        // URL, so prefer the one recorded in the checkout over the caller's,
+        // which is built from current configuration and stops matching if that
+        // configuration changed since the checkout was created. Reading it is
+        // local and optional: an unreadable `.flox` falls back to the caller's
+        // pointer, and the deregistration below tolerates a miss either way.
+        let registered_pointer = DotFlox::open_in(&checkout_path)
+            .ok()
+            .and_then(|dot_flox| match dot_flox.pointer {
+                EnvironmentPointer::Managed(pointer) => Some(pointer),
+                EnvironmentPointer::Path(_) => None,
+            })
+            .unwrap_or_else(|| pointer.clone());
+
+        fs::remove_dir_all(&checkout_path).map_err(RemoteEnvironmentError::DeleteLocalCheckout)?;
+
+        // Nothing keyed off the checkout to clean up: a directory without a
+        // `.flox` was never registered and never had a branch.
+        let Some(canonical_dot_flox) = canonical_dot_flox else {
+            return Ok(());
+        };
+
+        // Branch pruning stays local — `FloxMeta::open_local` never contacts
+        // FloxHub. Distinguish a missing floxmeta, which is simply nothing to
+        // prune, from a damaged one, which the user should hear about.
+        let pruned = FloxMeta::open_local(flox, pointer).and_then(|mut floxmeta| {
+            prune_branches_from_floxmeta_by_pointer(&mut floxmeta, pointer, &canonical_dot_flox)
+        });
+        match pruned {
+            Ok(()) => {},
+            Err(FloxMetaError::NotFound(_)) => {},
+            Err(err) => warn!(
+                %err,
+                owner = %pointer.owner,
+                name = %pointer.name,
+                "failed to prune floxmeta branches for deleted local checkout"
+            ),
+        }
+
+        match deregister(
+            flox,
+            &canonical_dot_flox,
+            &EnvironmentPointer::Managed(registered_pointer),
+        ) {
+            Ok(()) => {},
+            // The checkout was never registered, or was registered under a
+            // different pointer (e.g. a different FloxHub host). Either way
+            // there is no entry of ours left to remove.
+            Err(EnvRegistryError::UnknownKey(_) | EnvRegistryError::EnvNotRegistered) => {},
+            Err(err) => warn!(
+                %err,
+                owner = %pointer.owner,
+                name = %pointer.name,
+                "failed to deregister deleted local checkout"
+            ),
+        }
+
+        Ok(())
     }
 
     /// Pull a remote environment into a flox-provided managed environment
@@ -621,12 +733,16 @@ mod tests {
     use flox_manifest::test_helpers::with_latest_schema;
     use flox_test_utils::GENERATED_DATA;
     use indoc::indoc;
+    use tempfile::TempDir;
 
     use super::test_helpers::mock_remote_environment;
     use super::*;
     use crate::flox::test_helpers::flox_instance_with_optional_floxhub;
+    use crate::models::env_registry::{EnvRegistry, env_registry_path, read_environment_registry};
+    use crate::models::environment::floxmeta_branch::branch_name;
     use crate::models::environment::generations::HistoryKind;
     use crate::models::environment::managed_environment::test_helpers::mock_managed_environment_from_env_files;
+    use crate::models::environment::path_hash;
     use crate::providers::lock_manifest::RecoverableMergeError;
 
     #[test]
@@ -724,6 +840,127 @@ mod tests {
                 .to_string(),
             with_latest_schema("")
         );
+    }
+
+    /// State a deletion test asserts against, for a materialized local checkout
+    /// of the remote environment `test/foo`.
+    struct CachedCheckout {
+        flox: Flox,
+        _tempdir_handle: TempDir,
+        pointer: ManagedPointer,
+        /// The per-checkout floxmeta branch that deletion should prune.
+        branch: String,
+        /// Registry key for the checkout. The upstream fixture registers
+        /// itself under a separate key, so deregistration is asserted against
+        /// this entry rather than against an empty registry.
+        dot_flox_hash: String,
+    }
+
+    fn cached_remote_checkout() -> CachedCheckout {
+        let owner = EnvironmentOwner::from_str("test").unwrap();
+        let name = EnvironmentName::from_str("foo").unwrap();
+        let env_ref = RemoteEnvironmentRef::new_from_parts(owner.clone(), name.clone());
+
+        let (flox, tempdir_handle) = flox_instance_with_optional_floxhub(Some(&owner));
+        RemoteEnvironment::init_floxhub_environment(&flox, env_ref, true).unwrap();
+
+        let pointer = ManagedPointer::new(owner, name, &flox.floxhub);
+        RemoteEnvironment::new(&flox, pointer.clone(), None).expect("cache remote environment");
+        assert!(RemoteEnvironment::is_cached(&flox, &pointer));
+
+        let dot_flox =
+            CanonicalPath::new(RemoteEnvironment::checkout_path(&flox, &pointer).join(DOT_FLOX))
+                .expect("cached checkout has a .flox directory");
+        let branch = branch_name(&pointer, &dot_flox);
+        let dot_flox_hash = path_hash(&dot_flox);
+
+        CachedCheckout {
+            flox,
+            _tempdir_handle: tempdir_handle,
+            pointer,
+            branch,
+            dot_flox_hash,
+        }
+    }
+
+    fn registry(flox: &Flox) -> EnvRegistry {
+        read_environment_registry(env_registry_path(flox))
+            .expect("registry is readable")
+            .unwrap_or_default()
+    }
+
+    /// Deleting the local checkout removes the cached copy, prunes the
+    /// per-checkout floxmeta branch, and deregisters the checkout, without
+    /// requiring the upstream environment (which is untouched here).
+    #[test]
+    fn delete_local_checkout_removes_cached_copy() {
+        let checkout = cached_remote_checkout();
+        let CachedCheckout {
+            ref flox,
+            ref pointer,
+            ref branch,
+            ref dot_flox_hash,
+            ..
+        } = checkout;
+
+        let floxmeta = FloxMeta::open_local(flox, pointer).expect("local floxmeta exists");
+        assert!(
+            floxmeta.git.has_branch(branch).unwrap(),
+            "per-checkout branch should exist before deletion"
+        );
+        assert!(
+            registry(flox).entry_for_hash(dot_flox_hash).is_some(),
+            "the checkout should be registered before deletion"
+        );
+
+        RemoteEnvironment::delete_local_checkout(flox, pointer).expect("delete local checkout");
+
+        assert!(!RemoteEnvironment::local_checkout_exists(flox, pointer));
+        assert_eq!(
+            registry(flox).entry_for_hash(dot_flox_hash),
+            None,
+            "the checkout's registry entry should be gone after deletion"
+        );
+
+        // The per-checkout branch was pruned; the floxmeta repo itself remains.
+        let floxmeta = FloxMeta::open_local(flox, pointer).expect("local floxmeta still exists");
+        assert!(
+            !floxmeta.git.has_branch(branch).unwrap(),
+            "per-checkout branch should be pruned after deletion"
+        );
+    }
+
+    /// A checkout the registry has no record of is still removable. This is the
+    /// case a user is most likely to be cleaning up after — `RemoteEnvironment`
+    /// creates `.flox` before the fallible work that would register it, so an
+    /// interrupted first `--reference` command leaves exactly this state.
+    #[test]
+    fn delete_local_checkout_removes_unregistered_checkout() {
+        let checkout = cached_remote_checkout();
+        let (flox, pointer) = (&checkout.flox, &checkout.pointer);
+
+        fs::remove_file(env_registry_path(flox)).expect("remove registry");
+
+        RemoteEnvironment::delete_local_checkout(flox, pointer)
+            .expect("delete local checkout without a registry entry");
+        assert!(!RemoteEnvironment::local_checkout_exists(flox, pointer));
+    }
+
+    /// A checkout whose `.flox` is gone has no branch and no registry entry to
+    /// key off, but the directory it left behind is still the user's to remove.
+    #[test]
+    fn delete_local_checkout_removes_checkout_without_dot_flox() {
+        let checkout = cached_remote_checkout();
+        let (flox, pointer) = (&checkout.flox, &checkout.pointer);
+
+        let checkout_path = RemoteEnvironment::checkout_path(flox, pointer);
+        fs::remove_dir_all(checkout_path.join(DOT_FLOX)).expect("remove .flox");
+        assert!(!RemoteEnvironment::is_cached(flox, pointer));
+        assert!(RemoteEnvironment::local_checkout_exists(flox, pointer));
+
+        RemoteEnvironment::delete_local_checkout(flox, pointer)
+            .expect("delete local checkout without a .flox");
+        assert!(!RemoteEnvironment::local_checkout_exists(flox, pointer));
     }
 
     #[test]

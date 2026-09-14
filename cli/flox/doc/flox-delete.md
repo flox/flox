@@ -12,9 +12,15 @@ flox-delete - delete an environment
 # SYNOPSIS
 
 ```text
+# Delete an environment in a directory
 flox [<general options>] delete
      [-f]
      [-d=<path>]
+
+# Delete the local copy of a FloxHub environment
+flox [<general options>] delete
+     [-f]
+     [-r=<owner/name> | -D]
 ```
 
 # DESCRIPTION
@@ -23,10 +29,23 @@ Deletes all data pertaining to an environment.
 By default, only the environment in the current directory is deleted,
 but environments in other directories may be deleted via the `-d` flag.
 
+The `--reference` and `--default` flags instead delete the local copy of a
+FloxHub environment that was cached on this machine by a command run with
+`--reference`, such as [`flox-activate(1)`](./flox-activate.md) or
+[`flox-pull(1)`](./flox-pull.md).
+Only the local copy is removed:
+the environment on FloxHub is *not* deleted,
+and will be downloaded again the next time you activate or pull the reference.
+Deleting the upstream environment on FloxHub is not currently supported from
+the command line.
+This is a local operation and does not require network access, so it can also
+clean up a cached copy that can no longer be activated.
+
 By default, you will be prompted for a confirmation before deleting the
 environment.
-The `-f` flag skips the confirmation dialog and is required for non-interactive
-use.
+The `-f` flag skips the confirmation dialog,
+and is required to delete the local copy of a FloxHub environment in a
+non-interactive context.
 
 # OPTIONS
 
@@ -35,20 +54,8 @@ use.
 `-f`, `--force`
 :   Delete the environment without confirmation.
 
-<!-- Copied from ./include/environment-options.md
-     `flox delete` does not currently handle remote environments
-     Replace with an include once support is added.
- -->
-## Environment Options
-
-If no environment is specified for an environment command,
-the environment in the current directory
-or the active environment that was last activated is used.
-
-`-d`, `--dir`
-:   Path containing a .flox/ directory.
-
 ```{.include}
+./include/environment-options.md
 ./include/general-options.md
 ```
 
