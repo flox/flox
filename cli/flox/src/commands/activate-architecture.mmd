@@ -4,6 +4,24 @@ config:
   layout: dagre
 ---
 flowchart TB
+%% Socket lifecycle. process-compose serves its API over a unix socket and
+%% unlinks it only on a clean shutdown, so a manager that is killed leaves the
+%% file behind with nothing listening. The file's presence is never evidence
+%% that a manager is running.
+%%
+%% Liveness is one question, asked of the manager: GET /live, via
+%% flox_core::process_compose::manager_responds. Connecting alone would not do
+%% -- it proves only that something is bound, and reports a manager that has
+%% stopped answering differently on each platform.
+%%
+%% A manager that is gone and one that has stopped answering read the same.
+%% Nothing asked over the socket can separate them, and flox does not try:
+%% process-compose resolves whatever is at the path when it binds, refusing a
+%% live socket and unlinking a dead one.
+%%
+%% flox never removes the socket. process-compose resolves whatever is at the
+%% path when it binds, unlinking a dead one and refusing outright if the path
+%% is genuinely taken, which is the only place that decision is free of a race.
  subgraph cli["flox-activations activate"]
         s3["Registry Module"]
         match_activation_mode{"activation mode?"}
@@ -115,10 +133,10 @@ flowchart TB
  subgraph executive["Executive"]
         ns[["Monitoring loop"]]
         ny[["Clean up activation state directory"]]
-        n66[["stop-process-compose()"]]
+        n66[["stop-process-compose()<br>only if a manager answers"]]
         n125["register SIGUSR1 signal handler<br>"]
         n100@{ label: "- setsid()<br style=\"--tw-scale-x:\">- register as subreaper (Linux)<br><span style=\"padding-left:\">- register SIGUSR1 signal handler</span>" }
-        n148["SIGUSR1 signal handler:<br>start_process_compose()<br>using latest store path in activation state"]
+        n148["SIGUSR1 signal handler:<br>if no manager answers GET /live,<br>start_process_compose()<br>using latest store path in activation state"]
         s2
         n162["PIDs exited?"]
         n163["Cleanup stale start state directories"]
