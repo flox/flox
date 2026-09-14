@@ -1065,12 +1065,14 @@ Outcomes:
     200 — Build cancelled, or already terminal. ``BuildResponse.status``
           reflects the effective state.
     404 — No build with the given ID.
+    409 — The coordinator does not know the build yet because its
+          dispatch is in flight (the worker commits its claim
+          before the HTTP submit). Retry with backoff.
     502 — Build Coordinator unreachable or returned an unexpected
-          error; or the coordinator does not know the build yet
-          because its dispatch is in flight (the worker commits
-          its claim before the HTTP submit), or no longer knows it
-          (coordinator restart or purge). In every 502 case the
-          correct client action is retry with backoff.
+          error; or the coordinator has no record of a build whose
+          dispatch window has long passed (lost to a restart or
+          purge, or stranded by a worker that died between claim
+          and submit).
 
 An audit log line is emitted on every path, including unhandled
 exceptions (``outcome=internal_error``).
@@ -1113,6 +1115,9 @@ Sends a `DELETE` request to `/api/v1/factory/builds/{build_id}`
         match response.status().as_u16() {
             200u16 => ResponseValue::from_response(response).await,
             404u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            409u16 => {
                 Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
             }
             422u16 => {
