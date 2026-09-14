@@ -98,6 +98,30 @@ fn selection_preserves_existing_credentials() {
 }
 
 #[test]
+fn desktop_hints_do_not_treat_ssh_as_a_local_desktop() {
+    for (ssh_tty, ssh_connection, display, wayland, expected) in [
+        (None, None, None, None, false),
+        (None, None, Some(""), Some(""), false),
+        (None, None, Some(":0"), None, true),
+        (None, None, None, Some("wayland-0"), true),
+        (Some("tty"), None, Some(":0"), Some("wayland-0"), false),
+        (None, Some("ssh-session"), Some(":0"), None, false),
+    ] {
+        temp_env::with_vars(
+            [
+                ("SSH_TTY", ssh_tty),
+                ("SSH_CONNECTION", ssh_connection),
+                ("DISPLAY", display),
+                ("WAYLAND_DISPLAY", wayland),
+            ],
+            || {
+                assert_eq!(has_desktop_session(), expected);
+            },
+        );
+    }
+}
+
+#[test]
 fn plain_sessions_require_a_local_unix_transport() {
     for (address, expected) in [
         ("unix:path=/tmp/flox-keyring-test", Ok(())),
@@ -352,7 +376,7 @@ async fn private_service(state: Arc<Mutex<State>>) -> (Client, Connection) {
     )
     .unwrap();
     let mut client = Client::connect(connection).await.unwrap();
-    client.interactive = false;
+    client.can_prompt = false;
     (client, server)
 }
 
@@ -607,11 +631,13 @@ impl FakePrompt {
 }
 
 #[test]
-fn prompts_complete_cancel_or_time_out_and_are_never_shown_noninteractively() {
+fn prompts_complete_fall_back_or_time_out_and_are_never_shown_noninteractively() {
     pollster::block_on(async {
         for (interactive, dismissed, expected, mutations) in [
-            (true, Some(false), Ok(()), vec!["prompt"]),
-            (true, Some(true), Err(Error::Cancelled), vec![
+            (true, Some(false), Ok(UnlockPromptOutcome::Completed), vec![
+                "prompt",
+            ]),
+            (true, Some(true), Ok(UnlockPromptOutcome::Terminal), vec![
                 "prompt", "dismiss",
             ]),
             (true, None, Err(Error::TimedOut), vec!["prompt", "dismiss"]),
@@ -620,7 +646,7 @@ fn prompts_complete_cancel_or_time_out_and_are_never_shown_noninteractively() {
             let mut initial = initial_state();
             let state = Arc::new(Mutex::new(initial.clone()));
             let (mut client, server) = private_service(state.clone()).await;
-            client.interactive = interactive;
+            client.can_prompt = interactive;
             client.prompt_timeout = Duration::from_secs(if dismissed.is_some() { 10 } else { 1 });
             server
                 .object_server()
@@ -630,15 +656,104 @@ fn prompts_complete_cancel_or_time_out_and_are_never_shown_noninteractively() {
                 })
                 .await
                 .unwrap();
-            assert_eq!(
+            let result = if interactive {
+                client
+                    .complete_unlock_prompt(path("/prompt/test"), futures::future::pending())
+                    .await
+            } else {
                 client
                     .complete_prompt(path("/prompt/test"))
                     .await
-                    .map(|_| ()),
-                expected
-            );
+                    .map(|_| UnlockPromptOutcome::Completed)
+            };
+            assert_eq!(result, expected);
             initial.mutations = mutations.into_iter().map(String::from).collect();
             assert_eq!(*state.lock().unwrap(), initial);
         }
+    });
+}
+
+#[test]
+fn terminal_input_can_switch_or_cancel_while_the_desktop_is_unresponsive() {
+    pollster::block_on(async {
+        for (action, expected) in [
+            (WaitResult::Enter, Ok(UnlockPromptOutcome::Terminal)),
+            (WaitResult::Interrupted, Err(Error::Cancelled)),
+        ] {
+            let mut initial = initial_state();
+            let state = Arc::new(Mutex::new(initial.clone()));
+            let (mut client, server) = private_service(state.clone()).await;
+            client.can_prompt = true;
+            server
+                .object_server()
+                .at("/prompt/test", FakePrompt {
+                    state: state.clone(),
+                    dismissed: None,
+                })
+                .await
+                .unwrap();
+            let state_for_input = state.clone();
+            let terminal_action = async move {
+                loop {
+                    if state_for_input
+                        .lock()
+                        .unwrap()
+                        .mutations
+                        .iter()
+                        .any(|event| event == "prompt")
+                    {
+                        return action;
+                    }
+                    Timer::after(Duration::from_millis(1)).await;
+                }
+            };
+            assert_eq!(
+                client
+                    .complete_unlock_prompt(path("/prompt/test"), terminal_action)
+                    .await,
+                expected
+            );
+            initial.mutations = vec!["prompt".into(), "dismiss".into()];
+            assert_eq!(*state.lock().unwrap(), initial);
+        }
+    });
+}
+
+#[derive(Debug)]
+struct InputGuard(Arc<AtomicBool>);
+
+impl Drop for InputGuard {
+    fn drop(&mut self) {
+        self.0.store(true, Ordering::Relaxed);
+    }
+}
+
+#[test]
+fn desktop_completion_drops_pending_terminal_input_before_returning() {
+    pollster::block_on(async {
+        let state = Arc::new(Mutex::new(initial_state()));
+        let (mut client, server) = private_service(state.clone()).await;
+        client.can_prompt = true;
+        server
+            .object_server()
+            .at("/prompt/test", FakePrompt {
+                state,
+                dismissed: Some(false),
+            })
+            .await
+            .unwrap();
+        let input_dropped = Arc::new(AtomicBool::new(false));
+        let guard = InputGuard(input_dropped.clone());
+        let terminal_action = async move {
+            let _guard = guard;
+            futures::future::pending::<WaitResult>().await
+        };
+        let result = client
+            .complete_unlock_prompt(path("/prompt/test"), terminal_action)
+            .await;
+        assert_eq!(
+            (result, input_dropped.load(Ordering::Relaxed)),
+            (Ok(UnlockPromptOutcome::Completed), true)
+        );
     });
 }

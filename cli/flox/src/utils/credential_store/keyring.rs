@@ -6,7 +6,7 @@
 //! keyed by its code signature, and a nix-built `flox` is ad-hoc signed per
 //! build, so a native read prompted again after every upgrade and rebuild
 //! even after "Always Allow" (DEV-290). Linux collection selection and
-//! unlocking use Secret Service over D-Bus in [super::linux].
+//! unlocking use Secret Service over D-Bus in the Linux backend.
 
 use url::Url;
 

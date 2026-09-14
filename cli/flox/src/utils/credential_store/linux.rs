@@ -7,6 +7,7 @@
 //! Keep those attributes searchable, including when an item has been moved.
 
 use std::collections::HashMap;
+use std::env;
 use std::future::Future;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
@@ -14,7 +15,8 @@ use std::time::Duration;
 use async_io::Timer;
 use futures::StreamExt;
 use futures::future::{Either, select};
-use inquire::{Password, PasswordDisplayMode, Select};
+use indoc::formatdoc;
+use inquire::{Password, PasswordDisplayMode};
 use thiserror::Error;
 use zbus::address::Transport;
 use zbus::proxy::{Builder, CacheProperties};
@@ -23,7 +25,7 @@ use zbus::{Address, Connection, Proxy, connection};
 use zeroize::Zeroizing;
 
 use super::CredentialStoreError;
-use crate::utils::dialog::{Dialog, flox_theme};
+use crate::utils::dialog::{Checkpoint, Dialog, WaitResult, flox_theme};
 use crate::utils::{TERMINAL_STDERR, message};
 
 const SERVICE: &str = "org.freedesktop.secrets";
@@ -79,6 +81,22 @@ async fn bounded<T>(future: impl Future<Output = T>, duration: Duration) -> Resu
         Either::Left((result, _)) => Ok(result),
         Either::Right(_) => Err(Error::TimedOut),
     }
+}
+
+/// Environment hints choose the initial unlock method, not whether prompting
+/// is allowed. A present display can still be unusable, so desktop unlocking
+/// must also support an immediate terminal switch and a bounded fallback.
+fn has_desktop_session() -> bool {
+    let has_value = |name| env::var_os(name).is_some_and(|value| !value.is_empty());
+    !has_value("SSH_TTY")
+        && !has_value("SSH_CONNECTION")
+        && (has_value("DISPLAY") || has_value("WAYLAND_DISPLAY"))
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum UnlockPromptOutcome {
+    Completed,
+    Terminal,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -175,7 +193,7 @@ fn run(
             .map_err(|_| CredentialStoreError::NoBackend(keyring_core::Error::NoDefaultStore))?;
         let result = async {
             let mut client = Client::connect(connection.clone()).await?;
-            client.interactive &= allow_prompt;
+            client.can_prompt &= allow_prompt;
             client
                 .perform(service, account, operation)
                 .await
@@ -201,7 +219,7 @@ struct Client {
     connection: Connection,
     owner: String,
     session: OwnedObjectPath,
-    interactive: bool,
+    can_prompt: bool,
     prompt_timeout: Duration,
 }
 
@@ -244,7 +262,7 @@ impl Client {
             connection,
             owner,
             session,
-            interactive: Dialog::can_prompt(),
+            can_prompt: Dialog::can_prompt(),
             prompt_timeout: PROMPT_TIMEOUT,
         })
     }
@@ -392,7 +410,7 @@ impl Client {
         if !self.is_locked(collection).await? {
             return Ok(());
         }
-        if !self.interactive {
+        if !self.can_prompt {
             return Err(Error::Locked);
         }
         if UNLOCK_CANCELLED.load(Ordering::Relaxed) {
@@ -409,70 +427,120 @@ impl Client {
     }
 
     async fn unlock_interactively(&self, collection: &Collection) -> Result<(), Error> {
-        let mut terminal_supported = self.supports_terminal_unlock().await;
-        if !terminal_supported {
-            message::plain("Terminal unlocking is unavailable for this keyring provider.");
-        }
-        loop {
-            let choice = {
-                let _stderr_lock = TERMINAL_STDERR.lock();
-                let mut options = vec!["Use desktop prompt (30 second limit)"];
-                if terminal_supported {
-                    options.push("Enter keyring password in terminal");
-                }
-                options.push("Cancel");
-                Select::new(
-                    &format!("Keyring {:?} is locked.", collection.label),
-                    options,
-                )
-                .with_help_message("Select how to unlock it. Esc cancels.")
-                .with_render_config(flox_theme())
-                .prompt()
-                .map_err(|_| Error::Cancelled)?
-            };
-            match choice {
-                "Cancel" => return Err(Error::Cancelled),
-                "Enter keyring password in terminal" => {
-                    match self.unlock_with_password(collection).await {
-                        Err(Error::Unsupported) => {
-                            terminal_supported = false;
-                            message::warning(Error::Unsupported.to_string());
-                            continue;
-                        },
-                        result => return result,
-                    }
-                },
-                _ => {},
+        let terminal_supported = self.supports_terminal_unlock().await;
+        if !has_desktop_session() {
+            if !terminal_supported {
+                return Err(Error::Unsupported);
             }
-            let result = self.unlock_with_desktop(collection).await;
-            if self.is_locked(collection).await.is_ok_and(|locked| !locked) {
-                return Ok(());
-            }
-            message::warning(match result {
-                Err(Error::TimedOut) => {
-                    "The desktop unlock prompt timed out. Choose another unlock method."
-                },
-                _ => "The desktop prompt did not unlock the keyring. Choose an unlock method.",
-            });
+            message::plain(format!(
+                "Keyring {:?} is locked. Unlock it in this terminal.",
+                collection.label
+            ));
+            return self.unlock_with_password(collection).await;
         }
+
+        let result = self
+            .unlock_with_desktop(collection, terminal_supported)
+            .await;
+        match result {
+            Ok(UnlockPromptOutcome::Completed) => return Ok(()),
+            Err(Error::Cancelled) => return Err(Error::Cancelled),
+            Err(error) if !terminal_supported => return Err(error),
+            Ok(UnlockPromptOutcome::Terminal) | Err(_) => {},
+        }
+        // The desktop may have unlocked the collection as the user switched
+        // methods or the deadline expired. Avoid asking for a password again.
+        if !self.is_locked(collection).await? {
+            return Ok(());
+        }
+        message::plain(match result {
+            Err(Error::TimedOut) => {
+                "The desktop unlock prompt timed out. Unlock the keyring in this terminal."
+            },
+            Err(_) => {
+                "The desktop prompt could not unlock the keyring. Unlock it in this terminal."
+            },
+            _ => "Unlock the keyring in this terminal.",
+        });
+        self.unlock_with_password(collection).await
     }
 
-    async fn unlock_with_desktop(&self, collection: &Collection) -> Result<(), Error> {
+    async fn unlock_with_desktop(
+        &self,
+        collection: &Collection,
+        terminal_supported: bool,
+    ) -> Result<UnlockPromptOutcome, Error> {
         let service = self.service().await?;
         let (_, prompt): (Vec<OwnedObjectPath>, OwnedObjectPath) = bounded(
             service.call("Unlock", &(vec![&collection.path],)),
             CALL_TIMEOUT,
         )
         .await??;
-        self.complete_prompt(prompt).await?;
+        if prompt.as_str() != "/" && terminal_supported {
+            let message = formatdoc! {"
+                Unlock keyring {label:?} in the desktop prompt.
+                Press Enter to use the terminal instead, or Ctrl-C to cancel.",
+                label = collection.label,
+            };
+            let terminal_action = Dialog {
+                message: &message,
+                help_message: None,
+                typed: Checkpoint,
+            }
+            .checkpoint_async();
+            if self.complete_unlock_prompt(prompt, terminal_action).await?
+                == UnlockPromptOutcome::Terminal
+            {
+                return Ok(UnlockPromptOutcome::Terminal);
+            }
+        } else {
+            self.complete_prompt(prompt).await?;
+        }
         if self.is_locked(collection).await? {
             return Err(Error::Locked);
         }
-        Ok(())
+        Ok(UnlockPromptOutcome::Completed)
+    }
+
+    /// Race the desktop prompt against terminal input. Drop the losing future
+    /// before another prompt can start, restoring terminal mode and dismissing
+    /// the desktop prompt when the user switches methods or cancels.
+    async fn complete_unlock_prompt(
+        &self,
+        path: OwnedObjectPath,
+        terminal_action: impl Future<Output = WaitResult>,
+    ) -> Result<UnlockPromptOutcome, Error> {
+        match select(
+            Box::pin(self.complete_prompt(path.clone())),
+            Box::pin(terminal_action),
+        )
+        .await
+        {
+            Either::Left((result, terminal_action)) => {
+                drop(terminal_action);
+                // GNOME reports prompter startup failures and user dismissal
+                // through the same Completed(true) signal. Both need a terminal
+                // fallback; only an explicit terminal interruption cancels here.
+                match result {
+                    Err(Error::Cancelled) => Ok(UnlockPromptOutcome::Terminal),
+                    result => result.map(|_| UnlockPromptOutcome::Completed),
+                }
+            },
+            Either::Right((action, desktop_prompt)) => {
+                drop(desktop_prompt);
+                if let Ok(proxy) = self.proxy(path, PROMPT_INTERFACE).await {
+                    let _ = bounded(proxy.call::<_, _, ()>("Dismiss", &()), CALL_TIMEOUT).await;
+                }
+                match action {
+                    WaitResult::Enter => Ok(UnlockPromptOutcome::Terminal),
+                    WaitResult::Interrupted => Err(Error::Cancelled),
+                }
+            },
+        }
     }
 
     /// The extension is provider-specific and unsupported by GNOME. Capability
-    /// discovery only controls the menu; typed method errors remain authoritative.
+    /// discovery controls terminal availability; typed method errors remain authoritative.
     async fn supports_terminal_unlock(&self) -> bool {
         let Ok(proxy) = self
             .proxy(
@@ -559,7 +627,7 @@ impl Client {
         let proxy = self.proxy(path, PROMPT_INTERFACE).await?;
         let result = bounded(
             async {
-                if !self.interactive || UNLOCK_CANCELLED.load(Ordering::Relaxed) {
+                if !self.can_prompt || UNLOCK_CANCELLED.load(Ordering::Relaxed) {
                     return Err(Error::Locked);
                 }
                 let mut completed =

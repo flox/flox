@@ -563,7 +563,7 @@ fn complete_login(
     insecure_storage: bool,
     once: bool,
     storage_pref: TokenStorageMode,
-    interactive: bool,
+    allow_keyring_prompt: bool,
 ) -> Result<String> {
     // `--insecure-storage` forces plain text for this login; otherwise honor the
     // standing storage preference.
@@ -577,7 +577,7 @@ fn complete_login(
     // fallback and warning on keyring failure) or the plaintext config file
     // (explicit 0600).
     let stores = CredentialStores::from_flox(flox);
-    let stores = if interactive {
+    let stores = if allow_keyring_prompt {
         stores
     } else {
         stores.without_keyring_prompting()

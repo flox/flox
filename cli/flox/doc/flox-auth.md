@@ -45,12 +45,18 @@ matching credentials in a keyring named `Login`.
 An empty `Login` keyring does not override your default.
 Logout removes matching credentials from all keyrings for the current FloxHub.
 
-When the selected keyring is locked, an interactive command offers a desktop
-unlock prompt and, with GNOME Keyring, hidden password entry in the terminal.
-The terminal option is available before opening the desktop prompt.
-The desktop prompt times out after 30 seconds, after which you can choose again.
+When the selected keyring is locked, GNOME Keyring can be unlocked with hidden
+password entry in the terminal.
+SSH sessions and sessions without an X11 or Wayland display use terminal
+unlocking directly.
+Desktop sessions first open the graphical unlock prompt.
+Press Enter in the terminal to switch immediately to terminal unlocking if the
+window is inaccessible.
+A failed or dismissed desktop prompt, or a 30-second timeout, also falls back to
+terminal entry.
+Press Ctrl-C in the terminal to cancel the unlock operation.
 Other keyring providers must be unlocked through their desktop app.
-Press Esc to cancel terminal entry; incorrect passwords can be retried.
+Press Esc to cancel terminal password entry; incorrect passwords can be retried.
 The keyring password is never saved by Flox.
 
 Pipelines, prompt hooks, and `login --token-file` do not open unlock prompts.
