@@ -586,6 +586,11 @@ impl Install {
     }
 }
 
+/// Manifest description written into the `default` environment on first creation.
+/// Helps new users discover how to activate the environment from their shell RC files.
+const DEFAULT_ENV_DESCRIPTION: &str =
+    "This is your default environment. Activate it in your shell RC files to use it.";
+
 async fn try_create_default_environment_interactive(
     flox: &mut Flox,
     e: EnvironmentSelectError,
@@ -669,10 +674,15 @@ async fn try_create_default_environment_interactive(
                 ManagedEnvironmentError::UpstreamNotFound { env_ref, .. },
             )) => {
                 let env = ConcreteEnvironment::Remote(
-                    RemoteEnvironment::init_floxhub_environment(flox, env_ref.clone(), false)
-                        .with_context(|| {
-                            format!("Failed to initialize FloxHub environment '{env_ref}'")
-                        })?,
+                    RemoteEnvironment::init_floxhub_environment(
+                        flox,
+                        env_ref.clone(),
+                        false,
+                        Some(DEFAULT_ENV_DESCRIPTION.to_string()),
+                    )
+                    .with_context(|| {
+                        format!("Failed to initialize FloxHub environment '{env_ref}'")
+                    })?,
                 );
                 if let Err(err) = EventsHub::global().record_event(EventKind::CliEnvironmentCreate(
                     CliEnvironmentPayload::new(env_detail_from_concrete(flox, &env)),
