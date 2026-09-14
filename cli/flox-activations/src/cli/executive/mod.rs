@@ -13,6 +13,7 @@ use flox_core::activations::{
     write_activations_json,
 };
 use flox_core::proc_status::read_pid_status;
+use flox_core::process_compose::manager_responds;
 use flox_core::sentry::init_sentry;
 use flox_core::traceable_path;
 use fslock::LockFile;
@@ -592,6 +593,8 @@ fn handle_process_exited(
     }
 }
 
+/// Whether a new `process-compose` may be started.
+///
 /// Handle the SIGUSR1 signal to start process-compose.
 ///
 /// Return:
@@ -617,10 +620,18 @@ fn handle_start_services_signal(
         return Ok(None);
     };
 
-    // `flox-activations activate` ensures that `process-compose` is stopped
-    // (and the socket removed) before signaling a restart.
-    if project_ctx.flox_services_socket.exists() {
-        info!(reason = "already running", "skipping process-compose start");
+    // Where concurrent start requests serialise: activations signal
+    // independently, and nothing upstream sees more than its own.
+    // Where concurrent start requests serialise: activations signal
+    // independently, and nothing upstream sees more than its own. A manager
+    // that answers is one nobody should stack another on top of; whatever is
+    // left at the path when none does is `process-compose`'s to resolve when
+    // it binds.
+    if manager_responds(&project_ctx.flox_services_socket) {
+        info!(
+            reason = "a manager is answering",
+            "skipping process-compose start"
+        );
         return Ok(None);
     }
 
@@ -706,8 +717,8 @@ fn shut_down_and_remove_state(
 
 /// Shutdown `process-compose` if its socket is present.
 fn shut_down_process_compose(process_compose_bin: &Path, socket_path: &Path) {
-    if !socket_path.exists() {
-        info!(reason = "no socket", "did not shut down process-compose");
+    if !manager_responds(socket_path) {
+        info!(reason = "no manager", "did not shut down process-compose");
     } else if let Err(err) = process_compose_down(process_compose_bin, socket_path) {
         warn!(%err, "failed to run process-compose shutdown command");
     } else {

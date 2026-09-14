@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 use anyhow::{Context, Error, bail};
 use flox_core::activate::context::{AttachCtx, AttachProjectCtx};
 use flox_core::activations::StartIdentifier;
-use flox_core::process_compose::PROCESS_NEVER_EXIT_NAME;
+use flox_core::process_compose::{PROCESS_NEVER_EXIT_NAME, manager_responds};
 use time::OffsetDateTime;
 use time::macros::format_description;
 use tracing::{debug, info};
@@ -44,6 +44,16 @@ pub fn wait_for_socket_ready(
     );
 
     loop {
+        // Only ask `process-compose` when something is answering: each ask is
+        // a fork of a Go binary.
+        if !manager_responds(socket_file) {
+            if start.elapsed() >= timeout {
+                return Ok(false);
+            }
+            thread::sleep(poll_interval);
+            continue;
+        }
+
         let output = command.output().context(format!(
             "failed to poll socket readiness with command: {pretty_command}"
         ))?;
@@ -77,12 +87,8 @@ pub fn wait_for_socket_ready(
 
 /// The most recent `services.*.log` in `log_dir`, if there is one.
 ///
-/// `process-compose` is spawned by the executive, which reports neither the log
-/// path nor the outcome back to the process that asked for the start. Names are
-/// timestamped by [start_process_compose_no_services] in a format that sorts
-/// chronologically, so the greatest name is the instance whose startup was just
-/// waited on. Sorting by name rather than mtime keeps this independent of
-/// filesystems with coarse or skewed timestamps.
+/// Compares timestamped names rather than mtimes, which keeps this independent
+/// of filesystems with coarse or skewed timestamps.
 pub fn latest_services_log(log_dir: &Path) -> Option<PathBuf> {
     std::fs::read_dir(log_dir)
         .ok()?
@@ -114,13 +120,15 @@ pub fn log_tail(path: &Path, lines: usize) -> Option<String> {
 
 /// Start process-compose with only the flox_never_exit service.
 /// This allows services to be started later via the socket API.
+///
+/// Returns the manager's PID for the caller to record.
 pub fn start_process_compose_no_services(
     subsystem_verbosity: u32,
     attach_ctx: &AttachCtx,
     project: &AttachProjectCtx,
     start_id: &StartIdentifier,
     activation_state_dir: &Path,
-) -> Result<(), Error> {
+) -> Result<i32, Error> {
     let start_state_dir = start_id.start_state_dir(activation_state_dir)?;
     let config_file = start_id.store_path.join("service-config.yaml");
     let socket_path = project.flox_services_socket.as_path();
@@ -179,9 +187,9 @@ pub fn start_process_compose_no_services(
         "spawning process-compose without any services: {:?}",
         command
     );
-    command.spawn().context("Failed to spawn process-compose")?;
+    let child = command.spawn().context("Failed to spawn process-compose")?;
 
-    Ok(())
+    Ok(child.id() as i32)
 }
 
 /// Start specific services via the process-compose socket API.
