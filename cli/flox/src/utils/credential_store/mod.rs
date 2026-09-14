@@ -8,6 +8,8 @@
 
 mod auth_cache;
 mod keyring;
+#[cfg(target_os = "linux")]
+mod linux;
 mod mock;
 mod plaintext;
 /// macOS-only in production; compiled under `test` everywhere so the backend
@@ -40,6 +42,15 @@ use crate::utils::message;
 /// the token into their messages, and no variant carries the secret.
 #[derive(Debug, Error)]
 pub enum CredentialStoreError {
+    /// No Linux Secret Service backend is available.
+    #[cfg(target_os = "linux")]
+    #[error("no usable OS keyring backend is available")]
+    NoBackend(#[source] keyring_core::Error),
+
+    #[cfg(target_os = "linux")]
+    #[error(transparent)]
+    LinuxKeyring(#[from] linux::Error),
+
     /// A read or write against the plaintext `flox.toml` failed.
     #[error("could not access the plaintext credential file")]
     Plaintext(#[source] anyhow::Error),
@@ -219,6 +230,15 @@ impl CredentialStores {
         }
     }
 
+    /// Suppress Linux keyring UI for explicitly noninteractive command flows,
+    /// even when the caller happens to have a terminal attached.
+    pub fn without_keyring_prompting(mut self) -> Self {
+        if let CredentialStoreImpl::Keyring(keyring) = &mut self.keyring {
+            keyring.disable_prompting();
+        }
+        self
+    }
+
     /// Build storage and caching for an existing [Flox].
     pub fn from_flox(flox: &Flox) -> Self {
         Self::new(flox.floxhub.base_url(), &flox.config_dir, &flox.cache_dir)
@@ -291,8 +311,10 @@ impl CredentialStores {
     ///
     /// `Keyring`: attempt the keyring first (try-then-confirm); on success
     /// store there and remove any lingering plaintext token so it cannot
-    /// shadow the keyring entry, and on any keyring failure fall back to the
-    /// plaintext file (`0600`). `Plaintext`: write the plaintext file and drop
+    /// shadow the keyring entry. An unavailable backend permits fallback to
+    /// the plaintext file (`0600`); Linux unlock and selection failures are
+    /// returned so a refused unlock cannot change storage security.
+    /// `Plaintext`: write the plaintext file and drop
     /// any existing keyring entry (best effort). The returned [TokenStorage]
     /// tells the caller whether to warn the user.
     fn persist_login_token(
@@ -300,7 +322,19 @@ impl CredentialStores {
         token: &str,
         target: TokenStorageMode,
     ) -> Result<TokenStorage, CredentialStoreError> {
-        if target == TokenStorageMode::Keyring && self.keyring.set(token).is_ok() {
+        let stored_in_keyring = if target == TokenStorageMode::Keyring {
+            match self.keyring.set(token) {
+                Ok(()) => true,
+                // Cancelling an unlock or failing to select an existing entry
+                // must not silently save a new credential in plain text.
+                #[cfg(target_os = "linux")]
+                Err(err @ CredentialStoreError::LinuxKeyring(_)) => return Err(err),
+                Err(_) => false,
+            }
+        } else {
+            false
+        };
+        if stored_in_keyring {
             // The keyring already holds the token, so a failure to remove the
             // old plaintext copy must not fail the login. Warn instead: a
             // lingering plaintext token both leaves a secret on disk and shadows

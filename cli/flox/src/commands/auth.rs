@@ -548,6 +548,7 @@ pub async fn login_flox(
         insecure_storage,
         once,
         storage_pref,
+        true,
     )
 }
 
@@ -562,6 +563,7 @@ fn complete_login(
     insecure_storage: bool,
     once: bool,
     storage_pref: TokenStorageMode,
+    interactive: bool,
 ) -> Result<String> {
     // `--insecure-storage` forces plain text for this login; otherwise honor the
     // standing storage preference.
@@ -575,6 +577,11 @@ fn complete_login(
     // fallback and warning on keyring failure) or the plaintext config file
     // (explicit 0600).
     let stores = CredentialStores::from_flox(flox);
+    let stores = if interactive {
+        stores
+    } else {
+        stores.without_keyring_prompting()
+    };
     let storage = stores
         .persist_login(&auth_context, target)
         .context("Could not store token")?;
@@ -732,6 +739,7 @@ pub async fn login_with_token_file(
         insecure_storage,
         once,
         storage_pref,
+        false,
     )
 }
 
@@ -973,6 +981,7 @@ mod tests {
                 false,
                 false,
                 TokenStorageMode::Keyring,
+                false,
             )
             .expect("Auth0 login completes");
             complete_login(
@@ -982,6 +991,7 @@ mod tests {
                 false,
                 false,
                 TokenStorageMode::Keyring,
+                false,
             )
             .expect("PAT login completes");
 

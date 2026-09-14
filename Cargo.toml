@@ -27,6 +27,7 @@ version = "0.0.0"
 [workspace.dependencies]
 anstream = "0.6"
 anyhow = "1"
+async-io = "2.3.4"
 async-stream = "0.3.6"
 blake3 = "1.8.2"
 bpaf = { version = "0.9.24", features = ["derive", "autocomplete"] }
@@ -71,15 +72,10 @@ interim = { version = "0.2.1", features = ["chrono_0_4"] }
 is_executable = "1.0.5"
 itertools = "0.14.0"
 jsonwebtoken = { version = "10.3", features = ["rust_crypto"] }
-# Pure-Rust OS keyring access (keyring v4). The umbrella `keyring` crate forces
-# the `v1`/`cli` feature, which unconditionally references the Windows store and
-# drags Windows crates into the resolution; per the crate's own docs, apps that
-# pick their own backends depend on `keyring-core` plus the specific store
-# crates directly. The Linux backend is target-gated in `cli/flox/Cargo.toml`
-# (zbus Secret Service) so no new native library is linked; macOS goes through
-# the `security(1)` tool instead of a store crate.
+# Linux uses pure-Rust Secret Service access; macOS uses the security(1) tool.
 keyring-core = "1"
-zbus-secret-service-keyring-store = { version = "1", default-features = false, features = ["crypto-rust"] }
+zbus = "5.17"
+zeroize = "1.8"
 log = { version = "0.4.29", features = ["kv"] }
 nef-lock-catalog = { path = "cli/nef-lock-catalog" }
 nix = { version = "0.31", features = ["signal", "process", "user", "fs"] }

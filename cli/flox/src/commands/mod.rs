@@ -370,6 +370,17 @@ impl FloxArgs {
             &config.flox.config_dir,
             &config.flox.cache_dir,
         );
+        let stores = if matches!(
+            &self.command,
+            Some(Commands::Admin(AdminCommands::Auth(auth::Auth::Login {
+                token_file: Some(_),
+                ..
+            })))
+        ) {
+            stores.without_keyring_prompting()
+        } else {
+            stores
+        };
         let uses_token_auth = !matches!(
             config.flox.floxhub_authn_mode,
             Some(flox_config::AuthnMode::Kerberos)

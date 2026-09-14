@@ -37,6 +37,27 @@ an explanation of what to do.
 
 See [`flox-config(1)`](./flox-config.md).
 
+## Linux keyrings
+
+New credentials are stored in the default keyring selected in your keyring app.
+Existing credentials are updated where they were found, with priority given to
+matching credentials in a keyring named `Login`.
+An empty `Login` keyring does not override your default.
+Logout removes matching credentials from all keyrings for the current FloxHub.
+
+When the selected keyring is locked, an interactive command offers a desktop
+unlock prompt and, with GNOME Keyring, hidden password entry in the terminal.
+The terminal option is available before opening the desktop prompt.
+The desktop prompt times out after 30 seconds, after which you can choose again.
+Other keyring providers must be unlocked through their desktop app.
+Press Esc to cancel terminal entry; incorrect passwords can be retried.
+The keyring password is never saved by Flox.
+
+Pipelines, prompt hooks, and `login --token-file` do not open unlock prompts.
+Unlock the keyring before running a command that needs its credentials.
+Cancelling or failing to unlock an available keyring does not save the new
+credential in plain text.
+
 # SUBCOMMANDS
 
 ## `login`

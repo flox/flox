@@ -5,11 +5,8 @@
 //! framework: the Keychain trusts the *application* that created an item,
 //! keyed by its code signature, and a nix-built `flox` is ad-hoc signed per
 //! build, so a native read prompted again after every upgrade and rebuild
-//! even after "Always Allow" (DEV-290). Every other platform talks to the
-//! keyring via the `keyring` v4 crates (Linux: Secret Service over D-Bus).
-
-#[cfg(not(target_os = "macos"))]
-use std::sync::Once;
+//! even after "Always Allow" (DEV-290). Linux collection selection and
+//! unlocking use Secret Service over D-Bus in [super::linux].
 
 use url::Url;
 
@@ -40,25 +37,6 @@ fn keyring_disabled() -> bool {
     std::env::var(DISABLE_KEYRING_ENV_VAR).is_ok_and(|v| !v.is_empty())
 }
 
-/// Register the platform-native keyring as `keyring_core`'s default store.
-///
-/// Mirrors the `keyring` v4 `v1` module: try the per-target backend once, and
-/// swallow construction errors — when no backend registers, [keyring_core::Entry::new]
-/// returns [keyring_core::Error::NoDefaultStore], which [KeyringStore::remove]
-/// treats as a no-backend condition.
-#[cfg(not(target_os = "macos"))]
-fn register_default_store() {
-    static SET_CREDENTIAL_STORE: Once = Once::new();
-    SET_CREDENTIAL_STORE.call_once(|| {
-        #[cfg(target_os = "linux")]
-        {
-            if let Ok(store) = zbus_secret_service_keyring_store::Store::new() {
-                keyring_core::set_default_store(store);
-            }
-        }
-    });
-}
-
 /// OS-native encrypted credential storage (macOS Keychain / Linux Secret
 /// Service).
 ///
@@ -67,12 +45,23 @@ fn register_default_store() {
 #[derive(Debug, Clone)]
 pub(super) struct KeyringStore {
     account: String,
+    #[cfg(target_os = "linux")]
+    allow_prompt: bool,
 }
 
 impl KeyringStore {
     pub(super) fn new(floxhub_url: &Url) -> Self {
         Self {
             account: floxhub_url.as_str().to_string(),
+            #[cfg(target_os = "linux")]
+            allow_prompt: true,
+        }
+    }
+
+    pub(super) fn disable_prompting(&mut self) {
+        #[cfg(target_os = "linux")]
+        {
+            self.allow_prompt = false;
         }
     }
 }
@@ -96,10 +85,24 @@ impl KeyringStore {
     }
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(target_os = "linux")]
+impl KeyringStore {
+    fn get_from_backend(&self) -> Result<Option<String>, CredentialStoreError> {
+        super::linux::get(KEYRING_SERVICE, &self.account, self.allow_prompt)
+    }
+
+    fn set_in_backend(&self, token: &str) -> Result<(), CredentialStoreError> {
+        super::linux::set(KEYRING_SERVICE, &self.account, token, self.allow_prompt)
+    }
+
+    fn remove_from_backend(&self) -> Result<(), CredentialStoreError> {
+        super::linux::remove(KEYRING_SERVICE, &self.account, self.allow_prompt)
+    }
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
 impl KeyringStore {
     fn entry(&self) -> Result<keyring_core::Entry, CredentialStoreError> {
-        register_default_store();
         Ok(keyring_core::Entry::new(KEYRING_SERVICE, &self.account)?)
     }
 
@@ -144,9 +147,8 @@ impl CredentialStore for KeyringStore {
         if keyring_disabled() {
             return Err(CredentialStoreError::Disabled);
         }
-        // Try-then-confirm: attempt the write directly. Any failure (including
-        // a missing backend) surfaces as an error so the caller falls back to
-        // plaintext, rather than probing availability up front.
+        // Confirm the write before the caller removes any plaintext copy.
+        // A missing backend permits fallback; a refused Linux unlock does not.
         self.set_in_backend(token)
     }
 
@@ -161,8 +163,8 @@ impl CredentialStore for KeyringStore {
         // succeeds. Any other failure is surfaced so logout does not falsely
         // claim success.
         match self.remove_from_backend() {
-            // No Secret Service (or equivalent) to talk to.
-            #[cfg(not(target_os = "macos"))]
+            // No registered backend on other platforms.
+            #[cfg(not(any(target_os = "macos", target_os = "linux")))]
             Err(CredentialStoreError::Keyring(
                 keyring_core::Error::NoDefaultStore
                 | keyring_core::Error::PlatformFailure(_)
