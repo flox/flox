@@ -9,6 +9,7 @@ ignored = ["sapling-renderdag"]
 [dependencies]
 anstream.workspace = true
 anyhow.workspace = true
+base64.workspace = true
 bpaf.workspace = true
 chrono.workspace = true
 close_fds.workspace = true
@@ -26,7 +27,6 @@ indoc.workspace = true
 inquire.workspace = true
 interim.workspace = true
 itertools.workspace = true
-keyring-core.workspace = true
 nix.workspace = true
 oauth2.workspace = true
 path-dedot.workspace = true
@@ -67,14 +67,15 @@ nef-lock-catalog.workspace = true
 flox-manifest.workspace = true
 
 # Select the OS keyring backend per target so no new native library is linked.
-# macOS uses the Keychain via `security-framework` (already satisfied by the
-# Darwin SDK); Linux talks to the Secret Service over pure-Rust `zbus`
-# (`crypto-rust`), so the Nix build needs no extra `buildInputs`/`pkg-config`
-# entries. Depending on the store crates per-target (rather than the `keyring`
-# umbrella crate) keeps the Windows store — and its `windows-sys` resolution —
-# out of the dependency graph entirely.
-[target.'cfg(target_os = "macos")'.dependencies]
-apple-native-keyring-store.workspace = true
+# macOS drives the Keychain through the Apple-signed `security(1)` tool (see
+# `utils::credential_store::security_cli`) so no store crate is needed there;
+# Linux talks to the Secret Service over pure-Rust `zbus` (`crypto-rust`), so
+# the Nix build needs no extra `buildInputs`/`pkg-config` entries. Depending on
+# the store crate per-target (rather than the `keyring` umbrella crate) keeps
+# the Windows store — and its `windows-sys` resolution — out of the dependency
+# graph entirely.
+[target.'cfg(not(target_os = "macos"))'.dependencies]
+keyring-core.workspace = true
 
 [target.'cfg(target_os = "linux")'.dependencies]
 zbus-secret-service-keyring-store.workspace = true

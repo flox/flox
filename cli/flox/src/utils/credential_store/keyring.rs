@@ -1,10 +1,20 @@
-//! The OS-native encrypted credential backend (macOS Keychain / Linux Secret
-//! Service), via the `keyring` v4 crates.
+//! The OS-native encrypted credential backend.
+//!
+//! On macOS the login Keychain is driven through the Apple-signed
+//! `security(1)` tool ([super::security_cli]) rather than the Security
+//! framework: the Keychain trusts the *application* that created an item,
+//! keyed by its code signature, and a nix-built `flox` is ad-hoc signed per
+//! build, so a native read prompted again after every upgrade and rebuild
+//! even after "Always Allow" (DEV-290). Every other platform talks to the
+//! keyring via the `keyring` v4 crates (Linux: Secret Service over D-Bus).
 
+#[cfg(not(target_os = "macos"))]
 use std::sync::Once;
 
 use url::Url;
 
+#[cfg(target_os = "macos")]
+use super::security_cli::{SecurityCli, SecurityCliError};
 use super::{CredentialStore, CredentialStoreError};
 
 /// `service` value for the FloxHub credential in the OS keyring. The token is
@@ -34,17 +44,12 @@ fn keyring_disabled() -> bool {
 ///
 /// Mirrors the `keyring` v4 `v1` module: try the per-target backend once, and
 /// swallow construction errors — when no backend registers, [keyring_core::Entry::new]
-/// returns [keyring_core::Error::NoDefaultStore], which [KeyringStore] maps to
-/// [CredentialStoreError::NoBackend] so the caller falls back to plaintext.
+/// returns [keyring_core::Error::NoDefaultStore], which [KeyringStore::remove]
+/// treats as a no-backend condition.
+#[cfg(not(target_os = "macos"))]
 fn register_default_store() {
     static SET_CREDENTIAL_STORE: Once = Once::new();
     SET_CREDENTIAL_STORE.call_once(|| {
-        #[cfg(target_os = "macos")]
-        {
-            if let Ok(store) = apple_native_keyring_store::keychain::Store::new() {
-                keyring_core::set_default_store(store);
-            }
-        }
         #[cfg(target_os = "linux")]
         {
             if let Ok(store) = zbus_secret_service_keyring_store::Store::new() {
@@ -54,22 +59,8 @@ fn register_default_store() {
     });
 }
 
-/// Map a [keyring_core::Error] from a `get`/`set`/`remove` into our typed error.
-///
-/// [keyring_core::Error::NoEntry] is handled by callers (it is not a failure);
-/// the no-backend conditions become [CredentialStoreError::NoBackend] so the
-/// caller can branch on the type rather than a string.
-fn classify_keyring_error(error: keyring_core::Error) -> CredentialStoreError {
-    match error {
-        keyring_core::Error::NoDefaultStore
-        | keyring_core::Error::PlatformFailure(_)
-        | keyring_core::Error::NoStorageAccess(_) => CredentialStoreError::NoBackend(error),
-        other => CredentialStoreError::Keyring(other),
-    }
-}
-
 /// OS-native encrypted credential storage (macOS Keychain / Linux Secret
-/// Service) via the `keyring` v4 crates.
+/// Service).
 ///
 /// The entry is keyed by [KEYRING_SERVICE] plus the FloxHub base URL as the
 /// account, so distinct FloxHub instances do not collide.
@@ -84,10 +75,52 @@ impl KeyringStore {
             account: floxhub_url.as_str().to_string(),
         }
     }
+}
 
+#[cfg(target_os = "macos")]
+impl KeyringStore {
+    fn security(&self) -> SecurityCli {
+        SecurityCli::new(KEYRING_SERVICE, &self.account, None)
+    }
+
+    fn get_from_backend(&self) -> Result<Option<String>, CredentialStoreError> {
+        Ok(self.security().get()?)
+    }
+
+    fn set_in_backend(&self, token: &str) -> Result<(), CredentialStoreError> {
+        Ok(self.security().set(token)?)
+    }
+
+    fn remove_from_backend(&self) -> Result<(), CredentialStoreError> {
+        Ok(self.security().remove()?)
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+impl KeyringStore {
     fn entry(&self) -> Result<keyring_core::Entry, CredentialStoreError> {
         register_default_store();
-        keyring_core::Entry::new(KEYRING_SERVICE, &self.account).map_err(classify_keyring_error)
+        Ok(keyring_core::Entry::new(KEYRING_SERVICE, &self.account)?)
+    }
+
+    fn get_from_backend(&self) -> Result<Option<String>, CredentialStoreError> {
+        match self.entry()?.get_password() {
+            Ok(password) => Ok(Some(password)),
+            Err(keyring_core::Error::NoEntry) => Ok(None),
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    fn set_in_backend(&self, token: &str) -> Result<(), CredentialStoreError> {
+        Ok(self.entry()?.set_password(token)?)
+    }
+
+    fn remove_from_backend(&self) -> Result<(), CredentialStoreError> {
+        match self.entry()?.delete_credential() {
+            // Idempotent: a missing entry is not a failure.
+            Ok(()) | Err(keyring_core::Error::NoEntry) => Ok(()),
+            Err(e) => Err(e.into()),
+        }
     }
 }
 
@@ -95,16 +128,12 @@ impl CredentialStore for KeyringStore {
     fn get(&self) -> Result<Option<String>, CredentialStoreError> {
         // Disabled keyring: behave as a no-backend box. Return `Ok(None)` (not
         // an error) so this path is deterministic on a developer's keyring-
-        // capable machine. Checked before `entry()`, so no backend is
-        // initialized and no OS unlock prompt is triggered.
+        // capable machine. Checked before any backend is touched, so no OS
+        // unlock prompt is triggered.
         if keyring_disabled() {
             return Ok(None);
         }
-        match self.entry()?.get_password() {
-            Ok(password) => Ok(Some(password)),
-            Err(keyring_core::Error::NoEntry) => Ok(None),
-            Err(e) => Err(classify_keyring_error(e)),
-        }
+        self.get_from_backend()
     }
 
     fn set(&self, token: &str) -> Result<(), CredentialStoreError> {
@@ -118,9 +147,7 @@ impl CredentialStore for KeyringStore {
         // Try-then-confirm: attempt the write directly. Any failure (including
         // a missing backend) surfaces as an error so the caller falls back to
         // plaintext, rather than probing availability up front.
-        self.entry()?
-            .set_password(token)
-            .map_err(classify_keyring_error)
+        self.set_in_backend(token)
     }
 
     fn remove(&self) -> Result<(), CredentialStoreError> {
@@ -129,19 +156,22 @@ impl CredentialStore for KeyringStore {
         if keyring_disabled() {
             return Ok(());
         }
-        // Best-effort across machines with no keyring: when no backend is
-        // available there is nothing of ours stored there, so logout still
-        // succeeds. A backend that *is* present but rejects the delete (locked,
-        // platform error) is surfaced so logout does not falsely claim success.
-        let entry = match self.entry() {
-            Ok(entry) => entry,
-            Err(CredentialStoreError::NoBackend(_)) => return Ok(()),
-            Err(e) => return Err(e),
-        };
-        match entry.delete_credential() {
-            // Idempotent: a missing entry is not a failure.
-            Ok(()) | Err(keyring_core::Error::NoEntry) => Ok(()),
-            Err(e) => Err(classify_keyring_error(e)),
+        // Best-effort across machines with no keyring: when no usable backend
+        // is available there is nothing of ours stored there, so logout still
+        // succeeds. Any other failure is surfaced so logout does not falsely
+        // claim success.
+        match self.remove_from_backend() {
+            // No Secret Service (or equivalent) to talk to.
+            #[cfg(not(target_os = "macos"))]
+            Err(CredentialStoreError::Keyring(
+                keyring_core::Error::NoDefaultStore
+                | keyring_core::Error::PlatformFailure(_)
+                | keyring_core::Error::NoStorageAccess(_),
+            )) => Ok(()),
+            // No `security` tool to run.
+            #[cfg(target_os = "macos")]
+            Err(CredentialStoreError::SecurityTool(SecurityCliError::Spawn { .. })) => Ok(()),
+            other => other,
         }
     }
 }
