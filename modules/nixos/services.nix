@@ -8,7 +8,6 @@
 let
   inherit (config.programs.flox) package;
   inherit (lib)
-    escapeShellArgs
     filterAttrs
     mapAttrs
     mapAttrs'
@@ -19,7 +18,6 @@ let
     mkOption
     nameValuePair
     optionalAttrs
-    optionals
     types
     ;
 
@@ -68,49 +66,6 @@ let
 
   serviceUser = name: aCfg: if aCfg.user != null then aCfg.user else "flox-${name}";
   serviceGroup = name: aCfg: if aCfg.user != null then aCfg.group else "flox-${name}";
-
-  # The main unit's start command: activate the environment with its
-  # services, and keep following their logs as the unit's foreground
-  # process. The FloxHub token, if any, is provided as a systemd credential
-  # and travels to flox only through the environment.
-  startScript =
-    name: aCfg:
-    let
-      activateCmd = escapeShellArgs (
-        [ "${package}/bin/flox" ]
-        ++ aCfg.extraFloxArgs
-        ++ [
-          "activate"
-          "--dir"
-          (workingDirectory name)
-        ]
-        ++ optionals aCfg.trustEnvironment [ "--trust" ]
-        ++ aCfg.extraFloxActivateArgs
-        ++ [ "--start-services" ]
-      );
-      logsCmd = escapeShellArgs (
-        [ "${package}/bin/flox" ]
-        ++ aCfg.extraFloxArgs
-        ++ [
-          "services"
-          "logs"
-          "--follow"
-        ]
-      );
-    in
-    pkgs.writeShellScript "flox-activate-${name}" ''
-      set -euo pipefail
-      if [ -n "''${CREDENTIALS_DIRECTORY:-}" ] && [ -e "$CREDENTIALS_DIRECTORY/floxhub_token" ]; then
-        FLOX_FLOXHUB_TOKEN="$(cat "$CREDENTIALS_DIRECTORY/floxhub_token")"
-        export FLOX_FLOXHUB_TOKEN
-      fi
-      # By the time systemd runs ExecStart the previous instance's cgroup is
-      # gone, so any process-compose socket in this service's private cache
-      # is stale. Left in place it prevents services from starting again
-      # after an unclean shutdown.
-      rm -f ${workingDirectory name}/.cache/flox/run/*.sock
-      exec ${activateCmd} -- ${logsCmd}
-    '';
 
 in
 {
@@ -166,10 +121,11 @@ in
         unit = "${name}.service";
         user = serviceUser name aCfg;
         group = serviceGroup name aCfg;
-        workingDirectory = workingDirectory name;
         inherit (aCfg)
           environment
+          trustEnvironment
           extraFloxArgs
+          extraFloxActivateArgs
           extraFloxPullArgs
           pullAtServiceStart
           floxHubTokenFile
@@ -200,10 +156,10 @@ in
           User = serviceUser name aCfg;
           Group = serviceGroup name aCfg;
           WorkingDirectory = workingDirectory name;
-          Environment =
-            common.serviceEnvironment pkgs.runtimeShell (workingDirectory name) (serviceUser name aCfg)
-              cfg.metrics.enable;
-          ExecStart = "${startScript name aCfg}";
+          # The shared entry point applies HOME, USER and the XDG variables
+          # itself, so they are not repeated here; see ../systemd/libexec.
+          Environment = cfg.scriptEnvironment;
+          ExecStart = "${cfg.libexec}/flox-activate ${name}";
           Restart = "on-failure";
         }
         // optionalAttrs (aCfg.floxHubTokenFile != null) {

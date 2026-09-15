@@ -1,0 +1,3 @@
+#!/bin/sh
+# Records systemctl invocations so a test can assert on try-restart.
+echo "$*" >> "$FLOX_STUB_SYSTEMCTL_LOG"
