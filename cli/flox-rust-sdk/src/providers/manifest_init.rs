@@ -100,7 +100,10 @@ impl ManifestInitializer {
     /// Emitted only when set so existing manifests without a description are unchanged.
     fn add_description(manifest: &mut DocumentMut, customization: &InitCustomization) {
         if let Some(ref description) = customization.description {
-            manifest.insert(MANIFEST_DESCRIPTION_KEY, toml_edit::value(description.as_str()));
+            manifest.insert(
+                MANIFEST_DESCRIPTION_KEY,
+                toml_edit::value(description.as_str()),
+            );
         }
     }
 
