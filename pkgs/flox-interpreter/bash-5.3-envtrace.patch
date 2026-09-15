@@ -57,7 +57,7 @@
  }
 --- ../bash-5.3/variables.c
 +++ variables.c
-@@ -188,6 +188,828 @@ static SHELL_VAR nameref_maxloop_value;
+@@ -188,6 +188,842 @@ static SHELL_VAR nameref_maxloop_value;
  static HASH_TABLE *last_table_searched;	/* hash_lookup sets this */
  static VAR_CONTEXT *last_context_searched;
  
@@ -123,9 +123,15 @@
 +/* for prepend/append (so a replaying shell can apply the delta to its own  */
 +/* current value, e.g. append `:/usr/sbin' to its own PATH), and `@' for    */
 +/* unset.                                                                   */
-+/* An empty old value classifies as `append' (it is trivially a prefix of   */
-+/* the new value); when the old value is both a proper prefix and a proper  */
-+/* suffix of the new one, prefix wins and the op is `append'.               */
++/* Growth at one end is `prepend'/`append' only when the added text         */
++/* meets the old value at a `:' list separator that the added text          */
++/* itself carries (an appended delta starts with `:', a prepended one       */
++/* ends with `:').  Growth without one -- TMPDIR=/tmp/ becoming             */
++/* /tmp/nix-shell.abc -- is `updated': splicing such a delta into a         */
++/* replaying shell's own value would double the growth once that shell      */
++/* already holds the grown value.  An empty old value follows the same      */
++/* rule; when the old value is both a proper prefix and a proper suffix     */
++/* of the new one, prefix wins.                                             */
 +/*                                                                          */
 +/* <exported> is two digits, the PRE- and POST-operation export state, so   */
 +/* every record is invertible: `01' = newly exported, `11' = was and still  */
@@ -593,8 +599,15 @@
 +
 +/* Refine a generic value-assignment into the precise mutation kind, from
 +   the old/new value pair alone.  See the op table in the banner comment.
-+   The containment checks are exact byte comparisons; anything that is not
-+   pure growth at one end reports as "updated". */
++   The containment checks are exact byte comparisons.  Growth at one end
++   is `prepend'/`append' only when the added text carries the `:' list
++   separator on its inner edge (first byte of an appended delta, last byte
++   of a prepended one): that is what lets a replaying shell splice the
++   delta into its own value.  A value that merely grew by text --
++   TMPDIR=/tmp/ becoming /tmp/nix-shell.abc, a `-dev' suffix on a
++   directory -- is a rewrite; replaying it as a delta onto a shell that
++   already holds the grown value (a nested attach) would double the
++   growth.  Anything else reports as "updated". */
 +static const char *
 +envtrace_classify_set (const char *oldval, const char *newval)
 +{
@@ -608,10 +621,11 @@
 +    return "reset";
 +  ol = strlen (oldval);
 +  nl = strlen (newval);
-+  if (nl > ol && memcmp (newval, oldval, ol) == 0)
-+    return "append";		/* old is a prefix: text added at the end */
-+  if (nl > ol && memcmp (newval + (nl - ol), oldval, ol) == 0)
-+    return "prepend";		/* old is a suffix: text added at the front */
++  if (nl > ol && memcmp (newval, oldval, ol) == 0 && newval[ol] == ':')
++    return "append";		/* old is a prefix: list grew at the end */
++  if (nl > ol && memcmp (newval + (nl - ol), oldval, ol) == 0
++      && newval[nl - ol - 1] == ':')
++    return "prepend";		/* old is a suffix: list grew at the front */
 +  return "updated";
 +}
 +
@@ -886,7 +900,7 @@
  /* Some forward declarations. */
  static void create_variable_tables (void);
  
-@@ -3055,6 +3877,9 @@ bind_variable_internal (const char *name, const char *value, HASH_TABLE *table,
+@@ -3055,6 +3891,9 @@ bind_variable_internal (const char *name, const char *value, HASH_TABLE *table,
  {
    char *newval, *tname;
    SHELL_VAR *entry, *tentry;
@@ -896,7 +910,7 @@
  
    entry = (hflags & HASH_NOSRCH) ? (SHELL_VAR *)NULL : hash_lookup (name, table);
    /* Follow the nameref chain here if this is the global variables table */
-@@ -3118,12 +3943,14 @@ bind_variable_internal (const char *name, const char *value, HASH_TABLE *table,
+@@ -3118,12 +3957,14 @@ bind_variable_internal (const char *name, const char *value, HASH_TABLE *table,
  	{
  	  entry = make_new_variable (newval, table);
  	  var_setvalue (entry, make_variable_value (entry, value, aflags));
@@ -911,7 +925,7 @@
      }
    else if (entry->assign_func)	/* array vars have assign functions now */
      {
-@@ -3159,6 +3986,22 @@ assign_value:
+@@ -3159,6 +4000,22 @@ assign_value:
        /* Variables which are bound are visible. */
        VUNSETATTR (entry, att_invisible);
  
@@ -934,7 +948,7 @@
        /* If we can optimize the assignment, do so and return.  Right now, we
  	 optimize appends to string variables. */
        if (can_optimize_assignment (entry, value, aflags))
-@@ -3172,6 +4015,13 @@ assign_value:
+@@ -3172,6 +4029,13 @@ assign_value:
  	  if (exported_p (entry))
  	    array_needs_making = 1;
  
@@ -948,7 +962,7 @@
  	  return (entry);
  	}
  
-@@ -3214,6 +4064,18 @@ assign_value:
+@@ -3214,6 +4078,18 @@ assign_value:
    if (exported_p (entry))
      array_needs_making = 1;
  
@@ -967,7 +981,7 @@
    return (entry);
  }
  	
-@@ -3321,10 +4183,28 @@ bind_variable_value (SHELL_VAR *var, char *value, int aflags)
+@@ -3321,10 +4197,28 @@ bind_variable_value (SHELL_VAR *var, char *value, int aflags)
  {
    char *t;
    int invis;
@@ -996,7 +1010,7 @@
    if (var->assign_func)
      {
        /* If we're appending, we need the old value, so use
-@@ -3347,6 +4227,7 @@ bind_variable_value (SHELL_VAR *var, char *value, int aflags)
+@@ -3347,6 +4241,7 @@ bind_variable_value (SHELL_VAR *var, char *value, int aflags)
  	      free (t);
  	      if (invis)
  		VSETATTR (var, att_invisible);	/* XXX */
@@ -1004,7 +1018,7 @@
  	      return ((SHELL_VAR *)NULL);
  	    }
  	}
-@@ -3355,6 +4236,7 @@ bind_variable_value (SHELL_VAR *var, char *value, int aflags)
+@@ -3355,6 +4250,7 @@ bind_variable_value (SHELL_VAR *var, char *value, int aflags)
  	  free (t);
  	  if (invis)
  	    VSETATTR (var, att_invisible);	/* XXX */
@@ -1012,7 +1026,7 @@
  	  return ((SHELL_VAR *)NULL);
  	}
        FREE (value_cell (var));
-@@ -3369,6 +4251,14 @@ bind_variable_value (SHELL_VAR *var, char *value, int aflags)
+@@ -3369,6 +4265,14 @@ bind_variable_value (SHELL_VAR *var, char *value, int aflags)
    if (exported_p (var))
      array_needs_making = 1;
  
@@ -1027,7 +1041,7 @@
    return (var);
  }
  
-@@ -3646,6 +4536,12 @@ assign_in_env (const WORD_DESC *word, int flags)
+@@ -3646,6 +4550,12 @@ assign_in_env (const WORD_DESC *word, int flags)
  	so we do too. */
      xtrace_print_assignment (name, value, 0, 1);
  
@@ -1040,7 +1054,7 @@
    free (name);
    return 1;
  }
-@@ -3975,6 +4871,14 @@ makunbound (const char *name, VAR_CONTEXT *vc)
+@@ -3975,6 +4885,14 @@ makunbound (const char *name, VAR_CONTEXT *vc)
    if (old_var && exported_p (old_var))
      array_needs_making++;
  
@@ -1055,7 +1069,7 @@
    /* If we're unsetting a local variable and we're still executing inside
       the function, just mark the variable as invisible.  The function
       eventually called by pop_var_context() will clean it up later.  This
-@@ -4857,6 +5761,13 @@ make_env_array_from_var_list (SHELL_VAR **vars)
+@@ -4857,6 +5775,13 @@ make_env_array_from_var_list (SHELL_VAR **vars)
  
    for (i = 0, list_index = 0; var = vars[i]; i++)
      {
@@ -1069,7 +1083,7 @@
  #if defined (__CYGWIN__)
        /* We don't use the exportstr stuff on Cygwin at all. */
        INVALIDATE_EXPORTSTR (var);
-@@ -5345,6 +6256,8 @@ void
+@@ -5345,6 +6270,8 @@ void
  pop_var_context (void)
  {
    VAR_CONTEXT *ret, *vcxt;
@@ -1078,7 +1092,7 @@
  
    vcxt = shell_variables;
    if (vc_isfuncenv (vcxt) == 0)
-@@ -5357,11 +6270,21 @@ pop_var_context (void)
+@@ -5357,11 +6284,21 @@ pop_var_context (void)
  
    if (ret = vcxt->down)
      {

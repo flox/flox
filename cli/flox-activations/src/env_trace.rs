@@ -20,6 +20,12 @@
 //! the trace onto a different shell's environment extends that shell's own
 //! value instead of clobbering it with the value captured in the shell that
 //! ran the activation.
+//!
+//! A delta is always spliceable because the tracer only classifies growth
+//! as `prepend`/`append` when the added text carries the `:` list separator
+//! on its inner edge; growth without one (`TMPDIR=/tmp/` becoming
+//! `/tmp/nix-shell.abc`) is recorded as a rewrite, so a nested attach, whose
+//! shell already holds the grown value, does not apply it twice.
 
 use std::collections::HashMap;
 use std::path::Path;

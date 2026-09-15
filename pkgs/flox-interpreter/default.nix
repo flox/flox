@@ -39,11 +39,14 @@ let
   # at build time); its header comment is the format specification.
   # It is in the official bash-patch format (apply with -p0), which is how
   # nixpkgs applies bash patches, and targets bash 5.3p9 sources.
-  # Known-stale items in the vendored patch's header comment (the copy is
-  # kept byte-identical to the source commit rather than edited locally):
-  # its <op> table omits `set-if-absent` and its control-variable list
-  # omits BASH_ENVTRACE_RESET — both are implemented by the patch and
-  # documented in cli/flox-activations/src/env_trace.rs.
+  # The copy carries one local change on top of that commit, to be folded
+  # back into bash-envtrace before the next re-vendoring: `prepend`/`append`
+  # are reported only when the added text carries the `:` list separator
+  # (see envtrace_classify_set); plain textual growth reports as `updated`.
+  # Known-stale items in the vendored patch's header comment: its <op>
+  # table omits `set-if-absent` and its control-variable list omits
+  # BASH_ENVTRACE_RESET — both are implemented by the patch and documented
+  # in cli/flox-activations/src/env_trace.rs.
   bash-envtrace =
     assert lib.assertMsg (lib.hasPrefix "5.3" bashNonInteractive.version)
       "bash-5.3-envtrace.patch targets bash 5.3 but bashNonInteractive is ${bashNonInteractive.version}; regenerate the patch (see the bash-envtrace repo's regen-patch) before bumping bash";
@@ -127,6 +130,11 @@ runCommand "flox-interpreter"
     cat > "$TMPDIR/envtrace-smoke.sh" <<EOS
     BASH_ENVTRACE_FILE="$TMPDIR/envtrace-smoke.trace"
     export ENVTRACE_SMOKE=value
+    export ENVTRACE_LIST=/a
+    export ENVTRACE_LIST="\$ENVTRACE_LIST:/b"
+    export ENVTRACE_LIST="/c:\$ENVTRACE_LIST"
+    export ENVTRACE_DIR=/t/
+    export ENVTRACE_DIR="\$ENVTRACE_DIR"nix-shell.abc
     BASH_ENVTRACE_RESET=1
     export ENVTRACE_SMOKE=value
     unset BASH_ENVTRACE_RESET BASH_ENVTRACE_FILE
@@ -138,6 +146,18 @@ runCommand "flox-interpreter"
     # runtime.
     grep -q $'\x1f'"set"$'\x1f' "$TMPDIR/envtrace-smoke.trace"
     grep -q $'\x1f'"reset"$'\x1f' "$TMPDIR/envtrace-smoke.trace"
+    # List growth must be recorded as a delta carrying the separator, and
+    # plain textual growth as a rewrite: attach replays deltas onto the
+    # attaching shell's own value, so a nested attach — whose shell already
+    # holds the grown value — would otherwise double anything that is not
+    # a list (TMPDIR=/tmp/ becoming /tmp/nix-shell.abcnix-shell.abc).
+    grep -q $'\x1f'"append"$'\x1f'"11"$'\x1f'"ENVTRACE_LIST"$'\x1f'":/a"$'\x1f'"::/b$" "$TMPDIR/envtrace-smoke.trace"
+    grep -q $'\x1f'"prepend"$'\x1f'"11"$'\x1f'"ENVTRACE_LIST"$'\x1f'":/a:/b"$'\x1f'":/c:$" "$TMPDIR/envtrace-smoke.trace"
+    grep -q $'\x1f'"updated"$'\x1f'"11"$'\x1f'"ENVTRACE_DIR"$'\x1f'":/t/"$'\x1f'":/t/nix-shell.abc$" "$TMPDIR/envtrace-smoke.trace"
+    if grep -q $'\x1f'"append"$'\x1f'"11"$'\x1f'"ENVTRACE_DIR"$'\x1f' "$TMPDIR/envtrace-smoke.trace"; then
+      echo "envtrace recorded textual growth of ENVTRACE_DIR as an append delta" >&2
+      exit 1
+    fi
 
     # Create the "out" output.
     mkdir -p $out
