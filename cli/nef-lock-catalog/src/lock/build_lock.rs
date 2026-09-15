@@ -7,7 +7,9 @@ use floxhub_client::LockedInputEntry;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, instrument};
 
+use super::flakeref::RawNixFlakerefAttrs;
 use super::tree::PackageTreeNode;
+use crate::scan::AttrPath;
 use crate::{CatalogId, CatalogRef};
 
 /// Locked source information for a catalog: a package attribute hierarchy with
@@ -82,7 +84,71 @@ pub enum LockfileError {
     },
 }
 
+/// Why [BuildLock::override_input] could not replace a source.
+#[derive(Debug, thiserror::Error)]
+pub enum OverrideInputError {
+    #[error(
+        "The catalog lock does not pin '{reference}'.\nIt pins: {}",
+        .pinned.iter().map(ToString::to_string).collect::<Vec<_>>().join(", ")
+    )]
+    NotPinned {
+        reference: CatalogRef,
+        /// Every reference the lock does pin, in lock order.
+        pinned: Vec<CatalogRef>,
+    },
+
+    #[error("'{0}' names more than one input; an override replaces exactly one.")]
+    Wildcard(CatalogRef),
+}
+
 impl BuildLock {
+    /// Replace the source the lock pins for `reference` with `source`: the
+    /// lock's side of `nix build --override-input`. The replacement goes
+    /// into the `catalogs` tree, which is what the NEF fetches from;
+    /// `direct_catalog_inputs` stays as the catalog resolved it, since it
+    /// records what a publish submits and a publish never overrides.
+    pub fn override_input(
+        &mut self,
+        reference: &CatalogRef,
+        source: RawNixFlakerefAttrs,
+    ) -> Result<(), OverrideInputError> {
+        if reference.path().is_wildcard() {
+            return Err(OverrideInputError::Wildcard(reference.clone()));
+        }
+        // A reference names `<root>.<catalog>.<path...>`; its invariant
+        // guarantees the catalog component is present.
+        let names = reference.path().attribute_names();
+        let (catalog, path) = (names[1], &names[2..]);
+        let leaf = self
+            .catalogs
+            .get_mut(&CatalogId(catalog.to_string()))
+            .and_then(|CatalogLock::FloxHub { packages }| packages.package_mut(path));
+        let Some(PackageTreeNode::Package { source: pinned, .. }) = leaf else {
+            return Err(OverrideInputError::NotPinned {
+                reference: reference.clone(),
+                pinned: self.pinned_references(),
+            });
+        };
+        *pinned = source;
+        Ok(())
+    }
+
+    /// Every reference the lock pins, as the scanner would name it.
+    fn pinned_references(&self) -> Vec<CatalogRef> {
+        self.catalogs
+            .iter()
+            .flat_map(|(catalog, CatalogLock::FloxHub { packages })| {
+                packages.package_paths().into_iter().map(|path| {
+                    let root = AttrPath::root("catalogs").append_attribute(catalog.to_string());
+                    path.into_iter()
+                        .fold(root, AttrPath::append_attribute)
+                        .try_into()
+                        .expect("a pinned package lies beneath its catalog")
+                })
+            })
+            .collect()
+    }
+
     /// The direct-input entries covering exactly `references`; see
     /// [subset_direct_inputs].
     pub fn subset_direct(
@@ -311,6 +377,83 @@ mod tests {
             references(&["catalogs.myorg.missing", "catalogs.other.gone"])
                 .into_iter()
                 .collect::<Vec<_>>()
+        );
+    }
+
+    fn tree_source(lock: &BuildLock, catalog: &str, attr_path: &[&str]) -> serde_json::Value {
+        let value = serde_json::to_value(lock).unwrap();
+        let mut node = &value["catalogs"][catalog]["packages"];
+        for attribute in attr_path {
+            node = &node["entries"][*attribute];
+        }
+        node["source"].clone()
+    }
+
+    /// An override replaces the source in the `catalogs` tree the NEF
+    /// fetches from and nothing else: other inputs, and the direct entry a
+    /// publish would submit, stay as resolved.
+    #[test]
+    fn override_input_replaces_the_pinned_source_in_the_catalogs_tree() {
+        let mut lock = lock_with(&["myorg/hello", "myorg/world"]);
+        let source = serde_json::json!({ "type": "path", "path": "/src/hello", "dir": ".flox" });
+
+        lock.override_input(
+            &CatalogRef::new_unchecked("catalogs.myorg.hello"),
+            RawNixFlakerefAttrs::new_unchecked(source.clone()),
+        )
+        .expect("the lock pins the reference");
+
+        assert_eq!(tree_source(&lock, "myorg", &["hello"]), source);
+        assert_eq!(
+            tree_source(&lock, "myorg", &["world"])["type"],
+            serde_json::json!("git")
+        );
+        assert_eq!(
+            lock.direct_catalog_inputs["myorg/hello"],
+            entry("myorg", &["hello"])
+        );
+    }
+
+    #[test]
+    fn override_input_of_an_unpinned_reference_names_what_is_pinned() {
+        let mut lock = lock_with(&["myorg/hello", "myorg/toolkit.extras", "other/tool"]);
+        let source = RawNixFlakerefAttrs::new_unchecked(serde_json::json!({ "type": "path" }));
+
+        let err = lock
+            .override_input(&CatalogRef::new_unchecked("catalogs.myorg.missing"), source)
+            .expect_err("the lock does not pin the reference");
+
+        let OverrideInputError::NotPinned { reference, pinned } = err else {
+            panic!("expected NotPinned, got {err:?}");
+        };
+        assert_eq!(
+            reference,
+            CatalogRef::new_unchecked("catalogs.myorg.missing")
+        );
+        assert_eq!(
+            pinned,
+            references(&[
+                "catalogs.myorg.hello",
+                "catalogs.myorg.toolkit.extras",
+                "catalogs.other.tool",
+            ])
+            .into_iter()
+            .collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn override_input_refuses_a_wildcard() {
+        let mut lock = lock_with(&["myorg/hello"]);
+        let source = RawNixFlakerefAttrs::new_unchecked(serde_json::json!({ "type": "path" }));
+
+        let err = lock
+            .override_input(&CatalogRef::new_unchecked("catalogs.myorg.*"), source)
+            .expect_err("a wildcard names more than one input");
+
+        assert!(
+            matches!(err, OverrideInputError::Wildcard(_)),
+            "got {err:?}"
         );
     }
 

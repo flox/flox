@@ -26,9 +26,12 @@ use tracing::debug;
 
 use super::build::{
     BaseCatalogUrlSelect,
+    InputOverrides,
+    announce_input_overrides,
     base_catalog_url_select,
     base_nixpkgs_url_from_url_select,
     check_git_tracking_for_expression_builds,
+    input_overrides,
     packages_to_build,
     prefetch_expression_build_flake_ref,
     prefetch_flake_ref,
@@ -74,6 +77,9 @@ pub struct Develop {
     #[bpaf(external(base_catalog_url_select), optional)]
     base_catalog_url_select: Option<BaseCatalogUrlSelect>,
 
+    #[bpaf(external(input_overrides))]
+    input_overrides: InputOverrides,
+
     /// Shell command string to run in the development shell instead of entering it interactively
     #[bpaf(
         long("command"),
@@ -105,9 +111,11 @@ impl Develop {
         let Develop {
             environment,
             base_catalog_url_select,
+            input_overrides,
             shell_command,
             package,
         } = opts;
+        let input_overrides = input_overrides.into_inner();
 
         let mut env = environment.detect_concrete_environment(&mut flox, "Develop packages of")?;
         Self::refuse_managed_environment(&env)?;
@@ -151,11 +159,14 @@ impl Develop {
                 unreachable!("manifest builds are refused before the eval")
             },
         };
-        let catalog_lock =
-            BuildLockGuard::new_existing_or_ephemeral(&flox.floxhub_client, env.dot_flox_path(), [
-                &rel_file_path,
-            ])
-            .await?;
+        announce_input_overrides(&input_overrides);
+        let catalog_lock = BuildLockGuard::new_existing_or_ephemeral(
+            &flox.floxhub_client,
+            env.dot_flox_path(),
+            [&rel_file_path],
+            &input_overrides,
+        )
+        .await?;
 
         let base_nixpkgs_url =
             base_nixpkgs_url_from_url_select(&flox, base_catalog_url_select, Some(&lockfile))

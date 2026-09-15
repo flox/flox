@@ -27,6 +27,43 @@ pub enum PackageTreeNode {
     },
 }
 
+impl PackageTreeNode {
+    /// The package leaf at `attr_path`, if there is one; a package set
+    /// there, or a path leading through a package, is `None`.
+    pub(crate) fn package_mut(&mut self, attr_path: &[&str]) -> Option<&mut PackageTreeNode> {
+        let mut node = self;
+        for attribute in attr_path {
+            let PackageTreeNode::PackageSet { entries } = node else {
+                return None;
+            };
+            node = entries.get_mut(*attribute)?;
+        }
+        match node {
+            PackageTreeNode::Package { .. } => Some(node),
+            PackageTreeNode::PackageSet { .. } => None,
+        }
+    }
+
+    /// The attr path of every package leaf beneath this node, in key order.
+    pub(crate) fn package_paths(&self) -> Vec<Vec<String>> {
+        fn walk(node: &PackageTreeNode, prefix: &[String], paths: &mut Vec<Vec<String>>) {
+            match node {
+                PackageTreeNode::Package { .. } => paths.push(prefix.to_vec()),
+                PackageTreeNode::PackageSet { entries } => {
+                    for (name, child) in entries {
+                        let mut path = prefix.to_vec();
+                        path.push(name.clone());
+                        walk(child, &path, paths);
+                    }
+                },
+            }
+        }
+        let mut paths = Vec::new();
+        walk(self, &[], &mut paths);
+        paths
+    }
+}
+
 /// Builds a package tree from locked source items
 pub struct PackageTreeBuilder {
     root: PackageTreeNode,
