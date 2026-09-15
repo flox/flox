@@ -352,13 +352,6 @@ jobs:
     permissions:
       id-token: write # Needed for AWS Creds
 
-    outputs:
-      closure-size-x86_64-linux: ${{ steps.closure.outputs.closure-size-x86_64-linux }}
-      closure-size-aarch64-linux: ${{ steps.closure.outputs.closure-size-aarch64-linux }}
-      closure-size-x86_64-darwin: ${{ steps.closure.outputs.closure-size-x86_64-darwin }}
-      closure-size-aarch64-darwin: ${{ steps.closure.outputs.closure-size-aarch64-darwin }}
-      flox-version: ${{ steps.version.outputs.flox-version }}
-
     strategy:
       fail-fast: false
       matrix:
@@ -430,13 +423,6 @@ jobs:
             echo "::endgroup::"
           done
 
-      - name: "Get Flox version"
-        id: "version"
-        run: |
-          FLOX_VERSION="${FLOX_VERSION:=$(git describe)}"
-          FLOX_VERSION="${FLOX_VERSION:1}"
-          echo "flox-version=$FLOX_VERSION" >> $GITHUB_OUTPUT
-
   trigger-flox-installers-workflow:
     name: "Build installers"
     if: ${{ (github.base_ref == 'refs/heads/main' || github.ref == 'refs/heads/main') && github.event_name == 'push' }}
@@ -456,7 +442,6 @@ jobs:
           wait-timeout-minutes: 15
 
       - name: "Trigger flox-installers workflow"
-        id: "trigger-workflow"
         uses: convictional/trigger-workflow-and-wait@f69fa9eedd3c62a599220f4d5745230e237904be # v1.6.5
         with:
           owner: "flox"
@@ -470,26 +455,6 @@ jobs:
           propagate_failure: true
           trigger_workflow: true
           wait_workflow: true
-
-      - name: "Create shipit artifact"
-        if: ${{ success() || failure() }}
-        run: |
-          jq -n \
-            --arg "flox_installers_workflow_id" "${{ steps.trigger-workflow.outputs.workflow_id }}" \
-            --arg "flox_closure_size-x86_64-linux" "${{ needs.nix-build.outputs.closure-size-x86_64-linux }}" \
-            --arg "flox_closure_size-aarch64-linux" "${{ needs.nix-build.outputs.closure-size-aarch64-linux }}" \
-            --arg "flox_closure_size-x86_64-darwin" "${{ needs.nix-build.outputs.closure-size-x86_64-darwin }}" \
-            --arg "flox_closure_size-aarch64-darwin" "${{ needs.nix-build.outputs.closure-size-aarch64-darwin }}" \
-            --arg "flox_version" "${{ needs.nix-build.outputs.flox-version }}" \
-            '$ARGS.named' > shipit.json
-          cat shipit.json | jq
-
-      - name: "Upload artifact"
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
-        if: ${{ success() || failure() }}
-        with:
-          name: "shipit"
-          path: "shipit.json"
 
   report-failure:
     name: "Report Failure"
