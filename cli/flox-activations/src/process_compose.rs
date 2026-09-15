@@ -120,15 +120,13 @@ pub fn log_tail(path: &Path, lines: usize) -> Option<String> {
 
 /// Start process-compose with only the flox_never_exit service.
 /// This allows services to be started later via the socket API.
-///
-/// Returns the manager's PID for the caller to record.
 pub fn start_process_compose_no_services(
     subsystem_verbosity: u32,
     attach_ctx: &AttachCtx,
     project: &AttachProjectCtx,
     start_id: &StartIdentifier,
     activation_state_dir: &Path,
-) -> Result<i32, Error> {
+) -> Result<(), Error> {
     let start_state_dir = start_id.start_state_dir(activation_state_dir)?;
     let config_file = start_id.store_path.join("service-config.yaml");
     let socket_path = project.flox_services_socket.as_path();
@@ -187,9 +185,9 @@ pub fn start_process_compose_no_services(
         "spawning process-compose without any services: {:?}",
         command
     );
-    let child = command.spawn().context("Failed to spawn process-compose")?;
+    command.spawn().context("Failed to spawn process-compose")?;
 
-    Ok(child.id() as i32)
+    Ok(())
 }
 
 /// Start specific services via the process-compose socket API.

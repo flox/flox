@@ -621,8 +621,6 @@ fn handle_start_services_signal(
     };
 
     // Where concurrent start requests serialise: activations signal
-    // independently, and nothing upstream sees more than its own.
-    // Where concurrent start requests serialise: activations signal
     // independently, and nothing upstream sees more than its own. A manager
     // that answers is one nobody should stack another on top of; whatever is
     // left at the path when none does is `process-compose`'s to resolve when
@@ -715,7 +713,7 @@ fn shut_down_and_remove_state(
     Ok(())
 }
 
-/// Shutdown `process-compose` if its socket is present.
+/// Shut down `process-compose` if a manager is answering.
 fn shut_down_process_compose(process_compose_bin: &Path, socket_path: &Path) {
     if !manager_responds(socket_path) {
         info!(reason = "no manager", "did not shut down process-compose");

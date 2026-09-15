@@ -713,7 +713,7 @@ pub fn format_service_error(err: &ServiceError) -> String {
             The service manager did not respond.
 
             The connection to {socket} was refused.
-            Check with 'flox services status', then start them with 'flox services start'.
+            Check with 'flox services status', then start services with 'flox services start'.
         ", socket = socket.display()},
         ServiceError::LoggedError(LoggedError::ServiceManagerNotRunning) => formatdoc! {"
             Services not started or quit unexpectedly.

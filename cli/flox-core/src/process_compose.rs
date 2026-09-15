@@ -6,7 +6,7 @@
 use std::io::{Read, Write};
 use std::os::unix::io::AsFd;
 use std::os::unix::net::UnixStream;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::time::Duration;
 
 use nix::errno::Errno;
@@ -38,28 +38,6 @@ const RESPONSE_LIMIT: u64 = 64 * 1024;
 /// socket can separate those, and nothing tries.
 pub fn manager_responds(socket: &Path) -> bool {
     get(socket, "/live").is_some()
-}
-
-/// The config files the manager on `socket` is running, if one answers.
-///
-/// A manager is the authority on what it was started with, which is a better
-/// source than our own record of what we asked for: the record can outlive the
-/// process, and a process can outlive the record.
-pub fn manager_config_files(socket: &Path) -> Option<Vec<PathBuf>> {
-    #[derive(serde::Deserialize)]
-    struct ProjectState {
-        #[serde(rename = "fileNames")]
-        file_names: Vec<PathBuf>,
-    }
-
-    let body = get(socket, "/project/state")?;
-    match serde_json::from_str::<ProjectState>(&body) {
-        Ok(state) => Some(state.file_names),
-        Err(err) => {
-            debug!(?socket, %err, "could not read the service manager's project state");
-            None
-        },
-    }
 }
 
 /// `GET path` over the manager's socket, returning the response body on 200.

@@ -199,7 +199,7 @@ impl ServicesEnvironment {
     /// Get the path to the service manager socket.
     ///
     /// The socket may not exist, and its existence does not mean a manager is
-    /// running — see [flox_core::process_compose::socket_state].
+    /// running — see [flox_core::process_compose::manager_responds].
     pub fn socket(&self) -> &Path {
         &self.socket
     }
