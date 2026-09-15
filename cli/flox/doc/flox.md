@@ -54,7 +54,7 @@ sharing environments, and administration.
 :   Enter the environment, run `flox deactivate` to leave.
 
 `develop`
-:   Enter a development shell for a Nix expression package build.
+:   Enter a development shell for a Nix expression build.
 
 `deactivate`
 :   Deactivate the current environment.

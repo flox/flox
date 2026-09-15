@@ -835,7 +835,7 @@ enum UseCommands {
     )]
     Activate(#[bpaf(external(activate::activate))] activate::Activate),
 
-    /// Enter a development shell for a package build
+    /// Enter a development shell for a Nix expression build
     #[bpaf(command, footer("Run 'man flox-develop' for more details."))]
     Develop(#[bpaf(external(develop::develop))] develop::Develop),
 

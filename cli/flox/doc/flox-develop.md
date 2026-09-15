@@ -7,7 +7,7 @@ header: "Flox User Manuals"
 
 # NAME
 
-flox-develop - enter a development shell for a Nix expression package
+flox-develop - Enter a development shell for a Nix expression build
 
 
 # SYNOPSIS
@@ -23,24 +23,22 @@ flox [<general-options>] develop
 # DESCRIPTION
 
 Enter an interactive shell with the dependencies and `stdenv` build
-machinery of a Nix expression package (a `.nix` file under
-`.flox/pkgs/`) loaded and ready to invoke. This is the equivalent of
-`nix develop` for a package built with the Nix Expression Feature: it
-gives a Nix-literate developer a shell to drive the build by hand,
-reproduce a failure, and iterate, without running a full `flox build`
-for every change.
+machinery of a Nix expression build (a `.nix` file under
+`.flox/pkgs/`, see [`flox-build(1)`](./flox-build.md)) loaded and ready
+to invoke. This is the equivalent of `nix develop` for that package: a
+shell in which to drive the build by hand, reproduce a failure, and
+iterate, without running a full `flox build` for every change.
 
 Entering the shell does not require `<package>` to build successfully
-first — the shell is realised from the package's dependencies, not
-from a completed build. This is the primary way to debug a package
-that currently fails to build.
+first — the shell is built from the package's dependencies, not from a
+completed build. This is the primary way to debug a package that
+currently fails to build.
 
 `<package>` must be a Nix expression build. Manifest-defined builds
 (the `[build]` table in `manifest.toml`) are refused: an unsandboxed
 manifest build already runs its script in a shell equivalent to
-`flox activate`, so the shell this command would offer is one already
-reachable today. See [`flox-build(1)`](./flox-build.md) for manifest
-builds.
+`flox activate`, so use `flox activate` instead. See
+[`flox-build(1)`](./flox-build.md) for manifest builds.
 
 Like `flox build`, this command requires the environment's `.flox`
 directory to be inside a git repository, and the named package's
@@ -65,10 +63,10 @@ $ mkdir -p "$NIX_BUILD_TOP/work" && cd "$NIX_BUILD_TOP/work"
 $ genericBuild
 ```
 
-`NIX_BUILD_TOP` is a fresh temporary directory the shell sets up for
-you. Running `genericBuild` in the project directory instead unpacks
-the source *into your working tree*, which is almost never what you
-want.
+> **Note:** `NIX_BUILD_TOP` is a fresh temporary directory the shell
+> sets up for you. Running `genericBuild` in the project directory
+> instead unpacks the source *into your working tree*, which is almost
+> never what you want.
 
 After `unpackPhase`, edit the unpacked files under
 `$NIX_BUILD_TOP/work` and re-run individual phases (`buildPhase`,
@@ -92,25 +90,23 @@ the package's own `stdenv` and are not guaranteed to be present.
 
 ## Differences from a real build
 
-This shell approximates the environment `flox build` actually builds
-in. It does not reproduce it exactly, and the differences are printed
-on every entry:
+This shell approximates the environment in which `flox build` builds
+the package. It does not reproduce it exactly, and the differences are
+printed each time you enter the shell:
 
 - No build sandbox is applied here. `flox build` runs the build under
   `nix build`, which the Nix daemon may sandbox.
 - Your working tree is visible here, including files git does not
-  track. A real build sees only git-tracked files.
-- `$src` is a snapshot in the Nix store, taken when you entered.
-  `genericBuild` builds that snapshot, not your working tree; edits
-  reach it only when you re-enter (see "Working in the shell" above).
+  track. A real build sees only tracked files.
+- `$src` was evaluated when you entered and does not follow your edits;
+  exit and re-enter to pick them up (see "Working in the shell" above).
+  A real build evaluates it fresh every time.
 - `$out` and the other output variables point at placeholder paths,
-  not at real store paths. Nothing installed there is a real build
-  output.
-- The host `PATH` stays reachable after the build inputs, and if your
-  `~/.bashrc` activates a Flox environment, that environment is on
-  `PATH` here too. A real build sees only its own inputs.
-- This shell is interactive and sources `~/.bashrc`. The build shell
-  does neither.
+  not at store paths. Nothing installed there is a real build output.
+- This shell is interactive and sources `~/.bashrc`, so the tools on
+  your `PATH` remain available here, including any Flox environment
+  `~/.bashrc` activates; the build inputs come first on `PATH`. A real
+  build sees only its own inputs.
 
 ## Known limitations
 
@@ -120,45 +116,35 @@ on every entry:
 
 ## Garbage collection
 
-The shell's build inputs are GC-rooted for as long as the shell stays
-open: entering the shell creates a GC root symlink under
-`.flox/run/<system>.<package>.develop`, keyed to the package, so a
-concurrent `nix-collect-garbage` (or similar) cannot remove them out
-from under a running session. Re-entering the same package's shell
-repoints that symlink rather than adding another one — only the most
-recent `flox develop <package>` invocation is rooted.
+The shell's build inputs are protected from garbage collection while
+the shell is open: entering it writes a symlink under
+`.flox/run/<system>.<package>.develop`, so a concurrent
+`nix-collect-garbage` cannot remove them from under a running session.
+Re-entering the same package's shell repoints that symlink rather than
+adding another, so only the most recent shell for a package is
+protected.
 
 ## Omitting `<package>`
 
-`flox develop` without a package argument mirrors part of
-[`flox-build(1)`](./flox-build.md)'s bare-invocation convention: a
-project with a single Nix expression build in `.flox/pkgs/` needs no
-name for it, the same as `flox build`. The mirror stops there --
-`flox build` with no arguments builds every target it finds, but a
-development shell is singular, so `flox develop` never resolves to
-more than one.
-
-With exactly one Nix expression build, that build is entered. With
-more than one, the command refuses and lists every candidate so you
-can name one. With none, and the project defines manifest builds
-instead, it refuses and points at
-[`flox-activate(1)`](./flox-activate.md). With no builds of either
-kind, it refuses with the same "no packages found" guidance
-`flox build` gives an empty project.
+`flox develop` without a package argument uses the project's only Nix
+expression build, as `flox build` does. Unlike `flox build`, it never
+resolves to more than one: with several, it lists them so you can name
+one; with only manifest builds, it points at
+[`flox-activate(1)`](./flox-activate.md); with no builds at all, it
+fails the same way `flox build` does on an empty project.
 
 # OPTIONS
 
 `<package>`
-:   The Nix expression package to develop. Corresponds to an
-    expression file in `.flox/pkgs/`. May be omitted if the project
-    has exactly one Nix expression build.
+:   The package to develop, as defined by its expression file in
+    `.flox/pkgs/`. May be omitted if exactly one package in the project
+    has a Nix expression build.
 
 `--stability <stability>`
 :   Resolve the package's dependencies using a base package set of the
-    given stability, as tracked by the catalog server. Matches the
-    `--stability` flag of [`flox-build(1)`](./flox-build.md): the
-    shell must use the same nixpkgs the build would, or the two stop
-    agreeing on what a failure means.
+    given stability, as tracked by the catalog server, exactly as
+    `--stability` does for [`flox-build(1)`](./flox-build.md). Pass the
+    same value to both so the shell and the build agree on their inputs.
 
 `-c`, `--command <cmd>`
 :   Run a shell command string in the development shell instead of
@@ -175,8 +161,58 @@ kind, it refuses with the same "no packages found" guidance
 ./include/general-options.md
 ```
 
+# EXAMPLES
+
+## Iterating on a failing build
+
+1. Define a Nix expression build and track it with git:
+
+```nix
+# file: .flox/pkgs/hello/default.nix
+{ stdenv, hello }:
+
+stdenv.mkDerivation {
+  pname = "hello";
+  version = "1.0";
+  src = ./.;
+  buildInputs = [ hello ];
+  installPhase = "mkdir -p $out; echo hi > $out/hi";
+}
+```
+
+```console
+$ git add .flox/pkgs/hello
+```
+
+2. Enter the development shell and run the build phases in a scratch
+   directory:
+
+```console
+$ flox develop hello
+flox [develop: hello] $ mkdir -p "$NIX_BUILD_TOP/work" && cd "$NIX_BUILD_TOP/work"
+flox [develop: hello] $ genericBuild
+```
+
+3. Edit the unpacked source under `$NIX_BUILD_TOP/work` and re-run a
+   single phase. To change the expression instead, exit and run
+   `flox develop hello` again:
+
+```console
+flox [develop: hello] $ installPhase
+flox [develop: hello] $ exit
+```
+
+## Running one command in the shell
+
+Print the store path of the source snapshot without entering the shell:
+
+```console
+$ flox develop -c 'echo "$src"' hello
+```
+
 # SEE ALSO
 
 [`flox-build(1)`](./flox-build.md)
+[`flox-build-update-catalogs(1)`](./flox-build-update-catalogs.md)
 [`flox-activate(1)`](./flox-activate.md)
 [`manifest.toml(5)`](./manifest.toml.md)

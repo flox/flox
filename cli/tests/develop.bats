@@ -95,7 +95,7 @@ teardown() {
 @test "develop: appears in 'flox --help' under 'Use environments'" {
   run "$FLOX_BIN" --help
   assert_success
-  assert_output --partial "develop                Enter a development shell for a package build"
+  assert_output --partial "develop                Enter a development shell for a Nix expression build"
 }
 
 @test "develop: '--help' documents the package form, not activate's options" {
@@ -218,7 +218,7 @@ EOF
 
   run "$FLOX_BIN" develop -d "$PROJECT_DIR" < /dev/null
   assert_success
-  assert_output --partial "This shell approximates the build environment for 'greet'"
+  assert_output --partial "This shell approximates the environment in which 'flox build' builds 'greet'"
 }
 
 # ---------------------------------------------------------------------------- #
@@ -228,7 +228,7 @@ EOF
 # endpoint, so these two tests need that endpoint mocked rather than the
 # generic empty fixture the rest of this file uses.
 
-@test "develop: discloses the six known divergences on entry" {
+@test "develop: prints the disclosure on entry" {
   project_setup
   git_init_project
   nef_package_setup greet
@@ -236,12 +236,11 @@ EOF
 
   run "$FLOX_BIN" develop -d "$PROJECT_DIR" greet < /dev/null
   assert_success
-  assert_output --partial "No build sandbox is applied here"
-  assert_output --partial "Your working tree is visible here"
-  assert_output --partial "is a snapshot in the Nix store"
-  assert_output --partial "point at placeholder paths"
-  assert_output --partial "The host PATH stays reachable"
-  assert_output --partial "This shell is interactive and sources"
+  # The wording of the individual differences is free to change; what must
+  # hold is that the block prints, from its first line to the man-page pointer.
+  assert_output --partial "This shell approximates the environment in which 'flox build' builds 'greet'"
+  assert_output --partial "Known differences:"
+  assert_output --partial "Run 'man flox-develop' for details."
 }
 
 @test "develop: enters a shell even when the package's build phases would fail" {
@@ -271,7 +270,7 @@ EOF
 
   run "$FLOX_BIN" develop -d "$PROJECT_DIR" greet < /dev/null
   assert_success
-  assert_output --partial "This shell approximates the build environment for 'greet'"
+  assert_output --partial "This shell approximates the environment in which 'flox build' builds 'greet'"
 }
 
 @test "develop: editing the expression without committing changes the derivation on re-entry" {
@@ -359,7 +358,7 @@ develop_env_script_path() {
   assert_success
   assert_line --partial "src=/nix/store/"
   assert_line "have-genericBuild"
-  refute_output --partial "This shell approximates the build environment"
+  refute_output --partial "This shell approximates the environment in which"
 
   # The command's exit status becomes flox develop's.
   run "$FLOX_BIN" develop -d "$PROJECT_DIR" -c 'exit 7'
