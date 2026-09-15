@@ -710,13 +710,12 @@ pub fn format_resolve_error(err: &ResolveError) -> String {
 pub fn format_service_error(err: &ServiceError) -> String {
     match err {
         ServiceError::LoggedError(LoggedError::ServiceManagerUnresponsive(socket)) => formatdoc! {"
-            The service manager is unresponsive, please retry later.
+            The service manager did not respond.
 
-            If the problem persists, delete {socket}
-            and restart services with 'flox activate --start-services'
-            or 'flox services start' from an existing activation.
+            The connection to {socket} was refused.
+            Check with 'flox services status', then start services with 'flox services start'.
         ", socket = socket.display()},
-        ServiceError::LoggedError(LoggedError::SocketDoesntExist) => formatdoc! {"
+        ServiceError::LoggedError(LoggedError::ServiceManagerNotRunning) => formatdoc! {"
             Services not started or quit unexpectedly.
 
             To start services, run 'flox services start' in an activated environment,
