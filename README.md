@@ -218,5 +218,3 @@ We welcome contributions! Please read the [Contributor guide](./CONTRIBUTING.md)
 ## License
 
 The Flox CLI is licensed under the GPLv2. See [LICENSE](./LICENSE).
-
-<img referrerpolicy="no-referrer-when-downgrade" src="https://static.scarf.sh/a.png?x-pxid=199c01a0-67c0-4d95-a4c1-5c2d78aa7743" />
