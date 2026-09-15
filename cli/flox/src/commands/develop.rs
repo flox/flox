@@ -49,22 +49,21 @@ use crate::utils::message;
 /// [`Develop::print_disclosure`] — because the ones most likely to burn a
 /// user are exactly the ones nobody opens a manpage to discover.
 const DISCLOSURE: &str = indoc! {"
-    This shell approximates the build environment for '{name}'.
-    It is not the build. Known differences:
+    This shell approximates the environment in which 'flox build' builds '{name}'.
+    Known differences:
       - No build sandbox is applied here. 'flox build' runs the build under
         'nix build', which the Nix daemon may sandbox.
       - Your working tree is visible here, including files git does not
         track. A real build sees only tracked files.
-      - '$src' is a snapshot in the Nix store, taken when you entered.
-        'genericBuild' builds that snapshot, not your working tree; edits
-        reach it only when you re-enter.
+      - '$src' was evaluated when you entered and does not follow your edits;
+        exit and re-enter to pick them up. A real build evaluates it fresh
+        every time.
       - '$out' and the other output variables point at placeholder paths,
         not at store paths. Nothing installed there is a real build output.
-      - The host PATH stays reachable after the build inputs, and if your
-        '~/.bashrc' activates a Flox environment, that environment is on
-        PATH here too. A real build sees only its own inputs.
-      - This shell is interactive and sources '~/.bashrc'. The build shell
-        does neither."};
+      - This shell is interactive and sources '~/.bashrc', so the tools on
+        your PATH remain available here, including any Flox environment
+        '~/.bashrc' activates. A real build sees only its own inputs.
+    Run 'man flox-develop' for details."};
 
 #[derive(Bpaf, Clone)]
 pub struct Develop {
@@ -83,9 +82,8 @@ pub struct Develop {
     )]
     shell_command: Option<String>,
 
-    /// The Nix expression package to develop.
-    /// Corresponds to an expression file in '.flox/pkgs/'.
-    /// If omitted, the project's sole Nix expression build is used;
+    /// The package to develop, as defined by its expression file in '.flox/pkgs/'.
+    /// If omitted, the project's sole such package is used;
     /// with more than one, name which to develop.
     #[bpaf(positional("package"))]
     pub package: Option<String>,
@@ -307,14 +305,16 @@ impl Develop {
                 .collect();
 
         match expression_targets.len() {
-            0 => bail!(formatdoc! {"
-                This project defines manifest builds but no Nix expression build to develop.
-                An unsandboxed manifest build already runs against the activated environment,
-                so the shell it would get is one you can enter today.
+            0 => bail!(formatdoc! {r#"
+                This project has manifest builds but no package with a Nix expression build.
+                Manifest builds run their 'build.<NAME>.command' script in the activated
+                environment, so enter the environment and run that script by hand.
+                If a build sets 'sandbox' to anything but "off", set it to "off" first.
 
                 Next:
-                  $ flox activate
-                "
+                  $ flox activate                       <- Enter the environment
+                  $ <script from build.<NAME>.command>  <- Run the build by hand
+                "#
             }),
             1 => Ok(expression_targets.remove(0)),
             _ => {
@@ -325,10 +325,10 @@ impl Develop {
                     .collect::<Vec<_>>()
                     .join(", ");
                 bail!(formatdoc! {"
-                    Multiple Nix expression packages found: {candidates}.
+                    Found more than one package with a Nix expression build: {candidates}.
 
                     Name the one to develop:
-                      $ flox develop <package>
+                      $ flox develop <PACKAGE>
                     "
                 })
             },
@@ -365,13 +365,13 @@ impl Develop {
         let name = target.name();
         bail!(formatdoc! {r#"
             Cannot develop '{name}': it is a manifest build, not a Nix expression build.
-            An unsandboxed manifest build already runs against the activated environment,
-            so the shell it would get is one you can enter today.
-            If '{name}' declares any 'sandbox' mode other than "off", set 'sandbox = "off"' first.
+            Manifest builds run their 'build.{name}.command' script in the activated
+            environment, so enter the environment and run that script by hand.
+            If '{name}' sets 'sandbox' to anything but "off", set it to "off" first.
 
             Next:
-              $ flox activate                      <- Enter the environment
-              $ <steps from build.{name}.command>  <- Run the build by hand
+              $ flox activate                       <- Enter the environment
+              $ <script from build.{name}.command>  <- Run the build by hand
             "#, name = name});
     }
 
@@ -585,7 +585,7 @@ impl Develop {
         Ok(rcfile_path)
     }
 
-    /// Print the fixed six-item disclosure list as a single `message::info`
+    /// Print the fixed five-item disclosure list as a single `message::info`
     /// block, honoring the CLI's one-emoji-per-response rule.
     fn print_disclosure(pname: &str) {
         message::info(DISCLOSURE.replace("{name}", pname));
