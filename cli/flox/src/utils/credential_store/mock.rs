@@ -14,6 +14,7 @@ pub(super) struct MockStore {
 struct MockState {
     token: Option<String>,
     error: Option<String>,
+    get_error: Option<String>,
     remove_error: Option<String>,
 }
 
@@ -30,6 +31,12 @@ impl MockStore {
     #[allow(dead_code)]
     pub(super) fn set_error(&self, message: impl Into<String>) {
         self.inner.lock().unwrap().error = Some(message.into());
+    }
+
+    /// Make every `get` call fail, including repeated reads during logout.
+    #[allow(dead_code)]
+    pub(super) fn set_get_error(&self, message: impl Into<String>) {
+        self.inner.lock().unwrap().get_error = Some(message.into());
     }
 
     /// Make every `remove` call fail. Unlike [Self::set_error] (one-shot, on the
@@ -56,7 +63,11 @@ impl CredentialStore for MockStore {
         if let Some(e) = self.take_error() {
             return Err(e);
         }
-        Ok(self.inner.lock().unwrap().token.clone())
+        let state = self.inner.lock().unwrap();
+        if let Some(message) = &state.get_error {
+            return Err(CredentialStoreError::Mock(message.clone()));
+        }
+        Ok(state.token.clone())
     }
 
     fn set(&self, token: &str) -> Result<(), CredentialStoreError> {
