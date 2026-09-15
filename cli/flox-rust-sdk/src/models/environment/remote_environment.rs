@@ -319,10 +319,14 @@ impl RemoteEnvironment {
 
     /// Ensure that the environment `<env_ref>` is initialized on FloxHub.
     /// That is, attempt to create environment or use the existing one upstream.
+    ///
+    /// `description` is placed into the generated manifest when `bare` is false.
+    /// Callers that don't want a description (e.g. `flox init`) pass `None`.
     pub fn init_floxhub_environment(
         flox: &Flox,
         env_ref: RemoteEnvironmentRef,
         bare: bool,
+        description: Option<String>,
     ) -> Result<RemoteEnvironment, EnvironmentError> {
         let temp_env_dir = tempfile::TempDir::new_in(&flox.temp_dir)
             .map_err(RemoteEnvironmentError::CreateTempDotFlox)?;
@@ -334,6 +338,7 @@ impl RemoteEnvironment {
         } else {
             let customization = InitCustomization {
                 activate_mode: Some(ActivateMode::Run),
+                description,
                 ..Default::default()
             };
 
@@ -710,7 +715,7 @@ mod tests {
         let env_ref = RemoteEnvironmentRef::new_from_parts(owner.clone(), name.clone());
 
         let (flox, _tempdir_handle) = flox_instance_with_optional_floxhub(Some(&owner));
-        RemoteEnvironment::init_floxhub_environment(&flox, env_ref.clone(), true).unwrap();
+        RemoteEnvironment::init_floxhub_environment(&flox, env_ref.clone(), true, None).unwrap();
 
         let env =
             RemoteEnvironment::new(&flox, ManagedPointer::new(owner, name, &flox.floxhub), None)
@@ -734,10 +739,10 @@ mod tests {
 
         let (flox, _tempdir_handle) = flox_instance_with_optional_floxhub(Some(&owner));
 
-        RemoteEnvironment::init_floxhub_environment(&flox, env_ref.clone(), false)
+        RemoteEnvironment::init_floxhub_environment(&flox, env_ref.clone(), false, None)
             .expect("first init succeeds");
 
-        let err = RemoteEnvironment::init_floxhub_environment(&flox, env_ref.clone(), false)
+        let err = RemoteEnvironment::init_floxhub_environment(&flox, env_ref.clone(), false, None)
             .expect_err("second init should fail");
 
         assert!(
@@ -759,7 +764,7 @@ mod tests {
         let env_ref = RemoteEnvironmentRef::new_from_parts(owner.clone(), name.clone());
 
         let (flox, _tempdir_handle) = flox_instance_with_optional_floxhub(Some(&owner));
-        RemoteEnvironment::init_floxhub_environment(&flox, env_ref.clone(), true).unwrap();
+        RemoteEnvironment::init_floxhub_environment(&flox, env_ref.clone(), true, None).unwrap();
 
         let env =
             RemoteEnvironment::new(&flox, ManagedPointer::new(owner, name, &flox.floxhub), None)

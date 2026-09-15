@@ -321,6 +321,7 @@ fn init_floxhub_environment_decorated(
         flox,
         env_ref.clone(),
         bare,
+        None,
     )?);
     if let Err(err) = EventsHub::global().record_event(EventKind::CliEnvironmentCreate(
         CliEnvironmentPayload::new(env_detail_from_concrete(flox, &env)),
@@ -473,6 +474,7 @@ fn combine_customizations(customizations: Vec<InitCustomization>) -> InitCustomi
         profile_zsh: custom_profile_zsh,
         packages,
         activate_mode: None, // Language hooks don't touch mode.
+        description: None,
     }
 }
 
@@ -803,6 +805,7 @@ mod tests {
                     },
                 ]),
                 activate_mode: None,
+                description: None,
             },
             InitCustomization {
                 hook_on_activate: Some("hook_on_activate2".to_string()),
@@ -828,6 +831,7 @@ mod tests {
                     },
                 ]),
                 activate_mode: None,
+                description: None,
             },
         ];
 
@@ -931,6 +935,7 @@ mod tests {
                 },
             ]),
             activate_mode: None,
+            description: None,
         });
     }
 
@@ -953,6 +958,7 @@ mod tests {
                 outputs: None,
             }]),
             activate_mode: None,
+            description: None,
         };
 
         let toml_str = format_customization(&customization).unwrap();

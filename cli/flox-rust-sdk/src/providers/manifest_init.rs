@@ -41,6 +41,7 @@ impl ManifestInitializer {
 
         Self::add_header(&mut manifest);
         Self::add_version(&mut manifest);
+        Self::add_description(&mut manifest, customization);
         Self::add_install_section(&mut manifest, customization, true);
         Self::add_vars_section(&mut manifest);
         Self::add_hook_section(&mut manifest, customization, true);
@@ -92,6 +93,14 @@ impl ManifestInitializer {
             MANIFEST_VERSION_KEY,
             toml_edit::value(KnownSchemaVersion::latest().to_string()),
         );
+    }
+
+    /// Populates the top-level `description` field when the customization includes one.
+    /// Emitted only when set so existing manifests without a description are unchanged.
+    fn add_description(manifest: &mut DocumentMut, customization: &InitCustomization) {
+        if let Some(ref description) = customization.description {
+            manifest.insert("description", toml_edit::value(description.as_str()));
+        }
     }
 
     /// Populates an example install section with any packages necessary for
@@ -1056,6 +1065,131 @@ mod tests {
             &customization,
         )
         .unwrap();
+        assert!(manifest.contents_match(expected_string));
+    }
+
+    /// Verify that a customization with `description` set emits `description = "..."`
+    /// at the top level, immediately after `schema-version`, ahead of `[install]`.
+    #[test]
+    fn create_documented_manifest_with_description() {
+        let systems = &*DEFAULT_SYSTEMS_STR.iter().collect::<Vec<_>>();
+        let customization = InitCustomization {
+            description: Some(
+                "This is your default environment. \
+                Activate it in your shell RC files to use it."
+                    .to_string(),
+            ),
+            ..Default::default()
+        };
+
+        let expected_string = indoc! {r#"
+            ## Flox Environment Manifest -----------------------------------------
+            ##
+            ##   _Everything_ you need to know about the _manifest_ is here:
+            ##
+            ##   https://flox.dev/docs/reference/command-reference/manifest.toml/
+            ##
+            ## -------------------------------------------------------------------
+            # Flox manifest version managed by Flox CLI
+            schema-version = "1.17.0"
+            description = "This is your default environment. Activate it in your shell RC files to use it."
+
+
+            ## Install Packages --------------------------------------------------
+            ##  $ flox install gum  <- puts a package in [install] section below
+            ##  $ flox search gum   <- search for a package
+            ##  $ flox show gum     <- show all versions of a package
+            ## -------------------------------------------------------------------
+            [install]
+            # gum.pkg-path = "gum"
+            # gum.version = "^0.14.5"
+
+
+            ## Environment Variables ---------------------------------------------
+            ##  ... available for use in the activated environment
+            ##      as well as [hook], [profile] scripts and [services] below.
+            ## -------------------------------------------------------------------
+            [vars]
+            # INTRO_MESSAGE = "It's gettin' Flox in here"
+
+
+            ## Activation Hook ---------------------------------------------------
+            ##  ... run by _bash_ shell when you run 'flox activate'.
+            ## -------------------------------------------------------------------
+            [hook]
+            # on-activate = '''
+            #   # -> Set variables, create files and directories
+            #   # -> Perform initialization steps, e.g. create a python venv
+            #   # -> Useful environment variables:
+            #   #      - FLOX_ENV_PROJECT=/home/user/example
+            #   #      - FLOX_ENV=/home/user/example/.flox/run
+            #   #      - FLOX_ENV_CACHE=/home/user/example/.flox/cache
+            # '''
+
+
+            ## Profile script ----------------------------------------------------
+            ## ... sourced by _your shell_ when you run 'flox activate'.
+            ## -------------------------------------------------------------------
+            [profile]
+            # common = '''
+            #   gum style \
+            #   --foreground 212 --border-foreground 212 --border double \
+            #   --align center --width 50 --margin "1 2" --padding "2 4" \
+            #     $INTRO_MESSAGE
+            # '''
+            ## Shell-specific customizations such as setting aliases go here:
+            # bash = ...
+            # zsh  = ...
+            # fish = ...
+
+
+            ## Services ---------------------------------------------------------
+            ##  $ flox services start             <- Starts all services
+            ##  $ flox services status            <- Status of running services
+            ##  $ flox activate --start-services  <- Activates & starts all
+            ## ------------------------------------------------------------------
+            [services]
+            # myservice.command = "python3 -m http.server"
+
+
+            ## Include ----------------------------------------------------------
+            ## ... environments to create a composed environment
+            ## ------------------------------------------------------------------
+            [include]
+            # environments = [
+            #     { dir = "../common" }
+            # ]
+
+
+            ## Build and publish your own packages ------------------------------
+            ##  $ flox build
+            ##  $ flox publish
+            ## ------------------------------------------------------------------
+            [build]
+            # [build.myproject]
+            # description = "The coolest project ever"
+            # version = "0.0.1"
+            # command = """
+            #   mkdir -p $out/bin
+            #   cargo build --release
+            #   cp target/release/myproject $out/bin/myproject
+            # """
+
+
+            ## Other Environment Options -----------------------------------------
+            [options]
+            # Systems that environment is compatible with
+            # systems = [
+            @DEFAULT_SYSTEMS@
+            # ]
+            # Uncomment to disable CUDA detection.
+            # cuda-detection = false
+        "#}
+        .replace("@DEFAULT_SYSTEMS@\n", &default_systems_comment_lines());
+
+        let manifest =
+            ManifestInitializer::new_documented(Features::default(), systems, &customization)
+                .unwrap();
         assert!(manifest.contents_match(expected_string));
     }
 }
