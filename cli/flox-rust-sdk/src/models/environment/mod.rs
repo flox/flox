@@ -15,7 +15,7 @@ pub use flox_core::{Version, path_hash};
 use flox_core::{traceable_path, write_atomically_with_permissions};
 use flox_manifest::lockfile::{LockedInclude, Lockfile, LockfileError};
 use flox_manifest::raw::{PackageToInstall, PackageToModify};
-use flox_manifest::{Manifest, ManifestError, Migrated, Validated};
+use flox_manifest::{MANIFEST_FILENAME, Manifest, ManifestError, Migrated, Validated};
 use floxhub_client::ResolveError;
 use generations::{GenerationId, GenerationsError};
 use indoc::formatdoc;
@@ -796,7 +796,6 @@ impl UninitializedEnvironment {
     }
 
     /// Returns the path to the environment if it isn't remote
-    #[allow(dead_code)]
     pub fn path(&self) -> Option<&Path> {
         match self {
             UninitializedEnvironment::DotFlox(DotFlox { path, .. }) => Some(path),
@@ -846,6 +845,56 @@ impl UninitializedEnvironment {
         } else {
             format!("{}", self.name())
         }
+    }
+
+    /// Read this environment's manifest by locating it on disk and
+    /// migrating it against no lockfile, without opening the environment.
+    ///
+    /// This is a hack: the honest way to read a description is
+    /// [`UninitializedEnvironment::into_concrete_environment`] followed by
+    /// a per-type accessor, matching how `envs.rs` already dispatches on
+    /// [`ConcreteEnvironment`] for `delete`/`edit`/`build`. That path
+    /// forks a `git` subprocess and takes a per-owner floxmeta lock
+    /// (`acquire_floxmeta_lock`) for every managed or remote environment.
+    /// Listing ~13 environments (~10 managed/remote), hyperfine (release,
+    /// 50 runs) measured 19.9ms for this shortcut against 129.5ms for
+    /// opening each one -- 6.5x, almost entirely system time (6.8ms vs
+    /// 75.5ms: process spawns and locking, not the network, since neither
+    /// path fetches). A dimmed preview line under each row doesn't
+    /// justify paying that on every `flox envs`.
+    ///
+    /// Reading only `DotFlox` paths and skipping cached remotes measured
+    /// 20.3ms in the same run, so the `Remote` branch below -- an
+    /// `is_cached` check plus a manifest read for rows a path-only
+    /// lookup skips -- costs nothing measurable.
+    ///
+    /// Traded away: a managed environment pinned to a generation would
+    /// read its checkout instead of that generation. Unreachable today --
+    /// `ManagedPointer` (`mod.rs:474`) has no generation field, and
+    /// `get_registered_environments` only ever builds `DotFlox` pointers.
+    ///
+    /// `None` on any failure to read or migrate the manifest -- a listing
+    /// must keep listing an environment whose manifest it can't read.
+    pub fn migrated_manifest_without_lockfile(&self, flox: &Flox) -> Option<Manifest<Migrated>> {
+        let manifest_path = match self {
+            // A managed environment reaches this variant too: it's only in
+            // the registry because it was pulled to a directory, and that
+            // pull is what populated this same `.flox/env` checkout.
+            UninitializedEnvironment::DotFlox(DotFlox { path, .. }) => {
+                path.join(ENV_DIR_NAME).join(MANIFEST_FILENAME)
+            },
+            UninitializedEnvironment::Remote(pointer) => {
+                if !RemoteEnvironment::is_cached(flox, pointer) {
+                    return None;
+                }
+                RemoteEnvironment::checkout_path(flox, pointer)
+                    .join(DOT_FLOX)
+                    .join(ENV_DIR_NAME)
+                    .join(MANIFEST_FILENAME)
+            },
+        };
+
+        Manifest::read_typed(manifest_path).ok()?.migrate(None).ok()
     }
 }
 
@@ -1240,10 +1289,13 @@ mod test {
     use std::time::Duration;
 
     use flox_core::floxhub::DEFAULT_FLOXHUB_URL;
+    use flox_manifest::interfaces::AsLatestSchema;
+    use flox_manifest::test_helpers::with_latest_schema;
     use pretty_assertions::assert_eq;
 
     use super::*;
     use crate::flox::test_helpers::flox_instance;
+    use crate::models::environment::path_environment::test_helpers::new_path_environment;
     use crate::providers::git::GitProvider;
 
     const MANAGED_ENV_JSON: &'_ str = r#"{
@@ -1909,6 +1961,88 @@ mod test {
             links.run.as_path(),
             Path::new("/base/x86_64-linux.name-run")
         );
+    }
+
+    #[test]
+    fn migrated_manifest_without_lockfile_reads_a_dot_flox_environment() {
+        let (flox, _temp_dir_handle) = flox_instance();
+        let contents = with_latest_schema("description = \"On-disk description\"\n");
+        let path_env = new_path_environment(&flox, &contents);
+
+        let env = UninitializedEnvironment::DotFlox(DotFlox {
+            path: path_env.path.to_path_buf(),
+            pointer: path_env.pointer.clone().into(),
+        });
+
+        assert_eq!(
+            env.migrated_manifest_without_lockfile(&flox)
+                .expect("a readable manifest migrates")
+                .as_latest_schema()
+                .description,
+            Some("On-disk description".to_string())
+        );
+    }
+
+    #[test]
+    fn migrated_manifest_without_lockfile_reads_a_cached_remote_environment() {
+        let (flox, _temp_dir_handle) = flox_instance();
+        let pointer = ManagedPointer::new(
+            EnvironmentOwner::from_str("owner").unwrap(),
+            EnvironmentName::from_str("name").unwrap(),
+            &flox.floxhub,
+        );
+
+        // Populate the checkout `migrated_manifest_without_lockfile` reads,
+        // without going through `RemoteEnvironment::new` -- that would pull
+        // over the network, which this accessor must never do.
+        let env_dir = RemoteEnvironment::checkout_path(&flox, &pointer)
+            .join(DOT_FLOX)
+            .join(ENV_DIR_NAME);
+        fs::create_dir_all(&env_dir).unwrap();
+        fs::write(
+            env_dir.join(MANIFEST_FILENAME),
+            with_latest_schema("description = \"Remote description\"\n"),
+        )
+        .unwrap();
+
+        let env = UninitializedEnvironment::Remote(pointer);
+
+        assert_eq!(
+            env.migrated_manifest_without_lockfile(&flox)
+                .expect("a cached checkout's manifest migrates")
+                .as_latest_schema()
+                .description,
+            Some("Remote description".to_string())
+        );
+    }
+
+    #[test]
+    fn migrated_manifest_without_lockfile_is_none_when_the_manifest_is_missing() {
+        let (flox, _temp_dir_handle) = flox_instance();
+        let contents = with_latest_schema("");
+        let path_env = new_path_environment(&flox, &contents);
+        fs::remove_file(path_env.path.join(ENV_DIR_NAME).join(MANIFEST_FILENAME)).unwrap();
+
+        let env = UninitializedEnvironment::DotFlox(DotFlox {
+            path: path_env.path.to_path_buf(),
+            pointer: path_env.pointer.clone().into(),
+        });
+
+        assert!(env.migrated_manifest_without_lockfile(&flox).is_none());
+    }
+
+    #[test]
+    fn migrated_manifest_without_lockfile_is_none_for_an_uncached_remote_environment() {
+        let (flox, _temp_dir_handle) = flox_instance();
+        let pointer = ManagedPointer::new(
+            EnvironmentOwner::from_str("owner").unwrap(),
+            EnvironmentName::from_str("name").unwrap(),
+            &flox.floxhub,
+        );
+
+        let env = UninitializedEnvironment::Remote(pointer);
+
+        assert!(env.migrated_manifest_without_lockfile(&flox).is_none());
     }
 }
 

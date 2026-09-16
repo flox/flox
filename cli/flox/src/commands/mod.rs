@@ -702,9 +702,13 @@ fn print_welcome_message(envs: EnvRegistry, active_environments: ActiveEnvironme
         message::plain("No active environments. Use 'flox envs' to list all environments.\n");
     } else {
         message::created("Active environments:");
+        // No `Flox` exists yet on this bare-command path (it runs before
+        // `FloxArgs::handle` builds one for a dispatched subcommand), so
+        // this list shows no descriptions -- accepted rather than
+        // threading an `Option<&Flox>` through the shared display type.
         let envs = indent::indent_all_by(
             2,
-            DisplayEnvironments::new(active_environments.iter(), true).to_string(),
+            DisplayEnvironments::without_descriptions(active_environments.iter(), true).to_string(),
         );
         // We should use message::plain once bold formatting is fixed in
         // tracing-subscriber
