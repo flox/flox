@@ -93,6 +93,7 @@ pub struct InitCustomization {
     pub profile_zsh: Option<String>,
     pub packages: Option<Vec<CatalogPackage>>,
     pub activate_mode: Option<ActivateMode>,
+    pub description: Option<String>,
 }
 
 impl PartialEq for PathEnvironment {

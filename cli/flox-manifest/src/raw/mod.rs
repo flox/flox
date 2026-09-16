@@ -39,6 +39,8 @@ pub const MANIFEST_SYSTEMS_KEY: &str = "systems";
 pub const MANIFEST_INCLUDE_KEY: &str = "include";
 /// Represents the `[build]` table key in manifest.toml
 pub const MANIFEST_BUILD_KEY: &str = "build";
+/// Represents the top-level `description` key in manifest.toml
+pub const MANIFEST_DESCRIPTION_KEY: &str = "description";
 
 /// The systems assumed when a manifest has no `options.systems`.
 ///
