@@ -21,6 +21,19 @@ fn print_message(v: impl Display) {
     info!("{v}");
 }
 
+/// Detected terminal width in columns.
+///
+/// Falls back to 80 when it can't be determined -- stdout isn't a TTY,
+/// or the platform call otherwise fails. Callers that want the sane-max
+/// cap `render_markdown` is designed around (rather than the raw
+/// terminal width) apply `.min(80)` themselves; this only reports what
+/// the terminal says.
+pub(crate) fn terminal_width() -> usize {
+    crossterm::terminal::size()
+        .map(|(columns, _rows)| columns as usize)
+        .unwrap_or(80)
+}
+
 fn print_message_to_buffer(out: &mut impl Write, v: impl Display) {
     writeln!(out, "{v}").unwrap();
 }

@@ -5,15 +5,24 @@ use std::path::Path;
 use anyhow::Result;
 use bpaf::Bpaf;
 use crossterm::style::Stylize;
+use flox_manifest::interfaces::AsLatestSchema;
+use flox_manifest::{MANIFEST_FILENAME, Manifest};
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::env_registry::{EnvRegistry, garbage_collect};
-use flox_rust_sdk::models::environment::{DotFlox, EnvironmentPointer, ManagedPointer};
+use flox_rust_sdk::models::environment::{
+    DotFlox,
+    ENV_DIR_NAME,
+    EnvironmentPointer,
+    ManagedPointer,
+};
 use serde_json::json;
 use tracing::instrument;
+use unicode_width::UnicodeWidthChar;
 
 use super::UninitializedEnvironment;
 use crate::subcommand_metric;
 use crate::utils::active_environments::{ActiveEnvironments, activated_environments};
+use crate::utils::markdown::first_line_plain;
 use crate::utils::message;
 
 #[derive(Bpaf, Debug, Clone)]
@@ -156,6 +165,7 @@ impl Display for DisplayEnvironments<'_> {
             .map(|env| env.bare_description().len())
             .max()
             .unwrap_or(0);
+        let max_width = message::terminal_width();
 
         let mut envs = self.envs.iter();
 
@@ -166,14 +176,95 @@ impl Display for DisplayEnvironments<'_> {
             let first_formatted =
                 format!("{:<widest$}  {}", first.name(), format_location(first)).bold();
             writeln!(f, "{first_formatted}")?;
+            write_description_line(f, first, max_width)?;
         }
 
         for env in envs {
             writeln!(f, "{:<widest$}  {}", env.name(), format_location(env))?;
+            write_description_line(f, env, max_width)?;
         }
 
         Ok(())
     }
+}
+
+/// Write the environment's one-line description beneath its name, dimmed
+/// and truncated to fit the terminal -- or nothing, when there's no
+/// description to show.
+fn write_description_line(
+    f: &mut std::fmt::Formatter<'_>,
+    env: &UninitializedEnvironment,
+    max_width: usize,
+) -> std::fmt::Result {
+    let Some(description) = environment_description(env) else {
+        return Ok(());
+    };
+    let first_line = first_line_plain(&description);
+    if first_line.is_empty() {
+        return Ok(());
+    }
+    writeln!(
+        f,
+        "{}",
+        truncate_with_ellipsis(&first_line, max_width).dark_grey()
+    )
+}
+
+/// Read the `description` field from an environment's manifest, for
+/// display beneath its name in `flox envs`.
+///
+/// Best-effort: a missing, unreadable, or malformed manifest hides the
+/// description line rather than failing `flox envs`.
+///
+/// Only path environments are read. Managed and remote environments
+/// keep their manifest in a floxmeta git clone, and the only
+/// local-only open path (`FloxMeta::open_local`) doesn't expose the
+/// git handle a caller outside `flox-rust-sdk` would need to read a
+/// generation's manifest without going through the full `open`, which
+/// can fetch -- `flox envs` must never add a network call.
+fn environment_description(env: &UninitializedEnvironment) -> Option<String> {
+    let UninitializedEnvironment::DotFlox(DotFlox {
+        path,
+        pointer: EnvironmentPointer::Path(_),
+    }) = env
+    else {
+        return None;
+    };
+
+    let manifest_path = path.join(ENV_DIR_NAME).join(MANIFEST_FILENAME);
+    let manifest = Manifest::read_typed(manifest_path).ok()?;
+    let migrated = manifest.migrate(None).ok()?;
+    migrated.as_latest_schema().description.clone()
+}
+
+/// Truncate `text` to `max_width` terminal columns, appending an
+/// ellipsis when it doesn't fit. Width-aware (not byte- or
+/// char-indexed) so a wide character at the boundary isn't cut in half.
+fn truncate_with_ellipsis(text: &str, max_width: usize) -> String {
+    if max_width == 0 {
+        return String::new();
+    }
+
+    let total_width: usize = text.chars().filter_map(|c| c.width()).sum();
+    if total_width <= max_width {
+        return text.to_string();
+    }
+
+    const ELLIPSIS: char = '…';
+    let budget = max_width.saturating_sub(ELLIPSIS.width().unwrap_or(1));
+
+    let mut truncated = String::new();
+    let mut used = 0;
+    for c in text.chars() {
+        let w = c.width().unwrap_or(0);
+        if used + w > budget {
+            break;
+        }
+        truncated.push(c);
+        used += w;
+    }
+    truncated.push(ELLIPSIS);
+    truncated
 }
 
 /// Format the location (path and optional URL) of an environment.
@@ -247,10 +338,20 @@ mod tests {
     use flox_core::data::environment_ref::{EnvironmentName, EnvironmentOwner};
     use flox_core::floxhub::Floxhub;
     use flox_rust_sdk::models::environment::PathPointer;
-    use indoc::formatdoc;
+    use indoc::{formatdoc, indoc};
     use pretty_assertions::assert_eq;
 
     use super::*;
+
+    /// A manifest body whose description opens with an ATX H1 and a
+    /// second paragraph, so tests can assert both that the heading is
+    /// stripped and that only the first line survives into the row.
+    const DESCRIBED_MANIFEST_BODY: &str = indoc! {r#"
+        description = """
+        # My Env
+
+        Body text."""
+    "#};
 
     #[test]
     fn display_environments() {
@@ -288,5 +389,143 @@ mod tests {
             name_managed               /envs/managed (https://hub.example.com/owner/name_managed)
             name_remote                remote (https://hub.example.com/owner/name_remote)
         "});
+    }
+
+    /// Create a `.flox/env/manifest.toml` under a fresh temp dir and
+    /// return a path environment pointing at it, alongside the `TempDir`
+    /// (whose drop deletes the directory, so it must outlive the env).
+    fn path_env_with_manifest(
+        name: &str,
+        manifest_toml: &str,
+    ) -> (UninitializedEnvironment, tempfile::TempDir) {
+        let tempdir = tempfile::tempdir().unwrap();
+        let env_dir = tempdir.path().join(".flox").join(ENV_DIR_NAME);
+        std::fs::create_dir_all(&env_dir).unwrap();
+        std::fs::write(env_dir.join(MANIFEST_FILENAME), manifest_toml).unwrap();
+
+        let env = UninitializedEnvironment::DotFlox(DotFlox {
+            path: tempdir.path().join(".flox"),
+            pointer: EnvironmentPointer::Path(PathPointer::new(
+                EnvironmentName::from_str(name).unwrap(),
+            )),
+        });
+        (env, tempdir)
+    }
+
+    #[test]
+    fn environment_description_reads_path_environment_manifest() {
+        let manifest_toml =
+            flox_manifest::test_helpers::with_latest_schema(DESCRIBED_MANIFEST_BODY);
+        let (env, _tempdir) = path_env_with_manifest("described", &manifest_toml);
+
+        assert_eq!(
+            environment_description(&env).as_deref(),
+            Some("# My Env\n\nBody text.")
+        );
+    }
+
+    #[test]
+    fn environment_description_is_none_without_a_description_field() {
+        let manifest_toml = flox_manifest::test_helpers::with_latest_schema("");
+        let (env, _tempdir) = path_env_with_manifest("undescribed", &manifest_toml);
+
+        assert_eq!(environment_description(&env), None);
+    }
+
+    #[test]
+    fn environment_description_is_none_for_a_missing_manifest() {
+        let env = UninitializedEnvironment::DotFlox(DotFlox {
+            path: PathBuf::from("/does/not/exist/.flox"),
+            pointer: EnvironmentPointer::Path(PathPointer::new(
+                EnvironmentName::from_str("missing").unwrap(),
+            )),
+        });
+
+        assert_eq!(environment_description(&env), None);
+    }
+
+    /// Managed and remote environments are skipped entirely (see
+    /// `environment_description`'s doc comment for why) -- confirmed
+    /// here so a future change to that match doesn't silently start
+    /// reading floxmeta and risk a network call.
+    #[test]
+    fn environment_description_is_none_for_managed_and_remote() {
+        let floxhub = Floxhub::new("https://hub.example.com".parse().unwrap(), None, None).unwrap();
+        let owner = EnvironmentOwner::from_str("owner").unwrap();
+
+        let managed_env = UninitializedEnvironment::DotFlox(DotFlox {
+            path: PathBuf::from("/envs/managed/.flox"),
+            pointer: EnvironmentPointer::Managed(ManagedPointer::new(
+                owner.clone(),
+                EnvironmentName::from_str("name_managed").unwrap(),
+                &floxhub,
+            )),
+        });
+        let remote_env = UninitializedEnvironment::Remote(ManagedPointer::new(
+            owner,
+            EnvironmentName::from_str("name_remote").unwrap(),
+            &floxhub,
+        ));
+
+        assert_eq!(environment_description(&managed_env), None);
+        assert_eq!(environment_description(&remote_env), None);
+    }
+
+    #[test]
+    fn display_environments_shows_stripped_truncated_description() {
+        let manifest_toml =
+            flox_manifest::test_helpers::with_latest_schema(DESCRIBED_MANIFEST_BODY);
+        let (env, _tempdir) = path_env_with_manifest("described", &manifest_toml);
+
+        let envs = DisplayEnvironments {
+            envs: vec![&env],
+            format_active: false,
+        };
+        let output = envs.to_string();
+
+        // The row shows the Markdown-stripped first line, dimmed --
+        // never the raw "# My Env" syntax, and never ANSI-rendered
+        // Markdown (no heading color codes, just the dim escape).
+        assert!(output.contains("My Env"), "{output:?}");
+        assert!(!output.contains("# My Env"), "{output:?}");
+        assert!(!output.contains("Body text"), "{output:?}");
+    }
+
+    #[test]
+    fn display_environments_omits_description_line_when_absent() {
+        let manifest_toml = flox_manifest::test_helpers::with_latest_schema("");
+        let (env, _tempdir) = path_env_with_manifest("undescribed", &manifest_toml);
+
+        let envs = DisplayEnvironments {
+            envs: vec![&env],
+            format_active: false,
+        };
+        assert_eq!(envs.to_string().lines().count(), 1);
+    }
+
+    #[test]
+    fn truncate_with_ellipsis_leaves_short_text_unchanged() {
+        assert_eq!(truncate_with_ellipsis("short", 80), "short");
+    }
+
+    #[test]
+    fn truncate_with_ellipsis_truncates_long_text() {
+        let text = "a description that is much too long to fit in the available width";
+        let truncated = truncate_with_ellipsis(text, 20);
+
+        assert!(truncated.ends_with('…'), "{truncated:?}");
+        let width: usize = truncated.chars().filter_map(|c| c.width()).sum();
+        assert!(width <= 20, "{truncated:?} has width {width}");
+    }
+
+    #[test]
+    fn truncate_with_ellipsis_never_panics_on_wide_characters() {
+        // CJK wide characters landing exactly at the truncation boundary.
+        let text = "宽字符宽字符宽字符宽字符宽字符宽字符宽字符";
+        for max_width in [0, 1, 2, 3, 5, 10] {
+            let truncated = truncate_with_ellipsis(text, max_width);
+            let width: usize = truncated.chars().filter_map(|c| c.width()).sum();
+            assert!(width <= max_width.max(1), "{truncated:?} has width {width}");
+        }
     }
 }

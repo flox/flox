@@ -25,6 +25,7 @@ use flox_events::{CliEnvironmentActivatePayload, EventKind, EventsHub, Lifecycle
 use flox_manifest::interfaces::{AsLatestSchema, AsWritableManifest, WriteManifest};
 use flox_manifest::parsed::Inner;
 use flox_manifest::parsed::common::IncludeDescriptor;
+use flox_manifest::parsed::latest::ManifestLatest;
 use flox_manifest::{Manifest, MigratedTypedOnly};
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::floxmeta_branch::BranchOrd;
@@ -66,6 +67,7 @@ use crate::commands::{
 use crate::utils::detect_shell::{detect_shell_for_in_place, detect_shell_for_subshell};
 use crate::utils::errors::format_diverged_metadata;
 use crate::utils::events::{env_detail_from_concrete, env_detail_from_concrete_without_lineage};
+use crate::utils::markdown::render_markdown;
 use crate::utils::message;
 use crate::utils::upgrade_output::{count_upgrade_categories, format_upgrade_summary};
 use crate::{Exit, environment_subcommand_metric, subcommand_metric, utils};
@@ -402,6 +404,7 @@ impl ActivateOptions {
             LockResult::Unchanged(lockfile) => lockfile,
         };
         let manifest = &lockfile.migrated_manifest()?;
+        print_description_if_interactive(manifest.as_latest_schema(), &invocation_type);
 
         if !self.trust
             && let Some(compose) = &lockfile.compose
@@ -898,6 +901,26 @@ fn ensure_prompt_hook_version_compatible_for_activate() -> Result<()> {
     Ok(())
 }
 
+/// Print the environment's manifest description before the shell is
+/// ready, on interactive activation only.
+///
+/// `InPlace`, `ExecCommand`, and `ShellCommand` all write to a stream a
+/// script or caller reads (`eval`'d output, a piped command's stdout);
+/// an extra paragraph of description there would corrupt it, so those
+/// invocation types print nothing.
+fn print_description_if_interactive(manifest: &ManifestLatest, invocation_type: &InvocationType) {
+    if *invocation_type != InvocationType::Interactive {
+        return;
+    }
+    let Some(description) = manifest.description.as_deref() else {
+        return;
+    };
+    // Capped at 80: a wide terminal shouldn't stretch prose into an
+    // uncomfortably long line to read.
+    let width = message::terminal_width().min(80);
+    message::plain(render_markdown(description, width));
+}
+
 /// Notify the user of available upgrades
 ///
 /// Upon activation flox will start a detached process to check for upgrades.
@@ -1156,6 +1179,7 @@ mod tests {
         ManagedPointer,
         PathPointer,
     };
+    use flox_rust_sdk::utils::logging::test_helpers::test_subscriber_message_only;
 
     use super::*;
     use crate::commands::ActiveEnvironments;
@@ -1248,6 +1272,61 @@ mod tests {
     fn test_conflicting_service_flags_are_rejected() {
         let options = activate_options_with_flags(true, true);
         assert!(options.validate_service_flags().is_err());
+    }
+
+    #[test]
+    fn print_description_if_interactive_prints_for_interactive() {
+        let manifest = ManifestLatest {
+            description: Some("Hello".to_string()),
+            ..Default::default()
+        };
+
+        let (subscriber, writer) = test_subscriber_message_only();
+        tracing::subscriber::with_default(subscriber, || {
+            print_description_if_interactive(&manifest, &InvocationType::Interactive);
+        });
+
+        assert_eq!(writer.to_string(), "Hello\n");
+    }
+
+    /// A description printed into a command's output stream would
+    /// corrupt it -- `InPlace` is `eval`'d, `ExecCommand`/`ShellCommand`
+    /// wrap a caller-provided command -- so all three must stay silent.
+    #[test]
+    fn print_description_if_interactive_is_silent_for_non_interactive() {
+        let manifest = ManifestLatest {
+            description: Some("Hello".to_string()),
+            ..Default::default()
+        };
+
+        for invocation_type in [
+            InvocationType::InPlace,
+            InvocationType::ExecCommand(vec!["true".to_string()]),
+            InvocationType::ShellCommand("true".to_string()),
+        ] {
+            let (subscriber, writer) = test_subscriber_message_only();
+            tracing::subscriber::with_default(subscriber, || {
+                print_description_if_interactive(&manifest, &invocation_type);
+            });
+
+            assert_eq!(
+                writer.to_string(),
+                "",
+                "invocation_type={invocation_type:?} should print nothing"
+            );
+        }
+    }
+
+    #[test]
+    fn print_description_if_interactive_is_silent_without_description() {
+        let manifest = ManifestLatest::default();
+
+        let (subscriber, writer) = test_subscriber_message_only();
+        tracing::subscriber::with_default(subscriber, || {
+            print_description_if_interactive(&manifest, &InvocationType::Interactive);
+        });
+
+        assert_eq!(writer.to_string(), "");
     }
 }
 
