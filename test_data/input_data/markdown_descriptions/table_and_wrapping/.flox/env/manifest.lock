@@ -1,0 +1,9 @@
+{
+  "lockfile-version": 1,
+  "manifest": {
+    "schema-version": "1.17.0",
+    "description": "# Table And Wrapping\n\n| Backend | Syntax highlighting | Extra dependency      |\n| ------- | -------------------- | ---------------------- |\n| builtin | no                    | none                    |\n| mdcat   | yes                   | pulldown-cmark-mdcat    |\n| glow    | yes                   | glow binary (~20 MB)    |\n| gum     | no                    | gum binary              |\n\nThe builtin renderer is expected to degrade the table above to plain\ntext -- that divergence from the other three backends should be\ndirectly observable.\n\nThis paragraph, on the other hand, exists only to run past the\nstandard eighty-column terminal width, so the four backends can be\ncompared on how -- and whether -- each one wraps ordinary prose onto\na second line, independent of any other Markdown construct.\n",
+    "options": {}
+  },
+  "packages": []
+}

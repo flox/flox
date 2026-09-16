@@ -1,0 +1,20 @@
+schema-version = "1.17.0"
+description = """
+# Table And Wrapping
+
+| Backend | Syntax highlighting | Extra dependency      |
+| ------- | -------------------- | ---------------------- |
+| builtin | no                    | none                    |
+| mdcat   | yes                   | pulldown-cmark-mdcat    |
+| glow    | yes                   | glow binary (~20 MB)    |
+| gum     | no                    | gum binary              |
+
+The builtin renderer is expected to degrade the table above to plain
+text -- that divergence from the other three backends should be
+directly observable.
+
+This paragraph, on the other hand, exists only to run past the
+standard eighty-column terminal width, so the four backends can be
+compared on how -- and whether -- each one wraps ordinary prose onto
+a second line, independent of any other Markdown construct.
+"""

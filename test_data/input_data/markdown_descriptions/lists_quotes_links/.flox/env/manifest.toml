@@ -1,0 +1,19 @@
+schema-version = "1.17.0"
+description = """
+# Lists, Quotes, and Links
+
+Steps to get started:
+
+1. Clone the repository
+2. Run `flox activate`
+   - Installs every declared package
+   - Exports the manifest's `[vars]`
+   - Runs the `[hook]` script, if any
+3. Start hacking
+
+> Descriptions are Markdown, so a block quote should render as a quote
+> in every backend, not as a plain paragraph.
+
+See the [Flox manifest reference](https://flox.dev/docs/reference/command-reference/manifest.toml/)
+for the full set of fields.
+"""

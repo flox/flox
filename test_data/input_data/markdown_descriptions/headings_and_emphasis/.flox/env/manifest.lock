@@ -1,0 +1,9 @@
+{
+  "lockfile-version": 1,
+  "manifest": {
+    "schema-version": "1.17.0",
+    "description": "# Headings And Emphasis\n\n## A Second-Level Heading\n\n### A Third-Level Heading\n\nThis paragraph carries **bold**, *italic*, and ~~strikethrough~~ text so\nthe four backends can be compared on how they convey emphasis, and the\ntwo heading levels above exist to compare whether `#` and `##` render\ndifferently -- an open question this bake-off is meant to answer.\n",
+    "options": {}
+  },
+  "packages": []
+}

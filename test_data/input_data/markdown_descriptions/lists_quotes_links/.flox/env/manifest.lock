@@ -1,0 +1,9 @@
+{
+  "lockfile-version": 1,
+  "manifest": {
+    "schema-version": "1.17.0",
+    "description": "# Lists, Quotes, and Links\n\nSteps to get started:\n\n1. Clone the repository\n2. Run `flox activate`\n   - Installs every declared package\n   - Exports the manifest's `[vars]`\n   - Runs the `[hook]` script, if any\n3. Start hacking\n\n> Descriptions are Markdown, so a block quote should render as a quote\n> in every backend, not as a plain paragraph.\n\nSee the [Flox manifest reference](https://flox.dev/docs/reference/command-reference/manifest.toml/)\nfor the full set of fields.\n",
+    "options": {}
+  },
+  "packages": []
+}

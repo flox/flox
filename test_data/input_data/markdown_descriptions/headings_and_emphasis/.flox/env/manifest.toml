@@ -1,0 +1,13 @@
+schema-version = "1.17.0"
+description = """
+# Headings And Emphasis
+
+## A Second-Level Heading
+
+### A Third-Level Heading
+
+This paragraph carries **bold**, *italic*, and ~~strikethrough~~ text so
+the four backends can be compared on how they convey emphasis, and the
+two heading levels above exist to compare whether `#` and `##` render
+differently -- an open question this bake-off is meant to answer.
+"""

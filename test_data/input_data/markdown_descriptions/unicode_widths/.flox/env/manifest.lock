@@ -1,0 +1,9 @@
+{
+  "lockfile-version": 1,
+  "manifest": {
+    "schema-version": "1.17.0",
+    "description": "# Unicode Widths\n\nCJK wide characters, which occupy two terminal columns each: 宽字符宽字符宽字符宽字符\n\nCombining marks (each of these is the letter \"e\" plus a separate\ncombining acute accent codepoint, not the single precomposed \"é\"):\nééé\n\nEmoji, including a multi-codepoint family sequence that should measure\nas one glyph even though it joins four codepoints with zero-width\njoiners: 👨‍👩‍👧‍👦 and a simple emoji: 🎉\n",
+    "options": {}
+  },
+  "packages": []
+}

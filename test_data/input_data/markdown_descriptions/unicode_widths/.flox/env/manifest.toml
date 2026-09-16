@@ -1,0 +1,14 @@
+schema-version = "1.17.0"
+description = """
+# Unicode Widths
+
+CJK wide characters, which occupy two terminal columns each: 宽字符宽字符宽字符宽字符
+
+Combining marks (each of these is the letter "e" plus a separate
+combining acute accent codepoint, not the single precomposed "é"):
+ééé
+
+Emoji, including a multi-codepoint family sequence that should measure
+as one glyph even though it joins four codepoints with zero-width
+joiners: 👨‍👩‍👧‍👦 and a simple emoji: 🎉
+"""

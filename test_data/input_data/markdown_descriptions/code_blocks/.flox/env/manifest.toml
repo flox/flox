@@ -1,0 +1,16 @@
+schema-version = "1.17.0"
+description = """
+# Code Blocks
+
+Run `flox activate` to enter the environment, then check the interpreter
+with `python3 --version` from inside it.
+
+```python
+def greet(name: str) -> str:
+    return f"Hello, {name}!"
+```
+
+The fenced block above carries a language tag so syntax-highlighting
+backends (mdcat, glow) have something to color; the builtin renderer
+and gum are not expected to highlight it.
+"""

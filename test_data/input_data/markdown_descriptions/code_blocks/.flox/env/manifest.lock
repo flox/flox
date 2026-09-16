@@ -1,0 +1,9 @@
+{
+  "lockfile-version": 1,
+  "manifest": {
+    "schema-version": "1.17.0",
+    "description": "# Code Blocks\n\nRun `flox activate` to enter the environment, then check the interpreter\nwith `python3 --version` from inside it.\n\n```python\ndef greet(name: str) -> str:\n    return f\"Hello, {name}!\"\n```\n\nThe fenced block above carries a language tag so syntax-highlighting\nbackends (mdcat, glow) have something to color; the builtin renderer\nand gum are not expected to highlight it.\n",
+    "options": {}
+  },
+  "packages": []
+}
