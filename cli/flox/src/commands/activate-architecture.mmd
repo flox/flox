@@ -19,7 +19,7 @@ flowchart TB
         n155["wait_for_process_compose()"]
         exec_cmd["exec(cmd args)"]
         pc_start["subprocess(process-compose start)"]
-        n157["subprocess(process-compose list)<br>to verify running"]
+        n157["GET /live<br>to verify running"]
   end
  subgraph s2["process-compose"]
         n98["flox-never-exit"]

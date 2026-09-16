@@ -104,6 +104,8 @@ setup() {
 }
 
 teardown() {
+  reap_pinned_manager
+  reap_stale_orphans
   cat_teardown_fifo
   # Wait for executives before project teardown, otherwise some tests will hang
   # forever.
@@ -134,6 +136,64 @@ setup_sleeping_services() {
   assert_success
   run "$FLOX_BIN" edit -f "${TESTS_DIR}/services/sleeping_services.toml"
   assert_success
+}
+
+# Bring an activation with services up, then SIGKILL its `process-compose` so
+# it cannot clean up. Leaves the socket on disk and the services still running,
+# reparented away from the manager — the state reported in flox/flox#3950.
+#
+# Sets SOCKET and STALE_ORPHANS. Callers must reap STALE_ORPHANS.
+stage_stale_socket() {
+  ps_manager() {
+    ps -ax -o pid=,command= | grep -F "$1" | grep -F "process-compose" | grep -v grep | awk '{print $1}' | head -1
+  }
+  ps_children() { ps -ax -o pid=,ppid= | awk -v p="$1" '$2 == p { print $1 }'; }
+
+  mkfifo activate_started_fifo
+  TEARDOWN_FIFO="$PROJECT_DIR/finished"
+  mkfifo "$TEARDOWN_FIFO"
+  "$FLOX_BIN" activate -s -- bash -c "echo > activate_started_fifo && echo > $TEARDOWN_FIFO" 3>&- &
+  cat activate_started_fifo
+  "${TESTS_DIR}"/services/wait_for_service_status.sh one:Running
+
+  SOCKET="$("$FLOX_BIN" services-socket)"
+  [ -S "$SOCKET" ]
+  local pc_pid
+  pc_pid="$(ps_manager "$SOCKET")"
+  [ -n "$pc_pid" ]
+  STALE_ORPHANS="$(ps_children "$pc_pid" | tr '\n' ' ')"
+
+  kill -9 "$pc_pid"
+  for _ in $(seq 1 100); do
+    kill -0 "$pc_pid" 2>/dev/null || break
+    sleep 0.1
+  done
+  [ -S "$SOCKET" ]
+}
+
+# Reap the manager the upstream-pin test staged, and its services. In
+# `teardown` because an assertion failure aborts the test body first.
+reap_pinned_manager() {
+  if [ -n "${PIN_MANAGER:-}" ]; then
+    # shellcheck disable=SC2086
+    kill -9 $(ps -ax -o pid=,ppid= | awk -v p="$PIN_MANAGER" '$2 == p { print $1 }') 2>/dev/null || true
+    kill -9 "$PIN_MANAGER" 2>/dev/null || true
+    PIN_MANAGER=""
+  fi
+  if [ -n "${PIN_DIR:-}" ]; then
+    rm -rf "$PIN_DIR"
+    PIN_DIR=""
+  fi
+}
+
+# Reap what `stage_stale_socket` orphaned. Called from `teardown` so that a
+# failed assertion cannot leak `sleep infinity` for the rest of the run.
+reap_stale_orphans() {
+  # shellcheck disable=SC2086
+  if [ -n "${STALE_ORPHANS:-}" ] && [ -n "${STALE_ORPHANS// /}" ]; then
+    kill -9 $STALE_ORPHANS 2>/dev/null || true
+  fi
+  STALE_ORPHANS=""
 }
 
 setup_logging_services() {
@@ -1018,11 +1078,143 @@ EOF
   assert_output --partial "! Skipped starting services, services are already running"
 }
 
+# bats test_tags=services:stale-socket
+@test "stale socket: activation recovers and services run" {
+  setup_sleeping_services
+  stage_stale_socket
+
+  run "$FLOX_BIN" activate -s -- bash -c '"$FLOX_BIN" services status'
+  assert_success
+  assert_output --regexp "one +Running"
+}
+
+# bats test_tags=services:stale-socket
+@test "stale socket: status reports stopped rather than unresponsive" {
+  setup_sleeping_services
+  stage_stale_socket
+
+  run "$FLOX_BIN" activate -- bash -c '"$FLOX_BIN" services status'
+  assert_success
+  assert_output --regexp "one +Stopped"
+  refute_output --partial "did not respond"
+}
+
+# bats test_tags=services:stale-socket
+@test "stale socket: restart brings services back" {
+  setup_sleeping_services
+  stage_stale_socket
+
+  run "$FLOX_BIN" activate -- bash -c '"$FLOX_BIN" services restart'
+  assert_success
+  refute_output --partial "did not respond"
+  "${TESTS_DIR}"/services/wait_for_service_status.sh one:Running
+}
+
+# bats test_tags=services:stale-socket
+@test "stale socket: stop and logs report not started, not unresponsive" {
+  setup_sleeping_services
+  stage_stale_socket
+
+  for cmd in stop logs; do
+    run "$FLOX_BIN" activate -- bash -c "\"$FLOX_BIN\" services $cmd one"
+    assert_failure
+    assert_output --partial "Services not started or quit unexpectedly."
+    refute_output --partial "did not respond"
+  done
+}
+
+# A live manager must never be mistaken for a dead one: the cost of that
+# mistake is a second `process-compose` and a stranded first.
+# bats test_tags=services:stale-socket
+@test "live socket: a second activation does not start a second manager" {
+  setup_sleeping_services
+
+  mkfifo activate_started_fifo
+  TEARDOWN_FIFO="$PROJECT_DIR/finished"
+  mkfifo "$TEARDOWN_FIFO"
+  "$FLOX_BIN" activate -s -- bash -c "echo > activate_started_fifo && echo > $TEARDOWN_FIFO" 3>&- &
+  cat activate_started_fifo
+  "${TESTS_DIR}"/services/wait_for_service_status.sh one:Running
+
+  SOCKET="$("$FLOX_BIN" services-socket)"
+  managers() { ps -ax -o command= | grep -F "$SOCKET" | grep -cF "process-compose" || true; }
+  before="$(managers)"
+  # Without this the test passes when nothing is running at all and the
+  # assertion below compares zero to zero.
+  assert_equal "$before" "1"
+
+  run "$FLOX_BIN" activate -s -- true
+  assert_success
+
+  assert_equal "$(managers)" "1"
+}
+
+# The whole approach rests on `process-compose` resolving the socket when it
+# binds. That is upstream behaviour we depend on and do not control, so pin it.
+# bats test_tags=services:stale-socket
+@test "upstream: process-compose rebinds over a stale socket and refuses a live one" {
+  # Short path: macOS caps AF_UNIX paths near 104 bytes. Exported so teardown
+  # can clean up when an assertion below aborts the body.
+  PC_DIR="$(mktemp -d /tmp/pcpin.XXXX)"
+  PIN_DIR="$PC_DIR"
+  PC_SOCK="$PC_DIR/pin.sock"
+  cat > "$PC_DIR/p.yaml" <<'EOF'
+version: "0.5"
+processes:
+  svc:
+    command: "exec sleep 191919"
+EOF
+
+  # Wait for the manager to answer, never for its socket file to appear —
+  # that proxy is the defect this suite exists to pin.
+  pc_answers() { "$PROCESS_COMPOSE_BIN" process list -u "$PC_SOCK" -o json >/dev/null 2>&1; }
+  await_answer() {
+    for _ in $(seq 1 100); do
+      pc_answers && return 0
+      sleep 0.1
+    done
+    return 1
+  }
+  # GNU stat in the test environment, BSD stat elsewhere. GNU's -f means
+  # something else entirely, so try -c first and fall back.
+  inode_of() { stat -c %i "$1" 2>/dev/null || stat -f %i "$1"; }
+
+  "$PROCESS_COMPOSE_BIN" up -f "$PC_DIR/p.yaml" -u "$PC_SOCK" --tui=false -L "$PC_DIR/1.log" 3>&- &
+  first=$!
+  await_answer
+  first_inode="$(inode_of "$PC_SOCK")"
+
+  kill -9 "$first"
+  for _ in $(seq 1 100); do
+    kill -0 "$first" 2>/dev/null || break
+    sleep 0.1
+  done
+  [ -S "$PC_SOCK" ]
+
+  # Stale: the next manager unlinks it and binds its own.
+  "$PROCESS_COMPOSE_BIN" up -f "$PC_DIR/p.yaml" -u "$PC_SOCK" --tui=false -L "$PC_DIR/2.log" 3>&- &
+  second=$!
+  PIN_MANAGER="$second"
+  await_answer
+  second_inode="$(inode_of "$PC_SOCK")"
+  refute [ "$first_inode" = "$second_inode" ]
+
+  # Live: a third refuses, and leaves both the incumbent and its socket alone.
+  run "$PROCESS_COMPOSE_BIN" up -f "$PC_DIR/p.yaml" -u "$PC_SOCK" --tui=false -L "$PC_DIR/3.log"
+  assert_failure
+  # `kill -0` would be satisfied by a zombie, so ask the manager itself.
+  assert pc_answers
+  assert_equal "$(inode_of "$PC_SOCK")" "$second_inode"
+
+}
+
 # ---------------------------------------------------------------------------- #
 
 @test "blocking: error messages when startup times out" {
   setup_sleeping_services
-  export _FLOX_SERVICES_ACTIVATE_TIMEOUT=0.1
+  # The assertions below are on a log written by a process we spawn, but the
+  # budget is wall-clock, so too short a value fails on a slow machine.
+  export _FLOX_SERVICES_ACTIVATE_TIMEOUT=3
 
   # process-compose will never be able to create this socket,
   # which looks the same as taking a long time to create the socket.
@@ -1030,14 +1222,19 @@ EOF
   # when running this test as root.
   export _FLOX_SERVICES_SOCKET_OVERRIDE="/nonexistent_dir/does_not_exist.sock"
   run "$FLOX_BIN" activate -s -- true
-  assert_output "✘ ERROR: Failed to start services: process-compose socket not ready"
+  assert_output --partial "✘ ERROR: Failed to start services: the service manager did not respond within"
+  # Why it didn't come up is only recorded in the process-compose log, so the
+  # error is useless without it.
+  assert_output --partial "bind: no such file or directory"
+  assert_output --partial "The full log is at"
 }
 
-@test "blocking: activation blocks on process list" {
+@test "blocking: activation does not return before services are listable" {
   setup_sleeping_services
-  # This is run immediately after activation starts, which is about as good as
-  # we can get for checking that activation has blocked until process list
-  # succeeds
+  # Readiness is decided by `GET /live`. This pins the assumption that lets it
+  # stand in for the old `process list` poll: `process-compose` does not bind
+  # its API socket until the project is loaded, so a manager that answers is
+  # one whose services can already be listed and started.
   run "$FLOX_BIN" activate -s -- bash <(cat <<'EOF'
     SOCKET=$("$FLOX_BIN" services-socket)
     "$PROCESS_COMPOSE_BIN" process list -u "$SOCKET"
