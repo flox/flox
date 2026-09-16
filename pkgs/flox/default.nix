@@ -9,6 +9,7 @@
   flox-nix-plugins,
   flox-cli,
   flox-manpages,
+  glow,
   process-compose,
   pkgsFor,
   SENTRY_DSN ? null,
@@ -46,6 +47,7 @@ symlinkJoin {
       --set BUILDENV_NIX        "${flox-buildenv}/lib/buildenv.nix" \
       --set NIX_PLUGINS         "${flox-nix-plugins}/lib/nix-plugins" \
       --set PROCESS_COMPOSE_BIN "${process-compose}/bin/process-compose" \
+      --set GLOW_BIN            "${glow}/bin/glow" \
       --set FLOX_VERSION        "${version}"
 
     # make sure that version can be parsed

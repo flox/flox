@@ -89,6 +89,7 @@ pollster = "0.4.0"
 progenitor-client = "0.11.2"
 proptest = "1.9.0"
 proptest-derive = "0.7.0"
+pulldown-cmark = "0.13.0"
 regex = "1.12"
 regress = "0.10.5"
 reqwest = { version = "0.12.20", features = ["json", "blocking", "stream"] }
@@ -129,6 +130,7 @@ tracing = "0.1"
 tracing-appender = "0.2"
 tracing-indicatif = "0.3"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
+unicode-width = "0.2.2"
 url = { version = "2.5", features = ["serde"] }
 url-escape = "0.1.1"
 uuid = { version = "1.16", features = ["serde", "v4"] }

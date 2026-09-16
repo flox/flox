@@ -20,6 +20,7 @@
   flox-nix-plugins,
   flox,
   flox-interpreter,
+  glow,
   gawk,
   git,
   gnugrep,
@@ -203,6 +204,7 @@ writeShellScriptBin PROJECT_NAME ''
     export NIX_PLUGINS="${flox-nix-plugins}/lib/nix-plugins"
     export FLOX_ACTIVATIONS_BIN="${flox-activations}/libexec/flox-activations"
     export PROCESS_COMPOSE_BIN='${process-compose}/bin/process-compose'
+    export GLOW_BIN='${glow}/bin/glow'
     export FLOX_INTERPRETER='${flox-interpreter}'
     export FLOX_INTERPRETER_WRAPPER='${flox-interpreter.build_executable_wrapper}'
   ''}
