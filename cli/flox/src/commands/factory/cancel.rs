@@ -105,9 +105,10 @@ fn classify_error(err: &FactoryClientError, id: BuildId) -> (String, u8) {
             .to_string(),
             4,
         ),
-        // A server-side error (5xx/422): the host answered over HTTP and erred,
-        // so it is retryable. Exit 1; the cancel endpoint documents 502 as
-        // retry-with-backoff.
+        // A server-side error (5xx/422), or a 409 saying the build's dispatch is
+        // still in flight: the host answered over HTTP and the condition is
+        // transient, so it is retryable. Exit 1; the cancel endpoint documents
+        // both 502 and 409 as retry-with-backoff.
         FactoryClientError::Server(_) => (
             formatdoc! {"
                 The Flox Factory reported a server error for build {id}.
