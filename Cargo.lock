@@ -1602,6 +1602,7 @@ dependencies = [
  "sysinfo",
  "temp-env",
  "tempfile",
+ "terminal_size",
  "textwrap",
  "thiserror 2.0.18",
  "time",

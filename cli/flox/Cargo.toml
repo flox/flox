@@ -45,6 +45,7 @@ supports-color.workspace = true
 sys-info.workspace = true
 sysinfo.workspace = true
 tempfile.workspace = true
+terminal_size.workspace = true
 textwrap.workspace = true
 thiserror.workspace = true
 time.workspace = true

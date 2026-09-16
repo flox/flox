@@ -121,6 +121,7 @@ systemd = { path = "cli/systemd" }
 tar = "0.4"
 tempfile = "3.24.0"
 textwrap = { version = "0.16.2", features = ["terminal_size"] }
+terminal_size = "0.4.2"
 thiserror = "2"
 time = { version = "0.3", features = ["serde", "formatting", "local-offset"] }
 tokio = { version = "1", features = ["full"] }

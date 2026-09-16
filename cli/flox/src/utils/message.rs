@@ -14,6 +14,21 @@ use indoc::formatdoc;
 use minus::{ExitStrategy, Pager, page_all};
 use tracing::{debug, info};
 
+/// The terminal's current width in columns, or 80 if it can't be
+/// determined (not connected to a terminal). `textwrap`'s `terminal_size`
+/// feature already provides this fallback; wrapped here so callers go
+/// through `message::` rather than reaching for `textwrap` directly.
+pub(crate) fn terminal_width() -> usize {
+    // Measured on stderr, not stdout: everything sized by this renders
+    // there -- `message::` goes through `tracing`, whose subscriber writes
+    // to stderr, and glow is handed a dup of that same fd. `termwidth()`
+    // reads stdout, so `flox activate >out` on a tty would wrap the
+    // description at the 80-column fallback instead of the real width.
+    terminal_size::terminal_size_of(std::io::stderr())
+        .map(|(terminal_size::Width(columns), _)| columns as usize)
+        .unwrap_or(80)
+}
+
 /// Write a message to stderr.
 ///
 /// This is printed via the message_layer tracing subscriber
