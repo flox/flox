@@ -536,12 +536,10 @@ impl CoreEnvironment<ReadOnly> {
     /// Atomically upgrade packages in this environment
     ///
     /// First resolve a new lockfile with upgraded packages using the catalog client.
-    /// Then verify the new lockfile by building the environment.
     ///
-    /// Finally if `write_lockfile` is true,
-    /// replace the existing environment with the new, upgraded one.
-    /// Otherwise, validate the upgrade by writing the new lockfile to a temporary file
-    /// and building it.
+    /// If `write_lockfile` is true,
+    /// build the new environment and replace the existing one with it.
+    /// Otherwise, return the computed diff without building or writing anything.
     pub fn upgrade(
         &mut self,
         flox: &Flox,
@@ -582,21 +580,6 @@ impl CoreEnvironment<ReadOnly> {
             let store_path =
                 self.transact_with_lockfile_contents(lockfile_contents, flox, out_link_prefix)?;
             result.store_path = Some(store_path);
-        } else {
-            // SAFETY: see above
-            let lockfile_contents = serde_json::to_string_pretty(&result.new_lockfile).unwrap();
-            let tmp_lockfile = tempfile::NamedTempFile::new_in(&flox.temp_dir)
-                .map_err(CoreEnvironmentError::WriteLockfile)?;
-            fs::write(&tmp_lockfile, lockfile_contents)
-                .map_err(CoreEnvironmentError::WriteLockfile)?;
-
-            // We are not interested in the store path here, so we ignore the result
-            // Neither do we depend on services, so we pass `None`
-            let auth = NixAuth::from_flox(flox).map_err(EnvironmentError::Auth)?;
-            let catalog = &flox.floxhub_client;
-            let _ = BuildEnvNix::new(auth)
-                .build(catalog, tmp_lockfile.path(), None, None)
-                .map_err(|e| EnvironmentError::Core(CoreEnvironmentError::BuildEnv(e)))?;
         }
 
         Ok(result)

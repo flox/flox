@@ -204,6 +204,21 @@ To apply these changes, run upgrade without the '--dry-run' flag."
   assert_equal "$hello_locked_drv" "$old_hello_locked_drv"
 }
 
+# bats test_tags=upgrade:dry-run
+# Regression: '--dry-run' must not build or download packages.
+# _FLOX_TESTING_NO_BUILD panics the process if BuildEnvNix::build() is called,
+# so a successful run proves no build was attempted.
+@test "'upgrade --dry-run' does not build the environment" {
+  skip_x86_64_darwin_replay
+  "$FLOX_BIN" init
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/old_hello.yaml" "$FLOX_BIN" install hello
+
+  _FLOX_TESTING_NO_BUILD=true \
+    _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
+    run "$FLOX_BIN" upgrade --dry-run
+  assert_success
+}
+
 @test "upgrade for flake installable" {
   "$FLOX_BIN" init
 
