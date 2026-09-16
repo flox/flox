@@ -26,6 +26,7 @@
   inputs,
   krb5,
   lib,
+  llvmPackages,
   nix,
   nixpkgsInputLockedURL,
   pkg-config,
@@ -116,12 +117,19 @@ let
     };
   };
 
+  # rustc 1.90 links Linux binaries with its own rust-lld, which is not reached
+  # through the nixpkgs ld wrapper and so writes no RUNPATH. The build opts out
+  # of the self-contained linker below, which means the external one has to be
+  # supplied here, as `pkgs/rust-external-deps` does for crane.
+  # <https://github.com/rust-lang/rust/issues/162781>
+  linkerInputs = lib.optionals stdenv.hostPlatform.isLinux [
+    llvmPackages.bintools
+  ];
+
   crateOverrides =
     defaultCrateOverrides
-    // lib.mapAttrs (
-      _: envs: _attrs:
-      envs
-    ) crateEnvs
+    # Compile-time `env!()` values, on the crate that reads them.
+    // lib.mapAttrs (_: envs: (_attrs: envs)) crateEnvs
     // {
       # libgssapi-sys generates its bindings with bindgen and finds the
       # Kerberos headers through pkg-config.
@@ -143,10 +151,16 @@ let
         defaultCrateOverrides = crateOverrides;
       };
     in
-    buildRustCrate (
-      crateArgs
-      // lib.optionalAttrs (stdenv.hostPlatform.system == "x86_64-linux") {
-        extraRustcOpts = (crateArgs.extraRustcOpts or [ ]) ++ [ "-Clink-self-contained=-linker" ];
+    # buildRustCrate appends its own `nativeBuildInputs` and `extraRustcOpts`
+    # arguments after the crate's, so these survive a crate override that
+    # replaces what the crate itself declares.
+    (buildRustCrate crateArgs).override (
+      lib.optionalAttrs stdenv.hostPlatform.isLinux {
+        extraRustcOpts = [ "-Clink-self-contained=-linker" ];
+        # Build scripts are compiled and linked separately, through their own
+        # argument.
+        extraRustcOptsForBuildRs = [ "-Clink-self-contained=-linker" ];
+        nativeBuildInputs = linkerInputs;
       }
     );
 
