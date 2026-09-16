@@ -17,6 +17,7 @@ use floxhub_client::{
     FloxhubClientError,
     LookupGroup,
     ReferencesItem,
+    Stability,
     UnresolvableEntry,
 };
 use tracing::{debug, instrument};
@@ -88,11 +89,10 @@ fn build_request(references: BTreeSet<CatalogRef>) -> BuildInputsLookupRequest {
         groups: vec![group],
         reference_point: None,
         // Catalog-input resolution is independent of the nixpkgs base-catalog
-        // stability, but the OpenAPI spec still marks `stability` as a
-        // required request field. The field is in the process of being
-        // deprecated on the server side and in the spec; until that
-        // coordinated change lands, send the constant "stable".
-        stability: "stable".parse().expect("constant stability parses"),
+        // stability. The server accepts and ignores the field, and the spec
+        // marks it deprecated, but older servers still read it, so send the
+        // default stability until the field is dropped from the spec.
+        stability: Some(Stability::default().into()),
     }
 }
 

@@ -45,10 +45,54 @@ pub use api_types::{
     LookupGroup,
     ReferencePoint,
     ReferencesItem,
-    Stability,
     UnresolvableEntry,
     UnresolvableLeaf,
 };
+
+/// The name of a base-catalog stability, e.g. `stable` or `lts`.
+///
+/// The catalog server accepts any string here and performs no validation, so
+/// this carries no parse step; it exists to keep stabilities distinguishable
+/// from the other bare strings that travel alongside them. Requests hold the
+/// wire type, so convert at the call to the generated client.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Stability(String);
+
+impl Stability {
+    /// The stability a caller gets when it expresses no preference.
+    pub const DEFAULT: &str = "stable";
+}
+
+impl Default for Stability {
+    fn default() -> Self {
+        Stability(Self::DEFAULT.to_string())
+    }
+}
+
+impl From<String> for Stability {
+    fn from(value: String) -> Self {
+        Stability(value)
+    }
+}
+
+impl From<&str> for Stability {
+    fn from(value: &str) -> Self {
+        Stability(value.to_owned())
+    }
+}
+
+impl From<Stability> for String {
+    fn from(value: Stability) -> Self {
+        value.0
+    }
+}
+
+impl Display for Stability {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Display::fmt(&self.0, f)
+    }
+}
+
 // Command lookup. Unlike search, by-command is unpaginated, so the generated
 // result type is already the whole answer and needs no `ResultsPage` wrapper.
 pub use api_types::{ByCommandResult, CommandProvider};
@@ -409,7 +453,7 @@ pub struct BaseCatalogInfo(api_types::BaseCatalogInfo);
 
 impl BaseCatalogInfo {
     /// Name of the default stability.
-    pub const DEFAULT_STABILITY: &str = "stable";
+    pub const DEFAULT_STABILITY: &str = Stability::DEFAULT;
 
     /// Return the url for the newest page with the given stability.
     pub fn url_for_latest_page_with_stability(&self, stability: &str) -> Option<BaseCatalogUrl> {
