@@ -1,0 +1,54 @@
+schema-version = "1.17.0"
+description = """
+# Flox Markdown Renderer Bake-Off
+
+Every construct the four backends are compared on, in one description:
+**bold**, *italic*, ~~strikethrough~~, and inline `code`, all in this
+sentence.
+
+## Getting Started
+
+1. Clone the repository
+2. Run `flox activate`
+   - Installs every declared package
+   - Exports the manifest's `[vars]`
+   - Runs the `[hook]` script, if any
+3. Start hacking
+
+### A Third-Level Heading
+
+Heading levels are the open question. The three levels above exist so
+the backends can be compared on whether -- and how -- each one
+distinguishes a level from the next.
+
+```python
+def greet(name: str) -> str:
+    return f"Hello, {name}!"
+```
+
+That fenced block carries a language tag, so the syntax-highlighting
+backends have something to color; the builtin renderer and gum are not
+expected to highlight it.
+
+> Descriptions are Markdown, so a block quote should render as a quote
+> in every backend, not as a plain paragraph.
+
+| Backend | Syntax highlighting | Extra dependency     |
+| ------- | ------------------- | -------------------- |
+| builtin | no                  | none                 |
+| mdcat   | yes                 | pulldown-cmark-mdcat |
+| glow    | yes                 | glow binary          |
+| gum     | no                  | gum binary           |
+
+The builtin renderer degrades that table to plain text, and this
+paragraph runs well past the standard eighty-column terminal width so
+the backends can be compared on how -- and whether -- each one wraps
+ordinary prose onto a second line.
+
+CJK characters, two columns each: 宽字符宽字符宽字符宽字符
+Combining marks ("e" plus a combining acute, not precomposed): ééé
+Emoji, including a four-codepoint ZWJ family sequence: 👨‍👩‍👧‍👦 and 🎉
+
+See the [Flox manifest reference](https://flox.dev/docs/reference/command-reference/manifest.toml/)
+for the full set of fields.
+"""
