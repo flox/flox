@@ -255,9 +255,13 @@ impl fmt::Display for BuildListDisplay {
         let system_width = "SYSTEM"
             .len()
             .max(self.rows.iter().map(|r| r.system.len()).max().unwrap_or(0));
-        let stability_width = "STABILITY"
-            .len()
-            .max(self.rows.iter().map(|r| r.stability.len()).max().unwrap_or(0));
+        let stability_width = "STABILITY".len().max(
+            self.rows
+                .iter()
+                .map(|r| r.stability.len())
+                .max()
+                .unwrap_or(0),
+        );
         let status_width = "STATUS"
             .len()
             .max(self.rows.iter().map(|r| r.status.len()).max().unwrap_or(0));
@@ -272,12 +276,7 @@ impl fmt::Display for BuildListDisplay {
             writeln!(
                 f,
                 "{:<id_width$}  {:<attr_width$}  {:<system_width$}  {:<stability_width$}  {:<status_width$}  {}",
-                row.build_id,
-                row.attr_path,
-                row.system,
-                row.stability,
-                row.status,
-                row.updated_at,
+                row.build_id, row.attr_path, row.system, row.stability, row.status, row.updated_at,
             )?;
         }
 
