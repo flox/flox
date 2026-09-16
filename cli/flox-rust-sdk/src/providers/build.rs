@@ -155,7 +155,7 @@ pub enum ManifestBuilderError {
     #[error("failed to parse file for eval results")]
     ParseEvalResultFile(#[source] serde_json::Error),
 
-    #[error("failed to call nix to eval NEF")]
+    #[error("Failed to run 'nix eval' to list the Nix expression builds.")]
     CallNef(#[source] std::io::Error),
 
     #[error("failed to list available nix expressions to build: {0}")]
