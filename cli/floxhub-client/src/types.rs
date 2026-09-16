@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use url::Url;
 
+use crate::DEFAULT_STABILITY;
 use crate::error::FloxhubClientError;
 
 // ---------------------------------------------------------------------------
@@ -55,17 +56,16 @@ pub use api_types::{
 /// this carries no parse step; it exists to keep stabilities distinguishable
 /// from the other bare strings that travel alongside them. Requests hold the
 /// wire type, so convert at the call to the generated client.
+///
+/// The type carries no default. Which stability applies when a caller names
+/// none is a property of the catalog, not of the name, so callers derive it
+/// from [`DEFAULT_STABILITY`].
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Stability(String);
 
 impl Stability {
-    /// The stability a caller gets when it expresses no preference.
-    pub const DEFAULT: &str = "stable";
-}
-
-impl Default for Stability {
-    fn default() -> Self {
-        Stability(Self::DEFAULT.to_string())
+    pub fn as_str(&self) -> &str {
+        &self.0
     }
 }
 
@@ -452,9 +452,6 @@ impl Display for BaseCatalogUrl {
 pub struct BaseCatalogInfo(api_types::BaseCatalogInfo);
 
 impl BaseCatalogInfo {
-    /// Name of the default stability.
-    pub const DEFAULT_STABILITY: &str = Stability::DEFAULT;
-
     /// Return the url for the newest page with the given stability.
     pub fn url_for_latest_page_with_stability(&self, stability: &str) -> Option<BaseCatalogUrl> {
         let page_info = self.0.scraped_pages.iter().find(|page| {
@@ -474,7 +471,7 @@ impl BaseCatalogInfo {
 
     /// Return a url for the "default" stability.
     pub fn url_for_latest_page_with_default_stability(&self) -> Option<BaseCatalogUrl> {
-        self.url_for_latest_page_with_stability(Self::DEFAULT_STABILITY)
+        self.url_for_latest_page_with_stability(DEFAULT_STABILITY.as_str())
     }
 
     /// Return the names of available stabilities.
@@ -500,18 +497,14 @@ impl BaseCatalogInfo {
                 api_types::PageInfo {
                     rev: "".into(),
                     rev_count: 2,
-                    stability_tags: [
-                        BaseCatalogInfo::DEFAULT_STABILITY.into(),
-                        "not-default".into(),
-                    ]
-                    .to_vec(),
+                    stability_tags: ["stable".into(), "not-default".into()].to_vec(),
                 },
             ]
             .to_vec(),
             stabilities: [
                 api_types::StabilityInfo {
-                    name: BaseCatalogInfo::DEFAULT_STABILITY.into(),
-                    ref_: BaseCatalogInfo::DEFAULT_STABILITY.into(),
+                    name: "stable".into(),
+                    ref_: "stable".into(),
                 },
                 api_types::StabilityInfo {
                     name: "not-default".into(),
@@ -546,18 +539,14 @@ mod tests {
                 api_types::PageInfo {
                     rev: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb2".into(),
                     rev_count: 5,
-                    stability_tags: [
-                        BaseCatalogInfo::DEFAULT_STABILITY.into(),
-                        "not-default".into(),
-                    ]
-                    .to_vec(),
+                    stability_tags: ["stable".into(), "not-default".into()].to_vec(),
                 },
             ]
             .to_vec(),
             stabilities: [
                 api_types::StabilityInfo {
-                    name: BaseCatalogInfo::DEFAULT_STABILITY.into(),
-                    ref_: BaseCatalogInfo::DEFAULT_STABILITY.into(),
+                    name: "stable".into(),
+                    ref_: "stable".into(),
                 },
                 api_types::StabilityInfo {
                     name: "not-default".into(),

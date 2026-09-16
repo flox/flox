@@ -14,10 +14,10 @@ use floxhub_client::{
     BuildInputsLookupRequest,
     BuildInputsLookupResponse,
     CatalogClientTrait,
+    DEFAULT_STABILITY,
     FloxhubClientError,
     LookupGroup,
     ReferencesItem,
-    Stability,
     UnresolvableEntry,
 };
 use tracing::{debug, instrument};
@@ -92,7 +92,7 @@ fn build_request(references: BTreeSet<CatalogRef>) -> BuildInputsLookupRequest {
         // stability. The server accepts and ignores the field, and the spec
         // marks it deprecated, but older servers still read it, so send the
         // default stability until the field is dropped from the spec.
-        stability: Some(Stability::default().into()),
+        stability: Some(DEFAULT_STABILITY.clone().into()),
     }
 }
 
