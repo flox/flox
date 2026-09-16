@@ -6,6 +6,8 @@
   flox-cli-tests,
   flox-cli,
   flox-nix-plugins,
+  glow,
+  gum,
   hivemind,
   jq,
   just,
@@ -46,6 +48,8 @@ let
       commitizen
       daemonize
       flox-cli-tests
+      glow
+      gum
       hivemind
       jq
       just

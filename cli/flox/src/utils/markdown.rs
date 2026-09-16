@@ -38,6 +38,51 @@ use flox_core::util::message::stdout_supports_color;
 use pulldown_cmark::{Event, Options, Parser, Tag, TagEnd};
 use unicode_width::UnicodeWidthChar;
 
+/// Selects the Markdown backend `render_markdown` uses, so DEV-235 can
+/// compare all four candidates from `design.md`'s ADR-2 spike against
+/// identical input in a real terminal instead of on paper. This
+/// dispatch — and every backend but `builtin` — is comparison
+/// scaffolding: it ships nowhere and is deleted once a winner is
+/// picked, and none of it should shape how the `builtin` renderer
+/// above is written.
+const FLOX_MARKDOWN_RENDERER_VAR: &str = "FLOX_MARKDOWN_RENDERER";
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Backend {
+    Builtin,
+    Mdcat,
+    Glow,
+    Gum,
+}
+
+impl Backend {
+    /// Read `FLOX_MARKDOWN_RENDERER_VAR`. Unset and unrecognized
+    /// values both fall back to `Builtin` — a typo made while
+    /// comparing renderers must not abort the caller's activation.
+    fn from_env() -> Self {
+        match std::env::var(FLOX_MARKDOWN_RENDERER_VAR).as_deref() {
+            Ok("mdcat") => Backend::Mdcat,
+            Ok("glow") => Backend::Glow,
+            Ok("gum") => Backend::Gum,
+            _ => Backend::Builtin,
+        }
+    }
+}
+
+/// Render `input` (a manifest `description`) for a terminal `width`,
+/// using the backend `FLOX_MARKDOWN_RENDERER` selects (see `Backend`).
+/// The default, `builtin`, is documented on
+/// [`render_markdown_builtin`]; the other three exist only for DEV-235's
+/// side-by-side comparison and carry no equivalent guarantees.
+pub fn render_markdown(input: &str, width: usize) -> String {
+    match Backend::from_env() {
+        Backend::Builtin => render_markdown_builtin(input, width),
+        Backend::Mdcat => render_markdown_mdcat(input, width),
+        Backend::Glow => render_markdown_glow(input, width),
+        Backend::Gum => render_markdown_gum(input),
+    }
+}
+
 /// Render `input` (a manifest `description`) for a terminal `width`.
 ///
 /// ANSI styling is applied when stdout supports color; otherwise the
@@ -48,12 +93,159 @@ use unicode_width::UnicodeWidthChar;
 /// produces no renderable text (for example, input that is only
 /// whitespace after Markdown syntax is stripped) falls back to `input`
 /// unchanged.
-pub fn render_markdown(input: &str, width: usize) -> String {
+fn render_markdown_builtin(input: &str, width: usize) -> String {
     let rendered = render(input, width, stdout_supports_color());
     if rendered.is_empty() && !input.trim().is_empty() {
         return input.to_string();
     }
     rendered
+}
+
+/// Render via the `pulldown-cmark-mdcat` crate — one of the three
+/// comparison backends the `Backend` doc above describes.
+///
+/// `Environment` resolves a document's relative links/images against a
+/// base directory; a manifest description has neither, so the current
+/// working directory is an arbitrary but harmless choice. Falls back to
+/// `input` unchanged if the working directory can't be read or mdcat's
+/// own rendering fails — this backend is comparison-only, so a broken
+/// render should never take down the caller.
+fn render_markdown_mdcat(input: &str, width: usize) -> String {
+    use pulldown_cmark::Parser;
+    use pulldown_cmark_mdcat::resources::NoopResourceHandler;
+    use pulldown_cmark_mdcat::{
+        Environment,
+        Settings,
+        TerminalProgram,
+        TerminalSize,
+        Theme,
+        markdown_options,
+        push_tty,
+    };
+    use syntect::parsing::SyntaxSet;
+
+    let Ok(cwd) = std::env::current_dir() else {
+        return input.to_string();
+    };
+    let Ok(environment) = Environment::for_local_directory(&cwd) else {
+        return input.to_string();
+    };
+
+    let syntax_set = SyntaxSet::default();
+    let settings = Settings {
+        terminal_capabilities: if stdout_supports_color() {
+            TerminalProgram::Ansi.capabilities()
+        } else {
+            TerminalProgram::Dumb.capabilities()
+        },
+        terminal_size: TerminalSize {
+            // A manifest description's caller-supplied width is always
+            // well within u16 range; saturate rather than panic on the
+            // conversion for the sake of this comparison harness.
+            columns: width.try_into().unwrap_or(u16::MAX),
+            rows: 24,
+            pixels: None,
+            cell: None,
+        },
+        syntax_set: &syntax_set,
+        theme: Theme::default(),
+        syntax_theme: None,
+    };
+
+    let parser = Parser::new_ext(input, markdown_options(false));
+    let mut sink = Vec::new();
+    match push_tty(
+        &settings,
+        &environment,
+        &NoopResourceHandler,
+        &mut sink,
+        parser,
+    ) {
+        Ok(()) => String::from_utf8(sink).unwrap_or_else(|_| input.to_string()),
+        Err(_) => input.to_string(),
+    }
+}
+
+/// Run `program`, feeding `input` on stdin and returning stdout.
+///
+/// Returns `None` — never panics, never surfaces the raw `io::Error` —
+/// when `program` is missing (`ErrorKind::NotFound`), isn't executable
+/// (`PermissionDenied`), exits non-zero, or writes non-UTF8 output.
+/// Mirrors what ADR-2 (`slices/2026/07-environment-readme/design.md`)
+/// already requires of a `glow` shell-out, applied to both shell-out
+/// backends this harness compares.
+fn shell_out(program: &str, args: &[&str], input: &str) -> Option<String> {
+    use std::io::Write;
+    use std::process::{Command, Stdio};
+
+    let mut child = Command::new(program)
+        .args(args)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .ok()?;
+
+    // Write on a separate thread so `stdin` closes (dropped when the
+    // thread ends) before we block reading stdout below — writing
+    // inline here could deadlock a program that fills its stdout
+    // buffer before draining stdin.
+    let mut child_stdin = child.stdin.take()?;
+    let input = input.to_string();
+    let writer = std::thread::spawn(move || {
+        let _ = child_stdin.write_all(input.as_bytes());
+    });
+
+    let output = child.wait_with_output().ok()?;
+    let _ = writer.join();
+
+    if !output.status.success() {
+        return None;
+    }
+    String::from_utf8(output.stdout).ok()
+}
+
+/// Render via a `glow` shell-out (charmbracelet) — one of the three
+/// comparison backends the `Backend` doc above describes. Not in the
+/// dev shell; available via `nix shell nixpkgs#glow` (verified 3.0.0)
+/// and never added to `flake.nix` — falling back to plain text when
+/// it's absent is what makes this backend usable without it.
+fn render_markdown_glow(input: &str, width: usize) -> String {
+    let width_arg = width.to_string();
+    let mut args = vec!["-w", &width_arg, "-"];
+    if !stdout_supports_color() {
+        // glow's default `-s auto` style emits ANSI 256-color codes
+        // unconditionally: verified by piping `echo '# H' | glow -w
+        // 40 -s auto` to a file and finding `\x1b[38;5;...m` in the
+        // result. TTY detection there only picks a light/dark theme,
+        // it doesn't gate whether escapes are emitted at all. `notty`
+        // is the style that actually suppresses them (verified: the
+        // same input under `-s notty` has no escape bytes) — at the
+        // cost of also leaving `#`/`**`/backtick syntax un-stripped,
+        // unlike every other style tested.
+        args.push("-s");
+        args.push("notty");
+    }
+    shell_out("glow", &args, input).unwrap_or_else(|| input.to_string())
+}
+
+/// Render via a `gum format` shell-out (charmbracelet) — one of the
+/// three comparison backends the `Backend` doc above describes.
+/// Already in the dev shell (verified 2.0.0).
+///
+/// `gum format --help` (2.0.0) has no width/wrap flag, so — unlike
+/// `glow` — the caller's `width` has nowhere to go here.
+///
+/// Verified piping `printf '# H1\n## H2\n### H3\n' | gum format` to a
+/// file: unlike `glow`, gum's own TTY detection does suppress ANSI
+/// when piped, but each heading level still leaves a literal glyph
+/// marker in the byte stream — none for H1, then U+258C ("▌") and
+/// U+2503 ("┃") prefixed onto H2 and H3 — and inline code is wrapped
+/// in literal U+00A0 (no-break space) rather than backticks. Both
+/// survive as plain non-ANSI bytes, so there's no equivalent of
+/// glow's `-s notty` to reach for.
+fn render_markdown_gum(input: &str) -> String {
+    shell_out("gum", &["format"], input).unwrap_or_else(|| input.to_string())
 }
 
 /// Extract the first line of `input` as plain text, Markdown syntax
@@ -1011,5 +1203,137 @@ mod tests {
     #[test]
     fn first_line_plain_of_empty_input_is_empty() {
         assert_eq!(first_line_plain(""), "");
+    }
+
+    // `Backend::from_env` tests below use `temp_env::with_var`, which
+    // serializes access to the environment internally, so they're safe
+    // to run alongside the rest of this crate's parallel test threads.
+
+    #[test]
+    fn backend_from_env_defaults_to_builtin_when_unset() {
+        temp_env::with_var_unset(FLOX_MARKDOWN_RENDERER_VAR, || {
+            assert_eq!(Backend::from_env(), Backend::Builtin);
+        });
+    }
+
+    #[test]
+    fn backend_from_env_selects_builtin_explicitly() {
+        temp_env::with_var(FLOX_MARKDOWN_RENDERER_VAR, Some("builtin"), || {
+            assert_eq!(Backend::from_env(), Backend::Builtin);
+        });
+    }
+
+    #[test]
+    fn backend_from_env_selects_mdcat() {
+        temp_env::with_var(FLOX_MARKDOWN_RENDERER_VAR, Some("mdcat"), || {
+            assert_eq!(Backend::from_env(), Backend::Mdcat);
+        });
+    }
+
+    #[test]
+    fn backend_from_env_selects_glow() {
+        temp_env::with_var(FLOX_MARKDOWN_RENDERER_VAR, Some("glow"), || {
+            assert_eq!(Backend::from_env(), Backend::Glow);
+        });
+    }
+
+    #[test]
+    fn backend_from_env_selects_gum() {
+        temp_env::with_var(FLOX_MARKDOWN_RENDERER_VAR, Some("gum"), || {
+            assert_eq!(Backend::from_env(), Backend::Gum);
+        });
+    }
+
+    #[test]
+    fn backend_from_env_falls_back_to_builtin_for_unknown_value() {
+        temp_env::with_var(
+            FLOX_MARKDOWN_RENDERER_VAR,
+            Some("not-a-real-backend"),
+            || {
+                assert_eq!(Backend::from_env(), Backend::Builtin);
+            },
+        );
+    }
+
+    #[test]
+    fn render_markdown_dispatches_to_builtin_by_default() {
+        temp_env::with_var_unset(FLOX_MARKDOWN_RENDERER_VAR, || {
+            assert_eq!(
+                render_markdown("**bold**", 80),
+                render_markdown_builtin("**bold**", 80)
+            );
+        });
+    }
+
+    #[test]
+    fn render_markdown_dispatches_to_mdcat() {
+        temp_env::with_var(FLOX_MARKDOWN_RENDERER_VAR, Some("mdcat"), || {
+            assert_eq!(
+                render_markdown("# Heading", 80),
+                render_markdown_mdcat("# Heading", 80)
+            );
+        });
+    }
+
+    #[test]
+    fn mdcat_backend_renders_without_panicking() {
+        // Not a comparison of exact output (mdcat's rendering is its
+        // own and will change under us) -- just that the heading and
+        // paragraph text both survive the round trip.
+        let out = render_markdown_mdcat("# Heading\n\nSome body text.", 80);
+        assert!(out.contains("Heading"), "{out:?}");
+        assert!(out.contains("Some body text."), "{out:?}");
+    }
+
+    #[test]
+    fn shell_out_degrades_to_plain_text_when_binary_is_missing() {
+        // Empty PATH means `Command::spawn` can't resolve "glow" or
+        // "gum" to anything, regardless of what's actually installed
+        // on the host running this test -- the ticket asks that this
+        // not depend on either binary being present.
+        temp_env::with_var("PATH", Some(""), || {
+            assert_eq!(shell_out("glow", &["-w", "80"], "input"), None);
+            assert_eq!(shell_out("gum", &["format"], "input"), None);
+        });
+    }
+
+    #[test]
+    fn render_markdown_glow_degrades_to_plain_text_when_binary_is_missing() {
+        temp_env::with_var("PATH", Some(""), || {
+            assert_eq!(render_markdown_glow("**bold**", 80), "**bold**");
+        });
+    }
+
+    #[test]
+    fn render_markdown_gum_degrades_to_plain_text_when_binary_is_missing() {
+        temp_env::with_var("PATH", Some(""), || {
+            assert_eq!(render_markdown_gum("**bold**"), "**bold**");
+        });
+    }
+
+    #[test]
+    fn render_markdown_dispatches_to_glow_and_degrades_when_absent() {
+        temp_env::with_vars(
+            [
+                (FLOX_MARKDOWN_RENDERER_VAR, Some("glow")),
+                ("PATH", Some("")),
+            ],
+            || {
+                assert_eq!(render_markdown("**bold**", 80), "**bold**");
+            },
+        );
+    }
+
+    #[test]
+    fn render_markdown_dispatches_to_gum_and_degrades_when_absent() {
+        temp_env::with_vars(
+            [
+                (FLOX_MARKDOWN_RENDERER_VAR, Some("gum")),
+                ("PATH", Some("")),
+            ],
+            || {
+                assert_eq!(render_markdown("**bold**", 80), "**bold**");
+            },
+        );
     }
 }

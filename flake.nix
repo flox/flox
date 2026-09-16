@@ -19,6 +19,12 @@
   # reach stable.
   inputs.nixpkgs.url = "github:flox/nixpkgs/stable";
 
+  # TEMPORARY, renderer bake-off only: our pinned stable nixpkgs is ~6
+  # months old and ships gum 0.17 / glow 2.1, older than the versions the
+  # shell-out backends were written against. Remove this input together
+  # with the comparison harness.
+  inputs.nixpkgs-latest.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
+
   inputs.pre-commit-hooks.url = "github:cachix/pre-commit-hooks.nix";
   inputs.pre-commit-hooks.inputs.nixpkgs.follows = "nixpkgs";
 
@@ -222,7 +228,10 @@
       # ------------------------------------------------------------------------ #
 
       devShells = builtins.mapAttrs (system: pkgsBase: {
-        default = pkgsBase.floxDevelopmentPackages.callPackage ./shells/default { };
+        default = pkgsBase.floxDevelopmentPackages.callPackage ./shells/default {
+          # TEMPORARY: bake-off tools from latest nixpkgs, not our stable pin.
+          inherit (inputs.nixpkgs-latest.legacyPackages.${system}) glow gum;
+        };
       }) pkgsContext;
 
       # ------------------------------------------------------------------------ #

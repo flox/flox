@@ -90,6 +90,7 @@ progenitor-client = "0.11.2"
 proptest = "1.9.0"
 proptest-derive = "0.7.0"
 pulldown-cmark = { version = "0.13.4", default-features = false }
+pulldown-cmark-mdcat = { version = "2.17.0", default-features = false }
 regex = "1.12"
 regress = "0.10.5"
 reqwest = { version = "0.12.20", features = ["json", "blocking", "stream"] }
@@ -112,6 +113,7 @@ shell-escape = "0.1.5"
 slug = "0.1"
 strum = { version = "0.27", features = ["derive"] }
 supports-color = "3.0.2"
+syntect = { version = "5.3.0", default-features = false }
 # provides process tools for shell detection
 sysinfo = "0.38.0"
 # provide system version information for metric
