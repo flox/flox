@@ -134,12 +134,7 @@ impl ActivateArgs {
         if let Some(project) = &context.project_ctx
             && !project.services_to_start.is_empty()
         {
-            start_services_with_new_process_compose(
-                &context.activation_state_dir,
-                &project.process_compose_bin,
-                &project.flox_services_socket,
-                &project.services_to_start,
-            )?;
+            start_services_with_new_process_compose(&context.activation_state_dir, project)?;
         }
 
         attach(

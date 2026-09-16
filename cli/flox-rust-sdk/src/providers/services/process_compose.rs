@@ -14,7 +14,7 @@ use std::process::{Command, Stdio};
 use std::sync::LazyLock;
 use std::sync::mpsc::{Receiver, Sender};
 
-use flox_core::process_compose::PROCESS_NEVER_EXIT_NAME;
+use flox_core::process_compose::{PROCESS_NEVER_EXIT_NAME, manager_responds};
 use flox_core::traceable_path;
 use flox_manifest::interfaces::AsLatestSchema;
 use flox_manifest::lockfile::Lockfile;
@@ -434,6 +434,16 @@ impl ProcessStates {
     ///
     /// Note that this strips out our `flox_never_exit` process.
     pub fn read(socket: impl AsRef<Path>) -> Result<ProcessStates, ServiceError> {
+        // A socket with nothing behind it means no manager, not a manager that
+        // failed to answer. Asking `process-compose` would only fork a process
+        // to be refused, and callers would see "unresponsive" for an
+        // environment whose services simply are not running.
+        if !manager_responds(socket.as_ref()) {
+            return Err(ServiceError::LoggedError(
+                LoggedError::ServiceManagerNotRunning,
+            ));
+        }
+
         let mut cmd = base_process_compose_command(socket.as_ref());
         cmd.arg("list").args(["--output", "json"]);
 
@@ -587,10 +597,8 @@ pub struct ProcessComposeLogContents {
 /// These are errors formed by interpreting strings extracted from process-compose logs.
 #[derive(Debug, Clone, PartialEq, thiserror::Error)]
 pub enum LoggedError {
-    #[error("service manager unresponsive")]
-    ServiceManagerUnresponsive(PathBuf),
-    #[error("couldn't connect to service manager")]
-    SocketDoesntExist,
+    #[error("service manager is not running")]
+    ServiceManagerNotRunning,
     #[error("service '{0}' is not running")]
     ServiceNotRunning(String),
     #[error("unknown error: {0}")]
@@ -639,25 +647,15 @@ impl From<ProcessComposeLogContents> for LoggedError {
             );
         }
 
+        // `process-compose` distinguishes a socket that is absent from one
+        // nobody is listening on. Both mean the same thing to a user, and
+        // neither is worth a separate message: no manager is running.
         if contents
             .cause_msg
             .contains("connect: no such file or directory")
+            || contents.cause_msg.contains("connect: connection refused")
         {
-            return LoggedError::SocketDoesntExist;
-        }
-
-        let regex = Regex::new(r"dial unix (.+) connect: connection refused")
-            .expect("failed to compile regex");
-
-        if let Some(captures) = regex.captures(&contents.cause_msg) {
-            let socket_path = PathBuf::from(
-                captures
-                    .get(1)
-                    .expect("failed to extract capture group")
-                    .as_str(),
-            );
-
-            return LoggedError::ServiceManagerUnresponsive(socket_path);
+            return LoggedError::ServiceManagerNotRunning;
         }
 
         LoggedError::Other(contents.cause_msg)
@@ -1053,25 +1051,22 @@ pub mod test_helpers {
             // Dropping the child as stopping is handled via a process-compose command.
             let child = cmd.spawn().unwrap();
 
+            // Wait for the manager to answer, not merely for its socket to
+            // appear. `process-compose` creates the file when it binds and
+            // accepts some time after that, so waiting on the file hands tests
+            // a socket that nothing is listening on yet.
             let max_tries = 5;
-            for backoff in 1..max_tries {
-                debug!("waiting for socket to exist");
+            let mut ready = false;
+            for backoff in 1..=max_tries {
+                debug!("waiting for the service manager to answer");
                 thread::sleep(Duration::from_millis(100 * backoff));
 
-                // For now just check if the socket exists.
-                // Processes _may_ have not started yet, or the socket is unresponsive.
-                // We can't really check if the process is running,
-                // as it may have already exited.
-                // We could check if the socket can be connected to
-                // or try to read ProcessStates, if the current approach leads to flaking tests.
-                if socket.exists() {
+                if manager_responds(&socket) {
+                    ready = true;
                     break;
                 }
-
-                if backoff == max_tries {
-                    panic!("socket never appeared");
-                }
             }
+            assert!(ready, "service manager never answered on {socket:?}");
 
             Self {
                 _temp_dir: temp_dir,
@@ -1126,6 +1121,36 @@ mod tests {
     use test_helpers::TestProcessComposeInstance;
 
     use super::*;
+
+    /// A socket nobody is listening on is a manager that is not running, the
+    /// same as no socket at all.
+    #[test]
+    fn connection_refused_reads_as_no_manager() {
+        let contents = ProcessComposeLogContents {
+            err_msg: "failed to read process states".to_string(),
+            cause_msg: "dial unix /run/flox.abc123.sock: connect: connection refused".to_string(),
+        };
+
+        assert_eq!(
+            LoggedError::from(contents),
+            LoggedError::ServiceManagerNotRunning
+        );
+    }
+
+    /// A missing socket reads the same way, through the other branch.
+    #[test]
+    fn missing_socket_reads_as_no_manager() {
+        let contents = ProcessComposeLogContents {
+            err_msg: "failed to read process states".to_string(),
+            cause_msg: "dial unix /run/flox.abc123.sock: connect: no such file or directory"
+                .to_string(),
+        };
+
+        assert_eq!(
+            LoggedError::from(contents),
+            LoggedError::ServiceManagerNotRunning
+        );
+    }
 
     proptest! {
         #[test]
@@ -1547,7 +1572,9 @@ mod tests {
         assert!(
             matches!(
                 first_message,
-                Err(ServiceError::LoggedError(LoggedError::SocketDoesntExist))
+                Err(ServiceError::LoggedError(
+                    LoggedError::ServiceManagerNotRunning
+                ))
             ),
             "expected socket error, got {:?}",
             first_message
