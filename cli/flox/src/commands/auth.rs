@@ -410,6 +410,18 @@ impl Auth {
                     .refresh_identity(&flox.floxhub_client)
                     .await;
                 match identity {
+                    Ok(Some(identity)) if identity.is_expired() => {
+                        message::plain(format!(
+                            "You are logged in as {} on {}",
+                            identity.handle,
+                            flox.floxhub.base_url()
+                        ));
+                        // The credential is locally expired; the server
+                        // accepted it for /me, but it will be rejected for
+                        // authenticated operations.
+                        message::warning("Your FloxHub token is expired.");
+                        return Err(Exit(1).into());
+                    },
                     Ok(Some(identity)) => {
                         message::plain(format!(
                             "You are logged in as {} on {}",
