@@ -257,6 +257,49 @@ EOF
   expected="$(with_latest_schema "")"
   assert_equal "$manifest" "$expected"
 }
+
+# bats test_tags=init,init:default-flag
+@test "init -D fails without auth in non-interactive context" {
+  unset FLOX_FLOXHUB_TOKEN
+
+  run "$FLOX_BIN" init -D
+  assert_failure
+  assert_output --partial "You are not logged in to FloxHub."
+}
+
+# bats test_tags=init,init:default-flag
+@test "init -D creates <user>/default environment when logged in" {
+  floxhub_setup "test"
+
+  run "$FLOX_BIN" init -D
+  assert_success
+  assert_output --partial "Created environment 'test/default'"
+}
+
+# bats test_tags=init,init:default-flag
+@test "init -D --bare creates default environment with bare manifest" {
+  floxhub_setup "test"
+
+  run "$FLOX_BIN" init -D --bare
+  assert_success
+  assert_output --partial "Created environment 'test/default'"
+  manifest="$("$FLOX_BIN" list -c -r "test/default")"
+  expected="$(with_latest_schema "")"
+  assert_equal "$manifest" "$expected"
+}
+
+# bats test_tags=init,init:default-flag
+@test "init -D blocks with an expired token" {
+  floxhub_setup "test"
+
+  # Swap in an expired token (exp: 2024-01-01T00:00:00+00:00, handle: "test").
+  # init is a write operation, so an expired token must block rather than warn.
+  export FLOX_FLOXHUB_TOKEN="eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3guZGV2L2hhbmRsZSI6InRlc3QiLCJleHAiOjE3MDQwNjM2MDB9.-5VCofPtmYQuvh21EV1nEJhTFV_URkRP0WFu4QDPFxY"
+
+  run "$FLOX_BIN" init -D
+  assert_failure
+  assert_output --partial "Your FloxHub token has expired."
+}
 # ---------------------------------------------------------------------------- #
 #
 #
