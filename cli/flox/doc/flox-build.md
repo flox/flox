@@ -88,10 +88,24 @@ The `build.<package>.version` field can be specified in one of the following way
 1. **as read from a file**: `version.file = "<path>"`
 1. **as returned by a command**: `version.command = "<cmd> <args>"`
 
+### The nixpkgs revision a Nix expression build uses
+
+A build uses the nixpkgs of the thing being built.
+
+A Nix expression build (a package defined as a `.nix` file under
+`.flox/pkgs/`) uses a revision supplied by the catalog server: the latest
+revision of the default stability, or of the stability named with
+`--stability`.
+
+A manifest-defined package uses the package set its environment is locked to,
+and so do any Nix expression builds it reaches through `${pkg}` references.
+Building a Nix expression build and a manifest build in one invocation uses the
+catalog's revision for the expressions, which matters when the two are expected
+to link against the same libraries.
+
 ### Catalog imports for Nix expression builds
 
-Nix expression builds (packages defined as `.nix` files under `.flox/pkgs/`)
-can depend on packages from FloxHub catalogs.
+Nix expression builds can depend on packages from FloxHub catalogs.
 An expression references a catalog package as `catalogs.<catalog>.<package>`,
 where the package receives a `catalogs` argument.
 The referenced packages are the ones published to a FloxHub catalog with
@@ -119,14 +133,12 @@ package set.
     in the environment's `manifest.toml`.
 
 `--stability <stability>`
-:   Perform a nix expression build using a base package set of the given
+:   Perform a Nix expression build using a base package set of the given
     stability as tracked by the catalog server.
     A stability (e.g., `"stable"`) identifies a curated nixpkgs revision
     managed by the catalog server.
-    When omitted, the base package set is derived from the environment's
-    `toplevel` group; if no `toplevel` group exists, the `"stable"`
-    stability is used by default.
-    An explicit `--stability` value overrides both of these defaults.
+    When omitted, the default stability is used, except for the Nix expression
+    builds a manifest build reaches, which use the environment's revision.
     Cannot be used with manifest builds.
 
 

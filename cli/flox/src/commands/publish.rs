@@ -294,28 +294,36 @@ impl Publish {
 
         disallow_base_url_select_for_manifest_builds(
             [&package],
-            publish_config.base_catalog_url_select.is_some(),
+            publish_config.base_catalog_url_select.as_ref(),
         )?;
 
         // Check the environment for appropriate state to build and publish
         let env_metadata = check_environment_metadata(&flox, &path_env)?;
 
-        let selected_base_nixpkgs_url = base_nixpkgs_url_from_url_select(
-            &flox,
-            publish_config.base_catalog_url_select,
-            Some(&env_metadata.lockfile),
-        )
-        .await?;
-
-        prefetch_expression_build_flake_ref(
-            [&package],
-            &selected_base_nixpkgs_url.as_flake_ref()?,
-        )?;
+        // Only an expression build needs a nixpkgs selected for it; a manifest
+        // build uses the one its environment is locked to, which is also the
+        // one it is recorded against.
+        let selected = match package.kind().is_expression_build() {
+            true => Some(
+                base_nixpkgs_url_from_url_select(&flox, publish_config.base_catalog_url_select)
+                    .await?,
+            ),
+            false => None,
+        };
 
         let package_metadata = check_package_metadata(
-            &selected_base_nixpkgs_url,
+            selected.as_ref(),
             env_metadata.toplevel_catalog_ref.as_ref(),
             package,
+        )?;
+
+        // The page the package is recorded against is the page it is built
+        // against, so there is one value rather than two to keep in step.
+        let selected_base_nixpkgs_url = package_metadata.base_catalog_ref.clone();
+
+        prefetch_expression_build_flake_ref(
+            [&package_metadata.package],
+            &selected_base_nixpkgs_url.as_flake_ref()?,
         )?;
 
         let auth = NixAuth::from_flox(&flox)?;
