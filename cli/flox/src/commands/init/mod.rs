@@ -92,6 +92,9 @@ enum InitEnvironmentTypeSelect {
         #[bpaf(long("reference"), long("ref"), short('r'), argument("owner>/<name"))]
         environment_ref: RemoteEnvironmentRef,
     },
+    /// Shorthand for `-r <current_user>/default`
+    #[bpaf(long("default"), short('D'))]
+    Default,
 }
 
 // Create an environment in the current directory
@@ -156,6 +159,13 @@ impl Init {
                 let mut flox = flox;
                 ensure_auth(&mut flox).await?;
                 init_floxhub_environment_decorated(&flox, environment_ref, self.bare)?;
+            },
+            InitEnvironmentTypeSelect::Default => {
+                let mut flox = flox;
+                let user_handle = ensure_auth(&mut flox).await?;
+                let env_ref = RemoteEnvironmentRef::new(user_handle, DEFAULT_NAME)
+                    .context("Failed to construct default environment reference")?;
+                init_floxhub_environment_decorated(&flox, env_ref, self.bare)?;
             },
         }
         Ok(())
