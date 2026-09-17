@@ -124,7 +124,12 @@ let
       ${optionalString cfg.autoRestart ''
         if [ "$mode" = "timer" ] && [ "$before" != "$after" ]; then
           echo "Flox environment ${cfg.environment} changed; restarting ${cfg.unit}" >&2
-          systemctl try-restart ${escapeShellArg cfg.unit}
+          # --no-block is required, not an optimization. The unit being
+          # restarted requires flox-pull@<name>.service, which blocks on the
+          # lock this script is still holding. Waiting for the restart to
+          # finish would deadlock: the restart cannot proceed until the lock
+          # is released, and the lock is not released until this script exits.
+          systemctl --no-block try-restart ${escapeShellArg cfg.unit}
         fi
       ''}
     '';
