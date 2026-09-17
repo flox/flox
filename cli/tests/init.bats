@@ -292,7 +292,7 @@ EOF
 @test "init -D blocks with an expired token" {
   floxhub_setup "test"
 
-  # Swap in an expired token (exp: 2024-01-01T00:00:00+00:00, handle: "test").
+  # Swap in an expired token (exp: 2023-12-31T23:00:00Z, handle: "test").
   # init is a write operation, so an expired token must block rather than warn.
   export FLOX_FLOXHUB_TOKEN="eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3guZGV2L2hhbmRsZSI6InRlc3QiLCJleHAiOjE3MDQwNjM2MDB9.-5VCofPtmYQuvh21EV1nEJhTFV_URkRP0WFu4QDPFxY"
 
