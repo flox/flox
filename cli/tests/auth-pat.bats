@@ -144,6 +144,18 @@ teardown() {
   assert_output --partial "Expires at: 2030-01-01 00:00:00 UTC."
 }
 
+# bats test_tags=auth:pat:status,auth:expired
+@test "pat: auth status warns and fails when the token is expired" {
+  export FLOX_FLOXHUB_TOKEN="flox_pat_test-secret"
+  export _FLOX_USE_CATALOG_MOCK="$MANUALLY_GENERATED/auth/me_expired.yaml"
+
+  run "$FLOX_BIN" auth status
+  assert_failure
+  assert_output --partial "You are logged in as owner"
+  assert_output --partial "Your FloxHub token is expired."
+  refute_output --partial "Expires at:"
+}
+
 # bats test_tags=auth:pat:login
 @test "pat: auth login --token-file logs in with a pat" {
   unset FLOX_FLOXHUB_TOKEN
