@@ -10,6 +10,7 @@
   flox-src,
   gitMinimal,
   glibcLocalesUtf8,
+  glow,
   gnumake,
   inputs,
   lib,
@@ -40,6 +41,7 @@ let
       GNUMAKE_BIN = "${gnumake}/bin/make";
       SLEEP_BIN = "${coreutils}/bin/sleep";
       PROCESS_COMPOSE_BIN = "${process-compose}/bin/process-compose";
+      GLOW_BIN = "${glow}/bin/glow";
       FLOX_ACTIVATIONS_BIN = "${flox-activations}/libexec/flox-activations";
       # used internally to ensure CA certificates are available
       NIXPKGS_CACERT_BUNDLE_CRT = cacert.outPath + "/etc/ssl/certs/ca-bundle.crt";
@@ -128,6 +130,7 @@ in
       ++ [
         gitMinimal
         process-compose
+        glow
         coreutils # for `sleep infinity`
       ]
       ++ lib.optional (flox-nix-plugins != null) [ flox-nix-plugins ]

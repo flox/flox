@@ -66,6 +66,7 @@ use crate::commands::{
 use crate::utils::detect_shell::{detect_shell_for_in_place, detect_shell_for_subshell};
 use crate::utils::errors::format_diverged_metadata;
 use crate::utils::events::{env_detail_from_concrete, env_detail_from_concrete_without_lineage};
+use crate::utils::markdown::render_markdown_to_stderr;
 use crate::utils::message;
 use crate::utils::upgrade_output::{count_upgrade_categories, format_upgrade_summary};
 use crate::{Exit, environment_subcommand_metric, subcommand_metric, utils};
@@ -402,6 +403,35 @@ impl ActivateOptions {
             LockResult::Unchanged(lockfile) => lockfile,
         };
         let manifest = &lockfile.migrated_manifest()?;
+
+        // `manifest` is already the merged (composer-only) manifest, so an
+        // included environment's description never surfaces here.
+        //
+        // Only the interactive shell prints it: `InPlace`
+        // (`eval "$(flox activate)"`), `ExecCommand` and `ShellCommand` all
+        // write to a stdout the caller parses or evals, where an extra
+        // rendered block would corrupt that output.
+        if matches!(invocation_type, InvocationType::Interactive)
+            && let Some(description) = manifest.as_latest_schema().description.as_deref()
+        {
+            // glow renders onto stderr itself, where `message::` output
+            // also goes. Every way it can fail is a problem with this
+            // invocation or the installation -- a missing binary, a style
+            // or width argument it rejects -- never anything about the
+            // author's Markdown, which it renders as best it can. So a
+            // failure is worth reporting rather than papering over by
+            // dumping the raw source, which looks merely untidy and hides
+            // the real fault.
+            match render_markdown_to_stderr(description, message::terminal_width()) {
+                // glow's render ends flush against its last line of text, so
+                // without this the description runs straight into whatever
+                // activation prints next.
+                Ok(()) => eprintln!(),
+                Err(err) => message::warning(format!(
+                    "Could not render the environment description.\n{err}"
+                )),
+            }
+        }
 
         if !self.trust
             && let Some(compose) = &lockfile.compose

@@ -171,6 +171,33 @@ for a make feature first:
 
 ## Testing
 
+- Use `assert_eq!` on entire structs in tests so that it's easier to debug failures and catch new fields; don't `assert!` or `assert_eq!` on individual fields
+- **Test naming:** Do not prefix test functions with `test_`.
+  The `#[cfg(test)]` module and `#[test]` attribute already
+  identify them as tests. Name tests descriptively for what
+  they verify (e.g.,
+  `gather_repo_meta_no_upstream_suggests_set_upstream`).
+- **Test behavior that can break, not plumbing:** Do not test
+  generated code, the argument parser (bpaf is declarative and
+  tested upstream), or serialization round-trips
+  (`serialize(x) == serialize(x)`).
+- Prefer a type that makes an
+  invalid state unrepresentable (`NonZero`, domain types) over a
+  runtime guard plus a test for it. Do not add a client mock to
+  test a thin wrapper; see the provider-trait rule above.
+- Test when logic is complicated and there are multiple correct codepaths
+  through that logic
+- Test when there are many callers of the same logic, and different callers
+  depend on different behavior, making it easy to regress.
+- Don't write tautological tests or tests for logic that won't regress.
+  - Don't test a single match statement
+  - Don't test that an unconditional print of a message prints the message
+- **Tests: use test helpers** (behind `feature = "tests"`):
+  - `flox_manifest::raw::test_helpers`: `mk_test_manifest_from_contents()`,
+    `empty_test_migrated_manifest()`
+  - `flox_manifest::test_helpers`: `with_latest_schema("body")` to prepend
+    the correct schema version to TOML content strings
+
 ### Mock Data Generation
 
 Mock catalog responses are generated against local floxhub services. See `CONTRIBUTING.md` for details on regenerating mocks.
@@ -237,7 +264,6 @@ internal Linear issue instead.
     like avoiding the clone of a short `&str`. Ordinary elided
     borrows in function signatures (`&str` parameters) are fine.
   - Use structured log and tracing fields; don't interpolate variables into single strings
-  - Use `assert_eq!` on entire structs in tests so that it's easier to debug failures and catch new fields; don't `assert!` or `assert_eq!` on individual fields
   - `use` guidelines
     - Import from all flox crates with `use` rather than qualifying with `::`
     - For imports of external dependencies, qualifying with `::` is acceptable
@@ -295,18 +321,6 @@ internal Linear issue instead.
     continuations. The output the user sees matters more than
     source line length. Quote suggested commands with single
     quotes (e.g., `'git push'`).
-  - **Test naming:** Do not prefix test functions with `test_`.
-    The `#[cfg(test)]` module and `#[test]` attribute already
-    identify them as tests. Name tests descriptively for what
-    they verify (e.g.,
-    `gather_repo_meta_no_upstream_suggests_set_upstream`).
-  - **Test behavior that can break, not plumbing:** Do not test
-    generated code, the argument parser (bpaf is declarative and
-    tested upstream), or serialization round-trips
-    (`serialize(x) == serialize(x)`). Prefer a type that makes an
-    invalid state unrepresentable (`NonZero`, domain types) over a
-    runtime guard plus a test for it. Do not add a client mock to
-    test a thin wrapper; see the provider-trait rule above.
   - **Type safety at function boundaries:** Parse strings
     at entry points (CLI arg parsing, API response
     deserialization), not deep in business logic. Before
@@ -436,11 +450,7 @@ correct manifest lifecycle at compile time. Follow these rules strictly.
   `lockfile.migrated_user_manifest()` for the user-authored manifest instead of
   calling `lockfile.manifest.migrate_typed_only(...)` directly at call sites.
 
-- **Tests: use test helpers** (behind `feature = "tests"`):
-  - `flox_manifest::raw::test_helpers`: `mk_test_manifest_from_contents()`,
-    `empty_test_migrated_manifest()`
-  - `flox_manifest::test_helpers`: `with_latest_schema("body")` to prepend
-    the correct schema version to TOML content strings
+
 
 ## IDE Setup
 
