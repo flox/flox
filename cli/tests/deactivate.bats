@@ -638,6 +638,7 @@ diff_env_dumps() {
         NIX_SSL_CERT_FILE
         PATH_LOCALE
         REMOTEHOST
+        SSL_CERT_FILE
         _FLOX_PROMPT_HOOK_VERSION
         _flox_activate_tracer
       )
@@ -817,23 +818,12 @@ EOF
   output=$(diff_env_dumps "$BEFORE" "$AFTER"); status=$?
   assert_success
 
-  if [[ "$OSTYPE" == darwin* ]]; then
-    assert_output - <<EOF
+  assert_output - <<EOF
 PS1
 SHLVL
-SSL_CERT_FILE
 _FLOX_ACTIVATIONS_VERBOSITY
 _FLOX_SUBSYSTEM_VERBOSITY
 EOF
-  else
-    assert_output - <<EOF
-PS1
-SHLVL
-SSL_CERT_DIR
-_FLOX_ACTIVATIONS_VERBOSITY
-_FLOX_SUBSYSTEM_VERBOSITY
-EOF
-  fi
 }
 
 # bats test_tags=activate,deactivate
@@ -853,23 +843,12 @@ EOF
   output=$(diff_env_dumps "$BEFORE" "$AFTER"); status=$?
   assert_success
 
-  if [[ "$OSTYPE" == darwin* ]]; then
-    assert_output - <<EOF
+  assert_output - <<EOF
 SHELL
-SSL_CERT_FILE
 _
 _FLOX_ACTIVATIONS_VERBOSITY
 _FLOX_SUBSYSTEM_VERBOSITY
 EOF
-  else
-    assert_output - <<EOF
-SHELL
-SSL_CERT_DIR
-_
-_FLOX_ACTIVATIONS_VERBOSITY
-_FLOX_SUBSYSTEM_VERBOSITY
-EOF
-  fi
 }
 
 # bats test_tags=activate,deactivate
@@ -888,8 +867,7 @@ EOF
 
   output=$(diff_env_dumps "$BEFORE" "$AFTER"); status=$?
   assert_success
-  if [[ "$OSTYPE" == darwin* ]]; then
-    assert_output - <<EOF
+  assert_output - <<EOF
 FLOX_ORIG_HOME
 FLOX_TCSH_INIT_SCRIPT
 GROUP
@@ -899,28 +877,10 @@ MACHTYPE
 OSTYPE
 SHELL
 SHLVL
-SSL_CERT_FILE
 VENDOR
 _FLOX_ACTIVATIONS_VERBOSITY
 _FLOX_SUBSYSTEM_VERBOSITY
 EOF
-  else
-    assert_output - <<EOF
-FLOX_ORIG_HOME
-FLOX_TCSH_INIT_SCRIPT
-GROUP
-HOST
-HOSTTYPE
-MACHTYPE
-OSTYPE
-SHELL
-SHLVL
-SSL_CERT_DIR
-VENDOR
-_FLOX_ACTIVATIONS_VERBOSITY
-_FLOX_SUBSYSTEM_VERBOSITY
-EOF
-  fi
 }
 
 # bats test_tags=activate,deactivate
@@ -939,25 +899,13 @@ EOF
 
   output=$(diff_env_dumps "$BEFORE" "$AFTER"); status=$?
   assert_success
-  if [[ "$OSTYPE" == darwin* ]]; then
-    assert_output - <<EOF
+  assert_output - <<EOF
 FLOX_ORIG_ZDOTDIR
 OLDPWD
 PS1
-SSL_CERT_FILE
 _FLOX_ACTIVATIONS_VERBOSITY
 _FLOX_SUBSYSTEM_VERBOSITY
 EOF
-  else
-    assert_output - <<EOF
-FLOX_ORIG_ZDOTDIR
-OLDPWD
-PS1
-SSL_CERT_DIR
-_FLOX_ACTIVATIONS_VERBOSITY
-_FLOX_SUBSYSTEM_VERBOSITY
-EOF
-  fi
 }
 
 # Interactive-mode counterparts: drive a real interactive `flox activate`
@@ -995,29 +943,15 @@ EOF
 
   output=$(diff_env_dumps "$BEFORE" "$AFTER"); status=$?
   assert_success
-  if [[ "$OSTYPE" == darwin* ]]; then
-    assert_output - <<EOF
+  assert_output - <<EOF
 NO_COLOR
 PATH
 SHLVL
-SSL_CERT_FILE
 TCLLIBPATH
 TERM
 _FLOX_ACTIVATIONS_VERBOSITY
 _FLOX_SUBSYSTEM_VERBOSITY
 EOF
-  else
-    assert_output - <<EOF
-NO_COLOR
-PATH
-SHLVL
-SSL_CERT_DIR
-TCLLIBPATH
-TERM
-_FLOX_ACTIVATIONS_VERBOSITY
-_FLOX_SUBSYSTEM_VERBOSITY
-EOF
-  fi
 }
 
 # bats test_tags=activate,deactivate
@@ -1038,31 +972,16 @@ EOF
 
   output=$(diff_env_dumps "$BEFORE" "$AFTER"); status=$?
   assert_success
-  if [[ "$OSTYPE" == darwin* ]]; then
-    assert_output - <<EOF
+  assert_output - <<EOF
 NO_COLOR
 PATH
 SHLVL
-SSL_CERT_FILE
 TCLLIBPATH
 TERM
 _
 _FLOX_ACTIVATIONS_VERBOSITY
 _FLOX_SUBSYSTEM_VERBOSITY
 EOF
-  else
-    assert_output - <<EOF
-NO_COLOR
-PATH
-SHLVL
-SSL_CERT_DIR
-TCLLIBPATH
-TERM
-_
-_FLOX_ACTIVATIONS_VERBOSITY
-_FLOX_SUBSYSTEM_VERBOSITY
-EOF
-  fi
 }
 
 # bats test_tags=activate,deactivate
@@ -1083,10 +1002,7 @@ EOF
 
   output=$(diff_env_dumps "$BEFORE" "$AFTER"); status=$?
   assert_success
-  # macOS and Linux differ only in the SSL cert var (SSL_CERT_FILE vs
-  # SSL_CERT_DIR).
-  if [[ "$OSTYPE" == darwin* ]]; then
-    assert_output - <<EOF
+  assert_output - <<EOF
 FLOX_ORIG_HOME
 FLOX_TCSH_INIT_SCRIPT
 GROUP
@@ -1097,33 +1013,12 @@ NO_COLOR
 OSTYPE
 PATH
 SHLVL
-SSL_CERT_FILE
 TCLLIBPATH
 TERM
 VENDOR
 _FLOX_ACTIVATIONS_VERBOSITY
 _FLOX_SUBSYSTEM_VERBOSITY
 EOF
-  else
-    assert_output - <<EOF
-FLOX_ORIG_HOME
-FLOX_TCSH_INIT_SCRIPT
-GROUP
-HOST
-HOSTTYPE
-MACHTYPE
-NO_COLOR
-OSTYPE
-PATH
-SHLVL
-SSL_CERT_DIR
-TCLLIBPATH
-TERM
-VENDOR
-_FLOX_ACTIVATIONS_VERBOSITY
-_FLOX_SUBSYSTEM_VERBOSITY
-EOF
-  fi
 }
 
 # bats test_tags=activate,deactivate
@@ -1180,8 +1075,7 @@ EOF
 
   output=$(diff_env_dumps "$BEFORE" "$AFTER"); status=$?
   assert_success
-  if [[ "$OSTYPE" == darwin* ]]; then
-    assert_output - <<EOF
+  assert_output - <<EOF
 FLOX_ORIG_ZDOTDIR
 FLOX_SAVE_ZSH_PS1
 NO_COLOR
@@ -1189,28 +1083,11 @@ OLDPWD
 PATH
 PS1
 SHLVL
-SSL_CERT_FILE
 TCLLIBPATH
 TERM
 _FLOX_ACTIVATIONS_VERBOSITY
 _FLOX_SUBSYSTEM_VERBOSITY
 EOF
-  else
-    assert_output - <<EOF
-FLOX_ORIG_ZDOTDIR
-FLOX_SAVE_ZSH_PS1
-NO_COLOR
-OLDPWD
-PATH
-PS1
-SHLVL
-SSL_CERT_DIR
-TCLLIBPATH
-TERM
-_FLOX_ACTIVATIONS_VERBOSITY
-_FLOX_SUBSYSTEM_VERBOSITY
-EOF
-  fi
 }
 
 # ---------------------------------------------------------------------------- #

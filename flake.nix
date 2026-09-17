@@ -100,6 +100,17 @@
           rust-external-deps = callPackage ./pkgs/rust-external-deps { };
           rust-internal-deps = callPackage ./pkgs/rust-internal-deps { inherit nixpkgsInputLockedURL; };
 
+          # Same binaries built from the generated Cargo.nix.
+          #
+          # `flox-activations` is this package's own build, passed back
+          # through the overlay's fixed point. Only the `flox` crate reads the
+          # resulting path, and building flox-activations does not, so this
+          # does not need a second instantiation of the crate graph.
+          crate2nix-builds = callPackage ./pkgs/crate2nix {
+            inherit nixpkgsInputLockedURL;
+            inherit (final.crate2nix-builds) flox-activations;
+          };
+
           # (Linux-only) LD_AUDIT library for using dynamic libraries in Flox envs.
           ld-floxlib = callPackage ./pkgs/ld-floxlib { };
           flox-src = callPackage ./pkgs/flox-src { };
@@ -151,6 +162,14 @@
             flox-cli = prev.flox-cli.override {
               flox-interpreter = null;
               rust-internal-deps = self.rust-internal-deps;
+            };
+            crate2nix-builds = prev.crate2nix-builds.override {
+              flox-activations = null;
+              flox-buildenv = null;
+              flox-package-builder = null;
+              flox-nix-plugins = null;
+              flox-mk-container = null;
+              flox-interpreter = null;
             };
             flox-activations = prev.flox-activations.override { };
             flox-interpreter = prev.flox-interpreter.override {
@@ -216,6 +235,10 @@
           nix
           ;
 
+        crate2nix-flox = pkgs.crate2nix-builds.flox;
+        crate2nix-flox-activations = pkgs.crate2nix-builds.flox-activations;
+        crate2nix-nef-lock-catalog = pkgs.crate2nix-builds.nef-lock-catalog;
+
         default = pkgs.flox;
       }) pkgsContext;
 
@@ -223,6 +246,7 @@
 
       devShells = builtins.mapAttrs (system: pkgsBase: {
         default = pkgsBase.floxDevelopmentPackages.callPackage ./shells/default { };
+        crate2nix = pkgsBase.floxDevelopmentPackages.callPackage ./shells/crate2nix { };
       }) pkgsContext;
 
       # ------------------------------------------------------------------------ #
