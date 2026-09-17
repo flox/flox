@@ -136,6 +136,11 @@ impl RawNixFlakerefAttrs {
     pub fn new_unchecked(value: Value) -> Self {
         Self(value)
     }
+
+    /// The flakeref attribute set as JSON.
+    pub fn as_value(&self) -> &Value {
+        &self.0
+    }
 }
 
 impl From<floxhub_client::LockedGitSource> for RawNixFlakerefAttrs {
