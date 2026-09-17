@@ -29,6 +29,7 @@ use super::build::{
     base_catalog_url_select,
     base_nixpkgs_url_from_url_select,
     check_git_tracking_for_expression_builds,
+    describe_nixpkgs,
     packages_to_build,
     prefetch_expression_build_flake_ref,
     prefetch_flake_ref,
@@ -120,7 +121,7 @@ impl Develop {
         let target = Self::resolve_target(&lockfile_manifest, &expression_path_ref, package)?;
 
         // An unsandboxed manifest build already refuses `--stability`
-        // (`disallow_base_url_select_for_manifest_builds`, build.rs), but
+        // (`disallow_unusable_base_url_select`, build.rs), but
         // this check never runs here: `refuse_manifest_build` below rejects
         // every manifest-build target unconditionally, before `--stability`
         // is even inspected. If that blanket refusal is ever loosened,
@@ -155,10 +156,14 @@ impl Develop {
             ])
             .await?;
 
-        let base_nixpkgs_url =
-            base_nixpkgs_url_from_url_select(&flox, base_catalog_url_select, Some(&lockfile))
-                .await?
-                .as_flake_ref()?;
+        let expression_nixpkgs =
+            base_nixpkgs_url_from_url_select(&flox, base_catalog_url_select).await?;
+        let base_nixpkgs_url = expression_nixpkgs.as_flake_ref()?;
+
+        message::plain(format!(
+            "Nix expression builds use nixpkgs {}.",
+            describe_nixpkgs(&expression_nixpkgs)
+        ));
 
         prefetch_flake_ref(&COMMON_NIXPKGS_URL)?;
         prefetch_expression_build_flake_ref([&target], &base_nixpkgs_url)?;
