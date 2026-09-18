@@ -23,6 +23,7 @@ use floxhub_client::{
     SourceLineageChange,
     UserBuildPublish,
     UserDerivationInfo,
+    factory_build_token_from_env,
 };
 use git_url_parse::GitUrl;
 use indexmap::IndexSet;
@@ -766,8 +767,23 @@ where
                 .to_string_lossy()
                 .into_owned(),
             allow_lineage_change,
+            factory_build_token: factory_build_token_from_env(),
         };
 
+        // The Factory token is a capability: whoever reads it can claim a
+        // build's catalog association. `flox publish` runs inside the
+        // build pod and its stderr is the log the coordinator serves at
+        // GET /builds/{id}/logs, so this dump carries whether a token was
+        // sent, never its value.
+        let logged_build_info = UserBuildPublish {
+            factory_build_token: None,
+            ..build_info.clone()
+        };
+        tracing::debug!(
+            build_info = ?logged_build_info,
+            factory_build_token_present = build_info.factory_build_token.is_some(),
+            "Publishing build in catalog...",
+        );
         publish_build_with_confirmation(
             client,
             catalog_name,

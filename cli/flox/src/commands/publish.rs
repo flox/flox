@@ -34,6 +34,7 @@ use floxhub_client::{
     LockedInputEntry,
     PackageSystem,
     SourceLineageChange,
+    factory_build_token_from_env,
 };
 use indoc::formatdoc;
 use nef_lock_catalog::{CatalogRef, NixFlakeref, scan_package};
@@ -496,6 +497,7 @@ impl Publish {
             && !publish_config.allow_lineage_change
         {
             let locked_inputs_query: HashMap<_, _> = locked_inputs.clone().into_iter().collect();
+            let factory_build_token = factory_build_token_from_env();
             let query = CheckBuildQuery {
                 catalog_name: &catalog_name,
                 package_name: publish_provider.package_metadata.package.name().as_ref(),
@@ -504,6 +506,7 @@ impl Publish {
                 nixpkgs_rev,
                 system,
                 locked_inputs: &locked_inputs_query,
+                factory_build_token: factory_build_token.as_deref(),
             };
             if dedup_short_circuit(&flox.floxhub_client, query).await {
                 return Ok(());
