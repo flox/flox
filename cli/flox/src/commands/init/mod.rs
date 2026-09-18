@@ -745,7 +745,6 @@ mod tests {
     use flox_events::{CredentialType, EnvDetail, Event, EventsClient, SharedMetadataTemplate};
     use flox_rust_sdk::flox::test_helpers::{flox_instance, flox_instance_with_optional_floxhub};
     use flox_rust_sdk::models::environment::{DOT_FLOX, EnvJson, ManagedPointer};
-    use flox_rust_sdk::utils::logging::test_helpers::test_subscriber_message_only;
     use indoc::indoc;
     use pretty_assertions::assert_eq;
     use serial_test::serial;
@@ -753,6 +752,7 @@ mod tests {
     use uuid::Uuid;
 
     use super::*;
+    use crate::utils::message::test_helpers::capture_messages;
 
     impl ProvidedPackage {
         pub(crate) fn new(
@@ -1011,12 +1011,11 @@ mod tests {
         let env_ref = RemoteEnvironmentRef::new_from_parts(owner.clone(), name.clone());
 
         let (flox, _tempdir_handle) = flox_instance_with_optional_floxhub(Some(&owner));
-        let (subscriber, written) = test_subscriber_message_only();
+        let (output, written) = capture_messages();
 
-        tracing::subscriber::with_default(subscriber, || {
-            init_floxhub_environment_decorated(&flox, env_ref.clone(), false)
-        })
-        .unwrap();
+        output
+            .sync_scope(|| init_floxhub_environment_decorated(&flox, env_ref.clone(), false))
+            .unwrap();
 
         assert!(
             written

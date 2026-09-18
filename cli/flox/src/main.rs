@@ -117,7 +117,10 @@ fn main_with_output(verbosity: commands::Verbosity, output: &message::Output) ->
     let metrics_uuid = if !config.flox.disable_metrics {
         init_telemetry_uuid(&config.flox.data_dir, &config.flox.cache_dir)
             .and_then(|_| read_metrics_uuid(&config))
-            .inspect_err(|e| warn!("Failed to initialize metrics UUID: {e}"))
+            .inspect_err(|e| {
+                warn!(error = %e, "Failed to initialize metrics UUID");
+                message::warning(format!("Failed to initialize metrics UUID: {e}"));
+            })
             .ok()
     } else {
         None
@@ -201,6 +204,7 @@ fn main_with_output(verbosity: commands::Verbosity, output: &message::Output) ->
     // Runtime creates our SIGINT/Ctrl-C handler, so care must be taken to drop it last
     let runtime = tokio::runtime::Runtime::new().unwrap();
 
+    utils::tracing::command_started(v2_subcommand);
     let dispatch_start = Instant::now();
     let result = runtime.block_on(output.scope(run(args)));
 
@@ -232,6 +236,8 @@ fn main_with_output(verbosity: commands::Verbosity, output: &message::Output) ->
             (1, Some(kind))
         },
     };
+
+    utils::tracing::command_finished(v2_subcommand, code, error_kind, result.as_ref().err());
 
     // Emit the v2 `cli.command_completed`. The hub no-ops when no client was
     // installed (e.g. a bare `flox` invocation) or when `activate.rs` or

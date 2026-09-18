@@ -1014,13 +1014,13 @@ mod tests {
 
         let backup_client = Hub::global().with_client(|c| c.replace(client));
 
-        let (subscriber, reload_handle) = create_registry_and_filter_reload_handle();
+        let (subscriber, reload_handle, _output) = create_registry_and_filter_reload_handle();
 
         tracing::subscriber::with_default(subscriber, || {
             subcommand_metric!("foo");
-            update_filters(&reload_handle, "debug");
+            update_filters(&reload_handle, "debug").unwrap();
             subcommand_metric!("bar");
-            update_filters(&reload_handle, "off");
+            update_filters(&reload_handle, "off").unwrap();
             subcommand_metric!("baz");
         });
 

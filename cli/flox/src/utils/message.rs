@@ -15,6 +15,8 @@ use minus::{ExitStrategy, Pager, page_all};
 use tracing::debug;
 
 mod output;
+#[cfg(test)]
+pub(crate) use output::test_helpers;
 pub(crate) use output::{Output, current_output, set_default_output};
 
 /// Write a message to stderr.
@@ -366,12 +368,11 @@ mod tests {
     use flox_rust_sdk::flox::test_helpers::flox_instance;
     use flox_rust_sdk::models::environment::Environment;
     use flox_rust_sdk::models::environment::path_environment::test_helpers::new_path_environment;
-    use flox_rust_sdk::utils::logging::test_helpers::test_subscriber_message_only;
     use indoc::indoc;
     use pretty_assertions::assert_eq;
-    use tracing::instrument::WithSubscriber;
 
     use super::*;
+    use crate::utils::message::test_helpers::{WithOutput, capture_messages};
 
     /// Build a lockfile with a single catalog package locked for
     /// `locked_systems`, optionally with explicit `options.systems` in the
@@ -430,11 +431,11 @@ mod tests {
             None,
         );
 
-        let (subscriber, writer) = test_subscriber_message_only();
+        let (output, writer) = capture_messages();
         async {
             print_default_systems_changed(Some(&old), &new);
         }
-        .with_subscriber(subscriber)
+        .with_output(output)
         .await;
 
         assert_eq!(writer.to_string(), indoc! {"
@@ -458,11 +459,11 @@ mod tests {
         let new =
             lockfile_locked_for_systems(&["aarch64-darwin", "aarch64-linux", "x86_64-linux"], None);
 
-        let (subscriber, writer) = test_subscriber_message_only();
+        let (output, writer) = capture_messages();
         async {
             print_default_systems_changed(Some(&old), &new);
         }
-        .with_subscriber(subscriber)
+        .with_output(output)
         .await;
 
         assert_eq!(writer.to_string(), indoc! {"
@@ -485,13 +486,13 @@ mod tests {
             None,
         );
 
-        let (subscriber, writer) = test_subscriber_message_only();
+        let (output, writer) = capture_messages();
         async {
             print_default_systems_changed(Some(&explicit), &implicit);
             print_default_systems_changed(Some(&implicit), &explicit);
             print_default_systems_changed(None, &implicit);
         }
-        .with_subscriber(subscriber)
+        .with_output(output)
         .await;
 
         assert_eq!(writer.to_string(), "");
@@ -538,11 +539,11 @@ mod tests {
         let mut composer = new_path_environment(&flox, &composer_original_manifest);
         let lockfile = composer.lockfile(&flox).unwrap().into();
 
-        let (subscriber, writer) = test_subscriber_message_only();
+        let (output, writer) = capture_messages();
         async {
             print_overridden_manifest_fields(&lockfile);
         }
-        .with_subscriber(subscriber)
+        .with_output(output)
         .await;
 
         // - environments are listed by the order they were included

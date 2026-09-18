@@ -273,18 +273,17 @@ mod tests {
     use flox_rust_sdk::models::environment::Environment;
     use flox_rust_sdk::models::environment::path_environment::test_helpers::new_named_path_environment;
     use flox_rust_sdk::providers::catalog::test_helpers::catalog_replay_client;
-    use flox_rust_sdk::utils::logging::test_helpers::test_subscriber_message_only;
     use flox_test_utils::GENERATED_DATA;
     use flox_test_utils::manifests::HELLO;
     use indoc::indoc;
     use pretty_assertions::{assert_eq, assert_str_eq};
     use serial_test::serial;
     use tempfile::TempDir;
-    use tracing::instrument::WithSubscriber;
     use uuid::Uuid;
 
     use super::*;
     use crate::commands::EnvironmentSelect;
+    use crate::utils::message::test_helpers::{WithOutput, capture_messages};
 
     /// A mock-backed events client on the global hub, restored on drop so a
     /// panicking assertion cannot leak it into the next test. Holders must
@@ -451,7 +450,7 @@ mod tests {
     #[serial(global_events_client)]
     async fn confirmation_when_up_to_date() {
         let (mut flox, _tempdir) = flox_instance();
-        let (subscriber, writer) = test_subscriber_message_only();
+        let (output, writer) = capture_messages();
 
         let mut environment = new_named_path_environment(&flox, HELLO, "name");
 
@@ -465,7 +464,7 @@ mod tests {
             groups_or_iids: Vec::new(),
         }
         .handle(flox)
-        .with_subscriber(subscriber)
+        .with_output(output)
         .await
         .unwrap();
 
@@ -477,7 +476,7 @@ mod tests {
     /// Run an upgrade of an environment that only has upgrades on other systems
     async fn run_upgrade_with_upgrades_on_other_system(dry_run: bool) -> String {
         let (mut flox, _tempdir) = flox_instance();
-        let (subscriber, writer) = test_subscriber_message_only();
+        let (output, writer) = capture_messages();
 
         let mut environment = new_named_path_environment(&flox, "version = 1", "name");
 
@@ -503,7 +502,7 @@ mod tests {
             groups_or_iids: Vec::new(),
         }
         .handle(flox)
-        .with_subscriber(subscriber)
+        .with_output(output)
         .await
         .unwrap();
 
@@ -723,7 +722,7 @@ mod tests {
     /// Run a dry-run upgrade of an environment that has a version change on this system
     async fn run_dry_run_with_version_change() -> String {
         let (mut flox, _tempdir) = flox_instance();
-        let (subscriber, writer) = test_subscriber_message_only();
+        let (output, writer) = capture_messages();
 
         let mut environment = new_named_path_environment(&flox, "version = 1", "name");
 
@@ -750,7 +749,7 @@ mod tests {
             groups_or_iids: Vec::new(),
         }
         .handle(flox)
-        .with_subscriber(subscriber)
+        .with_output(output)
         .await
         .unwrap();
 

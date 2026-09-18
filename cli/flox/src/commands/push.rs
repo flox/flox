@@ -291,13 +291,12 @@ mod tests {
     use flox_rust_sdk::models::environment::path_environment::test_helpers::new_path_environment_in;
     use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironment;
     use flox_rust_sdk::models::environment::{Environment, ManagedPointer};
-    use flox_rust_sdk::utils::logging::test_helpers::test_subscriber_message_only;
     use indoc::indoc;
     use pretty_assertions::assert_eq;
-    use tracing::instrument::WithSubscriber;
 
     use super::Push;
     use crate::commands::EnvironmentSelect;
+    use crate::utils::message::test_helpers::{WithOutput, capture_messages};
 
     const EMPTY_MANIFEST: &str = "version = 1";
 
@@ -308,7 +307,7 @@ mod tests {
 
         let (mut flox, tempdir) = flox_instance_with_optional_floxhub(Some(&owner));
         set_test_auth(&mut flox, owner.as_str());
-        let (subscriber, writer) = test_subscriber_message_only();
+        let (output, writer) = capture_messages();
 
         let env = new_path_environment_in(&flox, EMPTY_MANIFEST, tempdir.path().join(name));
         let push_cmd = Push {
@@ -317,11 +316,7 @@ mod tests {
             force: false,
         };
 
-        push_cmd
-            .handle(flox)
-            .with_subscriber(subscriber)
-            .await
-            .unwrap();
+        push_cmd.handle(flox).with_output(output).await.unwrap();
 
         assert_eq!(writer.to_string(), indoc! {"
             ✔ my-env successfully pushed to FloxHub as public
@@ -340,7 +335,7 @@ mod tests {
 
         let (mut flox, tempdir) = flox_instance_with_optional_floxhub(Some(&owner));
         set_test_auth(&mut flox, owner.as_str());
-        let (subscriber, writer) = test_subscriber_message_only();
+        let (output, writer) = capture_messages();
 
         let mut env = mock_managed_environment_in(
             &flox,
@@ -361,11 +356,7 @@ mod tests {
         "};
         env.edit(&flox, updated_manifest.to_string()).unwrap();
 
-        push_cmd
-            .handle(flox)
-            .with_subscriber(subscriber)
-            .await
-            .unwrap();
+        push_cmd.handle(flox).with_output(output).await.unwrap();
 
         assert_eq!(writer.to_string(), indoc! {"
             ✔ Updates to my-env successfully pushed to FloxHub
@@ -384,7 +375,7 @@ mod tests {
 
         let (mut flox, tempdir) = flox_instance_with_optional_floxhub(Some(&owner));
         set_test_auth(&mut flox, owner.as_str());
-        let (subscriber, writer) = test_subscriber_message_only();
+        let (output, writer) = capture_messages();
 
         let env = mock_managed_environment_in(
             &flox,
@@ -399,11 +390,7 @@ mod tests {
             force: false,
         };
 
-        push_cmd
-            .handle(flox)
-            .with_subscriber(subscriber)
-            .await
-            .unwrap();
+        push_cmd.handle(flox).with_output(output).await.unwrap();
 
         assert_eq!(writer.to_string(), indoc! {"
             ℹ No changes to push for my-env.
@@ -469,7 +456,7 @@ mod tests {
             .unwrap();
 
         // Push the remote environment changes using -r
-        let (subscriber, writer) = test_subscriber_message_only();
+        let (output, writer) = capture_messages();
         let env_ref = remote_env.env_ref();
         let push_remote_cmd = Push {
             environment: EnvironmentSelect::Remote(env_ref),
@@ -479,7 +466,7 @@ mod tests {
 
         push_remote_cmd
             .handle(flox)
-            .with_subscriber(subscriber)
+            .with_output(output)
             .await
             .unwrap();
 
@@ -515,7 +502,7 @@ mod tests {
         let remote_env = RemoteEnvironment::new(&flox, pointer, None).unwrap();
 
         // Push the remote environment without making changes using -r
-        let (subscriber, writer) = test_subscriber_message_only();
+        let (output, writer) = capture_messages();
         let env_ref = remote_env.env_ref();
         let push_remote_cmd = Push {
             environment: EnvironmentSelect::Remote(env_ref),
@@ -525,7 +512,7 @@ mod tests {
 
         push_remote_cmd
             .handle(flox)
-            .with_subscriber(subscriber)
+            .with_output(output)
             .await
             .unwrap();
 

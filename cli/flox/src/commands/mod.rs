@@ -661,7 +661,7 @@ impl FloxArgs {
 /// [CredentialStores::resolve].
 fn auth_context_from_config(config: &Config) -> AuthContext {
     if let Some(flox_config::AuthnMode::Kerberos) = config.flox.floxhub_authn_mode {
-        return AuthContext::new_kerberos();
+        return auth_warning::with_kerberos_warning(AuthContext::new_kerberos());
     }
     AuthContext::new_from_token(
         config

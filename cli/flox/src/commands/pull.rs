@@ -558,6 +558,7 @@ impl Pull {
                     bail!("{build_error}");
                 }
 
+                tracing::info!(error = %build_error, "Pulled environment could not be built");
                 message::error(build_error);
 
                 // The unwrap() is only reached if !force,

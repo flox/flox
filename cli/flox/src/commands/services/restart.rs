@@ -154,6 +154,7 @@ impl Restart {
                     ));
                 },
                 Err(e) => {
+                    tracing::info!(service = %process.name, error = %e, "Service restart failed");
                     message::error(format!(
                         "Failed to {} service '{}': {}",
                         Self::action_for_service_name(&process.name, &processes),
