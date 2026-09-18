@@ -88,10 +88,29 @@ The `build.<package>.version` field can be specified in one of the following way
 1. **as read from a file**: `version.file = "<path>"`
 1. **as returned by a command**: `version.command = "<cmd> <args>"`
 
-### Catalog imports for Nix expression builds
+### The nixpkgs revision a Nix expression build uses
 
 Nix expression builds (packages defined as `.nix` files under `.flox/pkgs/`)
-can depend on packages from FloxHub catalogs.
+are built against a nixpkgs revision supplied by the catalog server: the
+latest revision of the `"stable"` stability, or of the stability named with
+`--stability`.
+The environment's own packages play no part in that choice, so editing or
+upgrading the manifest never changes which nixpkgs an expression build
+resolves against.
+
+Manifest-defined packages, by contrast, are built inside their environment and
+so see the package set the manifest is locked to.
+An environment containing both kinds of build therefore builds them against
+two different package sets, which matters when a Nix expression build and a
+manifest build are expected to link against the same libraries.
+`flox build` warns when the two have diverged.
+To bring them back together, run `flox upgrade` to move the environment's
+packages to the current revision, or pass `--nixpkgs-url` to build the
+expressions against the revision the environment already uses.
+
+### Catalog imports for Nix expression builds
+
+Nix expression builds can depend on packages from FloxHub catalogs.
 An expression references a catalog package as `catalogs.<catalog>.<package>`,
 where the package receives a `catalogs` argument.
 The referenced packages are the ones published to a FloxHub catalog with
@@ -119,14 +138,15 @@ package set.
     in the environment's `manifest.toml`.
 
 `--stability <stability>`
-:   Perform a nix expression build using a base package set of the given
+:   Perform a Nix expression build using a base package set of the given
     stability as tracked by the catalog server.
     A stability (e.g., `"stable"`) identifies a curated nixpkgs revision
     managed by the catalog server.
-    When omitted, the base package set is derived from the environment's
-    `toplevel` group; if no `toplevel` group exists, the `"stable"`
-    stability is used by default.
-    An explicit `--stability` value overrides both of these defaults.
+    When omitted, the latest `"stable"` revision is used.
+    The environment's own packages never determine this revision:
+    a Nix expression build resolves against the catalog server's current
+    view of the stability, not against whatever nixpkgs revision the
+    environment happens to be locked to.
     Cannot be used with manifest builds.
 
 

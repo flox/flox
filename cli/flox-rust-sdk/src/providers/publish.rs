@@ -948,7 +948,7 @@ pub fn check_build_metadata(
     );
 
     let build_results = builder.build(
-        &base_nixpkgs_url.as_flake_ref()?,
+        Some(&base_nixpkgs_url.as_flake_ref()?),
         &built_environments.dev,
         &[pkg.name()],
         // The catalog lock the CLI created for this publish; its subset is
@@ -2489,17 +2489,13 @@ pub mod tests {
     // publish test mocks.
     #[tokio::test(flavor = "multi_thread")]
     async fn retrieves_base_catalog_url() {
-        // `pkg_meta` is discarded, so this name never reaches the catalog.
-        let (_build_meta, env_meta, _pkg_meta) = dummy_publish_metadata("unused");
         let (flox, _tmpdir) = flox_instance();
         let (flox, _auth) = auto_recording_catalog_client_for_authed_local_services(
             flox,
             PublishTestUser::PersonalCatalogOnly,
             "get_base_catalog_nixpkgs_url",
         );
-        let _url = get_base_nixpkgs_url(&flox, Some("stable"), &env_meta)
-            .await
-            .unwrap();
+        let _url = get_base_nixpkgs_url(&flox, Some("stable")).await.unwrap();
     }
 
     // This test ensures that a user's default catalog gets created inline
