@@ -12,13 +12,17 @@ use flox_manifest::parsed::latest::SelectedOutputs;
 use flox_manifest::raw::PackageToInstall;
 use indoc::formatdoc;
 use minus::{ExitStrategy, Pager, page_all};
-use tracing::{debug, info};
+use tracing::debug;
+
+mod output;
+pub(crate) use output::{Output, current_output, set_default_output};
 
 /// Write a message to stderr.
 ///
-/// This is printed via the message_layer tracing subscriber
+/// Printing never emits a diagnostic event or consults logging filters.
 fn print_message(v: impl Display) {
-    info!("{v}");
+    // Match tracing's previous best-effort handling of terminal write failures.
+    let _ = current_output().notice(v);
 }
 
 fn print_message_to_buffer(out: &mut impl Write, v: impl Display) {
@@ -30,7 +34,7 @@ pub(crate) fn plain(v: impl Display) {
     print_message(v);
 }
 pub(crate) fn error(v: impl Display) {
-    print_message(format_error(v));
+    let _ = current_output().stderr(format_error(v));
 }
 pub(crate) fn created(v: impl Display) {
     let icon = if stderr_supports_color() {
@@ -51,10 +55,6 @@ pub(crate) fn deleted(v: impl Display) {
 }
 pub(crate) fn updated(v: impl Display) {
     print_message(format_updated(v));
-}
-/// Shown only at `-v` verbosity (`flox::utils::message=debug` filter).
-pub(crate) fn verbose(v: impl Display) {
-    debug!("{v}");
 }
 /// double width character, add an additional space for alignment
 pub(crate) fn info(v: impl Display) {

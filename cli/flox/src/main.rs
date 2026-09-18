@@ -26,7 +26,7 @@ use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironmentErr
 use flox_rust_sdk::providers::services::process_compose::ServiceError;
 use tracing::{debug, warn};
 use utils::errors::format_service_error;
-use utils::init::init_logger;
+use utils::init::init_output;
 use utils::{message, populate_default_nix_env_vars};
 
 use crate::utils::errors::{
@@ -101,7 +101,11 @@ fn main() -> ExitCode {
             .unwrap_or_default()
     };
 
-    init_logger(Some(verbosity));
+    let output = init_output(Some(verbosity));
+    output.sync_scope(|| main_with_output(verbosity, &output))
+}
+
+fn main_with_output(verbosity: commands::Verbosity, output: &message::Output) -> ExitCode {
     debug!("FLOX_VERSION={}", *FLOX_VERSION);
 
     if let Err(err) = set_user() {
@@ -173,7 +177,9 @@ fn main() -> ExitCode {
         }
         match parse_err {
             bpaf::ParseFailure::Stdout(m, _) => {
-                print!("{m:80}");
+                output
+                    .stdout(format_args!("{m:80}"))
+                    .expect("failed printing to stdout");
                 return ExitCode::from(0);
             },
             bpaf::ParseFailure::Stderr(m) => {
@@ -181,7 +187,7 @@ fn main() -> ExitCode {
                 return ExitCode::from(1);
             },
             bpaf::ParseFailure::Completion(c) => {
-                print!("{c}");
+                output.stdout(c).expect("failed printing to stdout");
                 return ExitCode::from(0);
             },
         }
@@ -196,7 +202,7 @@ fn main() -> ExitCode {
     let runtime = tokio::runtime::Runtime::new().unwrap();
 
     let dispatch_start = Instant::now();
-    let result = runtime.block_on(run(args));
+    let result = runtime.block_on(output.scope(run(args)));
 
     // Print errors; derive the exit code and the telemetry `error_kind`.
     let (code, error_kind): (u8, Option<&'static str>) = match &result {

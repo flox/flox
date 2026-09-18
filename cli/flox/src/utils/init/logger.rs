@@ -1,64 +1,55 @@
 use std::fmt;
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use crossterm::style::{ResetColor, Stylize};
-use tracing::{debug, error};
+use flox_core::util::message::stderr_supports_color;
+use sentry::integrations::tracing::EventFilter;
+use tracing::{Level, Subscriber};
 use tracing_indicatif::util::FilteredFormatFields;
 use tracing_subscriber::fmt::format::Writer;
 use tracing_subscriber::fmt::time::FormatTime;
+use tracing_subscriber::fmt::writer::BoxMakeWriter;
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::reload::Handle;
-use tracing_subscriber::util::SubscriberInitExt;
-use tracing_subscriber::{EnvFilter, Registry, filter};
+use tracing_subscriber::{EnvFilter, Registry};
 
+use super::progress::PROGRESS_TAG;
 use crate::commands::Verbosity;
-use crate::utils::init::logger::indicatif::PROGRESS_TAG;
-use crate::utils::message::stderr_supports_color;
-use crate::utils::metrics::MetricsLayer;
 
-static LOGGER_HANDLE: OnceLock<Handle<EnvFilter, Registry>> = OnceLock::new();
-
-pub(crate) fn init_logger(verbosity: Option<Verbosity>) {
-    let verbosity = verbosity.unwrap_or_default();
-
-    let log_filter = match verbosity {
-        // Show only errors
-        Verbosity::Quiet => "off,flox=error",
-        // Only show warnings, and user facing messages
-        Verbosity::Verbose(0) => "warn,flox::utils::message=info",
-        // Show internal info logs
-        Verbosity::Verbose(1) => {
-            "warn,flox=info,flox-rust-sdk=info,flox-core=info,flox::utils::message=debug"
-        },
-        // Show debug logs from our libraries
-        Verbosity::Verbose(2) => "warn,flox=debug,flox-rust-sdk=debug,flox-core=debug",
-        // Show trace logs from our libraries
-        Verbosity::Verbose(3) => "warn,flox=trace,flox-rust-sdk=trace,flox-core=trace",
-        // Show trace for all libraries
+pub(super) fn verbosity_filter(verbosity: Verbosity) -> &'static str {
+    match verbosity {
+        Verbosity::Quiet | Verbosity::Verbose(0) => "off",
+        Verbosity::Verbose(1) => "warn,flox=info,flox_rust_sdk=info,flox_core=info",
+        Verbosity::Verbose(2) => "warn,flox=debug,flox_rust_sdk=debug,flox_core=debug",
+        Verbosity::Verbose(3) => "warn,flox=trace,flox_rust_sdk=trace,flox_core=trace",
         Verbosity::Verbose(_) => "trace",
-    };
-
-    let filter_handle = LOGGER_HANDLE.get_or_init(|| {
-        let (subscriber, reload_handle) = create_registry_and_filter_reload_handle();
-        subscriber.init();
-        reload_handle
-    });
-
-    update_filters(filter_handle, log_filter);
+    }
 }
 
-pub fn update_filters(filter_handle: &Handle<EnvFilter, Registry>, log_filter: &str) {
-    let result = filter_handle.modify(|layer| {
-        match EnvFilter::try_from_default_env().or_else(|_| EnvFilter::try_new(log_filter)) {
-            Ok(new_filter) => *layer = new_filter,
-            Err(err) => {
-                error!("Updating logger filter failed: {}", err);
-            },
-        };
-    });
-    if let Err(err) = result {
-        error!("Updating logger filter failed: {}", err);
+pub fn update_filters(
+    filter_handle: &Handle<EnvFilter, Registry>,
+    log_filter: &str,
+) -> anyhow::Result<()> {
+    let filter = EnvFilter::try_from_env("FLOX_LOG").or_else(|_| EnvFilter::try_new(log_filter))?;
+    filter_handle.modify(|layer| *layer = filter)?;
+    Ok(())
+}
+
+pub(super) fn sentry_layer<S>() -> impl tracing_subscriber::Layer<S>
+where
+    S: Subscriber + for<'span> tracing_subscriber::registry::LookupSpan<'span>,
+{
+    sentry::integrations::tracing::layer()
+        .enable_span_attributes()
+        .event_filter(sentry_event_filter)
+}
+
+fn sentry_event_filter(metadata: &tracing::Metadata<'_>) -> EventFilter {
+    match *metadata.level() {
+        Level::ERROR => EventFilter::Event,
+        Level::WARN | Level::INFO => EventFilter::Breadcrumb,
+        Level::DEBUG | Level::TRACE => EventFilter::Ignore,
     }
 }
 
@@ -119,13 +110,12 @@ impl FormatTime for DeltaTimer {
     }
 }
 
-pub fn create_registry_and_filter_reload_handle() -> (
-    impl tracing_subscriber::layer::SubscriberExt,
+pub(super) fn console_layer(
+    writer: BoxMakeWriter,
+) -> (
+    impl tracing_subscriber::Layer<Registry>,
     Handle<EnvFilter, Registry>,
 ) {
-    debug!("Initializing logger (how are you seeing this?)");
-
-    let (progress_layer, writer) = indicatif::progress_layer();
     // The first time this layer is set it establishes an upper boundary for `log` verbosity.
     // If you try to `modify` this layer later, `log` will not accept any higher verbosity events.
     //
@@ -138,25 +128,6 @@ pub fn create_registry_and_filter_reload_handle() -> (
 
     let (filter, filter_reload_handle) = tracing_subscriber::reload::Layer::new(filter);
     let use_colors = stderr_supports_color();
-
-    // Tracing layer that handles user facing messages.
-    // That is messages that are produced by the `crate::utils::message` module,
-    // and target the flox _user_, rather than revealing internals.
-    let message_fmt = tracing_subscriber::fmt::format()
-        .compact()
-        .without_time()
-        .with_level(false)
-        .with_target(false);
-    let message_layer = tracing_subscriber::fmt::layer()
-        .with_writer(writer.clone())
-        .with_ansi(use_colors)
-        // Without this, colored output is broken,
-        // see https://github.com/tokio-rs/tracing/issues/3369
-        .with_ansi_sanitization(false)
-        .event_format(message_fmt)
-        .with_filter(filter::filter_fn(|meta| {
-            meta.target().starts_with("flox::utils::message")
-        }));
 
     // Tracing layer that handles all other logs.
     //
@@ -173,7 +144,7 @@ pub fn create_registry_and_filter_reload_handle() -> (
     // which is a visitor implementation that just drops fields based on a filter function,
     // here: a test for the field name "progress".
     let log_layer = tracing_subscriber::fmt::layer()
-        .with_writer(writer.clone())
+        .with_writer(writer)
         .with_ansi(use_colors)
         // Without this, colored output is broken,
         // see https://github.com/tokio-rs/tracing/issues/3369
@@ -182,122 +153,7 @@ pub fn create_registry_and_filter_reload_handle() -> (
         .map_fmt_fields(|format| {
             FilteredFormatFields::new(format, |field| field.name() != PROGRESS_TAG)
         })
-        .with_filter(filter::filter_fn(|meta| {
-            !meta.target().starts_with("flox::utils::message")
-        }));
+        .with_filter(filter);
 
-    // The combined layer that handles tracing events and formats them,
-    // either for user facing messages or for internal logs.
-    // The verbosity of these logs is controlled by the `filter` env filter.
-    let combined_log_layer = log_layer.and_then(message_layer).with_filter(filter);
-
-    let metrics_layer = MetricsLayer::new();
-    let sentry_layer = sentry::integrations::tracing::layer().enable_span_attributes();
-    // Filtered layer must come first.
-    // This appears to be the only way to avoid logs of the `flox_command` trace
-    // which is processed by the `log_layer` irrespective of the filter applied to it.
-    // My current understanding is, that it because the `metrics_layer` (at least) is
-    // registering `Interest` for the event and that somehow bypasses the filter?!
-    let registry = tracing_subscriber::registry()
-        .with(combined_log_layer)
-        .with(progress_layer)
-        .with(metrics_layer)
-        .with(sentry_layer);
-
-    (registry, filter_reload_handle)
+    (log_layer, filter_reload_handle)
 }
-
-// region: indicatif
-mod indicatif {
-    use std::fmt::{self, Display, Write};
-
-    use indicatif::{ProgressState, ProgressStyle};
-    use tracing::Subscriber;
-    use tracing::field::{Field, Visit};
-    use tracing_indicatif::IndicatifWriter;
-    use tracing_subscriber::field::RecordFields;
-    use tracing_subscriber::fmt::FormatFields;
-    use tracing_subscriber::fmt::format::Writer;
-    use tracing_subscriber::layer::Layer;
-    use tracing_subscriber::registry;
-
-    pub(super) const PROGRESS_TAG: &str = "progress";
-
-    pub fn progress_layer<S>() -> (impl tracing_subscriber::Layer<S>, IndicatifWriter)
-    where
-        S: Subscriber + for<'span> registry::LookupSpan<'span> + 'static,
-    {
-        #[derive(Debug, Default)]
-        struct Visitor {
-            message: Option<String>,
-        }
-        impl Display for Visitor {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                if let Some(message) = &self.message {
-                    write!(f, "{message}")
-                } else {
-                    write!(f, "👻 How can you see me?")
-                }
-            }
-        }
-        impl Visit for Visitor {
-            fn record_debug(&mut self, field: &Field, value: &dyn fmt::Debug) {
-                self.record_str(field, &format!("{:?}", value));
-            }
-
-            fn record_str(&mut self, field: &Field, value: &str) {
-                if field.name() == PROGRESS_TAG {
-                    self.message = Some(value.to_string());
-                }
-            }
-        }
-
-        struct Formatter;
-        impl<'writer> FormatFields<'writer> for Formatter {
-            /// Format the provided `fields` to the provided [`Writer`], returning a result.
-            fn format_fields<R: RecordFields>(
-                &self,
-                mut writer: Writer<'writer>,
-                fields: R,
-            ) -> fmt::Result {
-                let mut visitor = Visitor::default();
-                fields.record(&mut visitor);
-
-                write!(&mut writer, "{visitor}")?;
-
-                Ok(())
-            }
-        }
-
-        // The progress bar style, a spinner the progress message
-        // and the elapsed time if it's running longer than 1 second.
-        let style =
-            ProgressStyle::with_template("{span_child_prefix}{spinner} {span_fields} {wide_msg}")
-                .unwrap()
-                .with_key(
-                    "elapsed",
-                    |state: &ProgressState, writer: &mut dyn Write| {
-                        if state.elapsed() > std::time::Duration::from_secs(1) {
-                            let seconds = state.elapsed().as_secs();
-                            let sub_seconds = (state.elapsed().as_millis() % 1000) / 100;
-                            let _ = writer.write_str(&format!("{}.{}s", seconds, sub_seconds));
-                        }
-                    },
-                );
-
-        let layer = tracing_indicatif::IndicatifLayer::new()
-            .with_progress_style(style)
-            .with_span_field_formatter(Formatter);
-
-        let writer = layer.get_stderr_writer();
-
-        let filtered = layer.with_filter(tracing_subscriber::filter::FilterFn::new(|meta| {
-            meta.fields()
-                .iter()
-                .any(|field| field.name() == PROGRESS_TAG)
-        }));
-
-        (filtered, writer)
-    }
-}
-// endregion: indicatif
