@@ -103,7 +103,7 @@ impl Display for DownloadAttempt {
 
 #[derive(Debug, Error)]
 pub enum BuildEnvError {
-    #[error("Failed to realise '{install_id}':\n{message}")]
+    #[error("Failed to realize '{install_id}':\n{message}")]
     Realise2 { install_id: String, message: String },
 
     #[error(transparent)]
@@ -205,7 +205,7 @@ pub enum BuildEnvError {
 
     /// Store paths were unavailable after all materialisation retry attempts.
     #[error(
-        "Store paths were unavailable after {attempts} materialisation attempts.\n\
+        "Store paths were unavailable after {attempts} materialization attempts.\n\
         This is most likely caused by a concurrent garbage collection run.\n\
         If a garbage collection is in progress, wait for it to finish and retry.\n\
         Missing paths: {paths}"
@@ -799,10 +799,10 @@ where
             1 => Err(errors.into_iter().next().unwrap()),
             n => {
                 for e in &errors {
-                    debug!(error = %e, "per-package realisation failed");
+                    debug!(error = %e, "per-package realization failed");
                 }
                 Err(BuildEnvError::Other(format!(
-                    "{n} packages failed to realise; first error: {}",
+                    "{n} packages failed to realize; first error: {}",
                     errors[0]
                 )))
             },
@@ -871,7 +871,7 @@ where
     /// after a successful build to detect the "became valid in the meantime" case.
     /// That check is now provided by the outer [`materialise_with_retry`] loop,
     /// which re-stats all expected paths before calling `buildenv.nix`.
-    #[instrument(skip_all, fields(progress = format!("Realising flake package '{}'", locked.install_id)))]
+    #[instrument(skip_all, fields(progress = format!("Realizing flake package '{}'", locked.install_id)))]
     fn realise_flake(locked: &LockedPackageFlake) -> Result<(), BuildEnvError> {
         // Fast path: all outputs already present on disk.
         if locked
@@ -1258,7 +1258,7 @@ pub fn materialise_with_retry<T>(
                     ?missing,
                     attempt,
                     MAX_RETRIES,
-                    "store paths missing after materialisation, GC suspected — retrying"
+                    "store paths missing after materialization, GC suspected — retrying"
                 );
                 continue;
             }

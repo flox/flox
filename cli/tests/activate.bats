@@ -3743,7 +3743,7 @@ EOF
   assert_failure
   assert_output "Started outer activation..
 Attempting inner activation..
-✘ ERROR: Environment can't be activated in 'dev' mode whilst there are existing activations in 'run' mode
+✘ ERROR: Environment can't be activated in 'dev' mode while there are existing activations in 'run' mode
 
 Exit all activations of the environment and try again.
 PIDs of the running activations: ${ACTIVATION_PID}"

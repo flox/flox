@@ -78,7 +78,7 @@ Configuration for the container image produced by `flox containerize` may be spe
 
 > **Warning:**
 > `containerize.config` is **experimental**,
-> and its behaviour is subject to change
+> and its behavior is subject to change
 
 The following options from the OCI spec are supported, specified in `kebab-case` rather than `PascalCase`.
 Some options are passed through directly as container image config, while others are also used at container build time.

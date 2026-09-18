@@ -233,7 +233,7 @@ pub async fn authorize(
             tokio::select! {
                 enter_result = &mut enter_future => {
                     if enter_result == WaitResult::Interrupted {
-                        bail!("Authentication cancelled.");
+                        bail!("Authentication canceled.");
                     }
 
                     let mut command = opener.to_command();
