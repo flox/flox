@@ -193,6 +193,9 @@ struct BuildRowDisplay {
     build_id: i64,
     attr_path: String,
     system: String,
+    /// The nixpkgs stability a NEF build publishes with; `-` for a build
+    /// pinned to a nixpkgs revision by URL and for manifest builds.
+    stability: String,
     status: String,
     updated_at: String,
 }
@@ -206,6 +209,7 @@ impl From<BuildResponse> for BuildRowDisplay {
             build_id: b.build_id,
             attr_path: b.attr_path,
             system: b.system,
+            stability: b.stability.unwrap_or_else(|| "-".to_string()),
             status,
             updated_at,
         }
@@ -251,21 +255,28 @@ impl fmt::Display for BuildListDisplay {
         let system_width = "SYSTEM"
             .len()
             .max(self.rows.iter().map(|r| r.system.len()).max().unwrap_or(0));
+        let stability_width = "STABILITY".len().max(
+            self.rows
+                .iter()
+                .map(|r| r.stability.len())
+                .max()
+                .unwrap_or(0),
+        );
         let status_width = "STATUS"
             .len()
             .max(self.rows.iter().map(|r| r.status.len()).max().unwrap_or(0));
 
         writeln!(
             f,
-            "{:<id_width$}  {:<attr_width$}  {:<system_width$}  {:<status_width$}  UPDATED",
-            "BUILD ID", "ATTR PATH", "SYSTEM", "STATUS",
+            "{:<id_width$}  {:<attr_width$}  {:<system_width$}  {:<stability_width$}  {:<status_width$}  UPDATED",
+            "BUILD ID", "ATTR PATH", "SYSTEM", "STABILITY", "STATUS",
         )?;
 
         for row in &self.rows {
             writeln!(
                 f,
-                "{:<id_width$}  {:<attr_width$}  {:<system_width$}  {:<status_width$}  {}",
-                row.build_id, row.attr_path, row.system, row.status, row.updated_at,
+                "{:<id_width$}  {:<attr_width$}  {:<system_width$}  {:<stability_width$}  {:<status_width$}  {}",
+                row.build_id, row.attr_path, row.system, row.stability, row.status, row.updated_at,
             )?;
         }
 
@@ -286,20 +297,19 @@ mod tests {
     fn list_display_renders_table_exactly() {
         // A dispatched build shows its task's updated_at; an undispatched build
         // has no task, so UPDATED falls back to the build's created_at.
-        let builds = vec![
-            make_build(
-                1,
-                "x86_64-linux",
-                "hello",
-                Some(EffectiveBuildStatus::Running),
-            ),
-            make_build(2, "aarch64-darwin", "ripgrep", None),
-        ];
+        let mut running = make_build(
+            1,
+            "x86_64-linux",
+            "hello",
+            Some(EffectiveBuildStatus::Running),
+        );
+        running.stability = Some("stable".to_string());
+        let builds = vec![running, make_build(2, "aarch64-darwin", "ripgrep", None)];
         let display = BuildListDisplay::from(builds);
         assert_eq!(display.to_string(), indoc! {"
-            BUILD ID  ATTR PATH  SYSTEM          STATUS   UPDATED
-            1         hello      x86_64-linux    running  2025-01-01T00:00:01+00:00
-            2         ripgrep    aarch64-darwin  pending  2025-01-01T00:00:00+00:00
+            BUILD ID  ATTR PATH  SYSTEM          STABILITY  STATUS   UPDATED
+            1         hello      x86_64-linux    stable     running  2025-01-01T00:00:01+00:00
+            2         ripgrep    aarch64-darwin  -          pending  2025-01-01T00:00:00+00:00
         "});
     }
 
@@ -331,10 +341,10 @@ mod tests {
         ];
         let display = BuildListDisplay::from(builds);
         assert_eq!(display.to_string(), indoc! {"
-            BUILD ID  ATTR PATH  SYSTEM          STATUS                UPDATED
-            3         curl       x86_64-linux    timed_out             2025-01-01T00:00:01+00:00
-            4         jq         aarch64-darwin  cancelled             2025-01-01T00:00:00+00:00
-            5         wget       x86_64-linux    unknown: frobnicated  2025-01-01T00:00:00+00:00
+            BUILD ID  ATTR PATH  SYSTEM          STABILITY  STATUS                UPDATED
+            3         curl       x86_64-linux    -          timed_out             2025-01-01T00:00:01+00:00
+            4         jq         aarch64-darwin  -          cancelled             2025-01-01T00:00:00+00:00
+            5         wget       x86_64-linux    -          unknown: frobnicated  2025-01-01T00:00:00+00:00
         "});
     }
 
