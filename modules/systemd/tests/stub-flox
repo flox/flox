@@ -1,0 +1,43 @@
+#!/bin/sh
+# Stand-in for the flox CLI. Records each invocation's argv, one argument per
+# line, into $FLOX_STUB_LOG with a "---" separator between invocations, so a
+# test can assert on exactly what would have run.
+#
+# $FLOX_STUB_EXIT makes an invocation fail; `generations list` echoes
+# $FLOX_STUB_GENERATION so a test can simulate a pull fetching a new one.
+{
+  echo "---"
+  echo "token=${FLOX_FLOXHUB_TOKEN:-}"
+  echo "user=${USER:-}"
+  echo "home=${HOME:-}"
+  for arg in "$@"; do echo "arg=$arg"; done
+} >> "$FLOX_STUB_LOG"
+
+case "$*" in
+  *"generations list"*)
+    if [ "${FLOX_STUB_GENERATION_CHANGES:-0}" = 1 ]; then
+      # Emit a different generation on every call, so the fingerprint taken
+      # before a pull differs from the one taken after it.
+      count=$(cat "$FLOX_STUB_LOG.gencount" 2>/dev/null || echo 0)
+      count=$((count + 1))
+      echo "$count" > "$FLOX_STUB_LOG.gencount"
+      echo "gen$count"
+    else
+      echo "${FLOX_STUB_GENERATION:-gen1}"
+    fi
+    exit 0
+    ;;
+esac
+
+# A service-manager test needs the activation to stay up: try-restart is a
+# no-op on an inactive unit, so a stub that exited immediately could never
+# demonstrate a restart.
+case "$*" in
+  *activate*)
+    if [ -n "${FLOX_STUB_SLEEP:-}" ]; then
+      exec sleep "$FLOX_STUB_SLEEP"
+    fi
+    ;;
+esac
+
+exit "${FLOX_STUB_EXIT:-0}"
