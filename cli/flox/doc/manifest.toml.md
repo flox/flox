@@ -36,6 +36,12 @@ tables:
 - [`[plugins]`](#plugins) - experimental, see below
 - [`containerize`] - see [`flox-containerize(1)`](./flox-containerize.md)
 
+Alongside these, a manifest may set the following top-level fields:
+
+- [`schema-version`](#schema-version)
+- [`minimum-cli-version`](#minimum-cli-version)
+- [`description`](#description)
+
 ## `schema-version`
 
 `schema-version` is a top-level field that specifies the minimum version of Flox
