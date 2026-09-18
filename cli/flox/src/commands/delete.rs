@@ -80,7 +80,7 @@ impl Delete {
         };
 
         if !self.force && Dialog::can_prompt() && !confirm.prompt().await? {
-            bail!("Environment deletion cancelled");
+            bail!("Environment deletion canceled");
         }
 
         match environment {
