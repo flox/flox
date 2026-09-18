@@ -17,6 +17,7 @@ use floxhub_client::{
     CatalogStoreConfig,
     CheckBuildQuery,
     CheckBuildResponse,
+    DEFAULT_STABILITY,
     FloxhubClient,
     FloxhubClientConfig,
     FloxhubClientError,
@@ -510,7 +511,7 @@ pub async fn base_catalog_url_for_stability_arg(
                 formatdoc! {"
                     The default stability {} does not exist (or has not yet been populated).
                     Available stabilities are: {available_stabilities}
-                ", BaseCatalogInfo::DEFAULT_STABILITY}
+                ", DEFAULT_STABILITY.as_str()}
             };
 
             let url = base_catalog_info
