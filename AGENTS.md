@@ -341,8 +341,8 @@ internal Linear issue instead.
       "flox did not find an environment").
       Exception: the first sentence of an error may omit the
       subject for easier parsing.
-    - Write errors in sentence case, ending with a full stop.
-      Exception: omit the full stop when system information
+    - Write errors in sentence case, ending with a period.
+      Exception: omit the period when system information
       follows on the same line.
     - Strive for one sentence per line.
     - **Line 1:** A generic statement of the problem written
@@ -390,6 +390,24 @@ internal Linear issue instead.
     - **Voice:** Active voice, US English, plain language.
       Be concise — describe facts as if speaking to a
       junior engineer seeing the terminal for the first time.
+    - **Spelling:** Use US English spelling in all text that
+      Flox writes: command output, errors, progress messages,
+      log messages, help text, and man pages. This applies
+      even where Nix spells the same idea the British way:
+      print `Realizing`, not `Realising`. Two kinds of text keep
+      their original spelling. Show output that Flox relays
+      from Nix verbatim, such as the stderr of a failed
+      `nix build`. Leave alone the words that the user types
+      or a program parses: a Nix flag such as
+      `nix-store --realise`, or an API value such as the
+      `cancelled` status of a Flox Factory build. The rule
+      does not call for renaming identifiers or rewriting
+      comments.
+    - **Output relayed from Nix:** When Flox shows output from
+      Nix, introduce it with a line that Flox writes and that
+      names Nix as the source, so that users can tell Nix's
+      text, British spellings included, from Flox's.
+      `Caught Nix error while locking flake:` is an example.
   - **Naming new helpers:** Before introducing a helper
     function, search for the naming convention used by similar
     helpers in the same file. Follow established patterns
