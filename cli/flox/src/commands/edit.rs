@@ -343,7 +343,7 @@ impl Edit {
                         bail!("Can't prompt to continue editing in non-interactive context");
                     }
                     if !should_continue_dialog.clone().prompt().await? {
-                        bail!("Environment editing cancelled");
+                        bail!("Environment editing canceled");
                     }
                 },
             }

@@ -153,7 +153,7 @@ impl std::fmt::Display for ModeMismatch {
 
                 write!(
                     f,
-                    "Environment can't be activated in '{requested_mode}' mode whilst there are existing activations in '{current_mode}' mode\n\n\
+                    "Environment can't be activated in '{requested_mode}' mode while there are existing activations in '{current_mode}' mode\n\n\
                      Exit all activations of the environment and try again.\n\
                      PIDs of the running activations: {pid_list}",
                 )
@@ -165,7 +165,7 @@ impl std::fmt::Display for ModeMismatch {
             } => {
                 write!(
                     f,
-                    "Environment can't be activated in '{requested_mode}' mode whilst there are existing activations in '{current_mode}' mode\n\n\
+                    "Environment can't be activated in '{requested_mode}' mode while there are existing activations in '{current_mode}' mode\n\n\
                      The executive process is still running.\n\
                      Wait for it to finish, or stop it with: 'kill {pid}'",
                 )
