@@ -145,7 +145,7 @@ pub enum Verbosity {
         usize,
     ),
 
-    /// Silence logs except for errors
+    /// Silence routine notices and diagnostic logs
     #[bpaf(short, long)]
     Quiet,
 }
@@ -420,8 +420,9 @@ impl FloxArgs {
             && config.flox.auth_notifications.unwrap_or(true);
         let on_unauthenticated_resolve = install_resolve_warning.then(|| {
             let cache_dir = config.flox.cache_dir.clone();
+            let output = message::current_output();
             UnauthenticatedResolveHook::new(move || {
-                auth_warning::warn_unauthenticated_resolve(&cache_dir)
+                output.sync_scope(|| auth_warning::warn_unauthenticated_resolve(&cache_dir))
             })
         });
 
@@ -563,7 +564,7 @@ impl FloxArgs {
                         // we can find process children and propagate signals manually.
                         Err(Interrupted.into())
                     }
-                    result = tokio::task::spawn_local(cli_worker) => result?
+                    result = tokio::task::spawn_local(message::current_output().scope(cli_worker)) => result?
                 }
             })
             .await;
@@ -660,7 +661,7 @@ impl FloxArgs {
 /// [CredentialStores::resolve].
 fn auth_context_from_config(config: &Config) -> AuthContext {
     if let Some(flox_config::AuthnMode::Kerberos) = config.flox.floxhub_authn_mode {
-        return AuthContext::new_kerberos();
+        return auth_warning::with_kerberos_warning(AuthContext::new_kerberos());
     }
     AuthContext::new_from_token(
         config

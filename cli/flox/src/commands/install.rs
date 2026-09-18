@@ -410,6 +410,9 @@ impl Install {
 
                     let Some(pkg_retry) = packages.get_mut(install_id) else {
                         warn!(install_id, "resolution failure for nonexistent package");
+                        message::warning(format!(
+                            "Resolution failure for nonexistent package '{install_id}'."
+                        ));
                         continue;
                     };
 
@@ -422,6 +425,9 @@ impl Install {
                             ?pkg_retry.pkg,
                             "resolution failure for non-catalog package"
                         );
+                        message::warning(format!(
+                            "Resolution failure for non-catalog package '{install_id}'."
+                        ));
                         continue;
                     };
 
@@ -839,16 +845,15 @@ mod tests {
     };
     use flox_rust_sdk::providers::catalog::SystemEnum;
     use flox_rust_sdk::providers::catalog::test_helpers::catalog_replay_client;
-    use flox_rust_sdk::utils::logging::test_helpers::test_subscriber_message_only;
     use flox_test_utils::GENERATED_DATA;
     use flox_test_utils::manifests::EMPTY_ALL_SYSTEMS;
     use indoc::formatdoc;
-    use tracing::instrument::WithSubscriber;
 
     use super::{add_activation_to_rc_file, ensure_rc_file_exists};
     use crate::commands::EnvironmentSelect;
     use crate::commands::install::{Install, package_list_for_prompt};
     use crate::utils::message;
+    use crate::utils::message::test_helpers::{WithOutput, capture_messages};
 
     /// [Install::generate_warnings] shouldn't warn for packages not in packages_to_install
     #[test]
@@ -1024,7 +1029,7 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn warns_about_incomplete_system_availability() {
         let (mut flox, tempdir) = flox_instance();
-        let (subscriber, writer) = test_subscriber_message_only();
+        let (output, writer) = capture_messages();
 
         let is_linux = flox.system.ends_with("linux");
         let response_path = if is_linux {
@@ -1049,7 +1054,7 @@ mod tests {
         };
         install_cmd
             .handle(flox)
-            .with_subscriber(subscriber)
+            .with_output(output)
             .await
             .expect("installation failed");
         let expected = formatdoc! {"
@@ -1069,7 +1074,7 @@ mod tests {
         if flox.system == "x86_64-darwin" {
             return;
         }
-        let (subscriber, writer) = test_subscriber_message_only();
+        let (output, writer) = capture_messages();
 
         // The fixture was locked with the old 4-system implicit default set
         // and has no `options.systems`.
@@ -1089,7 +1094,7 @@ mod tests {
             packages: vec!["curl".to_string()],
         }
         .handle(flox)
-        .with_subscriber(subscriber)
+        .with_output(output)
         .await
         .expect("installation failed");
 
@@ -1118,11 +1123,11 @@ mod tests {
             systems: None,
             outputs: None,
         })];
-        let (subscriber, writer) = test_subscriber_message_only();
+        let (output, writer) = capture_messages();
         async {
             message::packages_with_additional_outputs(&pkgs, &lockfile, &system);
         }
-        .with_subscriber(subscriber)
+        .with_output(output)
         .await;
 
         let output = writer.to_string();
@@ -1148,11 +1153,11 @@ mod tests {
             systems: None,
             outputs: None,
         })];
-        let (subscriber, writer) = test_subscriber_message_only();
+        let (output, writer) = capture_messages();
         async {
             message::packages_with_additional_outputs(&pkgs, &lockfile, &system);
         }
-        .with_subscriber(subscriber)
+        .with_output(output)
         .await;
 
         let output = writer.to_string();
@@ -1186,11 +1191,11 @@ mod tests {
             systems: None,
             outputs: None,
         })];
-        let (subscriber, writer) = test_subscriber_message_only();
+        let (output, writer) = capture_messages();
         async {
             message::packages_with_additional_outputs(&pkgs, &lockfile, &system);
         }
-        .with_subscriber(subscriber)
+        .with_output(output)
         .await;
 
         let output = writer.to_string();
@@ -1219,11 +1224,11 @@ mod tests {
             systems: None,
             outputs: Some(RawSelectedOutputs::All),
         })];
-        let (subscriber, writer) = test_subscriber_message_only();
+        let (output, writer) = capture_messages();
         async {
             message::packages_with_additional_outputs(&pkgs, &lockfile, &system);
         }
-        .with_subscriber(subscriber)
+        .with_output(output)
         .await;
 
         let output = writer.to_string();
@@ -1253,11 +1258,11 @@ mod tests {
             systems: None,
             outputs: Some(RawSelectedOutputs::Specific(vec!["out".to_string()])),
         })];
-        let (subscriber, writer) = test_subscriber_message_only();
+        let (output, writer) = capture_messages();
         async {
             message::packages_with_additional_outputs(&pkgs, &lockfile, &system);
         }
-        .with_subscriber(subscriber)
+        .with_output(output)
         .await;
 
         let output = writer.to_string();

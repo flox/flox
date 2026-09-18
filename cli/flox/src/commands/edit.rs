@@ -337,6 +337,7 @@ impl Edit {
 
                 // for recoverable errors, prompt the user to continue editing
                 Err(e) => {
+                    tracing::info!(error = %e, "Environment edit requires correction");
                     message::error(format_error(&e));
 
                     if !Dialog::can_prompt() {
@@ -479,14 +480,13 @@ mod tests {
         new_path_environment_in,
     };
     use flox_rust_sdk::providers::lock_manifest::{ResolutionFailures, ResolveError};
-    use flox_rust_sdk::utils::logging::test_helpers::test_subscriber_message_only;
     use indoc::{formatdoc, indoc};
     use pretty_assertions::assert_eq;
     use serde::de::Error;
     use tempfile::tempdir;
-    use tracing::instrument::WithSubscriber;
 
     use super::*;
+    use crate::utils::message::test_helpers::{WithOutput, capture_messages};
 
     /// successful edit returns value that will end the loop
     #[test]
@@ -907,7 +907,7 @@ mod tests {
     #[tokio::test]
     async fn edit_warns_when_include_changed() {
         let (flox, tempdir) = flox_instance();
-        let (subscriber, writer) = test_subscriber_message_only();
+        let (output, writer) = capture_messages();
 
         // Create composer environment
         let composer_path = tempdir.path().join("composer");
@@ -948,7 +948,7 @@ mod tests {
             },
         }
         .handle(flox)
-        .with_subscriber(subscriber)
+        .with_output(output)
         .await
         .unwrap();
 
@@ -961,7 +961,7 @@ mod tests {
     #[tokio::test]
     async fn edit_warns_when_fields_overridden() {
         let (flox, tempdir) = flox_instance();
-        let (subscriber, writer) = test_subscriber_message_only();
+        let (output, writer) = capture_messages();
 
         let mut dep = new_path_environment(&flox, indoc! {r#"
             version = 1
@@ -1001,7 +1001,7 @@ mod tests {
             },
         }
         .handle(flox)
-        .with_subscriber(subscriber)
+        .with_output(output)
         .await
         .unwrap();
 
