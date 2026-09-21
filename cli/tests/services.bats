@@ -363,7 +363,7 @@ EOF
 
 @test "help for the command is displayed with no args" {
 
-    RUST_LOG=debug run "$FLOX_BIN" services
+    FLOX_LOG=debug run "$FLOX_BIN" services
     assert_success
     assert_output --partial "Manage services in an environment"
 }

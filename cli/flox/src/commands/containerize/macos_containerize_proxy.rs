@@ -18,6 +18,7 @@ use thiserror::Error;
 use tracing::{debug, info, instrument};
 
 use super::Runtime;
+use crate::utils::message;
 
 const NIX_PROXY_IMAGE: &str = "nixos/nix";
 static NIX_PROXY_IMAGE_REF: LazyLock<Option<String>> =
@@ -211,6 +212,9 @@ impl ContainerizeProxy {
             },
             Err(err) => {
                 tracing::warn!(%err, "failed to read nix substituter config, continuing without extra substituters");
+                message::warning(format!(
+                    "Failed to read nix substituter config, continuing without extra substituters: {err}"
+                ));
             },
         }
 

@@ -15,11 +15,13 @@ use minus::{ExitStrategy, Pager, page_all};
 use tracing::debug;
 
 mod output;
+#[cfg(test)]
+pub(crate) mod test_helpers;
 pub(crate) use output::{Output, current_output, set_default_output};
 
 /// Write a message to stderr.
 ///
-/// Printing never emits a diagnostic event or consults logging filters.
+/// Production printing never emits a diagnostic event or consults logging filters.
 fn print_message(v: impl Display) {
     // Match tracing's previous best-effort handling of terminal write failures.
     let _ = current_output().notice(v);
@@ -366,12 +368,12 @@ mod tests {
     use flox_rust_sdk::flox::test_helpers::flox_instance;
     use flox_rust_sdk::models::environment::Environment;
     use flox_rust_sdk::models::environment::path_environment::test_helpers::new_path_environment;
-    use flox_rust_sdk::utils::logging::test_helpers::test_subscriber_message_only;
     use indoc::indoc;
     use pretty_assertions::assert_eq;
     use tracing::instrument::WithSubscriber;
 
     use super::*;
+    use crate::utils::message::test_helpers::test_subscriber_message_only;
 
     /// Build a lockfile with a single catalog package locked for
     /// `locked_systems`, optionally with explicit `options.systems` in the

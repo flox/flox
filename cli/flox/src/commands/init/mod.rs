@@ -745,7 +745,6 @@ mod tests {
     use flox_events::{CredentialType, EnvDetail, Event, EventsClient, SharedMetadataTemplate};
     use flox_rust_sdk::flox::test_helpers::{flox_instance, flox_instance_with_optional_floxhub};
     use flox_rust_sdk::models::environment::{DOT_FLOX, EnvJson, ManagedPointer};
-    use flox_rust_sdk::utils::logging::test_helpers::test_subscriber_message_only;
     use indoc::indoc;
     use pretty_assertions::assert_eq;
     use serial_test::serial;
@@ -753,6 +752,7 @@ mod tests {
     use uuid::Uuid;
 
     use super::*;
+    use crate::utils::message::test_helpers::test_subscriber_message_only;
 
     impl ProvidedPackage {
         pub(crate) fn new(
