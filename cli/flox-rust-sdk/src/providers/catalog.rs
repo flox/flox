@@ -160,6 +160,10 @@ pub struct MockClient {
     // We use a RefCell here so that we don't have to modify the trait to allow mutable access
     // to `self` just to get mock responses out.
     pub mock_responses: MockField<VecDeque<Response>>,
+    /// The body of the most recent [`CatalogClientTrait::publish_build`]
+    /// call, for tests that assert on what a caller actually sent rather
+    /// than just on the canned response.
+    pub last_publish_build_info: MockField<Option<UserBuildPublish>>,
 }
 
 impl MockClient {
@@ -167,6 +171,7 @@ impl MockClient {
     pub fn new() -> Self {
         Self {
             mock_responses: Arc::new(Mutex::new(VecDeque::new())),
+            last_publish_build_info: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -338,8 +343,12 @@ impl CatalogClientTrait for MockClient {
         &self,
         _catalog_name: impl AsRef<str> + Send + Sync,
         _package_name: impl AsRef<str> + Send + Sync,
-        _build_info: &UserBuildPublish,
+        build_info: &UserBuildPublish,
     ) -> Result<(), FloxhubClientError> {
+        *self
+            .last_publish_build_info
+            .lock()
+            .expect("couldn't acquire mock lock") = Some(build_info.clone());
         let mock_resp = self
             .mock_responses
             .lock()

@@ -34,7 +34,6 @@ use floxhub_client::{
     LockedInputEntry,
     PackageSystem,
     SourceLineageChange,
-    factory_build_token_from_env,
 };
 use indoc::formatdoc;
 use nef_lock_catalog::{CatalogRef, NixFlakeref, scan_package};
@@ -103,6 +102,33 @@ async fn confirm_lineage_change(change: &SourceLineageChange) -> Result<bool, Pu
         return Err(PublishError::LineageChangeDeclined);
     }
     Ok(true)
+}
+
+/// Carries the Factory's per-build token into the build pod. Read by
+/// [`factory_build_token_from_env`] and forwarded, unread, on the two
+/// catalog-server calls `flox publish` makes.
+const FACTORY_BUILD_TOKEN_VAR: &str = "_FLOX_FACTORY_BUILD_TOKEN";
+
+/// Read the Factory build token from the process environment.
+///
+/// Called once per publish and threaded to the call sites that need it
+/// (the dedup check and the publish body) rather than re-read. Unset,
+/// empty, and non-UTF-8 all mean absent, and absent means the field is
+/// omitted from both request bodies `flox publish` sends. The value is
+/// opaque: it is never parsed, validated, or checked for a prefix.
+///
+/// Logs presence, never the value, at `info!`. The Factory runs `flox
+/// publish` at a fixed verbosity that filters out `debug!`, so this is
+/// the only level an investigator diagnosing an unlinked build can rely
+/// on.
+fn factory_build_token_from_env() -> Option<String> {
+    let token = std::env::var(FACTORY_BUILD_TOKEN_VAR)
+        .ok()
+        .filter(|s| !s.is_empty());
+    if token.is_some() {
+        tracing::info!("forwarding Factory build token");
+    }
+    token
 }
 
 /// Outcome of the dedup pre-check against the catalog.
@@ -492,12 +518,15 @@ impl Publish {
             })?),
             None => PackageSystem::from_str(&flox.system).ok(),
         };
+        // Read once and forwarded, unread, on every catalog-server call this
+        // publish makes.
+        let factory_build_token = factory_build_token_from_env();
+
         // Explicit source replacement must reach publish even for an existing build.
         if let Some(system) = dedup_system
             && !publish_config.allow_lineage_change
         {
             let locked_inputs_query: HashMap<_, _> = locked_inputs.clone().into_iter().collect();
-            let factory_build_token = factory_build_token_from_env();
             let query = CheckBuildQuery {
                 catalog_name: &catalog_name,
                 package_name: publish_provider.package_metadata.package.name().as_ref(),
@@ -543,6 +572,7 @@ impl Publish {
                 &locked_inputs,
                 key_file,
                 publish_config.metadata_only,
+                factory_build_token.as_deref(),
                 publish_config.allow_lineage_change,
                 confirm_lineage_change,
             )
@@ -790,5 +820,29 @@ mod tests {
             dedup_outcome(result),
             DedupOutcome::CheckFailed(_)
         ));
+    }
+
+    #[test]
+    fn factory_build_token_from_env_unset_gives_none() {
+        temp_env::with_var(FACTORY_BUILD_TOKEN_VAR, None::<&str>, || {
+            assert_eq!(factory_build_token_from_env(), None);
+        });
+    }
+
+    #[test]
+    fn factory_build_token_from_env_empty_gives_none() {
+        temp_env::with_var(FACTORY_BUILD_TOKEN_VAR, Some(""), || {
+            assert_eq!(factory_build_token_from_env(), None);
+        });
+    }
+
+    #[test]
+    fn factory_build_token_from_env_set_gives_some() {
+        temp_env::with_var(FACTORY_BUILD_TOKEN_VAR, Some("factory:abc123"), || {
+            assert_eq!(
+                factory_build_token_from_env(),
+                Some("factory:abc123".to_string())
+            );
+        });
     }
 }

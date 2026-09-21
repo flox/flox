@@ -46,7 +46,6 @@ pub use api_types::{
     LookupGroup,
     ReferencePoint,
     ReferencesItem,
-    Stability,
     UnresolvableEntry,
     UnresolvableLeaf,
 };

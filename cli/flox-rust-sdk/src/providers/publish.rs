@@ -23,7 +23,6 @@ use floxhub_client::{
     SourceLineageChange,
     UserBuildPublish,
     UserDerivationInfo,
-    factory_build_token_from_env,
 };
 use git_url_parse::GitUrl;
 use indexmap::IndexSet;
@@ -136,6 +135,10 @@ pub trait Publisher {
     /// package's expression selects, computed at publish time; empty for
     /// builds that resolve no catalog inputs.
     ///
+    /// `factory_build_token` is forwarded, uninterpreted, from the caller's
+    /// process environment; this trait does not read the environment
+    /// itself.
+    ///
     /// `allow_lineage_change` explicitly authorizes a source change. Otherwise,
     /// `confirm_lineage_change` is called only after a lineage refusal, before
     /// retrying the metadata submission once. Returning `Ok(false)` preserves the
@@ -157,6 +160,7 @@ pub trait Publisher {
         locked_inputs: &BTreeMap<String, LockedInputEntry>,
         key_file: Option<PathBuf>,
         metadata_only: bool,
+        factory_build_token: Option<&str>,
         allow_lineage_change: bool,
         confirm_lineage_change: impl AsyncFnOnce(&SourceLineageChange) -> Result<bool, PublishError>,
     ) -> Result<bool, PublishError>;
@@ -686,6 +690,7 @@ where
         locked_inputs: &BTreeMap<String, LockedInputEntry>,
         key_file: Option<PathBuf>,
         metadata_only: bool,
+        factory_build_token: Option<&str>,
         allow_lineage_change: bool,
         confirm_lineage_change: impl AsyncFnOnce(&SourceLineageChange) -> Result<bool, PublishError>,
     ) -> Result<bool, PublishError> {
@@ -767,7 +772,7 @@ where
                 .to_string_lossy()
                 .into_owned(),
             allow_lineage_change,
-            factory_build_token: factory_build_token_from_env(),
+            factory_build_token: factory_build_token.map(str::to_string),
         };
 
         // The Factory token is a capability: whoever reads it can claim a
@@ -2059,6 +2064,7 @@ pub mod tests {
                 &BTreeMap::new(),
                 None,
                 false,
+                None,
                 false,
                 async |_| Ok(false),
             )
@@ -2071,6 +2077,79 @@ pub mod tests {
             false,
             "MetadataOnly should not require publisher wait"
         );
+    }
+
+    /// The caller's `factory_build_token` argument — the CLI's forwarded
+    /// process-environment value — reaches the `UserBuildPublish` body sent
+    /// to `publish_build`, uninterpreted.
+    #[tokio::test]
+    async fn publish_forwards_factory_build_token_to_request_body() {
+        let (mut flox, _temp_dir_handle) = flox_instance();
+        let (_tempdir_handle, _remote_repo, remote_uri) = example_git_remote_repo();
+        let (env, _build_repo) = example_path_environment(&flox, Some(&remote_uri));
+
+        set_test_auth(&mut flox, "test");
+        let catalog_name = "test".to_string();
+
+        let env_metadata = check_environment_metadata(&flox, &env).unwrap();
+        let package_metadata = check_package_metadata(
+            Some(&mock_base_catalog_url()),
+            env_metadata.toplevel_catalog_ref.as_ref(),
+            EXAMPLE_MANIFEST_PACKAGE_TARGET.clone(),
+        )
+        .unwrap();
+
+        let build_metadata = check_build_metadata(
+            &flox,
+            env_metadata.toplevel_catalog_ref.as_ref().unwrap(),
+            None,
+            &env_metadata,
+            &package_metadata.package,
+            None,
+        )
+        .unwrap();
+
+        let auth = NixAuth::from_flox(&flox).unwrap();
+        let publish_provider = PublishProvider::new(env_metadata, package_metadata, auth);
+
+        let mut catalog = MockClient::new();
+        reset_mocks(&mut catalog, vec![
+            Response::CreatePackage,
+            Response::Publish(PublishResponse {
+                ingress_uri: None,
+                ingress_auth: None,
+                catalog_store_config: CatalogStoreConfig::MetaOnly,
+            }),
+            Response::PublishBuild,
+        ]);
+
+        let package_created = publish_provider
+            .create_package_and_possibly_user_catalog(&catalog, &catalog_name)
+            .await
+            .unwrap();
+        publish_provider
+            .publish(
+                &catalog,
+                &catalog_name,
+                package_created,
+                &build_metadata,
+                &BTreeMap::new(),
+                None,
+                false,
+                Some("factory:abc123"),
+                false,
+                async |_| Ok(false),
+            )
+            .await
+            .expect("expected publish to succeed");
+
+        let sent = catalog
+            .last_publish_build_info
+            .lock()
+            .expect("couldn't acquire mock lock")
+            .clone()
+            .expect("publish_build was called");
+        assert_eq!(sent.factory_build_token, Some("factory:abc123".to_string()));
     }
 
     #[test]
@@ -2335,6 +2414,7 @@ pub mod tests {
                 &BTreeMap::new(),
                 None,
                 false,
+                None,
                 false,
                 async |_| Ok(false),
             )
@@ -2490,6 +2570,7 @@ pub mod tests {
                 &BTreeMap::new(),
                 cache.local_signing_key_path(),
                 false,
+                None,
                 false,
                 async |_| Ok(false),
             )
@@ -2776,6 +2857,7 @@ pub mod tests {
                 // Server returns meta-only store config; narinfo collected
                 // from FIXED_TEST_STORE_PATH in the local daemon store.
                 false,
+                None,
                 false,
                 async |_| Ok(false),
             )
@@ -2819,6 +2901,7 @@ pub mod tests {
                 // Server returns meta-only store config; narinfo collected
                 // from FIXED_TEST_STORE_PATH in the local daemon store.
                 false,
+                None,
                 false,
                 async |_| Ok(false),
             )
@@ -2889,6 +2972,7 @@ pub mod tests {
                 // Server returns meta-only store config; narinfo collected
                 // from FIXED_TEST_STORE_PATH in the local daemon store.
                 false,
+                None,
                 false,
                 async |_| Ok(false),
             )
@@ -2907,6 +2991,7 @@ pub mod tests {
                 // Server returns meta-only store config; narinfo collected
                 // from FIXED_TEST_STORE_PATH in the local daemon store.
                 false,
+                None,
                 false,
                 async |_| Ok(false),
             )
@@ -2950,6 +3035,7 @@ pub mod tests {
                 // Server returns meta-only store config; narinfo collected
                 // from FIXED_TEST_STORE_PATH in the local daemon store.
                 false,
+                None,
                 false,
                 async |_| Ok(false),
             )
