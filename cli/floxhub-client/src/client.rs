@@ -493,7 +493,7 @@ impl CatalogClientTrait for FloxhubClient {
                     .by_command_api_v1_catalog_by_command_get(
                         &command_name,
                         Some(0),
-                        Some(page_size.get() as u64),
+                        Some(page_size.get() as i64),
                         system,
                     )
                     .await
@@ -503,7 +503,7 @@ impl CatalogClientTrait for FloxhubClient {
             },
             None => {
                 // Collect all providers across pages.
-                let page_size = RESPONSE_PAGE_SIZE.get() as u64;
+                let page_size = RESPONSE_PAGE_SIZE.get() as i64;
                 // Fetch the first page to initialise the stable fields.
                 let first = self
                     .catalog
@@ -522,7 +522,7 @@ impl CatalogClientTrait for FloxhubClient {
                 let total_count = first.total_count;
                 let mut all_providers = first.providers;
                 // Fetch subsequent pages until we have all providers.
-                let mut page = 1u64;
+                let mut page = 1i64;
                 while (all_providers.len() as i64) < total_count {
                     let next = self
                         .catalog

@@ -146,7 +146,6 @@
             "required": false,
             "schema": {
               "type": "integer",
-              "minimum": 0,
               "default": 0,
               "title": "Page"
             }
@@ -157,7 +156,6 @@
             "required": false,
             "schema": {
               "type": "integer",
-              "minimum": 0,
               "default": 10,
               "title": "Pagesize"
             }
@@ -338,7 +336,7 @@
           "build-inputs"
         ],
         "summary": "Lookup",
-        "description": "Resolve each reference group's transitive build-input closure.\n\nEvery package name resolves independently to its latest build at the\nreference point. Unreadable dependencies remain opaque boundary leaves.\nTimeout, overflow, and cycle failures affect only their own group.",
+        "description": "Resolve build inputs for one or more reference groups.\n\nDirect references resolve to latest; the transitive closure is taken\nverbatim; a cross-reference conflict yields a per-group conflict result.\n\nFor each group, walks the transitive package_inputs closure (accessor),\nthen applies auth redaction and assembles the flat LockedInputs map.\n\nEach group runs in its own transaction so a single group's timeout,\noverflow, or conflict produces a per-group error without affecting others.",
         "operationId": "lookup_api_v1_catalog_build_inputs_lookup_post",
         "requestBody": {
           "content": {
@@ -1752,37 +1750,6 @@
         }
       }
     },
-    "/api/v1/catalog/info/systems": {
-      "get": {
-        "tags": [
-          "info"
-        ],
-        "summary": "List registered systems",
-        "operationId": "getSystems_api_v1_catalog_info_systems_get",
-        "responses": {
-          "200": {
-            "description": "The names of every system registered in the catalog, sorted by name",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SystemsResult"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "The request could not be processed",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/v1/catalog/info/published-catalogs": {
       "get": {
         "tags": [
@@ -2272,11 +2239,9 @@
       "BuildInputsLookupRequest": {
         "properties": {
           "stability": {
-            "title": "Stability",
-            "description": "Accepted and ignored; not used by this endpoint. Deprecated.",
-            "deprecated": true,
-            "nullable": true,
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "title": "Stability"
           },
           "reference_point": {
             "nullable": true,
@@ -2297,10 +2262,11 @@
         },
         "type": "object",
         "required": [
+          "stability",
           "groups"
         ],
         "title": "BuildInputsLookupRequest",
-        "description": "Request body for the /build-inputs/lookup endpoint.\n\nA lookup names one or more `groups` of references to resolve, optionally\nanchored at a `reference_point`.\n\nThe response is source revisions plus DAG edges: for each reference, the\nlatest revision of its own source together with the transitive non-base\nsources that revision was built against.  That answer carries no system\nand no nixpkgs base revision, so the request body names neither.  A base\nrevision is selected at build time, against which the same lock may be\nbuilt repeatedly."
+        "description": "Request body for the /build-inputs/lookup endpoint.\n\nA lookup names a `stability` (required) and one or more `groups` of\nreferences to resolve, optionally anchored at a `reference_point`.  It is\nsystem-independent \u2014 the response is source revs + DAG edges, which carry\nno system \u2014 so the request body has no system field."
       },
       "BuildInputsLookupResponse": {
         "properties": {
@@ -3086,7 +3052,7 @@
           "locked_inputs_hash"
         ],
         "title": "LockedInputEntry",
-        "description": "An entry in a flat locked-inputs map.\n\nPublish leaves `inputs` as `null` because the server reconstructs the DAG\nfrom `package_inputs`. Lookup supplies direct input keys. An empty list\nmeans no dependencies.\n\n`locked_inputs_hash` is required. Lookup computes it from the closure it\nassembled; publish uses it to select a stored closure. Boundary children,\nincluding redacted or unencodable rows, can contribute to that hash without\nappearing in `inputs`. Lookup can compute a digest no stored row carries,\nwhich publish rejects."
+        "description": "A single entry in the flat locked-inputs map.\n\nOne type, two directions (intentionally NOT split into two models \u2014 the\npublish entry is the same entity with its edges not yet stated):\n\n- Publish request: the CLI sends {catalog, attr_path, build_type, source,\n  locked_inputs_hash} and leaves inputs null.  Null here means \"not stated\n  \u2014 the server is authoritative for the DAG\": the CLI knows its direct\n  inputs but is not the source of truth, and the server reconstructs the\n  DAG from package_inputs (keyed by locked_inputs_hash).\n- Lookup response: all fields are present and inputs is populated with the\n  full transitive-closure DAG.\n\ninputs uses the tri-state SBOM convention in both directions:\n  inputs: [k, ...]  \u2014 known direct inputs (by key)\n  inputs: []        \u2014 explicitly no dependencies\n  inputs null       \u2014 not stated (server is authoritative for the DAG)\n\nattr_path is a list of components, e.g. [\"python3Packages\", \"boolex\"].\nA flat catalog entry collapses what the CLI lockfile represents as a\nhierarchy of single-component package-set / package nodes.  Giving the\nCLI the components lets it re-expand that hierarchy.  A list is also\nunambiguous: if nested-dot component support is ever added (AI-267),\nthe list form remains the unambiguous carrier.\n\nlocked_inputs_hash is REQUIRED on every entry: the closure identity hash is\nthe round-trip disambiguator that pins which recorded build a locked input\nrefers to (lookup response \u2192 CLI \u2192 publish request).  A publish request\nmissing it fails validation (422) at this contract boundary \u2014 there is no\nhash-free / old-client fallback.  It always serializes as a string.\n\nWire behavior: a null `inputs` (the tri-state \"not stated\") is emitted as\nan explicit null \u2014 deliberately, NOT dropped; do not add exclude_none here.\nThe source sub-model never emits nulls at all: its named attributes are\nall required, and unknown ones pass through verbatim (see LockedGitSource).\n\nUse key() to build the canonical flat-map key for this entry."
       },
       "LockedSourceItem": {
         "properties": {
@@ -3434,16 +3400,6 @@
             },
             "type": "array",
             "title": "Items"
-          },
-          "commands_by_output": {
-            "additionalProperties": {
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
-            "type": "object",
-            "title": "Commands By Output"
           }
         },
         "type": "object",
@@ -4880,23 +4836,6 @@
         ],
         "title": "StorepathStatusResponse"
       },
-      "SystemsResult": {
-        "properties": {
-          "registered_systems": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Registered Systems"
-          }
-        },
-        "type": "object",
-        "required": [
-          "registered_systems"
-        ],
-        "title": "SystemsResult",
-        "description": "Every system registered in the catalog, sorted by name."
-      },
       "UnresolvableEntry": {
         "properties": {
           "reference": {
@@ -4933,7 +4872,7 @@
         },
         "type": "object",
         "title": "UnresolvableLeaf",
-        "description": "An unresolvable dependency encoded as one open-ended cause entry.\n\nSerializes as {\"unresolvable\": {<cause>: <detail>}} \u2014 a single-key cause\nmap rather than a closed union. Consumers must tolerate unrecognized\ncauses."
+        "description": "Uniform shape for an unresolvable dependency.\n\nSerializes as {\"unresolvable\": {}} \u2014 exactly one shape, no cause/reason\nfields at the leaf level. If a future change needs structured error\ndetail, introduce a typed `reason` field here."
       },
       "UserCatalog": {
         "properties": {

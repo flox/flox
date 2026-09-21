@@ -88,9 +88,11 @@ fn build_request(references: BTreeSet<CatalogRef>) -> BuildInputsLookupRequest {
         groups: vec![group],
         reference_point: None,
         // Catalog-input resolution is independent of the nixpkgs base-catalog
-        // stability. The spec now marks `stability` optional and deprecated
-        // ("accepted and ignored"), so the request omits it.
-        stability: None,
+        // stability, but the OpenAPI spec still marks `stability` as a
+        // required request field. The field is in the process of being
+        // deprecated on the server side and in the spec; until that
+        // coordinated change lands, send the constant "stable".
+        stability: "stable".parse().expect("constant stability parses"),
     }
 }
 
@@ -152,7 +154,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn build_request_maps_references_and_omits_stability() {
+    fn build_request_maps_references_and_stability() {
         let references = BTreeSet::from([
             CatalogRef::new_unchecked("catalogs.myorg.hello"),
             CatalogRef::new_unchecked("catalogs.myorg.world"),
@@ -168,7 +170,10 @@ mod tests {
             serde_json::to_value(&wire.groups[0].references).unwrap(),
             json!(["myorg.hello", "myorg.world"])
         );
-        assert!(wire.stability.is_none());
+        assert_eq!(
+            serde_json::to_value(&wire.stability).unwrap(),
+            json!("stable")
+        );
         assert!(wire.reference_point.is_none());
     }
 
