@@ -42,7 +42,7 @@ use flox_rust_sdk::providers::upgrade_checks::UpgradeInformationGuard;
 use flox_rust_sdk::utils::FLOX_INTERPRETER;
 use indoc::{formatdoc, indoc};
 use toml_edit::Key;
-use tracing::{debug, trace, warn};
+use tracing::{debug, info, trace, warn};
 
 use super::{
     EnvironmentSelect,
@@ -968,9 +968,10 @@ fn notify_package_upgrades(
     let description = environment_description(environment)?;
     let diff_for_system = upgrade_result.diff_for_system(&flox.system);
     if diff_for_system.is_empty() {
-        message::verbose(formatdoc! {"
-            Upgrades available for {description} on other systems.
-            Use 'flox upgrade --dry-run' for details."});
+        info!(
+            environment = %description,
+            "Upgrades available on other systems. Use 'flox upgrade --dry-run' for details."
+        );
         return Ok(());
     }
     // TODO: this doesn't capture the environment chosen by the user if we prompted

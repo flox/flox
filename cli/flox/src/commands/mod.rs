@@ -145,7 +145,7 @@ pub enum Verbosity {
         usize,
     ),
 
-    /// Silence logs except for errors
+    /// Silence routine notices and diagnostic logs
     #[bpaf(short, long)]
     Quiet,
 }
