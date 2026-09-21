@@ -245,8 +245,17 @@ impl Edit {
             EditResult::Changed {
                 ref old_lockfile,
                 ref new_lockfile,
+                ref schema_bumped,
                 ..
             } => {
+                if let Some((from, to)) = schema_bumped {
+                    message::warning(format!(
+                        "Manifest declared schema-version = \"{from}\" but used syntax from \"{to}\".\n\
+                         Upgraded to \"{to}\" to apply your edit.\n\
+                         Package output defaults may have changed for packages that did not specify 'outputs'."
+                    ));
+                }
+
                 if result.reactivate_required()?
                     && activated_environments().is_active(&active_environment)
                 {

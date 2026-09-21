@@ -464,3 +464,55 @@ EOF
   assert_success
   assert_output "$hello_store_path/bin/hello"
 }
+
+# ---------------------------------------------------------------------------- #
+
+# bats test_tags=edit:schema-upgrade
+# When a manifest declares an older schema-version but uses a field that only
+# exists in the latest schema, 'flox edit' should:
+#   - succeed (not fail with a parse error)
+#   - write schema-version = "<latest>" to disk
+#   - warn the user that the schema was upgraded
+@test "'flox edit' upgrades schema-version when older version uses newer-schema fields" {
+  "$FLOX_BIN" init
+
+  # Build a manifest that declares version = 1 (legacy schema) but includes
+  # 'description', a field that was introduced in schema-version 1.17.0.
+  cat << "EOF" > "$TMP_MANIFEST_PATH"
+version = 1
+
+description = "my test environment"
+EOF
+
+  run "$FLOX_BIN" edit -f "$TMP_MANIFEST_PATH"
+  assert_success
+
+  # The warning must mention the old and new schema versions.
+  assert_output --partial 'Upgraded to "1.17.0"'
+
+  # The manifest on disk must carry the bumped schema-version key.
+  run grep 'schema-version' "$MANIFEST_PATH"
+  assert_success
+  assert_output --partial 'schema-version = "1.17.0"'
+}
+
+# bats test_tags=edit:schema-upgrade:invalid
+# A manifest with genuinely invalid syntax (not just a version mismatch) must
+# still fail — the schema-upgrade fallback must not swallow real errors.
+@test "'flox edit' still fails when manifest has genuinely invalid syntax" {
+  "$FLOX_BIN" init
+  ORIGINAL_MANIFEST_CONTENTS="$(cat "$MANIFEST_PATH")"
+
+  # Use a type error that is invalid in every schema version: pkg-path must be
+  # a string, not an integer. When both the stated and latest schema fail, the
+  # function returns the original parse error rather than masking it.
+  cat << "EOF" > "$TMP_MANIFEST_PATH"
+version = 1
+
+[install]
+hello.pkg-path = 42
+EOF
+
+  RUST_BACKTRACE=0 run "$FLOX_BIN" edit -f "$TMP_MANIFEST_PATH"
+  assert_failure
+}

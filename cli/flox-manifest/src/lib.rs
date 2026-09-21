@@ -54,6 +54,7 @@ use crate::raw::{
     TomlEditError,
     get_json_schema_version_kind,
     get_schema_version_kind,
+    update_schema_version,
 };
 
 pub mod compose;
@@ -65,6 +66,20 @@ pub mod raw;
 pub mod util;
 
 pub static MANIFEST_FILENAME: &str = "manifest.toml";
+
+/// The outcome of [`Manifest::parse_toml_typed_or_as_latest`].
+#[derive(Debug, Clone)]
+pub enum ParsedManifest {
+    /// Parsed cleanly at its stated schema version.
+    AsStated(Manifest<Validated>),
+    /// Failed at the stated version but validated after bumping the version key
+    /// to `KnownSchemaVersion::latest()`.
+    BumpedToLatest {
+        manifest: Manifest<Validated>,
+        from: KnownSchemaVersion,
+        to: KnownSchemaVersion,
+    },
+}
 
 #[derive(Debug, thiserror::Error)]
 pub enum ManifestError {
@@ -346,6 +361,55 @@ impl Manifest<Init> {
     /// Parse the given TOML into a typed and validated manifest.
     pub fn parse_toml_typed(s: impl AsRef<str>) -> Result<Manifest<Validated>, ManifestError> {
         Self::parse_toml_untyped(s)?.validate()
+    }
+
+    /// Parse the given TOML into a validated manifest, falling back to the
+    /// latest schema if the stated version fails to validate.
+    ///
+    /// Returns `AsStated` when the manifest validates at its stated schema
+    /// version, or `BumpedToLatest` when it fails at the stated version but
+    /// succeeds after the schema-version key is rewritten to `latest()`.
+    ///
+    /// Falls back to `AsStated` when the stated version is already `latest()`,
+    /// or when the manifest still fails after the rewrite (neither schema
+    /// parses), or on TOML parse failure (structural, not schema, error).
+    pub fn parse_toml_typed_or_as_latest(
+        s: impl AsRef<str>,
+    ) -> Result<ParsedManifest, ManifestError> {
+        // Malformed TOML is a structural error, not a schema mismatch.
+        // Surface it as-is so the caller sees the real problem.
+        let untyped = Self::parse_toml_untyped(s)?;
+        match untyped.validate() {
+            Ok(m) => Ok(ParsedManifest::AsStated(m)),
+            Err(stated_err) => {
+                let stated: KnownSchemaVersion =
+                    match get_schema_version_kind(&untyped.inner.raw)?.try_into() {
+                        Ok(v) => v,
+                        // Unrecognised version key — the original error is the
+                        // right one to surface.
+                        Err(_) => return Err(stated_err),
+                    };
+                let latest = KnownSchemaVersion::latest();
+                if stated == latest {
+                    // Already at latest; the error is genuine, not a version mismatch.
+                    return Err(stated_err);
+                }
+                // Rewrite the version key in a clone of the raw document and
+                // attempt to parse it as the latest schema.
+                let mut bumped_raw = untyped.inner.raw.clone();
+                update_schema_version(&mut bumped_raw, latest);
+                match Manifest::<TomlParsed>::validate_toml(&bumped_raw) {
+                    Ok(m) => Ok(ParsedManifest::BumpedToLatest {
+                        manifest: m,
+                        from: stated,
+                        to: latest,
+                    }),
+                    // Neither schema parsed; return the original error so the
+                    // user sees a message about the stated version.
+                    Err(_) => Err(stated_err),
+                }
+            },
+        }
     }
 
     /// Parse the given JSON into a typed and validated manifest.
@@ -796,6 +860,96 @@ impl JsonSchema for Manifest<TypedOnly> {
 
     fn json_schema(_generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
         schema_for!(Parsed)
+    }
+}
+
+#[cfg(test)]
+mod parse_toml_typed_or_as_latest_tests {
+    use indoc::indoc;
+
+    use super::*;
+    use crate::test_helpers::with_latest_schema;
+
+    /// An older stated version combined with a newer-schema field triggers a
+    /// bump to `KnownSchemaVersion::latest()`.
+    #[test]
+    fn older_version_with_newer_field_bumps_to_latest() {
+        // `description` was introduced in V1_17_0; a V1_16_0 manifest
+        // that uses it should trigger a bump to latest (V1_17_0).
+        let contents = indoc! {r#"
+            schema-version = "1.16.0"
+
+            description = "My environment"
+
+            [install]
+        "#};
+        let result = Manifest::parse_toml_typed_or_as_latest(contents).unwrap();
+        match result {
+            ParsedManifest::BumpedToLatest { from, to, .. } => {
+                assert_eq!(from, KnownSchemaVersion::V1_16_0);
+                assert_eq!(to, KnownSchemaVersion::latest());
+            },
+            ParsedManifest::AsStated(_) => {
+                panic!("expected BumpedToLatest, got AsStated");
+            },
+        }
+    }
+
+    /// A legacy `version = 1` manifest that uses a newer-schema field
+    /// (`outputs`) should be bumped to latest.
+    #[test]
+    fn legacy_version_with_outputs_bumps_to_latest() {
+        let contents = indoc! {r#"
+            version = 1
+
+            [install]
+            hello.pkg-path = "hello"
+            hello.outputs = ["out"]
+        "#};
+        let result = Manifest::parse_toml_typed_or_as_latest(contents).unwrap();
+        match result {
+            ParsedManifest::BumpedToLatest { from, to, .. } => {
+                assert_eq!(from, KnownSchemaVersion::V1);
+                assert_eq!(to, KnownSchemaVersion::latest());
+            },
+            ParsedManifest::AsStated(_) => {
+                panic!("expected BumpedToLatest, got AsStated");
+            },
+        }
+    }
+
+    /// A fully valid manifest at its stated version returns `AsStated`.
+    #[test]
+    fn valid_manifest_returns_as_stated() {
+        let contents = with_latest_schema(indoc! {r#"
+            [install]
+        "#});
+        let result = Manifest::parse_toml_typed_or_as_latest(&contents).unwrap();
+        assert!(matches!(result, ParsedManifest::AsStated(_)));
+    }
+
+    /// A manifest already at latest with an invalid field returns an error,
+    /// not a spurious bump.
+    #[test]
+    fn already_latest_invalid_field_returns_err() {
+        // `bogus-field` is not part of the latest schema.
+        let contents = with_latest_schema(indoc! {r#"
+            [install]
+
+            bogus-field = "this-is-invalid"
+        "#});
+        assert!(Manifest::parse_toml_typed_or_as_latest(&contents).is_err());
+    }
+
+    /// Malformed TOML returns `Err(ManifestError::ParseToml)`.
+    #[test]
+    fn malformed_toml_returns_parse_error() {
+        let contents = "not valid toml {{{{";
+        let err = Manifest::parse_toml_typed_or_as_latest(contents).unwrap_err();
+        assert!(
+            matches!(err, ManifestError::ParseToml(_)),
+            "expected ParseToml, got {err:?}"
+        );
     }
 }
 
