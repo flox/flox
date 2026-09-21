@@ -50,10 +50,6 @@ pub const FLOX_CATALOG_DUMP_DATA_VAR: &str = "_FLOX_CATALOG_DUMP_RESPONSE_FILE";
 /// Test/regen-only — not a user-facing interface. See Justfile
 /// `gen-unit-data-no-publish` for usage.
 pub const FLOX_RESOLVE_STABILITY_VAR: &str = "_FLOX_RESOLVE_STABILITY";
-/// Carries the Factory's per-build token into the build pod. Read by
-/// [`client::factory_build_token_from_env`] and forwarded, unread, on the
-/// two catalog-server calls `flox publish` makes.
-pub const FACTORY_BUILD_TOKEN_VAR: &str = "_FLOX_FACTORY_BUILD_TOKEN";
 
 // Re-export catalog-api-v1 types for consumers.
 // This allows consumers to depend only on floxhub-client, not directly on catalog-api-v1.
@@ -91,7 +87,6 @@ pub use client::{
     CatalogClientTrait,
     CheckBuildQuery,
     FloxhubClient,
-    factory_build_token_from_env,
     str_to_catalog_name,
     str_to_package_name,
 };

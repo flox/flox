@@ -198,34 +198,10 @@ pub struct CheckBuildQuery<'a> {
     pub nixpkgs_rev: &'a str,
     pub system: api_types::PackageSystem,
     pub locked_inputs: &'a HashMap<String, api_types::LockedInputEntry>,
-    /// Forwarded, uninterpreted, from
-    /// [`factory_build_token_from_env`]. `None` for an ordinary
-    /// `flox publish`, which is the normal case rather than a
-    /// gap.
+    /// Forwarded, uninterpreted, from the caller's process environment.
+    /// `None` for an ordinary `flox publish`, which is the normal case
+    /// rather than a gap.
     pub factory_build_token: Option<&'a str>,
-}
-
-/// Read the Factory build token from the process environment.
-///
-/// Unset, empty, and non-UTF-8 all mean absent, and absent means the
-/// field is omitted from both request bodies this crate sends. The
-/// value is opaque: it is never parsed, validated, or checked for a
-/// prefix.
-///
-/// Logs presence, never the value, at `info!` on every call. The
-/// Factory runs `flox publish` at a fixed verbosity that filters out
-/// `debug!`, so this is the only level an investigator diagnosing an
-/// unlinked build can rely on, and the two call sites' line count
-/// says which of catalog-server's two write paths should have
-/// recorded the link.
-pub fn factory_build_token_from_env() -> Option<String> {
-    let token = std::env::var(crate::FACTORY_BUILD_TOKEN_VAR)
-        .ok()
-        .filter(|s| !s.is_empty());
-    if token.is_some() {
-        tracing::info!("forwarding Factory build token");
-    }
-    token
 }
 
 /// The complete catalog API interface.
@@ -1834,76 +1810,12 @@ pub mod tests {
         }
     }
 
-    /// A token on the query is forwarded, uninterpreted, on the check-build
-    /// request body.
-    #[tokio::test]
-    async fn check_build_includes_factory_build_token_when_present() {
-        use catalog_api_v1::types as api_types;
-
-        let server = MockServer::start_async().await;
-        let mock = server.mock(|when, then| {
-            when.method("POST")
-                .path(CHECK_BUILD_PATH)
-                .json_body_includes(json!({ "factory_build_token": "factory:abc123" }).to_string());
-            then.status(200)
-                .json_body(json!({ "already_published": false }));
-        });
-
-        let client = FloxhubClient::new(client_config(server.base_url().as_str())).unwrap();
-
-        client
-            .check_build_already_recorded(CheckBuildQuery {
-                catalog_name: "myorg",
-                package_name: "mypkg",
-                source_url: &"https://example.com/repo".parse().unwrap(),
-                source_rev: "deadbeef",
-                nixpkgs_rev: "cafebabe",
-                system: api_types::PackageSystem::X8664Linux,
-                locked_inputs: &HashMap::new(),
-                factory_build_token: Some("factory:abc123"),
-            })
-            .await
-            .expect("expected Ok");
-
-        mock.assert();
-    }
-
-    /// No token on the query means the key is omitted from the request
-    /// body, not sent as `null`.
-    #[tokio::test]
-    async fn check_build_excludes_factory_build_token_when_absent() {
-        use catalog_api_v1::types as api_types;
-
-        let server = MockServer::start_async().await;
-        let mock = server.mock(|when, then| {
-            when.method("POST")
-                .path(CHECK_BUILD_PATH)
-                .body_excludes("factory_build_token");
-            then.status(200)
-                .json_body(json!({ "already_published": false }));
-        });
-
-        let client = FloxhubClient::new(client_config(server.base_url().as_str())).unwrap();
-
-        client
-            .check_build_already_recorded(CheckBuildQuery {
-                catalog_name: "myorg",
-                package_name: "mypkg",
-                source_url: &"https://example.com/repo".parse().unwrap(),
-                source_rev: "deadbeef",
-                nixpkgs_rev: "cafebabe",
-                system: api_types::PackageSystem::X8664Linux,
-                locked_inputs: &HashMap::new(),
-                factory_build_token: None,
-            })
-            .await
-            .expect("expected Ok");
-
-        mock.assert();
-    }
-
     /// A token on the build info is forwarded, uninterpreted, on the
-    /// publish request body.
+    /// publish request body. The check-build endpoint takes the same
+    /// `Option<String>` field through the same generated
+    /// `skip_serializing_if`, so one endpoint proving inclusion on the
+    /// wire covers both; omission is proven separately by the four
+    /// existing publish cassettes replaying byte-identical.
     #[tokio::test]
     async fn publish_build_includes_factory_build_token_when_present() {
         let server = MockServer::start_async().await;
@@ -1916,30 +1828,6 @@ pub mod tests {
 
         let client = FloxhubClient::new(client_config(server.base_url().as_str())).unwrap();
         let build_info = minimal_build_info(Some("factory:abc123"));
-
-        client
-            .publish_build("myorg", "mypkg", &build_info)
-            .await
-            .expect("expected Ok");
-
-        mock.assert();
-    }
-
-    /// No token on the build info means the key is omitted from the
-    /// request body, not sent as `null` — a request from any CLI that
-    /// predates this change is byte-identical.
-    #[tokio::test]
-    async fn publish_build_excludes_factory_build_token_when_absent() {
-        let server = MockServer::start_async().await;
-        let mock = server.mock(|when, then| {
-            when.method("POST")
-                .path(PUBLISH_PATH)
-                .body_excludes("factory_build_token");
-            then.status(200).json_body(json!({}));
-        });
-
-        let client = FloxhubClient::new(client_config(server.base_url().as_str())).unwrap();
-        let build_info = minimal_build_info(None);
 
         client
             .publish_build("myorg", "mypkg", &build_info)
