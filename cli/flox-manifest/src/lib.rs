@@ -370,9 +370,11 @@ impl Manifest<Init> {
     /// version, or `BumpedToLatest` when it fails at the stated version but
     /// succeeds after the schema-version key is rewritten to `latest()`.
     ///
-    /// Falls back to `AsStated` when the stated version is already `latest()`,
-    /// or when the manifest still fails after the rewrite (neither schema
-    /// parses), or on TOML parse failure (structural, not schema, error).
+    /// Returns the original stated-version error (never `AsStated`) when the
+    /// stated version is already `latest()`, or when the manifest still fails
+    /// after the rewrite because neither schema parses. Returns the TOML parse
+    /// error when the input is not well-formed TOML (a structural error, not a
+    /// schema mismatch).
     pub fn parse_toml_typed_or_as_latest(
         s: impl AsRef<str>,
     ) -> Result<ParsedManifest, ManifestError> {

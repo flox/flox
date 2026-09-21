@@ -487,8 +487,10 @@ EOF
   run "$FLOX_BIN" edit -f "$TMP_MANIFEST_PATH"
   assert_success
 
-  # The warning must mention the old and new schema versions.
-  assert_output --partial 'Upgraded to "1.17.0"'
+  # A legacy manifest declares 'version = 1', not 'schema-version = "1"'
+  # (which is not valid TOML) — the warning must name the key it really used.
+  assert_output --partial 'Manifest declared version = 1'
+  assert_output --partial 'Upgraded it to schema-version = "1.17.0"'
 
   # The manifest on disk must carry the bumped schema-version key.
   run grep 'schema-version' "$MANIFEST_PATH"

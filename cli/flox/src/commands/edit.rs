@@ -249,11 +249,12 @@ impl Edit {
                 ..
             } => {
                 if let Some((from, to)) = schema_bumped {
-                    message::warning(format!(
-                        "Manifest declared schema-version = \"{from}\" but used syntax from \"{to}\".\n\
-                         Upgraded to \"{to}\" to apply your edit.\n\
-                         Package output defaults may have changed for packages that did not specify 'outputs'."
-                    ));
+                    let declared = from.toml_declaration();
+                    message::warning(formatdoc! {"
+                        Manifest declared {declared}, but its contents use fields from a newer schema.
+                        Upgraded it to schema-version = \"{to}\" to apply your edit.
+                        Package output defaults may have changed for packages that did not set 'outputs'.
+                    "});
                 }
 
                 if result.reactivate_required()?
