@@ -365,10 +365,12 @@ enable_blocking_telemetry_endpoints() {
 
   # Wait for the detached child to write its log and attempt the send. It blocks
   # on the black-hole endpoint for the pipeline timeout, so allow generous time.
-  local log_glob="$FLOX_CACHE_DIR/log/send-telemetry-"*.log
+  # The child logs to a single rolling file (truncated each spawn), not a
+  # per-invocation timestamped one.
+  local log_file="$FLOX_CACHE_DIR/log/send-telemetry.log"
   local sent=""
   for _ in $(seq 1 100); do
-    if grep -qs "Sending v2 events" $log_glob 2>/dev/null; then
+    if grep -qs "Sending v2 events" "$log_file" 2>/dev/null; then
       sent=yes
       break
     fi
@@ -376,7 +378,7 @@ enable_blocking_telemetry_endpoints() {
   done
   # The child ran and attempted delivery to the overridden v2 endpoint.
   assert [ "$sent" = "yes" ]
-  run grep -hs "endpoint_url" $log_glob
+  run grep -hs "endpoint_url" "$log_file"
   assert_output --partial "192.0.2.1"
 
   # Delivery to the black-hole endpoint fails, so the buffered events must be

@@ -343,6 +343,13 @@ impl MetricsBuffer {
 
     /// Remove all entries from the in-memory buffer and the file, returning
     /// them for sending after the lock is released.
+    ///
+    /// Truncate-before-send is deliberate: the caller cannot hold the buffer
+    /// lock across the network send without re-blocking the append path (the
+    /// stall the detached flush exists to remove). The cost is a crash window —
+    /// a SIGKILL or panic of the detached child between this truncate and the
+    /// failure re-buffer in `prepend` loses the in-flight batch. Accepted:
+    /// telemetry is best-effort, not durable.
     fn take_sendable(&mut self) -> Result<VecDeque<MetricEntry>> {
         let taken = std::mem::take(&mut self.buffer);
         self.overwrite_file()?;
@@ -423,9 +430,12 @@ impl Hub {
         self.with_client(|client| client.replace(new_client))
     }
 
-    /// Get a guard for the client, that will automatically flush the metrics on drop
+    /// Get a guard holding this hub's single-active-guard slot for the
+    /// lifetime of an invocation. Errors if another guard is already active.
     ///
-    /// The guard will return an error if another guard is already active.
+    /// Dropping the guard performs no network I/O; the detached
+    /// `send-telemetry` child arranges delivery after the parent exits (see
+    /// [`MetricGuard`]).
     pub fn try_guard(&self) -> Result<MetricGuard> {
         if Arc::strong_count(&self.client) > 1 {
             bail!("A guard is already active, there can only be one guard at a time")
@@ -748,6 +758,9 @@ impl Client {
     }
 }
 
+/// Holds the legacy metrics hub's single-active-guard slot for the lifetime of
+/// an invocation. Dropping it performs no network I/O; the detached
+/// `send-telemetry` child arranges delivery after the parent exits.
 pub struct MetricGuard {
     hub: Hub,
 }

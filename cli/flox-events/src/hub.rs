@@ -140,9 +140,13 @@ impl EventsHub {
         })
     }
 
-    /// Return an [`EventsGuard`] that flushes this hub's client on drop —
+    /// Return an [`EventsGuard`] holding this hub's single-active-guard slot —
     /// the counterpart of the legacy `Hub::try_guard`. Errors if a guard is
-    /// already active for this hub, so at most one guard flushes per process.
+    /// already active for this hub, so at most one guard exists per process.
+    ///
+    /// Dropping the guard performs no network I/O; the detached
+    /// `send-telemetry` child arranges delivery after the parent exits (see
+    /// [`EventsGuard`]).
     ///
     /// The `strong_count` probe is a faithful live-guard count only because
     /// `try_guard` is the sole site that clones an [`EventsHub`] (hence its

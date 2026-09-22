@@ -204,6 +204,13 @@ impl EventsBuffer {
     /// Remove all parsed entries from the in-memory buffer and the file,
     /// returning them for sending after the lock is released. Unparsed
     /// (`unknown`) lines stay in the file — no binary here can send them.
+    ///
+    /// Truncate-before-send is deliberate: the caller cannot hold the buffer
+    /// lock across the network send without re-blocking the append path (the
+    /// stall this pipeline's detached flush exists to remove). The cost is a
+    /// crash window — a SIGKILL or panic of the detached child between this
+    /// truncate and the failure re-buffer in `prepend` loses the in-flight
+    /// batch. Accepted: telemetry is best-effort, not durable.
     pub fn take_sendable(&mut self) -> Result<VecDeque<Event>> {
         let taken = std::mem::take(&mut self.buffer);
         self.overwrite_file()?;

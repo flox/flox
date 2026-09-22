@@ -260,11 +260,20 @@ fn main() -> ExitCode {
     //   a fork-bomb and stops `send-telemetry` from re-spawning itself);
     // - `_FLOX_TESTING_DISABLE_BG_SIDE_EFFECTS=1` (CI escape hatch,
     //   enforced inside the helper).
+    //
+    // The child logs to a single rolling file (truncated each spawn) rather
+    // than a per-invocation timestamped file: it runs on every command, so
+    // timestamped files would accumulate in the global cache log dir with no
+    // GC watching it. The per-environment executive GC only prunes an
+    // activation's own log dir, which this global path is not.
     if !config.flox.disable_metrics && !is_detached_side_effect_command(v2_subcommand) {
         let log_dir = config.flox.cache_dir.join("log");
+        let args = [String::from("send-telemetry"), String::from("-vv")];
         let spawn_result = utils::detached::DetachedCommand {
-            args: &["send-telemetry", "-vv"],
-            log_stem: "send-telemetry",
+            args: &args,
+            log_file: utils::detached::LogFile::Rolling(
+                utils::detached::SEND_TELEMETRY_LOG_NAME.to_string(),
+            ),
             log_dir: &log_dir,
         }
         .spawn(None);

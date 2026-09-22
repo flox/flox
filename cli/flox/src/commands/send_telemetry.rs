@@ -49,30 +49,42 @@ impl SendTelemetry {
                 .parse()
                 .unwrap_or(false);
 
-        // Both clients were installed by `FloxArgs::handle` before this point.
-        // `try_flush` uses a non-blocking lock so a concurrent child (from a
-        // rapid `cd`) exits early rather than queuing a second network call.
-        let v2_outcome = if !EventsHub::global().try_flush(force)? {
-            debug!("send-telemetry: v2 events buffer lock taken; skipping");
-            FlushOutcome::LockTaken
-        } else {
-            FlushOutcome::Flushed
-        };
-
-        let legacy_outcome = if !Hub::global().try_flush_metrics(force)? {
-            debug!("send-telemetry: legacy metrics buffer lock taken; skipping");
-            FlushOutcome::LockTaken
-        } else {
-            FlushOutcome::Flushed
-        };
+        // Flush both pipelines independently. A down endpoint on one must not
+        // starve the other, so each is attempted and its result captured before
+        // any error is surfaced. Both clients were installed by
+        // `FloxArgs::handle`. `try_flush` takes a non-blocking lock, so a
+        // concurrent child (from a rapid `cd`) exits early rather than queuing a
+        // second network call.
+        let v2_result = EventsHub::global().try_flush(force);
+        let legacy_result = Hub::global().try_flush_metrics(force);
 
         debug!(
-            ?v2_outcome,
-            ?legacy_outcome,
+            v2_outcome = ?flush_outcome(&v2_result),
+            legacy_outcome = ?flush_outcome(&legacy_result),
             "send-telemetry flush complete"
         );
 
-        Ok(())
+        // Surface the errors only after both pipelines have been attempted. If
+        // both failed, the legacy error is chained as context on the v2 error so
+        // neither is lost.
+        match (v2_result, legacy_result) {
+            (Ok(_), Ok(_)) => Ok(()),
+            (Err(v2_err), Ok(_)) => Err(v2_err),
+            (Ok(_), Err(legacy_err)) => Err(legacy_err),
+            (Err(v2_err), Err(legacy_err)) => {
+                Err(v2_err.context(format!("legacy metrics flush also failed: {legacy_err:#}")))
+            },
+        }
+    }
+}
+
+/// Classify a `try_flush` result for logging: whether the flush ran or the
+/// buffer lock was held by another flusher. An `Err` is logged as its message.
+fn flush_outcome(result: &Result<bool>) -> String {
+    match result {
+        Ok(true) => format!("{:?}", FlushOutcome::Flushed),
+        Ok(false) => format!("{:?}", FlushOutcome::LockTaken),
+        Err(err) => format!("error: {err:#}"),
     }
 }
 

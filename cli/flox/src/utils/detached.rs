@@ -6,11 +6,10 @@
 //! and the CI escape hatch that prevents background children from being
 //! spawned during integration tests.
 
-use std::fs::File;
+use std::fs::{File, OpenOptions};
 use std::os::fd::AsRawFd;
 use std::path::Path;
 use std::process::{Command, Stdio};
-use std::time::SystemTime;
 
 use anyhow::{Context, Result, bail};
 use flox_core::vars::{FLOX_VERSION_STRING, FLOX_VERSION_VAR};
@@ -34,13 +33,24 @@ pub fn bg_side_effects_disabled() -> bool {
     )
 }
 
+/// How the detached child's stderr log file is named and opened.
+pub enum LogFile {
+    /// A fixed filename, truncated on each spawn. Bounds disk growth for a
+    /// child spawned on every invocation, where a per-invocation file would
+    /// accumulate without cleanup.
+    Rolling(String),
+    /// A caller-supplied filename, created fresh each spawn. The caller is
+    /// responsible for including a sortable timestamp so an external GC (the
+    /// activations executive's `gc_logs_per_process`) can keep the last N.
+    PerInvocation(String),
+}
+
 /// Configuration for a detached background side-effect process.
 pub struct DetachedCommand<'a> {
     /// Subcommand name and arguments to pass to the current flox binary.
-    pub args: &'a [&'a str],
-    /// Log-file stem used to construct the output path: the log file will be
-    /// created as `log_dir/<stem>-<unix_timestamp>.log`.
-    pub log_stem: &'a str,
+    pub args: &'a [String],
+    /// Names and opens the child's stderr log file within `log_dir`.
+    pub log_file: LogFile,
     /// Directory where the log file will be written.
     pub log_dir: &'a Path,
 }
@@ -101,23 +111,8 @@ impl DetachedCommand<'_> {
             command.arg(arg);
         }
 
-        // Redirect logs to a timestamped file.
-        let timestamp = SystemTime::now()
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .expect("now is after UNIX EPOCH")
-            .as_secs();
-        let log_file_path = self
-            .log_dir
-            .join(format!("{}-{}.log", self.log_stem, timestamp));
-
-        debug!(
-            log_file = ?log_file_path,
-            "Logging detached child output to file, redirecting stdin/stdout to /dev/null"
-        );
-
         std::fs::create_dir_all(self.log_dir)?;
-        let log_file = File::create(&log_file_path)
-            .with_context(|| format!("Failed to create log file {}", log_file_path.display()))?;
+        let log_file = self.open_log_file()?;
         let log_file_fd = log_file.as_raw_fd();
 
         command.stderr(log_file);
@@ -149,7 +144,39 @@ impl DetachedCommand<'_> {
 
         Ok(())
     }
+
+    /// Open the child's stderr log file per the configured [`LogFile`] strategy.
+    ///
+    /// `Rolling` truncates so a child spawned on every invocation reuses one
+    /// bounded file; `PerInvocation` creates the caller-named file fresh.
+    fn open_log_file(&self) -> Result<File> {
+        let (path, file) = match &self.log_file {
+            LogFile::Rolling(name) => {
+                let path = self.log_dir.join(name);
+                let file = OpenOptions::new()
+                    .write(true)
+                    .create(true)
+                    .truncate(true)
+                    .open(&path);
+                (path, file)
+            },
+            LogFile::PerInvocation(name) => {
+                let path = self.log_dir.join(name);
+                (path.clone(), File::create(&path))
+            },
+        };
+
+        debug!(
+            log_file = ?path,
+            "Logging detached child output to file, redirecting stdin/stdout to /dev/null"
+        );
+
+        file.with_context(|| format!("Failed to create log file {}", path.display()))
+    }
 }
+
+/// The rolling log filename for the send-telemetry child.
+pub const SEND_TELEMETRY_LOG_NAME: &str = "send-telemetry.log";
 
 #[cfg(test)]
 mod tests {
@@ -186,13 +213,59 @@ mod tests {
         // With the CI escape hatch set, spawn returns Ok(()) without spawning.
         temp_env::with_var("_FLOX_TESTING_DISABLE_BG_SIDE_EFFECTS", Some("1"), || {
             let dir = tempfile::tempdir().unwrap();
+            let args = vec!["send-telemetry".to_string(), "--force".to_string()];
             let result = DetachedCommand {
-                args: &["send-telemetry", "--force"],
-                log_stem: "send-telemetry",
+                args: &args,
+                log_file: LogFile::Rolling(SEND_TELEMETRY_LOG_NAME.to_string()),
                 log_dir: dir.path(),
             }
             .spawn(Some(std::env::current_exe().unwrap()));
             assert!(result.is_ok(), "skipped spawn must return Ok");
         });
+    }
+
+    #[test]
+    fn rolling_log_file_is_truncated_on_reopen() {
+        // A Rolling log reuses one file and truncates it, so a child spawned on
+        // every invocation cannot grow the log dir without bound.
+        let dir = tempfile::tempdir().unwrap();
+        let cmd = DetachedCommand {
+            args: &[],
+            log_file: LogFile::Rolling(SEND_TELEMETRY_LOG_NAME.to_string()),
+            log_dir: dir.path(),
+        };
+
+        use std::io::Write as _;
+        let mut first = cmd.open_log_file().unwrap();
+        first
+            .write_all(b"stale contents from a previous run")
+            .unwrap();
+        drop(first);
+
+        // Reopening truncates: the previous run's bytes are gone and only one
+        // file exists.
+        let _second = cmd.open_log_file().unwrap();
+        let path = dir.path().join(SEND_TELEMETRY_LOG_NAME);
+        assert_eq!(
+            std::fs::read_to_string(&path).unwrap(),
+            "",
+            "rolling log must be truncated on reopen"
+        );
+        let log_count = std::fs::read_dir(dir.path()).unwrap().count();
+        assert_eq!(log_count, 1, "rolling log must not accumulate files");
+    }
+
+    #[test]
+    fn per_invocation_log_file_uses_the_given_name() {
+        // A PerInvocation log is created under the caller's name so the caller
+        // can embed a sortable timestamp for the executive GC to prune.
+        let dir = tempfile::tempdir().unwrap();
+        let cmd = DetachedCommand {
+            args: &[],
+            log_file: LogFile::PerInvocation("upgrade-check.42.log".to_string()),
+            log_dir: dir.path(),
+        };
+        let _file = cmd.open_log_file().unwrap();
+        assert!(dir.path().join("upgrade-check.42.log").is_file());
     }
 }
