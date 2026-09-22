@@ -87,17 +87,22 @@ reason = "Needs feature X"
 
 ## `description`
 
-`description` is an optional top-level field that provides a human-readable
-summary of the environment's purpose.
+`description` is an optional top-level field to describe the environment's
+purpose and usage.
+The value must be a string, and it supports Markdown syntax.
+
+Description is rendered as Markdown by `flox activate` and in FloxHub.
+
+The Markdown title or first line of the string is used as a summary line.
+
+Descriptions are dedented to allow indenting within manifest.toml.
 
 ```toml
-schema-version = "1.17.0"
-description = "Python 3.12 development environment with linting tools"
+description = '''
+  Multiline descriptions
+  are dedented
+'''
 ```
-
-The value must be a string.
-It has no effect on environment behavior.
-It is intended for documentation purposes only.
 
 When composing environments,
 the composing environment's `description` is used.
