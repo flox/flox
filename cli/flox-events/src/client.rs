@@ -1,3 +1,4 @@
+use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 
 use anyhow::Result;
@@ -154,28 +155,55 @@ impl EventsClient {
         Ok(())
     }
 
-    /// Flush using a non-blocking try-lock on the buffer file.
+    /// Flush using a non-blocking try-lock on the buffer file, never holding
+    /// the lock across a network send.
+    ///
+    /// The buffer lock also gates the append path (`record_event`), so holding
+    /// it across the send would block the next `flox` invocation's event
+    /// recording for the full network timeout — the exact stall this pipeline's
+    /// detached-flush design exists to avoid. So this drains the sendable
+    /// entries to memory and truncates the file under the lock, releases the
+    /// lock, then sends. A failed send re-buffers the unsent entries by
+    /// re-reading and prepending, so nothing is lost.
     ///
     /// Returns `Ok(false)` when another flusher holds the lock — the buffer
     /// was not drained but that is not an error. Returns `Ok(true)` when the
     /// flush ran (whether or not the expiry had elapsed).
     pub fn try_flush(&mut self, force: bool) -> Result<bool> {
-        let Some(mut events) = EventsBuffer::try_read(&self.data_dir)? else {
-            debug!("v2 events buffer lock held by another process; skipping flush");
-            return Ok(false);
-        };
-        if !events.is_expired(self.max_age) && !force {
-            return Ok(true);
-        }
-        while !events.is_empty() {
-            let batch_size = events.batch_size(BATCH_SIZE);
-            {
-                let batch: Vec<&Event> = events.iter().take(batch_size).collect();
-                self.connection.send(batch)?;
+        let drained = {
+            let Some(mut events) = EventsBuffer::try_read(&self.data_dir)? else {
+                debug!("v2 events buffer lock held by another process; skipping flush");
+                return Ok(false);
+            };
+            if !events.is_expired(self.max_age) && !force {
+                return Ok(true);
             }
-            events.drain_sent(batch_size);
-            events.overwrite_file()?;
-        }
+            // Snapshot all sendable entries and remove them from the file while
+            // the lock is held, then drop `events` to release the lock before
+            // any network I/O.
+            events.take_sendable()?
+        };
+
+        self.send_drained(drained)?;
         Ok(true)
+    }
+
+    /// Send entries already drained from the buffer, re-buffering any that a
+    /// failed send leaves unsent. The lock is acquired only to re-buffer, never
+    /// across the network call.
+    fn send_drained(&mut self, mut drained: VecDeque<Event>) -> Result<()> {
+        while !drained.is_empty() {
+            let batch_size = std::cmp::min(drained.len(), BATCH_SIZE);
+            let batch: Vec<&Event> = drained.iter().take(batch_size).collect();
+            if let Err(err) = self.connection.send(batch) {
+                // The send failed, so the whole remaining snapshot is unsent.
+                // Re-buffer it at the front (oldest-first) so a later flush
+                // retries it ahead of anything appended in the meantime.
+                EventsBuffer::read(&self.data_dir)?.prepend(drained)?;
+                return Err(err);
+            }
+            drained.drain(..batch_size);
+        }
+        Ok(())
     }
 }

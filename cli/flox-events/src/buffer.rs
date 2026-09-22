@@ -201,6 +201,26 @@ impl EventsBuffer {
         self.buffer.drain(..count);
     }
 
+    /// Remove all parsed entries from the in-memory buffer and the file,
+    /// returning them for sending after the lock is released. Unparsed
+    /// (`unknown`) lines stay in the file — no binary here can send them.
+    pub fn take_sendable(&mut self) -> Result<VecDeque<Event>> {
+        let taken = std::mem::take(&mut self.buffer);
+        self.overwrite_file()?;
+        Ok(taken)
+    }
+
+    /// Re-buffer entries a failed send left unsent, placing them ahead of
+    /// anything appended since [`take_sendable`], so a retry sends
+    /// oldest-first. Enforces the same cap as [`push`].
+    pub fn prepend(&mut self, mut unsent: VecDeque<Event>) -> Result<()> {
+        while let Some(event) = unsent.pop_back() {
+            self.buffer.push_front(event);
+        }
+        self.pop_front_to_max_size();
+        self.overwrite_file()
+    }
+
     /// Persist the current in-memory buffer, replacing the file contents.
     pub fn overwrite_file(&mut self) -> Result<()> {
         self.storage

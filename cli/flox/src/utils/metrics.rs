@@ -331,9 +331,33 @@ impl MetricsBuffer {
         Ok(())
     }
 
-    /// Returns an iterator over the entries in the buffer
+    /// Returns an iterator over the entries in the buffer.
+    ///
+    /// Only the test-only blocking `flush` and the buffer tests iterate in
+    /// place; production flushing drains via `take_sendable` and iterates the
+    /// owned snapshot instead.
+    #[cfg(test)]
     fn iter(&self) -> impl Iterator<Item = &MetricEntry> {
         self.buffer.iter()
+    }
+
+    /// Remove all entries from the in-memory buffer and the file, returning
+    /// them for sending after the lock is released.
+    fn take_sendable(&mut self) -> Result<VecDeque<MetricEntry>> {
+        let taken = std::mem::take(&mut self.buffer);
+        self.overwrite_file()?;
+        Ok(taken)
+    }
+
+    /// Re-buffer entries a failed send left unsent, placing them ahead of
+    /// anything appended since [`take_sendable`], so a retry sends
+    /// oldest-first. Enforces the same cap as [`push`].
+    fn prepend(&mut self, mut unsent: VecDeque<MetricEntry>) -> Result<()> {
+        while let Some(entry) = unsent.pop_back() {
+            self.buffer.push_front(entry);
+        }
+        self.pop_front_to_max_size();
+        self.overwrite_file()
     }
 
     fn pop_front_to_max_size(&mut self) {
@@ -669,24 +693,47 @@ impl Client {
 
     /// Flush using a non-blocking try-lock on the buffer file.
     ///
+    /// Never holds the buffer lock across a network send: the lock also gates
+    /// the append path (`record_metric`), so holding it across the send would
+    /// block the next `flox` invocation's metric recording for the full network
+    /// timeout — the stall the detached-flush design exists to avoid. Drains the
+    /// sendable entries and truncates the file under the lock, releases it, then
+    /// sends; a failed send re-buffers the unsent entries by re-reading and
+    /// prepending, so nothing is lost.
+    ///
     /// Returns `Ok(false)` when another flusher holds the lock — the buffer
     /// was not drained but that is not an error. Returns `Ok(true)` when the
     /// flush ran (whether or not the expiry had elapsed).
     fn try_flush(&mut self, force: bool) -> Result<bool> {
-        let Some(mut metrics) = MetricsBuffer::try_read(&self.metrics_dir)? else {
-            debug!("Metrics buffer lock held by another process; skipping flush");
-            return Ok(false);
-        };
-        if metrics.is_expired(self.max_age) || force {
-            while !metrics.buffer.is_empty() {
-                let batch_size = std::cmp::min(metrics.buffer.len(), BATCH_SIZE);
-                let batch: Vec<&MetricEntry> = metrics.iter().take(batch_size).collect();
-                self.connection.send(batch)?;
-                metrics.buffer.drain(..batch_size);
-                metrics.overwrite_file()?;
+        let drained = {
+            let Some(mut metrics) = MetricsBuffer::try_read(&self.metrics_dir)? else {
+                debug!("Metrics buffer lock held by another process; skipping flush");
+                return Ok(false);
+            };
+            if !metrics.is_expired(self.max_age) && !force {
+                return Ok(true);
             }
-        }
+            metrics.take_sendable()?
+        };
+
+        self.send_drained(drained)?;
         Ok(true)
+    }
+
+    /// Send entries already drained from the buffer, re-buffering any that a
+    /// failed send leaves unsent. The lock is acquired only to re-buffer, never
+    /// across the network call.
+    fn send_drained(&mut self, mut drained: VecDeque<MetricEntry>) -> Result<()> {
+        while !drained.is_empty() {
+            let batch_size = std::cmp::min(drained.len(), BATCH_SIZE);
+            let batch: Vec<&MetricEntry> = drained.iter().take(batch_size).collect();
+            if let Err(err) = self.connection.send(batch) {
+                MetricsBuffer::read(&self.metrics_dir)?.prepend(drained)?;
+                return Err(err);
+            }
+            drained.drain(..batch_size);
+        }
+        Ok(())
     }
 
     /// Record a metric event

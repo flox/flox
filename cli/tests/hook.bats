@@ -264,6 +264,139 @@ EXPIRED_FLOXHUB_TOKEN="eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3gu
 }
 
 # ---------------------------------------------------------------------------- #
+# Telemetry never blocks the prompt path (DEV-341)
+# ---------------------------------------------------------------------------- #
+#
+# `flox hook-env` runs on every shell prompt. Telemetry flushing used to happen
+# synchronously as the process exited (dropping the events and metrics guards),
+# so a slow or black-holed endpoint blocked the prompt for the full network
+# timeout of each pipeline (~2s + ~2s ≈ 4s). Flushing now happens in a detached
+# `send-telemetry` child, so the parent returns immediately regardless of
+# network state.
+#
+# The suite-wide setup disables metrics and background side effects
+# (FLOX_DISABLE_METRICS / _FLOX_TESTING_DISABLE_BG_SIDE_EFFECTS in
+# setup_suite.bash). These tests must re-enable both — with the flush suppressed
+# there is nothing to prove — so they override them locally.
+
+# Point both telemetry pipelines at a non-routable TEST-NET-1 address
+# (RFC 5737 192.0.2.0/24). A dropped-packet address makes connect() hang until
+# the pipeline's own 2s timeout, reproducing the original blocking bug; a
+# refused connection would fast-fail and hide it. Callers still get the CLI's
+# real behaviour because the override only swaps the endpoint URL.
+#
+# _FLOX_FORCE_FLUSH_METRICS=true forces the flush regardless of the 2h/2m buffer
+# expiry, so the flush path is exercised on the first prompt rather than only
+# once the buffer ages out. Both guard checks parse the value as a bool, which
+# accepts "true" but not "1".
+enable_blocking_telemetry_endpoints() {
+  export FLOX_DISABLE_METRICS=false
+  unset _FLOX_TESTING_DISABLE_BG_SIDE_EFFECTS
+  export _FLOX_METRICS_URL_OVERRIDE="https://192.0.2.1/legacy"
+  export _FLOX_METRICS_URL_V2_OVERRIDE="https://192.0.2.1/v2"
+  export _FLOX_FORCE_FLUSH_METRICS=true
+}
+
+# bats test_tags=hook:telemetry:nonblocking
+@test "'flox hook-env' returns fast when telemetry endpoints black-hole" {
+  cd "$BATS_TEST_TMPDIR"
+  enable_blocking_telemetry_endpoints
+
+  # First run seeds both buffers (a command_run/command_completed pair for v2,
+  # a subcommand metric for legacy) so the next run has data to flush.
+  "$FLOX_BIN" hook-env --shell bash --shell-pid "$$" >/dev/null 2>&1 || true
+
+  # The old code took ~4s here. `timeout` is the hard assertion: a 2s ceiling is
+  # comfortably above the observed ~30ms fast path and well below the ~4s block,
+  # so it cannot flake either way. The measured elapsed is logged as evidence.
+  local start_ns end_ns elapsed_ms
+  start_ns=$(date +%s%N)
+  run timeout 2 "$FLOX_BIN" hook-env --shell bash --shell-pid "$$"
+  end_ns=$(date +%s%N)
+  elapsed_ms=$(( (end_ns - start_ns) / 1000000 ))
+  echo "hook-env elapsed: ${elapsed_ms}ms (timeout ceiling 2000ms)" >&3
+
+  # 124 is timeout(1)'s exit status when it kills the command — i.e. the prompt
+  # path blocked past the ceiling, the regression this guards.
+  refute [ "$status" -eq 124 ]
+  assert_success
+}
+
+# The blocking flush was on the exit path of every invocation, not just
+# hook-env, so a plain command must be fast too. `flox list` needs no
+# environment and goes through the same guard-drop exit path.
+# bats test_tags=hook:telemetry:nonblocking
+@test "a plain 'flox' command returns fast when telemetry endpoints black-hole" {
+  cd "$BATS_TEST_TMPDIR"
+  enable_blocking_telemetry_endpoints
+
+  "$FLOX_BIN" list >/dev/null 2>&1 || true
+
+  local start_ns end_ns elapsed_ms
+  start_ns=$(date +%s%N)
+  run timeout 2 "$FLOX_BIN" list
+  end_ns=$(date +%s%N)
+  elapsed_ms=$(( (end_ns - start_ns) / 1000000 ))
+  echo "flox list elapsed: ${elapsed_ms}ms (timeout ceiling 2000ms)" >&3
+
+  refute [ "$status" -eq 124 ]
+}
+
+# Proves the flush is not dropped on the floor: the detached child actually runs
+# after the parent exits and attempts to deliver the buffered telemetry, and a
+# failed delivery preserves the buffer for a later retry rather than discarding
+# it. This uses the black-hole endpoint (no live HTTP peer, so the test stays
+# portable — the bats environment has no python or nc) and reads the child's own
+# debug log, which records the send attempt against the override URL.
+#
+# Successful drain-on-delivery is covered by the send_telemetry unit tests
+# (flush_drains_buffer_without_adding_events) against a mock connection; this
+# integration test covers the parts a unit test cannot: that main.rs actually
+# spawns the child, that the child inherits the endpoint override, and that a
+# send failure re-buffers instead of losing data.
+# bats test_tags=hook:telemetry:delivery
+@test "detached send-telemetry runs and preserves buffers when delivery fails" {
+  cd "$BATS_TEST_TMPDIR"
+  enable_blocking_telemetry_endpoints
+
+  # Seeds both buffers and spawns the detached child. The child runs `-vv`, so
+  # its send attempt is logged under $FLOX_CACHE_DIR/log.
+  "$FLOX_BIN" hook-env --shell bash --shell-pid "$$" >/dev/null 2>&1 || true
+
+  # Wait for the detached child to write its log and attempt the send. It blocks
+  # on the black-hole endpoint for the pipeline timeout, so allow generous time.
+  local log_glob="$FLOX_CACHE_DIR/log/send-telemetry-"*.log
+  local sent=""
+  for _ in $(seq 1 100); do
+    if grep -qs "Sending v2 events" $log_glob 2>/dev/null; then
+      sent=yes
+      break
+    fi
+    sleep 0.1
+  done
+  # The child ran and attempted delivery to the overridden v2 endpoint.
+  assert [ "$sent" = "yes" ]
+  run grep -hs "endpoint_url" $log_glob
+  assert_output --partial "192.0.2.1"
+
+  # Delivery to the black-hole endpoint fails, so the buffered events must be
+  # preserved for a later retry — not silently dropped. Wait for the child to
+  # finish its (failed) attempt, then confirm the buffer still holds data.
+  local v2_buffer="$FLOX_DATA_DIR/events-v2.json"
+  local v2_bytes=0
+  for _ in $(seq 1 100); do
+    v2_bytes=$(wc -c < "$v2_buffer" 2>/dev/null || echo 0)
+    # Once the child has finished and re-buffered, the file settles non-empty.
+    if [ "$v2_bytes" -gt 0 ] && ! pgrep -f "send-telemetry" >/dev/null 2>&1; then
+      break
+    fi
+    sleep 0.1
+  done
+  echo "v2 buffer bytes after failed delivery: ${v2_bytes}" >&3
+  assert [ "$v2_bytes" -gt 0 ]
+}
+
+# ---------------------------------------------------------------------------- #
 # Auto-activation: cd into a project activates its environment
 # ---------------------------------------------------------------------------- #
 #
