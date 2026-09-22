@@ -19,6 +19,7 @@ use tracing::{debug, info_span, instrument};
 
 use super::UninitializedEnvironment;
 use crate::subcommand_metric;
+use crate::utils::detached::bg_side_effects_disabled;
 
 /// By default check once a day
 const DEFAULT_TIMEOUT_SECONDS: i64 = 24 * 60 * 60;
@@ -181,11 +182,8 @@ pub fn spawn_detached_check_for_upgrades_process(
     check_timeout: Option<u64>,
 ) -> Result<()> {
     // Avoid race conditions in integration tests
-    if let Ok(true) = std::env::var("_FLOX_TESTING_DISABLE_BG_SIDE_EFFECTS")
-        .unwrap_or_default()
-        .parse()
-    {
-        debug!("Skipping background job for tests");
+    if bg_side_effects_disabled() {
+        debug!("Skipping background job for tests (_FLOX_TESTING_DISABLE_BG_SIDE_EFFECTS)");
         return Ok(());
     }
 

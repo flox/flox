@@ -1,5 +1,3 @@
-use tracing::debug;
-
 use crate::hub::EventsHub;
 
 /// Flushes the configured events client when dropped. Like the legacy
@@ -45,8 +43,10 @@ pub fn force_flush_requested() -> bool {
 
 impl Drop for EventsGuard {
     fn drop(&mut self) {
-        if let Err(err) = self.hub.flush(force_flush_requested()) {
-            debug!(error = %err, "Failed to flush v2 events on guard drop");
-        }
+        // Network I/O no longer happens here: the detached `send-telemetry`
+        // child flushes both pipelines from their on-disk buffers after the
+        // parent exits. The `hub` field is retained so the guard still
+        // participates in the `EventsHub::try_guard` strong-count check.
+        let _ = &self.hub;
     }
 }

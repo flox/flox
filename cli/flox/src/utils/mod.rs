@@ -10,6 +10,7 @@ pub mod auth_warning;
 pub mod catalog_lock;
 pub mod colors;
 pub mod credential_store;
+pub mod detached;
 pub mod detect_shell;
 pub mod dialog;
 pub mod didyoumean;

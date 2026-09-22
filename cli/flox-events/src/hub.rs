@@ -61,6 +61,22 @@ impl EventsHub {
         })
     }
 
+    /// Flush using a non-blocking try-lock on the buffer file.
+    ///
+    /// Returns `Ok(false)` when another flusher holds the lock. Returns
+    /// `Ok(true)` when the flush ran (whether or not the expiry had elapsed)
+    /// or no client is configured.
+    pub fn try_flush(&self, force: bool) -> Result<bool> {
+        self.with_client(|client| {
+            if let Some(client) = client {
+                client.try_flush(force)
+            } else {
+                trace!("No v2 events client configured, skipping try_flush");
+                Ok(true)
+            }
+        })
+    }
+
     pub fn record_event(&self, kind: EventKind) -> Result<()> {
         self.with_client(|client| {
             let Some(client) = client else {

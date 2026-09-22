@@ -2,6 +2,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use time::{Duration, OffsetDateTime};
+use tracing::debug;
 use uuid::Uuid;
 
 use crate::buffer::EventsBuffer;
@@ -151,5 +152,30 @@ impl EventsClient {
         }
 
         Ok(())
+    }
+
+    /// Flush using a non-blocking try-lock on the buffer file.
+    ///
+    /// Returns `Ok(false)` when another flusher holds the lock — the buffer
+    /// was not drained but that is not an error. Returns `Ok(true)` when the
+    /// flush ran (whether or not the expiry had elapsed).
+    pub fn try_flush(&mut self, force: bool) -> Result<bool> {
+        let Some(mut events) = EventsBuffer::try_read(&self.data_dir)? else {
+            debug!("v2 events buffer lock held by another process; skipping flush");
+            return Ok(false);
+        };
+        if !events.is_expired(self.max_age) && !force {
+            return Ok(true);
+        }
+        while !events.is_empty() {
+            let batch_size = events.batch_size(BATCH_SIZE);
+            {
+                let batch: Vec<&Event> = events.iter().take(batch_size).collect();
+                self.connection.send(batch)?;
+            }
+            events.drain_sent(batch_size);
+            events.overwrite_file()?;
+        }
+        Ok(true)
     }
 }

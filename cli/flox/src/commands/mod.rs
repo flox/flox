@@ -25,6 +25,7 @@ mod pull;
 mod push;
 mod run;
 mod search;
+mod send_telemetry;
 mod services;
 mod services_socket;
 mod show;
@@ -461,7 +462,13 @@ impl FloxArgs {
             .as_ref()
             .map(Commands::subcommand_name)
             .unwrap_or("help");
-        if let Err(err) = EventsHub::global().record_command_run(v2_subcommand.to_string()) {
+        // Detached side-effect commands must not record `cli.command_run`:
+        // a `send-telemetry` command_run event re-arms the buffer it is about
+        // to drain, causing every subsequent prompt to trigger an infinite
+        // flush loop.
+        if !is_detached_side_effect_command(v2_subcommand)
+            && let Err(err) = EventsHub::global().record_command_run(v2_subcommand.to_string())
+        {
             debug!(error = %err, "Failed to record v2 cli.command_run event");
         }
 
@@ -1153,6 +1160,10 @@ enum InternalCommands {
     /// Compute env changes for auto-activation (called on every prompt)
     #[bpaf(command("hook-env"), hide)]
     HookEnv(#[bpaf(external(hook_env::hook_env))] hook_env::HookEnv),
+
+    /// Flush buffered telemetry (invoked as a detached background child)
+    #[bpaf(command("send-telemetry"), hide)]
+    SendTelemetry(#[bpaf(external(send_telemetry::send_telemetry))] send_telemetry::SendTelemetry),
 }
 
 impl InternalCommands {
@@ -1164,6 +1175,7 @@ impl InternalCommands {
             InternalCommands::ActivationState(args) => args.handle(flox).await?,
             InternalCommands::ServicesSocket(args) => args.handle(flox).await?,
             InternalCommands::HookEnv(args) => args.handle(config, flox).await?,
+            InternalCommands::SendTelemetry(args) => args.handle(config, flox).await?,
         }
         Ok(())
     }
@@ -1186,8 +1198,17 @@ impl InternalCommands {
             InternalCommands::ActivationState(_) => "activation-state",
             InternalCommands::ServicesSocket(_) => "services-socket",
             InternalCommands::HookEnv(_) => "hook-env",
+            InternalCommands::SendTelemetry(_) => "send-telemetry",
         }
     }
+}
+
+/// Returns `true` for subcommand names that are themselves detached
+/// side-effect children. These must not spawn a further `send-telemetry`
+/// child (which would fork-bomb) and must not record `command_run` /
+/// `command_completed` events (which would re-arm the buffer they drain).
+pub fn is_detached_side_effect_command(name: &str) -> bool {
+    matches!(name, "send-telemetry" | "check-for-upgrades")
 }
 
 /// Special command to check for the presence of the `--prefix` flag.
