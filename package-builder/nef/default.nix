@@ -34,12 +34,25 @@ let
       in
       sourceInfo // lib.optionalAttrs (parsedRef ? dir) { inherit (parsedRef) dir; };
 
-  catalogSpecClosure = (lib.importJSON catalog-lockfile).catalogs;
+  lockContents = lib.importJSON catalog-lockfile;
+  catalogSpecClosure = lockContents.catalogs;
+
+  # Global overrides fold into the base nixpkgs before any catalog is
+  # instantiated, so every catalog and the project's own source build
+  # against the same, already-overridden nixpkgs. `or { }` covers a lock
+  # written before this field existed.
+  globalOverridesOverlay = lib.nef.instantiate.mkGlobalOverridesOverlay {
+    overridesClosure = lockContents.global_overrides or { };
+  };
+  nixpkgsWithOverrides = nixpkgs.extend globalOverridesOverlay;
+
   instantiatedCatalogsClosure = lib.nef.instantiate.instantiateCatalogs {
-    inherit nixpkgs catalogSpecClosure;
+    nixpkgs = nixpkgsWithOverrides;
+    inherit catalogSpecClosure;
   };
 
 in
 lib.nef.instantiate.instantiateFromSourceInfo {
-  inherit nixpkgs instantiatedCatalogsClosure sourceInfo;
+  nixpkgs = nixpkgsWithOverrides;
+  inherit instantiatedCatalogsClosure sourceInfo;
 }
