@@ -503,6 +503,7 @@ impl Node {
                 },
             ],
             name: "yarn".to_string(), // pkg-group name
+            stability: None,
         };
         let catalog = &flox.floxhub_client;
         let resolved = catalog.resolve(vec![yarn_and_node_pkg_group]).await?;
@@ -1054,6 +1055,8 @@ impl InitHook for Node {
                     version: yarn_install.yarn.version.clone(),
                     systems: None,
                     outputs: None,
+                    pkg_group: None,
+                    stability: None,
                 });
                 packages.push(CatalogPackage {
                     id: "node".to_string(),
@@ -1063,6 +1066,8 @@ impl InitHook for Node {
                     version: yarn_install.node.version.clone(),
                     systems: None,
                     outputs: None,
+                    pkg_group: None,
+                    stability: None,
                 });
                 Some(YARN_HOOK.to_string())
             },
@@ -1074,6 +1079,8 @@ impl InitHook for Node {
                         version: result.version.clone(),
                         systems: None,
                         outputs: None,
+                        pkg_group: None,
+                        stability: None,
                     },
                     None => CatalogPackage {
                         id: "nodejs".to_string(),
@@ -1081,6 +1088,8 @@ impl InitHook for Node {
                         version: None,
                         systems: None,
                         outputs: None,
+                        pkg_group: None,
+                        stability: None,
                     },
                 };
                 packages.push(nodejs_to_install);
@@ -1099,6 +1108,8 @@ impl InitHook for Node {
                     version: yarn_install.pkg.version.clone(),
                     systems: None,
                     outputs: None,
+                    pkg_group: None,
+                    stability: None,
                 });
                 Some(YARN_HOOK.to_string())
             },
@@ -1507,6 +1518,8 @@ mod tests {
                         version: Some("1".to_string()),
                         systems: None,
                         outputs: None,
+                        pkg_group: None,
+                        stability: None,
                     },
                     CatalogPackage {
                         id: "node".to_string(),
@@ -1514,6 +1527,8 @@ mod tests {
                         version: None,
                         systems: None,
                         outputs: None,
+                        pkg_group: None,
+                        stability: None,
                     }
                 ]),
                 hook_on_activate: Some(YARN_HOOK.to_string()),
@@ -1547,6 +1562,8 @@ mod tests {
                     version: Some("1".to_string()),
                     systems: None,
                     outputs: None,
+                    pkg_group: None,
+                    stability: None,
                 }]),
                 ..Default::default()
             }

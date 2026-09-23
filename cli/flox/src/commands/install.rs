@@ -72,6 +72,16 @@ pub struct Install {
     #[bpaf(external(environment_select), fallback(Default::default()))]
     environment: EnvironmentSelect,
 
+    /// Install the packages into the named package group
+    /// (default: 'toplevel', or a group of its own for custom catalog packages)
+    #[bpaf(long("pkg-group"), argument("name"))]
+    pkg_group: Option<String>,
+
+    /// Resolve the package group against a catalog stability,
+    /// e.g. 'stable', 'staging', 'unstable', or 'lts'
+    #[bpaf(long("stability"), argument("stability"))]
+    stability: Option<String>,
+
     /// Option to specify a package ID
     #[bpaf(external(pkg_with_id_option), many)]
     id: Vec<PkgWithIdOption>,
@@ -158,6 +168,7 @@ impl Install {
         if packages_to_install.is_empty() {
             bail!("Must specify at least one package");
         }
+        self.apply_group_options(&mut packages_to_install)?;
 
         let mut concrete_environment = match self
             .environment
@@ -273,6 +284,7 @@ impl Install {
 
         // Print status messages for the installation attempt
         message::packages_successfully_installed(&partitioned.successes, &description);
+        message::packages_group_stability(&partitioned.successes);
         message::packages_with_additional_outputs(&partitioned.successes, &lockfile, &flox.system);
         message::packages_installed_with_system_subsets(&partitioned.system_subsets);
         message::packages_already_installed(&partitioned.already_installed, &description);
@@ -304,6 +316,29 @@ impl Install {
             }
         }
 
+        Ok(())
+    }
+
+    /// Apply `--pkg-group` and `--stability` to every package being installed.
+    ///
+    /// Package groups only exist for catalog packages, so the options are
+    /// rejected for flakes and store paths rather than silently ignored.
+    fn apply_group_options(&self, packages: &mut [PackageToInstall]) -> Result<()> {
+        if self.pkg_group.is_none() && self.stability.is_none() {
+            return Ok(());
+        }
+        for package in packages.iter_mut() {
+            let PackageToInstall::Catalog(catalog_package) = package else {
+                bail!(formatdoc! {"
+                    '{package}' is not a package from the Flox Catalog.
+                    Only catalog packages belong to package groups, so '--pkg-group' and '--stability' can't apply to it.
+                    Install it in a separate 'flox install' command without those options.",
+                    package = Install::package_identifier(package),
+                });
+            };
+            catalog_package.pkg_group = self.pkg_group.clone();
+            catalog_package.stability = self.stability.clone();
+        }
         Ok(())
     }
 
@@ -873,6 +908,8 @@ mod tests {
             version: None,
             systems: None,
             outputs: None,
+            pkg_group: None,
+            stability: None,
         }];
         assert_eq!(
             Install::generate_unfree_and_broken_warnings(
@@ -905,6 +942,8 @@ mod tests {
             version: None,
             systems: None,
             outputs: None,
+            pkg_group: None,
+            stability: None,
         }];
         assert_eq!(
             Install::generate_unfree_and_broken_warnings(
@@ -929,6 +968,8 @@ mod tests {
             version: None,
             systems: None,
             outputs: None,
+            pkg_group: None,
+            stability: None,
         }];
         assert_eq!(
             Install::generate_unfree_and_broken_warnings(
@@ -961,6 +1002,8 @@ mod tests {
             version: None,
             systems: None,
             outputs: None,
+            pkg_group: None,
+            stability: None,
         }];
         assert_eq!(
             Install::generate_unfree_and_broken_warnings(
@@ -1044,6 +1087,8 @@ mod tests {
         let _env = new_path_environment_in(&flox, EMPTY_ALL_SYSTEMS, tempdir.path());
         let install_cmd = Install {
             environment: EnvironmentSelect::Dir(tempdir.path().to_path_buf()),
+            pkg_group: None,
+            stability: None,
             id: vec![],
             packages: vec![pkg_path.to_string()],
         };
@@ -1085,6 +1130,8 @@ mod tests {
 
         Install {
             environment: EnvironmentSelect::Dir(environment.parent_path().unwrap()),
+            pkg_group: None,
+            stability: None,
             id: vec![],
             packages: vec!["curl".to_string()],
         }
@@ -1117,6 +1164,8 @@ mod tests {
             version: None,
             systems: None,
             outputs: None,
+            pkg_group: None,
+            stability: None,
         })];
         let (subscriber, writer) = test_subscriber_message_only();
         async {
@@ -1147,6 +1196,8 @@ mod tests {
             version: None,
             systems: None,
             outputs: None,
+            pkg_group: None,
+            stability: None,
         })];
         let (subscriber, writer) = test_subscriber_message_only();
         async {
@@ -1185,6 +1236,8 @@ mod tests {
             version: None,
             systems: None,
             outputs: None,
+            pkg_group: None,
+            stability: None,
         })];
         let (subscriber, writer) = test_subscriber_message_only();
         async {
@@ -1218,6 +1271,8 @@ mod tests {
             version: None,
             systems: None,
             outputs: Some(RawSelectedOutputs::All),
+            pkg_group: None,
+            stability: None,
         })];
         let (subscriber, writer) = test_subscriber_message_only();
         async {
@@ -1252,6 +1307,8 @@ mod tests {
             version: None,
             systems: None,
             outputs: Some(RawSelectedOutputs::Specific(vec!["out".to_string()])),
+            pkg_group: None,
+            stability: None,
         })];
         let (subscriber, writer) = test_subscriber_message_only();
         async {

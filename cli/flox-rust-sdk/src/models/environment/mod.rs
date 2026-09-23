@@ -1076,6 +1076,25 @@ pub enum InstallOrUninstallError {
 
     #[error("'{1}' does not have an output '{0}'")]
     InvalidOutputForPackage(String, String),
+
+    #[error("{}", stability_conflict_message(.group, .current.as_deref(), .requested))]
+    StabilityConflict {
+        group: String,
+        current: Option<String>,
+        requested: String,
+    },
+}
+
+fn stability_conflict_message(group: &str, current: Option<&str>, requested: &str) -> String {
+    let current = match current {
+        Some(current) => format!("stability '{current}'"),
+        None => "the default stability".to_string(),
+    };
+    formatdoc! {"
+        Package group '{group}' already uses {current}.
+        Its packages share one stability, so '--stability {requested}' would re-resolve them.
+        To install into a new group instead, use '--pkg-group <NAME>'.
+        To change the whole group, set 'pkg-groups.{group}.stability' with 'flox edit'."}
 }
 
 /// Open an environment defined in `path` that has a `.flox` within.
@@ -2100,7 +2119,7 @@ mod migration_tests {
             .to_string();
 
         expect![[r#"
-            schema-version = "1.17.0"
+            schema-version = "1.18.0"
         "#]]
         .assert_eq(&manifest_contents);
     }
@@ -2447,6 +2466,8 @@ mod migration_tests {
                 version: None,
                 systems: None,
                 outputs: None,
+                pkg_group: None,
+                stability: None,
             })],
             &flox,
         )
@@ -2485,6 +2506,8 @@ mod migration_tests {
                 version: None,
                 systems: None,
                 outputs: None,
+                pkg_group: None,
+                stability: None,
             })],
             &flox,
         )

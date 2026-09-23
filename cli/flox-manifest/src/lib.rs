@@ -49,6 +49,7 @@ use crate::parsed::v1_14_0::ManifestV1_14_0;
 use crate::parsed::v1_15_0::ManifestV1_15_0;
 use crate::parsed::v1_16_0::ManifestV1_16_0;
 use crate::parsed::v1_17_0::ManifestV1_17_0;
+use crate::parsed::v1_18_0::ManifestV1_18_0;
 use crate::raw::{
     SyncTypedToRaw,
     TomlEditError,
@@ -243,13 +244,14 @@ enum Parsed {
     V1_15_0(ManifestV1_15_0),
     V1_16_0(ManifestV1_16_0),
     V1_17_0(ManifestV1_17_0),
+    V1_18_0(ManifestV1_18_0),
 }
 
 impl Parsed {
     /// A helper function for creating a [`Parsed`] from whatever the latest
     /// manifest schema version happens to be.
     pub(crate) fn from_latest(manifest: ManifestLatest) -> Self {
-        Self::V1_17_0(manifest)
+        Self::V1_18_0(manifest)
     }
 
     /// Returns the known schema version of the contained manifest.
@@ -267,6 +269,7 @@ impl Parsed {
             Parsed::V1_15_0(_) => KnownSchemaVersion::V1_15_0,
             Parsed::V1_16_0(_) => KnownSchemaVersion::V1_16_0,
             Parsed::V1_17_0(_) => KnownSchemaVersion::V1_17_0,
+            Parsed::V1_18_0(_) => KnownSchemaVersion::V1_18_0,
         }
     }
 
@@ -295,6 +298,13 @@ impl Parsed {
                 Ok(())
             },
             Parsed::V1_17_0(m) => {
+                m.services.validate()?;
+                if m.include.environments.is_empty() {
+                    m.services.validate_depends_on_targets()?;
+                }
+                Ok(())
+            },
+            Parsed::V1_18_0(m) => {
                 m.services.validate()?;
                 if m.include.environments.is_empty() {
                     m.services.validate_depends_on_targets()?;
@@ -578,6 +588,11 @@ impl<S: ManifestState> Manifest<S> {
                     .map_err(ManifestError::Invalid)?;
                 Ok(Parsed::V1_17_0(manifest))
             },
+            KnownSchemaVersion::V1_18_0 => {
+                let manifest = toml_edit::de::from_document::<ManifestV1_18_0>(toml.clone())
+                    .map_err(ManifestError::Invalid)?;
+                Ok(Parsed::V1_18_0(manifest))
+            },
         }
     }
 }
@@ -703,6 +718,16 @@ impl<'de> Deserialize<'de> for Manifest<TypedOnly> {
                 Ok(Manifest {
                     inner: TypedOnly {
                         parsed: Parsed::V1_17_0(manifest),
+                    },
+                })
+            },
+            KnownSchemaVersion::V1_18_0 => {
+                let d = untyped.into_deserializer();
+                let manifest = ManifestV1_18_0::deserialize(d)
+                    .map_err(|err| serde::de::Error::custom(err.to_string()))?;
+                Ok(Manifest {
+                    inner: TypedOnly {
+                        parsed: Parsed::V1_18_0(manifest),
                     },
                 })
             },

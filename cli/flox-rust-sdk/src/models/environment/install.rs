@@ -1,5 +1,6 @@
-use flox_manifest::interfaces::PackageLookup;
+use flox_manifest::interfaces::{AsLatestSchema, PackageLookup};
 use flox_manifest::lockfile::Lockfile;
+use flox_manifest::parsed::common::DEFAULT_GROUP_NAME;
 use flox_manifest::parsed::latest::{AllSentinel, SelectedOutputs};
 use flox_manifest::raw::{
     PackageModification,
@@ -75,6 +76,10 @@ pub(super) fn compute_install_modifications(
     manifest: &Manifest<Migrated>,
     lockfile: &Lockfile,
 ) -> Result<Vec<PackageToModify>, InstallOrUninstallError> {
+    for pkg in packages {
+        check_stability_conflict(pkg, manifest)?;
+    }
+
     let modifications = packages
         .iter()
         .filter_map(|pkg| compute_install_modification(pkg, manifest, lockfile).transpose())
@@ -82,6 +87,36 @@ pub(super) fn compute_install_modifications(
 
     debug!(?modifications, "computed install modifications");
     Ok(modifications)
+}
+
+/// Refuse to change the stability of a group that already has packages.
+///
+/// A group resolves against a single catalog page, so its stability applies
+/// to every package in it. Changing it as a side effect of installing one
+/// package would silently re-resolve the others.
+fn check_stability_conflict(
+    pkg: &PackageToInstall,
+    manifest: &Manifest<Migrated>,
+) -> Result<(), InstallOrUninstallError> {
+    let PackageToInstall::Catalog(catalog_pkg) = pkg else {
+        return Ok(());
+    };
+    let Some(requested) = &catalog_pkg.stability else {
+        return Ok(());
+    };
+    let group = catalog_pkg
+        .target_group()
+        .unwrap_or_else(|| DEFAULT_GROUP_NAME.to_string());
+    let manifest = manifest.as_latest_schema();
+    let current = manifest.group_stability(&group);
+    if current == Some(requested.as_str()) || !manifest.group_has_packages(&group) {
+        return Ok(());
+    }
+    Err(InstallOrUninstallError::StabilityConflict {
+        current: current.map(str::to_string),
+        requested: requested.clone(),
+        group,
+    })
 }
 
 /// Compute the modification (if any) needed to install a single package.
@@ -198,8 +233,13 @@ mod tests {
 
     use flox_core::canonical_path::CanonicalPath;
     use flox_manifest::raw::CatalogPackage;
-    use flox_manifest::raw::test_helpers::empty_test_migrated_manifest;
+    use flox_manifest::raw::test_helpers::{
+        empty_test_migrated_manifest,
+        mk_test_manifest_from_contents,
+    };
+    use flox_manifest::test_helpers::with_latest_schema;
     use flox_test_utils::GENERATED_DATA;
+    use indoc::indoc;
     use pretty_assertions::assert_eq;
 
     use super::*;
@@ -226,7 +266,98 @@ mod tests {
             version: None,
             systems: None,
             outputs,
+            pkg_group: None,
+            stability: None,
         })
+    }
+
+    fn package_to_install_with_stability(
+        pkg_path: &str,
+        pkg_group: Option<&str>,
+        stability: &str,
+    ) -> PackageToInstall {
+        let PackageToInstall::Catalog(mut pkg) = package_to_install(pkg_path, pkg_path, None)
+        else {
+            unreachable!()
+        };
+        pkg.pkg_group = pkg_group.map(str::to_string);
+        pkg.stability = Some(stability.to_string());
+        PackageToInstall::Catalog(pkg)
+    }
+
+    /// Install `pkg` into a manifest that has `hello` in the default group
+    /// and `curl` in the `tools` group, which uses the `stable` stability.
+    fn stability_check(pkg: PackageToInstall) -> Result<(), InstallOrUninstallError> {
+        let manifest = mk_test_manifest_from_contents(with_latest_schema(indoc! {r#"
+            [install]
+            hello.pkg-path = "hello"
+            curl.pkg-path = "curl"
+            curl.pkg-group = "tools"
+
+            [pkg-groups.tools]
+            stability = "stable"
+        "#}));
+        check_stability_conflict(&pkg, &manifest)
+    }
+
+    #[test]
+    fn stability_for_new_group_is_accepted() {
+        let pkg = package_to_install_with_stability("jq", Some("new"), "lts");
+        assert!(stability_check(pkg).is_ok());
+    }
+
+    #[test]
+    fn stability_matching_group_is_accepted() {
+        let pkg = package_to_install_with_stability("jq", Some("tools"), "stable");
+        assert!(stability_check(pkg).is_ok());
+    }
+
+    #[test]
+    fn stability_differing_from_group_is_rejected() {
+        let pkg = package_to_install_with_stability("jq", Some("tools"), "lts");
+        let Err(InstallOrUninstallError::StabilityConflict {
+            group,
+            current,
+            requested,
+        }) = stability_check(pkg)
+        else {
+            panic!("expected a stability conflict");
+        };
+        assert_eq!(
+            (group, current, requested),
+            (
+                "tools".to_string(),
+                Some("stable".to_string()),
+                "lts".to_string()
+            )
+        );
+    }
+
+    /// Packages without `--pkg-group` target the default group, which here
+    /// has packages but no explicit stability.
+    #[test]
+    fn stability_for_default_group_with_packages_is_rejected() {
+        let pkg = package_to_install_with_stability("jq", None, "lts");
+        let Err(InstallOrUninstallError::StabilityConflict {
+            group,
+            current,
+            requested,
+        }) = stability_check(pkg)
+        else {
+            panic!("expected a stability conflict");
+        };
+        assert_eq!(
+            (group, current, requested),
+            ("toplevel".to_string(), None, "lts".to_string())
+        );
+    }
+
+    /// Custom catalog packages get a group of their own, so a stability never
+    /// conflicts with the default group.
+    #[test]
+    fn stability_for_custom_catalog_package_is_accepted() {
+        let pkg = package_to_install_with_stability("myorg/mypkg", None, "lts");
+        assert!(stability_check(pkg).is_ok());
     }
 
     // For an empty manifest

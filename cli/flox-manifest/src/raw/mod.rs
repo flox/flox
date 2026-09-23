@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashSet};
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::LazyLock;
@@ -12,8 +12,8 @@ use toml_edit::{self, Array, DocumentMut, Formatted, InlineTable, Item, Table, T
 use tracing::{debug, trace};
 
 use crate::interfaces::CommonFields;
-use crate::parsed::common::{self, KnownSchemaVersion, VersionKind};
-use crate::parsed::latest::ManifestPackageDescriptor;
+use crate::parsed::common::{self, DEFAULT_GROUP_NAME, KnownSchemaVersion, VersionKind};
+use crate::parsed::latest::{ManifestLatest, PkgGroups};
 use crate::parsed::v1_10_0::SelectedOutputs;
 use crate::parsed::{Inner, v1, v1_10_0};
 use crate::util::is_custom_package;
@@ -198,6 +198,8 @@ pub enum TomlEditError {
     MalformedOptionsTable(String),
     #[error("'options' must be an array, but found {0} instead")]
     MalformedOptionsSystemsArray(String),
+    #[error("'{0}' must be a table, but found {1} instead")]
+    MalformedPkgGroupsTable(String, String),
 
     #[error("'{0}' is not a supported attribute in manifest version 1")]
     UnsupportedAttributeV1(String),
@@ -433,12 +435,32 @@ pub struct CatalogPackage {
     /// If `None`, the default outputs are installed.
     /// This can be parsed from the shorthand descriptor using the `^` syntax.
     pub outputs: Option<RawSelectedOutputs>,
+    /// The package group to install the package into.
+    /// If `None`, the group is inferred, see [CatalogPackage::target_group].
+    pub pkg_group: Option<String>,
+    /// The catalog stability to set for the package's group.
+    pub stability: Option<String>,
 }
 
 impl CatalogPackage {
     /// Returns true if the package is from a custom catalog.
     pub fn is_custom_catalog(&self) -> bool {
         is_custom_package(&self.pkg_path)
+    }
+
+    /// The group the package is installed into: the requested group, or
+    /// for packages from a custom catalog a group of their own, so that they
+    /// don't constrain the resolution of other packages.
+    ///
+    /// Returns `None` for the default group, which manifests represent by
+    /// omitting `pkg-group`.
+    pub fn target_group(&self) -> Option<String> {
+        match &self.pkg_group {
+            Some(group) if group == DEFAULT_GROUP_NAME => None,
+            Some(group) => Some(group.clone()),
+            None if self.is_custom_catalog() => Some(self.id.clone()),
+            None => None,
+        }
     }
 }
 
@@ -549,6 +571,8 @@ impl FromStr for CatalogPackage {
             version,
             systems: None,
             outputs,
+            pkg_group: None,
+            stability: None,
         })
     }
 }
@@ -772,19 +796,23 @@ pub trait ModifyPackages {
 impl Manifest<Migrated> {
     /// Add a package to the typed manifest
     /// The caller is responsible for calling
-    /// `update_raw_packages_from_typed_manifest()` afterwards
+    /// `update_raw_packages_from_typed_manifest()` and
+    /// `update_raw_pkg_groups()` afterwards
     /// It's assumed that `pkg` does not yet exist in the manifest
-    fn add_package(
-        pkg: &PackageToInstall,
-        pkg_map: &mut BTreeMap<String, ManifestPackageDescriptor>,
-    ) {
+    fn add_package(pkg: &PackageToInstall, manifest: &mut ManifestLatest) {
+        let pkg_map = manifest.install.inner_mut();
         match pkg {
             PackageToInstall::Catalog(pkg_raw) => {
-                let pkg_group = if pkg_raw.is_custom_catalog() {
-                    Some(pkg.id().to_string())
-                } else {
-                    None
-                };
+                let pkg_group = pkg_raw.target_group();
+                if let Some(stability) = &pkg_raw.stability {
+                    let group = pkg_group.as_deref().unwrap_or(DEFAULT_GROUP_NAME);
+                    manifest
+                        .pkg_groups
+                        .inner_mut()
+                        .entry(group.to_string())
+                        .or_default()
+                        .stability = Some(stability.clone());
+                }
                 let catalog_descriptor = v1_10_0::PackageDescriptorCatalog {
                     pkg_path: pkg_raw.pkg_path.clone(),
                     pkg_group,
@@ -839,10 +867,12 @@ impl ModifyPackages for Manifest<Migrated> {
     ) -> Result<Manifest<Migrated>, ManifestError> {
         debug!("attempting to modify packages in the manifest");
         let mut manifest = self.clone();
-        let pkg_map = manifest.inner.migrated_parsed.install.inner_mut();
         for modification in modifications {
+            let pkg_map = manifest.inner.migrated_parsed.install.inner_mut();
             match &modification.modification {
-                PackageModification::Add(pkg) => Self::add_package(pkg, pkg_map),
+                PackageModification::Add(pkg) => {
+                    Self::add_package(pkg, &mut manifest.inner.migrated_parsed)
+                },
                 PackageModification::Remove => {
                     if !pkg_map.contains_key(&modification.install_id) {
                         return Err(ManifestError::PackageNotFound(
@@ -867,6 +897,10 @@ impl ModifyPackages for Manifest<Migrated> {
             }
         }
         manifest.update_raw_packages_from_typed_manifest()?;
+        update_raw_pkg_groups(
+            &mut manifest.inner.migrated_raw,
+            &manifest.inner.migrated_parsed.pkg_groups,
+        )?;
         Ok(manifest)
     }
 }
@@ -985,6 +1019,93 @@ fn update_systems(
     Ok(())
 }
 
+/// Brings the settings of each package group in a raw TOML manifest into sync
+/// with the typed manifest.
+///
+/// Only `flox install` changes group settings, and it never removes a group,
+/// so groups that are missing from the typed manifest are left untouched.
+fn update_raw_pkg_groups(
+    raw: &mut DocumentMut,
+    pkg_groups: &PkgGroups,
+) -> Result<(), TomlEditError> {
+    if pkg_groups.inner().is_empty() {
+        return Ok(());
+    }
+    // New groups render after the existing ones. Without existing groups they
+    // render last, so they take over the document's trailing comments, e.g.
+    // the commented-out examples under `[options]` in a templated manifest,
+    // which would otherwise end up below them.
+    let new_group_position = raw.get("pkg-groups").and_then(last_table_position);
+    let original_trailing = raw.trailing().clone();
+    let mut trailing = new_group_position
+        .is_none()
+        .then(|| {
+            original_trailing
+                .as_str()
+                .unwrap_or_default()
+                .trim_end()
+                .to_string()
+        })
+        .filter(|trailing| !trailing.is_empty());
+    if trailing.is_some() {
+        raw.set_trailing("");
+    }
+
+    let groups_item = raw.entry("pkg-groups").or_insert_with(|| {
+        let mut table = Table::new();
+        // Render `[pkg-groups.<name>]` headers without an empty
+        // `[pkg-groups]` header above them.
+        table.set_implicit(true);
+        Item::Table(table)
+    });
+    let groups_item_type = groups_item.type_name().to_string();
+    let groups_table = groups_item.as_table_like_mut().ok_or_else(|| {
+        TomlEditError::MalformedPkgGroupsTable("pkg-groups".to_string(), groups_item_type)
+    })?;
+    for (name, settings) in pkg_groups.inner() {
+        let group_item = groups_table.entry(name).or_insert_with(|| {
+            let mut table = Table::new();
+            if let Some(position) = new_group_position {
+                table.set_position(position);
+            }
+            if let Some(trailing) = trailing.take() {
+                table.decor_mut().set_prefix(format!("{trailing}\n\n"));
+            }
+            Item::Table(table)
+        });
+        let group_item_type = group_item.type_name().to_string();
+        let group_table = group_item.as_table_like_mut().ok_or_else(|| {
+            TomlEditError::MalformedPkgGroupsTable(format!("pkg-groups.{name}"), group_item_type)
+        })?;
+        let raw_stability = group_table.get("stability").and_then(Item::as_str);
+        match &settings.stability {
+            Some(stability) if raw_stability != Some(stability.as_str()) => {
+                table_like_set(group_table, "stability", toml_string(stability).into())
+            },
+            None if raw_stability.is_some() => {
+                table_like_remove_preserving_decor(group_table, "stability")
+            },
+            _ => {},
+        }
+    }
+
+    // No new table took over the trailing comments.
+    if trailing.is_some() {
+        raw.set_trailing(original_trailing);
+    }
+    Ok(())
+}
+
+/// The largest document position of `item` and the tables nested in it.
+fn last_table_position(item: &Item) -> Option<isize> {
+    let table = item.as_table()?;
+    table
+        .iter()
+        .filter_map(|(_, child)| last_table_position(child))
+        .chain(table.position())
+        .max()
+}
+
 /// Brings all package descriptors in a raw TOML manifest into sync with the typed package descriptors
 /// in a validated manifest.
 fn update_raw_packages_from_typed_manifest(
@@ -1041,6 +1162,12 @@ fn update_raw_packages_from_typed_manifest(
             .cloned()
             .collect::<HashSet<String>>(),
         Parsed::V1_17_0(manifest) => manifest
+            .install
+            .inner()
+            .keys()
+            .cloned()
+            .collect::<HashSet<String>>(),
+        Parsed::V1_18_0(manifest) => manifest
             .install
             .inner()
             .keys()
@@ -1222,6 +1349,19 @@ fn update_descriptor(
             }
         },
         Parsed::V1_17_0(manifest) => {
+            let typed = manifest
+                .install
+                .inner()
+                .get(install_id)
+                .ok_or(TomlEditError::PackageNotFound(install_id.to_string()))?;
+            use crate::parsed::v1_10_0::ManifestPackageDescriptor::*;
+            match typed {
+                Catalog(d) => update_v1_10_0_catalog_descriptor(raw, d),
+                FlakeRef(d) => update_v1_10_0_flake_descriptor(raw, d),
+                StorePath(d) => update_store_path_descriptor(raw, d),
+            }
+        },
+        Parsed::V1_18_0(manifest) => {
             let typed = manifest
                 .install
                 .inner()
@@ -1755,6 +1895,8 @@ mod test {
             version: None,
             systems: None,
             outputs: None,
+            pkg_group: None,
+            stability: None,
         });
         assert_eq!(parsed.is_custom_catalog(), false);
 
@@ -1765,6 +1907,8 @@ mod test {
             version: Some("=1.2.3".to_string()),
             systems: None,
             outputs: None,
+            pkg_group: None,
+            stability: None,
         });
         assert_eq!(parsed.is_custom_catalog(), false);
 
@@ -1775,6 +1919,8 @@ mod test {
             version: Some("23.11".to_string()),
             systems: None,
             outputs: None,
+            pkg_group: None,
+            stability: None,
         });
         assert_eq!(parsed.is_custom_catalog(), false);
 
@@ -1785,6 +1931,8 @@ mod test {
             version: None,
             systems: None,
             outputs: None,
+            pkg_group: None,
+            stability: None,
         });
         assert_eq!(parsed.is_custom_catalog(), false);
 
@@ -1796,6 +1944,8 @@ mod test {
             version: None,
             systems: None,
             outputs: None,
+            pkg_group: None,
+            stability: None,
         });
         assert_eq!(parsed.is_custom_catalog(), false);
 
@@ -1812,6 +1962,8 @@ mod test {
             version: None,
             systems: None,
             outputs: None,
+            pkg_group: None,
+            stability: None,
         });
         assert_eq!(parsed.is_custom_catalog(), false);
 
@@ -1823,6 +1975,8 @@ mod test {
             version: Some("1.2.3".to_string()),
             systems: None,
             outputs: None,
+            pkg_group: None,
+            stability: None,
         });
         assert_eq!(parsed.is_custom_catalog(), false);
 
@@ -1835,6 +1989,8 @@ mod test {
             version: None,
             systems: None,
             outputs: None,
+            pkg_group: None,
+            stability: None,
         });
         assert_eq!(parsed.is_custom_catalog(), false);
 
@@ -1848,6 +2004,8 @@ mod test {
             version: Some("version".to_string()),
             systems: None,
             outputs: None,
+            pkg_group: None,
+            stability: None,
         });
         assert_eq!(parsed.is_custom_catalog(), false);
 
@@ -1859,6 +2017,8 @@ mod test {
             version: None,
             systems: None,
             outputs: None,
+            pkg_group: None,
+            stability: None,
         });
         assert_eq!(parsed.is_custom_catalog(), true);
 
@@ -1870,6 +2030,8 @@ mod test {
             version: None,
             systems: None,
             outputs: None,
+            pkg_group: None,
+            stability: None,
         });
         assert_eq!(parsed.is_custom_catalog(), true);
 
@@ -1881,6 +2043,8 @@ mod test {
             version: None,
             systems: None,
             outputs: None,
+            pkg_group: None,
+            stability: None,
         });
         assert_eq!(parsed.is_custom_catalog(), true);
 
@@ -1928,6 +2092,51 @@ curl.outputs = [\"bin\", \"man\"]
     }
 
     #[test]
+    fn install_with_stability_writes_pkg_group_settings() {
+        let PackageToInstall::Catalog(mut jq) =
+            PackageToInstall::parse(&"".to_string(), "jq").unwrap()
+        else {
+            unreachable!()
+        };
+        jq.pkg_group = Some("tools".to_string());
+        jq.stability = Some("lts".to_string());
+        // The trailing comment is part of the document's trailing whitespace,
+        // not of `[options]`, and must stay above the new group.
+        let manifest = mk_test_manifest_from_contents(with_latest_schema(indoc! {r#"
+            [install]
+            hello.pkg-path = "hello"
+
+            [options]
+            systems = ["aarch64-darwin"]
+            # cuda-detection = false
+        "#}));
+
+        let new_manifest = manifest
+            .modify_packages(&[PackageToModify {
+                install_id: jq.id.clone(),
+                modification: PackageModification::Add(PackageToInstall::Catalog(jq)),
+            }])
+            .unwrap();
+
+        expect![[r#"
+            schema-version = "1.18.0"
+
+            [install]
+            hello.pkg-path = "hello"
+            jq.pkg-path = "jq"
+            jq.pkg-group = "tools"
+
+            [options]
+            systems = ["aarch64-darwin"]
+            # cuda-detection = false
+
+            [pkg-groups.tools]
+            stability = "lts"
+        "#]]
+        .assert_eq(&new_manifest.inner.migrated_raw.to_string());
+    }
+
+    #[test]
     fn catalog_parses_descriptors_with_outputs() {
         // Package with specific outputs
         let parsed: CatalogPackage = "curl^bin,man".parse().unwrap();
@@ -1940,6 +2149,8 @@ curl.outputs = [\"bin\", \"man\"]
                 "bin".to_string(),
                 "man".to_string()
             ])),
+            pkg_group: None,
+            stability: None,
         });
 
         // Package with all outputs
@@ -1950,6 +2161,8 @@ curl.outputs = [\"bin\", \"man\"]
             version: None,
             systems: None,
             outputs: Some(RawSelectedOutputs::All),
+            pkg_group: None,
+            stability: None,
         });
 
         // Package with version containing special characters
@@ -1960,6 +2173,8 @@ curl.outputs = [\"bin\", \"man\"]
             version: Some("^5.0.0".to_string()),
             systems: None,
             outputs: None,
+            pkg_group: None,
+            stability: None,
         });
 
         // Invalid package with version and outputs
@@ -1970,6 +2185,8 @@ curl.outputs = [\"bin\", \"man\"]
             version: Some("5.0^bin,man,dev".to_string()),
             systems: None,
             outputs: None,
+            pkg_group: None,
+            stability: None,
         });
 
         // Package with outputs containing spaces (should be trimmed)
@@ -1984,6 +2201,8 @@ curl.outputs = [\"bin\", \"man\"]
                 "man".to_string(),
                 "dev".to_string()
             ])),
+            pkg_group: None,
+            stability: None,
         });
 
         // Error: empty outputs specification
@@ -2275,6 +2494,9 @@ curl.outputs = [\"bin\", \"man\"]
             Parsed::V1_17_0(m) => {
                 m.install.inner_mut().remove(id);
             },
+            Parsed::V1_18_0(m) => {
+                m.install.inner_mut().remove(id);
+            },
         }
     }
 
@@ -2307,6 +2529,9 @@ curl.outputs = [\"bin\", \"man\"]
                 m.install.inner_mut().insert(id.to_string(), descriptor);
             },
             Parsed::V1_17_0(m) => {
+                m.install.inner_mut().insert(id.to_string(), descriptor);
+            },
+            Parsed::V1_18_0(m) => {
                 m.install.inner_mut().insert(id.to_string(), descriptor);
             },
             _ => panic!("expected v1_10_0 or later manifest"),
@@ -2351,6 +2576,10 @@ curl.outputs = [\"bin\", \"man\"]
                 v1_10_0::ManifestPackageDescriptor::Catalog(desc) => Some(desc),
                 _ => None,
             },
+            Parsed::V1_18_0(m) => match m.install.inner_mut().get_mut(id)? {
+                v1_10_0::ManifestPackageDescriptor::Catalog(desc) => Some(desc),
+                _ => None,
+            },
             _ => panic!("expected v1_10_0 or later manifest"),
         }
     }
@@ -2372,7 +2601,7 @@ curl.outputs = [\"bin\", \"man\"]
         manifest.update_raw_packages_from_typed_manifest().unwrap();
         let output = manifest.inner.raw.to_string();
         expect![[r#"
-            schema-version = "1.17.0"
+            schema-version = "1.18.0"
 
             [install]
 
@@ -2410,7 +2639,7 @@ curl.outputs = [\"bin\", \"man\"]
         manifest.update_raw_packages_from_typed_manifest().unwrap();
         let output = manifest.inner.raw.to_string();
         expect![[r#"
-            schema-version = "1.17.0"
+            schema-version = "1.18.0"
 
             [install]
             # my favorite greeting program
@@ -2442,7 +2671,7 @@ curl.outputs = [\"bin\", \"man\"]
         manifest.update_raw_packages_from_typed_manifest().unwrap();
         let output = manifest.inner.raw.to_string();
         expect![[r#"
-            schema-version = "1.17.0"
+            schema-version = "1.18.0"
 
             [install]
             # keep this comment about hello
@@ -2470,7 +2699,7 @@ curl.outputs = [\"bin\", \"man\"]
         manifest.update_raw_packages_from_typed_manifest().unwrap();
         let output = manifest.inner.raw.to_string();
         expect![[r#"
-            schema-version = "1.17.0"
+            schema-version = "1.18.0"
 
             [install]
             hello.pkg-path = "hello" # this is important
@@ -2542,7 +2771,7 @@ curl.outputs = [\"bin\", \"man\"]
         manifest.update_raw_packages_from_typed_manifest().unwrap();
         let output = manifest.inner.raw.to_string();
         expect![[r#"
-            schema-version = "1.17.0"
+            schema-version = "1.18.0"
 
             [install]
             # this comment is above hello
@@ -2588,7 +2817,7 @@ curl.outputs = [\"bin\", \"man\"]
         manifest.update_systems().unwrap();
         let output = manifest.inner.raw.to_string();
         expect![[r#"
-            schema-version = "1.17.0"
+            schema-version = "1.18.0"
 
             [options]
             systems = ["aarch64-darwin", "x86_64-linux"]
@@ -2644,7 +2873,7 @@ curl.outputs = [\"bin\", \"man\"]
         manifest.update_raw_packages_from_typed_manifest().unwrap();
         let output = manifest.inner.raw.to_string();
         expect![[r#"
-            schema-version = "1.17.0"
+            schema-version = "1.18.0"
 
             [install]
             hello.pkg-path = "hello"
@@ -2669,7 +2898,7 @@ curl.outputs = [\"bin\", \"man\"]
         let output = migrated.inner.migrated_raw.to_string();
         expect![[r##"
             # this comment is above version
-            schema-version = "1.17.0"
+            schema-version = "1.18.0"
 
             [install]
             hello.pkg-path = "hello"

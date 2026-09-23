@@ -68,19 +68,20 @@ pub use api_types::{
 pub struct PackageGroup {
     pub name: String,
     pub descriptors: Vec<PackageDescriptor>,
+    /// The catalog stability to resolve the group against, from the
+    /// manifest's `pkg-groups.<name>.stability`. When `None`, `resolve()`
+    /// falls back to the client-level pin on `FloxhubClientConfig`.
+    pub stability: Option<String>,
 }
 
 impl TryFrom<PackageGroup> for api_types::PackageGroup {
     type Error = FloxhubClientError;
 
     fn try_from(package_group: PackageGroup) -> Result<Self, FloxhubClientError> {
-        // `stability` defaults to `None` here; the client-level pin lives on
-        // `FloxhubClientConfig` and is applied by `resolve()`, which also
-        // leaves room for a future per-group value to override it.
         Ok(Self {
             descriptors: package_group.descriptors,
             name: package_group.name,
-            stability: None,
+            stability: package_group.stability,
         })
     }
 }
@@ -694,20 +695,8 @@ mod tests {
         PackageGroup {
             name: "toplevel".to_string(),
             descriptors: vec![],
-        }
-    }
-
-    /// `TryFrom` always defaults `stability` to `None` — the client-level pin
-    /// is applied later by `resolve()` from `FloxhubClientConfig::stability`,
-    /// not read here. Direct construction, no env involved.
-    #[test]
-    fn package_group_convert_defaults_stability_to_none() {
-        let api_group: api_types::PackageGroup = make_package_group().try_into().unwrap();
-        assert_eq!(api_group, api_types::PackageGroup {
-            descriptors: vec![],
-            name: "toplevel".to_string(),
             stability: None,
-        });
+        }
     }
 
     /// Regression guard: `TryFrom` must not read

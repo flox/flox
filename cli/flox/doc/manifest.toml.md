@@ -26,6 +26,7 @@ The file is divided into just a few sections that are represented as TOML
 tables:
 
 - [`[install]`](#install)
+- [`[pkg-groups]`](#pkg-groups)
 - [`[vars]`](#vars)
 - [`[hook]`](#hook)
 - [`[profile]`](#profile)
@@ -62,6 +63,7 @@ Valid string values are:
 - `1.16.0`: introduced services `depends-on`, and
   `shutdown.timeout-seconds` / `shutdown.signal`
 - `1.17.0`: introduced `description`
+- `1.18.0`: introduced `pkg-groups`
 
 Existing manifest schemas, including the older `version = 1` format, are
 automatically forward-migrated when using features that require a newer schema
@@ -231,6 +233,9 @@ Each option is described below:
     See [`flox-upgrade(1)`](./flox-upgrade.md) for more details on how
     pkg-groups and packages interact during upgrades.
 
+    Settings that apply to a whole pkg-group, such as its catalog stability,
+    are set in the [`[pkg-groups]`](#pkg-groups) section.
+
 `version`
 :   Requires that the package match either an exact version or a semver range.
 
@@ -362,6 +367,57 @@ descriptors and flake installables, and `store-path` is described below:
     and flakes installables.
     Unlike the former, users are encouraged to specify it,
     because store paths are generally system dependent.
+
+
+## `[pkg-groups]`
+
+The `[pkg-groups]` section holds settings that apply to every package in a
+pkg-group.
+It requires `schema-version = "1.18.0"`.
+
+Each table is named after the pkg-group it configures,
+which is the value that packages set with `pkg-group`.
+Packages without a `pkg-group` belong to the `toplevel` pkg-group.
+
+```toml
+[install]
+curl.pkg-path = "curl"
+python3.pkg-path = "python3"
+python3.pkg-group = "legacy"
+
+[pkg-groups.legacy]
+stability = "lts"
+
+[pkg-groups.toplevel]
+stability = "stable"
+```
+
+The full set of options is:
+
+```
+PkgGroup ::= {
+  stability = null | <STRING>
+}
+```
+
+`stability`
+:   Resolves the packages in the pkg-group against a catalog stability,
+    such as `lts`, `stable`, `staging`, or `unstable`.
+
+    The Flox Catalog tags each version of the catalog with the stabilities it
+    satisfies.
+    A pkg-group with a stability resolves against the newest version of the
+    catalog that carries that stability.
+    Packages from custom catalogs carry the stabilities of the catalog version
+    they were built against,
+    see the `--stability` option of [`flox-publish(1)`](./flox-publish.md).
+
+    When unset, the pkg-group resolves against the newest version of the
+    catalog that carries any stability.
+
+    Because all packages in a pkg-group share one stability,
+    changing it re-resolves every package in the pkg-group.
+    [`flox-install(1)`](./flox-install.md) sets it with `--stability`.
 
 
 ## `[vars]`

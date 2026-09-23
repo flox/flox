@@ -13,6 +13,8 @@ flox-install - install packages to an environment
 
 ```text
 flox [<general options>] install
+     [--pkg-group <name>]
+     [--stability <stability>]
      [-i <id>] <package>[@<version>]
      [-i <id>] <package>[^<outputs>]
      [[-i <id>] <package>] ...
@@ -73,6 +75,27 @@ reference.
 
 `-i`, `--id`
 :   The install ID of the package as it will appear in the manifest
+
+`--pkg-group <name>`
+:   Install the packages into the pkg-group `<name>`.
+    Without this option, packages from the Flox Catalog join the `toplevel`
+    pkg-group, and packages from custom catalogs get a pkg-group of their own,
+    named after their install ID.
+    See [`manifest.toml(5)`](./manifest.toml.md) for more on pkg-groups.
+
+`--stability <stability>`
+:   Resolve the pkg-group that the packages join against a catalog stability,
+    such as `lts`, `stable`, `staging`, or `unstable`,
+    by setting `stability` in the manifest's `[pkg-groups]` section.
+
+    All packages in a pkg-group share one stability.
+    If the pkg-group already contains packages that use a different stability,
+    the installation fails rather than re-resolving them;
+    use `--pkg-group` to install into a separate pkg-group,
+    or change the pkg-group's stability with [`flox-edit(1)`](./flox-edit.md).
+
+    `--pkg-group` and `--stability` only apply to packages from a catalog,
+    not to flake installables or store paths.
 
 `<package>`
 :   The pkg-path of the package to install as shown by 'flox search'.

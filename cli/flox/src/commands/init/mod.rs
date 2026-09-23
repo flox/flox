@@ -574,6 +574,8 @@ impl From<ProvidedPackage> for CatalogPackage {
             version: value.version,
             systems: None,
             outputs: None,
+            pkg_group: None,
+            stability: None,
         }
     }
 }
@@ -645,6 +647,7 @@ async fn try_find_compatible_package(
                     systems: DEFAULT_SYSTEMS.clone(),
                 }],
                 name: attr_path.to_string(),
+                stability: None,
             }])
             .await?;
         let pkg: Option<ProvidedPackage> = resolved_groups
@@ -742,6 +745,7 @@ fn group_for_single_package(attr_path: &str, version: Option<&str>) -> PackageGr
             systems: DEFAULT_SYSTEMS.clone(),
         }],
         name: attr_path.to_string(),
+        stability: None,
     }
 }
 
@@ -805,6 +809,8 @@ mod tests {
                         version: None,
                         systems: None,
                         outputs: None,
+                        pkg_group: None,
+                        stability: None,
                     },
                     CatalogPackage {
                         id: "package2".to_string(),
@@ -812,6 +818,8 @@ mod tests {
                         version: None,
                         systems: None,
                         outputs: None,
+                        pkg_group: None,
+                        stability: None,
                     },
                 ]),
                 activate_mode: None,
@@ -831,6 +839,8 @@ mod tests {
                         version: None,
                         systems: None,
                         outputs: None,
+                        pkg_group: None,
+                        stability: None,
                     },
                     CatalogPackage {
                         id: "package1".to_string(),
@@ -838,6 +848,8 @@ mod tests {
                         version: None,
                         systems: None,
                         outputs: None,
+                        pkg_group: None,
+                        stability: None,
                     },
                 ]),
                 activate_mode: None,
@@ -927,21 +939,27 @@ mod tests {
                     pkg_path: "path1".to_string(),
                     version: None,
                     systems: None,
-                    outputs: None
+                    outputs: None,
+                    pkg_group: None,
+                    stability: None,
                 },
                 CatalogPackage {
                     id: "package2".to_string(),
                     pkg_path: "path2".to_string(),
                     version: None,
                     systems: None,
-                    outputs: None
+                    outputs: None,
+                    pkg_group: None,
+                    stability: None,
                 },
                 CatalogPackage {
                     id: "pip".to_string(),
                     pkg_path: "python311Packages.pip".to_string(),
                     version: None,
                     systems: None,
-                    outputs: None
+                    outputs: None,
+                    pkg_group: None,
+                    stability: None,
                 },
             ]),
             activate_mode: None,
@@ -966,6 +984,8 @@ mod tests {
                 version: Some("1.0.0".to_string()),
                 systems: None,
                 outputs: None,
+                pkg_group: None,
+                stability: None,
             }]),
             activate_mode: None,
             description: None,

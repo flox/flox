@@ -8,6 +8,7 @@ use flox_core::util::message::{format_error, format_updated};
 pub use flox_core::util::message::{stderr_supports_color, stdout_supports_color};
 use flox_manifest::compose::{COMPOSER_MANIFEST_ID, Warning};
 use flox_manifest::lockfile::{LockedPackage, Lockfile, PackageOutputs, default_systems_change};
+use flox_manifest::parsed::common::DEFAULT_GROUP_NAME;
 use flox_manifest::parsed::latest::SelectedOutputs;
 use flox_manifest::raw::PackageToInstall;
 use indoc::formatdoc;
@@ -138,6 +139,29 @@ pub(crate) fn packages_successfully_installed(
             .join(", ");
         updated(format!(
             "{pkg_list} installed to environment {environment_description}"
+        ));
+    }
+}
+
+/// Display the stability of each package group that installed packages
+/// requested one for.
+pub(crate) fn packages_group_stability(pkgs: &[PackageToInstall]) {
+    let group_stabilities = pkgs
+        .iter()
+        .filter_map(|pkg| match pkg {
+            PackageToInstall::Catalog(pkg) => {
+                let stability = pkg.stability.as_ref()?;
+                let group = pkg
+                    .target_group()
+                    .unwrap_or_else(|| DEFAULT_GROUP_NAME.to_string());
+                Some((group, stability))
+            },
+            _ => None,
+        })
+        .collect::<BTreeMap<_, _>>();
+    for (group, stability) in group_stabilities {
+        plain(format!(
+            "Package group '{group}' resolves against the '{stability}' stability."
         ));
     }
 }

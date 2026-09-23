@@ -55,6 +55,8 @@ impl UninstallSpec {
                     version,
                     systems: _systems,
                     outputs,
+                    pkg_group: _pkg_group,
+                    stability: _stability,
                 } = s.parse()?;
 
                 Ok(UninstallSpec {

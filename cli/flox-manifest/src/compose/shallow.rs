@@ -22,7 +22,7 @@ use crate::parsed::common::{
 };
 // merge_hook operates on the latest schema's Hook (which carries
 // `on-deactivate`), so composing environments preserves the field.
-use crate::parsed::latest::{Hook, Install, ManifestLatest, MinimumCliVersion};
+use crate::parsed::latest::{Hook, Install, ManifestLatest, MinimumCliVersion, PkgGroups};
 // merge_build operates on the latest schema's Build (which carries
 // `sandbox-allow`), so composing environments preserves the field.
 use crate::parsed::v1_13_0::{Build, Profile, ProfileDeactivate};
@@ -331,6 +331,22 @@ impl ShallowMerger {
         Ok((Plugins(merged), warnings))
     }
 
+    /// Group settings merge per group, like install IDs: an included
+    /// environment's group settings apply unless the composer configures the
+    /// same group, in which case the composer's settings win.
+    #[instrument(skip_all)]
+    fn merge_pkg_groups(
+        low_priority: &PkgGroups,
+        high_priority: &PkgGroups,
+    ) -> Result<(PkgGroups, Vec<Warning>), MergeError> {
+        let (merged, warnings) = map_union(
+            KeyPath::from_iter(["pkg-groups"]),
+            low_priority.inner(),
+            high_priority.inner(),
+        );
+        Ok((PkgGroups(merged), warnings))
+    }
+
     #[instrument(skip_all)]
     fn merge_containerize(
         low_priority: Option<&Containerize>,
@@ -373,6 +389,10 @@ impl ManifestMergeTrait for ShallowMerger {
         let (install, install_warnings) =
             Self::merge_install(&low_priority.install, &high_priority.install)?;
 
+        trace!(section = "pkg-groups", "merging manifest section");
+        let (pkg_groups, pkg_groups_warnings) =
+            Self::merge_pkg_groups(&low_priority.pkg_groups, &high_priority.pkg_groups)?;
+
         trace!(section = "vars", "merging manifest section");
         let (vars, vars_warnings) = Self::merge_vars(&low_priority.vars, &high_priority.vars)?;
 
@@ -411,6 +431,7 @@ impl ManifestMergeTrait for ShallowMerger {
         let warnings = [
             minimum_cli_version_warnings,
             install_warnings,
+            pkg_groups_warnings,
             vars_warnings,
             options_warnings,
             services_warnings,
@@ -430,6 +451,7 @@ impl ManifestMergeTrait for ShallowMerger {
             ),
             minimum_cli_version,
             install,
+            pkg_groups,
             vars,
             hook,
             profile,

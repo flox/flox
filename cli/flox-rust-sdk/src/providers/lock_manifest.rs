@@ -217,6 +217,7 @@ impl LockManifest {
         seed: Option<&Lockfile>,
     ) -> Result<impl Iterator<Item = PackageGroup>, ResolveError> {
         let seed_locked_packages = Self::seed_mapping(seed)?;
+        let seed_manifest = seed.map(Lockfile::migrated_manifest).transpose()?;
         let pkgs_by_group = manifest.catalog_pkgs_by_group();
         let manifest_systems = manifest.options.systems.as_deref();
         let maybe_licenses = manifest
@@ -259,11 +260,19 @@ impl LockManifest {
         let mut map: BTreeMap<String, PackageGroup> = BTreeMap::new();
 
         for (group_name, pkgs) in pkgs_by_group.iter() {
+            let stability = manifest.group_stability(group_name);
+            // Stability selects the catalog page that the whole group
+            // resolves against, so changing it invalidates every package in
+            // the group, not only those whose descriptors changed.
+            let stability_changed = seed_manifest.as_ref().is_some_and(|seed_manifest| {
+                seed_manifest.as_latest_schema().group_stability(group_name) != stability
+            });
             let group = map
                 .entry(group_name.clone())
                 .or_insert_with(|| PackageGroup {
                     descriptors: vec![],
                     name: group_name.clone(),
+                    stability: stability.map(str::to_string),
                 });
             let group_descriptors = &mut group.descriptors;
             for (id, desc) in pkgs.iter() {
@@ -281,7 +290,8 @@ impl LockManifest {
                     let locked_derivation = seed_locked_packages
                         .get(&(id.as_str(), system.to_string().as_str()))
                         .filter(|(descriptor, _)| {
-                            !descriptor.invalidates_existing_resolution(&desc.into())
+                            !stability_changed
+                                && !descriptor.invalidates_existing_resolution(&desc.into())
                         })
                         .and_then(|(_, locked_package)| locked_package.as_catalog_package_ref())
                         .map(|locked_package| locked_package.derivation.clone());
@@ -1364,7 +1374,7 @@ mod tests {
         fake_store_path_lock,
     };
     use flox_manifest::parsed::common::{DEFAULT_GROUP_NAME, Include, KnownSchemaVersion, Vars};
-    use flox_manifest::parsed::latest::PackageDescriptorFlake;
+    use flox_manifest::parsed::latest::{PackageDescriptorFlake, PkgGroup};
     use flox_manifest::raw::test_helpers::{
         empty_test_migrated_manifest,
         mk_test_manifest_from_contents,
@@ -1496,6 +1506,7 @@ mod tests {
                 allow_missing_builds: None,
                 systems: vec![floxhub_client::PackageSystem::Aarch64Darwin],
             }],
+            stability: None,
         }]
     });
 
@@ -1579,6 +1590,7 @@ mod tests {
                     systems: vec![floxhub_client::PackageSystem::X8664Linux],
                 },
             ],
+            stability: None,
         }];
 
         let actual_params = LockManifest::collect_resolution_package_groups(&manifest, None)
@@ -1647,6 +1659,7 @@ mod tests {
                     systems: vec![PackageSystem::X8664Linux],
                 },
             ],
+            stability: None,
         }];
 
         let actual_params = LockManifest::collect_resolution_package_groups(&manifest, None)
@@ -1724,6 +1737,7 @@ mod tests {
                     allow_missing_builds: None,
                     systems: vec![PackageSystem::Aarch64Darwin],
                 }],
+                stability: None,
             },
             PackageGroup {
                 name: "group2".to_string(),
@@ -1740,6 +1754,7 @@ mod tests {
                     allow_missing_builds: None,
                     systems: vec![PackageSystem::Aarch64Darwin],
                 }],
+                stability: None,
             },
         ];
 
@@ -1808,6 +1823,7 @@ mod tests {
                     systems: vec![PackageSystem::Aarch64Darwin],
                 },
             ],
+            stability: None,
         }];
 
         assert_eq!(actual_params, expected_params);
@@ -1943,6 +1959,68 @@ mod tests {
         );
     }
 
+    /// If a seed mapping is provided, use the derivations from the seed where possible
+    /// 4) Changing a group's stability re-resolves every package in that
+    ///    group, even though none of their descriptors changed, and leaves
+    ///    other groups locked.
+    #[test]
+    fn make_params_seeded_unlock_group_if_stability_changed() {
+        let (foo_iid, foo_descriptor, foo_locked) = fake_catalog_package_lock("foo", Some("tools"));
+        let (bar_iid, bar_descriptor, bar_locked) = fake_catalog_package_lock("bar", Some("tools"));
+        let (baz_iid, baz_descriptor, baz_locked) = fake_catalog_package_lock("baz", Some("other"));
+        let mut manifest_before = ManifestLatest::default();
+        manifest_before.install.inner_mut().extend([
+            (foo_iid, foo_descriptor),
+            (bar_iid, bar_descriptor),
+            (baz_iid, baz_descriptor),
+        ]);
+
+        let seed = Lockfile {
+            version: Version::<1>,
+            manifest: manifest_before.as_typed_only(),
+            packages: vec![
+                foo_locked.into(),
+                bar_locked.into(),
+                baz_locked.clone().into(),
+            ],
+            compose: None,
+        };
+
+        // ---------------------------------------------------------------------
+
+        let mut manifest_after = manifest_before.clone();
+        manifest_after
+            .pkg_groups
+            .inner_mut()
+            .insert("tools".to_string(), PkgGroup {
+                stability: Some("lts".to_string()),
+            });
+
+        let actual_params =
+            LockManifest::collect_resolution_package_groups(&manifest_after, Some(&seed))
+                .unwrap()
+                .map(|group| {
+                    let derivations = group
+                        .descriptors
+                        .into_iter()
+                        .map(|descriptor| (descriptor.install_id, descriptor.derivation))
+                        .collect::<Vec<_>>();
+                    (group.name, group.stability, derivations)
+                })
+                .collect::<Vec<_>>();
+
+        assert_eq!(actual_params, vec![
+            ("other".to_string(), None, vec![(
+                "baz_install_id".to_string(),
+                Some(baz_locked.derivation)
+            )]),
+            ("tools".to_string(), Some("lts".to_string()), vec![
+                ("bar_install_id".to_string(), None),
+                ("foo_install_id".to_string(), None),
+            ]),
+        ]);
+    }
+
     /// If flake installables and catalog packages are mixed,
     /// [LockManifest::collect_resolution_package_groups]
     /// should only return [PackageGroup]s for the catalog descriptors.
@@ -1979,6 +2057,7 @@ mod tests {
                 .into_iter()
                 .flatten()
                 .collect(),
+            stability: None,
         }];
 
         let actual_params = LockManifest::collect_resolution_package_groups(&manifest, None)
@@ -2533,6 +2612,7 @@ mod tests {
                     systems: vec![PackageSystem::Aarch64Darwin,],
                 }
             ],
+            stability: None,
         }]);
     }
 

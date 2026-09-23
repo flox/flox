@@ -153,6 +153,8 @@ impl InitHook for Go {
                 version: go_version,
                 systems: None,
                 outputs: None,
+                pkg_group: None,
+                stability: None,
             }]),
             ..Default::default()
         }

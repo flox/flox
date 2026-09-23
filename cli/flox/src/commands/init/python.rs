@@ -451,6 +451,8 @@ impl Provider for PoetryPyProject {
                     version: python_version,
                     systems: None,
                     outputs: None,
+                    pkg_group: None,
+                    stability: None,
                 },
                 CatalogPackage {
                     id: "poetry".to_string(),
@@ -458,6 +460,8 @@ impl Provider for PoetryPyProject {
                     version: None,
                     systems: None,
                     outputs: None,
+                    pkg_group: None,
+                    stability: None,
                 },
             ]),
             ..Default::default()
@@ -650,6 +654,8 @@ impl Provider for PyProject {
                 version: python_version,
                 systems: None,
                 outputs: None,
+                pkg_group: None,
+                stability: None,
             }]),
             ..Default::default()
         }
@@ -803,6 +809,8 @@ impl Provider for Requirements {
                 version: None,
                 systems: None,
                 outputs: None,
+                pkg_group: None,
+                stability: None,
             }]),
             ..Default::default()
         }

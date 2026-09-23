@@ -26,8 +26,9 @@ pub use crate::parsed::v1_16_0::{
     ServiceStartCondition,
     Services,
 };
+pub use crate::parsed::v1_18_0::{PkgGroup, PkgGroups};
 use crate::{Manifest, ManifestError, TypedOnly};
-pub type ManifestLatest = crate::parsed::v1_17_0::ManifestV1_17_0;
+pub type ManifestLatest = crate::parsed::v1_18_0::ManifestV1_18_0;
 
 impl ManifestLatest {
     /// Try to return a manifest in its original schema
@@ -119,10 +120,24 @@ impl ManifestLatest {
                 // against `self`, so a set `description` still routes to latest
                 // and is never silently dropped.
                 map.remove("description");
+                map.remove("pkg-groups");
                 map.insert("schema-version".into(), "1.16.0".into());
                 untyped
             },
             KnownSchemaVersion::V1_17_0 => {
+                let mut untyped =
+                    serde_json::to_value(self).map_err(ManifestError::SerializeJson)?;
+                let map = untyped
+                    .as_object_mut()
+                    .expect("all valid manifests should serialize to JSON objects");
+                // Same approach as `description` for V1_16_0: a set
+                // `pkg-groups` fails the re-migrate-and-compare check in
+                // `as_maybe_backwards_compatible` and routes to latest.
+                map.remove("pkg-groups");
+                map.insert("schema-version".into(), "1.17.0".into());
+                untyped
+            },
+            KnownSchemaVersion::V1_18_0 => {
                 return Ok(Some(self.as_typed_only()));
             },
         };
@@ -1052,6 +1067,81 @@ mod tests {
             .unwrap();
 
         assert_eq!(compat.get_schema_version(), KnownSchemaVersion::latest());
+    }
+
+    #[test]
+    fn pkg_groups_rejected_by_v1_17_0_schema() {
+        let manifest = with_schema(KnownSchemaVersion::V1_17_0, indoc! {r#"
+            [pkg-groups.toplevel]
+            stability = "lts"
+        "#});
+
+        let err = Manifest::parse_toml_typed(&manifest)
+            .expect_err("'pkg-groups' should be rejected by the v1.17.0 schema");
+
+        let ManifestError::Invalid(err) = err else {
+            panic!("expected ManifestError::Invalid, got: {err:?}");
+        };
+        assert!(
+            err.message()
+                .starts_with("unknown field `pkg-groups`, expected"),
+            "unexpected error message: {err}",
+        );
+    }
+
+    #[test]
+    fn pkg_groups_reject_unknown_settings() {
+        let manifest = with_latest_schema(indoc! {r#"
+            [pkg-groups.toplevel]
+            stabilty = "lts"
+        "#});
+
+        let err = Manifest::parse_toml_typed(&manifest)
+            .expect_err("misspelled group settings should be rejected");
+
+        let ManifestError::Invalid(err) = err else {
+            panic!("expected ManifestError::Invalid, got: {err:?}");
+        };
+        assert!(
+            err.message()
+                .starts_with("unknown field `stabilty`, expected `stability`"),
+            "unexpected error message: {err}",
+        );
+    }
+
+    #[test]
+    fn downgrades_to_v1_17_0_when_pkg_groups_unused() {
+        let manifest = ManifestLatest {
+            description: Some("a description".to_string()),
+            ..Default::default()
+        };
+
+        let compat = manifest
+            .as_maybe_backwards_compatible(KnownSchemaVersion::V1_17_0, None)
+            .unwrap();
+
+        assert_eq!(compat.get_schema_version(), KnownSchemaVersion::V1_17_0);
+    }
+
+    #[test]
+    fn stays_latest_schema_when_pkg_groups_used() {
+        let manifest = ManifestLatest {
+            pkg_groups: PkgGroups(
+                [("toplevel".to_string(), PkgGroup {
+                    stability: Some("lts".to_string()),
+                })]
+                .into(),
+            ),
+            ..Default::default()
+        };
+
+        for original_schema in [KnownSchemaVersion::V1_16_0, KnownSchemaVersion::V1_17_0] {
+            let compat = manifest
+                .as_maybe_backwards_compatible(original_schema, None)
+                .unwrap();
+
+            assert_eq!(compat.get_schema_version(), KnownSchemaVersion::latest());
+        }
     }
 
     /// Generates a mock `TypedManifest` for testing purposes.
