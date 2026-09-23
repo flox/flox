@@ -228,7 +228,21 @@ in
   */
   applyDeepOverrides =
     nixpkgs: overrideTree:
-    if overrideTree == null then nixpkgs else lib.nef.extendAttrSet [ ] { } nixpkgs overrideTree;
+    let
+      # Bound in the scope every override is called with (see
+      # `lib.nef.mkOverlay`'s `currentScope` argument), so referencing
+      # `catalogs` fails only for an override that actually asks for
+      # it, not for every override applied here.
+      catalogsDeniedError = throw ''
+        A deep override cannot use catalog packages: it is folded into
+        the base nixpkgs before any catalog is instantiated, so no
+        catalog exists yet when it runs.
+      '';
+    in
+    if overrideTree == null then
+      nixpkgs
+    else
+      lib.nef.extendAttrSet [ ] { catalogs = catalogsDeniedError; } nixpkgs overrideTree;
 
   /**
     This function takes a locked `floxhub` catalog

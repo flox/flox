@@ -143,6 +143,18 @@ in
     expected = "only for base";
   };
 
+  "test: an override that forces catalogs fails, naming why" = {
+    expr = nixpkgsWithOverrides.wantsCatalogs;
+    expectedError = {
+      type = "ThrownError";
+      msg = "cannot use catalog packages";
+    };
+  };
+
+  # `onlyForBase` above is defined in the same consuming project's
+  # `pkgs/__overrides` and never references `catalogs`, so its
+  # passing test above already covers an override left unaffected.
+
   "test: __overrides does not surface as a package set in the repository's own tree" = {
     expr = builtins.hasAttr "__overrides" consumer.pkgs;
     expected = false;
