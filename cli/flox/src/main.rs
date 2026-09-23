@@ -234,10 +234,7 @@ fn main() -> ExitCode {
     // `develop.rs` already recorded the pre-exec completion before their
     // own `exec`.
     //
-    // `send-telemetry` must not record its own completion: it would re-arm the
-    // buffer it just drained, causing every prompt to re-flush forever. Other
-    // detached children (`check-for-upgrades`) do record — they neither flush
-    // nor spawn a flush.
+    // Recording is gated by `is_telemetry_flush_command` — see its doc.
     if !is_telemetry_flush_command(v2_subcommand)
         && let Err(err) = flox_events::EventsHub::global().record_command_completed(
             v2_subcommand.to_string(),
@@ -262,11 +259,7 @@ fn main() -> ExitCode {
     // - `_FLOX_TESTING_DISABLE_BG_SIDE_EFFECTS=1` (CI escape hatch,
     //   enforced inside the helper).
     //
-    // The child logs to a single rolling file (truncated each spawn) rather
-    // than a per-invocation timestamped file: it runs on every command, so
-    // timestamped files would accumulate in the global cache log dir with no
-    // GC watching it. The per-environment executive GC only prunes an
-    // activation's own log dir, which this global path is not.
+    // Child logs to a single rolling file — see `LogFile::Rolling`.
     if !config.flox.disable_metrics && !is_detached_side_effect_command(v2_subcommand) {
         let log_dir = config.flox.cache_dir.join("log");
         let args = [String::from("send-telemetry"), String::from("-vv")];

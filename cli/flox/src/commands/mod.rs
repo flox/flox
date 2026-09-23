@@ -462,10 +462,7 @@ impl FloxArgs {
             .as_ref()
             .map(Commands::subcommand_name)
             .unwrap_or("help");
-        // `send-telemetry` must not record `cli.command_run`: it re-arms the
-        // buffer it is about to drain, so every subsequent prompt would
-        // re-flush forever. Other detached children (`check-for-upgrades`) do
-        // record — they neither flush nor spawn a flush.
+        // Recording is gated by `is_telemetry_flush_command` — see its doc.
         if !is_telemetry_flush_command(v2_subcommand)
             && let Err(err) = EventsHub::global().record_command_run(v2_subcommand.to_string())
         {

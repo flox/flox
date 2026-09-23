@@ -48,10 +48,8 @@ pub fn force_flush_requested() -> bool {
 
 impl Drop for EventsGuard {
     fn drop(&mut self) {
-        // Network I/O no longer happens here: the detached `send-telemetry`
-        // child flushes both pipelines from their on-disk buffers after the
-        // parent exits. The `hub` field is retained so the guard still
-        // participates in the `EventsHub::try_guard` strong-count check.
+        // No network I/O on drop; `hub` is held only for the strong-count
+        // check. See the struct doc.
         let _ = &self.hub;
     }
 }

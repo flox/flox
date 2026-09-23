@@ -710,7 +710,8 @@ impl Client {
     /// timeout — the stall the detached-flush design exists to avoid. Drains the
     /// sendable entries and truncates the file under the lock, releases it, then
     /// sends; a failed send re-buffers the unsent entries by re-reading and
-    /// prepending, so nothing is lost.
+    /// prepending, so nothing is lost on a send failure. (A crash between
+    /// truncate and re-buffer can still lose the snapshot; see `take_sendable`.)
     ///
     /// Returns `Ok(false)` when another flusher holds the lock — the buffer
     /// was not drained but that is not an error. Returns `Ok(true)` when the
@@ -761,16 +762,15 @@ impl Client {
 
 /// Holds the legacy metrics hub's single-active-guard slot for the lifetime of
 /// an invocation. Dropping it performs no network I/O; the detached
-/// `send-telemetry` child arranges delivery after the parent exits.
+/// `send-telemetry` child arranges delivery after the parent exits. The `hub`
+/// field is retained only for the `Hub::try_guard` strong-count check.
 pub struct MetricGuard {
     hub: Hub,
 }
 impl Drop for MetricGuard {
     fn drop(&mut self) {
-        // Network I/O no longer happens here: the detached `send-telemetry`
-        // child flushes both pipelines from its on-disk buffers after the
-        // parent exits.  The `hub` field is retained so the guard still
-        // participates in the `Hub::try_guard` strong-count check.
+        // No network I/O on drop; `hub` is held only for the strong-count
+        // check. See the struct doc.
         let _ = &self.hub;
     }
 }

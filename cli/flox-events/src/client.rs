@@ -164,7 +164,9 @@ impl EventsClient {
     /// detached-flush design exists to avoid. So this drains the sendable
     /// entries to memory and truncates the file under the lock, releases the
     /// lock, then sends. A failed send re-buffers the unsent entries by
-    /// re-reading and prepending, so nothing is lost.
+    /// re-reading and prepending, so nothing is lost on a send failure. (A
+    /// crash between truncate and re-buffer can still lose the snapshot; see
+    /// `EventsBuffer::take_sendable`.)
     ///
     /// Returns `Ok(false)` when another flusher holds the lock — the buffer
     /// was not drained but that is not an error. Returns `Ok(true)` when the

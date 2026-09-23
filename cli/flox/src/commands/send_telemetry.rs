@@ -141,14 +141,12 @@ mod tests {
             connection,
         );
 
-        // Seed one real event.
         client
             .record_command_run("list".to_string())
             .expect("record");
 
         EventsHub::global().set_client(client);
 
-        // Flush with force=true.
         EventsHub::global()
             .try_flush(true)
             .expect("flush must succeed");
@@ -183,7 +181,6 @@ mod tests {
         let tempdir = tempfile::tempdir().expect("tempdir");
         let data_dir = tempdir.path();
 
-        // Seed one event so there is something to flush.
         let connection = MockEventsConnection::default();
         let client = EventsClient::new_with_connection(
             Uuid::new_v4(),
