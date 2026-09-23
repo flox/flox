@@ -64,6 +64,26 @@ in
     expected = "consumer sees: overridden by repoA";
   };
 
+  "test: an override that forces catalogs fails, naming why" = {
+    expr =
+      (consumerAgainst (overriddenBase {
+        "repoF/wantsCatalogs" = {
+          attr_path = [ "wantsCatalogs" ];
+          source = {
+            type = "path";
+            path = ./testData/globalOverrides/repoF;
+          };
+        };
+      })).pkgs.wantsCatalogs;
+    expectedError = {
+      type = "ThrownError";
+      msg = "cannot use catalog packages";
+    };
+  };
+
+  # `topLevelDependency` above (via `repoA`) never references `catalogs`
+  # and its own passing tests already cover an override left unaffected.
+
   "test: global override does not see its own repository's pkgs/" = {
     expr =
       (overriddenBase {

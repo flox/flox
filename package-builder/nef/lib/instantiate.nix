@@ -330,12 +330,17 @@ in
     source's `pkgs/` tree with `lib.nef.dirToAttrs` and extracts only
     the single node at the entry's locked `attr_path`, ignoring every
     other entry the tree contains. Every extracted node is merged into
-    one extensions tree before a single call to `lib.nef.mkOverlay` with
-    an empty scope, so an override runs once, against `final`, with
-    neither its own repository's other `pkgs/` entries nor `catalogs` in
-    scope: both are added afterwards, by `instantiateFromSourceInfo` and
+    one extensions tree before a single call to `lib.nef.mkOverlay`, so
+    an override runs once, against `final`, with neither its own
+    repository's other `pkgs/` entries nor `catalogs` in scope: both
+    are added afterwards, by `instantiateFromSourceInfo` and
     `instantiateCatalogs`, against the nixpkgs this overlay already
-    extended.
+    extended. `catalogs` is bound to a throw in the scope passed to
+    `mkOverlay` (see its `currentScope` argument), rather than simply
+    left out, since `nixpkgs.extend` re-folds this overlay into
+    whatever `final` a later `.extend` produces -- including one that
+    already carries `catalogs` -- and an absent binding would resolve
+    to that leaked value instead of failing.
 
     # Arguments
 
@@ -375,8 +380,18 @@ in
         path = null;
         entries = { };
       } entries;
+
+      # Bound in the scope every override is called with (see
+      # `lib.nef.mkOverlay`'s `currentScope` argument), so referencing
+      # `catalogs` fails only for an override that actually asks for
+      # it, not for every override applied here.
+      catalogsDeniedError = throw ''
+        A global override cannot use catalog packages: it is folded
+        into the base nixpkgs before any catalog is instantiated, so
+        no catalog exists yet when it runs.
+      '';
     in
-    lib.nef.mkOverlay [ ] { } merged;
+    lib.nef.mkOverlay [ ] { catalogs = catalogsDeniedError; } merged;
 
   /**
     Apply an overlay assembled by `mkGlobalOverridesOverlay` to
