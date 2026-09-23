@@ -7,7 +7,7 @@
 //! The handler intentionally does NOT record `cli.command_run` or
 //! `cli.command_completed` events — doing so would re-arm the buffer it
 //! just drained, causing every prompt to re-flush forever. The exclusion
-//! is enforced in `main.rs` via `is_detached_side_effect_command`.
+//! is enforced at the recording sites via `is_telemetry_flush_command`.
 
 use anyhow::Result;
 use bpaf::Bpaf;

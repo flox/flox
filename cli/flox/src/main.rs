@@ -15,6 +15,7 @@ use commands::{
     Prefix,
     Version,
     is_detached_side_effect_command,
+    is_telemetry_flush_command,
 };
 use flox_config::Config;
 use flox_core::sentry::init_sentry;
@@ -233,11 +234,11 @@ fn main() -> ExitCode {
     // `develop.rs` already recorded the pre-exec completion before their
     // own `exec`.
     //
-    // Detached side-effect commands (`send-telemetry`, `check-for-upgrades`)
-    // must not record their own events: a `send-telemetry` completion event
-    // would re-arm the buffer it just drained, causing every prompt to
-    // re-flush forever.
-    if !is_detached_side_effect_command(v2_subcommand)
+    // `send-telemetry` must not record its own completion: it would re-arm the
+    // buffer it just drained, causing every prompt to re-flush forever. Other
+    // detached children (`check-for-upgrades`) do record — they neither flush
+    // nor spawn a flush.
+    if !is_telemetry_flush_command(v2_subcommand)
         && let Err(err) = flox_events::EventsHub::global().record_command_completed(
             v2_subcommand.to_string(),
             LifecycleFields {

@@ -346,10 +346,11 @@ impl MetricsBuffer {
     ///
     /// Truncate-before-send is deliberate: the caller cannot hold the buffer
     /// lock across the network send without re-blocking the append path (the
-    /// stall the detached flush exists to remove). The cost is a crash window —
-    /// a SIGKILL or panic of the detached child between this truncate and the
-    /// failure re-buffer in `prepend` loses the in-flight batch. Accepted:
-    /// telemetry is best-effort, not durable.
+    /// stall the detached flush exists to remove). This drains the whole buffer
+    /// and truncates the file, so a SIGKILL or panic of the detached child
+    /// between here and the failure re-buffer in `prepend` loses the entire
+    /// drained snapshot — up to MAX_BUFFER_SIZE events, not a single batch.
+    /// Accepted: telemetry is best-effort, not durable.
     fn take_sendable(&mut self) -> Result<VecDeque<MetricEntry>> {
         let taken = std::mem::take(&mut self.buffer);
         self.overwrite_file()?;
