@@ -3073,10 +3073,13 @@ mod tests {
         // fails rather than silently under-locking — for both forwarding
         // shapes.
         let cases = [
-            ("test_data/catalog_refs/import-entry-unreadable.nix", (4, 1)),
+            (
+                "test_data/catalog_refs/import-entry-unreadable.nix",
+                (3, 15),
+            ),
             (
                 "test_data/catalog_refs/import-entry-unreadable-whole.nix",
-                (5, 1),
+                (4, 15),
             ),
         ];
         // The scan names files canonically. The missing target has no
