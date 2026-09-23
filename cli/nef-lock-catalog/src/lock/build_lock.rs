@@ -41,6 +41,17 @@ pub struct BuildLock {
     /// impls in `floxhub-client`).
     pub(crate) direct_catalog_inputs: BTreeMap<String, LockedInputEntry>,
     pub(crate) catalogs: BTreeMap<CatalogId, CatalogLock>,
+    /// Locked sources for packages a dependency's catalog has marked as
+    /// global overrides: applied to the shared base nixpkgs for every
+    /// build that locks against their catalog, not just the builds that
+    /// reference them directly. Keyed and shaped like
+    /// `direct_catalog_inputs` — same `LockedInputEntry`, carrying the
+    /// override's own `attr_path` and locked `source` — since an override
+    /// is a locked package like any other, only applied at a different
+    /// point in the build. `#[serde(default)]` so a lock written before
+    /// this field existed still parses.
+    #[serde(default)]
+    pub(crate) global_overrides: BTreeMap<String, LockedInputEntry>,
 }
 
 /// References a lock was asked to cover but does not contain: the lock is
@@ -95,6 +106,13 @@ impl BuildLock {
     /// The direct (first-order) catalog inputs the lock pins.
     pub fn direct_catalog_inputs(&self) -> &BTreeMap<String, LockedInputEntry> {
         &self.direct_catalog_inputs
+    }
+
+    /// The global overrides the lock pins: packages a dependency's catalog
+    /// has marked to apply to the shared base nixpkgs for every build that
+    /// locks against it.
+    pub fn global_overrides(&self) -> &BTreeMap<String, LockedInputEntry> {
+        &self.global_overrides
     }
 }
 
@@ -312,6 +330,38 @@ mod tests {
                 .into_iter()
                 .collect::<Vec<_>>()
         );
+    }
+
+    /// A lock written before `global_overrides` existed has no such key;
+    /// `#[serde(default)]` must let it still parse, with the field empty
+    /// rather than a deserialization error.
+    #[test]
+    fn a_lock_without_global_overrides_still_parses() {
+        let json = r#"{
+            "version": 1,
+            "direct_catalog_inputs": {},
+            "catalogs": {}
+        }"#;
+
+        let lock: BuildLock = serde_json::from_str(json).expect("old-format lock still parses");
+
+        assert_eq!(lock.global_overrides(), &BTreeMap::new());
+    }
+
+    /// A lock carrying `global_overrides` round-trips through render/parse
+    /// with the entries intact, the same way `direct_catalog_inputs` does.
+    #[test]
+    fn rendered_lock_round_trips_global_overrides() {
+        let mut lock = lock_with(&["myorg/hello"]);
+        lock.global_overrides.insert(
+            "otherorg/openssl".to_string(),
+            entry("otherorg", &["openssl"]),
+        );
+
+        let rendered = render_lock(&lock).expect("lock renders");
+        let read: BuildLock = serde_json::from_str(&rendered).expect("rendered lock parses");
+
+        assert_eq!(read.global_overrides(), &lock.global_overrides);
     }
 
     #[test]

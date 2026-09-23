@@ -143,7 +143,8 @@ mod tests {
                             }
                         }
                     }
-                }
+                },
+                "global_overrides": {},
             })
         );
     }
@@ -198,7 +199,8 @@ mod tests {
                             }
                         }
                     }
-                }
+                },
+                "global_overrides": {},
             })
         );
     }

@@ -164,7 +164,7 @@ mod tests {
         assert_eq!(references, BTreeSet::new());
         assert_eq!(
             std::fs::read_to_string(&lockfile_path).unwrap(),
-            "{\n  \"version\": 1,\n  \"direct_catalog_inputs\": {},\n  \"catalogs\": {}\n}\n"
+            "{\n  \"version\": 1,\n  \"direct_catalog_inputs\": {},\n  \"catalogs\": {},\n  \"global_overrides\": {}\n}\n"
         );
     }
 }
