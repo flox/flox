@@ -44,7 +44,7 @@ let
   globalOverridesOverlay = lib.nef.instantiate.mkGlobalOverridesOverlay {
     overridesClosure = lockContents.global_overrides or { };
   };
-  nixpkgsWithOverrides = nixpkgs.extend globalOverridesOverlay;
+  nixpkgsWithOverrides = lib.nef.instantiate.applyGlobalOverridesOverlay nixpkgs globalOverridesOverlay;
 
   instantiatedCatalogsClosure = lib.nef.instantiate.instantiateCatalogs {
     nixpkgs = nixpkgsWithOverrides;

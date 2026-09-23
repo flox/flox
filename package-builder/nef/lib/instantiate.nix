@@ -378,4 +378,19 @@ in
     in
     lib.nef.mkOverlay [ ] { } merged;
 
+  /**
+    Apply an overlay assembled by `mkGlobalOverridesOverlay` to
+    `nixpkgs`, extending it exactly as `instantiateFromSourceInfo`
+    above extends `nixpkgs` for a project's own `pkgs/`.
+
+    # Arguments
+
+    `nixpkgs`
+    : the base nixpkgs instance the overlay is applied to
+
+    `overlay`
+    : the overlay returned by `mkGlobalOverridesOverlay`
+  */
+  applyGlobalOverridesOverlay = nixpkgs: overlay: nixpkgs.extend overlay;
+
 }
