@@ -14,13 +14,13 @@
   rustPlatform,
   mkShell,
   nix-unit,
-  nixfmt-rfc-style,
+  nixfmt,
   podman,
   pre-commit-check,
   procps,
   pstree,
   shfmt,
-  system,
+  stdenv,
   treefmt,
   writeShellScript,
   yamlfmt,
@@ -32,7 +32,7 @@ let
   # store path. Realised as part of the dev shell so the tests can rely on it
   # being present instead of building it themselves.
   fixedTestStorePath = import ../../test_data/manually_generated/cli-128-fixed-empty.nix {
-    inherit system;
+    system = stdenv.hostPlatform.system;
   };
 
   # For use in GitHub Actions and local development.
@@ -50,7 +50,7 @@ let
       jq
       just
       nix-unit
-      nixfmt-rfc-style
+      nixfmt
       podman
       procps
       pstree
