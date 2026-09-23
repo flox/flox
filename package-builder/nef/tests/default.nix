@@ -27,6 +27,7 @@ in
 
   collectionTests = import ./collectionTests.nix { inherit lib; };
   extensionTests = import ./extensionTests.nix { inherit lib; };
+  deepOverridesTests = import ./deepOverridesTests.nix { inherit lib nixpkgs; };
   reflectTests = import ./reflectTests { inherit lib; };
 }
 // (lib.optionalAttrs (test-fixtures != null) {
