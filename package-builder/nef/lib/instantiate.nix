@@ -291,7 +291,20 @@ in
     `overrideTree`
     : the tree returned by `collectDeepOverrides`
   */
-  applyDeepOverrides = nixpkgs: overrideTree: lib.nef.extendAttrSet [ ] { } nixpkgs overrideTree;
+  applyDeepOverrides =
+    nixpkgs: overrideTree:
+    let
+      # Bound in the scope every override is called with (see
+      # `lib.nef.mkOverlay`'s `currentScope` argument), so referencing
+      # `catalogs` fails only for an override that actually asks for
+      # it, not for every override applied here.
+      catalogsDeniedError = throw ''
+        A deep override cannot use catalog packages: it is folded into
+        the base nixpkgs before any catalog is instantiated, so no
+        catalog exists yet when it runs.
+      '';
+    in
+    lib.nef.extendAttrSet [ ] { catalogs = catalogsDeniedError; } nixpkgs overrideTree;
 
   /**
     Instantiate a NEF project from a given sourceInfo.

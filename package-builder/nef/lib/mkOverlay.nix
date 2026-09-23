@@ -71,9 +71,18 @@
                 # Examples of such sets are:
                 # - agdaPackages
                 if final ? newScope then
-                  final.newScope {
-                    ${name} = prev.${name} or recursionGuardError;
-                  }
+                  # `currentScope` is merged after `final`'s own auto-args
+                  # (`newScope`'s own `pkgsForCall // extra`), so a binding
+                  # a caller placed in `currentScope` -- e.g. `applyDeepOverrides`
+                  # binding `catalogs` to a throw -- wins even though `final`
+                  # is nixpkgs' top-level self and can carry attributes this
+                  # extension's own `prev` never had.
+                  final.newScope (
+                    currentScope
+                    // {
+                      ${name} = prev.${name} or recursionGuardError;
+                    }
+                  )
                 # probably equivalent to the above but structurally more similar to the `extend` case below
                 # else if final ? overrideScope then
                 #   (final.overrideScope (
@@ -91,7 +100,13 @@
                 # Todo: If a set can be extended but does not provide a `callPackage`,
                 # we should still try to use the `extend` it and build our own `callPackage` as below.
                 else if final ? callPackage && final ? extend then
-                  (final.extend (_: _: { ${name} = prev.${name} or recursionGuardError; })).callPackage
+                  (final.extend (
+                    _: _:
+                    currentScope
+                    // {
+                      ${name} = prev.${name} or recursionGuardError;
+                    }
+                  )).callPackage
                 else
                   # attrset that is not defined with `makeScope`
                   # and neither with `makeExtensible` and `callPackage`.

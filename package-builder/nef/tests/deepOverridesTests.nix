@@ -67,6 +67,38 @@ in
       expected = "consumer sees: overridden by dependency";
     };
 
+  # Runs through real nixpkgs and `instantiateFromSourceInfo`, the same
+  # as the test above, rather than the fake `basePkgs`: `basePkgs`'s
+  # `overrideScope` (`lib.makeScope`) layers incrementally, but real
+  # nixpkgs' `extend` re-folds every prior overlay -- including the
+  # deep-overrides one -- into the same `final` the later catalog
+  # overlay extends, which is the scope this test needs to reach.
+  "test: an override that forces catalogs fails, naming why" =
+    let
+      deepOverrideTree = instantiate.collectDeepOverrides {
+        catalogSpecClosure = singlePackageClosure "bar" ./testData/deepOverrides/dependency [
+          "wantsCatalogs"
+        ];
+        sourceInfo = consumerSourceInfo;
+      };
+      nixpkgsWithDeepOverrides = instantiate.applyDeepOverrides nixpkgs deepOverrideTree;
+      instantiated = instantiate.instantiateFromSourceInfo {
+        nixpkgs = nixpkgsWithDeepOverrides;
+        sourceInfo = consumerSourceInfo;
+        instantiatedCatalogsClosure = { };
+      };
+    in
+    {
+      # `nefDeepOverrideDemo` above is locked from the same dependency
+      # and never references `catalogs`; its passing test already
+      # covers an override left unaffected.
+      expr = instantiated.pkgs.wantsCatalogs;
+      expectedError = {
+        type = "ThrownError";
+        msg = "cannot use catalog packages";
+      };
+    };
+
   "test: a deep override does not see its own repository's pkgs/ tree" = {
     expr =
       let
