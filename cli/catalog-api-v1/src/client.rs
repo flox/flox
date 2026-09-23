@@ -927,6 +927,13 @@ manifest packages were built via the traditional flox manifest workflow.*/
     ///    "system"
     ///  ],
     ///  "properties": {
+    ///    "factory_build_token": {
+    ///      "title": "Factory Build Token",
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ]
+    ///    },
     ///    "locked_inputs": {
     ///      "title": "Locked Inputs",
     ///      "type": [
@@ -958,6 +965,8 @@ manifest packages were built via the traditional flox manifest workflow.*/
     /// </details>
     #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
     pub struct CheckBuildRequest {
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub factory_build_token: ::std::option::Option<::std::string::String>,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
         pub locked_inputs: ::std::option::Option<
             ::std::collections::HashMap<::std::string::String, LockedInputEntry>,
@@ -2889,6 +2898,13 @@ catalog) or '<owner>.<pkgset>.*' (package set) — e.g. 'brantley.*'
     ///      "default": ".flox",
     ///      "type": "string"
     ///    },
+    ///    "factory_build_token": {
+    ///      "title": "Factory Build Token",
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ]
+    ///    },
     ///    "locked_base_catalog_url": {
     ///      "title": "Locked Base Catalog Url",
     ///      "type": [
@@ -2977,6 +2993,8 @@ catalog) or '<owner>.<pkgset>.*' (package set) — e.g. 'brantley.*'
         pub derivation: PackageDerivation,
         #[serde(default = "defaults::package_build_with_nar_info_dot_flox_dir")]
         pub dot_flox_dir: ::std::string::String,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub factory_build_token: ::std::option::Option<::std::string::String>,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
         pub locked_base_catalog_url: ::std::option::Option<::std::string::String>,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]

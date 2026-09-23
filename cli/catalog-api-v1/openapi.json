@@ -2680,6 +2680,11 @@
               "$ref": "#/components/schemas/LockedInputEntry"
             },
             "type": "object"
+          },
+          "factory_build_token": {
+            "title": "Factory Build Token",
+            "nullable": true,
+            "type": "string"
           }
         },
         "type": "object",
@@ -3494,6 +3499,11 @@
               "$ref": "#/components/schemas/LockedInputEntry"
             },
             "type": "object"
+          },
+          "factory_build_token": {
+            "title": "Factory Build Token",
+            "nullable": true,
+            "type": "string"
           }
         },
         "type": "object",

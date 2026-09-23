@@ -198,6 +198,10 @@ pub struct CheckBuildQuery<'a> {
     pub nixpkgs_rev: &'a str,
     pub system: api_types::PackageSystem,
     pub locked_inputs: &'a HashMap<String, api_types::LockedInputEntry>,
+    /// Forwarded, uninterpreted, from the caller's process environment.
+    /// `None` for an ordinary `flox publish`, which is the normal case
+    /// rather than a gap.
+    pub factory_build_token: Option<&'a str>,
 }
 
 /// The complete catalog API interface.
@@ -731,6 +735,7 @@ impl CatalogClientTrait for FloxhubClient {
         let catalog = str_to_catalog_name(query.catalog_name)?;
         let package = str_to_package_name(query.package_name)?;
         let body = api_types::CheckBuildRequest {
+            factory_build_token: query.factory_build_token.map(str::to_string),
             source_url: query.source_url.to_string(),
             source_rev: query.source_rev.to_string(),
             nixpkgs_rev: query.nixpkgs_rev.to_string(),
@@ -1636,6 +1641,7 @@ pub mod tests {
                 nixpkgs_rev: "cafebabe",
                 system: api_types::PackageSystem::X8664Linux,
                 locked_inputs: &locked_inputs,
+                factory_build_token: None,
             })
             .await;
 
@@ -1674,6 +1680,7 @@ pub mod tests {
                 nixpkgs_rev: "cafebabe",
                 system: api_types::PackageSystem::X8664Linux,
                 locked_inputs: &HashMap::new(),
+                factory_build_token: None,
             })
             .await;
 
@@ -1712,6 +1719,7 @@ pub mod tests {
                 nixpkgs_rev: "cafebabe",
                 system: api_types::PackageSystem::X8664Linux,
                 locked_inputs: &HashMap::new(),
+                factory_build_token: None,
             })
             .await;
 
@@ -1747,10 +1755,85 @@ pub mod tests {
                 nixpkgs_rev: "cafebabe",
                 system: api_types::PackageSystem::X8664Linux,
                 locked_inputs: &HashMap::new(),
+                factory_build_token: None,
             })
             .await;
 
         mock.assert();
         assert!(result.is_err(), "expected Err from 5xx, got: {result:?}");
+    }
+
+    // ---------------------------------------------------------------------------
+    // factory_build_token: forwarded uninterpreted on check-build and
+    // publish, omitted rather than sent null when absent.
+    // ---------------------------------------------------------------------------
+
+    const PUBLISH_PATH: &str = "/api/v1/catalog/catalogs/myorg/packages/mypkg/builds";
+
+    /// A structurally valid [`UserBuildPublish`] for wire-shape tests. Every
+    /// field but `factory_build_token` is an arbitrary value satisfying the
+    /// schema.
+    fn minimal_build_info(factory_build_token: Option<&str>) -> UserBuildPublish {
+        use catalog_api_v1::types as api_types;
+
+        UserBuildPublish {
+            base_catalog_rev_count: None,
+            base_catalog_rev_date: None,
+            build_type: None,
+            cache_uri: None,
+            derivation: api_types::PackageDerivation {
+                broken: None,
+                description: None,
+                drv_path: "/nix/store/deadbeef-mypkg".to_string(),
+                license: None,
+                licenses: None,
+                name: "mypkg".to_string(),
+                outputs: api_types::PackageOutputs(vec![]),
+                outputs_to_install: None,
+                pname: None,
+                system: api_types::PackageSystem::X8664Linux,
+                unfree: None,
+                version: None,
+            },
+            dot_flox_dir: ".flox".to_string(),
+            factory_build_token: factory_build_token.map(str::to_string),
+            locked_base_catalog_url: None,
+            locked_inputs: None,
+            narinfos: None,
+            narinfos_source_url: None,
+            narinfos_source_version: None,
+            ref_: None,
+            rev: "deadbeef".to_string(),
+            rev_count: 1,
+            rev_date: chrono::Utc::now(),
+            url: "https://example.com/repo".to_string(),
+        }
+    }
+
+    /// A token on the build info is forwarded, uninterpreted, on the
+    /// publish request body. The check-build endpoint takes the same
+    /// `Option<String>` field through the same generated
+    /// `skip_serializing_if`, so one endpoint proving inclusion on the
+    /// wire covers both; omission is proven separately by the four
+    /// existing publish cassettes replaying byte-identical.
+    #[tokio::test]
+    async fn publish_build_includes_factory_build_token_when_present() {
+        let server = MockServer::start_async().await;
+        let mock = server.mock(|when, then| {
+            when.method("POST")
+                .path(PUBLISH_PATH)
+                .json_body_includes(json!({ "factory_build_token": "factory:abc123" }).to_string());
+            then.status(200).json_body(json!({}));
+        });
+
+        let client = FloxhubClient::new(client_config(server.base_url().as_str())).unwrap();
+        let build_info = minimal_build_info(Some("factory:abc123"));
+
+        client
+            .publish_build("myorg", "mypkg", &build_info)
+            .await
+            .expect("expected Ok");
+
+        mock.assert();
     }
 }
