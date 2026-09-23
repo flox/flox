@@ -227,31 +227,22 @@ in
     instantiatedCatalogsClosure;
 
   /**
-    Fold every deep override flagged in a catalog closure's lock, plus
-    the consuming project's own, into `nixpkgs` as a single overlay
-    applied before any catalog or project is instantiated. Overrides
-    are discovered under `pkgs/__overrides`, using `lib.nef.dirToAttrs`
-    exactly as `pkgs/` itself is discovered; `__overrides` is a
-    reserved name, stripped from the ordinary tree by
-    `instantiateFromSourceInfo` below. Only sources whose lock entry
+    Union the `pkgs/__overrides` trees of every source flagged in a
+    catalog closure's lock, plus the consuming project's own, into one
+    override tree, of the same shape `lib.nef.dirToAttrs` returns for a
+    single directory.
+
+    Overrides are discovered under `pkgs/__overrides`, using
+    `lib.nef.dirToAttrs` exactly as `pkgs/` itself is discovered;
+    `__overrides` is a reserved name, stripped from the ordinary tree
+    by `instantiateFromSourceInfo` below. Only sources whose lock entry
     records a deep override are fetched; the rest of the closure is
     left untouched.
-
-    Every override is called as a function against the resulting
-    overlay's `final`/`prev` (via `lib.nef.mkOverlay`), never against an
-    already-instantiated package, and never against any source's other
-    `pkgs/` entries: the overlay built here contains only
-    `pkgs/__overrides` entries, and is applied to the base `nixpkgs`
-    before `instantiateCatalogs` or `instantiateFromSourceInfo` extend
-    it further.
 
     Two sources overriding the same attribute path is an evaluation
     error naming both (see `mergeOverrideTrees`).
 
     # Arguments
-
-    `nixpkgs`
-    : the base nixpkgs instance deep overrides are applied to
 
     `catalogSpecClosure`
     : the locked catalog closure, as provided in a catalog lock file
@@ -259,12 +250,8 @@ in
     `sourceInfo`
     : the consuming project's own fetched source
   */
-  applyDeepOverrides =
-    {
-      nixpkgs,
-      catalogSpecClosure,
-      sourceInfo,
-    }:
+  collectDeepOverrides =
+    { catalogSpecClosure, sourceInfo }:
     let
       overridesTreeOf = label: fetchedSourceInfo: {
         inherit label;
@@ -276,14 +263,35 @@ in
         source: overridesTreeOf (labelSource source) (fetchSource source)
       ) flaggedSources;
       ownTree = overridesTreeOf "the consuming project" sourceInfo;
-
-      merged = {
-        type = "directory";
-        path = "<deep overrides>";
-        entries = mergeOverrideTrees [ ] ([ ownTree ] ++ lockedTrees);
-      };
     in
-    lib.nef.extendAttrSet [ ] { } nixpkgs merged;
+    {
+      type = "directory";
+      path = "<deep overrides>";
+      entries = mergeOverrideTrees [ ] ([ ownTree ] ++ lockedTrees);
+    };
+
+  /**
+    Apply an override tree assembled by `collectDeepOverrides` to
+    `nixpkgs`, as a single overlay applied before any catalog or
+    project is instantiated.
+
+    Every override is called as a function against the resulting
+    overlay's `final`/`prev` (via `lib.nef.mkOverlay`), never against an
+    already-instantiated package, and never against any source's other
+    `pkgs/` entries: the tree applied here contains only
+    `pkgs/__overrides` entries, and is applied to the base `nixpkgs`
+    before `instantiateCatalogs` or `instantiateFromSourceInfo` extend
+    it further.
+
+    # Arguments
+
+    `nixpkgs`
+    : the base nixpkgs instance deep overrides are applied to
+
+    `overrideTree`
+    : the tree returned by `collectDeepOverrides`
+  */
+  applyDeepOverrides = nixpkgs: overrideTree: lib.nef.extendAttrSet [ ] { } nixpkgs overrideTree;
 
   /**
     Instantiate a NEF project from a given sourceInfo.

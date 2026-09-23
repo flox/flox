@@ -45,13 +45,13 @@ in
   # this stays clear of the base's own package derivations.
   "test: an override in a dependency's source reaches the consumer's build" =
     let
-      nixpkgsWithDeepOverrides = instantiate.applyDeepOverrides {
-        inherit nixpkgs;
+      deepOverrideTree = instantiate.collectDeepOverrides {
         catalogSpecClosure = singlePackageClosure "bar" ./testData/deepOverrides/dependency [
           "nefDeepOverrideDemo"
         ];
         sourceInfo = consumerSourceInfo;
       };
+      nixpkgsWithDeepOverrides = instantiate.applyDeepOverrides nixpkgs deepOverrideTree;
       instantiated = instantiate.instantiateFromSourceInfo {
         nixpkgs = nixpkgsWithDeepOverrides;
         sourceInfo = consumerSourceInfo;
@@ -69,11 +69,13 @@ in
 
   "test: a deep override does not see its own repository's pkgs/ tree" = {
     expr =
-      (instantiate.applyDeepOverrides {
-        nixpkgs = basePkgs;
-        catalogSpecClosure = { };
-        sourceInfo = consumerSourceInfo;
-      }).usesLocalTool;
+      let
+        deepOverrideTree = instantiate.collectDeepOverrides {
+          catalogSpecClosure = { };
+          sourceInfo = consumerSourceInfo;
+        };
+      in
+      (instantiate.applyDeepOverrides basePkgs deepOverrideTree).usesLocalTool;
     # `usesLocalTool.nix` requests `localTool`, which exists only in the
     # consumer's own pkgs/, never in the deep overlay's scope; its
     # default value stands in, proving pkgs/ is not visible here.
@@ -82,20 +84,22 @@ in
 
   "test: two sources overriding the same attribute path is a collision error" = {
     expr =
-      (instantiate.applyDeepOverrides {
-        nixpkgs = basePkgs;
-        catalogSpecClosure = {
-          depA =
-            (singlePackageClosure "bar" ./testData/deepOverrides/dependency [
-              "topLevelDependency"
-            ]).dep;
-          depB =
-            (singlePackageClosure "baz" ./testData/deepOverrides/sibling [
-              "topLevelDependency"
-            ]).dep;
+      let
+        deepOverrideTree = instantiate.collectDeepOverrides {
+          catalogSpecClosure = {
+            depA =
+              (singlePackageClosure "bar" ./testData/deepOverrides/dependency [
+                "topLevelDependency"
+              ]).dep;
+            depB =
+              (singlePackageClosure "baz" ./testData/deepOverrides/sibling [
+                "topLevelDependency"
+              ]).dep;
+          };
+          sourceInfo = consumerSourceInfo;
         };
-        sourceInfo = consumerSourceInfo;
-      }).topLevelDependency;
+      in
+      (instantiate.applyDeepOverrides basePkgs deepOverrideTree).topLevelDependency;
     expectedError = {
       type = "ThrownError";
       msg = "Deep override collision on 'topLevelDependency'";
@@ -108,13 +112,15 @@ in
   # the directory structure below `__overrides`, not just its top level.
   "test: a deep override nested under a package set reaches that nested attribute" = {
     expr =
-      (instantiate.applyDeepOverrides {
-        nixpkgs = basePkgs;
-        catalogSpecClosure = singlePackageClosure "baz" ./testData/deepOverrides/dependency [
-          "setMakeScope.makeScopeDependency"
-        ];
-        sourceInfo = consumerSourceInfo;
-      }).setMakeScope.makeScopeDependency;
+      let
+        deepOverrideTree = instantiate.collectDeepOverrides {
+          catalogSpecClosure = singlePackageClosure "baz" ./testData/deepOverrides/dependency [
+            "setMakeScope.makeScopeDependency"
+          ];
+          sourceInfo = consumerSourceInfo;
+        };
+      in
+      (instantiate.applyDeepOverrides basePkgs deepOverrideTree).setMakeScope.makeScopeDependency;
     expected = "overridden nested by dependency";
   };
 
@@ -125,12 +131,12 @@ in
   # its own, alongside the ordinary attrs it does expose.
   "test: __overrides is excluded from a repository's own package tree" =
     let
+      deepOverrideTree = instantiate.collectDeepOverrides {
+        catalogSpecClosure = { };
+        sourceInfo = consumerSourceInfo;
+      };
       instantiated = instantiate.instantiateFromSourceInfo {
-        nixpkgs = instantiate.applyDeepOverrides {
-          inherit nixpkgs;
-          catalogSpecClosure = { };
-          sourceInfo = consumerSourceInfo;
-        };
+        nixpkgs = instantiate.applyDeepOverrides nixpkgs deepOverrideTree;
         sourceInfo = consumerSourceInfo;
         instantiatedCatalogsClosure = { };
       };
@@ -174,14 +180,13 @@ in
           };
         };
       };
+      deepOverrideTree = instantiate.collectDeepOverrides {
+        inherit catalogSpecClosure;
+        sourceInfo = consumerSourceInfo;
+      };
     in
     {
-      expr =
-        (instantiate.applyDeepOverrides {
-          nixpkgs = basePkgs;
-          inherit catalogSpecClosure;
-          sourceInfo = consumerSourceInfo;
-        }).topLevelValue;
+      expr = (instantiate.applyDeepOverrides basePkgs deepOverrideTree).topLevelValue;
       expected = "value";
     };
 }
