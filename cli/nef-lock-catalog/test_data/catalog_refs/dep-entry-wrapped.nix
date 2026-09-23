@@ -3,4 +3,5 @@
 let
   version = "1.0";
 in
-{ catalogs, dep-helper }: catalogs.myorg.toolkit.readVersion
+{ catalogs, dep-helper }:
+catalogs.myorg.toolkit.readVersion
