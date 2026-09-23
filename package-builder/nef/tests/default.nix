@@ -28,6 +28,7 @@ in
   collectionTests = import ./collectionTests.nix { inherit lib; };
   extensionTests = import ./extensionTests.nix { inherit lib; };
   reflectTests = import ./reflectTests { inherit lib; };
+  deepOverridesTests = import ./deepOverridesTests { inherit lib; };
 }
 // (lib.optionalAttrs (test-fixtures != null) {
   # Temporary disabled as lockless builds are in progress,

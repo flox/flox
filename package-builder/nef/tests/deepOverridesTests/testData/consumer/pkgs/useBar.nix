@@ -1,0 +1,1 @@
+{ catalogs }: catalogs.acme.bar

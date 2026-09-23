@@ -10,6 +10,90 @@ let
     in
     sourceInfo // lib.optionalAttrs (source ? dir) { inherit (source) dir; };
 
+  # A human-readable label for a locked source, for collision and
+  # provenance messages. Mirrors the rendering `fetchSource` already
+  # uses for its own error context.
+  describeSource = source: builtins.flakeRefToString (builtins.removeAttrs source [ "dir" ]);
+
+  # Every locked package source in a floxhub package tree (as read from
+  # the catalog lockfile), recursing through package_set nodes to each
+  # package leaf's `source`.
+  collectPackageSources =
+    node:
+    {
+      "package" = [ node.source ];
+      "package_set" = lib.concatMap collectPackageSources (lib.attrValues node.entries);
+    }
+    .${node.type};
+
+  # Every locked package source across the whole catalog closure.
+  collectClosureSources =
+    catalogSpecClosure:
+    lib.concatMap (catalogSpec: collectPackageSources catalogSpec.packages) (
+      lib.attrValues catalogSpecClosure
+    );
+
+  # Deep overrides live under this name inside a repository's `pkgs/`
+  # tree (e.g. `pkgs/__overrides/openssl`), so an override's attr path
+  # is publishable like any other package. `instantiateFromSourceInfo`
+  # excludes this name so it never surfaces as an ordinary package set.
+  deepOverridesDirName = "__overrides";
+
+  # The `pkgs/__overrides/` directory of a fetched source, as a
+  # `dirToAttrs` tree, or `null` if the source has none. The target
+  # attribute path is the path below `__overrides`, so
+  # `pkgs/__overrides/python3Packages/foo` targets `python3Packages.foo`.
+  overridesTreeOf =
+    sourceInfo:
+    let
+      overridesDir = "${sourceInfo.outPath}/${sourceInfo.dir or ""}/pkgs/${deepOverridesDirName}";
+    in
+    if builtins.pathExists overridesDir then lib.nef.dirToAttrs overridesDir else null;
+
+  # Union the `pkgs/__overrides/` trees of every source into one tree
+  # of the same shape `dirToAttrs` returns for a single directory.
+  #
+  # An override is a package definition shadowing a base attribute,
+  # with no identifier of its own, so there is nothing to prefer one
+  # over another by. Two sources defining the same attribute path is
+  # therefore an evaluation error naming both, rather than one
+  # silently shadowing the other.
+  mergeOverrideTrees =
+    attrPath: labeledTrees:
+    let
+      names = lib.unique (lib.concatMap (t: lib.attrNames t.tree.entries) labeledTrees);
+      mergeName =
+        name:
+        let
+          childAttrPath = attrPath ++ [ name ];
+          matches = map (t: {
+            inherit (t) label;
+            node = t.tree.entries.${name};
+          }) (lib.filter (t: t.tree.entries ? ${name}) labeledTrees);
+        in
+        lib.nameValuePair name (
+          if lib.length matches == 1 then
+            (lib.head matches).node
+          else if lib.all (m: m.node.type == "directory") matches then
+            mergeOverrideTrees childAttrPath (
+              map (m: {
+                inherit (m) label;
+                tree = m.node;
+              }) matches
+            )
+          else
+            throw ''
+              Deep override collision at '${lib.showAttrPath childAttrPath}':
+              defined by both ${lib.concatMapStringsSep " and " (m: m.label) matches}.
+            ''
+        );
+    in
+    {
+      type = "directory";
+      path = null;
+      entries = lib.listToAttrs (map mergeName names);
+    };
+
   # Fetch a floxhub based catalog
   #
   # {
@@ -70,6 +154,81 @@ let
     };
 in
 {
+
+  /**
+    Union the `pkgs/__overrides/` directories of every locked package
+    source in `catalogSpecClosure`, plus the consuming project's own,
+    into one override tree, of the same shape `dirToAttrs` returns for
+    a single directory.
+
+    Every override is discovered rather than declared in the lock, so
+    every locked source in the closure is fetched here, whether or not
+    the consumer references a package from it.
+
+    Returns `null` when no source in the closure carries a
+    `pkgs/__overrides/` directory, so `applyDeepOverrides` can tell
+    "nothing to apply" apart from an empty tree.
+
+    # Arguments
+
+    `catalogSpecClosure`
+    : the full locked catalog closure, as read from the catalog lockfile
+
+    `selfSourceInfo`
+    : the consuming project's own fetched source info, whose
+      `pkgs/__overrides/` directory (if any) is unioned in alongside
+      its dependencies'
+  */
+  collectDeepOverrides =
+    {
+      catalogSpecClosure,
+      selfSourceInfo,
+    }:
+    let
+      dependencyLabeledSources = map (source: {
+        label = describeSource source;
+        sourceInfo = fetchSource source;
+      }) (collectClosureSources catalogSpecClosure);
+
+      labeledSources = dependencyLabeledSources ++ [
+        {
+          label = "the project itself";
+          sourceInfo = selfSourceInfo;
+        }
+      ];
+
+      labeledTrees = lib.filter (t: t.tree != null) (
+        map (s: {
+          inherit (s) label;
+          tree = overridesTreeOf s.sourceInfo;
+        }) labeledSources
+      );
+    in
+    if labeledTrees == [ ] then null else mergeOverrideTrees [ ] labeledTrees;
+
+  /**
+    Apply an override tree assembled by `collectDeepOverrides` to
+    `nixpkgs`.
+
+    Reuses `extendAttrSet` exactly as `instantiateFromSourceInfo` does
+    for a project's `pkgs/`, so an override is called as a function
+    against the evolving `final`, never applied as an already-
+    instantiated package. Because this runs before any catalog or
+    `pkgs/` tree is instantiated, an override can only see the base and
+    other overrides — never its own repository's `pkgs/`.
+
+    # Arguments
+
+    `nixpkgs`
+    : the base nixpkgs to apply deep overrides to
+
+    `overrideTree`
+    : the tree returned by `collectDeepOverrides`, or `null` for "no
+      overrides found", in which case `nixpkgs` is returned unchanged
+  */
+  applyDeepOverrides =
+    nixpkgs: overrideTree:
+    if overrideTree == null then nixpkgs else lib.nef.extendAttrSet [ ] { } nixpkgs overrideTree;
 
   /**
     This function takes a locked `floxhub` catalog
@@ -181,7 +340,19 @@ in
       nixpkgsWithCatalogs = nixpkgs.extend catalogOverlay;
 
       # step 1 collect packages
-      collectedPackages = lib.nef.dirToAttrs pkgsDir;
+      #
+      # `pkgs/__overrides/` is applied to the base nixpkgs separately,
+      # before this repository's own `pkgs/` is collected (see
+      # `applyDeepOverrides`), and excluded here so it never surfaces
+      # as a package set a consumer of this repository could reference.
+      collectedPackages =
+        let
+          rawCollectedPackages = lib.nef.dirToAttrs pkgsDir;
+        in
+        rawCollectedPackages
+        // {
+          entries = builtins.removeAttrs rawCollectedPackages.entries [ deepOverridesDirName ];
+        };
 
       # Extend nixpkgs, with collectedPackages.
       # `attrPath` and `currentScope` remain empty as this is the toplevel attrset.
