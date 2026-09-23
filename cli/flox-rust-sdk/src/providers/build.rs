@@ -791,6 +791,44 @@ pub fn nix_expression_dir_in(dot_flox_path: impl AsRef<Path>) -> PathBuf {
     dot_flox_path.as_ref().join("pkgs")
 }
 
+/// The reserved subdirectory holding deep overrides, mirroring
+/// `overridesDirName` in `package-builder/nef/lib/instantiate.nix`.
+const DEEP_OVERRIDES_DIR_NAME: &str = "__overrides";
+
+/// Top-level attribute names declared under a repository's
+/// `pkgs/__overrides` directory (FLO-95), for reporting to the catalog at
+/// publish time. A `.nix` file contributes its stem; a directory
+/// contributes its own name without recursing into it — the wire field
+/// is a flat list, not an attribute path, so a nested override's deeper
+/// structure isn't represented here.
+///
+/// An absent directory is a repository with no overrides, so this
+/// returns an empty list rather than an error.
+pub fn deep_override_names_in(dot_flox_path: impl AsRef<Path>) -> Vec<String> {
+    let overrides_dir = nix_expression_dir_in(dot_flox_path).join(DEEP_OVERRIDES_DIR_NAME);
+    let Ok(entries) = std::fs::read_dir(&overrides_dir) else {
+        return Vec::new();
+    };
+
+    let mut names: Vec<String> = entries
+        .flatten()
+        .filter_map(|entry| {
+            let path = entry.path();
+            if path.is_dir() {
+                path.file_name()?.to_str().map(str::to_string)
+            } else if path.extension().and_then(|ext| ext.to_str()) == Some("nix")
+                && path.file_stem().and_then(|stem| stem.to_str()) != Some("flake")
+            {
+                path.file_stem()?.to_str().map(str::to_string)
+            } else {
+                None
+            }
+        })
+        .collect();
+    names.sort();
+    names
+}
+
 pub fn build_symlink_path(
     environment: &impl Environment,
     package: &str,
@@ -1583,6 +1621,32 @@ mod tests {
         };
         let slug: &'static str = (&err).into();
         assert_eq!(slug, "build.build_failure");
+    }
+
+    /// A `.nix` file contributes its stem, and a directory with
+    /// `default.nix` contributes its own name — the two ways NEF itself
+    /// recognizes a package entry under `pkgs/`.
+    #[test]
+    fn deep_override_names_in_lists_nix_files_and_default_nix_dirs() {
+        let dot_flox = tempfile::tempdir().unwrap();
+        let overrides_dir = dot_flox.path().join("pkgs").join("__overrides");
+        fs::create_dir_all(&overrides_dir).unwrap();
+        fs::write(overrides_dir.join("openssl.nix"), "").unwrap();
+        fs::create_dir_all(overrides_dir.join("curl")).unwrap();
+        fs::write(overrides_dir.join("curl").join("default.nix"), "").unwrap();
+
+        let names = deep_override_names_in(dot_flox.path());
+
+        assert_eq!(names, vec!["curl".to_string(), "openssl".to_string()]);
+    }
+
+    /// A repository declaring no overrides has no `pkgs/__overrides`
+    /// directory at all; that is an empty list, not an error.
+    #[test]
+    fn deep_override_names_in_is_empty_without_overrides_dir() {
+        let dot_flox = tempfile::tempdir().unwrap();
+
+        assert!(deep_override_names_in(dot_flox.path()).is_empty());
     }
 
     /// An unsupported `--system` reaches Rust as the eval result's `system`

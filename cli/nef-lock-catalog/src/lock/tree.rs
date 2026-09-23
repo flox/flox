@@ -65,6 +65,7 @@ impl PackageTreeBuilder {
         attr_path: Vec<String>,
         build_type: BuildType,
         source: RawNixFlakerefAttrs,
+        deep_overrides: Vec<String>,
     ) -> Result<()> {
         let Some((final_attribute, parent_attributes)) = attr_path.split_last() else {
             anyhow::bail!("Empty attribute path");
@@ -109,13 +110,10 @@ impl PackageTreeBuilder {
 
         // Insert final package using final component as key. The source is
         // stored verbatim — it is already locked server-side.
-        // `deep_overrides` has no wire source yet — see the field doc on
-        // `PackageTreeNode::Package`; the catalog `/build-inputs/lookup`
-        // response this is built from does not report it.
         let package = PackageTreeNode::Package {
             build_type,
             source,
-            deep_overrides: Vec::new(),
+            deep_overrides,
         };
         match current_node {
             PackageTreeNode::PackageSet { entries } => {
@@ -188,6 +186,7 @@ mod tests {
                 vec!["pkgs".to_string(), "hello".to_string()],
                 BuildType::Manifest,
                 RawNixFlakerefAttrs::new_unchecked(source.clone()),
+                Vec::new(),
             )
             .unwrap();
         builder
@@ -195,6 +194,7 @@ mod tests {
                 vec!["pkgs".to_string(), "grep".to_string()],
                 BuildType::Manifest,
                 RawNixFlakerefAttrs::new_unchecked(source.clone()),
+                Vec::new(),
             )
             .unwrap();
 
@@ -228,6 +228,7 @@ mod tests {
                 vec!["standalone".to_string()],
                 BuildType::Manifest,
                 RawNixFlakerefAttrs::new_unchecked(source.clone()),
+                Vec::new(),
             )
             .unwrap();
 
@@ -258,6 +259,7 @@ mod tests {
                 vec!["conflict".to_string()],
                 BuildType::Manifest,
                 RawNixFlakerefAttrs::new_unchecked(source.clone()),
+                Vec::new(),
             )
             .unwrap();
 
@@ -267,6 +269,7 @@ mod tests {
                 vec!["conflict".to_string(), "child".to_string()],
                 BuildType::Manifest,
                 RawNixFlakerefAttrs::new_unchecked(source.clone()),
+                Vec::new(),
             )
             .unwrap();
 
@@ -301,6 +304,7 @@ mod tests {
                 vec!["conflict".to_string(), "child".to_string()],
                 BuildType::Manifest,
                 RawNixFlakerefAttrs::new_unchecked(source.clone()),
+                Vec::new(),
             )
             .unwrap();
 
@@ -310,6 +314,7 @@ mod tests {
                 vec!["conflict".to_string()],
                 BuildType::Manifest,
                 RawNixFlakerefAttrs::new_unchecked(source.clone()),
+                Vec::new(),
             )
             .unwrap();
 
@@ -343,6 +348,7 @@ mod tests {
             vec![],
             BuildType::Manifest,
             RawNixFlakerefAttrs::new_unchecked(source),
+            Vec::new(),
         );
         assert!(result.is_err());
         assert!(
@@ -368,6 +374,7 @@ mod tests {
                 ],
                 BuildType::Manifest,
                 RawNixFlakerefAttrs::new_unchecked(source.clone()),
+                Vec::new(),
             )
             .unwrap();
 
@@ -410,6 +417,7 @@ mod tests {
                 vec!["test".to_string()],
                 BuildType::Manifest,
                 RawNixFlakerefAttrs::new_unchecked(source.clone()),
+                Vec::new(),
             )
             .unwrap();
 
@@ -454,6 +462,7 @@ mod tests {
                 vec!["pkg1".to_string()],
                 BuildType::Manifest,
                 RawNixFlakerefAttrs::new_unchecked(source.clone()),
+                Vec::new(),
             )
             .unwrap();
         builder
@@ -461,6 +470,7 @@ mod tests {
                 vec!["pkg2".to_string()],
                 BuildType::Manifest,
                 RawNixFlakerefAttrs::new_unchecked(source.clone()),
+                Vec::new(),
             )
             .unwrap();
         builder
@@ -468,6 +478,7 @@ mod tests {
                 vec!["pkg3".to_string()],
                 BuildType::Manifest,
                 RawNixFlakerefAttrs::new_unchecked(source.clone()),
+                Vec::new(),
             )
             .unwrap();
 
@@ -497,6 +508,7 @@ mod tests {
                 vec!["a".to_string(), "b".to_string(), "c".to_string()],
                 BuildType::Manifest,
                 RawNixFlakerefAttrs::new_unchecked(source.clone()),
+                Vec::new(),
             )
             .unwrap();
         builder
@@ -504,6 +516,7 @@ mod tests {
                 vec!["a".to_string(), "d".to_string()],
                 BuildType::Manifest,
                 RawNixFlakerefAttrs::new_unchecked(source.clone()),
+                Vec::new(),
             )
             .unwrap();
         builder
@@ -511,6 +524,7 @@ mod tests {
                 vec!["e".to_string()],
                 BuildType::Manifest,
                 RawNixFlakerefAttrs::new_unchecked(source.clone()),
+                Vec::new(),
             )
             .unwrap();
 
