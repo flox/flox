@@ -24,6 +24,16 @@ pub enum PackageTreeNode {
         /// The package's locked source ref, stored verbatim. See
         /// [RawNixFlakerefAttrs] for the invariant it carries.
         source: RawNixFlakerefAttrs,
+        /// Names of the deep overrides the publishing repository declared
+        /// in its `pkgs/__overrides` directory, if any. A consumer's NEF eval
+        /// fetches only the sources with a non-empty list here, rather
+        /// than every locked source in the closure, to check for
+        /// overrides. Omitted from the rendered lock when empty (the
+        /// common case), so a lock without overrides changes byte for
+        /// byte, and `#[serde(default)]` reads a lock written before
+        /// this field existed the same way, as an empty list.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        deep_overrides: Vec<String>,
     },
 }
 
@@ -99,7 +109,14 @@ impl PackageTreeBuilder {
 
         // Insert final package using final component as key. The source is
         // stored verbatim — it is already locked server-side.
-        let package = PackageTreeNode::Package { build_type, source };
+        // `deep_overrides` has no wire source yet — see the field doc on
+        // `PackageTreeNode::Package`; the catalog `/build-inputs/lookup`
+        // response this is built from does not report it.
+        let package = PackageTreeNode::Package {
+            build_type,
+            source,
+            deep_overrides: Vec::new(),
+        };
         match current_node {
             PackageTreeNode::PackageSet { entries } => {
                 // Check if there's already a package set at this location
@@ -521,5 +538,51 @@ mod tests {
         .unwrap();
 
         assert_eq!(tree, expected_tree);
+    }
+
+    /// A lock written before `deep_overrides` existed has no such key on
+    /// its package entries; `#[serde(default)]` must still parse it, as
+    /// an empty list, rather than fail deserialization.
+    #[test]
+    fn package_without_deep_overrides_key_parses_as_empty() {
+        let source = test_source();
+        let json = json!({
+            "type": "package",
+            "build_type": "manifest",
+            "source": source,
+        });
+
+        let node: PackageTreeNode = serde_json::from_value(json).unwrap();
+
+        let PackageTreeNode::Package { deep_overrides, .. } = node else {
+            panic!("expected package node");
+        };
+        assert_eq!(deep_overrides, Vec::<String>::new());
+    }
+
+    /// A populated `deep_overrides` list round-trips through
+    /// serialization unchanged.
+    #[test]
+    fn package_deep_overrides_round_trip() {
+        let source = test_source();
+        let node = PackageTreeNode::Package {
+            build_type: BuildType::Nef,
+            source: RawNixFlakerefAttrs::new_unchecked(source.clone()),
+            deep_overrides: vec!["openssl".to_string()],
+        };
+
+        let rendered = serde_json::to_value(&node).unwrap();
+        assert_eq!(
+            rendered,
+            json!({
+                "type": "package",
+                "build_type": "nef",
+                "source": source,
+                "deep_overrides": ["openssl"],
+            })
+        );
+
+        let read: PackageTreeNode = serde_json::from_value(rendered).unwrap();
+        assert_eq!(read, node);
     }
 }
