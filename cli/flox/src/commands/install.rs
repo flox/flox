@@ -294,7 +294,11 @@ impl Install {
         message::packages_group_stability(&partitioned.successes, &lockfile);
         message::packages_with_additional_outputs(&partitioned.successes, &lockfile, &flox.system);
         message::packages_installed_with_system_subsets(&partitioned.system_subsets);
-        message::packages_already_installed(&partitioned.already_installed, &description);
+        message::packages_already_installed(
+            &partitioned.already_installed,
+            &description,
+            &lockfile,
+        );
         message::packages_outputs_updated(&partitioned.outputs_updated, &description);
         message::packages_newly_overridden_by_composer(&new_package_overrides);
         message::print_default_systems_changed(old_lockfile.as_ref(), &lockfile);

@@ -111,6 +111,11 @@ fn check_stability_conflict(
     let Some(requested) = &catalog_pkg.stability else {
         return Ok(());
     };
+    // Installing a package that is already installed doesn't move it into
+    // the requested group, so the group's stability doesn't matter.
+    if manifest.pkg_descriptor_with_id(&catalog_pkg.id).is_some() {
+        return Ok(());
+    }
     let group = catalog_pkg
         .target_group()
         .unwrap_or_else(|| DEFAULT_GROUP_NAME.to_string());
@@ -386,6 +391,27 @@ mod tests {
     fn stability_for_custom_catalog_package_is_accepted() {
         let pkg = package_to_install_with_stability("myorg/mypkg", None, "lts");
         assert!(stability_check(pkg).is_ok());
+    }
+
+    /// An already installed package isn't moved into the requested group, so
+    /// the group's stability doesn't conflict.
+    #[test]
+    fn stability_for_already_installed_package_is_ignored() {
+        let manifest = mk_test_manifest_from_contents(with_latest_schema(indoc! {r#"
+            [install]
+            hello.pkg-path = "hello"
+            curl.pkg-path = "curl"
+        "#}));
+        let lockfile = lockfile_with_merged_manifest(indoc! {r#"
+            [install]
+            hello.pkg-path = "hello"
+            curl.pkg-path = "curl"
+        "#});
+        let pkg = package_to_install_with_stability("hello", None, "lts");
+
+        let modifications = compute_install_modifications(&[pkg], &manifest, &lockfile).unwrap();
+
+        assert_eq!(modifications, vec![]);
     }
 
     /// The environment's own default group is empty, but an included
