@@ -464,3 +464,41 @@ EOF
   assert_success
   assert_output "$hello_store_path/bin/hello"
 }
+
+# bats test_tags=edit:stability
+@test "'flox edit' changing a pkg-group's stability changes its packages' versions" {
+  skip_x86_64_darwin_replay
+  "$FLOX_BIN" init
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/ripgrep_lts.yaml" \
+    "$FLOX_BIN" install --stability lts ripgrep
+  lts_version="$(recorded_resolved_version "$GENERATED_DATA/resolve/ripgrep_lts.yaml")"
+  unstable_version="$(recorded_resolved_version "$GENERATED_DATA/resolve/ripgrep_lts_to_unstable.yaml")"
+  assert_not_equal "$lts_version" "$unstable_version"
+
+  sed 's/^stability = "lts"$/stability = "unstable"/' "$MANIFEST_PATH" > "$TMP_MANIFEST_PATH"
+  # The recording only matches a request that sets the new stability and
+  # doesn't keep the packages locked against the old one.
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/ripgrep_lts_to_unstable.yaml" \
+    run "$FLOX_BIN" edit -f "$TMP_MANIFEST_PATH"
+  assert_success
+
+  run jq -c '[.packages[] | {install_id, version, stabilities}] | unique' \
+    "$PROJECT_DIR/.flox/env/manifest.lock"
+  assert_success
+  assert_output "[{\"install_id\":\"ripgrep\",\"version\":\"$unstable_version\",\"stabilities\":[\"unstable\"]}]"
+}
+
+# bats test_tags=edit:stability
+@test "'flox edit' warns about pkg-group settings that no package uses" {
+  "$FLOX_BIN" init
+
+  run "$FLOX_BIN" edit -f <(with_latest_schema '
+[install]
+
+[pkg-groups.legcy]
+stability = "lts"
+')
+  assert_success
+  assert_output --partial "No package is in pkg-group 'legcy', so '[pkg-groups.legcy]' has no effect."
+  assert_output --partial "Check the pkg-group name with 'flox edit'."
+}

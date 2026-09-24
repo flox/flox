@@ -1,0 +1,18 @@
+when:
+  path: /api/v1/catalog/resolve
+  method: POST
+  body: '{"items":[{"descriptors":[{"allow_broken":null,"allow_insecure":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"ripgrep","install_id":"ripgrep","systems":["aarch64-darwin"]},{"allow_broken":null,"allow_insecure":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"ripgrep","install_id":"ripgrep","systems":["aarch64-linux"]},{"allow_broken":null,"allow_insecure":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"ripgrep","install_id":"ripgrep","systems":["x86_64-linux"]}],"name":"toplevel","stability":"unstable"}]}'
+then:
+  status: 200
+  header:
+  - name: date
+    value: Thu, 24 Sep 2026 21:39:07 GMT
+  - name: content-type
+    value: application/json
+  - name: content-length
+    value: '2766'
+  - name: server
+    value: uvicorn
+  - name: apigw-requestid
+    value: EOTDYg2yIAMEYgw=
+  body: '{"items":[{"name":"toplevel","page":{"page":1077996,"url":"","packages":[{"catalog":"nixpkgs","attr_path":"ripgrep","pkg_path":"ripgrep","derivation":"/nix/store/s6lvfn713yl4hisds9ccbfga63wfwg72-ripgrep-15.2.0.drv","name":"ripgrep-15.2.0","pname":"ripgrep","version":"15.2.0","system":"aarch64-darwin","outputs":[{"name":"out","store_path":"/nix/store/z85gi5j702y75rn09w6zdrzj6ymrh9i9-ripgrep-15.2.0"}],"outputs_to_install":["out","out"],"description":"Utility that combines the usability of The Silver Searcher with the raw speed of grep","license":"[ Unlicense, MIT ]","locked_url":"https://github.com/flox/nixpkgs?rev=6774f7bc253789b113a4f39285dc0fa100abeacc","rev":"6774f7bc253789b113a4f39285dc0fa100abeacc","rev_count":1077996,"rev_date":"2026-09-22T03:11:10Z","broken":false,"insecure":false,"unfree":false,"missing_builds":false,"stabilities":["unstable"],"scrape_date":"2026-09-23T04:59:39.423780Z","cache_uri":null,"install_id":"ripgrep"},{"catalog":"nixpkgs","attr_path":"ripgrep","pkg_path":"ripgrep","derivation":"/nix/store/6vhxfby7ls63b0xj8d6758cmki32h134-ripgrep-15.2.0.drv","name":"ripgrep-15.2.0","pname":"ripgrep","version":"15.2.0","system":"aarch64-linux","outputs":[{"name":"out","store_path":"/nix/store/6z0x460fggf3yclppp911w5n2awrf6a3-ripgrep-15.2.0"}],"outputs_to_install":["out","out"],"description":"Utility that combines the usability of The Silver Searcher with the raw speed of grep","license":"[ Unlicense, MIT ]","locked_url":"https://github.com/flox/nixpkgs?rev=6774f7bc253789b113a4f39285dc0fa100abeacc","rev":"6774f7bc253789b113a4f39285dc0fa100abeacc","rev_count":1077996,"rev_date":"2026-09-22T03:11:10Z","broken":false,"insecure":false,"unfree":false,"missing_builds":false,"stabilities":["unstable"],"scrape_date":"2026-09-23T05:31:46.241972Z","cache_uri":null,"install_id":"ripgrep"},{"catalog":"nixpkgs","attr_path":"ripgrep","pkg_path":"ripgrep","derivation":"/nix/store/1hiqcb1xg6k56wnv6b5d9djgwg5dl9lh-ripgrep-15.2.0.drv","name":"ripgrep-15.2.0","pname":"ripgrep","version":"15.2.0","system":"x86_64-linux","outputs":[{"name":"out","store_path":"/nix/store/hkclq7d0j10l7gk1v2hpif398dvnq6lz-ripgrep-15.2.0"}],"outputs_to_install":["out","out"],"description":"Utility that combines the usability of The Silver Searcher with the raw speed of grep","license":"[ Unlicense, MIT ]","locked_url":"https://github.com/flox/nixpkgs?rev=6774f7bc253789b113a4f39285dc0fa100abeacc","rev":"6774f7bc253789b113a4f39285dc0fa100abeacc","rev_count":1077996,"rev_date":"2026-09-22T03:11:10Z","broken":false,"insecure":false,"unfree":false,"missing_builds":false,"stabilities":["unstable"],"scrape_date":"2026-09-23T06:08:34.559065Z","cache_uri":null,"install_id":"ripgrep"}],"messages":[],"complete":true},"candidate_pages":null,"messages":[]}]}'

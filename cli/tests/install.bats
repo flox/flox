@@ -611,3 +611,116 @@ EOF
   assert_success
   assert_output --partial "hello"
 }
+
+# ---------------------------------------------------------------------------- #
+# pkg-group stabilities
+
+# bats test_tags=install:stability
+@test "'flox install --stability' sets the stability of an empty toplevel pkg-group" {
+  skip_x86_64_darwin_replay
+  "$FLOX_BIN" init
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/ripgrep_lts.yaml" \
+    run "$FLOX_BIN" install --stability lts ripgrep
+  assert_success
+  assert_output --partial "✔ 'ripgrep' installed to environment 'test'"
+  assert_output --partial "pkg-group 'toplevel' resolves against the 'lts' stability."
+
+  run tomlq -c '{install, "pkg-groups"}' "$MANIFEST_PATH"
+  assert_success
+  assert_output '{"install":{"ripgrep":{"pkg-path":"ripgrep"}},"pkg-groups":{"toplevel":{"stability":"lts"}}}'
+
+  run jq -c '[.packages[] | {install_id, group, lts: (.stabilities | index("lts") != null)}] | unique' "$LOCKFILE_PATH"
+  assert_success
+  assert_output '[{"install_id":"ripgrep","group":"toplevel","lts":true}]'
+}
+
+# bats test_tags=install:stability
+@test "'flox install --pkg-group --stability' creates a pkg-group with a stability" {
+  skip_x86_64_darwin_replay
+  "$FLOX_BIN" init
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/ripgrep_legacy_lts.yaml" \
+    run "$FLOX_BIN" install --pkg-group legacy --stability lts ripgrep
+  assert_success
+  assert_output --partial "pkg-group 'legacy' resolves against the 'lts' stability."
+
+  run tomlq -c '{install, "pkg-groups"}' "$MANIFEST_PATH"
+  assert_success
+  assert_output '{"install":{"ripgrep":{"pkg-path":"ripgrep","pkg-group":"legacy"}},"pkg-groups":{"legacy":{"stability":"lts"}}}'
+
+  run jq -c '[.packages[] | {install_id, group, lts: (.stabilities | index("lts") != null)}] | unique' "$LOCKFILE_PATH"
+  assert_success
+  assert_output '[{"install_id":"ripgrep","group":"legacy","lts":true}]'
+}
+
+# bats test_tags=install:stability
+@test "'flox install --stability' rejects a stability the catalog doesn't provide" {
+  skip_x86_64_darwin_replay
+  "$FLOX_BIN" init
+  cp "$MANIFEST_PATH" manifest.toml.before
+
+  # Only the base catalog info in this recording is used.
+  RUST_BACKTRACE=0 \
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/ripgrep_lts.yaml" \
+    run "$FLOX_BIN" install --stability lst ripgrep
+  assert_failure
+  assert_output --partial "Stability 'lst' does not exist."
+  assert_output --regexp "Available stabilities are: .*lts"
+
+  run diff manifest.toml.before "$MANIFEST_PATH"
+  assert_success
+}
+
+# bats test_tags=install:stability
+@test "'flox install --stability' fails for a toplevel pkg-group with packages and no stability" {
+  skip_x86_64_darwin_replay
+  "$FLOX_BIN" init
+  # hello is installed in toplevel of a manifest that predates '[pkg-groups]'.
+  cp "$GENERATED_DATA"/envs/hello/manifest.{toml,lock} "$PROJECT_DIR/.flox/env"
+  cp "$MANIFEST_PATH" manifest.toml.before
+
+  RUST_BACKTRACE=0 \
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/ripgrep_lts.yaml" \
+    run "$FLOX_BIN" install --stability lts ripgrep
+  assert_failure
+  assert_output - <<'EOF'
+✘ ERROR: Can't install into pkg-group 'toplevel' with stability 'lts'.
+The pkg-group has no stability set, so the Flox Catalog picks one.
+Its packages share one stability, so 'lts' would change their versions too.
+To install into a separate pkg-group instead, add '--pkg-group <NAME>'.
+To change the pkg-group's stability, run 'flox edit' and set:
+
+  schema-version = "1.18.0"  # replaces the current 'schema-version'
+
+  [pkg-groups.toplevel]
+  stability = "lts"
+EOF
+
+  run diff manifest.toml.before "$MANIFEST_PATH"
+  assert_success
+}
+
+# bats test_tags=install:stability
+@test "'flox install' doesn't change the stability or pkg-group of installed packages" {
+  skip_x86_64_darwin_replay
+  "$FLOX_BIN" init
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/ripgrep_lts.yaml" \
+    "$FLOX_BIN" install --stability lts ripgrep
+  cp "$MANIFEST_PATH" manifest.toml.before
+
+  # toplevel has a package that resolves against 'lts'.
+  RUST_BACKTRACE=0 \
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/ripgrep_lts.yaml" \
+    run "$FLOX_BIN" install --stability stable hello
+  assert_failure
+  assert_output --partial "Can't install into pkg-group 'toplevel' with stability 'stable'."
+  assert_output --partial "The pkg-group resolves against the 'lts' stability."
+
+  # An installed package isn't moved to another pkg-group.
+  run "$FLOX_BIN" install --pkg-group other ripgrep
+  assert_success
+  assert_output --partial "Package 'ripgrep' is already installed in pkg-group 'toplevel', so it was not moved to pkg-group 'other'."
+  assert_output --partial "To apply these options, run 'flox uninstall ripgrep' and then run 'flox install' again."
+
+  run diff manifest.toml.before "$MANIFEST_PATH"
+  assert_success
+}

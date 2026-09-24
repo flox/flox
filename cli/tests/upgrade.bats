@@ -181,6 +181,29 @@ function old_hello_response_version() {
   assert_success
 }
 
+# bats test_tags=upgrade:stability
+@test "upgrade stays within a pkg-group's stability" {
+  skip_x86_64_darwin_replay
+  "$FLOX_BIN" init
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/ripgrep_lts_old.yaml" \
+    "$FLOX_BIN" install --stability lts ripgrep
+  old_version="$(recorded_resolved_version "$GENERATED_DATA/resolve/ripgrep_lts_old.yaml")"
+  lts_version="$(recorded_resolved_version "$GENERATED_DATA/resolve/ripgrep_lts.yaml")"
+  # A newer version exists outside of the 'lts' stability.
+  unstable_version="$(recorded_resolved_version "$GENERATED_DATA/resolve/ripgrep_lts_to_unstable.yaml")"
+  assert_not_equal "$lts_version" "$unstable_version"
+
+  # The recording only matches a request that sets the 'lts' stability.
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/ripgrep_lts.yaml" \
+    run "$FLOX_BIN" upgrade
+  assert_success
+  assert_output --partial "- ripgrep: $old_version -> $lts_version"
+
+  run jq -c '[.packages[] | {install_id, version, lts: (.stabilities | index("lts") != null)}] | unique' "$LOCK_PATH"
+  assert_success
+  assert_output "[{\"install_id\":\"ripgrep\",\"version\":\"$lts_version\",\"lts\":true}]"
+}
+
 # bats test_tags=upgrade:dry-run
 @test "'upgrade --dry-run' does not update the lockfile" {
   skip_x86_64_darwin_replay

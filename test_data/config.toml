@@ -508,6 +508,49 @@ cmd = "flox install rubyPackages_3_2.rails"
 pre_cmd = "flox init"
 cmd = "flox install rustPlatform.rustLibSrc"
 
+# Installs into the empty toplevel pkg-group of a new environment, which sets
+# its stability.
+[resolve.ripgrep_lts]
+pre_cmd = "flox init"
+cmd = "flox install --stability lts ripgrep"
+
+# The same as ripgrep_lts, but with an older version of ripgrep, which
+# 'flox upgrade' upgrades within the 'lts' stability.
+[resolve.ripgrep_lts_old]
+pre_cmd = "flox init"
+cmd = "flox install --stability lts ripgrep"
+post_cmd = '''
+    yq -y '
+        if .when.path == "/api/v1/catalog/resolve" then
+            .then.body |= (
+                fromjson
+                | .items[].page.packages |= map(
+                    .derivation = "/nix/store/AAA-ripgrep-14.0.0.drv"
+                    | .version = "14.0.0"
+                )
+                | tojson
+            )
+            | del(.then.header[] | select(.name == "content-length"))
+        else . end
+    ' "$RESPONSE_FILE" > tmp.yaml
+    mv tmp.yaml "$RESPONSE_FILE"
+'''
+
+# Installs into a new pkg-group with a stability.
+[resolve.ripgrep_legacy_lts]
+pre_cmd = "flox init"
+cmd = "flox install --pkg-group legacy --stability lts ripgrep"
+
+# Changes the stability of the toplevel pkg-group after installing ripgrep
+# into it with the 'lts' stability.
+[resolve.ripgrep_lts_to_unstable]
+pre_cmd = '''
+    flox init
+    flox install --stability lts ripgrep
+    sed 's/^stability = "lts"$/stability = "unstable"/' .flox/env/manifest.toml > manifest.toml
+'''
+cmd = "flox edit -f manifest.toml"
+
 [resolve.tabula]
 pre_cmd = "flox init"
 cmd = "flox install tabula"

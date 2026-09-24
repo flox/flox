@@ -418,6 +418,13 @@ skip_x86_64_darwin_replay() {
   fi
 }
 
+# The version of the first package in the resolve response of a catalog
+# recording, which may also record other requests.
+recorded_resolved_version() {
+  yq -r 'select(.when.path == "/api/v1/catalog/resolve") | .then.body' "$1" \
+    | jq -r '.items[].page.packages[0].version'
+}
+
 # Ask for all four systems, including x86_64-darwin, which is no longer an
 # implicit default. Use this with the recordings that were deliberately made for
 # the full set (e.g. `resolve/bpftrace.yaml`, `envs/hello_as_greeting`) to cover
