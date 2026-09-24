@@ -623,7 +623,7 @@ EOF
     run "$FLOX_BIN" install --stability lts ripgrep
   assert_success
   assert_output --partial "✔ 'ripgrep' installed to environment 'test'"
-  assert_output --partial "pkg-group 'toplevel' resolves against the 'lts' stability."
+  assert_output --partial "The 'toplevel' pkg-group resolves against the 'lts' stability."
 
   run tomlq -c '{install, "pkg-groups"}' "$MANIFEST_PATH"
   assert_success
@@ -641,7 +641,7 @@ EOF
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/ripgrep_legacy_lts.yaml" \
     run "$FLOX_BIN" install --pkg-group legacy --stability lts ripgrep
   assert_success
-  assert_output --partial "pkg-group 'legacy' resolves against the 'lts' stability."
+  assert_output --partial "The 'legacy' pkg-group resolves against the 'lts' stability."
 
   run tomlq -c '{install, "pkg-groups"}' "$MANIFEST_PATH"
   assert_success
@@ -686,7 +686,7 @@ EOF
 ✘ ERROR: Can't install into pkg-group 'toplevel' with stability 'lts'.
 The pkg-group has no stability set, so the Flox Catalog picks one.
 Its packages share one stability, so 'lts' would change their versions too.
-To install into a separate pkg-group instead, add '--pkg-group <NAME>'.
+To install into a different pkg-group instead, use '--pkg-group <NAME>'.
 To change the pkg-group's stability, run 'flox edit' and set:
 
   schema-version = "1.18.0"  # replaces the current 'schema-version'
@@ -718,8 +718,27 @@ EOF
   # An installed package isn't moved to another pkg-group.
   run "$FLOX_BIN" install --pkg-group other ripgrep
   assert_success
-  assert_output --partial "Package 'ripgrep' is already installed in pkg-group 'toplevel', so it was not moved to pkg-group 'other'."
-  assert_output --partial "To apply these options, run 'flox uninstall ripgrep' and then run 'flox install' again."
+  assert_output - <<'EOF'
+! Package 'ripgrep' is already in the 'toplevel' pkg-group.
+It was not moved to the 'other' pkg-group.
+To move it, run 'flox uninstall ripgrep' and then run 'flox install' again.
+EOF
+
+  # The stability of an installed package's pkg-group doesn't change.
+  # Only the base catalog info in this recording is used.
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/ripgrep_lts.yaml" \
+    run "$FLOX_BIN" install --stability stable ripgrep
+  assert_success
+  assert_output - <<'EOF'
+! Package 'ripgrep' is already in the 'toplevel' pkg-group.
+The pkg-group still resolves against the 'lts' stability.
+To change the stability of 'ripgrep' only, run 'flox uninstall ripgrep'
+and install it again with '--pkg-group <NAME> --stability stable'.
+To change the stability of the whole pkg-group, run 'flox edit' and set:
+
+  [pkg-groups.toplevel]
+  stability = "stable"
+EOF
 
   run diff manifest.toml.before "$MANIFEST_PATH"
   assert_success

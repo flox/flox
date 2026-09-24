@@ -1,4 +1,4 @@
-use flox_manifest::interfaces::{AsLatestSchema, OriginalSchemaVersion, PackageLookup};
+use flox_manifest::interfaces::{AsLatestSchema, PackageLookup};
 use flox_manifest::lockfile::Lockfile;
 use flox_manifest::parsed::common::DEFAULT_GROUP_NAME;
 use flox_manifest::parsed::latest::{AllSentinel, ManifestLatest, SelectedOutputs};
@@ -11,7 +11,7 @@ use flox_manifest::raw::{
 use flox_manifest::{Manifest, Migrated};
 use tracing::debug;
 
-use crate::models::environment::InstallOrUninstallError;
+use crate::models::environment::{InstallOrUninstallError, PkgGroupStabilityEdit};
 
 /// Check that each string in `requested` appears in `all_outputs`.
 ///
@@ -126,8 +126,8 @@ fn check_stability_conflict(
     Err(InstallOrUninstallError::StabilityConflict {
         current: current.map(str::to_string),
         requested: requested.clone(),
+        edit: PkgGroupStabilityEdit::new(&group, requested, manifest),
         group,
-        manifest_schema: manifest.original_schema(),
     })
 }
 
@@ -246,6 +246,8 @@ mod tests {
     use expect_test::expect;
     use flox_core::canonical_path::CanonicalPath;
     use flox_manifest::interfaces::{AsTypedOnlyManifest, AsWritableManifest, WriteManifest};
+    use flox_manifest::lockfile::LockedPackage;
+    use flox_manifest::lockfile::test_helpers::fake_catalog_package_lock_with_outputs;
     use flox_manifest::parsed::common::KnownSchemaVersion;
     use flox_manifest::raw::test_helpers::{
         empty_test_migrated_manifest,
@@ -344,18 +346,17 @@ mod tests {
             group,
             current,
             requested,
-            manifest_schema,
+            ..
         }) = stability_check(pkg)
         else {
             panic!("expected a stability conflict");
         };
         assert_eq!(
-            (group, current, requested, manifest_schema),
+            (group, current, requested),
             (
                 "tools".to_string(),
                 Some("stable".to_string()),
-                "lts".to_string(),
-                KnownSchemaVersion::latest()
+                "lts".to_string()
             )
         );
     }
@@ -369,19 +370,14 @@ mod tests {
             group,
             current,
             requested,
-            manifest_schema,
+            ..
         }) = stability_check(pkg)
         else {
             panic!("expected a stability conflict");
         };
         assert_eq!(
-            (group, current, requested, manifest_schema),
-            (
-                "toplevel".to_string(),
-                None,
-                "lts".to_string(),
-                KnownSchemaVersion::latest()
-            )
+            (group, current, requested),
+            ("toplevel".to_string(), None, "lts".to_string())
         );
     }
 
@@ -465,19 +461,14 @@ mod tests {
             group,
             current,
             requested,
-            manifest_schema,
+            ..
         }) = compute_install_modifications(&[pkg], &manifest, &lockfile)
         else {
             panic!("expected a stability conflict");
         };
         assert_eq!(
-            (group, current, requested, manifest_schema),
-            (
-                "toplevel".to_string(),
-                None,
-                "lts".to_string(),
-                KnownSchemaVersion::latest()
-            )
+            (group, current, requested),
+            ("toplevel".to_string(), None, "lts".to_string())
         );
     }
 
@@ -492,7 +483,7 @@ mod tests {
             Can't install into pkg-group 'tools' with stability 'lts'.
             The pkg-group resolves against the 'stable' stability.
             Its packages share one stability, so 'lts' would change their versions too.
-            To install into a separate pkg-group instead, add '--pkg-group <NAME>'.
+            To install into a different pkg-group instead, use '--pkg-group <NAME>'.
             To change the pkg-group's stability, run 'flox edit' and set:
 
               [pkg-groups.tools]
@@ -518,7 +509,7 @@ mod tests {
             Can't install into pkg-group 'toplevel' with stability 'lts'.
             The pkg-group has no stability set, so the Flox Catalog picks one.
             Its packages share one stability, so 'lts' would change their versions too.
-            To install into a separate pkg-group instead, add '--pkg-group <NAME>'.
+            To install into a different pkg-group instead, use '--pkg-group <NAME>'.
             To change the pkg-group's stability, run 'flox edit' and set:
 
               schema-version = "1.18.0"  # replaces the current 'schema-version'
@@ -526,6 +517,96 @@ mod tests {
               [pkg-groups.toplevel]
               stability = "lts""#]]
         .assert_eq(&err.to_string());
+    }
+
+    /// A `version = 1` manifest installs all outputs of each package, so the
+    /// error lists the packages that need `outputs = "all"` to keep their
+    /// outputs once the manifest has a `schema-version`.
+    #[test]
+    fn stability_conflict_error_keeps_outputs_of_version_1_manifest() {
+        let locked = |id: &str, outputs: &[&str], outputs_to_install: &[&str]| {
+            let (_, mut locked) = fake_catalog_package_lock_with_outputs(id, id, outputs);
+            locked.outputs_to_install =
+                Some(outputs_to_install.iter().map(|o| o.to_string()).collect());
+            LockedPackage::Catalog(locked)
+        };
+        let lockfile = Lockfile {
+            packages: vec![
+                locked("curl", &["bin", "dev", "man"], &["bin", "man"]),
+                locked("gh", &["out", "man"], &["out"]),
+                locked("hello", &["out"], &["out"]),
+            ],
+            ..Default::default()
+        };
+        let manifest = Manifest::parse_and_migrate(
+            with_schema(KnownSchemaVersion::V1, indoc! {r#"
+                [install]
+                curl.pkg-path = "curl"
+                gh.pkg-path = "gh"
+                hello.pkg-path = "hello"
+            "#}),
+            Some(&lockfile),
+        )
+        .unwrap();
+        let pkg = package_to_install_with_stability("jq", None, "lts");
+
+        let err =
+            check_stability_conflict(&pkg, &manifest, manifest.as_latest_schema()).unwrap_err();
+
+        expect![[r#"
+            Can't install into pkg-group 'toplevel' with stability 'lts'.
+            The pkg-group has no stability set, so the Flox Catalog picks one.
+            Its packages share one stability, so 'lts' would change their versions too.
+            To install into a different pkg-group instead, use '--pkg-group <NAME>'.
+            To change the pkg-group's stability, run 'flox edit' and set:
+
+              schema-version = "1.18.0"  # replaces 'version = 1'
+
+              [pkg-groups.toplevel]
+              stability = "lts"
+
+            Packages 'curl', 'gh' install all of their outputs with 'version = 1'.
+            To keep that, also set 'outputs = "all"' for them in '[install]'."#]]
+        .assert_eq(&err.to_string());
+
+        // Following the instructions installs the outputs that migrating the
+        // manifest installs.
+        let edited = mk_test_manifest_from_contents(with_latest_schema(indoc! {r#"
+            [install]
+            curl.pkg-path = "curl"
+            curl.outputs = "all"
+            gh.pkg-path = "gh"
+            gh.outputs = "all"
+            hello.pkg-path = "hello"
+
+            [pkg-groups.toplevel]
+            stability = "lts"
+        "#}));
+        assert_eq!(
+            edited.as_latest_schema().install,
+            manifest.as_latest_schema().install
+        );
+    }
+
+    /// Pkg-group names that aren't bare TOML keys are quoted in the error's
+    /// TOML.
+    #[test]
+    fn stability_conflict_error_quotes_pkg_group_name() {
+        let manifest = mk_test_manifest_from_contents(with_latest_schema(indoc! {r#"
+            [install]
+            curl.pkg-path = "curl"
+            curl.pkg-group = "v1.2"
+        "#}));
+        let pkg = package_to_install_with_stability("jq", Some("v1.2"), "lts");
+
+        let err =
+            check_stability_conflict(&pkg, &manifest, manifest.as_latest_schema()).unwrap_err();
+
+        assert!(
+            err.to_string()
+                .ends_with("  [pkg-groups.\"v1.2\"]\n  stability = \"lts\""),
+            "{err}"
+        );
     }
 
     /// An included environment sets the stability of the default group, so

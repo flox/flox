@@ -289,17 +289,33 @@ impl Install {
         };
         let partitioned = Self::partition_installed_packages(&installed, &installation);
 
+        // The environment's own manifest, which decides what to change to
+        // give a pkg-group a stability.
+        let manifest = concrete_environment.manifest(&flox)?;
+
         // Print status messages for the installation attempt
         message::packages_successfully_installed(&partitioned.successes, &description);
-        message::packages_group_stability(&partitioned.successes, &lockfile);
+        let added_packages = partitioned
+            .successes
+            .iter()
+            .chain(&partitioned.system_subsets)
+            .cloned()
+            .collect::<Vec<_>>();
+        message::packages_group_stability(&added_packages, &lockfile);
         message::packages_with_additional_outputs(&partitioned.successes, &lockfile, &flox.system);
         message::packages_installed_with_system_subsets(&partitioned.system_subsets);
         message::packages_already_installed(
             &partitioned.already_installed,
             &description,
             &lockfile,
+            &manifest,
         );
-        message::packages_outputs_updated(&partitioned.outputs_updated, &description);
+        message::packages_outputs_updated(
+            &partitioned.outputs_updated,
+            &description,
+            &lockfile,
+            &manifest,
+        );
         message::packages_newly_overridden_by_composer(&new_package_overrides);
         message::print_default_systems_changed(old_lockfile.as_ref(), &lockfile);
 

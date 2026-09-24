@@ -33,6 +33,7 @@ use flox_manifest::parsed::latest::{
     ManifestLatest,
     ManifestPackageDescriptor,
     PackageDescriptorCatalog,
+    PkgGroups,
 };
 use flox_manifest::parsed::{Inner, latest};
 use flox_manifest::raw::DEFAULT_SYSTEMS_STR;
@@ -80,8 +81,9 @@ pub enum ResolveError {
     ResolutionFailed(ResolutionFailures),
 
     #[error(
-        "Stability '{stability}' of pkg-group '{group}' does not exist.\nAvailable stabilities are: {}\nChange 'stability' in '[pkg-groups.{group}]' with 'flox edit'.",
-        available.join(", ")
+        "Stability '{stability}' of pkg-group '{group}' does not exist.\nAvailable stabilities are: {}\nChange 'stability' in '{}' with 'flox edit'.",
+        available.join(", "),
+        PkgGroups::table_header(group)
     )]
     UnknownStability {
         group: String,

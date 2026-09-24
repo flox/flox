@@ -200,6 +200,15 @@ pub struct PkgGroups(
 
 impl_into_inner!(PkgGroups, BTreeMap<String, PkgGroup>);
 
+impl PkgGroups {
+    /// The TOML table header for the settings of `group`, with the name
+    /// quoted if it isn't a bare key, e.g. `[pkg-groups.legacy]` or
+    /// `[pkg-groups."v1.2"]`.
+    pub fn table_header(group: &str) -> String {
+        format!("[pkg-groups.{}]", toml_edit::Key::new(group))
+    }
+}
+
 impl SkipSerializing for PkgGroups {
     fn skip_serializing(&self) -> bool {
         self.0.is_empty()
@@ -221,4 +230,21 @@ pub struct PkgGroup {
         proptest(strategy = "optional_string(5)")
     )]
     pub stability: Option<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Pkg-group names that aren't bare TOML keys are quoted, so that a
+    /// name with a dot doesn't read as a nested table.
+    #[test]
+    fn pkg_groups_table_header_quotes_names() {
+        assert_eq!(PkgGroups::table_header("legacy"), "[pkg-groups.legacy]");
+        assert_eq!(PkgGroups::table_header("v1.2"), r#"[pkg-groups."v1.2"]"#);
+        assert_eq!(
+            PkgGroups::table_header("my group"),
+            r#"[pkg-groups."my group"]"#
+        );
+    }
 }

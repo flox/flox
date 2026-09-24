@@ -108,6 +108,9 @@ reference.
     to change the stability of the whole pkg-group instead,
     including the `schema-version` that the table requires
     if the manifest has an older one.
+    For a manifest with `version = 1`, the error also lists the packages
+    that need `outputs = "all"` to keep installing all of their outputs
+    once the manifest has a `schema-version`.
     Packages from included environments count as packages of the pkg-group,
     and a stability set by an included environment counts as its stability.
 
@@ -116,9 +119,15 @@ reference.
     and `flox install` prints which stability that is.
 
     `--pkg-group` and `--stability` don't move a package that is already
-    installed, and `flox install` says so.
-    To move it, uninstall it with [`flox-uninstall(1)`](./flox-uninstall.md)
-    and install it again.
+    installed, or change the stability of its pkg-group,
+    and `flox install` says so.
+    To move it to another pkg-group,
+    uninstall it with [`flox-uninstall(1)`](./flox-uninstall.md)
+    and install it again with `--pkg-group`.
+    To change the stability of the pkg-group that it is in,
+    and so of every package in that pkg-group,
+    set `stability` in the pkg-group's `[pkg-groups]` table with
+    [`flox-edit(1)`](./flox-edit.md).
 
     `--pkg-group` and `--stability` only apply to packages from a catalog,
     not to flake installables or store paths.

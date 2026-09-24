@@ -11,8 +11,10 @@ use flox_manifest::interfaces::{AsLatestSchema, PackageLookup};
 use flox_manifest::lockfile::{LockedPackage, Lockfile, PackageOutputs, default_systems_change};
 use flox_manifest::parsed::Inner;
 use flox_manifest::parsed::common::DEFAULT_GROUP_NAME;
-use flox_manifest::parsed::latest::{ManifestLatest, SelectedOutputs};
+use flox_manifest::parsed::latest::{ManifestLatest, PkgGroups, SelectedOutputs};
 use flox_manifest::raw::PackageToInstall;
+use flox_manifest::{Manifest, Migrated};
+use flox_rust_sdk::models::environment::PkgGroupStabilityEdit;
 use indoc::formatdoc;
 use minus::{ExitStrategy, Pager, page_all};
 use tracing::{debug, info};
@@ -186,17 +188,20 @@ pub(crate) fn packages_group_stability(pkgs: &[PackageToInstall], lockfile: &Loc
 
     for (group, stability) in requested_stabilities {
         info(format!(
-            "pkg-group '{group}' resolves against the '{stability}' stability."
+            "The '{group}' pkg-group resolves against the '{stability}' stability."
         ));
     }
     for (group, pkgs) in inheriting_pkgs {
         let Some(stability) = merged_manifest.group_stability(&group) else {
             continue;
         };
-        info(format!(
-            "{} joined pkg-group '{group}', which resolves against the '{stability}' stability.",
-            pkgs.join(", ")
-        ));
+        let pkgs = match pkgs.as_slice() {
+            [pkg] => format!("Package {pkg}"),
+            pkgs => format!("Packages {}", pkgs.join(", ")),
+        };
+        info(formatdoc! {"
+            {pkgs} joined the '{group}' pkg-group.
+            The pkg-group resolves against the '{stability}' stability."});
     }
 }
 
@@ -218,15 +223,32 @@ pub(crate) fn packages_installed_with_system_subsets(pkgs: &[PackageToInstall]) 
 }
 
 /// Display a message for packages whose outputs were updated.
+///
+/// Updating the outputs of a package doesn't move it to another pkg-group
+/// or change the stability of its pkg-group, so packages that
+/// `--pkg-group` or `--stability` would have changed get a message that
+/// says so.
 pub(crate) fn packages_outputs_updated(
     pkgs: &[(PackageToInstall, SelectedOutputs)],
     environment_description: &str,
+    lockfile: &Lockfile,
+    manifest: &Manifest<Migrated>,
 ) {
+    let merged_manifest = lockfile
+        .migrated_manifest()
+        .inspect_err(|err| debug!(%err, "failed to read merged manifest for pkg-groups"))
+        .ok();
     for (pkg, outputs) in pkgs {
         updated(format!(
             "'{}' outputs updated to '{outputs}' in environment {environment_description}",
             pkg.id(),
         ));
+        let unchanged_group_message = merged_manifest.as_ref().and_then(|merged_manifest| {
+            unchanged_group_message(pkg, manifest, merged_manifest.as_latest_schema())
+        });
+        if let Some(msg) = unchanged_group_message {
+            warning(msg);
+        }
     }
 }
 
@@ -239,6 +261,7 @@ pub(crate) fn packages_already_installed(
     pkgs: &[PackageToInstall],
     environment_description: &str,
     lockfile: &Lockfile,
+    manifest: &Manifest<Migrated>,
 ) {
     let merged_manifest = lockfile
         .migrated_manifest()
@@ -248,7 +271,7 @@ pub(crate) fn packages_already_installed(
     let mut other_pkgs = Vec::new();
     for pkg in pkgs {
         let unchanged_group_message = merged_manifest.as_ref().and_then(|merged_manifest| {
-            unchanged_group_message(pkg, merged_manifest.as_latest_schema())
+            unchanged_group_message(pkg, manifest, merged_manifest.as_latest_schema())
         });
         match unchanged_group_message {
             Some(msg) => unchanged_group_messages.push(msg),
@@ -284,8 +307,12 @@ pub(crate) fn packages_already_installed(
 /// A message for an already installed package whose pkg-group, or the
 /// pkg-group's stability, differs from what `--pkg-group` and `--stability`
 /// requested, since installing it again changes neither.
+///
+/// `manifest` is the environment's own manifest and `merged_manifest` is
+/// that manifest merged with its includes.
 fn unchanged_group_message(
     pkg: &PackageToInstall,
+    manifest: &Manifest<Migrated>,
     merged_manifest: &ManifestLatest,
 ) -> Option<String> {
     let PackageToInstall::Catalog(pkg) = pkg else {
@@ -301,29 +328,39 @@ fn unchanged_group_message(
         pkg.target_group()
             .unwrap_or_else(|| DEFAULT_GROUP_NAME.to_string())
     });
-    let current_stability = merged_manifest.group_stability(&current_group);
     let id = &pkg.id;
 
-    let problem = if let Some(requested_group) =
+    if let Some(requested_group) =
         requested_group.filter(|requested_group| *requested_group != current_group)
     {
-        format!(
-            "Package '{id}' is already installed in pkg-group '{current_group}', so it was not moved to pkg-group '{requested_group}'."
-        )
-    } else if let Some(stability) = pkg
+        // Installing it again after uninstalling it applies both options,
+        // or explains why the stability can't apply to the pkg-group.
+        return Some(formatdoc! {"
+            Package '{id}' is already in the '{current_group}' pkg-group.
+            It was not moved to the '{requested_group}' pkg-group.
+            To move it, run 'flox uninstall {id}' and then run 'flox install' again."});
+    }
+
+    let current_stability = merged_manifest.group_stability(&current_group);
+    let stability = pkg
         .stability
         .as_ref()
-        .filter(|stability| current_stability != Some(stability.as_str()))
-    {
-        format!(
-            "Package '{id}' is already installed in pkg-group '{current_group}', so '--stability {stability}' did not change it."
-        )
-    } else {
-        return None;
+        .filter(|stability| current_stability != Some(stability.as_str()))?;
+    let current_stability = match current_stability {
+        Some(current_stability) => {
+            format!("The pkg-group still resolves against the '{current_stability}' stability.")
+        },
+        None => "The pkg-group still has no stability set.".to_string(),
     };
+    // Installing it again into the same pkg-group would fail, since the
+    // pkg-group's other packages share its stability.
+    let edit = PkgGroupStabilityEdit::new(&current_group, stability, manifest);
     Some(formatdoc! {"
-        {problem}
-        To apply these options, run 'flox uninstall {id}' and then run 'flox install' again."})
+        Package '{id}' is already in the '{current_group}' pkg-group.
+        {current_stability}
+        To change the stability of '{id}' only, run 'flox uninstall {id}'
+        and install it again with '--pkg-group <NAME> --stability {stability}'.
+        To change the stability of the whole pkg-group, {edit}"})
 }
 
 pub(crate) fn packages_with_additional_outputs(
@@ -487,8 +524,10 @@ pub(crate) fn print_unused_pkg_groups(lockfile: &Lockfile) {
             continue;
         }
         warning(formatdoc! {"
-            No package is in pkg-group '{group}', so '[pkg-groups.{group}]' has no effect.
-            Check the pkg-group name with 'flox edit'."});
+            No package is in pkg-group '{group}', so '{header}' has no effect.
+            Check the pkg-group name with 'flox edit'.",
+            header = PkgGroups::table_header(group),
+        });
     }
 }
 
@@ -534,10 +573,11 @@ mod tests {
     use flox_manifest::interfaces::AsTypedOnlyManifest;
     use flox_manifest::lockfile::test_helpers::fake_catalog_package_lock;
     use flox_manifest::parsed::Inner;
+    use flox_manifest::parsed::common::KnownSchemaVersion;
     use flox_manifest::parsed::latest::{ManifestLatest, ManifestPackageDescriptor};
     use flox_manifest::raw::CatalogPackage;
     use flox_manifest::raw::test_helpers::mk_test_manifest_from_contents;
-    use flox_manifest::test_helpers::with_latest_schema;
+    use flox_manifest::test_helpers::{with_latest_schema, with_schema};
     use flox_rust_sdk::flox::test_helpers::flox_instance;
     use flox_rust_sdk::models::environment::Environment;
     use flox_rust_sdk::models::environment::path_environment::test_helpers::new_path_environment;
@@ -632,8 +672,9 @@ mod tests {
         .await;
 
         assert_eq!(writer.to_string(), indoc! {"
-            ℹ pkg-group 'tools' resolves against the 'staging' stability.
-            ℹ 'gh' joined pkg-group 'legacy', which resolves against the 'lts' stability.
+            ℹ The 'tools' pkg-group resolves against the 'staging' stability.
+            ℹ Package 'gh' joined the 'legacy' pkg-group.
+            The pkg-group resolves against the 'lts' stability.
             "});
     }
 
@@ -678,17 +719,109 @@ mod tests {
 
         let (subscriber, writer) = test_subscriber_message_only();
         async {
-            packages_already_installed(&pkgs, "'name'", &lockfile);
+            packages_already_installed(&pkgs, "'name'", &lockfile, &merged_manifest);
+        }
+        .with_subscriber(subscriber)
+        .await;
+
+        assert_eq!(writer.to_string(), indoc! {r#"
+            ! Packages with ids 'jq', 'gh' already installed to environment 'name'
+            ! Package 'hello' is already in the 'toplevel' pkg-group.
+            It was not moved to the 'legacy' pkg-group.
+            To move it, run 'flox uninstall hello' and then run 'flox install' again.
+            ! Package 'curl' is already in the 'legacy' pkg-group.
+            The pkg-group still resolves against the 'lts' stability.
+            To change the stability of 'curl' only, run 'flox uninstall curl'
+            and install it again with '--pkg-group <NAME> --stability stable'.
+            To change the stability of the whole pkg-group, run 'flox edit' and set:
+
+              [pkg-groups.legacy]
+              stability = "stable"
+            "#});
+    }
+
+    /// For a manifest older than the first schema with `[pkg-groups]`, the
+    /// TOML to set also updates the schema version.
+    #[tokio::test]
+    async fn packages_already_installed_updates_older_schema() {
+        let manifest =
+            mk_test_manifest_from_contents(with_schema(KnownSchemaVersion::V1_17_0, indoc! {r#"
+                [install]
+                hello.pkg-path = "hello"
+            "#}));
+        let lockfile = Lockfile {
+            manifest: manifest.as_latest_schema().as_typed_only(),
+            ..Default::default()
+        };
+        let pkgs = [PackageToInstall::Catalog(CatalogPackage {
+            id: "hello".to_string(),
+            pkg_path: "hello".to_string(),
+            version: None,
+            systems: None,
+            outputs: None,
+            pkg_group: None,
+            stability: Some("lts".to_string()),
+        })];
+
+        let (subscriber, writer) = test_subscriber_message_only();
+        async {
+            packages_already_installed(&pkgs, "'name'", &lockfile, &manifest);
+        }
+        .with_subscriber(subscriber)
+        .await;
+
+        assert_eq!(writer.to_string(), indoc! {r#"
+            ! Package 'hello' is already in the 'toplevel' pkg-group.
+            The pkg-group still has no stability set.
+            To change the stability of 'hello' only, run 'flox uninstall hello'
+            and install it again with '--pkg-group <NAME> --stability lts'.
+            To change the stability of the whole pkg-group, run 'flox edit' and set:
+
+              schema-version = "1.18.0"  # replaces the current 'schema-version'
+
+              [pkg-groups.toplevel]
+              stability = "lts"
+            "#});
+    }
+
+    /// Updating the outputs of an installed package doesn't move it to the
+    /// pkg-group that `--pkg-group` requests, which is reported.
+    #[tokio::test]
+    async fn packages_outputs_updated_reports_unchanged_pkg_group() {
+        let manifest = mk_test_manifest_from_contents(with_latest_schema(indoc! {r#"
+            [install]
+            hello.pkg-path = "hello"
+            hello.outputs = ["out", "man"]
+        "#}));
+        let lockfile = Lockfile {
+            manifest: manifest.as_latest_schema().as_typed_only(),
+            ..Default::default()
+        };
+        let pkgs = [(
+            PackageToInstall::Catalog(CatalogPackage {
+                id: "hello".to_string(),
+                pkg_path: "hello".to_string(),
+                version: None,
+                systems: None,
+                outputs: None,
+                pkg_group: Some("other".to_string()),
+                stability: None,
+            }),
+            SelectedOutputs::Specific(vec!["out".to_string(), "man".to_string()]),
+        )];
+
+        let (subscriber, writer) = test_subscriber_message_only();
+        async {
+            packages_outputs_updated(&pkgs, "'name'", &lockfile, &manifest);
         }
         .with_subscriber(subscriber)
         .await;
 
         assert_eq!(writer.to_string(), indoc! {"
-            ! Packages with ids 'jq', 'gh' already installed to environment 'name'
-            ! Package 'hello' is already installed in pkg-group 'toplevel', so it was not moved to pkg-group 'legacy'.
-            To apply these options, run 'flox uninstall hello' and then run 'flox install' again.
-            ! Package 'curl' is already installed in pkg-group 'legacy', so '--stability stable' did not change it.
-            To apply these options, run 'flox uninstall curl' and then run 'flox install' again.
+            ✔ 'hello' outputs updated to 'out,man' in environment 'name'
+            ! Package 'hello' is already in the 'toplevel' pkg-group.
+            It was not moved to the 'other' pkg-group.
+            To move it, run 'flox uninstall hello' and then run 'flox install' again.
             "});
     }
 

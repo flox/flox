@@ -13,8 +13,11 @@ use flox_core::data::environment_ref::{
 use flox_core::floxhub::Floxhub;
 pub use flox_core::{Version, path_hash};
 use flox_core::{traceable_path, write_atomically_with_permissions};
+use flox_manifest::interfaces::{AsLatestSchema, OriginalSchemaVersion};
 use flox_manifest::lockfile::{LockedInclude, Lockfile, LockfileError};
+use flox_manifest::parsed::Inner;
 use flox_manifest::parsed::common::KnownSchemaVersion;
+use flox_manifest::parsed::latest::{ManifestPackageDescriptor, PkgGroups, SelectedOutputs};
 use flox_manifest::raw::{PackageToInstall, PackageToModify};
 use flox_manifest::{MANIFEST_FILENAME, Manifest, ManifestError, Migrated, Validated};
 use floxhub_client::ResolveError;
@@ -1080,15 +1083,14 @@ pub enum InstallOrUninstallError {
 
     #[error(
         "{}",
-        stability_conflict_message(.group, .current.as_deref(), .requested, *.manifest_schema)
+        stability_conflict_message(.group, .current.as_deref(), .requested, .edit)
     )]
     StabilityConflict {
         group: String,
         current: Option<String>,
         requested: String,
-        /// The schema of the environment's own manifest, which decides what
-        /// the user has to change to set the stability with `flox edit`.
-        manifest_schema: KnownSchemaVersion,
+        /// How to give the pkg-group the requested stability instead.
+        edit: PkgGroupStabilityEdit,
     },
 }
 
@@ -1096,33 +1098,115 @@ fn stability_conflict_message(
     group: &str,
     current: Option<&str>,
     requested: &str,
-    manifest_schema: KnownSchemaVersion,
+    edit: &PkgGroupStabilityEdit,
 ) -> String {
     let current = match current {
         Some(current) => format!("The pkg-group resolves against the '{current}' stability."),
         None => "The pkg-group has no stability set, so the Flox Catalog picks one.".to_string(),
     };
-    // Older schemas reject `[pkg-groups]`, so the snippet also sets the first
-    // schema version that supports it.
-    let pkg_groups_schema = KnownSchemaVersion::V1_18_0;
-    let schema_line = match manifest_schema {
-        schema if schema >= pkg_groups_schema => String::new(),
-        KnownSchemaVersion::V1 => {
-            format!("  schema-version = \"{pkg_groups_schema}\"  # replaces 'version = 1'\n\n")
-        },
-        _ => format!(
-            "  schema-version = \"{pkg_groups_schema}\"  # replaces the current 'schema-version'\n\n"
-        ),
-    };
     formatdoc! {"
         Can't install into pkg-group '{group}' with stability '{requested}'.
         {current}
         Its packages share one stability, so '{requested}' would change their versions too.
-        To install into a separate pkg-group instead, add '--pkg-group <NAME>'.
-        To change the pkg-group's stability, run 'flox edit' and set:
+        To install into a different pkg-group instead, use '--pkg-group <NAME>'.
+        To change the pkg-group's stability, {edit}"}
+}
 
-        {schema_line}  [pkg-groups.{group}]
-          stability = \"{requested}\""}
+/// The change to make with `flox edit` to give a pkg-group a stability.
+///
+/// It renders as an instruction to run `flox edit`, followed by the TOML to
+/// set. Manifests older than the first schema with `[pkg-groups]` reject the
+/// table, so the TOML then also sets that schema version.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PkgGroupStabilityEdit {
+    group: String,
+    stability: String,
+    /// The schema of the environment's own manifest.
+    manifest_schema: KnownSchemaVersion,
+    /// Packages of a `version = 1` manifest that install all of their
+    /// outputs.
+    ///
+    /// Replacing `version = 1` with a `schema-version` by hand skips the
+    /// migration that sets `outputs = "all"` for them, so the instruction
+    /// lists them.
+    all_outputs_ids: Vec<String>,
+}
+
+impl PkgGroupStabilityEdit {
+    pub fn new(
+        group: impl Into<String>,
+        stability: impl Into<String>,
+        manifest: &Manifest<Migrated>,
+    ) -> Self {
+        let manifest_schema = manifest.original_schema();
+        // Migrating a `version = 1` manifest sets `outputs = "all"` for the
+        // packages that `version = 1` installs with more than their default
+        // outputs, and for packages that aren't locked yet.
+        let all_outputs_ids = if manifest_schema == KnownSchemaVersion::V1 {
+            manifest
+                .as_latest_schema()
+                .install
+                .inner()
+                .iter()
+                .filter(|(_, descriptor)| {
+                    let outputs = match descriptor {
+                        ManifestPackageDescriptor::Catalog(catalog) => &catalog.outputs,
+                        ManifestPackageDescriptor::FlakeRef(flake) => &flake.outputs,
+                        ManifestPackageDescriptor::StorePath(_) => return false,
+                    };
+                    matches!(outputs, Some(SelectedOutputs::All(_)))
+                })
+                .map(|(id, _)| id.clone())
+                .collect()
+        } else {
+            Vec::new()
+        };
+        Self {
+            group: group.into(),
+            stability: stability.into(),
+            manifest_schema,
+            all_outputs_ids,
+        }
+    }
+}
+
+impl std::fmt::Display for PkgGroupStabilityEdit {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let pkg_groups_schema = KnownSchemaVersion::V1_18_0;
+        let schema_line = match self.manifest_schema {
+            schema if schema >= pkg_groups_schema => String::new(),
+            KnownSchemaVersion::V1 => {
+                format!("  schema-version = \"{pkg_groups_schema}\"  # replaces 'version = 1'\n\n")
+            },
+            _ => format!(
+                "  schema-version = \"{pkg_groups_schema}\"  # replaces the current 'schema-version'\n\n"
+            ),
+        };
+        let header = PkgGroups::table_header(&self.group);
+        let stability = &self.stability;
+        f.write_str(&formatdoc! {"
+            run 'flox edit' and set:
+
+            {schema_line}  {header}
+              stability = \"{stability}\""})?;
+
+        let all_outputs = match self.all_outputs_ids.as_slice() {
+            [] => return Ok(()),
+            [id] => formatdoc! {"
+                Package '{id}' installs all of its outputs with 'version = 1'.
+                To keep that, also set 'outputs = \"all\"' for it in '[install]'."},
+            ids => formatdoc! {"
+                Packages {ids} install all of their outputs with 'version = 1'.
+                To keep that, also set 'outputs = \"all\"' for them in '[install]'.",
+                ids = ids
+                    .iter()
+                    .map(|id| format!("'{id}'"))
+                    .collect::<Vec<_>>()
+                    .join(", "),
+            },
+        };
+        write!(f, "\n\n{all_outputs}")
+    }
 }
 
 /// Open an environment defined in `path` that has a `.flox` within.
