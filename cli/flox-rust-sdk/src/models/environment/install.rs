@@ -1,4 +1,4 @@
-use flox_manifest::interfaces::{AsLatestSchema, PackageLookup};
+use flox_manifest::interfaces::{AsLatestSchema, OriginalSchemaVersion, PackageLookup};
 use flox_manifest::lockfile::Lockfile;
 use flox_manifest::parsed::common::DEFAULT_GROUP_NAME;
 use flox_manifest::parsed::latest::{AllSentinel, ManifestLatest, SelectedOutputs};
@@ -80,7 +80,7 @@ pub(super) fn compute_install_modifications(
     // stability, so conflicts are checked against the merged manifest.
     let merged_manifest = lockfile.migrated_manifest()?;
     for pkg in packages {
-        check_stability_conflict(pkg, merged_manifest.as_latest_schema())?;
+        check_stability_conflict(pkg, manifest, merged_manifest.as_latest_schema())?;
     }
 
     let modifications = packages
@@ -98,9 +98,11 @@ pub(super) fn compute_install_modifications(
 /// to every package in it. Changing it as a side effect of installing one
 /// package would silently re-resolve the others.
 ///
-/// `merged_manifest` is the environment's manifest merged with its includes.
+/// `manifest` is the environment's own manifest and `merged_manifest` is
+/// that manifest merged with its includes.
 fn check_stability_conflict(
     pkg: &PackageToInstall,
+    manifest: &Manifest<Migrated>,
     merged_manifest: &ManifestLatest,
 ) -> Result<(), InstallOrUninstallError> {
     let PackageToInstall::Catalog(catalog_pkg) = pkg else {
@@ -120,6 +122,7 @@ fn check_stability_conflict(
         current: current.map(str::to_string),
         requested: requested.clone(),
         group,
+        manifest_schema: manifest.original_schema(),
     })
 }
 
@@ -235,14 +238,16 @@ pub(super) fn compute_install_modification(
 mod tests {
     use std::path::Path;
 
+    use expect_test::expect;
     use flox_core::canonical_path::CanonicalPath;
     use flox_manifest::interfaces::AsTypedOnlyManifest;
+    use flox_manifest::parsed::common::KnownSchemaVersion;
     use flox_manifest::raw::CatalogPackage;
     use flox_manifest::raw::test_helpers::{
         empty_test_migrated_manifest,
         mk_test_manifest_from_contents,
     };
-    use flox_manifest::test_helpers::with_latest_schema;
+    use flox_manifest::test_helpers::{with_latest_schema, with_schema};
     use flox_test_utils::GENERATED_DATA;
     use indoc::indoc;
     use pretty_assertions::assert_eq;
@@ -302,7 +307,7 @@ mod tests {
             [pkg-groups.tools]
             stability = "stable"
         "#}));
-        check_stability_conflict(&pkg, manifest.as_latest_schema())
+        check_stability_conflict(&pkg, &manifest, manifest.as_latest_schema())
     }
 
     /// A lockfile whose merged manifest is `merged_manifest`, as for an
@@ -334,16 +339,18 @@ mod tests {
             group,
             current,
             requested,
+            manifest_schema,
         }) = stability_check(pkg)
         else {
             panic!("expected a stability conflict");
         };
         assert_eq!(
-            (group, current, requested),
+            (group, current, requested, manifest_schema),
             (
                 "tools".to_string(),
                 Some("stable".to_string()),
-                "lts".to_string()
+                "lts".to_string(),
+                KnownSchemaVersion::latest()
             )
         );
     }
@@ -357,13 +364,19 @@ mod tests {
             group,
             current,
             requested,
+            manifest_schema,
         }) = stability_check(pkg)
         else {
             panic!("expected a stability conflict");
         };
         assert_eq!(
-            (group, current, requested),
-            ("toplevel".to_string(), None, "lts".to_string())
+            (group, current, requested, manifest_schema),
+            (
+                "toplevel".to_string(),
+                None,
+                "lts".to_string(),
+                KnownSchemaVersion::latest()
+            )
         );
     }
 
@@ -390,14 +403,67 @@ mod tests {
             group,
             current,
             requested,
+            manifest_schema,
         }) = compute_install_modifications(&[pkg], &manifest, &lockfile)
         else {
             panic!("expected a stability conflict");
         };
         assert_eq!(
-            (group, current, requested),
-            ("toplevel".to_string(), None, "lts".to_string())
+            (group, current, requested, manifest_schema),
+            (
+                "toplevel".to_string(),
+                None,
+                "lts".to_string(),
+                KnownSchemaVersion::latest()
+            )
         );
+    }
+
+    /// The error shows the TOML that sets the pkg-group's stability.
+    #[test]
+    fn stability_conflict_error_shows_pkg_group_settings() {
+        let pkg = package_to_install_with_stability("jq", Some("tools"), "lts");
+
+        let err = stability_check(pkg).unwrap_err();
+
+        expect![[r#"
+            Can't install into pkg-group 'tools' with stability 'lts'.
+            The pkg-group resolves against the 'stable' stability.
+            Its packages share one stability, so 'lts' would change their versions too.
+            To install into a separate pkg-group instead, add '--pkg-group <NAME>'.
+            To change the pkg-group's stability, run 'flox edit' and set:
+
+              [pkg-groups.tools]
+              stability = "lts""#]]
+        .assert_eq(&err.to_string());
+    }
+
+    /// Manifests older than the first schema with `[pkg-groups]` reject the
+    /// table, so the error's TOML also updates the schema version.
+    #[test]
+    fn stability_conflict_error_updates_older_schema() {
+        let manifest =
+            mk_test_manifest_from_contents(with_schema(KnownSchemaVersion::V1_17_0, indoc! {r#"
+                [install]
+                hello.pkg-path = "hello"
+            "#}));
+        let pkg = package_to_install_with_stability("jq", None, "lts");
+
+        let err =
+            check_stability_conflict(&pkg, &manifest, manifest.as_latest_schema()).unwrap_err();
+
+        expect![[r#"
+            Can't install into pkg-group 'toplevel' with stability 'lts'.
+            The pkg-group has no stability set, so the Flox Catalog picks one.
+            Its packages share one stability, so 'lts' would change their versions too.
+            To install into a separate pkg-group instead, add '--pkg-group <NAME>'.
+            To change the pkg-group's stability, run 'flox edit' and set:
+
+              schema-version = "1.18.0"  # replaces the current 'schema-version'
+
+              [pkg-groups.toplevel]
+              stability = "lts""#]]
+        .assert_eq(&err.to_string());
     }
 
     /// An included environment sets the stability of the default group, so

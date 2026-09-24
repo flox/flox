@@ -14,6 +14,7 @@ use flox_core::floxhub::Floxhub;
 pub use flox_core::{Version, path_hash};
 use flox_core::{traceable_path, write_atomically_with_permissions};
 use flox_manifest::lockfile::{LockedInclude, Lockfile, LockfileError};
+use flox_manifest::parsed::common::KnownSchemaVersion;
 use flox_manifest::raw::{PackageToInstall, PackageToModify};
 use flox_manifest::{MANIFEST_FILENAME, Manifest, ManifestError, Migrated, Validated};
 use floxhub_client::ResolveError;
@@ -1077,24 +1078,51 @@ pub enum InstallOrUninstallError {
     #[error("'{1}' does not have an output '{0}'")]
     InvalidOutputForPackage(String, String),
 
-    #[error("{}", stability_conflict_message(.group, .current.as_deref(), .requested))]
+    #[error(
+        "{}",
+        stability_conflict_message(.group, .current.as_deref(), .requested, *.manifest_schema)
+    )]
     StabilityConflict {
         group: String,
         current: Option<String>,
         requested: String,
+        /// The schema of the environment's own manifest, which decides what
+        /// the user has to change to set the stability with `flox edit`.
+        manifest_schema: KnownSchemaVersion,
     },
 }
 
-fn stability_conflict_message(group: &str, current: Option<&str>, requested: &str) -> String {
+fn stability_conflict_message(
+    group: &str,
+    current: Option<&str>,
+    requested: &str,
+    manifest_schema: KnownSchemaVersion,
+) -> String {
     let current = match current {
-        Some(current) => format!("stability '{current}'"),
-        None => "the default stability".to_string(),
+        Some(current) => format!("The pkg-group resolves against the '{current}' stability."),
+        None => "The pkg-group has no stability set, so the Flox Catalog picks one.".to_string(),
+    };
+    // Older schemas reject `[pkg-groups]`, so the snippet also sets the first
+    // schema version that supports it.
+    let pkg_groups_schema = KnownSchemaVersion::V1_18_0;
+    let schema_line = match manifest_schema {
+        schema if schema >= pkg_groups_schema => String::new(),
+        KnownSchemaVersion::V1 => {
+            format!("  schema-version = \"{pkg_groups_schema}\"  # replaces 'version = 1'\n\n")
+        },
+        _ => format!(
+            "  schema-version = \"{pkg_groups_schema}\"  # replaces the current 'schema-version'\n\n"
+        ),
     };
     formatdoc! {"
-        Package group '{group}' already uses {current}.
-        Its packages share one stability, so '--stability {requested}' would re-resolve them.
-        To install into a new group instead, use '--pkg-group <NAME>'.
-        To change the whole group, set 'pkg-groups.{group}.stability' with 'flox edit'."}
+        Can't install into pkg-group '{group}' with stability '{requested}'.
+        {current}
+        Its packages share one stability, so '{requested}' would change their versions too.
+        To install into a separate pkg-group instead, add '--pkg-group <NAME>'.
+        To change the pkg-group's stability, run 'flox edit' and set:
+
+        {schema_line}  [pkg-groups.{group}]
+          stability = \"{requested}\""}
 }
 
 /// Open an environment defined in `path` that has a `.flox` within.

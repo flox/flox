@@ -72,13 +72,12 @@ pub struct Install {
     #[bpaf(external(environment_select), fallback(Default::default()))]
     environment: EnvironmentSelect,
 
-    /// Install the packages into the named package group
-    /// (default: 'toplevel', or a group of its own for custom catalog packages)
+    /// Install the packages into the named pkg-group
+    /// (default: 'toplevel', or a pkg-group of their own for custom catalog packages)
     #[bpaf(long("pkg-group"), argument("name"))]
     pkg_group: Option<String>,
 
-    /// Resolve the package group against a catalog stability,
-    /// e.g. 'stable', 'staging', 'unstable', or 'lts'
+    /// Resolve the pkg-group against a catalog stability, such as 'stable' or 'lts'
     #[bpaf(long("stability"), argument("stability"))]
     stability: Option<String>,
 
@@ -321,7 +320,7 @@ impl Install {
 
     /// Apply `--pkg-group` and `--stability` to every package being installed.
     ///
-    /// Package groups only exist for catalog packages, so the options are
+    /// Pkg-groups only exist for catalog packages, so the options are
     /// rejected for flakes and store paths rather than silently ignored.
     fn apply_group_options(&self, packages: &mut [PackageToInstall]) -> Result<()> {
         if self.pkg_group.is_none() && self.stability.is_none() {
@@ -331,7 +330,7 @@ impl Install {
             let PackageToInstall::Catalog(catalog_package) = package else {
                 bail!(formatdoc! {"
                     '{package}' is not a package from the Flox Catalog.
-                    Only catalog packages belong to package groups, so '--pkg-group' and '--stability' can't apply to it.
+                    Only catalog packages belong to pkg-groups, so '--pkg-group' and '--stability' can't apply to it.
                     Install it in a separate 'flox install' command without those options.",
                     package = Install::package_identifier(package),
                 });
