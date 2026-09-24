@@ -697,6 +697,7 @@ pub fn format_resolve_error(err: &ResolveError) -> String {
         "},
         ResolveError::SystemUnavailableInManifest { .. } => display_chain(err),
         ResolveError::ResolutionFailed(_) => display_chain(err),
+        ResolveError::UnknownStability { .. } => display_chain(err),
         ResolveError::LicenseNotAllowed(..) => display_chain(err),
         ResolveError::BrokenNotAllowed(_) => display_chain(err),
         ResolveError::UnfreeNotAllowed(_) => display_chain(err),

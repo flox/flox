@@ -44,7 +44,7 @@ use reqwest::StatusCode;
 use reqwest::header::HeaderMap;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
-use tracing::info;
+use tracing::{debug, info};
 
 use super::publish::CheckedEnvironmentMetadata;
 use crate::flox::Flox;
@@ -524,6 +524,53 @@ pub async fn base_catalog_url_for_stability_arg(
     Ok(url)
 }
 
+/// A stability that the Flox Catalog doesn't provide.
+#[derive(Debug, Clone, PartialEq, Error)]
+#[error(
+    "Stability '{stability}' does not exist.\nAvailable stabilities are: {}",
+    available.join(", ")
+)]
+pub struct UnknownStabilityError {
+    pub stability: String,
+    pub available: Vec<String>,
+}
+
+/// Check that `base_catalog_info` lists `stability`.
+///
+/// The Flox Catalog decides which stabilities exist, so they're read from it
+/// rather than from a list in the CLI.
+pub fn check_stability_available(
+    stability: &str,
+    base_catalog_info: &BaseCatalogInfo,
+) -> Result<(), UnknownStabilityError> {
+    let available = base_catalog_info.available_stabilities();
+    if available.contains(&stability) {
+        return Ok(());
+    }
+    Err(UnknownStabilityError {
+        stability: stability.to_string(),
+        available: available.into_iter().map(str::to_string).collect(),
+    })
+}
+
+/// Check that the Flox Catalog provides `stability`, before it is written to
+/// a manifest.
+///
+/// If the available stabilities can't be fetched, the check passes, and the
+/// catalog validates the stability when it resolves the packages instead.
+pub async fn check_stability_exists(
+    stability: &str,
+    base_catalog_info_fut: impl IntoFuture<Output = Result<BaseCatalogInfo, FloxhubClientError>>,
+) -> Result<(), UnknownStabilityError> {
+    match base_catalog_info_fut.await {
+        Ok(base_catalog_info) => check_stability_available(stability, &base_catalog_info),
+        Err(err) => {
+            debug!(%err, stability, "failed to fetch available stabilities");
+            Ok(())
+        },
+    }
+}
+
 /// Returns the nixpkgs URL used for builds and publishes.
 pub async fn get_base_nixpkgs_url(
     flox: &Flox,
@@ -950,6 +997,39 @@ mod tests {
         }
         let resp = client.resolve(vec![]).block_on().unwrap();
         assert!(resp.is_empty());
+    }
+
+    #[tokio::test]
+    async fn check_stability_exists_accepts_available_stability() {
+        let result =
+            check_stability_exists("not-default", async { Ok(BaseCatalogInfo::new_mock()) }).await;
+
+        assert_eq!(result, Ok(()));
+    }
+
+    #[tokio::test]
+    async fn check_stability_exists_lists_available_stabilities() {
+        let result = check_stability_exists("lst", async { Ok(BaseCatalogInfo::new_mock()) }).await;
+
+        assert_eq!(
+            result,
+            Err(UnknownStabilityError {
+                stability: "lst".to_string(),
+                available: vec!["stable".to_string(), "not-default".to_string()],
+            })
+        );
+    }
+
+    /// Without the list of stabilities, the catalog validates the stability
+    /// during resolution instead.
+    #[tokio::test]
+    async fn check_stability_exists_accepts_stability_if_catalog_unreachable() {
+        let result = check_stability_exists("lst", async {
+            Err(FloxhubClientError::Other("unreachable".to_string()))
+        })
+        .await;
+
+        assert_eq!(result, Ok(()));
     }
 
     #[test]

@@ -37,12 +37,17 @@ use flox_rust_sdk::models::user_state::{
     user_state_path,
     write_user_state_file,
 };
+use flox_rust_sdk::providers::catalog::check_stability_exists;
 use flox_rust_sdk::providers::lock_manifest::{
     ResolutionFailure,
     ResolutionFailures,
     ResolveError,
 };
-use floxhub_client::{MsgAttrPathNotFoundNotFoundForAllSystems, MsgAttrPathNotFoundNotInCatalog};
+use floxhub_client::{
+    CatalogClientTrait,
+    MsgAttrPathNotFoundNotFoundForAllSystems,
+    MsgAttrPathNotFoundNotInCatalog,
+};
 use indoc::formatdoc;
 use itertools::Itertools;
 use shell_gen::ShellWithPath;
@@ -168,6 +173,9 @@ impl Install {
             bail!("Must specify at least one package");
         }
         self.apply_group_options(&mut packages_to_install)?;
+        if let Some(stability) = &self.stability {
+            check_stability_exists(stability, flox.floxhub_client.get_base_catalog_info()).await?;
+        }
 
         let mut concrete_environment = match self
             .environment
@@ -876,6 +884,9 @@ mod tests {
     use flox_rust_sdk::utils::logging::test_helpers::test_subscriber_message_only;
     use flox_test_utils::GENERATED_DATA;
     use flox_test_utils::manifests::EMPTY_ALL_SYSTEMS;
+    use floxhub_client::client::test_helpers::client_config;
+    use floxhub_client::{BaseCatalogInfo, FloxhubClient};
+    use httpmock::MockServer;
     use indoc::formatdoc;
     use tracing::instrument::WithSubscriber;
 
@@ -1100,6 +1111,44 @@ mod tests {
              ! '{install_id}' installed only for the following systems: {installed_systems}
         "};
         assert_eq!(writer.to_string(), expected);
+    }
+
+    /// A stability that the Flox Catalog doesn't provide fails before the
+    /// manifest changes, and lists the stabilities it does provide.
+    #[tokio::test]
+    async fn install_with_unknown_stability_leaves_manifest_unchanged() {
+        let (mut flox, tempdir) = flox_instance();
+        let server = MockServer::start_async().await;
+        server.mock(|when, then| {
+            when.path("/api/v1/catalog/info/base-catalog");
+            then.status(200)
+                .json_body(serde_json::to_value(BaseCatalogInfo::new_mock()).unwrap());
+        });
+        flox.floxhub_client =
+            FloxhubClient::new(client_config(server.base_url().as_str())).unwrap();
+        let environment = new_path_environment_in(&flox, EMPTY_ALL_SYSTEMS, tempdir.path());
+        let manifest_path = environment.manifest_path(&flox).unwrap();
+        let manifest_before = std::fs::read_to_string(&manifest_path).unwrap();
+
+        let err = Install {
+            environment: EnvironmentSelect::Dir(tempdir.path().to_path_buf()),
+            pkg_group: None,
+            stability: Some("lst".to_string()),
+            id: vec![],
+            packages: vec!["hello".to_string()],
+        }
+        .handle(flox)
+        .await
+        .unwrap_err();
+
+        assert_eq!(
+            err.to_string(),
+            "Stability 'lst' does not exist.\nAvailable stabilities are: stable, not-default"
+        );
+        assert_eq!(
+            std::fs::read_to_string(&manifest_path).unwrap(),
+            manifest_before
+        );
     }
 
     /// Re-locking an environment locked by a Flox version with a different

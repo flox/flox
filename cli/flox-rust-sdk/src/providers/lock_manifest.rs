@@ -38,6 +38,7 @@ use flox_manifest::parsed::{Inner, latest};
 use flox_manifest::raw::DEFAULT_SYSTEMS_STR;
 use flox_manifest::{Manifest, ManifestError, MigratedTypedOnly};
 use floxhub_client::{
+    FloxhubClientError,
     MessageLevel,
     MsgAttrPathNotFoundNotFoundForAllSystems,
     MsgAttrPathNotFoundNotInCatalog,
@@ -51,12 +52,14 @@ use floxhub_client::{
 use indent::{indent_all_by, indent_by};
 use indoc::formatdoc;
 use itertools::{Either, Itertools};
+use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, instrument};
 
 use crate::flox::Flox;
 use crate::models::environment::fetcher::IncludeFetcher;
 use crate::models::environment::{CoreEnvironmentError, EnvironmentError};
+use crate::providers::catalog::{UnknownStabilityError, check_stability_available};
 use crate::providers::flake_installable_locker::{
     FlakeInstallableError,
     FlakeInstallableToLock,
@@ -75,6 +78,16 @@ pub enum ResolveError {
 
     #[error("resolution failed: {0}")]
     ResolutionFailed(ResolutionFailures),
+
+    #[error(
+        "pkg-group '{group}' uses stability '{stability}', which does not exist.\nAvailable stabilities are: {}\nChange 'stability' in '[pkg-groups.{group}]' with 'flox edit'.",
+        available.join(", ")
+    )]
+    UnknownStability {
+        group: String,
+        stability: String,
+        available: Vec<String>,
+    },
 
     // todo: this should probably part of some validation logic of the manifest file
     //       rather than occurring during the locking process creation
@@ -688,10 +701,16 @@ impl LockManifest {
 
         // lock packages
         let resolved = if !groups_to_lock.is_empty() {
-            client
-                .resolve(groups_to_lock)
-                .await
-                .map_err(ResolveError::CatalogResolve)?
+            let group_stabilities = groups_to_lock
+                .iter()
+                .filter_map(|group| Some((group.name.clone(), group.stability.clone()?)))
+                .collect::<Vec<_>>();
+            match client.resolve(groups_to_lock).await {
+                Ok(resolved) => resolved,
+                Err(err) => {
+                    return Err(Self::explain_resolve_error(err, &group_stabilities, client).await);
+                },
+            }
         } else {
             vec![]
         };
@@ -727,6 +746,48 @@ impl LockManifest {
             locked_installables,
         ]
         .concat())
+    }
+
+    /// Explain a failed resolve request that set a stability the Flox Catalog
+    /// doesn't provide.
+    ///
+    /// The catalog rejects such a request as unprocessable, so the available
+    /// stabilities are only fetched for that status, and only when a
+    /// pkg-group sets a stability. Otherwise, or if they can't be fetched,
+    /// the catalog's error is returned as is.
+    async fn explain_resolve_error(
+        err: floxhub_client::ResolveError,
+        group_stabilities: &[(String, String)],
+        client: &impl floxhub_client::CatalogClientTrait,
+    ) -> ResolveError {
+        let floxhub_client::ResolveError::FloxhubClientError(FloxhubClientError::APIError(
+            api_error,
+        )) = &err
+        else {
+            return ResolveError::CatalogResolve(err);
+        };
+        if group_stabilities.is_empty()
+            || api_error.status() != Some(StatusCode::UNPROCESSABLE_ENTITY)
+        {
+            return ResolveError::CatalogResolve(err);
+        }
+        let Ok(base_catalog_info) = client.get_base_catalog_info().await else {
+            return ResolveError::CatalogResolve(err);
+        };
+        group_stabilities
+            .iter()
+            .find_map(|(group, stability)| {
+                let UnknownStabilityError {
+                    stability,
+                    available,
+                } = check_stability_available(stability, &base_catalog_info).err()?;
+                Some(ResolveError::UnknownStability {
+                    group: group.clone(),
+                    stability,
+                    available,
+                })
+            })
+            .unwrap_or(ResolveError::CatalogResolve(err))
     }
 
     /// Given locked packages and manifest options allows, verify that the
@@ -1382,6 +1443,8 @@ mod tests {
     use flox_manifest::test_helpers::with_latest_schema;
     use flox_test_utils::GENERATED_DATA;
     use floxhub_client::{
+        ApiErrorResponse,
+        BaseCatalogInfo,
         CatalogPage,
         PackageDescriptor,
         PackageOutput,
@@ -1405,11 +1468,12 @@ mod tests {
     };
     use crate::models::environment::path_environment::tests::generate_path_environments_without_install_or_include;
     use crate::models::environment::remote_environment::test_helpers::mock_remote_environment;
-    use crate::providers::catalog::MockClient;
     use crate::providers::catalog::test_helpers::{
         auto_recording_catalog_client,
         catalog_replay_client,
+        reset_mocks,
     };
+    use crate::providers::catalog::{GenericResponse, MockClient, Response};
     use crate::providers::flake_installable_locker::{InstallableLocker, InstallableLockerMock};
 
     static TEST_MANIFEST_CONTENTS: &str = indoc! {r#"
@@ -3151,6 +3215,53 @@ mod tests {
             .unwrap_err(),
             ResolveError::UnfreeNotAllowed { .. }
         ));
+    }
+
+    /// A stability that the Flox Catalog rejects is explained with the
+    /// stabilities it provides, rather than with the catalog's raw error.
+    #[tokio::test]
+    async fn lock_manifest_explains_unknown_stability() {
+        let (foo_iid, foo_descriptor, _) = fake_catalog_package_lock("foo", Some("tools"));
+        let mut manifest = ManifestLatest::default();
+        manifest.install.inner_mut().insert(foo_iid, foo_descriptor);
+        manifest
+            .pkg_groups
+            .inner_mut()
+            .insert("tools".to_string(), PkgGroup {
+                stability: Some("lst".to_string()),
+            });
+
+        let mut client = MockClient::new();
+        reset_mocks(&mut client, vec![
+            Response::Error(GenericResponse {
+                inner: ApiErrorResponse {
+                    detail: "Invalid stability 'lst' in group 'tools'.".to_string(),
+                },
+                status: 422,
+            }),
+            Response::GetBaseCatalog(BaseCatalogInfo::new_mock()),
+        ]);
+
+        let err =
+            LockManifest::resolve_manifest(&manifest, None, &client, &InstallableLockerMock::new())
+                .await
+                .unwrap_err();
+
+        let ResolveError::UnknownStability {
+            group,
+            stability,
+            available,
+        } = err
+        else {
+            panic!("expected an unknown stability error, got: {err:?}");
+        };
+        assert_eq!(
+            (group, stability, available),
+            ("tools".to_string(), "lst".to_string(), vec![
+                "stable".to_string(),
+                "not-default".to_string()
+            ])
+        );
     }
 
     /// [Lockfile::lock_manifest] returns an error if the server
