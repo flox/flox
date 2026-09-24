@@ -86,21 +86,25 @@ pub mod types {
     }
     /**Request body for the /build-inputs/lookup endpoint.
 
-A lookup names a `stability` (required) and one or more `groups` of
-references to resolve, optionally anchored at a `reference_point`.  It is
-system-independent — the response is source revs + DAG edges, which carry
-no system — so the request body has no system field.*/
+A lookup names one or more `groups` of references to resolve, optionally
+anchored at a `reference_point`.
+
+The response is source revisions plus DAG edges: for each reference, the
+latest revision of its own source together with the transitive non-base
+sources that revision was built against.  That answer carries no system
+and no nixpkgs base revision, so the request body names neither.  A base
+revision is selected at build time, against which the same lock may be
+built repeatedly.*/
     ///
     /// <details><summary>JSON schema</summary>
     ///
     /// ```json
     ///{
     ///  "title": "BuildInputsLookupRequest",
-    ///  "description": "Request body for the /build-inputs/lookup endpoint.\n\nA lookup names a `stability` (required) and one or more `groups` of\nreferences to resolve, optionally anchored at a `reference_point`.  It is\nsystem-independent — the response is source revs + DAG edges, which carry\nno system — so the request body has no system field.",
+    ///  "description": "Request body for the /build-inputs/lookup endpoint.\n\nA lookup names one or more `groups` of references to resolve, optionally\nanchored at a `reference_point`.\n\nThe response is source revisions plus DAG edges: for each reference, the\nlatest revision of its own source together with the transitive non-base\nsources that revision was built against.  That answer carries no system\nand no nixpkgs base revision, so the request body names neither.  A base\nrevision is selected at build time, against which the same lock may be\nbuilt repeatedly.",
     ///  "type": "object",
     ///  "required": [
-    ///    "groups",
-    ///    "stability"
+    ///    "groups"
     ///  ],
     ///  "properties": {
     ///    "groups": {
@@ -127,8 +131,12 @@ no system — so the request body has no system field.*/
     ///    },
     ///    "stability": {
     ///      "title": "Stability",
-    ///      "type": "string",
-    ///      "minLength": 1
+    ///      "description": "Accepted and ignored; not used by this endpoint. Deprecated.",
+    ///      "deprecated": true,
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ]
     ///    }
     ///  }
     ///}
@@ -139,7 +147,9 @@ no system — so the request body has no system field.*/
         pub groups: ::std::vec::Vec<LookupGroup>,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
         pub reference_point: ::std::option::Option<ReferencePoint>,
-        pub stability: Stability,
+        ///Accepted and ignored; not used by this endpoint. Deprecated.
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub stability: ::std::option::Option<::std::string::String>,
     }
     impl ::std::convert::From<&BuildInputsLookupRequest> for BuildInputsLookupRequest {
         fn from(value: &BuildInputsLookupRequest) -> Self {
@@ -1717,50 +1727,24 @@ values, not the serialized form.*/
             value.clone()
         }
     }
-    /**A single entry in the flat locked-inputs map.
+    /**An entry in a flat locked-inputs map.
 
-One type, two directions (intentionally NOT split into two models — the
-publish entry is the same entity with its edges not yet stated):
+Publish leaves `inputs` as `null` because the server reconstructs the DAG
+from `package_inputs`. Lookup supplies direct input keys. An empty list
+means no dependencies.
 
-- Publish request: the CLI sends {catalog, attr_path, build_type, source,
-  locked_inputs_hash} and leaves inputs null.  Null here means "not stated
-  — the server is authoritative for the DAG": the CLI knows its direct
-  inputs but is not the source of truth, and the server reconstructs the
-  DAG from package_inputs (keyed by locked_inputs_hash).
-- Lookup response: all fields are present and inputs is populated with the
-  full transitive-closure DAG.
-
-inputs uses the tri-state SBOM convention in both directions:
-  inputs: [k, ...]  — known direct inputs (by key)
-  inputs: []        — explicitly no dependencies
-  inputs null       — not stated (server is authoritative for the DAG)
-
-attr_path is a list of components, e.g. ["python3Packages", "boolex"].
-A flat catalog entry collapses what the CLI lockfile represents as a
-hierarchy of single-component package-set / package nodes.  Giving the
-CLI the components lets it re-expand that hierarchy.  A list is also
-unambiguous: if nested-dot component support is ever added (AI-267),
-the list form remains the unambiguous carrier.
-
-locked_inputs_hash is REQUIRED on every entry: the closure identity hash is
-the round-trip disambiguator that pins which recorded build a locked input
-refers to (lookup response → CLI → publish request).  A publish request
-missing it fails validation (422) at this contract boundary — there is no
-hash-free / old-client fallback.  It always serializes as a string.
-
-Wire behavior: a null `inputs` (the tri-state "not stated") is emitted as
-an explicit null — deliberately, NOT dropped; do not add exclude_none here.
-The source sub-model never emits nulls at all: its named attributes are
-all required, and unknown ones pass through verbatim (see LockedGitSource).
-
-Use key() to build the canonical flat-map key for this entry.*/
+`locked_inputs_hash` is required. Lookup computes it from the closure it
+assembled; publish uses it to select a stored closure. Boundary children,
+including redacted or unencodable rows, can contribute to that hash without
+appearing in `inputs`. Lookup can compute a digest no stored row carries,
+which publish rejects.*/
     ///
     /// <details><summary>JSON schema</summary>
     ///
     /// ```json
     ///{
     ///  "title": "LockedInputEntry",
-    ///  "description": "A single entry in the flat locked-inputs map.\n\nOne type, two directions (intentionally NOT split into two models — the\npublish entry is the same entity with its edges not yet stated):\n\n- Publish request: the CLI sends {catalog, attr_path, build_type, source,\n  locked_inputs_hash} and leaves inputs null.  Null here means \"not stated\n  — the server is authoritative for the DAG\": the CLI knows its direct\n  inputs but is not the source of truth, and the server reconstructs the\n  DAG from package_inputs (keyed by locked_inputs_hash).\n- Lookup response: all fields are present and inputs is populated with the\n  full transitive-closure DAG.\n\ninputs uses the tri-state SBOM convention in both directions:\n  inputs: [k, ...]  — known direct inputs (by key)\n  inputs: []        — explicitly no dependencies\n  inputs null       — not stated (server is authoritative for the DAG)\n\nattr_path is a list of components, e.g. [\"python3Packages\", \"boolex\"].\nA flat catalog entry collapses what the CLI lockfile represents as a\nhierarchy of single-component package-set / package nodes.  Giving the\nCLI the components lets it re-expand that hierarchy.  A list is also\nunambiguous: if nested-dot component support is ever added (AI-267),\nthe list form remains the unambiguous carrier.\n\nlocked_inputs_hash is REQUIRED on every entry: the closure identity hash is\nthe round-trip disambiguator that pins which recorded build a locked input\nrefers to (lookup response → CLI → publish request).  A publish request\nmissing it fails validation (422) at this contract boundary — there is no\nhash-free / old-client fallback.  It always serializes as a string.\n\nWire behavior: a null `inputs` (the tri-state \"not stated\") is emitted as\nan explicit null — deliberately, NOT dropped; do not add exclude_none here.\nThe source sub-model never emits nulls at all: its named attributes are\nall required, and unknown ones pass through verbatim (see LockedGitSource).\n\nUse key() to build the canonical flat-map key for this entry.",
+    ///  "description": "An entry in a flat locked-inputs map.\n\nPublish leaves `inputs` as `null` because the server reconstructs the DAG\nfrom `package_inputs`. Lookup supplies direct input keys. An empty list\nmeans no dependencies.\n\n`locked_inputs_hash` is required. Lookup computes it from the closure it\nassembled; publish uses it to select a stored closure. Boundary children,\nincluding redacted or unencodable rows, can contribute to that hash without\nappearing in `inputs`. Lookup can compute a digest no stored row carries,\nwhich publish rejects.",
     ///  "type": "object",
     ///  "required": [
     ///    "attr_path",
@@ -2605,6 +2589,12 @@ catalog) or '<owner>.<pkgset>.*' (package set) — e.g. 'brantley.*'
     ///    "url"
     ///  ],
     ///  "properties": {
+    ///    "allow_lineage_change": {
+    ///      "title": "Allow Lineage Change",
+    ///      "description": "Allow this publish to replace the package's registered source repository or ref.",
+    ///      "default": false,
+    ///      "type": "boolean"
+    ///    },
     ///    "base_catalog_rev_count": {
     ///      "title": "Base Catalog Rev Count",
     ///      "type": [
@@ -2686,6 +2676,9 @@ catalog) or '<owner>.<pkgset>.*' (package set) — e.g. 'brantley.*'
     /// </details>
     #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
     pub struct PackageBuild {
+        ///Allow this publish to replace the package's registered source repository or ref.
+        #[serde(default)]
+        pub allow_lineage_change: bool,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
         pub base_catalog_rev_count: ::std::option::Option<i64>,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
@@ -2729,6 +2722,16 @@ catalog) or '<owner>.<pkgset>.*' (package set) — e.g. 'brantley.*'
     ///    "items"
     ///  ],
     ///  "properties": {
+    ///    "commands_by_output": {
+    ///      "title": "Commands By Output",
+    ///      "type": "object",
+    ///      "additionalProperties": {
+    ///        "type": "array",
+    ///        "items": {
+    ///          "type": "string"
+    ///        }
+    ///      }
+    ///    },
     ///    "items": {
     ///      "title": "Items",
     ///      "type": "array",
@@ -2742,6 +2745,14 @@ catalog) or '<owner>.<pkgset>.*' (package set) — e.g. 'brantley.*'
     /// </details>
     #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
     pub struct PackageBuildList {
+        #[serde(
+            default,
+            skip_serializing_if = ":: std :: collections :: HashMap::is_empty"
+        )]
+        pub commands_by_output: ::std::collections::HashMap<
+            ::std::string::String,
+            ::std::vec::Vec<::std::string::String>,
+        >,
         pub items: ::std::vec::Vec<PackageBuild>,
     }
     impl ::std::convert::From<&PackageBuildList> for PackageBuildList {
@@ -2845,6 +2856,12 @@ catalog) or '<owner>.<pkgset>.*' (package set) — e.g. 'brantley.*'
     ///    "url"
     ///  ],
     ///  "properties": {
+    ///    "allow_lineage_change": {
+    ///      "title": "Allow Lineage Change",
+    ///      "description": "Allow this publish to replace the package's registered source repository or ref.",
+    ///      "default": false,
+    ///      "type": "boolean"
+    ///    },
     ///    "base_catalog_rev_count": {
     ///      "title": "Base Catalog Rev Count",
     ///      "type": [
@@ -2964,6 +2981,9 @@ catalog) or '<owner>.<pkgset>.*' (package set) — e.g. 'brantley.*'
     /// </details>
     #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
     pub struct PackageBuildWithNarInfo {
+        ///Allow this publish to replace the package's registered source repository or ref.
+        #[serde(default)]
+        pub allow_lineage_change: bool,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
         pub base_catalog_rev_count: ::std::option::Option<i64>,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
@@ -5417,49 +5437,70 @@ because the two anchors carry different value types.*/
             value.clone()
         }
     }
-    ///`Stability`
+    /**Alphabetical sort direction for search results.
+
+When set, overrides the default relevance ranking with a case-insensitive
+alphabetical sort on `attr_path`. When absent, the default ordering
+(sort_priority ASC, attr_path_length ASC, attr_path ASC) is preserved.*/
     ///
     /// <details><summary>JSON schema</summary>
     ///
     /// ```json
     ///{
-    ///  "title": "Stability",
+    ///  "title": "SortOrder",
+    ///  "description": "Alphabetical sort direction for search results.\n\nWhen set, overrides the default relevance ranking with a case-insensitive\nalphabetical sort on `attr_path`. When absent, the default ordering\n(sort_priority ASC, attr_path_length ASC, attr_path ASC) is preserved.",
     ///  "type": "string",
-    ///  "minLength": 1
+    ///  "enum": [
+    ///    "name-asc",
+    ///    "name-desc"
+    ///  ]
     ///}
     /// ```
     /// </details>
-    #[derive(::serde::Serialize, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-    #[serde(transparent)]
-    pub struct Stability(::std::string::String);
-    impl ::std::ops::Deref for Stability {
-        type Target = ::std::string::String;
-        fn deref(&self) -> &::std::string::String {
-            &self.0
-        }
+    #[derive(
+        ::serde::Deserialize,
+        ::serde::Serialize,
+        Clone,
+        Copy,
+        Debug,
+        Eq,
+        Hash,
+        Ord,
+        PartialEq,
+        PartialOrd
+    )]
+    pub enum SortOrder {
+        #[serde(rename = "name-asc")]
+        NameAsc,
+        #[serde(rename = "name-desc")]
+        NameDesc,
     }
-    impl ::std::convert::From<Stability> for ::std::string::String {
-        fn from(value: Stability) -> Self {
-            value.0
-        }
-    }
-    impl ::std::convert::From<&Stability> for Stability {
-        fn from(value: &Stability) -> Self {
+    impl ::std::convert::From<&Self> for SortOrder {
+        fn from(value: &SortOrder) -> Self {
             value.clone()
         }
     }
-    impl ::std::str::FromStr for Stability {
+    impl ::std::fmt::Display for SortOrder {
+        fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+            match *self {
+                Self::NameAsc => f.write_str("name-asc"),
+                Self::NameDesc => f.write_str("name-desc"),
+            }
+        }
+    }
+    impl ::std::str::FromStr for SortOrder {
         type Err = self::error::ConversionError;
         fn from_str(
             value: &str,
         ) -> ::std::result::Result<Self, self::error::ConversionError> {
-            if value.chars().count() < 1usize {
-                return Err("shorter than 1 characters".into());
+            match value {
+                "name-asc" => Ok(Self::NameAsc),
+                "name-desc" => Ok(Self::NameDesc),
+                _ => Err("invalid value".into()),
             }
-            Ok(Self(value.to_string()))
         }
     }
-    impl ::std::convert::TryFrom<&str> for Stability {
+    impl ::std::convert::TryFrom<&str> for SortOrder {
         type Error = self::error::ConversionError;
         fn try_from(
             value: &str,
@@ -5467,7 +5508,7 @@ because the two anchors carry different value types.*/
             value.parse()
         }
     }
-    impl ::std::convert::TryFrom<&::std::string::String> for Stability {
+    impl ::std::convert::TryFrom<&::std::string::String> for SortOrder {
         type Error = self::error::ConversionError;
         fn try_from(
             value: &::std::string::String,
@@ -5475,24 +5516,12 @@ because the two anchors carry different value types.*/
             value.parse()
         }
     }
-    impl ::std::convert::TryFrom<::std::string::String> for Stability {
+    impl ::std::convert::TryFrom<::std::string::String> for SortOrder {
         type Error = self::error::ConversionError;
         fn try_from(
             value: ::std::string::String,
         ) -> ::std::result::Result<Self, self::error::ConversionError> {
             value.parse()
-        }
-    }
-    impl<'de> ::serde::Deserialize<'de> for Stability {
-        fn deserialize<D>(deserializer: D) -> ::std::result::Result<Self, D::Error>
-        where
-            D: ::serde::Deserializer<'de>,
-        {
-            ::std::string::String::deserialize(deserializer)?
-                .parse()
-                .map_err(|e: self::error::ConversionError| {
-                    <D::Error as ::serde::de::Error>::custom(e.to_string())
-                })
         }
     }
     ///`StabilityInfo`
@@ -5763,6 +5792,39 @@ because the two anchors carry different value types.*/
             value.clone()
         }
     }
+    ///Every system registered in the catalog, sorted by name.
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "SystemsResult",
+    ///  "description": "Every system registered in the catalog, sorted by name.",
+    ///  "type": "object",
+    ///  "required": [
+    ///    "registered_systems"
+    ///  ],
+    ///  "properties": {
+    ///    "registered_systems": {
+    ///      "title": "Registered Systems",
+    ///      "type": "array",
+    ///      "items": {
+    ///        "type": "string"
+    ///      }
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
+    pub struct SystemsResult {
+        pub registered_systems: ::std::vec::Vec<::std::string::String>,
+    }
+    impl ::std::convert::From<&SystemsResult> for SystemsResult {
+        fn from(value: &SystemsResult) -> Self {
+            value.clone()
+        }
+    }
     ///A single unresolvable reference within a lookup group.
     ///
     /// <details><summary>JSON schema</summary>
@@ -5807,18 +5869,18 @@ because the two anchors carry different value types.*/
             value.clone()
         }
     }
-    /**Uniform shape for an unresolvable dependency.
+    /**An unresolvable dependency encoded as one open-ended cause entry.
 
-Serializes as {"unresolvable": {}} — exactly one shape, no cause/reason
-fields at the leaf level. If a future change needs structured error
-detail, introduce a typed `reason` field here.*/
+Serializes as {"unresolvable": {<cause>: <detail>}} — a single-key cause
+map rather than a closed union. Consumers must tolerate unrecognized
+causes.*/
     ///
     /// <details><summary>JSON schema</summary>
     ///
     /// ```json
     ///{
     ///  "title": "UnresolvableLeaf",
-    ///  "description": "Uniform shape for an unresolvable dependency.\n\nSerializes as {\"unresolvable\": {}} — exactly one shape, no cause/reason\nfields at the leaf level. If a future change needs structured error\ndetail, introduce a typed `reason` field here.",
+    ///  "description": "An unresolvable dependency encoded as one open-ended cause entry.\n\nSerializes as {\"unresolvable\": {<cause>: <detail>}} — a single-key cause\nmap rather than a closed union. Consumers must tolerate unrecognized\ncauses.",
     ///  "type": "object",
     ///  "properties": {
     ///    "unresolvable": {
@@ -6153,16 +6215,11 @@ impl ClientHooks<crate::hooks::RequestHooks> for &Client {}
 impl Client {
     /**Lookup
 
-Resolve build inputs for one or more reference groups.
+Resolve each reference group's transitive build-input closure.
 
-Direct references resolve to latest; the transitive closure is taken
-verbatim; a cross-reference conflict yields a per-group conflict result.
-
-For each group, walks the transitive package_inputs closure (accessor),
-then applies auth redaction and assembles the flat LockedInputs map.
-
-Each group runs in its own transaction so a single group's timeout,
-overflow, or conflict produces a per-group error without affecting others.
+Every package name resolves independently to its latest build at the
+reference point. Unreadable dependencies remain opaque boundary leaves.
+Timeout, overflow, and cycle failures affect only their own group.
 
 Sends a `POST` request to `/api/v1/catalog/build-inputs/lookup`
 
@@ -6228,8 +6285,8 @@ Sends a `GET` request to `/api/v1/catalog/by-command`
     pub async fn by_command_api_v1_catalog_by_command_get<'a>(
         &'a self,
         name: &'a types::Name,
-        page: Option<i64>,
-        page_size: Option<i64>,
+        page: Option<u64>,
+        page_size: Option<u64>,
         system: types::PackageSystem,
     ) -> Result<ResponseValue<types::ByCommandResult>, Error<types::ErrorResponse>> {
         let url = format!("{}/api/v1/catalog/by-command", self.baseurl);
@@ -6900,6 +6957,9 @@ Sends a `POST` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{pac
             404u16 => {
                 Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
             }
+            409u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
             422u16 => {
                 Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
             }
@@ -7522,6 +7582,9 @@ Optional Query Parameters:
 - **search_term**: The search term to filter packages by
 - **catalogs**: Comma separated list of catalog names to search; defaults to
   all catalogs. Note: when searching base catalog, search_term is required.
+- **sort**: Result order. `name-asc` and `name-desc` sort alphabetically by
+  attr_path, overriding relevance ranking. Omit to use the default order
+  (sort_priority ASC, attr_path_length ASC, attr_path ASC).
 - **page**: Page number for pagination (default: 0)
 - **pageSize**: Page size for pagination (default: 10)
 Returns:
@@ -7536,6 +7599,7 @@ Sends a `GET` request to `/api/v1/catalog/search`
         page: Option<u64>,
         page_size: Option<u64>,
         search_term: Option<&'a types::SearchTerm>,
+        sort: Option<types::SortOrder>,
         system: types::PackageSystem,
     ) -> Result<ResponseValue<types::PackageSearchResult>, Error<types::ErrorResponse>> {
         let url = format!("{}/api/v1/catalog/search", self.baseurl);
@@ -7557,6 +7621,7 @@ Sends a `GET` request to `/api/v1/catalog/search`
             .query(&progenitor_client::QueryParam::new("page", &page))
             .query(&progenitor_client::QueryParam::new("pageSize", &page_size))
             .query(&progenitor_client::QueryParam::new("search_term", &search_term))
+            .query(&progenitor_client::QueryParam::new("sort", &sort))
             .query(&progenitor_client::QueryParam::new("system", &system))
             .headers(header_map)
             .build()?;
@@ -7584,6 +7649,8 @@ Query Parameters:
     - "plan" - Enables the logging of the DB query plan for queries for
     **value** seconds.  It will be scheduled to turn off automatically after
     that.
+
+Note: Requires authentication and superuser (flox staff) access.
 
 Sends a `POST` request to `/api/v1/catalog/settings/{key}`
 
