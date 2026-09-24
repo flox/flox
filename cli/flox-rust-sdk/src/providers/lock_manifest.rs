@@ -80,7 +80,7 @@ pub enum ResolveError {
     ResolutionFailed(ResolutionFailures),
 
     #[error(
-        "pkg-group '{group}' uses stability '{stability}', which does not exist.\nAvailable stabilities are: {}\nChange 'stability' in '[pkg-groups.{group}]' with 'flox edit'.",
+        "Stability '{stability}' of pkg-group '{group}' does not exist.\nAvailable stabilities are: {}\nChange 'stability' in '[pkg-groups.{group}]' with 'flox edit'.",
         available.join(", ")
     )]
     UnknownStability {

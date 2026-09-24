@@ -502,3 +502,23 @@ stability = "lts"
   assert_output --partial "No package is in pkg-group 'legcy', so '[pkg-groups.legcy]' has no effect."
   assert_output --partial "Check the pkg-group name with 'flox edit'."
 }
+
+# bats test_tags=edit:stability
+@test "'flox edit' explains a stability the catalog doesn't provide" {
+  skip_x86_64_darwin_replay
+  "$FLOX_BIN" init
+
+  RUST_BACKTRACE=0 \
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/ripgrep_unknown_stability.yaml" \
+    run "$FLOX_BIN" edit -f <(with_latest_schema '
+[install]
+ripgrep.pkg-path = "ripgrep"
+
+[pkg-groups.toplevel]
+stability = "lst"
+')
+  assert_failure
+  assert_output --partial "Stability 'lst' of pkg-group 'toplevel' does not exist."
+  assert_output --regexp "Available stabilities are: .*lts"
+  assert_output --partial "Change 'stability' in '[pkg-groups.toplevel]' with 'flox edit'."
+}

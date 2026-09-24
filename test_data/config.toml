@@ -551,6 +551,23 @@ pre_cmd = '''
 '''
 cmd = "flox edit -f manifest.toml"
 
+# Locks a pkg-group with a stability that the catalog doesn't provide.
+[resolve.ripgrep_unknown_stability]
+pre_cmd = '''
+    flox init
+    printf '%s\n' \
+        'schema-version = "1.18.0"' \
+        '' \
+        '[install]' \
+        'ripgrep.pkg-path = "ripgrep"' \
+        '' \
+        '[pkg-groups.toplevel]' \
+        'stability = "lst"' \
+        > manifest.toml
+'''
+cmd = "flox edit -f manifest.toml"
+ignore_cmd_errors = true
+
 [resolve.tabula]
 pre_cmd = "flox init"
 cmd = "flox install tabula"
