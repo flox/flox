@@ -9,6 +9,7 @@ pub use flox_core::util::message::{stderr_supports_color, stdout_supports_color}
 use flox_manifest::compose::{COMPOSER_MANIFEST_ID, Warning};
 use flox_manifest::interfaces::{AsLatestSchema, PackageLookup};
 use flox_manifest::lockfile::{LockedPackage, Lockfile, PackageOutputs, default_systems_change};
+use flox_manifest::parsed::Inner;
 use flox_manifest::parsed::common::DEFAULT_GROUP_NAME;
 use flox_manifest::parsed::latest::{ManifestLatest, SelectedOutputs};
 use flox_manifest::raw::PackageToInstall;
@@ -464,6 +465,33 @@ pub(crate) fn print_overridden_manifest_fields(lockfile: &Lockfile) {
     }
 }
 
+/// Warn about `[pkg-groups.<NAME>]` tables in the environment's own manifest
+/// that no package uses, which usually means the pkg-group name has a typo.
+///
+/// `toplevel` is skipped, since packages join it by default. Packages from
+/// included environments count, since the settings apply to them too.
+pub(crate) fn print_unused_pkg_groups(lockfile: &Lockfile) {
+    let (user_manifest, merged_manifest) = match (
+        lockfile.migrated_user_manifest(),
+        lockfile.migrated_manifest(),
+    ) {
+        (Ok(user_manifest), Ok(merged_manifest)) => (user_manifest, merged_manifest),
+        (Err(err), _) | (_, Err(err)) => {
+            debug!(%err, "failed to read manifests for unused pkg-groups");
+            return;
+        },
+    };
+    let merged_manifest = merged_manifest.as_latest_schema();
+    for group in user_manifest.as_latest_schema().pkg_groups.inner().keys() {
+        if group == DEFAULT_GROUP_NAME || merged_manifest.group_has_packages(group) {
+            continue;
+        }
+        warning(formatdoc! {"
+            No package is in pkg-group '{group}', so '[pkg-groups.{group}]' has no effect.
+            Check the pkg-group name with 'flox edit'."});
+    }
+}
+
 /// Report when re-locking changed the implicit default systems the environment
 /// is locked for, e.g. because a newer Flox with a different default set
 /// re-locked an environment without explicit `options.systems`.
@@ -661,6 +689,42 @@ mod tests {
             To apply these options, run 'flox uninstall hello' and then run 'flox install' again.
             ! Package 'curl' is already installed in pkg-group 'legacy', so '--stability stable' did not change it.
             To apply these options, run 'flox uninstall curl' and then run 'flox install' again.
+            "});
+    }
+
+    /// Settings for a pkg-group that no package is in, e.g. because of a typo,
+    /// are reported, unless they're for `toplevel`.
+    #[tokio::test]
+    async fn print_unused_pkg_groups_reports_groups_without_packages() {
+        let manifest = mk_test_manifest_from_contents(with_latest_schema(indoc! {r#"
+            [install]
+            gh.pkg-path = "gh"
+            gh.pkg-group = "legacy"
+
+            [pkg-groups.legacy]
+            stability = "lts"
+
+            [pkg-groups.legcy]
+            stability = "lts"
+
+            [pkg-groups.toplevel]
+            stability = "stable"
+        "#}));
+        let lockfile = Lockfile {
+            manifest: manifest.as_latest_schema().as_typed_only(),
+            ..Default::default()
+        };
+
+        let (subscriber, writer) = test_subscriber_message_only();
+        async {
+            print_unused_pkg_groups(&lockfile);
+        }
+        .with_subscriber(subscriber)
+        .await;
+
+        assert_eq!(writer.to_string(), indoc! {"
+            ! No package is in pkg-group 'legcy', so '[pkg-groups.legcy]' has no effect.
+            Check the pkg-group name with 'flox edit'.
             "});
     }
 

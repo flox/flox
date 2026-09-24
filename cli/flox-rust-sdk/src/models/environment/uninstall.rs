@@ -1,8 +1,10 @@
-use std::collections::HashMap;
 use std::collections::hash_map::Entry;
+use std::collections::{BTreeSet, HashMap, HashSet};
 
-use flox_manifest::interfaces::PackageLookup;
+use flox_manifest::interfaces::{AsLatestSchema, PackageLookup};
 use flox_manifest::lockfile::Lockfile;
+use flox_manifest::parsed::Inner;
+use flox_manifest::parsed::common::DEFAULT_GROUP_NAME;
 use flox_manifest::parsed::v1_10_0::SelectedOutputs;
 use flox_manifest::raw::{
     CatalogPackage,
@@ -202,6 +204,66 @@ fn compute_uninstall_modifications(
     Ok(modifications)
 }
 
+/// The named pkg-groups whose settings to remove because `modifications`
+/// remove their last package.
+///
+/// Removing the settings with the last package means that a pkg-group created
+/// later with the same name doesn't inherit them. The settings of the
+/// `toplevel` pkg-group are kept, since packages join it by default. A
+/// pkg-group that still has packages from included environments keeps its
+/// settings too, since they still apply to those packages.
+pub(super) fn pkg_groups_emptied_by(
+    modifications: &[PackageToModify],
+    manifest: &Manifest<Migrated>,
+    lockfile: &Lockfile,
+) -> Result<BTreeSet<String>, InstallOrUninstallError> {
+    let removed_ids = modifications
+        .iter()
+        .filter(|modification| modification.modification == PackageModification::Remove)
+        .map(|modification| modification.install_id.as_str())
+        .collect::<HashSet<_>>();
+    let configured_groups = &manifest.as_latest_schema().pkg_groups;
+    let candidates = removed_ids
+        .iter()
+        .filter_map(|id| manifest.catalog_descriptor_with_id(id)?.pkg_group)
+        .filter(|group| {
+            group != DEFAULT_GROUP_NAME && configured_groups.inner().contains_key(group)
+        })
+        .collect::<BTreeSet<_>>();
+    if candidates.is_empty() {
+        return Ok(candidates);
+    }
+
+    // The merged manifest has the environment's own packages and those of
+    // its includes, except for packages that the environment overrides.
+    let merged_manifest = lockfile.migrated_manifest()?;
+    let mut groups_in_use = merged_manifest
+        .as_latest_schema()
+        .catalog_pkgs_by_group()
+        .into_iter()
+        .filter(|(_, pkgs)| pkgs.keys().any(|id| !removed_ids.contains(id.as_str())))
+        .map(|(group, _)| group)
+        .collect::<HashSet<_>>();
+    // An overridden package stays installed from its include, possibly in the
+    // same pkg-group, so its pkg-group keeps its settings.
+    if let Some(compose) = &lockfile.compose {
+        for id in &removed_ids {
+            if compose.get_include_for_package(id, &None)?.is_some()
+                && let Some(group) = manifest
+                    .catalog_descriptor_with_id(id)
+                    .and_then(|descriptor| descriptor.pkg_group)
+            {
+                groups_in_use.insert(group);
+            }
+        }
+    }
+
+    Ok(candidates
+        .into_iter()
+        .filter(|group| !groups_in_use.contains(group))
+        .collect())
+}
+
 /// Convert an uninstall specification to a package modification.
 ///
 /// This function connects the intent (what outputs to uninstall),
@@ -243,13 +305,18 @@ fn modification_for_outputs(
 
 #[cfg(test)]
 mod tests {
-    use flox_manifest::interfaces::AsLatestSchema;
+    use flox_manifest::interfaces::{AsLatestSchema, AsTypedOnlyManifest};
     use flox_manifest::lockfile::test_helpers::fake_catalog_package_lock_with_outputs;
     use flox_manifest::parsed::Inner;
     use flox_manifest::parsed::latest::ManifestPackageDescriptor;
     use flox_manifest::parsed::v1_10_0::SelectedOutputs;
     use flox_manifest::raw::RawSelectedOutputs;
-    use flox_manifest::raw::test_helpers::empty_test_migrated_manifest;
+    use flox_manifest::raw::test_helpers::{
+        empty_test_migrated_manifest,
+        mk_test_manifest_from_contents,
+    };
+    use flox_manifest::test_helpers::with_latest_schema;
+    use indoc::indoc;
 
     use super::*;
 
@@ -364,6 +431,96 @@ mod tests {
         assert_eq!(spec.package_ref, "hello");
         assert_eq!(spec.outputs, None);
         assert_eq!(spec.version, Some("1.2.3".to_string()));
+    }
+
+    // === Tests for pkg_groups_emptied_by ===
+
+    /// The pkg-groups whose settings to remove when uninstalling `removed`
+    /// from `manifest`, whose merged manifest is `merged_manifest`.
+    fn emptied_groups(manifest: &str, merged_manifest: &str, removed: &[&str]) -> BTreeSet<String> {
+        let manifest = mk_test_manifest_from_contents(with_latest_schema(manifest));
+        let merged_manifest = mk_test_manifest_from_contents(with_latest_schema(merged_manifest));
+        let lockfile = Lockfile {
+            manifest: merged_manifest.as_latest_schema().as_typed_only(),
+            ..Default::default()
+        };
+        let modifications = removed
+            .iter()
+            .map(|id| PackageToModify {
+                install_id: id.to_string(),
+                modification: PackageModification::Remove,
+            })
+            .collect::<Vec<_>>();
+        pkg_groups_emptied_by(&modifications, &manifest, &lockfile).unwrap()
+    }
+
+    const TWO_GROUPS: &str = indoc! {r#"
+        [install]
+        hello.pkg-path = "hello"
+        gh.pkg-path = "gh"
+        gh.pkg-group = "legacy"
+        jq.pkg-path = "jq"
+        jq.pkg-group = "legacy"
+
+        [pkg-groups.legacy]
+        stability = "lts"
+
+        [pkg-groups.toplevel]
+        stability = "stable"
+    "#};
+
+    #[test]
+    fn pkg_groups_emptied_by_removing_last_package() {
+        assert_eq!(
+            emptied_groups(TWO_GROUPS, TWO_GROUPS, &["gh", "jq"]),
+            BTreeSet::from(["legacy".to_string()])
+        );
+    }
+
+    #[test]
+    fn pkg_groups_not_emptied_while_packages_remain() {
+        assert_eq!(
+            emptied_groups(TWO_GROUPS, TWO_GROUPS, &["gh"]),
+            BTreeSet::new()
+        );
+    }
+
+    /// Packages join `toplevel` by default, so its settings stay.
+    #[test]
+    fn pkg_groups_emptied_by_never_includes_toplevel() {
+        assert_eq!(
+            emptied_groups(TWO_GROUPS, TWO_GROUPS, &["hello"]),
+            BTreeSet::new()
+        );
+    }
+
+    /// The environment's settings for a pkg-group also apply to packages that
+    /// included environments put in it.
+    #[test]
+    fn pkg_groups_not_emptied_while_included_packages_remain() {
+        let manifest = indoc! {r#"
+            [install]
+            gh.pkg-path = "gh"
+            gh.pkg-group = "legacy"
+
+            [pkg-groups.legacy]
+            stability = "lts"
+        "#};
+        let merged_manifest = indoc! {r#"
+            [install]
+            gh.pkg-path = "gh"
+            gh.pkg-group = "legacy"
+            curl.pkg-path = "curl"
+            curl.pkg-group = "legacy"
+
+            [pkg-groups.legacy]
+            stability = "lts"
+        "#};
+
+        assert_eq!(
+            emptied_groups(manifest, merged_manifest, &["gh"]),
+            BTreeSet::new()
+        );
     }
 
     // === Tests for resolve_specs_to_modifications ===

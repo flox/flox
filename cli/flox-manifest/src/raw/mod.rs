@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::LazyLock;
@@ -860,6 +860,24 @@ impl Manifest<Migrated> {
     }
 }
 
+impl Manifest<Migrated> {
+    /// Remove the settings of `groups`, e.g. once their last package is
+    /// uninstalled, so that a pkg-group created later with the same name
+    /// doesn't inherit them.
+    pub fn remove_pkg_groups(
+        &self,
+        groups: &BTreeSet<String>,
+    ) -> Result<Manifest<Migrated>, ManifestError> {
+        let mut manifest = self.clone();
+        let pkg_groups = manifest.inner.migrated_parsed.pkg_groups.inner_mut();
+        for group in groups {
+            pkg_groups.remove(group);
+        }
+        remove_raw_pkg_groups(&mut manifest.inner.migrated_raw, groups)?;
+        Ok(manifest)
+    }
+}
+
 impl ModifyPackages for Manifest<Migrated> {
     fn modify_packages(
         &self,
@@ -1022,8 +1040,8 @@ fn update_systems(
 /// Brings the settings of each package group in a raw TOML manifest into sync
 /// with the typed manifest.
 ///
-/// Only `flox install` changes group settings, and it never removes a group,
-/// so groups that are missing from the typed manifest are left untouched.
+/// Groups that are missing from the typed manifest are left untouched;
+/// [`remove_raw_pkg_groups`] removes groups.
 fn update_raw_pkg_groups(
     raw: &mut DocumentMut,
     pkg_groups: &PkgGroups,
@@ -1094,6 +1112,104 @@ fn update_raw_pkg_groups(
         raw.set_trailing(original_trailing);
     }
     Ok(())
+}
+
+/// Removes the settings of `groups` from a raw TOML manifest, and the
+/// `pkg-groups` table once no group is left in it.
+///
+/// Comments above a removed table move to the next table, or to the end of
+/// the document if the removed table was the last one. The end of the
+/// document is where [`update_raw_pkg_groups`] takes them from for a new
+/// group, so installing and uninstalling a package in a new group leaves
+/// the manifest's comments where they were.
+fn remove_raw_pkg_groups(
+    raw: &mut DocumentMut,
+    groups: &BTreeSet<String>,
+) -> Result<(), TomlEditError> {
+    let Some(groups_item) = raw.get_mut("pkg-groups") else {
+        return Ok(());
+    };
+    let groups_item_type = groups_item.type_name().to_string();
+    let groups_table = groups_item.as_table_like_mut().ok_or_else(|| {
+        TomlEditError::MalformedPkgGroupsTable("pkg-groups".to_string(), groups_item_type)
+    })?;
+
+    let mut orphaned_comments = Vec::new();
+    for group in groups {
+        let Some(Item::Table(removed)) = groups_table.remove(group) else {
+            continue;
+        };
+        let Some(position) = removed.position() else {
+            continue;
+        };
+        let comments = removed
+            .decor()
+            .prefix()
+            .and_then(|prefix| prefix.as_str())
+            .filter(|prefix| !prefix.trim().is_empty());
+        if let Some(comments) = comments {
+            orphaned_comments.push((position, comments.to_string()));
+        }
+    }
+    if groups_table.is_empty() {
+        raw.remove("pkg-groups");
+    }
+
+    for (position, comments) in orphaned_comments {
+        let next_table = table_header_positions(raw.as_table(), &[])
+            .into_iter()
+            .filter(|(table_position, _)| *table_position > position)
+            .min_by_key(|(table_position, _)| *table_position)
+            .and_then(|(_, path)| table_at_path_mut(raw, &path));
+        match next_table {
+            Some(next_table) => {
+                // The comments bring their own separation from the content
+                // above them.
+                let existing = next_table
+                    .decor()
+                    .prefix()
+                    .and_then(|prefix| prefix.as_str())
+                    .unwrap_or_default()
+                    .trim_start_matches(['\n', '\r']);
+                let prefix = format!("{comments}{existing}");
+                next_table.decor_mut().set_prefix(prefix);
+            },
+            None => {
+                let existing = raw.trailing().as_str().unwrap_or_default();
+                let trailing = format!("{}\n{existing}", comments.trim_end());
+                raw.set_trailing(trailing);
+            },
+        }
+    }
+    Ok(())
+}
+
+/// The document positions and key paths of the tables nested in `table` that
+/// render a header, and so carry the comments above it.
+fn table_header_positions(table: &Table, path: &[String]) -> Vec<(isize, Vec<String>)> {
+    table
+        .iter()
+        .filter_map(|(key, item)| Some((key, item.as_table()?)))
+        .flat_map(|(key, child)| {
+            let child_path = [path, &[key.to_string()]].concat();
+            let own_header = child
+                .position()
+                .filter(|_| !child.is_implicit())
+                .map(|position| (position, child_path.clone()));
+            own_header
+                .into_iter()
+                .chain(table_header_positions(child, &child_path))
+        })
+        .collect()
+}
+
+/// The table at `path` in `raw`.
+fn table_at_path_mut<'a>(raw: &'a mut DocumentMut, path: &[String]) -> Option<&'a mut Table> {
+    let mut table = raw.as_table_mut();
+    for key in path {
+        table = table.get_mut(key)?.as_table_mut()?;
+    }
+    Some(table)
 }
 
 /// The largest document position of `item` and the tables nested in it.
@@ -2134,6 +2250,94 @@ curl.outputs = [\"bin\", \"man\"]
             stability = "lts"
         "#]]
         .assert_eq(&new_manifest.inner.migrated_raw.to_string());
+    }
+
+    /// Uninstalling the last package of a new group removes its settings and
+    /// gives back the comments that its table took over from the end of the
+    /// document, e.g. the commented-out examples in a templated manifest.
+    #[test]
+    fn remove_pkg_groups_restores_trailing_comments() {
+        let original = indoc! {r#"
+            schema-version = "1.18.0"
+
+            [install]
+            hello.pkg-path = "hello"
+
+            [options]
+            systems = ["aarch64-darwin"]
+            # cuda-detection = false
+        "#};
+        let PackageToInstall::Catalog(mut jq) =
+            PackageToInstall::parse(&"".to_string(), "jq").unwrap()
+        else {
+            unreachable!()
+        };
+        jq.pkg_group = Some("tools".to_string());
+        jq.stability = Some("lts".to_string());
+        let installed = mk_test_manifest_from_contents(original)
+            .modify_packages(&[PackageToModify {
+                install_id: jq.id.clone(),
+                modification: PackageModification::Add(PackageToInstall::Catalog(jq)),
+            }])
+            .unwrap();
+        // Read the written manifest back, as the next command does.
+        let installed = mk_test_manifest_from_contents(installed.inner.migrated_raw.to_string());
+
+        let uninstalled = installed
+            .modify_packages(&[PackageToModify {
+                install_id: "jq".to_string(),
+                modification: PackageModification::Remove,
+            }])
+            .unwrap()
+            .remove_pkg_groups(&BTreeSet::from(["tools".to_string()]))
+            .unwrap();
+
+        assert_eq!(uninstalled.inner.migrated_raw.to_string(), original);
+        assert_eq!(
+            uninstalled.inner.migrated_parsed.pkg_groups,
+            PkgGroups::default()
+        );
+    }
+
+    /// Comments above a removed group's table move to the next table, and
+    /// other groups keep their settings.
+    #[test]
+    fn remove_pkg_groups_moves_comments_to_next_table() {
+        let manifest = mk_test_manifest_from_contents(indoc! {r#"
+            schema-version = "1.18.0"
+
+            [install]
+            hello.pkg-path = "hello"
+
+            # pinned for the build servers
+            [pkg-groups.legacy]
+            stability = "lts"
+
+            [pkg-groups.toplevel]
+            stability = "stable"
+
+            [options]
+            systems = ["aarch64-darwin"]
+        "#});
+
+        let manifest = manifest
+            .remove_pkg_groups(&BTreeSet::from(["legacy".to_string()]))
+            .unwrap();
+
+        expect![[r#"
+            schema-version = "1.18.0"
+
+            [install]
+            hello.pkg-path = "hello"
+
+            # pinned for the build servers
+            [pkg-groups.toplevel]
+            stability = "stable"
+
+            [options]
+            systems = ["aarch64-darwin"]
+        "#]]
+        .assert_eq(&manifest.inner.migrated_raw.to_string());
     }
 
     #[test]
