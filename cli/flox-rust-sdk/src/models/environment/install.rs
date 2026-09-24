@@ -245,13 +245,13 @@ mod tests {
 
     use expect_test::expect;
     use flox_core::canonical_path::CanonicalPath;
-    use flox_manifest::interfaces::AsTypedOnlyManifest;
+    use flox_manifest::interfaces::{AsTypedOnlyManifest, AsWritableManifest, WriteManifest};
     use flox_manifest::parsed::common::KnownSchemaVersion;
-    use flox_manifest::raw::CatalogPackage;
     use flox_manifest::raw::test_helpers::{
         empty_test_migrated_manifest,
         mk_test_manifest_from_contents,
     };
+    use flox_manifest::raw::{CatalogPackage, ModifyPackages};
     use flox_manifest::test_helpers::{with_latest_schema, with_schema};
     use flox_test_utils::GENERATED_DATA;
     use indoc::indoc;
@@ -383,6 +383,42 @@ mod tests {
                 KnownSchemaVersion::latest()
             )
         );
+    }
+
+    /// The default group of a new environment has no packages, so a
+    /// stability for it is set rather than rejected, and the package doesn't
+    /// name the default group.
+    #[test]
+    fn stability_for_empty_default_group_writes_pkg_group_settings() {
+        let contents = indoc! {r#"
+            [install]
+            # gum.pkg-path = "gum"
+
+            [options]
+            systems = ["aarch64-darwin"]
+        "#}
+        .trim_end();
+        let manifest = mk_test_manifest_from_contents(with_latest_schema(contents));
+        let lockfile = lockfile_with_merged_manifest(contents);
+        let pkg = package_to_install_with_stability("jq", None, "staging");
+
+        let modifications = compute_install_modifications(&[pkg], &manifest, &lockfile).unwrap();
+        let new_manifest = manifest.modify_packages(&modifications).unwrap();
+
+        expect![[r#"
+            schema-version = "1.18.0"
+
+            [install]
+            jq.pkg-path = "jq"
+            # gum.pkg-path = "gum"
+
+            [options]
+            systems = ["aarch64-darwin"]
+
+            [pkg-groups.toplevel]
+            stability = "staging"
+        "#]]
+        .assert_eq(&new_manifest.as_writable().to_string());
     }
 
     /// Custom catalog packages get a group of their own, so a stability never
