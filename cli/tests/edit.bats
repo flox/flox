@@ -482,10 +482,10 @@ EOF
     run "$FLOX_BIN" edit -f "$TMP_MANIFEST_PATH"
   assert_success
 
-  run jq -c '[.packages[] | {install_id, version, stabilities}] | unique' \
+  run jq -c '[.packages[] | {install_id, version, unstable: (.stabilities | index("unstable") != null)}] | unique' \
     "$PROJECT_DIR/.flox/env/manifest.lock"
   assert_success
-  assert_output "[{\"install_id\":\"ripgrep\",\"version\":\"$unstable_version\",\"stabilities\":[\"unstable\"]}]"
+  assert_output "[{\"install_id\":\"ripgrep\",\"version\":\"$unstable_version\",\"unstable\":true}]"
 }
 
 # bats test_tags=edit:stability

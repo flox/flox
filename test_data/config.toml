@@ -543,6 +543,8 @@ cmd = "flox install --pkg-group legacy --stability lts ripgrep"
 
 # Changes the stability of the toplevel pkg-group after installing ripgrep
 # into it with the 'lts' stability.
+# The 'lts' and 'unstable' stabilities can resolve the same version, so the
+# response gets a fake version that differs from the one in ripgrep_lts.
 [resolve.ripgrep_lts_to_unstable]
 pre_cmd = '''
     flox init
@@ -550,6 +552,22 @@ pre_cmd = '''
     sed 's/^stability = "lts"$/stability = "unstable"/' .flox/env/manifest.toml > manifest.toml
 '''
 cmd = "flox edit -f manifest.toml"
+post_cmd = '''
+    yq -y '
+        if .when.path == "/api/v1/catalog/resolve" then
+            .then.body |= (
+                fromjson
+                | .items[].page.packages |= map(
+                    .derivation = "/nix/store/BBB-ripgrep-999.0.0.drv"
+                    | .version = "999.0.0"
+                )
+                | tojson
+            )
+            | del(.then.header[] | select(.name == "content-length"))
+        else . end
+    ' "$RESPONSE_FILE" > tmp.yaml
+    mv tmp.yaml "$RESPONSE_FILE"
+'''
 
 # Locks a pkg-group with a stability that the catalog doesn't provide.
 [resolve.ripgrep_unknown_stability]

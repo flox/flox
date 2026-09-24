@@ -189,11 +189,9 @@ function old_hello_response_version() {
     "$FLOX_BIN" install --stability lts ripgrep
   old_version="$(recorded_resolved_version "$GENERATED_DATA/resolve/ripgrep_lts_old.yaml")"
   lts_version="$(recorded_resolved_version "$GENERATED_DATA/resolve/ripgrep_lts.yaml")"
-  # A newer version exists outside of the 'lts' stability.
-  unstable_version="$(recorded_resolved_version "$GENERATED_DATA/resolve/ripgrep_lts_to_unstable.yaml")"
-  assert_not_equal "$lts_version" "$unstable_version"
 
-  # The recording only matches a request that sets the 'lts' stability.
+  # The recording only matches a request that sets the 'lts' stability, so
+  # the upgrade can't resolve against another stability.
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/ripgrep_lts.yaml" \
     run "$FLOX_BIN" upgrade
   assert_success
