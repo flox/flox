@@ -7,6 +7,7 @@ use flox_core::data::System;
 use flox_core::util::message::{format_error, format_updated};
 pub use flox_core::util::message::{stderr_supports_color, stdout_supports_color};
 use flox_manifest::compose::{COMPOSER_MANIFEST_ID, Warning};
+use flox_manifest::interfaces::AsLatestSchema;
 use flox_manifest::lockfile::{LockedPackage, Lockfile, PackageOutputs, default_systems_change};
 use flox_manifest::parsed::common::DEFAULT_GROUP_NAME;
 use flox_manifest::parsed::latest::SelectedOutputs;
@@ -143,25 +144,57 @@ pub(crate) fn packages_successfully_installed(
     }
 }
 
-/// Display the stability of each package group that installed packages
-/// requested one for.
-pub(crate) fn packages_group_stability(pkgs: &[PackageToInstall]) {
-    let group_stabilities = pkgs
-        .iter()
-        .filter_map(|pkg| match pkg {
-            PackageToInstall::Catalog(pkg) => {
-                let stability = pkg.stability.as_ref()?;
-                let group = pkg
-                    .target_group()
-                    .unwrap_or_else(|| DEFAULT_GROUP_NAME.to_string());
-                Some((group, stability))
+/// Display the stability of the pkg-group that each installed catalog
+/// package joined.
+///
+/// Packages installed with `--stability` set it for their pkg-group. Other
+/// packages inherit the stability that their pkg-group already has, possibly
+/// from an included environment, so it's read from the merged manifest.
+pub(crate) fn packages_group_stability(pkgs: &[PackageToInstall], lockfile: &Lockfile) {
+    let merged_manifest = match lockfile.migrated_manifest() {
+        Ok(merged_manifest) => merged_manifest,
+        Err(err) => {
+            debug!(%err, "failed to read merged manifest for pkg-group stabilities");
+            return;
+        },
+    };
+    let merged_manifest = merged_manifest.as_latest_schema();
+
+    let mut requested_stabilities = BTreeMap::new();
+    let mut inheriting_pkgs: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    for pkg in pkgs {
+        let PackageToInstall::Catalog(pkg) = pkg else {
+            continue;
+        };
+        let group = pkg
+            .target_group()
+            .unwrap_or_else(|| DEFAULT_GROUP_NAME.to_string());
+        match &pkg.stability {
+            Some(stability) => {
+                requested_stabilities.insert(group, stability);
             },
-            _ => None,
-        })
-        .collect::<BTreeMap<_, _>>();
-    for (group, stability) in group_stabilities {
-        plain(format!(
-            "Package group '{group}' resolves against the '{stability}' stability."
+            None if merged_manifest.group_stability(&group).is_some() => {
+                inheriting_pkgs
+                    .entry(group)
+                    .or_default()
+                    .push(format!("'{}'", pkg.id));
+            },
+            None => {},
+        }
+    }
+
+    for (group, stability) in requested_stabilities {
+        info(format!(
+            "pkg-group '{group}' resolves against the '{stability}' stability."
+        ));
+    }
+    for (group, pkgs) in inheriting_pkgs {
+        let Some(stability) = merged_manifest.group_stability(&group) else {
+            continue;
+        };
+        info(format!(
+            "{} joined pkg-group '{group}', which resolves against the '{stability}' stability.",
+            pkgs.join(", ")
         ));
     }
 }
@@ -402,6 +435,9 @@ mod tests {
     use flox_manifest::lockfile::test_helpers::fake_catalog_package_lock;
     use flox_manifest::parsed::Inner;
     use flox_manifest::parsed::latest::{ManifestLatest, ManifestPackageDescriptor};
+    use flox_manifest::raw::CatalogPackage;
+    use flox_manifest::raw::test_helpers::mk_test_manifest_from_contents;
+    use flox_manifest::test_helpers::with_latest_schema;
     use flox_rust_sdk::flox::test_helpers::flox_instance;
     use flox_rust_sdk::models::environment::Environment;
     use flox_rust_sdk::models::environment::path_environment::test_helpers::new_path_environment;
@@ -446,6 +482,59 @@ mod tests {
             packages,
             compose: None,
         }
+    }
+
+    /// A package installed with `--stability` reports the stability it set,
+    /// and a package without one reports the stability it inherited from its
+    /// pkg-group, if the pkg-group has one.
+    #[tokio::test]
+    async fn packages_group_stability_reports_set_and_inherited_stabilities() {
+        let merged_manifest = mk_test_manifest_from_contents(with_latest_schema(indoc! {r#"
+            [install]
+            curl.pkg-path = "curl"
+            curl.pkg-group = "tools"
+            gh.pkg-path = "gh"
+            gh.pkg-group = "legacy"
+            jq.pkg-path = "jq"
+
+            [pkg-groups.legacy]
+            stability = "lts"
+
+            [pkg-groups.tools]
+            stability = "staging"
+        "#}));
+        let lockfile = Lockfile {
+            manifest: merged_manifest.as_latest_schema().as_typed_only(),
+            ..Default::default()
+        };
+        let catalog_package = |id: &str, pkg_group: &str, stability: Option<&str>| {
+            PackageToInstall::Catalog(CatalogPackage {
+                id: id.to_string(),
+                pkg_path: id.to_string(),
+                version: None,
+                systems: None,
+                outputs: None,
+                pkg_group: Some(pkg_group.to_string()),
+                stability: stability.map(str::to_string),
+            })
+        };
+        let pkgs = [
+            catalog_package("curl", "tools", Some("staging")),
+            catalog_package("gh", "legacy", None),
+            catalog_package("jq", "toplevel", None),
+        ];
+
+        let (subscriber, writer) = test_subscriber_message_only();
+        async {
+            packages_group_stability(&pkgs, &lockfile);
+        }
+        .with_subscriber(subscriber)
+        .await;
+
+        assert_eq!(writer.to_string(), indoc! {"
+            ℹ pkg-group 'tools' resolves against the 'staging' stability.
+            ℹ 'gh' joined pkg-group 'legacy', which resolves against the 'lts' stability.
+            "});
     }
 
     #[tokio::test]

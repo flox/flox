@@ -291,7 +291,7 @@ impl Install {
 
         // Print status messages for the installation attempt
         message::packages_successfully_installed(&partitioned.successes, &description);
-        message::packages_group_stability(&partitioned.successes);
+        message::packages_group_stability(&partitioned.successes, &lockfile);
         message::packages_with_additional_outputs(&partitioned.successes, &lockfile, &flox.system);
         message::packages_installed_with_system_subsets(&partitioned.system_subsets);
         message::packages_already_installed(&partitioned.already_installed, &description);
