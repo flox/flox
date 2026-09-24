@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 use std::{fs, io};
 
@@ -111,6 +111,9 @@ pub struct UninstallationAttempt {
     pub built_environment_store_paths: Option<BuildEnvOutputs>,
     /// The resolved modifications that were applied.
     pub modifications: Vec<PackageToModify>,
+    /// The pkg-groups whose settings were removed from the manifest, since
+    /// the uninstalled packages were their last ones.
+    pub removed_pkg_groups: BTreeSet<String>,
 }
 
 #[enum_dispatch]

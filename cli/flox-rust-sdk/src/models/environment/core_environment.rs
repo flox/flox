@@ -419,6 +419,7 @@ impl CoreEnvironment<ReadOnly> {
             still_included,
             built_environment_store_paths: Some(store_path),
             modifications,
+            removed_pkg_groups: emptied_pkg_groups,
         })
     }
 

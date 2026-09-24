@@ -307,7 +307,9 @@ fn modification_for_outputs(
 mod tests {
     use flox_manifest::interfaces::{AsLatestSchema, AsTypedOnlyManifest};
     use flox_manifest::lockfile::test_helpers::fake_catalog_package_lock_with_outputs;
+    use flox_manifest::lockfile::{Compose, LockedInclude};
     use flox_manifest::parsed::Inner;
+    use flox_manifest::parsed::common::IncludeDescriptor;
     use flox_manifest::parsed::latest::ManifestPackageDescriptor;
     use flox_manifest::parsed::v1_10_0::SelectedOutputs;
     use flox_manifest::raw::RawSelectedOutputs;
@@ -519,6 +521,53 @@ mod tests {
 
         assert_eq!(
             emptied_groups(manifest, merged_manifest, &["gh"]),
+            BTreeSet::new()
+        );
+    }
+
+    /// A package that the environment overrides is still installed from its
+    /// included environment after uninstalling it, so its pkg-group keeps
+    /// its settings, even though the merged manifest has no other package in
+    /// the pkg-group.
+    #[test]
+    fn pkg_groups_not_emptied_while_overridden_package_remains_included() {
+        let manifest = mk_test_manifest_from_contents(with_latest_schema(indoc! {r#"
+            [install]
+            gh.pkg-path = "gh"
+            gh.pkg-group = "legacy"
+
+            [pkg-groups.legacy]
+            stability = "lts"
+        "#}));
+        let included = mk_test_manifest_from_contents(with_latest_schema(indoc! {r#"
+            [install]
+            gh.pkg-path = "gh"
+            gh.pkg-group = "legacy"
+        "#}));
+        // The environment's 'gh' overrides the included one.
+        let lockfile = Lockfile {
+            manifest: manifest.as_latest_schema().as_typed_only(),
+            compose: Some(Compose {
+                composer: manifest.as_latest_schema().as_typed_only(),
+                include: vec![LockedInclude {
+                    manifest: included.as_latest_schema().as_typed_only(),
+                    name: "tools".to_string(),
+                    descriptor: IncludeDescriptor::Local {
+                        dir: "../tools".into(),
+                        name: None,
+                    },
+                }],
+                warnings: vec![],
+            }),
+            ..Default::default()
+        };
+        let modifications = [PackageToModify {
+            install_id: "gh".to_string(),
+            modification: PackageModification::Remove,
+        }];
+
+        assert_eq!(
+            pkg_groups_emptied_by(&modifications, &manifest, &lockfile).unwrap(),
             BTreeSet::new()
         );
     }

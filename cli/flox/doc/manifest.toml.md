@@ -434,9 +434,11 @@ PkgGroup ::= {
     see [`flox-install(1)`](./flox-install.md).
 
 When [`flox-uninstall(1)`](./flox-uninstall.md) removes the last package of a
-pkg-group, it also removes the pkg-group's table,
+pkg-group, it also removes the pkg-group's table and says so,
 so that a pkg-group created later with the same name doesn't inherit its
 settings.
+Comments above the table stay where they were;
+comments inside it are removed with it.
 It keeps the table of `toplevel`, which packages join by default,
 and the table of a pkg-group that still has packages from an included
 environment.

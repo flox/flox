@@ -1117,71 +1117,248 @@ fn update_raw_pkg_groups(
 /// Removes the settings of `groups` from a raw TOML manifest, and the
 /// `pkg-groups` table once no group is left in it.
 ///
-/// Comments above a removed table move to the next table, or to the end of
-/// the document if the removed table was the last one. The end of the
-/// document is where [`update_raw_pkg_groups`] takes them from for a new
-/// group, so installing and uninstalling a package in a new group leaves
-/// the manifest's comments where they were.
+/// Comments above a removed table or line stay where they were: above the
+/// next line of the same table, if there is one, or else above the next
+/// table header, separated from it by a blank line so that they don't read
+/// as a description of that table, or at the end of the document. The end
+/// of the document is where [`update_raw_pkg_groups`] takes comments from
+/// for a new group, so installing and uninstalling a package in a new group
+/// leaves the manifest's comments where they were. Comments inside a
+/// removed table are removed with it.
 fn remove_raw_pkg_groups(
     raw: &mut DocumentMut,
     groups: &BTreeSet<String>,
 ) -> Result<(), TomlEditError> {
-    let Some(groups_item) = raw.get_mut("pkg-groups") else {
+    let Some(groups_item) = raw.get("pkg-groups") else {
         return Ok(());
     };
     let groups_item_type = groups_item.type_name().to_string();
-    let groups_table = groups_item.as_table_like_mut().ok_or_else(|| {
+    let groups_table = groups_item.as_table_like().ok_or_else(|| {
         TomlEditError::MalformedPkgGroupsTable("pkg-groups".to_string(), groups_item_type)
     })?;
+    // The position of an explicit `[pkg-groups]` header, which is where the
+    // lines of the table are.
+    let groups_header_position = groups_item
+        .as_table()
+        .filter(|table| !table.is_implicit() && !table.is_dotted())
+        .and_then(Table::position);
+    let removes_all_groups = groups_table.iter().all(|(group, _)| groups.contains(group));
+    // A line after `pkg-groups` at the top of the document, for comments of
+    // lines of `pkg-groups` in the dotted or inline form.
+    let next_root_line = || next_line_after(raw.as_table(), "pkg-groups", &BTreeSet::new());
 
+    // Comments to move, in document order.
     let mut orphaned_comments = Vec::new();
-    for group in groups {
-        let Some(Item::Table(removed)) = groups_table.remove(group) else {
-            continue;
+    if removes_all_groups {
+        // The comments above the `[pkg-groups]` header, or above the line of
+        // an inline `pkg-groups` table.
+        let comments = match groups_header_position {
+            Some(position) => groups_item
+                .as_table()
+                .and_then(|table| table.decor().prefix())
+                .map(|prefix| {
+                    (
+                        position,
+                        prefix.clone(),
+                        CommentsDestination::NextHeader(Some(position)),
+                    )
+                }),
+            None => raw
+                .key("pkg-groups")
+                .and_then(|key| key.leaf_decor().prefix())
+                .map(|prefix| {
+                    let destination = match next_root_line() {
+                        Some(line) => CommentsDestination::Line(vec![], line),
+                        None => CommentsDestination::NextHeader(None),
+                    };
+                    (-1, prefix.clone(), destination)
+                }),
         };
-        let Some(position) = removed.position() else {
-            continue;
-        };
-        let comments = removed
-            .decor()
-            .prefix()
-            .and_then(|prefix| prefix.as_str())
-            .filter(|prefix| !prefix.trim().is_empty());
-        if let Some(comments) = comments {
-            orphaned_comments.push((position, comments.to_string()));
-        }
+        orphaned_comments.extend(comments);
     }
-    if groups_table.is_empty() {
-        raw.remove("pkg-groups");
-    }
-
-    for (position, comments) in orphaned_comments {
-        let next_table = table_header_positions(raw.as_table(), &[])
-            .into_iter()
-            .filter(|(table_position, _)| *table_position > position)
-            .min_by_key(|(table_position, _)| *table_position)
-            .and_then(|(_, path)| table_at_path_mut(raw, &path));
-        match next_table {
-            Some(next_table) => {
-                // The comments bring their own separation from the content
-                // above them.
-                let existing = next_table
-                    .decor()
-                    .prefix()
-                    .and_then(|prefix| prefix.as_str())
-                    .unwrap_or_default()
-                    .trim_start_matches(['\n', '\r']);
-                let prefix = format!("{comments}{existing}");
-                next_table.decor_mut().set_prefix(prefix);
+    for (group, item) in groups_table
+        .iter()
+        .filter(|(group, _)| groups.contains(*group))
+    {
+        // A `[pkg-groups.<NAME>]` header, rather than a line of the
+        // `pkg-groups` table.
+        let header = item.as_table().filter(|table| !table.is_dotted());
+        let (anchor, comments, destination) = match header.and_then(Table::position) {
+            Some(position) => {
+                let Some(prefix) = header.and_then(|table| table.decor().prefix()) else {
+                    continue;
+                };
+                (
+                    position,
+                    prefix.clone(),
+                    CommentsDestination::NextHeader(Some(position)),
+                )
             },
             None => {
-                let existing = raw.trailing().as_str().unwrap_or_default();
-                let trailing = format!("{}\n{existing}", comments.trim_end());
-                raw.set_trailing(trailing);
+                let destination = match next_line_after(groups_table, group, groups) {
+                    Some(line) => CommentsDestination::Line(vec!["pkg-groups".to_string()], line),
+                    None if groups_header_position.is_some() => {
+                        CommentsDestination::NextHeader(groups_header_position)
+                    },
+                    None => match next_root_line() {
+                        Some(line) => CommentsDestination::Line(vec![], line),
+                        None => CommentsDestination::NextHeader(None),
+                    },
+                };
+                let Some(prefix) = line_prefix(groups_table, group) else {
+                    continue;
+                };
+                (groups_header_position.unwrap_or(-1), prefix, destination)
             },
+        };
+        orphaned_comments.push((anchor, comments, destination));
+    }
+    // Keep comments in document order, also when they move to the same
+    // place. The sort is stable, so lines of the same table keep their order.
+    orphaned_comments.sort_by_key(|(anchor, ..)| *anchor);
+    let orphaned_comments = orphaned_comments
+        .into_iter()
+        .filter_map(|(_, comments, destination)| {
+            let comments = comments.as_str()?.to_string();
+            (!comments.trim().is_empty()).then_some((comments, destination))
+        })
+        .collect::<Vec<_>>();
+
+    if removes_all_groups {
+        raw.remove("pkg-groups");
+    } else if let Some(groups_table) = raw.get_mut("pkg-groups").and_then(Item::as_table_like_mut) {
+        for group in groups {
+            groups_table.remove(group);
         }
     }
+
+    // Each move puts comments before those already there, so moving them in
+    // reverse document order keeps them in document order.
+    for (comments, destination) in orphaned_comments.into_iter().rev() {
+        move_comments(raw, &comments, destination);
+    }
     Ok(())
+}
+
+/// Where [`remove_raw_pkg_groups`] moves the comments above a removed table
+/// or line.
+enum CommentsDestination {
+    /// Above the line of the key in the table at the path.
+    Line(Vec<String>, String),
+    /// Above the first table header after the position, or after the start
+    /// of the document for `None`, or at the end of the document if there is
+    /// no such header.
+    NextHeader(Option<isize>),
+}
+
+/// The next key after `key` in `table` that renders as a line of the table,
+/// rather than as a table header of its own, skipping the keys in `removed`.
+fn next_line_after(table: &dyn TableLike, key: &str, removed: &BTreeSet<String>) -> Option<String> {
+    table
+        .iter()
+        .skip_while(|(other, _)| *other != key)
+        .skip(1)
+        .find(|(other, item)| {
+            let is_line = match item {
+                Item::Table(table) => table.is_dotted(),
+                Item::Value(_) => true,
+                Item::None | Item::ArrayOfTables(_) => false,
+            };
+            is_line && !removed.contains(*other)
+        })
+        .map(|(other, _)| other.to_string())
+}
+
+/// The comments and whitespace above the line of `key` in `table`.
+///
+/// For a dotted key, e.g. `legacy.stability = "lts"`, they belong to the
+/// last key of the first line, `stability`. Unlike for a dotted key, the
+/// keys inside an inline table are on the same line as the table's key.
+fn line_prefix(table: &dyn TableLike, key: &str) -> Option<toml_edit::RawString> {
+    let (table_key, item) = table.get_key_value(key)?;
+    match item.as_table().filter(|table| table.is_dotted()) {
+        Some(dotted) => {
+            let (first_key, _) = dotted.iter().next()?;
+            line_prefix(dotted, first_key)
+        },
+        None => table_key.leaf_decor().prefix().cloned(),
+    }
+}
+
+/// Set the comments and whitespace above the line of `key` in `table`; see
+/// [`line_prefix`].
+fn set_line_prefix(table: &mut dyn TableLike, key: &str, prefix: String) {
+    let first_dotted_key = table
+        .get(key)
+        .and_then(Item::as_table)
+        .filter(|table| table.is_dotted())
+        .and_then(|dotted| {
+            dotted
+                .iter()
+                .next()
+                .map(|(first_key, _)| first_key.to_string())
+        });
+    match first_dotted_key {
+        Some(first_key) => {
+            if let Some(dotted) = table.get_mut(key).and_then(Item::as_table_mut) {
+                set_line_prefix(dotted, &first_key, prefix);
+            }
+        },
+        None => {
+            if let Some(mut table_key) = table.key_mut(key) {
+                table_key.leaf_decor_mut().set_prefix(prefix);
+            }
+        },
+    }
+}
+
+/// Put `comments` in front of the comments at `destination`, separated from
+/// what follows by a blank line.
+fn move_comments(raw: &mut DocumentMut, comments: &str, destination: CommentsDestination) {
+    let comments = comments.trim_end();
+    match destination {
+        CommentsDestination::Line(table_path, key) => {
+            let Some(table) = table_at_path_mut(raw, &table_path) else {
+                return;
+            };
+            let existing = line_prefix(table, &key);
+            let existing = existing
+                .as_ref()
+                .and_then(|prefix| prefix.as_str())
+                .unwrap_or_default()
+                .trim_start_matches(['\n', '\r']);
+            let prefix = format!("{comments}\n\n{existing}");
+            set_line_prefix(table, &key, prefix);
+        },
+        CommentsDestination::NextHeader(position) => {
+            let next_table = table_header_positions(raw.as_table(), &[])
+                .into_iter()
+                .filter(|(table_position, _)| {
+                    position.is_none_or(|position| *table_position > position)
+                })
+                .min_by_key(|(table_position, _)| *table_position)
+                .and_then(|(_, path)| table_at_path_mut(raw, &path));
+            match next_table {
+                Some(next_table) => {
+                    // The comments bring their own separation from the
+                    // content above them.
+                    let existing = next_table
+                        .decor()
+                        .prefix()
+                        .and_then(|prefix| prefix.as_str())
+                        .unwrap_or_default()
+                        .trim_start_matches(['\n', '\r']);
+                    let prefix = format!("{comments}\n\n{existing}");
+                    next_table.decor_mut().set_prefix(prefix);
+                },
+                None => {
+                    let existing = raw.trailing().as_str().unwrap_or_default();
+                    let trailing = format!("{comments}\n{existing}");
+                    raw.set_trailing(trailing);
+                },
+            }
+        },
+    }
 }
 
 /// The document positions and key paths of the tables nested in `table` that
@@ -2299,11 +2476,33 @@ curl.outputs = [\"bin\", \"man\"]
         );
     }
 
-    /// Comments above a removed group's table move to the next table, and
-    /// other groups keep their settings.
+    /// Removes `groups` from `manifest`, and checks that the result parses
+    /// with the settings of the other pkg-groups.
+    fn remove_pkg_groups_from(manifest: &str, groups: &[&str]) -> String {
+        let manifest = mk_test_manifest_from_contents(manifest);
+        let groups = groups.iter().map(|group| group.to_string()).collect();
+        let removed = manifest.remove_pkg_groups(&groups).unwrap();
+        let written = removed.inner.migrated_raw.to_string();
+
+        let mut expected_groups = manifest.inner.migrated_parsed.pkg_groups.clone();
+        expected_groups
+            .inner_mut()
+            .retain(|group, _| !groups.contains(group));
+        assert_eq!(
+            mk_test_manifest_from_contents(&written)
+                .inner
+                .migrated_parsed
+                .pkg_groups,
+            expected_groups
+        );
+        written
+    }
+
+    /// Comments above a removed group's table stay in place, separated from
+    /// the next table, and other groups keep their settings.
     #[test]
-    fn remove_pkg_groups_moves_comments_to_next_table() {
-        let manifest = mk_test_manifest_from_contents(indoc! {r#"
+    fn remove_pkg_groups_keeps_comments_in_place() {
+        let manifest = indoc! {r#"
             schema-version = "1.18.0"
 
             [install]
@@ -2311,6 +2510,7 @@ curl.outputs = [\"bin\", \"man\"]
 
             # pinned for the build servers
             [pkg-groups.legacy]
+            # comments inside the table are removed with it
             stability = "lts"
 
             [pkg-groups.toplevel]
@@ -2318,11 +2518,7 @@ curl.outputs = [\"bin\", \"man\"]
 
             [options]
             systems = ["aarch64-darwin"]
-        "#});
-
-        let manifest = manifest
-            .remove_pkg_groups(&BTreeSet::from(["legacy".to_string()]))
-            .unwrap();
+        "#};
 
         expect![[r#"
             schema-version = "1.18.0"
@@ -2331,13 +2527,195 @@ curl.outputs = [\"bin\", \"man\"]
             hello.pkg-path = "hello"
 
             # pinned for the build servers
+
             [pkg-groups.toplevel]
             stability = "stable"
 
             [options]
             systems = ["aarch64-darwin"]
         "#]]
-        .assert_eq(&manifest.inner.migrated_raw.to_string());
+        .assert_eq(&remove_pkg_groups_from(manifest, &["legacy"]));
+    }
+
+    /// The comments of several removed groups keep their order.
+    #[test]
+    fn remove_pkg_groups_keeps_comments_in_order() {
+        let manifest = indoc! {r#"
+            schema-version = "1.18.0"
+
+            # A comment
+            [pkg-groups.alpha]
+            stability = "a"
+
+            # B comment
+            [pkg-groups.zeta]
+            stability = "z"
+
+            # options comment
+            [options]
+            systems = ["aarch64-darwin"]
+
+            # C comment
+            [pkg-groups.beta]
+            stability = "b"
+
+            # D comment
+            [pkg-groups.gamma]
+            stability = "g"
+        "#};
+
+        expect![[r#"
+            schema-version = "1.18.0"
+
+            # A comment
+
+            # B comment
+
+            # options comment
+            [options]
+            systems = ["aarch64-darwin"]
+
+            # C comment
+
+            # D comment
+        "#]]
+        .assert_eq(&remove_pkg_groups_from(manifest, &[
+            "alpha", "beta", "gamma", "zeta",
+        ]));
+    }
+
+    /// Groups set with dotted keys or inline tables under a `[pkg-groups]`
+    /// header keep the comments above their lines in place, and so does the
+    /// header once no group is left.
+    #[test]
+    fn remove_pkg_groups_under_pkg_groups_header() {
+        let manifest = indoc! {r#"
+            schema-version = "1.18.0"
+
+            # about pkg-groups
+            [pkg-groups]
+            # legacy comment
+            legacy.stability = "lts"
+            # tools comment
+            tools = { stability = "stable" }
+            # extra comment
+            extra.stability = "staging"
+
+            [options]
+            systems = ["aarch64-darwin"]
+        "#};
+
+        expect![[r#"
+            schema-version = "1.18.0"
+
+            # about pkg-groups
+            [pkg-groups]
+            # legacy comment
+
+            # tools comment
+
+            # extra comment
+            extra.stability = "staging"
+
+            [options]
+            systems = ["aarch64-darwin"]
+        "#]]
+        .assert_eq(&remove_pkg_groups_from(manifest, &["legacy", "tools"]));
+        expect![[r#"
+            schema-version = "1.18.0"
+
+            # about pkg-groups
+            [pkg-groups]
+            # legacy comment
+            legacy.stability = "lts"
+            # tools comment
+            tools = { stability = "stable" }
+            # extra comment
+
+            [options]
+            systems = ["aarch64-darwin"]
+        "#]]
+        .assert_eq(&remove_pkg_groups_from(manifest, &["extra"]));
+        expect![[r#"
+            schema-version = "1.18.0"
+
+            # about pkg-groups
+
+            # legacy comment
+
+            # tools comment
+
+            # extra comment
+
+            [options]
+            systems = ["aarch64-darwin"]
+        "#]]
+        .assert_eq(&remove_pkg_groups_from(manifest, &[
+            "extra", "legacy", "tools",
+        ]));
+    }
+
+    /// Groups set with dotted keys or an inline table at the top of the
+    /// document keep the comments above their lines in place.
+    #[test]
+    fn remove_pkg_groups_at_top_level() {
+        let dotted = indoc! {r#"
+            schema-version = "1.18.0"
+            # legacy comment
+            pkg-groups.legacy.stability = "lts"
+            # tools comment
+            pkg-groups.tools.stability = "stable"
+
+            [options]
+            systems = ["aarch64-darwin"]
+        "#};
+        let inline = indoc! {r#"
+            schema-version = "1.18.0"
+            # pkg-groups comment
+            pkg-groups = { legacy = { stability = "lts" }, tools = { stability = "stable" } }
+
+            [options]
+            systems = ["aarch64-darwin"]
+        "#};
+
+        expect![[r#"
+            schema-version = "1.18.0"
+            # legacy comment
+
+            # tools comment
+            pkg-groups.tools.stability = "stable"
+
+            [options]
+            systems = ["aarch64-darwin"]
+        "#]]
+        .assert_eq(&remove_pkg_groups_from(dotted, &["legacy"]));
+        expect![[r#"
+            schema-version = "1.18.0"
+            # legacy comment
+
+            # tools comment
+
+            [options]
+            systems = ["aarch64-darwin"]
+        "#]]
+        .assert_eq(&remove_pkg_groups_from(dotted, &["legacy", "tools"]));
+        expect![[r#"
+            schema-version = "1.18.0"
+            # pkg-groups comment
+            pkg-groups = { tools = { stability = "stable" } }
+
+            [options]
+            systems = ["aarch64-darwin"]
+        "#]]
+        .assert_eq(&remove_pkg_groups_from(inline, &["legacy"]));
+        expect![[r#"
+            schema-version = "1.18.0"
+            # pkg-groups comment
+
+            [options]
+            systems = ["aarch64-darwin"]
+        "#]]
+        .assert_eq(&remove_pkg_groups_from(inline, &["legacy", "tools"]));
     }
 
     #[test]

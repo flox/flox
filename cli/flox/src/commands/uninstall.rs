@@ -1,11 +1,12 @@
 use anyhow::Result;
 use bpaf::Bpaf;
 use flox_events::{CliEnvironmentPayload, CliPackagePayload, EventKind, EventsHub, Outcome};
-use flox_manifest::parsed::latest::SelectedOutputs;
+use flox_manifest::parsed::latest::{PkgGroups, SelectedOutputs};
 use flox_manifest::raw::PackageModification;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::uninstall::UninstallSpec;
 use flox_rust_sdk::models::environment::{Environment, EnvironmentError};
+use indoc::formatdoc;
 use itertools::Itertools;
 use tracing::{debug, info_span, instrument};
 
@@ -124,6 +125,14 @@ impl Uninstall {
                 // Add is only used for installs, never uninstalls.
                 PackageModification::Add(_) => unreachable!(),
             }
+        }
+
+        for group in &attempt.removed_pkg_groups {
+            message::info(formatdoc! {"
+                The '{group}' pkg-group has no packages left.
+                Removed its settings in '{header}' from the manifest.",
+                header = PkgGroups::table_header(group),
+            });
         }
 
         if let Some(new_lockfile) = concrete_environment.existing_lockfile(&flox)? {
