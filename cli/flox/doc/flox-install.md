@@ -95,7 +95,8 @@ reference.
     so `--stability` can only set the stability of a pkg-group
     that has no packages yet, or confirm the stability it already has.
     Without `--pkg-group`, packages from the Flox Catalog join the `toplevel`
-    pkg-group, so in a new environment `flox install --stability <stability> <package>`
+    pkg-group, so in a new environment
+    `flox install --stability <stability> <package>`
     sets the stability of `toplevel`.
 
     If the pkg-group already has packages
@@ -118,7 +119,8 @@ reference.
     installed, and `flox install` says so.
     To move it, uninstall it with [`flox-uninstall(1)`](./flox-uninstall.md)
     and install it again.
-    They only apply to packages from a catalog,
+
+    `--pkg-group` and `--stability` only apply to packages from a catalog,
     not to flake installables or store paths.
 
 `<package>`
