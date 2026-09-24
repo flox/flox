@@ -471,7 +471,7 @@ EOF
 # When a manifest declares an older schema-version but uses a field that only
 # exists in the latest schema, 'flox edit' should:
 #   - succeed (not fail with a parse error)
-#   - write schema-version = "<latest>" to disk
+#   - write schema-version = "1.17.0" to disk (description introduced in 1.17.0)
 #   - warn the user that the schema was upgraded
 @test "'flox edit' upgrades schema-version when older version uses newer-schema fields" {
   "$FLOX_BIN" init
@@ -496,6 +496,37 @@ EOF
   run grep 'schema-version' "$MANIFEST_PATH"
   assert_success
   assert_output --partial 'schema-version = "1.17.0"'
+}
+
+# bats test_tags=edit:schema-upgrade
+# When a manifest at schema-version 1.10.0 uses minimum-cli-version (a field
+# introduced in 1.11.0), 'flox edit' should bump to 1.11.0 — not to the
+# latest version. This proves the bump is minimal, not always-to-latest.
+@test "'flox edit' bumps to minimum required schema-version, not always to latest" {
+  "$FLOX_BIN" init
+
+  # minimum-cli-version was introduced in schema-version 1.11.0.
+  # Using it in a 1.10.0 manifest must trigger a bump to 1.11.0 only.
+  cat << "EOF" > "$TMP_MANIFEST_PATH"
+schema-version = "1.10.0"
+
+[minimum-cli-version]
+version = "1.0.0"
+reason = "uses outputs"
+
+[install]
+EOF
+
+  run "$FLOX_BIN" edit -f "$TMP_MANIFEST_PATH"
+  assert_success
+
+  assert_output --partial 'Manifest declared schema-version = "1.10.0"'
+  assert_output --partial 'Upgraded it to schema-version = "1.11.0"'
+
+  # The manifest on disk must carry 1.11.0, not a later version.
+  run grep 'schema-version' "$MANIFEST_PATH"
+  assert_success
+  assert_output --partial 'schema-version = "1.11.0"'
 }
 
 # bats test_tags=edit:schema-upgrade:invalid

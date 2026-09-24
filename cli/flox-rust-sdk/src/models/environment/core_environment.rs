@@ -445,10 +445,9 @@ impl CoreEnvironment<ReadOnly> {
             return Ok(EditResult::Unchanged);
         }
 
-        let (new_manifest, schema_bump) = match Manifest::parse_toml_typed_or_as_latest(&contents)?
-        {
+        let (new_manifest, schema_bump) = match Manifest::parse_toml_typed_or_bumped(&contents)? {
             ParsedManifest::AsStated(m) => (m, None),
-            ParsedManifest::BumpedToLatest { manifest, from, to } => (manifest, Some((from, to))),
+            ParsedManifest::Bumped { manifest, from, to } => (manifest, Some((from, to))),
         };
         let (old_lockfile, migrated_manifest) =
             if let Some(lockfile) = maybe_up_to_date_lockfile.as_ref() {
@@ -496,10 +495,9 @@ impl CoreEnvironment<ReadOnly> {
             return Ok(Ok(EditResult::Unchanged));
         }
 
-        let (new_manifest, schema_bump) = match Manifest::parse_toml_typed_or_as_latest(&contents)?
-        {
+        let (new_manifest, schema_bump) = match Manifest::parse_toml_typed_or_bumped(&contents)? {
             ParsedManifest::AsStated(m) => (m, None),
-            ParsedManifest::BumpedToLatest { manifest, from, to } => (manifest, Some((from, to))),
+            ParsedManifest::Bumped { manifest, from, to } => (manifest, Some((from, to))),
         };
         let mut old_lockfile = self.lockfile_if_up_to_date()?;
         if old_lockfile.is_none() {
