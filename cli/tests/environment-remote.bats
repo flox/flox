@@ -499,3 +499,28 @@ EOF
   ensure_remote_environment_built "$OWNER/test"
   _FLOX_TESTING_NO_WRITABLE=true "$FLOX_BIN" activate --trust -r "$OWNER/test" -- true
 }
+
+# bats test_tags=hermetic,remote,remote:envs
+# Regression test for DEV-337: activating a remote environment must not cause
+# the backing cache checkout to appear as an inactive managed environment in
+# `flox envs` output.
+@test "activated remote env appears once under Active, not under Inactive" {
+  make_empty_remote_env
+
+  export FLOX_CACHE_DIR="$(realpath $FLOX_CACHE_DIR)"
+
+  # Capture `flox envs` output from inside the activated remote environment.
+  # The `-c` command is executed with _FLOX_ACTIVE_ENVIRONMENTS set, so
+  # `flox envs` sees the remote as active.
+  run "$FLOX_BIN" activate --trust --reference "$OWNER/test" \
+    -c "$FLOX_BIN envs"
+  assert_success
+
+  # The remote must appear in the Active section.
+  assert_output --partial "Active environments:"
+  assert_output --partial "$OWNER/test"
+
+  # The cache checkout path must not appear anywhere — it must not leak into
+  # the Inactive section as a second entry for the same environment.
+  refute_output --partial "$FLOX_CACHE_DIR/remote/$OWNER/test"
+}

@@ -115,6 +115,18 @@ impl RemoteEnvironment {
         Self::checkout_path(flox, pointer).join(DOT_FLOX).exists()
     }
 
+    /// True when `dot_flox_path` is the cache checkout backing `pointer`.
+    ///
+    /// `flox envs` uses this to suppress the inner managed environment that
+    /// [RemoteEnvironment::new] registers in the env-registry: that entry is
+    /// load-bearing for GC pruning and `flox delete -r`, but must not appear
+    /// as a second "inactive" entry alongside the active remote.
+    ///
+    /// Pure path computation — no filesystem I/O.
+    pub fn is_checkout_of(flox: &Flox, dot_flox_path: &Path, pointer: &ManagedPointer) -> bool {
+        Self::checkout_path(flox, pointer).join(DOT_FLOX) == *dot_flox_path
+    }
+
     /// Pull a remote environment into a flox-provided managed environment
     /// at [RemoteEnvironment::checkout_path].
     ///
@@ -775,5 +787,52 @@ mod tests {
         let history_kind = &history.iter().next().unwrap().kind;
 
         assert_eq!(history_kind, &HistoryKind::Initialize);
+    }
+
+    /// The checkout's own `.flox` directory is recognised as its backing path.
+    #[test]
+    fn is_checkout_of_true_for_own_dot_flox() {
+        let owner = EnvironmentOwner::from_str("owner").unwrap();
+        let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub(Some(&owner));
+        let name = EnvironmentName::from_str("myenv").unwrap();
+        let pointer = ManagedPointer::new(owner, name, &flox.floxhub);
+
+        let dot_flox = RemoteEnvironment::checkout_path(&flox, &pointer).join(DOT_FLOX);
+        assert!(RemoteEnvironment::is_checkout_of(
+            &flox, &dot_flox, &pointer
+        ));
+    }
+
+    /// An unrelated path is not identified as a checkout of this pointer.
+    #[test]
+    fn is_checkout_of_false_for_unrelated_path() {
+        let owner = EnvironmentOwner::from_str("owner").unwrap();
+        let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub(Some(&owner));
+        let name = EnvironmentName::from_str("myenv").unwrap();
+        let pointer = ManagedPointer::new(owner, name, &flox.floxhub);
+
+        let unrelated = std::path::PathBuf::from("/some/other/path/.flox");
+        assert!(!RemoteEnvironment::is_checkout_of(
+            &flox, &unrelated, &pointer
+        ));
+    }
+
+    /// The checkout path for a different pointer is not identified as this pointer's checkout.
+    #[test]
+    fn is_checkout_of_false_for_different_pointer() {
+        let owner = EnvironmentOwner::from_str("owner").unwrap();
+        let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub(Some(&owner));
+        let name_a = EnvironmentName::from_str("env-a").unwrap();
+        let name_b = EnvironmentName::from_str("env-b").unwrap();
+        let pointer_a = ManagedPointer::new(owner.clone(), name_a, &flox.floxhub);
+        let pointer_b = ManagedPointer::new(owner, name_b, &flox.floxhub);
+
+        // env-a's checkout should not match pointer_b
+        let dot_flox_a = RemoteEnvironment::checkout_path(&flox, &pointer_a).join(DOT_FLOX);
+        assert!(!RemoteEnvironment::is_checkout_of(
+            &flox,
+            &dot_flox_a,
+            &pointer_b
+        ));
     }
 }

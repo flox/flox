@@ -8,6 +8,7 @@ use crossterm::style::Stylize;
 use flox_manifest::interfaces::AsLatestSchema;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::env_registry::{EnvRegistry, garbage_collect};
+use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironment;
 use flox_rust_sdk::models::environment::{DotFlox, EnvironmentPointer, ManagedPointer};
 use serde_json::json;
 use tracing::instrument;
@@ -109,6 +110,11 @@ impl Envs {
         active: ActiveEnvironments,
         registered: impl Iterator<Item = UninitializedEnvironment>,
     ) -> Result<()> {
+        // Strip cache-checkout entries that back active remote environments
+        // before computing the inactive set.  The registry entry itself is
+        // preserved — GC pruning and `flox delete -r` depend on it — only the
+        // display is filtered.
+        let registered = registered.filter(|env| !is_cached_remote_backing(flox, env));
         let inactive = get_inactive_environments(registered, active.iter())?;
 
         if self.json {
@@ -320,6 +326,29 @@ fn format_path(path: &Path) -> String {
     path.parent().unwrap_or(path).to_string_lossy().to_string()
 }
 
+/// True when `env` is the managed-environment cache checkout that backs an
+/// active remote environment.
+///
+/// Activating a [`RemoteEnvironment`] creates an inner [`ManagedEnvironment`]
+/// under `~/.cache/flox/remote/<owner>/<name>/.flox` and registers it in the
+/// env-registry.  That registration is load-bearing (GC pruning and
+/// `flox delete -r` rely on it), but the cache entry must not appear as a
+/// second inactive entry in `flox envs` alongside the active remote.
+///
+/// Detection is pointer-derived: the path must equal
+/// `RemoteEnvironment::checkout_path(flox, pointer).join(".flox")`, not just
+/// a prefix match on the cache dir.
+fn is_cached_remote_backing(flox: &Flox, env: &UninitializedEnvironment) -> bool {
+    let UninitializedEnvironment::DotFlox(DotFlox {
+        path,
+        pointer: EnvironmentPointer::Managed(mp),
+    }) = env
+    else {
+        return false;
+    };
+    RemoteEnvironment::is_checkout_of(flox, path, mp)
+}
+
 fn get_registered_environments(
     registry: &EnvRegistry,
 ) -> impl Iterator<Item = UninitializedEnvironment> + '_ {
@@ -356,7 +385,9 @@ mod tests {
 
     use flox_core::data::environment_ref::{EnvironmentName, EnvironmentOwner};
     use flox_core::floxhub::Floxhub;
-    use flox_rust_sdk::models::environment::PathPointer;
+    use flox_rust_sdk::flox::test_helpers::flox_instance_with_optional_floxhub;
+    use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironment;
+    use flox_rust_sdk::models::environment::{DOT_FLOX, PathPointer};
     use indoc::formatdoc;
     use pretty_assertions::assert_eq;
 
@@ -440,5 +471,51 @@ mod tests {
         assert_eq!(envs.to_string(), formatdoc! {"
             name_path  /envs/path
         "});
+    }
+
+    /// A `DotFlox::Managed` whose path matches the remote-environment cache
+    /// checkout is identified as a backing entry.
+    #[test]
+    fn is_cached_remote_backing_true_for_cache_checkout() {
+        let owner = EnvironmentOwner::from_str("owner").unwrap();
+        let (flox, _tempdir) = flox_instance_with_optional_floxhub(Some(&owner));
+        let name = EnvironmentName::from_str("myenv").unwrap();
+        let pointer = ManagedPointer::new(owner, name, &flox.floxhub);
+        let checkout_dot_flox = RemoteEnvironment::checkout_path(&flox, &pointer).join(DOT_FLOX);
+
+        let env = UninitializedEnvironment::DotFlox(DotFlox {
+            path: checkout_dot_flox,
+            pointer: EnvironmentPointer::Managed(pointer),
+        });
+        assert!(is_cached_remote_backing(&flox, &env));
+    }
+
+    /// A plain managed env at an arbitrary path is not a backing entry.
+    #[test]
+    fn is_cached_remote_backing_false_for_arbitrary_managed_path() {
+        let owner = EnvironmentOwner::from_str("owner").unwrap();
+        let (flox, _tempdir) = flox_instance_with_optional_floxhub(Some(&owner));
+        let name = EnvironmentName::from_str("myenv").unwrap();
+        let pointer = ManagedPointer::new(owner, name, &flox.floxhub);
+
+        let env = UninitializedEnvironment::DotFlox(DotFlox {
+            path: PathBuf::from("/projects/myenv/.flox"),
+            pointer: EnvironmentPointer::Managed(pointer),
+        });
+        assert!(!is_cached_remote_backing(&flox, &env));
+    }
+
+    /// A `DotFlox::Path` (not a managed pointer) is never a backing entry.
+    #[test]
+    fn is_cached_remote_backing_false_for_path_pointer() {
+        let owner = EnvironmentOwner::from_str("owner").unwrap();
+        let (flox, _tempdir) = flox_instance_with_optional_floxhub(Some(&owner));
+        let name = EnvironmentName::from_str("myenv").unwrap();
+
+        let env = UninitializedEnvironment::DotFlox(DotFlox {
+            path: PathBuf::from("/projects/myenv/.flox"),
+            pointer: EnvironmentPointer::Path(PathPointer::new(name)),
+        });
+        assert!(!is_cached_remote_backing(&flox, &env));
     }
 }
