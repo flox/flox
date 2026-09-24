@@ -3266,6 +3266,75 @@ mod tests {
         );
     }
 
+    /// Resolve a manifest whose `tools` pkg-group has `stability`, with the
+    /// catalog returning `responses`.
+    async fn resolve_error_with_stability(
+        stability: &str,
+        responses: Vec<Response>,
+    ) -> ResolveError {
+        let (foo_iid, foo_descriptor, _) = fake_catalog_package_lock("foo", Some("tools"));
+        let mut manifest = ManifestLatest::default();
+        manifest.install.inner_mut().insert(foo_iid, foo_descriptor);
+        manifest
+            .pkg_groups
+            .inner_mut()
+            .insert("tools".to_string(), PkgGroup {
+                stability: Some(stability.to_string()),
+            });
+        let mut client = MockClient::new();
+        reset_mocks(&mut client, responses);
+
+        LockManifest::resolve_manifest(&manifest, None, &client, &InstallableLockerMock::new())
+            .await
+            .unwrap_err()
+    }
+
+    fn catalog_error_response(status: u16) -> Response {
+        Response::Error(GenericResponse {
+            inner: ApiErrorResponse {
+                detail: "catalog error".to_string(),
+            },
+            status,
+        })
+    }
+
+    /// Only an unprocessable request can be caused by an unknown stability,
+    /// so other errors are returned as is, without fetching the available
+    /// stabilities.
+    #[tokio::test]
+    async fn lock_manifest_keeps_catalog_error_for_other_statuses() {
+        // Fetching the base catalog info would fail, since it isn't mocked.
+        let err = resolve_error_with_stability("lst", vec![catalog_error_response(500)]).await;
+
+        assert!(matches!(err, ResolveError::CatalogResolve(_)), "{err:?}");
+    }
+
+    /// Without the available stabilities, the catalog's error is returned as
+    /// is.
+    #[tokio::test]
+    async fn lock_manifest_keeps_catalog_error_without_base_catalog_info() {
+        let err = resolve_error_with_stability("lst", vec![
+            catalog_error_response(422),
+            catalog_error_response(500),
+        ])
+        .await;
+
+        assert!(matches!(err, ResolveError::CatalogResolve(_)), "{err:?}");
+    }
+
+    /// An unprocessable request with only known stabilities has another
+    /// cause, so the catalog's error is returned as is.
+    #[tokio::test]
+    async fn lock_manifest_keeps_catalog_error_for_known_stabilities() {
+        let err = resolve_error_with_stability("stable", vec![
+            catalog_error_response(422),
+            Response::GetBaseCatalog(BaseCatalogInfo::new_mock()),
+        ])
+        .await;
+
+        assert!(matches!(err, ResolveError::CatalogResolve(_)), "{err:?}");
+    }
+
     /// [Lockfile::lock_manifest] returns an error if the server
     /// returns a package that is not allowed.
     #[cfg_attr(

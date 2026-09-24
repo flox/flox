@@ -395,12 +395,16 @@ impl CatalogClientTrait for MockClient {
             .expect("couldn't acquire mock lock")
             .pop_front();
 
-        let resp = match mock_resp {
-            Some(Response::GetBaseCatalog(resp)) => resp,
+        match mock_resp {
+            Some(Response::GetBaseCatalog(resp)) => Ok(resp),
+            Some(Response::Error(err)) => Err(FloxhubClientError::APIError(
+                floxhub_client::ApiError::ErrorResponse(
+                    err.try_into()
+                        .expect("couldn't convert mock error response"),
+                ),
+            )),
             _ => panic!("expected get_base_catalog response, found {:?}", &mock_resp),
-        };
-
-        Ok(resp)
+        }
     }
 
     async fn get_catalog_locked_sources(
