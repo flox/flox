@@ -16,10 +16,11 @@
 //! variable existed or are the single byte `@` when it did not.
 //!
 //! Unlike a before/after environment diff, a trace records *how* each value
-//! was built: `prepend`/`append` records carry only the delta, so replaying
-//! the trace onto a different shell's environment extends that shell's own
-//! value instead of clobbering it with the value captured in the shell that
-//! ran the activation.
+//! was built: `prepend`/`append` records carry the old value and only the
+//! added text, so a replay onto a different shell's environment can either
+//! extend that shell's own value or reconstruct the exact value the
+//! recording shell ended with. Which of the two is right for a given record
+//! is decided at replay time; see [`apply_growth`].
 
 use std::collections::HashMap;
 use std::path::Path;
@@ -159,9 +160,8 @@ pub enum TraceOp {
 /// One parsed trace record.
 ///
 /// The timestamp and pre/post export digits are validated during parsing but
-/// not retained: replay only needs the operation, the variable, and the
-/// operand. The recorded old value is retained for diagnostics but never
-/// replayed — it belongs to the start shell's context.
+/// not retained: replay only needs the operation, the variable, the operand
+/// and, for `prepend`/`append`, the old value (see [`apply_growth`]).
 #[derive(Debug, Clone, PartialEq)]
 pub struct TraceRecord {
     pub op: TraceOp,
@@ -293,12 +293,11 @@ fn unescape(escaped: &str) -> Result<String> {
 /// replays a trace.
 ///
 /// Application is semantic, not blind overwrite: `set`/`updated`/`reset`
-/// assign their operand, `prepend`/`append` apply their delta to the value
-/// the base environment currently holds (an empty base when it has none —
-/// the recorded old value is the start shell's and is never replayed),
-/// `unset` removes, `tempenv` is a no-op, and `set-if-absent` (a
-/// same-value assignment without declared reset intent) is applied only
-/// when the base has no value at all.
+/// assign their operand, `prepend`/`append` extend the value the base
+/// environment currently holds or reconstruct the recorded value (see
+/// [`apply_growth`]), `unset` removes, `tempenv` is a no-op, and
+/// `set-if-absent` (a same-value assignment without declared reset intent)
+/// is applied only when the base has no value at all.
 fn generate_diff_from_trace(
     records: &[TraceRecord],
     base_env: &HashMap<String, String>,
@@ -336,19 +335,7 @@ fn generate_diff_from_trace(
                 VarEffect::Set(record.operand.clone().expect("validated at parse time"))
             },
             TraceOp::Unset => VarEffect::Unset,
-            TraceOp::Prepend | TraceOp::Append => {
-                let delta = record.operand.clone().expect("validated at parse time");
-                // When the target has no value the base is EMPTY, not the
-                // recorded old value: the old value is the *start* shell's
-                // and replaying it would leak that shell's stack into a
-                // target that never had the variable — the exact class of
-                // bug the trace exists to eliminate.
-                let base = current.unwrap_or_default();
-                match record.op {
-                    TraceOp::Prepend => VarEffect::Set(format!("{delta}{base}")),
-                    _ => VarEffect::Set(format!("{base}{delta}")),
-                }
-            },
+            TraceOp::Prepend | TraceOp::Append => VarEffect::Set(apply_growth(record, current)),
         };
         effects.insert(record.name.clone(), effect);
     }
@@ -365,6 +352,80 @@ fn generate_diff_from_trace(
         }
     }
     env_diff
+}
+
+/// The character that joins the elements of a list-valued variable.
+///
+/// Only the POSIX `:` is recognized, for every variable. Those lists are
+/// search paths, where an element the target already has can be skipped.
+/// Whitespace-joined flag lists repeat tokens (`-isystem /a -isystem /b`),
+/// so treating them the same way would drop flags. Growth across any other
+/// separator is replayed as the exact recorded value.
+const LIST_SEPARATOR: char = ':';
+
+/// Apply a `prepend`/`append` record to `current`, the value the target
+/// environment holds at this point of the replay.
+///
+/// The tracer classifies growth textually: the record only says that the
+/// new value starts (or ends) with the old one and what the added text was.
+/// That cannot tell a list gaining an element (`PATH=$PATH:/x`) from a value
+/// replaced by one that happens to start with it (`TMPDIR=/tmp/` becoming
+/// `/tmp/nix-shell.abc` because mktemp created the directory inside the old
+/// one). Splicing the second kind into another shell's value corrupts it,
+/// and a nested attach, whose shell already holds the grown value, would
+/// apply it twice. So the added text is treated as list elements only when
+/// it meets the old value at [`LIST_SEPARATOR`]; otherwise the record is
+/// replayed as the exact value the recording shell ended with.
+///
+/// The list keeps one copy of each added element, where it decides lookups.
+/// A prepended element the target already has moves to the front, because
+/// the recording shell gave it priority; an appended one stays put, because
+/// a later copy never wins. Either way a nested attach is a no-op for lists.
+/// Nothing is joined onto an empty base: that would leave a leading
+/// separator, an empty element that `PATH` and `CPATH` read as the current
+/// directory. The recorded old value is never used as the base, since it
+/// belongs to the recording shell.
+fn apply_growth(record: &TraceRecord, current: Option<String>) -> String {
+    let delta = record.operand.as_deref().expect("validated at parse time");
+    let old = record.old.as_deref().unwrap_or_default();
+    let sep = LIST_SEPARATOR;
+    let prepend = record.op == TraceOp::Prepend;
+
+    let list_delta = if prepend {
+        delta
+            .strip_suffix(sep)
+            .or_else(|| old.starts_with(sep).then_some(delta))
+    } else {
+        delta
+            .strip_prefix(sep)
+            .or_else(|| old.ends_with(sep).then_some(delta))
+    };
+    let Some(elements) = list_delta else {
+        return if prepend {
+            format!("{delta}{old}")
+        } else {
+            format!("{old}{delta}")
+        };
+    };
+
+    let base = current.unwrap_or_default();
+    let mut list: Vec<&str> = if base.is_empty() {
+        Vec::new()
+    } else {
+        base.split(sep).collect()
+    };
+    let elements: Vec<&str> = elements.split(sep).collect();
+    if prepend {
+        list.retain(|element| !elements.contains(element));
+        list.splice(0..0, elements);
+    } else {
+        let missing: Vec<&str> = elements
+            .into_iter()
+            .filter(|element| !list.contains(element))
+            .collect();
+        list.extend(missing);
+    }
+    list.join(&sep.to_string())
 }
 
 #[cfg(test)]
@@ -546,9 +607,10 @@ mod tests {
 
     #[test]
     fn generate_diff_uses_empty_base_when_target_lacks_value() {
-        // The attaching shell has no CPATH at all: the base is empty. The
-        // recorded old value belongs to the *start* shell's stack and must
-        // not leak into a target that never had the variable.
+        // The attaching shell has no CPATH at all: the recorded old value
+        // belongs to the *start* shell's stack and must not leak into a
+        // target that never had the variable, and the element is not joined
+        // onto the empty base either, which would leave an empty element.
         let records = vec![TraceRecord {
             op: TraceOp::Prepend,
             name: "CPATH".to_string(),
@@ -558,7 +620,165 @@ mod tests {
 
         assert_eq!(
             generate_diff_from_trace(&records, &HashMap::new()),
-            diff(&[("CPATH", "/shared/include:")], &[])
+            diff(&[("CPATH", "/shared/include")], &[])
+        );
+    }
+
+    #[test]
+    fn generate_diff_rewrites_textual_growth_of_a_non_list_value() {
+        // `nix print-dev-env` replaced TMPDIR with a directory mktemp created
+        // inside the old one, so the tracer saw the old value as a prefix of
+        // the new. The added text carries no list separator, so the attaching
+        // shell gets the recorded value, not its own TMPDIR with text glued on.
+        let records = vec![TraceRecord {
+            op: TraceOp::Append,
+            name: "TMPDIR".to_string(),
+            old: Some("/tmp/".to_string()),
+            operand: Some("nix-shell.abc".to_string()),
+        }];
+
+        assert_eq!(
+            generate_diff_from_trace(&records, &env(&[("TMPDIR", "/other/")])),
+            diff(&[("TMPDIR", "/tmp/nix-shell.abc")], &[])
+        );
+    }
+
+    #[test]
+    fn generate_diff_does_not_double_textual_growth_on_nested_attach() {
+        // A shell activating from inside the activation already holds the
+        // grown value.
+        let records = vec![TraceRecord {
+            op: TraceOp::Append,
+            name: "TMPDIR".to_string(),
+            old: Some("/tmp/".to_string()),
+            operand: Some("nix-shell.abc".to_string()),
+        }];
+
+        assert_eq!(
+            generate_diff_from_trace(&records, &env(&[("TMPDIR", "/tmp/nix-shell.abc")])),
+            diff(&[("TMPDIR", "/tmp/nix-shell.abc")], &[])
+        );
+    }
+
+    #[test]
+    fn generate_diff_moves_a_prepended_element_the_target_already_has() {
+        // A hook prepends a directory that is already further down PATH so
+        // that its binaries win. Skipping it as a duplicate would leave the
+        // target resolving a different binary than the recording shell.
+        let records = vec![TraceRecord {
+            op: TraceOp::Prepend,
+            name: "PATH".to_string(),
+            old: Some("/usr/bin:/opt/node/bin".to_string()),
+            operand: Some("/opt/node/bin:".to_string()),
+        }];
+        let base = env(&[("PATH", "/usr/bin:/opt/node/bin:/bin")]);
+
+        assert_eq!(
+            generate_diff_from_trace(&records, &base),
+            diff(&[("PATH", "/opt/node/bin:/usr/bin:/bin")], &[])
+        );
+    }
+
+    #[test]
+    fn generate_diff_keeps_an_appended_element_the_target_already_has() {
+        // The earlier copy already wins every lookup, so it must not move to
+        // the back.
+        let records = vec![TraceRecord {
+            op: TraceOp::Append,
+            name: "PATH".to_string(),
+            old: Some("/opt/node/bin:/usr/bin".to_string()),
+            operand: Some(":/opt/node/bin".to_string()),
+        }];
+        let base = env(&[("PATH", "/opt/node/bin:/usr/bin:/bin")]);
+
+        assert_eq!(
+            generate_diff_from_trace(&records, &base),
+            diff(&[("PATH", "/opt/node/bin:/usr/bin:/bin")], &[])
+        );
+    }
+
+    #[test]
+    fn generate_diff_is_a_no_op_for_a_list_the_target_already_grew() {
+        // The nested-attach case for a list: the attaching shell's PATH is
+        // the value the whole history produced, so replaying the history
+        // adds nothing, even though later records pushed the earlier
+        // elements away from the edges.
+        let records = vec![
+            TraceRecord {
+                op: TraceOp::Prepend,
+                name: "PATH".to_string(),
+                old: Some("/base".to_string()),
+                operand: Some("/p1:".to_string()),
+            },
+            TraceRecord {
+                op: TraceOp::Append,
+                name: "PATH".to_string(),
+                old: Some("/p1:/base".to_string()),
+                operand: Some(":/a1".to_string()),
+            },
+            TraceRecord {
+                op: TraceOp::Prepend,
+                name: "PATH".to_string(),
+                old: Some("/p1:/base:/a1".to_string()),
+                operand: Some("/p2:".to_string()),
+            },
+        ];
+        let base = env(&[("PATH", "/p2:/p1:/base:/a1")]);
+
+        assert_eq!(
+            generate_diff_from_trace(&records, &base),
+            diff(&[("PATH", "/p2:/p1:/base:/a1")], &[])
+        );
+    }
+
+    #[test]
+    fn generate_diff_splices_when_the_separator_is_on_the_old_value() {
+        // The old value ended with the separator, so the added text is a
+        // list element even though it does not carry one itself.
+        let records = vec![TraceRecord {
+            op: TraceOp::Append,
+            name: "PATH".to_string(),
+            old: Some("/a:".to_string()),
+            operand: Some("/b".to_string()),
+        }];
+
+        assert_eq!(
+            generate_diff_from_trace(&records, &env(&[("PATH", "/x")])),
+            diff(&[("PATH", "/x:/b")], &[])
+        );
+    }
+
+    #[test]
+    fn generate_diff_splices_a_prepend_when_the_separator_is_on_the_old_value() {
+        // A leading separator is how MANPATH asks for the standard search
+        // path, so the old value carries it and the added text does not.
+        let records = vec![TraceRecord {
+            op: TraceOp::Prepend,
+            name: "MANPATH".to_string(),
+            old: Some(":/a/man".to_string()),
+            operand: Some("/b/man".to_string()),
+        }];
+
+        assert_eq!(
+            generate_diff_from_trace(&records, &env(&[("MANPATH", "/x/man")])),
+            diff(&[("MANPATH", "/b/man:/x/man")], &[])
+        );
+    }
+
+    #[test]
+    fn generate_diff_rewrites_growth_across_another_separator() {
+        // Only `:` joins list elements. Whitespace is plain text even in a
+        // flag list, so the recorded value replaces the target's own.
+        let records = vec![TraceRecord {
+            op: TraceOp::Append,
+            name: "NIX_CFLAGS_COMPILE".to_string(),
+            old: Some("-isystem /a".to_string()),
+            operand: Some(" -isystem /b".to_string()),
+        }];
+
+        assert_eq!(
+            generate_diff_from_trace(&records, &env(&[("NIX_CFLAGS_COMPILE", "-fPIC")])),
+            diff(&[("NIX_CFLAGS_COMPILE", "-isystem /a -isystem /b")], &[])
         );
     }
 
