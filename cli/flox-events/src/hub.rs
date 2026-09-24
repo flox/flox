@@ -61,6 +61,22 @@ impl EventsHub {
         })
     }
 
+    /// Flush using a non-blocking try-lock on the buffer file.
+    ///
+    /// Returns `Ok(false)` when another flusher holds the lock. Returns
+    /// `Ok(true)` when the flush ran (whether or not the expiry had elapsed)
+    /// or no client is configured.
+    pub fn try_flush(&self, force: bool) -> Result<bool> {
+        self.with_client(|client| {
+            if let Some(client) = client {
+                client.try_flush(force)
+            } else {
+                trace!("No v2 events client configured, skipping try_flush");
+                Ok(true)
+            }
+        })
+    }
+
     pub fn record_event(&self, kind: EventKind) -> Result<()> {
         self.with_client(|client| {
             let Some(client) = client else {
@@ -124,9 +140,13 @@ impl EventsHub {
         })
     }
 
-    /// Return an [`EventsGuard`] that flushes this hub's client on drop —
+    /// Return an [`EventsGuard`] holding this hub's single-active-guard slot —
     /// the counterpart of the legacy `Hub::try_guard`. Errors if a guard is
-    /// already active for this hub, so at most one guard flushes per process.
+    /// already active for this hub, so at most one guard exists per process.
+    ///
+    /// Dropping the guard performs no network I/O; the detached
+    /// `send-telemetry` child arranges delivery after the parent exits (see
+    /// [`EventsGuard`]).
     ///
     /// The `strong_count` probe is a faithful live-guard count only because
     /// `try_guard` is the sole site that clones an [`EventsHub`] (hence its

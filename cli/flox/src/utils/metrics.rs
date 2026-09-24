@@ -192,7 +192,7 @@ impl MetricEntry {
 /// Thus, a [MetricsBuffer] instance should be short-lived
 /// to avoid blocking other processes.
 #[derive(Debug)]
-struct MetricsBuffer {
+pub(crate) struct MetricsBuffer {
     /// The file where the metrics buffer is stored
     storage: File,
     /// The lock file for the metrics buffer.
@@ -201,7 +201,9 @@ struct MetricsBuffer {
     buffer: VecDeque<MetricEntry>,
 }
 impl MetricsBuffer {
-    /// Reads the metrics buffer from the cache directory
+    /// Reads the metrics buffer from the cache directory.
+    ///
+    /// Blocks until the file lock is acquired.
     fn read(cache_dir: &Path) -> Result<Self> {
         // Create a file lock to avoid concurrent access to the metrics.
         // The lock is released once the object is dropped.
@@ -231,6 +233,38 @@ impl MetricsBuffer {
             _file_lock: metrics_lock,
             buffer: buffer_iter,
         })
+    }
+
+    /// Attempts to acquire the buffer lock without blocking.
+    ///
+    /// Returns `None` when another process holds the lock so the caller can
+    /// exit early rather than piling up concurrent flushers.
+    fn try_read(cache_dir: &Path) -> Result<Option<Self>> {
+        let mut metrics_lock = LockFile::open(&cache_dir.join(METRICS_LOCK_FILE_NAME))?;
+        if !metrics_lock.try_lock()? {
+            return Ok(None);
+        }
+
+        let buffer_file_path = cache_dir.join(METRICS_EVENTS_FILE_NAME);
+        let mut events_buffer_file = OpenOptions::new()
+            .read(true)
+            .append(true)
+            .create(true)
+            .open(buffer_file_path)?;
+
+        let mut buffer_json = String::new();
+        events_buffer_file.read_to_string(&mut buffer_json)?;
+
+        let buffer_iter = serde_json::Deserializer::from_str(&buffer_json)
+            .into_iter::<MetricEntry>()
+            .filter_map(|x| x.ok())
+            .collect();
+
+        Ok(Some(MetricsBuffer {
+            storage: events_buffer_file,
+            _file_lock: metrics_lock,
+            buffer: buffer_iter,
+        }))
     }
 
     /// Returns the oldest timestamp in the buffer
@@ -297,15 +331,56 @@ impl MetricsBuffer {
         Ok(())
     }
 
-    /// Returns an iterator over the entries in the buffer
+    /// Returns an iterator over the entries in the buffer.
+    ///
+    /// Only the test-only blocking `flush` and the buffer tests iterate in
+    /// place; production flushing drains via `take_sendable` and iterates the
+    /// owned snapshot instead.
+    #[cfg(test)]
     fn iter(&self) -> impl Iterator<Item = &MetricEntry> {
         self.buffer.iter()
+    }
+
+    /// Remove all entries from the in-memory buffer and the file, returning
+    /// them for sending after the lock is released.
+    ///
+    /// Truncate-before-send is deliberate: the caller cannot hold the buffer
+    /// lock across the network send without re-blocking the append path (the
+    /// stall the detached flush exists to remove). This drains the whole buffer
+    /// and truncates the file, so a SIGKILL or panic of the detached child
+    /// between here and the failure re-buffer in `prepend` loses the entire
+    /// drained snapshot — up to MAX_BUFFER_SIZE events, not a single batch.
+    /// Accepted: telemetry is best-effort, not durable.
+    fn take_sendable(&mut self) -> Result<VecDeque<MetricEntry>> {
+        let taken = std::mem::take(&mut self.buffer);
+        self.overwrite_file()?;
+        Ok(taken)
+    }
+
+    /// Re-buffer entries a failed send left unsent, placing them ahead of
+    /// anything appended since [`take_sendable`], so a retry sends
+    /// oldest-first. Enforces the same cap as [`push`].
+    fn prepend(&mut self, mut unsent: VecDeque<MetricEntry>) -> Result<()> {
+        while let Some(entry) = unsent.pop_back() {
+            self.buffer.push_front(entry);
+        }
+        self.pop_front_to_max_size();
+        self.overwrite_file()
     }
 
     fn pop_front_to_max_size(&mut self) {
         while self.buffer.len() >= MAX_BUFFER_SIZE {
             self.buffer.pop_front();
         }
+    }
+
+    /// Test helper: acquire a blocking lock on the metrics buffer so that
+    /// `try_read` attempts from another caller return `None`.
+    ///
+    /// The returned `MetricsBuffer` holds the lock for as long as it is alive.
+    #[cfg(test)]
+    pub fn blocking_read_for_lock_test(cache_dir: &Path) -> Result<Self> {
+        Self::read(cache_dir)
     }
 }
 
@@ -338,7 +413,7 @@ static METRICS_HUB: LazyLock<Hub> = LazyLock::new(|| Hub {
 /// from tracing events emitted by [subcommand_metric!].
 #[derive(Debug)]
 pub struct Hub {
-    client: Arc<Mutex<Option<Client>>>,
+    pub(crate) client: Arc<Mutex<Option<Client>>>,
 }
 
 impl Hub {
@@ -356,9 +431,12 @@ impl Hub {
         self.with_client(|client| client.replace(new_client))
     }
 
-    /// Get a guard for the client, that will automatically flush the metrics on drop
+    /// Get a guard holding this hub's single-active-guard slot for the
+    /// lifetime of an invocation. Errors if another guard is already active.
     ///
-    /// The guard will return an error if another guard is already active.
+    /// Dropping the guard performs no network I/O; the detached
+    /// `send-telemetry` child arranges delivery after the parent exits (see
+    /// [`MetricGuard`]).
     pub fn try_guard(&self) -> Result<MetricGuard> {
         if Arc::strong_count(&self.client) > 1 {
             bail!("A guard is already active, there can only be one guard at a time")
@@ -381,19 +459,18 @@ impl Hub {
         f(&mut client)
     }
 
-    /// Flush the metrics to the telemetry backend
+    /// Flush the metrics using a non-blocking try-lock on the buffer file.
     ///
-    /// If `force` is true, the metrics are flushed even if the buffer is not expired.
-    /// This methods is jut a convenience wrapper around [Client::flush],
-    /// that will do nothing if no client is setup.
-    fn flush_metrics(&self, force: bool) -> Result<()> {
+    /// Returns `Ok(false)` when another process holds the lock, so the caller
+    /// knows the buffer was not drained (not an error). Returns `Ok(true)` when
+    /// the flush ran (whether or not the expiry had elapsed).
+    pub fn try_flush_metrics(&self, force: bool) -> Result<bool> {
         self.with_client(|client| {
-            if let Some(client) = client {
-                client.flush(force)
-            } else {
-                debug!("No metrics client setup, skipping flush");
-                Ok(())
-            }
+            let Some(client) = client else {
+                debug!("No metrics client setup, skipping try_flush");
+                return Ok(true);
+            };
+            client.try_flush(force)
         })
     }
 
@@ -598,7 +675,13 @@ impl Client {
     ///
     /// Sends metrics in batches of MAX_BUFFER_SIZE entries. After each successful batch,
     /// the buffer file is overwritten to remove the sent entries.
-    fn flush(&mut self, force: bool) -> Result<()> {
+    ///
+    /// In production code, prefer [`try_flush`](Self::try_flush) which uses a
+    /// non-blocking lock so concurrent flushers exit early rather than queuing.
+    /// This blocking variant is retained for test code that needs to flush
+    /// deterministically in a controlled single-process context.
+    #[cfg(test)]
+    pub(crate) fn flush(&mut self, force: bool) -> Result<()> {
         let mut metrics = MetricsBuffer::read(&self.metrics_dir)?;
         if metrics.is_expired(self.max_age) || force {
             // Send metrics in batches
@@ -619,6 +702,52 @@ impl Client {
         Ok(())
     }
 
+    /// Flush using a non-blocking try-lock on the buffer file.
+    ///
+    /// Never holds the buffer lock across a network send: the lock also gates
+    /// the append path (`record_metric`), so holding it across the send would
+    /// block the next `flox` invocation's metric recording for the full network
+    /// timeout — the stall the detached-flush design exists to avoid. Drains the
+    /// sendable entries and truncates the file under the lock, releases it, then
+    /// sends; a failed send re-buffers the unsent entries by re-reading and
+    /// prepending, so nothing is lost on a send failure. (A crash between
+    /// truncate and re-buffer can still lose the snapshot; see `take_sendable`.)
+    ///
+    /// Returns `Ok(false)` when another flusher holds the lock — the buffer
+    /// was not drained but that is not an error. Returns `Ok(true)` when the
+    /// flush ran (whether or not the expiry had elapsed).
+    fn try_flush(&mut self, force: bool) -> Result<bool> {
+        let drained = {
+            let Some(mut metrics) = MetricsBuffer::try_read(&self.metrics_dir)? else {
+                debug!("Metrics buffer lock held by another process; skipping flush");
+                return Ok(false);
+            };
+            if !metrics.is_expired(self.max_age) && !force {
+                return Ok(true);
+            }
+            metrics.take_sendable()?
+        };
+
+        self.send_drained(drained)?;
+        Ok(true)
+    }
+
+    /// Send entries already drained from the buffer, re-buffering any that a
+    /// failed send leaves unsent. The lock is acquired only to re-buffer, never
+    /// across the network call.
+    fn send_drained(&mut self, mut drained: VecDeque<MetricEntry>) -> Result<()> {
+        while !drained.is_empty() {
+            let batch_size = std::cmp::min(drained.len(), BATCH_SIZE);
+            let batch: Vec<&MetricEntry> = drained.iter().take(batch_size).collect();
+            if let Err(err) = self.connection.send(batch) {
+                MetricsBuffer::read(&self.metrics_dir)?.prepend(drained)?;
+                return Err(err);
+            }
+            drained.drain(..batch_size);
+        }
+        Ok(())
+    }
+
     /// Record a metric event
     ///
     /// Takes a Metric event and adds additional shared metadata to it
@@ -631,23 +760,28 @@ impl Client {
     }
 }
 
+/// Holds the legacy metrics hub's single-active-guard slot for the lifetime of
+/// an invocation. Dropping it performs no network I/O; the detached
+/// `send-telemetry` child arranges delivery after the parent exits. The `hub`
+/// field is retained only for the `Hub::try_guard` strong-count check.
 pub struct MetricGuard {
     hub: Hub,
 }
 impl Drop for MetricGuard {
     fn drop(&mut self) {
-        let force = std::env::var("_FLOX_FORCE_FLUSH_METRICS")
-            .unwrap_or_default()
-            .parse()
-            .unwrap_or(false);
-        if let Err(e) = self.hub.flush_metrics(force) {
-            debug!("Failed to flush metrics on guard drop: {e}")
-        };
+        // No network I/O on drop; `hub` is held only for the strong-count
+        // check. See the struct doc.
+        let _ = &self.hub;
     }
 }
 
+/// In-memory metrics connection used in tests.
+///
+/// Kept at module level so tests in other modules (e.g. `send_telemetry`)
+/// can reference it via `crate::utils::metrics::tests::TestConnection`.
 #[cfg(test)]
-mod tests {
+pub mod tests {
+    use std::any::Any;
     use std::fs;
 
     use flox_config::FloxConfig;
@@ -658,7 +792,7 @@ mod tests {
     use crate::utils::init::{create_registry_and_filter_reload_handle, update_filters};
 
     #[derive(Debug, Default)]
-    pub(super) struct TestConnection {
+    pub struct TestConnection {
         pub sent: Vec<Vec<MetricEntry>>,
     }
 
@@ -895,9 +1029,10 @@ mod tests {
         assert_eq!(entry_bar.subcommand, event_bar.subcommand);
     }
 
-    /// Test that [Hub::try_guard] returns a guard as expected
-    /// And that the guard flushes the metrics on drop when the buffer is expired.
-    /// And that the guard does not flush the metrics when the buffer is not expired.
+    /// Test that [Hub::try_guard] returns a guard as expected and enforces
+    /// single-guard exclusivity. Also verifies that `try_flush_metrics` drains
+    /// the buffer — flushing on guard drop was removed so that `hook-env` does
+    /// not block on network I/O; the `send-telemetry` command handles it now.
     #[test]
     fn test_hub_try_guard() {
         let (client, _tempdir) = create_client();
@@ -936,15 +1071,25 @@ mod tests {
             );
         }
 
-        // dropping the guard should flush the metrics if expired
-        // nothing to be flushed now as the default max_age is 2 hours
+        // Dropping the guard must NOT flush the buffer — the parent exits
+        // immediately after spawning `send-telemetry`, and synchronous network
+        // I/O in drop() would block `hook-env` for seconds on a slow network.
         drop(guard);
 
-        // force all events to be expired
-        hub.with_client(|c| c.as_mut().unwrap().max_age = Duration::seconds(0));
+        // Buffer must still hold the two events (no flush happened on drop).
+        {
+            let buffer = MetricsBuffer::read(&metrics_dir).unwrap();
+            assert_eq!(
+                buffer.buffer.len(),
+                2,
+                "guard drop must not flush; events must still be buffered"
+            );
+        }
 
-        // create and drop the guard immediately
-        drop(hub.try_guard().unwrap());
+        // try_flush_metrics(force=true) drains the buffer — this is what
+        // `send-telemetry` calls after the parent has exited.
+        hub.with_client(|c| c.as_mut().unwrap().max_age = Duration::seconds(0));
+        hub.try_flush_metrics(true).unwrap();
 
         // buffer should be empty now
         let buffer = MetricsBuffer::read(&metrics_dir).unwrap();

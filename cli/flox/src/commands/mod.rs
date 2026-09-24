@@ -25,6 +25,7 @@ mod pull;
 mod push;
 mod run;
 mod search;
+mod send_telemetry;
 mod services;
 mod services_socket;
 mod show;
@@ -461,7 +462,10 @@ impl FloxArgs {
             .as_ref()
             .map(Commands::subcommand_name)
             .unwrap_or("help");
-        if let Err(err) = EventsHub::global().record_command_run(v2_subcommand.to_string()) {
+        // Recording is gated by `is_telemetry_flush_command` — see its doc.
+        if !is_telemetry_flush_command(v2_subcommand)
+            && let Err(err) = EventsHub::global().record_command_run(v2_subcommand.to_string())
+        {
             debug!(error = %err, "Failed to record v2 cli.command_run event");
         }
 
@@ -1153,6 +1157,10 @@ enum InternalCommands {
     /// Compute env changes for auto-activation (called on every prompt)
     #[bpaf(command("hook-env"), hide)]
     HookEnv(#[bpaf(external(hook_env::hook_env))] hook_env::HookEnv),
+
+    /// Flush buffered telemetry (invoked as a detached background child)
+    #[bpaf(command("send-telemetry"), hide)]
+    SendTelemetry(#[bpaf(external(send_telemetry::send_telemetry))] send_telemetry::SendTelemetry),
 }
 
 impl InternalCommands {
@@ -1164,6 +1172,7 @@ impl InternalCommands {
             InternalCommands::ActivationState(args) => args.handle(flox).await?,
             InternalCommands::ServicesSocket(args) => args.handle(flox).await?,
             InternalCommands::HookEnv(args) => args.handle(config, flox).await?,
+            InternalCommands::SendTelemetry(args) => args.handle(config, flox).await?,
         }
         Ok(())
     }
@@ -1186,8 +1195,27 @@ impl InternalCommands {
             InternalCommands::ActivationState(_) => "activation-state",
             InternalCommands::ServicesSocket(_) => "services-socket",
             InternalCommands::HookEnv(_) => "hook-env",
+            InternalCommands::SendTelemetry(_) => "send-telemetry",
         }
     }
+}
+
+/// Whether `name` is a detached background child, and so must not itself spawn
+/// a `send-telemetry` child. `send-telemetry` spawning one would fork-bomb;
+/// `check-for-upgrades` spawning one would add a redundant background process
+/// per activation. Gates only the spawn site in `main`.
+pub fn is_detached_side_effect_command(name: &str) -> bool {
+    matches!(name, "send-telemetry" | "check-for-upgrades")
+}
+
+/// Whether `name` must not record its own `cli.command_run` /
+/// `cli.command_completed` events. Only `send-telemetry` qualifies: it flushes
+/// the buffer, so recording into it would re-arm the buffer it just drained and
+/// make every prompt re-flush forever. `check-for-upgrades` neither flushes nor
+/// spawns a flush, so recording its events is safe — and it did so before this
+/// change, so keeping it preserves that telemetry.
+pub fn is_telemetry_flush_command(name: &str) -> bool {
+    name == "send-telemetry"
 }
 
 /// Special command to check for the presence of the `--prefix` flag.
@@ -1970,6 +1998,31 @@ fn render_composition_manifest(manifest: &Manifest<TypedOnly>) -> Result<String>
     toml_edit::visit_mut::visit_document_mut(&mut Visitor::new_for_document(), &mut document);
 
     Ok(document.to_string())
+}
+
+#[cfg(test)]
+mod detached_predicate_tests {
+    use super::*;
+
+    /// The spawn exclusion covers both detached children: `send-telemetry`
+    /// would fork-bomb by re-spawning itself, and `check-for-upgrades` would
+    /// add a redundant background spawn per activation.
+    #[test]
+    fn spawn_exclusion_covers_both_detached_children() {
+        assert!(is_detached_side_effect_command("send-telemetry"));
+        assert!(is_detached_side_effect_command("check-for-upgrades"));
+        assert!(!is_detached_side_effect_command("install"));
+    }
+
+    /// The recording exclusion covers only `send-telemetry`: it flushes, so
+    /// recording re-arms the buffer it drained. `check-for-upgrades` neither
+    /// flushes nor spawns a flush, so it keeps recording its own events.
+    #[test]
+    fn recording_exclusion_covers_only_the_flush_command() {
+        assert!(is_telemetry_flush_command("send-telemetry"));
+        assert!(!is_telemetry_flush_command("check-for-upgrades"));
+        assert!(!is_telemetry_flush_command("install"));
+    }
 }
 
 #[cfg(test)]

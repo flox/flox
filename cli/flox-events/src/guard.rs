@@ -1,10 +1,13 @@
-use tracing::debug;
-
 use crate::hub::EventsHub;
 
-/// Flushes the configured events client when dropped. Like the legacy
-/// `MetricGuard`, the flush only sends once the buffer has expired, unless
-/// `_FLOX_FORCE_FLUSH_METRICS` forces an immediate send.
+/// Holds the single-active-guard slot on the global [`EventsHub`] for the
+/// lifetime of a `flox` invocation.
+///
+/// Dropping the guard performs no network I/O: delivery is arranged by the
+/// detached `send-telemetry` child, which flushes the on-disk buffer after the
+/// parent exits so the prompt path never blocks on the network. The `hub`
+/// field is retained only so the guard participates in the
+/// [`EventsHub::try_guard`] strong-count check.
 #[derive(Debug)]
 pub struct EventsGuard {
     hub: EventsHub,
@@ -45,8 +48,8 @@ pub fn force_flush_requested() -> bool {
 
 impl Drop for EventsGuard {
     fn drop(&mut self) {
-        if let Err(err) = self.hub.flush(force_flush_requested()) {
-            debug!(error = %err, "Failed to flush v2 events on guard drop");
-        }
+        // No network I/O on drop; `hub` is held only for the strong-count
+        // check. See the struct doc.
+        let _ = &self.hub;
     }
 }

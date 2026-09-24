@@ -1,24 +1,20 @@
-use std::fs::{self, File};
-use std::os::fd::AsRawFd;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
 use std::time::SystemTime;
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
 use bpaf::{Bpaf, Parser};
 use flox_core::log_file_format_upgrade_check;
-use flox_core::vars::{FLOX_VERSION_STRING, FLOX_VERSION_VAR};
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment, EnvironmentError};
 use flox_rust_sdk::providers::catalog::CatalogQoS;
 use flox_rust_sdk::providers::upgrade_checks::{UpgradeInformation, UpgradeInformationGuard};
-use flox_rust_sdk::utils::CommandExt;
 use serde::de::DeserializeOwned;
 use time::{Duration, OffsetDateTime};
 use tracing::{debug, info_span, instrument};
 
 use super::UninitializedEnvironment;
 use crate::subcommand_metric;
+use crate::utils::detached::{DetachedCommand, LogFile};
 
 /// By default check once a day
 const DEFAULT_TIMEOUT_SECONDS: i64 = 24 * 60 * 60;
@@ -153,134 +149,45 @@ fn update_remote_environment_state(
     }
 }
 
-/// Spawn a new `flox check-for-upgrades` process in the background,
-/// and redirect its logs to a log file.
+/// Spawn a detached `flox check-for-upgrades` process in the background.
 ///
-/// The process will live on after the parent process exits.
-/// When multiple processes are spawned, e.g. due to multiple successive activations,
-/// one (usually the first) process will grab a lock on the upgrade information file,
-/// and the others will exit early.
+/// The process outlives the parent. When several are spawned by successive
+/// activations, one grabs the upgrade-information file lock and the rest exit
+/// early.
 ///
-/// ## SAFETY:
-///
-/// [pre_exec](std::os::unix::process::CommandExt::pre_exec)
-/// is unsafe because it runs in an environment atypical for Rust,
-/// where many guarantees provided by the rust ownership model
-/// do not necessarily hold.
-/// It is strongly recommended to limit the scope to `pre_exec`.
-/// Here we limit the scope of the `pre_exec` call to closing (duplicated) file descriptors
-/// and detaching the process from the parent process group.
-/// Closing file descriptors _before_ exec'ing is considerably safer
-/// than closing them in the child process, which may have already opened its own unknown descriptors.
-/// Likewise, detaching the process from the parent process group
-/// applies only to the subprocess and only when spawning the process as a background process.
+/// The process-group detach, fd close, stdio redirection, and env propagation
+/// are the shared mechanism in [`DetachedCommand`]; this function only builds
+/// the argument list and the per-invocation log name. The log name embeds a
+/// timestamp so the activations executive's `gc_logs_per_process` keeps the
+/// last N and prunes the rest.
 pub fn spawn_detached_check_for_upgrades_process(
     environment: &UninitializedEnvironment,
     self_executable: Option<PathBuf>,
     log_dir: &Path,
     check_timeout: Option<u64>,
 ) -> Result<()> {
-    // Avoid race conditions in integration tests
-    if let Ok(true) = std::env::var("_FLOX_TESTING_DISABLE_BG_SIDE_EFFECTS")
-        .unwrap_or_default()
-        .parse()
-    {
-        debug!("Skipping background job for tests");
-        return Ok(());
-    }
-
-    // Get the path to the current executable
-    let self_executable = match self_executable {
-        Some(path) => path,
-        None if cfg!(test) => {
-            bail!("self_executable must be provided in tests")
-        },
-        // SECURITY:
-        // This is safe because the flox executable path
-        // is at an immutable nix store path.
-        None => std::env::current_exe()?,
-    };
-
     let environment_json = serde_json::to_string(&environment)?;
-    let mut command = Command::new(self_executable);
 
-    // Propagate the version which is set by the bypassed wrapper script and
-    // then gets unset when the CLI starts.
-    command.env(FLOX_VERSION_VAR, &*FLOX_VERSION_STRING);
-
-    // Propagate the parent's v2 invocation_id so the detached
-    // upgrade-check process emits its `cli.command_run` /
-    // `cli.command_completed` events under the same invocation as the
-    // parent flox command that triggered it (rather than appearing as a
-    // separate top-level user invocation downstream). The child reads
-    // this variable in `crate::utils::events::resolve_invocation_id`. We
-    // explicitly do *not* set this variable into the parent's process
-    // environment, only on this `Command`'s child env, so that the
-    // user-shell `command.exec()` path in `activate.rs` does not leak the
-    // id forward into the user's shell.
-    if let Some(parent_invocation_id) = crate::utils::events::current_invocation_id() {
-        command.env(
-            crate::utils::events::FLOX_INVOCATION_ID_VAR,
-            parent_invocation_id.to_string(),
-        );
-    }
-
-    command.arg("check-for-upgrades");
-    command.arg(environment_json);
-
+    let mut args = vec!["check-for-upgrades".to_string(), environment_json];
     if let Some(timeout) = check_timeout {
-        command.arg("--check-timeout").arg(timeout.to_string());
-    };
+        args.push("--check-timeout".to_string());
+        args.push(timeout.to_string());
+    }
+    args.push("-vv".to_string()); // enable debug logging
 
-    command.arg("-vv"); // enable debug logging
-
-    // Redirect logs to a file
     let timestamp = SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)
         .expect("now is after UNIX EPOCH")
         .as_secs();
-    let upgrade_check_log = log_dir.join(log_file_format_upgrade_check(timestamp));
+    let log_name = log_file_format_upgrade_check(timestamp);
 
-    debug!(
-        log_file=?upgrade_check_log,
-        "Logging upgrade check output to file, and redirecting std{{in,out}} to /dev/null"
-    );
-
-    fs::create_dir_all(log_dir)?;
-    let log_file = File::create(upgrade_check_log)?;
-    let log_file_fd = log_file.as_raw_fd();
-    command.stderr(log_file);
-    command.stdout(Stdio::null());
-    command.stdin(Stdio::null());
-
-    let keep_fds = [log_file_fd];
-
-    // Close all additional file descriptors except the log file
-    // and detach the process from the parent process group.
-    // See the SAFETY section above for more information on the safety of this operation.
-    unsafe {
-        use std::os::unix::process::CommandExt as _;
-        command.pre_exec(move || {
-            close_fds::CloseFdsBuilder::new()
-                .keep_fds(&keep_fds)
-                .cloexecfrom(3);
-
-            // Detach the process from the parent process group
-            // so that it wont receive signals from the parent
-            nix::unistd::setsid()?;
-            Ok(())
-        });
+    DetachedCommand {
+        args: &args,
+        log_file: LogFile::PerInvocation(log_name),
+        log_dir,
     }
-
-    command.display();
-    debug!(cmd=%command.display(), "Spawning check-for-upgrades process in background");
-
-    // continue in the background
-    let _child = command
-        .spawn()
-        .context("Failed to spawn 'check-for-upgrades' process")?;
-
-    Ok(())
+    .spawn(self_executable)
+    .context("Failed to spawn 'check-for-upgrades' process")
 }
 
 #[cfg(test)]

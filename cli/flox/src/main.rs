@@ -14,6 +14,8 @@ use commands::{
     NoEnvironmentError,
     Prefix,
     Version,
+    is_detached_side_effect_command,
+    is_telemetry_flush_command,
 };
 use flox_config::Config;
 use flox_core::sentry::init_sentry;
@@ -231,15 +233,47 @@ fn main() -> ExitCode {
     // installed (e.g. a bare `flox` invocation) or when `activate.rs` or
     // `develop.rs` already recorded the pre-exec completion before their
     // own `exec`.
-    if let Err(err) = flox_events::EventsHub::global().record_command_completed(
-        v2_subcommand.to_string(),
-        LifecycleFields {
-            exit_code: i32::from(code),
-            duration_ms: Some(duration_to_ms(dispatch_start.elapsed())),
-            error_kind: error_kind.map(String::from),
-        },
-    ) {
+    //
+    // Recording is gated by `is_telemetry_flush_command` — see its doc.
+    if !is_telemetry_flush_command(v2_subcommand)
+        && let Err(err) = flox_events::EventsHub::global().record_command_completed(
+            v2_subcommand.to_string(),
+            LifecycleFields {
+                exit_code: i32::from(code),
+                duration_ms: Some(duration_to_ms(dispatch_start.elapsed())),
+                error_kind: error_kind.map(String::from),
+            },
+        )
+    {
         debug!(error = %err, "Failed to record v2 cli.command_completed event");
+    }
+
+    // Spawn a detached `send-telemetry` child to flush both telemetry
+    // pipelines from their on-disk buffers. The parent exits immediately
+    // after spawning, so no network I/O blocks the shell prompt.
+    //
+    // Skipped when:
+    // - metrics are disabled (no data to send);
+    // - this invocation is itself a detached side-effect command (prevents
+    //   a fork-bomb and stops `send-telemetry` from re-spawning itself);
+    // - `_FLOX_TESTING_DISABLE_BG_SIDE_EFFECTS=1` (CI escape hatch,
+    //   enforced inside the helper).
+    //
+    // Child logs to a single rolling file — see `LogFile::Rolling`.
+    if !config.flox.disable_metrics && !is_detached_side_effect_command(v2_subcommand) {
+        let log_dir = config.flox.cache_dir.join("log");
+        let args = [String::from("send-telemetry"), String::from("-vv")];
+        let spawn_result = utils::detached::DetachedCommand {
+            args: &args,
+            log_file: utils::detached::LogFile::Rolling(
+                utils::detached::SEND_TELEMETRY_LOG_NAME.to_string(),
+            ),
+            log_dir: &log_dir,
+        }
+        .spawn(None);
+        if let Err(err) = spawn_result {
+            debug!(error = %err, "Failed to spawn detached send-telemetry process");
+        }
     }
 
     drop(_v2_events_guard);

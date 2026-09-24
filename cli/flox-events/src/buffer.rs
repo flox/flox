@@ -32,6 +32,8 @@ pub struct EventsBuffer {
 
 impl EventsBuffer {
     /// Read the buffer from `data_dir`, creating the file if needed.
+    ///
+    /// Blocks until the file lock is acquired.
     pub fn read(data_dir: &Path) -> Result<Self> {
         std::fs::create_dir_all(data_dir).with_context(|| {
             format!(
@@ -104,6 +106,78 @@ impl EventsBuffer {
         })
     }
 
+    /// Attempts to acquire the buffer lock without blocking.
+    ///
+    /// Returns `None` when another process holds the lock, so the caller can
+    /// exit early rather than piling up concurrent flushers.
+    pub fn try_read(data_dir: &Path) -> Result<Option<Self>> {
+        std::fs::create_dir_all(data_dir).with_context(|| {
+            format!(
+                "Could not create v2 events buffer directory at {}",
+                data_dir.display()
+            )
+        })?;
+
+        let mut events_lock = LockFile::open(&data_dir.join(EVENTS_LOCK_FILE_NAME))
+            .context("Could not open v2 events lock file")?;
+        if !events_lock
+            .try_lock()
+            .context("Could not try-lock v2 events buffer")?
+        {
+            return Ok(None);
+        }
+
+        let buffer_file_path = data_dir.join(EVENTS_BUFFER_FILE_NAME);
+        let mut events_buffer_file_options = OpenOptions::new();
+        events_buffer_file_options
+            .read(true)
+            .append(true)
+            .create(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            events_buffer_file_options.mode(0o600);
+        }
+        let mut events_buffer_file = events_buffer_file_options
+            .open(&buffer_file_path)
+            .with_context(|| {
+                format!(
+                    "Could not open v2 events buffer file at {}",
+                    buffer_file_path.display()
+                )
+            })?;
+
+        let mut buffer_json = String::new();
+        events_buffer_file
+            .read_to_string(&mut buffer_json)
+            .context("Could not read v2 events buffer file")?;
+
+        let mut buffer = VecDeque::new();
+        let mut unknown = VecDeque::new();
+        for line in buffer_json.lines() {
+            if line.trim().is_empty() {
+                continue;
+            }
+            match serde_json::from_str::<Event>(line) {
+                Ok(event) => buffer.push_back(event),
+                Err(err) => {
+                    debug!(error = %err, "Retaining unreadable v2 event buffer entry");
+                    unknown.push_back(line.to_string());
+                },
+            }
+        }
+        while unknown.len() >= MAX_BUFFER_SIZE {
+            unknown.pop_front();
+        }
+
+        Ok(Some(Self {
+            storage: events_buffer_file,
+            _file_lock: events_lock,
+            buffer,
+            unknown,
+        }))
+    }
+
     pub(crate) fn is_expired(&self, expiry: Duration) -> bool {
         let now = OffsetDateTime::now_utc();
         self.oldest_timestamp()
@@ -125,6 +199,34 @@ impl EventsBuffer {
 
     pub(crate) fn drain_sent(&mut self, count: usize) {
         self.buffer.drain(..count);
+    }
+
+    /// Remove all parsed entries from the in-memory buffer and the file,
+    /// returning them for sending after the lock is released. Unparsed
+    /// (`unknown`) lines stay in the file — no binary here can send them.
+    ///
+    /// Truncate-before-send is deliberate: the caller cannot hold the buffer
+    /// lock across the network send without re-blocking the append path (the
+    /// stall this pipeline's detached flush exists to remove). This drains the
+    /// whole buffer and truncates the file, so a SIGKILL or panic of the
+    /// detached child between here and the failure re-buffer in `prepend` loses
+    /// the entire drained snapshot — up to MAX_BUFFER_SIZE events, not a single
+    /// batch. Accepted: telemetry is best-effort, not durable.
+    pub fn take_sendable(&mut self) -> Result<VecDeque<Event>> {
+        let taken = std::mem::take(&mut self.buffer);
+        self.overwrite_file()?;
+        Ok(taken)
+    }
+
+    /// Re-buffer entries a failed send left unsent, placing them ahead of
+    /// anything appended since [`take_sendable`], so a retry sends
+    /// oldest-first. Enforces the same cap as [`push`].
+    pub fn prepend(&mut self, mut unsent: VecDeque<Event>) -> Result<()> {
+        while let Some(event) = unsent.pop_back() {
+            self.buffer.push_front(event);
+        }
+        self.pop_front_to_max_size();
+        self.overwrite_file()
     }
 
     /// Persist the current in-memory buffer, replacing the file contents.
