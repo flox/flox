@@ -1,7 +1,7 @@
 use flox_manifest::interfaces::{AsLatestSchema, PackageLookup};
 use flox_manifest::lockfile::Lockfile;
 use flox_manifest::parsed::common::DEFAULT_GROUP_NAME;
-use flox_manifest::parsed::latest::{AllSentinel, SelectedOutputs};
+use flox_manifest::parsed::latest::{AllSentinel, ManifestLatest, SelectedOutputs};
 use flox_manifest::raw::{
     PackageModification,
     PackageToInstall,
@@ -76,8 +76,11 @@ pub(super) fn compute_install_modifications(
     manifest: &Manifest<Migrated>,
     lockfile: &Lockfile,
 ) -> Result<Vec<PackageToModify>, InstallOrUninstallError> {
+    // Included environments can add packages to a pkg-group and set its
+    // stability, so conflicts are checked against the merged manifest.
+    let merged_manifest = lockfile.migrated_manifest()?;
     for pkg in packages {
-        check_stability_conflict(pkg, manifest)?;
+        check_stability_conflict(pkg, merged_manifest.as_latest_schema())?;
     }
 
     let modifications = packages
@@ -94,9 +97,11 @@ pub(super) fn compute_install_modifications(
 /// A group resolves against a single catalog page, so its stability applies
 /// to every package in it. Changing it as a side effect of installing one
 /// package would silently re-resolve the others.
+///
+/// `merged_manifest` is the environment's manifest merged with its includes.
 fn check_stability_conflict(
     pkg: &PackageToInstall,
-    manifest: &Manifest<Migrated>,
+    merged_manifest: &ManifestLatest,
 ) -> Result<(), InstallOrUninstallError> {
     let PackageToInstall::Catalog(catalog_pkg) = pkg else {
         return Ok(());
@@ -107,9 +112,8 @@ fn check_stability_conflict(
     let group = catalog_pkg
         .target_group()
         .unwrap_or_else(|| DEFAULT_GROUP_NAME.to_string());
-    let manifest = manifest.as_latest_schema();
-    let current = manifest.group_stability(&group);
-    if current == Some(requested.as_str()) || !manifest.group_has_packages(&group) {
+    let current = merged_manifest.group_stability(&group);
+    if current == Some(requested.as_str()) || !merged_manifest.group_has_packages(&group) {
         return Ok(());
     }
     Err(InstallOrUninstallError::StabilityConflict {
@@ -232,6 +236,7 @@ mod tests {
     use std::path::Path;
 
     use flox_core::canonical_path::CanonicalPath;
+    use flox_manifest::interfaces::AsTypedOnlyManifest;
     use flox_manifest::raw::CatalogPackage;
     use flox_manifest::raw::test_helpers::{
         empty_test_migrated_manifest,
@@ -297,7 +302,17 @@ mod tests {
             [pkg-groups.tools]
             stability = "stable"
         "#}));
-        check_stability_conflict(&pkg, &manifest)
+        check_stability_conflict(&pkg, manifest.as_latest_schema())
+    }
+
+    /// A lockfile whose merged manifest is `merged_manifest`, as for an
+    /// environment that includes other environments.
+    fn lockfile_with_merged_manifest(merged_manifest: &str) -> Lockfile {
+        let merged_manifest = mk_test_manifest_from_contents(with_latest_schema(merged_manifest));
+        Lockfile {
+            manifest: merged_manifest.as_latest_schema().as_typed_only(),
+            ..Default::default()
+        }
     }
 
     #[test]
@@ -358,6 +373,55 @@ mod tests {
     fn stability_for_custom_catalog_package_is_accepted() {
         let pkg = package_to_install_with_stability("myorg/mypkg", None, "lts");
         assert!(stability_check(pkg).is_ok());
+    }
+
+    /// The environment's own default group is empty, but an included
+    /// environment has packages in it, which a new stability would change.
+    #[test]
+    fn stability_for_default_group_with_included_packages_is_rejected() {
+        let manifest = empty_test_migrated_manifest();
+        let lockfile = lockfile_with_merged_manifest(indoc! {r#"
+            [install]
+            hello.pkg-path = "hello"
+        "#});
+        let pkg = package_to_install_with_stability("jq", None, "lts");
+
+        let Err(InstallOrUninstallError::StabilityConflict {
+            group,
+            current,
+            requested,
+        }) = compute_install_modifications(&[pkg], &manifest, &lockfile)
+        else {
+            panic!("expected a stability conflict");
+        };
+        assert_eq!(
+            (group, current, requested),
+            ("toplevel".to_string(), None, "lts".to_string())
+        );
+    }
+
+    /// An included environment sets the stability of the default group, so
+    /// requesting that stability doesn't change the group.
+    #[test]
+    fn stability_matching_included_group_stability_is_accepted() {
+        let manifest = empty_test_migrated_manifest();
+        let lockfile = lockfile_with_merged_manifest(indoc! {r#"
+            [install]
+            hello.pkg-path = "hello"
+
+            [pkg-groups.toplevel]
+            stability = "lts"
+        "#});
+        let pkg = package_to_install_with_stability("jq", None, "lts");
+
+        let modifications =
+            compute_install_modifications(std::slice::from_ref(&pkg), &manifest, &lockfile)
+                .unwrap();
+
+        assert_eq!(modifications, vec![PackageToModify {
+            install_id: "jq".to_string(),
+            modification: PackageModification::Add(pkg),
+        }]);
     }
 
     // For an empty manifest
