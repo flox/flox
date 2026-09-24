@@ -402,22 +402,49 @@ PkgGroup ::= {
 
 `stability`
 :   Resolves the packages in the pkg-group against a catalog stability,
-    such as `lts`, `stable`, `staging`, or `unstable`.
+    such as `stable` or `lts`.
+    The Flox Catalog decides which stabilities exist.
 
     The Flox Catalog tags each version of the catalog with the stabilities it
     satisfies.
     A pkg-group with a stability resolves against the newest version of the
-    catalog that carries that stability.
+    catalog that carries that stability,
+    and [`flox-upgrade(1)`](./flox-upgrade.md) only upgrades its packages to
+    versions that carry it.
     Packages from custom catalogs carry the stabilities of the catalog version
     they were built against,
     see the `--stability` option of [`flox-publish(1)`](./flox-publish.md).
 
-    When unset, the pkg-group resolves against the newest version of the
-    catalog that carries any stability.
+    When `stability` is unset, the Flox Catalog decides which versions the
+    pkg-group resolves against.
+    Currently, it resolves against the same versions as
+    `stability = "unstable"`.
+    To keep a pkg-group on a specific stability, set `stability` explicitly.
 
-    Because all packages in a pkg-group share one stability,
-    changing it re-resolves every package in the pkg-group.
-    [`flox-install(1)`](./flox-install.md) sets it with `--stability`.
+    All packages in a pkg-group share one stability,
+    so changing `stability` can change the version of every package in the
+    pkg-group:
+    when the environment is next locked,
+    for example after [`flox-edit(1)`](./flox-edit.md),
+    all of the pkg-group's packages resolve again against the new stability.
+    For the same reason, `flox install --stability` only sets the stability of
+    a pkg-group that has no packages yet.
+    Installing a package with `--stability` into a pkg-group that has packages
+    and a different or unset stability fails;
+    see [`flox-install(1)`](./flox-install.md).
+
+When [`flox-uninstall(1)`](./flox-uninstall.md) removes the last package of a
+pkg-group, it also removes the pkg-group's table,
+so that a pkg-group created later with the same name doesn't inherit its
+settings.
+It keeps the table of `toplevel`, which packages join by default,
+and the table of a pkg-group that still has packages from an included
+environment.
+[`flox-edit(1)`](./flox-edit.md) warns about tables of pkg-groups that no
+package uses, which usually means that the pkg-group name has a typo.
+
+The settings of a pkg-group apply to its packages from included environments
+too; see [Merge semantics](#merge-semantics).
 
 
 ## `[vars]`
@@ -837,6 +864,14 @@ manifest, but things can be overridden or added by higher priority manifests.
 
 `[services]`
 : Service descriptors are entirely overwritten by higher priority manifests
+
+`[pkg-groups]`
+: The settings of a pkg-group are overwritten entirely by a higher priority
+  manifest.
+  They apply to every package in the pkg-group,
+  whichever manifest installs it,
+  so the `stability` from the highest priority manifest that sets one
+  applies to the packages that all of the manifests put in that pkg-group.
 
 `[include]`
 : The `include` section is omitted from merged manifests, so no merging of the

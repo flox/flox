@@ -36,6 +36,17 @@ by passing 'toplevel' as the group name.
 A single package can only be specified to upgrade by ID
 if it is not in a group with any other packages.
 
+Upgrades stay within each pkg-group's stability.
+A pkg-group that sets `stability` in the manifest's `[pkg-groups]` section
+upgrades to the newest versions that carry that stability,
+so upgrading never moves its packages to a version that doesn't carry it.
+A pkg-group without a `stability` upgrades to the versions that the Flox
+Catalog chooses for an unset stability,
+as described in [`manifest.toml(5)`](./manifest.toml.md).
+To move a pkg-group to a different stability,
+change its `stability` with [`flox-edit(1)`](./flox-edit.md) instead,
+which changes the versions of its packages without running `flox upgrade`.
+
 See [`manifest.toml(5)`](./manifest.toml.md) for more on using pkg-groups.
 
 # OPTIONS
@@ -55,4 +66,5 @@ See [`manifest.toml(5)`](./manifest.toml.md) for more on using pkg-groups.
 
 # SEE ALSO
 
+[`flox-edit(1)`](./flox-edit.md),
 [`manifest.toml(5)`](./manifest.toml.md)

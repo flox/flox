@@ -85,16 +85,40 @@ reference.
 
 `--stability <stability>`
 :   Resolve the pkg-group that the packages join against a catalog stability,
-    such as `lts`, `stable`, `staging`, or `unstable`,
+    such as `stable` or `lts`,
     by setting `stability` in the manifest's `[pkg-groups]` section.
+    The installation fails before the manifest changes
+    if the Flox Catalog doesn't provide the stability,
+    and the error lists the stabilities that it does provide.
 
-    All packages in a pkg-group share one stability.
-    If the pkg-group already contains packages that use a different stability,
-    the installation fails rather than re-resolving them;
-    use `--pkg-group` to install into a separate pkg-group,
-    or change the pkg-group's stability with [`flox-edit(1)`](./flox-edit.md).
+    All packages in a pkg-group share one stability,
+    so `--stability` can only set the stability of a pkg-group
+    that has no packages yet, or confirm the stability it already has.
+    Without `--pkg-group`, packages from the Flox Catalog join the `toplevel`
+    pkg-group, so in a new environment `flox install --stability <stability> <package>`
+    sets the stability of `toplevel`.
 
-    `--pkg-group` and `--stability` only apply to packages from a catalog,
+    If the pkg-group already has packages
+    and its stability is different or unset,
+    the installation fails rather than changing the versions of those packages.
+    The error shows how to install into a separate pkg-group with
+    `--pkg-group`,
+    and the `[pkg-groups]` table to set with [`flox-edit(1)`](./flox-edit.md)
+    to change the stability of the whole pkg-group instead,
+    including the `schema-version` that the table requires
+    if the manifest has an older one.
+    Packages from included environments count as packages of the pkg-group,
+    and a stability set by an included environment counts as its stability.
+
+    A package installed without `--stability` into a pkg-group that has a
+    stability resolves against that stability,
+    and `flox install` prints which stability that is.
+
+    `--pkg-group` and `--stability` don't move a package that is already
+    installed, and `flox install` says so.
+    To move it, uninstall it with [`flox-uninstall(1)`](./flox-uninstall.md)
+    and install it again.
+    They only apply to packages from a catalog,
     not to flake installables or store paths.
 
 `<package>`
