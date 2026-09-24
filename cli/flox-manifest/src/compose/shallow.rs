@@ -1148,6 +1148,27 @@ mod tests {
         assert_eq!(warnings, vec![]);
     }
 
+    /// A higher priority table for a pkg-group replaces the lower priority
+    /// one as a whole, so a table without a stability unsets it.
+    #[test]
+    fn merges_pkg_groups_section_table_without_stability_unsets_it() {
+        let low_priority = pkg_groups(&[("toplevel", "lts")]);
+        let high_priority = PkgGroups(
+            [("toplevel".to_string(), PkgGroup { stability: None })]
+                .into_iter()
+                .collect(),
+        );
+
+        let (merged, warnings) =
+            ShallowMerger::merge_pkg_groups(&low_priority, &high_priority).unwrap();
+
+        assert_eq!(merged, high_priority);
+        assert_eq!(warnings, vec![Warning::Overriding(KeyPath::from_iter([
+            "pkg-groups",
+            "toplevel"
+        ]))]);
+    }
+
     #[test]
     fn description_composer_wins_when_both_set() {
         let result = ShallowMerger::merge_description(

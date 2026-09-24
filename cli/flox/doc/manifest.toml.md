@@ -872,8 +872,12 @@ manifest, but things can be overridden or added by higher priority manifests.
   manifest.
   They apply to every package in the pkg-group,
   whichever manifest installs it,
-  so the `stability` from the highest priority manifest that sets one
-  applies to the packages that all of the manifests put in that pkg-group.
+  so the `[pkg-groups.<NAME>]` table from the highest priority manifest that
+  has one applies to the packages that all of the manifests put in that
+  pkg-group.
+  That table applies as a whole:
+  if it doesn't set `stability`, the pkg-group has no stability set,
+  even if a lower priority manifest sets one.
 
 `[include]`
 : The `include` section is omitted from merged manifests, so no merging of the
