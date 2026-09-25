@@ -193,6 +193,10 @@ flox config --set 'trusted_environments."owner/name"' trust
 
     (default: true)
 
+    To turn off notifications for a single environment instead,
+    set `options.activate.upgrade-notifications = false` in its manifest.
+    See [`manifest.toml(5)`](./manifest.toml.md).
+
 `keep_tempdir`
 :   Flox creates a single tempdir for each process in
     `$FLOX_CACHE_HOME/process`.

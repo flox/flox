@@ -59,12 +59,13 @@ pub enum KnownSchemaVersion {
     V1_15_0,
     V1_16_0,
     V1_17_0,
+    V1_18_0,
 }
 
 impl KnownSchemaVersion {
     /// Returns the latest schema version.
     pub fn latest() -> Self {
-        KnownSchemaVersion::V1_17_0
+        KnownSchemaVersion::V1_18_0
     }
 
     /// Returns the oldest supported schema version.
@@ -84,6 +85,7 @@ impl KnownSchemaVersion {
             KnownSchemaVersion::V1_15_0,
             KnownSchemaVersion::V1_16_0,
             KnownSchemaVersion::V1_17_0,
+            KnownSchemaVersion::V1_18_0,
         ]
         .into_iter()
     }
@@ -113,6 +115,7 @@ impl TryFrom<VersionKind> for KnownSchemaVersion {
                 "1.15.0" => Ok(KnownSchemaVersion::V1_15_0),
                 "1.16.0" => Ok(KnownSchemaVersion::V1_16_0),
                 "1.17.0" => Ok(KnownSchemaVersion::V1_17_0),
+                "1.18.0" => Ok(KnownSchemaVersion::V1_18_0),
                 _ => Err(ManifestError::InvalidSchemaVersion(v.to_string())),
             },
         }
@@ -131,6 +134,7 @@ impl std::fmt::Display for KnownSchemaVersion {
             KnownSchemaVersion::V1_15_0 => write!(f, "1.15.0"),
             KnownSchemaVersion::V1_16_0 => write!(f, "1.16.0"),
             KnownSchemaVersion::V1_17_0 => write!(f, "1.17.0"),
+            KnownSchemaVersion::V1_18_0 => write!(f, "1.18.0"),
         }
     }
 }

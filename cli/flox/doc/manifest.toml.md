@@ -62,6 +62,7 @@ Valid string values are:
 - `1.16.0`: introduced services `depends-on`, and
   `shutdown.timeout-seconds` / `shutdown.signal`
 - `1.17.0`: introduced `description`
+- `1.18.0`: introduced `options.activate.upgrade-notifications`
 
 Existing manifest schemas, including the older `version = 1` format, are
 automatically forward-migrated when using features that require a newer schema
@@ -809,6 +810,11 @@ manifest, but things can be overridden or added by higher priority manifests.
   `options.activate.mode = run` unless a higher priority manifest explicitly
   sets `options.activate.mode = dev`.
 
+  The exception is `options.activate.upgrade-notifications`, which only the
+  composing manifest sets.
+  Upgrade notifications describe upgrades to the composing environment, which
+  an included environment's setting doesn't cover.
+
 ## `[build]`
 
 The `[build]` section of the manifest allows you to describe build instructions
@@ -921,7 +927,8 @@ Options ::= {
 }
 
 Activate ::= {
-  mode = null | 'dev' | 'run'
+  mode                  = null | 'dev' | 'run'
+, upgrade-notifications = null | <BOOL>
 }
 
 Allows ::= {
@@ -959,6 +966,18 @@ Semver ::= {
     their man pages made available).  This behavior is more in line with what
     you would expect from a system-wide package manager like `apt`, `yum`, or
     `brew`.
+
+`activate.upgrade-notifications`
+:   Whether `flox activate` notifies about available upgrades for this
+    environment.
+    The default is `true`.
+    Set it to `false` for an environment whose upgrades are handled elsewhere,
+    for example by a scheduled job, so that the notification is only noise.
+    The setting applies to everyone who activates the environment.
+    It can't turn notifications back on for a user who disabled them for all
+    environments with `upgrade_notifications = false`
+    (see [`flox-config(1)`](./flox-config.md)).
+    Requires `schema-version = "1.18.0"`.
 
 `allow.unfree`
 :   Allows packages with unfree licenses to be installed and appear in search
