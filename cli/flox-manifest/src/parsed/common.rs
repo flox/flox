@@ -95,6 +95,19 @@ impl KnownSchemaVersion {
             _ => "schema-version",
         }
     }
+
+    /// Returns the version as it is written in a manifest: the full
+    /// `key = value` TOML declaration. The legacy form is an unquoted
+    /// integer (`version = 1`); every other version is a quoted string
+    /// (`schema-version = "1.17.0"`). Rendering `schema-version = "1"`
+    /// would be invalid TOML for the legacy case, so the two forms cannot
+    /// share a format string.
+    pub fn toml_declaration(&self) -> String {
+        match self {
+            KnownSchemaVersion::V1 => format!("{} = {self}", self.key_name()),
+            _ => format!("{} = \"{self}\"", self.key_name()),
+        }
+    }
 }
 
 impl TryFrom<VersionKind> for KnownSchemaVersion {
@@ -693,6 +706,15 @@ mod tests {
     use flox_core::data::flox_version::FloxVersion;
 
     use super::*;
+
+    #[test]
+    fn toml_declaration_renders_legacy_and_versioned_forms() {
+        assert_eq!(KnownSchemaVersion::V1.toml_declaration(), "version = 1");
+        assert_eq!(
+            KnownSchemaVersion::V1_17_0.toml_declaration(),
+            "schema-version = \"1.17.0\"",
+        );
+    }
 
     /// Ensure the manifest.toml man page documents all schema versions that use
     /// the `schema-version` key (i.e. all versions after the legacy `version = 1`).
