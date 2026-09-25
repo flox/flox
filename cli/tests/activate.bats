@@ -2960,8 +2960,9 @@ EOF
   project_setup
   setup_test_plugin
 
-  # Install hello so the build derives its nixpkgs from the toplevel group
-  # instead of querying the catalog for base catalog information.
+  # `hello` gives the environment a resolved package set to build against.
+  # The build below is manifest-only — the project has no Nix expressions —
+  # so nothing here queries the catalog for base catalog information.
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
     "$FLOX_BIN" edit -f - <<< "$(with_latest_schema "$(cat <<EOF
 

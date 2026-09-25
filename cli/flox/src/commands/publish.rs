@@ -45,7 +45,7 @@ use crate::commands::build::{
     base_catalog_url_select,
     base_nixpkgs_url_from_url_select,
     check_git_tracking_for_expression_builds,
-    disallow_base_url_select_for_manifest_builds,
+    disallow_unusable_base_url_select,
     expression_rel_paths,
     packages_to_build,
     prefetch_expression_build_flake_ref,
@@ -292,20 +292,19 @@ impl Publish {
             package
         };
 
-        disallow_base_url_select_for_manifest_builds(
-            [&package],
-            publish_config.base_catalog_url_select.is_some(),
+        // Publishing a manifest build records the nixpkgs its environment is
+        // locked to, whatever is selected here, so a selection can only
+        // mislead. An expression publish is the case the flags exist for.
+        disallow_unusable_base_url_select(
+            publish_config.base_catalog_url_select.as_ref(),
+            !package.kind().is_expression_build(),
         )?;
 
         // Check the environment for appropriate state to build and publish
         let env_metadata = check_environment_metadata(&flox, &path_env)?;
 
-        let selected_base_nixpkgs_url = base_nixpkgs_url_from_url_select(
-            &flox,
-            publish_config.base_catalog_url_select,
-            Some(&env_metadata.lockfile),
-        )
-        .await?;
+        let selected_base_nixpkgs_url =
+            base_nixpkgs_url_from_url_select(&flox, publish_config.base_catalog_url_select).await?;
 
         prefetch_expression_build_flake_ref(
             [&package],

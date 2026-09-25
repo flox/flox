@@ -199,8 +199,10 @@ usage:
 # Verify certain prerequisites and touch a timestamped file to
 # act as a root prerequisite before kicking off the build DAG. Accepts
 # BUILD_RESULT_FILE (the `build` goal) or EVAL_RESULT_FILE (the `eval`
-# goal, which stops at the NEF eval and never builds a package). Both
-# goals reach the NEF eval, so both nixpkgs URLs are always required.
+# goal, which stops at the NEF eval and never builds a package).
+# BUILDTIME_NIXPKGS_URL is always required; EXPRESSION_BUILD_NIXPKGS_URL is
+# required only once a Nix expression build has been discovered, since
+# nothing else reads it.
 .PHONY: $(PROJECT_TMPDIR)/check-build-prerequisites
 $(PROJECT_TMPDIR)/check-build-prerequisites:
 	@# At least one of BUILD_RESULT_FILE or EVAL_RESULT_FILE must be defined.
@@ -225,9 +227,12 @@ $(PROJECT_TMPDIR)/check-build-prerequisites:
 	$(if $(NIX_EXPRESSION_BUILDS),$(if $(CATALOG_LOCKFILE),,$(error CATALOG_LOCKFILE not defined)))
 	$(if $(NIX_EXPRESSION_BUILDS),$(if $(wildcard $(CATALOG_LOCKFILE)),, \
 	  $(error CATALOG_LOCKFILE $(CATALOG_LOCKFILE) not found)))
-	@# Check that the BUILDTIME_NIXPKGS_URL and EXPRESSION_BUILD_NIXPKGS_URL are defined.
+	@# Check that the BUILDTIME_NIXPKGS_URL and EXPRESSION_BUILD_NIXPKGS_URL are
+	@# defined. Only Nix expression builds read the latter, so require it under
+	@# the same condition as CATALOG_LOCKFILE above.
 	$(if $(BUILDTIME_NIXPKGS_URL),,$(error BUILDTIME_NIXPKGS_URL not defined))
-	$(if $(EXPRESSION_BUILD_NIXPKGS_URL),,$(error EXPRESSION_BUILD_NIXPKGS_URL not defined))
+	$(if $(NIX_EXPRESSION_BUILDS),$(if $(EXPRESSION_BUILD_NIXPKGS_URL),, \
+	  $(error EXPRESSION_BUILD_NIXPKGS_URL not defined)))
 	@# Check that the FLOX_ENV_CACHE is defined, and create it because the
 	@# activate script requires --env-cache to be an existing directory.
 	$(if $(FLOX_ENV_CACHE),,$(error FLOX_ENV_CACHE not defined))

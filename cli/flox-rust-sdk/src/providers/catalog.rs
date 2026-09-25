@@ -46,7 +46,6 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::info;
 
-use super::publish::CheckedEnvironmentMetadata;
 use crate::flox::Flox;
 
 // Arc allows you to push things into the client from outside the client if necessary
@@ -471,18 +470,25 @@ pub fn mock_base_catalog_url() -> BaseCatalogUrl {
     BaseCatalogUrl::from(env!("TESTING_BASE_CATALOG_URL"))
 }
 
-/// Derive the nixpkgs url to be used for builds.
-/// If a stability is provided, try to retrieve a url for that stability from the catalog.
-/// Else, if we can derive a stability from the toplevel group of the environment, use that.
-/// Otherwise attr
+/// Derive the nixpkgs url a Nix expression build is built against.
+///
+/// The catalog server is the only source consulted: either the latest page of
+/// the stability the user named, or the latest page of the default stability.
+/// The environment's own locked nixpkgs (its `toplevel` group) deliberately
+/// plays no part — an expression build is independent of the manifest it
+/// happens to live next to, and deriving its base from the manifest pinned
+/// every expression build to whatever revision the environment last resolved.
+/// That pin both failed builds against month-old package sets and, once the
+/// page aged out of the catalog's retention window, made `flox publish` fail
+/// outright with no way to recover but to upgrade the environment.
 pub async fn base_catalog_url_for_stability_arg(
     stability: Option<&str>,
     base_catalog_info_fut: impl IntoFuture<Output = Result<BaseCatalogInfo, FloxhubClientError>>,
-    toplevel_derived_url: Option<&BaseCatalogUrl>,
 ) -> Result<BaseCatalogUrl, FloxhubClientError> {
-    let url = match (stability, toplevel_derived_url) {
-        (Some(stability), _) => {
-            let base_catalog_info = base_catalog_info_fut.await?;
+    let base_catalog_info = base_catalog_info_fut.await?;
+
+    let url = match stability {
+        Some(stability) => {
             let make_error_message = || {
                 let available_stabilities = base_catalog_info.available_stabilities().join(", ");
                 formatdoc! {"
@@ -498,13 +504,7 @@ pub async fn base_catalog_url_for_stability_arg(
             info!(%url, %stability, "using page from user provided stability");
             url
         },
-        (None, Some(toplevel_derived_url)) => {
-            info!(url=%toplevel_derived_url, "using nixpkgs derived from toplevel group");
-            toplevel_derived_url.clone()
-        },
-        (None, None) => {
-            let base_catalog_info = base_catalog_info_fut.await?;
-
+        None => {
             let make_error_message = || {
                 let available_stabilities = base_catalog_info.available_stabilities().join(", ");
                 formatdoc! {"
@@ -524,21 +524,15 @@ pub async fn base_catalog_url_for_stability_arg(
     Ok(url)
 }
 
-/// Returns the nixpkgs URL used for builds and publishes.
+/// Returns the nixpkgs URL used for expression builds and publishes.
 pub async fn get_base_nixpkgs_url(
     flox: &Flox,
     stability: Option<&str>,
-    env_metadata: &CheckedEnvironmentMetadata,
 ) -> Result<BaseCatalogUrl, FloxhubClientError> {
     let catalog = &flox.floxhub_client;
     let base_catalog_info_fut = catalog.get_base_catalog_info();
 
-    base_catalog_url_for_stability_arg(
-        stability,
-        base_catalog_info_fut,
-        env_metadata.toplevel_catalog_ref.as_ref(),
-    )
-    .await
+    base_catalog_url_for_stability_arg(stability, base_catalog_info_fut).await
 }
 
 pub mod test_helpers {

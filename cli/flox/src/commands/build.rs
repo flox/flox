@@ -23,14 +23,14 @@ use flox_rust_sdk::providers::build::{
     PackageTarget,
     PackageTargetKind,
     PackageTargets,
-    find_toplevel_group_nixpkgs,
+    locked_nixpkgs_urls,
     nix_expression_dir,
 };
 use flox_rust_sdk::providers::catalog::base_catalog_url_for_stability_arg;
 use flox_rust_sdk::providers::git::{GitCommandProvider, GitProvider};
 use flox_rust_sdk::providers::nix;
 use flox_rust_sdk::utils::{CommandExt, FLOX_INTERPRETER};
-use floxhub_client::{BaseCatalogUrl, CatalogClientTrait};
+use floxhub_client::{BaseCatalogUrl, CatalogClientTrait, FloxhubClientError};
 use indoc::formatdoc;
 use itertools::Itertools;
 use nef_lock_catalog::{NixFlakeref, catalog_lockfile_path, lock_project_catalog};
@@ -313,18 +313,6 @@ impl Build {
             )
         };
 
-        disallow_base_url_select_for_manifest_builds(
-            &packages_to_build,
-            nixpkgs_url_select.is_some(),
-        )?;
-
-        let base_nixpkgs_url =
-            base_nixpkgs_url_from_url_select(&flox, nixpkgs_url_select, Some(&lockfile))
-                .await?
-                .as_flake_ref()?;
-
-        prefetch_expression_build_flake_ref(&packages_to_build, &base_nixpkgs_url)?;
-
         let target_names = packages_to_build
             .iter()
             .map(|target| target.name())
@@ -358,6 +346,27 @@ impl Build {
         } else {
             expression_rel_paths(&packages_to_build)
         };
+
+        disallow_unusable_base_url_select(nixpkgs_url_select.as_ref(), lock_rel_paths.is_empty())?;
+
+        // A manifest build's `${pkg}` references can reach any of the
+        // project's expressions, which is what `lock_rel_paths` already covers.
+        let expression_nixpkgs_url = match &*lock_rel_paths {
+            [] => None,
+            _ => Some(base_nixpkgs_url_from_url_select(&flox, nixpkgs_url_select).await?),
+        };
+        let base_nixpkgs_url = expression_nixpkgs_url
+            .as_ref()
+            .map(|url| url.as_flake_ref())
+            .transpose()?;
+
+        if let (Some(expression_nixpkgs), Some(base_nixpkgs_url)) =
+            (&expression_nixpkgs_url, &base_nixpkgs_url)
+        {
+            prefetch_expression_build_flake_ref(&packages_to_build, base_nixpkgs_url)?;
+            report_expression_nixpkgs(expression_nixpkgs, &lockfile, has_manifest_build);
+        }
+
         let catalog_lock = match &*lock_rel_paths {
             [] => None,
             lock_rel_paths => Some(
@@ -380,7 +389,7 @@ impl Build {
         );
         let build_start = Instant::now();
         let results = builder.build(
-            &base_nixpkgs_url,
+            base_nixpkgs_url.as_ref(),
             &FLOX_INTERPRETER,
             &target_names,
             catalog_lock.as_ref().map(|lock| lock.path()),
@@ -487,7 +496,7 @@ impl Build {
                     "Cannot use --stability or --nixpkgs-url together with an explicit flake reference ('{parsed_flake_ref}'). Remove the flag or use a bare attribute path."
                 );
             }
-            let base_nixpkgs_url = base_nixpkgs_url_from_url_select(flox, Some(sel), None).await?;
+            let base_nixpkgs_url = base_nixpkgs_url_from_url_select(flox, Some(sel)).await?;
             Ok(base_nixpkgs_url.as_flake_ref()?.to_string())
         } else {
             Ok(parsed_flake_ref)
@@ -665,28 +674,107 @@ impl Build {
     }
 }
 
-/// Check that all packages are compatible with the selected Nixpkgs URL selection.
-pub(crate) fn disallow_base_url_select_for_manifest_builds<'p>(
-    packages: impl IntoIterator<Item = &'p PackageTarget>,
-    nixpkgs_overridden: bool,
+/// Name the nixpkgs an expression build resolved, or warn that the
+/// environment's manifest builds disagree with it.
+///
+/// The revision moves with the catalog, so a build that breaks against an
+/// unchanged working tree has nothing else to point at.
+fn report_expression_nixpkgs(
+    expression_nixpkgs: &BaseCatalogUrl,
+    lockfile: &Lockfile,
+    has_manifest_build: bool,
+) {
+    let diverged = if has_manifest_build {
+        revisions_differing_from(&locked_nixpkgs_urls(lockfile), expression_nixpkgs)
+    } else {
+        Vec::new()
+    };
+
+    if diverged.is_empty() {
+        message::plain(format!(
+            "Nix expression builds use nixpkgs {}.",
+            describe_nixpkgs(expression_nixpkgs)
+        ));
+        return;
+    }
+
+    message::warning(formatdoc! {"
+        Manifest builds and Nix expression builds in this environment use
+        different nixpkgs revisions, so packages built from one may not link
+        against packages built from the other.
+          manifest builds:        nixpkgs {manifest}
+          Nix expression builds:  nixpkgs {expression}
+        Run 'flox upgrade' to move this environment to the current revision.
+        ",
+        manifest = diverged.join(", "),
+        expression = describe_nixpkgs(expression_nixpkgs),
+    });
+}
+
+/// Compared by revision, not by url: the same revision reached through a
+/// differently shaped url is the same package set.
+fn revisions_differing_from(locked: &[BaseCatalogUrl], expression: &BaseCatalogUrl) -> Vec<String> {
+    let expression_rev = expression.rev();
+    let mut seen = Vec::new();
+    let mut diverged = Vec::new();
+
+    for url in locked {
+        let differs = match (url.rev(), &expression_rev) {
+            (Some(locked_rev), Some(expression_rev)) => &locked_rev != expression_rev,
+            _ => url != expression,
+        };
+        if !differs {
+            continue;
+        }
+
+        let key = url.rev().unwrap_or_else(|| url.to_string());
+        if seen.contains(&key) {
+            continue;
+        }
+
+        seen.push(key);
+        diverged.push(describe_nixpkgs(url));
+    }
+
+    diverged
+}
+
+/// A nixpkgs revision short enough to compare by eye, or the whole url when
+/// there is no revision to name.
+pub(crate) fn describe_nixpkgs(url: &BaseCatalogUrl) -> String {
+    match url.rev() {
+        Some(rev) if rev.len() >= 7 => format!("rev {}", &rev[..7]),
+        Some(rev) => format!("rev {rev}"),
+        None => url.to_string(),
+    }
+}
+
+/// Refuse a nixpkgs selection that cannot affect anything this invocation
+/// builds, rather than ignoring it silently.
+pub(crate) fn disallow_unusable_base_url_select(
+    nixpkgs_url_select: Option<&BaseCatalogUrlSelect>,
+    selects_nothing: bool,
 ) -> Result<()> {
-    if !nixpkgs_overridden {
+    let Some(select) = nixpkgs_url_select else {
+        return Ok(());
+    };
+
+    if !selects_nothing {
         return Ok(());
     }
 
-    for package in packages {
-        if package.kind().is_expression_build() {
-            continue;
-        }
-        bail!(formatdoc! {"
-            The '--stability' option only applies to nix expression builds.
-            '{name}' is a manifest build.
-            Omit '--stability' to build with nixpkgs compatible with the environment,
-            or pass exclusively nix expression builds.
-            ", name = package.name()
-        })
-    }
-    Ok(())
+    let flag = match select {
+        BaseCatalogUrlSelect::NixpkgsUrl(_) => "--nixpkgs-url",
+        BaseCatalogUrlSelect::Stability(_) => "--stability",
+    };
+
+    bail!(formatdoc! {"
+        The '{flag}' option only applies to Nix expression builds, and this
+        command builds none.
+        A manifest build always uses the nixpkgs its environment is locked to.
+        Omit '{flag}', or name a Nix expression build instead.
+        "
+    })
 }
 
 /// Determine the [BaseCatalogUrl] used for expression builds
@@ -701,47 +789,46 @@ pub(crate) fn disallow_base_url_select_for_manifest_builds<'p>(
 ///   (i.e. `BaseCatalogUrlSelect::Stability` / `--stability <stability>`)
 ///   queries the nixpkgs url for the given stability from the catalog server
 ///   and uses the latest revision for that stability.
-/// * If neither argument is provided, uses the nixpkgs url
-///   associated with the (implicit) `toplevel` group of the environment.
-/// * If the environment has no `toplevel` group, finally falls back
-///   to querying the latest nixpkgs url for the stability "stable"
-///   from the catalog-server.
+/// * If neither argument is provided, uses the latest nixpkgs url for the
+///   default stability ("stable") from the catalog server.
+///
+/// The environment's own locked nixpkgs is never consulted, so the manifest
+/// cannot pin, or stale, what an expression build resolves against.
 pub(crate) async fn base_nixpkgs_url_from_url_select(
     flox: &Flox,
     nixpkgs_url_select: Option<BaseCatalogUrlSelect>,
-    lockfile: Option<&Lockfile>,
 ) -> Result<BaseCatalogUrl, anyhow::Error> {
     let catalog = &flox.floxhub_client;
     let base_catalog_info_fut = catalog.get_base_catalog_info();
 
-    let toplevel_derived_url = if let Some(lockfile) = lockfile {
-        find_toplevel_group_nixpkgs(lockfile)
-    } else {
-        None
+    let stability = match nixpkgs_url_select {
+        Some(BaseCatalogUrlSelect::NixpkgsUrl(url)) => {
+            return Ok(BaseCatalogUrl::from(url.as_str()));
+        },
+        Some(BaseCatalogUrlSelect::Stability(stability)) => Some(stability),
+        None => None,
     };
 
-    match nixpkgs_url_select {
-        Some(BaseCatalogUrlSelect::NixpkgsUrl(url)) => Ok(BaseCatalogUrl::from(url.as_str())),
-        Some(BaseCatalogUrlSelect::Stability(stability)) => {
-            let url = base_catalog_url_for_stability_arg(
-                Some(&stability),
-                base_catalog_info_fut,
-                toplevel_derived_url.as_ref(),
-            )
-            .await?;
-            Ok(url)
-        },
-        None => {
-            let url = base_catalog_url_for_stability_arg(
-                None,
-                base_catalog_info_fut,
-                toplevel_derived_url.as_ref(),
-            )
-            .await
-            .context("could not get information about the base catalog")?;
-            Ok(url)
-        },
+    match base_catalog_url_for_stability_arg(stability.as_deref(), base_catalog_info_fut).await {
+        Ok(url) => Ok(url),
+        Err(err @ FloxhubClientError::StabilityError(_)) => Err(err.into()),
+        Err(err) => Err(base_catalog_unreachable(err)),
     }
+}
+
+/// The error an offline or air-gapped user meets.
+///
+/// The cause is folded into the message rather than left as a source, because
+/// `main` joins an uncategorized error's chain with ": " — which would append
+/// the transport error to the advice sentence and bury it.
+fn base_catalog_unreachable(err: impl std::fmt::Display) -> anyhow::Error {
+    anyhow::anyhow!(formatdoc! {"
+        Could not get information about the base catalog.
+        {err}
+        Pass '--nixpkgs-url <url>' to build against a nixpkgs revision
+        directly, without consulting the catalog server.
+        "
+    })
 }
 
 /// Enforce the existence of a git repository when building nix expressions,
@@ -983,72 +1070,117 @@ mod test {
         assert!(result.is_err());
     }
 
+    /// A selection is refused only when this invocation reaches no Nix
+    /// expression build, because that is the only case where it can have no
+    /// effect. The refusal names the flag the user actually passed.
     #[test]
-    fn manifest_builds_not_allowed_with_stabilities_present() {
-        let mut packages = vec![PackageTarget::new_unchecked(
-            "manifest",
-            PackageTargetKind::ManifestBuild { sandbox: None },
-        )];
+    fn base_url_select_refused_only_when_it_selects_nothing() {
+        let stability = BaseCatalogUrlSelect::Stability("stable".to_string());
 
-        let result = disallow_base_url_select_for_manifest_builds(&packages, true);
-        assert!(result.is_err());
+        let err = disallow_unusable_base_url_select(Some(&stability), true)
+            .expect_err("a selection that reaches no expression build is refused");
+        assert!(
+            err.to_string().contains("'--stability' option"),
+            "unexpected error: {err}"
+        );
 
-        // the presence of expression builds doesnt change the result
-        packages.push(PackageTarget::new_unchecked(
-            "expression",
-            PackageTargetKind::ExpressionBuild(ExpressionBuildMetadata {
-                rel_file_path: Default::default(),
-            }),
-        ));
-
-        let result = disallow_base_url_select_for_manifest_builds(&packages, true);
-        assert!(result.is_err());
-
-        // if all targets are expression builds, the check succeeds
-        let packages = packages.split_off(1);
-        let result = disallow_base_url_select_for_manifest_builds(&packages, true);
-        assert!(result.is_ok());
+        // Reaching any expression build makes the selection meaningful, even
+        // when a manifest build was the package named on the command line.
+        disallow_unusable_base_url_select(Some(&stability), false)
+            .expect("a selection that reaches an expression build is allowed");
     }
 
+    /// The refusal names `--nixpkgs-url` when that is what was passed. It used
+    /// to say `--stability` either way, which sent users of the other flag
+    /// looking for a flag they had not used.
     #[test]
-    fn manifest_builds_allowed_with_stabilities_absent() {
-        let mut packages = vec![PackageTarget::new_unchecked(
-            "manifest",
-            PackageTargetKind::ManifestBuild { sandbox: None },
-        )];
+    fn base_url_select_refusal_names_the_flag_that_was_passed() {
+        let url =
+            BaseCatalogUrlSelect::NixpkgsUrl("https://github.com/NixOS/nixpkgs".parse().unwrap());
 
-        let result = disallow_base_url_select_for_manifest_builds(&packages, false);
-        assert!(result.is_ok());
+        let err = disallow_unusable_base_url_select(Some(&url), true)
+            .expect_err("a selection that reaches no expression build is refused");
 
-        // the presence of expression builds doesnt change the result
-        packages.push(PackageTarget::new_unchecked(
-            "expression",
-            PackageTargetKind::ExpressionBuild(ExpressionBuildMetadata {
-                rel_file_path: Default::default(),
-            }),
-        ));
+        let message = err.to_string();
+        assert!(
+            message.contains("'--nixpkgs-url' option"),
+            "unexpected: {message}"
+        );
+        assert!(!message.contains("--stability"), "unexpected: {message}");
+    }
 
-        let result = disallow_base_url_select_for_manifest_builds(&packages, false);
-        assert!(result.is_ok());
+    /// A stability the catalog does not carry is not an unreachable catalog:
+    /// the server answered, and its answer lists what it does carry. Wrapping
+    /// it in the unreachable-catalog message would open with a false claim and
+    /// bury that list.
+    #[tokio::test]
+    async fn unknown_stability_keeps_its_own_error() {
+        use floxhub_client::FloxhubClient;
+        use floxhub_client::client::test_helpers::client_config;
+        use httpmock::MockServer;
+
+        let (mut flox, _temp_dir) = flox_instance();
+
+        let server = MockServer::start_async().await;
+        server.mock(|when, then| {
+            when.path("/api/v1/catalog/info/base-catalog");
+            then.status(200)
+                .json_body(serde_json::to_value(BaseCatalogInfo::new_mock()).unwrap());
+        });
+        flox.floxhub_client =
+            FloxhubClient::new(client_config(server.base_url().as_str())).unwrap();
+
+        let err = base_nixpkgs_url_from_url_select(
+            &flox,
+            Some(BaseCatalogUrlSelect::Stability("typo".to_string())),
+        )
+        .await
+        .expect_err("a stability the catalog does not carry is an error");
+
+        let message = err.to_string();
+        assert!(
+            message.contains("Stability 'typo' does not exist"),
+            "unexpected: {message}"
+        );
+        assert!(
+            message.contains("Available stabilities are"),
+            "the available stabilities are the actionable part: {message}"
+        );
+        assert!(
+            !message.contains("Could not get information about the base catalog"),
+            "the catalog was reached: {message}"
+        );
+    }
+
+    /// The same revision reached through a differently shaped url is the same
+    /// package set, so it is not a divergence — and a revision is named once
+    /// however many packages are locked to it.
+    #[test]
+    fn divergence_is_decided_and_deduped_by_revision() {
+        let expression = BaseCatalogUrl::from("https://github.com/flox/nixpkgs?rev=abc1234");
+
+        let same_rev_other_shape =
+            BaseCatalogUrl::from("https://example.invalid/nixpkgs?rev=abc1234&extra=1");
+        assert_eq!(
+            revisions_differing_from(&[same_rev_other_shape], &expression),
+            Vec::<String>::new()
+        );
+
+        let other = BaseCatalogUrl::from("https://github.com/flox/nixpkgs?rev=def5678");
+        let other_again = BaseCatalogUrl::from("https://github.com/flox/nixpkgs?rev=def5678");
+        assert_eq!(
+            revisions_differing_from(&[other, other_again], &expression),
+            vec!["rev def5678".to_string()]
+        );
     }
 
     #[tokio::test]
-    async fn prefer_explicit_stability_over_toplevel() {
+    async fn explicit_stability_selects_that_stabilitys_latest_page() {
         let mock_base_catalog_info = BaseCatalogInfo::new_mock();
 
-        let actual_without_toplevel = base_catalog_url_for_stability_arg(
-            Some("not-default"),
-            async { Ok(mock_base_catalog_info.clone()) },
-            None,
-        )
-        .await
-        .unwrap();
-
-        let actual_with_toplevel = base_catalog_url_for_stability_arg(
-            Some("not-default"),
-            async { Ok(mock_base_catalog_info.clone()) },
-            Some(&BaseCatalogUrl::from("dont expect this")),
-        )
+        let actual = base_catalog_url_for_stability_arg(Some("not-default"), async {
+            Ok(mock_base_catalog_info.clone())
+        })
         .await
         .unwrap();
 
@@ -1056,41 +1188,22 @@ mod test {
             .url_for_latest_page_with_stability("not-default")
             .unwrap();
 
-        assert_eq!(actual_without_toplevel, expected_url);
-        assert_eq!(actual_with_toplevel, expected_url);
+        assert_eq!(actual, expected_url);
     }
 
     #[tokio::test]
-    async fn prefer_toplevel_over_implicit_stability() {
-        let expected_url = BaseCatalogUrl::from("expect this");
-
-        let actual_with_toplevel = base_catalog_url_for_stability_arg(
-            None,
-            async { unreachable!("with a toplevel we don't query for stabilities") },
-            Some(&expected_url),
-        )
-        .await
-        .unwrap();
-
-        assert_eq!(actual_with_toplevel, expected_url);
-    }
-
-    #[tokio::test]
-    async fn prefer_implicit_stability_without_toplevel() {
+    async fn no_stability_selects_the_default_stabilitys_latest_page() {
         let mock_base_catalog_info = BaseCatalogInfo::new_mock();
 
-        let actual_with_toplevel = base_catalog_url_for_stability_arg(
-            None,
-            async { Ok(mock_base_catalog_info.clone()) },
-            None,
-        )
-        .await
-        .unwrap();
+        let actual =
+            base_catalog_url_for_stability_arg(None, async { Ok(mock_base_catalog_info.clone()) })
+                .await
+                .unwrap();
 
         let expected_url = mock_base_catalog_info
             .url_for_latest_page_with_default_stability()
             .unwrap();
-        assert_eq!(actual_with_toplevel, expected_url);
+        assert_eq!(actual, expected_url);
     }
 
     #[test]
@@ -1456,7 +1569,6 @@ mod test {
         let result = base_nixpkgs_url_from_url_select(
             &flox,
             Some(BaseCatalogUrlSelect::Stability("not-default".to_string())),
-            None,
         )
         .await
         .unwrap();
@@ -1482,7 +1594,6 @@ mod test {
         let result = base_nixpkgs_url_from_url_select(
             &flox,
             Some(BaseCatalogUrlSelect::NixpkgsUrl(raw_url.clone())),
-            None,
         )
         .await
         .unwrap();
