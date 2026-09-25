@@ -38,6 +38,30 @@ pub enum LockError {
     #[error("{} catalog reference(s) were unresolvable", .0.len())]
     Unresolvable(Vec<UnresolvableEntry>),
 
+    /// The server's per-group statement timeout fired before the closure
+    /// walk finished. The server reports this as a `timeout` marker on
+    /// every reference of the group; nothing about the references
+    /// themselves is known, so this is not an unresolvable-reference
+    /// failure and must not be rendered as one.
+    #[error(
+        "The catalog lookup timed out on the server before the dependency \
+         closure could be resolved; nothing is known about the {references} \
+         reference(s). Retry, and if it keeps timing out report it to the \
+         catalog's operators."
+    )]
+    LookupTimedOut { references: usize },
+
+    /// The closure exceeded the server's item limit.
+    #[error(
+        "The dependency closure of the {references} reference(s) exceeds the \
+         catalog's limit ({closure_items} items, limit {max_items})."
+    )]
+    ClosureOverflow {
+        references: usize,
+        closure_items: u64,
+        max_items: u64,
+    },
+
     /// The catalog lookup request itself failed.
     #[error(transparent)]
     Client(#[from] FloxhubClientError),
@@ -131,6 +155,14 @@ fn lock_from_response(mut response: BuildInputsLookupResponse) -> Result<BuildLo
         )));
     };
 
+    // A group-level failure (statement timeout, closure overflow) is reported
+    // by the server as the same marker on every reference of the group. It
+    // says nothing about any reference, so surface it as what it is rather
+    // than as N unresolvable references.
+    if let Some(failure) = group_failure(&group.unresolvable) {
+        return Err(failure);
+    }
+
     // Any unresolvable references fail the whole lock with no partial output.
     if !group.unresolvable.is_empty() {
         debug!(
@@ -145,6 +177,36 @@ fn lock_from_response(mut response: BuildInputsLookupResponse) -> Result<BuildLo
     debug!(resolved = group.lock.len(), "all references resolved");
 
     Ok(build_lock_from_locked_inputs(group.lock, direct)?)
+}
+
+/// Detect a group-level failure marker carried by every unresolvable entry.
+///
+/// The server marks a timed-out group with `{"timeout": true}` and an
+/// overflowed group with `{"overflow": {"closure_items", "max_items"}}` on
+/// each of the group's references. Only a marker present on *every* entry is
+/// a group failure; a mix means ordinary unresolvable references.
+fn group_failure(entries: &[UnresolvableEntry]) -> Option<LockError> {
+    let first = entries.first()?;
+    let references = entries.len();
+    let all_have = |key: &str| {
+        entries
+            .iter()
+            .all(|e| e.leaf.unresolvable.contains_key(key))
+    };
+
+    if all_have("timeout") {
+        return Some(LockError::LookupTimedOut { references });
+    }
+    if all_have("overflow") {
+        let overflow = first.leaf.unresolvable.get("overflow")?;
+        let count = |field: &str| overflow.get(field).and_then(|v| v.as_u64()).unwrap_or(0);
+        return Some(LockError::ClosureOverflow {
+            references,
+            closure_items: count("closure_items"),
+            max_items: count("max_items"),
+        });
+    }
+    None
 }
 
 #[cfg(test)]
@@ -251,5 +313,58 @@ mod tests {
             },
             other => panic!("expected LockError::Unresolvable, got {other:?}"),
         }
+    }
+    fn entry(reference: &str, leaf: serde_json::Value) -> UnresolvableEntry {
+        serde_json::from_value(json!({
+            "reference": reference,
+            "chain": [],
+            "leaf": { "unresolvable": leaf },
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn timeout_on_every_entry_is_a_timeout_not_unresolvable_references() {
+        let entries = vec![
+            entry("acme.a", json!({"timeout": true})),
+            entry("acme.b", json!({"timeout": true})),
+        ];
+        match group_failure(&entries) {
+            Some(LockError::LookupTimedOut { references }) => assert_eq!(references, 2),
+            other => panic!("expected LookupTimedOut, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn overflow_carries_the_server_counts() {
+        let entries = vec![entry(
+            "acme.a",
+            json!({"overflow": {"closure_items": 12000, "max_items": 10000}}),
+        )];
+        match group_failure(&entries) {
+            Some(LockError::ClosureOverflow {
+                references,
+                closure_items,
+                max_items,
+            }) => {
+                assert_eq!((references, closure_items, max_items), (1, 12000, 10000));
+            },
+            other => panic!("expected ClosureOverflow, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_marker_on_only_some_entries_is_not_a_group_failure() {
+        let entries = vec![
+            entry("acme.a", json!({"timeout": true})),
+            entry("acme.b", json!({"_handle": "h"})),
+        ];
+        assert!(group_failure(&entries).is_none());
+    }
+
+    #[test]
+    fn redacted_entries_stay_unresolvable() {
+        let entries = vec![entry("acme.a", json!({"_handle": "h"}))];
+        assert!(group_failure(&entries).is_none());
     }
 }
