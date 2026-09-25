@@ -115,27 +115,28 @@ impl RemoteEnvironment {
         Self::checkout_path(flox, pointer).join(DOT_FLOX).exists()
     }
 
-    /// Whether `dot_flox_path` has the layout of the cache checkout that backs
-    /// the remote environment named by `pointer`: it ends with
-    /// `remote/<owner>/<name>/.flox`. Independent of the current cache root,
-    /// because `XDG_CACHE_HOME` (hence `Flox::cache_dir`) can differ between
-    /// the session that created the checkout and the one now listing it.
-    /// `flox envs` uses this to hide those backing environments from its list.
-    pub fn is_checkout_of(dot_flox_path: &Path, pointer: &ManagedPointer) -> bool {
-        let expected = [
-            REMOTE_ENVIRONMENT_BASE_DIR,
-            pointer.owner.as_ref(),
-            pointer.name.as_ref(),
-            DOT_FLOX,
-        ];
-        let mut actual = dot_flox_path.components().rev();
-        for want in expected.iter().rev() {
-            match actual.next() {
-                Some(std::path::Component::Normal(got)) if got == std::ffi::OsStr::new(want) => {},
-                _ => return false,
-            }
-        }
-        true
+    /// Whether `dot_flox_path` is the flox-managed cache checkout that backs the
+    /// remote environment named by `pointer`: the `.flox` at
+    /// `<cache_dir>/remote/<owner>/<name>`. `flox envs` uses this to hide those
+    /// internal checkouts from its listing.
+    ///
+    /// Anchored to the current `Flox::cache_dir` so a user's own managed
+    /// environment pulled to an arbitrary path (even one ending in
+    /// `remote/<owner>/<name>/.flox`) is not mistaken for a cache checkout. The
+    /// cache root is canonicalized before comparison because it may be
+    /// non-canonical (e.g. macOS `$TMPDIR`) while registry paths are always
+    /// canonical, so a raw comparison would spuriously miss.
+    pub fn is_checkout_of(flox: &Flox, dot_flox_path: &Path, pointer: &ManagedPointer) -> bool {
+        let cache_root = flox
+            .cache_dir
+            .canonicalize()
+            .unwrap_or_else(|_| flox.cache_dir.clone());
+        let expected = cache_root
+            .join(REMOTE_ENVIRONMENT_BASE_DIR)
+            .join(pointer.owner.as_ref())
+            .join(pointer.name.as_ref())
+            .join(DOT_FLOX);
+        expected == *dot_flox_path
     }
 
     /// Pull a remote environment into a flox-provided managed environment
@@ -800,33 +801,56 @@ mod tests {
         assert_eq!(history_kind, &HistoryKind::Initialize);
     }
 
-    /// A path ending with `remote/<owner>/<name>/.flox` is recognised as the
-    /// checkout backing that pointer, regardless of the leading cache root.
+    /// A canonical registry path equal to `canonicalize(flox.cache_dir)/remote/<owner>/<name>/.flox`
+    /// is recognised as the cache checkout for that pointer.
+    ///
+    /// The test constructs the path via `canonicalize(cache_dir)` to exercise the
+    /// canonicalization path — registry paths are always canonical while
+    /// `flox.cache_dir` may not be (e.g. macOS `$TMPDIR`).
     #[test]
-    fn is_checkout_of_true_for_own_dot_flox() {
+    fn is_checkout_of_true_for_canonical_cache_checkout() {
         let owner = EnvironmentOwner::from_str("owner").unwrap();
         let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub(Some(&owner));
         let name = EnvironmentName::from_str("myenv").unwrap();
         let pointer = ManagedPointer::new(owner, name, &flox.floxhub);
 
-        let dot_flox = RemoteEnvironment::checkout_path(&flox, &pointer).join(DOT_FLOX);
-        assert!(RemoteEnvironment::is_checkout_of(&dot_flox, &pointer));
+        // Construct the canonical path a registry entry would hold: start from the
+        // real (canonical) cache root, as `ManagedEnvironment::open` stores it.
+        let canonical_cache = flox
+            .cache_dir
+            .canonicalize()
+            .unwrap_or_else(|_| flox.cache_dir.clone());
+        let dot_flox = canonical_cache
+            .join(REMOTE_ENVIRONMENT_BASE_DIR)
+            .join(pointer.owner.as_ref())
+            .join(pointer.name.as_ref())
+            .join(DOT_FLOX);
+        assert!(RemoteEnvironment::is_checkout_of(
+            &flox, &dot_flox, &pointer
+        ));
     }
 
-    /// The same trailing shape under a different cache root still matches —
-    /// this is the regression `XDG_CACHE_HOME` variance introduced.
+    /// A managed env pulled to an arbitrary path that happens to end with
+    /// `remote/<owner>/<name>/.flox` but lives outside `flox.cache_dir` must NOT
+    /// be mistaken for a cache checkout (regression guard for DEV-337).
+    ///
+    /// Repro: `flox pull -d /tmp/x/remote/owner/myenv owner/myenv` then
+    /// `flox envs` — the env must appear in the listing, not be hidden.
     #[test]
-    fn is_checkout_of_true_for_different_cache_root() {
+    fn is_checkout_of_false_for_user_env_outside_cache_dir() {
         let owner = EnvironmentOwner::from_str("owner").unwrap();
         let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub(Some(&owner));
         let name = EnvironmentName::from_str("myenv").unwrap();
         let pointer = ManagedPointer::new(owner, name, &flox.floxhub);
 
-        // Construct the path under a completely different cache root than
-        // `flox.cache_dir` — what happens when XDG_CACHE_HOME changes between
-        // the session that created the checkout and the one now listing it.
-        let other_root = PathBuf::from("/some/other/root/remote/owner/myenv/.flox");
-        assert!(RemoteEnvironment::is_checkout_of(&other_root, &pointer));
+        // A path with the right trailing shape but rooted outside flox.cache_dir.
+        // This simulates `flox pull -d /tmp/x/remote/owner/myenv owner/myenv`.
+        let outside_cache = PathBuf::from("/tmp/x/remote/owner/myenv/.flox");
+        assert!(!RemoteEnvironment::is_checkout_of(
+            &flox,
+            &outside_cache,
+            &pointer
+        ));
     }
 
     /// An unrelated path is not identified as a checkout of this pointer.
@@ -838,7 +862,9 @@ mod tests {
         let pointer = ManagedPointer::new(owner, name, &flox.floxhub);
 
         let unrelated = PathBuf::from("/some/other/path/.flox");
-        assert!(!RemoteEnvironment::is_checkout_of(&unrelated, &pointer));
+        assert!(!RemoteEnvironment::is_checkout_of(
+            &flox, &unrelated, &pointer
+        ));
     }
 
     /// A path that has the right shape but a different owner or name does not match.
@@ -851,9 +877,21 @@ mod tests {
         let pointer_a = ManagedPointer::new(owner.clone(), name_a, &flox.floxhub);
         let pointer_b = ManagedPointer::new(owner, name_b, &flox.floxhub);
 
-        // env-a's checkout should not match pointer_b
-        let dot_flox_a = RemoteEnvironment::checkout_path(&flox, &pointer_a).join(DOT_FLOX);
-        assert!(!RemoteEnvironment::is_checkout_of(&dot_flox_a, &pointer_b));
+        // env-a's canonical checkout path must not match pointer_b
+        let canonical_cache = flox
+            .cache_dir
+            .canonicalize()
+            .unwrap_or_else(|_| flox.cache_dir.clone());
+        let dot_flox_a = canonical_cache
+            .join(REMOTE_ENVIRONMENT_BASE_DIR)
+            .join(pointer_a.owner.as_ref())
+            .join(pointer_a.name.as_ref())
+            .join(DOT_FLOX);
+        assert!(!RemoteEnvironment::is_checkout_of(
+            &flox,
+            &dot_flox_a,
+            &pointer_b
+        ));
     }
 
     /// A path missing the `.flox` segment is not a checkout, even if the rest matches.
@@ -866,7 +904,11 @@ mod tests {
 
         // Path that has remote/<owner>/<name> but stops before `.flox`
         let no_dot_flox = RemoteEnvironment::checkout_path(&flox, &pointer);
-        assert!(!RemoteEnvironment::is_checkout_of(&no_dot_flox, &pointer));
+        assert!(!RemoteEnvironment::is_checkout_of(
+            &flox,
+            &no_dot_flox,
+            &pointer
+        ));
     }
 
     /// A path missing the `remote` segment is not a checkout.
@@ -879,6 +921,8 @@ mod tests {
 
         // Has owner/name/.flox but no `remote` segment
         let no_remote = PathBuf::from("/cache/owner/myenv/.flox");
-        assert!(!RemoteEnvironment::is_checkout_of(&no_remote, &pointer));
+        assert!(!RemoteEnvironment::is_checkout_of(
+            &flox, &no_remote, &pointer
+        ));
     }
 }
