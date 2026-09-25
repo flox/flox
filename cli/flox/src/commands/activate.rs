@@ -42,7 +42,7 @@ use flox_rust_sdk::providers::upgrade_checks::UpgradeInformationGuard;
 use flox_rust_sdk::utils::FLOX_INTERPRETER;
 use indoc::{formatdoc, indoc};
 use toml_edit::Key;
-use tracing::{debug, trace, warn};
+use tracing::{debug, info, trace, warn};
 
 use super::{
     EnvironmentSelect,
@@ -998,9 +998,10 @@ fn notify_package_upgrades(
     let description = environment_description(environment)?;
     let diff_for_system = upgrade_result.diff_for_system(&flox.system);
     if diff_for_system.is_empty() {
-        message::verbose(formatdoc! {"
-            Upgrades available for {description} on other systems.
-            Use 'flox upgrade --dry-run' for details."});
+        info!(
+            environment = %description,
+            "Upgrades available on other systems. Use 'flox upgrade --dry-run' for details."
+        );
         return Ok(());
     }
     // TODO: this doesn't capture the environment chosen by the user if we prompted
@@ -1062,6 +1063,9 @@ fn notify_environment_upgrades(
         Ok(metadata) => metadata.into_inner(),
         Err(error) => {
             warn!(%error, "Not notifying user of environment upgrades, could not get local state");
+            message::warning(format!(
+                "Not notifying user of environment upgrades, could not get local state: {error}"
+            ));
             return Ok(());
         },
     };
@@ -1070,6 +1074,9 @@ fn notify_environment_upgrades(
         Ok(metadata) => metadata.into_inner(),
         Err(error) => {
             warn!(%error, "Not notifying user of environment upgrades, could not get remote state");
+            message::warning(format!(
+                "Not notifying user of environment upgrades, could not get remote state: {error}"
+            ));
             return Ok(());
         },
     };
@@ -1292,12 +1299,12 @@ mod upgrade_notification_tests {
         new_path_environment_from_env_files,
     };
     use flox_rust_sdk::providers::upgrade_checks::UpgradeInformation;
-    use flox_rust_sdk::utils::logging::test_helpers::test_subscriber_message_only;
     use flox_test_utils::GENERATED_DATA;
     use time::OffsetDateTime;
 
     use super::*;
     use crate::commands::ActiveEnvironments;
+    use crate::utils::message::test_helpers::test_subscriber_message_only;
 
     #[test]
     fn no_notification_printed_if_absent() {

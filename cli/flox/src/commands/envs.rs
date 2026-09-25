@@ -316,6 +316,7 @@ fn format_url(pointer: &ManagedPointer) -> String {
             // done with `//` in the joined path and `EnvironmentOwner` and
             // `EnvironmentName` prevent slashes.
             tracing::warn!(?pointer, %err, "Failed to format URL for environment");
+            message::warning(format!("Failed to format URL for environment: {err}"));
             "unknown".into()
         },
         |url| url.to_string(),

@@ -410,6 +410,9 @@ impl Install {
 
                     let Some(pkg_retry) = packages.get_mut(install_id) else {
                         warn!(install_id, "resolution failure for nonexistent package");
+                        message::warning(format!(
+                            "Resolution failure for nonexistent package '{install_id}'."
+                        ));
                         continue;
                     };
 
@@ -422,6 +425,9 @@ impl Install {
                             ?pkg_retry.pkg,
                             "resolution failure for non-catalog package"
                         );
+                        message::warning(format!(
+                            "Resolution failure for non-catalog package '{install_id}'."
+                        ));
                         continue;
                     };
 
@@ -839,7 +845,6 @@ mod tests {
     };
     use flox_rust_sdk::providers::catalog::SystemEnum;
     use flox_rust_sdk::providers::catalog::test_helpers::catalog_replay_client;
-    use flox_rust_sdk::utils::logging::test_helpers::test_subscriber_message_only;
     use flox_test_utils::GENERATED_DATA;
     use flox_test_utils::manifests::EMPTY_ALL_SYSTEMS;
     use indoc::formatdoc;
@@ -849,6 +854,7 @@ mod tests {
     use crate::commands::EnvironmentSelect;
     use crate::commands::install::{Install, package_list_for_prompt};
     use crate::utils::message;
+    use crate::utils::message::test_helpers::test_subscriber_message_only;
 
     /// [Install::generate_warnings] shouldn't warn for packages not in packages_to_install
     #[test]

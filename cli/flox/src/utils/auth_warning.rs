@@ -12,12 +12,25 @@
 use std::path::Path;
 use std::{fs, io};
 
+use floxhub_client::AuthContext;
+use floxhub_client::auth::Credential;
+use floxhub_client::auth::storage::AuthContextStorageExt;
 use indoc::indoc;
 use serde::{Deserialize, Serialize};
 use time::{Duration, OffsetDateTime};
 use tracing::debug;
 
 use crate::utils::message;
+
+/// Preserve the SDK's actionable notice without loading credentials during startup.
+pub(crate) fn with_kerberos_warning(context: AuthContext) -> AuthContext {
+    AuthContext::deferred(context.cached_facts(), move || {
+        if matches!(context.credential(), Credential::Kerberos(None)) {
+            message::warning("Kerberos ticket not found. Run 'kinit' to authenticate.");
+        }
+        context.clone()
+    })
+}
 
 const RESOLVE_AUTH_WARNING_FILE_NAME: &str = "resolve-auth-warning-timestamp.json";
 const RESOLVE_AUTH_WARNING_EXPIRY: Duration = Duration::hours(8);
@@ -95,6 +108,26 @@ fn record_warning(stamp_file: &Path, now: OffsetDateTime) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::utils::message::test_helpers::test_subscriber_message_only;
+
+    #[test]
+    fn kerberos_notice_is_lazy_captured_and_emitted_once() {
+        let (subscriber, writer) = test_subscriber_message_only();
+        let context = with_kerberos_warning(AuthContext::from_kerberos(None));
+        assert_eq!(writer.to_string(), "");
+        std::thread::spawn(move || {
+            tracing::subscriber::with_default(subscriber, || {
+                context.credential();
+                context.credential();
+            });
+        })
+        .join()
+        .unwrap();
+        assert_eq!(
+            writer.to_string(),
+            "! Kerberos ticket not found. Run 'kinit' to authenticate.\n"
+        );
+    }
 
     fn stamp_in(dir: &Path) -> std::path::PathBuf {
         dir.join(RESOLVE_AUTH_WARNING_FILE_NAME)

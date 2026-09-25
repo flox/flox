@@ -182,6 +182,7 @@ pub(crate) fn activated_environments() -> ActiveEnvironments {
     match ActiveEnvironments::from_str(&flox_active_environments_var) {
         Ok(active_environments) => active_environments,
         Err(e) => {
+            tracing::info!(error = %e, "Active environment state is invalid; using defaults");
             message::error(format!(
                 "Could not parse _FLOX_ACTIVE_ENVIRONMENTS -- using defaults: {e}"
             ));

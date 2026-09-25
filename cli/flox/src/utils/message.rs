@@ -12,7 +12,12 @@ use flox_manifest::parsed::latest::SelectedOutputs;
 use flox_manifest::raw::PackageToInstall;
 use indoc::formatdoc;
 use minus::{ExitStrategy, Pager, page_all};
-use tracing::{debug, info};
+use tracing::debug;
+
+mod output;
+#[cfg(test)]
+pub(crate) mod test_helpers;
+pub(crate) use output::{Output, current_output, set_default_output};
 
 /// The terminal's current width in columns, or 80 if it can't be
 /// determined (not connected to a terminal). `textwrap`'s `terminal_size`
@@ -31,9 +36,10 @@ pub(crate) fn terminal_width() -> usize {
 
 /// Write a message to stderr.
 ///
-/// This is printed via the message_layer tracing subscriber
+/// Production printing never emits a diagnostic event or consults logging filters.
 fn print_message(v: impl Display) {
-    info!("{v}");
+    // Match tracing's previous best-effort handling of terminal write failures.
+    let _ = current_output().notice(v);
 }
 
 fn print_message_to_buffer(out: &mut impl Write, v: impl Display) {
@@ -45,7 +51,7 @@ pub(crate) fn plain(v: impl Display) {
     print_message(v);
 }
 pub(crate) fn error(v: impl Display) {
-    print_message(format_error(v));
+    let _ = current_output().stderr(format_error(v));
 }
 pub(crate) fn created(v: impl Display) {
     let icon = if stderr_supports_color() {
@@ -66,10 +72,6 @@ pub(crate) fn deleted(v: impl Display) {
 }
 pub(crate) fn updated(v: impl Display) {
     print_message(format_updated(v));
-}
-/// Shown only at `-v` verbosity (`flox::utils::message=debug` filter).
-pub(crate) fn verbose(v: impl Display) {
-    debug!("{v}");
 }
 /// double width character, add an additional space for alignment
 pub(crate) fn info(v: impl Display) {
@@ -381,12 +383,12 @@ mod tests {
     use flox_rust_sdk::flox::test_helpers::flox_instance;
     use flox_rust_sdk::models::environment::Environment;
     use flox_rust_sdk::models::environment::path_environment::test_helpers::new_path_environment;
-    use flox_rust_sdk::utils::logging::test_helpers::test_subscriber_message_only;
     use indoc::indoc;
     use pretty_assertions::assert_eq;
     use tracing::instrument::WithSubscriber;
 
     use super::*;
+    use crate::utils::message::test_helpers::test_subscriber_message_only;
 
     /// Build a lockfile with a single catalog package locked for
     /// `locked_systems`, optionally with explicit `options.systems` in the

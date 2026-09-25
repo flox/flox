@@ -30,6 +30,7 @@ impl Logs {
         let mut stream = match client.get_build_logs(self.id).await {
             Ok(stream) => stream,
             Err(FactoryClientError::NotFound) => {
+                tracing::info!(build_id = %self.id, "Build logs unavailable");
                 message::error(format!("No logs available for build {}.", self.id));
                 return Err(Exit(2).into());
             },
@@ -94,13 +95,13 @@ impl<W: Write> LogWriter<W> {
 
 #[cfg(test)]
 mod tests {
-    use flox_rust_sdk::utils::logging::test_helpers::test_subscriber_message_only;
     use pretty_assertions::assert_eq;
     use tracing::instrument::WithSubscriber;
 
     use super::*;
     use crate::Exit;
     use crate::commands::factory::test_helpers::StubFactoryClient;
+    use crate::utils::message::test_helpers::test_subscriber_message_only;
 
     /// Render chunks through a `LogWriter`, returning the bytes written.
     fn render(chunks: &[&[u8]], raw: bool) -> Vec<u8> {

@@ -273,7 +273,6 @@ mod tests {
     use flox_rust_sdk::models::environment::Environment;
     use flox_rust_sdk::models::environment::path_environment::test_helpers::new_named_path_environment;
     use flox_rust_sdk::providers::catalog::test_helpers::catalog_replay_client;
-    use flox_rust_sdk::utils::logging::test_helpers::test_subscriber_message_only;
     use flox_test_utils::GENERATED_DATA;
     use flox_test_utils::manifests::HELLO;
     use indoc::indoc;
@@ -285,6 +284,7 @@ mod tests {
 
     use super::*;
     use crate::commands::EnvironmentSelect;
+    use crate::utils::message::test_helpers::test_subscriber_message_only;
 
     /// A mock-backed events client on the global hub, restored on drop so a
     /// panicking assertion cannot leak it into the next test. Holders must

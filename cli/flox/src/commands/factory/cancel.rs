@@ -57,6 +57,7 @@ impl Cancel {
                 // A 200 with a status outside the lifecycle vocabulary is a
                 // service contract violation, not a successful cancel.
                 CancelOutcome::Unexpected(message) => {
+                    tracing::info!(build_id = %self.id, status = %build.status, "Cancel returned an unexpected build status");
                     message::error(message);
                     Err(Exit(1).into())
                 },
@@ -69,6 +70,7 @@ impl Cancel {
     /// [`Exit`], so the process exit code alone tells automation what to do.
     fn fail(&self, err: &FactoryClientError) -> anyhow::Error {
         let (message, code) = classify_error(err, self.id);
+        tracing::info!(build_id = %self.id, error = %err, exit_code = code, "Build cancellation failed");
         message::error(message);
         Exit(code).into()
     }
@@ -202,13 +204,13 @@ fn render(build: &BuildResponse, outcome: &str, json: bool) -> Result<String> {
 
 #[cfg(test)]
 mod tests {
-    use flox_rust_sdk::utils::logging::test_helpers::test_subscriber_message_only;
     use floxhub_client::FactoryApiError;
     use pretty_assertions::assert_eq;
     use tracing::instrument::WithSubscriber;
 
     use super::*;
     use crate::commands::factory::test_helpers::{StubFactoryClient, StubResult, make_build};
+    use crate::utils::message::test_helpers::test_subscriber_message_only;
 
     fn id(n: i64) -> BuildId {
         n.to_string().parse().unwrap()

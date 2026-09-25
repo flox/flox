@@ -337,6 +337,7 @@ impl Edit {
 
                 // for recoverable errors, prompt the user to continue editing
                 Err(e) => {
+                    tracing::info!(error = %e, "Environment edit requires correction");
                     message::error(format_error(&e));
 
                     if !Dialog::can_prompt() {
@@ -479,7 +480,6 @@ mod tests {
         new_path_environment_in,
     };
     use flox_rust_sdk::providers::lock_manifest::{ResolutionFailures, ResolveError};
-    use flox_rust_sdk::utils::logging::test_helpers::test_subscriber_message_only;
     use indoc::{formatdoc, indoc};
     use pretty_assertions::assert_eq;
     use serde::de::Error;
@@ -487,6 +487,7 @@ mod tests {
     use tracing::instrument::WithSubscriber;
 
     use super::*;
+    use crate::utils::message::test_helpers::test_subscriber_message_only;
 
     /// successful edit returns value that will end the loop
     #[test]

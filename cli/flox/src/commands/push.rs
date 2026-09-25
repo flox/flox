@@ -291,13 +291,13 @@ mod tests {
     use flox_rust_sdk::models::environment::path_environment::test_helpers::new_path_environment_in;
     use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironment;
     use flox_rust_sdk::models::environment::{Environment, ManagedPointer};
-    use flox_rust_sdk::utils::logging::test_helpers::test_subscriber_message_only;
     use indoc::indoc;
     use pretty_assertions::assert_eq;
     use tracing::instrument::WithSubscriber;
 
     use super::Push;
     use crate::commands::EnvironmentSelect;
+    use crate::utils::message::test_helpers::test_subscriber_message_only;
 
     const EMPTY_MANIFEST: &str = "version = 1";
 
