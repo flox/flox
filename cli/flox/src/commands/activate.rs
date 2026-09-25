@@ -297,6 +297,7 @@ impl Activate {
         if (invocation_type == InvocationType::Interactive
             || invocation_type == InvocationType::InPlace)
             && config.flox.upgrade_notifications.unwrap_or(true)
+            && manifest_allows_upgrade_notifications(&flox, &concrete_environment)?
         {
             // Read the results of a previous upgrade check
             // and print a message if an upgrade is available.
@@ -926,6 +927,30 @@ fn ensure_prompt_hook_version_compatible_for_activate() -> Result<()> {
     }
 
     Ok(())
+}
+
+/// Whether the environment leaves upgrade notifications enabled
+/// (`options.activate.upgrade-notifications`, default `true`).
+///
+/// Reads the existing lockfile instead of locking: activation locks later and
+/// reports what locking changed, which locking here first would swallow.
+/// A lockfile that is out of date with the manifest can't produce a wrong
+/// package notification either, because [notify_package_upgrades] only
+/// notifies when the upgrade check ran against the current lockfile.
+fn manifest_allows_upgrade_notifications(
+    flox: &Flox,
+    environment: &ConcreteEnvironment,
+) -> Result<bool> {
+    let Some(lockfile) = environment.existing_lockfile(flox)? else {
+        return Ok(true);
+    };
+    Ok(lockfile
+        .migrated_manifest()?
+        .as_latest_schema()
+        .options
+        .activate
+        .upgrade_notifications
+        .unwrap_or(true))
 }
 
 /// Notify the user of available upgrades

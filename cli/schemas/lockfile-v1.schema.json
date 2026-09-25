@@ -420,6 +420,30 @@
           },
           "type": "object"
         },
+        "ActivateOptions2": {
+          "additionalProperties": false,
+          "description": "Activation options for V1_18_0: adds `upgrade-notifications`.",
+          "properties": {
+            "mode": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ActivateMode"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "upgrade-notifications": {
+              "description": "Whether `flox activate` notifies about available upgrades for this\nenvironment. Setting this to `false` suppresses the notification for\neveryone who activates the environment; it can't re-enable\nnotifications that a user disabled with the `upgrade_notifications`\nconfig key.",
+              "type": [
+                "boolean",
+                "null"
+              ]
+            }
+          },
+          "type": "object"
+        },
         "AllSentinel": {
           "enum": [
             "all"
@@ -1631,6 +1655,98 @@
           ],
           "type": "object"
         },
+        "ManifestV1_18_0": {
+          "additionalProperties": false,
+          "description": "Not meant for writing manifest files, only for reading them.\nModifications should be made using `manifest::raw`.",
+          "properties": {
+            "build": {
+              "$ref": "#/$defs/Build2",
+              "description": "Package build definitions"
+            },
+            "containerize": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Containerize"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "description": {
+              "description": "A human-readable description of the environment's purpose.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "hook": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Hook2"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Hooks that are run at various times during the lifecycle of the manifest\nin a known shell environment."
+            },
+            "include": {
+              "$ref": "#/$defs/Include"
+            },
+            "install": {
+              "$ref": "#/$defs/Install2",
+              "description": "The packages to install in the form of a map from install_id\nto package descriptor."
+            },
+            "minimum-cli-version": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/MinimumCliVersion"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The minimum CLI version that can activate this environment."
+            },
+            "options": {
+              "$ref": "#/$defs/Options2",
+              "default": {},
+              "description": "Options that control the behavior of the manifest."
+            },
+            "plugins": {
+              "$ref": "#/$defs/Plugins",
+              "description": "Free-form data provided by installed plugins, keyed by plugin\npackage name (`[plugins.<pkg-name>]`). Each plugin defines and\nvalidates the shape of its own table; Flox does not interpret it.\nThe convention for secrets plugins is a flat table of\n`ENV_VAR_NAME = \"path/to/secret/in/store\"`, read by the plugin's\n`profile.d` script at activation."
+            },
+            "profile": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Profile2"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Profile scripts that are run in the user's shell upon activation\n(and, optionally, upon deactivation)."
+            },
+            "schema-version": {
+              "description": "Which schema version this manifest adheres to.\n\nMust be a valid Flox CLI version listed in [`KnownSchemaVersion`].",
+              "type": "string"
+            },
+            "services": {
+              "$ref": "#/$defs/Services3",
+              "description": "Service definitions"
+            },
+            "vars": {
+              "$ref": "#/$defs/Vars",
+              "description": "Variables that are exported to the shell environment upon activation."
+            }
+          },
+          "required": [
+            "schema-version"
+          ],
+          "type": "object"
+        },
         "ManifestVersion": {
           "format": "uint8",
           "maximum": 255,
@@ -1665,6 +1781,42 @@
           "properties": {
             "activate": {
               "$ref": "#/$defs/ActivateOptions",
+              "description": "Options that control the behavior of activations."
+            },
+            "allow": {
+              "$ref": "#/$defs/Allows",
+              "description": "Options that control what types of packages are allowed."
+            },
+            "cuda-detection": {
+              "description": "Whether to detect CUDA devices and libs during activation.",
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "semver": {
+              "$ref": "#/$defs/SemverOptions",
+              "description": "Options that control how semver versions are resolved."
+            },
+            "systems": {
+              "description": "A list of systems that each package is resolved for.",
+              "items": {
+                "type": "string"
+              },
+              "type": [
+                "array",
+                "null"
+              ]
+            }
+          },
+          "type": "object"
+        },
+        "Options2": {
+          "additionalProperties": false,
+          "description": "Manifest options for V1_18_0: identical to `common::Options` except that\n`activate` is the V1_18_0 [`ActivateOptions`]. Earlier schema versions keep\nusing `common::Options`.",
+          "properties": {
+            "activate": {
+              "$ref": "#/$defs/ActivateOptions2",
               "description": "Options that control the behavior of activations."
             },
             "allow": {
@@ -2853,6 +3005,9 @@
         },
         {
           "$ref": "#/$defs/ManifestV1_17_0"
+        },
+        {
+          "$ref": "#/$defs/ManifestV1_18_0"
         }
       ],
       "description": "A validated, typed manifest with a known schema.",

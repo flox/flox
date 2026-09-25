@@ -478,7 +478,7 @@ mod tests {
             ##
             ## -------------------------------------------------------------------
             # Flox manifest version managed by Flox CLI
-            schema-version = "1.17.0"
+            schema-version = "1.18.0"
 
 
             ## Install Packages --------------------------------------------------
@@ -602,7 +602,7 @@ mod tests {
             ##
             ## -------------------------------------------------------------------
             # Flox manifest version managed by Flox CLI
-            schema-version = "1.17.0"
+            schema-version = "1.18.0"
 
 
             ## Install Packages --------------------------------------------------
@@ -729,7 +729,7 @@ mod tests {
             ##
             ## -------------------------------------------------------------------
             # Flox manifest version managed by Flox CLI
-            schema-version = "1.17.0"
+            schema-version = "1.18.0"
 
 
             ## Install Packages --------------------------------------------------
@@ -853,7 +853,7 @@ mod tests {
             ##
             ## -------------------------------------------------------------------
             # Flox manifest version managed by Flox CLI
-            schema-version = "1.17.0"
+            schema-version = "1.18.0"
 
 
             ## Install Packages --------------------------------------------------
@@ -966,7 +966,7 @@ mod tests {
             ##
             ## -------------------------------------------------------------------
             # Flox manifest version managed by Flox CLI
-            schema-version = "1.17.0"
+            schema-version = "1.18.0"
 
 
             ## Install Packages --------------------------------------------------
@@ -1095,7 +1095,7 @@ mod tests {
             ##
             ## -------------------------------------------------------------------
             # Flox manifest version managed by Flox CLI
-            schema-version = "1.17.0"
+            schema-version = "1.18.0"
             description = "This is your default environment. Activate it in your shell RC files to use it."
 
 
