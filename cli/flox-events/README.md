@@ -9,7 +9,7 @@ of the way.
 This document is the contract reference for anyone adding or changing
 an event ("metrics message") or a field on one ("metric value"). The
 step-by-step procedure lives in the repo skill
-`.claude/skills/adding-metrics-events/SKILL.md`; this file explains
+`.agents/skills/adding-metrics-events/SKILL.md`; this file explains
 the rules that procedure enforces and why they exist.
 
 Telemetry can be disabled entirely with

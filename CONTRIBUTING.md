@@ -237,7 +237,7 @@ section refers to settings from that plugin.
 #### Claude Code Rust LSP
 
 The repository ships an in-tree Claude Code LSP plugin at
-`.claude/skills/flox-rust-lsp` that launches `rust-analyzer` inside the dev
+`.agents/skills/flox-rust-lsp` that launches `rust-analyzer` inside the dev
 shell (`nix develop -c rust-analyzer`) with the `extra-tests` cargo feature and
 `clippy` checks enabled. Because the server is launched through `nix develop`,
 it always uses the workspace's pinned `fenix.stable` toolchain regardless of how
@@ -304,7 +304,7 @@ If your change adds or modifies an event or one of its fields, read
 [`cli/flox-events/README.md`](cli/flox-events/README.md) first — it
 documents the wire contract, naming and stability rules, and how to
 verify what is actually emitted — and see
-[`.claude/skills/adding-metrics-events/SKILL.md`](.claude/skills/adding-metrics-events/SKILL.md)
+[`.agents/skills/adding-metrics-events/SKILL.md`](.agents/skills/adding-metrics-events/SKILL.md)
 for the step-by-step procedure. Event and field names are frozen once
 shipped, and the golden tests in that crate pin the wire shape; a
 failing golden is a contract signal — read the README before touching
