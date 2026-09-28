@@ -436,6 +436,9 @@ correct manifest lifecycle at compile time. Follow these rules strictly.
 - **Adding new schemas** - copy the latest `flox-manifest/src/parsed/v*.rs` to
   a new version file and duplicate modified leaf types. Unmodified types
   continue to live in `parsed::common` or their respective version.
+    - Put schema bump boilerplate in a separate commit. Keep substantive
+      decisions, such as not merging a field for composition, in a
+      separate, focused commit so they are easy to review.
 
 - **Always use `Manifest` constructors** - don't pass manifest content as
   `String` or deserialize into inner types directly (e.g.
