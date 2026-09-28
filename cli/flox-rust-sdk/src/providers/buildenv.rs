@@ -2872,6 +2872,36 @@ mod buildenv_tests {
         );
     }
 
+    /// A namespaced package (pkg-path `floxexamples/hello`) has an install_id
+    /// (`myhello`) that differs from its attr_path (`hello`). The old code
+    /// compared attr_path against pkg-path, so both mismatched and the build
+    /// failed with "package 'myhello' is not in 'toplevel' pkg-group". This
+    /// test verifies that matching on install_id fixes the regression.
+    #[test]
+    fn verify_build_closure_accepts_namespaced_package_in_runtime_packages() {
+        let buildenv = buildenv_instance();
+        let lockfile_path = MANUALLY_GENERATED
+            .join("buildenv/lockfiles/runtime-packages-namespaced-hello/manifest.lock");
+        let client = MockClient::new();
+        let result = buildenv.build(&client, &lockfile_path, None, None).unwrap();
+
+        let runtime = result.run.as_ref();
+        let develop = result.dev.as_ref();
+        let build_myhello = result.manifest_build_runtimes.get("build-myhello").unwrap();
+
+        // The namespaced hello package (install_id=myhello, attr_path=hello,
+        // pkg-path=floxexamples/hello) must appear in all closures.
+        assert!(runtime.join("bin/hello").is_executable_file());
+        assert!(develop.join("bin/hello").is_executable_file());
+        assert!(build_myhello.join("bin/hello").is_executable_file());
+
+        // coreutils is in toplevel but not listed in runtime-packages, so it
+        // must be absent from the build closure while present in run/dev.
+        assert!(runtime.join("bin/coreutils").is_executable_file());
+        assert!(develop.join("bin/coreutils").is_executable_file());
+        assert!(!build_myhello.join("bin/coreutils").exists());
+    }
+
     #[test]
     fn default_outputs_include_man() {
         let buildenv = buildenv_instance();
