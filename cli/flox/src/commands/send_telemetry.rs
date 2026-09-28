@@ -1,7 +1,7 @@
 //! Hidden internal subcommand that flushes both telemetry pipelines.
 //!
-//! Invoked as a detached background child by `main.rs` on every normal
-//! command exit. Because the parent exits immediately after spawning this
+//! Invoked as a detached background child by `main.rs` when telemetry is due
+//! at command exit. Because the parent exits immediately after spawning this
 //! child, network I/O here does not block the user's shell prompt.
 //!
 //! The handler intentionally does NOT record `cli.command_run` or
@@ -132,7 +132,7 @@ mod tests {
         let sent = connection.sent_batches();
         let invocation_id = Uuid::new_v4();
 
-        let client = EventsClient::new_with_connection(
+        let mut client = EventsClient::new_with_connection(
             Uuid::new_v4(),
             tempdir.path(),
             invocation_id,
@@ -182,7 +182,7 @@ mod tests {
         let data_dir = tempdir.path();
 
         let connection = MockEventsConnection::default();
-        let client = EventsClient::new_with_connection(
+        let mut client = EventsClient::new_with_connection(
             Uuid::new_v4(),
             data_dir,
             Uuid::new_v4(),
@@ -232,6 +232,7 @@ mod tests {
             metrics_dir: cache_dir.to_path_buf(),
             max_age: time::Duration::ZERO,
             connection: connection.boxed(),
+            oldest_buffered_timestamp: None,
         };
         let hub = Hub {
             client: std::sync::Arc::new(std::sync::Mutex::new(Some(client))),

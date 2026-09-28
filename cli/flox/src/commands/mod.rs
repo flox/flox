@@ -299,7 +299,7 @@ impl FloxArgs {
             )
             .await;
             if update_prompted
-                && let Some(events_client) = build_events_client(
+                && let Some(mut events_client) = build_events_client(
                     &config,
                     resolve_invocation_id(),
                     // This path runs before any credential is resolved, and

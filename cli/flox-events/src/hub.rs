@@ -77,6 +77,16 @@ impl EventsHub {
         })
     }
 
+    /// Whether buffered events are due for a background flush. No client
+    /// means no work; the client avoids rereading a buffer it just appended to.
+    pub fn is_flush_due(&self) -> Result<bool> {
+        self.with_client(|client| {
+            client
+                .as_ref()
+                .map_or(Ok(false), EventsClient::is_flush_due)
+        })
+    }
+
     pub fn record_event(&self, kind: EventKind) -> Result<()> {
         self.with_client(|client| {
             let Some(client) = client else {
