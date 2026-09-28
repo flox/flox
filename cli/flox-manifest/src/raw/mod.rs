@@ -1046,6 +1046,12 @@ fn update_raw_packages_from_typed_manifest(
             .keys()
             .cloned()
             .collect::<HashSet<String>>(),
+        Parsed::V1_18_0(manifest) => manifest
+            .install
+            .inner()
+            .keys()
+            .cloned()
+            .collect::<HashSet<String>>(),
     };
 
     // Don't create an [install] table if there are no packages in either
@@ -1222,6 +1228,19 @@ fn update_descriptor(
             }
         },
         Parsed::V1_17_0(manifest) => {
+            let typed = manifest
+                .install
+                .inner()
+                .get(install_id)
+                .ok_or(TomlEditError::PackageNotFound(install_id.to_string()))?;
+            use crate::parsed::v1_10_0::ManifestPackageDescriptor::*;
+            match typed {
+                Catalog(d) => update_v1_10_0_catalog_descriptor(raw, d),
+                FlakeRef(d) => update_v1_10_0_flake_descriptor(raw, d),
+                StorePath(d) => update_store_path_descriptor(raw, d),
+            }
+        },
+        Parsed::V1_18_0(manifest) => {
             let typed = manifest
                 .install
                 .inner()
@@ -2275,6 +2294,9 @@ curl.outputs = [\"bin\", \"man\"]
             Parsed::V1_17_0(m) => {
                 m.install.inner_mut().remove(id);
             },
+            Parsed::V1_18_0(m) => {
+                m.install.inner_mut().remove(id);
+            },
         }
     }
 
@@ -2307,6 +2329,9 @@ curl.outputs = [\"bin\", \"man\"]
                 m.install.inner_mut().insert(id.to_string(), descriptor);
             },
             Parsed::V1_17_0(m) => {
+                m.install.inner_mut().insert(id.to_string(), descriptor);
+            },
+            Parsed::V1_18_0(m) => {
                 m.install.inner_mut().insert(id.to_string(), descriptor);
             },
             _ => panic!("expected v1_10_0 or later manifest"),
@@ -2351,6 +2376,10 @@ curl.outputs = [\"bin\", \"man\"]
                 v1_10_0::ManifestPackageDescriptor::Catalog(desc) => Some(desc),
                 _ => None,
             },
+            Parsed::V1_18_0(m) => match m.install.inner_mut().get_mut(id)? {
+                v1_10_0::ManifestPackageDescriptor::Catalog(desc) => Some(desc),
+                _ => None,
+            },
             _ => panic!("expected v1_10_0 or later manifest"),
         }
     }
@@ -2372,7 +2401,7 @@ curl.outputs = [\"bin\", \"man\"]
         manifest.update_raw_packages_from_typed_manifest().unwrap();
         let output = manifest.inner.raw.to_string();
         expect![[r#"
-            schema-version = "1.17.0"
+            schema-version = "1.18.0"
 
             [install]
 
@@ -2410,7 +2439,7 @@ curl.outputs = [\"bin\", \"man\"]
         manifest.update_raw_packages_from_typed_manifest().unwrap();
         let output = manifest.inner.raw.to_string();
         expect![[r#"
-            schema-version = "1.17.0"
+            schema-version = "1.18.0"
 
             [install]
             # my favorite greeting program
@@ -2442,7 +2471,7 @@ curl.outputs = [\"bin\", \"man\"]
         manifest.update_raw_packages_from_typed_manifest().unwrap();
         let output = manifest.inner.raw.to_string();
         expect![[r#"
-            schema-version = "1.17.0"
+            schema-version = "1.18.0"
 
             [install]
             # keep this comment about hello
@@ -2470,7 +2499,7 @@ curl.outputs = [\"bin\", \"man\"]
         manifest.update_raw_packages_from_typed_manifest().unwrap();
         let output = manifest.inner.raw.to_string();
         expect![[r#"
-            schema-version = "1.17.0"
+            schema-version = "1.18.0"
 
             [install]
             hello.pkg-path = "hello" # this is important
@@ -2542,7 +2571,7 @@ curl.outputs = [\"bin\", \"man\"]
         manifest.update_raw_packages_from_typed_manifest().unwrap();
         let output = manifest.inner.raw.to_string();
         expect![[r#"
-            schema-version = "1.17.0"
+            schema-version = "1.18.0"
 
             [install]
             # this comment is above hello
@@ -2588,7 +2617,7 @@ curl.outputs = [\"bin\", \"man\"]
         manifest.update_systems().unwrap();
         let output = manifest.inner.raw.to_string();
         expect![[r#"
-            schema-version = "1.17.0"
+            schema-version = "1.18.0"
 
             [options]
             systems = ["aarch64-darwin", "x86_64-linux"]
@@ -2644,7 +2673,7 @@ curl.outputs = [\"bin\", \"man\"]
         manifest.update_raw_packages_from_typed_manifest().unwrap();
         let output = manifest.inner.raw.to_string();
         expect![[r#"
-            schema-version = "1.17.0"
+            schema-version = "1.18.0"
 
             [install]
             hello.pkg-path = "hello"
@@ -2669,7 +2698,7 @@ curl.outputs = [\"bin\", \"man\"]
         let output = migrated.inner.migrated_raw.to_string();
         expect![[r##"
             # this comment is above version
-            schema-version = "1.17.0"
+            schema-version = "1.18.0"
 
             [install]
             hello.pkg-path = "hello"
