@@ -177,73 +177,25 @@ EXPIRED_FLOXHUB_TOKEN="eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3gu
 # bats test_tags=hook:hook-env
 @test "'flox deactivate' suppresses advisory preamble output" {
   _FLOX_FLOXHUB_GIT_URL="https://git.example.invalid/" \
-    FLOX_FLOXHUB_TOKEN="$EXPIRED_FLOXHUB_TOKEN" \
     run --separate-stderr "$FLOX_BIN" deactivate
   assert_success
   refute_regex "$stderr" "as the FloxHub git endpoint"
-  refute_regex "$stderr" "not logged in to FloxHub"
 }
 
 # Pin that the suppression is scoped to the prompt-hook flow: user-invoked
-# commands still print both advisories.
+# commands still print the advisory.
 # bats test_tags=hook:hook-env
 @test "user-invoked commands still print advisory preamble output" {
   _FLOX_FLOXHUB_GIT_URL="https://git.example.invalid/" \
-    FLOX_FLOXHUB_TOKEN="$EXPIRED_FLOXHUB_TOKEN" \
     run --separate-stderr "$FLOX_BIN" config
   assert_success
   assert_regex "$stderr" "Using https://git.example.invalid/ as the FloxHub git endpoint"
-  assert_regex "$stderr" "You are not logged in to FloxHub"
 }
 
-# The logged-out reminder is account-global, so a single user action that
-# nests `flox` invocations — e.g. `flox activate` whose shell rc runs
-# `flox activate` again — should surface it only once. The outermost activation
-# warns; anything already inside an activation stays quiet.
+# Prompt hooks run before every prompt, so nothing about the logged-out state
+# may surface there.
 # bats test_tags=hook:hook-env
-@test "logged-out advisory is shown once across nested 'flox' invocations" {
-  project_setup
-
-  FLOX_FLOXHUB_TOKEN="$EXPIRED_FLOXHUB_TOKEN" \
-    run "$FLOX_BIN" activate -d "$PROJECT_DIR" -- \
-    "$FLOX_BIN" activate -d "$PROJECT_DIR" -- true
-  assert_success
-  # Once for the outer activation, and not again for the nested one.
-  run grep -c "You are not logged in to FloxHub" <<< "$output"
-  assert_output "1"
-
-  project_teardown
-}
-
-# Mirrors the real-world trigger: a shell rc activates an environment in place
-# (`eval "$(flox activate)"`), then the user runs another `flox` command in the
-# same shell. The in-place activation exports `_FLOX_ACTIVE_ENVIRONMENTS`, so the
-# second command sees it is nested and does not repeat the reminder.
-# bats test_tags=hook:hook-env
-@test "logged-out advisory is not repeated after an in-place activation" {
-  project_setup
-
-  FLOX_FLOXHUB_TOKEN="$EXPIRED_FLOXHUB_TOKEN" \
-    run bash -c "eval \"\$('$FLOX_BIN' activate -d '$PROJECT_DIR')\"; '$FLOX_BIN' config"
-  assert_success
-  # Once for the in-place activation, and not again for the later command.
-  run grep -c "You are not logged in to FloxHub" <<< "$output"
-  assert_output "1"
-
-  project_teardown
-}
-
-# A user who never logged in gets the same reminder as one whose token expired.
-# bats test_tags=hook:hook-env
-@test "user-invoked commands warn when not logged in" {
-  unset FLOX_FLOXHUB_TOKEN
-  run --separate-stderr "$FLOX_BIN" config
-  assert_success
-  assert_regex "$stderr" "You are not logged in to FloxHub. Run 'flox auth login' to log in."
-}
-
-# bats test_tags=hook:hook-env
-@test "'flox hook-env' suppresses the logged-out advisory when no token is set" {
+@test "'flox hook-env' prints nothing when no token is set" {
   # See the empty-cwd note in the first hook-env test.
   cd "$BATS_TEST_TMPDIR"
   unset FLOX_FLOXHUB_TOKEN
@@ -251,16 +203,6 @@ EXPIRED_FLOXHUB_TOKEN="eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3gu
   assert_success
   assert_equal "$stderr" ""
   assert_output ""
-}
-
-# `flox auth` subcommands either log the user in or already report the
-# logged-out state themselves, so the reminder must not be stacked on top.
-# bats test_tags=hook:hook-env
-@test "'flox auth' subcommands do not repeat the logged-out advisory" {
-  unset FLOX_FLOXHUB_TOKEN
-  run "$FLOX_BIN" auth status
-  assert_output --partial "You are not currently logged in to FloxHub."
-  refute_output --partial "Run 'flox auth login'"
 }
 
 # ---------------------------------------------------------------------------- #

@@ -393,8 +393,6 @@ impl FloxArgs {
             auth_context_from_config(&config)
         };
 
-        self.warn_if_logged_out(&config, &credential);
-
         let invocation_id = resolve_invocation_id();
 
         let metrics_device_uuid = (!config.flox.disable_metrics)
@@ -409,13 +407,10 @@ impl FloxArgs {
         // still write the 8-hour stamp and mute the next interactive warning
         // the user never saw.
         //
-        // This deliberately coexists with the once-per-shell-session
-        // logged-out reminder from `warn_if_logged_out`: the reminder
-        // reports current status on every command, while this warning fires
-        // only on the resolve that will start failing once catalog auth
-        // gating is enforced — at which point it becomes an error (or an
-        // interactive login prompt) and the overlap gets revisited. Both are
-        // advisory, so both answer to `auth_notifications`.
+        // This is the only advisory about being logged out. Commands that
+        // resolve nothing, such as activating a locked environment, work
+        // without a login and stay quiet, so an unconditional reminder would
+        // suggest a requirement that doesn't exist.
         let install_resolve_warning = !self.is_prompt_hook_flow()
             && !matches!(self.verbosity, Verbosity::Quiet)
             && config.flox.auth_notifications.unwrap_or(true);
@@ -599,54 +594,6 @@ impl FloxArgs {
             Some(Commands::Internal(InternalCommands::HookEnv(_)))
                 | Some(Commands::Use(UseCommands::Deactivate(_)))
         )
-    }
-
-    /// Remind a user who is not logged in — no credential, or one whose `exp`
-    /// claim has passed — to run 'flox auth login'. The reminder is suppressed
-    /// for `flox auth` subcommands, the prompt-hook flow, invocations nested
-    /// inside an activation, and when the `auth_notifications` config key is
-    /// set to `false`.
-    ///
-    /// The credential is not consumed when the configured authn mode does not
-    /// use it (e.g. Kerberos), so warning about its state never happens there.
-    ///
-    /// For `flox hook-env` the state is reported by the next user-invoked
-    /// command instead; see [Self::is_prompt_hook_flow].
-    ///
-    /// No credential can be rejected locally: a `flox_pat_` token is opaque by
-    /// design, and any other string may be an issuer's opaque access token, so
-    /// both count as logged in until the server says otherwise. Expiry is only
-    /// known locally for a token carrying the `exp` claim.
-    ///
-    /// This asks [AuthContext] rather than the credential itself, so a
-    /// deferred credential is not read just to decide whether to print a
-    /// reminder. The answer then comes from a record an earlier invocation
-    /// wrote, and a record that disagrees with the keyring misses or invents
-    /// one reminder.
-    fn warn_if_logged_out(&self, config: &Config, credential: &AuthContext) {
-        if credential.is_unauthenticated() {
-            // Every `flox auth` subcommand either logs the user in
-            // (`login`) or already reports the logged-out state itself
-            // (`status`, `logout`, `token`), so the reminder would be
-            // redundant there.
-            let is_auth_command =
-                matches!(self.command, Some(Commands::Admin(AdminCommands::Auth(_))));
-            // The logged-out state is account-global, so the reminder only
-            // needs to appear once per shell session. The outermost activation
-            // surfaces it; any `flox` invocation already running inside an
-            // activation — a nested `flox activate`, or a command in an
-            // activated shell whose rc re-activates an environment — stays
-            // quiet. Activations export `_FLOX_ACTIVE_ENVIRONMENTS` into the
-            // shell, including in-place `eval "$(flox activate)"` ones, so
-            // it is a reliable signal even across the parent shell.
-            let nested = activated_environments().last_active().is_some();
-            let quieted = !config.flox.auth_notifications.unwrap_or(true);
-            if !is_auth_command && !self.is_prompt_hook_flow() && !nested && !quieted {
-                message::warning(
-                    "You are not logged in to FloxHub. Run 'flox auth login' to log in.",
-                );
-            }
-        }
     }
 }
 
@@ -1914,11 +1861,11 @@ pub(super) async fn ensure_auth(flox: &mut Flox) -> Result<String> {
 /// the user's handle.
 ///
 /// Unlike [`ensure_auth`], an expired Auth0 token is not a hard failure: the
-/// handle is still readable from the token, and [`FloxArgs::warn_if_logged_out`]
-/// has already warned that the user is not logged in, so activation proceeds
-/// with the handle rather than blocking. FloxHub still validates the token on
-/// the actual request. Missing credentials (not logged in / no Kerberos ticket) fall back
-/// to [`ensure_auth`] and its recovery flow.
+/// handle is still readable from the token, and activating does not need a
+/// login, so activation proceeds with the handle rather than blocking.
+/// FloxHub still validates the token on the actual request. Missing
+/// credentials (not logged in / no Kerberos ticket) fall back to
+/// [`ensure_auth`] and its recovery flow.
 async fn ensure_auth_allowing_expired(flox: &mut Flox) -> Result<String> {
     // An expired identity still carries its handle; only a missing identity
     // (not logged in, no ticket, or a server-rejected token) falls back to
