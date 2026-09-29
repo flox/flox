@@ -59,6 +59,23 @@ pub(crate) fn render_diff(diff: &SingleSystemUpgradeDiff) -> String {
         .join("\n")
 }
 
+/// Render what a package upgrades to, for display next to its current
+/// version: the new version, or `rebuild (rev DATE -> DATE)` for a new build
+/// of the same version (see [render_diff] for the fallbacks).
+pub(crate) fn render_upgrade_target(before: &LockedPackage, after: &LockedPackage) -> String {
+    let old_version = before.version().unwrap_or("unknown");
+    let new_version = after.version().unwrap_or("unknown");
+
+    if new_version != old_version {
+        return new_version.to_string();
+    }
+
+    match rebuild_detail(before, after) {
+        Some(detail) => format!("rebuild ({detail})"),
+        None => "rebuild".to_string(),
+    }
+}
+
 /// Extract a human-readable detail string for build-only changes.
 ///
 /// Tries rev_date first (formatted as YYYY-MM-DD), then rev hash (7 chars).

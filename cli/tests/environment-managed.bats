@@ -328,6 +328,131 @@ Upstream:
 
 # ---------------------------------------------------------------------------- #
 
+# bats test_tags=managed,list,list:all
+@test "'flox list -a' shows the generation and FloxHub state of a managed environment" {
+  make_empty_managed_env
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
+    "$FLOX_BIN" install hello
+
+  # The default output only lists packages.
+  run --separate-stderr "$FLOX_BIN" list
+  assert_success
+  assert_output "hello: hello (2.12.3)"
+
+  run --separate-stderr "$FLOX_BIN" list -a
+  assert_success
+  assert_output - << EOF
+Environment:      $OWNER/$PROJECT_NAME
+FloxHub URL:      https://hub.flox.dev/$OWNER/$PROJECT_NAME
+Path:             $(realpath "$PROJECT_DIR")
+System:           $NIX_SYSTEM
+Systems:          aarch64-darwin, aarch64-linux, x86_64-linux
+Generation:       2 (live)
+FloxHub:          generation 1
+Auto-upgrade:     none in FloxHub's history
+Upgrade notices:  on
+Upgrades:         unknown, 'flox activate' hasn't checked yet
+
+Packages:
+
+hello:
+  Description:          Program that produces a familiar, friendly greeting
+  Package Path:         hello
+  Package Name:         hello
+  Priority:             5
+  Version:              2.12.3
+  Stability:            unstable
+  License:              GPL-3.0-or-later
+  Unfree:               false
+  Broken:               false
+  Available Outputs:    [ "out" ]
+  Installed Outputs:    [ "out" ]
+EOF
+  # stderr starts with a warning about the mock FloxHub
+  assert_equal "${stderr_lines[-1]}" "Use 'flox push' to update the environment on FloxHub."
+
+  "$FLOX_BIN" push
+  tomlq -i -t '.vars.foo = "bar"' .flox/env/manifest.toml
+
+  run --separate-stderr "$FLOX_BIN" list -a
+  assert_success
+  assert_line "Generation:       2 (live, with local changes)"
+  assert_line "FloxHub:          generation 2"
+  # stderr starts with a warning about the mock FloxHub
+  assert_equal "${stderr_lines[-1]}" "Use 'flox edit --sync' to commit your local changes to a new generation."
+}
+
+# bats test_tags=managed,list,list:all
+@test "'flox list -a --upstream' shows the FloxHub state after fetching it" {
+  skip_x86_64_darwin_replay
+  mkdir a a_data
+  mkdir b b_data
+
+  # on machine a, create and push the (empty) environment
+  export FLOX_DATA_DIR="$(pwd)/a_data"
+  pushd a > /dev/null || return
+  "$FLOX_BIN" init
+  "$FLOX_BIN" push --owner "$OWNER"
+  popd > /dev/null || return
+
+  # on machine b, install a package and push it
+  export FLOX_DATA_DIR="$(pwd)/b_data"
+  pushd b > /dev/null || return
+  "$FLOX_BIN" pull "$OWNER/a"
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
+    "$FLOX_BIN" install hello
+  "$FLOX_BIN" push
+  popd > /dev/null || return
+
+  export FLOX_DATA_DIR="$(pwd)/a_data"
+  pushd a > /dev/null || return
+
+  # machine a hasn't fetched the change yet
+  run --separate-stderr "$FLOX_BIN" list -a
+  assert_success
+  assert_line "FloxHub:          generation 1"
+
+  run --separate-stderr "$FLOX_BIN" list -a --upstream
+  assert_success
+  assert_output - << EOF
+Environment:      $OWNER/a
+FloxHub URL:      https://hub.flox.dev/$OWNER/a
+Path:             $(realpath "$PWD")
+System:           $NIX_SYSTEM
+Systems:          aarch64-darwin, aarch64-linux, x86_64-linux
+Generation:       1 (live)
+FloxHub:          generation 2
+Auto-upgrade:     none in FloxHub's history
+Upgrade notices:  on
+Upgrades:         unknown, 'flox activate' hasn't checked yet
+
+Packages on FloxHub:
+
+hello:
+  Description:          Program that produces a familiar, friendly greeting
+  Package Path:         hello
+  Package Name:         hello
+  Priority:             5
+  Version:              2.12.3
+  Stability:            unstable
+  License:              GPL-3.0-or-later
+  Unfree:               false
+  Broken:               false
+  Available Outputs:    [ "out" ]
+  Installed Outputs:    [ "out" ]
+EOF
+  # stderr starts with a warning about the mock FloxHub
+  assert_equal "${stderr_lines[-1]}" "Use 'flox pull' to fetch updates from FloxHub."
+
+  # the fetched state is kept
+  run --separate-stderr "$FLOX_BIN" list -a
+  assert_success
+  assert_line "FloxHub:          generation 2"
+  popd > /dev/null || return
+}
+
+# ---------------------------------------------------------------------------- #
+
 # bats test_tags=managed,delete,managed:delete
 @test "m10: deletes existing environment" {
   # This test asserts before and after state of the home directory.
