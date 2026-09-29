@@ -464,3 +464,126 @@ EOF
   assert_success
   assert_output "$hello_store_path/bin/hello"
 }
+
+# ---------------------------------------------------------------------------- #
+
+# bats test_tags=edit:schema-upgrade
+# When a manifest declares an older schema-version but uses a field that only
+# exists in the latest schema, 'flox edit' should:
+#   - succeed (not fail with a parse error)
+#   - write schema-version = "1.17.0" to disk (description introduced in 1.17.0)
+#   - warn the user that the schema was upgraded
+@test "'flox edit' upgrades schema-version when older version uses newer-schema fields" {
+  "$FLOX_BIN" init
+
+  # Build a manifest that declares version = 1 (legacy schema) but includes
+  # 'description', a field that was introduced in schema-version 1.17.0.
+  cat << "EOF" > "$TMP_MANIFEST_PATH"
+version = 1
+
+description = "my test environment"
+EOF
+
+  run "$FLOX_BIN" edit -f "$TMP_MANIFEST_PATH"
+  assert_success
+
+  # A legacy manifest declares 'version = 1', not 'schema-version = "1"'
+  # (which is not valid TOML) — the warning must name the key it really used.
+  assert_output --partial 'Manifest declared version = 1'
+  assert_output --partial 'Upgraded it to schema-version = "1.17.0"'
+
+  # Upgrading from v1 crosses the only non-lossless boundary (v1 -> 1.10.0
+  # sets output defaults), so the caveat must appear.
+  assert_output --partial "Package output defaults may have changed"
+
+  # The manifest on disk must carry the bumped schema-version key.
+  run grep 'schema-version' "$MANIFEST_PATH"
+  assert_success
+  assert_output --partial 'schema-version = "1.17.0"'
+}
+
+# bats test_tags=edit:schema-upgrade
+# When a manifest at schema-version 1.10.0 uses minimum-cli-version (a field
+# introduced in 1.11.0), 'flox edit' should bump to 1.11.0 — not to the
+# latest version. This proves the bump is minimal, not always-to-latest.
+@test "'flox edit' bumps to minimum required schema-version, not always to latest" {
+  "$FLOX_BIN" init
+
+  # minimum-cli-version was introduced in schema-version 1.11.0.
+  # Using it in a 1.10.0 manifest must trigger a bump to 1.11.0 only.
+  cat << "EOF" > "$TMP_MANIFEST_PATH"
+schema-version = "1.10.0"
+
+[minimum-cli-version]
+version = "1.0.0"
+reason = "uses outputs"
+
+[install]
+EOF
+
+  run "$FLOX_BIN" edit -f "$TMP_MANIFEST_PATH"
+  assert_success
+
+  assert_output --partial 'Manifest declared schema-version = "1.10.0"'
+  assert_output --partial 'Upgraded it to schema-version = "1.11.0"'
+
+  # This is a purely additive bump (1.10.0 -> 1.11.0), so the outputs
+  # caveat must not appear.
+  refute_output --partial "Package output defaults may have changed"
+
+  # The manifest on disk must carry 1.11.0, not a later version.
+  run grep 'schema-version' "$MANIFEST_PATH"
+  assert_success
+  assert_output --partial 'schema-version = "1.11.0"'
+}
+
+# bats test_tags=edit:schema-upgrade
+# When a manifest at schema-version 1.16.0 uses 'description' (introduced in
+# 1.17.0), the schema bump is purely additive and must NOT warn about output
+# default changes — only the v1 -> 1.10.0 boundary is non-lossless.
+@test "'flox edit' does not warn about output defaults on additive schema bumps" {
+  "$FLOX_BIN" init
+
+  # description was introduced in schema-version 1.17.0.
+  # Using it in a 1.16.0 manifest is a purely additive bump.
+  cat << "EOF" > "$TMP_MANIFEST_PATH"
+schema-version = "1.16.0"
+
+description = "my test environment"
+EOF
+
+  run "$FLOX_BIN" edit -f "$TMP_MANIFEST_PATH"
+  assert_success
+
+  assert_output --partial 'Manifest declared schema-version = "1.16.0"'
+  assert_output --partial 'Upgraded it to schema-version = "1.17.0"'
+
+  # Purely additive bump — output defaults cannot change.
+  refute_output --partial "Package output defaults may have changed"
+
+  # The manifest on disk must carry the bumped schema-version key.
+  run grep 'schema-version' "$MANIFEST_PATH"
+  assert_success
+  assert_output --partial 'schema-version = "1.17.0"'
+}
+
+# bats test_tags=edit:schema-upgrade:invalid
+# A manifest with genuinely invalid syntax (not just a version mismatch) must
+# still fail — the schema-upgrade fallback must not swallow real errors.
+@test "'flox edit' still fails when manifest has genuinely invalid syntax" {
+  "$FLOX_BIN" init
+  ORIGINAL_MANIFEST_CONTENTS="$(cat "$MANIFEST_PATH")"
+
+  # Use a type error that is invalid in every schema version: pkg-path must be
+  # a string, not an integer. When both the stated and latest schema fail, the
+  # function returns the original parse error rather than masking it.
+  cat << "EOF" > "$TMP_MANIFEST_PATH"
+version = 1
+
+[install]
+hello.pkg-path = 42
+EOF
+
+  RUST_BACKTRACE=0 run "$FLOX_BIN" edit -f "$TMP_MANIFEST_PATH"
+  assert_failure
+}

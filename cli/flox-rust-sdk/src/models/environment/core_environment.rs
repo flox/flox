@@ -17,7 +17,15 @@ use flox_manifest::interfaces::{
 use flox_manifest::lockfile::{LOCKFILE_FILENAME, LockedPackage, Lockfile, LockfileError};
 use flox_manifest::parsed::common::KnownSchemaVersion;
 use flox_manifest::raw::{ModifyPackages, PackageToInstall, TomlEditError};
-use flox_manifest::{MANIFEST_FILENAME, Manifest, ManifestError, Migrated, Validated, Writable};
+use flox_manifest::{
+    MANIFEST_FILENAME,
+    Manifest,
+    ManifestError,
+    Migrated,
+    ParsedManifest,
+    Validated,
+    Writable,
+};
 use itertools::Itertools;
 use pollster::FutureExt;
 use serde::{Deserialize, Serialize};
@@ -437,7 +445,10 @@ impl CoreEnvironment<ReadOnly> {
             return Ok(EditResult::Unchanged);
         }
 
-        let new_manifest = Manifest::parse_toml_typed(&contents)?;
+        let (new_manifest, schema_bump) = match Manifest::parse_toml_typed_or_bumped(&contents)? {
+            ParsedManifest::AsStated(m) => (m, None),
+            ParsedManifest::Bumped { manifest, from, to } => (manifest, Some((from, to))),
+        };
         let (old_lockfile, migrated_manifest) =
             if let Some(lockfile) = maybe_up_to_date_lockfile.as_ref() {
                 (
@@ -456,6 +467,7 @@ impl CoreEnvironment<ReadOnly> {
             old_lockfile: Box::new(old_lockfile),
             new_lockfile: Box::new(new_lockfile),
             built_environment_store_paths: store_path,
+            schema_bumped: schema_bump,
         })
     }
 
@@ -483,7 +495,10 @@ impl CoreEnvironment<ReadOnly> {
             return Ok(Ok(EditResult::Unchanged));
         }
 
-        let new_manifest = Manifest::parse_toml_typed(&contents)?;
+        let (new_manifest, schema_bump) = match Manifest::parse_toml_typed_or_bumped(&contents)? {
+            ParsedManifest::AsStated(m) => (m, None),
+            ParsedManifest::Bumped { manifest, from, to } => (manifest, Some((from, to))),
+        };
         let mut old_lockfile = self.lockfile_if_up_to_date()?;
         if old_lockfile.is_none() {
             // If locking fails, we still want to perform the unsafe edit, so
@@ -528,6 +543,7 @@ impl CoreEnvironment<ReadOnly> {
                 old_lockfile: Box::new(old_lockfile),
                 new_lockfile: Box::new(new_lockfile),
                 built_environment_store_paths: store_path,
+                schema_bumped: schema_bump,
             })),
             Err(err) => Ok(Err(EnvironmentError::Core(err))),
         }
@@ -991,6 +1007,10 @@ pub enum EditResult {
         old_lockfile: Box<Option<Lockfile>>,
         new_lockfile: Box<Lockfile>,
         built_environment_store_paths: BuildEnvOutputs,
+        /// When the manifest's schema-version was bumped to bring it in line
+        /// with the latest supported schema, the (from, to) versions are stored
+        /// here so the caller can display a warning to the user.
+        schema_bumped: Option<(KnownSchemaVersion, KnownSchemaVersion)>,
     },
 }
 

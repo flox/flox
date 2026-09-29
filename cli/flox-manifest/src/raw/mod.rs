@@ -934,7 +934,7 @@ impl SyncTypedToRaw for Manifest<Migrated> {
     }
 }
 
-fn update_schema_version(raw: &mut DocumentMut, schema_version: KnownSchemaVersion) {
+pub(crate) fn update_schema_version(raw: &mut DocumentMut, schema_version: KnownSchemaVersion) {
     let (old_key, new_key, new_value) = match schema_version {
         KnownSchemaVersion::V1 => (
             "schema-version",

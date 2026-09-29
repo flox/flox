@@ -95,6 +95,36 @@ impl KnownSchemaVersion {
             _ => "schema-version",
         }
     }
+
+    /// Returns whether upgrading from this schema version may change package
+    /// output defaults.
+    ///
+    /// Only the V1 → 1.10.0 boundary is non-lossless: that migration sets
+    /// `outputs = "all"` on every package descriptor that did not already
+    /// pin its outputs, which changes what gets built for packages that
+    /// previously relied on per-derivation defaults.
+    /// See `migrate/v1_to_v1_10_0.rs`.
+    ///
+    /// Every migration above 1.10.0 is additive (optional fields only), so
+    /// they cannot change existing output selections. If a future migration
+    /// introduces another non-lossless boundary, extend this predicate to
+    /// cover it.
+    pub fn upgrade_may_change_outputs(&self) -> bool {
+        matches!(self, KnownSchemaVersion::V1)
+    }
+
+    /// Returns the version as it is written in a manifest: the full
+    /// `key = value` TOML declaration. The legacy form is an unquoted
+    /// integer (`version = 1`); every other version is a quoted string
+    /// (`schema-version = "1.17.0"`). Rendering `schema-version = "1"`
+    /// would be invalid TOML for the legacy case, so the two forms cannot
+    /// share a format string.
+    pub fn toml_declaration(&self) -> String {
+        match self {
+            KnownSchemaVersion::V1 => format!("{} = {self}", self.key_name()),
+            _ => format!("{} = \"{self}\"", self.key_name()),
+        }
+    }
 }
 
 impl TryFrom<VersionKind> for KnownSchemaVersion {
@@ -693,6 +723,27 @@ mod tests {
     use flox_core::data::flox_version::FloxVersion;
 
     use super::*;
+
+    #[test]
+    fn v1_upgrade_may_change_outputs() {
+        assert!(KnownSchemaVersion::V1.upgrade_may_change_outputs());
+    }
+
+    #[test]
+    fn post_v1_upgrade_does_not_change_outputs() {
+        assert!(!KnownSchemaVersion::V1_10_0.upgrade_may_change_outputs());
+        assert!(!KnownSchemaVersion::V1_16_0.upgrade_may_change_outputs());
+        assert!(!KnownSchemaVersion::latest().upgrade_may_change_outputs());
+    }
+
+    #[test]
+    fn toml_declaration_renders_legacy_and_versioned_forms() {
+        assert_eq!(KnownSchemaVersion::V1.toml_declaration(), "version = 1");
+        assert_eq!(
+            KnownSchemaVersion::V1_17_0.toml_declaration(),
+            "schema-version = \"1.17.0\"",
+        );
+    }
 
     /// Ensure the manifest.toml man page documents all schema versions that use
     /// the `schema-version` key (i.e. all versions after the legacy `version = 1`).
