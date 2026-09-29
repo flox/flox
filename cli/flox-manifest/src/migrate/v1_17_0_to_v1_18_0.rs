@@ -4,10 +4,9 @@ use crate::parsed::v1_18_0::ManifestV1_18_0;
 
 /// Migrate a v1.17.0 manifest to a v1.18.0 manifest.
 ///
-/// This is a lossless migration: V1_18_0 doesn't add anything new yet, it
-/// exists to give `options.activate.upgrade-notifications` a schema version
-/// that hasn't shipped. All V1_17_0 manifests are valid V1_18_0 manifests
-/// as-is.
+/// This is a lossless migration: V1_18_0 adds an optional
+/// `options.activate.upgrade-notifications` field. All V1_17_0 manifests are
+/// valid V1_18_0 manifests with `upgrade-notifications` unset.
 pub(crate) fn migrate_manifest_v1_17_0_to_v1_18_0(
     manifest: ManifestV1_17_0,
 ) -> Result<ManifestV1_18_0, MigrationError> {
@@ -19,7 +18,7 @@ pub(crate) fn migrate_manifest_v1_17_0_to_v1_18_0(
         vars: manifest.vars,
         hook: manifest.hook,
         profile: manifest.profile,
-        options: manifest.options,
+        options: manifest.options.into(),
         services: manifest.services,
         build: manifest.build,
         containerize: manifest.containerize,
@@ -33,10 +32,17 @@ mod tests {
     use proptest::prelude::*;
 
     use super::*;
+    use crate::parsed::v1_18_0::{ActivateOptions, Options};
 
     proptest! {
-        // The migration only sets the new schema version; everything else is
+        // The migration only sets the new schema version and defaults the new
+        // `options.activate.upgrade-notifications` field; everything else is
         // carried over unchanged.
+        //
+        // `expected.options` is built by hand rather than with `Options::from`,
+        // the conversion the migration itself uses, so a field that conversion
+        // drops or misassigns fails the assertion instead of being mangled
+        // identically on both sides.
         #[test]
         fn migration_v1_17_0_to_v1_18_0_is_lossless(manifest in any::<ManifestV1_17_0>()) {
             let migrated = migrate_manifest_v1_17_0_to_v1_18_0(manifest.clone()).unwrap();
@@ -48,7 +54,16 @@ mod tests {
                 vars: manifest.vars,
                 hook: manifest.hook,
                 profile: manifest.profile,
-                options: manifest.options,
+                options: Options {
+                    systems: manifest.options.systems,
+                    allow: manifest.options.allow,
+                    semver: manifest.options.semver,
+                    cuda_detection: manifest.options.cuda_detection,
+                    activate: ActivateOptions {
+                        mode: manifest.options.activate.mode,
+                        upgrade_notifications: None,
+                    },
+                },
                 services: manifest.services,
                 build: manifest.build,
                 containerize: manifest.containerize,

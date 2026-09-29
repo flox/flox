@@ -420,6 +420,30 @@
           },
           "type": "object"
         },
+        "ActivateOptions2": {
+          "additionalProperties": false,
+          "description": "Activation options for V1_18_0: adds `upgrade-notifications`.",
+          "properties": {
+            "mode": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ActivateMode"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "upgrade-notifications": {
+              "description": "Whether `flox activate` notifies about available upgrades for this\nenvironment. Setting this to `false` suppresses the notification for\neveryone who activates the environment; it can't re-enable\nnotifications that a user disabled with the `upgrade_notifications`\nconfig key.",
+              "type": [
+                "boolean",
+                "null"
+              ]
+            }
+          },
+          "type": "object"
+        },
         "AllSentinel": {
           "enum": [
             "all"
@@ -1686,7 +1710,7 @@
               "description": "The minimum CLI version that can activate this environment."
             },
             "options": {
-              "$ref": "#/$defs/Options",
+              "$ref": "#/$defs/Options2",
               "default": {},
               "description": "Options that control the behavior of the manifest."
             },
@@ -1757,6 +1781,42 @@
           "properties": {
             "activate": {
               "$ref": "#/$defs/ActivateOptions",
+              "description": "Options that control the behavior of activations."
+            },
+            "allow": {
+              "$ref": "#/$defs/Allows",
+              "description": "Options that control what types of packages are allowed."
+            },
+            "cuda-detection": {
+              "description": "Whether to detect CUDA devices and libs during activation.",
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "semver": {
+              "$ref": "#/$defs/SemverOptions",
+              "description": "Options that control how semver versions are resolved."
+            },
+            "systems": {
+              "description": "A list of systems that each package is resolved for.",
+              "items": {
+                "type": "string"
+              },
+              "type": [
+                "array",
+                "null"
+              ]
+            }
+          },
+          "type": "object"
+        },
+        "Options2": {
+          "additionalProperties": false,
+          "description": "Manifest options for V1_18_0: identical to `common::Options` except that\n`activate` is the V1_18_0 [`ActivateOptions`]. Earlier schema versions keep\nusing `common::Options`.",
+          "properties": {
+            "activate": {
+              "$ref": "#/$defs/ActivateOptions2",
               "description": "Options that control the behavior of activations."
             },
             "allow": {

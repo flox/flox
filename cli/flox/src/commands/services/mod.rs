@@ -428,6 +428,7 @@ pub async fn start_services_with_new_process_compose(
         concrete_environment,
         InvocationType::ExecCommand(vec!["true".to_string()]),
         names.to_vec(),
+        None,
     )
     .await?;
     // We don't know if the service actually started because we don't have

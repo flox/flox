@@ -1,7 +1,9 @@
 use std::collections::BTreeMap;
 
+use flox_core::activate::mode::ActivateMode;
+use flox_core::data::System;
 #[cfg(any(test, feature = "tests"))]
-use flox_test_utils::proptest::optional_string;
+use flox_test_utils::proptest::{optional_string, optional_vec_of_strings};
 #[cfg(any(test, feature = "tests"))]
 use proptest::prelude::*;
 use schemars::JsonSchema;
@@ -9,7 +11,14 @@ use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
 
 use crate::interfaces::{AsTypedOnlyManifest, SchemaVersion, impl_pkg_lookup};
-use crate::parsed::common::{Containerize, Include, KnownSchemaVersion, Options, Vars};
+use crate::parsed::common::{
+    Allows,
+    Containerize,
+    Include,
+    KnownSchemaVersion,
+    SemverOptions,
+    Vars,
+};
 use crate::parsed::v1_10_0::{Install, ManifestPackageDescriptor};
 pub use crate::parsed::v1_11_0::MinimumCliVersion;
 pub use crate::parsed::v1_13_0::{
@@ -142,5 +151,86 @@ impl AsTypedOnlyManifest for ManifestV1_18_0 {
 impl SchemaVersion for ManifestV1_18_0 {
     fn get_schema_version(&self) -> KnownSchemaVersion {
         KnownSchemaVersion::V1_18_0
+    }
+}
+
+/// Manifest options for V1_18_0: identical to `common::Options` except that
+/// `activate` is the V1_18_0 [`ActivateOptions`]. Earlier schema versions keep
+/// using `common::Options`.
+#[skip_serializing_none]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash, JsonSchema)]
+#[cfg_attr(any(test, feature = "tests"), derive(proptest_derive::Arbitrary))]
+#[serde(rename_all = "kebab-case")]
+#[serde(deny_unknown_fields)]
+pub struct Options {
+    /// A list of systems that each package is resolved for.
+    #[cfg_attr(
+        any(test, feature = "tests"),
+        proptest(strategy = "optional_vec_of_strings(3, 4)")
+    )]
+    pub systems: Option<Vec<System>>,
+    /// Options that control what types of packages are allowed.
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Allows::skip_serializing")]
+    pub allow: Allows,
+    /// Options that control how semver versions are resolved.
+    #[serde(default)]
+    #[serde(skip_serializing_if = "SemverOptions::skip_serializing")]
+    pub semver: SemverOptions,
+    /// Whether to detect CUDA devices and libs during activation.
+    // TODO: Migrate to `ActivateOptions`.
+    pub cuda_detection: Option<bool>,
+    /// Options that control the behavior of activations.
+    #[serde(default)]
+    #[serde(skip_serializing_if = "ActivateOptions::skip_serializing")]
+    pub activate: ActivateOptions,
+}
+
+/// Activation options for V1_18_0: adds `upgrade-notifications`.
+#[skip_serializing_none]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash, JsonSchema)]
+#[cfg_attr(any(test, feature = "tests"), derive(proptest_derive::Arbitrary))]
+#[serde(rename_all = "kebab-case")]
+#[serde(deny_unknown_fields)]
+pub struct ActivateOptions {
+    pub mode: Option<ActivateMode>,
+    /// Whether `flox activate` notifies about available upgrades for this
+    /// environment. Setting this to `false` suppresses the notification for
+    /// everyone who activates the environment; it can't re-enable
+    /// notifications that a user disabled with the `upgrade_notifications`
+    /// config key.
+    pub upgrade_notifications: Option<bool>,
+}
+
+impl SkipSerializing for ActivateOptions {
+    /// Don't write a struct of None's into the lockfile but also don't
+    /// explicitly check fields which we might forget to update.
+    fn skip_serializing(&self) -> bool {
+        self == &ActivateOptions::default()
+    }
+}
+
+// Conversion from the common type, used by the V1_17_0 -> V1_18_0 migration.
+// The new `upgrade_notifications` field defaults to None, which is what makes
+// the migration lossless.
+impl From<crate::parsed::common::Options> for Options {
+    fn from(options: crate::parsed::common::Options) -> Self {
+        let crate::parsed::common::Options {
+            systems,
+            allow,
+            semver,
+            cuda_detection,
+            activate,
+        } = options;
+        Options {
+            systems,
+            allow,
+            semver,
+            cuda_detection,
+            activate: ActivateOptions {
+                mode: activate.mode,
+                upgrade_notifications: None,
+            },
+        }
     }
 }
