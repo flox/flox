@@ -35,6 +35,8 @@ use flox_rust_sdk::models::environment::{
     ConcreteEnvironment,
     Environment,
     EnvironmentError,
+    FollowMode,
+    SingleSystemUpgradeDiff,
     UpgradeResult,
 };
 use flox_rust_sdk::providers::lock_manifest::LockResult;
@@ -61,6 +63,7 @@ use crate::commands::{
     SHELL_COMPLETION_COMMAND,
     SHELL_COMPLETION_FILE,
     ensure_environment_trust,
+    lockfile_reporting_followed_includes,
     render_composition_manifest,
     uninitialized_environment_description,
 };
@@ -378,9 +381,13 @@ impl ActivateOptions {
 
         let now_active = UninitializedEnvironment::from_concrete_environment(&concrete_environment);
 
-        // Read before `lockfile()`, which may re-lock and overwrite it.
+        // Read before locking, which may re-lock and overwrite it.
         let old_lockfile = concrete_environment.existing_lockfile(&flox)?;
-        let lockfile = match concrete_environment.lockfile(&flox)? {
+        let lockfile = match lockfile_reporting_followed_includes(
+            &mut concrete_environment,
+            &flox,
+            FollowMode::LockAndBuild,
+        )? {
             LockResult::Changed(lockfile) => {
                 message::print_overridden_manifest_fields(&lockfile);
                 message::print_default_systems_changed(old_lockfile.as_ref(), &lockfile);
@@ -405,9 +412,15 @@ impl ActivateOptions {
             {
                 // Read the results of a previous upgrade check
                 // and print a message if an upgrade is available.
+                // The check upgrades the environment's lockfile, which may not
+                // have the latest changes to included environments in use.
+                let checked_lockfile = concrete_environment
+                    .existing_lockfile(&flox)?
+                    .unwrap_or_else(|| lockfile.clone());
                 notify_upgrades_if_available(
                     &flox,
                     &concrete_environment,
+                    &checked_lockfile,
                     &lockfile,
                     environment_select,
                 )?;
@@ -972,10 +985,15 @@ fn ensure_prompt_hook_version_compatible_for_activate() -> Result<()> {
 /// but doesn't act on it, they should see the message again next time they activate,
 /// so they are not wondering whether upgrades may have been applied automatically.
 /// To make this less annoying, we tried to make the message as unobtrusive as possible.
+///
+/// `lockfile` is the lockfile that the upgrade check upgrades,
+/// and `in_use` is the one in use, which may have other versions of packages
+/// with changes to included environments.
 fn notify_upgrades_if_available(
     flox: &Flox,
     environment: &ConcreteEnvironment,
     lockfile: &Lockfile,
+    in_use: &Lockfile,
     environment_select: &EnvironmentSelect,
 ) -> Result<()> {
     let current_environment = UninitializedEnvironment::from_concrete_environment(environment);
@@ -1000,6 +1018,7 @@ fn notify_upgrades_if_available(
         flox,
         environment,
         lockfile,
+        in_use,
         &info.upgrade_result,
         environment_select,
     )?;
@@ -1011,6 +1030,7 @@ fn notify_package_upgrades(
     flox: &Flox,
     environment: &ConcreteEnvironment,
     lockfile: &Lockfile,
+    in_use: &Lockfile,
     upgrade_result: &UpgradeResult,
     environment_select: &EnvironmentSelect,
 ) -> Result<()> {
@@ -1030,6 +1050,21 @@ fn notify_package_upgrades(
         message::verbose(formatdoc! {"
             Upgrades available for {description} on other systems.
             Use 'flox upgrade --dry-run' for details."});
+        return Ok(());
+    }
+    // Only count upgrades of the versions in use
+    let diff_for_system: SingleSystemUpgradeDiff = diff_for_system
+        .into_iter()
+        .filter(|(install_id, (old, _))| {
+            in_use.packages.iter().any(|package| {
+                package.install_id() == install_id
+                    && package.system() == &flox.system
+                    && package.derivation() == old.derivation()
+            })
+        })
+        .collect();
+    if diff_for_system.is_empty() {
+        debug!("Not notifying user of upgrade, the versions in use differ from the lockfile");
         return Ok(());
     }
     // TODO: this doesn't capture the environment chosen by the user if we prompted
@@ -1345,6 +1380,7 @@ mod upgrade_notification_tests {
                 &flox,
                 &environment,
                 &lockfile,
+                &lockfile,
                 &EnvironmentSelect::Unspecified,
             )
             .unwrap();
@@ -1415,6 +1451,7 @@ mod upgrade_notification_tests {
                         &flox,
                         &environment,
                         &lockfile,
+                        &lockfile,
                         &EnvironmentSelect::Unspecified,
                     )
                     .unwrap();
@@ -1447,6 +1484,7 @@ mod upgrade_notification_tests {
             notify_upgrades_if_available(
                 &flox,
                 &environment,
+                &lockfile,
                 &lockfile,
                 &EnvironmentSelect::Unspecified,
             )
@@ -1487,7 +1525,8 @@ mod upgrade_notification_tests {
         let lockfile: Lockfile = environment.lockfile(&flox).unwrap().into();
 
         tracing::subscriber::with_default(subscriber, || {
-            notify_upgrades_if_available(&flox, &environment, &lockfile, &env_select).unwrap();
+            notify_upgrades_if_available(&flox, &environment, &lockfile, &lockfile, &env_select)
+                .unwrap();
         });
 
         let printed = writer.to_string();
@@ -1537,6 +1576,7 @@ mod upgrade_notification_tests {
                 &flox,
                 &environment,
                 &lockfile,
+                &lockfile,
                 &EnvironmentSelect::Unspecified,
             )
             .unwrap();
@@ -1584,6 +1624,7 @@ mod upgrade_notification_tests {
             notify_upgrades_if_available(
                 &flox,
                 &environment,
+                &lockfile,
                 &lockfile,
                 &EnvironmentSelect::Unspecified,
             )

@@ -316,6 +316,7 @@ pub fn format_core_error(err: &CoreEnvironmentError) -> String {
         CoreEnvironmentError::Auth(err) => display_chain(err),
         CoreEnvironmentError::Manifest(manifest_err) => format_manifest_error(manifest_err),
         CoreEnvironmentError::Lockfile(err) => display_chain(err),
+        CoreEnvironmentError::FollowedBuildFailed(_) => display_chain(err),
         CoreEnvironmentError::EnvError(err) => display_chain(err),
     }
 }

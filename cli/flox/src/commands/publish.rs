@@ -375,6 +375,22 @@ impl Publish {
         // Check the environment for appropriate state to build and publish
         let env_metadata = check_environment_metadata(&flox, &path_env)?;
 
+        // Publishing builds the lockfile, so it doesn't have changes to
+        // included environments that other commands use until they're saved.
+        let unsaved = path_env.unsaved_followed_includes(&flox)?;
+        if !unsaved.is_empty() {
+            message::warning(formatdoc! {"
+                Publishing without changes to included environments that aren't in the lockfile yet:
+                {names}
+                Run 'flox include upgrade' and commit the lockfile to publish them.",
+                names = unsaved
+                    .iter()
+                    .map(|name| format!("- '{name}'"))
+                    .collect::<Vec<_>>()
+                    .join("\n"),
+            });
+        }
+
         // Only an expression build needs a nixpkgs selected for it; a manifest
         // build uses the one its environment is locked to, which is also the
         // one it is recorded against.

@@ -34,7 +34,7 @@ mod upgrade;
 
 use std::collections::HashMap;
 use std::fmt::Display;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::{env, fmt, mem};
 
 use anyhow::{Context, Result, bail};
@@ -58,11 +58,13 @@ use flox_rust_sdk::models::environment::{
     DotFlox,
     Environment,
     EnvironmentError,
+    FollowMode,
     ManagedPointer,
     UninitializedEnvironment,
     find_dot_flox,
     open_path,
 };
+use flox_rust_sdk::providers::lock_manifest::LockResult;
 use floxhub_client::{CredentialKind, UnauthenticatedResolveHook};
 use indoc::{formatdoc, indoc};
 use tempfile::TempDir;
@@ -1928,6 +1930,34 @@ async fn ensure_auth_allowing_expired(flox: &mut Flox) -> Result<String> {
         // Identity unknown: proceed under the UNKNOWN display handle.
         Ok(None) => Ok(floxhub_client::UNKNOWN_HANDLE.to_string()),
         Err(_) => ensure_auth(flox).await,
+    }
+}
+
+/// Return the lockfile of an environment, reporting what locking it did with
+/// the latest changes to its included path environments.
+pub(crate) fn lockfile_reporting_followed_includes(
+    environment: &mut ConcreteEnvironment,
+    flox: &Flox,
+    mode: FollowMode,
+) -> Result<LockResult, EnvironmentError> {
+    let (lock_result, followed_includes) = environment.lockfile_following_includes(flox, mode)?;
+    message::print_followed_includes(&followed_includes, &include_upgrade_command(environment));
+    Ok(lock_result)
+}
+
+/// The 'flox include upgrade' command for an environment, selecting it with
+/// '-d' unless it's in the current directory
+fn include_upgrade_command(environment: &ConcreteEnvironment) -> String {
+    let in_current_directory = |dir: &Path| {
+        std::env::current_dir()
+            .and_then(std::fs::canonicalize)
+            .is_ok_and(|current_dir| current_dir == dir)
+    };
+    match environment.parent_path() {
+        Ok(dir) if !in_current_directory(&dir) => {
+            format!("flox include upgrade -d {}", dir.display())
+        },
+        _ => "flox include upgrade".to_string(),
     }
 }
 

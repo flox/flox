@@ -1,8 +1,11 @@
 use std::collections::{BTreeMap, HashMap};
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use flox_core::{WriteError, write_atomically};
+use flox_manifest::compose::ManifestMerger;
+use flox_manifest::compose::shallow::ShallowMerger;
 use flox_manifest::interfaces::{
     AsLatestSchema,
     AsTypedOnlyManifest,
@@ -13,7 +16,13 @@ use flox_manifest::interfaces::{
     SchemaVersion,
     WriteManifest,
 };
-use flox_manifest::lockfile::{LOCKFILE_FILENAME, LockedPackage, Lockfile, LockfileError};
+use flox_manifest::lockfile::{
+    LOCKFILE_FILENAME,
+    LockedInclude,
+    LockedPackage,
+    Lockfile,
+    LockfileError,
+};
 use flox_manifest::parsed::common::KnownSchemaVersion;
 use flox_manifest::raw::{ModifyPackages, PackageToInstall, TomlEditError};
 use flox_manifest::{
@@ -22,6 +31,7 @@ use flox_manifest::{
     ManifestError,
     Migrated,
     ParsedManifest,
+    TypedOnly,
     Validated,
     Writable,
 };
@@ -46,7 +56,13 @@ use crate::data::CanonicalPath;
 use crate::flox::Flox;
 use crate::models::environment::install::compute_install_modifications;
 use crate::providers::buildenv::{BuildEnv, BuildEnvError, BuildEnvNix, BuildEnvOutputs};
-use crate::providers::lock_manifest::{LockManifest, LockResult, ResolutionFailure, ResolveError};
+use crate::providers::lock_manifest::{
+    LockManifest,
+    LockResult,
+    RecoverableMergeError,
+    ResolutionFailure,
+    ResolveError,
+};
 use crate::providers::nix_auth::{AuthError, NixAuth};
 use crate::providers::services::process_compose::{ServiceError, maybe_make_service_config_file};
 
@@ -160,6 +176,100 @@ impl<State> CoreEnvironment<State> {
             Some(lock) => Ok(LockResult::Unchanged(lock)),
             None => self.lock(flox),
         }
+    }
+
+    /// Check the included path environments in `lockfile` for changes that
+    /// aren't in `lockfile`.
+    ///
+    /// Other kinds of included environments only change with
+    /// 'flox include upgrade', so they aren't checked.
+    pub(crate) fn check_path_includes(
+        &self,
+        flox: &Flox,
+        lockfile: &Lockfile,
+    ) -> PathIncludesCheck {
+        let mut check = PathIncludesCheck::default();
+        let Some(compose) = &lockfile.compose else {
+            return check;
+        };
+        for locked in &compose.include {
+            match self
+                .include_fetcher
+                .fetch_if_path_environment(flox, &locked.descriptor)
+            {
+                Ok(Some(latest)) if &latest != locked => {
+                    check.changed.push(locked.name.clone());
+                    check.includes.push(latest);
+                },
+                Ok(_) => check.includes.push(locked.clone()),
+                Err(err) => {
+                    check.unreadable.push((locked.name.clone(), err));
+                    check.includes.push(locked.clone());
+                },
+            }
+        }
+        check
+    }
+
+    /// The merged manifest of this environment with the latest changes to its
+    /// included path environments, computed without locking or writing
+    /// anything.
+    ///
+    /// `lockfile` has to be up to date with the manifest,
+    /// so only changes that the included environments locked are used.
+    pub(crate) fn manifest_following_path_includes(
+        &self,
+        flox: &Flox,
+        lockfile: Lockfile,
+        unreadable_includes: UnreadableIncludes,
+    ) -> Result<Manifest<TypedOnly>, EnvironmentError> {
+        let check = self.check_path_includes(flox, &lockfile);
+        for (name, err) in check.unreadable {
+            if matches!(unreadable_includes, UnreadableIncludes::Fail) || is_include_cycle(&err) {
+                return Err(err);
+            }
+            debug!(name, %err, "using locked version of unreadable include");
+        }
+        if check.changed.is_empty() {
+            return Ok(lockfile.manifest);
+        }
+
+        let manifest_without_migrating = self.manifest_without_migrating()?.as_typed_only();
+        let original_schema = manifest_without_migrating.get_schema_version();
+        let manifest = manifest_without_migrating.migrate_typed_only(Some(&lockfile))?;
+        let (merged, ..) = LockManifest::merge_manifest(
+            flox,
+            manifest.as_latest_schema(),
+            Some(&lockfile),
+            &self.include_fetcher,
+            ManifestMerger::Shallow(ShallowMerger),
+            Some(check.changed),
+        )
+        .map_err(EnvironmentError::Recoverable)?;
+
+        Ok(merged.as_maybe_backwards_compatible(original_schema, Some(&lockfile))?)
+    }
+
+    /// Lock with the latest versions of the named included environments,
+    /// without writing anything.
+    pub(crate) fn lock_with_latest_includes(
+        &self,
+        flox: &Flox,
+        lockfile: &Lockfile,
+        to_upgrade: Vec<String>,
+    ) -> Result<Lockfile, EnvironmentError> {
+        let manifest = self
+            .manifest_without_migrating()?
+            .as_typed_only()
+            .migrate_typed_only(Some(lockfile))?;
+        LockManifest::lock_manifest_with_include_upgrades(
+            flox,
+            &manifest,
+            Some(lockfile),
+            &self.include_fetcher,
+            Some(to_upgrade),
+        )
+        .block_on()
     }
 
     fn ensure_manifest_schemas_match(
@@ -693,6 +803,22 @@ impl CoreEnvironment<ReadOnly> {
         Ok(result)
     }
 
+    /// Build `lockfile` in a temporary copy of the environment,
+    /// leaving the environment's own lockfile as it is.
+    #[must_use = "don't discard the store paths of built environments"]
+    pub(crate) fn build_lockfile(
+        &mut self,
+        flox: &Flox,
+        lockfile: &Lockfile,
+        out_link_prefix: Option<&Path>,
+    ) -> Result<BuildEnvOutputs, CoreEnvironmentError> {
+        let tempdir =
+            tempfile::tempdir_in(&flox.temp_dir).map_err(CoreEnvironmentError::MakeSandbox)?;
+        let mut temp_env = self.writable(tempdir.path())?;
+        temp_env.update_lockfile(lockfile)?;
+        temp_env.build(flox, out_link_prefix)
+    }
+
     /// Upgrade environment with latest changes to included environments.
     ///
     /// This just delegates to Lockfile::lock_manifest_with_include_upgrades and
@@ -705,10 +831,14 @@ impl CoreEnvironment<ReadOnly> {
     /// after we've fetched all included environments.
     // TODO: this mostly duplicates logic in lock() and upgrade()
     // We could probably factor some of it out.
+    ///
+    /// `seed` is the lockfile to reuse locked packages from,
+    /// if it isn't the environment's lockfile.
     pub fn include_upgrade(
         &mut self,
         flox: &Flox,
         to_upgrade: Vec<String>,
+        seed: Option<&Lockfile>,
         out_link_prefix: Option<&Path>,
     ) -> Result<UpgradeResult, EnvironmentError> {
         tracing::debug!(
@@ -729,7 +859,7 @@ impl CoreEnvironment<ReadOnly> {
         let mut new_lockfile = LockManifest::lock_manifest_with_include_upgrades(
             flox,
             &manifest.as_migrated_typed_only(),
-            existing_lockfile.as_ref(),
+            seed.or(existing_lockfile.as_ref()),
             &self.include_fetcher,
             Some(to_upgrade),
         )
@@ -1170,10 +1300,93 @@ impl UpgradeResult {
     }
 }
 
+/// What locking an environment did with the latest changes to its included
+/// path environments
+#[derive(Clone, Debug, Default)]
+pub struct FollowedIncludes {
+    /// Included environments whose latest changes are in use,
+    /// but aren't in the environment's lockfile yet
+    pub unsaved: Vec<String>,
+    /// Included environments whose latest changes couldn't be read,
+    /// so the versions in use before are kept
+    pub unreadable: Vec<UnreadableInclude>,
+    /// Included environments whose latest changes couldn't be locked,
+    /// so the versions in use before are kept
+    pub not_locked: Option<NotAppliedIncludes>,
+    /// Included environments whose latest changes don't build with this
+    /// environment, so the environment's lockfile is used instead
+    pub not_built: Option<NotAppliedIncludes>,
+}
+
+#[derive(Clone, Debug)]
+pub struct UnreadableInclude {
+    pub name: String,
+    pub reason: Arc<EnvironmentError>,
+}
+
+#[derive(Clone, Debug)]
+pub struct NotAppliedIncludes {
+    pub names: Vec<String>,
+    pub reason: Arc<EnvironmentError>,
+}
+
+/// How a command uses the latest changes to included path environments
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum FollowMode {
+    /// Lock with them, leaving building to whatever needs the environment
+    /// built
+    Lock,
+    /// Lock with them, and build the environment with them before using them,
+    /// so that changes that don't build aren't reported as in use
+    LockAndBuild,
+}
+
+/// The included path environments of a lockfile, checked for changes
+#[derive(Debug, Default)]
+pub(crate) struct PathIncludesCheck {
+    /// The includes of the lockfile, with the latest versions of the included
+    /// path environments that changed
+    pub includes: Vec<LockedInclude>,
+    /// Names of the included environments that changed
+    pub changed: Vec<String>,
+    /// Included environments that couldn't be read, by name
+    pub unreadable: Vec<(String, EnvironmentError)>,
+}
+
+/// Whether `err` is an include cycle, possibly found while fetching a nested
+/// include.
+///
+/// A cycle is never read around, so that new cycles can't be locked.
+fn is_include_cycle(err: &EnvironmentError) -> bool {
+    match err {
+        EnvironmentError::Recoverable(RecoverableMergeError::IncludeCycle(_)) => true,
+        EnvironmentError::Recoverable(RecoverableMergeError::Fetch { err, .. }) => {
+            is_include_cycle(err)
+        },
+        _ => false,
+    }
+}
+
+/// What to do about an included path environment that can't be read while
+/// merging the environment that includes it in memory
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum UnreadableIncludes {
+    /// Fail, so that whatever includes the merged environment keeps its own
+    /// copy of it, rather than an older copy of the unreadable environment.
+    Fail,
+    /// Use the copy in the merged environment's lockfile, as locking does.
+    UseLocked,
+}
+
 #[derive(Debug, Error)]
 pub enum CoreEnvironmentError {
     #[error(transparent)]
     Manifest(#[from] ManifestError),
+
+    /// The error that building with the latest changes to included
+    /// environments failed with earlier
+    #[error("{0}")]
+    FollowedBuildFailed(String),
     #[error(transparent)]
     Lockfile(#[from] LockfileError),
     // region: immutable manifest errors

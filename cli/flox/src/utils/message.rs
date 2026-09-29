@@ -10,9 +10,13 @@ use flox_manifest::compose::{COMPOSER_MANIFEST_ID, Warning};
 use flox_manifest::lockfile::{LockedPackage, Lockfile, PackageOutputs, default_systems_change};
 use flox_manifest::parsed::latest::SelectedOutputs;
 use flox_manifest::raw::PackageToInstall;
+use flox_rust_sdk::models::environment::{EnvironmentError, FollowedIncludes};
+use flox_rust_sdk::providers::lock_manifest::RecoverableMergeError;
 use indoc::formatdoc;
 use minus::{ExitStrategy, Pager, page_all};
 use tracing::{debug, info};
+
+use crate::utils::errors;
 
 /// The terminal's current width in columns, or 80 if it can't be
 /// determined (not connected to a terminal). `textwrap`'s `terminal_size`
@@ -333,6 +337,105 @@ pub(crate) fn print_overridden_manifest_fields(lockfile: &Lockfile) {
         };
         info(message);
     }
+}
+
+/// Report what locking did with the latest changes to included path
+/// environments.
+///
+/// `include_upgrade` is the 'flox include upgrade' command for the
+/// environment, which saves the changes in use to its lockfile.
+pub(crate) fn print_followed_includes(followed: &FollowedIncludes, include_upgrade: &str) {
+    let is_unreadable = |name: &String| {
+        followed
+            .unreadable
+            .iter()
+            .any(|unreadable| &unreadable.name == name)
+    };
+    if !followed.unsaved.is_empty() {
+        // Upgrading an include that can't be read fails, and saving only the
+        // others would lose the version in use of those that can't be read.
+        let next_step = if followed.unsaved.iter().any(is_unreadable) {
+            format!(
+                "\nRun '{include_upgrade}' to save them to the lockfile once all of them can be read."
+            )
+        } else {
+            format!("\nRun '{include_upgrade}' to save them to the lockfile.")
+        };
+        info(format!(
+            "{}{next_step}",
+            format_include_names(
+                "Using changes to included environments that aren't in the lockfile yet:",
+                &followed.unsaved,
+            )
+        ));
+    }
+    for unreadable in &followed.unreadable {
+        let version = if followed.unsaved.contains(&unreadable.name) {
+            "that was in use before"
+        } else {
+            "saved in the lockfile"
+        };
+        let reason = match unreadable.reason.as_ref() {
+            EnvironmentError::Recoverable(RecoverableMergeError::PathOutOfSync(path)) => {
+                formatdoc! {"
+                The environment in '{path}' has changes that aren't locked yet.
+                Run 'flox edit -d {path}' to lock them.",
+                    path = path.display(),
+                }
+            },
+            reason => errors::format_error(reason).trim_end().to_string(),
+        };
+        warning(formatdoc! {"
+            Could not get the latest changes to included environment '{name}'.
+            Using the version of '{name}' {version}.
+            {reason}",
+            name = unreadable.name,
+        });
+    }
+    if let Some(not_locked) = &followed.not_locked {
+        let versions = if not_locked
+            .names
+            .iter()
+            .any(|name| followed.unsaved.contains(name))
+        {
+            "that were in use before"
+        } else {
+            "saved in the lockfile"
+        };
+        warning(formatdoc! {"
+            {header}
+            Using the versions {versions}.
+            {reason}",
+            header = format_include_names(
+                "Could not lock the latest changes to included environments:",
+                &not_locked.names,
+            ),
+            reason = errors::format_error(&not_locked.reason).trim_end(),
+        });
+    }
+    if let Some(not_built) = &followed.not_built {
+        warning(formatdoc! {"
+            {header}
+            Using the versions saved in the lockfile.
+            {reason}
+            The changes are tried again when an included environment changes.",
+            header = format_include_names(
+                "Could not build with the latest changes to included environments:",
+                &not_built.names,
+            ),
+            reason = errors::format_error(&not_built.reason).trim_end(),
+        });
+    }
+}
+
+/// A header followed by a list of included environment names, as printed by
+/// 'flox include upgrade'
+fn format_include_names(header: &str, names: &[String]) -> String {
+    let mut message = header.to_string();
+    for name in names {
+        message.push_str(&format!("\n- '{name}'"));
+    }
+    message
 }
 
 /// Report when re-locking changed the implicit default systems the environment

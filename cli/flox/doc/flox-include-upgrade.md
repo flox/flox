@@ -26,6 +26,13 @@ If the names of specific included environments are provided, only changes for
 those environments will be fetched. If no names are provided, changes will be
 fetched for all included environments.
 
+A path environment already uses the latest changes that the path
+environments it includes with `dir` have locked, but keeps them out of its
+lockfile.
+This command saves them to the lockfile,
+and gets the latest contents of other included environments, such as those
+included with `remote`.
+
 # OPTIONS
 
 `<included environment>`

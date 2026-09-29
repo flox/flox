@@ -105,10 +105,12 @@ fn check_for_package_upgrades(
     // - has recently been fetched
     // Otherwise, run a dry-upgrade of the environment and store the new information
     if let Some(info) = upgrade_information.info() {
-        let environment_lockfile = environment.lockfile(flox)?.into();
+        // Read rather than lock, leaving it to commands in the foreground to
+        // apply and report changes to included environments.
+        let environment_lockfile = environment.existing_lockfile(flox)?;
 
-        let is_information_for_current_lockfile =
-            info.upgrade_result.old_lockfile == Some(environment_lockfile);
+        let is_information_for_current_lockfile = environment_lockfile.is_some()
+            && info.upgrade_result.old_lockfile == environment_lockfile;
         let is_checked_recently = (OffsetDateTime::now_utc() - info.last_checked) < timeout;
 
         if is_information_for_current_lockfile && is_checked_recently {
@@ -130,9 +132,14 @@ fn check_for_package_upgrades(
     // state on every activation (DEV-324).
     let upgrade_result = if flox.auth_context.is_unauthenticated() {
         debug!("Not logged in; skipping package upgrade resolve.");
-        let current_lockfile = environment.lockfile(flox)?.into();
+        // Record the lockfile that the check above compares with, rather than
+        // a copy with changes to included environments.
+        let current_lockfile = match environment.existing_lockfile(flox)? {
+            Some(lockfile) => lockfile,
+            None => environment.lockfile(flox)?.into(),
+        };
         UpgradeResult {
-            old_lockfile: Some(environment.lockfile(flox)?.into()),
+            old_lockfile: Some(current_lockfile.clone()),
             new_lockfile: current_lockfile,
             store_path: None,
         }
@@ -215,11 +222,14 @@ pub fn spawn_detached_check_for_upgrades_process(
 #[cfg(test)]
 mod tests {
 
+    use flox_manifest::test_helpers::with_latest_schema;
     use flox_rust_sdk::flox::test_helpers::{flox_instance, set_test_auth};
     use flox_rust_sdk::models::environment::UpgradeResult;
+    use flox_rust_sdk::models::environment::path_environment::PathEnvironment;
     use flox_rust_sdk::models::environment::path_environment::test_helpers::{
         new_path_environment,
         new_path_environment_from_env_files,
+        new_path_environment_in,
     };
     use flox_rust_sdk::providers::catalog::test_helpers::catalog_replay_client;
     use flox_test_utils::GENERATED_DATA;
@@ -329,8 +339,6 @@ mod tests {
     /// running on every activation (DEV-324).
     #[test]
     fn logged_out_records_noop_check_and_throttles() {
-        use flox_rust_sdk::models::environment::path_environment::PathEnvironment;
-
         // flox_instance() sets AuthContext::new_from_token(None) → Auth0(None),
         // which is_unauthenticated() == true — no catalog replay client needed
         // because no resolve occurs.
@@ -377,5 +385,42 @@ mod tests {
             ExitBranch::AlreadyChecked,
             "second call should be throttled"
         );
+    }
+
+    /// The logged-out check also throttles while the environment uses changes
+    /// to included environments that aren't in its lockfile yet.
+    #[test]
+    fn logged_out_throttles_while_following_unsaved_include_changes() {
+        let (flox, tempdir) = flox_instance();
+        let included_contents =
+            |value: &str| with_latest_schema(format!("[vars]\nv = \"{value}\""));
+        let mut included = new_path_environment_in(
+            &flox,
+            &included_contents("v1"),
+            tempdir.path().join("included"),
+        );
+        included.lockfile(&flox).unwrap();
+        let mut composer = new_path_environment_in(
+            &flox,
+            &with_latest_schema("[include]\nenvironments = [{ dir = \"../included\" }]"),
+            tempdir.path().join("composer"),
+        );
+        composer.lockfile(&flox).unwrap();
+        included.edit(&flox, included_contents("v2")).unwrap();
+        // A command in the foreground follows the change
+        composer.lockfile(&flox).unwrap();
+        assert_eq!(composer.unsaved_followed_includes(&flox).unwrap(), vec![
+            "included".to_string()
+        ]);
+
+        let (pointer, dot_flox_path) = (composer.pointer.clone(), composer.path.clone());
+        let exit_branch =
+            check_for_package_upgrades(&flox, &mut composer.into(), Duration::MAX).unwrap();
+        assert_eq!(exit_branch, ExitBranch::Checked);
+
+        let composer = PathEnvironment::open(&flox, pointer, dot_flox_path).unwrap();
+        let exit_branch =
+            check_for_package_upgrades(&flox, &mut composer.into(), Duration::MAX).unwrap();
+        assert_eq!(exit_branch, ExitBranch::AlreadyChecked);
     }
 }

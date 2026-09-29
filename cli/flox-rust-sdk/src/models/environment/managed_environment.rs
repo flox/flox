@@ -494,8 +494,12 @@ impl Environment for ManagedEnvironment {
         }
 
         let out_link_prefix = self.rendered_env_links.out_link_prefix();
-        let result =
-            local_checkout.include_upgrade(flox, to_upgrade.clone(), Some(out_link_prefix))?;
+        let result = local_checkout.include_upgrade(
+            flox,
+            to_upgrade.clone(),
+            None,
+            Some(out_link_prefix),
+        )?;
         if result.store_path.is_some() {
             let change = HistoryKind::IncludeUpgrade {
                 targets: to_upgrade,
@@ -915,7 +919,8 @@ impl ManagedEnvironment {
         let parent_directory = dot_flox_path
             .parent()
             .ok_or(EnvironmentError::InvalidPath(dot_flox_path.to_path_buf()))?;
-        let include_fetcher = IncludeFetcher::new(Some(parent_directory.to_path_buf()));
+        let include_fetcher =
+            IncludeFetcher::for_composer(parent_directory.to_path_buf(), dot_flox_path.clone());
 
         Self::open_with(
             flox,
