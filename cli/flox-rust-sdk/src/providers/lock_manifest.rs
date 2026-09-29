@@ -3154,9 +3154,7 @@ mod tests {
             &flox,
             &manifest.as_migrated_typed_only(),
             Some(&locked),
-            &IncludeFetcher {
-                base_directory: None,
-            },
+            &IncludeFetcher::new(None),
         )
         .await
         .unwrap();
@@ -3186,9 +3184,7 @@ mod tests {
                 };
 
             // Lock
-            let lockfile = LockManifest::lock_manifest(&flox, &manifest.as_migrated_typed_only(), None, &IncludeFetcher {
-                base_directory: Some(tempdir.path().to_path_buf()),
-            })
+            let lockfile = LockManifest::lock_manifest(&flox, &manifest.as_migrated_typed_only(), None, &IncludeFetcher::new(Some(tempdir.path().to_path_buf())))
             .block_on()
             .unwrap();
 
@@ -3616,9 +3612,7 @@ mod tests {
             &flox,
             &manifest,
             None,
-            &IncludeFetcher {
-                base_directory: Some(tempdir.path().to_path_buf()),
-            },
+            &IncludeFetcher::new(Some(tempdir.path().to_path_buf())),
             ManifestMerger::Shallow(ShallowMerger),
             None,
         )
@@ -3685,9 +3679,7 @@ mod tests {
             &flox,
             &manifest,
             None,
-            &IncludeFetcher {
-                base_directory: Some(tempdir.path().to_path_buf()),
-            },
+            &IncludeFetcher::new(Some(tempdir.path().to_path_buf())),
             ManifestMerger::Shallow(ShallowMerger),
             None,
         )
@@ -3746,9 +3738,7 @@ mod tests {
         middle_precedence.lockfile(&flox).unwrap();
 
         // Lock
-        let include_fetcher = IncludeFetcher {
-            base_directory: Some(tempdir.path().to_path_buf()),
-        };
+        let include_fetcher = IncludeFetcher::new(Some(tempdir.path().to_path_buf()));
 
         let lockfile = LockManifest::lock_manifest(
             &flox,
@@ -3858,9 +3848,7 @@ mod tests {
         dep1.lockfile(&flox).unwrap();
 
         // Lock
-        let include_fetcher = IncludeFetcher {
-            base_directory: Some(tempdir.path().to_path_buf()),
-        };
+        let include_fetcher = IncludeFetcher::new(Some(tempdir.path().to_path_buf()));
 
         let lockfile = LockManifest::lock_manifest(
             &flox,
@@ -3976,9 +3964,7 @@ mod tests {
         dep1.lockfile(&flox).unwrap();
 
         // Lock
-        let include_fetcher = IncludeFetcher {
-            base_directory: Some(tempdir.path().to_path_buf()),
-        };
+        let include_fetcher = IncludeFetcher::new(Some(tempdir.path().to_path_buf()));
 
         let lockfile = LockManifest::lock_manifest(
             &flox,
@@ -4055,9 +4041,7 @@ mod tests {
         dep2.lockfile(&flox).unwrap();
 
         // LockManifest
-        let include_fetcher = IncludeFetcher {
-            base_directory: Some(tempdir.path().to_path_buf()),
-        };
+        let include_fetcher = IncludeFetcher::new(Some(tempdir.path().to_path_buf()));
 
         let err = LockManifest::merge_manifest(
             &flox,

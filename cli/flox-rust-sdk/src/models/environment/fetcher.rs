@@ -28,6 +28,10 @@ pub struct FetchedInclude {
 }
 
 impl IncludeFetcher {
+    pub fn new(base_directory: Option<PathBuf>) -> Self {
+        Self { base_directory }
+    }
+
     pub fn fetch(
         &self,
         flox: &Flox,
@@ -169,9 +173,7 @@ pub mod test_helpers {
 
     /// Returns an IncludeFetcher that fails to fetch anything
     pub fn mock_include_fetcher() -> IncludeFetcher {
-        IncludeFetcher {
-            base_directory: None,
-        }
+        IncludeFetcher::new(None)
     }
 }
 
@@ -203,9 +205,7 @@ mod test {
         let mut environment = new_path_environment_in(&flox, &manifest_contents, &environment_path);
         let lockfile = environment.lockfile(&flox).unwrap().into();
 
-        let include_fetcher = IncludeFetcher {
-            base_directory: Some(tempdir.path().to_path_buf()),
-        };
+        let include_fetcher = IncludeFetcher::new(Some(tempdir.path().to_path_buf()));
 
         let include_descriptor = IncludeDescriptor::Local {
             dir: environment_path.file_name().unwrap().into(),
@@ -236,9 +236,7 @@ mod test {
         let mut environment = new_path_environment_in(&flox, &manifest_contents, &environment_path);
         let lockfile = environment.lockfile(&flox).unwrap().into();
 
-        let include_fetcher = IncludeFetcher {
-            base_directory: Some(tempdir.path().to_path_buf()),
-        };
+        let include_fetcher = IncludeFetcher::new(Some(tempdir.path().to_path_buf()));
 
         let include_descriptor = IncludeDescriptor::Local {
             dir: environment_path,
@@ -272,9 +270,7 @@ mod test {
         fs::create_dir(&environment_path).unwrap();
         let mut environment = new_path_environment_in(&flox, &manifest_contents, &environment_path);
 
-        let include_fetcher = IncludeFetcher {
-            base_directory: Some(tempdir.path().to_path_buf()),
-        };
+        let include_fetcher = IncludeFetcher::new(Some(tempdir.path().to_path_buf()));
 
         let include_descriptor = IncludeDescriptor::Local {
             dir: environment_path.file_name().unwrap().into(),
@@ -336,9 +332,7 @@ mod test {
         let environment =
             mock_managed_environment_in(&flox, manifest_contents, owner, &environment_path, None);
 
-        let include_fetcher = IncludeFetcher {
-            base_directory: Some(tempdir.path().to_path_buf()),
-        };
+        let include_fetcher = IncludeFetcher::new(Some(tempdir.path().to_path_buf()));
 
         let include_descriptor = IncludeDescriptor::Local {
             dir: environment_path.file_name().unwrap().into(),
@@ -403,9 +397,7 @@ mod test {
         let lockfile = remote_env.existing_lockfile(&flox).unwrap().unwrap();
 
         // Fetch and lock the remote environment.
-        let include_fetcher = IncludeFetcher {
-            base_directory: Some(tempdir.path().to_path_buf()),
-        };
+        let include_fetcher = IncludeFetcher::new(Some(tempdir.path().to_path_buf()));
         let include_descriptor = IncludeDescriptor::Remote {
             remote: "owner/name".parse().unwrap(),
             name: None,
@@ -458,9 +450,7 @@ mod test {
         let initial_generation_lockfile = remote_env.existing_lockfile(&flox).unwrap().unwrap();
 
         // Fetch and lock the remote environment at a given generation.
-        let include_fetcher = IncludeFetcher {
-            base_directory: Some(tempdir.path().to_path_buf()),
-        };
+        let include_fetcher = IncludeFetcher::new(Some(tempdir.path().to_path_buf()));
         let include_descriptor = IncludeDescriptor::Remote {
             remote: "owner/name".parse().unwrap(),
             name: None,

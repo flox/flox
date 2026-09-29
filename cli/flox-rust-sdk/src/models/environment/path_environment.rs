@@ -145,9 +145,7 @@ impl PathEnvironment {
     }
 
     fn include_fetcher(&self) -> Result<IncludeFetcher, EnvironmentError> {
-        Ok(IncludeFetcher {
-            base_directory: Some(self.parent_path()?),
-        })
+        Ok(IncludeFetcher::new(Some(self.parent_path()?)))
     }
 
     /// Get a view of the environment that can be used to perform operations

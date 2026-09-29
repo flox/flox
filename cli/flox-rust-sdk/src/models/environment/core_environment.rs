@@ -1400,9 +1400,7 @@ mod tests {
         )
         .unwrap();
 
-        let mut env_view = CoreEnvironment::new(&env_path, IncludeFetcher {
-            base_directory: None,
-        });
+        let mut env_view = CoreEnvironment::new(&env_path, IncludeFetcher::new(None));
 
         let new_env_str = with_latest_schema(&formatdoc! {r#"
             [install]
@@ -1592,9 +1590,7 @@ mod tests {
         let sandbox_path = tempfile::tempdir_in(&tempdir).unwrap();
         fs::create_dir(env_path.path().with_extension("tmp")).unwrap();
 
-        let mut env_view = CoreEnvironment::new(&env_path, IncludeFetcher {
-            base_directory: None,
-        });
+        let mut env_view = CoreEnvironment::new(&env_path, IncludeFetcher::new(None));
         let temp_env = env_view.writable(&sandbox_path).unwrap();
 
         let err = env_view
@@ -1620,9 +1616,7 @@ mod tests {
         // force fail by setting dir readonly
         fs::set_permissions(&env_path, env_path_permissions.clone()).unwrap();
 
-        let mut env_view = CoreEnvironment::new(&env_path, IncludeFetcher {
-            base_directory: None,
-        });
+        let mut env_view = CoreEnvironment::new(&env_path, IncludeFetcher::new(None));
         let temp_env = env_view.writable(&sandbox_path).unwrap();
 
         let err = env_view.replace_with(temp_env).expect_err(&format!(
@@ -1650,9 +1644,7 @@ mod tests {
             "#})
         .unwrap();
 
-        let mut env_view = CoreEnvironment::new(&env_path, IncludeFetcher {
-            base_directory: None,
-        });
+        let mut env_view = CoreEnvironment::new(&env_path, IncludeFetcher::new(None));
 
         flox.floxhub_client =
             catalog_replay_client(GENERATED_DATA.join("resolve/hello.yaml")).await;

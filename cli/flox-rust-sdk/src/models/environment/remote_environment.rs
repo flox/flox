@@ -225,9 +225,7 @@ impl RemoteEnvironment {
             inner_rendered_env_links,
             // remote environments shouldn't be able to fetch dir includes,
             // so set base_directory to None
-            IncludeFetcher {
-                base_directory: None,
-            },
+            IncludeFetcher::new(None),
             generation,
         )
         .map_err(RemoteEnvironmentError::OpenManagedEnvironment)?;

@@ -60,9 +60,7 @@ impl LockManifest {
             &migrated_manifest,
             input_lockfile.as_ref(),
             // For now this will just cause an error if the manifest has includes
-            &IncludeFetcher {
-                base_directory: None,
-            },
+            &IncludeFetcher::new(None),
         )
         .await
         .context("Failed to lock the manifest")?;

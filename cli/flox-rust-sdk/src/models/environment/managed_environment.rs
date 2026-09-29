@@ -915,9 +915,7 @@ impl ManagedEnvironment {
         let parent_directory = dot_flox_path
             .parent()
             .ok_or(EnvironmentError::InvalidPath(dot_flox_path.to_path_buf()))?;
-        let include_fetcher = IncludeFetcher {
-            base_directory: Some(parent_directory.to_path_buf()),
-        };
+        let include_fetcher = IncludeFetcher::new(Some(parent_directory.to_path_buf()));
 
         Self::open_with(
             flox,
@@ -2325,9 +2323,7 @@ mod test {
             test_pointer,
             dot_flox_path.clone(),
             rendered_env_links,
-            IncludeFetcher {
-                base_directory: Some(dot_flox_path.parent().unwrap().to_path_buf()),
-            },
+            IncludeFetcher::new(Some(dot_flox_path.parent().unwrap().to_path_buf())),
             None,
         )
         .unwrap();
@@ -2367,9 +2363,7 @@ mod test {
             test_pointer,
             CanonicalPath::new(&dot_flox_path).unwrap(),
             rendered_env_links,
-            IncludeFetcher {
-                base_directory: Some(dot_flox_path.parent().unwrap().to_path_buf()),
-            },
+            IncludeFetcher::new(Some(dot_flox_path.parent().unwrap().to_path_buf())),
             None,
         )
         .unwrap();
@@ -2424,9 +2418,7 @@ mod test {
             test_pointer.clone(),
             env1_dir.clone(),
             rendered_env_links.clone(),
-            IncludeFetcher {
-                base_directory: Some(env1_dir.parent().unwrap().to_path_buf()),
-            },
+            IncludeFetcher::new(Some(env1_dir.parent().unwrap().to_path_buf())),
             None,
         )
         .unwrap();
@@ -2436,9 +2428,7 @@ mod test {
             test_pointer.clone(),
             env2_dir.clone(),
             rendered_env_links.clone(),
-            IncludeFetcher {
-                base_directory: Some(env2_dir.parent().unwrap().to_path_buf()),
-            },
+            IncludeFetcher::new(Some(env2_dir.parent().unwrap().to_path_buf())),
             None,
         )
         .unwrap();
