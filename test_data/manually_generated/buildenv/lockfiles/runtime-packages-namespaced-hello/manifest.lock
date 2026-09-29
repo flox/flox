@@ -1,0 +1,209 @@
+{
+  "lockfile-version": 1,
+  "manifest": {
+    "schema-version": "1.14.0",
+    "install": {
+      "myhello": {
+        "pkg-path": "floxexamples/hello",
+        "outputs": "all"
+      },
+      "coreutils": {
+        "pkg-path": "coreutils",
+        "outputs": "all"
+      }
+    },
+    "options": {},
+    "build": {
+      "myhello": {
+        "command": "    mkdir -p $out/bin\n    echo echo hello foo > $out/bin/hello\n    echo exec hello >> $out/bin/hello\n    chmod +x $out/bin/hello\n",
+        "runtime-packages": [
+          "myhello"
+        ]
+      }
+    }
+  },
+  "packages": [
+    {
+      "attr_path": "coreutils",
+      "broken": false,
+      "derivation": "/nix/store/i1ym91acw8k71km03m1yc7k5n72s1jdb-coreutils-9.11.drv",
+      "description": "GNU Core Utilities",
+      "install_id": "coreutils",
+      "license": "GPL-3.0-or-later",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=2fcb964de67fcf60b43471c55d5d99e61a9ccb5a",
+      "name": "coreutils-9.11",
+      "pname": "coreutils",
+      "rev": "2fcb964de67fcf60b43471c55d5d99e61a9ccb5a",
+      "rev_count": 1051473,
+      "rev_date": "2026-08-10T17:52:38Z",
+      "scrape_date": "2026-08-12T05:00:26.596310Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "9.11",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "info": "/nix/store/dbcgkq5rzijsfxzd8k39rkdb8rf1wf0s-coreutils-9.11-info",
+        "out": "/nix/store/f0100xb3jh1wz822ngh721h898nqpwj7-coreutils-9.11"
+      },
+      "system": "aarch64-darwin",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "coreutils",
+      "broken": false,
+      "derivation": "/nix/store/qmldn6aqr74hf89xpskl3sz24gpka5zj-coreutils-9.11.drv",
+      "description": "GNU Core Utilities",
+      "install_id": "coreutils",
+      "license": "GPL-3.0-or-later",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=2fcb964de67fcf60b43471c55d5d99e61a9ccb5a",
+      "name": "coreutils-9.11",
+      "pname": "coreutils",
+      "rev": "2fcb964de67fcf60b43471c55d5d99e61a9ccb5a",
+      "rev_count": 1051473,
+      "rev_date": "2026-08-10T17:52:38Z",
+      "scrape_date": "2026-08-12T05:34:35.618927Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "9.11",
+      "outputs_to_install": [
+        "out",
+        "out"
+      ],
+      "outputs": {
+        "debug": "/nix/store/95qha5hcgfr3n1mxqqc53ijvs8h3vz90-coreutils-9.11-debug",
+        "info": "/nix/store/sygh7ax8hnnmakyzr5kmmfn60yddc2il-coreutils-9.11-info",
+        "out": "/nix/store/p79fmimbb698sv4c135kbdwlhjcqpd3p-coreutils-9.11"
+      },
+      "system": "aarch64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "coreutils",
+      "broken": false,
+      "derivation": "/nix/store/wpdcwb9xd1gy3lhr514q4xzpy7s188v8-coreutils-9.11.drv",
+      "description": "GNU Core Utilities",
+      "install_id": "coreutils",
+      "license": "GPL-3.0-or-later",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=2fcb964de67fcf60b43471c55d5d99e61a9ccb5a",
+      "name": "coreutils-9.11",
+      "pname": "coreutils",
+      "rev": "2fcb964de67fcf60b43471c55d5d99e61a9ccb5a",
+      "rev_count": 1051473,
+      "rev_date": "2026-08-10T17:52:38Z",
+      "scrape_date": "2026-08-12T06:14:57.292119Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "9.11",
+      "outputs_to_install": [
+        "out",
+        "out",
+        "out"
+      ],
+      "outputs": {
+        "debug": "/nix/store/5mpx87dpbzxk5js203akrn63q8zns9pc-coreutils-9.11-debug",
+        "info": "/nix/store/ml2c8ssa5g8pm4xydjkx95nl0yqb4686-coreutils-9.11-info",
+        "out": "/nix/store/di26b1kkbammy0sj70nq5qzvfrh78wxl-coreutils-9.11"
+      },
+      "system": "x86_64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "hello",
+      "broken": false,
+      "derivation": "/nix/store/pna804ff5bq9rh3v47da2ia9fvjmnvqh-hello-2.12.3.drv",
+      "description": "Program that produces a familiar, friendly greeting",
+      "install_id": "myhello",
+      "license": "GPL-3.0-or-later",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=2fcb964de67fcf60b43471c55d5d99e61a9ccb5a",
+      "name": "hello-2.12.3",
+      "pname": "hello",
+      "rev": "2fcb964de67fcf60b43471c55d5d99e61a9ccb5a",
+      "rev_count": 1051473,
+      "rev_date": "2026-08-10T17:52:38Z",
+      "scrape_date": "2026-08-12T05:00:42.752526Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "2.12.3",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/v4f0jj9sz97ckskvacf40llz4nfr19jf-hello-2.12.3"
+      },
+      "system": "aarch64-darwin",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "hello",
+      "broken": false,
+      "derivation": "/nix/store/gfkn07cb1mav3sqfma0sj31xi89dvh0x-hello-2.12.3.drv",
+      "description": "Program that produces a familiar, friendly greeting",
+      "install_id": "myhello",
+      "license": "GPL-3.0-or-later",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=2fcb964de67fcf60b43471c55d5d99e61a9ccb5a",
+      "name": "hello-2.12.3",
+      "pname": "hello",
+      "rev": "2fcb964de67fcf60b43471c55d5d99e61a9ccb5a",
+      "rev_count": 1051473,
+      "rev_date": "2026-08-10T17:52:38Z",
+      "scrape_date": "2026-08-12T05:34:54.763574Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "2.12.3",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/4z8ys247h2242760a0pw6y9akab2n09l-hello-2.12.3"
+      },
+      "system": "aarch64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "hello",
+      "broken": false,
+      "derivation": "/nix/store/v953s1650bpjdv5hva7xryl7bbaac7sw-hello-2.12.3.drv",
+      "description": "Program that produces a familiar, friendly greeting",
+      "install_id": "myhello",
+      "license": "GPL-3.0-or-later",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=2fcb964de67fcf60b43471c55d5d99e61a9ccb5a",
+      "name": "hello-2.12.3",
+      "pname": "hello",
+      "rev": "2fcb964de67fcf60b43471c55d5d99e61a9ccb5a",
+      "rev_count": 1051473,
+      "rev_date": "2026-08-10T17:52:38Z",
+      "scrape_date": "2026-08-12T06:15:17.505355Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "2.12.3",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/lxra5fkapsdbdjqi6wa205s7vmqh1vxb-hello-2.12.3"
+      },
+      "system": "x86_64-linux",
+      "group": "toplevel",
+      "priority": 5
+    }
+  ]
+}

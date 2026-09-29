@@ -723,8 +723,12 @@ if ($manifest) {
                 # to be installed.
                 if (defined $builds->{$build}{"runtime-packages"}) {
                     my @buildPackageNames = @{$builds->{$build}{"runtime-packages"}};
-                    # Derive the corresponding package attr-paths.
-                    my @buildPackageAttrPaths;
+                    # Collect the install_ids of packages selected for this build.
+                    # install_id is the canonical key: attr_path is the bare catalog
+                    # attribute and pkg-path is user input (which may carry an owner
+                    # prefix for namespaced packages), so neither is a reliable match
+                    # against the other across all cases.
+                    my @buildPackageInstallIds;
                     foreach my $name (@buildPackageNames) {
                         if (exists $install->{$name}) {
                             # Skip over any packages referenced in "runtime-packages" that
@@ -732,9 +736,9 @@ if ($manifest) {
                             if (exists $install->{$name}{'systems'}) {
                                 next unless grep { $_ eq $system } @{$install->{$name}{'systems'}};
                             }
-                            # First confirm that the pkg-path can be found in @toplevelPackages
-                            if (grep { $_->{"attr_path"} eq $install->{$name}{"pkg-path"} } @toplevelPackages) {
-                                push @buildPackageAttrPaths, $install->{$name}{"pkg-path"};
+                            # Confirm the install_id is present in @toplevelPackages.
+                            if (grep { $_->{"install_id"} eq $name } @toplevelPackages) {
+                                push @buildPackageInstallIds, $name;
                             } else {
                                 die "package '$name' is not in 'toplevel' pkg-group\n";
                             }
@@ -743,10 +747,10 @@ if ($manifest) {
                         }
                     }
                     # Filter packages found in the "toplevel" pkg-group to include only
-                    # those packages found in `$buildPackageAttrPaths`.
+                    # those packages found in `@buildPackageInstallIds`.
                     my @buildPackages;
                     foreach my $package (@toplevelPackages) {
-                        if (grep { $_ eq $package->{"attr_path"} } @buildPackageAttrPaths) {
+                        if (grep { $_ eq $package->{"install_id"} } @buildPackageInstallIds) {
                             push @buildPackages, $package;
                         }
                     }
