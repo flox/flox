@@ -62,6 +62,7 @@ Valid string values are:
 - `1.16.0`: introduced services `depends-on`, and
   `shutdown.timeout-seconds` / `shutdown.signal`
 - `1.17.0`: introduced `description`
+- `1.18.0`: introduced `options.activate.upgrade-notifications`
 
 Existing manifest schemas, including the older `version = 1` format, are
 automatically forward-migrated when using features that require a newer schema
@@ -921,7 +922,8 @@ Options ::= {
 }
 
 Activate ::= {
-  mode = null | 'dev' | 'run'
+  mode                  = null | 'dev' | 'run'
+, upgrade-notifications = null | <BOOL>
 }
 
 Allows ::= {
@@ -959,6 +961,20 @@ Semver ::= {
     their man pages made available).  This behavior is more in line with what
     you would expect from a system-wide package manager like `apt`, `yum`, or
     `brew`.
+
+`activate.upgrade-notifications`
+:   Whether `flox activate` notifies about available upgrades for this
+    environment.
+    The default is `true`.
+    Set it to `false` for an environment whose upgrades are handled elsewhere,
+    for example by a scheduled job.
+    The setting applies to everyone who activates the environment.
+    An environment that includes this one inherits the setting unless it sets
+    its own.
+    It can't turn notifications back on for a user who disabled them for all
+    environments with `upgrade_notifications = false`
+    (see [`flox-config(1)`](./flox-config.md)).
+    Requires `schema-version = "1.18.0"`.
 
 `allow.unfree`
 :   Allows packages with unfree licenses to be installed and appear in search

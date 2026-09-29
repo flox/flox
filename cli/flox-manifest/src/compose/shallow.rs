@@ -11,18 +11,19 @@ use super::{
     shallow_merge_options,
 };
 use crate::parsed::Inner;
-use crate::parsed::common::{
-    ActivateOptions,
-    Allows,
-    Containerize,
-    Include,
-    Options,
-    SemverOptions,
-    Vars,
-};
+use crate::parsed::common::{Allows, Containerize, Include, SemverOptions, Vars};
 // merge_hook operates on the latest schema's Hook (which carries
-// `on-deactivate`), so composing environments preserves the field.
-use crate::parsed::latest::{Hook, Install, ManifestLatest, MinimumCliVersion};
+// `on-deactivate`), and merge_options on the latest schema's Options (which
+// carries `activate.upgrade-notifications`), so composing environments
+// preserves those fields.
+use crate::parsed::latest::{
+    ActivateOptions,
+    Hook,
+    Install,
+    ManifestLatest,
+    MinimumCliVersion,
+    Options,
+};
 // merge_build operates on the latest schema's Build (which carries
 // `sandbox-allow`), so composing environments preserves the field.
 use crate::parsed::v1_13_0::{Build, Profile, ProfileDeactivate};
@@ -246,6 +247,13 @@ impl ShallowMerger {
             high_priority.activate.mode.clone(),
         );
 
+        let (merged_activate_upgrade_notifications, activate_upgrade_notifications_warning) =
+            shallow_merge_options(
+                root_key.extend(["activate", "upgrade-notifications"]),
+                low_priority.activate.upgrade_notifications,
+                high_priority.activate.upgrade_notifications,
+            );
+
         let merged = Options {
             systems: merged_systems,
             allow: Allows {
@@ -259,12 +267,14 @@ impl ShallowMerger {
             cuda_detection: merged_cuda_detection,
             activate: ActivateOptions {
                 mode: merged_activate_mode,
+                upgrade_notifications: merged_activate_upgrade_notifications,
             },
         };
 
         warnings.extend(
             [
                 activate_mode_warning,
+                activate_upgrade_notifications_warning,
                 allow_unfree_warning,
                 allow_broken_warning,
                 allow_licenses_warning,
@@ -611,6 +621,7 @@ mod tests {
             let cuda_detection = options2.cuda_detection.or(options1.cuda_detection);
             let activate = ActivateOptions {
                 mode: options2.activate.mode.or(options1.activate.mode),
+                upgrade_notifications: options2.activate.upgrade_notifications.or(options1.activate.upgrade_notifications),
             };
             let expected = Options { systems, allow, semver, cuda_detection, activate };
             prop_assert_eq!(merged, expected);

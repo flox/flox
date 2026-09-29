@@ -26,8 +26,12 @@ pub use crate::parsed::v1_16_0::{
     ServiceStartCondition,
     Services,
 };
+// Options are version-specific from V1_18_0 on (`activate` adds
+// `upgrade-notifications`), so the latest schema re-exports that copy rather
+// than common's.
+pub use crate::parsed::v1_18_0::{ActivateOptions, Options};
 use crate::{Manifest, ManifestError, TypedOnly};
-pub type ManifestLatest = crate::parsed::v1_17_0::ManifestV1_17_0;
+pub type ManifestLatest = crate::parsed::v1_18_0::ManifestV1_18_0;
 
 impl ManifestLatest {
     /// Try to return a manifest in its original schema
@@ -123,6 +127,15 @@ impl ManifestLatest {
                 untyped
             },
             KnownSchemaVersion::V1_17_0 => {
+                let mut untyped =
+                    serde_json::to_value(self).map_err(ManifestError::SerializeJson)?;
+                let map = untyped
+                    .as_object_mut()
+                    .expect("all valid manifests should serialize to JSON objects");
+                map.insert("schema-version".into(), "1.17.0".into());
+                untyped
+            },
+            KnownSchemaVersion::V1_18_0 => {
                 return Ok(Some(self.as_typed_only()));
             },
         };
@@ -162,6 +175,7 @@ impl ManifestLatest {
 mod tests {
     use std::path::PathBuf;
 
+    use flox_core::activate::mode::ActivateMode;
     use flox_core::data::environment_ref::RemoteEnvironmentRef;
     use indoc::{formatdoc, indoc};
     use pretty_assertions::assert_eq;
@@ -1049,6 +1063,89 @@ mod tests {
 
         let compat = manifest
             .as_maybe_backwards_compatible(KnownSchemaVersion::V1_16_0, None)
+            .unwrap();
+
+        assert_eq!(compat.get_schema_version(), KnownSchemaVersion::latest());
+    }
+
+    #[test]
+    fn upgrade_notifications_rejected_by_v1_17_0_schema() {
+        let manifest = with_schema(KnownSchemaVersion::V1_17_0, indoc! {r#"
+            [options.activate]
+            upgrade-notifications = false
+        "#});
+
+        let err = Manifest::parse_toml_typed(&manifest).expect_err(
+            "'options.activate.upgrade-notifications' should be rejected by the v1.17.0 schema",
+        );
+
+        let ManifestError::Invalid(err) = err else {
+            panic!("expected ManifestError::Invalid, got: {err:?}");
+        };
+        assert!(
+            err.message()
+                .starts_with("unknown field `upgrade-notifications`, expected"),
+            "unexpected error message: {err}",
+        );
+    }
+
+    #[test]
+    fn upgrade_notifications_parses_with_latest_schema() {
+        let manifest = with_latest_schema(indoc! {r#"
+            [options.activate]
+            mode = "run"
+            upgrade-notifications = false
+        "#});
+
+        let migrated = Manifest::parse_toml_typed(&manifest)
+            .unwrap()
+            .migrate(None)
+            .unwrap();
+
+        assert_eq!(
+            migrated.as_latest_schema().options.activate,
+            ActivateOptions {
+                mode: Some(ActivateMode::Run),
+                upgrade_notifications: Some(false),
+            }
+        );
+    }
+
+    #[test]
+    fn downgrades_to_v1_17_0_when_upgrade_notifications_unused() {
+        let manifest = ManifestLatest {
+            options: Options {
+                activate: ActivateOptions {
+                    mode: Some(ActivateMode::Run),
+                    upgrade_notifications: None,
+                },
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let compat = manifest
+            .as_maybe_backwards_compatible(KnownSchemaVersion::V1_17_0, None)
+            .unwrap();
+
+        assert_eq!(compat.get_schema_version(), KnownSchemaVersion::V1_17_0);
+    }
+
+    #[test]
+    fn stays_latest_schema_when_upgrade_notifications_used() {
+        let manifest = ManifestLatest {
+            options: Options {
+                activate: ActivateOptions {
+                    mode: None,
+                    upgrade_notifications: Some(false),
+                },
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let compat = manifest
+            .as_maybe_backwards_compatible(KnownSchemaVersion::V1_17_0, None)
             .unwrap();
 
         assert_eq!(compat.get_schema_version(), KnownSchemaVersion::latest());

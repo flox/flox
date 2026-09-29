@@ -49,6 +49,7 @@ use crate::parsed::v1_14_0::ManifestV1_14_0;
 use crate::parsed::v1_15_0::ManifestV1_15_0;
 use crate::parsed::v1_16_0::ManifestV1_16_0;
 use crate::parsed::v1_17_0::ManifestV1_17_0;
+use crate::parsed::v1_18_0::ManifestV1_18_0;
 use crate::raw::{
     SyncTypedToRaw,
     TomlEditError,
@@ -258,13 +259,14 @@ enum Parsed {
     V1_15_0(ManifestV1_15_0),
     V1_16_0(ManifestV1_16_0),
     V1_17_0(ManifestV1_17_0),
+    V1_18_0(ManifestV1_18_0),
 }
 
 impl Parsed {
     /// A helper function for creating a [`Parsed`] from whatever the latest
     /// manifest schema version happens to be.
     pub(crate) fn from_latest(manifest: ManifestLatest) -> Self {
-        Self::V1_17_0(manifest)
+        Self::V1_18_0(manifest)
     }
 
     /// Returns the known schema version of the contained manifest.
@@ -282,6 +284,7 @@ impl Parsed {
             Parsed::V1_15_0(_) => KnownSchemaVersion::V1_15_0,
             Parsed::V1_16_0(_) => KnownSchemaVersion::V1_16_0,
             Parsed::V1_17_0(_) => KnownSchemaVersion::V1_17_0,
+            Parsed::V1_18_0(_) => KnownSchemaVersion::V1_18_0,
         }
     }
 
@@ -310,6 +313,13 @@ impl Parsed {
                 Ok(())
             },
             Parsed::V1_17_0(m) => {
+                m.services.validate()?;
+                if m.include.environments.is_empty() {
+                    m.services.validate_depends_on_targets()?;
+                }
+                Ok(())
+            },
+            Parsed::V1_18_0(m) => {
                 m.services.validate()?;
                 if m.include.environments.is_empty() {
                     m.services.validate_depends_on_targets()?;
@@ -641,6 +651,11 @@ impl<S: ManifestState> Manifest<S> {
                     .map_err(ManifestError::Invalid)?;
                 Ok(Parsed::V1_17_0(manifest))
             },
+            KnownSchemaVersion::V1_18_0 => {
+                let manifest = toml_edit::de::from_document::<ManifestV1_18_0>(toml.clone())
+                    .map_err(ManifestError::Invalid)?;
+                Ok(Parsed::V1_18_0(manifest))
+            },
         }
     }
 }
@@ -766,6 +781,16 @@ impl<'de> Deserialize<'de> for Manifest<TypedOnly> {
                 Ok(Manifest {
                     inner: TypedOnly {
                         parsed: Parsed::V1_17_0(manifest),
+                    },
+                })
+            },
+            KnownSchemaVersion::V1_18_0 => {
+                let d = untyped.into_deserializer();
+                let manifest = ManifestV1_18_0::deserialize(d)
+                    .map_err(|err| serde::de::Error::custom(err.to_string()))?;
+                Ok(Manifest {
+                    inner: TypedOnly {
+                        parsed: Parsed::V1_18_0(manifest),
                     },
                 })
             },
@@ -918,7 +943,7 @@ mod parse_toml_typed_or_bumped_tests {
     }
 
     /// A `schema-version = "1.16.0"` manifest that uses `description`
-    /// (introduced in 1.17.0) bumps to V1_17_0 (minimum == latest here).
+    /// (introduced in 1.17.0) bumps to exactly V1_17_0, not to latest.
     #[test]
     fn v1_16_0_with_description_bumps_to_v1_17_0() {
         let contents = indoc! {r#"
@@ -933,6 +958,27 @@ mod parse_toml_typed_or_bumped_tests {
             ParsedManifest::Bumped { from, to, .. } => {
                 assert_eq!(from, KnownSchemaVersion::V1_16_0);
                 assert_eq!(to, KnownSchemaVersion::V1_17_0);
+            },
+            ParsedManifest::AsStated(_) => {
+                panic!("expected Bumped, got AsStated");
+            },
+        }
+    }
+
+    /// A `schema-version = "1.17.0"` manifest that uses
+    /// `options.activate.upgrade-notifications` (introduced in 1.18.0) bumps
+    /// to V1_18_0.
+    #[test]
+    fn v1_17_0_with_upgrade_notifications_bumps_to_v1_18_0() {
+        let contents = with_schema(KnownSchemaVersion::V1_17_0, indoc! {r#"
+            [options.activate]
+            upgrade-notifications = false
+        "#});
+        let result = Manifest::parse_toml_typed_or_bumped(&contents).unwrap();
+        match result {
+            ParsedManifest::Bumped { from, to, .. } => {
+                assert_eq!(from, KnownSchemaVersion::V1_17_0);
+                assert_eq!(to, KnownSchemaVersion::V1_18_0);
             },
             ParsedManifest::AsStated(_) => {
                 panic!("expected Bumped, got AsStated");
