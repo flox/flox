@@ -250,11 +250,18 @@ impl Edit {
             } => {
                 if let Some((from, to)) = schema_bumped {
                     let declared = from.toml_declaration();
-                    message::warning(formatdoc! {"
-                        Manifest declared {declared}, but its contents use fields from a newer schema.
-                        Upgraded it to schema-version = \"{to}\" to apply your edit.
-                        Package output defaults may have changed for packages that did not set 'outputs'.
-                    "});
+                    if from.upgrade_may_change_outputs() {
+                        message::warning(formatdoc! {"
+                            Manifest declared {declared}, but its contents use fields from a newer schema.
+                            Upgraded it to schema-version = \"{to}\" to apply your edit.
+                            Package output defaults may have changed for packages that did not set 'outputs'.
+                        "});
+                    } else {
+                        message::warning(formatdoc! {"
+                            Manifest declared {declared}, but its contents use fields from a newer schema.
+                            Upgraded it to schema-version = \"{to}\" to apply your edit.
+                        "});
+                    }
                 }
 
                 if result.reactivate_required()?

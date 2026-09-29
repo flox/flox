@@ -492,6 +492,10 @@ EOF
   assert_output --partial 'Manifest declared version = 1'
   assert_output --partial 'Upgraded it to schema-version = "1.17.0"'
 
+  # Upgrading from v1 crosses the only non-lossless boundary (v1 -> 1.10.0
+  # sets output defaults), so the caveat must appear.
+  assert_output --partial "Package output defaults may have changed"
+
   # The manifest on disk must carry the bumped schema-version key.
   run grep 'schema-version' "$MANIFEST_PATH"
   assert_success
@@ -523,10 +527,44 @@ EOF
   assert_output --partial 'Manifest declared schema-version = "1.10.0"'
   assert_output --partial 'Upgraded it to schema-version = "1.11.0"'
 
+  # This is a purely additive bump (1.10.0 -> 1.11.0), so the outputs
+  # caveat must not appear.
+  refute_output --partial "Package output defaults may have changed"
+
   # The manifest on disk must carry 1.11.0, not a later version.
   run grep 'schema-version' "$MANIFEST_PATH"
   assert_success
   assert_output --partial 'schema-version = "1.11.0"'
+}
+
+# bats test_tags=edit:schema-upgrade
+# When a manifest at schema-version 1.16.0 uses 'description' (introduced in
+# 1.17.0), the schema bump is purely additive and must NOT warn about output
+# default changes — only the v1 -> 1.10.0 boundary is non-lossless.
+@test "'flox edit' does not warn about output defaults on additive schema bumps" {
+  "$FLOX_BIN" init
+
+  # description was introduced in schema-version 1.17.0.
+  # Using it in a 1.16.0 manifest is a purely additive bump.
+  cat << "EOF" > "$TMP_MANIFEST_PATH"
+schema-version = "1.16.0"
+
+description = "my test environment"
+EOF
+
+  run "$FLOX_BIN" edit -f "$TMP_MANIFEST_PATH"
+  assert_success
+
+  assert_output --partial 'Manifest declared schema-version = "1.16.0"'
+  assert_output --partial 'Upgraded it to schema-version = "1.17.0"'
+
+  # Purely additive bump — output defaults cannot change.
+  refute_output --partial "Package output defaults may have changed"
+
+  # The manifest on disk must carry the bumped schema-version key.
+  run grep 'schema-version' "$MANIFEST_PATH"
+  assert_success
+  assert_output --partial 'schema-version = "1.17.0"'
 }
 
 # bats test_tags=edit:schema-upgrade:invalid
