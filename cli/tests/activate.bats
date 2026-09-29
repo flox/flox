@@ -4132,6 +4132,42 @@ EOF
   assert_output "HOOKVAR=mine"
 }
 
+# A hook that grows a single value by plain text must not have that growth
+# spliced onto an attaching shell's own value. The real-world case is
+# TMPDIR=/tmp/ becoming /tmp/nix-shell.abc through `nix print-dev-env`: a
+# nested activation's shell already holds the grown value, so splicing the
+# growth again would point TMPDIR at /tmp/nix-shell.abcnix-shell.abc, which
+# does not exist. A list element is spliced, but never a second time.
+# bats test_tags=activate,activate:attach
+@test "attach does not re-apply textual growth of a non-list value" {
+  # We don't need an environment, but we do need wait_for_activations to have a
+  # PROJECT_DIR to look for
+  project_setup_common
+
+  "$FLOX_BIN" init -d proj
+  MANIFEST_CONTENTS="$(cat << "EOF"
+    version = 1
+
+    [hook]
+    on-activate = """
+      export GROWN="${GROWN}nix-shell.abc"
+      export LISTED="$LISTED:/added"
+    """
+EOF
+  )"
+  echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -d proj -f -
+
+  # Shell #1 starts the activation from the base values. Shell #2 activates
+  # from inside it, so it attaches while its own GROWN and LISTED already
+  # carry the hook's growth.
+  GROWN=/base/ LISTED=/base FLOX_SHELL=bash "$FLOX_BIN" activate -d proj -c \
+    "FLOX_SHELL=bash \"$FLOX_BIN\" activate -d proj -c 'echo \"GROWN=\$GROWN\"; echo \"LISTED=\$LISTED\"' > output"
+  run cat output
+  assert_success
+  assert_line "GROWN=/base/nix-shell.abc"
+  assert_line "LISTED=/base:/added"
+}
+
 # Export-attribute changes made through `declare -x`, `declare +x`, and
 # function-local `local -x` funnel through different code paths in bash
 # than the `export` builtin. An attaching shell must see their net
