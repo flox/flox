@@ -767,6 +767,21 @@ manifest, but things can be overridden or added by higher priority manifests.
 `[install]`
 : Package descriptors are overwritten entirely by a higher priority manifest.
 
+  When Flox fetches an included environment, which happens the first time the
+  composing environment is locked, when an include is added or changed, and
+  with `flox include upgrade`, it reuses the versions that environment locked
+  for each package group whose packages all come from that environment, are
+  locked for all of the composing environment's systems, and are allowed by its
+  `options.allow` and `options.semver` settings, unless the composing
+  environment already locked that group.
+  A package group that mixes packages from several environments, such as the
+  default `toplevel` group when the composing environment or another included
+  environment installs packages too, is resolved together for the composing
+  environment.
+  To keep an included environment's versions, install its packages in a
+  `pkg-group` that no other environment in the composition installs packages
+  into, including the composing environment.
+
 `[vars]`
 : Variables are overwritten entirely by a higher priority manifest.
   Flox evaluates references among the final merged values in dependency order.

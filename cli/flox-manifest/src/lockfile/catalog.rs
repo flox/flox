@@ -130,4 +130,11 @@ impl LockedPackageCatalog {
             group,
         }
     }
+
+    /// Whether the locked version is a semver pre-release, e.g. `1.0.0-rc.1`.
+    ///
+    /// Versions that aren't semver aren't pre-releases.
+    pub fn is_pre_release(&self) -> bool {
+        semver::Version::parse(&self.version).is_ok_and(|version| !version.pre.is_empty())
+    }
 }
