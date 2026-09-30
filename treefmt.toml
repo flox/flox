@@ -7,8 +7,13 @@ command = "nixfmt"
 options = []
 # Glob pattern of files to include
 includes = [ "*.nix" ]
-# Glob patterns of files to exclude
-excludes = []
+# Glob patterns of files to exclude.
+# These two fixtures hold deliberately invalid Nix so the lock scanner's
+# parse-error paths can be exercised. nixfmt cannot read them.
+excludes = [
+  "cli/nef-lock-catalog/test_data/catalog_refs/invalid-syntax.nix",
+  "cli/nef-lock-catalog/test_data/catalog_refs/parse-error-import/broken.nix",
+]
 
 
 [formatter.yaml]

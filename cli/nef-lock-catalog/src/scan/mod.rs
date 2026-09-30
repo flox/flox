@@ -317,7 +317,7 @@ mod tests {
             err,
             ScanError::UnlockableReference { file, position, reason }
                 if file == Path::new("escaping-root.nix")
-                    && position == Some((4, 3))
+                    && position == Some((3, 20))
                     && reason == "'catalogs.*' references the whole catalog namespace"
         );
     }
