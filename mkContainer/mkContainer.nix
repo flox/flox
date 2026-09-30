@@ -175,6 +175,11 @@ let
           environment
           (lowPrio containerPkgs.bash) # for a usable shell
           (lowPrio containerPkgs.coreutils) # for just the basic utils
+          # A system trust store at /etc/ssl/certs. The activation exports
+          # NIX_SSL_CERT_FILE for Nix software, and never SSL_CERT_FILE;
+          # software that reads only the system locations (Go, rustls) has
+          # nowhere else to look in an image.
+          (lowPrio containerPkgs.cacert)
         ];
       };
       config = containerConfig // {
