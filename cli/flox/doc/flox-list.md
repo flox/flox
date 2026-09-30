@@ -105,11 +105,33 @@ FloxHub
     It notes when the local copy and FloxHub have diverged.
 
 Auto-upgrade
-:   When FloxHub last upgraded the environment on its own,
-    for example as a scheduled automatic upgrade,
-    and the generation that upgrade created, as of the last fetch.
-    Whether automatic upgrades are enabled is configured on FloxHub
-    and isn't shown.
+:   For environments on FloxHub, whether FloxHub upgrades the environment
+    automatically and how often, such as `weekly`,
+    as of the last `flox list -a --upstream`
+    or the check that `flox activate` runs in the background.
+    `next due` is the next UTC date the schedule is due:
+    FloxHub upgrades the environment when its scheduler runs on that date,
+    and doesn't make up a run it missed.
+    Once that date has passed, `next due` is left out
+    until the settings are fetched again.
+    It's `unknown` until the settings are fetched from FloxHub,
+    if FloxHub didn't provide them,
+    for example because you aren't logged in,
+    or if the environment isn't on the configured FloxHub,
+    the only one the settings are fetched from.
+
+    Up to three more lines follow.
+    `upgrades from` names the environment on FloxHub
+    that the environment's packages are upgraded from,
+    in place of upgrades from the Flox Catalog,
+    if you can read that environment.
+    The Upgrades line and `Upgrade available` still describe upgrades from
+    the Flox Catalog.
+    `last run` is when FloxHub last checked the environment for upgrades
+    without upgrading it, if that came after its last upgrade,
+    and whether no upgrades were available or the upgrade failed.
+    `last upgraded` is when FloxHub last upgraded the environment on its own
+    and the generation that upgrade created.
 
 Upgrade notices
 :   Whether `flox activate` notifies about available upgrades,

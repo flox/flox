@@ -349,7 +349,7 @@ System:           $NIX_SYSTEM
 Systems:          aarch64-darwin, aarch64-linux, x86_64-linux
 Generation:       2 (live)
 FloxHub:          generation 1
-Auto-upgrade:     none in FloxHub's history
+Auto-upgrade:     unknown, not fetched from FloxHub yet
 Upgrade notices:  on
 Upgrades:         unknown, 'flox activate' hasn't checked yet
 
@@ -411,8 +411,10 @@ EOF
   run --separate-stderr "$FLOX_BIN" list -a
   assert_success
   assert_line "FloxHub:          generation 1"
+  assert_line "Auto-upgrade:     unknown, not fetched from FloxHub yet"
 
-  run --separate-stderr "$FLOX_BIN" list -a --upstream
+  _FLOX_USE_CATALOG_MOCK="$MANUALLY_GENERATED/floxem/automatic_upgrades_owner_a.yaml" \
+    run --separate-stderr "$FLOX_BIN" list -a --upstream
   assert_success
   assert_output - << EOF
 Environment:      $OWNER/a
@@ -422,7 +424,9 @@ System:           $NIX_SYSTEM
 Systems:          aarch64-darwin, aarch64-linux, x86_64-linux
 Generation:       1 (live)
 FloxHub:          generation 2
-Auto-upgrade:     none in FloxHub's history
+Auto-upgrade:     enabled, weekly, next due 2100-01-04 UTC
+                  upgrades from owner/qa
+                  last run 2026-09-28 00:17:03 UTC, no upgrades available
 Upgrade notices:  on
 Upgrades:         unknown, 'flox activate' hasn't checked yet
 
@@ -448,7 +452,31 @@ EOF
   run --separate-stderr "$FLOX_BIN" list -a
   assert_success
   assert_line "FloxHub:          generation 2"
+  assert_line "Auto-upgrade:     enabled, weekly, next due 2100-01-04 UTC"
+  assert_line "                  upgrades from owner/qa"
+  assert_line "                  last run 2026-09-28 00:17:03 UTC, no upgrades available"
   popd > /dev/null || return
+}
+
+# bats test_tags=managed,list,list:all,activate:upgrade-checks
+@test "'flox list -a' shows the automatic upgrade settings fetched by the background check" {
+  skip_x86_64_darwin_replay
+  # Without packages, the check's dry upgrade doesn't contact the catalog,
+  # so the mock only needs to serve the settings.
+  "$FLOX_BIN" init --name a
+  "$FLOX_BIN" push --owner "$OWNER"
+
+  unset _FLOX_TESTING_DISABLE_BG_SIDE_EFFECTS # allow background checks for this test
+  _FLOX_USE_CATALOG_MOCK="$MANUALLY_GENERATED/floxem/automatic_upgrades_owner_a.yaml" \
+    "$FLOX_BIN" activate -c true
+
+  # The check writes the settings after the upgrade information.
+  timeout 5s bash -c "until [ -e '$FLOX_CACHE_DIR/floxhub/$OWNER/a/automatic-upgrades.json' ]; do sleep 0.1; done"
+
+  run --separate-stderr "$FLOX_BIN" list -a
+  assert_success
+  assert_line "Auto-upgrade:     enabled, weekly, next due 2100-01-04 UTC"
+  assert_line "                  upgrades from owner/qa"
 }
 
 # ---------------------------------------------------------------------------- #

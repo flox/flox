@@ -5,9 +5,10 @@ use std::str::FromStr;
 
 use anyhow::{Result, bail};
 use bpaf::Bpaf;
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDate, Utc};
 use flox_config::Config;
 use flox_core::data::System;
+use flox_core::data::environment_ref::RemoteEnvironmentRef;
 use flox_events::{CliEnvironmentPayload, EventKind, EventsHub};
 use flox_manifest::interfaces::{AsLatestSchema, AsWritableManifest, WriteManifest};
 use flox_manifest::lockfile::{LockedInstallable, LockedPackageFlake, Lockfile, PackageToList};
@@ -23,6 +24,14 @@ use flox_rust_sdk::models::environment::{
     ConcreteEnvironment,
     Environment,
     SingleSystemUpgradeDiff,
+};
+use flox_rust_sdk::providers::automatic_upgrades::{
+    self,
+    AutomaticUpgradeResult,
+    AutomaticUpgradeRun,
+    AutomaticUpgrades,
+    AutomaticUpgradesState,
+    CachedAutomaticUpgrades,
 };
 use flox_rust_sdk::providers::buildenv::get_installed_outputs;
 use flox_rust_sdk::providers::upgrade_checks::{UpgradeInformation, UpgradeInformationGuard};
@@ -135,8 +144,30 @@ impl List {
         }
 
         // `--all` shows details about the environment along with its packages.
-        let details = (self.list_mode == ListMode::All)
-            .then(|| EnvironmentDetails::gather(&config, &flox, &env, &lockfile, self.upstream));
+        let details = if self.list_mode == ListMode::All {
+            let automatic_upgrades = if self.upstream {
+                // Fetched along with the rest of FloxHub's state.
+                match automatic_upgrades::refresh(&flox, &env).await {
+                    Ok(fetched) => fetched,
+                    Err(err) => {
+                        debug!(error = %err, "Failed to refresh automatic upgrade settings");
+                        automatic_upgrades::read_cached(&flox, &env)
+                    },
+                }
+            } else {
+                automatic_upgrades::read_cached(&flox, &env)
+            };
+            Some(EnvironmentDetails::gather(
+                &config,
+                &flox,
+                &env,
+                &lockfile,
+                self.upstream,
+                automatic_upgrades,
+            ))
+        } else {
+            None
+        };
         let flags = self
             .environment
             .to_flags()
@@ -147,7 +178,8 @@ impl List {
         let packages = lockfile.list_packages(system)?;
 
         if let Some(details) = &details {
-            print_environment_details(stdout().lock(), details)?;
+            // FloxHub's schedule runs on UTC dates.
+            print_environment_details(stdout().lock(), details, Utc::now().date_naive())?;
         }
 
         if packages.is_empty() {
@@ -546,6 +578,8 @@ struct EnvironmentDetails {
     systems: Option<Vec<System>>,
     /// `None` for path environments, which have no generations
     generations: Option<GenerationDetails>,
+    /// `None` for path environments, which FloxHub doesn't upgrade
+    auto_upgrade: Option<AutoUpgradeSettings>,
     upgrade_notices: UpgradeNotices,
     upgrades: UpgradeStatus,
 }
@@ -557,6 +591,7 @@ impl EnvironmentDetails {
         env: &ConcreteEnvironment,
         lockfile: &Lockfile,
         upstream: bool,
+        automatic_upgrades: Option<CachedAutomaticUpgrades>,
     ) -> Self {
         let (name, floxhub_url, path, generations) = match env {
             ConcreteEnvironment::Path(env) => (
@@ -600,6 +635,18 @@ impl EnvironmentDetails {
                 .map(|systems| systems.into_iter().collect())
         });
 
+        let pointer = match env {
+            ConcreteEnvironment::Path(_) => None,
+            ConcreteEnvironment::Managed(env) => Some(env.pointer()),
+            ConcreteEnvironment::Remote(env) => Some(env.pointer()),
+        };
+        let auto_upgrade = pointer.map(|pointer| {
+            if !automatic_upgrades::is_on_configured_floxhub(flox, pointer) {
+                return AutoUpgradeSettings::OtherFloxhub;
+            }
+            AutoUpgradeSettings::from(automatic_upgrades)
+        });
+
         Self {
             name,
             floxhub_url,
@@ -607,6 +654,7 @@ impl EnvironmentDetails {
             system: flox.system.clone(),
             systems,
             generations,
+            auto_upgrade,
             upgrade_notices: UpgradeNotices::new(
                 config.flox.upgrade_notifications,
                 options.activate.upgrade_notifications,
@@ -734,18 +782,6 @@ impl FloxHubState {
             },
         }
     }
-
-    /// The CLI can't see whether automatic upgrades are enabled,
-    /// only the ones FloxHub made.
-    fn auto_upgrade(&self) -> String {
-        match &self.last_auto_upgrade {
-            Some(upgrade) => format!(
-                "last upgraded {} (generation {})",
-                upgrade.timestamp, upgrade.generation
-            ),
-            None => "none in FloxHub's history".to_string(),
-        }
-    }
 }
 
 /// Authors FloxHub records for changes it makes on its own,
@@ -772,6 +808,133 @@ fn last_auto_upgrade(history: &History) -> Option<AutoUpgrade> {
             generation: change.current_generation,
             timestamp: change.timestamp,
         })
+}
+
+/// FloxHub's automatic upgrade settings, as of the last fetch
+#[derive(Clone, Debug, PartialEq)]
+enum AutoUpgradeSettings {
+    NotFetched,
+    /// FloxHub answered without the settings
+    Unavailable,
+    /// The environment is on a FloxHub the settings aren't fetched from
+    OtherFloxhub,
+    Fetched(AutomaticUpgrades),
+}
+
+impl From<Option<CachedAutomaticUpgrades>> for AutoUpgradeSettings {
+    fn from(cached: Option<CachedAutomaticUpgrades>) -> Self {
+        match cached.map(|cached| cached.state) {
+            None => AutoUpgradeSettings::NotFetched,
+            Some(AutomaticUpgradesState::Unavailable) => AutoUpgradeSettings::Unavailable,
+            Some(AutomaticUpgradesState::Fetched(settings)) => {
+                AutoUpgradeSettings::Fetched(settings)
+            },
+        }
+    }
+}
+
+impl AutoUpgradeSettings {
+    fn fetched(&self) -> Option<&AutomaticUpgrades> {
+        match self {
+            AutoUpgradeSettings::Fetched(settings) => Some(settings),
+            AutoUpgradeSettings::NotFetched
+            | AutoUpgradeSettings::Unavailable
+            | AutoUpgradeSettings::OtherFloxhub => None,
+        }
+    }
+
+    fn upgrade_source(&self) -> Option<&RemoteEnvironmentRef> {
+        self.fetched()
+            .and_then(|settings| settings.upgrade_source.as_ref())
+    }
+
+    /// Whether automatic upgrades are enabled, and when they are due next.
+    /// A due date before `today` is out of date, so it's left out.
+    fn state(&self, today: NaiveDate) -> String {
+        let settings = match self {
+            AutoUpgradeSettings::NotFetched => {
+                return "unknown, not fetched from FloxHub yet".to_string();
+            },
+            AutoUpgradeSettings::Unavailable => {
+                return "unknown, FloxHub didn't provide it".to_string();
+            },
+            AutoUpgradeSettings::OtherFloxhub => {
+                return "unknown, the environment isn't on the configured FloxHub".to_string();
+            },
+            AutoUpgradeSettings::Fetched(settings) => settings,
+        };
+        if !settings.enabled {
+            return "disabled".to_string();
+        }
+        let Some(cadence) = &settings.cadence else {
+            return "enabled".to_string();
+        };
+        match settings.next_due_date.filter(|date| *date >= today) {
+            Some(date) => format!("enabled, {cadence}, next due {date} UTC"),
+            None => format!("enabled, {cadence}"),
+        }
+    }
+}
+
+/// The lines of the Auto-upgrade detail:
+/// the settings, the upgrade source,
+/// the last run if it didn't upgrade and came after the last upgrade,
+/// and the last upgrade.
+///
+/// The last upgrade is the higher generation of `history_upgrade`, the newest
+/// automatic upgrade in FloxHub's history, and the last run.
+/// For the same generation, the history's timestamp is shown,
+/// so it doesn't change once the settings are fetched.
+fn auto_upgrade_lines(
+    settings: &AutoUpgradeSettings,
+    history_upgrade: Option<&AutoUpgrade>,
+    today: NaiveDate,
+) -> Vec<String> {
+    let mut lines = vec![settings.state(today)];
+    if let Some(source) = settings.upgrade_source() {
+        lines.push(format!("upgrades from {source}"));
+    }
+
+    let last_run = settings
+        .fetched()
+        .and_then(|settings| settings.last_run.as_ref());
+    let run_upgrade = last_run.and_then(|run| match run.result {
+        AutomaticUpgradeResult::Upgrade(generation) => Some(AutoUpgrade {
+            generation,
+            timestamp: run.timestamp,
+        }),
+        _ => None,
+    });
+    let last_upgrade = [run_upgrade.as_ref(), history_upgrade]
+        .into_iter()
+        .flatten()
+        .max_by_key(|upgrade| upgrade.generation);
+
+    if let Some(run) = last_run
+        && let Some(outcome) = run_outcome(run)
+        && last_upgrade.is_none_or(|upgrade| run.timestamp > upgrade.timestamp)
+    {
+        lines.push(format!("last run {}{outcome}", run.timestamp));
+    }
+    if let Some(upgrade) = last_upgrade {
+        lines.push(format!(
+            "last upgraded {} (generation {})",
+            upgrade.timestamp, upgrade.generation
+        ));
+    }
+    lines
+}
+
+/// How a run that didn't upgrade the environment ended,
+/// or `None` for an upgrade
+fn run_outcome(run: &AutomaticUpgradeRun) -> Option<&'static str> {
+    match run.result {
+        AutomaticUpgradeResult::Upgrade(_) => None,
+        AutomaticUpgradeResult::Noop => Some(", no upgrades available"),
+        AutomaticUpgradeResult::Failure => Some(", failed"),
+        AutomaticUpgradeResult::Error => Some(", failed (FloxHub error)"),
+        AutomaticUpgradeResult::Unknown => Some(""),
+    }
 }
 
 /// Whether `flox activate` notifies about available upgrades
@@ -943,7 +1106,12 @@ fn pinned_generation(env: &ConcreteEnvironment) -> Option<GenerationId> {
 ///
 /// Details that don't apply to the environment are left out
 /// rather than printed as placeholders.
-fn print_environment_details(mut out: impl Write, details: &EnvironmentDetails) -> Result<()> {
+/// `today` is the current UTC date.
+fn print_environment_details(
+    mut out: impl Write,
+    details: &EnvironmentDetails,
+    today: NaiveDate,
+) -> Result<()> {
     let mut rows = vec![("Environment", details.name.clone())];
     if let Some(floxhub_url) = &details.floxhub_url {
         rows.push(("FloxHub URL", floxhub_url.to_string()));
@@ -970,8 +1138,20 @@ fn print_environment_details(mut out: impl Write, details: &EnvironmentDetails) 
         }
         if let Some(floxhub) = &generations.floxhub {
             rows.push(("FloxHub", floxhub.generation()));
-            rows.push(("Auto-upgrade", floxhub.auto_upgrade()));
         }
+    }
+    if let Some(settings) = &details.auto_upgrade {
+        let history_upgrade = details
+            .generations
+            .as_ref()
+            .and_then(|generations| generations.floxhub.as_ref())
+            .and_then(|floxhub| floxhub.last_auto_upgrade.as_ref());
+        let mut lines = auto_upgrade_lines(settings, history_upgrade, today).into_iter();
+        if let Some(state) = lines.next() {
+            rows.push(("Auto-upgrade", state));
+        }
+        // Continuation lines have no label.
+        rows.extend(lines.map(|line| ("", line)));
     }
     rows.push(("Upgrade notices", details.upgrade_notices.to_string()));
     rows.push(("Upgrades", details.upgrades.to_string()));
@@ -982,7 +1162,12 @@ fn print_environment_details(mut out: impl Write, details: &EnvironmentDetails) 
     // Align values at the same column for every environment.
     let width = "Upgrades checked: ".len();
     for (label, value) in rows {
-        writeln!(&mut out, "{:<width$}{value}", format!("{label}:"))?;
+        let label = if label.is_empty() {
+            String::new()
+        } else {
+            format!("{label}:")
+        };
+        writeln!(&mut out, "{label:<width$}{value}")?;
     }
     Ok(())
 }
@@ -997,6 +1182,9 @@ fn print_environment_details(mut out: impl Write, details: &EnvironmentDetails) 
 /// Changes on FloxHub come next,
 /// since FloxHub may already have applied the upgrades listed locally.
 /// Upgrades come last and apply to the live generation, not a pinned one.
+/// They aren't suggested for an environment that FloxHub upgrades from
+/// another environment, since FloxHub replaces its packages with that
+/// environment's and would overwrite upgrades from the catalog.
 fn next_step(details: &EnvironmentDetails, has_packages: bool, flags: &str) -> Option<String> {
     let generations = details.generations.as_ref();
     let local = generations.and_then(|generations| generations.local.as_ref());
@@ -1033,7 +1221,13 @@ fn next_step(details: &EnvironmentDetails, has_packages: bool, flags: &str) -> O
         Some(BranchOrd::Equal) | None => {},
     }
 
-    if !has_packages || matches!(local, Some(LocalGeneration::Pinned { .. })) {
+    let has_upgrade_source = details
+        .auto_upgrade
+        .as_ref()
+        .and_then(AutoUpgradeSettings::upgrade_source)
+        .is_some();
+    if !has_packages || matches!(local, Some(LocalGeneration::Pinned { .. })) || has_upgrade_source
+    {
         return None;
     }
 
@@ -1634,6 +1828,25 @@ mod tests {
         Utc.with_ymd_and_hms(2026, 9, day, 12, 0, 0).unwrap()
     }
 
+    /// The UTC date `flox list --all` runs on in these tests
+    fn today() -> NaiveDate {
+        NaiveDate::from_ymd_opt(2026, 9, 30).unwrap()
+    }
+
+    fn date(month: u32, day: u32) -> NaiveDate {
+        NaiveDate::from_ymd_opt(2026, month, day).unwrap()
+    }
+
+    fn weekly() -> AutomaticUpgrades {
+        AutomaticUpgrades {
+            enabled: true,
+            cadence: Some("weekly".to_string()),
+            next_due_date: Some(date(10, 5)),
+            last_run: None,
+            upgrade_source: None,
+        }
+    }
+
     fn managed_details() -> EnvironmentDetails {
         EnvironmentDetails {
             name: "owner/backend".to_string(),
@@ -1659,6 +1872,7 @@ mod tests {
                     }),
                 }),
             }),
+            auto_upgrade: Some(AutoUpgradeSettings::Fetched(weekly())),
             upgrade_notices: UpgradeNotices::On,
             upgrades: UpgradeStatus::Available {
                 checked: timestamp(28),
@@ -1705,6 +1919,7 @@ mod tests {
             system: "aarch64-darwin".to_string(),
             systems: None,
             generations: None,
+            auto_upgrade: None,
             upgrade_notices: UpgradeNotices::On,
             upgrades: UpgradeStatus::NotChecked,
         }
@@ -1713,7 +1928,7 @@ mod tests {
     #[test]
     fn print_environment_details_managed_environment() {
         let mut out = Vec::new();
-        print_environment_details(&mut out, &managed_details()).unwrap();
+        print_environment_details(&mut out, &managed_details(), today()).unwrap();
         assert_eq!(String::from_utf8(out).unwrap(), indoc! {"
             Environment:      owner/backend
             FloxHub URL:      https://hub.flox.dev/owner/backend
@@ -1722,7 +1937,8 @@ mod tests {
             Systems:          aarch64-darwin, x86_64-linux
             Generation:       10 (live, latest is 12, with local changes)
             FloxHub:          generation 13
-            Auto-upgrade:     last upgraded 2026-09-27 12:00:00 UTC (generation 13)
+            Auto-upgrade:     enabled, weekly, next due 2026-10-05 UTC
+                              last upgraded 2026-09-27 12:00:00 UTC (generation 13)
             Upgrade notices:  on
             Upgrades:         1 version change and 1 rebuild
             Upgrades checked: 2026-09-28 12:00:00 UTC
@@ -1750,6 +1966,7 @@ mod tests {
                     last_auto_upgrade: None,
                 }),
             }),
+            auto_upgrade: Some(AutoUpgradeSettings::NotFetched),
             upgrade_notices: UpgradeNotices::DisabledByConfig,
             upgrades: UpgradeStatus::NotCovered {
                 checked: timestamp(28),
@@ -1757,14 +1974,14 @@ mod tests {
         };
 
         let mut out = Vec::new();
-        print_environment_details(&mut out, &details).unwrap();
+        print_environment_details(&mut out, &details, today()).unwrap();
         assert_eq!(String::from_utf8(out).unwrap(), indoc! {"
             Environment:      owner/tools
             FloxHub URL:      https://hub.flox.dev/owner/tools
             System:           x86_64-linux
             Generation:       2 (pinned by 'flox activate --generation', live is 3)
             FloxHub:          generation 3 (diverged from the local copy)
-            Auto-upgrade:     none in FloxHub's history
+            Auto-upgrade:     unknown, not fetched from FloxHub yet
             Upgrade notices:  off (upgrade_notifications = false in 'flox config')
             Upgrades:         unknown, only the live generation is checked
             Upgrades checked: 2026-09-28 12:00:00 UTC
@@ -1782,7 +1999,7 @@ mod tests {
         };
 
         let mut out = Vec::new();
-        print_environment_details(&mut out, &details).unwrap();
+        print_environment_details(&mut out, &details, today()).unwrap();
         assert_eq!(String::from_utf8(out).unwrap(), indoc! {"
             Environment:      project
             Path:             /home/user/project
@@ -1902,6 +2119,208 @@ mod tests {
     }
 
     #[test]
+    fn auto_upgrade_lines_combine_settings_and_history() {
+        let at = |day: u32, time: (u32, u32, u32)| {
+            Utc.with_ymd_and_hms(2026, 9, day, time.0, time.1, time.2)
+                .unwrap()
+        };
+        let run = |day, result| {
+            Some(AutomaticUpgradeRun {
+                timestamp: at(day, (0, 17, 3)),
+                result,
+            })
+        };
+        let history = |generation: usize, day| {
+            Some(AutoUpgrade {
+                generation: generation.into(),
+                timestamp: at(day, (0, 17, 2)),
+            })
+        };
+        let pipelined = AutomaticUpgrades {
+            cadence: Some("daily".to_string()),
+            next_due_date: Some(date(10, 1)),
+            upgrade_source: Some("acme/app-qa".parse().unwrap()),
+            ..weekly()
+        };
+
+        let cases = [
+            (
+                "enabled, with the last run upgrading",
+                AutoUpgradeSettings::Fetched(AutomaticUpgrades {
+                    last_run: run(28, AutomaticUpgradeResult::Upgrade(7.into())),
+                    ..weekly()
+                }),
+                None,
+                indoc! {"
+                    enabled, weekly, next due 2026-10-05 UTC
+                    last upgraded 2026-09-28 00:17:03 UTC (generation 7)"},
+            ),
+            (
+                "the same upgrade in history and the last run",
+                AutoUpgradeSettings::Fetched(AutomaticUpgrades {
+                    last_run: run(28, AutomaticUpgradeResult::Upgrade(7.into())),
+                    ..weekly()
+                }),
+                history(7, 28),
+                indoc! {"
+                    enabled, weekly, next due 2026-10-05 UTC
+                    last upgraded 2026-09-28 00:17:02 UTC (generation 7)"},
+            ),
+            (
+                "an upgrade that hasn't been fetched from FloxHub's history yet",
+                AutoUpgradeSettings::Fetched(AutomaticUpgrades {
+                    last_run: run(28, AutomaticUpgradeResult::Upgrade(7.into())),
+                    ..weekly()
+                }),
+                history(6, 21),
+                indoc! {"
+                    enabled, weekly, next due 2026-10-05 UTC
+                    last upgraded 2026-09-28 00:17:03 UTC (generation 7)"},
+            ),
+            (
+                "enabled without a schedule",
+                AutoUpgradeSettings::Fetched(AutomaticUpgrades {
+                    cadence: None,
+                    ..weekly()
+                }),
+                None,
+                "enabled",
+            ),
+            (
+                "due today",
+                AutoUpgradeSettings::Fetched(AutomaticUpgrades {
+                    next_due_date: Some(today()),
+                    ..weekly()
+                }),
+                None,
+                "enabled, weekly, next due 2026-09-30 UTC",
+            ),
+            (
+                "disabled, without history",
+                AutoUpgradeSettings::Fetched(AutomaticUpgrades {
+                    enabled: false,
+                    cadence: None,
+                    next_due_date: None,
+                    ..weekly()
+                }),
+                None,
+                "disabled",
+            ),
+            (
+                "disabled, with an upgrade source",
+                AutoUpgradeSettings::Fetched(AutomaticUpgrades {
+                    enabled: false,
+                    cadence: None,
+                    next_due_date: None,
+                    ..pipelined.clone()
+                }),
+                history(7, 28),
+                indoc! {"
+                    disabled
+                    upgrades from acme/app-qa
+                    last upgraded 2026-09-28 00:17:02 UTC (generation 7)"},
+            ),
+            (
+                "pipelined, with a run after the last upgrade",
+                AutoUpgradeSettings::Fetched(AutomaticUpgrades {
+                    last_run: run(30, AutomaticUpgradeResult::Noop),
+                    ..pipelined
+                }),
+                history(7, 28),
+                indoc! {"
+                    enabled, daily, next due 2026-10-01 UTC
+                    upgrades from acme/app-qa
+                    last run 2026-09-30 00:17:03 UTC, no upgrades available
+                    last upgraded 2026-09-28 00:17:02 UTC (generation 7)"},
+            ),
+            (
+                "the last run failed",
+                AutoUpgradeSettings::Fetched(AutomaticUpgrades {
+                    last_run: run(28, AutomaticUpgradeResult::Failure),
+                    ..weekly()
+                }),
+                history(6, 21),
+                indoc! {"
+                    enabled, weekly, next due 2026-10-05 UTC
+                    last run 2026-09-28 00:17:03 UTC, failed
+                    last upgraded 2026-09-21 00:17:02 UTC (generation 6)"},
+            ),
+            (
+                "FloxHub failed to run the last upgrade",
+                AutoUpgradeSettings::Fetched(AutomaticUpgrades {
+                    last_run: run(28, AutomaticUpgradeResult::Error),
+                    ..weekly()
+                }),
+                None,
+                indoc! {"
+                    enabled, weekly, next due 2026-10-05 UTC
+                    last run 2026-09-28 00:17:03 UTC, failed (FloxHub error)"},
+            ),
+            (
+                "a result from a newer FloxHub",
+                AutoUpgradeSettings::Fetched(AutomaticUpgrades {
+                    last_run: run(28, AutomaticUpgradeResult::Unknown),
+                    ..weekly()
+                }),
+                None,
+                indoc! {"
+                    enabled, weekly, next due 2026-10-05 UTC
+                    last run 2026-09-28 00:17:03 UTC"},
+            ),
+            (
+                "a past due date and a run before the last upgrade",
+                AutoUpgradeSettings::Fetched(AutomaticUpgrades {
+                    next_due_date: Some(date(9, 28)),
+                    last_run: run(21, AutomaticUpgradeResult::Noop),
+                    ..weekly()
+                }),
+                history(7, 28),
+                indoc! {"
+                    enabled, weekly
+                    last upgraded 2026-09-28 00:17:02 UTC (generation 7)"},
+            ),
+            (
+                "never fetched, with history",
+                AutoUpgradeSettings::NotFetched,
+                history(7, 28),
+                indoc! {"
+                    unknown, not fetched from FloxHub yet
+                    last upgraded 2026-09-28 00:17:02 UTC (generation 7)"},
+            ),
+            (
+                "never fetched, without history",
+                AutoUpgradeSettings::NotFetched,
+                None,
+                "unknown, not fetched from FloxHub yet",
+            ),
+            (
+                "not provided by FloxHub",
+                AutoUpgradeSettings::Unavailable,
+                history(7, 28),
+                indoc! {"
+                    unknown, FloxHub didn't provide it
+                    last upgraded 2026-09-28 00:17:02 UTC (generation 7)"},
+            ),
+            (
+                "on another FloxHub",
+                AutoUpgradeSettings::OtherFloxhub,
+                history(7, 28),
+                indoc! {"
+                    unknown, the environment isn't on the configured FloxHub
+                    last upgraded 2026-09-28 00:17:02 UTC (generation 7)"},
+            ),
+        ];
+
+        for (case, settings, history_upgrade, expected) in cases {
+            assert_eq!(
+                auto_upgrade_lines(&settings, history_upgrade.as_ref(), today()).join("\n"),
+                expected,
+                "{case}"
+            );
+        }
+    }
+
+    #[test]
     fn next_step_prefers_local_changes_then_floxhub_then_upgrades() {
         let checked = timestamp(28);
         let flags = " -d /home/user/backend";
@@ -1929,6 +2348,13 @@ mod tests {
         let path_outdated = EnvironmentDetails {
             upgrades: UpgradeStatus::Outdated { checked },
             ..path_details()
+        };
+        let with_upgrade_source = |upgrades: &UpgradeStatus| EnvironmentDetails {
+            auto_upgrade: Some(AutoUpgradeSettings::Fetched(AutomaticUpgrades {
+                upgrade_source: Some("acme/app-qa".parse().unwrap()),
+                ..weekly()
+            })),
+            ..with_state(BranchOrd::Equal, live(false), upgrades)
         };
 
         let cases = [
@@ -1977,6 +2403,9 @@ mod tests {
             ),
             // no packages to upgrade
             (path_outdated, false, None),
+            // FloxHub replaces the packages with those of the upgrade source
+            (with_upgrade_source(&available), true, None),
+            (with_upgrade_source(&UpgradeStatus::NotChecked), true, None),
         ];
 
         for (details, has_packages, expected) in cases {

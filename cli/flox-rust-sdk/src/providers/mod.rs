@@ -1,3 +1,4 @@
+pub mod automatic_upgrades;
 pub mod build;
 pub mod buildenv;
 pub mod catalog;
