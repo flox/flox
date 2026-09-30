@@ -186,6 +186,8 @@ pub(crate) mod test_helpers {
             created_at: chrono::Utc.with_ymd_and_hms(2025, 1, 1, 0, 0, 0).unwrap(),
             exit_code: None,
             task,
+            // Trigger provenance isn't under test here.
+            trigger: None,
         }
     }
 

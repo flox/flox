@@ -279,6 +279,9 @@ coordinator-reported status appears.*/
     ///          ]
     ///        }
     ///      ]
+    ///    },
+    ///    "trigger": {
+    ///      "$ref": "#/components/schemas/BuildTrigger"
     ///    }
     ///  }
     ///}
@@ -300,20 +303,290 @@ coordinator-reported status appears.*/
         pub system: ::std::string::String,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
         pub task: ::std::option::Option<TaskResponse>,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub trigger: ::std::option::Option<BuildTrigger>,
     }
     impl ::std::convert::From<&BuildResponse> for BuildResponse {
         fn from(value: &BuildResponse) -> Self {
             value.clone()
         }
     }
-    ///JSON body returned for all error responses on the builds endpoints.
+    /**The builds created in a window, summarized per system and per
+catalog.
+
+``systems`` lists every system the catalog knows, sorted by name and
+zero-padded. ``catalogs`` lists only the catalogs with at least one
+build in the window, sorted by name. The two lists partition the
+same builds, so their per-status sums agree.*/
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "BuildStatsResponse",
+    ///  "description": "The builds created in a window, summarized per system and per\ncatalog.\n\n``systems`` lists every system the catalog knows, sorted by name and\nzero-padded. ``catalogs`` lists only the catalogs with at least one\nbuild in the window, sorted by name. The two lists partition the\nsame builds, so their per-status sums agree.",
+    ///  "type": "object",
+    ///  "required": [
+    ///    "catalogs",
+    ///    "systems"
+    ///  ],
+    ///  "properties": {
+    ///    "catalogs": {
+    ///      "title": "Catalogs",
+    ///      "type": "array",
+    ///      "items": {
+    ///        "$ref": "#/components/schemas/CatalogBuildStats"
+    ///      }
+    ///    },
+    ///    "systems": {
+    ///      "title": "Systems",
+    ///      "type": "array",
+    ///      "items": {
+    ///        "$ref": "#/components/schemas/SystemBuildStats"
+    ///      }
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
+    pub struct BuildStatsResponse {
+        pub catalogs: ::std::vec::Vec<CatalogBuildStats>,
+        pub systems: ::std::vec::Vec<SystemBuildStats>,
+    }
+    impl ::std::convert::From<&BuildStatsResponse> for BuildStatsResponse {
+        fn from(value: &BuildStatsResponse) -> Self {
+            value.clone()
+        }
+    }
+    /**How many builds sit in each effective status.
+
+The fields are named exactly as the build feed's ``status`` filter
+values, so each count links into the feed under its own key.*/
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "BuildStatusCounts",
+    ///  "description": "How many builds sit in each effective status.\n\nThe fields are named exactly as the build feed's ``status`` filter\nvalues, so each count links into the feed under its own key.",
+    ///  "type": "object",
+    ///  "required": [
+    ///    "cancelled",
+    ///    "completed",
+    ///    "failed",
+    ///    "pending",
+    ///    "running",
+    ///    "timed_out"
+    ///  ],
+    ///  "properties": {
+    ///    "cancelled": {
+    ///      "title": "Cancelled",
+    ///      "type": "integer"
+    ///    },
+    ///    "completed": {
+    ///      "title": "Completed",
+    ///      "type": "integer"
+    ///    },
+    ///    "failed": {
+    ///      "title": "Failed",
+    ///      "type": "integer"
+    ///    },
+    ///    "pending": {
+    ///      "title": "Pending",
+    ///      "type": "integer"
+    ///    },
+    ///    "running": {
+    ///      "title": "Running",
+    ///      "type": "integer"
+    ///    },
+    ///    "timed_out": {
+    ///      "title": "Timed Out",
+    ///      "type": "integer"
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
+    pub struct BuildStatusCounts {
+        pub cancelled: i64,
+        pub completed: i64,
+        pub failed: i64,
+        pub pending: i64,
+        pub running: i64,
+        pub timed_out: i64,
+    }
+    impl ::std::convert::From<&BuildStatusCounts> for BuildStatusCounts {
+        fn from(value: &BuildStatusCounts) -> Self {
+            value.clone()
+        }
+    }
+    ///What scheduled a build.
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "BuildTrigger",
+    ///  "description": "What scheduled a build.",
+    ///  "type": "object",
+    ///  "properties": {
+    ///    "kind": {
+    ///      "description": "What scheduled the build: `source_push`, a push to the package's source repository; `base_catalog_push`, a push to the base catalog; `cascade`, a publish of one of the package's dependencies; `fill_in`, a publish of the package itself on another system. Other values may be added. Null when the Factory cannot tell.",
+    ///      "oneOf": [
+    ///        {
+    ///          "type": "null"
+    ///        },
+    ///        {
+    ///          "allOf": [
+    ///            {
+    ///              "$ref": "#/components/schemas/BuildTriggerKind"
+    ///            }
+    ///          ]
+    ///        }
+    ///      ]
+    ///    },
+    ///    "stabilities": {
+    ///      "title": "Stabilities",
+    ///      "description": "The stabilities that named this build's nixpkgs revision when the build was scheduled. Empty when none did, as for a manifest build, which does not build against the revision. Not the revision's current stabilities, which can move after scheduling.",
+    ///      "type": "array",
+    ///      "items": {
+    ///        "type": "string"
+    ///      }
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
+    pub struct BuildTrigger {
+        ///What scheduled the build: `source_push`, a push to the package's source repository; `base_catalog_push`, a push to the base catalog; `cascade`, a publish of one of the package's dependencies; `fill_in`, a publish of the package itself on another system. Other values may be added. Null when the Factory cannot tell.
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub kind: ::std::option::Option<BuildTriggerKind>,
+        ///The stabilities that named this build's nixpkgs revision when the build was scheduled. Empty when none did, as for a manifest build, which does not build against the revision. Not the revision's current stabilities, which can move after scheduling.
+        #[serde(default, skip_serializing_if = "::std::vec::Vec::is_empty")]
+        pub stabilities: ::std::vec::Vec<::std::string::String>,
+    }
+    impl ::std::convert::From<&BuildTrigger> for BuildTrigger {
+        fn from(value: &BuildTrigger) -> Self {
+            value.clone()
+        }
+    }
+    impl ::std::default::Default for BuildTrigger {
+        fn default() -> Self {
+            Self {
+                kind: Default::default(),
+                stabilities: Default::default(),
+            }
+        }
+    }
+    ///`BuildTriggerKind`
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "BuildTriggerKind",
+    ///  "type": "string"
+    ///}
+    /// ```
+    /// </details>
+    #[derive(
+        ::serde::Deserialize,
+        ::serde::Serialize,
+        Clone,
+        Debug,
+        Eq,
+        Hash,
+        Ord,
+        PartialEq,
+        PartialOrd
+    )]
+    #[serde(transparent)]
+    pub struct BuildTriggerKind(pub ::std::string::String);
+    impl ::std::ops::Deref for BuildTriggerKind {
+        type Target = ::std::string::String;
+        fn deref(&self) -> &::std::string::String {
+            &self.0
+        }
+    }
+    impl ::std::convert::From<BuildTriggerKind> for ::std::string::String {
+        fn from(value: BuildTriggerKind) -> Self {
+            value.0
+        }
+    }
+    impl ::std::convert::From<&BuildTriggerKind> for BuildTriggerKind {
+        fn from(value: &BuildTriggerKind) -> Self {
+            value.clone()
+        }
+    }
+    impl ::std::convert::From<::std::string::String> for BuildTriggerKind {
+        fn from(value: ::std::string::String) -> Self {
+            Self(value)
+        }
+    }
+    impl ::std::str::FromStr for BuildTriggerKind {
+        type Err = ::std::convert::Infallible;
+        fn from_str(value: &str) -> ::std::result::Result<Self, Self::Err> {
+            Ok(Self(value.to_string()))
+        }
+    }
+    impl ::std::fmt::Display for BuildTriggerKind {
+        fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+            self.0.fmt(f)
+        }
+    }
+    ///Window summary for one catalog.
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "CatalogBuildStats",
+    ///  "description": "Window summary for one catalog.",
+    ///  "type": "object",
+    ///  "required": [
+    ///    "catalog",
+    ///    "completed_seconds",
+    ///    "counts"
+    ///  ],
+    ///  "properties": {
+    ///    "catalog": {
+    ///      "title": "Catalog",
+    ///      "type": "string"
+    ///    },
+    ///    "completed_seconds": {
+    ///      "title": "Completed Seconds",
+    ///      "type": "integer"
+    ///    },
+    ///    "counts": {
+    ///      "$ref": "#/components/schemas/BuildStatusCounts"
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
+    pub struct CatalogBuildStats {
+        pub catalog: ::std::string::String,
+        pub completed_seconds: i64,
+        pub counts: BuildStatusCounts,
+    }
+    impl ::std::convert::From<&CatalogBuildStats> for CatalogBuildStats {
+        fn from(value: &CatalogBuildStats) -> Self {
+            value.clone()
+        }
+    }
+    /**JSON body returned for all error responses on the builds and
+stats endpoints.*/
     ///
     /// <details><summary>JSON schema</summary>
     ///
     /// ```json
     ///{
     ///  "title": "ErrorResponse",
-    ///  "description": "JSON body returned for all error responses on the builds endpoints.",
+    ///  "description": "JSON body returned for all error responses on the builds and\nstats endpoints.",
     ///  "type": "object",
     ///  "required": [
     ///    "detail"
@@ -411,6 +684,47 @@ coordinator-reported status appears.*/
                 .map_err(|e: self::error::ConversionError| {
                     <D::Error as ::serde::de::Error>::custom(e.to_string())
                 })
+        }
+    }
+    ///Window summary for one system.
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "SystemBuildStats",
+    ///  "description": "Window summary for one system.",
+    ///  "type": "object",
+    ///  "required": [
+    ///    "completed_seconds",
+    ///    "counts",
+    ///    "system"
+    ///  ],
+    ///  "properties": {
+    ///    "completed_seconds": {
+    ///      "title": "Completed Seconds",
+    ///      "type": "integer"
+    ///    },
+    ///    "counts": {
+    ///      "$ref": "#/components/schemas/BuildStatusCounts"
+    ///    },
+    ///    "system": {
+    ///      "title": "System",
+    ///      "type": "string"
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
+    pub struct SystemBuildStats {
+        pub completed_seconds: i64,
+        pub counts: BuildStatusCounts,
+        pub system: ::std::string::String,
+    }
+    impl ::std::convert::From<&SystemBuildStats> for SystemBuildStats {
+        fn from(value: &SystemBuildStats) -> Self {
+            value.clone()
         }
     }
     ///`SystemItem`
@@ -1065,12 +1379,14 @@ Outcomes:
     200 — Build cancelled, or already terminal. ``BuildResponse.status``
           reflects the effective state.
     404 — No build with the given ID.
+    409 — The coordinator does not know the build yet because its
+          dispatch is in flight (the worker commits its claim
+          before the HTTP submit). Retry with backoff.
     502 — Build Coordinator unreachable or returned an unexpected
-          error; or the coordinator does not know the build yet
-          because its dispatch is in flight (the worker commits
-          its claim before the HTTP submit), or no longer knows it
-          (coordinator restart or purge). In every 502 case the
-          correct client action is retry with backoff.
+          error; or the coordinator has no record of a build whose
+          dispatch window has long passed (lost to a restart or
+          purge, or stranded by a worker that died between claim
+          and submit).
 
 An audit log line is emitted on every path, including unhandled
 exceptions (``outcome=internal_error``).
@@ -1113,6 +1429,9 @@ Sends a `DELETE` request to `/api/v1/factory/builds/{build_id}`
         match response.status().as_u16() {
             200u16 => ResponseValue::from_response(response).await,
             404u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            409u16 => {
                 Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
             }
             422u16 => {

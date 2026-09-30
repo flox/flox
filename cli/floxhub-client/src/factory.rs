@@ -859,6 +859,8 @@ pub mod tests {
             status,
             system: "x86_64-linux".to_string(),
             task: None,
+            // Trigger provenance isn't under test here.
+            trigger: None,
         })
         .expect("BuildResponse serializes")
     }
@@ -908,6 +910,7 @@ pub mod tests {
             status: EffectiveBuildStatus::Cancelled,
             system: "x86_64-linux".to_string(),
             task: None,
+            trigger: None,
         };
         assert_eq!(build, expected);
     }
