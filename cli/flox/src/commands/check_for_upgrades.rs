@@ -47,15 +47,6 @@ impl CheckForUpgrades {
     pub async fn handle(self, mut flox: Flox) -> Result<()> {
         subcommand_metric!("check-upgrade");
 
-        // Upgrade checks are a logged-in-only feature. The check calls
-        // the catalog `resolve`, which becomes authenticated-only under
-        // catalog auth gating; skip it when logged out ahead of that
-        // cutover rather than run a check that will stop working (DEV-324).
-        if flox.auth_context.is_unauthenticated() {
-            debug!("Not logged in; skipping upgrade check.");
-            return Ok(());
-        }
-
         // For catalog requests made by this command, set the QoS to background.
         // Eventually we might want to prioritize these requests differently,
         // since they are not as time-sensitive as the ones actively made by the user.
@@ -75,6 +66,17 @@ impl CheckForUpgrades {
         })?;
 
         let mut environment = self.environment.into_concrete_environment(&flox, None)?;
+
+        // The package upgrade check runs a catalog `resolve`, which becomes
+        // authenticated-only under catalog auth gating. Skip just that check
+        // when logged out, but still refresh remote environment state —
+        // public environments can fetch it unauthenticated (DEV-324).
+        if flox.auth_context.is_unauthenticated() {
+            debug!("Not logged in; skipping package upgrade check.");
+            update_remote_environment_state(&flox, &environment)?;
+            return Ok(());
+        }
+
         let check_exit_branch = check_for_package_upgrades(
             &flox,
             &mut environment,
@@ -305,11 +307,12 @@ mod tests {
         );
     }
 
-    /// `handle()` must return `Ok(())` immediately without writing any upgrade
-    /// information when the user is not logged in.
+    /// `handle()` must skip the package upgrade check and return `Ok(())` without
+    /// writing any upgrade information when the user is not logged in.
     ///
-    /// The catalog `resolve` endpoint is authenticated-only, so the guard
-    /// prevents a guaranteed failure on the background call (DEV-324).
+    /// `update_remote_environment_state` still runs (public environments can
+    /// fetch remote state unauthenticated). For a Path environment it is a
+    /// no-op, so no upgrade information is written (DEV-324).
     #[tokio::test]
     async fn handle_skips_when_not_logged_in() {
         // flox_instance() sets AuthContext::new_from_token(None) → Auth0(None),
