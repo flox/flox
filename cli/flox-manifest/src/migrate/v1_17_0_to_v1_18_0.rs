@@ -5,8 +5,8 @@ use crate::parsed::v1_18_0::ManifestV1_18_0;
 /// Migrate a v1.17.0 manifest to a v1.18.0 manifest.
 ///
 /// This is a lossless migration: V1_18_0 adds a top-level `pkg-groups`
-/// table. All V1_17_0 manifests are valid V1_18_0 manifests with no
-/// package group settings.
+/// table and `options.stability`. All V1_17_0 manifests are valid V1_18_0
+/// manifests with no package group settings and no stability.
 pub(crate) fn migrate_manifest_v1_17_0_to_v1_18_0(
     manifest: ManifestV1_17_0,
 ) -> Result<ManifestV1_18_0, MigrationError> {
@@ -19,7 +19,7 @@ pub(crate) fn migrate_manifest_v1_17_0_to_v1_18_0(
         vars: manifest.vars,
         hook: manifest.hook,
         profile: manifest.profile,
-        options: manifest.options,
+        options: manifest.options.into(),
         services: manifest.services,
         build: manifest.build,
         containerize: manifest.containerize,
@@ -33,9 +33,12 @@ mod tests {
     use proptest::prelude::*;
 
     use super::*;
-    use crate::parsed::v1_18_0::PkgGroups;
+    use crate::parsed::v1_18_0::{Options, PkgGroups};
 
     proptest! {
+        // `expected.options` is built field by field rather than with
+        // `Options::from`, the conversion the migration uses, so a field that
+        // the conversion drops fails the assertion.
         #[test]
         fn migration_v1_17_0_to_v1_18_0_is_lossless(manifest in any::<ManifestV1_17_0>()) {
             let migrated = migrate_manifest_v1_17_0_to_v1_18_0(manifest.clone()).unwrap();
@@ -49,7 +52,14 @@ mod tests {
                 vars: manifest.vars,
                 hook: manifest.hook,
                 profile: manifest.profile,
-                options: manifest.options,
+                options: Options {
+                    systems: manifest.options.systems,
+                    allow: manifest.options.allow,
+                    semver: manifest.options.semver,
+                    cuda_detection: manifest.options.cuda_detection,
+                    activate: manifest.options.activate,
+                    stability: None,
+                },
                 services: manifest.services,
                 build: manifest.build,
                 containerize: manifest.containerize,

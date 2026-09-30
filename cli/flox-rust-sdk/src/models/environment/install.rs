@@ -381,6 +381,49 @@ mod tests {
         );
     }
 
+    /// Install `pkg` into a manifest whose default group has `hello` and
+    /// takes its stability from `options.stability`.
+    fn stability_check_with_options_stability(
+        pkg: PackageToInstall,
+    ) -> Result<(), InstallOrUninstallError> {
+        let manifest = mk_test_manifest_from_contents(with_latest_schema(indoc! {r#"
+            [install]
+            hello.pkg-path = "hello"
+
+            [options]
+            stability = "stable"
+        "#}));
+        check_stability_conflict(&pkg, &manifest, manifest.as_latest_schema())
+    }
+
+    #[test]
+    fn stability_matching_options_stability_is_accepted() {
+        let pkg = package_to_install_with_stability("jq", None, "stable");
+        assert!(stability_check_with_options_stability(pkg).is_ok());
+    }
+
+    #[test]
+    fn stability_differing_from_options_stability_is_rejected() {
+        let pkg = package_to_install_with_stability("jq", None, "lts");
+        let Err(InstallOrUninstallError::StabilityConflict {
+            group,
+            current,
+            requested,
+            ..
+        }) = stability_check_with_options_stability(pkg)
+        else {
+            panic!("expected a stability conflict");
+        };
+        assert_eq!(
+            (group, current, requested),
+            (
+                "toplevel".to_string(),
+                Some("stable".to_string()),
+                "lts".to_string()
+            )
+        );
+    }
+
     /// The default group of a new environment has no packages, so a
     /// stability for it is set rather than rejected, and the package doesn't
     /// name the default group.

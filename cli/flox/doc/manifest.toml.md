@@ -63,7 +63,7 @@ Valid string values are:
 - `1.16.0`: introduced services `depends-on`, and
   `shutdown.timeout-seconds` / `shutdown.signal`
 - `1.17.0`: introduced `description`
-- `1.18.0`: introduced `pkg-groups`
+- `1.18.0`: introduced `pkg-groups` and `options.stability`
 
 Existing manifest schemas, including the older `version = 1` format, are
 automatically forward-migrated when using features that require a newer schema
@@ -415,7 +415,9 @@ PkgGroup ::= {
     they were built against,
     see the `--stability` option of [`flox-publish(1)`](./flox-publish.md).
 
-    When `stability` is unset, the Flox Catalog decides which versions the
+    When `stability` is unset, the pkg-group resolves against
+    [`options.stability`](#options).
+    When that is unset too, the Flox Catalog decides which versions the
     pkg-group resolves against.
     Currently, it resolves against the same versions as
     `stability = "unstable"`.
@@ -430,7 +432,8 @@ PkgGroup ::= {
     For the same reason, `flox install --stability` only sets the stability of
     a pkg-group that has no packages yet.
     Installing a package with `--stability` into a pkg-group that has packages
-    and a different or unset stability fails;
+    and a different or unset stability, including one it takes from
+    `options.stability`, fails;
     see [`flox-install(1)`](./flox-install.md).
 
 When [`flox-uninstall(1)`](./flox-uninstall.md) removes the last package of a
@@ -1015,6 +1018,7 @@ Options ::= {
 , allow                     = null | Allows
 , semver                    = null | Semver
 , cuda-detection            = null | <BOOL>
+, stability                 = null | <STRING>
 }
 
 Activate ::= {
@@ -1083,6 +1087,27 @@ Semver ::= {
     The default is `true`.
     When enabled, Flox will detect if you have an Nvidia device and attempt to
     locate `libcuda` in well-known paths.
+
+`stability`
+:   Resolves every pkg-group against a catalog stability, such as `stable`,
+    unless the pkg-group sets its own `stability` in its
+    [`[pkg-groups]`](#pkg-groups) table.
+    It requires `schema-version = "1.18.0"`.
+
+    ```toml
+    [options]
+    stability = "stable"
+
+    [pkg-groups.legacy]
+    stability = "lts"
+    ```
+
+    Here the `legacy` pkg-group resolves against `lts`,
+    and every other pkg-group, including `toplevel`, against `stable`.
+    When `stability` is unset, pkg-groups without their own `stability`
+    resolve against the versions that the Flox Catalog chooses.
+    Changing it re-resolves every pkg-group that takes it
+    when the environment is next locked.
 
 ## `[plugins]`
 

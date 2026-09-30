@@ -26,7 +26,9 @@ pub use crate::parsed::v1_16_0::{
     ServiceStartCondition,
     Services,
 };
-pub use crate::parsed::v1_18_0::{PkgGroup, PkgGroups};
+// Options are version-specific from V1_18_0 on (it adds `stability`), so the
+// latest schema re-exports that copy rather than common's.
+pub use crate::parsed::v1_18_0::{Options, PkgGroup, PkgGroups};
 use crate::{Manifest, ManifestError, TypedOnly};
 pub type ManifestLatest = crate::parsed::v1_18_0::ManifestV1_18_0;
 

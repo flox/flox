@@ -113,10 +113,13 @@ reference.
     once the manifest has a `schema-version`.
     Packages from included environments count as packages of the pkg-group,
     and a stability set by an included environment counts as its stability.
+    A pkg-group that doesn't set its own stability has the stability of
+    `options.stability`, if the manifest sets it.
 
-    A package installed without `--stability` into a pkg-group that has a
-    stability resolves against that stability,
-    and `flox install` prints which stability that is.
+    A package installed without `--stability` resolves against the stability
+    of its pkg-group.
+    When the pkg-group sets its own stability, `flox install` prints which
+    stability that is.
 
     `--pkg-group` and `--stability` don't move a package that is already
     installed, or change the stability of its pkg-group,

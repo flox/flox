@@ -1,7 +1,8 @@
 use std::collections::BTreeMap;
 
+use flox_core::data::System;
 #[cfg(any(test, feature = "tests"))]
-use flox_test_utils::proptest::{btree_map_strategy, optional_string};
+use flox_test_utils::proptest::{btree_map_strategy, optional_string, optional_vec_of_strings};
 #[cfg(any(test, feature = "tests"))]
 use proptest::prelude::*;
 use schemars::JsonSchema;
@@ -10,11 +11,13 @@ use serde_with::skip_serializing_none;
 
 use crate::interfaces::{AsTypedOnlyManifest, SchemaVersion, impl_pkg_lookup};
 use crate::parsed::common::{
+    ActivateOptions,
+    Allows,
     Containerize,
     DEFAULT_GROUP_NAME,
     Include,
     KnownSchemaVersion,
-    Options,
+    SemverOptions,
     Vars,
 };
 use crate::parsed::v1_10_0::{Install, ManifestPackageDescriptor};
@@ -159,12 +162,20 @@ impl SchemaVersion for ManifestV1_18_0 {
 }
 
 impl ManifestV1_18_0 {
-    /// The catalog stability that the packages in `group` resolve against,
-    /// or `None` to let the catalog pick its default.
+    /// The catalog stability that the packages in `group` resolve against:
+    /// the group's own stability, else the environment's
+    /// `options.stability`, or `None` to let the catalog pick its default.
     ///
     /// `group` is the name the packages are locked under, so the default
     /// group is [`DEFAULT_GROUP_NAME`].
     pub fn group_stability(&self, group: &str) -> Option<&str> {
+        self.group_stability_override(group)
+            .or(self.options.stability.as_deref())
+    }
+
+    /// The stability that `group` sets under `[pkg-groups.<group>]`, which
+    /// overrides `options.stability` for that group.
+    pub fn group_stability_override(&self, group: &str) -> Option<&str> {
         self.pkg_groups
             .inner()
             .get(group)
@@ -223,8 +234,8 @@ pub struct PkgGroup {
     /// The catalog stability to resolve the group's packages against,
     /// e.g. `stable` or `staging`.
     ///
-    /// The catalog validates the value; when unset, the catalog resolves
-    /// against its newest page carrying any stability.
+    /// The catalog validates the value; when unset, the group takes
+    /// `options.stability`, and without that the catalog's default.
     #[cfg_attr(
         any(test, feature = "tests"),
         proptest(strategy = "optional_string(5)")
@@ -232,9 +243,118 @@ pub struct PkgGroup {
     pub stability: Option<String>,
 }
 
+/// Manifest options for V1_18_0: identical to `common::Options` except for
+/// the added `stability`. Earlier schema versions keep using
+/// `common::Options`.
+#[skip_serializing_none]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash, JsonSchema)]
+#[cfg_attr(any(test, feature = "tests"), derive(proptest_derive::Arbitrary))]
+#[serde(rename_all = "kebab-case")]
+#[serde(deny_unknown_fields)]
+pub struct Options {
+    /// A list of systems that each package is resolved for.
+    #[cfg_attr(
+        any(test, feature = "tests"),
+        proptest(strategy = "optional_vec_of_strings(3, 4)")
+    )]
+    pub systems: Option<Vec<System>>,
+    /// Options that control what types of packages are allowed.
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Allows::skip_serializing")]
+    pub allow: Allows,
+    /// Options that control how semver versions are resolved.
+    #[serde(default)]
+    #[serde(skip_serializing_if = "SemverOptions::skip_serializing")]
+    pub semver: SemverOptions,
+    /// Whether to detect CUDA devices and libs during activation.
+    // TODO: Migrate to `ActivateOptions`.
+    pub cuda_detection: Option<bool>,
+    /// Options that control the behavior of activations.
+    #[serde(default)]
+    #[serde(skip_serializing_if = "ActivateOptions::skip_serializing")]
+    pub activate: ActivateOptions,
+    /// The catalog stability that every package group resolves against,
+    /// e.g. `stable`, unless the group sets its own under
+    /// `[pkg-groups.<name>]`.
+    ///
+    /// The catalog validates the value; when unset, groups without their
+    /// own stability resolve against the catalog's default.
+    #[cfg_attr(
+        any(test, feature = "tests"),
+        proptest(strategy = "optional_string(5)")
+    )]
+    pub stability: Option<String>,
+}
+
+impl From<crate::parsed::common::Options> for Options {
+    fn from(options: crate::parsed::common::Options) -> Self {
+        let crate::parsed::common::Options {
+            systems,
+            allow,
+            semver,
+            cuda_detection,
+            activate,
+        } = options;
+        Options {
+            systems,
+            allow,
+            semver,
+            cuda_detection,
+            activate,
+            stability: None,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn manifest_with_stabilities(
+        options_stability: Option<&str>,
+        groups: &[(&str, Option<&str>)],
+    ) -> ManifestV1_18_0 {
+        let pkg_groups = groups
+            .iter()
+            .map(|(name, stability)| {
+                (name.to_string(), PkgGroup {
+                    stability: stability.map(str::to_string),
+                })
+            })
+            .collect();
+        ManifestV1_18_0 {
+            options: Options {
+                stability: options_stability.map(str::to_string),
+                ..Default::default()
+            },
+            pkg_groups: PkgGroups(pkg_groups),
+            ..Default::default()
+        }
+    }
+
+    /// A group's own stability wins over `options.stability`, which applies
+    /// to every other group.
+    #[test]
+    fn group_stability_prefers_group_over_options() {
+        let manifest =
+            manifest_with_stabilities(Some("stable"), &[("legacy", Some("lts")), ("tools", None)]);
+
+        assert_eq!(
+            [
+                manifest.group_stability("legacy"),
+                manifest.group_stability("tools"),
+                manifest.group_stability(DEFAULT_GROUP_NAME),
+            ],
+            [Some("lts"), Some("stable"), Some("stable")]
+        );
+    }
+
+    #[test]
+    fn group_stability_is_unset_without_group_or_options_stability() {
+        let manifest = manifest_with_stabilities(None, &[("legacy", Some("lts"))]);
+
+        assert_eq!(manifest.group_stability(DEFAULT_GROUP_NAME), None);
+    }
 
     /// Pkg-group names that aren't bare TOML keys are quoted, so that a
     /// name with a dot doesn't read as a nested table.

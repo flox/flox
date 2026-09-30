@@ -1686,7 +1686,7 @@
               "description": "The minimum CLI version that can activate this environment."
             },
             "options": {
-              "$ref": "#/$defs/Options",
+              "$ref": "#/$defs/Options2",
               "default": {},
               "description": "Options that control the behavior of the manifest."
             },
@@ -1777,6 +1777,49 @@
             "semver": {
               "$ref": "#/$defs/SemverOptions",
               "description": "Options that control how semver versions are resolved."
+            },
+            "systems": {
+              "description": "A list of systems that each package is resolved for.",
+              "items": {
+                "type": "string"
+              },
+              "type": [
+                "array",
+                "null"
+              ]
+            }
+          },
+          "type": "object"
+        },
+        "Options2": {
+          "additionalProperties": false,
+          "description": "Manifest options for V1_18_0: identical to `common::Options` except for\nthe added `stability`. Earlier schema versions keep using\n`common::Options`.",
+          "properties": {
+            "activate": {
+              "$ref": "#/$defs/ActivateOptions",
+              "description": "Options that control the behavior of activations."
+            },
+            "allow": {
+              "$ref": "#/$defs/Allows",
+              "description": "Options that control what types of packages are allowed."
+            },
+            "cuda-detection": {
+              "description": "Whether to detect CUDA devices and libs during activation.",
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "semver": {
+              "$ref": "#/$defs/SemverOptions",
+              "description": "Options that control how semver versions are resolved."
+            },
+            "stability": {
+              "description": "The catalog stability that every package group resolves against,\ne.g. `stable`, unless the group sets its own under\n`[pkg-groups.<name>]`.\n\nThe catalog validates the value; when unset, groups without their\nown stability resolve against the catalog's default.",
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "systems": {
               "description": "A list of systems that each package is resolved for.",
@@ -1984,7 +2027,7 @@
           "additionalProperties": false,
           "properties": {
             "stability": {
-              "description": "The catalog stability to resolve the group's packages against,\ne.g. `stable` or `staging`.\n\nThe catalog validates the value; when unset, the catalog resolves\nagainst its newest page carrying any stability.",
+              "description": "The catalog stability to resolve the group's packages against,\ne.g. `stable` or `staging`.\n\nThe catalog validates the value; when unset, the group takes\n`options.stability`, and without that the catalog's default.",
               "type": [
                 "string",
                 "null"

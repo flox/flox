@@ -2087,6 +2087,61 @@ mod tests {
         ]);
     }
 
+    /// Changing `options.stability` re-resolves the groups that inherit it,
+    /// and leaves a group that sets its own stability locked.
+    #[test]
+    fn make_params_seeded_unlock_groups_if_options_stability_changed() {
+        let (foo_iid, foo_descriptor, foo_locked) = fake_catalog_package_lock("foo", Some("tools"));
+        let (baz_iid, baz_descriptor, baz_locked) = fake_catalog_package_lock("baz", Some("other"));
+        let mut manifest_before = ManifestLatest::default();
+        manifest_before
+            .install
+            .inner_mut()
+            .extend([(foo_iid, foo_descriptor), (baz_iid, baz_descriptor)]);
+        manifest_before
+            .pkg_groups
+            .inner_mut()
+            .insert("tools".to_string(), PkgGroup {
+                stability: Some("lts".to_string()),
+            });
+
+        let seed = Lockfile {
+            version: Version::<1>,
+            manifest: manifest_before.as_typed_only(),
+            packages: vec![foo_locked.clone().into(), baz_locked.into()],
+            compose: None,
+        };
+
+        // ---------------------------------------------------------------------
+
+        let mut manifest_after = manifest_before.clone();
+        manifest_after.options.stability = Some("stable".to_string());
+
+        let actual_params =
+            LockManifest::collect_resolution_package_groups(&manifest_after, Some(&seed))
+                .unwrap()
+                .map(|group| {
+                    let derivations = group
+                        .descriptors
+                        .into_iter()
+                        .map(|descriptor| (descriptor.install_id, descriptor.derivation))
+                        .collect::<Vec<_>>();
+                    (group.name, group.stability, derivations)
+                })
+                .collect::<Vec<_>>();
+
+        assert_eq!(actual_params, vec![
+            ("other".to_string(), Some("stable".to_string()), vec![(
+                "baz_install_id".to_string(),
+                None
+            )]),
+            ("tools".to_string(), Some("lts".to_string()), vec![(
+                "foo_install_id".to_string(),
+                Some(foo_locked.derivation)
+            )]),
+        ]);
+    }
+
     /// If flake installables and catalog packages are mixed,
     /// [LockManifest::collect_resolution_package_groups]
     /// should only return [PackageGroup]s for the catalog descriptors.

@@ -11,18 +11,11 @@ use super::{
     shallow_merge_options,
 };
 use crate::parsed::Inner;
-use crate::parsed::common::{
-    ActivateOptions,
-    Allows,
-    Containerize,
-    Include,
-    Options,
-    SemverOptions,
-    Vars,
-};
+use crate::parsed::common::{ActivateOptions, Allows, Containerize, Include, SemverOptions, Vars};
 // merge_hook operates on the latest schema's Hook (which carries
-// `on-deactivate`), so composing environments preserves the field.
-use crate::parsed::latest::{Hook, Install, ManifestLatest, MinimumCliVersion, PkgGroups};
+// `on-deactivate`), and merge_options on the latest schema's Options (which
+// carries `stability`), so composing environments preserves those fields.
+use crate::parsed::latest::{Hook, Install, ManifestLatest, MinimumCliVersion, Options, PkgGroups};
 // merge_build operates on the latest schema's Build (which carries
 // `sandbox-allow`), so composing environments preserves the field.
 use crate::parsed::v1_13_0::{Build, Profile, ProfileDeactivate};
@@ -246,6 +239,12 @@ impl ShallowMerger {
             high_priority.activate.mode.clone(),
         );
 
+        let (merged_stability, stability_warning) = shallow_merge_options(
+            root_key.push("stability"),
+            low_priority.stability.clone(),
+            high_priority.stability.clone(),
+        );
+
         let merged = Options {
             systems: merged_systems,
             allow: Allows {
@@ -260,6 +259,7 @@ impl ShallowMerger {
             activate: ActivateOptions {
                 mode: merged_activate_mode,
             },
+            stability: merged_stability,
         };
 
         warnings.extend(
@@ -270,6 +270,7 @@ impl ShallowMerger {
                 allow_licenses_warning,
                 allow_pre_releases_warning,
                 cuda_detection_warning,
+                stability_warning,
                 systems_warning,
             ]
             .into_iter()
@@ -644,7 +645,8 @@ mod tests {
             let activate = ActivateOptions {
                 mode: options2.activate.mode.or(options1.activate.mode),
             };
-            let expected = Options { systems, allow, semver, cuda_detection, activate };
+            let stability = options2.stability.or(options1.stability);
+            let expected = Options { systems, allow, semver, cuda_detection, activate, stability };
             prop_assert_eq!(merged, expected);
         }
 

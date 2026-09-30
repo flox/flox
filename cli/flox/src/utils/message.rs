@@ -151,8 +151,10 @@ pub(crate) fn packages_successfully_installed(
 /// package joined.
 ///
 /// Packages installed with `--stability` set it for their pkg-group. Other
-/// packages inherit the stability that their pkg-group already has, possibly
-/// from an included environment, so it's read from the merged manifest.
+/// packages inherit the stability that their pkg-group already sets, possibly
+/// in an included environment, so it's read from the merged manifest. A
+/// stability that applies to every pkg-group through `options.stability`
+/// isn't reported, since it doesn't depend on the pkg-group a package joins.
 pub(crate) fn packages_group_stability(pkgs: &[PackageToInstall], lockfile: &Lockfile) {
     let merged_manifest = match lockfile.migrated_manifest() {
         Ok(merged_manifest) => merged_manifest,
@@ -176,7 +178,7 @@ pub(crate) fn packages_group_stability(pkgs: &[PackageToInstall], lockfile: &Loc
             Some(stability) => {
                 requested_stabilities.insert(group, stability);
             },
-            None if merged_manifest.group_stability(&group).is_some() => {
+            None if merged_manifest.group_stability_override(&group).is_some() => {
                 inheriting_pkgs
                     .entry(group)
                     .or_default()
@@ -192,7 +194,7 @@ pub(crate) fn packages_group_stability(pkgs: &[PackageToInstall], lockfile: &Loc
         ));
     }
     for (group, pkgs) in inheriting_pkgs {
-        let Some(stability) = merged_manifest.group_stability(&group) else {
+        let Some(stability) = merged_manifest.group_stability_override(&group) else {
             continue;
         };
         let pkgs = match pkgs.as_slice() {
@@ -626,7 +628,8 @@ mod tests {
 
     /// A package installed with `--stability` reports the stability it set,
     /// and a package without one reports the stability it inherited from its
-    /// pkg-group, if the pkg-group has one.
+    /// pkg-group, if the pkg-group sets one. `jq` joins the default group,
+    /// which takes `options.stability`, so it reports nothing.
     #[tokio::test]
     async fn packages_group_stability_reports_set_and_inherited_stabilities() {
         let merged_manifest = mk_test_manifest_from_contents(with_latest_schema(indoc! {r#"
@@ -636,6 +639,9 @@ mod tests {
             gh.pkg-path = "gh"
             gh.pkg-group = "legacy"
             jq.pkg-path = "jq"
+
+            [options]
+            stability = "stable"
 
             [pkg-groups.legacy]
             stability = "lts"
