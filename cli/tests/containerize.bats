@@ -349,6 +349,20 @@ function assert_container_output() {
   assert_equal "${stderr_lines[$hello_line]}" "Hello, world!"
 }
 
+# The image carries a system trust store: the activation exports
+# NIX_SSL_CERT_FILE for Nix software and never SSL_CERT_FILE, so software that
+# reads only the system locations (Go, rustls) needs /etc/ssl/certs to exist.
+# bats test_tags=containerize:run-container-i
+@test "container has a CA bundle at /etc/ssl/certs" {
+  env_setup_catalog
+
+  CONTAINER_ID="$("$FLOX_BIN" containerize -f - | podman load | sed -nr 's/^Loaded image: (.*)$/\1/p')"
+
+  run podman run -q "$CONTAINER_ID" ls /etc/ssl/certs/ca-bundle.crt
+  assert_success
+  assert_output --partial "/etc/ssl/certs/ca-bundle.crt"
+}
+
 # bats test_tags=containerize:run-container-i
 @test "container can be run with 'podman run' with/without -i'" {
   env_setup_catalog
