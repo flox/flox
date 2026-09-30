@@ -201,11 +201,11 @@ pub fn spawn_detached_check_for_upgrades_process(
 mod tests {
 
     use flox_rust_sdk::flox::test_helpers::flox_instance;
-    use flox_rust_sdk::models::environment::{UninitializedEnvironment, UpgradeResult};
     use flox_rust_sdk::models::environment::path_environment::test_helpers::{
         new_path_environment,
         new_path_environment_from_env_files,
     };
+    use flox_rust_sdk::models::environment::{UninitializedEnvironment, UpgradeResult};
     use flox_rust_sdk::providers::catalog::test_helpers::catalog_replay_client;
     use flox_test_utils::GENERATED_DATA;
     use flox_test_utils::manifests::HELLO;
