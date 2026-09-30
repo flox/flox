@@ -56,6 +56,33 @@ pub struct DetachedCommand<'a> {
 }
 
 impl DetachedCommand<'_> {
+    /// Build the child [`Command`], with env, args, but no stdio or `pre_exec`
+    /// (those need the log file handle that only `spawn` opens).
+    ///
+    /// Split out from `spawn` so the env-var handling is unit-testable via
+    /// [`Command::get_envs`] without forking a real child.
+    fn configure(&self, self_executable: &std::path::Path) -> Command {
+        let mut command = Command::new(self_executable);
+
+        // Propagate the version which the wrapper script sets and the CLI then
+        // unsets — the child needs it to emit its own version telemetry.
+        command.env(FLOX_VERSION_VAR, &*FLOX_VERSION_STRING);
+
+        // Propagate the parent's invocation_id so the child's v2 events join
+        // the parent's stream rather than appearing as a separate top-level
+        // invocation. Written only onto this Command, not into the parent
+        // process env, so it does not leak forward into the user's shell.
+        if let Some(parent_invocation_id) = current_invocation_id() {
+            command.env(FLOX_INVOCATION_ID_VAR, parent_invocation_id.to_string());
+        }
+
+        for arg in self.args {
+            command.arg(arg);
+        }
+
+        command
+    }
+
     /// Spawn a detached background `flox` child process.
     ///
     /// The child:
@@ -93,23 +120,7 @@ impl DetachedCommand<'_> {
             None => std::env::current_exe()?,
         };
 
-        let mut command = Command::new(&self_executable);
-
-        // Propagate the version which the wrapper script sets and the CLI then
-        // unsets — the child needs it to emit its own version telemetry.
-        command.env(FLOX_VERSION_VAR, &*FLOX_VERSION_STRING);
-
-        // Propagate the parent's invocation_id so the child's v2 events join
-        // the parent's stream rather than appearing as a separate top-level
-        // invocation. Written only onto this Command, not into the parent
-        // process env, so it does not leak forward into the user's shell.
-        if let Some(parent_invocation_id) = current_invocation_id() {
-            command.env(FLOX_INVOCATION_ID_VAR, parent_invocation_id.to_string());
-        }
-
-        for arg in self.args {
-            command.arg(arg);
-        }
+        let mut command = self.configure(&self_executable);
 
         std::fs::create_dir_all(self.log_dir)?;
         let log_file = self.open_log_file()?;
