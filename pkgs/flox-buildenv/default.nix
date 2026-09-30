@@ -1,15 +1,10 @@
 {
-  cacert,
   callPackage,
   coreutils,
-  darwin,
   flox-activations,
   flox-interpreter,
-  glibcLocalesUtf8,
-  lib,
   nix,
   runCommand,
-  stdenv,
   writeText,
 }:
 # We need to ensure that the flox-interpreter package is available.
@@ -33,22 +28,16 @@ let
       "${activationScripts_fallback}-build_executable_wrapper";
   flox_activations_out = flox-activations.out;
 
-  defaultEnvrc = writeText "default.envrc" (
-    ''
-      # Default environment variables
-      export SSL_CERT_FILE="''${SSL_CERT_FILE:-${cacert}/etc/ssl/certs/ca-bundle.crt}"
-      export NIX_SSL_CERT_FILE="''${NIX_SSL_CERT_FILE:-''${SSL_CERT_FILE}}"
-    ''
-    + lib.optionalString stdenv.isLinux ''
-      export LOCALE_ARCHIVE="''${LOCALE_ARCHIVE:-${glibcLocalesUtf8}/lib/locale/locale-archive}"
-    ''
-    + lib.optionalString stdenv.isDarwin ''
-      export PATH_LOCALE="''${PATH_LOCALE:-${darwin.locale}/share/locale}"
-    ''
-    + ''
-      # Static environment variables
-    ''
-  );
+  # Header of the environment's activate.d/envrc; the manifest's [vars] are
+  # appended to it by buildenv.nix. The environment itself sets no defaults
+  # for the certificate or locale variables: activations, services and
+  # containers go through flox-activations, which exports them from
+  # flox-core's default_nix_env_vars, and a local `flox build`, which
+  # sources this file directly, inherits them from the flox process.
+  # Duplicating them here only obscured which value a user ended up with.
+  defaultEnvrc = writeText "default.envrc" ''
+    # Static environment variables
+  '';
   perl = callPackage ./flox-perl.nix {
     # Script which determines the modules to keep.
     perlScript = BuilderLibs_pm;
