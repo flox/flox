@@ -151,10 +151,25 @@ impl Drop for MockRecorder {
 
         // `save` and `save_to` append a timestamp, so we rename after write.
         // https://github.com/alexliesenfeld/httpmock/issues/115
+        //
+        // Save beside the destination (`record_save_to`) rather than
+        // httpmock's default `record_save`, which always writes under this
+        // crate's own `target/httpmock/recordings`. A caller's destination
+        // can be a `tempfile::tempdir()` on `$TMPDIR`, and `target/` and
+        // `$TMPDIR` are frequently different mounts (e.g. a tmpfs `/tmp`) —
+        // the `fs::rename` below is a plain `rename(2)`, which fails with
+        // `EXDEV` across a filesystem boundary. Saving into the
+        // destination's own parent directory guarantees the rename that
+        // follows never crosses one.
+        let save_dir = self
+            .path
+            .parent()
+            .expect("destination path should have a parent directory");
         let tempfile = self
             .server
-            .record_save(
+            .record_save_to(
                 &self.recording,
+                save_dir,
                 // We need something unique in the name otherwise parallel
                 // threads can race each other
                 format!(
