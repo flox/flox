@@ -2355,6 +2355,7 @@ mod buildenv_tests {
     use flox_manifest::parsed::latest::ManifestPackageDescriptor;
     use flox_manifest::raw::test_helpers::empty_test_migrated_manifest;
     use flox_test_utils::{GENERATED_DATA, MANUALLY_GENERATED};
+    use floxhub_client::StoreInfoResponse;
     use tempfile::TempDir;
     use test_helpers::buildenv_instance;
 
@@ -2882,7 +2883,35 @@ mod buildenv_tests {
         let buildenv = buildenv_instance();
         let lockfile_path = MANUALLY_GENERATED
             .join("buildenv/lockfiles/runtime-packages-namespaced-hello/manifest.lock");
-        let client = MockClient::new();
+
+        // A namespaced package is a custom catalog package, so the build asks
+        // the catalog where to download it unless it is already in the local
+        // store. Answer that query rather than relying on some other test
+        // having realised the same store path first. `hello` itself comes
+        // from nixpkgs, so the public cache serves it.
+        let lockfile =
+            Lockfile::read_from_file(&CanonicalPath::new(&lockfile_path).unwrap()).unwrap();
+        let items = lockfile
+            .packages
+            .iter()
+            .filter_map(|pkg| match pkg {
+                LockedPackage::Catalog(p) if p.install_id == "myhello" => Some(p),
+                _ => None,
+            })
+            .flat_map(|p| p.outputs.values().cloned())
+            .map(|store_path| {
+                (store_path, vec![StoreInfo {
+                    url: Some("https://cache.nixos.org".to_string()),
+                    auth: None,
+                    catalog: None,
+                    package: None,
+                    public_keys: None,
+                }])
+            })
+            .collect();
+        let mut client = MockClient::new();
+        client.push_store_info_response(StoreInfoResponse { items });
+
         let result = buildenv.build(&client, &lockfile_path, None, None).unwrap();
 
         let runtime = result.run.as_ref();
