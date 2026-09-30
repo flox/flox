@@ -123,18 +123,18 @@ Note that this is a paid feature available with Flox for Teams.
 :   Specify the organization to which an artifact should be published to.
     Takes precedence over the default value of the user's GitHub handle.
 
-`--allow-lineage-change`
-:   Allow replacing the package's registered source repository or ref.
-    Without this option, a refused source change requires interactive
-    confirmation showing the registered and requested sources.
-    Use this option to confirm source changes in non-interactive environments.
-
 `--signing-private-key <path>`
 :   The private key to use in signing the package
     during upload.  This is a local file path. This option is only necessary
     when using a Catalog Store not provided by Flox.
     Takes precedence over the value of `publish.signing_private_key` from
     'flox config'.
+
+`--allow-lineage-change`
+:   Allow replacing the package's registered source repository or ref.
+    Without this option, a refused source change requires interactive
+    confirmation showing the registered and requested sources.
+    Use this option to confirm source changes in non-interactive environments.
 
 `--stability <stability>`
 :   Perform a Nix expression build using a base package set of the given
