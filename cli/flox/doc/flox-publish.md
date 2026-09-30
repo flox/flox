@@ -135,6 +135,9 @@ Note that this is a paid feature available with Flox for Teams.
     Without this option, a refused source change requires interactive
     confirmation showing the registered and requested sources.
     Use this option to confirm source changes in non-interactive environments.
+    This option also disables the existing-build deduplication shortcut.
+    An interactive ref-only change at an already-published commit can return
+    "already published" without reaching the confirmation prompt.
 
 `--stability <stability>`
 :   Perform a Nix expression build using a base package set of the given

@@ -50,10 +50,10 @@ pub enum PublishError {
 pub type ApiErrorResponse = api_types::ErrorResponse;
 pub type ApiErrorResponseValue = ResponseValue<ApiErrorResponse>;
 
-/// The canonical, credential-free sources reported by a publish refusal.
+/// The sources as reported by the server in a publish refusal.
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
 #[error(
-    "Package source repository or ref has changed.\nRegistered source: {registered}\nRequested source: {requested}\nTo replace the registered source, retry with 'flox publish --allow-lineage-change'."
+    "Package source repository or ref has changed.\nRegistered source: {registered}\nRequested source: {requested}\nTo replace the registered source, retry your publish command with '--allow-lineage-change' added."
 )]
 pub struct SourceLineageChange {
     pub registered: String,

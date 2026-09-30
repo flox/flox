@@ -85,7 +85,12 @@ async fn confirm_lineage_change(change: &SourceLineageChange) -> Result<bool, Pu
     }
     .prompt()
     .await
-    .map_err(|err| PublishError::Catchall(format!("Could not confirm source change: {err}")))?;
+    .map_err(|err| match err {
+        inquire::InquireError::OperationCanceled | inquire::InquireError::OperationInterrupted => {
+            PublishError::LineageChangeDeclined
+        },
+        err => PublishError::Catchall(format!("Could not confirm source change: {err}")),
+    })?;
     if !confirmed {
         return Err(PublishError::LineageChangeDeclined);
     }

@@ -137,7 +137,10 @@ pub trait Publisher {
     ///
     /// `allow_lineage_change` explicitly authorizes a source change. Otherwise,
     /// `confirm_lineage_change` is called only after a lineage refusal, before
-    /// retrying the metadata submission once. Returning false preserves the refusal.
+    /// retrying the metadata submission once. Returning `Ok(false)` preserves the
+    /// refusal when confirmation is unavailable. Returning
+    /// `Err(PublishError::LineageChangeDeclined)` signals an explicit decline
+    /// or cancellation.
     ///
     /// Returns `true` when the caller should wait for an external publisher
     /// to confirm completion (Publisher mode), or `false` when the CLI has
@@ -1481,7 +1484,33 @@ pub mod tests {
             "ref": "release",
             "rev": "abc123",
             "rev_count": 1,
-            "rev_date": "2026-01-01T00:00:00Z"
+            "rev_date": "2026-01-01T00:00:00Z",
+            "narinfos": {
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa": {
+                    "path": "/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-hello",
+                    "url": "nar/hello.nar.xz",
+                    "compression": "xz",
+                    "narSize": 1024
+                }
+            },
+            "narinfos_source_url": "https://cache.example.test/hello/narinfos.json",
+            "cache_uri": "https://cache.example.test",
+            "locked_inputs": {
+                "dependency": {
+                    "attr_path": ["packages", "dependency"],
+                    "build_type": "manifest",
+                    "catalog": "test",
+                    "locked_inputs_hash": "dependency-closure-hash",
+                    "source": {
+                        "type": "git",
+                        "url": "https://github.com/org/dependency",
+                        "ref": "main",
+                        "rev": "def456",
+                        "dir": "."
+                    }
+                }
+            },
+            "locked_base_catalog_url": "https://github.com/flox/nixpkgs?rev=abc123"
         }))
         .unwrap();
         let initial = server.mock(|when, then| {
