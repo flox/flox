@@ -251,6 +251,27 @@ EOF
   [ -e hello.txt ]
 }
 
+# Services run under the executive, which initializes Sentry itself: with
+# metrics on and a DSN set, the TLS client it builds writes SSL_CERT_FILE and
+# SSL_CERT_DIR into the executive on Linux. The executive records both before
+# that and hands the record to process-compose, so a service sees them as the
+# user left them, absent here. The metrics endpoints are pointed at an
+# unroutable address as hook.bats does. Discriminates on Linux only.
+# bats test_tags=services:tls-env
+@test "service does not inherit probed SSL_CERT_FILE or SSL_CERT_DIR" {
+  "$FLOX_BIN" init
+  run "$FLOX_BIN" edit -f "${TESTS_DIR}/services/tls_env.toml"
+  assert_success
+  run env -u NIX_SSL_CERT_FILE -u SSL_CERT_FILE -u SSL_CERT_DIR FLOX_DISABLE_METRICS=false FLOX_SENTRY_DSN=https://public@sentry.invalid/1 _FLOX_METRICS_URL_OVERRIDE=https://192.0.2.1/legacy _FLOX_METRICS_URL_V2_OVERRIDE=https://192.0.2.1/v2 "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
+    "${TESTS_DIR}"/services/wait_for_service_status.sh tls_env:Completed
+EOF
+)
+  assert_success
+  run cat tls_env.txt
+  assert_success
+  refute_line --regexp '^SSL_CERT_(FILE|DIR)='
+}
+
 # The unit tests cover the config Flox writes. These cover what
 # `process-compose` does with it, which is the half that would go unnoticed if
 # we picked a key or a condition string it doesn't honour.

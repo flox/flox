@@ -764,6 +764,10 @@ impl ActivateOptions {
         // more sense for 0 to be the default rather than 1.
         let verbosity_num = flox.verbosity.max(0) as u32;
         let mut command = std::process::Command::new(&*FLOX_ACTIVATIONS_BIN);
+        // The activation, and the shell it starts, must not inherit the
+        // certificate paths the TLS library may have written into this
+        // process since startup.
+        flox_core::util::restore_startup_tls_env(&mut command);
         command
             .env(FLOX_ACTIVATIONS_VERBOSITY_VAR, format!("{verbosity_num}"))
             .arg("activate")

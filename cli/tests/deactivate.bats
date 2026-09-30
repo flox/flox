@@ -515,12 +515,12 @@ assert_prompt_round_trip() {
 # User-controlled variables: flox may read these but must not overwrite a value
 # the user set, and must restore it on deactivate. We assert the user's value
 # survives the round-trip; the complementary "not leaked when the user did not
-# set it" guarantee is already covered by the in-place env-diff tests below
-# (their expected blocks would fail if one of these started surviving).
+# set it" guarantee is covered by the in-place env-diff tests below for the
+# variables they do not list as noise (NIX_SSL_CERT_FILE is noise on both
+# platforms, since the dev shell sets it).
 #
-# NOTE: NIX_SSL_CERT_FILE is NOT yet in this set — it is set unconditionally,
-# leaks, and overwrites a user value. Add it here once fixed; see
-# NIX_SSL_CERT_FILE-findings.md.
+# The certificate variables follow the rule stated at default_nix_env_vars
+# in flox-core.
 
 # bats test_tags=deactivate
 @test "deactivate preserves a user-set FLOX_SHELL (zsh)" {
@@ -536,6 +536,14 @@ assert_prompt_round_trip() {
   "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/deactivate-vars.toml"
 
   assert_user_var_preserved SSL_CERT_FILE /user/cert
+}
+
+# bats test_tags=deactivate
+@test "deactivate preserves a user-set NIX_SSL_CERT_FILE (zsh)" {
+  project_setup
+  "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/deactivate-vars.toml"
+
+  assert_user_var_preserved NIX_SSL_CERT_FILE /user/nix-cert
 }
 
 # ---------------------------------------------------------------------------- #
@@ -652,7 +660,6 @@ diff_env_dumps() {
         LS_COLORS
         NIX_SSL_CERT_FILE
         REMOTEHOST
-        SSL_CERT_FILE
         _FLOX_PROMPT_HOOK_VERSION
         _flox_activate_tracer
       )
@@ -817,23 +824,12 @@ EOF
   output=$(diff_env_dumps "$BEFORE" "$AFTER"); status=$?
   assert_success
 
-  if [[ "$OSTYPE" == darwin* ]]; then
-    assert_output - <<EOF
+  assert_output - <<EOF
 PS1
 SHLVL
-SSL_CERT_FILE
 _FLOX_ACTIVATIONS_VERBOSITY
 _FLOX_SUBSYSTEM_VERBOSITY
 EOF
-  else
-    assert_output - <<EOF
-PS1
-SHLVL
-SSL_CERT_DIR
-_FLOX_ACTIVATIONS_VERBOSITY
-_FLOX_SUBSYSTEM_VERBOSITY
-EOF
-  fi
 }
 
 # bats test_tags=activate,deactivate
@@ -853,23 +849,12 @@ EOF
   output=$(diff_env_dumps "$BEFORE" "$AFTER"); status=$?
   assert_success
 
-  if [[ "$OSTYPE" == darwin* ]]; then
-    assert_output - <<EOF
+  assert_output - <<EOF
 SHELL
-SSL_CERT_FILE
 _
 _FLOX_ACTIVATIONS_VERBOSITY
 _FLOX_SUBSYSTEM_VERBOSITY
 EOF
-  else
-    assert_output - <<EOF
-SHELL
-SSL_CERT_DIR
-_
-_FLOX_ACTIVATIONS_VERBOSITY
-_FLOX_SUBSYSTEM_VERBOSITY
-EOF
-  fi
 }
 
 # bats test_tags=activate,deactivate
@@ -888,8 +873,7 @@ EOF
 
   output=$(diff_env_dumps "$BEFORE" "$AFTER"); status=$?
   assert_success
-  if [[ "$OSTYPE" == darwin* ]]; then
-    assert_output - <<EOF
+  assert_output - <<EOF
 FLOX_ORIG_HOME
 FLOX_TCSH_INIT_SCRIPT
 GROUP
@@ -899,28 +883,10 @@ MACHTYPE
 OSTYPE
 SHELL
 SHLVL
-SSL_CERT_FILE
 VENDOR
 _FLOX_ACTIVATIONS_VERBOSITY
 _FLOX_SUBSYSTEM_VERBOSITY
 EOF
-  else
-    assert_output - <<EOF
-FLOX_ORIG_HOME
-FLOX_TCSH_INIT_SCRIPT
-GROUP
-HOST
-HOSTTYPE
-MACHTYPE
-OSTYPE
-SHELL
-SHLVL
-SSL_CERT_DIR
-VENDOR
-_FLOX_ACTIVATIONS_VERBOSITY
-_FLOX_SUBSYSTEM_VERBOSITY
-EOF
-  fi
 }
 
 # bats test_tags=activate,deactivate
@@ -939,25 +905,13 @@ EOF
 
   output=$(diff_env_dumps "$BEFORE" "$AFTER"); status=$?
   assert_success
-  if [[ "$OSTYPE" == darwin* ]]; then
-    assert_output - <<EOF
+  assert_output - <<EOF
 FLOX_ORIG_ZDOTDIR
 OLDPWD
 PS1
-SSL_CERT_FILE
 _FLOX_ACTIVATIONS_VERBOSITY
 _FLOX_SUBSYSTEM_VERBOSITY
 EOF
-  else
-    assert_output - <<EOF
-FLOX_ORIG_ZDOTDIR
-OLDPWD
-PS1
-SSL_CERT_DIR
-_FLOX_ACTIVATIONS_VERBOSITY
-_FLOX_SUBSYSTEM_VERBOSITY
-EOF
-  fi
 }
 
 # Interactive-mode counterparts: drive a real interactive `flox activate`
@@ -995,29 +949,15 @@ EOF
 
   output=$(diff_env_dumps "$BEFORE" "$AFTER"); status=$?
   assert_success
-  if [[ "$OSTYPE" == darwin* ]]; then
-    assert_output - <<EOF
+  assert_output - <<EOF
 NO_COLOR
 PATH
 SHLVL
-SSL_CERT_FILE
 TCLLIBPATH
 TERM
 _FLOX_ACTIVATIONS_VERBOSITY
 _FLOX_SUBSYSTEM_VERBOSITY
 EOF
-  else
-    assert_output - <<EOF
-NO_COLOR
-PATH
-SHLVL
-SSL_CERT_DIR
-TCLLIBPATH
-TERM
-_FLOX_ACTIVATIONS_VERBOSITY
-_FLOX_SUBSYSTEM_VERBOSITY
-EOF
-  fi
 }
 
 # bats test_tags=activate,deactivate
@@ -1038,31 +978,16 @@ EOF
 
   output=$(diff_env_dumps "$BEFORE" "$AFTER"); status=$?
   assert_success
-  if [[ "$OSTYPE" == darwin* ]]; then
-    assert_output - <<EOF
+  assert_output - <<EOF
 NO_COLOR
 PATH
 SHLVL
-SSL_CERT_FILE
 TCLLIBPATH
 TERM
 _
 _FLOX_ACTIVATIONS_VERBOSITY
 _FLOX_SUBSYSTEM_VERBOSITY
 EOF
-  else
-    assert_output - <<EOF
-NO_COLOR
-PATH
-SHLVL
-SSL_CERT_DIR
-TCLLIBPATH
-TERM
-_
-_FLOX_ACTIVATIONS_VERBOSITY
-_FLOX_SUBSYSTEM_VERBOSITY
-EOF
-  fi
 }
 
 # bats test_tags=activate,deactivate
@@ -1083,10 +1008,7 @@ EOF
 
   output=$(diff_env_dumps "$BEFORE" "$AFTER"); status=$?
   assert_success
-  # macOS and Linux differ only in the SSL cert var (SSL_CERT_FILE vs
-  # SSL_CERT_DIR).
-  if [[ "$OSTYPE" == darwin* ]]; then
-    assert_output - <<EOF
+  assert_output - <<EOF
 FLOX_ORIG_HOME
 FLOX_TCSH_INIT_SCRIPT
 GROUP
@@ -1097,33 +1019,12 @@ NO_COLOR
 OSTYPE
 PATH
 SHLVL
-SSL_CERT_FILE
 TCLLIBPATH
 TERM
 VENDOR
 _FLOX_ACTIVATIONS_VERBOSITY
 _FLOX_SUBSYSTEM_VERBOSITY
 EOF
-  else
-    assert_output - <<EOF
-FLOX_ORIG_HOME
-FLOX_TCSH_INIT_SCRIPT
-GROUP
-HOST
-HOSTTYPE
-MACHTYPE
-NO_COLOR
-OSTYPE
-PATH
-SHLVL
-SSL_CERT_DIR
-TCLLIBPATH
-TERM
-VENDOR
-_FLOX_ACTIVATIONS_VERBOSITY
-_FLOX_SUBSYSTEM_VERBOSITY
-EOF
-  fi
 }
 
 # bats test_tags=activate,deactivate
@@ -1180,8 +1081,7 @@ EOF
 
   output=$(diff_env_dumps "$BEFORE" "$AFTER"); status=$?
   assert_success
-  if [[ "$OSTYPE" == darwin* ]]; then
-    assert_output - <<EOF
+  assert_output - <<EOF
 FLOX_ORIG_ZDOTDIR
 FLOX_SAVE_ZSH_PS1
 NO_COLOR
@@ -1189,28 +1089,11 @@ OLDPWD
 PATH
 PS1
 SHLVL
-SSL_CERT_FILE
 TCLLIBPATH
 TERM
 _FLOX_ACTIVATIONS_VERBOSITY
 _FLOX_SUBSYSTEM_VERBOSITY
 EOF
-  else
-    assert_output - <<EOF
-FLOX_ORIG_ZDOTDIR
-FLOX_SAVE_ZSH_PS1
-NO_COLOR
-OLDPWD
-PATH
-PS1
-SHLVL
-SSL_CERT_DIR
-TCLLIBPATH
-TERM
-_FLOX_ACTIVATIONS_VERBOSITY
-_FLOX_SUBSYSTEM_VERBOSITY
-EOF
-  fi
 }
 
 # ---------------------------------------------------------------------------- #

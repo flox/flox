@@ -220,6 +220,7 @@ impl Develop {
         // same injection-safety rule the rcfile follows).
         if let Some(shell_command) = shell_command {
             let mut command = Command::new(&*INTERACTIVE_BASH_BIN);
+            flox_core::util::restore_startup_tls_env(&mut command);
             command.env("_FLOX_DEVELOP_ENV_SCRIPT", &env_script_path);
             command.env("_FLOX_DEVELOP_COMMAND", &shell_command);
             command
@@ -238,6 +239,7 @@ impl Develop {
         Self::print_disclosure(target.name().as_ref());
 
         let mut command = Command::new(&*INTERACTIVE_BASH_BIN);
+        flox_core::util::restore_startup_tls_env(&mut command);
         // `pname` and the `print-dev-env` script path are passed as
         // environment variables and referenced by name from the rcfile
         // (`render_rcfile`) rather than interpolated into its text, so

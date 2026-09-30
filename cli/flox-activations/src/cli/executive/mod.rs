@@ -16,6 +16,7 @@ use flox_core::proc_status::read_pid_status;
 use flox_core::process_compose::manager_responds;
 use flox_core::sentry::init_sentry;
 use flox_core::traceable_path;
+use flox_core::util::capture_startup_tls_env;
 use fslock::LockFile;
 use log_gc::{spawn_heartbeat_log, spawn_logs_gc_threads};
 use nix::sys::signal::Signal::SIGUSR1;
@@ -68,6 +69,12 @@ pub struct ExecutiveArgs {
 
 impl ExecutiveArgs {
     pub fn handle(self) -> Result<(), anyhow::Error> {
+        // Step 0: Record SSL_CERT_FILE and SSL_CERT_DIR as the executive
+        // received them, before Sentry (step 4) can build the TLS client
+        // that writes them into this process on Linux. Every process the
+        // executive spawns is given this record back.
+        capture_startup_tls_env();
+
         // Step 1: Extract context which we need to do anything.
         let contents = fs::read_to_string(&self.executive_ctx)?;
         let ExecutiveCtx {

@@ -1705,6 +1705,7 @@ dependencies = [
  "shell_gen",
  "supports-color",
  "sysinfo",
+ "temp-env",
  "tempfile",
  "thiserror 2.0.18",
  "time",

@@ -946,10 +946,10 @@ async fn exec_run(run_args: RunArgs, flox: &Flox) -> Result<()> {
 
                 debug!(path = ?new_path, "exec via build output PATH");
 
-                let err = std::process::Command::new(&run_args.executable)
-                    .args(&run_args.args)
-                    .env("PATH", &new_path)
-                    .exec();
+                let mut command = std::process::Command::new(&run_args.executable);
+                command.args(&run_args.args).env("PATH", &new_path);
+                flox_core::util::restore_startup_tls_env(&mut command);
+                let err = command.exec();
 
                 return Err(RunError::ExecFailed(
                     run_args.executable.to_string_lossy().into_owned(),
@@ -966,9 +966,10 @@ async fn exec_run(run_args: RunArgs, flox: &Flox) -> Result<()> {
     debug!(path = %executable_path.display(), "found executable");
 
     // 8. Exec (replace the flox process).
-    let err = std::process::Command::new(&executable_path)
-        .args(&run_args.args)
-        .exec();
+    let mut command = std::process::Command::new(&executable_path);
+    command.args(&run_args.args);
+    flox_core::util::restore_startup_tls_env(&mut command);
+    let err = command.exec();
 
     // exec only returns on error.
     Err(RunError::ExecFailed(executable_path.display().to_string(), err).into())
