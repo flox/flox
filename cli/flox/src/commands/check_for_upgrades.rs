@@ -5,7 +5,12 @@ use anyhow::{Context, Result};
 use bpaf::{Bpaf, Parser};
 use flox_core::log_file_format_upgrade_check;
 use flox_rust_sdk::flox::Flox;
-use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment, EnvironmentError};
+use flox_rust_sdk::models::environment::{
+    ConcreteEnvironment,
+    Environment,
+    EnvironmentError,
+    UpgradeResult,
+};
 use flox_rust_sdk::providers::catalog::CatalogQoS;
 use flox_rust_sdk::providers::upgrade_checks::{UpgradeInformation, UpgradeInformationGuard};
 use serde::de::DeserializeOwned;
@@ -67,16 +72,6 @@ impl CheckForUpgrades {
 
         let mut environment = self.environment.into_concrete_environment(&flox, None)?;
 
-        // The package upgrade check runs a catalog `resolve`, which becomes
-        // authenticated-only under catalog auth gating. Skip just that check
-        // when logged out, but still refresh remote environment state —
-        // public environments can fetch it unauthenticated (DEV-324).
-        if flox.auth_context.is_unauthenticated() {
-            debug!("Not logged in; skipping package upgrade check.");
-            update_remote_environment_state(&flox, &environment)?;
-            return Ok(());
-        }
-
         let check_exit_branch = check_for_package_upgrades(
             &flox,
             &mut environment,
@@ -127,9 +122,25 @@ fn check_for_package_upgrades(
         return Ok(ExitBranch::LockTaken);
     };
 
-    let upgrade_result = info_span!("check-upgrade", progress = "Performing dry upgrade")
-        .entered()
-        .in_scope(|| environment.dry_upgrade(flox, &[]))?;
+    // When logged out, skip the catalog resolve entirely and record a no-op
+    // result instead. old_lockfile == new_lockfile means diff() is empty,
+    // so no false upgrade notification is shown. Recording last_checked here
+    // throttles update_remote_environment_state on the same schedule as the
+    // authenticated path, so logged-out users are not forced to fetch remote
+    // state on every activation (DEV-324).
+    let upgrade_result = if flox.auth_context.is_unauthenticated() {
+        debug!("Not logged in; skipping package upgrade resolve.");
+        let current_lockfile = environment.lockfile(flox)?.into();
+        UpgradeResult {
+            old_lockfile: Some(environment.lockfile(flox)?.into()),
+            new_lockfile: current_lockfile,
+            store_path: None,
+        }
+    } else {
+        info_span!("check-upgrade", progress = "Performing dry upgrade")
+            .entered()
+            .in_scope(|| environment.dry_upgrade(flox, &[]))?
+    };
 
     let new_info = UpgradeInformation {
         last_checked: OffsetDateTime::now_utc(),
@@ -204,12 +215,12 @@ pub fn spawn_detached_check_for_upgrades_process(
 #[cfg(test)]
 mod tests {
 
-    use flox_rust_sdk::flox::test_helpers::flox_instance;
+    use flox_rust_sdk::flox::test_helpers::{flox_instance, set_test_auth};
+    use flox_rust_sdk::models::environment::UpgradeResult;
     use flox_rust_sdk::models::environment::path_environment::test_helpers::{
         new_path_environment,
         new_path_environment_from_env_files,
     };
-    use flox_rust_sdk::models::environment::{UninitializedEnvironment, UpgradeResult};
     use flox_rust_sdk::providers::catalog::test_helpers::catalog_replay_client;
     use flox_test_utils::GENERATED_DATA;
     use flox_test_utils::manifests::HELLO;
@@ -281,6 +292,10 @@ mod tests {
             catalog_replay_client(GENERATED_DATA.join("resolve/hello.yaml")).await;
         environment.lockfile(&flox).unwrap();
 
+        // flox_instance() gives a logged-out instance; the dry_upgrade path
+        // requires catalog access, so authenticate before running the check.
+        set_test_auth(&mut flox, "test");
+
         // required to read the upgrade information after being moved in the following line.
         let cache_path = environment.cache_path().unwrap();
 
@@ -307,33 +322,60 @@ mod tests {
         );
     }
 
-    /// `handle()` must skip the package upgrade check and return `Ok(())` without
-    /// writing any upgrade information when the user is not logged in.
-    ///
-    /// `update_remote_environment_state` still runs (public environments can
-    /// fetch remote state unauthenticated). For a Path environment it is a
-    /// no-op, so no upgrade information is written (DEV-324).
-    #[tokio::test]
-    async fn handle_skips_when_not_logged_in() {
+    /// When logged out, `check_for_package_upgrades` records a no-op
+    /// `UpgradeInformation` (old_lockfile == new_lockfile, no store_path) so
+    /// that the throttle fires on subsequent calls just as it would for an
+    /// authenticated user — preventing `update_remote_environment_state` from
+    /// running on every activation (DEV-324).
+    #[test]
+    fn logged_out_records_noop_check_and_throttles() {
+        use flox_rust_sdk::models::environment::path_environment::PathEnvironment;
+
         // flox_instance() sets AuthContext::new_from_token(None) → Auth0(None),
-        // which is_unauthenticated() == true.
+        // which is_unauthenticated() == true — no catalog replay client needed
+        // because no resolve occurs.
         let (flox, _tempdir) = flox_instance();
 
-        let concrete =
-            new_path_environment_from_env_files(&flox, GENERATED_DATA.join("envs/hello"));
-        let cache_path = concrete.cache_path().unwrap();
-        let environment = UninitializedEnvironment::from_concrete_environment(&concrete.into());
+        let env = new_path_environment_from_env_files(&flox, GENERATED_DATA.join("envs/hello"));
+        let cache_path = env.cache_path().unwrap();
 
-        let result = CheckForUpgrades {
-            check_timeout: DEFAULT_TIMEOUT_SECONDS,
-            environment,
-        }
-        .handle(flox)
-        .await;
+        // Capture the path and pointer so we can re-open the same environment
+        // for the throttle assertion below without needing Clone on PathEnvironment.
+        let dot_flox_path = env.path.clone();
+        let pointer = env.pointer.clone();
 
-        assert!(result.is_ok());
-        // No upgrade information should have been written.
+        // First call: should record a no-op check and return Checked.
+        let exit_branch =
+            check_for_package_upgrades(&flox, &mut env.into(), Duration::MAX).unwrap();
+        assert_eq!(exit_branch, ExitBranch::Checked);
+
+        // Verify the written UpgradeInformation contains old == new (no false
+        // upgrade notification) and no store_path (no build occurred).
         let guard = UpgradeInformationGuard::read_in(cache_path).unwrap();
-        assert!(guard.info().is_none());
+        let info = guard
+            .info()
+            .as_ref()
+            .expect("upgrade information was written");
+        assert_eq!(
+            info.upgrade_result.old_lockfile.as_ref(),
+            Some(&info.upgrade_result.new_lockfile),
+            "old_lockfile should equal new_lockfile — diff() must be empty"
+        );
+        assert!(
+            info.upgrade_result.store_path.is_none(),
+            "no build should have occurred"
+        );
+
+        // Re-open the same environment; second call must be throttled (AlreadyChecked),
+        // proving update_remote_environment_state is no longer invoked on every
+        // activation for logged-out users.
+        let env2 = PathEnvironment::open(&flox, pointer, dot_flox_path).unwrap();
+        let exit_branch2 =
+            check_for_package_upgrades(&flox, &mut env2.into(), Duration::MAX).unwrap();
+        assert_eq!(
+            exit_branch2,
+            ExitBranch::AlreadyChecked,
+            "second call should be throttled"
+        );
     }
 }
