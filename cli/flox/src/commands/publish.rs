@@ -87,9 +87,7 @@ async fn confirm_lineage_change(change: &SourceLineageChange) -> Result<bool, Pu
     .await
     .map_err(|err| PublishError::Catchall(format!("Could not confirm source change: {err}")))?;
     if !confirmed {
-        return Err(PublishError::Catchall(
-            "Publish canceled. The registered source was not changed.".to_owned(),
-        ));
+        return Err(PublishError::LineageChangeDeclined);
     }
     Ok(true)
 }
@@ -536,6 +534,8 @@ impl Publish {
             .await
         {
             Ok(needs_wait) => needs_wait,
+            // A declined confirmation is a deliberate cancel, not a failure.
+            Err(e @ PublishError::LineageChangeDeclined) => return Err(e.into()),
             Err(e) => bail!("Failed to publish package: {}", display_chain(&e)),
         };
 

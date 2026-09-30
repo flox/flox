@@ -113,6 +113,10 @@ pub enum PublishError {
 
     #[error("Timed out waiting for publish completion")]
     PublishTimeout,
+
+    /// The user declined to replace the package's registered source.
+    #[error("Publish canceled. The registered source was not changed.")]
+    LineageChangeDeclined,
 }
 
 /// The `Publish` trait describes the high level behavior of publishing a package to a catalog.
