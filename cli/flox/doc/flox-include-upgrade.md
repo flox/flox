@@ -22,8 +22,21 @@ flox [<general-options>] include upgrade
 
 Get the latest contents of included environments and merge them with the
 composing environment.
-The generations that environments included with `remote` changed between are
-listed.
+This includes package upgrades that an included environment has locked without
+changing its manifest, for example with `flox upgrade`, for each package group
+whose packages all come from that environment.
+Such a package group is set to the versions in the included environment's
+lockfile once that environment's lock differs from the one the lockfile
+records.
+Until then, the composing environment keeps the versions it locked itself, for
+example with `flox upgrade`.
+A package group that mixes packages from several environments, such as the
+default `toplevel` group when the composing environment installs packages too,
+doesn't get those upgrades.
+See [`manifest.toml(5)`](./manifest.toml.md) for more details on how packages
+from included environments are locked.
+The packages that changed on the current system are listed, and so are the
+generations that environments included with `remote` changed between.
 
 If the names of specific included environments are provided, only changes for
 those environments will be fetched. If no names are provided, changes will be
@@ -33,9 +46,8 @@ A path environment, or an environment pulled from FloxHub into a directory,
 already uses the latest changes to the environments it includes with
 `auto-upgrade` enabled, which by default are the path environments it includes
 with `dir`, but keeps them out of its lockfile and its generations.
-This command saves them to the lockfile,
-and gets the latest contents of other included environments, such as those
-included with `remote`.
+This command saves the changes in use to the lockfile, and gets the latest
+contents of other included environments, such as those included with `remote`.
 
 ## Checking the lockfile
 

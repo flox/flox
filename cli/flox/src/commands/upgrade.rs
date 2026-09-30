@@ -216,7 +216,7 @@ fn upgrade_payload(
 /// Version changes show: `- pkg: 1.0 -> 2.0`
 /// Rebuilds show: `- pkg: 1.0 (rebuild, rev DATE -> DATE)` with fallback to
 /// rev hash or bare `(rebuild)` when rev info is unavailable.
-fn render_diff(diff: &SingleSystemUpgradeDiff) -> String {
+pub(crate) fn render_diff(diff: &SingleSystemUpgradeDiff) -> String {
     diff.iter()
         .map(|(_, (before, after))| {
             let install_id = before.install_id();

@@ -908,7 +908,17 @@ impl LockManifest {
     ///   system, for a descriptor that doesn't invalidate the merged one;
     /// - for a package group, those packages satisfy the merged manifest's
     ///   `allow` and `semver` options, which resolving the group would apply;
-    /// - `seed_lockfile` locks none of the unit's packages.
+    /// - `seed_lockfile` doesn't lock the same derivations for the unit,
+    ///   e.g. because it doesn't lock all of them yet,
+    ///   or because the included environment has upgraded them since;
+    /// - if `seed_lockfile` locks all of the unit, the included environment's
+    ///   lock changed since `seed_lockfile` recorded it, or it isn't recorded
+    ///   (see [LockedInclude::has_lock_recorded_by]).
+    ///
+    /// So a fetched include's locks take precedence over `seed_lockfile`'s
+    /// for the units it wholly provides, once it locks something new,
+    /// while the composing environment's own upgrades of them are kept until
+    /// then.
     ///
     /// Copying whole units from a single lockfile keeps every package group
     /// the product of a single resolution.
@@ -941,6 +951,21 @@ impl LockManifest {
             .collect::<Result<BTreeMap<_, _>, ResolveError>>()?;
 
         let providers = compose.include_names_by_install_id()?;
+        let recorded_includes = seed_lockfile
+            .and_then(|seed_lockfile| seed_lockfile.compose.as_ref())
+            .map(|compose| compose.include.as_slice())
+            .unwrap_or_default();
+        // Whether the include named `name` locks what `seed_lockfile` recorded
+        let lock_is_recorded = |name: &String| {
+            let fetched = compose.include.iter().find(|include| &include.name == name);
+            let recorded = recorded_includes
+                .iter()
+                .find(|include| &include.name == name);
+            fetched
+                .zip(recorded)
+                .and_then(|(fetched, recorded)| fetched.has_lock_recorded_by(recorded))
+                .unwrap_or(false)
+        };
         // The fetched include that provides all of `install_ids`, if there is one
         let single_fetched_provider = |install_ids: Vec<&String>| {
             let name = install_ids
@@ -962,11 +987,13 @@ impl LockManifest {
                 .iter()
                 .map(|descriptor| &descriptor.install_id)
                 .collect();
-            let adopted_from = single_fetched_provider(install_ids)
-                .filter(|_| seed_group.pins_none())
-                .and_then(|(name, include_view)| {
+            let adopted_from =
+                single_fetched_provider(install_ids).and_then(|(name, include_view)| {
                     let include_group = include_view.groups.get(group_name).filter(|group| {
-                        group.pins_all() && include_view.satisfies_options(group, merged)
+                        group.pins_all()
+                            && include_view.satisfies_options(group, merged)
+                            && !group.pins_same_derivations_as(seed_group)
+                            && !(seed_group.pins_all() && lock_is_recorded(name))
                     })?;
                     Some((name, include_group))
                 });
@@ -990,9 +1017,14 @@ impl LockManifest {
         for install_id in flake_install_ids {
             let seed_locked = seed_view.flakes.get(&install_id);
             let adopted_from = single_fetched_provider(vec![&install_id])
-                .filter(|_| seed_locked.is_none())
                 .and_then(|(name, include_view)| {
                     Some((name, include_view.flakes.get(&install_id)?))
+                })
+                .filter(|(name, include_locked)| {
+                    seed_locked.is_none_or(|seed_locked| {
+                        !locks_same_derivations(seed_locked, include_locked)
+                            && !lock_is_recorded(name)
+                    })
                 });
 
             match adopted_from {
@@ -1522,19 +1554,37 @@ impl SeedView {
 }
 
 impl SeededGroup {
-    fn pins_all(&self) -> bool {
+    /// The derivation pinned for each descriptor of the group, if any
+    fn pinned_derivations(&self) -> impl Iterator<Item = Option<&str>> {
         self.group
             .descriptors
             .iter()
-            .all(|descriptor| descriptor.derivation.is_some())
+            .map(|descriptor| descriptor.derivation.as_deref())
     }
 
-    fn pins_none(&self) -> bool {
-        self.group
-            .descriptors
-            .iter()
-            .all(|descriptor| descriptor.derivation.is_none())
+    fn pins_all(&self) -> bool {
+        self.pinned_derivations()
+            .all(|derivation| derivation.is_some())
     }
+
+    /// Whether both seeds pin the same derivation for each descriptor.
+    ///
+    /// Both groups must come from views of the same manifest,
+    /// so that their descriptors line up.
+    fn pins_same_derivations_as(&self, other: &SeededGroup) -> bool {
+        self.pinned_derivations().eq(other.pinned_derivations())
+    }
+}
+
+/// Whether two seeds lock a flake install ID to the same derivations.
+///
+/// Both must come from views of the same manifest,
+/// so that their systems line up.
+fn locks_same_derivations(locked: &[LockedPackage], other: &[LockedPackage]) -> bool {
+    locked
+        .iter()
+        .map(LockedPackage::derivation)
+        .eq(other.iter().map(LockedPackage::derivation))
 }
 
 /// Whether resolving packages for `manifest` may pick pre-release versions,
@@ -4217,6 +4267,7 @@ mod tests {
                         auto_upgrade: None,
                     },
                     generation: None,
+                    packages_hash: None,
                 })
                 .collect(),
             warnings: vec![],
@@ -4606,12 +4657,53 @@ mod tests {
         assert_eq!(seed, Some(lockfile_for(&merged, [hello_locked.into()])));
     }
 
-    /// Groups the composer already locked keep the composer's pins.
+    /// A group an include locked to other derivations than the composer is
+    /// copied from the include, which takes precedence,
+    /// while the composer's own groups keep the composer's pins.
     #[test]
-    fn seed_with_include_locks_keeps_groups_the_composer_locked() {
+    fn seed_with_include_locks_copies_include_pins_that_differ() {
         let (hello_iid, hello_descriptor, hello_locked) = fake_catalog_package_lock("hello", None);
+        let (vim_iid, vim_descriptor, vim_locked) = fake_catalog_package_lock("vim", Some("tools"));
         let hello_locked_by_dep = LockedPackageCatalog {
             derivation: "derivation of dep".to_string(),
+            ..hello_locked.clone()
+        };
+
+        let composer = manifest_installing([(vim_iid.clone(), vim_descriptor.clone())]);
+        let dep = manifest_installing([(hello_iid.clone(), hello_descriptor.clone())]);
+        let merged =
+            manifest_installing([(hello_iid, hello_descriptor), (vim_iid, vim_descriptor)]);
+        let seed_lockfile = lockfile_for(&merged, [hello_locked.into(), vim_locked.clone().into()]);
+        let include_lockfiles = BTreeMap::from([(
+            "dep".to_string(),
+            lockfile_for(&dep, [hello_locked_by_dep.clone().into()]),
+        )]);
+
+        let seed = LockManifest::seed_with_include_locks(
+            &merged,
+            Some(&compose_of(&composer, &[("dep", &dep)])),
+            &include_lockfiles,
+            Some(&seed_lockfile),
+        )
+        .unwrap();
+
+        assert_eq!(
+            seed,
+            Some(lockfile_for(&merged, [
+                vim_locked.into(),
+                hello_locked_by_dep.into()
+            ]))
+        );
+    }
+
+    /// A group the composer locked to the same derivations as the include
+    /// keeps the composer's pins, so metadata-only differences don't change
+    /// the lockfile.
+    #[test]
+    fn seed_with_include_locks_keeps_composer_pins_that_agree() {
+        let (hello_iid, hello_descriptor, hello_locked) = fake_catalog_package_lock("hello", None);
+        let hello_locked_by_dep = LockedPackageCatalog {
+            rev_date: hello_locked.rev_date + chrono::Duration::days(1),
             ..hello_locked.clone()
         };
 
@@ -4635,13 +4727,14 @@ mod tests {
         assert_eq!(seed, None);
     }
 
-    /// A group the composer locked in part keeps the composer's pins.
+    /// A group the composer locked only in part is copied from the include,
+    /// even if the packages the composer locked agree with the include.
     #[test]
-    fn seed_with_include_locks_keeps_groups_the_composer_locked_in_part() {
+    fn seed_with_include_locks_copies_groups_the_composer_locked_in_part() {
         let (hello_iid, hello_descriptor, hello_locked) = fake_catalog_package_lock("hello", None);
         let (jq_iid, jq_descriptor, jq_locked) = fake_catalog_package_lock("jq", None);
         let hello_locked_by_dep = LockedPackageCatalog {
-            derivation: "derivation of dep".to_string(),
+            rev_date: hello_locked.rev_date + chrono::Duration::days(1),
             ..hello_locked.clone()
         };
 
@@ -4654,7 +4747,10 @@ mod tests {
         let seed_lockfile = lockfile_for(&merged, [hello_locked.into()]);
         let include_lockfiles = BTreeMap::from([(
             "dep".to_string(),
-            lockfile_for(&dep, [hello_locked_by_dep.into(), jq_locked.into()]),
+            lockfile_for(&dep, [
+                hello_locked_by_dep.clone().into(),
+                jq_locked.clone().into(),
+            ]),
         )]);
 
         let seed = LockManifest::seed_with_include_locks(
@@ -4665,7 +4761,13 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(seed, None);
+        assert_eq!(
+            seed,
+            Some(lockfile_for(&merged, [
+                hello_locked_by_dep.into(),
+                jq_locked.into()
+            ]))
+        );
     }
 
     /// A flake an include locked for every requested system is copied,
@@ -4693,13 +4795,51 @@ mod tests {
         assert_eq!(seed, Some(lockfile_for(&merged, [foo_locked.into()])));
     }
 
-    /// Flakes the composer already locked keep the composer's lock.
+    /// A flake an include locked to another derivation than the composer is
+    /// copied from the include.
     #[test]
-    fn seed_with_include_locks_keeps_flakes_the_composer_locked() {
+    fn seed_with_include_locks_copies_flake_locks_that_differ() {
         let (foo_iid, foo_descriptor, foo_locked) = fake_flake_installable_lock("foo");
         let foo_locked_by_dep = LockedPackageFlake {
             locked_installable: LockedInstallable {
                 derivation: "derivation of dep".to_string(),
+                ..foo_locked.locked_installable.clone()
+            },
+            ..foo_locked.clone()
+        };
+
+        let composer = manifest_installing([]);
+        let dep = manifest_installing([(foo_iid.clone(), foo_descriptor.clone().into())]);
+        let merged = manifest_installing([(foo_iid, foo_descriptor.into())]);
+        let seed_lockfile = lockfile_for(&merged, [foo_locked.into()]);
+        let include_lockfiles = BTreeMap::from([(
+            "dep".to_string(),
+            lockfile_for(&dep, [foo_locked_by_dep.clone().into()]),
+        )]);
+
+        let seed = LockManifest::seed_with_include_locks(
+            &merged,
+            Some(&compose_of(&composer, &[("dep", &dep)])),
+            &include_lockfiles,
+            Some(&seed_lockfile),
+        )
+        .unwrap();
+
+        assert_eq!(
+            seed,
+            Some(lockfile_for(&merged, [foo_locked_by_dep.into()]))
+        );
+    }
+
+    /// A flake the composer locked to the same derivation as the include
+    /// keeps the composer's lock.
+    #[test]
+    fn seed_with_include_locks_keeps_composer_flake_locks_that_agree() {
+        let (foo_iid, foo_descriptor, foo_locked) = fake_flake_installable_lock("foo");
+        let foo_locked_by_dep = LockedPackageFlake {
+            locked_installable: LockedInstallable {
+                locked_url: "github:nowhere/exciting/0000000000000000000000000000000000000000#foo"
+                    .to_string(),
                 ..foo_locked.locked_installable.clone()
             },
             ..foo_locked.clone()
@@ -4762,5 +4902,75 @@ mod tests {
                 .collect::<Vec<_>>()
         };
         assert_eq!(sorted(lockfile.packages), sorted(dep_lockfile.packages));
+    }
+
+    /// Upgrading an include applies the packages the included environment
+    /// locked again without changing its manifest, e.g. with 'flox upgrade',
+    /// without resolving them, which would fail with the no-op catalog client.
+    /// Locking without upgrading the include keeps the composer's lock.
+    #[tokio::test]
+    async fn lock_manifest_with_include_upgrades_copies_lock_only_changes() {
+        let (flox, tempdir) = flox_instance();
+        let dep = new_path_environment_from_env_files_in(
+            &flox,
+            GENERATED_DATA.join("envs/hello"),
+            tempdir.path().join("dep"),
+            None,
+        );
+        let manifest = mk_test_manifest_from_contents(with_latest_schema(indoc! {r#"
+            [include]
+            environments = [
+              { dir = "dep" }
+            ]
+        "#}))
+        .as_migrated_typed_only();
+        let include_fetcher = IncludeFetcher::new(Some(tempdir.path().to_path_buf()));
+        let lockfile = LockManifest::lock_manifest(&flox, &manifest, None, &include_fetcher)
+            .await
+            .unwrap();
+
+        let upgrade_hello = |lockfile: &mut Lockfile| {
+            for package in &mut lockfile.packages {
+                if let LockedPackage::Catalog(package) = package {
+                    package.derivation = format!("{}-upgraded", package.derivation);
+                    package.version = "2.12.1".to_string();
+                }
+            }
+        };
+        let dep_lockfile_path = dep.lockfile_path(&flox).unwrap();
+        let mut dep_lockfile =
+            Lockfile::from_str(&std::fs::read_to_string(&dep_lockfile_path).unwrap()).unwrap();
+        upgrade_hello(&mut dep_lockfile);
+        std::fs::write(
+            &dep_lockfile_path,
+            serde_json::to_string_pretty(&dep_lockfile).unwrap(),
+        )
+        .unwrap();
+
+        let relocked = LockManifest::lock_manifest_with_include_upgrades(
+            &flox,
+            &manifest,
+            Some(&lockfile),
+            &include_fetcher,
+            None,
+        )
+        .await
+        .unwrap();
+        assert_eq!(relocked, lockfile);
+
+        let upgraded = LockManifest::lock_manifest_with_include_upgrades(
+            &flox,
+            &manifest,
+            Some(&lockfile),
+            &include_fetcher,
+            Some(vec!["dep".to_string()]),
+        )
+        .await
+        .unwrap();
+        let mut expected = lockfile.clone();
+        upgrade_hello(&mut expected);
+        expected.compose.as_mut().unwrap().include[0].packages_hash =
+            Some(dep_lockfile.packages_hash());
+        assert_eq!(upgraded, expected);
     }
 }

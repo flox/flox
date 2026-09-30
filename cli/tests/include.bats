@@ -702,4 +702,136 @@ EOF
     "$(jq -S "$locked_packages" included/.flox/env/manifest.lock)"
 }
 
+@test "include upgrade applies package upgrades locked by an included environment" {
+  skip_x86_64_darwin_replay
+
+  "$FLOX_BIN" init -d included
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/old_hello.yaml" \
+    "$FLOX_BIN" install -d included hello
+
+  "$FLOX_BIN" init -d composer
+  MANIFEST_CONTENTS="$(cat << "EOF"
+    version = 1
+
+    [include]
+    environments = [
+      { dir = "../included" },
+    ]
+EOF
+  )"
+  echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f - -d composer
+
+  # This only changes the included environment's lockfile.
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
+    "$FLOX_BIN" upgrade -d included
+
+  old_version="$(yq -r '.then.body' "$GENERATED_DATA/resolve/old_hello.yaml" \
+    | jq -r '.items[].page.packages[0].version')"
+  new_version="$(yq -r '.then.body' "$GENERATED_DATA/resolve/hello.yaml" \
+    | jq -r '.items[].page.packages[0].version')"
+
+  # The file's default empty mock fails any resolution, so the composer can
+  # only lock by reusing the included environment's packages.
+  run "$FLOX_BIN" include upgrade -d composer
+  assert_success
+  assert_output --partial - <<EOF
+✔ Upgraded 'composer' with latest changes to:
+- 'included'
+Changed packages:
+- hello: $old_version -> $new_version
+EOF
+
+  locked_packages='[.packages[] | {install_id, system, derivation}] | sort_by(.system)'
+  assert_equal \
+    "$(jq -S "$locked_packages" composer/.flox/env/manifest.lock)" \
+    "$(jq -S "$locked_packages" included/.flox/env/manifest.lock)"
+
+  # A rewrite would produce identical contents, so check that the lockfile
+  # wasn't written at all.
+  touch "$BATS_TEST_TMPDIR/before-second-upgrade"
+  run "$FLOX_BIN" include upgrade -d composer
+  assert_success
+  assert_output --partial "No included environments have changes."
+  assert_equal \
+    "$(find composer/.flox/env/manifest.lock -newer "$BATS_TEST_TMPDIR/before-second-upgrade")" \
+    ""
+}
+
+@test "list follows packages locked by an included environment without resolving them" {
+  skip_x86_64_darwin_replay
+
+  "$FLOX_BIN" init -d included
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/old_hello.yaml" \
+    "$FLOX_BIN" install -d included hello
+
+  "$FLOX_BIN" init -d composer
+  MANIFEST_CONTENTS="$(cat << "EOF"
+    version = 1
+
+    [include]
+    environments = [
+      { dir = "../included" },
+    ]
+EOF
+  )"
+  echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f - -d composer
+  lockfile_before="$(cat composer/.flox/env/manifest.lock)"
+
+  new_version="$(yq -r '.then.body' "$GENERATED_DATA/resolve/hello.yaml" \
+    | jq -r '.items[].page.packages[0].version')"
+
+  # Upgrading only changes the included environment's lockfile.
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
+    "$FLOX_BIN" upgrade -d included
+
+  # The file's default empty mock fails any resolution, so the composer can
+  # only follow by reusing the included environment's packages.
+  run --separate-stderr "$FLOX_BIN" list -d composer
+  assert_success
+  assert_output "hello: hello ($new_version)"
+  assert_regex "$stderr" "- 'included'"
+
+  locked_packages='[.packages[] | {install_id, system, derivation}] | sort_by(.system)'
+  assert_equal \
+    "$(jq -S ".lockfile | $locked_packages" composer/.flox/cache/followed-includes.*.json)" \
+    "$(jq -S "$locked_packages" included/.flox/env/manifest.lock)"
+  assert_equal "$(cat composer/.flox/env/manifest.lock)" "$lockfile_before"
+}
+
+@test "include upgrade keeps the composer's own upgrades while the included environment is unchanged" {
+  skip_x86_64_darwin_replay
+
+  "$FLOX_BIN" init -d included
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/old_hello.yaml" \
+    "$FLOX_BIN" install -d included hello
+
+  "$FLOX_BIN" init -d composer
+  MANIFEST_CONTENTS="$(cat << "EOF"
+    version = 1
+
+    [include]
+    environments = [
+      { dir = "../included" },
+    ]
+EOF
+  )"
+  echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f - -d composer
+  new_version="$(yq -r '.then.body' "$GENERATED_DATA/resolve/hello.yaml" \
+    | jq -r '.items[].page.packages[0].version')"
+
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
+    "$FLOX_BIN" upgrade -d composer
+  run --separate-stderr "$FLOX_BIN" list -d composer
+  assert_success
+  assert_output "hello: hello ($new_version)"
+  refute_regex "$stderr" "aren't in the lockfile yet"
+
+  run "$FLOX_BIN" include upgrade -d composer
+  assert_success
+  assert_output --partial "No included environments have changes."
+  run "$FLOX_BIN" list -d composer
+  assert_success
+  assert_output "hello: hello ($new_version)"
+}
+
 # ---------------------------------------------------------------------------- #

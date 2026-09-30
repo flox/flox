@@ -125,6 +125,13 @@
         },
         "name": {
           "type": "string"
+        },
+        "packages_hash": {
+          "description": "A hash of the packages that an included directory's environment had\nlocked when the composing environment last took them.\n\nIt tells upgrades that the included environment locked from the\ncomposing environment's own.\nOlder versions of Flox didn't record it, and it's not set for\nenvironments included from FloxHub, whose generation records it.",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "required": [

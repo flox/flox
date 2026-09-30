@@ -8,6 +8,7 @@ use indoc::{formatdoc, indoc};
 use tracing::{debug, info_span, instrument};
 
 use super::{ConcreteEnvironment, EnvironmentSelect};
+use crate::commands::upgrade::render_diff;
 use crate::commands::{
     display_help,
     environment_description,
@@ -109,7 +110,7 @@ impl Upgrade {
         let result =
             span.in_scope(|| environment.include_upgrade(&flox, self.to_upgrade.clone()))?;
 
-        let include_diff = result.include_diff();
+        let include_diff = result.include_diff()?;
         if include_diff.is_empty() {
             if self.to_upgrade.is_empty() {
                 message::info("No included environments have changes.");
@@ -125,6 +126,13 @@ impl Upgrade {
                 if let Some(generations) = format_generation_change(&result, upgraded) {
                     message.push_str(&format!(" ({generations})"));
                 }
+            }
+            let diff_for_system = result.diff_for_system(&flox.system);
+            if !diff_for_system.is_empty() {
+                message.push_str(&format!(
+                    "\nChanged packages:\n{}",
+                    render_diff(&diff_for_system)
+                ));
             }
             message::updated(message);
             print_overridden_manifest_fields(&result.new_lockfile);

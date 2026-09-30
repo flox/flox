@@ -86,9 +86,17 @@ fn changed_include_names(lockfile: &Lockfile, copy: &Lockfile) -> Vec<String> {
     locked_includes(copy)
         .into_iter()
         .flatten()
-        .filter(|include| !locked.contains(include))
+        .filter(|include| !locked.iter().any(|locked| include.is_recorded_by(locked)))
         .map(|include| include.name.clone())
         .collect()
+}
+
+/// Whether `copy` only differs from `lockfile` in what they record about how
+/// included environments were locked, which doesn't change the environment,
+/// e.g. after an included environment upgraded only packages that the
+/// composing environment doesn't use
+fn only_records_differ(lockfile: &Lockfile, copy: &Lockfile) -> bool {
+    copy.without_include_records() == lockfile.without_include_records()
 }
 
 /// Whether building would fail the same way again, unlike a failure to
@@ -277,13 +285,17 @@ pub(super) fn follow_includes(
     };
 
     let Some(mut copy) =
-        copy.filter(|copy| locked_includes(&copy.lockfile) != locked_includes(committed))
+        copy.filter(|copy| !changed_include_names(committed, &copy.lockfile).is_empty())
     else {
         copies.remove(&flox.system);
         return Ok(locked_without_copy(followed));
     };
     if is_new {
         copies.write(&flox.system, &copy);
+    }
+    // The copy is kept, so that it isn't locked again
+    if only_records_differ(committed, &copy.lockfile) {
+        return Ok(locked_without_copy(followed));
     }
     let unsaved = changed_include_names(committed, &copy.lockfile);
 
@@ -424,7 +436,7 @@ pub(super) fn check_followed_includes(
         },
     };
     let unsaved = changed_include_names(&committed, &lockfile);
-    if unsaved.is_empty() {
+    if unsaved.is_empty() || only_records_differ(&committed, &lockfile) {
         return Ok(Some(followed));
     }
     match env_view.build_lockfile(flox, &lockfile, None) {

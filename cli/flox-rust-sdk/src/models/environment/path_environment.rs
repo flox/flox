@@ -911,10 +911,12 @@ pub mod tests {
     use std::io::Write;
 
     use flox_manifest::interfaces::AsLatestSchema;
+    use flox_manifest::lockfile::LockedPackage;
     use flox_manifest::parsed::Inner;
     use flox_manifest::parsed::common::KnownSchemaVersion;
     use flox_manifest::parsed::v1::test_helpers::manifest_without_install_or_include;
     use flox_manifest::test_helpers::{with_latest_schema, with_schema};
+    use flox_test_utils::GENERATED_DATA;
     use flox_test_utils::proptest::{alphanum_string, lowercase_alphanum_string};
     use indoc::indoc;
     use itertools::izip;
@@ -929,6 +931,7 @@ pub mod tests {
     use crate::models::environment::path_environment::test_helpers::{
         new_path_environment,
         new_path_environment_from_env_files,
+        new_path_environment_from_env_files_in,
         new_path_environment_in,
     };
     use crate::providers::lock_manifest::RecoverableMergeError;
@@ -1616,6 +1619,236 @@ pub mod tests {
         assert_eq!(
             b_lockfile_before,
             fs::read(b.lockfile_path(&flox).unwrap()).unwrap()
+        );
+    }
+
+    /// Contents of a manifest that installs hello, as in the generated
+    /// `envs/hello` environment, with `extra` appended
+    fn hello_manifest(extra: &str) -> String {
+        with_latest_schema(formatdoc! {r#"
+            [install]
+            hello.pkg-path = "hello"
+
+            [options]
+            systems = ["aarch64-darwin", "aarch64-linux", "x86_64-darwin", "x86_64-linux"]
+
+            {extra}
+        "#})
+    }
+
+    /// Change the derivations an environment locks, as 'flox upgrade' would,
+    /// without resolving anything
+    fn upgrade_locked_packages(environment: &PathEnvironment, flox: &Flox) {
+        upgrade_locked_packages_by(environment, flox, "upgraded");
+    }
+
+    /// Like [upgrade_locked_packages], with derivations marked as upgraded by
+    /// `by`, so that environments can upgrade to different ones
+    fn upgrade_locked_packages_by(environment: &PathEnvironment, flox: &Flox, by: &str) {
+        edit_lockfile(environment, flox, |lockfile| {
+            for package in &mut lockfile.packages {
+                if let LockedPackage::Catalog(package) = package {
+                    package.derivation = format!("{}-{by}", package.derivation);
+                    package.version = "2.12.4".to_string();
+                }
+            }
+        });
+    }
+
+    fn edit_lockfile(environment: &PathEnvironment, flox: &Flox, edit: impl FnOnce(&mut Lockfile)) {
+        let lockfile_path = environment.lockfile_path(flox).unwrap();
+        let mut lockfile = environment.existing_lockfile(flox).unwrap().unwrap();
+        edit(&mut lockfile);
+        fs::write(
+            lockfile_path,
+            serialize_json_with_newline(&lockfile).unwrap(),
+        )
+        .unwrap();
+    }
+
+    /// A composing environment including the hello environment from a
+    /// directory, and that environment
+    fn composer_including_hello(
+        flox: &Flox,
+        tempdir: &TempDir,
+    ) -> (PathEnvironment, PathEnvironment) {
+        let included = new_path_environment_from_env_files_in(
+            flox,
+            GENERATED_DATA.join("envs/hello"),
+            tempdir.path().join("included"),
+            None,
+        );
+        let composer = locked_path_environment(
+            flox,
+            tempdir,
+            "composer",
+            &with_latest_schema("[include]\nenvironments = [{ dir = \"../included\" }]"),
+        );
+        (composer, included)
+    }
+
+    /// Upgrades that an included environment locked without changing its
+    /// manifest are followed.
+    #[test]
+    fn lockfile_follows_upgrades_an_included_environment_locked_without_editing_it() {
+        let (flox, tempdir) = flox_instance();
+        let (mut composer, included) = composer_including_hello(&flox, &tempdir);
+
+        upgrade_locked_packages(&included, &flox);
+
+        let (lockfile, followed) = follow(&mut composer, &flox, FollowMode::Lock);
+        assert_eq!(
+            followed_names(&followed),
+            (vec!["included"], vec![], vec![], vec![])
+        );
+        assert_eq!(
+            sorted_packages(&lockfile),
+            sorted_packages(&included.existing_lockfile(&flox).unwrap().unwrap())
+        );
+    }
+
+    /// An included environment's upgrades of packages that the composing
+    /// environment doesn't use, here for a system it isn't locked for, change
+    /// only what its lockfile records, which isn't an unsaved change.
+    #[test]
+    fn lockfile_does_not_report_upgrades_of_packages_it_does_not_use() {
+        let (flox, tempdir) = flox_instance();
+        let included = new_path_environment_from_env_files_in(
+            &flox,
+            GENERATED_DATA.join("envs/hello"),
+            tempdir.path().join("included"),
+            None,
+        );
+        let mut composer = locked_path_environment(
+            &flox,
+            &tempdir,
+            "composer",
+            &with_latest_schema(indoc! {r#"
+                [include]
+                environments = [{ dir = "../included" }]
+
+                [options]
+                systems = ["aarch64-darwin"]
+            "#}),
+        );
+        let committed = composer.existing_lockfile(&flox).unwrap().unwrap();
+
+        edit_lockfile(&included, &flox, |lockfile| {
+            for package in &mut lockfile.packages {
+                if let LockedPackage::Catalog(package) = package
+                    && package.system != "aarch64-darwin"
+                {
+                    package.derivation = format!("{}-upgraded", package.derivation);
+                }
+            }
+        });
+
+        let (lockfile, followed) = follow(&mut composer, &flox, FollowMode::Lock);
+        assert_eq!(followed_names(&followed), (vec![], vec![], vec![], vec![]));
+        assert_eq!(lockfile, committed);
+    }
+
+    /// The composing environment's own upgrades of packages that an included
+    /// environment provides are kept, by following and by
+    /// 'flox include upgrade', until the included environment locks
+    /// something new.
+    #[test]
+    fn lockfile_keeps_upgrades_of_the_composer_until_its_include_upgrades() {
+        let (flox, tempdir) = flox_instance();
+        let (mut composer, included) = composer_including_hello(&flox, &tempdir);
+
+        upgrade_locked_packages_by(&composer, &flox, "composer");
+        let upgraded = composer.existing_lockfile(&flox).unwrap().unwrap();
+        let (lockfile, followed) = follow(&mut composer, &flox, FollowMode::Lock);
+        assert_eq!(followed_names(&followed), (vec![], vec![], vec![], vec![]));
+        assert_eq!(lockfile, upgraded);
+        new_command(&mut composer);
+        composer.include_upgrade(&flox, vec![]).unwrap();
+        assert_eq!(
+            composer.existing_lockfile(&flox).unwrap().unwrap(),
+            upgraded
+        );
+
+        upgrade_locked_packages_by(&included, &flox, "included");
+        let (lockfile, followed) = follow(&mut composer, &flox, FollowMode::Lock);
+        assert_eq!(
+            followed_names(&followed),
+            (vec!["included"], vec![], vec![], vec![])
+        );
+        assert_eq!(
+            sorted_packages(&lockfile),
+            sorted_packages(&included.existing_lockfile(&flox).unwrap().unwrap())
+        );
+    }
+
+    /// A lockfile from a version of Flox that didn't record what an included
+    /// environment locked follows it as before, and isn't rewritten just to
+    /// record it.
+    #[test]
+    fn lockfile_without_recorded_include_locks_follows_as_before() {
+        let (flox, tempdir) = flox_instance();
+        let (mut composer, included) = composer_including_hello(&flox, &tempdir);
+        edit_lockfile(&composer, &flox, |lockfile| {
+            for include in &mut lockfile.compose.as_mut().unwrap().include {
+                include.packages_hash = None;
+            }
+        });
+        let lockfile_path = composer.lockfile_path(&flox).unwrap();
+        let before = fs::read(&lockfile_path).unwrap();
+
+        new_command(&mut composer);
+        composer.include_upgrade(&flox, vec![]).unwrap();
+        assert_eq!(fs::read(&lockfile_path).unwrap(), before);
+
+        upgrade_locked_packages(&included, &flox);
+        let (_, followed) = follow(&mut composer, &flox, FollowMode::Lock);
+        assert_eq!(followed_names(&followed), (vec![], vec![], vec![], vec![]));
+    }
+
+    /// The packages in a lockfile, in a stable order
+    fn sorted_packages(lockfile: &Lockfile) -> Vec<LockedPackage> {
+        lockfile
+            .packages
+            .iter()
+            .cloned()
+            .sorted_by_key(|package| (package.install_id().to_string(), package.system().clone()))
+            .collect()
+    }
+
+    /// Following copies the packages that an included environment locked,
+    /// including ones it upgraded, instead of resolving them,
+    /// which would fail with the mock catalog client.
+    #[test]
+    fn lockfile_follows_packages_locked_by_path_include() {
+        let (flox, tempdir) = flox_instance();
+        let mut included = new_path_environment_from_env_files_in(
+            &flox,
+            GENERATED_DATA.join("envs/hello"),
+            tempdir.path().join("included"),
+            None,
+        );
+        let mut composer = locked_path_environment(
+            &flox,
+            &tempdir,
+            "composer",
+            &with_latest_schema("[include]\nenvironments = [{ dir = \"../included\" }]"),
+        );
+
+        edit_and_lock(
+            &mut included,
+            &flox,
+            &hello_manifest("[vars]\nincluded = \"v2\""),
+        );
+        upgrade_locked_packages(&included, &flox);
+
+        let (lockfile, followed) = follow(&mut composer, &flox, FollowMode::Lock);
+        assert_eq!(
+            followed_names(&followed),
+            (vec!["included"], vec![], vec![], vec![])
+        );
+        assert_eq!(
+            sorted_packages(&lockfile),
+            sorted_packages(&included.existing_lockfile(&flox).unwrap().unwrap())
         );
     }
 

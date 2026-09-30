@@ -288,6 +288,12 @@ impl IncludeFetcher {
                     (lockfile.manifest.clone(), lockfile, name, Some(generation))
                 }),
         }?;
+        // The generation of an environment included from FloxHub already
+        // identifies its packages
+        let packages_hash = match include_environment {
+            IncludeDescriptor::Local { .. } => Some(lockfile.packages_hash()),
+            IncludeDescriptor::Remote { .. } => None,
+        };
 
         Ok(FetchedInclude {
             locked_include: LockedInclude {
@@ -295,6 +301,7 @@ impl IncludeFetcher {
                 name,
                 descriptor: include_environment.clone(),
                 generation,
+                packages_hash,
             },
             lockfile,
         })
@@ -509,7 +516,7 @@ mod test {
 
         fs::create_dir(&environment_path).unwrap();
         let mut environment = new_path_environment_in(&flox, &manifest_contents, &environment_path);
-        let lockfile = environment.lockfile(&flox).unwrap().into();
+        let lockfile: Lockfile = environment.lockfile(&flox).unwrap().into();
 
         let include_fetcher = IncludeFetcher::new(Some(tempdir.path().to_path_buf()));
 
@@ -527,6 +534,7 @@ mod test {
                 name: "environment".to_string(),
                 descriptor: include_descriptor,
                 generation: None,
+                packages_hash: Some(lockfile.packages_hash()),
             },
             lockfile,
         })
@@ -542,7 +550,7 @@ mod test {
 
         fs::create_dir(&environment_path).unwrap();
         let mut environment = new_path_environment_in(&flox, &manifest_contents, &environment_path);
-        let lockfile = environment.lockfile(&flox).unwrap().into();
+        let lockfile: Lockfile = environment.lockfile(&flox).unwrap().into();
 
         let include_fetcher = IncludeFetcher::new(Some(tempdir.path().to_path_buf()));
 
@@ -560,6 +568,7 @@ mod test {
                 name: "environment".to_string(),
                 descriptor: include_descriptor,
                 generation: None,
+                packages_hash: Some(lockfile.packages_hash()),
             },
             lockfile,
         })
@@ -816,6 +825,7 @@ mod test {
                     name: "name".to_string(),
                     descriptor: include_descriptor,
                     generation: Some(current_generation),
+                    packages_hash: None,
                 },
                 lockfile,
             },
@@ -908,6 +918,7 @@ mod test {
                 name: "name".to_string(),
                 descriptor: include_descriptor.clone(),
                 generation: Some(*initial_generation),
+                packages_hash: None,
             },
             lockfile: initial_generation_lockfile,
         });
@@ -979,6 +990,7 @@ mod test {
                         .current_gen()
                         .unwrap()
                 ),
+                packages_hash: None,
             })
         );
     }

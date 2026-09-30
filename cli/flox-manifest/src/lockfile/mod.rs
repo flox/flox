@@ -100,6 +100,65 @@ impl Lockfile {
             .map(|json| flox_core::blake3_hex(json.as_bytes()))
     }
 
+    /// A hash of the packages this lockfile locks: which derivation each
+    /// install ID locks on each system.
+    ///
+    /// Other metadata of the packages, such as when the catalog scraped them,
+    /// doesn't change it, nor does their order.
+    /// Store paths aren't included: the manifest has them, and a lockfile
+    /// that reuses packages locked by included environments before locking
+    /// doesn't have them yet.
+    pub fn packages_hash(&self) -> String {
+        let locked: BTreeSet<(&str, &str, Option<&str>)> = self
+            .packages
+            .iter()
+            .filter(|package| !matches!(package, LockedPackage::StorePath(_)))
+            .map(|package| {
+                (
+                    package.install_id(),
+                    package.system().as_str(),
+                    package.derivation(),
+                )
+            })
+            .collect();
+        let json = serde_json::to_vec(&locked).expect("tuples of strings serialize");
+        flox_core::blake3_hex(&json)
+    }
+
+    /// This lockfile without what it records about how included environments
+    /// were locked, which doesn't change what's in the environment,
+    /// see [LockedInclude::without_records]
+    pub fn without_include_records(&self) -> Lockfile {
+        let mut lockfile = self.clone();
+        for include in lockfile
+            .compose
+            .iter_mut()
+            .flat_map(|compose| &mut compose.include)
+        {
+            *include = include.without_records();
+        }
+        lockfile
+    }
+
+    /// Whether this is the lockfile `recorded`, comparing only the fields of
+    /// included environments that `recorded` records,
+    /// see [LockedInclude::as_recorded_by]
+    pub fn is_recorded_by(&self, recorded: &Lockfile) -> bool {
+        let mut this = self.clone();
+        if let (Some(compose), Some(recorded_compose)) = (&mut this.compose, &recorded.compose) {
+            for include in &mut compose.include {
+                if let Some(recorded_include) = recorded_compose
+                    .include
+                    .iter()
+                    .find(|recorded_include| recorded_include.name == include.name)
+                {
+                    *include = include.as_recorded_by(recorded_include);
+                }
+            }
+        }
+        this == *recorded
+    }
+
     pub fn version(&self) -> u8 {
         1
     }

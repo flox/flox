@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -197,7 +197,7 @@ impl<State> CoreEnvironment<State> {
                 .include_fetcher
                 .fetch_if_auto_upgraded(flox, &locked.descriptor)
             {
-                Ok(Some(latest)) if &latest != locked => {
+                Ok(Some(latest)) if !latest.is_recorded_by(locked) => {
                     check.changed.push(locked.name.clone());
                     check.includes.push(latest);
                 },
@@ -876,11 +876,16 @@ impl CoreEnvironment<ReadOnly> {
             store_path: None,
         };
 
-        if Some(&result.new_lockfile) == result.old_lockfile.as_ref() {
+        // Only recording what a lockfile from an older version of Flox doesn't
+        // record isn't a change
+        if let Some(old_lockfile) = &result.old_lockfile
+            && result.new_lockfile.is_recorded_by(old_lockfile)
+        {
             debug!(
                 environment_lockfile_path = ?self.lockfile_path(),
                 "lockfile is up to date, skipping write"
             );
+            result.new_lockfile = old_lockfile.clone();
             return Ok(result);
         }
 
@@ -1267,36 +1272,43 @@ impl UpgradeResult {
             .collect()
     }
 
-    /// Returns the names of includes that were changed
+    /// Returns the names of includes that were changed, in include order
     ///
-    /// If an include exists in new_lockfile but not old_lockfile, that is
-    /// treated as changed
-    pub fn include_diff(&self) -> Vec<String> {
+    /// An include is changed if it is in new_lockfile but not in
+    /// old_lockfile, if its locked copy differs,
+    /// or if the derivation of a package it provides changed (see
+    /// [Self::diff]), e.g. because the included environment upgraded it.
+    /// Packages the composing environment declares itself don't change
+    /// any include.
+    pub fn include_diff(&self) -> Result<Vec<String>, ManifestError> {
+        let Some(new_compose) = &self.new_lockfile.compose else {
+            return Ok(vec![]);
+        };
         let old_include = self
             .old_lockfile
             .as_ref()
             .and_then(|old_lockfile| old_lockfile.compose.as_ref())
             .map(|old_compose| &old_compose.include);
 
-        let Some(new_compose) = &self.new_lockfile.compose else {
-            return vec![];
-        };
-        let new_include = &new_compose.include;
+        let providers = new_compose.include_names_by_install_id()?;
+        let upgraded_packages = self.diff();
+        let includes_with_upgrades = upgraded_packages
+            .keys()
+            .filter_map(|install_id| providers.get(install_id))
+            .collect::<BTreeSet<_>>();
 
-        // If there aren't any old locked includes, all includes have been
-        // changed
-        let Some(old_include) = old_include else {
-            return new_include
-                .iter()
-                .map(|locked_include| locked_include.name.clone())
-                .collect();
-        };
-
-        new_include
+        Ok(new_compose
+            .include
             .iter()
-            .filter(|new_locked_include| !old_include.contains(new_locked_include))
+            .filter(|new_locked_include| {
+                old_include.is_none_or(|old_include| {
+                    !old_include.iter().any(|old_locked_include| {
+                        new_locked_include.is_recorded_by(old_locked_include)
+                    })
+                }) || includes_with_upgrades.contains(&new_locked_include.name)
+            })
             .map(|locked_include| locked_include.name.clone())
-            .collect()
+            .collect())
     }
 }
 
@@ -1571,9 +1583,13 @@ mod tests {
     use std::os::unix::fs::PermissionsExt;
     use std::str::FromStr;
 
+    use flox_core::Version;
     use flox_core::activate::mode::ActivateMode;
     use flox_manifest::interfaces::AsLatestSchema;
+    use flox_manifest::lockfile::test_helpers::fake_catalog_package_lock;
+    use flox_manifest::lockfile::{Compose, LockedInclude, LockedPackageCatalog};
     use flox_manifest::parsed::Inner;
+    use flox_manifest::parsed::latest::IncludeDescriptor;
     use flox_manifest::raw::CatalogPackage;
     use flox_manifest::test_helpers::{with_latest_schema, with_schema};
     use flox_test_utils::{GENERATED_DATA, MANUALLY_GENERATED};
@@ -2216,7 +2232,9 @@ mod tests {
     }
 
     /// Re-locking a composed environment under the current release must
-    /// reproduce the prior-release lockfile byte-for-byte.
+    /// reproduce the prior-release lockfile byte-for-byte, apart from what the
+    /// current release records about how included environments were locked,
+    /// which older releases ignore.
     ///
     /// Set up as a real `PathEnvironment` composer with a sibling `included`
     /// env (matching the fixture's `dir = "../included"` layout) so the include
@@ -2256,12 +2274,12 @@ mod tests {
             .lockfile(&flox)
             .expect("composed env should lock offline (no packages)");
 
-        let produced = fs::read(
-            composer
-                .lockfile_path(&flox)
-                .expect("composer lockfile path"),
-        )
-        .expect("composer lockfile must exist after lock");
+        let produced = composer
+            .existing_lockfile(&flox)
+            .unwrap()
+            .expect("composer lockfile must exist after lock");
+        let produced = produced.without_include_records();
+        let produced = serialize_json_with_newline(&produced).unwrap().into_bytes();
 
         assert_eq!(
             produced, expected_lockfile_bytes,
@@ -2269,6 +2287,77 @@ mod tests {
              byte-match the prior-release lockfile. The prior pin must be >= v1.12.0 \
              (post-#4180 composer-drift fix); re-capture via \
              'just regen-prior-release-fixtures'."
+        );
+    }
+
+    /// Packages whose derivations changed are attributed to the include that
+    /// provides them, but not packages the composing environment declares.
+    #[test]
+    fn include_diff_reports_includes_whose_packages_changed() {
+        let (hello_iid, _, hello_locked) = fake_catalog_package_lock("hello", None);
+        let (vim_iid, _, vim_locked) = fake_catalog_package_lock("vim", None);
+        let manifest_installing = |install_id: &str, pkg_path: &str| {
+            Manifest::parse_toml_typed(with_latest_schema(formatdoc! {r#"
+                [install]
+                {install_id}.pkg-path = "{pkg_path}"
+            "#}))
+            .unwrap()
+            .as_typed_only()
+        };
+        let compose = Compose {
+            composer: manifest_installing(&vim_iid, "vim"),
+            include: vec![LockedInclude {
+                manifest: manifest_installing(&hello_iid, "hello"),
+                name: "dep".to_string(),
+                descriptor: IncludeDescriptor::Local {
+                    dir: "dep".into(),
+                    name: None,
+                    auto_upgrade: None,
+                },
+                generation: None,
+                packages_hash: None,
+            }],
+            warnings: vec![],
+        };
+        let lockfile_with = |hello: &LockedPackageCatalog, vim: &LockedPackageCatalog| Lockfile {
+            version: Version,
+            manifest: compose.composer.clone(),
+            packages: vec![hello.clone().into(), vim.clone().into()],
+            compose: Some(compose.clone()),
+        };
+        let include_diff_after = |hello: &LockedPackageCatalog, vim: &LockedPackageCatalog| {
+            UpgradeResult {
+                old_lockfile: Some(lockfile_with(&hello_locked, &vim_locked)),
+                new_lockfile: lockfile_with(hello, vim),
+                store_path: None,
+            }
+            .include_diff()
+        };
+
+        let hello_upgraded = LockedPackageCatalog {
+            derivation: "upgraded derivation".to_string(),
+            ..hello_locked.clone()
+        };
+        let hello_rescraped = LockedPackageCatalog {
+            rev_date: hello_locked.rev_date + chrono::Duration::days(1),
+            ..hello_locked.clone()
+        };
+        let vim_upgraded = LockedPackageCatalog {
+            derivation: "upgraded derivation".to_string(),
+            ..vim_locked.clone()
+        };
+
+        assert_eq!(
+            include_diff_after(&hello_upgraded, &vim_locked).unwrap(),
+            vec!["dep".to_string()]
+        );
+        assert_eq!(
+            include_diff_after(&hello_rescraped, &vim_locked).unwrap(),
+            Vec::<String>::new()
+        );
+        assert_eq!(
+            include_diff_after(&hello_locked, &vim_upgraded).unwrap(),
+            Vec::<String>::new()
         );
     }
 }

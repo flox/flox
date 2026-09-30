@@ -96,6 +96,70 @@ pub struct LockedInclude {
     /// included environments.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub generation: Option<usize>,
+    /// A hash of the packages that an included directory's environment had
+    /// locked when the composing environment last took them.
+    ///
+    /// It tells upgrades that the included environment locked from the
+    /// composing environment's own.
+    /// Older versions of Flox didn't record it, and it's not set for
+    /// environments included from FloxHub, whose generation records it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub packages_hash: Option<String>,
+}
+
+impl LockedInclude {
+    /// This version of the included environment, keeping only the fields
+    /// that `recorded` records.
+    ///
+    /// Lockfiles written by older versions of Flox don't record every field,
+    /// so comparing with them ignores the fields they lack.
+    pub fn as_recorded_by(&self, recorded: &LockedInclude) -> LockedInclude {
+        LockedInclude {
+            generation: recorded.generation.and(self.generation),
+            packages_hash: recorded
+                .packages_hash
+                .as_ref()
+                .and(self.packages_hash.clone()),
+            ..self.clone()
+        }
+    }
+
+    /// Whether this is the version of the included environment that
+    /// `recorded` records, see [Self::as_recorded_by]
+    pub fn is_recorded_by(&self, recorded: &LockedInclude) -> bool {
+        self.as_recorded_by(recorded) == *recorded
+    }
+
+    /// Whether the included environment still has the lock that `recorded`
+    /// records, i.e. it hasn't changed its packages since,
+    /// or [None] if `recorded` doesn't record its lock
+    pub fn has_lock_recorded_by(&self, recorded: &LockedInclude) -> Option<bool> {
+        if !recorded
+            .descriptor
+            .includes_same_environment(&self.descriptor)
+        {
+            return None;
+        }
+        match &recorded.descriptor {
+            IncludeDescriptor::Remote { .. } => recorded
+                .generation
+                .map(|generation| self.generation == Some(generation)),
+            IncludeDescriptor::Local { .. } => recorded
+                .packages_hash
+                .as_ref()
+                .map(|hash| self.packages_hash.as_ref() == Some(hash)),
+        }
+    }
+
+    /// This included environment without what's recorded about how it was
+    /// locked: its generation and `packages_hash`
+    pub fn without_records(&self) -> LockedInclude {
+        LockedInclude {
+            generation: None,
+            packages_hash: None,
+            ..self.clone()
+        }
+    }
 }
 
 #[cfg(test)]
@@ -123,6 +187,7 @@ mod tests {
                 auto_upgrade: None,
             },
             generation: None,
+            packages_hash: None,
         }
     }
 
@@ -155,5 +220,28 @@ mod tests {
                 ("c".to_string(), "include2".to_string()),
             ])
         );
+    }
+
+    /// Another environment from FloxHub with the same name and generation
+    /// number doesn't have the recorded lock
+    #[test]
+    fn has_lock_recorded_by_only_for_the_same_environment() {
+        let remote = |reference: &str| LockedInclude {
+            descriptor: IncludeDescriptor::Remote {
+                remote: reference.parse().unwrap(),
+                name: None,
+                generation: None,
+                auto_upgrade: None,
+            },
+            generation: Some(2),
+            ..locked_include("python", "")
+        };
+        let recorded = remote("alice/python");
+
+        assert_eq!(
+            remote("alice/python").has_lock_recorded_by(&recorded),
+            Some(true)
+        );
+        assert_eq!(remote("bob/python").has_lock_recorded_by(&recorded), None);
     }
 }

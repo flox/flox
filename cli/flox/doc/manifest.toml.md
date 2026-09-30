@@ -767,8 +767,10 @@ The fields in these include descriptors are as follows:
   Requires `schema-version = "1.18.0"`.
 
 The lockfile of the composing environment stores a copy of each included
-environment, and for an environment included with `remote`, the generation it
-was fetched at, which `flox list --config` shows.
+environment.
+For an environment included with `remote` it records the generation it was
+fetched at, which `flox list --config` shows, and for one included with `dir`,
+a hash of the packages that environment had locked.
 
 A path environment, or an environment pulled from FloxHub into a directory,
 follows the environments it includes with `auto-upgrade` enabled:
@@ -777,8 +779,17 @@ environment, `flox build`,
 use the latest changes that those environments have locked,
 including changes to the environments that they include in turn.
 These changes are kept in a copy of the lockfile in `.flox/cache`.
-Every new generation of an environment included with `remote` and
-`auto-upgrade = true` is followed, including one that only upgrades packages.
+They include package upgrades that an included environment locked without
+changing its manifest, for example with `flox upgrade`, and every new
+generation of an environment included with `remote` and `auto-upgrade = true`.
+Upgrades that the composing environment locked itself, for example with
+`flox upgrade`, are kept until the included environment's lock differs from the
+one the lockfile records, i.e. until it locks other versions of any of its
+packages or, for one included with `remote`, has a new generation.
+Its versions then take precedence.
+A lockfile written by an older version of Flox doesn't record which packages an
+included environment had locked, so until changes to that environment are
+saved, upgrades it locks without changing its manifest aren't followed.
 The lockfile itself is only updated when you run
 [`flox include upgrade`](./flox-include-upgrade.md),
 so that you decide when the changes are committed,
@@ -822,8 +833,10 @@ manifest, but things can be overridden or added by higher priority manifests.
   with `flox include upgrade`, it reuses the versions that environment locked
   for each package group whose packages all come from that environment, are
   locked for all of the composing environment's systems, and are allowed by its
-  `options.allow` and `options.semver` settings, unless the composing
-  environment already locked that group.
+  `options.allow` and `options.semver` settings.
+  They replace other versions of those packages that the composing environment
+  locked, such as its own upgrades, once the included environment's lock
+  differs from the one the composing environment's lockfile records.
   A package group that mixes packages from several environments, such as the
   default `toplevel` group when the composing environment or another included
   environment installs packages too, is resolved together for the composing
