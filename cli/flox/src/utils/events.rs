@@ -678,6 +678,7 @@ mod tests {
             let auth_context = AuthContext::new_from_token(Some(token));
             let floxhub_client = init_floxhub_client(
                 server.base_url(),
+                url::Url::parse(&server.url("/floxem")).unwrap(),
                 auth_context.clone(),
                 Some(Uuid::new_v4()),
                 invocation_id,

@@ -6,6 +6,7 @@ use bpaf::{Bpaf, Parser};
 use flox_core::log_file_format_upgrade_check;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment, EnvironmentError};
+use flox_rust_sdk::providers::automatic_upgrades;
 use flox_rust_sdk::providers::catalog::CatalogQoS;
 use flox_rust_sdk::providers::upgrade_checks::{UpgradeInformation, UpgradeInformationGuard};
 use serde::de::DeserializeOwned;
@@ -72,7 +73,15 @@ impl CheckForUpgrades {
             Duration::seconds(self.check_timeout),
         )?;
         match check_exit_branch {
-            ExitBranch::Checked => update_remote_environment_state(&flox, &environment)?,
+            ExitBranch::Checked => {
+                let fetched = update_remote_environment_state(&flox, &environment);
+                // Best-effort: the settings are a detail for `flox list --all`,
+                // so failing to fetch them never fails the check.
+                if let Err(err) = automatic_upgrades::refresh(&flox, &environment).await {
+                    debug!(error = %err, "Failed to refresh automatic upgrade settings");
+                }
+                fetched?
+            },
             // `check_exit_branch` determined,
             // that we are already concurrently checking for updates (LockTaken)
             // or we have `AlreadyChecked` for updates recently (within self.check_timeout)

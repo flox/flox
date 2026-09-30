@@ -622,6 +622,11 @@ pub trait GenerationsExt {
     /// generation.
     fn generation(&self) -> Result<Option<GenerationId>, EnvironmentError>;
 
+    /// The generation the environment was opened at
+    /// (e.g. `flox activate --generation`),
+    /// or `None` if it operates on the current generation.
+    fn pinned_generation(&self) -> Option<GenerationId>;
+
     /// The operating generation and its lockfile, read in a single metadata
     /// pass for telemetry. Best-effort: a generation whose lockfile can't be
     /// read still yields its id.

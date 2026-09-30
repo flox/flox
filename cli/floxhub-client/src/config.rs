@@ -4,6 +4,8 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use url::Url;
+
 use crate::AuthContext;
 
 /// Hook invoked by [`crate::FloxhubClient::resolve`] just before it contacts
@@ -44,6 +46,9 @@ impl std::fmt::Debug for UnauthenticatedResolveHook {
 pub struct FloxhubClientConfig {
     /// Base URL for the catalog and factory APIs.
     pub base_url: String,
+    /// Base URL for the FloxHub environment manager (floxEM) API, which
+    /// FloxHub serves apart from the catalog and factory APIs.
+    pub floxem_url: Url,
     /// Additional headers to include in requests.
     pub extra_headers: BTreeMap<String, String>,
     /// Mock mode for testing.

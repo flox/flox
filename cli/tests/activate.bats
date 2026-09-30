@@ -5364,6 +5364,36 @@ Setting PATH from .bashrc"
     assert_output false # lockfile content should differ due to upgrade
 }
 
+# bats test_tags=activate:upgrade-checks,list:all
+@test "'flox list -a' shows upgrades found by the background check" {
+  skip_x86_64_darwin_replay
+  project_setup_common
+  unset _FLOX_TESTING_DISABLE_BG_SIDE_EFFECTS # allow background checks for this test
+  "$FLOX_BIN" init
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/old_hello.yaml" "$FLOX_BIN" install hello
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" "$FLOX_BIN" activate -c true
+
+  # The check writes the file in place, so wait until it's complete JSON.
+  timeout 5s bash -c "until jq -e .upgrade_result .flox/cache/upgrade-checks.json > /dev/null 2>&1; do sleep 0.1; done"
+
+  run --separate-stderr "$FLOX_BIN" list
+  assert_success
+  assert_output "hello: hello (2.10.1 - upgrade available)"
+
+  run --separate-stderr "$FLOX_BIN" list -a
+  assert_success
+  assert_line "Upgrades:         1 version change"
+  assert_line --regexp '^Upgrades checked: [0-9-]+ [0-9:]+ UTC$'
+  assert_line "hello: (upgrade available)"
+  assert_line "  Version:              2.10.1"
+  assert_line "  Upgrade available:    2.12.3"
+  # repeated together after the packages
+  assert_line "Available upgrades:"
+  assert_line "- hello: 2.10.1 -> 2.12.3"
+  # the next step follows an empty line
+  assert_equal "${stderr_lines[-1]}" "Use 'flox upgrade' to apply the upgrades."
+}
+
 # =============================================================================
 # Nested activation PATH/MANPATH tests and helpers
 # =============================================================================

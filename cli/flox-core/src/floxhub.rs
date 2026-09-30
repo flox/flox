@@ -51,6 +51,13 @@ impl Transform<'static> {
         saas_path: "",
         path: "",
     };
+    /// The FloxHub environment manager (floxEM) API. Hosted resolves to
+    /// `api.<...>.flox.dev/floxem`, enterprise / on-premise to `<base>/floxem`.
+    const FLOXEM: Self = Transform {
+        saas_prefix: "api",
+        saas_path: "floxem",
+        path: "floxem",
+    };
     /// The FloxHub git endpoint. Hosted resolves to `api.<...>.flox.dev/git`,
     /// enterprise / on-premise to `<base>/git`.
     const GIT: Self = Transform {
@@ -66,6 +73,7 @@ pub struct Floxhub {
     api_url: Url,
     git_url: Url,
     git_url_overridden: bool,
+    floxem_url: Url,
 }
 
 impl Floxhub {
@@ -77,12 +85,14 @@ impl Floxhub {
         let git_url_overridden = git_url_override.is_some();
         let git_url = Self::resolve_effective_url(&base_url, Transform::GIT, git_url_override)?;
         let api_url = Self::resolve_effective_url(&base_url, Transform::API, api_url_override)?;
+        let floxem_url = Self::resolve_effective_url(&base_url, Transform::FLOXEM, None)?;
 
         let hub = Floxhub {
             base_url,
             api_url,
             git_url,
             git_url_overridden,
+            floxem_url,
         };
 
         debug!(?hub, "Determined FloxHub urls");
@@ -180,6 +190,12 @@ impl Floxhub {
     /// This is useful for testing FloxHub locally.
     pub fn git_url(&self) -> &Url {
         &self.git_url
+    }
+
+    /// Return the url of the FloxHub environment manager (floxEM) API,
+    /// which serves environment settings such as automatic upgrades.
+    pub fn floxem_url(&self) -> &Url {
+        &self.floxem_url
     }
 
     /// Append a path-segment `route` to `base_url`, preserving any existing
@@ -314,6 +330,46 @@ mod tests {
             floxhub.git_url().as_str(),
             "https://onprem.example.internal/git",
         );
+    }
+
+    #[test]
+    fn floxem_url_follows_the_base_topology() {
+        let cases = [
+            ("https://hub.flox.dev", "https://api.flox.dev/floxem"),
+            (
+                "https://hub.preview.flox.dev",
+                "https://api.preview.flox.dev/floxem",
+            ),
+            (
+                "https://hub.local.flox.dev:8443",
+                "https://api.local.flox.dev:8443/floxem",
+            ),
+            (
+                "https://onprem.example.internal/",
+                "https://onprem.example.internal/floxem",
+            ),
+            (
+                "https://host.internal/floxhub/",
+                "https://host.internal/floxhub/floxem",
+            ),
+        ];
+        for (base, expected) in cases {
+            let floxhub = Floxhub::new(Url::from_str(base).unwrap(), None, None).unwrap();
+            assert_eq!(floxhub.floxem_url().as_str(), expected, "base {base}");
+        }
+    }
+
+    /// The API override (`catalog_url`) and git override don't move floxEM,
+    /// which is always derived from the base.
+    #[test]
+    fn floxem_url_ignores_api_and_git_overrides() {
+        let floxhub = Floxhub::new(
+            Url::from_str("https://hub.flox.dev").unwrap(),
+            Some(Url::from_str("https://catalog.example.internal").unwrap()),
+            Some(Url::from_str("file:///tmp/floxhub").unwrap()),
+        )
+        .unwrap();
+        assert_eq!(floxhub.floxem_url().as_str(), "https://api.flox.dev/floxem");
     }
 
     #[test]

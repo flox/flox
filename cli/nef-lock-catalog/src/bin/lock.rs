@@ -212,6 +212,7 @@ fn build_client(config: &Config, floxhub_token: Option<String>) -> Result<Floxhu
 
     let config = FloxhubClientConfig {
         base_url: catalog_url,
+        floxem_url: floxhub.floxem_url().clone(),
         extra_headers: Default::default(),
         mock_mode,
         auth_context,

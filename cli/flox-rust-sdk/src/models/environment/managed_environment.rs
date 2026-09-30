@@ -662,6 +662,10 @@ impl GenerationsExt for ManagedEnvironment {
             .current_gen())
     }
 
+    fn pinned_generation(&self) -> Option<GenerationId> {
+        self.generation
+    }
+
     fn generation_and_existing_lockfile(
         &self,
     ) -> Result<(Option<GenerationId>, Option<Lockfile>), EnvironmentError> {

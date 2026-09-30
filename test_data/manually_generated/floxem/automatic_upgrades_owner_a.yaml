@@ -1,0 +1,17 @@
+# Hand-written: FloxHub's automatic upgrade settings for `owner/a`, as floxEM
+# serves them. The request must carry the token that `floxhub_setup` exports,
+# in both headers.
+when:
+  method: GET
+  path: /floxem/api/v1/environment/owner/a/automatic-upgrades
+  header:
+  - name: authorization
+    value: bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3guZGV2L2hhbmRsZSI6InRlc3QiLCJleHAiOjk5OTk5OTk5OTl9.6-nbzFzQEjEX7dfWZFLE-I_qW2N_-9W2HFzzfsquI74
+  - name: x-flox-github-token
+    value: eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3guZGV2L2hhbmRsZSI6InRlc3QiLCJleHAiOjk5OTk5OTk5OTl9.6-nbzFzQEjEX7dfWZFLE-I_qW2N_-9W2HFzzfsquI74
+then:
+  status: 200
+  header:
+  - name: content-type
+    value: application/json
+  body: '{"enabled":true,"cadence":"weekly","nextDueDate":"2100-01-04","lastAutomaticUpgrade":{"timestamp":"2026-09-28T00:17:03.123456+00:00","result":"noop","generation":null},"upgradeSource":{"owner":"owner","name":"qa"}}'

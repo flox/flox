@@ -1,12 +1,12 @@
-//! FloxhubClient: shared catalog + factory SDK client.
+//! FloxhubClient: shared SDK client for FloxHub's services.
 //!
-//! [`FloxhubClient`] fronts both the catalog and factory surfaces of FloxHub.
-//! Both generated inner clients (`catalog_api_v1::Client` and
-//! `factory_api_v1::Client`) share a single reqwest connection pool, a single
-//! auth pre-request hook, and (when configured) a single record/replay
-//! [`MockGuard`]. This means authentication, Sentry trace headers, timeouts,
-//! and mock recording are wired once and apply to all outgoing requests
-//! regardless of which API surface they target.
+//! [`FloxhubClient`] fronts the catalog, factory, accounts and environment
+//! manager (floxEM) surfaces of FloxHub. The inner clients share a single auth
+//! pre-request hook and (when configured) a single record/replay
+//! [`MockGuard`], and all but floxEM share a single reqwest connection pool.
+//! This means authentication, Sentry trace headers, timeouts, and mock
+//! recording are wired once and apply to all outgoing requests regardless of
+//! which API surface they target.
 
 use std::cmp::min;
 use std::collections::{BTreeMap, HashMap};
@@ -33,6 +33,7 @@ use crate::accounts::AccountsApiClient;
 use crate::auth::AuthContext;
 use crate::config::FloxhubClientConfig;
 use crate::error::{ByCommandError, FloxhubClientError, ResolveError, SearchError, VersionsError};
+use crate::floxem::FloxemApiClient;
 use crate::mock::MockGuard;
 use crate::types::*;
 
@@ -43,16 +44,18 @@ pub const EMPTY_SEARCH_RESPONSE: &api_types::PackageSearchResult =
         total_count: 0,
     };
 
-/// A client for the FloxHub catalog and factory service APIs.
+/// A client for FloxHub's catalog, factory, accounts and floxEM service APIs.
 ///
-/// Wraps both generated API clients (`catalog_api_v1::Client` and
-/// `factory_api_v1::Client`) and handles:
+/// Wraps the generated API clients (`catalog_api_v1::Client` and
+/// `factory_api_v1::Client`) and the hand-written accounts and floxEM clients,
+/// and handles:
 /// - HTTP client construction with shared connection pool and timeouts
 /// - Bearer token / Kerberos authentication via a shared pre-request hook
-/// - Mock server recording/replay for testing (single guard covers both APIs)
+/// - Mock server recording/replay for testing (single guard covers all APIs)
 ///
-/// The `base_url` / [`FloxhubClientConfig`] field fronts both the catalog
-/// and factory surfaces; both inner clients target the same effective URL.
+/// The catalog, factory and accounts clients target the effective
+/// `base_url` of [`FloxhubClientConfig`]; the floxEM client targets its own
+/// `floxem_url`.
 pub struct FloxhubClient {
     /// Catalog inner client.
     pub(crate) catalog: CatalogApiClient,
@@ -60,6 +63,9 @@ pub struct FloxhubClient {
     pub(crate) factory: FactoryApiClient,
     /// Accounts inner client (hand-written), sharing the same reqwest client.
     pub(crate) accounts: AccountsApiClient,
+    /// floxEM inner client (hand-written), sharing the same reqwest client
+    /// and auth hook but served from its own base URL.
+    pub(crate) floxem: FloxemApiClient,
     config: FloxhubClientConfig,
 
     _mock_guard: Option<MockGuard>,
@@ -74,18 +80,30 @@ impl Debug for FloxhubClient {
 }
 
 impl FloxhubClient {
-    /// Create a new client fronting both the catalog and factory surfaces.
+    /// Create a new client fronting the catalog, factory, accounts and floxEM
+    /// surfaces.
     ///
-    /// The reqwest connection pool, auth hook, and (when configured) the
-    /// record/replay [`MockGuard`] are built once and shared by both inner
-    /// clients. `reqwest::Client` clones share the underlying pool, so there
-    /// is no double connection overhead.
+    /// The auth hook and (when configured) the record/replay [`MockGuard`] are
+    /// built once and shared by all inner clients, and the reqwest connection
+    /// pool by all but floxEM. `reqwest::Client` clones share the underlying
+    /// pool, so there is no double connection overhead.
     pub fn new(config: FloxhubClientConfig) -> Result<Self, FloxhubClientError> {
-        // One MockGuard covers both surfaces.
+        // One MockGuard covers every surface.
         let mock_guard = MockGuard::new(&config);
         let effective_url = match mock_guard {
             Some(ref mock) => mock.url(),
             None => config.base_url.clone(),
+        };
+        // The mock serves every surface from one host, so floxEM gets a
+        // `/floxem` prefix there to keep its routes apart from the catalog's.
+        // Recording forwards every request to `base_url`, so it only captures
+        // floxEM when floxEM is served at `<base_url>/floxem`, which holds
+        // unless `catalog_url` or `_FLOX_FLOXEM_URL` moves either one.
+        // `floxem_url` is unused under a mock.
+        let effective_floxem_url = match mock_guard {
+            Some(ref mock) => Url::parse(&format!("{}/floxem", mock.url()))
+                .map_err(|err| FloxhubClientError::Other(err.to_string()))?,
+            None => config.floxem_url.clone(),
         };
 
         // Build the shared auth closure once; wrap it in each crate's
@@ -98,11 +116,23 @@ impl FloxhubClient {
             pre_request: Arc::clone(&pre_request),
         };
 
-        // One reqwest::Client for both inner clients. Clones share the pool.
+        // One reqwest::Client for the catalog, factory and accounts clients.
+        // Clones share the pool.
         let http_client = build_http_client(
             &config.extra_headers,
             config.user_agent.as_deref(),
             &config.base_url,
+            reqwest::redirect::Policy::default(),
+        )
+        .map_err(FloxhubClientError::Other)?;
+        // floxEM reads the token from a custom header, which reqwest doesn't
+        // strip when a redirect leads to another host, as it does
+        // `Authorization`. Following no redirects keeps the token on FloxHub.
+        let floxem_http_client = build_http_client(
+            &config.extra_headers,
+            config.user_agent.as_deref(),
+            effective_floxem_url.as_str(),
+            reqwest::redirect::Policy::none(),
         )
         .map_err(FloxhubClientError::Other)?;
 
@@ -111,11 +141,18 @@ impl FloxhubClient {
         let factory =
             FactoryApiClient::new_with_client(&effective_url, http_client.clone(), factory_hooks);
         let accounts = AccountsApiClient::new_with_client(&effective_url, http_client);
+        let floxem = FloxemApiClient::new_with_client(
+            effective_floxem_url,
+            floxem_http_client,
+            config.auth_context.clone(),
+            Arc::clone(&pre_request),
+        );
 
         Ok(Self {
             catalog,
             factory,
             accounts,
+            floxem,
             config,
             _mock_guard: mock_guard,
         })
@@ -124,6 +161,11 @@ impl FloxhubClient {
     /// Access the underlying accounts API client for making requests.
     pub fn accounts(&self) -> &AccountsApiClient {
         &self.accounts
+    }
+
+    /// Access the underlying floxEM API client for making requests.
+    pub fn floxem(&self) -> &FloxemApiClient {
+        &self.floxem
     }
 
     /// Access the underlying catalog API client for making requests.
@@ -927,8 +969,8 @@ pub(crate) fn build_pre_request_hook(
     })
 }
 
-/// Build a configured `reqwest::Client` with standard timeouts and the
-/// provided extra headers and user-agent.
+/// Build a configured `reqwest::Client` with standard timeouts, the
+/// provided extra headers and user-agent, and the redirect policy.
 ///
 /// Authentication is injected per-request via the hook returned by
 /// [`build_pre_request_hook`], not baked into the default headers here.
@@ -938,6 +980,7 @@ pub(crate) fn build_http_client(
     extra_headers: &BTreeMap<String, String>,
     user_agent: Option<&str>,
     base_url: &str,
+    redirect: reqwest::redirect::Policy,
 ) -> Result<reqwest::Client, String> {
     let headers = build_header_map(extra_headers)?;
 
@@ -950,7 +993,8 @@ pub(crate) fn build_http_client(
     let client_builder = reqwest::Client::builder()
         .default_headers(headers)
         .connect_timeout(Duration::from_secs(15))
-        .timeout(Duration::from_secs(60));
+        .timeout(Duration::from_secs(60))
+        .redirect(redirect);
 
     let client_builder = if let Some(ua) = user_agent {
         client_builder.user_agent(ua)
@@ -987,15 +1031,20 @@ pub(crate) fn build_header_map(
 /// non-gated) test helpers can build a client without enabling a feature.
 /// Nothing here should be used in production code.
 pub mod test_helpers {
+    use url::Url;
+
     use super::FloxhubClient;
     use crate::auth::AuthContext;
     use crate::config::FloxhubClientConfig;
 
     /// Build an unauthenticated [`FloxhubClientConfig`] pointed at `url`,
-    /// with no mock mode, extra headers, or user agent.
+    /// with floxEM at `<url>/floxem` and no mock mode, extra headers, or user
+    /// agent.
     pub fn client_config(url: &str) -> FloxhubClientConfig {
         FloxhubClientConfig {
             base_url: url.to_string(),
+            floxem_url: Url::parse(&format!("{}/floxem", url.trim_end_matches('/')))
+                .expect("test URL is valid"),
             extra_headers: Default::default(),
             mock_mode: Default::default(),
             auth_context: AuthContext::new_from_token(None),

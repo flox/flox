@@ -1,13 +1,16 @@
-//! FloxHub SDK client — catalog and factory API surfaces.
+//! FloxHub SDK client — catalog, factory, accounts and floxEM API surfaces.
 //!
 //! This crate abstracts over both generated API crates:
 //! - `catalog-api-v1` — via [`FloxhubClient`] and the catalog [`CatalogClientTrait`]
 //! - `factory-api-v1` — via [`FactoryClientTrait`] implemented for
 //!   [`FloxhubClient`]
 //!
-//! Both clients share a single construction path inside [`FloxhubClient`]:
-//! one reqwest client, one auth pre-request hook, and one record/replay
-//! [`mock::MockGuard`] cover all outgoing requests.
+//! and adds hand-written clients for the accounts and environment manager
+//! (floxEM) APIs.
+//!
+//! All clients share a single construction path inside [`FloxhubClient`]:
+//! one auth pre-request hook and one record/replay [`mock::MockGuard`] cover
+//! all outgoing requests.
 //!
 //! ## Usage
 //!
@@ -20,6 +23,7 @@
 //!
 //! let config = FloxhubClientConfig {
 //!     base_url: "https://api.flox.dev".to_string(),
+//!     floxem_url: Url::parse("https://api.flox.dev/floxem")?,
 //!     extra_headers: BTreeMap::new(),
 //!     mock_mode: FloxhubMockMode::None,
 //!     auth_context: AuthContext::new_from_token(floxhub_token),
@@ -39,6 +43,7 @@ pub mod client;
 mod config;
 mod error;
 mod factory;
+mod floxem;
 mod types;
 
 pub(crate) mod mock;
@@ -115,6 +120,14 @@ pub use factory_api_v1::{
     ByteStream as FactoryByteStream,
     Error as FactoryApiError,
     ResponseValue as FactoryApiResponseValue,
+};
+pub use floxem::{
+    AutomaticUpgradeResult,
+    AutomaticUpgradesRequestError,
+    AutomaticUpgradesResponse,
+    FloxemApiClient,
+    LastAutomaticUpgrade,
+    UpgradeSource,
 };
 // Types (re-exported from types module for convenience)
 pub use types::*;

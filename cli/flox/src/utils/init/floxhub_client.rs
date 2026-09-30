@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 
+use anyhow::Context;
 use flox_rust_sdk::flox::FLOX_VERSION;
 use flox_rust_sdk::utils::{HEADER_DEVICE_UUID, HEADER_INVOCATION_ID, INVOCATION_SOURCES};
 use floxhub_client::{
@@ -10,7 +11,12 @@ use floxhub_client::{
     UnauthenticatedResolveHook,
 };
 use tracing::debug;
+use url::Url;
 use uuid::Uuid;
+
+/// Overrides the floxEM API base, for testing against a local floxEM.
+/// Unused under `_FLOX_USE_CATALOG_MOCK` and `_FLOX_CATALOG_DUMP_RESPONSE_FILE`.
+const FLOXEM_URL_VAR: &str = "_FLOX_FLOXEM_URL";
 
 /// Initialize the FloxHub API client.
 ///
@@ -24,8 +30,12 @@ use uuid::Uuid;
 /// `base_url` is the API base the generated client joins request paths onto
 /// (e.g. `<base>/api/v1/catalog/...`); pass [`flox_core::floxhub::Floxhub::api_url_str`]
 /// so any trailing slash is already trimmed.
+/// `floxem_url` is the floxEM API base
+/// ([`flox_core::floxhub::Floxhub::floxem_url`]),
+/// unless `_FLOX_FLOXEM_URL` overrides it for this invocation.
 pub fn init_floxhub_client(
     base_url: String,
+    floxem_url: Url,
     auth_context: AuthContext,
     metrics_device_uuid: Option<Uuid>,
     invocation_id: Uuid,
@@ -46,8 +56,14 @@ pub fn init_floxhub_client(
 
     let mock_mode = FloxhubMockMode::default_from_env();
 
+    let floxem_url = match std::env::var(FLOXEM_URL_VAR) {
+        Ok(url) => Url::parse(&url).with_context(|| format!("Invalid {FLOXEM_URL_VAR} '{url}'"))?,
+        Err(_) => floxem_url,
+    };
+
     let client_config = FloxhubClientConfig {
         base_url,
+        floxem_url,
         extra_headers,
         mock_mode,
         auth_context,
@@ -78,6 +94,7 @@ mod tests {
 
         let client = init_floxhub_client(
             server.base_url(),
+            Url::parse(&server.url("/floxem")).unwrap(),
             AuthContext::default(),
             Some(Uuid::new_v4()),
             invocation_id,
@@ -99,6 +116,7 @@ mod tests {
 
         let client = init_floxhub_client(
             server.base_url(),
+            Url::parse(&server.url("/floxem")).unwrap(),
             AuthContext::default(),
             None,
             Uuid::nil(),

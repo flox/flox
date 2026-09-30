@@ -212,3 +212,58 @@ EOF
 - This environment set:
   - vars.foo"
 }
+
+# ---------------------------------------------------------------------------- #
+
+# bats test_tags=list,list:all
+@test "'flox list -a' shows environment details" {
+  init_env
+  cp "$GENERATED_DATA"/envs/hello/* "$PROJECT_DIR/.flox/env"
+
+  run --separate-stderr "$FLOX_BIN" list -a
+  assert_success
+  assert_output - << EOF
+Environment:      env
+Path:             $(realpath "$PROJECT_DIR")
+System:           $NIX_SYSTEM
+Systems:          aarch64-darwin, aarch64-linux, x86_64-darwin, x86_64-linux
+Upgrade notices:  on
+Upgrades:         unknown, 'flox activate' hasn't checked yet
+
+Packages:
+
+hello:
+  Description:          Program that produces a familiar, friendly greeting
+  Package Path:         hello
+  Package Name:         hello
+  Priority:             5
+  Version:              2.12.3
+  Stability:            staging, unstable
+  License:              GPL-3.0-or-later
+  Unfree:               false
+  Broken:               false
+  Available Outputs:    [ "out" ]
+  Installed Outputs:    [ "out" ]
+EOF
+  # the next step follows an empty line
+  assert_equal "${stderr_lines[-1]}" "Use 'flox upgrade --dry-run' to see the upgrades available now."
+}
+
+# bats test_tags=list,list:all
+@test "'flox list -a' shows environment details without packages" {
+  init_env
+
+  run --separate-stderr "$FLOX_BIN" list -a -d "$PROJECT_DIR"
+  assert_success
+  assert_output - << EOF
+Environment:      env
+Path:             $(realpath "$PROJECT_DIR")
+System:           $NIX_SYSTEM
+Systems:          aarch64-darwin, aarch64-linux, x86_64-darwin, x86_64-linux
+Upgrade notices:  on
+Upgrades:         unknown, 'flox activate' hasn't checked yet
+EOF
+  assert_equal "$stderr" "! No packages are installed for your current system ('$NIX_SYSTEM').
+
+You can see the whole manifest with 'flox list --config'."
+}

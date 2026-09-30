@@ -548,6 +548,10 @@ impl GenerationsExt for RemoteEnvironment {
         self.inner.generation()
     }
 
+    fn pinned_generation(&self) -> Option<GenerationId> {
+        self.inner.pinned_generation()
+    }
+
     fn generation_and_existing_lockfile(
         &self,
     ) -> Result<(Option<GenerationId>, Option<Lockfile>), EnvironmentError> {
