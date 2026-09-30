@@ -1,7 +1,7 @@
 {
   "lockfile-version": 1,
   "manifest": {
-    "schema-version": "1.14.0",
+    "schema-version": "1.17.0",
     "install": {
       "influxdb2": {
         "pkg-path": "influxdb2",
