@@ -542,6 +542,7 @@ pub async fn get_base_nixpkgs_url(
 }
 
 pub mod test_helpers {
+    use floxhub_client::client::test_helpers::client_config;
     use floxhub_client::{AuthContext, DEFAULT_CATALOG_URL};
     use pollster::FutureExt;
 
@@ -618,6 +619,7 @@ pub mod test_helpers {
     pub async fn catalog_replay_client(path: impl AsRef<Path>) -> FloxhubClient {
         let catalog_config = FloxhubClientConfig {
             base_url: "https://not_used".to_string(),
+            floxem_url: client_config("https://not_used").floxem_url,
             extra_headers: Default::default(),
             mock_mode: FloxhubMockMode::Replay(path.as_ref().to_path_buf()),
             auth_context: AuthContext::new_from_token(None),
@@ -726,6 +728,7 @@ pub mod test_helpers {
 
         let catalog_config = FloxhubClientConfig {
             base_url: base_url_str.clone(),
+            floxem_url: client_config(&base_url_str).floxem_url,
             extra_headers: Default::default(),
             mock_mode: mock_mode.clone(),
             auth_context: auth_context.clone(),
@@ -911,6 +914,7 @@ pub mod test_helpers {
         let admin_token = test_token_for_handle("test_catalog_admin");
         let admin_config = FloxhubClientConfig {
             base_url: base_url.to_string(),
+            floxem_url: client_config(base_url).floxem_url,
             extra_headers: Default::default(),
             mock_mode: FloxhubMockMode::None,
             auth_context: AuthContext::from_auth0_token(Some(admin_token)),

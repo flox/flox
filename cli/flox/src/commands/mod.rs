@@ -428,6 +428,7 @@ impl FloxArgs {
 
         let floxhub_client = init_floxhub_client(
             floxhub.api_url_str(),
+            floxhub.floxem_url().clone(),
             credential.clone(),
             metrics_device_uuid,
             invocation_id,

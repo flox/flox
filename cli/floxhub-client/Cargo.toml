@@ -33,6 +33,7 @@ base64.workspace = true
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 serde_json.workspace = true
+indoc.workspace = true
 itertools.workspace = true
 proptest.workspace = true
 sentry.workspace = true

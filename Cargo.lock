@@ -1847,6 +1847,7 @@ dependencies = [
  "futures",
  "http 1.4.0",
  "httpmock",
+ "indoc",
  "itertools 0.14.0",
  "jsonwebtoken",
  "libgssapi",
