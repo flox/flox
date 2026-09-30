@@ -169,6 +169,7 @@ async fn publish_build_with_confirmation(
     mut build_info: UserBuildPublish,
     confirm: impl AsyncFnOnce(&SourceLineageChange) -> Result<bool, PublishError>,
 ) -> Result<(), PublishError> {
+    tracing::debug!(?build_info, "Publishing build in catalog...");
     let result = client
         .publish_build(catalog_name, package_name, &build_info)
         .await;
@@ -177,6 +178,7 @@ async fn publish_build_with_confirmation(
         && confirm(change).await?
     {
         build_info.allow_lineage_change = true;
+        tracing::debug!("Retrying build publish with confirmed lineage change...");
         return client
             .publish_build(catalog_name, package_name, &build_info)
             .await
