@@ -47,8 +47,10 @@ pub static FLOX_ACTIVATIONS_BIN: LazyLock<PathBuf> = LazyLock::new(|| {
 pub const TRAILING_NETWORK_CALL_TIMEOUT: Duration = Duration::from_secs(2);
 
 /// Set the default nix environment variables for the current process
+/// (see `default_nix_env_vars` for the rule).
 ///
-/// SAFETY: called once, prior to possible concurrent access to env
+/// SAFETY: called once, first thing in main, while the process is still
+/// single-threaded.
 pub fn populate_default_nix_env_vars() {
     let env_map = default_nix_env_vars();
     for (key, value) in env_map {

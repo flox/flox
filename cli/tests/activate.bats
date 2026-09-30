@@ -1273,6 +1273,28 @@ EOF
 
 # ---------------------------------------------------------------------------- #
 
+# Certificate variables for Nix-built software: the rule is stated once, at
+# default_nix_env_vars in flox-core; these cases follow it. The environment
+# itself (flox-buildenv) sets none of these; flox is the one place they come
+# from. The dev shell exports NIX_SSL_CERT_FILE itself, so each case clears
+# both variables first and sets exactly what it is about.
+#
+# The bundle flox defaults to is compiled into it (NIXPKGS_CACERT_BUNDLE_CRT
+# at build time), which the test harness does not know, so the bash case
+# accepts any nss-cacert store path and the others compare against the
+# concrete one taken from flox's own bash output.
+BUNDLE_RE='/nix/store/[a-z0-9]{32}-nss-cacert-[^/;]+/etc/ssl/certs/ca-bundle\.crt'
+
+# Prints the bundle a bash activation with neither variable set points
+# NIX_SSL_CERT_FILE at, checked to exist.
+flox_default_bundle() {
+  local bundle
+  bundle="$(FLOX_SHELL=bash env -u NIX_SSL_CERT_FILE -u SSL_CERT_FILE "$FLOX_BIN" activate \
+    | sed -n 's/^export NIX_SSL_CERT_FILE=\([^;]*\);$/\1/p' | head -n 1)"
+  [ -f "$bundle" ] || return 1
+  printf '%s\n' "$bundle"
+}
+
 sets_NIX_SSL_CERT_FILE() {
   shell="${1?}"
   shift
@@ -1280,10 +1302,16 @@ sets_NIX_SSL_CERT_FILE() {
   shift
   project_setup
   # Flox detects that the output is not a tty and prints the script to stdout
-  FLOX_SHELL="$shell" run "$FLOX_BIN" activate
+  FLOX_SHELL="$shell" run env -u NIX_SSL_CERT_FILE -u SSL_CERT_FILE "$FLOX_BIN" activate
   assert_success
-  # check that env vars are set for compatibility with nix built software
-  assert_line --partial "$expected_line"
+  # check that env vars are set for compatibility with nix built software;
+  # expected_line carries the shell's own separator ("=" or a space)
+  if [ "$shell" = bash ]; then
+    assert_line --regexp "^${expected_line}${BUNDLE_RE};$"
+  else
+    assert_line "${expected_line}$(flox_default_bundle);"
+  fi
+  refute_line --regexp "^(export|setenv|set -gx) SSL_CERT_FILE"
 }
 
 # bats test_tags=activate
@@ -1298,12 +1326,71 @@ sets_NIX_SSL_CERT_FILE() {
 
 # bats test_tags=activate
 @test "fish: sets NIX_SSL_CERT_FILE" {
-  sets_NIX_SSL_CERT_FILE "fish" "set -gx NIX_SSL_CERT_FILE"
+  sets_NIX_SSL_CERT_FILE "fish" "set -gx NIX_SSL_CERT_FILE "
 }
 
 # bats test_tags=activate
 @test "tcsh: sets NIX_SSL_CERT_FILE" {
-  sets_NIX_SSL_CERT_FILE "tcsh" "setenv NIX_SSL_CERT_FILE"
+  sets_NIX_SSL_CERT_FILE "tcsh" "setenv NIX_SSL_CERT_FILE "
+}
+
+# bats test_tags=activate
+@test "bash: does not default NIX_SSL_CERT_FILE when SSL_CERT_FILE is set" {
+  project_setup
+  # flox itself loads its trust roots from SSL_CERT_FILE, so it must be a
+  # real bundle, just not the one flox would default to.
+  bundle="$(flox_default_bundle)" || fail "could not determine the bundle flox defaults to"
+  cp "$bundle" "$BATS_TEST_TMPDIR/user-certs.pem"
+  FLOX_SHELL="bash" run env -u NIX_SSL_CERT_FILE SSL_CERT_FILE="$BATS_TEST_TMPDIR/user-certs.pem" "$FLOX_BIN" activate
+  assert_success
+  refute_line --partial "NIX_SSL_CERT_FILE="
+  refute_line --partial "export SSL_CERT_FILE"
+}
+
+# bats test_tags=activate
+@test "bash: does not touch a user-set NIX_SSL_CERT_FILE" {
+  project_setup
+  FLOX_SHELL="bash" run env -u SSL_CERT_FILE NIX_SSL_CERT_FILE=/user/nix-certs.pem "$FLOX_BIN" activate
+  assert_success
+  refute_line --partial "NIX_SSL_CERT_FILE="
+  refute_line --partial "export SSL_CERT_FILE"
+}
+
+# The own-default clause: a parent flox applied the default, and SSL_CERT_FILE
+# has appeared since (on Linux flox's TLS library writes it on first use).
+# bats test_tags=activate
+@test "bash: keeps its own NIX_SSL_CERT_FILE default when SSL_CERT_FILE appeared since" {
+  project_setup
+  bundle="$(flox_default_bundle)" || fail "could not determine the bundle flox defaults to"
+  cp "$bundle" "$BATS_TEST_TMPDIR/user-certs.pem"
+  FLOX_SHELL="bash" run env NIX_SSL_CERT_FILE="$bundle" SSL_CERT_FILE="$BATS_TEST_TMPDIR/user-certs.pem" "$FLOX_BIN" activate
+  assert_success
+  assert_line "export NIX_SSL_CERT_FILE=$bundle;"
+  refute_line --partial "export SSL_CERT_FILE"
+}
+
+# The default is applied before Sentry initializes: with metrics on and a DSN
+# set, the TLS client Sentry builds writes SSL_CERT_FILE into the flox process
+# on Linux, which must not be taken for the user's. The metrics endpoints are
+# pointed at an unroutable address as hook.bats does, so nothing real is
+# reached even if a flush were attempted.
+# bats test_tags=activate
+@test "bash: sets NIX_SSL_CERT_FILE with metrics and a Sentry DSN enabled" {
+  project_setup
+  FLOX_SHELL="bash" run env -u NIX_SSL_CERT_FILE -u SSL_CERT_FILE FLOX_DISABLE_METRICS=false FLOX_SENTRY_DSN=https://public@sentry.invalid/1 _FLOX_METRICS_URL_OVERRIDE=https://192.0.2.1/legacy _FLOX_METRICS_URL_V2_OVERRIDE=https://192.0.2.1/v2 "$FLOX_BIN" activate
+  assert_success
+  assert_line --regexp "^export NIX_SSL_CERT_FILE=${BUNDLE_RE};$"
+}
+
+# What flox spawns does not inherit the certificate paths its TLS library may
+# have written into the flox process (SSL_CERT_FILE and SSL_CERT_DIR on
+# Linux): they are restored to their startup state, absent here.
+# bats test_tags=activate
+@test "activated command does not inherit probed SSL_CERT_FILE or SSL_CERT_DIR" {
+  project_setup
+  run env -u NIX_SSL_CERT_FILE -u SSL_CERT_FILE -u SSL_CERT_DIR "$FLOX_BIN" activate -- sh -c 'echo "file=${SSL_CERT_FILE-unset} dir=${SSL_CERT_DIR-unset}"'
+  assert_success
+  assert_line "file=unset dir=unset"
 }
 
 # ---------------------------------------------------------------------------- #

@@ -400,6 +400,9 @@ impl FloxBuildMk<'_> {
     fn base_command(&self, base_dir: &Path) -> Command {
         // todo: extra makeflags, eventually
         let mut command = Command::new(&*GNUMAKE_BIN);
+        // A local build must not inherit certificate paths the TLS library
+        // wrote into this process since startup.
+        flox_core::util::restore_startup_tls_env(&mut command);
         command.env_remove("MAKEFLAGS");
         command.arg("--file").arg(&*FLOX_BUILD_MK);
         command.arg("--directory").arg(base_dir); // Change dir before reading makefile.

@@ -5905,6 +5905,10 @@ rec {
             name = "indoc";
             packageId = "indoc";
           }
+          {
+            name = "temp-env";
+            packageId = "temp-env";
+          }
         ];
         features = {
           "default" = [ "proc_status" ];
