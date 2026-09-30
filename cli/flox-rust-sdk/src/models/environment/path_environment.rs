@@ -1036,6 +1036,48 @@ pub mod tests {
         );
     }
 
+    /// An include upgrade that changes nothing doesn't write the lockfile,
+    /// so it doesn't rebuild the environment,
+    /// or create a generation for managed environments.
+    #[test]
+    fn include_upgrade_without_changes_does_not_write_lockfile() {
+        let (flox, tempdir) = flox_instance();
+
+        let dep_path = tempdir.path().join("dep");
+        fs::create_dir(&dep_path).unwrap();
+        let mut dep = new_path_environment_in(
+            &flox,
+            indoc! {r#"
+                version = 1
+                [vars]
+                foo = "v1"
+            "#},
+            &dep_path,
+        );
+        dep.lockfile(&flox).unwrap();
+
+        let mut composer = new_path_environment_in(
+            &flox,
+            indoc! {r#"
+                version = 1
+                [include]
+                environments = [
+                  { dir = "dep" },
+                ]
+            "#},
+            tempdir.path(),
+        );
+        let lockfile: Lockfile = composer.lockfile(&flox).unwrap().into();
+
+        let result = composer.include_upgrade(&flox, vec![]).unwrap();
+
+        assert_eq!(result, UpgradeResult {
+            old_lockfile: Some(lockfile.clone()),
+            new_lockfile: lockfile,
+            store_path: None,
+        });
+    }
+
     #[test]
     fn no_rebuild_on_lockfile_formatting_change() {
         let (flox, _temp_dir) = flox_instance();
