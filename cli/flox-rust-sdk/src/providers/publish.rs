@@ -1491,14 +1491,18 @@ pub mod tests {
             then.status(status)
                 .json_body(serde_json::json!({"detail": detail}));
         });
-        let mut replacement = build.clone();
-        replacement.allow_lineage_change = true;
-        let retry = server.mock(|when, then| {
-            when.method(httpmock::Method::POST)
-                .path("/api/v1/catalog/catalogs/test/packages/hello/builds")
-                .json_body_obj(&replacement);
-            then.status(retry_status)
-                .json_body(serde_json::json!({"detail": detail}));
+        // With the override already set, a retry would resend the initial body,
+        // so only `initial` can match and it counts every request.
+        let retry = (!allow_lineage_change).then(|| {
+            let mut replacement = build.clone();
+            replacement.allow_lineage_change = true;
+            server.mock(|when, then| {
+                when.method(httpmock::Method::POST)
+                    .path("/api/v1/catalog/catalogs/test/packages/hello/builds")
+                    .json_body_obj(&replacement);
+                then.status(retry_status)
+                    .json_body(serde_json::json!({"detail": detail}));
+            })
         });
         let mut confirmations = 0;
         let result =
@@ -1512,7 +1516,8 @@ pub mod tests {
             })
             .await
             .map_err(|err| err.to_string());
-        (confirmations, initial.calls(), retry.calls(), result)
+        let retries = retry.map_or(0, |mock| mock.calls());
+        (confirmations, initial.calls(), retries, result)
     }
 
     #[tokio::test]
