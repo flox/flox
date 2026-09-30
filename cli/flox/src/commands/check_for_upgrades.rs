@@ -201,8 +201,7 @@ pub fn spawn_detached_check_for_upgrades_process(
 mod tests {
 
     use flox_rust_sdk::flox::test_helpers::flox_instance;
-    use flox_rust_sdk::models::environment::UninitializedEnvironment;
-    use flox_rust_sdk::models::environment::UpgradeResult;
+    use flox_rust_sdk::models::environment::{UninitializedEnvironment, UpgradeResult};
     use flox_rust_sdk::models::environment::path_environment::test_helpers::{
         new_path_environment,
         new_path_environment_from_env_files,
