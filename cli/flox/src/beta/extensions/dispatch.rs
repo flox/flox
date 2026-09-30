@@ -187,6 +187,7 @@ pub fn try_dispatch_external(data_dir: &Path) -> Option<ExitCode> {
         .env("FLOX_EXTENSION_NAME", &extension_name)
         .env("FLOX_EXTENSION_PATH", &extension_path)
         .env("FLOX_BIN", &flox_bin);
+    flox_core::util::restore_startup_tls_env(&mut command);
 
     let err = replace_process(&mut command);
     eprintln!("flox: failed to execute '{}': {}", path.display(), err);
