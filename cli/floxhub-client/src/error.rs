@@ -50,12 +50,48 @@ pub enum PublishError {
 pub type ApiErrorResponse = api_types::ErrorResponse;
 pub type ApiErrorResponseValue = ResponseValue<ApiErrorResponse>;
 
+/// The canonical, credential-free sources reported by a publish refusal.
+#[derive(Clone, Debug, PartialEq, Eq, Error)]
+#[error(
+    "Package source repository or ref has changed.\nRegistered source: {registered}\nRequested source: {requested}\nTo replace the registered source, retry with 'flox publish --allow-lineage-change'."
+)]
+pub struct SourceLineageChange {
+    pub registered: String,
+    pub requested: String,
+}
+
+impl FloxhubClientError {
+    pub(crate) fn classify_publish_error(self) -> Self {
+        // FLO-94 currently exposes only a text detail, not a structured code.
+        // Match its full framing only on publish's 409 responses; other
+        // conflicts must never authorize replacing a package's source.
+        if let Self::APIError(APIError::ErrorResponse(response)) = &self
+            && response.status() == reqwest::StatusCode::CONFLICT
+            && let Some((_, sources)) = response.detail.split_once(" is registered to ")
+            && let Some(sources) = sources.strip_suffix(
+                ". Retry with allow_lineage_change=true to replace the registered source.",
+            )
+            && let Some((registered, requested)) = sources.split_once("; this publish is from ")
+            && !registered.is_empty()
+            && !requested.is_empty()
+        {
+            return Self::SourceLineageChange(SourceLineageChange {
+                registered: registered.to_owned(),
+                requested: requested.to_owned(),
+            });
+        }
+        self
+    }
+}
+
 /// Common error type for catalog API operations.
 ///
 /// This error type wraps errors from the generated `catalog-api-v1` crate.
 /// SDK-specific operation errors (ResolveError, SearchError, etc.) wrap this type.
 #[derive(Debug, Error)]
 pub enum FloxhubClientError {
+    #[error(transparent)]
+    SourceLineageChange(SourceLineageChange),
     #[error("system not supported by catalog")]
     UnsupportedSystem(#[source] api_error::ConversionError),
     #[error("{}", fmt_api_error(.0))]

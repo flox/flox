@@ -20,6 +20,7 @@ use floxhub_client::{
     PackageOutputs,
     PackageSystem,
     PublishResponse,
+    SourceLineageChange,
     UserBuildPublish,
     UserDerivationInfo,
 };
@@ -130,6 +131,10 @@ pub trait Publisher {
     /// package's expression selects, computed at publish time; empty for
     /// builds that resolve no catalog inputs.
     ///
+    /// `allow_lineage_change` explicitly authorizes a source change. Otherwise,
+    /// `confirm_lineage_change` is called only after a lineage refusal, before
+    /// retrying the metadata submission once. Returning false preserves the refusal.
+    ///
     /// Returns `true` when the caller should wait for an external publisher
     /// to confirm completion (Publisher mode), or `false` when the CLI has
     /// already populated the catalog directly and no wait is needed
@@ -144,6 +149,8 @@ pub trait Publisher {
         locked_inputs: &BTreeMap<String, LockedInputEntry>,
         key_file: Option<PathBuf>,
         metadata_only: bool,
+        allow_lineage_change: bool,
+        confirm_lineage_change: impl AsyncFnOnce(&SourceLineageChange) -> Result<bool, PublishError>,
     ) -> Result<bool, PublishError>;
     async fn wait_for_publish_completion(
         &self,
@@ -152,6 +159,30 @@ pub trait Publisher {
         poll_interval_millis: u64,
         timeout_millis: u64,
     ) -> Result<(), PublishError>;
+}
+
+/// Retry only the metadata submission: artifacts have already been uploaded.
+async fn publish_build_with_confirmation(
+    client: &impl CatalogClientTrait,
+    catalog_name: &str,
+    package_name: &str,
+    mut build_info: UserBuildPublish,
+    confirm: impl AsyncFnOnce(&SourceLineageChange) -> Result<bool, PublishError>,
+) -> Result<(), PublishError> {
+    let result = client
+        .publish_build(catalog_name, package_name, &build_info)
+        .await;
+    if let Err(FloxhubClientError::SourceLineageChange(change)) = &result
+        && !build_info.allow_lineage_change
+        && confirm(change).await?
+    {
+        build_info.allow_lineage_change = true;
+        return client
+            .publish_build(catalog_name, package_name, &build_info)
+            .await
+            .map_err(PublishError::CatalogError);
+    }
+    result.map_err(PublishError::CatalogError)
 }
 
 /// Simple struct to hold the information of a locked URL.
@@ -645,6 +676,8 @@ where
         locked_inputs: &BTreeMap<String, LockedInputEntry>,
         key_file: Option<PathBuf>,
         metadata_only: bool,
+        allow_lineage_change: bool,
+        confirm_lineage_change: impl AsyncFnOnce(&SourceLineageChange) -> Result<bool, PublishError>,
     ) -> Result<bool, PublishError> {
         // Step 2 hit /publish
         // Catalogs are configured with their "store".
@@ -723,22 +756,17 @@ where
                 .rel_expression_build_base_dir
                 .to_string_lossy()
                 .into_owned(),
-            // No CLI flag exposes lineage changes yet, so match the field's
-            // documented server-side default and let the catalog keep
-            // rejecting a publish that would move a package's registered
-            // source repository or ref.
-            allow_lineage_change: false,
+            allow_lineage_change,
         };
 
-        tracing::debug!(?build_info, "Publishing build in catalog...");
-        client
-            .publish_build(
-                &catalog_name,
-                self.package_metadata.package.name().as_ref(),
-                &build_info,
-            )
-            .await
-            .map_err(PublishError::CatalogError)?;
+        publish_build_with_confirmation(
+            client,
+            catalog_name,
+            self.package_metadata.package.name().as_ref(),
+            build_info,
+            confirm_lineage_change,
+        )
+        .await?;
 
         Ok(needs_publisher_wait)
     }
@@ -1384,8 +1412,9 @@ pub mod tests {
     use chrono::Utc;
     use flox_manifest::interfaces::{AsWritableManifest, WriteManifest};
     use flox_test_utils::GENERATED_DATA;
-    use floxhub_client::AuthContext;
     use floxhub_client::auth::Credential;
+    use floxhub_client::client::test_helpers::client_config;
+    use floxhub_client::{AuthContext, FloxhubClient};
     use pretty_assertions::assert_eq;
 
     use super::*;
@@ -1421,6 +1450,116 @@ pub mod tests {
     };
     use crate::providers::nix::test_helpers::known_store_path;
     use crate::providers::nix_auth::{NixAuth, write_floxhub_netrc};
+
+    // Matches SourceLineageChanged.details from floxhub#2456.
+    const LINEAGE_CHANGE_DETAIL: &str = "test/hello is registered to github.com/org/original (ref main); this publish is from github.com/org/moved (ref release). Retry with allow_lineage_change=true to replace the registered source.";
+
+    async fn exercise_lineage_publish(
+        status: u16,
+        detail: &str,
+        allow_lineage_change: bool,
+        confirm: bool,
+        retry_status: u16,
+    ) -> (usize, usize, usize, Result<(), String>) {
+        let server = httpmock::MockServer::start_async().await;
+        let client = FloxhubClient::new(client_config(&server.base_url())).unwrap();
+        let build: UserBuildPublish = serde_json::from_value(serde_json::json!({
+            "allow_lineage_change": allow_lineage_change,
+            "derivation": {
+                "drv_path": "/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-hello.drv",
+                "name": "hello",
+                "outputs": [],
+                "system": "x86_64-linux"
+            },
+            "url": "https://github.com/org/moved",
+            "ref": "release",
+            "rev": "abc123",
+            "rev_count": 1,
+            "rev_date": "2026-01-01T00:00:00Z"
+        }))
+        .unwrap();
+        let initial = server.mock(|when, then| {
+            when.method(httpmock::Method::POST)
+                .path("/api/v1/catalog/catalogs/test/packages/hello/builds")
+                .json_body_obj(&build);
+            then.status(status)
+                .json_body(serde_json::json!({"detail": detail}));
+        });
+        let mut replacement = build.clone();
+        replacement.allow_lineage_change = true;
+        let retry = server.mock(|when, then| {
+            when.method(httpmock::Method::POST)
+                .path("/api/v1/catalog/catalogs/test/packages/hello/builds")
+                .json_body_obj(&replacement);
+            then.status(retry_status)
+                .json_body(serde_json::json!({"detail": detail}));
+        });
+        let mut confirmations = 0;
+        let result =
+            publish_build_with_confirmation(&client, "test", "hello", build, async |change| {
+                confirmations += 1;
+                assert_eq!(change, &SourceLineageChange {
+                    registered: "github.com/org/original (ref main)".to_owned(),
+                    requested: "github.com/org/moved (ref release)".to_owned(),
+                });
+                Ok(confirm)
+            })
+            .await
+            .map_err(|err| err.to_string());
+        (confirmations, initial.calls(), retry.calls(), result)
+    }
+
+    #[tokio::test]
+    async fn publish_lineage_confirmation_retries_only_when_accepted() {
+        let accepted = exercise_lineage_publish(409, LINEAGE_CHANGE_DETAIL, false, true, 200).await;
+        assert_eq!(accepted, (1, 1, 1, Ok(())));
+
+        let declined =
+            exercise_lineage_publish(409, LINEAGE_CHANGE_DETAIL, false, false, 200).await;
+        let refusal = SourceLineageChange {
+            registered: "github.com/org/original (ref main)".to_owned(),
+            requested: "github.com/org/moved (ref release)".to_owned(),
+        }
+        .to_string();
+        assert_eq!(declined, (1, 1, 0, Err(refusal.clone())));
+
+        // Even a second lineage refusal must terminate, not prompt or loop again.
+        let refused_retry =
+            exercise_lineage_publish(409, LINEAGE_CHANGE_DETAIL, false, true, 409).await;
+        assert_eq!(refused_retry, (1, 1, 1, Err(refusal)));
+    }
+
+    #[tokio::test]
+    async fn publish_lineage_flag_sends_override_without_confirmation() {
+        let outcome = exercise_lineage_publish(200, "", true, false, 200).await;
+        assert_eq!(outcome, (0, 1, 0, Ok(())));
+    }
+
+    #[tokio::test]
+    async fn publish_lineage_confirmation_ignores_other_responses() {
+        let success = exercise_lineage_publish(200, "", false, true, 200).await;
+        assert_eq!(success, (0, 1, 0, Ok(())));
+        for (status, detail, expected) in [
+            (
+                409,
+                "A page already exists",
+                "409 Conflict: A page already exists".to_owned(),
+            ),
+            (
+                409,
+                "allow_lineage_change=true",
+                "409 Conflict: allow_lineage_change=true".to_owned(),
+            ),
+            (
+                400,
+                LINEAGE_CHANGE_DETAIL,
+                format!("400 Bad Request: {LINEAGE_CHANGE_DETAIL}"),
+            ),
+        ] {
+            let outcome = exercise_lineage_publish(status, detail, false, true, 200).await;
+            assert_eq!(outcome, (0, 1, 0, Err(expected)));
+        }
+    }
 
     fn example_git_remote_repo() -> (tempfile::TempDir, GitCommandProvider, String) {
         let tempdir_handle = tempfile::tempdir_in(std::env::temp_dir()).unwrap();
@@ -1864,6 +2003,8 @@ pub mod tests {
                 &BTreeMap::new(),
                 None,
                 false,
+                false,
+                async |_| Ok(false),
             )
             .await;
 
@@ -2138,6 +2279,8 @@ pub mod tests {
                 &BTreeMap::new(),
                 None,
                 false,
+                false,
+                async |_| Ok(false),
             )
             .await;
 
@@ -2291,6 +2434,8 @@ pub mod tests {
                 &BTreeMap::new(),
                 cache.local_signing_key_path(),
                 false,
+                false,
+                async |_| Ok(false),
             )
             .await
             .unwrap();
@@ -2575,6 +2720,8 @@ pub mod tests {
                 // Server returns meta-only store config; narinfo collected
                 // from FIXED_TEST_STORE_PATH in the local daemon store.
                 false,
+                false,
+                async |_| Ok(false),
             )
             .await
             .expect("failed to do publish");
@@ -2616,6 +2763,8 @@ pub mod tests {
                 // Server returns meta-only store config; narinfo collected
                 // from FIXED_TEST_STORE_PATH in the local daemon store.
                 false,
+                false,
+                async |_| Ok(false),
             )
             .await
             .expect("failed to do publish");
@@ -2684,6 +2833,8 @@ pub mod tests {
                 // Server returns meta-only store config; narinfo collected
                 // from FIXED_TEST_STORE_PATH in the local daemon store.
                 false,
+                false,
+                async |_| Ok(false),
             )
             .await
             .expect("failed to do publish");
@@ -2700,6 +2851,8 @@ pub mod tests {
                 // Server returns meta-only store config; narinfo collected
                 // from FIXED_TEST_STORE_PATH in the local daemon store.
                 false,
+                false,
+                async |_| Ok(false),
             )
             .await
             .expect("failed to do publish");
@@ -2741,6 +2894,8 @@ pub mod tests {
                 // Server returns meta-only store config; narinfo collected
                 // from FIXED_TEST_STORE_PATH in the local daemon store.
                 false,
+                false,
+                async |_| Ok(false),
             )
             .await
             .unwrap_err();

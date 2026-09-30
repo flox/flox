@@ -17,6 +17,7 @@ flox [<general-options>] publish
      [-d=<path>]
      [-o=<org>]
      [--signing-private-key <path>]
+     [--allow-lineage-change]
      [--stability <stability>]
      [<package>]...
 ```
@@ -121,6 +122,12 @@ Note that this is a paid feature available with Flox for Teams.
 `-o, --org <org>`
 :   Specify the organization to which an artifact should be published to.
     Takes precedence over the default value of the user's GitHub handle.
+
+`--allow-lineage-change`
+:   Allow replacing the package's registered source repository or ref.
+    Without this option, a refused source change requires interactive
+    confirmation showing the registered and requested sources.
+    Use this option to confirm source changes in non-interactive environments.
 
 `--signing-private-key <path>`
 :   The private key to use in signing the package
