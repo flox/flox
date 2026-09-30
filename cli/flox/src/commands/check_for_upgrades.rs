@@ -47,8 +47,10 @@ impl CheckForUpgrades {
     pub async fn handle(self, mut flox: Flox) -> Result<()> {
         subcommand_metric!("check-upgrade");
 
-        // The background upgrade check runs a catalog `resolve`, which is
-        // authenticated-only. Skip it entirely when logged out (DEV-324).
+        // Upgrade checks are a logged-in-only feature. The check calls
+        // the catalog `resolve`, which becomes authenticated-only under
+        // catalog auth gating; skip it when logged out ahead of that
+        // cutover rather than run a check that will stop working (DEV-324).
         if flox.auth_context.is_unauthenticated() {
             debug!("Not logged in; skipping upgrade check.");
             return Ok(());
