@@ -47,6 +47,13 @@ impl CheckForUpgrades {
     pub async fn handle(self, mut flox: Flox) -> Result<()> {
         subcommand_metric!("check-upgrade");
 
+        // The background upgrade check runs a catalog `resolve`, which is
+        // authenticated-only. Skip it entirely when logged out (DEV-324).
+        if flox.auth_context.is_unauthenticated() {
+            debug!("Not logged in; skipping upgrade check.");
+            return Ok(());
+        }
+
         // For catalog requests made by this command, set the QoS to background.
         // Eventually we might want to prioritize these requests differently,
         // since they are not as time-sensitive as the ones actively made by the user.
@@ -194,6 +201,7 @@ pub fn spawn_detached_check_for_upgrades_process(
 mod tests {
 
     use flox_rust_sdk::flox::test_helpers::flox_instance;
+    use flox_rust_sdk::models::environment::UninitializedEnvironment;
     use flox_rust_sdk::models::environment::UpgradeResult;
     use flox_rust_sdk::models::environment::path_environment::test_helpers::{
         new_path_environment,
@@ -294,5 +302,34 @@ mod tests {
             &info.upgrade_result.new_lockfile,
             info.upgrade_result.old_lockfile.as_ref().unwrap()
         );
+    }
+
+    /// `handle()` must return `Ok(())` immediately without writing any upgrade
+    /// information when the user is not logged in.
+    ///
+    /// The catalog `resolve` endpoint is authenticated-only, so the guard
+    /// prevents a guaranteed failure on the background call (DEV-324).
+    #[tokio::test]
+    async fn handle_skips_when_not_logged_in() {
+        // flox_instance() sets AuthContext::new_from_token(None) → Auth0(None),
+        // which is_unauthenticated() == true.
+        let (flox, _tempdir) = flox_instance();
+
+        let concrete =
+            new_path_environment_from_env_files(&flox, GENERATED_DATA.join("envs/hello"));
+        let cache_path = concrete.cache_path().unwrap();
+        let environment = UninitializedEnvironment::from_concrete_environment(&concrete.into());
+
+        let result = CheckForUpgrades {
+            check_timeout: DEFAULT_TIMEOUT_SECONDS,
+            environment,
+        }
+        .handle(flox)
+        .await;
+
+        assert!(result.is_ok());
+        // No upgrade information should have been written.
+        let guard = UpgradeInformationGuard::read_in(cache_path).unwrap();
+        assert!(guard.info().is_none());
     }
 }
