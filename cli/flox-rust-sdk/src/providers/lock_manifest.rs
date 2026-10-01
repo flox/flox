@@ -929,7 +929,7 @@ impl LockManifest {
     ///
     /// Returns [None] if no unit is copied, and `seed_lockfile` should be
     /// used as is.
-    fn seed_with_include_locks(
+    pub(crate) fn seed_with_include_locks(
         merged: &ManifestLatest,
         compose: Option<&Compose>,
         include_lockfiles: &BTreeMap<String, Lockfile>,

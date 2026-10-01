@@ -147,10 +147,11 @@ pub struct FetchedInclude {
     pub locked_include: LockedInclude,
     /// The included environment's lockfile.
     ///
-    /// It may predate the fetched manifest, e.g. for a path environment
-    /// merged with the latest changes to its own includes.
-    /// Seeding only reuses the packages it locks for descriptors that the
-    /// merged manifest doesn't change.
+    /// For a path environment merged with the latest changes to its own
+    /// includes, this is its lockfile with the packages those includes
+    /// locked, which may not lock every package in the fetched manifest.
+    /// Seeding only reuses packages locked for descriptors that the merged
+    /// manifest doesn't change.
     pub lockfile: Lockfile,
 }
 
@@ -369,12 +370,12 @@ impl IncludeFetcher {
                         RecoverableMergeError::PathOutOfSync(path),
                     ));
                 };
-                let manifest = core_environment.manifest_following_includes(
+                let (manifest, seed) = core_environment.manifest_following_includes(
                     flox,
-                    lockfile.clone(),
+                    lockfile,
                     unreadable_includes,
                 )?;
-                (manifest, lockfile)
+                (manifest, seed)
             },
             ConcreteEnvironment::Managed(environment) => {
                 let Some(lockfile) = environment.existing_lockfile(flox)? else {
@@ -390,16 +391,16 @@ impl IncludeFetcher {
                 // Like a path environment, it follows its own includes
                 let include_fetcher =
                     self.for_included(environment.parent_path()?, environment.dot_flox_path());
-                let manifest = CoreEnvironment::new(
+                let (manifest, seed) = CoreEnvironment::new(
                     environment.dot_flox_path().join(ENV_DIR_NAME),
                     include_fetcher,
                 )
                 .manifest_following_includes(
                     flox,
-                    lockfile.clone(),
+                    lockfile,
                     unreadable_includes,
                 )?;
-                (manifest, lockfile)
+                (manifest, seed)
             },
             ConcreteEnvironment::Remote(_) => {
                 unreachable!("opening a path cannot result in a remote environment");

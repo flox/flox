@@ -778,10 +778,13 @@ commands that use it, such as `flox activate`, `flox list` and, for a path
 environment, `flox build`,
 use the latest changes that those environments have locked,
 including changes to the environments that they include in turn.
+They use the package versions those environments locked, as described for
+`[install]` below, instead of resolving them again.
 These changes are kept in a copy of the lockfile in `.flox/cache`.
 They include package upgrades that an included environment locked without
-changing its manifest, for example with `flox upgrade`, and every new
-generation of an environment included with `remote` and `auto-upgrade = true`.
+changing its manifest, for example with `flox upgrade`, also in environments
+that it includes in turn, and every new generation of an environment included
+with `remote` and `auto-upgrade = true`.
 Upgrades that the composing environment locked itself, for example with
 `flox upgrade`, are kept until the included environment's lock differs from the
 one the lockfile records, i.e. until it locks other versions of any of its
@@ -829,8 +832,9 @@ manifest, but things can be overridden or added by higher priority manifests.
 : Package descriptors are overwritten entirely by a higher priority manifest.
 
   When Flox fetches an included environment, which happens the first time the
-  composing environment is locked, when an include is added or changed, and
-  with `flox include upgrade`, it reuses the versions that environment locked
+  composing environment is locked, when an include is added or changed, when an
+  environment follows changes to an included environment, and with
+  `flox include upgrade`, it reuses the versions that environment locked
   for each package group whose packages all come from that environment, are
   locked for all of the composing environment's systems, and are allowed by its
   `options.allow` and `options.semver` settings.

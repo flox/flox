@@ -1707,6 +1707,43 @@ pub mod tests {
         );
     }
 
+    /// A -> B -> C: upgrades that C locked without changing its manifest reach
+    /// A without B locking them.
+    #[test]
+    fn lockfile_follows_upgrades_a_nested_include_locked_without_editing_it() {
+        let (flox, tempdir) = flox_instance();
+        let c = new_path_environment_from_env_files_in(
+            &flox,
+            GENERATED_DATA.join("envs/hello"),
+            tempdir.path().join("c"),
+            None,
+        );
+        locked_path_environment(
+            &flox,
+            &tempdir,
+            "b",
+            &with_latest_schema("[include]\nenvironments = [{ dir = \"../c\" }]"),
+        );
+        let mut a = locked_path_environment(
+            &flox,
+            &tempdir,
+            "a",
+            &with_latest_schema("[include]\nenvironments = [{ dir = \"../b\" }]"),
+        );
+
+        upgrade_locked_packages(&c, &flox);
+
+        let (lockfile, followed) = follow(&mut a, &flox, FollowMode::Lock);
+        assert_eq!(
+            followed_names(&followed),
+            (vec!["b"], vec![], vec![], vec![])
+        );
+        assert_eq!(
+            sorted_packages(&lockfile),
+            sorted_packages(&c.existing_lockfile(&flox).unwrap().unwrap())
+        );
+    }
+
     /// An included environment's upgrades of packages that the composing
     /// environment doesn't use, here for a system it isn't locked for, change
     /// only what its lockfile records, which isn't an unsaved change.
@@ -1849,6 +1886,50 @@ pub mod tests {
         assert_eq!(
             sorted_packages(&lockfile),
             sorted_packages(&included.existing_lockfile(&flox).unwrap().unwrap())
+        );
+    }
+
+    /// A -> B -> C: the packages that C locked reach A through B,
+    /// without B locking them and without resolving them.
+    #[test]
+    fn lockfile_follows_packages_locked_by_nested_path_include() {
+        let (flox, tempdir) = flox_instance();
+        let mut c = new_path_environment_from_env_files_in(
+            &flox,
+            GENERATED_DATA.join("envs/hello"),
+            tempdir.path().join("c"),
+            None,
+        );
+        let b = locked_path_environment(
+            &flox,
+            &tempdir,
+            "b",
+            &with_latest_schema("[include]\nenvironments = [{ dir = \"../c\" }]"),
+        );
+        let mut a = locked_path_environment(
+            &flox,
+            &tempdir,
+            "a",
+            &with_latest_schema("[include]\nenvironments = [{ dir = \"../b\" }]"),
+        );
+        let b_lockfile_before = fs::read(b.lockfile_path(&flox).unwrap()).unwrap();
+
+        edit_and_lock(&mut c, &flox, &hello_manifest("[vars]\nc = \"v2\""));
+        upgrade_locked_packages(&c, &flox);
+
+        let (lockfile, followed) = follow(&mut a, &flox, FollowMode::Lock);
+        assert_eq!(
+            followed_names(&followed),
+            (vec!["b"], vec![], vec![], vec![])
+        );
+        assert_eq!(locked_vars(&lockfile), vars_map(&[("c", "v2")]));
+        assert_eq!(
+            sorted_packages(&lockfile),
+            sorted_packages(&c.existing_lockfile(&flox).unwrap().unwrap())
+        );
+        assert_eq!(
+            b_lockfile_before,
+            fs::read(b.lockfile_path(&flox).unwrap()).unwrap()
         );
     }
 
@@ -2228,8 +2309,8 @@ pub mod tests {
         );
     }
 
-    /// When the lockfile changes, the changes in use are copied again on top
-    /// of it.
+    /// When the lockfile changes, the latest changes to the included
+    /// environments are copied again on top of it.
     #[test]
     fn lockfile_copies_changes_in_use_again_after_lockfile_changes() {
         let (flox, tempdir) = flox_instance();

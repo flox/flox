@@ -24,6 +24,7 @@ use flox_manifest::lockfile::{
     LockfileError,
 };
 use flox_manifest::parsed::common::KnownSchemaVersion;
+use flox_manifest::parsed::latest::ManifestLatest;
 use flox_manifest::raw::{ModifyPackages, PackageToInstall, TomlEditError};
 use flox_manifest::{
     MANIFEST_FILENAME,
@@ -213,16 +214,19 @@ impl<State> CoreEnvironment<State> {
 
     /// The merged manifest of this environment with the latest changes to the
     /// included environments that are upgraded automatically, computed without
-    /// locking or writing anything.
+    /// locking or writing anything, and a lockfile to seed locking it with.
     ///
     /// `lockfile` has to be up to date with the manifest,
     /// so only changes that the included environments locked are used.
+    /// The seed is `lockfile` with the packages that the changed included
+    /// environments locked, so that an environment that includes this one
+    /// reuses them instead of resolving them again.
     pub(crate) fn manifest_following_includes(
         &self,
         flox: &Flox,
         lockfile: Lockfile,
         unreadable_includes: UnreadableIncludes,
-    ) -> Result<Manifest<TypedOnly>, EnvironmentError> {
+    ) -> Result<(Manifest<TypedOnly>, Lockfile), EnvironmentError> {
         let check = self.check_auto_upgraded_includes(flox, &lockfile);
         for (name, err) in check.unreadable {
             if matches!(unreadable_includes, UnreadableIncludes::Fail) || is_include_cycle(&err) {
@@ -231,13 +235,13 @@ impl<State> CoreEnvironment<State> {
             debug!(name, %err, "using locked version of unreadable include");
         }
         if check.changed.is_empty() {
-            return Ok(lockfile.manifest);
+            return Ok((lockfile.manifest.clone(), lockfile));
         }
 
         let manifest_without_migrating = self.manifest_without_migrating()?.as_typed_only();
         let original_schema = manifest_without_migrating.get_schema_version();
         let manifest = manifest_without_migrating.migrate_typed_only(Some(&lockfile))?;
-        let (merged, ..) = LockManifest::merge_manifest(
+        let (merged, compose, include_lockfiles) = LockManifest::merge_manifest(
             flox,
             manifest.as_latest_schema(),
             Some(&lockfile),
@@ -246,8 +250,35 @@ impl<State> CoreEnvironment<State> {
             Some(check.changed),
         )
         .map_err(EnvironmentError::Recoverable)?;
+        // The seed is labeled with the merged manifest, whose options decide
+        // whether its packages may be pre-releases, so it can't carry packages
+        // locked while this environment allowed pre-releases and it no longer
+        // does.
+        let allows_pre_releases =
+            |manifest: &ManifestLatest| manifest.options.semver.allow_pre_releases.unwrap_or(false);
+        let relabels_pre_releases =
+            allows_pre_releases(lockfile.migrated_manifest()?.as_latest_schema())
+                && !allows_pre_releases(&merged);
+        // Seeding only saves resolving packages again, and the environment that
+        // includes this one validates its own merged manifest when locking, so
+        // a manifest that can't be seeded isn't an error here.
+        let seed = if relabels_pre_releases {
+            None
+        } else {
+            LockManifest::seed_with_include_locks(
+                &merged,
+                compose.as_ref(),
+                &include_lockfiles,
+                Some(&lockfile),
+            )
+            .unwrap_or_else(|err| {
+                debug!(%err, "not reusing packages locked by included environments");
+                None
+            })
+        };
 
-        Ok(merged.as_maybe_backwards_compatible(original_schema, Some(&lockfile))?)
+        let manifest = merged.as_maybe_backwards_compatible(original_schema, Some(&lockfile))?;
+        Ok((manifest, seed.unwrap_or(lockfile)))
     }
 
     /// Lock with the latest versions of the named included environments,
