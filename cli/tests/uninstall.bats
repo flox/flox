@@ -218,6 +218,40 @@ EOF
   assert_failure
   assert_output - << EOF
 ✘ ERROR: Cannot remove included package 'hello'
+Remove the package from environment 'included'.
+This environment uses its changes without 'flox include upgrade'.
+EOF
+}
+
+@test "uninstall: refuses to remove a package from an included environment that's gone" {
+  skip_x86_64_darwin_replay
+  "$FLOX_BIN" init -d included
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
+    "$FLOX_BIN" edit -d included -f - <<- EOF
+version = 1
+
+[install]
+hello.pkg-path = "hello"
+EOF
+
+  "$FLOX_BIN" init -d composer
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
+    "$FLOX_BIN" edit -d composer -f - <<- EOF
+version = 1
+
+[include]
+environments = [
+  { dir = "../included" },
+]
+EOF
+  rm -rf included
+
+  # disable backtrace; we expect this to fail and assert output
+  RUST_BACKTRACE=0 \
+    run "$FLOX_BIN" uninstall -d composer hello
+  assert_failure
+  assert_output - << EOF
+✘ ERROR: Cannot remove included package 'hello'
 Remove the package from environment 'included' and then run 'flox include upgrade'
 EOF
 }

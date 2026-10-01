@@ -1095,17 +1095,33 @@ pub enum UpgradeError {
 pub enum InstallOrUninstallError {
     #[error(transparent)]
     ManifestError(#[from] ManifestError),
-    #[error(
-        "Cannot remove included package '{0}'\n\
-         Remove the package from environment '{1}' and then run 'flox include upgrade'"
-    )]
-    PackageOnlyIncluded(String, String),
+    /// `followed` is whether the environment that includes `include`
+    /// uses its latest changes without 'flox include upgrade'
+    #[error("{}", format_package_only_included(package, include, *followed))]
+    PackageOnlyIncluded {
+        package: String,
+        include: String,
+        followed: bool,
+    },
 
     #[error("'{0}' was not found in Lockfile")]
     PackageInManifestNotInLockfile(String),
 
     #[error("'{1}' does not have an output '{0}'")]
     InvalidOutputForPackage(String, String),
+}
+
+fn format_package_only_included(package: &str, include: &str, followed: bool) -> String {
+    if followed {
+        formatdoc! {"
+            Cannot remove included package '{package}'
+            Remove the package from environment '{include}'.
+            This environment uses its changes without 'flox include upgrade'."}
+    } else {
+        formatdoc! {"
+            Cannot remove included package '{package}'
+            Remove the package from environment '{include}' and then run 'flox include upgrade'"}
+    }
 }
 
 /// Open an environment defined in `path` that has a `.flox` within.

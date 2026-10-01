@@ -116,12 +116,38 @@ impl IncludeFetcher {
         self.fetch_with(flox, include_environment, UnreadableIncludes::Fail)
     }
 
-    /// Fetch the latest version of an included environment if its
-    /// `auto-upgrade` field says to use its latest changes without
-    /// 'flox include upgrade'.
+    /// Whether an included environment's `auto-upgrade` field says to use its
+    /// latest changes without 'flox include upgrade'.
     ///
-    /// By default that's an included path environment, whose latest locked
-    /// changes are used.
+    /// By default that's an included path environment.
+    pub fn is_auto_upgraded(
+        &self,
+        include_environment: &IncludeDescriptor,
+    ) -> Result<bool, EnvironmentError> {
+        Ok(
+            match (include_environment.auto_upgrade(), include_environment) {
+                (AutoUpgrade::Never, _) => false,
+                (AutoUpgrade::Always, _) => true,
+                (AutoUpgrade::IfPathEnvironment, IncludeDescriptor::Local { dir, .. }) => {
+                    let path = self
+                        .expand_include_dir(dir)
+                        .map_err(EnvironmentError::Recoverable)?;
+                    // Reading the pointer avoids opening a managed environment,
+                    // which may need git or network access.
+                    matches!(
+                        DotFlox::open_in(&path)?.pointer,
+                        EnvironmentPointer::Path(_)
+                    )
+                },
+                (AutoUpgrade::IfPathEnvironment, IncludeDescriptor::Remote { .. }) => false,
+            },
+        )
+    }
+
+    /// Fetch the latest version of an included environment if it's upgraded
+    /// automatically, see [Self::is_auto_upgraded].
+    ///
+    /// For an included path environment, those are its latest locked changes.
     /// Returns [None] for an included environment that only
     /// 'flox include upgrade' fetches again.
     /// Fails if the latest changes to any path environment included below it
@@ -131,23 +157,7 @@ impl IncludeFetcher {
         flox: &Flox,
         include_environment: &IncludeDescriptor,
     ) -> Result<Option<LockedInclude>, EnvironmentError> {
-        let auto_upgraded = match (include_environment.auto_upgrade(), include_environment) {
-            (AutoUpgrade::Never, _) => false,
-            (AutoUpgrade::Always, _) => true,
-            (AutoUpgrade::IfPathEnvironment, IncludeDescriptor::Local { dir, .. }) => {
-                let path = self
-                    .expand_include_dir(dir)
-                    .map_err(EnvironmentError::Recoverable)?;
-                // Reading the pointer avoids opening a managed environment,
-                // which may need git or network access.
-                matches!(
-                    DotFlox::open_in(&path)?.pointer,
-                    EnvironmentPointer::Path(_)
-                )
-            },
-            (AutoUpgrade::IfPathEnvironment, IncludeDescriptor::Remote { .. }) => false,
-        };
-        if !auto_upgraded {
+        if !self.is_auto_upgraded(include_environment)? {
             return Ok(None);
         }
         self.fetch_with(flox, include_environment, UnreadableIncludes::Fail)

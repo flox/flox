@@ -55,6 +55,7 @@ use super::{
     EnvironmentError,
     EnvironmentPointer,
     GCROOTS_DIR_NAME,
+    InstallOrUninstallError,
     InstallationAttempt,
     LOG_DIR_NAME,
     PathPointer,
@@ -410,6 +411,30 @@ impl PathEnvironment {
         })
     }
 
+    /// Whether the included environment named `name` in the lockfile is
+    /// followed, so its locked changes are used without 'flox include upgrade'.
+    ///
+    /// An include whose environment can't be opened counts as not followed.
+    fn follows_include_named(&self, flox: &Flox, name: &str) -> Result<bool, EnvironmentError> {
+        let Some(lockfile) = self.existing_lockfile(flox)? else {
+            return Ok(false);
+        };
+        let Some(locked) = locked_includes(&lockfile)
+            .into_iter()
+            .flatten()
+            .find(|locked| locked.name == name)
+        else {
+            return Ok(false);
+        };
+        Ok(self
+            .include_fetcher()?
+            .is_auto_upgraded(&locked.descriptor)
+            .unwrap_or_else(|err| {
+                debug!(include = name, %err, "could not tell whether the include is followed");
+                false
+            }))
+    }
+
     /// Build a copy of the lockfile with the latest changes to included path
     /// environments into the rendered environment links,
     /// and record whether that worked.
@@ -689,7 +714,23 @@ impl Environment for PathEnvironment {
     ) -> Result<UninstallationAttempt, EnvironmentError> {
         let mut env_view = self.as_core_environment_mut()?;
         let out_link_prefix = self.rendered_env_links.out_link_prefix();
-        let result = env_view.uninstall(specs, flox, Some(out_link_prefix))?;
+        let result = match env_view.uninstall(specs, flox, Some(out_link_prefix)) {
+            Err(EnvironmentError::InstallOrUninstall(
+                InstallOrUninstallError::PackageOnlyIncluded {
+                    package, include, ..
+                },
+            )) => {
+                let followed = self.follows_include_named(flox, &include)?;
+                return Err(EnvironmentError::InstallOrUninstall(
+                    InstallOrUninstallError::PackageOnlyIncluded {
+                        package,
+                        include,
+                        followed,
+                    },
+                ));
+            },
+            result => result?,
+        };
         if result.built_environment_store_paths.is_some() {
             self.rendered_env_links.replace_legacy_links();
             self.link_followed_changes(flox);

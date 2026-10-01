@@ -95,10 +95,11 @@ pub fn resolve_specs_to_modifications(
                     .transpose()?
                     .flatten()
                 {
-                    return Err(InstallOrUninstallError::PackageOnlyIncluded(
-                        pkg.clone(),
-                        include.name,
-                    ));
+                    return Err(InstallOrUninstallError::PackageOnlyIncluded {
+                        package: pkg.clone(),
+                        include: include.name,
+                        followed: false,
+                    });
                 }
                 return Err(ManifestError::PackageNotFound(pkg.clone()).into());
             },
