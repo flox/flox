@@ -8,9 +8,11 @@ use flox_manifest::parsed::latest::{AutoUpgrade, IncludeDescriptor};
 use flox_manifest::{Manifest, TypedOnly};
 use itertools::Itertools;
 
+use super::core_environment::CoreEnvironment;
 use super::{
     ConcreteEnvironment,
     DotFlox,
+    ENV_DIR_NAME,
     EnvironmentError,
     EnvironmentPointer,
     UninitializedEnvironment,
@@ -378,7 +380,19 @@ impl IncludeFetcher {
                         RecoverableMergeError::ManagedOutOfSync(path),
                     ));
                 }
-                (lockfile.manifest.clone(), lockfile)
+                // Like a path environment, it follows its own includes
+                let include_fetcher =
+                    self.for_included(environment.parent_path()?, environment.dot_flox_path());
+                let manifest = CoreEnvironment::new(
+                    environment.dot_flox_path().join(ENV_DIR_NAME),
+                    include_fetcher,
+                )
+                .manifest_following_includes(
+                    flox,
+                    lockfile.clone(),
+                    unreadable_includes,
+                )?;
+                (manifest, lockfile)
             },
             ConcreteEnvironment::Remote(_) => {
                 unreachable!("opening a path cannot result in a remote environment");

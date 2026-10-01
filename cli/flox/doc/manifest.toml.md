@@ -770,9 +770,10 @@ The lockfile of the composing environment stores a copy of each included
 environment, and for an environment included with `remote`, the generation it
 was fetched at, which `flox list --config` shows.
 
-A path environment follows the environments it includes with
-`auto-upgrade` enabled:
-commands that use it, such as `flox activate`, `flox list` and `flox build`,
+A path environment, or an environment pulled from FloxHub into a directory,
+follows the environments it includes with `auto-upgrade` enabled:
+commands that use it, such as `flox activate`, `flox list` and, for a path
+environment, `flox build`,
 use the latest changes that those environments have locked,
 including changes to the environments that they include in turn.
 These changes are kept in a copy of the lockfile in `.flox/cache`.
@@ -794,9 +795,12 @@ lockfile are used.
 `flox activate`, `flox list`, `flox build`, `flox develop` and
 `flox containerize` print a warning when this happens.
 
-All other included environments, and all environments included by a FloxHub
-environment, are only updated when you run
-[`flox include upgrade`](./flox-include-upgrade.md).
+Following never creates a generation of an environment pulled from FloxHub;
+`flox include upgrade` creates one with the changes, as it does for any other
+changes to included environments.
+All other included environments, and all environments included by an
+environment activated with `flox activate -r` or at a specific generation, are
+only updated when you run [`flox include upgrade`](./flox-include-upgrade.md).
 
 ### Merge semantics
 

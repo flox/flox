@@ -527,6 +527,47 @@ EOF
   refute_output --partial "aren't in the lockfile yet"
 }
 
+@test "an environment pulled from FloxHub follows an included path environment without creating a generation" {
+  floxhub_setup owner
+  "$FLOX_BIN" init -d included
+  "$FLOX_BIN" edit -d included -f - << EOF
+version = 1
+[vars]
+included = "v1"
+EOF
+  "$FLOX_BIN" init -d composer
+  "$FLOX_BIN" push -d composer --owner "$OWNER"
+  # Pushing an environment that includes a path environment isn't allowed
+  "$FLOX_BIN" edit -d composer -f - << EOF
+version = 1
+[include]
+environments = [{ dir = "../included" }]
+EOF
+  generations() {
+    "$FLOX_BIN" generations list -d composer --json | jq 'length'
+  }
+  generations_before="$(generations)"
+
+  "$FLOX_BIN" edit -d included -f - << EOF
+version = 1
+[vars]
+included = "v2"
+EOF
+
+  run --separate-stderr "$FLOX_BIN" activate -d composer -- bash -c 'echo "$included"'
+  assert_success
+  assert_output "v2"
+  assert_regex "$stderr" "- 'included'"
+  assert_equal "$(generations)" "$generations_before"
+
+  run "$FLOX_BIN" include upgrade -d composer
+  assert_success
+  assert_output --partial "- 'included'"
+  assert_equal "$(generations)" "$((generations_before + 1))"
+
+  wait_for_activations "$PROJECT_DIR/composer" || return 1
+}
+
 # ---------------------------------------------------------------------------- #
 
 function setup_composer_with_remote_include() {

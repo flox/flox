@@ -1941,8 +1941,29 @@ pub(crate) fn lockfile_reporting_followed_includes(
     mode: FollowMode,
 ) -> Result<LockResult, EnvironmentError> {
     let (lock_result, followed_includes) = environment.lockfile_following_includes(flox, mode)?;
-    message::print_followed_includes(&followed_includes, &include_upgrade_command(environment));
+    message::print_followed_includes(
+        &followed_includes,
+        &save_followed_changes_command(environment, flox),
+    );
     Ok(lock_result)
+}
+
+/// The 'flox include upgrade' command that saves the changes to included
+/// environments in use, for a "Run '<command>'" message.
+///
+/// An environment pulled from FloxHub with changes that aren't in a
+/// generation yet has to sync them first, which 'flox include upgrade'
+/// otherwise refuses.
+fn save_followed_changes_command(environment: &ConcreteEnvironment, flox: &Flox) -> String {
+    let include_upgrade = include_upgrade_command(environment);
+    let ConcreteEnvironment::Managed(managed) = environment else {
+        return include_upgrade;
+    };
+    if !managed.has_local_changes(flox).unwrap_or(false) {
+        return include_upgrade;
+    }
+    let edit_sync = include_upgrade.replacen("include upgrade", "edit --sync", 1);
+    format!("{edit_sync}' and then '{include_upgrade}")
 }
 
 /// The 'flox include upgrade' command for an environment, selecting it with

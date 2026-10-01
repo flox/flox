@@ -164,8 +164,9 @@ pub trait Environment: Send {
     /// Return the lockfile like [Environment::lockfile], reporting what it did
     /// with the latest changes to followed included environments.
     ///
-    /// Only path environments follow their included environments;
-    /// the others report nothing.
+    /// Path environments, and environments pulled from FloxHub into a
+    /// directory that aren't pinned to a generation, follow their included
+    /// environments; the others report nothing.
     fn lockfile_following_includes(
         &mut self,
         flox: &Flox,
@@ -180,8 +181,9 @@ pub trait Environment: Send {
     /// Returns [None] if the lockfile isn't up to date with the manifest,
     /// so the included environments it locked can't be checked.
     ///
-    /// Only path environments follow their included environments;
-    /// the others have nothing to check.
+    /// Path environments, and environments pulled from FloxHub into a
+    /// directory that aren't pinned to a generation, follow their included
+    /// environments; the others have nothing to check.
     fn check_followed_includes(
         &mut self,
         _flox: &Flox,

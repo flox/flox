@@ -11,8 +11,9 @@ use flox_manifest::{Manifest, ManifestError, Migrated, Validated};
 use thiserror::Error;
 use tracing::{debug, instrument};
 
-use super::core_environment::{CoreEnvironment, UpgradeResult};
+use super::core_environment::{CoreEnvironment, FollowMode, FollowedIncludes, UpgradeResult};
 use super::fetcher::IncludeFetcher;
+use super::followed_includes::{self, FollowedLockfiles, Following};
 use super::generations::{
     AllGenerationsMetadata,
     GenerationId,
@@ -35,6 +36,7 @@ use super::{
     EnvironmentError,
     EnvironmentPointer,
     GCROOTS_DIR_NAME,
+    InstallOrUninstallError,
     InstallationAttempt,
     LOG_DIR_NAME,
     ManagedPointer,
@@ -75,6 +77,10 @@ pub struct ManagedEnvironment {
     /// Specific generation to use, i.e. from `flox activate`
     /// This doesn't represent the live generation.
     generation: Option<GenerationId>,
+    /// Whether commands use the latest changes to the included environments
+    /// it follows, as they do for an environment pulled into a directory,
+    /// but not for one opened for 'flox activate -r'
+    follows_includes: bool,
 }
 
 #[derive(Debug, Error, strum::IntoStaticStr)]
@@ -213,8 +219,46 @@ impl Environment for ManagedEnvironment {
             return Ok(LockResult::Unchanged(lockfile));
         }
 
+        let Following {
+            lock_result,
+            followed,
+            ..
+        } = self.follow_includes(flox, FollowMode::Lock)?;
+        debug!(?followed, "followed included environments");
+        Ok(lock_result)
+    }
+
+    fn lockfile_following_includes(
+        &mut self,
+        flox: &Flox,
+        mode: FollowMode,
+    ) -> Result<(LockResult, FollowedIncludes), EnvironmentError> {
+        if self.generation.is_some() {
+            return Ok((self.lockfile(flox)?, FollowedIncludes::default()));
+        }
+        let Following {
+            lock_result,
+            followed,
+            ..
+        } = self.follow_includes(flox, mode)?;
+        Ok((lock_result, followed))
+    }
+
+    fn check_followed_includes(
+        &mut self,
+        flox: &Flox,
+    ) -> Result<Option<FollowedIncludes>, EnvironmentError> {
+        if !self.follows_includes() {
+            return Ok(Some(FollowedIncludes::default()));
+        }
         let mut local_checkout = self.local_env_or_copy_current_generation(flox)?;
-        self.ensure_locked(flox, &mut local_checkout)
+        // Changes that aren't in a generation yet have to be synced before
+        // 'flox include upgrade' can save anything
+        if !Self::validate_checkout(&local_checkout, &self.generations())? {
+            return Err(ManagedEnvironmentError::CheckoutOutOfSync.into());
+        }
+        let committed = local_checkout.lockfile_if_up_to_date()?;
+        followed_includes::check_followed_includes(&mut local_checkout, committed, flox)
     }
 
     /// Returns the lockfile if it already exists.
@@ -329,6 +373,7 @@ impl Environment for ManagedEnvironment {
         }
         if result.built_environments.is_some() {
             self.rendered_env_links.replace_legacy_links();
+            self.link_followed_changes(flox);
         }
 
         Ok(result)
@@ -362,7 +407,28 @@ impl Environment for ManagedEnvironment {
 
         let targets: Vec<String> = specs.iter().map(|s| s.package_ref.clone()).collect();
         let out_link_prefix = self.rendered_env_links.out_link_prefix();
-        let result = local_checkout.uninstall(specs, flox, Some(out_link_prefix))?;
+        let result = match local_checkout.uninstall(specs, flox, Some(out_link_prefix)) {
+            Err(EnvironmentError::InstallOrUninstall(
+                InstallOrUninstallError::PackageOnlyIncluded {
+                    package, include, ..
+                },
+            )) => {
+                let followed = self.follows_includes()
+                    && followed_includes::follows_include_named(
+                        local_checkout.existing_lockfile()?.as_ref(),
+                        &self.include_fetcher,
+                        &include,
+                    );
+                return Err(EnvironmentError::InstallOrUninstall(
+                    InstallOrUninstallError::PackageOnlyIncluded {
+                        package,
+                        include,
+                        followed,
+                    },
+                ));
+            },
+            result => result?,
+        };
         let change = HistoryKind::Uninstall { targets };
 
         // It's an error to uninstall a package that isn't installed so if we
@@ -373,6 +439,7 @@ impl Environment for ManagedEnvironment {
         self.lock_pointer()?;
         if result.built_environment_store_paths.is_some() {
             self.rendered_env_links.replace_legacy_links();
+            self.link_followed_changes(flox);
         }
 
         Ok(result)
@@ -404,6 +471,7 @@ impl Environment for ManagedEnvironment {
                     .map_err(ManagedEnvironmentError::CommitGeneration)?;
                 self.lock_pointer()?;
                 self.rendered_env_links.replace_legacy_links();
+                self.link_followed_changes(flox);
             },
             EditResult::Unchanged => {},
         }
@@ -463,6 +531,7 @@ impl Environment for ManagedEnvironment {
         }
         if result.store_path.is_some() {
             self.rendered_env_links.replace_legacy_links();
+            self.link_followed_changes(flox);
         }
         Ok(result)
     }
@@ -493,11 +562,23 @@ impl Environment for ManagedEnvironment {
             ))?
         }
 
+        // Save the copy of the lockfile in use, see [followed_includes::copy_to_save]
+        let copy = if self.follows_includes() {
+            let committed: Lockfile = self.ensure_locked(flox, &mut local_checkout)?.into();
+            followed_includes::copy_to_save(
+                &committed,
+                &self.followed_lockfiles(),
+                &flox.system,
+                &to_upgrade,
+            )
+        } else {
+            None
+        };
         let out_link_prefix = self.rendered_env_links.out_link_prefix();
         let result = local_checkout.include_upgrade(
             flox,
             to_upgrade.clone(),
-            None,
+            copy.as_ref().map(|copy| &copy.lockfile),
             Some(out_link_prefix),
         )?;
         if result.store_path.is_some() {
@@ -510,6 +591,13 @@ impl Environment for ManagedEnvironment {
 
             self.lock_pointer()?;
             self.rendered_env_links.replace_legacy_links();
+        }
+        // Copies are of the lockfile before the upgrade, so the latest changes
+        // to included environments that weren't saved are copied again the
+        // next time they're used.
+        self.followed_lockfiles().remove_all();
+        if result.store_path.is_some() {
+            self.link_followed_changes(flox);
         }
 
         Ok(result)
@@ -524,41 +612,42 @@ impl Environment for ManagedEnvironment {
             return self.rendered_env_links_for_generation(flox, generation);
         }
 
-        let mut local_checkout = self.local_env_or_copy_current_generation(flox)?;
-        self.ensure_locked(flox, &mut local_checkout)?;
-
-        let lockfile_contents = local_checkout
-            .existing_lockfile_contents()
-            .map_err(ManagedEnvironmentError::Core)?
-            .expect("lockfile presence checked");
-
-        let rendered_env_lockfile_path = self.rendered_env_links.dev.join(LOCKFILE_FILENAME);
-
-        let mut build_and_link = || -> Result<(), EnvironmentError> {
+        let lockfile: Lockfile = self
+            .follow_includes(flox, FollowMode::Lock)?
+            .lock_result
+            .into();
+        let rendered_lockfile_path = self.rendered_env_links.dev.join(LOCKFILE_FILENAME);
+        let rendered_lockfile = CanonicalPath::new(rendered_lockfile_path)
+            .ok()
+            .and_then(|path| Lockfile::read_from_file(&path).ok());
+        if rendered_lockfile.as_ref() != Some(&lockfile) {
             self.build(flox)?;
-            Ok(())
-        };
-
-        if !rendered_env_lockfile_path.exists() {
-            build_and_link()?;
-            return Ok(self.rendered_env_links.clone());
-        }
-
-        let Ok(rendered_env_lockfile_contents) = fs::read_to_string(&rendered_env_lockfile_path)
-        else {
-            build_and_link()?;
-            return Ok(self.rendered_env_links.clone());
-        };
-
-        if lockfile_contents != rendered_env_lockfile_contents {
-            build_and_link()?;
-            return Ok(self.rendered_env_links.clone());
         }
 
         Ok(self.rendered_env_links.clone())
     }
 
+    /// Build the environment, with the latest changes to the included
+    /// environments it follows if it builds with them
     fn build(&mut self, flox: &Flox) -> Result<BuildEnvOutputs, EnvironmentError> {
+        if self.follows_includes()
+            && let Some(mut copy) = self.follow_includes(flox, FollowMode::Lock)?.copy
+        {
+            let mut local_checkout = self.local_env_or_copy_current_generation(flox)?;
+            match followed_includes::build_followed_lockfile(
+                &mut local_checkout,
+                &self.followed_lockfiles(),
+                &self.rendered_env_links,
+                flox,
+                &mut copy,
+            ) {
+                Ok(store_paths) => return Ok(store_paths),
+                Err(err) => debug!(
+                    %err,
+                    "building with the latest changes to included environments failed, building the lockfile instead"
+                ),
+            }
+        }
         let out_link_prefix = self.rendered_env_links.out_link_prefix();
         let mut local_checkout = self.local_env_or_copy_current_generation(flox)?;
         // todo: ensure lockfile exists?
@@ -838,6 +927,63 @@ impl ManagedEnvironment {
         }
     }
 
+    /// Whether commands use the latest changes to the included environments
+    /// it follows, which they don't for a specific generation
+    fn follows_includes(&self) -> bool {
+        self.follows_includes && self.generation.is_none()
+    }
+
+    /// The copies of the lockfile with the latest changes to followed
+    /// included environments
+    fn followed_lockfiles(&self) -> FollowedLockfiles {
+        FollowedLockfiles::in_dot_flox(&self.path)
+    }
+
+    /// Build the latest changes to followed included environments into the
+    /// rendered environment links again, after a command that created a
+    /// generation built its lockfile into them, so that activations keep
+    /// using the changes.
+    ///
+    /// Failing only leaves the generation's lockfile in the links until the
+    /// next command that uses the environment.
+    fn link_followed_changes(&mut self, flox: &Flox) {
+        if !self.follows_includes() {
+            return;
+        }
+        if let Err(err) = self.follow_includes(flox, FollowMode::LockAndBuild) {
+            debug!(%err, "could not use the latest changes to included environments");
+        }
+    }
+
+    /// Lock the environment if the local checkout changed, and use a copy of
+    /// its lockfile with the latest changes to the included environments it
+    /// follows, see [followed_includes::follow_includes].
+    ///
+    /// Following never creates a generation.
+    fn follow_includes(
+        &mut self,
+        flox: &Flox,
+        mode: FollowMode,
+    ) -> Result<Following, EnvironmentError> {
+        let mut local_checkout = self.local_env_or_copy_current_generation(flox)?;
+        let lock_result = self.ensure_locked(flox, &mut local_checkout)?;
+        if !self.follows_includes() {
+            return Ok(Following {
+                lock_result,
+                followed: FollowedIncludes::default(),
+                copy: None,
+            });
+        }
+        followed_includes::follow_includes(
+            &mut local_checkout,
+            lock_result,
+            &self.followed_lockfiles(),
+            &self.rendered_env_links,
+            flox,
+            mode,
+        )
+    }
+
     /// Returns a unique identifier for the location of the environment.
     fn path_hash(&self) -> String {
         path_hash(&self.path)
@@ -922,7 +1068,7 @@ impl ManagedEnvironment {
         let include_fetcher =
             IncludeFetcher::for_composer(parent_directory.to_path_buf(), dot_flox_path.clone());
 
-        Self::open_with(
+        let mut environment = Self::open_with(
             flox,
             floxmeta_branch,
             pointer,
@@ -931,7 +1077,9 @@ impl ManagedEnvironment {
             include_fetcher,
             generation,
         )
-        .map_err(EnvironmentError::ManagedEnvironment)
+        .map_err(EnvironmentError::ManagedEnvironment)?;
+        environment.follows_includes = true;
+        Ok(environment)
     }
 
     /// Open a managed environment backed by a provided floxmeta_branch.
@@ -960,6 +1108,7 @@ impl ManagedEnvironment {
             floxmeta_branch,
             include_fetcher,
             generation,
+            follows_includes: false,
         };
 
         Ok(env)
@@ -1066,6 +1215,7 @@ impl ManagedEnvironment {
             .map_err(ManagedEnvironmentError::CommitGeneration)?;
 
         self.lock_pointer()?;
+        self.link_followed_changes(flox);
         Ok(SyncToGenerationResult::Synced)
     }
 
@@ -1695,6 +1845,7 @@ pub mod test_helpers {
             floxmeta_branch,
             include_fetcher: mock_include_fetcher(),
             generation: None,
+            follows_includes: false,
         }
     }
 
@@ -1779,6 +1930,7 @@ mod test {
     use flox_manifest::parsed::Inner;
     use flox_manifest::parsed::latest::{self, ManifestLatest};
     use flox_manifest::raw::DEFAULT_SYSTEMS_STR;
+    use flox_manifest::test_helpers::with_latest_schema;
     use flox_manifest::{MANIFEST_FILENAME, Manifest};
     use flox_test_utils::GENERATED_DATA;
     use indoc::{formatdoc, indoc};
@@ -1797,6 +1949,7 @@ mod test {
         read_environment_registry,
     };
     use crate::models::environment::DOT_FLOX;
+    use crate::models::environment::path_environment::test_helpers::new_named_path_environment_in;
     use crate::models::environment::test_helpers::{
         new_core_environment,
         new_core_environment_with_lockfile,
@@ -2613,6 +2766,202 @@ mod test {
             lockfile.compose.unwrap().include[0].manifest,
             toml_edit::de::from_str(dep_manifest_contents).unwrap()
         );
+    }
+
+    /// An environment pulled from FloxHub follows locked changes to an
+    /// included path environment without creating a generation,
+    /// and 'flox include upgrade' saves them in a new generation.
+    #[test]
+    fn managed_composer_follows_locked_changes_to_path_include() {
+        let owner = "owner".parse().unwrap();
+        let (flox, tempdir) = flox_instance_with_optional_floxhub(Some(&owner));
+        let included_contents =
+            |value: &str| format!("version = 1\n[vars]\nincluded = \"{value}\"\n");
+        let mut included = new_named_path_environment_in(
+            &flox,
+            &included_contents("v1"),
+            tempdir.path().join("included"),
+            "included",
+        );
+        included.lockfile(&flox).unwrap();
+        let mut composer = mock_managed_environment_in(
+            &flox,
+            "version = 1",
+            owner,
+            tempdir.path().join("composer"),
+            Some("composer"),
+        );
+        // Pushing an environment that includes a path environment isn't
+        // allowed, so the include is added after pushing.
+        composer
+            .edit(
+                &flox,
+                indoc! {r#"
+                    version = 1
+                    [include]
+                    environments = [{ dir = "../included" }]
+                "#}
+                .to_string(),
+            )
+            .unwrap();
+        let (pointer, dot_flox_path) = (composer.pointer().clone(), composer.path.clone());
+        // Each command opens the environment again
+        let open =
+            || ManagedEnvironment::open(&flox, pointer.clone(), &dot_flox_path, None).unwrap();
+        let generation_count = |composer: &ManagedEnvironment| {
+            composer.generations_metadata().unwrap().generations().len()
+        };
+        let included_var = |lockfile: &Lockfile| {
+            lockfile
+                .migrated_manifest()
+                .unwrap()
+                .as_latest_schema()
+                .vars
+                .inner()
+                .get("included")
+                .cloned()
+        };
+        let generations_before = generation_count(&composer);
+        let lockfile_before = composer.existing_lockfile(&flox).unwrap().unwrap();
+
+        included.edit(&flox, included_contents("v2")).unwrap();
+
+        let mut composer = open();
+        let (lock_result, followed) = composer
+            .lockfile_following_includes(&flox, FollowMode::Lock)
+            .unwrap();
+        assert_eq!(followed.unsaved, vec!["included".to_string()]);
+        assert_eq!(included_var(&lock_result.into()), Some("v2".to_string()));
+        assert_eq!(generation_count(&composer), generations_before);
+        assert_eq!(
+            composer.existing_lockfile(&flox).unwrap().unwrap(),
+            lockfile_before
+        );
+
+        let mut composer = open();
+        composer.include_upgrade(&flox, vec![]).unwrap();
+        assert_eq!(generation_count(&composer), generations_before + 1);
+        let saved = composer.existing_lockfile(&flox).unwrap().unwrap();
+        assert_eq!(included_var(&saved), Some("v2".to_string()));
+
+        let mut composer = open();
+        let (_, followed) = composer
+            .lockfile_following_includes(&flox, FollowMode::Lock)
+            .unwrap();
+        assert!(followed.unsaved.is_empty());
+    }
+
+    /// A path environment pulled from FloxHub at `<tempdir>/<name>` that
+    /// includes `include`
+    fn managed_including(
+        flox: &Flox,
+        tempdir: &Path,
+        name: &str,
+        include: &str,
+    ) -> ManagedEnvironment {
+        let mut environment = mock_managed_environment_in(
+            flox,
+            "version = 1",
+            "owner".parse().unwrap(),
+            tempdir.join(name),
+            Some(name),
+        );
+        // Pushing an environment that includes a path environment isn't
+        // allowed, so the include is added after pushing.
+        environment
+            .edit(
+                flox,
+                format!("version = 1\n[include]\nenvironments = [{include}]\n"),
+            )
+            .unwrap();
+        environment
+    }
+
+    /// A path environment at `<tempdir>/leaf` with `leaf = "<value>"`
+    fn leaf_environment(flox: &Flox, tempdir: &Path, value: &str) -> PathEnvironment {
+        let mut leaf = new_named_path_environment_in(
+            flox,
+            &format!("version = 1\n[vars]\nleaf = \"{value}\"\n"),
+            tempdir.join("leaf"),
+            "leaf",
+        );
+        leaf.lockfile(flox).unwrap();
+        leaf
+    }
+
+    /// The `leaf` var of the merged manifest in a lockfile
+    fn leaf_var(lockfile: Lockfile) -> Option<String> {
+        lockfile
+            .migrated_manifest()
+            .unwrap()
+            .as_latest_schema()
+            .vars
+            .inner()
+            .get("leaf")
+            .cloned()
+    }
+
+    /// A path environment that includes an environment pulled from FloxHub
+    /// gets the changes that it follows in turn.
+    #[test]
+    fn managed_include_passes_on_changes_it_follows() {
+        let owner = "owner".parse().unwrap();
+        let (flox, tempdir) = flox_instance_with_optional_floxhub(Some(&owner));
+        let mut leaf = leaf_environment(&flox, tempdir.path(), "v1");
+        managed_including(&flox, tempdir.path(), "middle", r#"{ dir = "../leaf" }"#);
+        let mut composer = new_named_path_environment_in(
+            &flox,
+            &with_latest_schema(
+                "[include]\nenvironments = [{ dir = \"../middle\", auto-upgrade = true }]",
+            ),
+            tempdir.path().join("composer"),
+            "composer",
+        );
+        composer.lockfile(&flox).unwrap();
+
+        leaf.edit(&flox, "version = 1\n[vars]\nleaf = \"v2\"\n".to_string())
+            .unwrap();
+
+        // A new command
+        let mut composer =
+            PathEnvironment::open(&flox, composer.pointer.clone(), composer.path.clone()).unwrap();
+        let (lock_result, followed) = composer
+            .lockfile_following_includes(&flox, FollowMode::Lock)
+            .unwrap();
+        assert_eq!(followed.unsaved, vec!["middle".to_string()]);
+        assert_eq!(leaf_var(lock_result.into()), Some("v2".to_string()));
+    }
+
+    /// A command that creates a generation keeps the latest changes to
+    /// followed includes in the rendered environment, which it rebuilt.
+    #[test]
+    fn managed_edit_keeps_followed_changes_in_rendered_environment() {
+        let owner = "owner".parse().unwrap();
+        let (flox, tempdir) = flox_instance_with_optional_floxhub(Some(&owner));
+        let mut leaf = leaf_environment(&flox, tempdir.path(), "v1");
+        let include = r#"{ dir = "../leaf" }"#;
+        let middle = managed_including(&flox, tempdir.path(), "middle", include);
+        let (pointer, dot_flox_path) = (middle.pointer().clone(), middle.path.clone());
+        leaf.edit(&flox, "version = 1\n[vars]\nleaf = \"v2\"\n".to_string())
+            .unwrap();
+
+        let mut middle = ManagedEnvironment::open(&flox, pointer, &dot_flox_path, None).unwrap();
+        middle
+            .lockfile_following_includes(&flox, FollowMode::LockAndBuild)
+            .unwrap();
+        middle
+            .edit(
+                &flox,
+                format!(
+                    "version = 1\n[vars]\nmiddle = \"v1\"\n[include]\nenvironments = [{include}]\n"
+                ),
+            )
+            .unwrap();
+        let rendered = Lockfile::read_from_file(
+            &CanonicalPath::new(middle.rendered_env_links.dev.join(LOCKFILE_FILENAME)).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(leaf_var(rendered), Some("v2".to_string()));
     }
 
     #[cfg_attr(
