@@ -616,24 +616,19 @@ impl Build {
         let lockfile_path = catalog_lockfile_path(env.dot_flox_path());
 
         if rel_file_paths.is_empty() {
-            // Replace only v1 locks: the prescribed relock command must work
-            // without expressions, while existing v2 pins remain authoritative.
-            match nef_lock_catalog::read_lock(&lockfile_path) {
-                Err(nef_lock_catalog::LockfileError::LegacyVersion { .. }) => {
-                    nef_lock_catalog::write_lock(
-                        &nef_lock_catalog::BuildLock::default(),
-                        &lockfile_path,
-                    )?;
-                    message::created(formatdoc! {"
-                    No Nix expression builds found; replaced the old '.flox/catalog.lock' \
-                        with an empty version 2 lock.
-                        Commit the file so every revision builds against the same inputs."});
-                },
-                _ => {
-                    message::plain(
-                        "No Nix expression builds found; only expression builds reference the catalog.",
-                    );
-                },
+            if lockfile_path.exists() {
+                nef_lock_catalog::write_lock(
+                    &nef_lock_catalog::BuildLock::default(),
+                    &lockfile_path,
+                )?;
+                message::created(formatdoc! {"
+                No Nix expression builds found; replaced '.flox/catalog.lock' \
+                    with an empty version 2 lock.
+                    Commit the file so every revision builds against the same inputs."});
+            } else {
+                message::plain(
+                    "No Nix expression builds found; only expression builds reference the catalog.",
+                );
             }
             return Ok(());
         }
@@ -1004,6 +999,51 @@ mod test {
         Build::update_catalogs(&flox, ConcreteEnvironment::Path(env))
             .await
             .expect("a v1 lock with no expression builds is replaced, not refused");
+
+        assert_eq!(
+            std::fs::read_to_string(&lockfile_path).unwrap(),
+            "{\n  \"version\": 2,\n  \"locked_inputs\": {},\n  \"direct_inputs\": [],\n  \"catalogs\": {}\n}\n"
+        );
+    }
+
+    #[tokio::test]
+    async fn update_catalogs_replaces_a_populated_v2_lock_with_no_expression_builds() {
+        let (flox, _temp_dir) = flox_instance();
+        let env = new_path_environment(&flox, "version = 1\n");
+        let lockfile_path = catalog_lockfile_path(env.dot_flox_path());
+        let input_key = "myorg/hello".to_owned();
+        let entry = serde_json::from_value(serde_json::json!({
+            "attr_path": ["hello"],
+            "build_type": "nef",
+            "catalog": "myorg",
+            "inputs": [],
+            "locked_inputs_hash": "sha256-test",
+            "source": {
+                "type": "git",
+                "url": "https://example.com/repo",
+                "ref": "refs/heads/main",
+                "rev": "abc",
+                "dir": "."
+            }
+        }))
+        .unwrap();
+        let populated = nef_lock_catalog::build_lock_from_locked_inputs(
+            std::collections::HashMap::from([(input_key.clone(), entry)]),
+            [&input_key],
+        )
+        .unwrap();
+        nef_lock_catalog::write_lock(&populated, &lockfile_path).unwrap();
+        assert_eq!(
+            nef_lock_catalog::read_lock(&lockfile_path)
+                .unwrap()
+                .locked_inputs
+                .len(),
+            1
+        );
+
+        Build::update_catalogs(&flox, ConcreteEnvironment::Path(env))
+            .await
+            .expect("a populated v2 lock is replaced");
 
         assert_eq!(
             std::fs::read_to_string(&lockfile_path).unwrap(),
