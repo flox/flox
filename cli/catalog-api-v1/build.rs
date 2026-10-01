@@ -19,6 +19,12 @@ fn main() {
             && (*k == "/api/v1/catalog/info/base-catalog" || !k.starts_with("/api/v1/catalog/info"))
             && !k.starts_with("/api/v1/catalog/status")
     });
+    // Lookup clients opt into v2. Progenitor's generated `anyOf` wrapper
+    // parses v2 as v1 because the v1 group permits unknown fields, losing
+    // `not_lockable`. Keep the vendored OAS union and narrow only generation.
+    spec_json["paths"]["/api/v1/catalog/build-inputs/lookup"]["post"]["responses"]["200"]["content"]
+        ["application/json"]["schema"] =
+        serde_json::json!({"$ref": "#/components/schemas/BuildInputsLookupResponseV2"});
     let spec = serde_json::from_value(spec_json).expect("Failed to parse openapi spec");
 
     let client = generate_client(&spec);

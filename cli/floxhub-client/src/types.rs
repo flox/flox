@@ -40,7 +40,9 @@ pub type PackageDetails = ResultsPage<PackageBuild>;
 pub use api_types::{
     BuildInputsLookupRequest,
     BuildInputsLookupResponse,
+    BuildInputsLookupResponseV2,
     GroupResult,
+    GroupResultV2,
     LockedGitSource,
     LockedInputEntry,
     LookupGroup,

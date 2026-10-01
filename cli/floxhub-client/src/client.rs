@@ -279,7 +279,7 @@ pub trait CatalogClientTrait {
     async fn build_inputs_lookup(
         &self,
         request: BuildInputsLookupRequest,
-    ) -> Result<BuildInputsLookupResponse, FloxhubClientError>;
+    ) -> Result<BuildInputsLookupResponseV2, FloxhubClientError>;
 
     /// Create a package within a user catalog.
     async fn create_package(
@@ -615,7 +615,7 @@ impl CatalogClientTrait for FloxhubClient {
     async fn build_inputs_lookup(
         &self,
         request: BuildInputsLookupRequest,
-    ) -> Result<BuildInputsLookupResponse, FloxhubClientError> {
+    ) -> Result<BuildInputsLookupResponseV2, FloxhubClientError> {
         tracing::debug!(n_groups = request.groups.len(), "looking up build inputs");
 
         // NOTE: unlike sibling catalog endpoints, the generated lookup endpoint
@@ -630,7 +630,13 @@ impl CatalogClientTrait for FloxhubClient {
             .await
             .map_err(|err| FloxhubClientError::Other(err.to_string()))?;
 
-        Ok(response.into_inner())
+        let response = response.into_inner();
+        if response.version != 2 {
+            return Err(FloxhubClientError::Other(
+                "catalog lookup did not return a v2 response".to_string(),
+            ));
+        }
+        Ok(response)
     }
 
     async fn publish_info(
@@ -1057,6 +1063,37 @@ pub mod tests {
     use super::*;
     use crate::config::UnauthenticatedResolveHook;
     const SENTRY_TRACE_HEADER: &str = "sentry-trace";
+
+    #[tokio::test]
+    async fn lookup_reads_v2_not_lockable_from_http_response() {
+        let server = MockServer::start_async().await;
+        let mock = server.mock(|when, then| {
+            when.method("POST")
+                .path("/api/v1/catalog/build-inputs/lookup")
+                .json_body_includes(json!({"response_version": 2}).to_string());
+            then.status(200).json_body(json!({
+                "version": 2,
+                "groups": {"default": {
+                    "lock": {}, "matched": {}, "unresolvable": [],
+                    "not_lockable": {"nixpkgs.hello": {"kind": "base_catalog"}}
+                }}
+            }));
+        });
+        let client = FloxhubClient::new(client_config(server.base_url().as_str())).unwrap();
+        let request: BuildInputsLookupRequest = serde_json::from_value(json!({
+            "groups": [{"key": "default", "references": ["nixpkgs.hello"]}],
+            "response_version": 2
+        }))
+        .unwrap();
+
+        let response = client.build_inputs_lookup(request).await.unwrap();
+        mock.assert();
+        assert_eq!(response.version, 2);
+        assert_eq!(
+            response.groups["default"].not_lockable["nixpkgs.hello"].kind,
+            "base_catalog"
+        );
+    }
 
     #[tokio::test]
     async fn resolve_response_with_new_message_type() {

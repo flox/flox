@@ -12,7 +12,7 @@ use std::collections::BTreeSet;
 
 use floxhub_client::{
     BuildInputsLookupRequest,
-    BuildInputsLookupResponse,
+    BuildInputsLookupResponseV2,
     CatalogClientTrait,
     DEFAULT_STABILITY,
     FloxhubClientError,
@@ -88,6 +88,7 @@ fn build_request(references: BTreeSet<CatalogRef>) -> BuildInputsLookupRequest {
     BuildInputsLookupRequest {
         groups: vec![group],
         reference_point: None,
+        response_version: 2.try_into().expect("supported lookup response version"),
         // Catalog-input resolution is independent of the nixpkgs base-catalog
         // stability. The server accepts and ignores the field, and the spec
         // marks it deprecated, but older servers still read it, so send the
@@ -124,7 +125,7 @@ fn wire_reference(reference: &CatalogRef) -> ReferencesItem {
 /// Boundary: if the group reports any unresolvable references, fail the whole
 /// lock. Otherwise hand the resolved `lock` map off to the A2 transform.
 #[instrument(skip(response))]
-fn lock_from_response(mut response: BuildInputsLookupResponse) -> Result<BuildLock, LockError> {
+fn lock_from_response(mut response: BuildInputsLookupResponseV2) -> Result<BuildLock, LockError> {
     let Some(group) = response.groups.remove(LOOKUP_GROUP_KEY) else {
         return Err(LockError::Transform(anyhow::anyhow!(
             "The server returned no group for our request; nothing to lock."
@@ -175,11 +176,12 @@ mod tests {
             json!(DEFAULT_STABILITY)
         );
         assert!(wire.reference_point.is_none());
+        assert_eq!(*wire.response_version, 2);
     }
 
     #[test]
     fn r11_success_fixture_locks() {
-        let response: BuildInputsLookupResponse = serde_json::from_str(include_str!(
+        let response: BuildInputsLookupResponseV2 = serde_json::from_str(include_str!(
             "../../test_data/build_inputs_lookup/success.json"
         ))
         .expect("success fixture deserializes");
@@ -207,7 +209,7 @@ mod tests {
     /// The server's canonical keys and dotted reference names must not be conflated.
     #[test]
     fn success_fixture_projects_by_its_own_reference() {
-        let response: BuildInputsLookupResponse = serde_json::from_str(include_str!(
+        let response: BuildInputsLookupResponseV2 = serde_json::from_str(include_str!(
             "../../test_data/build_inputs_lookup/success.json"
         ))
         .expect("success fixture deserializes");
@@ -227,7 +229,7 @@ mod tests {
 
     #[test]
     fn r11_partial_fixture_is_unresolvable() {
-        let response: BuildInputsLookupResponse = serde_json::from_str(include_str!(
+        let response: BuildInputsLookupResponseV2 = serde_json::from_str(include_str!(
             "../../test_data/build_inputs_lookup/partial.json"
         ))
         .expect("partial fixture deserializes");
@@ -245,5 +247,64 @@ mod tests {
             },
             other => panic!("expected LockError::Unresolvable, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn v2_base_only_wire_locks_without_a_root() {
+        let response: BuildInputsLookupResponseV2 = serde_json::from_value(json!({
+            "version": 2,
+            "groups": {"default": {
+                "lock": {}, "matched": {}, "unresolvable": [],
+                "not_lockable": {"nixpkgs.python3Packages.*": {"kind": "base_catalog"}}
+            }}
+        }))
+        .expect("generated v2 model parses the wire response");
+        assert_eq!(response.version, 2);
+        assert_eq!(
+            response.groups[LOOKUP_GROUP_KEY].not_lockable["nixpkgs.python3Packages.*"].kind,
+            "base_catalog"
+        );
+
+        let lock = lock_from_response(response).expect("base-only group is usable");
+        assert!(lock.direct_inputs.is_empty());
+        assert!(lock.locked_inputs.is_empty());
+        assert_eq!(serde_json::to_value(&lock).unwrap()["catalogs"], json!({}));
+    }
+
+    #[test]
+    fn v2_mixed_group_keeps_only_lockable_roots() {
+        let mut response: serde_json::Value = serde_json::from_str(include_str!(
+            "../../test_data/build_inputs_lookup/success.json"
+        ))
+        .unwrap();
+        response["version"] = json!(2);
+        response["groups"][LOOKUP_GROUP_KEY]["not_lockable"] =
+            json!({"nixpkgs.hello": {"kind": "base_catalog"}});
+        let response: BuildInputsLookupResponseV2 = serde_json::from_value(response).unwrap();
+
+        let lock = lock_from_response(response).expect("mixed group is usable");
+        assert_eq!(
+            lock.direct_inputs,
+            BTreeSet::from(["myorg/hello".to_string()])
+        );
+        assert_eq!(lock.locked_inputs.len(), 1);
+        let value = serde_json::to_value(&lock).unwrap();
+        assert!(value["catalogs"].get("nixpkgs").is_none());
+    }
+
+    #[test]
+    fn v2_unresolvable_still_fails_with_a_base_advisory() {
+        let mut response: serde_json::Value = serde_json::from_str(include_str!(
+            "../../test_data/build_inputs_lookup/partial.json"
+        ))
+        .unwrap();
+        response["version"] = json!(2);
+        response["groups"][LOOKUP_GROUP_KEY]["not_lockable"] =
+            json!({"nixpkgs.hello": {"kind": "base_catalog"}});
+        let response: BuildInputsLookupResponseV2 = serde_json::from_value(response).unwrap();
+        assert!(matches!(
+            lock_from_response(response),
+            Err(LockError::Unresolvable(entries)) if entries.len() == 1
+        ));
     }
 }

@@ -87,7 +87,9 @@ pub mod types {
     /**Request body for the /build-inputs/lookup endpoint.
 
 A lookup names one or more `groups` of references to resolve, optionally
-anchored at a `reference_point`.
+anchored at a `reference_point`. `response_version=2` separates requested
+base-catalog references from genuine resolution failures; omitted/1 keeps
+the original response contract.
 
 The response is source revisions plus DAG edges: for each reference, the
 latest revision of its own source together with the transitive non-base
@@ -101,7 +103,7 @@ built repeatedly.*/
     /// ```json
     ///{
     ///  "title": "BuildInputsLookupRequest",
-    ///  "description": "Request body for the /build-inputs/lookup endpoint.\n\nA lookup names one or more `groups` of references to resolve, optionally\nanchored at a `reference_point`.\n\nThe response is source revisions plus DAG edges: for each reference, the\nlatest revision of its own source together with the transitive non-base\nsources that revision was built against.  That answer carries no system\nand no nixpkgs base revision, so the request body names neither.  A base\nrevision is selected at build time, against which the same lock may be\nbuilt repeatedly.",
+    ///  "description": "Request body for the /build-inputs/lookup endpoint.\n\nA lookup names one or more `groups` of references to resolve, optionally\nanchored at a `reference_point`. `response_version=2` separates requested\nbase-catalog references from genuine resolution failures; omitted/1 keeps\nthe original response contract.\n\nThe response is source revisions plus DAG edges: for each reference, the\nlatest revision of its own source together with the transitive non-base\nsources that revision was built against.  That answer carries no system\nand no nixpkgs base revision, so the request body names neither.  A base\nrevision is selected at build time, against which the same lock may be\nbuilt repeatedly.",
     ///  "type": "object",
     ///  "required": [
     ///    "groups"
@@ -129,6 +131,15 @@ built repeatedly.*/
     ///        }
     ///      ]
     ///    },
+    ///    "response_version": {
+    ///      "title": "Response Version",
+    ///      "default": 1,
+    ///      "type": "integer",
+    ///      "enum": [
+    ///        1,
+    ///        2
+    ///      ]
+    ///    },
     ///    "stability": {
     ///      "title": "Stability",
     ///      "description": "Accepted and ignored; not used by this endpoint. Deprecated.",
@@ -147,6 +158,8 @@ built repeatedly.*/
         pub groups: ::std::vec::Vec<LookupGroup>,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
         pub reference_point: ::std::option::Option<ReferencePoint>,
+        #[serde(default = "defaults::build_inputs_lookup_request_response_version")]
+        pub response_version: ResponseVersion,
         ///Accepted and ignored; not used by this endpoint. Deprecated.
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
         pub stability: ::std::option::Option<::std::string::String>,
@@ -193,6 +206,47 @@ built repeatedly.*/
     }
     impl ::std::convert::From<&BuildInputsLookupResponse> for BuildInputsLookupResponse {
         fn from(value: &BuildInputsLookupResponse) -> Self {
+            value.clone()
+        }
+    }
+    ///Opt-in response for lookup clients that understand base references.
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "BuildInputsLookupResponseV2",
+    ///  "description": "Opt-in response for lookup clients that understand base references.",
+    ///  "type": "object",
+    ///  "required": [
+    ///    "groups"
+    ///  ],
+    ///  "properties": {
+    ///    "groups": {
+    ///      "title": "Groups",
+    ///      "type": "object",
+    ///      "additionalProperties": {
+    ///        "$ref": "#/components/schemas/GroupResultV2"
+    ///      }
+    ///    },
+    ///    "version": {
+    ///      "title": "Version",
+    ///      "default": 2,
+    ///      "type": "integer"
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
+    pub struct BuildInputsLookupResponseV2 {
+        pub groups: ::std::collections::HashMap<::std::string::String, GroupResultV2>,
+        #[serde(default = "defaults::default_u64::<i64, 2>")]
+        pub version: i64,
+    }
+    impl ::std::convert::From<&BuildInputsLookupResponseV2>
+    for BuildInputsLookupResponseV2 {
+        fn from(value: &BuildInputsLookupResponseV2) -> Self {
             value.clone()
         }
     }
@@ -1452,6 +1506,84 @@ cleanly (mirrors how unresolvable defaults).*/
             value.clone()
         }
     }
+    ///Lookup group with base-namespace advisories separate from failures.
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "GroupResultV2",
+    ///  "description": "Lookup group with base-namespace advisories separate from failures.",
+    ///  "type": "object",
+    ///  "required": [
+    ///    "lock"
+    ///  ],
+    ///  "properties": {
+    ///    "lock": {
+    ///      "title": "Lock",
+    ///      "type": "object",
+    ///      "additionalProperties": {
+    ///        "$ref": "#/components/schemas/LockedInputEntry"
+    ///      }
+    ///    },
+    ///    "matched": {
+    ///      "title": "Matched",
+    ///      "type": "object",
+    ///      "additionalProperties": {
+    ///        "type": "array",
+    ///        "items": {
+    ///          "type": "string"
+    ///        }
+    ///      }
+    ///    },
+    ///    "not_lockable": {
+    ///      "title": "Not Lockable",
+    ///      "type": "object",
+    ///      "additionalProperties": {
+    ///        "$ref": "#/components/schemas/NotLockableEntry"
+    ///      }
+    ///    },
+    ///    "unresolvable": {
+    ///      "title": "Unresolvable",
+    ///      "type": "array",
+    ///      "items": {
+    ///        "$ref": "#/components/schemas/UnresolvableEntry"
+    ///      }
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
+    pub struct GroupResultV2 {
+        pub lock: ::std::collections::HashMap<
+            ::std::string::String,
+            crate::types::LockedInputEntry,
+        >,
+        #[serde(
+            default,
+            skip_serializing_if = ":: std :: collections :: HashMap::is_empty"
+        )]
+        pub matched: ::std::collections::HashMap<
+            ::std::string::String,
+            ::std::vec::Vec<::std::string::String>,
+        >,
+        #[serde(
+            default,
+            skip_serializing_if = ":: std :: collections :: HashMap::is_empty"
+        )]
+        pub not_lockable: ::std::collections::HashMap<
+            ::std::string::String,
+            NotLockableEntry,
+        >,
+        #[serde(default, skip_serializing_if = "::std::vec::Vec::is_empty")]
+        pub unresolvable: ::std::vec::Vec<UnresolvableEntry>,
+    }
+    impl ::std::convert::From<&GroupResultV2> for GroupResultV2 {
+        fn from(value: &GroupResultV2) -> Self {
+            value.clone()
+        }
+    }
     ///`HealthCheck`
     ///
     /// <details><summary>JSON schema</summary>
@@ -2339,6 +2471,36 @@ catalog) or '<owner>.<pkgset>.*' (package set) — e.g. 'brantley.*'
             >,
         ) -> Self {
             Self(value)
+        }
+    }
+    ///A requested reference whose catalog is supplied by pinned evaluation.
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "NotLockableEntry",
+    ///  "description": "A requested reference whose catalog is supplied by pinned evaluation.",
+    ///  "type": "object",
+    ///  "required": [
+    ///    "kind"
+    ///  ],
+    ///  "properties": {
+    ///    "kind": {
+    ///      "title": "Kind",
+    ///      "type": "string"
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
+    pub struct NotLockableEntry {
+        pub kind: ::std::string::String,
+    }
+    impl ::std::convert::From<&NotLockableEntry> for NotLockableEntry {
+        fn from(value: &NotLockableEntry) -> Self {
+            value.clone()
         }
     }
     ///Comma-separated list of output names (e.g., 'out,bin,dev')
@@ -5180,6 +5342,67 @@ because the two anchors carry different value types.*/
             value.clone()
         }
     }
+    ///`ResponseVersion`
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "Response Version",
+    ///  "default": 1,
+    ///  "type": "integer",
+    ///  "enum": [
+    ///    1,
+    ///    2
+    ///  ]
+    ///}
+    /// ```
+    /// </details>
+    #[derive(::serde::Serialize, Clone, Debug, PartialEq)]
+    #[serde(transparent)]
+    pub struct ResponseVersion(i64);
+    impl ::std::ops::Deref for ResponseVersion {
+        type Target = i64;
+        fn deref(&self) -> &i64 {
+            &self.0
+        }
+    }
+    impl ::std::convert::From<ResponseVersion> for i64 {
+        fn from(value: ResponseVersion) -> Self {
+            value.0
+        }
+    }
+    impl ::std::convert::From<&ResponseVersion> for ResponseVersion {
+        fn from(value: &ResponseVersion) -> Self {
+            value.clone()
+        }
+    }
+    impl ::std::default::Default for ResponseVersion {
+        fn default() -> Self {
+            ResponseVersion(1_i64)
+        }
+    }
+    impl ::std::convert::TryFrom<i64> for ResponseVersion {
+        type Error = self::error::ConversionError;
+        fn try_from(
+            value: i64,
+        ) -> ::std::result::Result<Self, self::error::ConversionError> {
+            if ![1_i64, 2_i64].contains(&value) {
+                Err("invalid value".into())
+            } else {
+                Ok(Self(value))
+            }
+        }
+    }
+    impl<'de> ::serde::Deserialize<'de> for ResponseVersion {
+        fn deserialize<D>(deserializer: D) -> ::std::result::Result<Self, D::Error>
+        where
+            D: ::serde::Deserializer<'de>,
+        {
+            Self::try_from(<i64>::deserialize(deserializer)?)
+                .map_err(|e| { <D::Error as ::serde::de::Error>::custom(e.to_string()) })
+        }
+    }
     ///Supported SBOM format types.
     ///
     /// <details><summary>JSON schema</summary>
@@ -6046,6 +6269,9 @@ causes.*/
         {
             T::try_from(V).unwrap()
         }
+        pub(super) fn build_inputs_lookup_request_response_version() -> super::ResponseVersion {
+            super::ResponseVersion(1_i64)
+        }
         pub(super) fn build_source_dir() -> ::std::string::String {
             ".flox".to_string()
         }
@@ -6181,7 +6407,7 @@ Sends a `POST` request to `/api/v1/catalog/build-inputs/lookup`
         &'a self,
         body: &'a types::BuildInputsLookupRequest,
     ) -> Result<
-        ResponseValue<types::BuildInputsLookupResponse>,
+        ResponseValue<types::BuildInputsLookupResponseV2>,
         Error<types::ErrorResponse>,
     > {
         let url = format!("{}/api/v1/catalog/build-inputs/lookup", self.baseurl);

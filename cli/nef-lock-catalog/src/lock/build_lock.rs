@@ -10,6 +10,10 @@ use super::tree::PackageTreeNode;
 use crate::project::UPDATE_CATALOGS_COMMAND;
 use crate::{CatalogId, CatalogRef};
 
+// Must match the configured base catalog's name on the catalog server and the
+// pinned instance exposed as `catalogs.nixpkgs` by the NEF builder.
+pub(crate) const BASE_CATALOG_NAME: &str = "nixpkgs";
+
 /// Locked source information for a catalog: a package attribute hierarchy with
 /// a locked source per package at its leaves, as returned by the catalog
 /// `/build-inputs/lookup` endpoint.
@@ -228,6 +232,8 @@ impl BuildLock {
     /// Project a package's direct roots and dependency closure for publication.
     /// A non-wildcard reference selects its most specific direct input;
     /// a wildcard selects every direct input under its prefix.
+    /// References in the base catalog select no roots because the builder
+    /// supplies them from its pinned nixpkgs instance.
     ///
     /// Walk only entries reachable from the selected roots. A lock can hold
     /// unrelated packages, and build/develop should not validate their graphs.
@@ -339,6 +345,11 @@ fn select_roots(
         // guarantees the catalog component is present.
         let names = reference.path().attribute_names();
         let (catalog, path) = (names[1], &names[2..]);
+        // Base references are evaluated from pinned nixpkgs; they have no
+        // lock root even when a wildcard names many attributes.
+        if catalog == BASE_CATALOG_NAME {
+            continue;
+        }
         let wildcard = reference.path().is_wildcard();
 
         let mut matched: Vec<&String> = candidates
@@ -507,6 +518,29 @@ mod tests {
             closure.locked_inputs["myorg/hello"],
             floxhub_client::LockedInputEntry::from(&lock.locked_inputs["myorg/hello"])
         );
+    }
+
+    #[test]
+    fn base_references_and_wildcards_do_not_select_lock_roots() {
+        let lock = lock_with(&["myorg/hello"]);
+        let base_only = lock
+            .project_package(&references(&[
+                "catalogs.nixpkgs.hello",
+                "catalogs.nixpkgs.python3Packages.*",
+                "catalogs.nixpkgs.*",
+            ]))
+            .expect("base references need no lock root");
+        assert!(base_only.direct_inputs.is_empty());
+        assert!(base_only.locked_inputs.is_empty());
+
+        let mixed = lock
+            .project_package(&references(&[
+                "catalogs.nixpkgs.python3Packages.*",
+                "catalogs.myorg.hello",
+            ]))
+            .expect("only the custom reference selects a lock root");
+        assert_eq!(mixed.direct_inputs, vec!["myorg/hello".to_string()]);
+        assert_eq!(mixed.locked_inputs.len(), 1);
     }
 
     /// A reference may select a member of the package it resolved to

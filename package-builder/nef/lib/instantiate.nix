@@ -141,7 +141,12 @@ in
         builtins.addErrorContext "while instantiating catalog '${name}'" (
           lib.nef.instantiate.instantiateCatalog nixpkgs instantiatedCatalogsClosure catalogSpec
         );
-      instantiatedCatalogsClosure = lib.mapAttrs instantiateCatalog' catalogSpecClosure;
+      # The base catalog comes from the builder's pinned nixpkgs, never from a lock entry.
+      instantiatedCatalogsClosure =
+        if builtins.hasAttr "nixpkgs" catalogSpecClosure then
+          throw "catalog.lock cannot define the reserved nixpkgs catalog"
+        else
+          lib.mapAttrs instantiateCatalog' catalogSpecClosure;
     in
     instantiatedCatalogsClosure;
 
@@ -168,7 +173,10 @@ in
       pkgsDir = configRoot + "/pkgs";
 
       catalogOverlay = final: prev: {
-        catalogs = lib.mapAttrs (
+        catalogs = {
+          # Use the same pinned instance as the NEF builder's other nixpkgs inputs.
+          nixpkgs = nixpkgs;
+        } // lib.mapAttrs (
           _: catalogInstance:
           {
             "nix" = catalogInstance.reflect.packages;

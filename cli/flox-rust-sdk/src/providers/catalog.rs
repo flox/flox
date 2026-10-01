@@ -10,7 +10,7 @@ use floxhub_client::{
     BaseCatalogInfo,
     BaseCatalogUrl,
     BuildInputsLookupRequest,
-    BuildInputsLookupResponse,
+    BuildInputsLookupResponseV2,
     ByCommandError,
     ByCommandResult,
     CatalogClientTrait,
@@ -423,7 +423,7 @@ impl CatalogClientTrait for MockClient {
     async fn build_inputs_lookup(
         &self,
         _request: BuildInputsLookupRequest,
-    ) -> Result<BuildInputsLookupResponse, FloxhubClientError> {
+    ) -> Result<BuildInputsLookupResponseV2, FloxhubClientError> {
         // Intentionally unsupported: the lockless lookup path is tested via the
         // record/replay client and pure nef-lock-catalog unit tests, not the
         // MockClient response queue.

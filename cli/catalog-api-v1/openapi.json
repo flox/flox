@@ -370,7 +370,15 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/BuildInputsLookupResponse"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/BuildInputsLookupResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/BuildInputsLookupResponseV2"
+                    }
+                  ],
+                  "title": "Response Lookup Api V1 Catalog Build Inputs Lookup Post"
                 }
               }
             }
@@ -2318,6 +2326,15 @@
               }
             ]
           },
+          "response_version": {
+            "type": "integer",
+            "enum": [
+              1,
+              2
+            ],
+            "title": "Response Version",
+            "default": 1
+          },
           "groups": {
             "items": {
               "$ref": "#/components/schemas/LookupGroup"
@@ -2332,7 +2349,7 @@
           "groups"
         ],
         "title": "BuildInputsLookupRequest",
-        "description": "Request body for the /build-inputs/lookup endpoint.\n\nA lookup names one or more `groups` of references to resolve, optionally\nanchored at a `reference_point`.\n\nThe response is source revisions plus DAG edges: for each reference, the\nlatest revision of its own source together with the transitive non-base\nsources that revision was built against.  That answer carries no system\nand no nixpkgs base revision, so the request body names neither.  A base\nrevision is selected at build time, against which the same lock may be\nbuilt repeatedly."
+        "description": "Request body for the /build-inputs/lookup endpoint.\n\nA lookup names one or more `groups` of references to resolve, optionally\nanchored at a `reference_point`. `response_version=2` separates requested\nbase-catalog references from genuine resolution failures; omitted/1 keeps\nthe original response contract.\n\nThe response is source revisions plus DAG edges: for each reference, the\nlatest revision of its own source together with the transitive non-base\nsources that revision was built against.  That answer carries no system\nand no nixpkgs base revision, so the request body names neither.  A base\nrevision is selected at build time, against which the same lock may be\nbuilt repeatedly."
       },
       "BuildInputsLookupResponse": {
         "properties": {
@@ -2356,6 +2373,29 @@
         ],
         "title": "BuildInputsLookupResponse",
         "description": "Response body for the /build-inputs/lookup endpoint."
+      },
+      "BuildInputsLookupResponseV2": {
+        "properties": {
+          "version": {
+            "type": "integer",
+            "const": 2,
+            "title": "Version",
+            "default": 2
+          },
+          "groups": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/GroupResultV2"
+            },
+            "type": "object",
+            "title": "Groups"
+          }
+        },
+        "type": "object",
+        "required": [
+          "groups"
+        ],
+        "title": "BuildInputsLookupResponseV2",
+        "description": "Opt-in response for lookup clients that understand base references."
       },
       "BuildRef": {
         "properties": {
@@ -2960,6 +3000,47 @@
         "title": "GroupResult",
         "description": "Result for a single LookupGroup.\n\nlock carries the resolved LockedInputs map (full transitive closure).\nunresolvable is scoped INSIDE the group (never at the top-level response).\nKeeping unresolvable entries group-scoped is the contract the lookup\nhandler must respect when building this response.\n\nmatched maps locked-input keys (same namespace as lock \u2014 every matched\nkey must also exist in lock) to the list of raw user-query strings that\ndirectly pulled this entry in.  A direct dep matched by several queries\nhas several entries in its value list; a wildcard query pulling several\ndeps means that query string appears under several keys.  Roots are\nimplicit \u2014 they are the keys of matched.\n\nmatched is response-only; it must NOT appear on the publish request path.\nUse pydantic.Field(default_factory=dict) so an empty match set serializes\ncleanly (mirrors how unresolvable defaults)."
       },
+      "GroupResultV2": {
+        "properties": {
+          "lock": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/LockedInputEntry"
+            },
+            "type": "object",
+            "title": "Lock"
+          },
+          "unresolvable": {
+            "items": {
+              "$ref": "#/components/schemas/UnresolvableEntry"
+            },
+            "type": "array",
+            "title": "Unresolvable"
+          },
+          "matched": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "type": "object",
+            "title": "Matched"
+          },
+          "not_lockable": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/NotLockableEntry"
+            },
+            "type": "object",
+            "title": "Not Lockable"
+          }
+        },
+        "type": "object",
+        "required": [
+          "lock"
+        ],
+        "title": "GroupResultV2",
+        "description": "Lookup group with base-namespace advisories separate from failures."
+      },
       "HealthCheck": {
         "properties": {
           "check_parameters": {
@@ -3379,6 +3460,21 @@
         },
         "type": "object",
         "title": "NarInfos"
+      },
+      "NotLockableEntry": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "base_catalog",
+            "title": "Kind"
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind"
+        ],
+        "title": "NotLockableEntry",
+        "description": "A requested reference whose catalog is supplied by pinned evaluation."
       },
       "PackageBuild": {
         "properties": {
