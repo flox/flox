@@ -349,6 +349,34 @@ EOF
   assert_output --partial 'included1 = "v1"'
 }
 
+@test "list does not follow changes to an included path environment with auto-upgrade disabled" {
+  setup_composer_and_two_includes
+  MANIFEST_CONTENTS="$(cat << "EOF"
+    schema-version = "1.18.0"
+
+    [include]
+    environments = [
+      { dir = "../included1", auto-upgrade = false },
+      { dir = "../included2" },
+    ]
+EOF
+  )"
+  echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f - -d composer
+  edit_both_included_environments
+
+  run "$FLOX_BIN" list -c -d composer
+  assert_success
+  assert_output --partial 'included1 = "v1"'
+  assert_output --partial 'included2 = "v2"'
+
+  run "$FLOX_BIN" include upgrade -d composer included1
+  assert_success
+
+  run "$FLOX_BIN" list -c -d composer
+  assert_success
+  assert_output --partial 'included1 = "v2"'
+}
+
 @test "list keeps the version in use of an included path environment it cannot read" {
   setup_composer_and_two_includes
   edit_included1
@@ -541,6 +569,31 @@ EOF
   )"
   echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f - -r owner/remote
   "$FLOX_BIN" push -f -r owner/remote
+}
+
+@test "list follows changes to an included remote environment with auto-upgrade enabled" {
+  setup_composer_with_remote_include
+  MANIFEST_CONTENTS="$(cat << "EOF"
+    schema-version = "1.18.0"
+
+    [include]
+    environments = [
+      { remote = "owner/remote", auto-upgrade = true },
+    ]
+EOF
+  )"
+  echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f - -d composer
+  lockfile_before="$(cat composer/.flox/env/manifest.lock)"
+  edit_remote
+
+  run "$FLOX_BIN" list -c -d composer
+  assert_success
+  assert_output --partial 'remote = "v2"'
+  assert_output --partial - <<EOF
+ℹ Using changes to included environments that aren't in the lockfile yet:
+- 'remote'
+EOF
+  assert_equal "$(cat composer/.flox/env/manifest.lock)" "$lockfile_before"
 }
 
 @test "include upgrade reports no changes for remote environments" {

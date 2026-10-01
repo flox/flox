@@ -11,7 +11,7 @@ use super::{
     shallow_merge_options,
 };
 use crate::parsed::Inner;
-use crate::parsed::common::{Allows, Containerize, Include, SemverOptions, Vars};
+use crate::parsed::common::{Allows, Containerize, SemverOptions, Vars};
 // merge_hook operates on the latest schema's Hook (which carries
 // `on-deactivate`), and merge_options on the latest schema's Options (which
 // carries `activate.upgrade-notifications`), so composing environments
@@ -19,6 +19,7 @@ use crate::parsed::common::{Allows, Containerize, Include, SemverOptions, Vars};
 use crate::parsed::latest::{
     ActivateOptions,
     Hook,
+    Include,
     Install,
     ManifestLatest,
     MinimumCliVersion,

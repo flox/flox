@@ -1,9 +1,11 @@
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
+use std::sync::{Arc, Mutex};
 
 use flox_core::data::environment_ref::RemoteEnvironmentRef;
 use flox_manifest::lockfile::{LockedInclude, Lockfile};
-use flox_manifest::parsed::common::IncludeDescriptor;
+use flox_manifest::parsed::latest::{AutoUpgrade, IncludeDescriptor};
 use flox_manifest::{Manifest, TypedOnly};
 
 use super::{
@@ -15,11 +17,18 @@ use super::{
 };
 use crate::data::CanonicalPath;
 use crate::flox::Flox;
-use crate::models::environment::generations::GenerationsExt;
+use crate::models::environment::floxmeta_branch::fetch_remote_generations;
+use crate::models::environment::generations::GenerationsError;
 use crate::models::environment::managed_environment::ManagedEnvironmentError;
-use crate::models::environment::remote_environment::RemoteEnvironment;
 use crate::models::environment::{Environment, ManagedPointer, UnreadableIncludes};
 use crate::providers::lock_manifest::RecoverableMergeError;
+
+/// The lockfiles of remote environments that have been fetched, by
+/// environment and generation.
+///
+/// Sharing them between fetchers fetches each remote environment once,
+/// so everything that uses it sees the same version.
+pub type RemoteLockfiles = Arc<Mutex<HashMap<(RemoteEnvironmentRef, Option<usize>), Lockfile>>>;
 
 /// Context required to fetch an environment include
 #[derive(Clone, Debug)]
@@ -28,6 +37,7 @@ pub struct IncludeFetcher {
     /// The `.flox` directories of the environments whose includes are being
     /// fetched, outermost first, used to detect include cycles
     composers: Vec<CanonicalPath>,
+    remote_lockfiles: RemoteLockfiles,
 }
 
 /// The included environment as fetched,
@@ -49,6 +59,7 @@ impl IncludeFetcher {
         Self {
             base_directory,
             composers: Vec::new(),
+            remote_lockfiles: RemoteLockfiles::default(),
         }
     }
 
@@ -59,7 +70,14 @@ impl IncludeFetcher {
         Self {
             base_directory: Some(base_directory),
             composers: vec![dot_flox],
+            remote_lockfiles: RemoteLockfiles::default(),
         }
+    }
+
+    /// Use, and add to, remote environments that other fetchers have fetched
+    pub fn with_remote_lockfiles(mut self, remote_lockfiles: RemoteLockfiles) -> Self {
+        self.remote_lockfiles = remote_lockfiles;
+        self
     }
 
     /// A fetcher for the includes of an included path environment,
@@ -70,12 +88,13 @@ impl IncludeFetcher {
         Self {
             base_directory: Some(base_directory),
             composers,
+            remote_lockfiles: self.remote_lockfiles.clone(),
         }
     }
 
     /// Fetch an included environment.
     ///
-    /// An included path environment whose own included path environments
+    /// An included path environment whose own automatically upgraded includes
     /// can't be read uses its lockfile's copies of them.
     pub fn fetch(
         &self,
@@ -97,30 +116,38 @@ impl IncludeFetcher {
         self.fetch_with(flox, include_environment, UnreadableIncludes::Fail)
     }
 
-    /// Fetch an included environment if its directory holds a path
-    /// environment, whose latest locked changes are always used.
+    /// Fetch the latest version of an included environment if its
+    /// `auto-upgrade` field says to use its latest changes without
+    /// 'flox include upgrade'.
     ///
-    /// Returns [None] for any other kind of included environment,
-    /// which is only fetched again by 'flox include upgrade'.
+    /// By default that's an included path environment, whose latest locked
+    /// changes are used.
+    /// Returns [None] for an included environment that only
+    /// 'flox include upgrade' fetches again.
     /// Fails if the latest changes to any path environment included below it
     /// can't be read, so that the including environment keeps its own copy.
-    pub fn fetch_if_path_environment(
+    pub fn fetch_if_auto_upgraded(
         &self,
         flox: &Flox,
         include_environment: &IncludeDescriptor,
     ) -> Result<Option<LockedInclude>, EnvironmentError> {
-        let IncludeDescriptor::Local { dir, .. } = include_environment else {
-            return Ok(None);
+        let auto_upgraded = match (include_environment.auto_upgrade(), include_environment) {
+            (AutoUpgrade::Never, _) => false,
+            (AutoUpgrade::Always, _) => true,
+            (AutoUpgrade::IfPathEnvironment, IncludeDescriptor::Local { dir, .. }) => {
+                let path = self
+                    .expand_include_dir(dir)
+                    .map_err(EnvironmentError::Recoverable)?;
+                // Reading the pointer avoids opening a managed environment,
+                // which may need git or network access.
+                matches!(
+                    DotFlox::open_in(&path)?.pointer,
+                    EnvironmentPointer::Path(_)
+                )
+            },
+            (AutoUpgrade::IfPathEnvironment, IncludeDescriptor::Remote { .. }) => false,
         };
-        let path = self
-            .expand_include_dir(dir)
-            .map_err(EnvironmentError::Recoverable)?;
-        // Reading the pointer avoids opening a managed environment,
-        // which may need git or network access.
-        if !matches!(
-            DotFlox::open_in(&path)?.pointer,
-            EnvironmentPointer::Path(_)
-        ) {
+        if !auto_upgraded {
             return Ok(None);
         }
         self.fetch_with(flox, include_environment, UnreadableIncludes::Fail)
@@ -134,13 +161,14 @@ impl IncludeFetcher {
         unreadable_includes: UnreadableIncludes,
     ) -> Result<FetchedInclude, EnvironmentError> {
         let (manifest, lockfile, name) = match include_environment {
-            IncludeDescriptor::Local { dir, name } => {
+            IncludeDescriptor::Local { dir, name, .. } => {
                 self.fetch_local(flox, dir, name, unreadable_includes)
             },
             IncludeDescriptor::Remote {
                 remote,
                 name,
                 generation,
+                ..
             } => self
                 .fetch_remote(flox, remote, name, *generation)
                 // One read for both, so the manifest matches the packages
@@ -161,8 +189,8 @@ impl IncludeFetcher {
     /// Fetch a local (path or managed) environment, only if it's locked.
     ///
     /// A path environment provides the manifest in its lockfile,
-    /// merged with the latest locked changes to its own included path
-    /// environments.
+    /// merged with the latest changes to its own automatically upgraded
+    /// includes.
     /// A managed environment has to be in sync with its current generation.
     fn fetch_local(
         &self,
@@ -215,7 +243,7 @@ impl IncludeFetcher {
                         RecoverableMergeError::PathOutOfSync(path),
                     ));
                 };
-                let manifest = core_environment.manifest_following_path_includes(
+                let manifest = core_environment.manifest_following_includes(
                     flox,
                     lockfile.clone(),
                     unreadable_includes,
@@ -253,29 +281,34 @@ impl IncludeFetcher {
         name: &Option<String>,
         generation: Option<usize>,
     ) -> Result<(Lockfile, String), EnvironmentError> {
+        let name = name.clone().unwrap_or_else(|| remote.name().to_string());
+        let key = (remote.clone(), generation);
+        let fetched = self
+            .remote_lockfiles
+            .lock()
+            .expect("remote lockfiles lock should not be poisoned")
+            .get(&key)
+            .cloned();
+        if let Some(lockfile) = fetched {
+            return Ok((lockfile, name));
+        }
+
         let pointer =
             ManagedPointer::new(remote.owner().clone(), remote.name().clone(), &flox.floxhub);
-
-        // Don't affect existing open remotes but still uses the same floxmeta.
-        let tempdir =
-            tempfile::tempdir_in(&flox.temp_dir).map_err(EnvironmentError::CreateTempDir)?;
-        let environment = RemoteEnvironment::new_in(flox, tempdir.path(), pointer, None)?;
-
+        let generations = fetch_remote_generations(flox, &pointer)
+            .map_err(ManagedEnvironmentError::FloxmetaBranch)?;
         let lockfile = match generation {
-            Some(generation) => {
-                let lockfile_content = environment
-                    .lockfile_contents_for_generation(generation)
-                    .map_err(ManagedEnvironmentError::Generations)?;
-                Lockfile::from_str(&lockfile_content)?
-            },
-            None => environment
-                .existing_lockfile(flox)?
-                .expect("remote environments should always be locked"),
-        };
-        let name = name
-            .clone()
-            .unwrap_or_else(|| environment.name().to_string());
+            Some(generation) => generations.lockfile(generation),
+            None => generations.current_gen_lockfile().and_then(|contents| {
+                Lockfile::from_str(&contents).map_err(GenerationsError::Lockfile)
+            }),
+        }
+        .map_err(ManagedEnvironmentError::Generations)?;
 
+        self.remote_lockfiles
+            .lock()
+            .expect("remote lockfiles lock should not be poisoned")
+            .insert(key, lockfile.clone());
         Ok((lockfile, name))
     }
 
@@ -319,9 +352,14 @@ mod test {
 
     use super::*;
     use crate::flox::test_helpers::{flox_instance, flox_instance_with_optional_floxhub};
+    use crate::models::env_registry::{env_registry_path, read_environment_registry};
+    use crate::models::environment::generations::GenerationsExt;
     use crate::models::environment::managed_environment::test_helpers::mock_managed_environment_in;
     use crate::models::environment::path_environment::test_helpers::new_path_environment_in;
+    use crate::models::environment::remote_environment::RemoteEnvironment;
     use crate::models::environment::remote_environment::test_helpers::mock_remote_environment;
+    use crate::models::floxmeta::floxmeta_dir;
+    use crate::providers::git::{GitCommandProvider, GitProvider};
     use crate::providers::lock_manifest::LockResult;
 
     #[test]
@@ -341,6 +379,7 @@ mod test {
         let include_descriptor = IncludeDescriptor::Local {
             dir: environment_path.file_name().unwrap().into(),
             name: None,
+            auto_upgrade: None,
         };
 
         let fetched = include_fetcher.fetch(&flox, &include_descriptor).unwrap();
@@ -372,6 +411,7 @@ mod test {
         let include_descriptor = IncludeDescriptor::Local {
             dir: environment_path,
             name: None,
+            auto_upgrade: None,
         };
 
         let fetched = include_fetcher.fetch(&flox, &include_descriptor).unwrap();
@@ -406,6 +446,7 @@ mod test {
         let include_descriptor = IncludeDescriptor::Local {
             dir: environment_path.file_name().unwrap().into(),
             name: None,
+            auto_upgrade: None,
         };
 
         let expected_error = formatdoc! {r#"
@@ -477,6 +518,7 @@ mod test {
         let self_include = IncludeDescriptor::Local {
             dir: ".".into(),
             name: None,
+            auto_upgrade: None,
         };
         let err = include_fetcher.fetch(&flox, &self_include).unwrap_err();
         let EnvironmentError::Recoverable(RecoverableMergeError::IncludeCycle(cycle)) = err else {
@@ -490,6 +532,7 @@ mod test {
         let include_b = IncludeDescriptor::Local {
             dir: "../b".into(),
             name: None,
+            auto_upgrade: None,
         };
         let err = include_fetcher.fetch(&flox, &include_b).unwrap_err();
         let EnvironmentError::Recoverable(RecoverableMergeError::IncludeCycle(cycle)) = err else {
@@ -502,10 +545,10 @@ mod test {
         ]);
     }
 
-    /// A managed environment in an included directory isn't followed, so
-    /// checking it for changes doesn't open it
+    /// A managed environment in an included directory isn't upgraded
+    /// automatically by default, so checking it for changes doesn't open it
     #[test]
-    fn fetch_if_path_environment_skips_managed_directory() {
+    fn fetch_if_auto_upgraded_skips_managed_directory() {
         let owner = "owner".parse().unwrap();
         let (flox, tempdir) = flox_instance_with_optional_floxhub(Some(&owner));
 
@@ -521,9 +564,10 @@ mod test {
         .unwrap();
 
         let fetched = IncludeFetcher::new(Some(tempdir.path().to_path_buf()))
-            .fetch_if_path_environment(&flox, &IncludeDescriptor::Local {
+            .fetch_if_auto_upgraded(&flox, &IncludeDescriptor::Local {
                 dir: environment_path.file_name().unwrap().into(),
                 name: None,
+                auto_upgrade: None,
             })
             .unwrap();
         assert_eq!(fetched, None);
@@ -549,6 +593,7 @@ mod test {
         let include_descriptor = IncludeDescriptor::Local {
             dir: environment_path.file_name().unwrap().into(),
             name: None,
+            auto_upgrade: None,
         };
 
         // After writing a comment, fetching should fail
@@ -614,6 +659,7 @@ mod test {
             remote: "owner/name".parse().unwrap(),
             name: None,
             generation: None,
+            auto_upgrade: None,
         };
         let fetched = include_fetcher.fetch(&flox, &include_descriptor).unwrap();
         assert_eq!(
@@ -639,6 +685,44 @@ mod test {
             open_env_lockfile_now, open_env_lockfile_previous,
             "fetch should not affect the generation of an already open environment"
         );
+    }
+
+    /// Fetching a remote environment doesn't register an environment or
+    /// create a floxmeta branch that only garbage collection would remove
+    #[test]
+    fn fetch_remote_leaves_nothing_behind() {
+        let env_ref = RemoteEnvironmentRef::new("owner", "name").unwrap();
+        let (flox, tempdir) = flox_instance_with_optional_floxhub(Some(env_ref.owner()));
+        mock_remote_environment(
+            &flox,
+            &with_latest_schema(""),
+            env_ref.owner().clone(),
+            Some(&env_ref.name().to_string()),
+        );
+        let registry = || read_environment_registry(env_registry_path(&flox)).unwrap();
+        let branches = || {
+            GitCommandProvider::open(floxmeta_dir(&flox, env_ref.owner()))
+                .unwrap()
+                .list_branches()
+                .unwrap()
+                .into_iter()
+                .map(|branch| branch.name)
+                .collect::<Vec<_>>()
+        };
+        let registry_before = registry();
+        let branches_before = branches();
+
+        IncludeFetcher::new(Some(tempdir.path().to_path_buf()))
+            .fetch(&flox, &IncludeDescriptor::Remote {
+                remote: env_ref.clone(),
+                name: None,
+                generation: None,
+                auto_upgrade: None,
+            })
+            .unwrap();
+
+        assert_eq!(registry(), registry_before);
+        assert_eq!(branches(), branches_before);
     }
 
     #[test]
@@ -667,6 +751,7 @@ mod test {
             remote: "owner/name".parse().unwrap(),
             name: None,
             generation: Some(*initial_generation),
+            auto_upgrade: None,
         };
 
         let fetched = include_fetcher.fetch(&flox, &include_descriptor).unwrap();
@@ -693,6 +778,92 @@ mod test {
         assert_eq!(
             fetched_after_upstream_changes, fetched,
             "fetch should get the locked generation"
+        );
+    }
+
+    /// Only a remote environment with `auto-upgrade = true` and no pinned
+    /// generation is upgraded automatically
+    #[test]
+    fn fetch_if_auto_upgraded_remote() {
+        let env_ref = RemoteEnvironmentRef::new("owner", "name").unwrap();
+        let (flox, tempdir) = flox_instance_with_optional_floxhub(Some(env_ref.owner()));
+        let mut remote_env = mock_remote_environment(
+            &flox,
+            &with_latest_schema(""),
+            env_ref.owner().clone(),
+            Some(&env_ref.name().to_string()),
+        );
+        let include_fetcher = IncludeFetcher::new(Some(tempdir.path().to_path_buf()));
+        let remote = |generation, auto_upgrade| IncludeDescriptor::Remote {
+            remote: env_ref.clone(),
+            name: None,
+            generation,
+            auto_upgrade,
+        };
+
+        let not_auto_upgraded = [
+            remote(None, None),
+            remote(None, Some(false)),
+            remote(Some(1), None),
+            remote(Some(1), Some(true)),
+        ]
+        .map(|descriptor| {
+            include_fetcher
+                .fetch_if_auto_upgraded(&flox, &descriptor)
+                .unwrap()
+        });
+        assert_eq!(not_auto_upgraded, [None, None, None, None]);
+
+        let auto_upgraded = remote(None, Some(true));
+        let fetched = include_fetcher
+            .fetch_if_auto_upgraded(&flox, &auto_upgraded)
+            .unwrap();
+        assert_eq!(
+            fetched,
+            Some(LockedInclude {
+                manifest: remote_env.manifest(&flox).unwrap().as_typed_only(),
+                name: "name".to_string(),
+                descriptor: auto_upgraded,
+            })
+        );
+    }
+
+    /// Fetchers that share remote manifests fetch each remote environment
+    /// once, so they all use the same version of it
+    #[test]
+    fn fetch_remote_once_with_shared_remote_lockfiles() {
+        let env_ref = RemoteEnvironmentRef::new("owner", "name").unwrap();
+        let (flox, tempdir) = flox_instance_with_optional_floxhub(Some(env_ref.owner()));
+        let mut remote_env = mock_remote_environment(
+            &flox,
+            &with_latest_schema(""),
+            env_ref.owner().clone(),
+            Some(&env_ref.name().to_string()),
+        );
+        let include_descriptor = IncludeDescriptor::Remote {
+            remote: env_ref.clone(),
+            name: None,
+            generation: None,
+            auto_upgrade: None,
+        };
+        let include_fetcher = IncludeFetcher::new(Some(tempdir.path().to_path_buf()));
+        let fetched = include_fetcher.fetch(&flox, &include_descriptor).unwrap();
+
+        remote_env
+            .edit(&flox, with_latest_schema("[vars]\nfoo = \"bar\"\n"))
+            .unwrap();
+        remote_env.push(&flox, true).unwrap();
+
+        let sharing_fetcher = IncludeFetcher::new(Some(tempdir.path().to_path_buf()))
+            .with_remote_lockfiles(include_fetcher.remote_lockfiles.clone());
+        assert_eq!(
+            sharing_fetcher.fetch(&flox, &include_descriptor).unwrap(),
+            fetched
+        );
+        let new_fetcher = IncludeFetcher::new(Some(tempdir.path().to_path_buf()));
+        assert_ne!(
+            new_fetcher.fetch(&flox, &include_descriptor).unwrap(),
+            fetched
         );
     }
 }

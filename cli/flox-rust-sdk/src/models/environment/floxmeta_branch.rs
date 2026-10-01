@@ -290,6 +290,46 @@ impl FloxmetaBranch {
     }
 }
 
+/// The latest generations of an environment on FloxHub, fetched into its
+/// shared sync branch.
+///
+/// Unlike [FloxmetaBranch::new], this doesn't create a branch for an instance
+/// of the environment, so fetching repeatedly leaves nothing behind for
+/// garbage collection.
+/// The generations are read at the fetched revision, so other processes that
+/// update the sync branch afterwards don't change them.
+#[tracing::instrument(skip_all, fields(
+    progress = format!("Fetching latest generation of '{}/{}'", pointer.owner, pointer.name)
+))]
+pub(crate) fn fetch_remote_generations(
+    flox: &Flox,
+    pointer: &ManagedPointer,
+) -> Result<Generations, FloxmetaBranchError> {
+    let _lock = acquire_floxmeta_lock(&floxmeta_dir(flox, &pointer.owner))?;
+    let floxmeta = open_or_clone_floxmeta(flox, pointer)?;
+    let remote_branch = remote_branch_name(pointer);
+    floxmeta
+        .git
+        .fetch_ref(
+            "dynamicorigin",
+            &format!("+{remote_branch}:{remote_branch}"),
+        )
+        .map_err(|err| match err {
+            GitRemoteCommandError::AccessDenied => FloxmetaBranchError::AccessDenied,
+            GitRemoteCommandError::RefNotFound(_) => FloxmetaBranchError::UpstreamNotFound {
+                env_ref: pointer.clone().into(),
+                upstream: pointer.floxhub_base_url.to_string(),
+                user: flox.auth_context.handle(),
+            },
+            err => FloxmetaBranchError::Fetch(err),
+        })?;
+    let rev = floxmeta
+        .git
+        .branch_hash(&remote_branch)
+        .map_err(FloxmetaBranchError::GitBranchHash)?;
+    Ok(Generations::new(floxmeta.git, rev))
+}
+
 /// Acquire exclusive lock on floxmeta directory
 #[tracing::instrument(fields(
     progress = "Waiting for lock to open or create Flox remote metadata"

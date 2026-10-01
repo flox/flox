@@ -1934,7 +1934,7 @@ async fn ensure_auth_allowing_expired(flox: &mut Flox) -> Result<String> {
 }
 
 /// Return the lockfile of an environment, reporting what locking it did with
-/// the latest changes to its included path environments.
+/// the latest changes to the included environments it follows.
 pub(crate) fn lockfile_reporting_followed_includes(
     environment: &mut ConcreteEnvironment,
     flox: &Flox,

@@ -62,7 +62,8 @@ Valid string values are:
 - `1.16.0`: introduced services `depends-on`, and
   `shutdown.timeout-seconds` / `shutdown.signal`
 - `1.17.0`: introduced `description`
-- `1.18.0`: introduced `options.activate.upgrade-notifications`
+- `1.18.0`: introduced `options.activate.upgrade-notifications` and include
+  `auto-upgrade`
 
 Existing manifest schemas, including the older `version = 1` format, are
 automatically forward-migrated when using features that require a newer schema
@@ -715,13 +716,15 @@ IncludeDescriptor ::= LocalIncludeDescriptor
                     | RemoteIncludeDescriptor (deprecated)
 
 LocalIncludeDescriptor ::= {
-  dir  = STRING
-, name = null | STRING
+  dir          = STRING
+, name         = null | STRING
+, auto-upgrade = null | BOOL
 }
 
 FloxHubIncludeDescriptor ::= {
-  remote = STRING
-, name   = null | STRING
+  remote       = STRING
+, name         = null | STRING
+, auto-upgrade = null | BOOL
 }
 
 # Deprecated, will be removed in a future release
@@ -748,13 +751,29 @@ The fields in these include descriptors are as follows:
   when you are including multiple environments that have the same name, or when
   you want to provide a more convenient name for the included environment.
 
+`auto-upgrade`
+: Whether to use the latest changes to the included environment without
+  running [`flox include upgrade`](./flox-include-upgrade.md).
+  The default is `true` for a path environment included with `dir`,
+  and `false` for any other included environment.
+  Set it to `false` to keep using the version of a path environment that is
+  in the lockfile.
+  Set it to `true` to use the latest generation of an environment included
+  with `remote`, which is fetched from FloxHub each time a command uses the
+  composing environment and so needs network access.
+  For a directory that holds an environment pulled from FloxHub, `true` uses
+  its current local generation, as long as it has no changes that aren't in a
+  generation yet.
+  Requires `schema-version = "1.18.0"`.
+
 The lockfile of the composing environment stores a copy of each included
 environment.
 
-A path environment follows the path environments it includes with `dir`:
+A path environment follows the environments it includes with
+`auto-upgrade` enabled:
 commands that use it, such as `flox activate`, `flox list` and `flox build`,
 use the latest changes that those environments have locked,
-including changes to the path environments that they include in turn.
+including changes to the environments that they include in turn.
 These changes are kept in a copy of the lockfile in `.flox/cache`.
 The lockfile itself is only updated when you run
 [`flox include upgrade`](./flox-include-upgrade.md),
@@ -769,12 +788,12 @@ command such as `flox edit` or `flox activate` locks that environment.
 If the latest changes can't be read or locked, the versions in use before are
 kept, and if the environment doesn't build with them, the versions in the
 lockfile are used.
-`flox activate`, `flox list`, `flox build` and `flox develop` print a warning
-when this happens.
+`flox activate`, `flox list`, `flox build`, `flox develop` and
+`flox containerize` print a warning when this happens.
 
-All other included environments, such as those specified with `remote`,
-and all environments included by a FloxHub environment, are only updated when
-you run [`flox include upgrade`](./flox-include-upgrade.md).
+All other included environments, and all environments included by a FloxHub
+environment, are only updated when you run
+[`flox include upgrade`](./flox-include-upgrade.md).
 
 ### Merge semantics
 

@@ -178,24 +178,24 @@ impl<State> CoreEnvironment<State> {
         }
     }
 
-    /// Check the included path environments in `lockfile` for changes that
-    /// aren't in `lockfile`.
+    /// Check the included environments in `lockfile` that are upgraded
+    /// automatically for changes that aren't in `lockfile`.
     ///
-    /// Other kinds of included environments only change with
+    /// Other included environments only change with
     /// 'flox include upgrade', so they aren't checked.
-    pub(crate) fn check_path_includes(
+    pub(crate) fn check_auto_upgraded_includes(
         &self,
         flox: &Flox,
         lockfile: &Lockfile,
-    ) -> PathIncludesCheck {
-        let mut check = PathIncludesCheck::default();
+    ) -> AutoUpgradedIncludesCheck {
+        let mut check = AutoUpgradedIncludesCheck::default();
         let Some(compose) = &lockfile.compose else {
             return check;
         };
         for locked in &compose.include {
             match self
                 .include_fetcher
-                .fetch_if_path_environment(flox, &locked.descriptor)
+                .fetch_if_auto_upgraded(flox, &locked.descriptor)
             {
                 Ok(Some(latest)) if &latest != locked => {
                     check.changed.push(locked.name.clone());
@@ -211,19 +211,19 @@ impl<State> CoreEnvironment<State> {
         check
     }
 
-    /// The merged manifest of this environment with the latest changes to its
-    /// included path environments, computed without locking or writing
-    /// anything.
+    /// The merged manifest of this environment with the latest changes to the
+    /// included environments that are upgraded automatically, computed without
+    /// locking or writing anything.
     ///
     /// `lockfile` has to be up to date with the manifest,
     /// so only changes that the included environments locked are used.
-    pub(crate) fn manifest_following_path_includes(
+    pub(crate) fn manifest_following_includes(
         &self,
         flox: &Flox,
         lockfile: Lockfile,
         unreadable_includes: UnreadableIncludes,
     ) -> Result<Manifest<TypedOnly>, EnvironmentError> {
-        let check = self.check_path_includes(flox, &lockfile);
+        let check = self.check_auto_upgraded_includes(flox, &lockfile);
         for (name, err) in check.unreadable {
             if matches!(unreadable_includes, UnreadableIncludes::Fail) || is_include_cycle(&err) {
                 return Err(err);
@@ -1300,8 +1300,8 @@ impl UpgradeResult {
     }
 }
 
-/// What locking an environment did with the latest changes to its included
-/// path environments
+/// What locking an environment did with the latest changes to the included
+/// environments it follows
 #[derive(Clone, Debug, Default)]
 pub struct FollowedIncludes {
     /// Included environments whose latest changes are in use,
@@ -1330,7 +1330,7 @@ pub struct NotAppliedIncludes {
     pub reason: Arc<EnvironmentError>,
 }
 
-/// How a command uses the latest changes to included path environments
+/// How a command uses the latest changes to followed included environments
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum FollowMode {
     /// Lock with them, leaving building to whatever needs the environment
@@ -1341,11 +1341,12 @@ pub enum FollowMode {
     LockAndBuild,
 }
 
-/// The included path environments of a lockfile, checked for changes
+/// The included environments of a lockfile that are upgraded automatically,
+/// checked for changes
 #[derive(Debug, Default)]
-pub(crate) struct PathIncludesCheck {
+pub(crate) struct AutoUpgradedIncludesCheck {
     /// The includes of the lockfile, with the latest versions of the included
-    /// path environments that changed
+    /// environments that changed
     pub includes: Vec<LockedInclude>,
     /// Names of the included environments that changed
     pub changed: Vec<String>,
@@ -1367,8 +1368,8 @@ fn is_include_cycle(err: &EnvironmentError) -> bool {
     }
 }
 
-/// What to do about an included path environment that can't be read while
-/// merging the environment that includes it in memory
+/// What to do about an automatically upgraded include that can't be read while
+/// merging the path environment that includes it in memory
 #[derive(Clone, Copy, Debug)]
 pub(crate) enum UnreadableIncludes {
     /// Fail, so that whatever includes the merged environment keeps its own

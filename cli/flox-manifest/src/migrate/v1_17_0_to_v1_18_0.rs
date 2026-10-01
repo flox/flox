@@ -5,8 +5,9 @@ use crate::parsed::v1_18_0::ManifestV1_18_0;
 /// Migrate a v1.17.0 manifest to a v1.18.0 manifest.
 ///
 /// This is a lossless migration: V1_18_0 adds an optional
-/// `options.activate.upgrade-notifications` field. All V1_17_0 manifests are
-/// valid V1_18_0 manifests with `upgrade-notifications` unset.
+/// `options.activate.upgrade-notifications` field and an optional
+/// `auto-upgrade` field on include descriptors. All V1_17_0 manifests are
+/// valid V1_18_0 manifests with both unset.
 pub(crate) fn migrate_manifest_v1_17_0_to_v1_18_0(
     manifest: ManifestV1_17_0,
 ) -> Result<ManifestV1_18_0, MigrationError> {
@@ -22,7 +23,7 @@ pub(crate) fn migrate_manifest_v1_17_0_to_v1_18_0(
         services: manifest.services,
         build: manifest.build,
         containerize: manifest.containerize,
-        include: manifest.include,
+        include: manifest.include.into(),
         plugins: manifest.plugins,
     })
 }
@@ -32,17 +33,18 @@ mod tests {
     use proptest::prelude::*;
 
     use super::*;
-    use crate::parsed::v1_18_0::{ActivateOptions, Options};
+    use crate::parsed::common;
+    use crate::parsed::v1_18_0::{ActivateOptions, Include, IncludeDescriptor, Options};
 
     proptest! {
         // The migration only sets the new schema version and defaults the new
-        // `options.activate.upgrade-notifications` field; everything else is
-        // carried over unchanged.
+        // `options.activate.upgrade-notifications` and include `auto-upgrade`
+        // fields; everything else is carried over unchanged.
         //
-        // `expected.options` is built by hand rather than with `Options::from`,
-        // the conversion the migration itself uses, so a field that conversion
-        // drops or misassigns fails the assertion instead of being mangled
-        // identically on both sides.
+        // `expected.options` and `expected.include` are built by hand rather
+        // than with the `From` conversions the migration itself uses, so a
+        // field those conversions drop or misassign fails the assertion
+        // instead of being mangled identically on both sides.
         #[test]
         fn migration_v1_17_0_to_v1_18_0_is_lossless(manifest in any::<ManifestV1_17_0>()) {
             let migrated = migrate_manifest_v1_17_0_to_v1_18_0(manifest.clone()).unwrap();
@@ -67,7 +69,32 @@ mod tests {
                 services: manifest.services,
                 build: manifest.build,
                 containerize: manifest.containerize,
-                include: manifest.include,
+                include: Include {
+                    environments: manifest
+                        .include
+                        .environments
+                        .into_iter()
+                        .map(|descriptor| match descriptor {
+                            common::IncludeDescriptor::Local { dir, name } => {
+                                IncludeDescriptor::Local {
+                                    dir,
+                                    name,
+                                    auto_upgrade: None,
+                                }
+                            },
+                            common::IncludeDescriptor::Remote {
+                                remote,
+                                name,
+                                generation,
+                            } => IncludeDescriptor::Remote {
+                                remote,
+                                name,
+                                generation,
+                                auto_upgrade: None,
+                            },
+                        })
+                        .collect(),
+                },
                 plugins: manifest.plugins,
             };
             prop_assert_eq!(migrated, expected);

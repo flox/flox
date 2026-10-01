@@ -339,7 +339,7 @@ pub(crate) fn print_overridden_manifest_fields(lockfile: &Lockfile) {
     }
 }
 
-/// Report what locking did with the latest changes to included path
+/// Report what locking did with the latest changes to followed included
 /// environments.
 ///
 /// `include_upgrade` is the 'flox include upgrade' command for the

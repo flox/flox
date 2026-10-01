@@ -1,9 +1,13 @@
 use std::collections::BTreeMap;
+use std::fmt::Display;
+use std::path::PathBuf;
 
 use flox_core::activate::mode::ActivateMode;
 use flox_core::data::System;
+use flox_core::data::environment_ref::RemoteEnvironmentRef;
 #[cfg(any(test, feature = "tests"))]
 use flox_test_utils::proptest::{optional_string, optional_vec_of_strings};
+use indoc::formatdoc;
 #[cfg(any(test, feature = "tests"))]
 use proptest::prelude::*;
 use schemars::JsonSchema;
@@ -11,14 +15,7 @@ use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
 
 use crate::interfaces::{AsTypedOnlyManifest, SchemaVersion, impl_pkg_lookup};
-use crate::parsed::common::{
-    Allows,
-    Containerize,
-    Include,
-    KnownSchemaVersion,
-    SemverOptions,
-    Vars,
-};
+use crate::parsed::common::{Allows, Containerize, KnownSchemaVersion, SemverOptions, Vars};
 use crate::parsed::v1_10_0::{Install, ManifestPackageDescriptor};
 pub use crate::parsed::v1_11_0::MinimumCliVersion;
 pub use crate::parsed::v1_13_0::{
@@ -230,6 +227,206 @@ impl From<crate::parsed::common::Options> for Options {
             activate: ActivateOptions {
                 mode: activate.mode,
                 upgrade_notifications: None,
+            },
+        }
+    }
+}
+
+/// The section where users can declare dependencies on other environments.
+///
+/// From V1_18_0 on, include descriptors can set `auto-upgrade`.
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, JsonSchema)]
+#[cfg_attr(any(test, feature = "tests"), derive(proptest_derive::Arbitrary))]
+#[serde(deny_unknown_fields)]
+pub struct Include {
+    #[serde(default)]
+    pub environments: Vec<IncludeDescriptor>,
+}
+
+impl SkipSerializing for Include {
+    fn skip_serializing(&self) -> bool {
+        self.environments.is_empty()
+    }
+}
+
+impl Include {
+    /// Check for settings that contradict each other, which the types allow
+    /// because the errors of untagged enum variants can't be reported
+    pub fn validate(&self) -> Result<(), ManifestError> {
+        for include in &self.environments {
+            if let IncludeDescriptor::Remote {
+                generation: Some(generation),
+                auto_upgrade: Some(true),
+                ..
+            } = include
+            {
+                return Err(ManifestError::InvalidIncludeConfig(formatdoc! {"
+                    Included environment '{include}' sets both 'generation = {generation}' and 'auto-upgrade = true'.
+                    Remove 'generation' to use the latest generation, or remove 'auto-upgrade' to stay on generation {generation}."
+                }));
+            }
+        }
+        Ok(())
+    }
+}
+
+/// The structure for how a user is able to declare a dependency on an environment.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
+#[cfg_attr(any(test, feature = "tests"), derive(proptest_derive::Arbitrary))]
+#[serde(deny_unknown_fields)]
+#[serde(
+    untagged,
+    expecting = "expected { dir = <dir>, [name = <name>], [auto-upgrade = <bool>] } OR { remote = <owner/name>, [name = <name>], [generation = <generation>], [auto-upgrade = <bool>] }"
+)]
+pub enum IncludeDescriptor {
+    Local {
+        /// The directory where the environment is located.
+        dir: PathBuf,
+        /// A name similar to an install ID that a user could use to specify
+        /// the environment on the command line e.g. for upgrades, or in an
+        /// error message.
+        #[cfg_attr(
+            any(test, feature = "tests"),
+            proptest(strategy = "optional_string(5)")
+        )]
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        name: Option<String>,
+        /// Whether commands use the latest changes that the included
+        /// environment has locked, without 'flox include upgrade'.
+        /// Defaults to true if the directory holds a path environment.
+        #[serde(
+            rename = "auto-upgrade",
+            default,
+            skip_serializing_if = "Option::is_none"
+        )]
+        auto_upgrade: Option<bool>,
+    },
+    Remote {
+        /// The remote environment reference in the form `owner/name`.
+        #[serde(alias = "reference")]
+        remote: RemoteEnvironmentRef,
+        /// A name similar to an install ID that a user could use to specify
+        /// the environment on the command line e.g. for upgrades, or in an
+        /// error message.
+        #[cfg_attr(
+            any(test, feature = "tests"),
+            proptest(strategy = "optional_string(5)")
+        )]
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        name: Option<String>,
+
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[cfg_attr(
+            any(test, feature = "tests"),
+            proptest(strategy = "proptest::option::of(0..10usize)")
+        )]
+        generation: Option<usize>,
+        /// Whether commands use the latest generation of the environment,
+        /// without 'flox include upgrade'.
+        /// Defaults to false, and can't be true together with `generation`.
+        #[serde(
+            rename = "auto-upgrade",
+            default,
+            skip_serializing_if = "Option::is_none"
+        )]
+        auto_upgrade: Option<bool>,
+    },
+}
+
+/// Whether an included environment's latest changes are used without
+/// 'flox include upgrade'
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AutoUpgrade {
+    Always,
+    Never,
+    /// If the included directory holds a path environment, rather than a
+    /// managed one
+    IfPathEnvironment,
+}
+
+impl IncludeDescriptor {
+    /// Whether `other` includes the same environment under the same name,
+    /// regardless of whether either upgrades it automatically
+    pub fn includes_same_environment(&self, other: &IncludeDescriptor) -> bool {
+        self.without_auto_upgrade() == other.without_auto_upgrade()
+    }
+
+    fn without_auto_upgrade(&self) -> IncludeDescriptor {
+        let mut descriptor = self.clone();
+        match &mut descriptor {
+            IncludeDescriptor::Local { auto_upgrade, .. }
+            | IncludeDescriptor::Remote { auto_upgrade, .. } => *auto_upgrade = None,
+        }
+        descriptor
+    }
+
+    /// A remote environment pinned to a generation never changes,
+    /// so it's never upgraded automatically.
+    pub fn auto_upgrade(&self) -> AutoUpgrade {
+        match self {
+            IncludeDescriptor::Local {
+                auto_upgrade: Some(true),
+                ..
+            }
+            | IncludeDescriptor::Remote {
+                generation: None,
+                auto_upgrade: Some(true),
+                ..
+            } => AutoUpgrade::Always,
+            IncludeDescriptor::Local {
+                auto_upgrade: None, ..
+            } => AutoUpgrade::IfPathEnvironment,
+            IncludeDescriptor::Local {
+                auto_upgrade: Some(false),
+                ..
+            }
+            | IncludeDescriptor::Remote { .. } => AutoUpgrade::Never,
+        }
+    }
+}
+
+impl Display for IncludeDescriptor {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            IncludeDescriptor::Local { dir, name, .. } => {
+                write!(f, "{}", name.as_deref().unwrap_or(&dir.to_string_lossy()))
+            },
+            IncludeDescriptor::Remote { remote, name, .. } => {
+                write!(f, "{}", name.as_deref().unwrap_or(&remote.to_string()))
+            },
+        }
+    }
+}
+
+// Conversions from the common types, used by the V1_17_0 -> V1_18_0 migration.
+// `auto-upgrade` stays unset.
+impl From<crate::parsed::common::Include> for Include {
+    fn from(include: crate::parsed::common::Include) -> Self {
+        Include {
+            environments: include.environments.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+impl From<crate::parsed::common::IncludeDescriptor> for IncludeDescriptor {
+    fn from(descriptor: crate::parsed::common::IncludeDescriptor) -> Self {
+        match descriptor {
+            crate::parsed::common::IncludeDescriptor::Local { dir, name } => {
+                IncludeDescriptor::Local {
+                    dir,
+                    name,
+                    auto_upgrade: None,
+                }
+            },
+            crate::parsed::common::IncludeDescriptor::Remote {
+                remote,
+                name,
+                generation,
+            } => IncludeDescriptor::Remote {
+                remote,
+                name,
+                generation,
+                auto_upgrade: None,
             },
         }
     }

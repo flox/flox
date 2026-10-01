@@ -23,13 +23,9 @@ use flox_manifest::lockfile::{
     LockedPackageStorePath,
     Lockfile,
 };
-use flox_manifest::parsed::common::{
-    Allows,
-    DEFAULT_PRIORITY,
-    IncludeDescriptor,
-    KnownSchemaVersion,
-};
+use flox_manifest::parsed::common::{Allows, DEFAULT_PRIORITY, KnownSchemaVersion};
 use flox_manifest::parsed::latest::{
+    IncludeDescriptor,
     ManifestLatest,
     ManifestPackageDescriptor,
     PackageDescriptorCatalog,
@@ -537,13 +533,22 @@ impl LockManifest {
                 let Some(compose) = &seed_lockfile.compose else {
                     break 'existing None;
                 };
-                // And we can find an identical include descriptor in the seed lockfile
-                // Then use the existing locked include
+                // And the seed lockfile includes the same environment
+                // Then use the existing locked include.
+                // Changing only whether it's upgraded automatically doesn't
+                // fetch it again, so pinning an include keeps its version.
                 compose
                     .include
                     .iter()
-                    .find(|locked_include| &locked_include.descriptor == include_environment)
-                    .cloned()
+                    .find(|locked_include| {
+                        locked_include
+                            .descriptor
+                            .includes_same_environment(include_environment)
+                    })
+                    .map(|locked_include| LockedInclude {
+                        descriptor: include_environment.clone(),
+                        ..locked_include.clone()
+                    })
             };
 
             let locked_include = match existing_locked_include {
@@ -1680,8 +1685,8 @@ mod tests {
         fake_flake_installable_lock,
         fake_store_path_lock,
     };
-    use flox_manifest::parsed::common::{DEFAULT_GROUP_NAME, Include, KnownSchemaVersion, Vars};
-    use flox_manifest::parsed::latest::PackageDescriptorFlake;
+    use flox_manifest::parsed::common::{DEFAULT_GROUP_NAME, KnownSchemaVersion, Vars};
+    use flox_manifest::parsed::latest::{Include, PackageDescriptorFlake};
     use flox_manifest::raw::test_helpers::{
         empty_test_migrated_manifest,
         mk_test_manifest_from_contents,
@@ -3194,6 +3199,7 @@ mod tests {
                         .map(|(dir, _)| IncludeDescriptor::Local {
                             dir,
                             name: None,
+                            auto_upgrade: None,
                         })
                         .collect(),
                 };
@@ -3835,11 +3841,18 @@ mod tests {
         );
     }
 
-    /// Re-merge after editing an included environment
-    /// If modify_include_descriptor is true, modify the include descriptor
-    /// which should trigger a re-fetch.
-    /// Otherwise, re-merging should not re-fetch.
-    async fn re_merge_after_editing_dep(modify_include_descriptor: bool) {
+    /// How [re_merge_after_editing_dep] changes the include descriptor
+    #[derive(Clone, Copy, PartialEq)]
+    enum DescriptorChange {
+        Unchanged,
+        Name,
+        AutoUpgrade,
+    }
+
+    /// Re-merge after editing an included environment.
+    /// Changing the name in the include descriptor should trigger a re-fetch.
+    /// Leaving it unchanged, or only changing `auto-upgrade`, should not.
+    async fn re_merge_after_editing_dep(change: DescriptorChange) {
         let (flox, tempdir) = flox_instance();
 
         let mut manifest_contents = with_latest_schema(indoc! {r#"
@@ -3897,15 +3910,21 @@ mod tests {
 
         dep1.edit(&flox, dep1_edited_manifest_contents).unwrap();
 
-        if modify_include_descriptor {
-            manifest_contents = with_latest_schema(indoc! {r#"
+        let changed_include = match change {
+            DescriptorChange::Unchanged => None,
+            DescriptorChange::Name => Some(r#"{ dir = "dep1", name = "dep1 edited" }"#),
+            DescriptorChange::AutoUpgrade => Some(r#"{ dir = "dep1", auto-upgrade = false }"#),
+        };
+        if let Some(changed_include) = changed_include {
+            manifest_contents = with_latest_schema(formatdoc! {"
                 [include]
                 environments = [
-                  { dir = "dep1", name = "dep1 edited" }
+                  {changed_include}
                 ]
-                "#});
+                "});
             manifest = mk_test_manifest_from_contents(manifest_contents);
         }
+        let refetched = change == DescriptorChange::Name;
 
         // Merge
         let (merged, compose, _) = LockManifest::merge_manifest(
@@ -3922,7 +3941,7 @@ mod tests {
             schema_version: KnownSchemaVersion::latest().to_string(),
             vars: Vars::from_map(BTreeMap::from([(
                 "foo".to_string(),
-                if modify_include_descriptor {
+                if refetched {
                     "dep1 edited".to_string()
                 } else {
                     "dep1".to_string()
@@ -3930,27 +3949,40 @@ mod tests {
             )])),
             ..Default::default()
         });
+        let locked_include = &compose.unwrap().include[0];
         assert_eq!(
-            compose.unwrap().include[0].manifest,
-            if modify_include_descriptor {
+            locked_include.manifest,
+            if refetched {
                 dep1_edited_manifest.as_typed_only()
             } else {
                 dep1_manifest.as_typed_only()
             }
+        );
+        assert_eq!(
+            locked_include.descriptor,
+            manifest.as_latest_schema().include.environments[0]
         );
     }
 
     /// If included environments have already been locked, the existing locked include should be used
     #[tokio::test]
     async fn merge_manifest_does_not_refetch_if_include_descriptor_unchanged() {
-        re_merge_after_editing_dep(false).await;
+        re_merge_after_editing_dep(DescriptorChange::Unchanged).await;
     }
 
-    /// [LockManifest::merge_manifest] re-fetches if any part of an include
-    /// descriptor has changed
+    /// [LockManifest::merge_manifest] re-fetches if the environment or name of
+    /// an include descriptor has changed
     #[tokio::test]
     async fn merge_manifest_refetches_if_include_descriptor_changed() {
-        re_merge_after_editing_dep(true).await;
+        re_merge_after_editing_dep(DescriptorChange::Name).await;
+    }
+
+    /// [LockManifest::merge_manifest] keeps the locked include, with the new
+    /// descriptor, if only `auto-upgrade` changed, so that pinning an include
+    /// keeps the version in the lockfile
+    #[tokio::test]
+    async fn merge_manifest_does_not_refetch_if_only_auto_upgrade_changed() {
+        re_merge_after_editing_dep(DescriptorChange::AutoUpgrade).await;
     }
 
     // [LockManifest::merge_manifest] doesn't leave stale locked includes
@@ -4181,6 +4213,7 @@ mod tests {
                     descriptor: IncludeDescriptor::Local {
                         dir: name.into(),
                         name: None,
+                        auto_upgrade: None,
                     },
                 })
                 .collect(),

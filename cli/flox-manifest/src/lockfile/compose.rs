@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use crate::compose::WarningWithContext;
 use crate::interfaces::{AsLatestSchema, PackageLookup};
 use crate::parsed::Inner;
-use crate::parsed::common::IncludeDescriptor;
+use crate::parsed::latest::IncludeDescriptor;
 use crate::{Manifest, ManifestError, TypedOnly};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema)]
@@ -121,6 +121,7 @@ mod tests {
             descriptor: IncludeDescriptor::Local {
                 dir: name.into(),
                 name: None,
+                auto_upgrade: None,
             },
         }
     }

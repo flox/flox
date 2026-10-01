@@ -5,7 +5,7 @@ use std::{fs, io};
 use flox_core::data::environment_ref::{EnvironmentName, EnvironmentOwner, RemoteEnvironmentRef};
 use flox_manifest::interfaces::{AsLatestSchema, AsWritableManifest, ContentsMatch, WriteManifest};
 use flox_manifest::lockfile::{LOCKFILE_FILENAME, Lockfile};
-use flox_manifest::parsed::common::IncludeDescriptor;
+use flox_manifest::parsed::latest::IncludeDescriptor;
 use flox_manifest::raw::{CatalogPackage, FlakePackage, PackageToInstall, StorePath};
 use flox_manifest::{Manifest, ManifestError, Migrated, Validated};
 use thiserror::Error;

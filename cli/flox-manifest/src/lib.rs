@@ -163,6 +163,9 @@ pub enum ManifestError {
 
     #[error("{0}")]
     InvalidServiceConfig(String),
+
+    #[error("{0}")]
+    InvalidIncludeConfig(String),
 }
 
 // =============================================================================
@@ -288,6 +291,25 @@ impl Parsed {
         }
     }
 
+    /// Validates the include section of the contained manifest.
+    ///
+    /// Only V1_18_0 and later include descriptors can contradict themselves,
+    /// see [crate::parsed::v1_18_0::Include::validate]
+    pub(crate) fn validate_includes(&self) -> Result<(), ManifestError> {
+        match self {
+            Parsed::V1(_)
+            | Parsed::V1_10_0(_)
+            | Parsed::V1_11_0(_)
+            | Parsed::V1_12_0(_)
+            | Parsed::V1_13_0(_)
+            | Parsed::V1_14_0(_)
+            | Parsed::V1_15_0(_)
+            | Parsed::V1_16_0(_)
+            | Parsed::V1_17_0(_) => Ok(()),
+            Parsed::V1_18_0(m) => m.include.validate(),
+        }
+    }
+
     /// Validates the services section of the contained manifest.
     ///
     /// Dispatched per version because the services types are version-specific
@@ -406,12 +428,18 @@ impl Manifest<Init> {
                 for candidate in KnownSchemaVersion::iter().filter(|v| *v > stated) {
                     let mut bumped_raw = untyped.inner.raw.clone();
                     update_schema_version(&mut bumped_raw, candidate);
-                    if let Ok(m) = Manifest::<TomlParsed>::validate_toml(&bumped_raw) {
-                        return Ok(ParsedManifest::Bumped {
-                            manifest: m,
-                            from: stated,
-                            to: candidate,
-                        });
+                    match Manifest::<TomlParsed>::validate_toml(&bumped_raw) {
+                        Ok(m) => {
+                            return Ok(ParsedManifest::Bumped {
+                                manifest: m,
+                                from: stated,
+                                to: candidate,
+                            });
+                        },
+                        // The candidate accepts the fields present, but they
+                        // contradict each other, which is the real problem.
+                        Err(err @ ManifestError::InvalidIncludeConfig(_)) => return Err(err),
+                        Err(_) => {},
                     }
                 }
                 // No candidate validated; return the original error so the
@@ -478,6 +506,7 @@ impl Manifest<TomlParsed> {
             },
         };
         manifest.inner.parsed.validate_services()?;
+        manifest.inner.parsed.validate_includes()?;
         Ok(manifest)
     }
 }
@@ -963,6 +992,42 @@ mod parse_toml_typed_or_bumped_tests {
                 panic!("expected Bumped, got AsStated");
             },
         }
+    }
+
+    /// A `schema-version = "1.17.0"` manifest that uses include
+    /// `auto-upgrade` (introduced in 1.18.0) bumps to V1_18_0.
+    #[test]
+    fn v1_17_0_with_include_auto_upgrade_bumps_to_v1_18_0() {
+        let contents = with_schema(KnownSchemaVersion::V1_17_0, indoc! {r#"
+            [include]
+            environments = [{ dir = "../base", auto-upgrade = false }]
+        "#});
+        let result = Manifest::parse_toml_typed_or_bumped(&contents).unwrap();
+        match result {
+            ParsedManifest::Bumped { from, to, .. } => {
+                assert_eq!(from, KnownSchemaVersion::V1_17_0);
+                assert_eq!(to, KnownSchemaVersion::V1_18_0);
+            },
+            ParsedManifest::AsStated(_) => {
+                panic!("expected Bumped, got AsStated");
+            },
+        }
+    }
+
+    /// A `schema-version = "1.17.0"` manifest whose include descriptor sets
+    /// both `generation` and `auto-upgrade = true` reports that conflict,
+    /// rather than the 1.17.0 schema's error about the unknown field.
+    #[test]
+    fn v1_17_0_with_conflicting_include_auto_upgrade_reports_conflict() {
+        let contents = with_schema(KnownSchemaVersion::V1_17_0, indoc! {r#"
+            [include]
+            environments = [{ remote = "owner/name", generation = 2, auto-upgrade = true }]
+        "#});
+        let err = Manifest::parse_toml_typed_or_bumped(&contents).unwrap_err();
+        assert!(
+            matches!(err, ManifestError::InvalidIncludeConfig(_)),
+            "expected an include config error, got: {err:?}"
+        );
     }
 
     /// A `schema-version = "1.17.0"` manifest that uses

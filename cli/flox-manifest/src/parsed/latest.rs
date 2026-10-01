@@ -29,7 +29,13 @@ pub use crate::parsed::v1_16_0::{
 // Options are version-specific from V1_18_0 on (`activate` adds
 // `upgrade-notifications`), so the latest schema re-exports that copy rather
 // than common's.
-pub use crate::parsed::v1_18_0::{ActivateOptions, Options};
+pub use crate::parsed::v1_18_0::{
+    ActivateOptions,
+    AutoUpgrade,
+    Include,
+    IncludeDescriptor,
+    Options,
+};
 use crate::{Manifest, ManifestError, TypedOnly};
 pub type ManifestLatest = crate::parsed::v1_18_0::ManifestV1_18_0;
 
@@ -186,7 +192,7 @@ mod tests {
     use crate::ManifestError;
     use crate::interfaces::{PackageLookup, SchemaVersion};
     use crate::parsed::Inner;
-    use crate::parsed::common::{BuildVersion, IncludeDescriptor, PackageDescriptorStorePath};
+    use crate::parsed::common::{BuildVersion, PackageDescriptorStorePath};
     // ManifestLatest's build section is the version-specific Build (with
     // `sandbox-allow`), so build assertions use the latest schema's types.
     use crate::parsed::v1_13_0::{Build, BuildDescriptor, Profile, ProfileDeactivate};
@@ -584,16 +590,19 @@ mod tests {
             IncludeDescriptor::Local {
                 dir: PathBuf::from("../foo"),
                 name: Some("bar".to_string()),
+                auto_upgrade: None,
             },
             IncludeDescriptor::Remote {
                 remote: RemoteEnvironmentRef::new("owner", "repo").unwrap(),
                 name: Some("baz".to_string()),
                 generation: None,
+                auto_upgrade: None,
             },
             IncludeDescriptor::Remote {
                 remote: RemoteEnvironmentRef::new("owner", "repo").unwrap(),
                 name: Some("bap".to_string()),
                 generation: None,
+                auto_upgrade: None,
             },
         ]);
     }
@@ -1063,6 +1072,111 @@ mod tests {
 
         let compat = manifest
             .as_maybe_backwards_compatible(KnownSchemaVersion::V1_16_0, None)
+            .unwrap();
+
+        assert_eq!(compat.get_schema_version(), KnownSchemaVersion::latest());
+    }
+
+    #[test]
+    fn include_auto_upgrade_parses_with_latest_schema() {
+        let manifest = with_latest_schema(indoc! {r#"
+            [include]
+            environments = [
+                { dir = "../base", auto-upgrade = false },
+                { remote = "owner/repo", auto-upgrade = true },
+            ]
+        "#});
+        let parsed = toml_edit::de::from_str::<ManifestLatest>(&manifest).unwrap();
+
+        assert_eq!(parsed.include, Include {
+            environments: vec![
+                IncludeDescriptor::Local {
+                    dir: PathBuf::from("../base"),
+                    name: None,
+                    auto_upgrade: Some(false),
+                },
+                IncludeDescriptor::Remote {
+                    remote: RemoteEnvironmentRef::new("owner", "repo").unwrap(),
+                    name: None,
+                    generation: None,
+                    auto_upgrade: Some(true),
+                },
+            ],
+        });
+    }
+
+    #[test]
+    fn include_auto_upgrade_rejected_by_v1_17_0_schema() {
+        let manifest = with_schema(KnownSchemaVersion::V1_17_0, indoc! {r#"
+            [include]
+            environments = [{ dir = "../base", auto-upgrade = false }]
+        "#});
+
+        let err = Manifest::parse_toml_typed(&manifest)
+            .expect_err("include 'auto-upgrade' should be rejected by the v1.17.0 schema");
+
+        let ManifestError::Invalid(err) = err else {
+            panic!("expected ManifestError::Invalid, got: {err:?}");
+        };
+        // Untagged enums report their 'expecting' message rather than the
+        // unknown field.
+        assert!(
+            err.message().contains("expected { dir = <dir>"),
+            "unexpected error message: {err}",
+        );
+    }
+
+    #[test]
+    fn include_auto_upgrade_with_generation_is_rejected_at_parse() {
+        let manifest = with_latest_schema(indoc! {r#"
+            [include]
+            environments = [{ remote = "owner/repo", generation = 2, auto-upgrade = true }]
+        "#});
+
+        let err = Manifest::parse_toml_typed(&manifest)
+            .expect_err("'generation' and 'auto-upgrade = true' should be rejected together");
+
+        assert_eq!(err.to_string(), indoc! {"
+            Included environment 'owner/repo' sets both 'generation = 2' and 'auto-upgrade = true'.
+            Remove 'generation' to use the latest generation, or remove 'auto-upgrade' to stay on generation 2."
+        });
+    }
+
+    #[test]
+    fn downgrades_to_v1_17_0_when_include_auto_upgrade_unused() {
+        let manifest = ManifestLatest {
+            include: Include {
+                environments: vec![IncludeDescriptor::Local {
+                    dir: PathBuf::from("../base"),
+                    name: None,
+                    auto_upgrade: None,
+                }],
+            },
+            ..Default::default()
+        };
+
+        let compat = manifest
+            .as_maybe_backwards_compatible(KnownSchemaVersion::V1_17_0, None)
+            .unwrap();
+
+        assert_eq!(compat.get_schema_version(), KnownSchemaVersion::V1_17_0);
+    }
+
+    #[test]
+    fn stays_latest_schema_when_include_auto_upgrade_used() {
+        let manifest = ManifestLatest {
+            include: Include {
+                environments: vec![IncludeDescriptor::Local {
+                    dir: PathBuf::from("../base"),
+                    name: None,
+                    auto_upgrade: Some(false),
+                }],
+            },
+            ..Default::default()
+        };
+
+        let compat = manifest
+            .as_maybe_backwards_compatible(KnownSchemaVersion::V1_17_0, None)
             .unwrap();
 
         assert_eq!(compat.get_schema_version(), KnownSchemaVersion::latest());

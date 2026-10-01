@@ -24,7 +24,8 @@ use flox_core::data::environment_ref::EnvironmentName;
 use flox_core::{blake3_hex, write_atomically};
 use flox_manifest::interfaces::{AsWritableManifest, WriteManifest};
 use flox_manifest::lockfile::{LOCKFILE_FILENAME, LockedInclude, Lockfile};
-use flox_manifest::parsed::common::{IncludeDescriptor, KnownSchemaVersion};
+use flox_manifest::parsed::common::KnownSchemaVersion;
+use flox_manifest::parsed::latest::AutoUpgrade;
 use flox_manifest::raw::{CatalogPackage, DEFAULT_SYSTEMS_STR, PackageToInstall};
 use flox_manifest::{MANIFEST_FILENAME, Manifest, Migrated, Validated, Writable};
 use indoc::formatdoc;
@@ -41,7 +42,7 @@ use super::core_environment::{
     UnreadableInclude,
     UpgradeResult,
 };
-use super::fetcher::IncludeFetcher;
+use super::fetcher::{IncludeFetcher, RemoteLockfiles};
 use super::uninstall::UninstallSpec;
 use super::{
     CACHE_DIR_NAME,
@@ -71,12 +72,12 @@ use crate::providers::lock_manifest::LockResult;
 use crate::providers::manifest_init::ManifestInitializer;
 
 /// The start of the names of the files in `.flox/cache` that keep a copy of the
-/// lockfile with the latest changes to included path environments, one per
+/// lockfile with the latest changes to followed included environments, one per
 /// system, since whether the copy builds depends on the system
 const FOLLOWED_LOCKFILE_PREFIX: &str = "followed-includes.";
 
-/// A copy of an environment's lockfile with the latest changes to its included
-/// path environments.
+/// A copy of an environment's lockfile with the latest changes to the included
+/// environments it follows.
 ///
 /// It's kept in the gitignored `.flox/cache`, so following included
 /// environments never changes the environment's own lockfile.
@@ -105,7 +106,7 @@ impl FollowedBuild {
     }
 }
 
-/// The lockfile that following included path environments results in
+/// The lockfile that following included environments results in
 #[derive(Clone, Debug)]
 struct Following {
     lock_result: LockResult,
@@ -178,6 +179,11 @@ pub struct PathEnvironment {
     /// The rendered environment links for this environment.
     /// These may not yet exist if the environment has not been built.
     rendered_env_links: RenderedEnvironmentLinks,
+
+    /// Included remote environments fetched by this instance, so that a
+    /// command that uses the environment more than once fetches each of
+    /// them once
+    remote_lockfiles: RemoteLockfiles,
 }
 
 /// A profile script or list of packages to install when initializing an environment
@@ -239,14 +245,15 @@ impl PathEnvironment {
             path: dot_flox_path,
             pointer,
             rendered_env_links,
+            remote_lockfiles: RemoteLockfiles::default(),
         })
     }
 
     fn include_fetcher(&self) -> Result<IncludeFetcher, EnvironmentError> {
-        Ok(IncludeFetcher::for_composer(
-            self.parent_path()?,
-            self.path.clone(),
-        ))
+        Ok(
+            IncludeFetcher::for_composer(self.parent_path()?, self.path.clone())
+                .with_remote_lockfiles(self.remote_lockfiles.clone()),
+        )
     }
 
     /// Get a view of the environment that can be used to perform operations
@@ -279,13 +286,15 @@ impl PathEnvironment {
     }
 
     /// Lock the environment, and use a copy of its lockfile with the latest
-    /// changes to its included path environments if any changed.
+    /// changes to the included environments it follows if any changed.
     ///
+    /// The `auto-upgrade` field of each include decides whether it's
+    /// followed, see [AutoUpgrade].
     /// Only changes that the included environments have locked are used.
     /// Changes that can't be read or locked keep the versions in use before,
     /// and changes that don't build together with this environment fall back
     /// to the environment's lockfile, as [FollowedIncludes] reports.
-    fn follow_path_includes(
+    fn follow_includes(
         &mut self,
         flox: &Flox,
         mode: FollowMode,
@@ -300,12 +309,12 @@ impl PathEnvironment {
             followed,
             copy: None,
         };
-        let has_local_includes = locked_includes(committed).is_some_and(|includes| {
+        let may_auto_upgrade = locked_includes(committed).is_some_and(|includes| {
             includes
                 .iter()
-                .any(|locked| matches!(locked.descriptor, IncludeDescriptor::Local { .. }))
+                .any(|locked| locked.descriptor.auto_upgrade() != AutoUpgrade::Never)
         });
-        if !has_local_includes {
+        if !may_auto_upgrade {
             self.remove_followed_lockfile(&flox.system);
             return Ok(locked_without_copy(FollowedIncludes::default()));
         }
@@ -316,8 +325,8 @@ impl PathEnvironment {
             .filter(|cached| cached.base == base);
         // Changes are checked against the versions in use
         let in_use = cached.as_ref().filter(|cached| !cached.build.failed());
-        let check =
-            env_view.check_path_includes(flox, in_use.map_or(committed, |copy| &copy.lockfile));
+        let check = env_view
+            .check_auto_upgraded_includes(flox, in_use.map_or(committed, |copy| &copy.lockfile));
         let mut followed = FollowedIncludes {
             unreadable: check
                 .unreadable
@@ -429,7 +438,7 @@ impl PathEnvironment {
     /// Names of the included environments that the copy of the lockfile in
     /// use has changes to, which the lockfile doesn't have yet.
     ///
-    /// Unlike [Self::follow_path_includes], this doesn't lock anything,
+    /// Unlike [Self::follow_includes], this doesn't lock anything,
     /// so it reports the copy from the last command that used it.
     pub fn unsaved_followed_includes(&self, flox: &Flox) -> Result<Vec<String>, EnvironmentError> {
         let Some(committed) = self.existing_lockfile(flox)? else {
@@ -451,13 +460,13 @@ impl PathEnvironment {
     /// Failing only leaves the lockfile in the links until the next command
     /// that uses the environment.
     fn link_followed_changes(&mut self, flox: &Flox) {
-        if let Err(err) = self.follow_path_includes(flox, FollowMode::LockAndBuild) {
+        if let Err(err) = self.follow_includes(flox, FollowMode::LockAndBuild) {
             debug!(%err, "could not use the latest changes to included environments");
         }
     }
 
     /// Build the environment's lockfile, without the latest changes to
-    /// included path environments that it doesn't have yet.
+    /// followed included environments that it doesn't have yet.
     ///
     /// Publishing builds this, so that it builds what's committed.
     pub fn build_locked(&mut self, flox: &Flox) -> Result<BuildEnvOutputs, EnvironmentError> {
@@ -546,13 +555,13 @@ impl PathEnvironment {
 
 impl Environment for PathEnvironment {
     /// This will lock the environment if it is not already locked,
-    /// and use the latest changes to included path environments.
+    /// and use the latest changes to the included environments it follows.
     fn lockfile(&mut self, flox: &Flox) -> Result<LockResult, EnvironmentError> {
         let Following {
             lock_result,
             followed,
             ..
-        } = self.follow_path_includes(flox, FollowMode::Lock)?;
+        } = self.follow_includes(flox, FollowMode::Lock)?;
         debug!(?followed, "followed included environments");
         Ok(lock_result)
     }
@@ -566,7 +575,7 @@ impl Environment for PathEnvironment {
             lock_result,
             followed,
             ..
-        } = self.follow_path_includes(flox, mode)?;
+        } = self.follow_includes(flox, mode)?;
         Ok((lock_result, followed))
     }
 
@@ -582,7 +591,7 @@ impl Environment for PathEnvironment {
         let Some(committed) = env_view.lockfile_if_up_to_date()? else {
             return Ok(None);
         };
-        let check = env_view.check_path_includes(flox, &committed);
+        let check = env_view.check_auto_upgraded_includes(flox, &committed);
         let mut followed = FollowedIncludes {
             unreadable: check
                 .unreadable
@@ -797,7 +806,7 @@ impl Environment for PathEnvironment {
         let out_paths = self.rendered_env_links.clone();
 
         let lockfile = self
-            .follow_path_includes(flox, FollowMode::Lock)?
+            .follow_includes(flox, FollowMode::Lock)?
             .lock_result
             .into();
         if self.needs_rebuild(&lockfile) {
@@ -809,10 +818,10 @@ impl Environment for PathEnvironment {
 
     /// Build the environment
     /// This will lock the environment if it is not already locked,
-    /// and build it with the latest changes to included path environments if
-    /// it builds with them, see [Self::follow_path_includes].
+    /// and build it with the latest changes to the included environments it
+    /// follows if it builds with them, see [Self::follow_includes].
     fn build(&mut self, flox: &Flox) -> Result<BuildEnvOutputs, EnvironmentError> {
-        if let Some(mut copy) = self.follow_path_includes(flox, FollowMode::Lock)?.copy {
+        if let Some(mut copy) = self.follow_includes(flox, FollowMode::Lock)?.copy {
             match self.build_followed_lockfile(flox, &mut copy) {
                 Ok(store_paths) => return Ok(store_paths),
                 Err(err) => debug!(

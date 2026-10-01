@@ -25,7 +25,7 @@ use flox_events::{CliEnvironmentActivatePayload, EventKind, EventsHub, Lifecycle
 use flox_manifest::interfaces::{AsLatestSchema, AsWritableManifest, WriteManifest};
 use flox_manifest::lockfile::Lockfile;
 use flox_manifest::parsed::Inner;
-use flox_manifest::parsed::common::IncludeDescriptor;
+use flox_manifest::parsed::latest::IncludeDescriptor;
 use flox_manifest::{Manifest, MigratedTypedOnly};
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::floxmeta_branch::BranchOrd;

@@ -431,6 +431,20 @@
       },
       "type": "object"
     },
+    "Include2": {
+      "additionalProperties": false,
+      "description": "The section where users can declare dependencies on other environments.\n\nFrom V1_18_0 on, include descriptors can set `auto-upgrade`.",
+      "properties": {
+        "environments": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/IncludeDescriptor2"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
     "IncludeDescriptor": {
       "anyOf": [
         {
@@ -456,6 +470,73 @@
         {
           "additionalProperties": false,
           "properties": {
+            "generation": {
+              "format": "uint",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "name": {
+              "description": "A name similar to an install ID that a user could use to specify\nthe environment on the command line e.g. for upgrades, or in an\nerror message.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "remote": {
+              "$ref": "#/$defs/EnvironmentRef",
+              "description": "The remote environment reference in the form `owner/name`."
+            }
+          },
+          "required": [
+            "remote"
+          ],
+          "type": "object"
+        }
+      ],
+      "description": "The structure for how a user is able to declare a dependency on an environment."
+    },
+    "IncludeDescriptor2": {
+      "anyOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "auto-upgrade": {
+              "description": "Whether commands use the latest changes that the included\nenvironment has locked, without 'flox include upgrade'.\nDefaults to true if the directory holds a path environment.",
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "dir": {
+              "description": "The directory where the environment is located.",
+              "type": "string"
+            },
+            "name": {
+              "description": "A name similar to an install ID that a user could use to specify\nthe environment on the command line e.g. for upgrades, or in an\nerror message.",
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "dir"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "auto-upgrade": {
+              "description": "Whether commands use the latest generation of the environment,\nwithout 'flox include upgrade'.\nDefaults to false, and can't be true together with `generation`.",
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
             "generation": {
               "format": "uint",
               "minimum": 0,
@@ -1295,7 +1376,7 @@
           "description": "Hooks that are run at various times during the lifecycle of the manifest\nin a known shell environment."
         },
         "include": {
-          "$ref": "#/$defs/Include"
+          "$ref": "#/$defs/Include2"
         },
         "install": {
           "$ref": "#/$defs/Install2",

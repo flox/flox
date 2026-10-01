@@ -161,9 +161,9 @@ pub trait Environment: Send {
     fn lockfile(&mut self, flox: &Flox) -> Result<LockResult, EnvironmentError>;
 
     /// Return the lockfile like [Environment::lockfile], reporting what it did
-    /// with the latest changes to included path environments.
+    /// with the latest changes to followed included environments.
     ///
-    /// Only path environments follow their included path environments;
+    /// Only path environments follow their included environments;
     /// the others report nothing.
     fn lockfile_following_includes(
         &mut self,
@@ -1047,9 +1047,6 @@ pub enum EnvironmentError {
 
     #[error("failed to create log directory")]
     CreateLogDir(#[source] std::io::Error),
-
-    #[error("could not create temporary directory")]
-    CreateTempDir(#[source] std::io::Error),
 
     #[error("could not get current directory")]
     GetCurrentDir(#[source] std::io::Error),
