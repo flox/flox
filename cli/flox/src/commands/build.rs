@@ -33,6 +33,8 @@ use flox_rust_sdk::utils::{CommandExt, FLOX_INTERPRETER};
 use floxhub_client::{BaseCatalogUrl, CatalogClientTrait, FloxhubClientError};
 use indoc::formatdoc;
 use itertools::Itertools;
+/// Share the relock command with the crate that reports legacy locks.
+pub(crate) use nef_lock_catalog::UPDATE_CATALOGS_COMMAND;
 use nef_lock_catalog::{NixFlakeref, catalog_lockfile_path, lock_project_catalog};
 use thiserror::Error;
 use tracing::{debug, instrument, trace};
@@ -43,14 +45,6 @@ use crate::utils::catalog_lock::BuildLockGuard;
 use crate::utils::events::duration_to_ms;
 use crate::utils::message;
 use crate::{environment_subcommand_metric, subcommand_metric};
-
-/// How the user invokes the catalog-lock update, for messages that name it.
-///
-/// NAMING: provisional — the command is expected to be renamed (or folded
-/// into a flag such as `flox build --lock-catalog`) once the UX discussion
-/// settles. Keep the user-visible name confined to this constant and the
-/// `UpdateCatalogs` bpaf declaration so the rename stays a two-line change.
-pub(crate) const UPDATE_CATALOGS_COMMAND: &str = "flox build update-catalogs";
 
 #[derive(Debug, Clone, Bpaf)]
 pub enum BaseCatalogUrlSelect {
@@ -619,15 +613,31 @@ impl Build {
 
         let rel_file_paths =
             expression_rel_paths(&PackageTargets::new(&manifest, &expression_ref)?.all());
+        let lockfile_path = catalog_lockfile_path(env.dot_flox_path());
 
         if rel_file_paths.is_empty() {
-            message::plain(
-                "No Nix expression builds found; only expression builds reference the catalog.",
-            );
+            // Replace only v1 locks: the prescribed relock command must work
+            // without expressions, while existing v2 pins remain authoritative.
+            match nef_lock_catalog::read_lock(&lockfile_path) {
+                Err(nef_lock_catalog::LockfileError::LegacyVersion { .. }) => {
+                    nef_lock_catalog::write_lock(
+                        &nef_lock_catalog::BuildLock::default(),
+                        &lockfile_path,
+                    )?;
+                    message::created(formatdoc! {"
+                    No Nix expression builds found; replaced the old '.flox/catalog.lock' \
+                        with an empty version 2 lock.
+                        Commit the file so every revision builds against the same inputs."});
+                },
+                _ => {
+                    message::plain(
+                        "No Nix expression builds found; only expression builds reference the catalog.",
+                    );
+                },
+            }
             return Ok(());
         }
 
-        let lockfile_path = catalog_lockfile_path(env.dot_flox_path());
         let references = lock_project_catalog(
             &flox.floxhub_client,
             nix_expression_dir(&env),
@@ -975,6 +985,49 @@ mod test {
 
         let displayed = Build::format_result_links([&symlink], &flox.temp_dir).unwrap();
         assert_eq!(displayed, vec![symlink.to_string_lossy()]);
+    }
+
+    #[tokio::test]
+    async fn update_catalogs_replaces_a_v1_lock_with_no_expression_builds() {
+        let (flox, _temp_dir) = flox_instance();
+        let manifest = formatdoc! {r#"
+            version = 1
+        "#};
+        let env = new_path_environment(&flox, &manifest);
+        let lockfile_path = catalog_lockfile_path(env.dot_flox_path());
+        std::fs::write(
+            &lockfile_path,
+            "{\"version\": 1, \"direct_catalog_inputs\": {}, \"catalogs\": {}}\n",
+        )
+        .unwrap();
+
+        Build::update_catalogs(&flox, ConcreteEnvironment::Path(env))
+            .await
+            .expect("a v1 lock with no expression builds is replaced, not refused");
+
+        assert_eq!(
+            std::fs::read_to_string(&lockfile_path).unwrap(),
+            "{\n  \"version\": 2,\n  \"locked_inputs\": {},\n  \"direct_inputs\": [],\n  \"catalogs\": {}\n}\n"
+        );
+    }
+
+    #[tokio::test]
+    async fn update_catalogs_is_a_no_op_with_no_expression_builds_and_no_existing_lock() {
+        let (flox, _temp_dir) = flox_instance();
+        let manifest = formatdoc! {r#"
+            version = 1
+        "#};
+        let env = new_path_environment(&flox, &manifest);
+        let lockfile_path = catalog_lockfile_path(env.dot_flox_path());
+
+        Build::update_catalogs(&flox, ConcreteEnvironment::Path(env))
+            .await
+            .expect("no expression builds and no lock is a no-op");
+
+        assert!(
+            !lockfile_path.exists(),
+            "no lock should be created when none existed"
+        );
     }
 
     /// Test that conflicting build names are detected if builds are defined via the manifest and nix expressions.

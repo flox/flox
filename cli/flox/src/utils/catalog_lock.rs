@@ -147,6 +147,31 @@ mod tests {
     /// A committed lock with one canonical entry, plus an expression that
     /// references it.
     const COMMITTED_LOCK: &str = r#"{
+  "version": 2,
+  "locked_inputs": {
+    "myorg/hello": {
+      "attr_path": ["hello"],
+      "build_type": "nef",
+      "catalog": "myorg",
+      "inputs": [],
+      "locked_inputs_hash": "sha256-test",
+      "version": null,
+      "build": null,
+      "source": {
+        "dir": ".",
+        "ref": "refs/heads/main",
+        "rev": "0000000000000000000000000000000000000000",
+        "type": "git",
+        "url": "https://example.com/repo"
+      }
+    }
+  },
+  "direct_inputs": ["myorg/hello"],
+  "catalogs": {}
+}
+"#;
+
+    const COMMITTED_V1_LOCK: &str = r#"{
   "version": 1,
   "direct_catalog_inputs": {
     "myorg/hello": {
@@ -196,7 +221,7 @@ mod tests {
         );
         assert_eq!(
             std::fs::read_to_string(lock.path()).unwrap(),
-            "{\n  \"version\": 1,\n  \"direct_catalog_inputs\": {},\n  \"catalogs\": {}\n}\n"
+            "{\n  \"version\": 2,\n  \"locked_inputs\": {},\n  \"direct_inputs\": [],\n  \"catalogs\": {}\n}\n"
         );
     }
 
@@ -221,10 +246,24 @@ mod tests {
         );
 
         let references = scan_package(&pkgs_dir, "hello.nix").unwrap();
-        let subset = lock.build_lock().subset_direct(&references).unwrap();
-        assert_eq!(subset.keys().collect::<Vec<_>>(), vec![
-            &"myorg/hello".to_string()
-        ]);
+        let closure = lock.build_lock().project_package(&references).unwrap();
+        assert_eq!(closure.direct_inputs, vec!["myorg/hello".to_string()]);
+    }
+
+    #[tokio::test]
+    async fn committed_v1_lock_is_refused() {
+        let (_project, dot_flox, _pkgs_dir) =
+            project_with_expression("{ catalogs }: catalogs.myorg.hello");
+        std::fs::write(catalog_lockfile_path(&dot_flox), COMMITTED_V1_LOCK).unwrap();
+
+        let err = BuildLockGuard::new_existing_or_ephemeral(&new_noop(), &dot_flox, ["hello.nix"])
+            .await
+            .expect_err("a v1 lock must be refused, not read as v2");
+        let message = format!("{err:#}");
+        assert!(
+            message.contains(nef_lock_catalog::UPDATE_CATALOGS_COMMAND),
+            "the refusal must name the relock command, got: {message}"
+        );
     }
 
     /// A committed lock that does not cover a scanned reference is still
@@ -243,7 +282,7 @@ mod tests {
         let references = scan_package(&pkgs_dir, "hello.nix").unwrap();
         let err = lock
             .build_lock()
-            .subset_direct(&references)
+            .project_package(&references)
             .expect_err("an uncovered reference must be stale");
         assert!(
             err.to_string().contains("myorg.world"),
