@@ -176,6 +176,10 @@ impl Develop {
             catalog_lock.path(),
             None,
         )?;
+        // The eval was the lock's only consumer, and the `exec` below replaces
+        // this process without running destructors: an ephemeral lock still
+        // held then would be left behind in the temp dir.
+        drop(catalog_lock);
         let drv_path = eval_results
             .first()
             .context("eval() returned no results for the requested package")?
