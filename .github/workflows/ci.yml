@@ -503,7 +503,9 @@ jobs:
 
           for package in 'packages.${{ matrix.system }}.crate2nix-flox' 'packages.${{ matrix.system }}.crate2nix-flox-activations' 'packages.${{ matrix.system }}.crate2nix-nef-lock-catalog'; do
             echo "::group::Building $package"
-            ./.github/scripts/remote-execute-nix-build.sh "$package" "$NIX_SUBSTITUTER"
+            # `true`: also publish the per-crate build outputs, which the
+            # product closures do not reference.
+            ./.github/scripts/remote-execute-nix-build.sh "$package" "$NIX_SUBSTITUTER" true
             echo "::endgroup::"
           done
 
