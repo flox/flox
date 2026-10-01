@@ -1,7 +1,7 @@
 {
   "lockfile-version": 1,
   "manifest": {
-    "schema-version": "1.14.0",
+    "schema-version": "1.17.0",
     "install": {
       "cctools": {
         "pkg-path": "darwin.cctools",
@@ -81,6 +81,8 @@
       "version": "1010.6",
       "outputs_to_install": [
         "man",
+        "out",
+        "out",
         "out",
         "out",
         "out",
@@ -607,6 +609,7 @@
       "version": "3.13.13",
       "outputs_to_install": [
         "out",
+        "out",
         "out"
       ],
       "outputs": {
@@ -637,6 +640,8 @@
       "unfree": false,
       "version": "3.13.13",
       "outputs_to_install": [
+        "out",
+        "out",
         "out",
         "out"
       ],
@@ -699,6 +704,7 @@
       "unfree": false,
       "version": "3.13.13",
       "outputs_to_install": [
+        "out",
         "out",
         "out",
         "out"

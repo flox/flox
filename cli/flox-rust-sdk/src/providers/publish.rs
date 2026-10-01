@@ -723,6 +723,11 @@ where
                 .rel_expression_build_base_dir
                 .to_string_lossy()
                 .into_owned(),
+            // No CLI flag exposes lineage changes yet, so match the field's
+            // documented server-side default and let the catalog keep
+            // rejecting a publish that would move a package's registered
+            // source repository or ref.
+            allow_lineage_change: false,
         };
 
         tracing::debug!(?build_info, "Publishing build in catalog...");

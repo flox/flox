@@ -105,24 +105,31 @@ fn classify_error(err: &FactoryClientError, id: BuildId) -> (String, u8) {
             .to_string(),
             4,
         ),
-        // A server-side error (5xx/422): the host answered over HTTP and erred,
-        // so it is retryable. Exit 1; the cancel endpoint documents 502 as
-        // retry-with-backoff.
+        // A 409 means the coordinator has not received the build yet.
+        FactoryClientError::Server(api)
+            if api.status().is_some_and(|status| status.as_u16() == 409) =>
+        {
+            (
+                formatdoc! {"
+                    The Flox Factory is still dispatching build {id}.
+                    Try 'flox factory cancel {id}' again in a moment."},
+                1,
+            )
+        },
+        // A 502 can also mean the coordinator lost the build. Do not promise
+        // that retry will resolve every service failure.
         FactoryClientError::Server(_) => (
             formatdoc! {"
-                The Flox Factory reported a server error for build {id}.
-                This is usually temporary; wait a moment and try again."},
+                The Flox Factory could not confirm cancellation for build {id}.
+                Try again in a moment.
+                If the problem persists, run 'flox factory status {id}' to check its state."},
             1,
         ),
-        // A non-auth 4xx, or a body that did not parse as a build: an
-        // unrecognised response, reported as a generic service error and retried
-        // rather than escalated. Exit 1. Naming the variant rather than using
-        // `_` makes a future error variant a compile error rather than a silent
-        // default.
+        // An unrecognized response has no known recovery action. Exit 1.
         FactoryClientError::APIError(_) => (
             formatdoc! {"
                 The Flox Factory could not cancel build {id}.
-                This is usually temporary; wait a moment and try again."},
+                Run 'flox factory status {id}' to check its state."},
             1,
         ),
     }
@@ -212,6 +219,15 @@ mod tests {
 
     fn id(n: i64) -> BuildId {
         n.to_string().parse().unwrap()
+    }
+
+    fn server_error(status: u16) -> FactoryClientError {
+        let response = http::Response::builder()
+            .status(status)
+            .body(String::new())
+            .unwrap()
+            .into();
+        FactoryClientError::Server(FactoryApiError::UnexpectedResponse(response))
     }
 
     // -------------------------------------------------------------------------
@@ -352,16 +368,28 @@ mod tests {
     }
 
     #[test]
-    fn server_is_service_error_exit_1() {
-        // A 5xx is a retryable service fault; the cancel endpoint documents 502
-        // as retry-with-backoff.
-        let err = FactoryClientError::Server(FactoryApiError::InvalidRequest("5xx".to_string()));
+    fn dispatch_in_flight_is_retryable_exit_1() {
         assert_eq!(
-            classify_error(&err, id(7)),
+            classify_error(&server_error(409), id(7)),
             (
                 indoc! {"
-                    The Flox Factory reported a server error for build 7.
-                    This is usually temporary; wait a moment and try again."}
+                    The Flox Factory is still dispatching build 7.
+                    Try 'flox factory cancel 7' again in a moment."}
+                .to_string(),
+                1,
+            )
+        );
+    }
+
+    #[test]
+    fn service_failure_is_exit_1_without_promising_recovery() {
+        assert_eq!(
+            classify_error(&server_error(502), id(7)),
+            (
+                indoc! {"
+                    The Flox Factory could not confirm cancellation for build 7.
+                    Try again in a moment.
+                    If the problem persists, run 'flox factory status 7' to check its state."}
                 .to_string(),
                 1,
             )
@@ -379,7 +407,7 @@ mod tests {
             (
                 indoc! {"
                     The Flox Factory could not cancel build 7.
-                    This is usually temporary; wait a moment and try again."}
+                    Run 'flox factory status 7' to check its state."}
                 .to_string(),
                 1,
             )
@@ -464,8 +492,9 @@ mod tests {
             "the DELETE should have been issued"
         );
         assert_eq!(writer.to_string(), indoc! {"
-            ✘ ERROR: The Flox Factory reported a server error for build 42.
-            This is usually temporary; wait a moment and try again.
+            ✘ ERROR: The Flox Factory could not confirm cancellation for build 42.
+            Try again in a moment.
+            If the problem persists, run 'flox factory status 42' to check its state.
         "});
     }
 

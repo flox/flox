@@ -58,12 +58,12 @@ pub enum FactoryClientError {
     #[error("{}", fmt_api_error(.0))]
     AuthRejected(APIError<ErrorResponse>),
 
-    /// The Flox Factory reported a server-side error (HTTP 5xx, or 422).
+    /// The cancel endpoint reported HTTP 409, 422, or 5xx.
     ///
     /// Distinct from [`FactoryClientError::Transport`] because the host did
-    /// respond: the failure is the service's, and the same request may succeed
-    /// on retry. Wraps the underlying error so the server's `detail` still
-    /// renders, matching the `APIError` variant.
+    /// respond. The status distinguishes a dispatch still in flight (409) from
+    /// service failures, some of which may persist (502). Wraps the underlying
+    /// error so the server's `detail` remains available.
     #[error("{}", fmt_api_error(.0))]
     Server(APIError<ErrorResponse>),
 
@@ -174,8 +174,11 @@ fn classify_build_error(err: FactoryClientError) -> FactoryClientError {
         Some(401 | 403) => FactoryClientError::AuthRejected(api),
         // 5xx is a service fault. 422 only arises from a non-integer path
         // (FastAPI request validation), which an `i64` never produces, so it is
-        // mapped here defensively rather than left as a generic API error.
-        Some(422 | 500..=599) => FactoryClientError::Server(api),
+        // mapped here defensively rather than left as a generic API error. 409
+        // is the cancel endpoint's "the coordinator does not know the build
+        // yet, its dispatch is in flight" answer, which the spec documents as
+        // retry with backoff.
+        Some(409 | 422 | 500..=599) => FactoryClientError::Server(api),
         // Everything else (a non-auth 4xx, or a 200 whose body did not parse as
         // a `BuildResponse`) degrades to the generic API error.
         _ => FactoryClientError::APIError(api),
@@ -859,6 +862,8 @@ pub mod tests {
             status,
             system: "x86_64-linux".to_string(),
             task: None,
+            // Trigger provenance isn't under test here.
+            trigger: None,
         })
         .expect("BuildResponse serializes")
     }
@@ -908,6 +913,7 @@ pub mod tests {
             status: EffectiveBuildStatus::Cancelled,
             system: "x86_64-linux".to_string(),
             task: None,
+            trigger: None,
         };
         assert_eq!(build, expected);
     }
@@ -960,6 +966,20 @@ pub mod tests {
         assert!(
             err.to_string().contains("Build Coordinator unreachable"),
             "expected the server detail to survive, got {err}"
+        );
+    }
+
+    #[tokio::test]
+    async fn cancel_build_maps_409_to_server() {
+        let err = cancel_build_against_mock(
+            409,
+            json!({ "detail": "Build registration still in flight" }),
+        )
+        .await
+        .unwrap_err();
+        assert!(
+            matches!(err, FactoryClientError::Server(_)),
+            "expected Server, got {err:?}"
         );
     }
 

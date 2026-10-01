@@ -44,6 +44,8 @@ mod types;
 pub(crate) mod mock;
 
 pub const DEFAULT_CATALOG_URL: &str = "https://api.flox.dev";
+/// The base-catalog stability used when a caller names none.
+pub const DEFAULT_STABILITY: &str = "stable";
 pub const FLOX_CATALOG_MOCK_DATA_VAR: &str = "_FLOX_USE_CATALOG_MOCK";
 pub const FLOX_CATALOG_DUMP_DATA_VAR: &str = "_FLOX_CATALOG_DUMP_RESPONSE_FILE";
 /// Sets `PackageGroup.stability` on the wire during mock recording runs.

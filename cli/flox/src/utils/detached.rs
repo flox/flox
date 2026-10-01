@@ -56,11 +56,62 @@ pub struct DetachedCommand<'a> {
 }
 
 impl DetachedCommand<'_> {
+    /// Build the child [`Command`], with env, args, but no stdio or `pre_exec`
+    /// (those need the log file handle that only `spawn` opens).
+    ///
+    /// Split out from `spawn` so the env-var handling — in particular the
+    /// mock-recording scrub below — is unit-testable via [`Command::get_envs`]
+    /// without forking a real child.
+    fn configure(&self, self_executable: &std::path::Path) -> Command {
+        let mut command = Command::new(self_executable);
+
+        // Propagate the version which the wrapper script sets and the CLI then
+        // unsets — the child needs it to emit its own version telemetry.
+        command.env(FLOX_VERSION_VAR, &*FLOX_VERSION_STRING);
+
+        // Propagate the parent's invocation_id so the child's v2 events join
+        // the parent's stream rather than appearing as a separate top-level
+        // invocation. Written only onto this Command, not into the parent
+        // process env, so it does not leak forward into the user's shell.
+        if let Some(parent_invocation_id) = current_invocation_id() {
+            command.env(FLOX_INVOCATION_ID_VAR, parent_invocation_id.to_string());
+        }
+
+        // Every dispatch — including this child's own — builds its own
+        // FloxhubClient via `init_floxhub_client`, which reads
+        // `_FLOX_CATALOG_DUMP_RESPONSE_FILE` fresh from the environment. Left
+        // inherited, a mock-recording session around the foreground command
+        // means this child records its own, unrelated traffic (or none at
+        // all) to the *same* destination file, and overwrites whatever the
+        // foreground command already recorded there when its own client
+        // drops — this is how `just gen-data` produced 0-byte cassettes
+        // despite the foreground `flox install` succeeding. Recording is a
+        // write, and two independent writers to the same file race.
+        //
+        // Replay mode (`_FLOX_USE_CATALOG_MOCK`) does not share that failure:
+        // it only reads a cassette, so any number of clients replaying the
+        // same file are independent. It is also load-bearing, not just
+        // harmless — `check-for-upgrades` is itself a detached child, and
+        // integration tests (e.g. activate.bats's upgrade-check test) set
+        // this var on the foreground command specifically so that child
+        // replays deterministically instead of hitting the network. Leave it
+        // inherited.
+        command.env_remove(floxhub_client::FLOX_CATALOG_DUMP_DATA_VAR);
+
+        for arg in self.args {
+            command.arg(arg);
+        }
+
+        command
+    }
+
     /// Spawn a detached background `flox` child process.
     ///
     /// The child:
     /// - inherits the parent's `FLOX_VERSION` and invocation-id env vars so its
     ///   v2 events join the parent's stream;
+    /// - does not inherit the mock-recording env var, but does inherit the
+    ///   mock-replay one (see [`Self::configure`]);
     /// - has stdin/stdout redirected to `/dev/null` (stdout hygiene is critical
     ///   for `hook-env`, whose stdout is the shell's command-substitution buffer);
     /// - has stderr redirected to a log file under `log_dir`;
@@ -93,23 +144,7 @@ impl DetachedCommand<'_> {
             None => std::env::current_exe()?,
         };
 
-        let mut command = Command::new(&self_executable);
-
-        // Propagate the version which the wrapper script sets and the CLI then
-        // unsets — the child needs it to emit its own version telemetry.
-        command.env(FLOX_VERSION_VAR, &*FLOX_VERSION_STRING);
-
-        // Propagate the parent's invocation_id so the child's v2 events join
-        // the parent's stream rather than appearing as a separate top-level
-        // invocation. Written only onto this Command, not into the parent
-        // process env, so it does not leak forward into the user's shell.
-        if let Some(parent_invocation_id) = current_invocation_id() {
-            command.env(FLOX_INVOCATION_ID_VAR, parent_invocation_id.to_string());
-        }
-
-        for arg in self.args {
-            command.arg(arg);
-        }
+        let mut command = self.configure(&self_executable);
 
         std::fs::create_dir_all(self.log_dir)?;
         let log_file = self.open_log_file()?;
@@ -204,6 +239,65 @@ mod tests {
             Some("true"),
             || {
                 assert!(bg_side_effects_disabled());
+            },
+        );
+    }
+
+    /// The detached child must never inherit the mock-recording env var,
+    /// regardless of what the spawning process has set — a Record-mode child
+    /// that makes no catalog request (or an unrelated one) overwrites
+    /// whatever the foreground command already recorded to the same
+    /// destination when its own client drops. It must still inherit the
+    /// mock-replay env var, which only reads. Asserted via `get_envs()`
+    /// rather than by actually spawning: `Command`'s env diff only lists vars
+    /// this call touched, so an explicit `env_remove` reads back as `None`
+    /// regardless of the real process environment, while a var this code
+    /// never mentions would not appear at all.
+    #[test]
+    fn configure_strips_the_record_var_but_preserves_the_replay_var() {
+        use std::ffi::OsStr;
+
+        temp_env::with_vars(
+            [
+                (
+                    floxhub_client::FLOX_CATALOG_DUMP_DATA_VAR,
+                    Some("/tmp/some-cassette.yaml"),
+                ),
+                (
+                    floxhub_client::FLOX_CATALOG_MOCK_DATA_VAR,
+                    Some("/tmp/some-other-cassette.yaml"),
+                ),
+            ],
+            || {
+                let args: Vec<String> = vec![];
+                let command = DetachedCommand {
+                    args: &args,
+                    log_file: LogFile::Rolling(SEND_TELEMETRY_LOG_NAME.to_string()),
+                    log_dir: Path::new("/tmp"),
+                }
+                .configure(Path::new("/bin/true"));
+
+                let envs: std::collections::HashMap<_, _> = command.get_envs().collect();
+                assert_eq!(
+                    envs.get(OsStr::new(floxhub_client::FLOX_CATALOG_DUMP_DATA_VAR)),
+                    Some(&None),
+                    "dump-recording var must be explicitly removed, not merely absent \
+                     — two independent recorders writing the same destination is the \
+                     bug this guards against"
+                );
+                // `configure` must never have touched this var: `Command`'s env
+                // diff only lists vars a `.env()`/`.env_remove()` call named, so
+                // its total absence here — not `Some(&None)` — is what proves the
+                // replay var still reaches the child via ordinary inheritance.
+                // activate.bats's upgrade-check test depends on exactly that: it
+                // sets this var on the foreground command so its detached
+                // check-for-upgrades child replays deterministically.
+                assert_eq!(
+                    envs.get(OsStr::new(floxhub_client::FLOX_CATALOG_MOCK_DATA_VAR)),
+                    None,
+                    "mock-replay var must be left for ordinary env inheritance, \
+                     not explicitly removed"
+                );
             },
         );
     }
