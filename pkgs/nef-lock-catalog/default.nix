@@ -18,11 +18,6 @@ let
   envs = {
     # used internally to ensure CA certificates are available
     NIXPKGS_CACERT_BUNDLE_CRT = cacert.outPath + "/etc/ssl/certs/ca-bundle.crt";
-    # `flox-core` (a transitive dependency) reads this with `env!` at compile
-    # time. This binary does not activate environments, but the variable must
-    # be defined for the build to compile, so point it at this package's own
-    # output as flox-activations does.
-    FLOX_ACTIVATIONS_BIN = "${placeholder "out"}/libexec/flox-activations";
     # `nef-lock-catalog` reads this with `env!` at compile time to locate `nix`.
     NIX_BIN = "${nix}/bin/nix";
     FLOX_VERSION = FLOX_VERSION;

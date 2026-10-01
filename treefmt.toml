@@ -13,6 +13,7 @@ includes = [ "*.nix" ]
 excludes = [
   "cli/nef-lock-catalog/test_data/catalog_refs/invalid-syntax.nix",
   "cli/nef-lock-catalog/test_data/catalog_refs/parse-error-import/broken.nix",
+  "pkgs/crate2nix/Cargo.nix", # generated
 ]
 
 
