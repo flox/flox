@@ -14,6 +14,8 @@ use floxhub_client::{BaseCatalogUrl, PackageSystem};
 use indoc::formatdoc;
 use itertools::Itertools;
 use nef_lock_catalog::NixFlakeref;
+#[cfg(any(test, feature = "tests"))]
+use nef_lock_catalog::{BuildLock, write_lock};
 use serde::Deserialize;
 use tempfile::NamedTempFile;
 use thiserror::Error;
@@ -1123,11 +1125,7 @@ pub mod test_helpers {
         // callers that need nothing more.
         let empty_lock_path = flox.temp_dir.join("empty-catalog.lock");
         let catalog_lockfile = catalog_lockfile.unwrap_or_else(|| {
-            std::fs::write(
-                &empty_lock_path,
-                "{\"version\": 1, \"direct_catalog_inputs\": {}, \"catalogs\": {}}\n",
-            )
-            .unwrap();
+            write_lock(&BuildLock::default(), &empty_lock_path).unwrap();
             &empty_lock_path
         });
 
@@ -1189,11 +1187,7 @@ pub mod test_helpers {
         // NEF evals require a CLI-provided catalog lock; these fixtures make
         // no catalog references, so an empty lock suffices.
         let empty_lock_path = flox.temp_dir.join("empty-catalog.lock");
-        std::fs::write(
-            &empty_lock_path,
-            "{\"version\": 1, \"direct_catalog_inputs\": {}, \"catalogs\": {}}\n",
-        )
-        .unwrap();
+        write_lock(&BuildLock::default(), &empty_lock_path).unwrap();
 
         let base_dir = env.parent_path().unwrap();
         let built_environments = env.build(flox).unwrap();
@@ -1627,11 +1621,7 @@ mod tests {
         let expression_ref = NixFlakeref::from_path(env.dot_flox_path()).unwrap();
 
         let empty_lock_path = flox.temp_dir.join("empty-catalog.lock");
-        fs::write(
-            &empty_lock_path,
-            "{\"version\": 1, \"direct_catalog_inputs\": {}, \"catalogs\": {}}\n",
-        )
-        .unwrap();
+        write_lock(&BuildLock::default(), &empty_lock_path).unwrap();
 
         let err = FloxBuildMk::new(
             &flox,
@@ -1744,11 +1734,7 @@ mod tests {
         let expression_ref = NixFlakeref::from_path(env.dot_flox_path()).unwrap();
 
         let empty_lock_path = flox.temp_dir.join("empty-catalog.lock");
-        fs::write(
-            &empty_lock_path,
-            "{\"version\": 1, \"direct_catalog_inputs\": {}, \"catalogs\": {}}\n",
-        )
-        .unwrap();
+        write_lock(&BuildLock::default(), &empty_lock_path).unwrap();
 
         let err = FloxBuildMk::new(
             &flox,
@@ -4460,6 +4446,7 @@ mod nef_tests {
             "attr_path": ["hello"],
             "build_type": "nef",
             "catalog": "myorg",
+            "inputs": [],
             "locked_inputs_hash": "sha256-test-fixture",
             "source": {
                 "dir": ".",
@@ -4613,13 +4600,8 @@ mod nef_tests {
         );
     }
 
-    /// `eval()` and `build()` must resolve the same fixture to the exact same
-    /// derivation. This is the regression the eval goal exists to prevent: a
-    /// `flox develop` shell built from an eval that named a *different*
-    /// derivation than `build` would actually build is a develop shell for
-    /// the wrong environment. Mirrors
-    /// `nef_lock_matches_build_catalog_inputs_and_skips_build`'s parity
-    /// check, but on `drvPath` rather than `direct_catalog_inputs`.
+    /// Eval and build must resolve the same derivation so develop enters the
+    /// environment that build produces.
     #[test]
     fn eval_and_build_resolve_the_same_derivation() {
         let pname = "foo".to_string();
@@ -4686,11 +4668,7 @@ mod nef_tests {
             "#})]);
 
         let empty_lock_path = flox.temp_dir.join("empty-catalog.lock");
-        fs::write(
-            &empty_lock_path,
-            "{\"version\": 1, \"direct_catalog_inputs\": {}, \"catalogs\": {}}\n",
-        )
-        .unwrap();
+        write_lock(&BuildLock::default(), &empty_lock_path).unwrap();
 
         let err = FloxBuildMk::new(
             &flox,
