@@ -72,12 +72,19 @@ async fn confirm_lineage_change(change: &SourceLineageChange) -> Result<bool, Pu
     message::warning(formatdoc! {
         "Package source repository or ref has changed.
         Registered source: {registered}
-        Requested source: {requested}",
+        Requested source: {requested}
+
+        Changing the repository can affect which build other packages lock as an input.
+        Where automated builds run, future builds use the newly registered source.
+        Previously published builds remain stored; existing locks are unchanged.
+
+        Continue only if the requested repository and ref are the intended source for
+        this package going forward.",
         registered = change.registered,
         requested = change.requested,
     });
     let confirmed = Dialog {
-        message: "Replace the registered source and publish?",
+        message: "Change the registered source and publish?",
         help_message: None,
         typed: Confirm {
             default: Some(false),

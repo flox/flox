@@ -53,7 +53,10 @@ pub type ApiErrorResponseValue = ResponseValue<ApiErrorResponse>;
 /// The sources as reported by the server in a publish refusal.
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
 #[error(
-    "Package source repository or ref has changed.\nRegistered source: {registered}\nRequested source: {requested}\nTo replace the registered source, retry your publish command with '--allow-lineage-change' added."
+    "Package source repository or ref has changed.\n\
+     Registered source: {registered}\n\
+     Requested source: {requested}\n\
+     To replace the registered source, retry your publish command with '--allow-lineage-change' added."
 )]
 pub struct SourceLineageChange {
     pub registered: String,

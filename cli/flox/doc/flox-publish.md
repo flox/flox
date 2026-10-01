@@ -131,13 +131,26 @@ Note that this is a paid feature available with Flox for Teams.
     'flox config'.
 
 `--allow-lineage-change`
-:   Allow replacing the package's registered source repository or ref.
+:   Explicitly authorize replacing the package's registered source repository
+    or ref. Use it only when that replacement is intentional.
     Without this option, a refused source change requires interactive
-    confirmation showing the registered and requested sources.
-    Use this option to confirm source changes in non-interactive environments.
-    This option also disables the existing-build deduplication shortcut.
-    An interactive ref-only change at an already-published commit can return
-    "already published" without reaching the confirmation prompt.
+    confirmation showing the registered and requested sources. Confirmation
+    defaults to no. In a non-interactive environment, a refused source change
+    fails without prompting. For an intentional replacement, repeat the
+    original command with `--allow-lineage-change` added. Leave this option
+    unset for routine CI publishing.
+
+    This option bypasses the check for an already-published build, even when
+    the registered source has not changed. Publishing can therefore repeat
+    build and upload preparation.
+
+    Without this option, changing only the ref at an already-published commit
+    with the same build inputs can report "already published" without prompting
+    or updating the registered ref. Moving back to a previously published
+    repository and revision can also report "already published" without
+    prompting or updating the registration. Both cases affect interactive and
+    non-interactive publishing. Use `--allow-lineage-change` only when the
+    replacement is intentional.
 
 `--stability <stability>`
 :   Perform a Nix expression build using a base package set of the given
