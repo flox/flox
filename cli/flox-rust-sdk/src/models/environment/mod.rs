@@ -66,6 +66,7 @@ pub use core_environment::{
 
 pub mod fetcher;
 pub mod floxmeta_branch;
+mod followed_includes;
 pub mod generations;
 mod install;
 pub mod managed_environment;

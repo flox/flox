@@ -15,34 +15,22 @@
 
 use std::ffi::OsStr;
 use std::fs::{self};
-use std::iter;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 
 use flox_core::activate::mode::ActivateMode;
 use flox_core::data::environment_ref::EnvironmentName;
-use flox_core::{blake3_hex, write_atomically};
 use flox_manifest::interfaces::{AsWritableManifest, WriteManifest};
-use flox_manifest::lockfile::{LOCKFILE_FILENAME, LockedInclude, Lockfile};
+use flox_manifest::lockfile::{LOCKFILE_FILENAME, Lockfile};
 use flox_manifest::parsed::common::KnownSchemaVersion;
-use flox_manifest::parsed::latest::AutoUpgrade;
 use flox_manifest::raw::{CatalogPackage, DEFAULT_SYSTEMS_STR, PackageToInstall};
 use flox_manifest::{MANIFEST_FILENAME, Manifest, Migrated, Validated, Writable};
 use indoc::formatdoc;
 use itertools::Itertools;
-use serde::{Deserialize, Serialize};
 use tracing::debug;
 
-use super::core_environment::{
-    CoreEnvironment,
-    CoreEnvironmentError,
-    FollowMode,
-    FollowedIncludes,
-    NotAppliedIncludes,
-    UnreadableInclude,
-    UpgradeResult,
-};
+use super::core_environment::{CoreEnvironment, FollowMode, FollowedIncludes, UpgradeResult};
 use super::fetcher::{FetchedIncludes, IncludeFetcher};
+use super::followed_includes::{self, FollowedLockfiles, Following};
 use super::uninstall::UninstallSpec;
 use super::{
     CACHE_DIR_NAME,
@@ -68,95 +56,9 @@ use crate::data::{CanonicalPath, System};
 use crate::flox::Flox;
 use crate::models::env_registry::{deregister, ensure_registered};
 use crate::models::environment::{ENV_DIR_NAME, create_dot_flox_gitignore};
-use crate::providers::buildenv::{BuildEnvError, BuildEnvOutputs};
+use crate::providers::buildenv::BuildEnvOutputs;
 use crate::providers::lock_manifest::LockResult;
 use crate::providers::manifest_init::ManifestInitializer;
-
-/// The start of the names of the files in `.flox/cache` that keep a copy of the
-/// lockfile with the latest changes to followed included environments, one per
-/// system, since whether the copy builds depends on the system
-const FOLLOWED_LOCKFILE_PREFIX: &str = "followed-includes.";
-
-/// A copy of an environment's lockfile with the latest changes to the included
-/// environments it follows.
-///
-/// It's kept in the gitignored `.flox/cache`, so following included
-/// environments never changes the environment's own lockfile.
-/// That only changes with explicit commands, such as 'flox include upgrade'.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-struct FollowedLockfile {
-    /// Hash of the lockfile that this is a copy of
-    base: String,
-    lockfile: Lockfile,
-    build: FollowedBuild,
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
-enum FollowedBuild {
-    Pending,
-    Succeeded,
-    /// Building failed with this error, and would fail the same way again,
-    /// so the copy isn't used until the included environments change again
-    Failed(String),
-}
-
-impl FollowedBuild {
-    fn failed(&self) -> bool {
-        matches!(self, FollowedBuild::Failed(_))
-    }
-}
-
-/// The lockfile that following included environments results in
-#[derive(Clone, Debug)]
-struct Following {
-    lock_result: LockResult,
-    followed: FollowedIncludes,
-    /// The copy of the lockfile in use, if any
-    copy: Option<FollowedLockfile>,
-}
-
-/// The included environments locked in `lockfile`, if it has any
-fn locked_includes(lockfile: &Lockfile) -> Option<&Vec<LockedInclude>> {
-    lockfile.compose.as_ref().map(|compose| &compose.include)
-}
-
-/// Names of the included environments that `copy` has different versions of
-/// than `lockfile`
-fn changed_include_names(lockfile: &Lockfile, copy: &Lockfile) -> Vec<String> {
-    let locked = locked_includes(lockfile)
-        .map(Vec::as_slice)
-        .unwrap_or_default();
-    locked_includes(copy)
-        .into_iter()
-        .flatten()
-        .filter(|include| !locked.contains(include))
-        .map(|include| include.name.clone())
-        .collect()
-}
-
-/// Whether building would fail the same way again, unlike a failure to
-/// download a package, for example
-fn fails_every_time(err: &CoreEnvironmentError) -> bool {
-    matches!(
-        err,
-        CoreEnvironmentError::Manifest(_)
-            | CoreEnvironmentError::BuildEnv(
-                BuildEnvError::Build(_)
-                    | BuildEnvError::Manifest(_)
-                    | BuildEnvError::VarsCycle { .. }
-                    | BuildEnvError::LockfileIncompatible { .. }
-                    | BuildEnvError::LockfileMissingCurrentSystem { .. }
-            )
-    )
-}
-
-/// An error and its sources, on one line
-fn error_chain(err: &dyn std::error::Error) -> String {
-    iter::successors(Some(err), |err| err.source())
-        .map(ToString::to_string)
-        .join(": ")
-}
 
 /// Struct representing a local environment
 ///
@@ -286,15 +188,15 @@ impl PathEnvironment {
         self.as_core_environment()
     }
 
+    /// The copies of the lockfile with the latest changes to followed
+    /// included environments
+    fn followed_lockfiles(&self) -> FollowedLockfiles {
+        FollowedLockfiles::in_dot_flox(&self.path)
+    }
+
     /// Lock the environment, and use a copy of its lockfile with the latest
-    /// changes to the included environments it follows if any changed.
-    ///
-    /// The `auto-upgrade` field of each include decides whether it's
-    /// followed, see [AutoUpgrade].
-    /// Only changes that the included environments have locked are used.
-    /// Changes that can't be read or locked keep the versions in use before,
-    /// and changes that don't build together with this environment fall back
-    /// to the environment's lockfile, as [FollowedIncludes] reports.
+    /// changes to the included environments it follows if any changed,
+    /// see [followed_includes::follow_includes].
     fn follow_includes(
         &mut self,
         flox: &Flox,
@@ -302,162 +204,14 @@ impl PathEnvironment {
     ) -> Result<Following, EnvironmentError> {
         let mut env_view = self.as_core_environment_mut()?;
         let lock_result = env_view.ensure_locked(flox)?;
-        let committed = match &lock_result {
-            LockResult::Changed(lockfile) | LockResult::Unchanged(lockfile) => lockfile,
-        };
-        let locked_without_copy = |followed| Following {
-            lock_result: lock_result.clone(),
-            followed,
-            copy: None,
-        };
-        let may_auto_upgrade = locked_includes(committed).is_some_and(|includes| {
-            includes
-                .iter()
-                .any(|locked| locked.descriptor.auto_upgrade() != AutoUpgrade::Never)
-        });
-        if !may_auto_upgrade {
-            self.remove_followed_lockfile(&flox.system);
-            return Ok(locked_without_copy(FollowedIncludes::default()));
-        }
-
-        let base = blake3_hex(&serde_json::to_vec(committed).expect("lockfile is valid json"));
-        let cached = self
-            .read_followed_lockfile(&flox.system)
-            .filter(|cached| cached.base == base);
-        // Changes are checked against the versions in use
-        let in_use = cached.as_ref().filter(|cached| !cached.build.failed());
-        let check = env_view
-            .check_auto_upgraded_includes(flox, in_use.map_or(committed, |copy| &copy.lockfile));
-        let mut followed = FollowedIncludes {
-            unreadable: check
-                .unreadable
-                .into_iter()
-                .map(|(name, err)| UnreadableInclude {
-                    name,
-                    reason: Arc::new(err),
-                })
-                .collect(),
-            ..Default::default()
-        };
-
-        let mut is_new = false;
-        let copy = if check.changed.is_empty() {
-            in_use.cloned()
-        } else if let Some(cached) = cached
-            .as_ref()
-            .filter(|cached| locked_includes(&cached.lockfile) == Some(&check.includes))
-        {
-            Some(cached.clone())
-        } else {
-            let seed = in_use.map_or(committed, |copy| &copy.lockfile);
-            match env_view.lock_with_latest_includes(flox, seed, check.changed.clone()) {
-                Ok(lockfile) => {
-                    is_new = true;
-                    Some(FollowedLockfile {
-                        base,
-                        lockfile,
-                        build: FollowedBuild::Pending,
-                    })
-                },
-                Err(err) => {
-                    followed.not_locked = Some(NotAppliedIncludes {
-                        names: check.changed,
-                        reason: Arc::new(err),
-                    });
-                    in_use.cloned()
-                },
-            }
-        };
-
-        let Some(mut copy) =
-            copy.filter(|copy| locked_includes(&copy.lockfile) != locked_includes(committed))
-        else {
-            self.remove_followed_lockfile(&flox.system);
-            return Ok(locked_without_copy(followed));
-        };
-        if is_new {
-            self.write_followed_lockfile(&flox.system, &copy);
-        }
-        let unsaved = changed_include_names(committed, &copy.lockfile);
-
-        if mode == FollowMode::LockAndBuild
-            && copy.build == FollowedBuild::Pending
-            && let Err(err) = self.build_followed_lockfile(flox, &mut copy)
-        {
-            followed.not_built = Some(NotAppliedIncludes {
-                names: unsaved,
-                reason: Arc::new(err),
-            });
-            return Ok(locked_without_copy(followed));
-        }
-        if let FollowedBuild::Failed(message) = &copy.build {
-            followed.not_built = Some(NotAppliedIncludes {
-                names: unsaved,
-                reason: Arc::new(CoreEnvironmentError::FollowedBuildFailed(message.clone()).into()),
-            });
-            return Ok(locked_without_copy(followed));
-        }
-
-        followed.unsaved = unsaved;
-        let lock_result = if is_new {
-            LockResult::Changed(copy.lockfile.clone())
-        } else {
-            LockResult::Unchanged(copy.lockfile.clone())
-        };
-        Ok(Following {
+        followed_includes::follow_includes(
+            &mut env_view,
             lock_result,
-            followed,
-            copy: Some(copy),
-        })
-    }
-
-    /// Whether the included environment named `name` in the lockfile is
-    /// followed, so its locked changes are used without 'flox include upgrade'.
-    ///
-    /// An include whose environment can't be opened counts as not followed.
-    fn follows_include_named(&self, flox: &Flox, name: &str) -> Result<bool, EnvironmentError> {
-        let Some(lockfile) = self.existing_lockfile(flox)? else {
-            return Ok(false);
-        };
-        let Some(locked) = locked_includes(&lockfile)
-            .into_iter()
-            .flatten()
-            .find(|locked| locked.name == name)
-        else {
-            return Ok(false);
-        };
-        Ok(self
-            .include_fetcher()?
-            .is_auto_upgraded(&locked.descriptor)
-            .unwrap_or_else(|err| {
-                debug!(include = name, %err, "could not tell whether the include is followed");
-                false
-            }))
-    }
-
-    /// Build a copy of the lockfile with the latest changes to included path
-    /// environments into the rendered environment links,
-    /// and record whether that worked.
-    fn build_followed_lockfile(
-        &mut self,
-        flox: &Flox,
-        copy: &mut FollowedLockfile,
-    ) -> Result<BuildEnvOutputs, EnvironmentError> {
-        let mut env_view = self.as_core_environment_mut()?;
-        let out_link_prefix = self.rendered_env_links.out_link_prefix();
-        let result = env_view.build_lockfile(flox, &copy.lockfile, Some(out_link_prefix));
-        let build = match &result {
-            Ok(_) => FollowedBuild::Succeeded,
-            Err(err) if fails_every_time(err) => FollowedBuild::Failed(error_chain(err)),
-            Err(_) => FollowedBuild::Pending,
-        };
-        if copy.build != build {
-            copy.build = build;
-            self.write_followed_lockfile(&flox.system, copy);
-        }
-        let outputs = result?;
-        self.rendered_env_links.replace_legacy_links();
-        Ok(outputs)
+            &self.followed_lockfiles(),
+            &self.rendered_env_links,
+            flox,
+            mode,
+        )
     }
 
     /// Names of the included environments that the copy of the lockfile in
@@ -469,12 +223,11 @@ impl PathEnvironment {
         let Some(committed) = self.existing_lockfile(flox)? else {
             return Ok(Vec::new());
         };
-        let base = blake3_hex(&serde_json::to_vec(&committed).expect("lockfile is valid json"));
-        Ok(self
-            .read_followed_lockfile(&flox.system)
-            .filter(|copy| copy.base == base && !copy.build.failed())
-            .map(|copy| changed_include_names(&committed, &copy.lockfile))
-            .unwrap_or_default())
+        Ok(followed_includes::unsaved_followed_includes(
+            &committed,
+            &self.followed_lockfiles(),
+            &flox.system,
+        ))
     }
 
     /// Build the latest changes to followed included environments into the
@@ -501,58 +254,6 @@ impl PathEnvironment {
         let store_paths = env_view.build(flox, Some(out_link_prefix))?;
         self.rendered_env_links.replace_legacy_links();
         Ok(store_paths)
-    }
-
-    fn followed_lockfile_path(&self, system: &System) -> PathBuf {
-        self.path
-            .join(CACHE_DIR_NAME)
-            .join(format!("{FOLLOWED_LOCKFILE_PREFIX}{system}.json"))
-    }
-
-    fn read_followed_lockfile(&self, system: &System) -> Option<FollowedLockfile> {
-        let contents = fs::read_to_string(self.followed_lockfile_path(system)).ok()?;
-        serde_json::from_str(&contents)
-            .inspect_err(|err| debug!(%err, "ignoring unreadable copy of the lockfile"))
-            .ok()
-    }
-
-    /// Failing to keep the copy only means that it's made again next time.
-    fn write_followed_lockfile(&self, system: &System, copy: &FollowedLockfile) {
-        let contents = serde_json::to_string(copy).expect("lockfile is valid json");
-        // Creates the cache directory
-        if let Err(err) = self.cache_path() {
-            debug!(%err, "could not keep copy of the lockfile");
-            return;
-        }
-        if let Err(err) = write_atomically(self.followed_lockfile_path(system), contents) {
-            debug!(%err, "could not keep copy of the lockfile");
-        }
-    }
-
-    fn remove_followed_lockfile(&self, system: &System) {
-        let path = self.followed_lockfile_path(system);
-        if path.exists()
-            && let Err(err) = fs::remove_file(&path)
-        {
-            debug!(%err, "could not remove copy of the lockfile");
-        }
-    }
-
-    /// Remove the copies of the lockfile for every system
-    fn remove_followed_lockfiles(&self) {
-        let Ok(entries) = fs::read_dir(self.path.join(CACHE_DIR_NAME)) else {
-            return;
-        };
-        for entry in entries.flatten() {
-            if entry
-                .file_name()
-                .to_string_lossy()
-                .starts_with(FOLLOWED_LOCKFILE_PREFIX)
-                && let Err(err) = fs::remove_file(entry.path())
-            {
-                debug!(%err, "could not remove copy of the lockfile");
-            }
-        }
     }
 
     pub fn rename(&mut self, new_name: EnvironmentName) -> Result<(), EnvironmentError> {
@@ -604,59 +305,13 @@ impl Environment for PathEnvironment {
         Ok((lock_result, followed))
     }
 
-    /// Unlike following, this doesn't lock the environment, or use or keep a
-    /// copy of the lockfile, and it always builds the latest changes,
-    /// without replacing the rendered environment links,
-    /// so it reports the same wherever it runs.
     fn check_followed_includes(
         &mut self,
         flox: &Flox,
     ) -> Result<Option<FollowedIncludes>, EnvironmentError> {
         let mut env_view = self.as_core_environment_mut()?;
-        let Some(committed) = env_view.lockfile_if_up_to_date()? else {
-            return Ok(None);
-        };
-        let check = env_view.check_auto_upgraded_includes(flox, &committed);
-        let mut followed = FollowedIncludes {
-            unreadable: check
-                .unreadable
-                .into_iter()
-                .map(|(name, err)| UnreadableInclude {
-                    name,
-                    reason: Arc::new(err),
-                })
-                .collect(),
-            ..Default::default()
-        };
-        if check.changed.is_empty() {
-            return Ok(Some(followed));
-        }
-
-        let lockfile =
-            match env_view.lock_with_latest_includes(flox, &committed, check.changed.clone()) {
-                Ok(lockfile) => lockfile,
-                Err(err) => {
-                    followed.not_locked = Some(NotAppliedIncludes {
-                        names: check.changed,
-                        reason: Arc::new(err),
-                    });
-                    return Ok(Some(followed));
-                },
-            };
-        let unsaved = changed_include_names(&committed, &lockfile);
-        if unsaved.is_empty() {
-            return Ok(Some(followed));
-        }
-        match env_view.build_lockfile(flox, &lockfile, None) {
-            Ok(_) => followed.unsaved = unsaved,
-            Err(err) => {
-                followed.not_built = Some(NotAppliedIncludes {
-                    names: unsaved,
-                    reason: Arc::new(err.into()),
-                })
-            },
-        }
-        Ok(Some(followed))
+        let committed = env_view.lockfile_if_up_to_date()?;
+        followed_includes::check_followed_includes(&mut env_view, committed, flox)
     }
 
     /// Returns the lockfile if it already exists.
@@ -720,7 +375,11 @@ impl Environment for PathEnvironment {
                     package, include, ..
                 },
             )) => {
-                let followed = self.follows_include_named(flox, &include)?;
+                let followed = followed_includes::follows_include_named(
+                    self.existing_lockfile(flox)?.as_ref(),
+                    &self.include_fetcher()?,
+                    &include,
+                );
                 return Err(EnvironmentError::InstallOrUninstall(
                     InstallOrUninstallError::PackageOnlyIncluded {
                         package,
@@ -790,19 +449,12 @@ impl Environment for PathEnvironment {
         );
         let mut env_view = self.as_core_environment_mut()?;
         let committed: Lockfile = env_view.ensure_locked(flox)?.into();
-        // Save the packages of the copy in use rather than locking them again,
-        // so that the lockfile gets what was used,
-        // unless that would save changes to includes that weren't named.
-        let base = blake3_hex(&serde_json::to_vec(&committed).expect("lockfile is valid json"));
-        let copy = self
-            .read_followed_lockfile(&flox.system)
-            .filter(|copy| copy.base == base && !copy.build.failed())
-            .filter(|copy| {
-                to_upgrade.is_empty()
-                    || changed_include_names(&committed, &copy.lockfile)
-                        .iter()
-                        .all(|name| to_upgrade.contains(name))
-            });
+        let copy = followed_includes::copy_to_save(
+            &committed,
+            &self.followed_lockfiles(),
+            &flox.system,
+            &to_upgrade,
+        );
         let out_link_prefix = self.rendered_env_links.out_link_prefix();
         let result = env_view.include_upgrade(
             flox,
@@ -813,9 +465,10 @@ impl Environment for PathEnvironment {
         if result.store_path.is_some() {
             self.rendered_env_links.replace_legacy_links();
         }
-        // Copies are of the lockfile before the upgrade, so any changes that
-        // are still unsaved are copied again the next time they're used.
-        self.remove_followed_lockfiles();
+        // Copies are of the lockfile before the upgrade, so the latest changes
+        // to included environments that weren't saved are copied again the
+        // next time they're used.
+        self.followed_lockfiles().remove_all();
         if result.store_path.is_some() {
             self.link_followed_changes(flox);
         }
@@ -863,7 +516,14 @@ impl Environment for PathEnvironment {
     /// follows if it builds with them, see [Self::follow_includes].
     fn build(&mut self, flox: &Flox) -> Result<BuildEnvOutputs, EnvironmentError> {
         if let Some(mut copy) = self.follow_includes(flox, FollowMode::Lock)?.copy {
-            match self.build_followed_lockfile(flox, &mut copy) {
+            let mut env_view = self.as_core_environment_mut()?;
+            match followed_includes::build_followed_lockfile(
+                &mut env_view,
+                &self.followed_lockfiles(),
+                &self.rendered_env_links,
+                flox,
+                &mut copy,
+            ) {
                 Ok(store_paths) => return Ok(store_paths),
                 Err(err) => debug!(
                     %err,
@@ -1265,6 +925,7 @@ pub mod tests {
     use super::*;
     use crate::flox::test_helpers::flox_instance;
     use crate::models::env_registry::{env_registry_path, read_environment_registry};
+    use crate::models::environment::core_environment::NotAppliedIncludes;
     use crate::models::environment::path_environment::test_helpers::{
         new_path_environment,
         new_path_environment_from_env_files,
@@ -1816,12 +1477,19 @@ pub mod tests {
         // Locking alone doesn't build the copy
         let copy_build = |composer: &PathEnvironment| {
             composer
-                .read_followed_lockfile(&flox.system)
+                .followed_lockfiles()
+                .read(&flox.system)
                 .map(|copy| copy.build)
         };
-        assert_eq!(copy_build(&composer), Some(FollowedBuild::Pending));
+        assert_eq!(
+            copy_build(&composer),
+            Some(followed_includes::FollowedBuild::Pending)
+        );
         follow(&mut composer, &flox, FollowMode::LockAndBuild);
-        assert_eq!(copy_build(&composer), Some(FollowedBuild::Succeeded));
+        assert_eq!(
+            copy_build(&composer),
+            Some(followed_includes::FollowedBuild::Succeeded)
+        );
 
         // The copy is reused, and the changes are still unsaved
         let (lock_result, followed) = composer
@@ -2141,9 +1809,10 @@ pub mod tests {
             let (lockfile, followed) = follow(&mut composer, &flox, mode);
             assert!(matches!(
                 composer
-                    .read_followed_lockfile(&flox.system)
+                    .followed_lockfiles()
+                    .read(&flox.system)
                     .map(|copy| copy.build),
-                Some(FollowedBuild::Failed(_))
+                Some(followed_includes::FollowedBuild::Failed(_))
             ));
             assert_eq!(
                 followed_names(&followed),
@@ -2438,7 +2107,7 @@ pub mod tests {
         let (followed_lockfile, _) = follow(&mut composer, &flox, FollowMode::Lock);
 
         composer.include_upgrade(&flox, vec![]).unwrap();
-        assert!(!composer.followed_lockfile_path(&flox.system).exists());
+        assert!(composer.followed_lockfiles().read(&flox.system).is_none());
 
         // The lockfile gets exactly what was in use, not a new lock of it
         let saved = composer.existing_lockfile(&flox).unwrap().unwrap();
