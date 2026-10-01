@@ -1,8 +1,9 @@
 use anyhow::{Result, bail};
 use bpaf::Bpaf;
 use flox_events::{CliEnvironmentPayload, EventKind, EventsHub};
+use flox_manifest::lockfile::Lockfile;
 use flox_rust_sdk::flox::Flox;
-use flox_rust_sdk::models::environment::Environment;
+use flox_rust_sdk::models::environment::{Environment, UpgradeResult};
 use indoc::{formatdoc, indoc};
 use tracing::{debug, info_span, instrument};
 
@@ -121,6 +122,9 @@ impl Upgrade {
             let mut message = format!("Upgraded {description} with latest changes to:");
             for upgraded in &include_diff {
                 message.push_str(&format!("\n- '{upgraded}'"));
+                if let Some(generations) = format_generation_change(&result, upgraded) {
+                    message.push_str(&format!(" ({generations})"));
+                }
             }
             message::updated(message);
             print_overridden_manifest_fields(&result.new_lockfile);
@@ -169,5 +173,24 @@ impl Upgrade {
             "The lockfile has the latest changes to the included environments that commands use.",
         );
         Ok(())
+    }
+}
+
+/// The FloxHub generations that an upgrade moved an included environment
+/// between, if it's included from FloxHub
+fn format_generation_change(result: &UpgradeResult, name: &str) -> Option<String> {
+    let generation = |lockfile: &Lockfile| {
+        lockfile
+            .compose
+            .as_ref()?
+            .include
+            .iter()
+            .find(|locked| locked.name == name)?
+            .generation
+    };
+    let new = generation(&result.new_lockfile)?;
+    match result.old_lockfile.as_ref().and_then(generation) {
+        Some(old) if old != new => Some(format!("generation {old} -> {new}")),
+        _ => Some(format!("generation {new}")),
     }
 }

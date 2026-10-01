@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::str::FromStr;
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use flox_core::data::environment_ref::RemoteEnvironmentRef;
@@ -36,8 +35,9 @@ pub struct FetchedIncludes(Arc<Mutex<FetchedIncludesInner>>);
 
 #[derive(Debug, Default)]
 struct FetchedIncludesInner {
-    /// The lockfiles of remote environments, by environment and generation
-    remote: HashMap<(RemoteEnvironmentRef, Option<usize>), Lockfile>,
+    /// The lockfiles of remote environments and the generations they're
+    /// from, by environment and requested generation
+    remote: HashMap<(RemoteEnvironmentRef, Option<usize>), (Lockfile, usize)>,
     /// Local environments, by `.flox` directory and how their own
     /// unreadable includes were handled
     local: HashMap<(PathBuf, UnreadableIncludes), LocalFetch>,
@@ -68,12 +68,16 @@ impl FetchedIncludes {
             .expect("fetched includes lock should not be poisoned")
     }
 
-    fn remote(&self, key: &(RemoteEnvironmentRef, Option<usize>)) -> Option<Lockfile> {
+    fn remote(&self, key: &(RemoteEnvironmentRef, Option<usize>)) -> Option<(Lockfile, usize)> {
         self.lock().remote.get(key).cloned()
     }
 
-    fn insert_remote(&self, key: (RemoteEnvironmentRef, Option<usize>), lockfile: Lockfile) {
-        self.lock().remote.insert(key, lockfile);
+    fn insert_remote(
+        &self,
+        key: (RemoteEnvironmentRef, Option<usize>),
+        fetched: (Lockfile, usize),
+    ) {
+        self.lock().remote.insert(key, fetched);
     }
 
     /// A local environment fetched before, unless one of `composers` is in
@@ -265,10 +269,10 @@ impl IncludeFetcher {
         include_environment: &IncludeDescriptor,
         unreadable_includes: UnreadableIncludes,
     ) -> Result<FetchedInclude, EnvironmentError> {
-        let (manifest, lockfile, name) = match include_environment {
-            IncludeDescriptor::Local { dir, name, .. } => {
-                self.fetch_local(flox, dir, name, unreadable_includes)
-            },
+        let (manifest, lockfile, name, generation) = match include_environment {
+            IncludeDescriptor::Local { dir, name, .. } => self
+                .fetch_local(flox, dir, name, unreadable_includes)
+                .map(|(manifest, lockfile, name)| (manifest, lockfile, name, None)),
             IncludeDescriptor::Remote {
                 remote,
                 name,
@@ -278,7 +282,9 @@ impl IncludeFetcher {
                 .fetch_remote(flox, remote, name, *generation)
                 // One read for both, so the manifest matches the packages
                 // even if a remote environment's live generation moves.
-                .map(|(lockfile, name)| (lockfile.manifest.clone(), lockfile, name)),
+                .map(|(lockfile, generation, name)| {
+                    (lockfile.manifest.clone(), lockfile, name, Some(generation))
+                }),
         }?;
 
         Ok(FetchedInclude {
@@ -286,6 +292,7 @@ impl IncludeFetcher {
                 manifest,
                 name,
                 descriptor: include_environment.clone(),
+                generation,
             },
             lockfile,
         })
@@ -398,27 +405,34 @@ impl IncludeFetcher {
         remote: &RemoteEnvironmentRef,
         name: &Option<String>,
         generation: Option<usize>,
-    ) -> Result<(Lockfile, String), EnvironmentError> {
+    ) -> Result<(Lockfile, usize, String), EnvironmentError> {
         let name = name.clone().unwrap_or_else(|| remote.name().to_string());
         let key = (remote.clone(), generation);
-        if let Some(lockfile) = self.fetched.remote(&key) {
-            return Ok((lockfile, name));
+        if let Some((lockfile, generation)) = self.fetched.remote(&key) {
+            return Ok((lockfile, generation, name));
         }
 
         let pointer =
             ManagedPointer::new(remote.owner().clone(), remote.name().clone(), &flox.floxhub);
         let generations = fetch_remote_generations(flox, &pointer)
             .map_err(ManagedEnvironmentError::FloxmetaBranch)?;
-        let lockfile = match generation {
-            Some(generation) => generations.lockfile(generation),
-            None => generations.current_gen_lockfile().and_then(|contents| {
-                Lockfile::from_str(&contents).map_err(GenerationsError::Lockfile)
+        let fetched = match generation {
+            Some(generation) => generations
+                .lockfile(generation)
+                .map(|lockfile| (lockfile, generation)),
+            None => generations.metadata().and_then(|metadata| {
+                let current_gen = *metadata
+                    .current_gen()
+                    .ok_or(GenerationsError::NoGenerations)?;
+                let lockfile = generations.lockfile_unchecked(current_gen)?;
+                Ok((lockfile, current_gen))
             }),
         }
         .map_err(ManagedEnvironmentError::Generations)?;
 
-        self.fetched.insert_remote(key, lockfile.clone());
-        Ok((lockfile, name))
+        self.fetched.insert_remote(key, fetched.clone());
+        let (lockfile, generation) = fetched;
+        Ok((lockfile, generation, name))
     }
 
     /// For directories that aren't absolute, join them to the base_directory
@@ -498,6 +512,7 @@ mod test {
                 manifest,
                 name: "environment".to_string(),
                 descriptor: include_descriptor,
+                generation: None,
             },
             lockfile,
         })
@@ -530,6 +545,7 @@ mod test {
                 manifest,
                 name: "environment".to_string(),
                 descriptor: include_descriptor,
+                generation: None,
             },
             lockfile,
         })
@@ -763,6 +779,11 @@ mod test {
             .unwrap();
         remote_env.push(&flox, true).unwrap();
         let lockfile = remote_env.existing_lockfile(&flox).unwrap().unwrap();
+        let current_generation = *remote_env
+            .generations_metadata()
+            .unwrap()
+            .current_gen()
+            .unwrap();
 
         // Fetch and lock the remote environment.
         let include_fetcher = IncludeFetcher::new(Some(tempdir.path().to_path_buf()));
@@ -780,6 +801,7 @@ mod test {
                     manifest,
                     name: "name".to_string(),
                     descriptor: include_descriptor,
+                    generation: Some(current_generation),
                 },
                 lockfile,
             },
@@ -871,6 +893,7 @@ mod test {
                 manifest: initial_generation_manifest.as_typed_only(),
                 name: "name".to_string(),
                 descriptor: include_descriptor.clone(),
+                generation: Some(*initial_generation),
             },
             lockfile: initial_generation_lockfile,
         });
@@ -935,6 +958,13 @@ mod test {
                 manifest: remote_env.manifest(&flox).unwrap().as_typed_only(),
                 name: "name".to_string(),
                 descriptor: auto_upgraded,
+                generation: Some(
+                    *remote_env
+                        .generations_metadata()
+                        .unwrap()
+                        .current_gen()
+                        .unwrap()
+                ),
             })
         );
     }

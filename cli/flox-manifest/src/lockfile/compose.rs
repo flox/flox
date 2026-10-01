@@ -89,14 +89,13 @@ pub struct LockedInclude {
     )]
     pub name: String,
     pub descriptor: IncludeDescriptor,
-    // TODO: Record generation if/when:
-    // 1. We have a need for it in presentation, e.g.
-    //   - https://github.com/flox/flox/issues/2948
-    // 2. Generations work has settled:
-    //   - https://github.com/flox/product/pull/881
-    //   - https://github.com/flox/product/pull/891
-    // 3. We've exposed it from `RemoteEnvironment`/`ManagedEnvironment`
-    // pub remote: Option<Generation>,
+    /// The generation of an environment included from FloxHub that was
+    /// fetched, so that users can see which one is in use.
+    ///
+    /// Older versions of Flox didn't record it, and it's not set for other
+    /// included environments.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub generation: Option<usize>,
 }
 
 #[cfg(test)]
@@ -123,6 +122,7 @@ mod tests {
                 name: None,
                 auto_upgrade: None,
             },
+            generation: None,
         }
     }
 

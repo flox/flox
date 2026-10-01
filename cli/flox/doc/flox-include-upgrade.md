@@ -22,6 +22,8 @@ flox [<general-options>] include upgrade
 
 Get the latest contents of included environments and merge them with the
 composing environment.
+The generations that environments included with `remote` changed between are
+listed.
 
 If the names of specific included environments are provided, only changes for
 those environments will be fetched. If no names are provided, changes will be

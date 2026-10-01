@@ -767,7 +767,8 @@ The fields in these include descriptors are as follows:
   Requires `schema-version = "1.18.0"`.
 
 The lockfile of the composing environment stores a copy of each included
-environment.
+environment, and for an environment included with `remote`, the generation it
+was fetched at, which `flox list --config` shows.
 
 A path environment follows the environments it includes with
 `auto-upgrade` enabled:
@@ -775,6 +776,8 @@ commands that use it, such as `flox activate`, `flox list` and `flox build`,
 use the latest changes that those environments have locked,
 including changes to the environments that they include in turn.
 These changes are kept in a copy of the lockfile in `.flox/cache`.
+Every new generation of an environment included with `remote` and
+`auto-upgrade = true` is followed, including one that only upgrades packages.
 The lockfile itself is only updated when you run
 [`flox include upgrade`](./flox-include-upgrade.md),
 so that you decide when the changes are committed,

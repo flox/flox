@@ -4216,6 +4216,7 @@ mod tests {
                         name: None,
                         auto_upgrade: None,
                     },
+                    generation: None,
                 })
                 .collect(),
             warnings: vec![],

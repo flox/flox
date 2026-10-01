@@ -111,6 +111,15 @@
         "descriptor": {
           "$ref": "#/$defs/IncludeDescriptor"
         },
+        "generation": {
+          "description": "The generation of an environment included from FloxHub that was\nfetched, so that users can see which one is in use.\n\nOlder versions of Flox didn't record it, and it's not set for other\nincluded environments.",
+          "format": "uint",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
         "manifest": {
           "$ref": "#/$defs/Manifest"
         },

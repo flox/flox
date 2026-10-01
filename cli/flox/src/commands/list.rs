@@ -185,9 +185,21 @@ impl List {
             "{}",
             Self::manifest_contents_to_print(lockfile, manifest_contents)?
         );
-        let is_composed = lockfile.compose.is_some();
-        if is_composed {
+        if let Some(compose) = &lockfile.compose {
             message::info("Displaying merged manifest.");
+            let floxhub_generations = compose
+                .include
+                .iter()
+                .filter_map(|locked| {
+                    let generation = locked.generation?;
+                    Some(format!("\n- '{}' at generation {generation}", locked.name))
+                })
+                .collect::<String>();
+            if !floxhub_generations.is_empty() {
+                message::info(format!(
+                    "Included FloxHub environments:{floxhub_generations}"
+                ));
+            }
             message::print_overridden_manifest_fields(lockfile);
         }
 

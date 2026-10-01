@@ -618,7 +618,14 @@ EOF
 '\$_FLOX_FLOXHUB_GIT_URL' overrides the git endpoint and is intended for testing only.
 
 ✔ Upgraded 'composer' with latest changes to:
-- 'remote'
+- 'remote' (generation 1 -> 2)
+EOF
+
+  run "$FLOX_BIN" list -c -d composer
+  assert_success
+  assert_output --partial - <<EOF
+ℹ Included FloxHub environments:
+- 'remote' at generation 2
 EOF
 }
 
