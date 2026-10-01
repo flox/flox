@@ -294,6 +294,43 @@ EXPIRED_FLOXHUB_TOKEN="eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3gu
   assert_output --partial "$(realpath "$PROJECT2_DIR")"
 }
 
+# bats test_tags=hook:auto-activate:bash
+@test "bash: hook auto-activation doesn't report changes to included environments" {
+  project_setup
+  project2_setup
+  INCLUDED_DIR="${BATS_TEST_TMPDIR?}/included-${BATS_TEST_NUMBER?}"
+  "$FLOX_BIN" init -d "$INCLUDED_DIR"
+  set_vars_manifest "$INCLUDED_DIR" TEST_INCLUDED v1
+  cat << EOF | "$FLOX_BIN" edit -d "$PROJECT2_DIR" -f -
+version = 1
+
+[vars]
+TEST_VAR2 = "auto2"
+
+[include]
+environments = [{ dir = "$INCLUDED_DIR" }]
+EOF
+  # Followed, but not in project2's lockfile yet
+  set_vars_manifest "$INCLUDED_DIR" TEST_INCLUDED v2
+  "$FLOX_BIN" activate allow -d "$PROJECT2_DIR"
+
+  run --separate-stderr bash -c "
+    export FLOX_SHELL=\$(which bash)
+    eval \"\$($FLOX_BIN activate -d $PROJECT_DIR)\"
+    cd $PROJECT2_DIR
+    _flox_hook
+    echo \"included:\$TEST_INCLUDED\"
+  "
+  assert_success
+  assert_output --partial "included:v2"
+  refute_regex "$stderr" "aren't in the lockfile yet"
+
+  # An activation the user runs reports them
+  run --separate-stderr "$FLOX_BIN" activate -d "$PROJECT2_DIR" -- true
+  assert_success
+  assert_regex "$stderr" "aren't in the lockfile yet"
+}
+
 # bats test_tags=hook:auto-activate:zsh
 @test "zsh: hook auto-activates a discovered environment on cd" {
   project_setup

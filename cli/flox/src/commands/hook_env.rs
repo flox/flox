@@ -978,6 +978,8 @@ async fn prompt_for_auto_activation(project_dirs: &[PathBuf]) -> Result<AutoActi
 /// runs `flox activate` with stdout captured — which selects in-place mode —
 /// so this reuses the full activation path (hooks, services, attach
 /// semantics) of `eval "$(flox activate)"`.
+/// `--from-prompt-hook` keeps it from reporting changes to included
+/// environments on every prompt.
 fn write_activate_command(shell: Shell, project_dir: &Path, writer: &mut impl Write) -> Result<()> {
     let flox_bin = std::env::current_exe().context("failed to determine flox executable path")?;
     let flox_bin = flox_bin.to_string_lossy().to_string();
@@ -988,19 +990,19 @@ fn write_activate_command(shell: Shell, project_dir: &Path, writer: &mut impl Wr
         Shell::Bash | Shell::Zsh => {
             writeln!(
                 writer,
-                r#"eval "$({escaped_bin} activate --dir {escaped_dir})";"#
+                r#"eval "$({escaped_bin} activate --from-prompt-hook --dir {escaped_dir})";"#
             )?;
         },
         Shell::Fish => {
             writeln!(
                 writer,
-                "{escaped_bin} activate --dir {escaped_dir} | source;"
+                "{escaped_bin} activate --from-prompt-hook --dir {escaped_dir} | source;"
             )?;
         },
         Shell::Tcsh => {
             writeln!(
                 writer,
-                r#"eval "`{escaped_bin} activate --dir {escaped_dir}`";"#
+                r#"eval "`{escaped_bin} activate --from-prompt-hook --dir {escaped_dir}`";"#
             )?;
         },
     }
@@ -1828,7 +1830,7 @@ mod tests {
         write_activate_command(Shell::Bash, Path::new("/home/user/my proj"), &mut buf).unwrap();
         let script = String::from_utf8(buf).unwrap();
         assert!(
-            script.contains("activate --dir '/home/user/my proj'"),
+            script.contains("activate --from-prompt-hook --dir '/home/user/my proj'"),
             "{script}"
         );
         assert!(script.starts_with(r#"eval "$("#), "{script}");

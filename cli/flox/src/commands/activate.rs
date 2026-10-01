@@ -178,6 +178,11 @@ pub struct ActivateOptions {
     #[bpaf(long, short)]
     pub generation: Option<GenerationId>,
 
+    /// Activate for the prompt hook's auto-activation,
+    /// which doesn't report changes to included environments
+    #[bpaf(long("from-prompt-hook"), hide)]
+    pub from_prompt_hook: bool,
+
     #[bpaf(external(command_select), optional)]
     pub command: Option<CommandSelect>,
 }
@@ -384,8 +389,8 @@ impl ActivateOptions {
         // Read before locking, which may re-lock and overwrite it.
         let old_lockfile = concrete_environment.existing_lockfile(&flox)?;
         // The services command already reported following for its
-        // activations.
-        let lock_result = if check_upgrades.is_some() {
+        // activations, and auto-activation on every prompt stays quiet.
+        let lock_result = if check_upgrades.is_some() && !self.from_prompt_hook {
             lockfile_reporting_followed_includes(
                 &mut concrete_environment,
                 &flox,
@@ -1347,6 +1352,7 @@ mod tests {
             add_sbin: false,
             mode: None,
             generation: None,
+            from_prompt_hook: false,
             command: None,
         }
     }
