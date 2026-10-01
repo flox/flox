@@ -1188,7 +1188,7 @@ fn parse_publishable_remote_url(raw: &str, remote_name: &str) -> Result<Url, Pub
 /// This entails checking that:
 /// - The repo has a remote configured.
 /// - The tracked source files are clean.
-/// - The current revision exists on the tracked remote branch.
+/// - The current revision is reachable from the freshly fetched tracked remote branch.
 #[instrument(skip_all, fields(progress = "Checking repository state"))]
 fn gather_build_repo_meta(
     git: &GitCommandProvider,
@@ -1263,18 +1263,23 @@ fn gather_build_repo_meta(
             },
         })?;
 
-    let rev_on_remote = match git.rev_exists_on_remote(&status.rev, &remote_info.name) {
+    let rev_on_remote = match git.rev_is_on_remote_branch(
+        &status.rev,
+        &remote_info.name,
+        &remote_info.reference,
+    ) {
         Ok(exists) => exists,
         Err(ref cmd_err) if cmd_err.is_access_denied() => {
             return Err(build_repo_err(&formatdoc! {"
-                Could not access remote '{remote_name}' while verifying the local revision: {cmd_err}
+                Could not access remote '{remote_name}' while verifying branch containment: {cmd_err}
                 Check your SSH agent (`ssh-add -l`) or credential configuration.",
                 remote_name = remote_info.name,
             }));
         },
         Err(cmd_err) => {
             return Err(build_repo_err(&formatdoc! {"
-                Failed to check whether local revision exists on remote '{remote_name}/{remote_branch}': {cmd_err}",
+                Could not verify that the local revision is on remote branch '{remote_name}/{remote_branch}': {cmd_err}
+                Fetch the branch and its full history, then retry publishing.",
                 remote_name = remote_info.name,
                 remote_branch = remote_info.short_branch(),
             }));
@@ -1282,8 +1287,8 @@ fn gather_build_repo_meta(
     };
     if !rev_on_remote {
         return Err(build_repo_err(&formatdoc! {"
-            Local revision is not present on remote '{remote_name}/{remote_branch}'.
-            Push your commits with 'git push'",
+            Local revision is not contained in remote branch '{remote_name}/{remote_branch}'.
+            Push this branch with 'git push' before publishing.",
             remote_name = remote_info.name,
             remote_branch = remote_info.short_branch(),
         }));
@@ -1505,6 +1510,7 @@ pub mod tests {
 
     // Matches SourceLineageChanged.details from floxhub#2456.
     const LINEAGE_CHANGE_DETAIL: &str = "test/hello is registered to github.com/org/original (ref main); this publish is from github.com/org/moved (ref release). Retry with allow_lineage_change=true to replace the registered source.";
+    const INPUT_LINEAGE_WARNING: &str = "dependency moved to a newer source lineage";
 
     async fn exercise_lineage_publish(
         status: u16,
@@ -3426,6 +3432,35 @@ pub mod tests {
         assert!(
             msg.contains("git push"),
             "Expected 'git push' suggestion, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn gather_repo_meta_refuses_a_revision_only_on_a_sibling_branch() {
+        let (git, _tempdir) = init_temp_repo(false);
+        let _remotes = create_remotes(&git, &["origin"]);
+        git.checkout("main", true).unwrap();
+        commit_file(&git, "base.txt");
+        let base = git.status().unwrap().rev;
+        git.push_ref("origin", "main", false).unwrap();
+        git.create_branch("sibling", &base).unwrap();
+        git.checkout("sibling", false).unwrap();
+        commit_file(&git, "sibling.txt");
+        git.push_ref("origin", "sibling", false).unwrap();
+        GitCommandProvider::run_command(git.new_command().args(["fetch", "origin", "main"]))
+            .unwrap();
+        GitCommandProvider::run_command(git.new_command().args([
+            "branch",
+            "--set-upstream-to=origin/main",
+            "sibling",
+        ]))
+        .unwrap();
+
+        let err = gather_build_repo_meta(&git).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("not contained in remote branch 'origin/main'"),
+            "{msg}"
         );
     }
 

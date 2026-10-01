@@ -337,6 +337,50 @@ pub struct GitCommandProvider {
 }
 
 impl GitCommandProvider {
+    /// Verify against a freshly fetched branch tip, including its full history.
+    /// A cached remote-tracking ref cannot establish what is currently published.
+    pub fn rev_is_on_remote_branch(
+        &self,
+        rev: &str,
+        remote_name: &str,
+        branch_ref: &str,
+    ) -> Result<bool, GitCommandError> {
+        if !branch_ref.starts_with("refs/heads/") {
+            return Err(GitCommandError::InvalidOutput(format!(
+                "'{branch_ref}' is not a remote branch ref"
+            )));
+        }
+
+        let shallow = Self::run_command(
+            self.new_command()
+                .args(["rev-parse", "--is-shallow-repository"]),
+        )?;
+        let mut fetch = self.new_command();
+        fetch.args(["fetch", "--no-tags"]);
+        if shallow.to_string_lossy().trim() == "true" {
+            fetch.arg("--unshallow");
+        }
+        fetch.args([remote_name, branch_ref]);
+        Self::run_command(&mut fetch)?;
+        let still_shallow = Self::run_command(
+            self.new_command()
+                .args(["rev-parse", "--is-shallow-repository"]),
+        )?;
+        if still_shallow.to_string_lossy().trim() == "true" {
+            return Err(GitCommandError::InvalidOutput(
+                "remote history is still shallow after fetching the branch".to_owned(),
+            ));
+        }
+
+        let mut ancestor = self.new_command();
+        ancestor.args(["merge-base", "--is-ancestor", rev, "FETCH_HEAD"]);
+        match Self::run_command(&mut ancestor) {
+            Ok(_) => Ok(true),
+            Err(GitCommandError::BadExit(1, _, _)) => Ok(false),
+            Err(err) => Err(err),
+        }
+    }
+
     /// Create a new [Command] with the current [GitCommandOptions]
     /// and the current working directory set to the path of the repo.
     ///
@@ -2113,6 +2157,98 @@ pub mod tests {
             !build_repo
                 .rev_exists_on_remote(&status.rev, "some_remote")
                 .unwrap()
+        );
+    }
+
+    #[test]
+    fn verifies_containment_on_the_fetched_branch_instead_of_any_remote_ref() {
+        let (repo, _repo_dir) = init_temp_repo(false);
+        let _remotes = create_remotes(&repo, &["origin"]);
+        commit_file(&repo, "base");
+        let base = repo.status().unwrap().rev;
+        repo.create_branch("main", &base).unwrap();
+        repo.checkout("main", false).unwrap();
+        commit_file(&repo, "main_tip");
+        repo.push_ref("origin", "main", false).unwrap();
+
+        repo.create_branch("sibling", &base).unwrap();
+        repo.checkout("sibling", false).unwrap();
+        commit_file(&repo, "sibling_tip");
+        let sibling = repo.status().unwrap().rev;
+        repo.push_ref("origin", "sibling", false).unwrap();
+
+        assert!(
+            repo.rev_is_on_remote_branch(&base, "origin", "refs/heads/main")
+                .unwrap()
+        );
+        assert!(
+            !repo
+                .rev_is_on_remote_branch(&sibling, "origin", "refs/heads/main")
+                .unwrap()
+        );
+        assert!(
+            repo.rev_is_on_remote_branch(&sibling, "origin", "refs/heads/sibling")
+                .unwrap()
+        );
+
+        // Deliberately poison the cached tracking ref: FETCH_HEAD must still
+        // identify the branch as it exists on the remote now.
+        GitCommandProvider::run_command(repo.new_command().args([
+            "update-ref",
+            "refs/remotes/origin/main",
+            &sibling,
+        ]))
+        .unwrap();
+        assert!(
+            repo.rev_is_on_remote_branch(&base, "origin", "refs/heads/main")
+                .unwrap()
+        );
+        assert!(
+            !repo
+                .rev_is_on_remote_branch(&sibling, "origin", "refs/heads/main")
+                .unwrap()
+        );
+    }
+
+    #[test]
+    fn unshallows_before_testing_remote_branch_ancestry() {
+        let (repo, _repo_dir) = init_temp_repo(false);
+        let remotes = create_remotes(&repo, &["origin"]);
+        commit_file(&repo, "base");
+        let base = repo.status().unwrap().rev;
+        repo.create_branch("main", &base).unwrap();
+        repo.checkout("main", false).unwrap();
+        commit_file(&repo, "tip");
+        repo.push_ref("origin", "main", false).unwrap();
+
+        let clone_dir = tempfile::tempdir().unwrap();
+        let remote_url = repo_local_url(&remotes.get("origin").unwrap().0);
+        GitCommandProvider::run_command(test_git_options().new_command().args([
+            "clone",
+            "--depth",
+            "1",
+            "--branch",
+            "main",
+            &remote_url,
+            clone_dir.path().to_str().unwrap(),
+        ]))
+        .unwrap();
+        let shallow = GitCommandProvider::open(clone_dir.path()).unwrap();
+        assert!(
+            shallow
+                .rev_is_on_remote_branch(&base, "origin", "refs/heads/main")
+                .unwrap()
+        );
+        assert_eq!(
+            GitCommandProvider::run_command(
+                shallow
+                    .new_command()
+                    .args(["rev-parse", "--is-shallow-repository"]),
+            )
+            .unwrap()
+            .to_string_lossy()
+            .trim(),
+            "false"
         );
     }
 
