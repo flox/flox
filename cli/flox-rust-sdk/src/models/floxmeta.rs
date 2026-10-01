@@ -219,6 +219,12 @@ impl FloxMeta {
     }
 }
 
+/// Bytes per second below which a transfer from or to FloxHub counts as
+/// stalled, see `http.lowSpeedLimit` in git-config(1)
+const FLOXHUB_LOW_SPEED_LIMIT: &str = "10";
+/// Seconds after which a stalled transfer from or to FloxHub is aborted
+const FLOXHUB_LOW_SPEED_TIME: &str = if cfg!(test) { "2" } else { "30" };
+
 /// Returns the git options for interacting with floxmeta repositories
 ///
 /// * Disable global and system config
@@ -259,6 +265,12 @@ pub fn floxmeta_git_options(
         format!("{floxhub_git_url}/{floxhub_owner}/floxmeta"),
     );
 
+    // Abort transfers that stall rather than waiting for them forever,
+    // e.g. when the connection to FloxHub drops.
+    // Connecting is bounded by curl's and the system's connection timeouts.
+    options.add_config_flag("http.lowSpeedLimit", FLOXHUB_LOW_SPEED_LIMIT);
+    options.add_config_flag("http.lowSpeedTime", FLOXHUB_LOW_SPEED_TIME);
+
     // Delegate authentication to the auth context
     options.authenticate(auth_context, floxhub_git_url);
 
@@ -281,6 +293,8 @@ pub(super) fn floxmeta_dir(flox: &Flox, owner: &EnvironmentOwner) -> PathBuf {
 
 #[cfg(test)]
 mod header_tests {
+    use std::time::{Duration, Instant};
+
     use httpmock::MockServer;
     use url::Url;
     use uuid::Uuid;
@@ -289,8 +303,8 @@ mod header_tests {
     use crate::flox::FLOX_VERSION;
 
     /// Issue a git clone against the mock server using the given options.
-    /// The mock returns 403, so git stops after one request. We assert the
-    /// clone fails to prove the mock was actually hit.
+    /// The mock fails git's first request. We assert the clone fails to
+    /// prove the mock was actually hit.
     fn clone_against_mock(server: &MockServer, owner: &str, options: GitCommandOptions) {
         let result = GitCommandProvider::clone_branch_with(
             options,
@@ -330,6 +344,31 @@ mod header_tests {
             clone_against_mock(&server, owner, options);
             mock.assert();
         });
+    }
+
+    /// A transfer that stalls fails instead of waiting for FloxHub forever
+    #[test]
+    fn git_request_fails_when_floxhub_stops_responding() {
+        let server = MockServer::start();
+        server.mock(|_, then| {
+            then.status(200).delay(Duration::from_secs(120));
+        });
+
+        let owner = "testowner";
+        let server_url = Url::parse(&server.base_url()).unwrap();
+        let options = floxmeta_git_options(
+            &server_url,
+            owner,
+            &AuthContext::from_auth0_token(None),
+            None,
+        );
+        let started = Instant::now();
+        clone_against_mock(&server, owner, options);
+        assert!(
+            started.elapsed() < Duration::from_secs(30),
+            "clone took {:?}",
+            started.elapsed()
+        );
     }
 
     #[test]
