@@ -18,6 +18,7 @@ use flox_rust_sdk::providers::build::{
 };
 use flox_rust_sdk::providers::nix_auth::NixAuth;
 use flox_rust_sdk::providers::publish::{
+    PublishError,
     PublishProvider,
     Publisher,
     build_repo_err,
@@ -32,6 +33,7 @@ use floxhub_client::{
     FloxhubClientError,
     LockedInputEntry,
     PackageSystem,
+    SourceLineageChange,
 };
 use indoc::formatdoc;
 use nef_lock_catalog::{CatalogRef, NixFlakeref, scan_package};
@@ -54,6 +56,7 @@ use crate::commands::build::{
 };
 use crate::commands::{SHELL_COMPLETION_FILE, ensure_auth, needs_project_files_error};
 use crate::utils::catalog_lock::BuildLockGuard;
+use crate::utils::dialog::{Confirm, Dialog};
 use crate::utils::errors::display_chain;
 use crate::utils::events::env_detail_from_concrete;
 use crate::utils::message;
@@ -61,6 +64,45 @@ use crate::{environment_subcommand_metric, subcommand_metric};
 
 const PUBLISH_COMPLETION_POLL_INTERVAL_MILLIS: u64 = 2_000; // 1s
 const PUBLISH_COMPLETION_TIMEOUT_MILLIS: u64 = 30 * 60 * 1_000; // 30 min
+
+async fn confirm_lineage_change(change: &SourceLineageChange) -> Result<bool, PublishError> {
+    if !Dialog::can_prompt() {
+        return Ok(false);
+    }
+    message::warning(formatdoc! {
+        "Package source repository or ref has changed.
+        Registered source: {registered}
+        Requested source: {requested}
+
+        Changing the repository can affect which build other packages lock as an input.
+        Where automated builds run, future builds use the newly registered source.
+        Previously published builds remain stored; existing locks are unchanged.
+
+        Continue only if the requested repository and ref are the intended source for
+        this package going forward.",
+        registered = change.registered,
+        requested = change.requested,
+    });
+    let confirmed = Dialog {
+        message: "Change the registered source and publish?",
+        help_message: None,
+        typed: Confirm {
+            default: Some(false),
+        },
+    }
+    .prompt()
+    .await
+    .map_err(|err| match err {
+        inquire::InquireError::OperationCanceled | inquire::InquireError::OperationInterrupted => {
+            PublishError::LineageChangeDeclined
+        },
+        err => PublishError::Catchall(format!("Could not confirm source change: {err}")),
+    })?;
+    if !confirmed {
+        return Err(PublishError::LineageChangeDeclined);
+    }
+    Ok(true)
+}
 
 /// Outcome of the dedup pre-check against the catalog.
 #[derive(Debug)]
@@ -157,6 +199,10 @@ pub struct Publish {
     #[bpaf(long, hide)]
     metadata_only: bool,
 
+    /// Allow replacing the package's registered source repository or ref.
+    #[bpaf(long)]
+    allow_lineage_change: bool,
+
     #[bpaf(external(base_catalog_url_select), optional)]
     base_catalog_url_select: Option<BaseCatalogUrlSelect>,
 
@@ -198,6 +244,7 @@ struct PublishTarget {
 #[derive(Debug, Clone)]
 struct PublishConfig {
     metadata_only: bool,
+    allow_lineage_change: bool,
     cache_args: CacheArgs,
     base_catalog_url_select: Option<BaseCatalogUrlSelect>,
     system_override: SystemOverride,
@@ -217,6 +264,7 @@ impl Publish {
 
         let publish_config = PublishConfig {
             metadata_only: self.metadata_only,
+            allow_lineage_change: self.allow_lineage_change,
             cache_args: self.cache,
             base_catalog_url_select: self.base_catalog_url_select,
             system_override: self.system_override,
@@ -443,7 +491,10 @@ impl Publish {
             })?),
             None => PackageSystem::from_str(&flox.system).ok(),
         };
-        if let Some(system) = dedup_system {
+        // Explicit source replacement must reach publish even for an existing build.
+        if let Some(system) = dedup_system
+            && !publish_config.allow_lineage_change
+        {
             let locked_inputs_query: HashMap<_, _> = locked_inputs.clone().into_iter().collect();
             let query = CheckBuildQuery {
                 catalog_name: &catalog_name,
@@ -489,10 +540,14 @@ impl Publish {
                 &locked_inputs,
                 key_file,
                 publish_config.metadata_only,
+                publish_config.allow_lineage_change,
+                confirm_lineage_change,
             )
             .await
         {
             Ok(needs_wait) => needs_wait,
+            // A declined confirmation is a deliberate cancel, not a failure.
+            Err(e @ PublishError::LineageChangeDeclined) => return Err(e.into()),
             Err(e) => bail!("Failed to publish package: {}", display_chain(&e)),
         };
 

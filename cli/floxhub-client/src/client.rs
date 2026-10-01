@@ -675,7 +675,8 @@ impl CatalogClientTrait for FloxhubClient {
             )
             .await
             .map_api_error()
-            .await?;
+            .await
+            .map_err(FloxhubClientError::classify_publish_error)?;
         Ok(())
     }
 
