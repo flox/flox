@@ -10,6 +10,87 @@ let
     in
     sourceInfo // lib.optionalAttrs (source ? dir) { inherit (source) dir; };
 
+  # A human-readable label for a locked source, reused as the identity
+  # in deep-override collision errors below.
+  labelSource = source: builtins.flakeRefToString (builtins.removeAttrs source [ "dir" ]);
+
+  # NEF's one reserved name: a `pkgs/__overrides` directory holds deep
+  # overrides rather than ordinary packages. It sits inside `pkgs/` so
+  # `__overrides.openssl` is a publishable attr path (design note,
+  # "Splitting the package tree"), which means `instantiateFromSourceInfo`
+  # below must strip it out before it reaches a repository's own package
+  # tree, exactly once, at the point `pkgs/` is collected.
+  overridesDirName = "__overrides";
+
+  # Every locked package source in a catalog's package tree whose entry
+  # records at least one deep override, i.e. `deep_overrides` is
+  # present and non-empty (absent on locks predating the field, per
+  # `PackageTreeNode::Package` in `nef-lock-catalog`). Mirrors the
+  # "package" / "package_set" recursion `fetchFloxHubCatalog` below
+  # uses to instantiate the same tree, but collects sources instead of
+  # instantiating them, and only where flagged, so a project with no
+  # deep overrides in its closure fetches nothing extra.
+  collectDeepOverrideSources =
+    node:
+    {
+      "package" = lib.optional ((node.deep_overrides or [ ]) != [ ]) node.source;
+      "package_set" = lib.concatMap collectDeepOverrideSources (lib.attrValues node.entries);
+    }
+    .${node.type};
+
+  # Every flagged source reachable from a catalog closure, one entry
+  # per catalog. `nix` catalogs throw here exactly as `instantiateCatalog`
+  # does, since they would fail on the same closure moments later.
+  collectClosureDeepOverrideSources =
+    catalogSpecClosure:
+    lib.concatMap (
+      catalogSpec:
+      {
+        "nix" = throw "source inputs not currently supported";
+        "floxhub" = collectDeepOverrideSources catalogSpec.packages;
+      }
+      .${catalogSpec.type}
+    ) (lib.attrValues catalogSpecClosure);
+
+  # Merge the `pkgs/__overrides` trees of several sources (as produced by
+  # `lib.nef.dirToAttrs`) into one tree of the same shape. Two sources
+  # contributing the same attribute path is an evaluation error naming
+  # both; two sources contributing different attributes under the same
+  # subdirectory merge, since neither actually collides.
+  mergeOverrideTrees =
+    attrPath: labeledTrees:
+    let
+      allEntries = lib.concatMap (
+        labeled:
+        lib.mapAttrsToList (name: value: {
+          inherit (labeled) label;
+          inherit name value;
+        }) labeled.tree.entries
+      ) labeledTrees;
+      grouped = lib.groupBy (entry: entry.name) allEntries;
+    in
+    lib.mapAttrs (
+      name: group:
+      if builtins.length group == 1 then
+        (builtins.head group).value
+      else if lib.all (entry: entry.value.type == "directory") group then
+        {
+          type = "directory";
+          path = "<merged overrides at '${lib.showAttrPath (attrPath ++ [ name ])}'>";
+          entries = mergeOverrideTrees (attrPath ++ [ name ]) (
+            map (entry: {
+              inherit (entry) label;
+              tree = entry.value;
+            }) group
+          );
+        }
+      else
+        throw ''
+          Deep override collision on '${lib.showAttrPath (attrPath ++ [ name ])}': defined by both
+          '${(builtins.elemAt group 0).label}' and '${(builtins.elemAt group 1).label}'.
+        ''
+    ) grouped;
+
   # Fetch a floxhub based catalog
   #
   # {
@@ -146,6 +227,86 @@ in
     instantiatedCatalogsClosure;
 
   /**
+    Union the `pkgs/__overrides` trees of every source flagged in a
+    catalog closure's lock, plus the consuming project's own, into one
+    override tree, of the same shape `lib.nef.dirToAttrs` returns for a
+    single directory.
+
+    Overrides are discovered under `pkgs/__overrides`, using
+    `lib.nef.dirToAttrs` exactly as `pkgs/` itself is discovered;
+    `__overrides` is a reserved name, stripped from the ordinary tree
+    by `instantiateFromSourceInfo` below. Only sources whose lock entry
+    records a deep override are fetched; the rest of the closure is
+    left untouched.
+
+    Two sources overriding the same attribute path is an evaluation
+    error naming both (see `mergeOverrideTrees`).
+
+    # Arguments
+
+    `catalogSpecClosure`
+    : the locked catalog closure, as provided in a catalog lock file
+
+    `sourceInfo`
+    : the consuming project's own fetched source
+  */
+  collectDeepOverrides =
+    { catalogSpecClosure, sourceInfo }:
+    let
+      overridesTreeOf = label: fetchedSourceInfo: {
+        inherit label;
+        tree = lib.nef.dirToAttrs "${fetchedSourceInfo.outPath}/${fetchedSourceInfo.dir or ""}/pkgs/${overridesDirName}";
+      };
+
+      flaggedSources = lib.unique (collectClosureDeepOverrideSources catalogSpecClosure);
+      lockedTrees = map (
+        source: overridesTreeOf (labelSource source) (fetchSource source)
+      ) flaggedSources;
+      ownTree = overridesTreeOf "the consuming project" sourceInfo;
+    in
+    {
+      type = "directory";
+      path = "<deep overrides>";
+      entries = mergeOverrideTrees [ ] ([ ownTree ] ++ lockedTrees);
+    };
+
+  /**
+    Apply an override tree assembled by `collectDeepOverrides` to
+    `nixpkgs`, as a single overlay applied before any catalog or
+    project is instantiated.
+
+    Every override is called as a function against the resulting
+    overlay's `final`/`prev` (via `lib.nef.mkOverlay`), never against an
+    already-instantiated package, and never against any source's other
+    `pkgs/` entries: the tree applied here contains only
+    `pkgs/__overrides` entries, and is applied to the base `nixpkgs`
+    before `instantiateCatalogs` or `instantiateFromSourceInfo` extend
+    it further.
+
+    # Arguments
+
+    `nixpkgs`
+    : the base nixpkgs instance deep overrides are applied to
+
+    `overrideTree`
+    : the tree returned by `collectDeepOverrides`
+  */
+  applyDeepOverrides =
+    nixpkgs: overrideTree:
+    let
+      # Bound in the scope every override is called with (see
+      # `lib.nef.mkOverlay`'s `currentScope` argument), so referencing
+      # `catalogs` fails only for an override that actually asks for
+      # it, not for every override applied here.
+      catalogsDeniedError = throw ''
+        A deep override cannot use catalog packages: it is folded into
+        the base nixpkgs before any catalog is instantiated, so no
+        catalog exists yet when it runs.
+      '';
+    in
+    lib.nef.extendAttrSet [ ] { catalogs = catalogsDeniedError; } nixpkgs overrideTree;
+
+  /**
     Instantiate a NEF project from a given sourceInfo.
 
     * Collects and evaluates packages in `${sourceInfo.outPath}/${sourceInfo.dir or ""}/pkgs`;
@@ -181,7 +342,14 @@ in
       nixpkgsWithCatalogs = nixpkgs.extend catalogOverlay;
 
       # step 1 collect packages
-      collectedPackages = lib.nef.dirToAttrs pkgsDir;
+      # `__overrides` (see the reserved-name comment above) lives inside
+      # `pkgsDir` but is applied to the shared base by `applyDeepOverrides`,
+      # not by this repository's own instantiation; drop it here so it
+      # never surfaces as a package set of this repository's own tree.
+      collectedPackagesRaw = lib.nef.dirToAttrs pkgsDir;
+      collectedPackages = collectedPackagesRaw // {
+        entries = builtins.removeAttrs collectedPackagesRaw.entries [ overridesDirName ];
+      };
 
       # Extend nixpkgs, with collectedPackages.
       # `attrPath` and `currentScope` remain empty as this is the toplevel attrset.

@@ -45,12 +45,18 @@ pub fn build_lock_from_locked_inputs<'d>(
             inputs: _,
             locked_inputs_hash: _,
             source,
+            deep_overrides,
         } = entry;
 
         builders
             .entry(CatalogId(catalog))
             .or_insert_with(PackageTreeBuilder::new)
-            .add_package_source(attr_path, build_type, source.into())?;
+            .add_package_source(
+                attr_path,
+                build_type,
+                source.into(),
+                deep_overrides.unwrap_or_default(),
+            )?;
     }
 
     let catalogs = builders
@@ -101,6 +107,7 @@ mod tests {
             inputs: None,
             locked_inputs_hash: "sha256-test".to_string(),
             source,
+            deep_overrides: None,
         }
     }
 
@@ -235,6 +242,27 @@ mod tests {
         assert_eq!(
             value["catalogs"]["beta"]["packages"]["entries"]["bar"]["source"],
             expected_b
+        );
+    }
+
+    /// A populated `deep_overrides` on the wire entry reaches the built
+    /// tree's package node, rather than being dropped in translation.
+    #[test]
+    fn deep_overrides_carried_into_package_tree() {
+        let source = git_source("https://example.com/repo", "abc");
+        let mut wire_entry = entry("myorg", &["hello"], BuildType::Nef, source);
+        wire_entry.deep_overrides = Some(vec!["openssl".to_string()]);
+        let locked = HashMap::from([("myorg.hello".to_string(), wire_entry)]);
+
+        let value = serde_json::to_value(
+            build_lock_from_locked_inputs(locked, [&"myorg.hello".to_string()])
+                .expect("transform succeeds"),
+        )
+        .unwrap();
+
+        assert_eq!(
+            value["catalogs"]["myorg"]["packages"]["entries"]["hello"]["deep_overrides"],
+            json!(["openssl"])
         );
     }
 }

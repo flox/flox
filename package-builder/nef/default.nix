@@ -35,11 +35,21 @@ let
       sourceInfo // lib.optionalAttrs (parsedRef ? dir) { inherit (parsedRef) dir; };
 
   catalogSpecClosure = (lib.importJSON catalog-lockfile).catalogs;
+
+  # Every package in the build must see the same base nixpkgs, so deep
+  # overrides are folded in before any catalog is instantiated.
+  deepOverrideTree = lib.nef.instantiate.collectDeepOverrides {
+    inherit catalogSpecClosure sourceInfo;
+  };
+  nixpkgsWithDeepOverrides = lib.nef.instantiate.applyDeepOverrides nixpkgs deepOverrideTree;
+
   instantiatedCatalogsClosure = lib.nef.instantiate.instantiateCatalogs {
-    inherit nixpkgs catalogSpecClosure;
+    nixpkgs = nixpkgsWithDeepOverrides;
+    inherit catalogSpecClosure;
   };
 
 in
 lib.nef.instantiate.instantiateFromSourceInfo {
-  inherit nixpkgs instantiatedCatalogsClosure sourceInfo;
+  nixpkgs = nixpkgsWithDeepOverrides;
+  inherit instantiatedCatalogsClosure sourceInfo;
 }

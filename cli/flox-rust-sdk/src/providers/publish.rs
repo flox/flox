@@ -40,6 +40,7 @@ use super::build::{
     PackageTarget,
     PackageTargetError,
     PackageTargetKind,
+    deep_override_names_in,
     find_toplevel_group_nixpkgs,
 };
 use super::buildenv::BuildEnvOutputs;
@@ -723,6 +724,14 @@ where
                 .rel_expression_build_base_dir
                 .to_string_lossy()
                 .into_owned(),
+            // Always sent, mirroring `locked_inputs` above: an empty list
+            // states that the repository declares no overrides, rather
+            // than leaving the field unstated for the server to guess at.
+            deep_overrides: Some(deep_override_names_in(
+                self.env_metadata
+                    .repo_root_path
+                    .join(&self.env_metadata.rel_expression_build_base_dir),
+            )),
         };
 
         tracing::debug!(?build_info, "Publishing build in catalog...");
