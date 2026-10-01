@@ -176,7 +176,8 @@ in
         catalogs = {
           # Use the same pinned instance as the NEF builder's other nixpkgs inputs.
           nixpkgs = nixpkgs;
-        } // lib.mapAttrs (
+        }
+        // lib.mapAttrs (
           _: catalogInstance:
           {
             "nix" = catalogInstance.reflect.packages;
