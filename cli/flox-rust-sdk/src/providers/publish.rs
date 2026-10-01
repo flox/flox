@@ -1518,7 +1518,8 @@ pub mod tests {
         allow_lineage_change: bool,
         confirm: bool,
         retry_status: u16,
-    ) -> (usize, usize, usize, Result<(), String>) {
+        warn_on_success: bool,
+    ) -> (usize, usize, usize, Result<Vec<String>, String>) {
         let server = httpmock::MockServer::start_async().await;
         let client = FloxhubClient::new(client_config(&server.base_url())).unwrap();
         let build: UserBuildPublish = serde_json::from_value(serde_json::json!({
@@ -1559,15 +1560,28 @@ pub mod tests {
                     }
                 }
             },
+            "direct_inputs": ["dependency"],
             "locked_base_catalog_url": "https://github.com/flox/nixpkgs?rev=abc123"
         }))
         .unwrap();
+        let response_body = if warn_on_success {
+            serde_json::json!({"warnings": [{
+                "code": "input_lineage_changed",
+                "input": "dependency",
+                "message": INPUT_LINEAGE_WARNING
+            }]})
+        } else {
+            serde_json::json!({})
+        };
         let initial = server.mock(|when, then| {
             when.method(httpmock::Method::POST)
                 .path("/api/v1/catalog/catalogs/test/packages/hello/builds")
                 .json_body_obj(&build);
-            then.status(status)
-                .json_body(serde_json::json!({"detail": detail}));
+            then.status(status).json_body(if status == 200 {
+                response_body.clone()
+            } else {
+                serde_json::json!({"detail": detail})
+            });
         });
         // With the override already set, a retry would resend the initial body,
         // so only `initial` can match and it counts every request.
@@ -1578,8 +1592,11 @@ pub mod tests {
                 when.method(httpmock::Method::POST)
                     .path("/api/v1/catalog/catalogs/test/packages/hello/builds")
                     .json_body_obj(&replacement);
-                then.status(retry_status)
-                    .json_body(serde_json::json!({"detail": detail}));
+                then.status(retry_status).json_body(if retry_status == 200 {
+                    response_body.clone()
+                } else {
+                    serde_json::json!({"detail": detail})
+                });
             })
         });
         let mut confirmations = 0;
@@ -1593,6 +1610,13 @@ pub mod tests {
                 Ok(confirm)
             })
             .await
+            .map(|receipt| {
+                receipt
+                    .warnings
+                    .into_iter()
+                    .map(|warning| warning.message)
+                    .collect()
+            })
             .map_err(|err| err.to_string());
         let retries = retry.map_or(0, |mock| mock.calls());
         (confirmations, initial.calls(), retries, result)
@@ -1600,11 +1624,15 @@ pub mod tests {
 
     #[tokio::test]
     async fn publish_lineage_confirmation_retries_only_when_accepted() {
-        let accepted = exercise_lineage_publish(409, LINEAGE_CHANGE_DETAIL, false, true, 200).await;
-        assert_eq!(accepted, (1, 1, 1, Ok(())));
+        let accepted =
+            exercise_lineage_publish(409, LINEAGE_CHANGE_DETAIL, false, true, 200, true).await;
+        assert_eq!(
+            accepted,
+            (1, 1, 1, Ok(vec![INPUT_LINEAGE_WARNING.to_owned()]))
+        );
 
         let declined =
-            exercise_lineage_publish(409, LINEAGE_CHANGE_DETAIL, false, false, 200).await;
+            exercise_lineage_publish(409, LINEAGE_CHANGE_DETAIL, false, false, 200, true).await;
         let refusal = SourceLineageChange {
             registered: "github.com/org/original (ref main)".to_owned(),
             requested: "github.com/org/moved (ref release)".to_owned(),
@@ -1614,20 +1642,32 @@ pub mod tests {
 
         // Even a second lineage refusal must terminate, not prompt or loop again.
         let refused_retry =
-            exercise_lineage_publish(409, LINEAGE_CHANGE_DETAIL, false, true, 409).await;
+            exercise_lineage_publish(409, LINEAGE_CHANGE_DETAIL, false, true, 409, true).await;
         assert_eq!(refused_retry, (1, 1, 1, Err(refusal)));
     }
 
     #[tokio::test]
     async fn publish_lineage_flag_sends_override_without_confirmation() {
-        let outcome = exercise_lineage_publish(200, "", true, false, 200).await;
-        assert_eq!(outcome, (0, 1, 0, Ok(())));
+        let outcome = exercise_lineage_publish(200, "", true, false, 200, true).await;
+        assert_eq!(
+            outcome,
+            (0, 1, 0, Ok(vec![INPUT_LINEAGE_WARNING.to_owned()]))
+        );
+    }
+
+    #[tokio::test]
+    async fn publish_success_carries_input_lineage_warning_without_a_conflict() {
+        let outcome = exercise_lineage_publish(200, "", false, false, 200, true).await;
+        assert_eq!(
+            outcome,
+            (0, 1, 0, Ok(vec![INPUT_LINEAGE_WARNING.to_owned()]))
+        );
     }
 
     #[tokio::test]
     async fn publish_lineage_confirmation_ignores_other_responses() {
-        let success = exercise_lineage_publish(200, "", false, true, 200).await;
-        assert_eq!(success, (0, 1, 0, Ok(())));
+        let success = exercise_lineage_publish(200, "", false, true, 200, false).await;
+        assert_eq!(success, (0, 1, 0, Ok(vec![])));
         for (status, detail, expected) in [
             (
                 409,
@@ -1645,7 +1685,7 @@ pub mod tests {
                 format!("400 Bad Request: {LINEAGE_CHANGE_DETAIL}"),
             ),
         ] {
-            let outcome = exercise_lineage_publish(status, detail, false, true, 200).await;
+            let outcome = exercise_lineage_publish(status, detail, false, true, 200, false).await;
             assert_eq!(outcome, (0, 1, 0, Err(expected)));
         }
     }

@@ -19,6 +19,7 @@ use flox_rust_sdk::providers::build::{
 use flox_rust_sdk::providers::nix_auth::NixAuth;
 use flox_rust_sdk::providers::publish::{
     PublishError,
+    PublishOutcome,
     PublishProvider,
     Publisher,
     build_repo_err,
@@ -69,6 +70,12 @@ use crate::{environment_subcommand_metric, subcommand_metric};
 
 const PUBLISH_COMPLETION_POLL_INTERVAL_MILLIS: u64 = 2_000; // 1s
 const PUBLISH_COMPLETION_TIMEOUT_MILLIS: u64 = 30 * 60 * 1_000; // 30 min
+
+fn emit_publish_warnings(outcome: &PublishOutcome, mut emit: impl FnMut(&str)) {
+    for warning in &outcome.warnings {
+        emit(&warning.message);
+    }
+}
 
 async fn confirm_lineage_change(change: &SourceLineageChange) -> Result<bool, PublishError> {
     if !Dialog::can_prompt() {
@@ -600,9 +607,7 @@ impl Publish {
         };
 
         // A later poll failure must not hide warnings from the accepted POST.
-        for warning in &outcome.warnings {
-            message::warning(&warning.message);
-        }
+        emit_publish_warnings(&outcome, |warning| message::warning(warning));
 
         // Only poll when the external publisher service is responsible for
         // ingesting artifacts (Publisher mode). NixCopy and MetadataOnly
@@ -641,10 +646,26 @@ impl Publish {
 mod tests {
     use flox_manifest::test_helpers::with_latest_schema;
     use flox_rust_sdk::providers::build::test_helpers::prepare_empty_expressions_ref;
+    use floxhub_client::PublishWarning;
     use indoc::indoc;
 
     use super::*;
     use crate::utils::catalog_lock::test_helpers::build_lock_guard_from_parts;
+
+    #[test]
+    fn accepted_publish_displays_advisory_input_warning() {
+        let outcome = PublishOutcome {
+            needs_publisher_wait: false,
+            warnings: vec![PublishWarning {
+                code: "input_lineage_changed".to_owned(),
+                input: "dependency".to_owned(),
+                message: "dependency moved to a newer source lineage".to_owned(),
+            }],
+        };
+        let mut displayed = Vec::new();
+        emit_publish_warnings(&outcome, |message| displayed.push(message.to_owned()));
+        assert_eq!(displayed, ["dependency moved to a newer source lineage"]);
+    }
 
     /// A stale committed lock fails a publish naming both the uncovered
     /// reference and the recovery command.
