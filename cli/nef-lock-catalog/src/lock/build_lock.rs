@@ -200,7 +200,7 @@ pub enum ProjectionError {
     Stale(#[from] StaleLockError),
     /// A direct key is missing from the full map. Projection validates even
     /// hand-edited or foreign locks that bypassed lookup conversion.
-    #[error("selected root '{key}' does not appear in the lock's locked_inputs")]
+    #[error("direct input '{key}' does not appear in the lock's locked_inputs")]
     MissingRoot { key: String },
     /// An entry's `inputs` names a child key absent from `locked_inputs`.
     #[error("'{parent}' names dependency '{key}', which does not appear in the lock")]
@@ -643,11 +643,15 @@ mod tests {
         lock.direct_inputs.insert("myorg/dangling".to_string());
 
         let err = lock
-            .project_package(&references(&["catalogs.myorg.dangling"]))
-            .expect_err("a dangling root is refused, not silently written through");
+            .project_package(&references(&["catalogs.myorg.hello"]))
+            .expect_err("an unselected dangling direct input is refused");
         assert!(
             matches!(err, ProjectionError::MissingRoot { .. }),
             "{err:?}"
+        );
+        assert_eq!(
+            err.to_string(),
+            "direct input 'myorg/dangling' does not appear in the lock's locked_inputs"
         );
     }
 
