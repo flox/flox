@@ -34,7 +34,16 @@ Flox makes some assertions before publishing, specifically:
 - The Flox environment used to build the package is tracked as a git repository.
 - Tracked files in the repository are all clean.
 - The repository has a remote defined and the current revision has been pushed to it.
-- The build environment must have at least one package installed.
+- For a manifest build, the environment must have at least one package in the
+  `toplevel` package group: the package is published against the nixpkgs
+  revision that group is locked to, and an environment with no such package is
+  locked to none.
+  A Nix expression build has no such requirement, because the revision it is
+  published against comes from the catalog server rather than the environment.
+
+A Nix expression build is published against the catalog's current revision, so
+installing it into an environment locked to an older revision may require
+placing it in its own package group.
 
 These conditions ensure that the package being built can be located, built,
 and reproduced in the future.
@@ -121,14 +130,13 @@ Note that this is a paid feature available with Flox for Teams.
     'flox config'.
 
 `--stability <stability>`
-:   Perform a nix expression build using a base package set of the given
+:   Perform a Nix expression build using a base package set of the given
     stability as tracked by the catalog server.
     A stability (e.g., `"stable"`) identifies a curated nixpkgs revision
     managed by the catalog server.
-    When omitted, the base package set is derived from the environment's
-    `toplevel` group; if no `toplevel` group exists, the `"stable"`
-    stability is used by default.
-    An explicit `--stability` value overrides both of these defaults.
+    When omitted, the default stability is used.
+    A manifest build is published against its environment's revision instead,
+    and so are the Nix expression builds it reaches.
     Cannot be used with manifest builds.
 
 ```{.include}

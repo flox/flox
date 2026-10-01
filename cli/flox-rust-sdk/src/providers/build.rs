@@ -69,10 +69,13 @@ pub trait ManifestBuilder {
     /// created by the CLI (the committed .flox/catalog.lock, or a fresh
     /// ephemeral lock) and passed through as `CATALOG_LOCKFILE`. Required
     /// whenever the project has Nix expression builds.
+    ///
+    /// `expression_build_nixpkgs` is required under the same condition: [None]
+    /// only for a project with no Nix expression builds.
     #[allow(clippy::too_many_arguments)]
     fn build(
         self,
-        expression_build_nixpkgs: &Url,
+        expression_build_nixpkgs: Option<&Url>,
         flox_interpreter: &Path,
         packages: &[PackageTargetName],
         catalog_lockfile: Option<&Path>,
@@ -476,14 +479,13 @@ impl ManifestBuilder for FloxBuildMk<'_> {
     /// **Invariant**: the caller of this function has to ensure,
     /// that manifest builds are always built with a compatible version of nixpkgs!
     ///
-    /// **Invariant**: the caller is expected to prevent mixed builds
-    /// of manifest and expression build if `expression_build_nixpkgs_url`
-    /// is different from the environments toplevel group,
-    /// i.e. manifest builds and expression builds would use incompatible nixpkgs.
+    /// `expression_build_nixpkgs_url` comes from the catalog server rather
+    /// than the environment, and is [None] only for a project with no Nix
+    /// expression builds.
     #[allow(clippy::too_many_arguments)]
     fn build(
         self,
-        expression_build_nixpkgs_url: &Url,
+        expression_build_nixpkgs_url: Option<&Url>,
         flox_interpreter: &Path,
         packages: &[PackageTargetName],
         catalog_lockfile: Option<&Path>,
@@ -493,9 +495,11 @@ impl ManifestBuilder for FloxBuildMk<'_> {
         let mut command = self.base_command(self.base_dir);
         command.arg("build");
         command.arg(format!("BUILDTIME_NIXPKGS_URL={}", &*COMMON_NIXPKGS_URL));
-        command.arg(format!(
-            "EXPRESSION_BUILD_NIXPKGS_URL={expression_build_nixpkgs_url}"
-        ));
+        if let Some(expression_build_nixpkgs_url) = expression_build_nixpkgs_url {
+            command.arg(format!(
+                "EXPRESSION_BUILD_NIXPKGS_URL={expression_build_nixpkgs_url}"
+            ));
+        }
 
         // The catalog lock the NEF evals consume. The CLI owns the lock's
         // lifecycle; the package builder requires the path whenever the
@@ -1112,10 +1116,7 @@ pub mod test_helpers {
         build_cache: Option<bool>,
         expect_success: bool,
     ) -> CollectedOutput {
-        let toplevel_or_common_nixpkgs =
-            find_toplevel_group_nixpkgs(&env.lockfile(flox).unwrap().into())
-                .map(|toplevel_nixpkgs| toplevel_nixpkgs.as_flake_ref().unwrap())
-                .unwrap_or_else(|| COMMON_NIXPKGS_URL.clone());
+        let expression_build_nixpkgs = COMMON_NIXPKGS_URL.clone();
 
         // NEF builds require a CLI-provided catalog lock; expressions with no
         // catalog references consume an empty one, so write that default for
@@ -1143,7 +1144,7 @@ pub mod test_helpers {
             &mut output_stderr,
         )
         .build(
-            &toplevel_or_common_nixpkgs,
+            Some(&expression_build_nixpkgs),
             &env.rendered_env_links(flox).unwrap().dev,
             &[PackageTargetName::new_unchecked(&package)],
             Some(catalog_lockfile),
@@ -1183,10 +1184,7 @@ pub mod test_helpers {
         expression_ref: &NixFlakeref,
         package: &str,
     ) -> EvalResults {
-        let toplevel_or_common_nixpkgs =
-            find_toplevel_group_nixpkgs(&env.lockfile(flox).unwrap().into())
-                .map(|toplevel_nixpkgs| toplevel_nixpkgs.as_flake_ref().unwrap())
-                .unwrap_or_else(|| COMMON_NIXPKGS_URL.clone());
+        let expression_build_nixpkgs = COMMON_NIXPKGS_URL.clone();
 
         // NEF evals require a CLI-provided catalog lock; these fixtures make
         // no catalog references, so an empty lock suffices.
@@ -1208,7 +1206,7 @@ pub mod test_helpers {
             &cache_path,
         )
         .eval(
-            &toplevel_or_common_nixpkgs,
+            &expression_build_nixpkgs,
             &[PackageTarget::new_unchecked(
                 package,
                 PackageTargetKind::ExpressionBuild(ExpressionBuildMetadata {
@@ -1683,6 +1681,46 @@ mod tests {
 
         assert_build_status(&flox, &mut env, &package_name, None, true);
         assert_build_file(&env_path, &package_name, &file_name, &file_content);
+    }
+
+    #[test]
+    fn manifest_build_succeeds_without_an_expression_build_nixpkgs() {
+        let package_name = String::from("foo");
+
+        let manifest = formatdoc! {r#"
+            version = 1
+
+            [build.{package_name}]
+            command = "mkdir $out; echo -n hi > $out/hi"
+        "#};
+
+        let (flox, _temp_dir_handle) = flox_instance();
+        let mut env = new_path_environment(&flox, &manifest);
+
+        let mut stdout = String::new();
+        let mut stderr = String::new();
+        let results = FloxBuildMk::new_with_buffers(
+            &flox,
+            &env.parent_path().unwrap(),
+            &NixFlakeref::from_path(env.dot_flox_path()).unwrap(),
+            &env.build(&flox).unwrap(),
+            &env.cache_path().unwrap(),
+            &mut stdout,
+            &mut stderr,
+        )
+        .build(
+            None,
+            &env.rendered_env_links(&flox).unwrap().dev,
+            &[PackageTargetName::new_unchecked(&package_name)],
+            None,
+            None,
+            None,
+        );
+
+        let results = results.unwrap_or_else(|err| {
+            panic!("manifest build failed without a nixpkgs url: {err:?}\n{stderr}")
+        });
+        assert_eq!(results.len(), 1);
     }
 
     /// A manifest build has no derivation for `eval` to resolve.

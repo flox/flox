@@ -948,7 +948,7 @@ pub fn check_build_metadata(
     );
 
     let build_results = builder.build(
-        &base_nixpkgs_url.as_flake_ref()?,
+        Some(&base_nixpkgs_url.as_flake_ref()?),
         &built_environments.dev,
         &[pkg.name()],
         // The catalog lock the CLI created for this publish; its subset is
@@ -1323,7 +1323,7 @@ pub fn check_environment_metadata(
 }
 
 pub fn check_package_metadata(
-    expression_build_ref: &BaseCatalogUrl,
+    expression_build_ref: Option<&BaseCatalogUrl>,
     toplevel_catalog_ref: Option<&BaseCatalogUrl>,
     pkg: PackageTarget,
 ) -> Result<PackageMetadata, PublishError> {
@@ -1338,7 +1338,11 @@ pub fn check_package_metadata(
             PublishError::UnsupportedEnvironmentState("No packages in toplevel group".to_string())
         })?
     } else {
-        expression_build_ref.clone()
+        expression_build_ref.cloned().ok_or_else(|| {
+            PublishError::UnsupportedEnvironmentState(
+                "No nixpkgs selected for a Nix expression build".to_string(),
+            )
+        })?
     };
 
     Ok(PackageMetadata {
@@ -1619,7 +1623,7 @@ pub mod tests {
         let toplevel_catalog_url = find_toplevel_group_nixpkgs(&lockfile);
 
         let meta = check_package_metadata(
-            &mock_base_catalog_url(),
+            Some(&mock_base_catalog_url()),
             toplevel_catalog_url.as_ref(),
             EXAMPLE_MANIFEST_PACKAGE_TARGET.clone(),
         )
@@ -1632,6 +1636,36 @@ pub mod tests {
             locked_base_pkg.locked_url
         );
         assert_eq!(&meta.package, &*EXAMPLE_MANIFEST_PACKAGE_TARGET);
+    }
+
+    /// Each kind of build requires exactly one of the two refs: a manifest
+    /// build the environment's, an expression build the one selected for it.
+    #[test]
+    fn check_package_metadata_requires_the_ref_for_the_kind() {
+        let url = mock_base_catalog_url();
+
+        assert!(
+            check_package_metadata(None, None, EXAMPLE_MANIFEST_PACKAGE_TARGET.clone()).is_err()
+        );
+        assert!(
+            check_package_metadata(Some(&url), None, EXAMPLE_MANIFEST_PACKAGE_TARGET.clone())
+                .is_err(),
+            "a manifest build is not satisfied by an expression build's nixpkgs"
+        );
+
+        let expression = PackageTarget::new_unchecked(
+            "expression",
+            PackageTargetKind::ExpressionBuild(crate::providers::build::ExpressionBuildMetadata {
+                rel_file_path: Default::default(),
+            }),
+        );
+        assert!(check_package_metadata(None, Some(&url), expression.clone()).is_err());
+        assert_eq!(
+            check_package_metadata(Some(&url), None, expression)
+                .unwrap()
+                .base_catalog_ref,
+            url
+        );
     }
 
     #[test]
@@ -1782,7 +1816,7 @@ pub mod tests {
 
         let env_metadata = check_environment_metadata(&flox, &env).unwrap();
         let package_metadata = check_package_metadata(
-            &mock_base_catalog_url(),
+            Some(&mock_base_catalog_url()),
             env_metadata.toplevel_catalog_ref.as_ref(),
             EXAMPLE_MANIFEST_PACKAGE_TARGET.clone(),
         )
@@ -1845,7 +1879,7 @@ pub mod tests {
 
         let env_metadata = check_environment_metadata(&flox, &env).unwrap();
         let package_metadata = check_package_metadata(
-            &mock_base_catalog_url(),
+            Some(&mock_base_catalog_url()),
             env_metadata.toplevel_catalog_ref.as_ref(),
             EXAMPLE_MANIFEST_PACKAGE_TARGET.clone(),
         )
@@ -2195,7 +2229,7 @@ pub mod tests {
 
         let env_metadata = check_environment_metadata(&flox, &env).unwrap();
         let package_metadata = check_package_metadata(
-            &mock_base_catalog_url(),
+            Some(&mock_base_catalog_url()),
             env_metadata.toplevel_catalog_ref.as_ref(),
             EXAMPLE_MANIFEST_PACKAGE_TARGET.clone(),
         )
@@ -2489,17 +2523,13 @@ pub mod tests {
     // publish test mocks.
     #[tokio::test(flavor = "multi_thread")]
     async fn retrieves_base_catalog_url() {
-        // `pkg_meta` is discarded, so this name never reaches the catalog.
-        let (_build_meta, env_meta, _pkg_meta) = dummy_publish_metadata("unused");
         let (flox, _tmpdir) = flox_instance();
         let (flox, _auth) = auto_recording_catalog_client_for_authed_local_services(
             flox,
             PublishTestUser::PersonalCatalogOnly,
             "get_base_catalog_nixpkgs_url",
         );
-        let _url = get_base_nixpkgs_url(&flox, Some("stable"), &env_meta)
-            .await
-            .unwrap();
+        let _url = get_base_nixpkgs_url(&flox, Some("stable")).await.unwrap();
     }
 
     // This test ensures that a user's default catalog gets created inline

@@ -222,10 +222,10 @@ EOF
 
 # ---------------------------------------------------------------------------- #
 # Divergence disclosure and expression-loop re-entry: these exercise the real
-# `eval` -> `nix print-dev-env` pipeline. With no `--stability`/`--nixpkgs-url`
-# and no `toplevel` group, resolving a nixpkgs URL calls the base-catalog-info
-# endpoint, so these two tests need that endpoint mocked rather than the
-# generic empty fixture the rest of this file uses.
+# `eval` -> `nix print-dev-env` pipeline. Resolving the nixpkgs a Nix
+# expression build uses always calls the base-catalog-info endpoint — the
+# catalog server is its only source — so the tests below need that endpoint
+# mocked rather than the generic empty fixture the rest of this file uses.
 
 @test "develop: prints the disclosure on entry" {
   project_setup
