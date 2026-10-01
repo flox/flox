@@ -3926,7 +3926,8 @@ mod tests {
         }
         let refetched = change == DescriptorChange::Name;
 
-        // Merge
+        // Merge, in a new command that hasn't fetched anything yet
+        let include_fetcher = IncludeFetcher::new(Some(tempdir.path().to_path_buf()));
         let (merged, compose, _) = LockManifest::merge_manifest(
             &flox,
             manifest.as_latest_schema(),

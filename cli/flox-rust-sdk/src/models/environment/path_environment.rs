@@ -42,7 +42,7 @@ use super::core_environment::{
     UnreadableInclude,
     UpgradeResult,
 };
-use super::fetcher::{IncludeFetcher, RemoteLockfiles};
+use super::fetcher::{FetchedIncludes, IncludeFetcher};
 use super::uninstall::UninstallSpec;
 use super::{
     CACHE_DIR_NAME,
@@ -181,10 +181,10 @@ pub struct PathEnvironment {
     /// These may not yet exist if the environment has not been built.
     rendered_env_links: RenderedEnvironmentLinks,
 
-    /// Included remote environments fetched by this instance, so that a
-    /// command that uses the environment more than once fetches each of
-    /// them once
-    remote_lockfiles: RemoteLockfiles,
+    /// Included environments fetched by this instance, so that a command
+    /// that uses the environment more than once, or includes an environment
+    /// through more than one other, fetches each of them once
+    fetched_includes: FetchedIncludes,
 }
 
 /// A profile script or list of packages to install when initializing an environment
@@ -246,14 +246,14 @@ impl PathEnvironment {
             path: dot_flox_path,
             pointer,
             rendered_env_links,
-            remote_lockfiles: RemoteLockfiles::default(),
+            fetched_includes: FetchedIncludes::default(),
         })
     }
 
     fn include_fetcher(&self) -> Result<IncludeFetcher, EnvironmentError> {
         Ok(
             IncludeFetcher::for_composer(self.parent_path()?, self.path.clone())
-                .with_remote_lockfiles(self.remote_lockfiles.clone()),
+                .with_fetched_includes(self.fetched_includes.clone()),
         )
     }
 
@@ -1753,13 +1753,21 @@ pub mod tests {
         )
     }
 
-    /// Follow included environments and return the lockfile in use,
-    /// asserting that the environment's own lockfile isn't written
+    /// Forget the included environments fetched so far, which a command only
+    /// fetches once
+    fn new_command(environment: &mut PathEnvironment) {
+        environment.fetched_includes = FetchedIncludes::default();
+    }
+
+    /// Follow included environments as a new command would, and return the
+    /// lockfile in use, asserting that the environment's own lockfile isn't
+    /// written
     fn follow(
         environment: &mut PathEnvironment,
         flox: &Flox,
         mode: FollowMode,
     ) -> (Lockfile, FollowedIncludes) {
+        new_command(environment);
         let lockfile_path = environment.lockfile_path(flox).unwrap();
         let bytes_before = fs::read(&lockfile_path).unwrap();
         let (lock_result, followed) = environment.lockfile_following_includes(flox, mode).unwrap();
@@ -1970,6 +1978,7 @@ pub mod tests {
         );
         follow(&mut composer, &flox, FollowMode::LockAndBuild);
 
+        new_command(&mut composer);
         composer
             .edit(
                 &flox,
@@ -2222,6 +2231,7 @@ pub mod tests {
         )
         .unwrap();
 
+        new_command(&mut a);
         a.include_upgrade(&flox, vec![]).unwrap_err();
         let (lockfile, followed) = follow(&mut a, &flox, FollowMode::Lock);
         assert_eq!(

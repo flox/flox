@@ -1370,7 +1370,7 @@ fn is_include_cycle(err: &EnvironmentError) -> bool {
 
 /// What to do about an automatically upgraded include that can't be read while
 /// merging the path environment that includes it in memory
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub(crate) enum UnreadableIncludes {
     /// Fail, so that whatever includes the merged environment keeps its own
     /// copy of it, rather than an older copy of the unreadable environment.

@@ -408,6 +408,8 @@ mod tests {
         composer.lockfile(&flox).unwrap();
         included.edit(&flox, included_contents("v2")).unwrap();
         // A command in the foreground follows the change
+        let mut composer =
+            PathEnvironment::open(&flox, composer.pointer.clone(), composer.path.clone()).unwrap();
         composer.lockfile(&flox).unwrap();
         assert_eq!(composer.unsaved_followed_includes(&flox).unwrap(), vec![
             "included".to_string()

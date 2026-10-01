@@ -2328,7 +2328,9 @@ mod migration_tests {
 
         included_env.edit(&flox, updated_included_manifest).unwrap();
 
-        // Upgrade all includes on the composer.
+        // Upgrade all includes on the composer, in a new command
+        let mut composer =
+            PathEnvironment::open(&flox, composer.pointer.clone(), composer.path.clone()).unwrap();
         let new_lockfile = composer
             .include_upgrade(&flox, vec![])
             .unwrap()

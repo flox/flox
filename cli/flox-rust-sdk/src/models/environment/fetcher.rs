@@ -1,12 +1,13 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, MutexGuard};
 
 use flox_core::data::environment_ref::RemoteEnvironmentRef;
 use flox_manifest::lockfile::{LockedInclude, Lockfile};
 use flox_manifest::parsed::latest::{AutoUpgrade, IncludeDescriptor};
 use flox_manifest::{Manifest, TypedOnly};
+use itertools::Itertools;
 
 use super::{
     ConcreteEnvironment,
@@ -23,12 +24,105 @@ use crate::models::environment::managed_environment::ManagedEnvironmentError;
 use crate::models::environment::{Environment, ManagedPointer, UnreadableIncludes};
 use crate::providers::lock_manifest::RecoverableMergeError;
 
-/// The lockfiles of remote environments that have been fetched, by
-/// environment and generation.
+/// Included environments that have been fetched.
 ///
-/// Sharing them between fetchers fetches each remote environment once,
-/// so everything that uses it sees the same version.
-pub type RemoteLockfiles = Arc<Mutex<HashMap<(RemoteEnvironmentRef, Option<usize>), Lockfile>>>;
+/// Sharing them between fetchers fetches each included environment once,
+/// even when several environments include it, so everything that uses it
+/// sees the same version.
+/// Nothing a command writes is fetched again by the same command,
+/// since a command only writes the environment that includes the others.
+#[derive(Clone, Debug, Default)]
+pub struct FetchedIncludes(Arc<Mutex<FetchedIncludesInner>>);
+
+#[derive(Debug, Default)]
+struct FetchedIncludesInner {
+    /// The lockfiles of remote environments, by environment and generation
+    remote: HashMap<(RemoteEnvironmentRef, Option<usize>), Lockfile>,
+    /// Local environments, by `.flox` directory and how their own
+    /// unreadable includes were handled
+    local: HashMap<(PathBuf, UnreadableIncludes), LocalFetch>,
+    /// The `.flox` directories of the local environments fetched so far,
+    /// in order, so that a fetch can tell which ones it fetched in turn
+    fetch_log: Vec<PathBuf>,
+}
+
+/// A local environment as fetched
+#[derive(Clone, Debug)]
+struct LocalFetch {
+    name: String,
+    manifest: Manifest<TypedOnly>,
+    lockfile: Lockfile,
+    /// The `.flox` directories of the environment and of every environment
+    /// fetched for it in turn.
+    ///
+    /// Whether fetching finds an include cycle depends on the environments
+    /// that include it, so the fetch is only reused while none of these are
+    /// among them.
+    subtree: Vec<PathBuf>,
+}
+
+impl FetchedIncludes {
+    fn lock(&self) -> MutexGuard<'_, FetchedIncludesInner> {
+        self.0
+            .lock()
+            .expect("fetched includes lock should not be poisoned")
+    }
+
+    fn remote(&self, key: &(RemoteEnvironmentRef, Option<usize>)) -> Option<Lockfile> {
+        self.lock().remote.get(key).cloned()
+    }
+
+    fn insert_remote(&self, key: (RemoteEnvironmentRef, Option<usize>), lockfile: Lockfile) {
+        self.lock().remote.insert(key, lockfile);
+    }
+
+    /// A local environment fetched before, unless one of `composers` is in
+    /// its subtree, which would make fetching it again find a cycle
+    fn local(
+        &self,
+        key: &(PathBuf, UnreadableIncludes),
+        composers: &[CanonicalPath],
+    ) -> Option<LocalFetch> {
+        let mut inner = self.lock();
+        let fetched = inner.local.get(key)?.clone();
+        if fetched
+            .subtree
+            .iter()
+            .any(|dot_flox| composers.iter().any(|composer| **composer == *dot_flox))
+        {
+            return None;
+        }
+        inner.fetch_log.extend(fetched.subtree.iter().cloned());
+        Some(fetched)
+    }
+
+    /// Record that fetching the local environment at `dot_flox` started,
+    /// returning where its subtree starts in the fetch log
+    fn start_local(&self, dot_flox: &Path) -> usize {
+        let mut inner = self.lock();
+        inner.fetch_log.push(dot_flox.to_path_buf());
+        inner.fetch_log.len() - 1
+    }
+
+    /// Keep a local environment that was fetched starting at `start`
+    fn insert_local(
+        &self,
+        key: (PathBuf, UnreadableIncludes),
+        start: usize,
+        name: String,
+        manifest: Manifest<TypedOnly>,
+        lockfile: Lockfile,
+    ) {
+        let mut inner = self.lock();
+        let subtree = inner.fetch_log[start..].iter().unique().cloned().collect();
+        inner.local.insert(key, LocalFetch {
+            name,
+            manifest,
+            lockfile,
+            subtree,
+        });
+    }
+}
 
 /// Context required to fetch an environment include
 #[derive(Clone, Debug)]
@@ -37,7 +131,7 @@ pub struct IncludeFetcher {
     /// The `.flox` directories of the environments whose includes are being
     /// fetched, outermost first, used to detect include cycles
     composers: Vec<CanonicalPath>,
-    remote_lockfiles: RemoteLockfiles,
+    fetched: FetchedIncludes,
 }
 
 /// The included environment as fetched,
@@ -59,7 +153,7 @@ impl IncludeFetcher {
         Self {
             base_directory,
             composers: Vec::new(),
-            remote_lockfiles: RemoteLockfiles::default(),
+            fetched: FetchedIncludes::default(),
         }
     }
 
@@ -70,13 +164,14 @@ impl IncludeFetcher {
         Self {
             base_directory: Some(base_directory),
             composers: vec![dot_flox],
-            remote_lockfiles: RemoteLockfiles::default(),
+            fetched: FetchedIncludes::default(),
         }
     }
 
-    /// Use, and add to, remote environments that other fetchers have fetched
-    pub fn with_remote_lockfiles(mut self, remote_lockfiles: RemoteLockfiles) -> Self {
-        self.remote_lockfiles = remote_lockfiles;
+    /// Use, and add to, included environments that other fetchers have
+    /// fetched
+    pub fn with_fetched_includes(mut self, fetched: FetchedIncludes) -> Self {
+        self.fetched = fetched;
         self
     }
 
@@ -88,7 +183,7 @@ impl IncludeFetcher {
         Self {
             base_directory: Some(base_directory),
             composers,
-            remote_lockfiles: self.remote_lockfiles.clone(),
+            fetched: self.fetched.clone(),
         }
     }
 
@@ -234,11 +329,16 @@ impl IncludeFetcher {
             ));
         }
 
+        let key = (dot_flox.path.clone(), unreadable_includes);
+        if let Some(fetched) = self.fetched.local(&key, &self.composers) {
+            let name = name.clone().unwrap_or(fetched.name);
+            return Ok((fetched.manifest, fetched.lockfile, name));
+        }
+        let start = self.fetched.start_local(&dot_flox.path);
+
         let environment =
             UninitializedEnvironment::DotFlox(dot_flox).into_concrete_environment(flox, None)?;
-        let name = name
-            .clone()
-            .unwrap_or_else(|| environment.name().to_string());
+        let environment_name = environment.name().to_string();
 
         let (manifest, lockfile) = match environment {
             ConcreteEnvironment::Path(environment) => {
@@ -278,6 +378,14 @@ impl IncludeFetcher {
             },
         };
 
+        self.fetched.insert_local(
+            key,
+            start,
+            environment_name.clone(),
+            manifest.clone(),
+            lockfile.clone(),
+        );
+        let name = name.clone().unwrap_or(environment_name);
         Ok((manifest, lockfile, name))
     }
 
@@ -293,13 +401,7 @@ impl IncludeFetcher {
     ) -> Result<(Lockfile, String), EnvironmentError> {
         let name = name.clone().unwrap_or_else(|| remote.name().to_string());
         let key = (remote.clone(), generation);
-        let fetched = self
-            .remote_lockfiles
-            .lock()
-            .expect("remote lockfiles lock should not be poisoned")
-            .get(&key)
-            .cloned();
-        if let Some(lockfile) = fetched {
+        if let Some(lockfile) = self.fetched.remote(&key) {
             return Ok((lockfile, name));
         }
 
@@ -315,10 +417,7 @@ impl IncludeFetcher {
         }
         .map_err(ManagedEnvironmentError::Generations)?;
 
-        self.remote_lockfiles
-            .lock()
-            .expect("remote lockfiles lock should not be poisoned")
-            .insert(key, lockfile.clone());
+        self.fetched.insert_remote(key, lockfile.clone());
         Ok((lockfile, name))
     }
 
@@ -493,6 +592,8 @@ mod test {
             "#}),
         )
         .unwrap();
+        // A new command fetches it again
+        let include_fetcher = IncludeFetcher::new(Some(tempdir.path().to_path_buf()));
         let err = include_fetcher
             .fetch(&flox, &include_descriptor)
             .unwrap_err();
@@ -838,10 +939,10 @@ mod test {
         );
     }
 
-    /// Fetchers that share remote manifests fetch each remote environment
+    /// Fetchers that share fetched includes fetch each remote environment
     /// once, so they all use the same version of it
     #[test]
-    fn fetch_remote_once_with_shared_remote_lockfiles() {
+    fn fetch_remote_once_with_shared_fetched_includes() {
         let env_ref = RemoteEnvironmentRef::new("owner", "name").unwrap();
         let (flox, tempdir) = flox_instance_with_optional_floxhub(Some(env_ref.owner()));
         let mut remote_env = mock_remote_environment(
@@ -865,7 +966,7 @@ mod test {
         remote_env.push(&flox, true).unwrap();
 
         let sharing_fetcher = IncludeFetcher::new(Some(tempdir.path().to_path_buf()))
-            .with_remote_lockfiles(include_fetcher.remote_lockfiles.clone());
+            .with_fetched_includes(include_fetcher.fetched.clone());
         assert_eq!(
             sharing_fetcher.fetch(&flox, &include_descriptor).unwrap(),
             fetched
@@ -874,6 +975,106 @@ mod test {
         assert_ne!(
             new_fetcher.fetch(&flox, &include_descriptor).unwrap(),
             fetched
+        );
+    }
+
+    /// Fetchers that share fetched includes fetch each local environment
+    /// once, so they all use the same version of it
+    #[test]
+    fn fetch_local_once_with_shared_fetched_includes() {
+        let (flox, tempdir) = flox_instance();
+        let mut environment = new_path_environment_in(
+            &flox,
+            &with_latest_schema("[vars]\nfoo = \"v1\""),
+            tempdir.path().join("environment"),
+        );
+        environment.lockfile(&flox).unwrap();
+        let include_descriptor = IncludeDescriptor::Local {
+            dir: "environment".into(),
+            name: None,
+            auto_upgrade: None,
+        };
+        let include_fetcher = IncludeFetcher::new(Some(tempdir.path().to_path_buf()));
+        let fetched = include_fetcher.fetch(&flox, &include_descriptor).unwrap();
+
+        fs::write(
+            environment.manifest_path(&flox).unwrap(),
+            with_latest_schema("[vars]\nfoo = \"v2\""),
+        )
+        .unwrap();
+        environment.lockfile(&flox).unwrap();
+
+        let sharing_fetcher = IncludeFetcher::new(Some(tempdir.path().to_path_buf()))
+            .with_fetched_includes(include_fetcher.fetched.clone());
+        assert_eq!(
+            sharing_fetcher.fetch(&flox, &include_descriptor).unwrap(),
+            fetched
+        );
+        let new_fetcher = IncludeFetcher::new(Some(tempdir.path().to_path_buf()));
+        assert_ne!(
+            new_fetcher.fetch(&flox, &include_descriptor).unwrap(),
+            fetched
+        );
+    }
+
+    /// An environment fetched before isn't reused for a composer that it
+    /// includes in turn, so that the include cycle is still found.
+    ///
+    /// D follows X, which pins D, so fetching D on its own doesn't find the
+    /// cycle, but fetching it for X does.
+    #[test]
+    fn fetch_local_finds_cycle_through_environment_fetched_before() {
+        let (flox, tempdir) = flox_instance();
+        let mut x = new_path_environment_in(
+            &flox,
+            &with_latest_schema("[vars]\nx = \"v1\""),
+            tempdir.path().join("x"),
+        );
+        x.lockfile(&flox).unwrap();
+        let mut d = new_path_environment_in(
+            &flox,
+            &with_latest_schema("[vars]\nd = \"v1\""),
+            tempdir.path().join("d"),
+        );
+        d.lockfile(&flox).unwrap();
+        fs::write(
+            x.manifest_path(&flox).unwrap(),
+            with_latest_schema(
+                "[include]\nenvironments = [{ dir = \"../d\", auto-upgrade = false }]",
+            ),
+        )
+        .unwrap();
+        x.lockfile(&flox).unwrap();
+        fs::write(
+            d.manifest_path(&flox).unwrap(),
+            with_latest_schema("[include]\nenvironments = [{ dir = \"../x\" }]"),
+        )
+        .unwrap();
+        d.lockfile(&flox).unwrap();
+
+        let include_fetcher = IncludeFetcher::new(Some(tempdir.path().to_path_buf()));
+        let include_d = IncludeDescriptor::Local {
+            dir: "d".into(),
+            name: None,
+            auto_upgrade: None,
+        };
+        include_fetcher.fetch(&flox, &include_d).unwrap();
+
+        let fetcher_for_x =
+            IncludeFetcher::for_composer(tempdir.path().join("x"), x.dot_flox_path())
+                .with_fetched_includes(include_fetcher.fetched.clone());
+        let include_d_from_x = IncludeDescriptor::Local {
+            dir: "../d".into(),
+            name: None,
+            auto_upgrade: None,
+        };
+        let err = fetcher_for_x.fetch(&flox, &include_d_from_x).unwrap_err();
+        assert!(
+            matches!(
+                err,
+                EnvironmentError::Recoverable(RecoverableMergeError::IncludeCycle(_))
+            ),
+            "{err:?}"
         );
     }
 }
