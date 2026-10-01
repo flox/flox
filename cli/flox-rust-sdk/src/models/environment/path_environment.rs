@@ -570,6 +570,61 @@ impl Environment for PathEnvironment {
         Ok((lock_result, followed))
     }
 
+    /// Unlike following, this doesn't lock the environment, or use or keep a
+    /// copy of the lockfile, and it always builds the latest changes,
+    /// without replacing the rendered environment links,
+    /// so it reports the same wherever it runs.
+    fn check_followed_includes(
+        &mut self,
+        flox: &Flox,
+    ) -> Result<Option<FollowedIncludes>, EnvironmentError> {
+        let mut env_view = self.as_core_environment_mut()?;
+        let Some(committed) = env_view.lockfile_if_up_to_date()? else {
+            return Ok(None);
+        };
+        let check = env_view.check_path_includes(flox, &committed);
+        let mut followed = FollowedIncludes {
+            unreadable: check
+                .unreadable
+                .into_iter()
+                .map(|(name, err)| UnreadableInclude {
+                    name,
+                    reason: Arc::new(err),
+                })
+                .collect(),
+            ..Default::default()
+        };
+        if check.changed.is_empty() {
+            return Ok(Some(followed));
+        }
+
+        let lockfile =
+            match env_view.lock_with_latest_includes(flox, &committed, check.changed.clone()) {
+                Ok(lockfile) => lockfile,
+                Err(err) => {
+                    followed.not_locked = Some(NotAppliedIncludes {
+                        names: check.changed,
+                        reason: Arc::new(err),
+                    });
+                    return Ok(Some(followed));
+                },
+            };
+        let unsaved = changed_include_names(&committed, &lockfile);
+        if unsaved.is_empty() {
+            return Ok(Some(followed));
+        }
+        match env_view.build_lockfile(flox, &lockfile, None) {
+            Ok(_) => followed.unsaved = unsaved,
+            Err(err) => {
+                followed.not_built = Some(NotAppliedIncludes {
+                    names: unsaved,
+                    reason: Arc::new(err.into()),
+                })
+            },
+        }
+        Ok(Some(followed))
+    }
+
     /// Returns the lockfile if it already exists.
     fn existing_lockfile(&self, _flox: &Flox) -> Result<Option<Lockfile>, EnvironmentError> {
         self.as_core_environment()?

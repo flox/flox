@@ -1,13 +1,18 @@
-use anyhow::Result;
+use anyhow::{Result, bail};
 use bpaf::Bpaf;
 use flox_events::{CliEnvironmentPayload, EventKind, EventsHub};
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::Environment;
-use indoc::indoc;
+use indoc::{formatdoc, indoc};
 use tracing::{debug, info_span, instrument};
 
-use super::EnvironmentSelect;
-use crate::commands::{display_help, environment_description, environment_select};
+use super::{ConcreteEnvironment, EnvironmentSelect};
+use crate::commands::{
+    display_help,
+    environment_description,
+    environment_select,
+    include_upgrade_command,
+};
 use crate::environment_subcommand_metric;
 use crate::utils::events::env_detail_from_concrete;
 use crate::utils::message::{self, print_overridden_manifest_fields};
@@ -37,6 +42,12 @@ pub enum IncludeCommands {
 pub struct Upgrade {
     #[bpaf(external(environment_select), fallback(Default::default()))]
     environment: EnvironmentSelect,
+
+    /// Check that the lockfile has the latest changes to the included
+    /// environments that commands use, without changing anything.
+    /// Fails if it doesn't.
+    #[bpaf(long)]
+    check: bool,
 
     /// Name of included environment to check for changes
     #[bpaf(positional("included environment"))]
@@ -82,6 +93,10 @@ impl Upgrade {
             debug!(error = %err, "Failed to record v2 event");
         }
 
+        if self.check {
+            return self.check(&flox, &mut environment);
+        }
+
         let description = environment_description(&environment)?;
 
         let span = info_span!(
@@ -125,6 +140,34 @@ impl Upgrade {
             }
         }
 
+        Ok(())
+    }
+
+    /// Fail unless the lockfile has the latest changes to the included
+    /// environments that commands use, without writing anything
+    fn check(&self, flox: &Flox, environment: &mut ConcreteEnvironment) -> Result<()> {
+        if !self.to_upgrade.is_empty() {
+            bail!(formatdoc! {"
+                '--check' checks every included environment.
+                Run 'flox include upgrade --check' without naming included environments."});
+        }
+        let include_upgrade = include_upgrade_command(environment);
+        let span = info_span!(
+            "include upgrade check",
+            progress = "Checking for changes to included environments..."
+        );
+        let Some(followed) = span.in_scope(|| environment.check_followed_includes(flox))? else {
+            bail!(formatdoc! {"
+                The lockfile isn't up to date with the manifest.
+                Run '{include_upgrade}' to lock it with the latest changes to included environments."});
+        };
+        if let Some(problems) = message::format_followed_includes_check(&followed, &include_upgrade)
+        {
+            bail!(problems);
+        }
+        message::updated(
+            "The lockfile has the latest changes to the included environments that commands use.",
+        );
         Ok(())
     }
 }

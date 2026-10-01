@@ -375,21 +375,12 @@ pub(crate) fn print_followed_includes(followed: &FollowedIncludes, include_upgra
         } else {
             "saved in the lockfile"
         };
-        let reason = match unreadable.reason.as_ref() {
-            EnvironmentError::Recoverable(RecoverableMergeError::PathOutOfSync(path)) => {
-                formatdoc! {"
-                The environment in '{path}' has changes that aren't locked yet.
-                Run 'flox edit -d {path}' to lock them.",
-                    path = path.display(),
-                }
-            },
-            reason => errors::format_error(reason).trim_end().to_string(),
-        };
         warning(formatdoc! {"
             Could not get the latest changes to included environment '{name}'.
             Using the version of '{name}' {version}.
             {reason}",
             name = unreadable.name,
+            reason = format_unreadable_reason(&unreadable.reason),
         });
     }
     if let Some(not_locked) = &followed.not_locked {
@@ -426,6 +417,83 @@ pub(crate) fn print_followed_includes(followed: &FollowedIncludes, include_upgra
             reason = errors::format_error(&not_built.reason).trim_end(),
         });
     }
+}
+
+/// Why the latest changes to an included environment couldn't be read
+fn format_unreadable_reason(reason: &EnvironmentError) -> String {
+    match reason {
+        EnvironmentError::Recoverable(RecoverableMergeError::PathOutOfSync(path)) => {
+            formatdoc! {"
+                The environment in '{path}' has changes that aren't locked yet.
+                Run 'flox edit -d {path}' to lock them.",
+                path = path.display(),
+            }
+        },
+        reason => errors::format_error(reason).trim_end().to_string(),
+    }
+}
+
+/// What 'flox include upgrade --check' reports when the lockfile doesn't have
+/// the latest changes to followed included environments, or [None] if it
+/// does.
+///
+/// `include_upgrade` is the 'flox include upgrade' command for the
+/// environment, which saves the changes to its lockfile.
+pub(crate) fn format_followed_includes_check(
+    followed: &FollowedIncludes,
+    include_upgrade: &str,
+) -> Option<String> {
+    let mut problems = Vec::new();
+    for unreadable in &followed.unreadable {
+        problems.push(formatdoc! {"
+            Could not get the latest changes to included environment '{name}'.
+            {reason}",
+            name = unreadable.name,
+            reason = format_unreadable_reason(&unreadable.reason),
+        });
+    }
+    if let Some(not_locked) = &followed.not_locked {
+        problems.push(format!(
+            "{}\n{}",
+            format_include_names(
+                "Could not lock the latest changes to included environments:",
+                &not_locked.names,
+            ),
+            errors::format_error(&not_locked.reason).trim_end(),
+        ));
+    }
+    if let Some(not_built) = &followed.not_built {
+        problems.push(format!(
+            "{}\n{}",
+            format_include_names(
+                "The environment doesn't build with the latest changes to included environments:",
+                &not_built.names,
+            ),
+            errors::format_error(&not_built.reason).trim_end(),
+        ));
+    }
+    let next_step = if problems.is_empty() {
+        format!("Run '{include_upgrade}' to save them to the lockfile.")
+    } else {
+        format!("Then run '{include_upgrade}' to save the latest changes to the lockfile.")
+    };
+    if !followed.unsaved.is_empty() {
+        problems.push(format_include_names(
+            "Included environments have changes that aren't in the lockfile:",
+            &followed.unsaved,
+        ));
+    }
+    if problems.is_empty() {
+        return None;
+    }
+    Some(formatdoc! {"
+        The lockfile doesn't have the latest changes to included environments.
+
+        {problems}
+
+        {next_step}",
+        problems = problems.join("\n\n"),
+    })
 }
 
 /// A header followed by a list of included environment names, as printed by

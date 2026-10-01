@@ -14,6 +14,7 @@ included environments
 ```text
 flox [<general-options>] include upgrade
      [-d=<path> | -r=<owner/name>]
+     [--check]
      [<included environment>]...
 ```
 
@@ -33,7 +34,32 @@ This command saves them to the lockfile,
 and gets the latest contents of other included environments, such as those
 included with `remote`.
 
+## Checking the lockfile
+
+`flox include upgrade --check` checks that the lockfile has the latest changes
+to the included environments that commands use, without changing anything.
+It's meant as an optional check in CI, so that a commit doesn't leave changes
+to included environments out of its lockfile.
+It succeeds if the lockfile has them, and fails with an error naming the
+`flox include upgrade` command to run if:
+
+- included environments have changes that aren't in the lockfile;
+- the latest changes to an included environment can't be read or locked,
+  for example because its manifest is committed without its lockfile;
+- the environment doesn't build with the latest changes on the current system.
+
+It doesn't use or keep the copy of the lockfile in `.flox/cache`, and it builds
+the latest changes without replacing the environment that commands use, so it
+reports the same wherever it runs.
+For an environment that doesn't follow its included environments, there's
+nothing to check.
+
 # OPTIONS
+
+`--check`
+:   Check that the lockfile has the latest changes to the included
+    environments that commands use, without changing anything.
+    Fails if it doesn't. Can't be combined with names of included environments.
 
 `<included environment>`
 :   Name of included environment to check for changes

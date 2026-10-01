@@ -173,6 +173,21 @@ pub trait Environment: Send {
         Ok((self.lockfile(flox)?, FollowedIncludes::default()))
     }
 
+    /// Check whether the lockfile has the latest changes to the included
+    /// environments that are followed, without writing anything.
+    ///
+    /// Returns [None] if the lockfile isn't up to date with the manifest,
+    /// so the included environments it locked can't be checked.
+    ///
+    /// Only path environments follow their included environments;
+    /// the others have nothing to check.
+    fn check_followed_includes(
+        &mut self,
+        _flox: &Flox,
+    ) -> Result<Option<FollowedIncludes>, EnvironmentError> {
+        Ok(Some(FollowedIncludes::default()))
+    }
+
     /// Reads the manifest from disk without performing the migration.
     ///
     /// All operations are to be performed on the migrated manifest when possible.

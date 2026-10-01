@@ -397,6 +397,86 @@ EOF
   wait_for_activations "$PROJECT_DIR/composer" || return 1
 }
 
+@test "include upgrade --check succeeds when the lockfile has the latest changes" {
+  setup_composer_and_two_includes
+
+  run "$FLOX_BIN" include upgrade --check -d composer
+  assert_success
+  assert_output --partial "The lockfile has the latest changes to the included environments that commands use."
+}
+
+@test "include upgrade --check fails on changes that aren't in the lockfile, without writing anything" {
+  setup_composer_and_two_includes
+  edit_included1
+  lockfile_before="$(cat composer/.flox/env/manifest.lock)"
+
+  RUST_BACKTRACE=0 run "$FLOX_BIN" include upgrade --check -d composer
+  assert_failure
+  assert_output --partial - << EOF
+The lockfile doesn't have the latest changes to included environments.
+
+Included environments have changes that aren't in the lockfile:
+- 'included1'
+
+Run 'flox include upgrade -d $(cd composer && pwd -P)' to save them to the lockfile.
+EOF
+  assert_equal "$(cat composer/.flox/env/manifest.lock)" "$lockfile_before"
+  run ls composer/.flox/cache
+  refute_output --partial "followed-includes"
+
+  "$FLOX_BIN" include upgrade -d composer
+  run "$FLOX_BIN" include upgrade --check -d composer
+  assert_success
+}
+
+@test "include upgrade --check fails when an included environment isn't locked" {
+  setup_composer_and_two_includes
+  # A manifest committed without its lockfile
+  cat > included1/.flox/env/manifest.toml << EOF
+version = 1
+[vars]
+included1 = "v2"
+EOF
+  rm included1/.flox/env/manifest.lock
+
+  RUST_BACKTRACE=0 run "$FLOX_BIN" include upgrade --check -d composer
+  assert_failure
+  assert_output --partial "Could not get the latest changes to included environment 'included1'."
+  assert_output --partial "has changes that aren't locked yet."
+  assert_output --partial "Then run 'flox include upgrade -d $(cd composer && pwd -P)' to save the latest changes to the lockfile."
+}
+
+@test "include upgrade --check fails when the latest changes don't build" {
+  "$FLOX_BIN" init -d included
+  "$FLOX_BIN" edit -d included -f - << EOF
+version = 1
+[vars]
+Y = "v1"
+EOF
+  "$FLOX_BIN" init -d composer
+  "$FLOX_BIN" edit -d composer -f - << EOF
+version = 1
+[vars]
+X = "\$Y"
+[include]
+environments = [{ dir = "../included" }]
+EOF
+  # Builds on its own, but the variables form a cycle with the composer's
+  "$FLOX_BIN" edit -d included -f - << EOF
+version = 1
+[vars]
+Y = "\$X"
+EOF
+
+  RUST_BACKTRACE=0 run "$FLOX_BIN" include upgrade --check -d composer
+  assert_failure
+  assert_output --partial - << EOF
+The environment doesn't build with the latest changes to included environments:
+- 'included'
+EOF
+  assert_output --partial "Found a reference cycle in the '[vars]' section"
+}
+
 @test "edit errors when an environment includes itself" {
   "$FLOX_BIN" init -d composer
   RUST_BACKTRACE=0 run "$FLOX_BIN" edit -d composer -f - << EOF

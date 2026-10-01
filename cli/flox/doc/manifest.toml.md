@@ -760,6 +760,8 @@ The lockfile itself is only updated when you run
 [`flox include upgrade`](./flox-include-upgrade.md),
 so that you decide when the changes are committed,
 and `flox publish` builds the lockfile without them.
+`flox include upgrade --check` fails if the lockfile doesn't have them, for
+example as a check in CI.
 
 Changes that an included environment hasn't locked yet aren't used.
 For example, edits made to its `manifest.toml` in a text editor are used once a

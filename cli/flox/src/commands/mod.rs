@@ -1947,7 +1947,7 @@ pub(crate) fn lockfile_reporting_followed_includes(
 
 /// The 'flox include upgrade' command for an environment, selecting it with
 /// '-d' unless it's in the current directory
-fn include_upgrade_command(environment: &ConcreteEnvironment) -> String {
+pub(crate) fn include_upgrade_command(environment: &ConcreteEnvironment) -> String {
     let in_current_directory = |dir: &Path| {
         std::env::current_dir()
             .and_then(std::fs::canonicalize)
