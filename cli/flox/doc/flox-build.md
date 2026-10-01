@@ -16,6 +16,7 @@ flox-build - Build packages with Flox
 flox [<general-options>] build
      [-d=<path>]
      [--stability <stability>]
+     [--override-input <reference>=<flakeref>]...
      [<package>]...
 ```
 
@@ -111,6 +112,43 @@ Catalog references resolve to the latest published versions and are
 independent of `--stability`, which selects only the nixpkgs base
 package set.
 
+To build against an unpublished revision of a catalog input, such as a
+local checkout being iterated on, pass
+`--override-input <reference>=<flakeref>`.
+The input's source is replaced for that invocation only, as
+`nix build --override-input` replaces a flake input;
+the committed lock is left unchanged.
+
+`<reference>` names the package as an expression references it, e.g.
+`catalogs.myorg.hello`.
+Where an expression selects a member of a package
+(`catalogs.myorg.toolkit.readVersion`), name the package
+(`catalogs.myorg.toolkit`).
+The reference must be one the lock pins:
+with a committed lock, any catalog input of the project;
+without one, a catalog input of the packages being built.
+
+`<flakeref>` is a Nix flake reference with a URL scheme, such as
+`git+file:///src/hello` or `github:myorg/hello/my-branch`
+(`flake:<name>` for a registry entry).
+Any other value is a path, relative to the current directory.
+A path inside a git repository is fetched as that repository:
+only git-tracked files are fetched, including uncommitted changes to them,
+as for the project's own expressions.
+A path outside of one is fetched as a `path:` flakeref, which copies the
+entire directory into the Nix store.
+In either form the source's `.flox` directory is looked for directly
+beneath the path given, or beneath the `?dir=<subdir>` of a flakeref.
+
+An override replaces the source of an input and nothing else:
+
+- The input must already be published.
+  Without a committed lock the catalog is still asked to resolve it,
+  so a package that has never been published cannot be overridden.
+- Catalog packages that the overriding source itself references come from
+  the project's lock.
+  A reference the overriding source adds is not resolved.
+
 # OPTIONS
 
 `<package>`
@@ -128,6 +166,17 @@ package set.
     stability is used by default.
     An explicit `--stability` value overrides both of these defaults.
     Cannot be used with manifest builds.
+
+`--override-input <reference>=<flakeref>`
+:   Fetch the catalog input `<reference>`, as the expression names it
+    (e.g. `catalogs.myorg.hello`), from `<flakeref>` for this invocation
+    instead of its locked source.
+    A value without a URL scheme is a path: the git repository it is in,
+    or a `path:` flakeref outside of one.
+    May be given more than once, once for each input.
+    `.flox/catalog.lock` is not modified.
+    Cannot be used unless a Nix expression build is among the packages
+    being built.
 
 
 ```{.include}

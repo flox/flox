@@ -214,10 +214,15 @@ EOF
   git_init_project
   nef_package_setup greet
   export _FLOX_USE_CATALOG_MOCK="$UNIT_TEST_GENERATED/get_base_catalog_nixpkgs_url.yaml"
+  export TMPDIR="$BATS_TEST_TMPDIR"
 
   run "$FLOX_BIN" develop -d "$PROJECT_DIR" < /dev/null
   assert_success
   assert_output --partial "This shell approximates the environment in which 'flox build' builds 'greet'"
+  # The shell is `exec`ed, so nothing outlives it to remove the ephemeral
+  # catalog lock this project, having no committed one, was evaluated with.
+  run compgen -G "$TMPDIR/flox-catalog.lock.*"
+  assert_failure
 }
 
 # ---------------------------------------------------------------------------- #
