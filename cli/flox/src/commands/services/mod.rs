@@ -25,6 +25,7 @@ use super::{
     EnvironmentSelect,
     UninitializedEnvironment,
     activated_environments,
+    lockfile_reporting_followed_includes,
 };
 use crate::commands::activate::{ActivateOptions, CommandSelect};
 use crate::commands::display_help;
@@ -170,10 +171,9 @@ impl ServicesEnvironment {
         let socket = environment.services_socket_path(flox)?;
         // Settle whether the latest changes to included environments build,
         // so that the services match the environment that's activated.
-        let lockfile: Lockfile = environment
-            .lockfile_following_includes(flox, FollowMode::LockAndBuild)?
-            .0
-            .into();
+        let lockfile: Lockfile =
+            lockfile_reporting_followed_includes(&mut environment, flox, FollowMode::LockAndBuild)?
+                .into();
         let manifest = lockfile.migrated_manifest()?;
 
         Ok(Self {
@@ -381,6 +381,8 @@ pub async fn start_services_with_new_process_compose(
     names: &[String],
     generation: Option<GenerationId>,
 ) -> Result<Vec<String>> {
+    // Creating the ServicesEnvironment already reported what following
+    // included environments did.
     let lockfile: Lockfile = concrete_environment
         .lockfile_following_includes(&flox, FollowMode::LockAndBuild)?
         .0

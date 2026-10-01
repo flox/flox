@@ -1047,6 +1047,56 @@ EOF
   assert_output --regexp "one +Stopped +"
 }
 
+@test "status: reports changes to included environments that aren't in the lockfile yet" {
+  "$FLOX_BIN" init -d included
+  "$FLOX_BIN" edit -d included -f "${TESTS_DIR}/services/sleeping_services.toml"
+  "$FLOX_BIN" init -d composer
+  "$FLOX_BIN" edit -d composer -f - << EOF
+version = 1
+
+[include]
+environments = [{ dir = "../included" }]
+EOF
+
+  {
+    cat "${TESTS_DIR}/services/sleeping_services.toml"
+    printf '\n[services.three]\ncommand = "sleep infinity"\n'
+  } | "$FLOX_BIN" edit -d included -f -
+
+  run --separate-stderr "$FLOX_BIN" services status -d composer
+  assert_success
+  assert_output --regexp "three +Stopped"
+  assert_regex "$stderr" "aren't in the lockfile yet"
+  assert_regex "$stderr" "- 'included'"
+}
+
+@test "start: reports changes to included environments once" {
+  "$FLOX_BIN" init -d included
+  "$FLOX_BIN" edit -d included -f - << EOF
+version = 1
+
+[vars]
+included = "v1"
+EOF
+  "$FLOX_BIN" init -d composer
+  {
+    cat "${TESTS_DIR}/services/sleeping_services.toml"
+    printf '\n[include]\nenvironments = [{ dir = "../included" }]\n'
+  } | "$FLOX_BIN" edit -d composer -f -
+  "$FLOX_BIN" edit -d included -f - << EOF
+version = 1
+
+[vars]
+included = "v2"
+EOF
+
+  run "$FLOX_BIN" activate -d composer -- bash -c '
+    "$FLOX_BIN" services start -d composer one 2> start.stderr
+  '
+  assert_success
+  assert_equal "$(grep -c "aren't in the lockfile yet" start.stderr)" 1
+}
+
 @test "status: prints requested services (after start)" {
   setup_sleeping_services
 

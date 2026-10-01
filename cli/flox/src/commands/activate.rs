@@ -383,11 +383,24 @@ impl ActivateOptions {
 
         // Read before locking, which may re-lock and overwrite it.
         let old_lockfile = concrete_environment.existing_lockfile(&flox)?;
-        let lockfile = match lockfile_reporting_followed_includes(
-            &mut concrete_environment,
-            &flox,
-            FollowMode::LockAndBuild,
-        )? {
+        // The services command already reported following for its
+        // activations.
+        let lock_result = if check_upgrades.is_some() {
+            lockfile_reporting_followed_includes(
+                &mut concrete_environment,
+                &flox,
+                FollowMode::LockAndBuild,
+            )?
+        } else {
+            let (lock_result, followed) = concrete_environment
+                .lockfile_following_includes(&flox, FollowMode::LockAndBuild)?;
+            debug!(
+                ?followed,
+                "followed included environments without reporting"
+            );
+            lock_result
+        };
+        let lockfile = match lock_result {
             LockResult::Changed(lockfile) => {
                 message::print_overridden_manifest_fields(&lockfile);
                 message::print_default_systems_changed(old_lockfile.as_ref(), &lockfile);
