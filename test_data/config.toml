@@ -354,6 +354,9 @@ pre_cmd = "flox init"
 cmd = "flox install hello"
 
 [resolve.hello_unfree]
+# This response must have a substitutable output on the test systems. A forced
+# rerecord can move its nixpkgs revision; verify cache availability before
+# accepting a changed cassette. The retained 2fcb964d revision meets this.
 pre_cmd = "flox init"
 cmd = "flox install hello-unfree"
 

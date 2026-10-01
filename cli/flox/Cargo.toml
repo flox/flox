@@ -87,6 +87,7 @@ zbus-secret-service-keyring-store.workspace = true
 factory-api-v1.workspace = true
 flox-events = { workspace = true, features = ["tests"] }
 floxhub-client = { workspace = true, features = ["tests"] }
+http.workspace = true
 httpmock.workspace = true
 pretty_assertions.workspace = true
 proptest.workspace = true

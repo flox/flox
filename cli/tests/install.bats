@@ -256,13 +256,10 @@ EOF
   [ -e "$PROJECT_DIR/.flox/run/$NIX_SYSTEM.composer-dev/bin/bash" ]
 }
 
-# This is also checking we can build an unfree package
+# This checks the license warning; the pinned output may come from a cache.
 @test "'flox install' warns about unfree packages" {
   skip_x86_64_darwin_replay
   "$FLOX_BIN" init
-  # Keep this response at nixpkgs rev 2fcb964d when regenerating mocks.
-  # A recording at 7a0f122f made Linux CI time out during this install;
-  # the stalled Nix operation was not captured (flox/flox#4739).
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello_unfree.yaml"
   run "$FLOX_BIN" install hello-unfree
   assert_success

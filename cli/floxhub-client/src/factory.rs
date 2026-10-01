@@ -58,12 +58,12 @@ pub enum FactoryClientError {
     #[error("{}", fmt_api_error(.0))]
     AuthRejected(APIError<ErrorResponse>),
 
-    /// The Flox Factory reported a server-side error (HTTP 5xx, or 422).
+    /// The cancel endpoint reported HTTP 409, 422, or 5xx.
     ///
     /// Distinct from [`FactoryClientError::Transport`] because the host did
-    /// respond: the failure is the service's, and the same request may succeed
-    /// on retry. Wraps the underlying error so the server's `detail` still
-    /// renders, matching the `APIError` variant.
+    /// respond. The status distinguishes a dispatch still in flight (409) from
+    /// service failures, some of which may persist (502). Wraps the underlying
+    /// error so the server's `detail` remains available.
     #[error("{}", fmt_api_error(.0))]
     Server(APIError<ErrorResponse>),
 

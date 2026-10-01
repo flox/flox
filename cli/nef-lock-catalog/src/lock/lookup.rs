@@ -92,7 +92,7 @@ fn build_request(references: BTreeSet<CatalogRef>) -> BuildInputsLookupRequest {
         // stability. The server accepts and ignores the field, and the spec
         // marks it deprecated, but older servers still read it, so send the
         // default stability until the field is dropped from the spec.
-        stability: Some(DEFAULT_STABILITY.clone().into()),
+        stability: Some(DEFAULT_STABILITY.to_owned()),
     }
 }
 
@@ -172,7 +172,7 @@ mod tests {
         );
         assert_eq!(
             serde_json::to_value(&wire.stability).unwrap(),
-            json!("stable")
+            json!(DEFAULT_STABILITY)
         );
         assert!(wire.reference_point.is_none());
     }

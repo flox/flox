@@ -500,7 +500,7 @@ pub fn base_catalog_url_for_stability_arg(
                 formatdoc! {"
                     The default stability {} does not exist (or has not yet been populated).
                     Available stabilities are: {available_stabilities}
-                ", DEFAULT_STABILITY.as_str()}
+                ", DEFAULT_STABILITY}
             };
 
             let url = base_catalog_info
