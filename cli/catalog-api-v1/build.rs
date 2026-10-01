@@ -42,6 +42,16 @@ fn generator() -> progenitor::Generator {
         "crate::types::CatalogStoreConfig",
         vec![].into_iter(),
     );
+    settings.with_replacement(
+        "LockedGitSource",
+        "crate::types::LockedGitSource",
+        vec![].into_iter(),
+    );
+    settings.with_replacement(
+        "LockedInputEntry",
+        "crate::types::LockedInputEntry",
+        vec![].into_iter(),
+    );
     settings.with_inner_type(parse_quote! { crate::hooks::RequestHooks });
     progenitor::Generator::new(&settings)
 }

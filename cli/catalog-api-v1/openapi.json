@@ -1397,7 +1397,7 @@
           "catalogs"
         ],
         "summary": "Check if a build already exists",
-        "description": "Check whether a build already exists for the given source tuple.\n\nPath Parameters:\n- **catalog_name**: The name of the catalog\n- **package_name**: The name of the package\n\nRequest Body:\n- **source_url**: Source repository URL\n- **source_rev**: Source revision\n- **nixpkgs_rev**: Nixpkgs revision used for the build\n- **system**: Target system (e.g. x86_64-linux)\n- **locked_inputs**: Optional flat map of DIRECT catalog dependencies,\n  same shape as the locked_inputs field on the publish endpoint.  The\n  check is always closure-aware \u2014 there is no hash-blind path:\n  absent/null/{} \u2192 empty closure (H(\u2205)); {\u2026} \u2192 resolved + Merkle-hashed.\n  Old clients that omit the field are accepted (no 422); they are treated\n  as publishing with an empty closure.\n\nReturns:\n- **CheckBuildResponse** with already_published=true and provenance\n  if a matching build exists, or already_published=false otherwise.",
+        "description": "Check whether a build already exists for the given source tuple.\n\nPath Parameters:\n- **catalog_name**: The name of the catalog\n- **package_name**: The name of the package\n\nRequest Body:\n- **source_url**: Source repository URL\n- **source_rev**: Source revision\n- **nixpkgs_rev**: Nixpkgs revision used for the build\n- **system**: Target system (e.g. x86_64-linux)\n- **locked_inputs**, **direct_inputs**: the same mode-selecting pair as\n  the publish endpoint (build_lock.selects_v2): absent/null\n  direct_inputs is legacy, which always answers\n  already_published=false. Any list,\n  including [], selects v2: locked_inputs must hold the complete\n  closure, which is validated and walked the same way as publish; a\n  well-shaped but unresolvable closure is an advisory miss, never a\n  hard failure.\n- **source_ref**, **dot_flox_dir**: identify the package under check,\n  never a dependency's source. Either absent or unusable is an advisory\n  miss for a v2 check; legacy always misses regardless of these fields.\n\nReturns:\n- **CheckBuildResponse** with already_published=true and provenance\n  if a matching build exists, or already_published=false otherwise.",
         "operationId": "check_build_api_v1_catalog_catalogs__catalog_name__packages__package_name__check_build_post",
         "security": [
           {
@@ -2751,6 +2751,24 @@
             "title": "Factory Build Token",
             "nullable": true,
             "type": "string"
+          },
+          "direct_inputs": {
+            "title": "Direct Inputs",
+            "nullable": true,
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "source_ref": {
+            "title": "Source Ref",
+            "nullable": true,
+            "type": "string"
+          },
+          "dot_flox_dir": {
+            "title": "Dot Flox Dir",
+            "nullable": true,
+            "type": "string"
           }
         },
         "type": "object",
@@ -3104,6 +3122,16 @@
             },
             "type": "array"
           },
+          "version": {
+            "title": "Version",
+            "nullable": true,
+            "type": "string"
+          },
+          "build": {
+            "title": "Build",
+            "nullable": true,
+            "type": "string"
+          },
           "locked_inputs_hash": {
             "type": "string",
             "title": "Locked Inputs Hash"
@@ -3118,7 +3146,7 @@
           "locked_inputs_hash"
         ],
         "title": "LockedInputEntry",
-        "description": "An entry in a flat locked-inputs map.\n\nPublish leaves `inputs` as `null` because the server reconstructs the DAG\nfrom `package_inputs`. Lookup supplies direct input keys. An empty list\nmeans no dependencies.\n\n`locked_inputs_hash` is required. Lookup computes it from the closure it\nassembled; publish uses it to select a stored closure. Boundary children,\nincluding redacted or unencodable rows, can contribute to that hash without\nappearing in `inputs`. Lookup can compute a digest no stored row carries,\nwhich publish rejects."
+        "description": "One catalog-qualified input with a required closure hash.\n\nLegacy treats every map entry as direct and ignores its child list, which\nmay be absent, null, empty or dangling. V2 requires populated child lists\nand exactly the closure reachable from `direct_inputs`; the server verifies\nevery hash independently. Lookup supplies child keys, with `[]` for a leaf.\nAn unresolved lookup group can contain partial entries and must be rejected\nas a whole."
       },
       "LockedSourceItem": {
         "properties": {
@@ -3491,7 +3519,15 @@
         "title": "PackageBuildList"
       },
       "PackageBuildResponse": {
-        "properties": {},
+        "properties": {
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/PublishWarning"
+            },
+            "type": "array",
+            "title": "Warnings"
+          }
+        },
         "type": "object",
         "title": "PackageBuildResponse"
       },
@@ -3592,6 +3628,14 @@
             "title": "Factory Build Token",
             "nullable": true,
             "type": "string"
+          },
+          "direct_inputs": {
+            "title": "Direct Inputs",
+            "nullable": true,
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
           }
         },
         "type": "object",
@@ -4373,6 +4417,30 @@
           "catalog_store_config"
         ],
         "title": "PublishInfoResponseCatalog"
+      },
+      "PublishWarning": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "input": {
+            "type": "string",
+            "title": "Input"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "input",
+          "message"
+        ],
+        "title": "PublishWarning",
+        "description": "A publish diagnostic with an open code and a message for display."
       },
       "PublishedCatalog": {
         "properties": {
