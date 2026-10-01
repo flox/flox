@@ -37,6 +37,10 @@ use crate::{
 /// File name of the project catalog lock, relative to the `.flox` directory.
 pub const CATALOG_LOCKFILE_NAME: &str = "catalog.lock";
 
+/// The relock remedy shared by the reader and CLI. Keep its spelling in one
+/// place while the command's final name remains under discussion.
+pub const UPDATE_CATALOGS_COMMAND: &str = "flox build update-catalogs";
+
 /// The location of the project catalog lock within `dot_flox_path`.
 pub fn catalog_lockfile_path(dot_flox_path: impl AsRef<Path>) -> PathBuf {
     dot_flox_path.as_ref().join(CATALOG_LOCKFILE_NAME)
@@ -164,7 +168,7 @@ mod tests {
         assert_eq!(references, BTreeSet::new());
         assert_eq!(
             std::fs::read_to_string(&lockfile_path).unwrap(),
-            "{\n  \"version\": 1,\n  \"direct_catalog_inputs\": {},\n  \"catalogs\": {}\n}\n"
+            "{\n  \"version\": 2,\n  \"locked_inputs\": {},\n  \"direct_inputs\": [],\n  \"catalogs\": {}\n}\n"
         );
     }
 }

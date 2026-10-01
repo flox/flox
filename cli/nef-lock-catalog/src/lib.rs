@@ -26,11 +26,14 @@ impl Display for CatalogId {
 
 pub use lock::build_lock::{
     BuildLock,
+    GitSource,
+    LockedInput,
     LockfileError,
+    PackageClosure,
+    ProjectionError,
     StaleLockError,
     read_lock,
     render_lock,
-    subset_direct_inputs,
     write_lock,
 };
 pub use lock::flakeref::NixFlakeref;
@@ -40,6 +43,7 @@ pub use lock::transform::build_lock_from_locked_inputs;
 pub use project::{
     CATALOG_LOCKFILE_NAME,
     CatalogLockError,
+    UPDATE_CATALOGS_COMMAND,
     catalog_lockfile_path,
     lock_project_catalog,
     resolve_lock,
