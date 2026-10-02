@@ -763,7 +763,8 @@ The fields in these include descriptors are as follows:
   Commands use the generation that was last fetched from FloxHub instead of
   fetching it: `flox activate` fetches it in the background when it checks for
   upgrades, about once a day, and the next command after that uses it.
-  A generation that's older than the one in the lockfile isn't used.
+  A generation that's older than the one in the lockfile isn't used,
+  including for an environment that an included directory includes.
   Using a new generation can still need network access, to resolve packages
   that it shares a package group with the composing environment for, and to
   download them.

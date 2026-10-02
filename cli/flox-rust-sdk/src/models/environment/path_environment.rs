@@ -2143,6 +2143,94 @@ pub mod tests {
         assert_eq!(locked_vars(&lockfile), vars_map(&[("remote", "v2")]));
     }
 
+    /// A -> B -> owner/remote: when this machine fetched the remote
+    /// environment before the generation that A's lockfile has for B, A keeps
+    /// that version of B rather than going back to an older generation.
+    #[test]
+    fn lockfile_keeps_path_include_whose_remote_include_was_fetched_before_it() {
+        let (flox, tempdir) = flox_instance_with_optional_floxhub(Some(&"owner".parse().unwrap()));
+        let mut remote = mock_remote_environment(
+            &flox,
+            &with_latest_schema("[vars]\nremote = \"v1\""),
+            "owner".parse().unwrap(),
+            Some("remote"),
+        );
+        locked_path_environment(
+            &flox,
+            &tempdir,
+            "b",
+            &with_latest_schema(
+                "[include]\nenvironments = [{ remote = \"owner/remote\", auto-upgrade = true }]",
+            ),
+        );
+        let mut a = locked_path_environment(
+            &flox,
+            &tempdir,
+            "a",
+            &with_latest_schema("[include]\nenvironments = [{ dir = \"../b\" }]"),
+        );
+        let pointer = remote.pointer().clone();
+        let floxmeta = FloxMeta::open_local(&flox, &pointer).unwrap();
+        let sync_branch = remote_branch_name(&pointer);
+        let fetched_before = floxmeta.git.branch_hash(&sync_branch).unwrap();
+        remote
+            .edit(&flox, with_latest_schema("[vars]\nremote = \"v2\""))
+            .unwrap();
+        remote.push(&flox, true).unwrap();
+        new_command(&mut a);
+        a.include_upgrade(&flox, vec![]).unwrap();
+
+        floxmeta
+            .git
+            .reset_branch(&sync_branch, &fetched_before)
+            .unwrap();
+        let (lockfile, followed) = follow(&mut a, &flox, FollowMode::Lock);
+        assert_eq!(followed_names(&followed), (vec![], vec![], vec![], vec![]));
+        assert_eq!(locked_vars(&lockfile), vars_map(&[("remote", "v2")]));
+    }
+
+    /// A -> B -> owner/remote pinned to a generation: following B doesn't
+    /// need that generation to have been fetched on this machine, since B's
+    /// lockfile has it.
+    #[test]
+    fn lockfile_follows_path_include_with_a_pinned_remote_include_not_fetched() {
+        let (flox, tempdir) = flox_instance_with_optional_floxhub(Some(&"owner".parse().unwrap()));
+        mock_remote_environment(
+            &flox,
+            &with_latest_schema("[vars]\nremote = \"v1\""),
+            "owner".parse().unwrap(),
+            Some("remote"),
+        );
+        let b_manifest = |vars: &str| {
+            with_latest_schema(formatdoc! {r#"
+                [include]
+                environments = [{{ remote = "owner/remote", generation = 1 }}]
+
+                [vars]
+                {vars}
+            "#})
+        };
+        let mut b = locked_path_environment(&flox, &tempdir, "b", &b_manifest("b = \"v1\""));
+        let mut a = locked_path_environment(
+            &flox,
+            &tempdir,
+            "a",
+            &with_latest_schema("[include]\nenvironments = [{ dir = \"../b\" }]"),
+        );
+
+        fs::remove_dir_all(floxmeta_dir(&flox, &"owner".parse().unwrap())).unwrap();
+        edit_and_lock(&mut b, &flox, &b_manifest("b = \"v2\""));
+        let (lockfile, followed) = follow(&mut a, &flox, FollowMode::Lock);
+        assert_eq!(
+            followed_names(&followed),
+            (vec!["b"], vec![], vec![], vec![])
+        );
+        assert_eq!(
+            locked_vars(&lockfile),
+            vars_map(&[("remote", "v1"), ("b", "v2")])
+        );
+    }
+
     /// The notice about new generations on FloxHub is an upgrade notification,
     /// which an environment can turn off
     #[test]

@@ -200,7 +200,8 @@ impl<State> CoreEnvironment<State> {
                 .fetch_if_auto_upgraded(flox, &locked.descriptor)
             {
                 Ok(Some(latest))
-                    if !latest.is_recorded_by(locked) && !self.fetched_before(flox, locked) =>
+                    if !latest.is_recorded_by(locked)
+                        && !self.fetched_before(flox, locked, &latest) =>
                 {
                     check.changed.push(locked.name.clone());
                     check.includes.push(latest);
@@ -228,14 +229,32 @@ impl<State> CoreEnvironment<State> {
     /// the generation that `locked` records, e.g. when a teammate saved a
     /// newer generation in the lockfile, so reading it as last fetched would
     /// go back to an older one.
-    fn fetched_before(&self, flox: &Flox, locked: &LockedInclude) -> bool {
-        let (IncludeDescriptor::Remote { remote, .. }, Some(generation)) =
-            (&locked.descriptor, locked.generation)
-        else {
-            return false;
+    ///
+    /// For an included directory, that's any of the environments from FloxHub
+    /// that it includes in the version `locked` records, which `latest`, its
+    /// latest version, has an older generation of.
+    fn fetched_before(&self, flox: &Flox, locked: &LockedInclude, latest: &LockedInclude) -> bool {
+        let lacks = |remote, generation| {
+            self.include_fetcher
+                .last_fetched_lacks_generation(flox, remote, generation)
         };
-        self.include_fetcher
-            .last_fetched_lacks_generation(flox, remote, generation)
+        match &locked.descriptor {
+            IncludeDescriptor::Remote { remote, .. } => locked
+                .generation
+                .is_some_and(|generation| lacks(remote, generation)),
+            IncludeDescriptor::Local { .. } => locked.included_remotes.iter().any(|recorded| {
+                let Some(generation) = recorded.generation else {
+                    return false;
+                };
+                let goes_back = latest.included_remotes.iter().any(|included| {
+                    included.remote == recorded.remote
+                        && included
+                            .generation
+                            .is_some_and(|latest| latest < generation)
+                });
+                goes_back && lacks(&recorded.remote, generation)
+            }),
+        }
     }
 
     /// A view of this environment that reads environments included from
