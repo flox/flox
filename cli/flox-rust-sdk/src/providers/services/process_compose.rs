@@ -491,6 +491,7 @@ impl IntoIterator for ProcessStates {
 fn base_process_compose_command(socket: impl AsRef<Path>) -> Command {
     let path = Path::new(&*PROCESS_COMPOSE_BIN);
     let mut cmd = Command::new(path);
+    flox_core::util::restore_startup_tls_env(&mut cmd);
     cmd.env("PATH", path)
         .env("NO_COLOR", "1") // apparently it doesn't do this automatically even though it's not connected to a tty...
         .arg("--unix-socket")
@@ -1032,6 +1033,9 @@ pub mod test_helpers {
             write_process_compose_config(config, &config_path).unwrap();
 
             let mut cmd = Command::new(&*PROCESS_COMPOSE_BIN);
+            // Services must not inherit certificate paths the TLS library
+            // wrote into this process since startup.
+            flox_core::util::restore_startup_tls_env(&mut cmd);
 
             // apparently it doesn't do this automatically even though it's not connected to a tty...
             cmd.env("NO_COLOR", "1");

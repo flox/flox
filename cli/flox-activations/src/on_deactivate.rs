@@ -14,6 +14,7 @@ use std::process::{Command, Stdio};
 use anyhow::{Context, Result};
 use flox_core::activate::context::{AttachCtx, AttachProjectCtx};
 use flox_core::activations::StartIdentifier;
+use flox_core::util::restore_startup_tls_env;
 use tracing::{debug, info, warn};
 
 use crate::attach_diff::AttachDiff;
@@ -114,6 +115,8 @@ fn run_hook_script(
     )?;
 
     let mut command = Command::new(BASH_BIN);
+    // Before the attach diff, so a hook that exported one of these wins.
+    restore_startup_tls_env(&mut command);
     attach_diff.apply_to_command(&mut command);
     command.arg(script);
     command

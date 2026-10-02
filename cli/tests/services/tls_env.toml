@@ -1,0 +1,4 @@
+version = 1
+
+[services.tls_env]
+command = "env > \"$PWD/tls_env.txt\""

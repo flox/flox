@@ -7,6 +7,7 @@ use anyhow::{Context, Error, bail};
 use flox_core::activate::context::{AttachCtx, AttachProjectCtx};
 use flox_core::activations::StartIdentifier;
 use flox_core::process_compose::{PROCESS_NEVER_EXIT_NAME, manager_responds};
+use flox_core::util::restore_startup_tls_env;
 use time::OffsetDateTime;
 use time::macros::format_description;
 use tracing::{debug, info};
@@ -116,6 +117,8 @@ pub fn start_process_compose_no_services(
         .join(format!("services.{}.log", log_timestamp_now()?));
 
     let mut command = Command::new(&project.process_compose_bin);
+    // Before the attach diff, so a hook that exported one of these wins.
+    restore_startup_tls_env(&mut command);
 
     // The executive inherits the pre-activation environment from activate,
     // so these values are the same as what the initial activation captured.
@@ -177,6 +180,7 @@ pub fn start_services_via_socket(
         }
 
         let mut cmd = Command::new(process_compose_bin);
+        restore_startup_tls_env(&mut cmd);
         cmd.env("NO_COLOR", "1")
             .arg("--unix-socket")
             .arg(socket_path)
@@ -205,6 +209,7 @@ pub fn start_services_via_socket(
 /// Shuts down process-compose by running `process-compose down` via the unix socket.
 pub fn process_compose_down(process_compose_bin: &Path, socket_path: &Path) -> Result<(), Error> {
     let mut cmd = Command::new(process_compose_bin);
+    restore_startup_tls_env(&mut cmd);
     cmd.arg("down");
     cmd.arg("--unix-socket");
     cmd.arg(socket_path);

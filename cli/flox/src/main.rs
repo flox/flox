@@ -19,6 +19,7 @@ use commands::{
 };
 use flox_config::Config;
 use flox_core::sentry::init_sentry;
+use flox_core::util::capture_startup_tls_env;
 use flox_core::vars::{FLOX_VERSION_STRING, FLOX_VERSION_VAR};
 use flox_events::{EventsHub, LifecycleFields};
 use flox_rust_sdk::flox::FLOX_VERSION;
@@ -46,7 +47,6 @@ mod commands;
 mod utils;
 
 async fn run(args: FloxArgs) -> Result<()> {
-    populate_default_nix_env_vars();
     let config = Config::parse()?;
     args.handle(config).await?;
     Ok(())
@@ -55,6 +55,15 @@ async fn run(args: FloxArgs) -> Result<()> {
 fn main() -> ExitCode {
     // Avoid SIGPIPE from killing the process
     reset_sigpipe();
+
+    // Record the certificate variables as the user left them and apply the
+    // Nix-software defaults, before Sentry, any HTTP client or the async
+    // runtime: on Linux the first TLS client built writes SSL_CERT_FILE and
+    // SSL_CERT_DIR into this process when they are unset or point at a
+    // missing path, which would otherwise be taken for the user's, and the
+    // process is still single-threaded here, which env::set_var requires.
+    capture_startup_tls_env();
+    populate_default_nix_env_vars();
 
     // Eagerly evaluate version and prevent it from propagating to sub-processes.
     let _ = *FLOX_VERSION_STRING;

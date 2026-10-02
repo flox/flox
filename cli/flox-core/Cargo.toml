@@ -38,6 +38,7 @@ uuid.workspace = true
 
 [dev-dependencies]
 indoc.workspace = true
+temp-env.workspace = true
 
 [features]
 default = ["proc_status"]
