@@ -8,12 +8,10 @@ use crate::utils::table::{table_string, table_writer};
 /// Render the `flox extension list` table: each extension's name and the
 /// source path it was installed from.
 pub(super) fn render_table(extensions: &[Extension]) -> Result<String> {
-    // TabWriter's minimum width applies to every column, so the NAME minimum
-    // is formatted into the cells.
     let mut tw = table_writer(Vec::new());
-    writeln!(tw, "{:<20}\tPATH", "NAME")?;
+    writeln!(tw, "NAME\tPATH")?;
     for ext in extensions {
-        writeln!(tw, "{:<20}\t{}", ext.name, ext.state.source)?;
+        writeln!(tw, "{}\t{}", ext.name, ext.state.source)?;
     }
 
     Ok(table_string(tw))
@@ -44,35 +42,15 @@ mod tests {
 
     #[test]
     fn render_table_sizes_name_column() {
-        let cases = [
-            (
-                "short names keep the minimum width",
-                vec![
-                    extension("deploy", "/home/u/src/flox-deploy"),
-                    extension("lint", "/home/u/src/flox-lint"),
-                ],
-                indoc! {"
-                    NAME                  PATH
-                    deploy                /home/u/src/flox-deploy
-                    lint                  /home/u/src/flox-lint
-                "},
-            ),
-            (
-                "a long name widens the column",
-                vec![
-                    extension("deploy", "/home/u/src/flox-deploy"),
-                    extension("a-very-long-extension-name", "/home/u/src/long"),
-                ],
-                indoc! {"
-                    NAME                        PATH
-                    deploy                      /home/u/src/flox-deploy
-                    a-very-long-extension-name  /home/u/src/long
-                "},
-            ),
+        let extensions = vec![
+            extension("deploy", "/home/u/src/flox-deploy"),
+            extension("a-very-long-extension-name", "/home/u/src/long"),
         ];
 
-        for (name, extensions, expected) in cases {
-            assert_eq!(render_table(&extensions).unwrap(), expected, "{name}");
-        }
+        assert_eq!(render_table(&extensions).unwrap(), indoc! {"
+            NAME                        PATH
+            deploy                      /home/u/src/flox-deploy
+            a-very-long-extension-name  /home/u/src/long
+        "});
     }
 }

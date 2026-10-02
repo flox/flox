@@ -1,3 +1,4 @@
+use std::cmp::max;
 use std::fmt::{self, Display};
 use std::io::Write;
 
@@ -198,14 +199,22 @@ impl Display for ProcessStatesDisplay {
             }
         }
 
-        // TabWriter's minimum width and alignment apply to every column, so
-        // the NAME minimum and the right-aligned PID are formatted into cells.
-        let mut tw = table_writer(Vec::new()).padding(1);
-        writeln!(tw, "{:<10}\tSTATUS\t{:>8}", "NAME", "PID").map_err(|_| fmt::Error)?;
+        // TabWriter can't right-align a single column.
+        let pid_width = max(
+            "PID".len(),
+            self.0
+                .iter()
+                .map(|proc| proc.pid_display().len())
+                .max()
+                .unwrap_or(0),
+        );
+
+        let mut tw = table_writer(Vec::new());
+        writeln!(tw, "NAME\tSTATUS\t{:>pid_width$}", "PID").map_err(|_| fmt::Error)?;
         for proc in &self.0 {
             writeln!(
                 tw,
-                "{:<10}\t{}\t{:>8}",
+                "{}\t{}\t{:>pid_width$}",
                 proc.name,
                 display_status(proc),
                 proc.pid_display(),
@@ -239,11 +248,11 @@ mod tests {
         ]);
         let states_display: ProcessStatesDisplay = states.into();
         assert_eq!(format!("{states_display}"), indoc! {"
-            NAME       STATUS       PID
-            aaa        Running      123
-            bbb        Running      123
-            ccc        Running      123
-            zzz        Running      123
+            NAME  STATUS   PID
+            aaa   Running  123
+            bbb   Running  123
+            ccc   Running  123
+            zzz   Running  123
         "});
     }
 
@@ -255,9 +264,9 @@ mod tests {
         ]);
         let states_display: ProcessStatesDisplay = states.into();
         assert_eq!(format!("{states_display}"), indoc! {"
-            NAME                 STATUS       PID
-            longlonglonglonglong Running      123
-            short                Running      123
+            NAME                  STATUS   PID
+            longlonglonglonglong  Running  123
+            short                 Running  123
         "});
     }
 
@@ -270,10 +279,10 @@ mod tests {
         ]);
         let states_display: ProcessStatesDisplay = states.into();
         assert_eq!(format!("{states_display}"), indoc! {"
-            NAME       STATUS             PID
-            aaa        Running            123
-            bbb        Stopped          [456]
-            ccc        Completed (0)    [789]
+            NAME  STATUS           PID
+            aaa   Running          123
+            bbb   Stopped        [456]
+            ccc   Completed (0)  [789]
         "});
     }
 
@@ -288,12 +297,26 @@ mod tests {
         ]);
         let states_display: ProcessStatesDisplay = states.into();
         assert_eq!(format!("{states_display}"), indoc! {"
-            NAME       STATUS       PID
-            aaa        Running        1
-            bbb        Running       12
-            ccc        Running      123
-            ddd        Running     1234
-            eee        Running    12345
+            NAME  STATUS     PID
+            aaa   Running      1
+            bbb   Running     12
+            ccc   Running    123
+            ddd   Running   1234
+            eee   Running  12345
+        "});
+    }
+
+    #[test]
+    fn processstatesdisplay_pid_column_fits_widest_pid() {
+        let states = ProcessStates::from(vec![
+            generate_process_state("aaa", "Running", 123, true),
+            generate_stopped_process_state("bbb", 4194304),
+        ]);
+        let states_display: ProcessStatesDisplay = states.into();
+        assert_eq!(format!("{states_display}"), indoc! {"
+            NAME  STATUS         PID
+            aaa   Running        123
+            bbb   Stopped  [4194304]
         "});
     }
 
@@ -302,8 +325,8 @@ mod tests {
         let states = ProcessStates::from(vec![generate_process_state("aaa", "Error", 123, true)]);
         let states_display: ProcessStatesDisplay = states.into();
         assert_eq!(format!("{states_display}"), indoc! {"
-            NAME       STATUS      PID
-            aaa        Error       123
+            NAME  STATUS  PID
+            aaa   Error   123
         "});
     }
 
