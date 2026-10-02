@@ -115,18 +115,18 @@ const FACTORY_BUILD_TOKEN_VAR: &str = "_FLOX_FACTORY_BUILD_TOKEN";
 /// (the dedup check and the publish body) rather than re-read. Unset,
 /// empty, and non-UTF-8 all mean absent, and absent means the field is
 /// omitted from both request bodies `flox publish` sends. The value is
-/// opaque: it is never parsed, validated, or checked for a prefix.
-///
-/// Logs presence, never the value, at `info!`. The Factory runs `flox
-/// publish` at a fixed verbosity that filters out `debug!`, so this is
-/// the only level an investigator diagnosing an unlinked build can rely
-/// on.
+/// opaque and never parsed, validated, or checked for a prefix. It is
+/// not a credential either: it authenticates nothing and only names
+/// which build a publish belongs to, so it is logged as-is.
 fn factory_build_token_from_env() -> Option<String> {
     let token = std::env::var(FACTORY_BUILD_TOKEN_VAR)
         .ok()
         .filter(|s| !s.is_empty());
-    if token.is_some() {
-        tracing::info!("forwarding Factory build token");
+    if let Some(value) = token.as_deref() {
+        tracing::info!(
+            factory_build_token = value,
+            "forwarding Factory build token"
+        );
     }
     token
 }
