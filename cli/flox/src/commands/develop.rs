@@ -181,6 +181,9 @@ impl Develop {
             catalog_lock.path(),
             None,
         )?;
+        // eval has finished reading CATALOG_LOCKFILE through make and Nix.
+        // Release it before either shell path replaces this process.
+        drop(catalog_lock);
         let drv_path = eval_results
             .first()
             .context("eval() returned no results for the requested package")?
