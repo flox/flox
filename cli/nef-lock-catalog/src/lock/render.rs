@@ -261,19 +261,21 @@ build failed: 2 inputs could not be resolved.
         let entries = [readable, private];
 
         let rendered = render_unresolvable(&entries);
-        assert!(
-            rendered.contains(
-                "1. 'catalogs.acme.tool' is unresolvable in this context.\n     Dependency path:\n       catalogs.acme.tool (unresolvable)\n     Publish a new commit"
-            ),
-            "the readable entry must carry its own remedy inline, got: {rendered}"
-        );
-        assert!(
-            !rendered.contains("acme.secret (unresolvable)\n     Publish"),
-            "the private entry must never carry the readable entry's remedy, got: {rendered}"
-        );
-        assert!(
-            rendered.contains("Possible causes (each independently)"),
-            "the shared hedge must remain for the entry rendering could not explain, got: {rendered}"
-        );
+        let expected = "\
+build failed: 2 inputs could not be resolved.
+
+  1. 'catalogs.acme.tool' is unresolvable in this context.
+     Dependency path:
+       catalogs.acme.tool (unresolvable)
+     Publish a new commit of 'catalogs.acme.tool' with an upgraded CLI and a version 2 catalog lock.
+
+  2. 'catalogs.acme.secret' is unresolvable in this context.
+     Dependency path:
+       catalogs.acme.secret (unresolvable)
+
+  Possible causes (each independently): an input may not be visible to
+  you, may have no published revision, or may have aged out of retention.
+  Verify availability with the owner of the relevant catalog.";
+        assert_eq!(rendered, expected);
     }
 }
