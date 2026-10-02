@@ -15,22 +15,23 @@ use indoc::formatdoc;
 /// (`catalogs.<catalog>.<package>`).
 const CATALOG_ROOT: &str = "catalogs";
 
-/// A readable identity without a v2 index needs a new publish, not a relock
-/// of the same commit.
-const LEGACY_UNINDEXED_REMEDY: &str =
-    "Publish a new commit of this package with an upgraded CLI and a version 2 catalog lock.";
-
 /// The readable unindexed cause used by the server
 /// (`flox/floxhub@2f761a193:catalog_server/api/v1/endpoints/build_inputs.py`).
 const LEGACY_UNINDEXED_CAUSE_KEY: &str = "legacy_unindexed";
 
-/// Return a specific remedy only for a server-classified readable cause.
-fn legacy_unindexed_remedy(entry: &UnresolvableEntry) -> Option<&'static str> {
+/// A readable identity without a v2 index needs a new publish, not a relock
+/// of the same commit. Return a remedy only for that classified cause.
+fn legacy_unindexed_remedy(entry: &UnresolvableEntry) -> Option<String> {
     entry
         .leaf
         .unresolvable
         .contains_key(LEGACY_UNINDEXED_CAUSE_KEY)
-        .then_some(LEGACY_UNINDEXED_REMEDY)
+        .then(|| {
+            format!(
+                "Publish a new commit of '{}' with an upgraded CLI and a version 2 catalog lock.",
+                display_reference(entry.chain.last().unwrap_or(&entry.reference))
+            )
+        })
 }
 
 /// Prefix a server-returned, catalog-relative reference with the NEF
@@ -216,7 +217,7 @@ build failed: 2 inputs could not be resolved.
   Dependency path:
     catalogs.acme.tool (unresolvable)
 
-  Publish a new commit of this package with an upgraded CLI and a version 2 catalog lock.";
+  Publish a new commit of 'catalogs.acme.tool' with an upgraded CLI and a version 2 catalog lock.";
 
         assert_eq!(render_unresolvable(&entries), expected);
     }
@@ -232,7 +233,7 @@ build failed: 2 inputs could not be resolved.
 
         assert!(
             render_unresolvable(&entries).ends_with(
-                "Publish a new commit of this package with an upgraded CLI and a version 2 catalog lock."
+                "Publish a new commit of 'catalogs.acme.tool' with an upgraded CLI and a version 2 catalog lock."
             )
         );
     }
