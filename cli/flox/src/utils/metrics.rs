@@ -474,6 +474,11 @@ impl Hub {
         })
     }
 
+    /// Whether buffered metrics are due for a background flush.
+    pub fn is_flush_due(&self) -> Result<bool> {
+        self.with_client(|client| client.as_ref().map_or(Ok(false), Client::is_flush_due))
+    }
+
     /// Record a metric event
     ///
     /// This is a convenience wrapper around [Client::record_metric],
@@ -653,6 +658,8 @@ pub struct Client {
     pub metrics_dir: PathBuf,
     pub max_age: Duration,
     pub connection: Box<dyn Connection>,
+    /// Snapshot from the last append; the sender rechecks the on-disk buffer.
+    pub(crate) oldest_buffered_timestamp: Option<OffsetDateTime>,
 }
 
 impl Client {
@@ -665,7 +672,18 @@ impl Client {
             metrics_dir,
             max_age: DEFAULT_BUFFER_EXPIRY,
             connection: connection.boxed(),
+            oldest_buffered_timestamp: None,
         })
+    }
+
+    /// Reuse the last append's timestamp, or try a non-blocking read when no
+    /// timestamp is cached. Contention defers the check to a later invocation.
+    fn is_flush_due(&self) -> Result<bool> {
+        if let Some(oldest) = self.oldest_buffered_timestamp {
+            return Ok(OffsetDateTime::now_utc() - oldest > self.max_age);
+        }
+        Ok(MetricsBuffer::try_read(&self.metrics_dir)?
+            .is_some_and(|metrics| metrics.is_expired(self.max_age)))
     }
 
     /// Send the metrics to the telemetry backend and remove sent entries from the buffer.
@@ -682,6 +700,7 @@ impl Client {
     /// deterministically in a controlled single-process context.
     #[cfg(test)]
     pub(crate) fn flush(&mut self, force: bool) -> Result<()> {
+        self.oldest_buffered_timestamp = None;
         let mut metrics = MetricsBuffer::read(&self.metrics_dir)?;
         if metrics.is_expired(self.max_age) || force {
             // Send metrics in batches
@@ -717,6 +736,7 @@ impl Client {
     /// was not drained but that is not an error. Returns `Ok(true)` when the
     /// flush ran (whether or not the expiry had elapsed).
     fn try_flush(&mut self, force: bool) -> Result<bool> {
+        self.oldest_buffered_timestamp = None;
         let drained = {
             let Some(mut metrics) = MetricsBuffer::try_read(&self.metrics_dir)? else {
                 debug!("Metrics buffer lock held by another process; skipping flush");
@@ -752,10 +772,12 @@ impl Client {
     ///
     /// Takes a Metric event and adds additional shared metadata to it
     /// before pushing it to the metrics buffer.
-    fn record_metric(&self, event: MetricEvent) -> Result<()> {
+    fn record_metric(&mut self, event: MetricEvent) -> Result<()> {
         let entry = MetricEntry::new(event, OffsetDateTime::now_utc(), self.uuid);
+        self.oldest_buffered_timestamp = None;
         let mut metrics_buffer = MetricsBuffer::read(&self.metrics_dir)?;
         metrics_buffer.push(entry)?;
+        self.oldest_buffered_timestamp = metrics_buffer.oldest_timestamp();
         Ok(())
     }
 }
@@ -820,9 +842,53 @@ pub mod tests {
             metrics_dir: cache_dir,
             max_age: Duration::hours(2),
             connection: TestConnection::default().boxed(),
+            oldest_buffered_timestamp: None,
         };
 
         (client, tempdir)
+    }
+
+    #[test]
+    fn flush_due_reads_unrecorded_buffers_without_waiting_for_the_lock() {
+        let (client, _tempdir) = create_client();
+        assert!(!client.is_flush_due().unwrap());
+
+        let mut buffer = MetricsBuffer::read(&client.metrics_dir).unwrap();
+        let mut entry = make_entry("list");
+        entry.timestamp -= Duration::hours(3);
+        buffer.push(entry).unwrap();
+        assert!(!client.is_flush_due().unwrap());
+        drop(buffer);
+        assert!(client.is_flush_due().unwrap());
+    }
+
+    #[test]
+    fn flush_due_reuses_and_refreshes_the_oldest_recorded_timestamp() {
+        let (mut client, _tempdir) = create_client();
+        let mut entry = make_entry("list");
+        entry.timestamp -= Duration::hours(3);
+        MetricsBuffer::read(&client.metrics_dir)
+            .unwrap()
+            .push(entry)
+            .unwrap();
+
+        client.record_metric(make_event("list")).unwrap();
+        {
+            let _held = MetricsBuffer::read(&client.metrics_dir).unwrap();
+            assert!(client.is_flush_due().unwrap());
+        }
+
+        MetricsBuffer::read(&client.metrics_dir)
+            .unwrap()
+            .take_sendable()
+            .unwrap();
+        client.record_metric(make_event("list")).unwrap();
+        assert!(!client.is_flush_due().unwrap());
+
+        client.max_age = Duration::ZERO;
+        assert!(client.is_flush_due().unwrap());
+        client.try_flush(true).unwrap();
+        assert!(!client.is_flush_due().unwrap());
     }
 
     /// Make a test entry with known values
@@ -977,7 +1043,7 @@ pub mod tests {
     /// Test that [Client::record_metric] records metrics as expected
     #[test]
     fn test_client_record_metric() {
-        let (client, _tempdir) = create_client();
+        let (mut client, _tempdir) = create_client();
 
         let event_foo = make_event("foo");
         client.record_metric(event_foo.clone()).unwrap();

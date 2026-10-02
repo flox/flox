@@ -47,6 +47,9 @@ pub struct EventsClient {
     pub max_age: Duration,
     pub connection: Box<dyn EventsConnection>,
     shared_metadata: SharedMetadataTemplate,
+    /// Snapshot from the last append, so checking expiry at command exit
+    /// does not need to read the buffer again. Flushers still check on disk.
+    oldest_buffered_timestamp: Option<OffsetDateTime>,
 }
 
 impl EventsClient {
@@ -86,13 +89,14 @@ impl EventsClient {
             max_age: DEFAULT_BUFFER_EXPIRY,
             connection: connection.boxed(),
             shared_metadata,
+            oldest_buffered_timestamp: None,
         }
     }
 
     /// Record a `cli.command_run` event for `subcommand` — the one event
     /// per invocation carrying the full command context built from the
     /// client's shared metadata.
-    pub fn record_command_run(&self, subcommand: String) -> Result<()> {
+    pub fn record_command_run(&mut self, subcommand: String) -> Result<()> {
         let payload = CliCommandRunPayload::new(self.shared_metadata.into_payload(subcommand));
         self.record_event(EventKind::CliCommandRun(payload))
     }
@@ -101,7 +105,7 @@ impl EventsClient {
     /// lifecycle fields. The full command context stays on `cli.command_run`;
     /// this payload keeps only the subcommand plus the lifecycle.
     pub fn record_command_completed(
-        &self,
+        &mut self,
         subcommand: String,
         lifecycle: LifecycleFields,
     ) -> Result<()> {
@@ -110,12 +114,13 @@ impl EventsClient {
         ))
     }
 
-    pub fn record_event(&self, kind: EventKind) -> Result<()> {
-        self.record_event_with_auth_subject(kind, self.auth_subject.as_deref())
+    pub fn record_event(&mut self, kind: EventKind) -> Result<()> {
+        let auth_subject = self.auth_subject.clone();
+        self.record_event_with_auth_subject(kind, auth_subject.as_deref())
     }
 
     pub(crate) fn record_event_with_auth_subject(
-        &self,
+        &mut self,
         kind: EventKind,
         auth_subject: Option<&str>,
     ) -> Result<()> {
@@ -130,12 +135,28 @@ impl EventsClient {
             kind,
         };
 
+        self.oldest_buffered_timestamp = None;
         let mut events_buffer = EventsBuffer::read(&self.data_dir)?;
         events_buffer.push(event)?;
+        self.oldest_buffered_timestamp = events_buffer.oldest_timestamp();
         Ok(())
     }
 
+    /// Advisory expiry check for deciding whether to start a background sender.
+    /// Uses the last append's timestamp, or a non-blocking read if no timestamp
+    /// is cached. A busy buffer is left for a later invocation. The sender must
+    /// recheck: another process may have drained or re-buffered events since
+    /// this snapshot was taken.
+    pub fn is_flush_due(&self) -> Result<bool> {
+        if let Some(oldest) = self.oldest_buffered_timestamp {
+            return Ok(OffsetDateTime::now_utc() - oldest > self.max_age);
+        }
+        Ok(EventsBuffer::try_read(&self.data_dir)?
+            .is_some_and(|events| events.is_expired(self.max_age)))
+    }
+
     pub fn flush(&mut self, force: bool) -> Result<()> {
+        self.oldest_buffered_timestamp = None;
         let mut events = EventsBuffer::read(&self.data_dir)?;
         if !events.is_expired(self.max_age) && !force {
             return Ok(());
@@ -172,6 +193,7 @@ impl EventsClient {
     /// was not drained but that is not an error. Returns `Ok(true)` when the
     /// flush ran (whether or not the expiry had elapsed).
     pub fn try_flush(&mut self, force: bool) -> Result<bool> {
+        self.oldest_buffered_timestamp = None;
         let drained = {
             let Some(mut events) = EventsBuffer::try_read(&self.data_dir)? else {
                 debug!("v2 events buffer lock held by another process; skipping flush");

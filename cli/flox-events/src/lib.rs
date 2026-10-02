@@ -1929,6 +1929,7 @@ mod pipeline_tests {
     use pretty_assertions::assert_eq;
     use serial_test::serial;
     use tempfile::TempDir;
+    use time::Duration;
 
     use super::*;
     use crate::test_helpers::MockEventsConnection;
@@ -2005,7 +2006,7 @@ mod pipeline_tests {
     #[test]
     fn client_stamps_auth_subject_on_recorded_events() {
         let tempdir = tempfile::tempdir().expect("tempdir");
-        let client = EventsClient::new_with_connection(
+        let mut client = EventsClient::new_with_connection(
             DEVICE_ID,
             tempdir.path(),
             INVOCATION_ID,
@@ -2031,7 +2032,7 @@ mod pipeline_tests {
     #[test]
     fn one_event_auth_subject_override_does_not_mutate_client() {
         let tempdir = tempfile::tempdir().expect("tempdir");
-        let client = EventsClient::new_with_connection(
+        let mut client = EventsClient::new_with_connection(
             DEVICE_ID,
             tempdir.path(),
             INVOCATION_ID,
@@ -2113,7 +2114,7 @@ mod pipeline_tests {
     #[test]
     fn events_client_record_stamps_event_metadata() {
         let tempdir = tempfile::tempdir().expect("tempdir");
-        let client = client_with_connection(&tempdir, MockEventsConnection::default());
+        let mut client = client_with_connection(&tempdir, MockEventsConnection::default());
         let before = OffsetDateTime::now_utc();
 
         client
@@ -2133,6 +2134,63 @@ mod pipeline_tests {
         assert_eq!(event.auth_subject, None);
         assert_eq!(event.producer_version.as_deref(), Some("0.0.0-test"));
         assert_eq!(event.kind, command_completed_kind());
+    }
+
+    #[test]
+    fn flush_due_reads_unrecorded_buffers_without_waiting_for_the_lock() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let client = client_with_connection(&tempdir, MockEventsConnection::default());
+        assert!(!client.is_flush_due().unwrap());
+
+        let mut buffer = EventsBuffer::read(tempdir.path()).unwrap();
+        buffer.push(fixed_event(command_run_kind())).unwrap();
+        assert!(!client.is_flush_due().unwrap());
+        drop(buffer);
+        assert!(client.is_flush_due().unwrap());
+    }
+
+    #[test]
+    fn flush_due_reuses_and_refreshes_the_oldest_recorded_timestamp() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let mut client = client_with_connection(&tempdir, MockEventsConnection::default());
+        EventsBuffer::read(tempdir.path())
+            .unwrap()
+            .push(fixed_event(command_run_kind()))
+            .unwrap();
+
+        client.record_event(command_run_kind()).unwrap();
+        {
+            // A non-blocking reread would return false while this lock is held.
+            let _held = EventsBuffer::read(tempdir.path()).unwrap();
+            assert!(client.is_flush_due().unwrap());
+        }
+
+        let mut other = client_with_connection(&tempdir, MockEventsConnection::default());
+        other.try_flush(true).unwrap();
+        client.record_event(command_run_kind()).unwrap();
+        assert!(!client.is_flush_due().unwrap());
+
+        // Reevaluate the timestamp at exit, rather than caching whether the
+        // buffer was due when the event was recorded.
+        client.max_age = Duration::ZERO;
+        assert!(client.is_flush_due().unwrap());
+        client.try_flush(true).unwrap();
+        assert!(!client.is_flush_due().unwrap());
+    }
+
+    #[test]
+    fn flush_due_preserves_retries_after_a_failed_send() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let connection = MockEventsConnection::default();
+        connection.fail_next_send();
+        let mut client = client_with_connection(&tempdir, connection);
+        client.max_age = Duration::ZERO;
+        client.record_event(command_run_kind()).unwrap();
+
+        client.try_flush(false).expect_err("send should fail");
+        assert!(client.is_flush_due().unwrap());
+        client.try_flush(false).unwrap();
+        assert!(!client.is_flush_due().unwrap());
     }
 
     #[test]
