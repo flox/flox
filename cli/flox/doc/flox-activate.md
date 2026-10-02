@@ -187,11 +187,13 @@ options.
     To trust all environments from an organization, use a wildcard key:
     `flox config --set 'trusted_environments."<owner>/*"' trust`.
     Environments included from FloxHub are trusted the same way,
-    including those that environments included with `dir` include in turn.
+    including those that environments included with `dir` include in turn,
+    as the lockfile records them.
     Those that an environment included from FloxHub includes are trusted
     by trusting that environment.
-    An environment included with `auto-upgrade = true` changes without
-    anyone reviewing it, so trusting it with an exact `trusted_environments`
+    An environment included with `auto-upgrade = true`, or by an included
+    directory that's followed, changes without anyone reviewing it,
+    so trusting it with an exact `trusted_environments`
     entry applies to what it runs on activation (its hook and profile scripts,
     variables, services and packages) as it was the first time you activated
     it after trusting it, or as you trusted it when asked.

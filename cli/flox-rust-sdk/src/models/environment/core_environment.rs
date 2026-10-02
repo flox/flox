@@ -377,7 +377,11 @@ impl<State> CoreEnvironment<State> {
         };
 
         let manifest = merged.as_maybe_backwards_compatible(original_schema, Some(&lockfile))?;
-        Ok((manifest, seed.unwrap_or(lockfile)))
+        // Labeled with what's merged, so that an environment including this
+        // one can tell what this one includes
+        let mut seed = seed.unwrap_or(lockfile);
+        seed.compose = compose;
+        Ok((manifest, seed))
     }
 
     /// Lock with the latest versions of the named included environments,
@@ -2488,6 +2492,7 @@ mod tests {
                 },
                 generation: None,
                 packages_hash: None,
+                included_remotes: Vec::new(),
             }],
             warnings: vec![],
         };

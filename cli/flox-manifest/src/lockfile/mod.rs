@@ -5,7 +5,7 @@ mod package_outputs;
 mod store_path;
 
 pub use catalog::LockedPackageCatalog;
-pub use compose::{Compose, LockedInclude};
+pub use compose::{Compose, IncludedRemote, LockedInclude};
 pub use flake::{LockedInstallable, LockedPackageFlake};
 use flox_core::data::{CanonicalPath, System};
 pub use package_outputs::PackageOutputs;

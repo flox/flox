@@ -4274,6 +4274,7 @@ mod tests {
                     },
                     generation: None,
                     packages_hash: None,
+                    included_remotes: Vec::new(),
                 })
                 .collect(),
             warnings: vec![],

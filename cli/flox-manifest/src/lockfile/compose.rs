@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 
+use flox_core::data::environment_ref::RemoteEnvironmentRef;
 #[cfg(any(test, feature = "tests"))]
 use flox_test_utils::proptest::alphanum_string;
 #[cfg(any(test, feature = "tests"))]
@@ -105,6 +106,30 @@ pub struct LockedInclude {
     /// environments included from FloxHub, whose generation records it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub packages_hash: Option<String>,
+    /// The environments from FloxHub that an included directory's environment
+    /// included, directly or in turn, when the composing environment last
+    /// took it, which are merged into `manifest`, for checking their trust.
+    ///
+    /// It's recorded along with `packages_hash`, so if that isn't recorded,
+    /// neither is this.
+    /// Comparing included environments ignores it: what they include changes
+    /// their manifests too.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub included_remotes: Vec<IncludedRemote>,
+}
+
+/// An environment from FloxHub that an included environment includes
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
+#[cfg_attr(any(test, feature = "tests"), derive(proptest_derive::Arbitrary))]
+pub struct IncludedRemote {
+    pub remote: RemoteEnvironmentRef,
+    /// The generation it was fetched at, if recorded
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(
+        any(test, feature = "tests"),
+        proptest(strategy = "proptest::option::of(0..10usize)")
+    )]
+    pub generation: Option<usize>,
 }
 
 impl LockedInclude {
@@ -120,6 +145,7 @@ impl LockedInclude {
                 .packages_hash
                 .as_ref()
                 .and(self.packages_hash.clone()),
+            included_remotes: recorded.included_remotes.clone(),
             ..self.clone()
         }
     }
@@ -152,11 +178,12 @@ impl LockedInclude {
     }
 
     /// This included environment without what's recorded about how it was
-    /// locked: its generation and `packages_hash`
+    /// locked: its generation, `packages_hash` and `included_remotes`
     pub fn without_records(&self) -> LockedInclude {
         LockedInclude {
             generation: None,
             packages_hash: None,
+            included_remotes: Vec::new(),
             ..self.clone()
         }
     }
@@ -188,6 +215,7 @@ mod tests {
             },
             generation: None,
             packages_hash: None,
+            included_remotes: Vec::new(),
         }
     }
 

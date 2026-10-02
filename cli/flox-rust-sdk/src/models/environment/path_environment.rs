@@ -935,7 +935,7 @@ pub mod tests {
 
     use flox_core::data::environment_ref::RemoteEnvironmentRef;
     use flox_manifest::interfaces::{AsLatestSchema, AsTypedOnlyManifest};
-    use flox_manifest::lockfile::LockedPackage;
+    use flox_manifest::lockfile::{IncludedRemote, LockedPackage};
     use flox_manifest::parsed::Inner;
     use flox_manifest::parsed::common::KnownSchemaVersion;
     use flox_manifest::parsed::v1::test_helpers::manifest_without_install_or_include;
@@ -953,6 +953,7 @@ pub mod tests {
     use crate::models::env_registry::{env_registry_path, read_environment_registry};
     use crate::models::environment::core_environment::NotAppliedIncludes;
     use crate::models::environment::floxmeta_branch::remote_branch_name;
+    use crate::models::environment::generations::GenerationsExt;
     use crate::models::environment::path_environment::test_helpers::{
         new_path_environment,
         new_path_environment_from_env_files,
@@ -2165,10 +2166,85 @@ pub mod tests {
         assert_eq!(followed.upstream_changes, vec![]);
     }
 
+    /// The lockfile records the environments from FloxHub that an included
+    /// directory includes, also in turn, so a pinned directory's are known
+    /// even after the directory changes or goes away.
+    #[test]
+    fn included_remote_environments_of_a_pinned_directory_are_recorded() {
+        let (flox, tempdir) = flox_instance_with_optional_floxhub(Some(&"owner".parse().unwrap()));
+        let mut remote = mock_remote_environment(
+            &flox,
+            &with_latest_schema("[vars]\nremote = \"v1\""),
+            "owner".parse().unwrap(),
+            Some("remote"),
+        );
+        locked_path_environment(
+            &flox,
+            &tempdir,
+            "c",
+            &with_latest_schema("[include]\nenvironments = [{ remote = \"owner/remote\" }]"),
+        );
+        let mut b = locked_path_environment(
+            &flox,
+            &tempdir,
+            "b",
+            &with_latest_schema("[include]\nenvironments = [{ dir = \"../c\" }]"),
+        );
+        let mut pinned = locked_path_environment(
+            &flox,
+            &tempdir,
+            "pinned",
+            &with_latest_schema(
+                "[include]\nenvironments = [{ dir = \"../b\", auto-upgrade = false }]",
+            ),
+        );
+        let generation = remote
+            .generations_metadata()
+            .unwrap()
+            .current_gen()
+            .map(|generation| *generation);
+        assert_eq!(
+            pinned
+                .existing_lockfile(&flox)
+                .unwrap()
+                .unwrap()
+                .compose
+                .unwrap()
+                .include[0]
+                .included_remotes,
+            vec![IncludedRemote {
+                remote: "owner/remote".parse().unwrap(),
+                generation,
+            }]
+        );
+        let expected = vec![IncludedRemoteEnvironment {
+            env_ref: "owner/remote".parse().unwrap(),
+            manifests: vec![remote.manifest(&flox).unwrap().as_typed_only()],
+            followed: vec![],
+        }];
+
+        edit_and_lock(&mut b, &flox, &with_latest_schema(""));
+        let (lockfile, _) = follow(&mut pinned, &flox, FollowMode::Lock);
+        assert_eq!(
+            pinned
+                .included_remote_environments(&flox, &lockfile)
+                .unwrap(),
+            expected
+        );
+        fs::remove_dir_all(tempdir.path().join("b")).unwrap();
+        assert_eq!(
+            pinned
+                .included_remote_environments(&flox, &lockfile)
+                .unwrap(),
+            expected
+        );
+    }
+
     /// The environments included from FloxHub in use include those that
     /// included directories include in turn: as following merges them if the
-    /// directory is followed, and as the directory's lockfile has them if
-    /// it's pinned. A directory that's included both ways is listed both ways.
+    /// directory is followed, and as the lockfile records them if it's
+    /// pinned. Everything a followed directory includes can change without
+    /// the lockfile changing, even what it pins itself.
     #[test]
     fn included_remote_environments_include_those_included_in_turn() {
         let (flox, tempdir) = flox_instance_with_optional_floxhub(Some(&"owner".parse().unwrap()));
@@ -2242,8 +2318,8 @@ pub mod tests {
             both.included_remote_environments(&flox, &lockfile).unwrap(),
             vec![IncludedRemoteEnvironment {
                 env_ref: "owner/remote".parse().unwrap(),
-                manifests: vec![v1, v2.clone()],
-                followed: vec![v2],
+                manifests: vec![v1.clone(), v2.clone()],
+                followed: vec![v1, v2],
             }]
         );
     }

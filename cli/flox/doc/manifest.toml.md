@@ -780,7 +780,8 @@ The lockfile of the composing environment stores a copy of each included
 environment.
 For an environment included with `remote` it records the generation it was
 fetched at, which `flox list --config` shows, and for one included with `dir`,
-a hash of the packages that environment had locked.
+a hash of the packages that environment had locked and the environments from
+FloxHub it included, which `flox activate` checks trust for.
 
 A path environment, or an environment pulled from FloxHub into a directory,
 follows the environments it includes with `auto-upgrade` enabled:

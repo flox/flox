@@ -99,6 +99,27 @@
       ],
       "description": "The structure for how a user is able to declare a dependency on an environment."
     },
+    "IncludedRemote": {
+      "description": "An environment from FloxHub that an included environment includes",
+      "properties": {
+        "generation": {
+          "description": "The generation it was fetched at, if recorded",
+          "format": "uint",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "remote": {
+          "$ref": "#/$defs/EnvironmentRef"
+        }
+      },
+      "required": [
+        "remote"
+      ],
+      "type": "object"
+    },
     "KeyPath": {
       "description": "A key path to a value in a manifest.\nThis is used to provide the location for warnings.\n\nThe `KeyPath` behaves like an immutable stack of keys,\nwhere [`KeyPath::push`] and [`KeyPath::extend`] return a new `KeyPath`\nwith the new key(s) added to the top of the stack,\nleaving the original `KeyPath` unchanged.",
       "items": {
@@ -119,6 +140,13 @@
             "integer",
             "null"
           ]
+        },
+        "included_remotes": {
+          "description": "The environments from FloxHub that an included directory's environment\nincluded, directly or in turn, when the composing environment last\ntook it, which are merged into `manifest`, for checking their trust.\n\nIt's recorded along with `packages_hash`, so if that isn't recorded,\nneither is this.\nComparing included environments ignores it: what they include changes\ntheir manifests too.",
+          "items": {
+            "$ref": "#/$defs/IncludedRemote"
+          },
+          "type": "array"
         },
         "manifest": {
           "$ref": "#/$defs/Manifest"
