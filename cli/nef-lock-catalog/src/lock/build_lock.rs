@@ -834,7 +834,48 @@ mod tests {
     }
 
     #[test]
-    fn build_type_preserves_the_exact_disk_bytes() {
+    fn default_lock_compact_json_matches_documented_field_order() {
+        assert_eq!(
+            serde_json::to_string(&BuildLock::default()).unwrap(),
+            r#"{"version":2,"locked_inputs":{},"direct_inputs":[]}"#
+        );
+    }
+
+    #[test]
+    fn write_default_lock_matches_empty_v2_bytes() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("catalog.lock");
+        write_lock(&BuildLock::default(), &path).unwrap();
+
+        assert_eq!(
+            fs::read(&path).unwrap(),
+            b"{\n  \"version\": 2,\n  \"locked_inputs\": {},\n  \"direct_inputs\": []\n}\n"
+        );
+    }
+
+    #[test]
+    fn build_type_accepts_only_manifest_and_nef() {
+        assert_eq!(
+            serde_json::from_str::<super::BuildType>(r#""nef""#).unwrap(),
+            super::BuildType::Nef
+        );
+        assert_eq!(
+            serde_json::from_str::<super::BuildType>(r#""manifest""#).unwrap(),
+            super::BuildType::Manifest
+        );
+        assert!(serde_json::from_str::<super::BuildType>(r#""other""#).is_err());
+        assert_eq!(
+            serde_json::to_string(&super::BuildType::Nef).unwrap(),
+            r#""nef""#
+        );
+        assert_eq!(
+            serde_json::to_string(&super::BuildType::Manifest).unwrap(),
+            r#""manifest""#
+        );
+    }
+
+    #[test]
+    fn write_populated_lock_matches_literal_bytes() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("catalog.lock");
         let lock = lock_with(&["myorg/hello"]);
