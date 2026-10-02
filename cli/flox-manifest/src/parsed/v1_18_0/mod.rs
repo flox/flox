@@ -14,6 +14,7 @@ use crate::interfaces::{AsTypedOnlyManifest, SchemaVersion, impl_pkg_lookup};
 use crate::parsed::common::{
     Allows,
     Containerize,
+    DEFAULT_GROUP_NAME,
     Include,
     KnownSchemaVersion,
     SemverOptions,
@@ -260,7 +261,7 @@ impl ManifestV1_18_0 {
     /// `options.stability`, or `None` to let the catalog pick its default.
     ///
     /// `group` is the name the packages are locked under, so the default
-    /// group is [`DEFAULT_GROUP_NAME`](crate::parsed::common::DEFAULT_GROUP_NAME).
+    /// group is [`DEFAULT_GROUP_NAME`].
     pub fn group_stability(&self, group: &str) -> Option<&str> {
         self.group_stability_override(group)
             .or(self.options.stability.as_deref())
@@ -273,6 +274,16 @@ impl ManifestV1_18_0 {
             .inner()
             .get(group)
             .and_then(|settings| settings.stability.as_deref())
+    }
+
+    /// Whether any catalog package is installed into `group`.
+    pub fn group_has_packages(&self, group: &str) -> bool {
+        self.install.inner().values().any(|descriptor| {
+            let ManifestPackageDescriptor::Catalog(catalog) = descriptor else {
+                return false;
+            };
+            catalog.pkg_group.as_deref().unwrap_or(DEFAULT_GROUP_NAME) == group
+        })
     }
 }
 
@@ -331,7 +342,6 @@ pub struct PkgGroup {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::parsed::common::DEFAULT_GROUP_NAME;
 
     fn manifest_with_stabilities(
         options_stability: Option<&str>,
