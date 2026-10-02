@@ -116,6 +116,7 @@ sysinfo = "0.38.0"
 # TODO: review if we need this
 sys-info = "0.9"
 systemd = { path = "cli/systemd" }
+tabwriter = "1.4.1"
 tar = "0.4"
 tempfile = "3.24.0"
 textwrap = { version = "0.16.2", features = ["terminal_size"] }

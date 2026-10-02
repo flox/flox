@@ -23,6 +23,7 @@ pub mod message;
 pub mod metrics;
 pub mod openers;
 pub mod search;
+pub mod table;
 pub mod tracing;
 pub mod update_notifications;
 pub mod upgrade_output;
