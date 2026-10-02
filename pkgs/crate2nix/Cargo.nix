@@ -5374,6 +5374,10 @@ rec {
             packageId = "sysinfo";
           }
           {
+            name = "tabwriter";
+            packageId = "tabwriter";
+          }
+          {
             name = "tempfile";
             packageId = "tempfile";
           }

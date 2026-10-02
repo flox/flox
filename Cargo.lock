@@ -1614,6 +1614,7 @@ dependencies = [
  "supports-color",
  "sys-info",
  "sysinfo",
+ "tabwriter",
  "temp-env",
  "tempfile",
  "terminal_size",

@@ -44,6 +44,7 @@ strum.workspace = true
 supports-color.workspace = true
 sys-info.workspace = true
 sysinfo.workspace = true
+tabwriter.workspace = true
 tempfile.workspace = true
 terminal_size.workspace = true
 textwrap.workspace = true
