@@ -141,6 +141,14 @@ fn lock_from_response(mut response: BuildInputsLookupResponseV2) -> Result<Build
         return Err(LockError::Unresolvable(group.unresolvable));
     }
 
+    for reference in group.not_lockable.keys() {
+        if reference != "nixpkgs" && !reference.starts_with("nixpkgs.") {
+            return Err(LockError::Transform(anyhow::anyhow!(
+                "catalog reference '{reference}' cannot be locked"
+            )));
+        }
+    }
+
     let direct = group.matched.keys();
 
     debug!(resolved = group.lock.len(), "all references resolved");
@@ -230,6 +238,36 @@ mod tests {
     }
 
     #[test]
+    fn wire_nar_hash_survives_write_and_read() {
+        let mut wire: serde_json::Value = serde_json::from_str(include_str!(
+            "../../test_data/build_inputs_lookup/success.json"
+        ))
+        .unwrap();
+        wire["version"] = json!(2);
+        wire["groups"][LOOKUP_GROUP_KEY]["lock"]["myorg/hello"]["source"]["narHash"] =
+            json!("sha256-wire-extra");
+        let response: BuildInputsLookupResponseV2 = serde_json::from_value(wire).unwrap();
+        let lock = lock_from_response(response).unwrap();
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("catalog.lock");
+        crate::write_lock(&lock, &path).unwrap();
+        let read = crate::read_lock(&path).unwrap();
+        assert_eq!(
+            read.locked_inputs["myorg/hello"].source.extra["narHash"],
+            json!("sha256-wire-extra")
+        );
+        let closure = read
+            .project_package(&BTreeSet::from([CatalogRef::new_unchecked(
+                "catalogs.myorg.hello",
+            )]))
+            .unwrap();
+        assert_eq!(
+            closure.locked_inputs["myorg/hello"].source.extra["narHash"],
+            json!("sha256-wire-extra")
+        );
+    }
+
+    #[test]
     fn r11_partial_fixture_is_unresolvable() {
         let response: BuildInputsLookupResponseV2 = serde_json::from_str(include_str!(
             "../../test_data/build_inputs_lookup/partial.json"
@@ -297,6 +335,20 @@ mod tests {
             serde_json::from_str(&crate::lock::transform::render_builder_lock(&lock).unwrap())
                 .unwrap();
         assert!(value["catalogs"].get("nixpkgs").is_none());
+    }
+
+    #[test]
+    fn not_lockable_outside_base_namespace_fails_the_lock() {
+        let response: BuildInputsLookupResponseV2 = serde_json::from_value(json!({
+            "version": 2,
+            "groups": {"default": {
+                "lock": {}, "matched": {},
+                "not_lockable": {"other.hello": {"kind": "future_kind"}}
+            }}
+        }))
+        .unwrap();
+        let error = lock_from_response(response).unwrap_err().to_string();
+        assert!(error.contains("other.hello"), "{error}");
     }
 
     #[test]
