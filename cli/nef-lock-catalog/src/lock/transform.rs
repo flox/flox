@@ -53,7 +53,24 @@ fn materialize_entries<'a>(
     entries: impl IntoIterator<Item = (&'a String, &'a LockedInput)>,
 ) -> Result<serde_json::Value> {
     let mut builders: BTreeMap<CatalogId, PackageTreeBuilder> = BTreeMap::new();
+    let mut seen: BTreeMap<(String, Vec<String>), &String> = BTreeMap::new();
     for (key, entry) in entries {
+        for ((catalog, path), previous_key) in &seen {
+            if catalog == &entry.catalog
+                && (path.starts_with(&entry.attr_path) || entry.attr_path.starts_with(path))
+            {
+                anyhow::bail!(
+                    "catalog '{}' has colliding lock keys '{}' (catalogs.{catalog}.{}) and '{}' (catalogs.{catalog}.{})",
+                    entry.catalog,
+                    previous_key,
+                    path.join("."),
+                    key,
+                    entry.attr_path.join("."),
+                    catalog = entry.catalog,
+                );
+            }
+        }
+        seen.insert((entry.catalog.clone(), entry.attr_path.clone()), key);
         builders
             .entry(CatalogId(entry.catalog.clone()))
             .or_insert_with(PackageTreeBuilder::new)
@@ -286,6 +303,19 @@ mod tests {
                 .get("narHash")
                 .is_none()
         );
+        // PJ-2: compare the entire tree's serialized bytes with the v1 shape.
+        let expected = json!({"myorg": {"type": "floxhub", "packages": {
+            "type": "package_set", "entries": {"hello": {
+                "type": "package", "build_type": "nef", "source": {
+                    "type": "git", "url": "https://example.com/repo",
+                    "rev": "abc", "ref": "refs/heads/main", "dir": "."
+                }
+            }}
+        }}});
+        assert_eq!(
+            serde_json::to_vec(&materialize_catalogs(&lock).unwrap()).unwrap(),
+            serde_json::to_vec(&expected).unwrap()
+        );
     }
 
     #[test]
@@ -317,11 +347,34 @@ mod tests {
         ] {
             let err = materialize_entries(entries).unwrap_err();
             let message = format!("{err:#}");
-            assert!(
-                message.contains("package 'a' collides with package 'a.b'"),
-                "{message}"
-            );
+            for expected in [
+                "myorg/a",
+                "myorg/a.b",
+                "catalogs.myorg.a",
+                "catalogs.myorg.a.b",
+            ] {
+                assert!(message.contains(expected), "{message}");
+            }
         }
+    }
+
+    #[test]
+    fn materialization_rejects_two_keys_for_one_exact_path() {
+        let source = git_source("https://example.com/repo", "abc");
+        let locked = HashMap::from([
+            (
+                "myorg/alias-one".to_string(),
+                entry("myorg", &["a"], BuildType::Nef, source.clone()),
+            ),
+            (
+                "myorg/alias-two".to_string(),
+                entry("myorg", &["a"], BuildType::Nef, source),
+            ),
+        ]);
+        let lock = build_lock_from_locked_inputs(locked, [&"myorg/alias-one".to_string()]).unwrap();
+        let error = materialize_catalogs(&lock).unwrap_err().to_string();
+        assert!(error.contains("myorg/alias-one"), "{error}");
+        assert!(error.contains("myorg/alias-two"), "{error}");
     }
 
     #[test]

@@ -25,5 +25,6 @@ rowan.workspace = true
 tokio.workspace = true
 
 [dev-dependencies]
+httpmock.workspace = true
 floxhub-client = { path = "../floxhub-client", features = ["tests"] }
 tempfile.workspace = true

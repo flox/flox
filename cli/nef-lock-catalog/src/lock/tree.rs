@@ -28,20 +28,18 @@ pub enum PackageTreeNode {
 
 /// Builds a package tree from locked source items
 pub struct PackageTreeBuilder {
-    root: PackageTreeNode,
+    root: BTreeMap<String, PackageTreeNode>,
 }
 
 impl PackageTreeBuilder {
     pub fn new() -> Self {
         Self {
-            root: PackageTreeNode::PackageSet {
-                entries: BTreeMap::new(),
-            },
+            root: BTreeMap::new(),
         }
     }
 
     pub fn into_root(self) -> PackageTreeNode {
-        self.root
+        PackageTreeNode::PackageSet { entries: self.root }
     }
 
     /// Add a package to the tree from a raw, already-locked source value.
@@ -60,58 +58,44 @@ impl PackageTreeBuilder {
         };
 
         // Build the path step by step
-        let mut current_node = &mut self.root;
+        let mut entries = &mut self.root;
 
         // Process intermediate components (all guaranteed to be package sets)
         for (index, attribute) in parent_attributes.iter().enumerate() {
-            let entries = match current_node {
-                PackageTreeNode::PackageSet { entries } => {
-                    // Ensure package set exists and handle conflict resolution
-                    entries
-                },
-                PackageTreeNode::Package { .. } => anyhow::bail!(
-                    "package '{}' collides with package '{}'",
-                    attr_path[..index].join("."),
-                    attr_path.join(".")
-                ),
-            };
-            current_node =
+            let node =
                 entries
                     .entry(attribute.clone())
-                    .or_insert(PackageTreeNode::PackageSet {
+                    .or_insert_with(|| PackageTreeNode::PackageSet {
                         entries: BTreeMap::new(),
                     });
-            if matches!(current_node, PackageTreeNode::Package { .. }) {
-                anyhow::bail!(
+            entries = match node {
+                PackageTreeNode::PackageSet { entries } => entries,
+                PackageTreeNode::Package { .. } => anyhow::bail!(
                     "package '{}' collides with package '{}'",
                     attr_path[..=index].join("."),
                     attr_path.join(".")
-                );
-            }
+                ),
+            };
         }
 
         // Insert final package using final component as key. The source is
         // stored verbatim — it is already locked server-side.
         let package = PackageTreeNode::Package { build_type, source };
-        match current_node {
-            PackageTreeNode::PackageSet { entries } => {
-                // Check if there's already a package set at this location
-                if let Some(PackageTreeNode::PackageSet { .. }) = entries.get(final_attribute) {
-                    let child = entries[final_attribute]
-                        .first_package_path()
-                        .expect("a package set created by insertion has a package");
-                    anyhow::bail!(
-                        "package '{}' collides with package '{}.{}'",
-                        attr_path.join("."),
-                        attr_path.join("."),
-                        child.join(".")
-                    );
-                }
-
-                entries.insert(final_attribute.clone(), package);
-            },
-            PackageTreeNode::Package { .. } => unreachable!("root is always a package set"),
+        if let Some(PackageTreeNode::PackageSet { .. }) = entries.get(final_attribute) {
+            let child = entries[final_attribute]
+                .first_package_path()
+                .expect("a package set created by insertion has a package");
+            anyhow::bail!(
+                "package '{}' collides with package '{}.{}'",
+                attr_path.join("."),
+                attr_path.join("."),
+                child.join(".")
+            );
         }
+        if entries.contains_key(final_attribute) {
+            anyhow::bail!("duplicate package path '{}'", attr_path.join("."));
+        }
+        entries.insert(final_attribute.clone(), package);
 
         Ok(())
     }
@@ -346,6 +330,28 @@ mod tests {
         .unwrap();
 
         assert_eq!(tree, expected_tree);
+    }
+
+    #[test]
+    fn duplicate_exact_path_is_rejected() {
+        let mut builder = PackageTreeBuilder::new();
+        for first in [true, false] {
+            let result = builder.add_package_source(
+                vec!["a".into()],
+                BuildType::Nef,
+                RawNixFlakerefAttrs::new_unchecked(test_source()),
+            );
+            if first {
+                result.unwrap();
+            } else {
+                assert!(
+                    result
+                        .unwrap_err()
+                        .to_string()
+                        .contains("duplicate package path 'a'")
+                );
+            }
+        }
     }
 
     #[test]
