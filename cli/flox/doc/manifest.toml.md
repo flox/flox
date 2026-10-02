@@ -26,6 +26,7 @@ The file is divided into just a few sections that are represented as TOML
 tables:
 
 - [`[install]`](#install)
+- [`[pkg-groups]`](#pkg-groups)
 - [`[vars]`](#vars)
 - [`[hook]`](#hook)
 - [`[profile]`](#profile)
@@ -62,7 +63,8 @@ Valid string values are:
 - `1.16.0`: introduced services `depends-on`, and
   `shutdown.timeout-seconds` / `shutdown.signal`
 - `1.17.0`: introduced `description`
-- `1.18.0`: introduced `options.activate.upgrade-notifications`
+- `1.18.0`: introduced `options.activate.upgrade-notifications`,
+  `options.stability`, and `pkg-groups`
 
 Existing manifest schemas, including the older `version = 1` format, are
 automatically forward-migrated when using features that require a newer schema
@@ -232,6 +234,9 @@ Each option is described below:
     See [`flox-upgrade(1)`](./flox-upgrade.md) for more details on how
     pkg-groups and packages interact during upgrades.
 
+    Settings that apply to a whole pkg-group, such as its stability,
+    are set in the [`[pkg-groups]`](#pkg-groups) section.
+
 `version`
 :   Requires that the package match either an exact version or a semver range.
 
@@ -363,6 +368,55 @@ descriptors and flake installables, and `store-path` is described below:
     and flakes installables.
     Unlike the former, users are encouraged to specify it,
     because store paths are generally system dependent.
+
+
+## `[pkg-groups]`
+
+`pkg-groups.<NAME>` configures every package that sets
+`pkg-group = "<NAME>"`, and `pkg-groups.toplevel` configures every package that
+doesn't set `pkg-group`.
+
+```toml
+[install]
+curl.pkg-path = "curl"
+python3.pkg-path = "python3"
+python3.pkg-group = "legacy"
+
+[pkg-groups]
+legacy.stability = "lts"
+toplevel.stability = "stable"
+```
+
+The full set of options is:
+
+```
+PkgGroup ::= {
+  stability = null | <STRING>
+}
+```
+
+`stability`
+:   Resolves the packages in the pkg-group against the given stability in the
+    catalog.
+    Stability filters which builds of a package can be installed, and it
+    determines how often packages are updated.
+    Each stability receives updates on a different cadence:
+
+    - `unstable` changes daily
+    - `staging` changes weekly
+    - `stable` changes monthly
+    - `lts` changes every 6 months
+
+    `pkg-groups.<group name>.stability` takes precedence over `options.stability`.
+    If both are unset, the catalog's default stability is used (currently `unstable`).
+
+    See the [Base Catalog](https://flox.dev/docs/concepts/base-catalog/)
+    page for more details about how stabilities work.
+    See the [Package Groups](https://flox.dev/docs/concepts/package-groups)
+    page for more information about resolution.
+
+The settings of a pkg-group apply to its packages from included environments
+too; see [Merge semantics](#merge-semantics).
 
 
 ## `[vars]`
@@ -923,6 +977,7 @@ Options ::= {
 , allow                     = null | Allows
 , semver                    = null | Semver
 , cuda-detection            = null | <BOOL>
+, stability                 = null | <STRING>
 }
 
 Activate ::= {
@@ -1006,6 +1061,11 @@ Semver ::= {
     The default is `true`.
     When enabled, Flox will detect if you have an Nvidia device and attempt to
     locate `libcuda` in well-known paths.
+
+`stability`
+:   Provides a default stability for all package groups to be resolved against.
+    `pkg-groups.<group name>.stability` overrides this option for individual package groups.
+    See [pkg-groups stability](#pkg-groups).
 
 ## `[plugins]`
 

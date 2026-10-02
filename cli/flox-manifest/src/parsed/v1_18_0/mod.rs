@@ -254,6 +254,28 @@ impl From<crate::parsed::common::Options> for Options {
     }
 }
 
+impl ManifestV1_18_0 {
+    /// The catalog stability that the packages in `group` resolve against:
+    /// the group's own stability, else the environment's
+    /// `options.stability`, or `None` to let the catalog pick its default.
+    ///
+    /// `group` is the name the packages are locked under, so the default
+    /// group is [`DEFAULT_GROUP_NAME`](crate::parsed::common::DEFAULT_GROUP_NAME).
+    pub fn group_stability(&self, group: &str) -> Option<&str> {
+        self.group_stability_override(group)
+            .or(self.options.stability.as_deref())
+    }
+
+    /// The stability that `group` sets under `[pkg-groups.<group>]`, which
+    /// overrides `options.stability` for that group.
+    pub fn group_stability_override(&self, group: &str) -> Option<&str> {
+        self.pkg_groups
+            .inner()
+            .get(group)
+            .and_then(|settings| settings.stability.as_deref())
+    }
+}
+
 /// Settings for package groups, keyed by the group name that packages
 /// reference with `pkg-group`.
 ///
@@ -271,6 +293,17 @@ pub struct PkgGroups(
 );
 
 impl_into_inner!(PkgGroups, BTreeMap<String, PkgGroup>);
+
+impl PkgGroups {
+    /// The dotted key of the settings of `group`, with the name quoted if it
+    /// isn't a bare key, e.g. `pkg-groups.legacy` or `pkg-groups."v1.2"`.
+    ///
+    /// Unlike a `[pkg-groups.<NAME>]` header, this names the settings however
+    /// the manifest writes them, e.g. as `legacy.stability` in `[pkg-groups]`.
+    pub fn key_path(group: &str) -> String {
+        format!("pkg-groups.{}", toml_edit::Key::new(group))
+    }
+}
 
 impl SkipSerializing for PkgGroups {
     fn skip_serializing(&self) -> bool {
@@ -293,4 +326,65 @@ pub struct PkgGroup {
         proptest(strategy = "optional_string(5)")
     )]
     pub stability: Option<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::parsed::common::DEFAULT_GROUP_NAME;
+
+    fn manifest_with_stabilities(
+        options_stability: Option<&str>,
+        groups: &[(&str, Option<&str>)],
+    ) -> ManifestV1_18_0 {
+        let pkg_groups = groups
+            .iter()
+            .map(|(name, stability)| {
+                (name.to_string(), PkgGroup {
+                    stability: stability.map(str::to_string),
+                })
+            })
+            .collect();
+        ManifestV1_18_0 {
+            options: Options {
+                stability: options_stability.map(str::to_string),
+                ..Default::default()
+            },
+            pkg_groups: PkgGroups(pkg_groups),
+            ..Default::default()
+        }
+    }
+
+    /// A group's own stability wins over `options.stability`, which applies
+    /// to every other group.
+    #[test]
+    fn group_stability_prefers_group_over_options() {
+        let manifest =
+            manifest_with_stabilities(Some("stable"), &[("legacy", Some("lts")), ("tools", None)]);
+
+        assert_eq!(
+            [
+                manifest.group_stability("legacy"),
+                manifest.group_stability("tools"),
+                manifest.group_stability(DEFAULT_GROUP_NAME),
+            ],
+            [Some("lts"), Some("stable"), Some("stable")]
+        );
+    }
+
+    #[test]
+    fn group_stability_is_unset_without_group_or_options_stability() {
+        let manifest = manifest_with_stabilities(None, &[("legacy", Some("lts"))]);
+
+        assert_eq!(manifest.group_stability(DEFAULT_GROUP_NAME), None);
+    }
+
+    /// Pkg-group names that aren't bare TOML keys are quoted, so that a
+    /// name with a dot doesn't read as a nested table.
+    #[test]
+    fn pkg_groups_key_path_quotes_names() {
+        assert_eq!(PkgGroups::key_path("legacy"), "pkg-groups.legacy");
+        assert_eq!(PkgGroups::key_path("v1.2"), r#"pkg-groups."v1.2""#);
+        assert_eq!(PkgGroups::key_path("my group"), r#"pkg-groups."my group""#);
+    }
 }

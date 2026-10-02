@@ -645,6 +645,7 @@ async fn try_find_compatible_package(
                     systems: DEFAULT_SYSTEMS.clone(),
                 }],
                 name: attr_path.to_string(),
+                stability: None,
             }])
             .await?;
         let pkg: Option<ProvidedPackage> = resolved_groups
@@ -742,6 +743,7 @@ fn group_for_single_package(attr_path: &str, version: Option<&str>) -> PackageGr
             systems: DEFAULT_SYSTEMS.clone(),
         }],
         name: attr_path.to_string(),
+        stability: None,
     }
 }
 
