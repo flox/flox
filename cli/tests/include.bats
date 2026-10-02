@@ -296,3 +296,35 @@ EOF
 }
 
 # ---------------------------------------------------------------------------- #
+# Reusing the packages that included environments locked
+# ---------------------------------------------------------------------------- #
+
+@test "composing a locked environment reuses its locked packages" {
+  "$FLOX_BIN" init -d included
+  cp "$GENERATED_DATA"/envs/hello/manifest.{toml,lock} included/.flox/env
+
+  # The file's default empty mock fails any resolution, so the composer can
+  # only lock by reusing the included environment's packages.
+  "$FLOX_BIN" init -d composer
+  MANIFEST_CONTENTS="$(cat << "EOF"
+    version = 1
+
+    [include]
+    environments = [
+      { dir = "../included" },
+    ]
+EOF
+  )"
+  echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f - -d composer
+
+  run "$FLOX_BIN" list -d composer
+  assert_success
+  assert_output --partial "hello: hello (2.12.3)"
+
+  locked_packages='[.packages[] | {install_id, system, derivation}] | sort_by(.system)'
+  assert_equal \
+    "$(jq -S "$locked_packages" composer/.flox/env/manifest.lock)" \
+    "$(jq -S "$locked_packages" included/.flox/env/manifest.lock)"
+}
+
+# ---------------------------------------------------------------------------- #

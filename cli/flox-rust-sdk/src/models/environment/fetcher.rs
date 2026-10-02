@@ -4,7 +4,6 @@ use std::str::FromStr;
 use flox_core::data::environment_ref::RemoteEnvironmentRef;
 use flox_manifest::lockfile::{LockedInclude, Lockfile};
 use flox_manifest::parsed::common::IncludeDescriptor;
-use flox_manifest::{Manifest, TypedOnly};
 
 use super::{ConcreteEnvironment, EnvironmentError, open_path};
 use crate::flox::Flox;
@@ -20,13 +19,21 @@ pub struct IncludeFetcher {
     pub base_directory: Option<PathBuf>,
 }
 
+/// The included environment as fetched,
+/// with the lockfile whose packages seed the composing environment's lock.
+#[derive(Clone, Debug, PartialEq)]
+pub struct FetchedInclude {
+    pub locked_include: LockedInclude,
+    pub lockfile: Lockfile,
+}
+
 impl IncludeFetcher {
     pub fn fetch(
         &self,
         flox: &Flox,
         include_environment: &IncludeDescriptor,
-    ) -> Result<LockedInclude, EnvironmentError> {
-        let (manifest, name) = match include_environment {
+    ) -> Result<FetchedInclude, EnvironmentError> {
+        let (lockfile, name) = match include_environment {
             IncludeDescriptor::Local { dir, name } => self.fetch_local(flox, dir, name),
             IncludeDescriptor::Remote {
                 remote,
@@ -35,10 +42,15 @@ impl IncludeFetcher {
             } => self.fetch_remote(flox, remote, name, *generation),
         }?;
 
-        Ok(LockedInclude {
-            manifest,
-            name,
-            descriptor: include_environment.clone(),
+        // One read for both, so the manifest matches the packages
+        // even if a remote environment's live generation moves.
+        Ok(FetchedInclude {
+            locked_include: LockedInclude {
+                manifest: lockfile.manifest.clone(),
+                name,
+                descriptor: include_environment.clone(),
+            },
+            lockfile,
         })
     }
 
@@ -48,7 +60,7 @@ impl IncludeFetcher {
         flox: &Flox,
         dir: impl AsRef<Path>,
         name: &Option<String>,
-    ) -> Result<(Manifest<TypedOnly>, String), EnvironmentError> {
+    ) -> Result<(Lockfile, String), EnvironmentError> {
         if self.base_directory.is_none() {
             return Err(EnvironmentError::Recoverable(
                 RecoverableMergeError::RemoteCannotIncludeLocal,
@@ -93,9 +105,7 @@ impl IncludeFetcher {
             },
         };
 
-        let manifest = lockfile.manifest;
-
-        Ok((manifest, name))
+        Ok((lockfile, name))
     }
 
     /// Fetch a remote environment.
@@ -107,7 +117,7 @@ impl IncludeFetcher {
         remote: &RemoteEnvironmentRef,
         name: &Option<String>,
         generation: Option<usize>,
-    ) -> Result<(Manifest<TypedOnly>, String), EnvironmentError> {
+    ) -> Result<(Lockfile, String), EnvironmentError> {
         let pointer =
             ManagedPointer::new(remote.owner().clone(), remote.name().clone(), &flox.floxhub);
 
@@ -127,12 +137,11 @@ impl IncludeFetcher {
                 .existing_lockfile(flox)?
                 .expect("remote environments should always be locked"),
         };
-        let manifest = lockfile.manifest;
         let name = name
             .clone()
             .unwrap_or_else(|| environment.name().to_string());
 
-        Ok((manifest, name))
+        Ok((lockfile, name))
     }
 
     /// For directories that aren't absolute, join them to the base_directory
@@ -192,7 +201,7 @@ mod test {
 
         fs::create_dir(&environment_path).unwrap();
         let mut environment = new_path_environment_in(&flox, &manifest_contents, &environment_path);
-        environment.lockfile(&flox).unwrap();
+        let lockfile = environment.lockfile(&flox).unwrap().into();
 
         let include_fetcher = IncludeFetcher {
             base_directory: Some(tempdir.path().to_path_buf()),
@@ -205,10 +214,13 @@ mod test {
 
         let fetched = include_fetcher.fetch(&flox, &include_descriptor).unwrap();
 
-        assert_eq!(fetched, LockedInclude {
-            manifest,
-            name: "environment".to_string(),
-            descriptor: include_descriptor,
+        assert_eq!(fetched, FetchedInclude {
+            locked_include: LockedInclude {
+                manifest,
+                name: "environment".to_string(),
+                descriptor: include_descriptor,
+            },
+            lockfile,
         })
     }
 
@@ -222,7 +234,7 @@ mod test {
 
         fs::create_dir(&environment_path).unwrap();
         let mut environment = new_path_environment_in(&flox, &manifest_contents, &environment_path);
-        environment.lockfile(&flox).unwrap();
+        let lockfile = environment.lockfile(&flox).unwrap().into();
 
         let include_fetcher = IncludeFetcher {
             base_directory: Some(tempdir.path().to_path_buf()),
@@ -235,10 +247,13 @@ mod test {
 
         let fetched = include_fetcher.fetch(&flox, &include_descriptor).unwrap();
 
-        assert_eq!(fetched, LockedInclude {
-            manifest,
-            name: "environment".to_string(),
-            descriptor: include_descriptor,
+        assert_eq!(fetched, FetchedInclude {
+            locked_include: LockedInclude {
+                manifest,
+                name: "environment".to_string(),
+                descriptor: include_descriptor,
+            },
+            lockfile,
         })
     }
 
@@ -385,6 +400,7 @@ mod test {
             .edit(&flox, manifest_contents.to_string())
             .unwrap();
         remote_env.push(&flox, true).unwrap();
+        let lockfile = remote_env.existing_lockfile(&flox).unwrap().unwrap();
 
         // Fetch and lock the remote environment.
         let include_fetcher = IncludeFetcher {
@@ -398,10 +414,13 @@ mod test {
         let fetched = include_fetcher.fetch(&flox, &include_descriptor).unwrap();
         assert_eq!(
             fetched,
-            LockedInclude {
-                manifest,
-                name: "name".to_string(),
-                descriptor: include_descriptor,
+            FetchedInclude {
+                locked_include: LockedInclude {
+                    manifest,
+                    name: "name".to_string(),
+                    descriptor: include_descriptor,
+                },
+                lockfile,
             },
             "fetch should get the new generation"
         );
@@ -436,6 +455,7 @@ mod test {
             .current_gen()
             .unwrap();
         let initial_generation_manifest = remote_env.manifest(&flox).unwrap();
+        let initial_generation_lockfile = remote_env.existing_lockfile(&flox).unwrap().unwrap();
 
         // Fetch and lock the remote environment at a given generation.
         let include_fetcher = IncludeFetcher {
@@ -448,10 +468,13 @@ mod test {
         };
 
         let fetched = include_fetcher.fetch(&flox, &include_descriptor).unwrap();
-        assert_eq!(fetched, LockedInclude {
-            manifest: initial_generation_manifest.as_typed_only(),
-            name: "name".to_string(),
-            descriptor: include_descriptor.clone(),
+        assert_eq!(fetched, FetchedInclude {
+            locked_include: LockedInclude {
+                manifest: initial_generation_manifest.as_typed_only(),
+                name: "name".to_string(),
+                descriptor: include_descriptor.clone(),
+            },
+            lockfile: initial_generation_lockfile,
         });
 
         // Modify the remote environment to create a new generation.

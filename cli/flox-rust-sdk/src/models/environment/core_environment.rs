@@ -1,7 +1,6 @@
 use std::collections::{BTreeMap, HashMap};
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::str::FromStr;
 
 use flox_core::{WriteError, write_atomically};
 use flox_manifest::interfaces::{
@@ -719,11 +718,7 @@ impl CoreEnvironment<ReadOnly> {
 
         let manifest = self.manifest(flox)?;
 
-        let existing_lockfile_contents = self.existing_lockfile_contents()?;
-        let existing_lockfile = existing_lockfile_contents
-            .as_deref()
-            .map(Lockfile::from_str)
-            .transpose()?;
+        let existing_lockfile = self.existing_lockfile()?;
 
         let manifest_without_migrating = self.manifest_without_migrating()?;
         let original_schema = manifest_without_migrating.get_schema_version();
@@ -751,20 +746,18 @@ impl CoreEnvironment<ReadOnly> {
             store_path: None,
         };
 
-        // SAFETY: serde_json::to_string_pretty is only documented to fail if
-        // the "Serialize decides to fail, or if T contains a map with non-string keys",
-        // neither of which should happen here.
-        let lockfile_contents = serde_json::to_string_pretty(&result.new_lockfile).unwrap();
-
-        let environment_lockfile_path = self.lockfile_path();
-
-        if Some(&lockfile_contents) == existing_lockfile_contents.as_ref() {
+        if Some(&result.new_lockfile) == result.old_lockfile.as_ref() {
             debug!(
-                ?environment_lockfile_path,
+                environment_lockfile_path = ?self.lockfile_path(),
                 "lockfile is up to date, skipping write"
             );
             return Ok(result);
         }
+
+        // SAFETY: serde_json::to_string_pretty is only documented to fail if
+        // the "Serialize decides to fail, or if T contains a map with non-string keys",
+        // neither of which should happen here.
+        let lockfile_contents = serde_json::to_string_pretty(&result.new_lockfile).unwrap();
 
         let store_path =
             self.transact_with_lockfile_contents(lockfile_contents, flox, out_link_prefix)?;
@@ -1362,6 +1355,7 @@ mod tests {
     use std::fs::OpenOptions;
     use std::io::Write;
     use std::os::unix::fs::PermissionsExt;
+    use std::str::FromStr;
 
     use flox_core::activate::mode::ActivateMode;
     use flox_manifest::interfaces::AsLatestSchema;

@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 #[cfg(any(test, feature = "tests"))]
 use flox_test_utils::proptest::alphanum_string;
 #[cfg(any(test, feature = "tests"))]
@@ -6,7 +8,8 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::compose::WarningWithContext;
-use crate::interfaces::PackageLookup;
+use crate::interfaces::{AsLatestSchema, PackageLookup};
+use crate::parsed::Inner;
 use crate::parsed::common::IncludeDescriptor;
 use crate::{Manifest, ManifestError, TypedOnly};
 
@@ -53,6 +56,27 @@ impl Compose {
 
         Ok(None)
     }
+
+    /// Maps each install ID an included environment provides to the name of
+    /// the include that provides it, using the merge's precedence:
+    /// later includes take precedence over earlier ones,
+    /// and install IDs the composer declares are omitted.
+    pub fn include_names_by_install_id(&self) -> Result<BTreeMap<String, String>, ManifestError> {
+        let mut names = BTreeMap::new();
+        for include in &self.include {
+            let manifest = include.manifest.migrate_typed_only(None)?;
+            for install_id in manifest.as_latest_schema().install.inner().keys() {
+                names.insert(install_id.clone(), include.name.clone());
+            }
+        }
+
+        let composer = self.composer.migrate_typed_only(None)?;
+        for install_id in composer.as_latest_schema().install.inner().keys() {
+            names.remove(install_id);
+        }
+
+        Ok(names)
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema)]
@@ -73,4 +97,62 @@ pub struct LockedInclude {
     //   - https://github.com/flox/product/pull/891
     // 3. We've exposed it from `RemoteEnvironment`/`ManagedEnvironment`
     // pub remote: Option<Generation>,
+}
+
+#[cfg(test)]
+mod tests {
+    use indoc::indoc;
+    use pretty_assertions::assert_eq;
+
+    use super::*;
+    use crate::interfaces::AsTypedOnlyManifest;
+    use crate::test_helpers::with_latest_schema;
+
+    fn typed_manifest(body: &str) -> Manifest<TypedOnly> {
+        Manifest::parse_toml_typed(with_latest_schema(body))
+            .unwrap()
+            .as_typed_only()
+    }
+
+    fn locked_include(name: &str, body: &str) -> LockedInclude {
+        LockedInclude {
+            manifest: typed_manifest(body),
+            name: name.to_string(),
+            descriptor: IncludeDescriptor::Local {
+                dir: name.into(),
+                name: None,
+            },
+        }
+    }
+
+    #[test]
+    fn include_names_by_install_id_prefers_composer_and_later_includes() {
+        let compose = Compose {
+            composer: typed_manifest(indoc! {r#"
+                [install]
+                a.pkg-path = "a"
+            "#}),
+            include: vec![
+                locked_include("include1", indoc! {r#"
+                    [install]
+                    a.pkg-path = "a"
+                    b.pkg-path = "b"
+                    c.pkg-path = "c"
+                "#}),
+                locked_include("include2", indoc! {r#"
+                    [install]
+                    c.pkg-path = "c"
+                "#}),
+            ],
+            warnings: vec![],
+        };
+
+        assert_eq!(
+            compose.include_names_by_install_id().unwrap(),
+            BTreeMap::from([
+                ("b".to_string(), "include1".to_string()),
+                ("c".to_string(), "include2".to_string()),
+            ])
+        );
+    }
 }
