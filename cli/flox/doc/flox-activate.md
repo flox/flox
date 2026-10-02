@@ -186,6 +186,20 @@ options.
     `flox config --set trusted_environments.\"<owner/name>\" trust`.
     To trust all environments from an organization, use a wildcard key:
     `flox config --set 'trusted_environments."<owner>/*"' trust`.
+    Environments included from FloxHub are trusted the same way,
+    including those that environments included with `dir` include in turn.
+    Those that an environment included from FloxHub includes are trusted
+    by trusting that environment.
+    An environment included with `auto-upgrade = true` changes without
+    anyone reviewing it, so trusting it with an exact `trusted_environments`
+    entry applies to what it runs on activation (its hook and profile scripts,
+    variables, services and packages) as it was the first time you activated
+    it after trusting it, or as you trusted it when asked.
+    When that changes, you're asked again, unless you trust everything from
+    its owner, and activating without a terminal fails until you trust it.
+    Upgrades of the packages it already installs don't count as changes.
+    Changing whether it's trusted with `flox config`, or denying it, forgets
+    what you trusted.
 
 `--print-script`
 :  Prints an activation script to `stdout` that's suitable for sourcing in

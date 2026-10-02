@@ -768,6 +768,9 @@ The fields in these include descriptors are as follows:
   that it shares a package group with the composing environment for, and to
   download them.
   Adding the include and running `flox include upgrade` fetch it right away.
+  Since what it runs on activation can change without anyone reviewing it,
+  `flox activate` asks whether to trust it again when that changes, see
+  [`flox-activate(1)`](./flox-activate.md).
   For a directory that holds an environment pulled from FloxHub, `true` uses
   its current local generation, as long as it has no changes that aren't in a
   generation yet.

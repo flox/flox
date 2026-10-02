@@ -687,6 +687,67 @@ EOF
   assert_regex "$stderr" "Run 'flox include upgrade -d .*/composer' to get them."
 }
 
+@test "activate checks trust of a remote environment that an included path environment includes" {
+  setup_composer_with_remote_include
+  "$FLOX_BIN" init -d middle
+  "$FLOX_BIN" edit -d middle -f - << EOF
+version = 1
+[include]
+environments = [{ remote = "owner/remote" }]
+EOF
+  "$FLOX_BIN" edit -d composer -f - << EOF
+version = 1
+[include]
+environments = [{ dir = "../middle" }]
+EOF
+
+  RUST_BACKTRACE=0 run "$FLOX_BIN" activate -d composer -- true
+  assert_failure
+  assert_output --partial "The included environment owner/remote is not trusted."
+
+  run "$FLOX_BIN" activate --trust -d composer -- true
+  assert_success
+}
+
+@test "activate checks a followed remote environment again when what it runs changes" {
+  setup_composer_with_remote_include
+  "$FLOX_BIN" edit -d composer -f - << EOF
+schema-version = "1.18.0"
+[include]
+environments = [{ remote = "owner/remote", auto-upgrade = true }]
+EOF
+  "$FLOX_BIN" config --set trusted_environments.owner/remote trust
+
+  run "$FLOX_BIN" activate -d composer -- true
+  assert_success
+
+  # Variables can run commands too.
+  # Pushing updates the sync branch, as the background check would.
+  "$FLOX_BIN" edit -r owner/remote -f - << EOF
+version = 1
+[vars]
+remote = "v2"
+EOF
+  "$FLOX_BIN" push -f -r owner/remote
+
+  RUST_BACKTRACE=0 run "$FLOX_BIN" activate -d composer -- true
+  assert_failure
+  assert_output --partial "The included environment owner/remote changed since you trusted it."
+  assert_output --partial "run 'flox config --set trusted_environments.owner/remote trust' to trust them,"
+  # The version that isn't trusted yet isn't linked into the environment
+  run grep -c '"v2"' "composer/.flox/run/$NIX_SYSTEM.composer-dev/manifest.lock"
+  assert_output "0"
+
+  run "$FLOX_BIN" activate --trust -d composer -- true
+  assert_success
+
+  # Trusting it again trusts what it runs now
+  "$FLOX_BIN" config --set trusted_environments.owner/remote trust
+  run "$FLOX_BIN" activate -d composer -- bash -c 'echo "$remote"'
+  assert_success
+  assert_line "v2"
+}
+
 @test "include upgrade reports no changes for remote environments" {
   setup_composer_with_remote_include
   run "$FLOX_BIN" include upgrade -d composer

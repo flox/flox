@@ -35,7 +35,7 @@ mod upgrade;
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::path::{Path, PathBuf};
-use std::{env, fmt, mem};
+use std::{env, fmt, fs, io, mem};
 
 use anyhow::{Context, Result, bail};
 use bpaf::{Args, Bpaf, ParseFailure, Parser, ShellComp};
@@ -43,6 +43,7 @@ use flox_config::{Config, EnvironmentTrust, FLOX_DIR_NAME, TokenStorageMode};
 use flox_core::data::environment_ref::{self, DEFAULT_NAME, RemoteEnvironmentRef};
 use flox_core::floxhub::{DEFAULT_FLOXHUB_URL, Floxhub};
 use flox_core::vars::FLOX_DISABLE_METRICS_VAR;
+use flox_core::{blake3_hex, write_atomically};
 use flox_events::{EventKind, EventsHub};
 use flox_manifest::interfaces::AsLatestSchema;
 use flox_manifest::{Manifest, TypedOnly};
@@ -1655,9 +1656,16 @@ fn resolve_trust<'a>(
     trusted: &'a HashMap<RemoteEnvironmentRef, EnvironmentTrust>,
     env_ref: &RemoteEnvironmentRef,
 ) -> Option<&'a EnvironmentTrust> {
-    let wildcard_ref = RemoteEnvironmentRef::new(env_ref.owner().as_str(), "*")
-        .expect("* is always valid in EnvironmentName");
-    trusted.get(env_ref).or_else(|| trusted.get(&wildcard_ref))
+    trusted
+        .get(env_ref)
+        .or_else(|| trusted.get(&owner_wildcard(env_ref)))
+}
+
+/// The `owner/*` entry that trusts or denies every environment of the owner
+/// of `env_ref`
+fn owner_wildcard(env_ref: &RemoteEnvironmentRef) -> RemoteEnvironmentRef {
+    RemoteEnvironmentRef::new(env_ref.owner().as_str(), "*")
+        .expect("* is always valid in EnvironmentName")
 }
 
 /// Check whether the given [EnvironmentRef] is trusted.
@@ -1666,12 +1674,21 @@ fn resolve_trust<'a>(
 ///
 /// This function returns [`Ok`] if the environment is trusted
 /// and a formatted error message if not.
+///
+/// `followed_scripts` are the hashes of what the followed versions of an
+/// included environment run on activation, see [included_scripts_hash].
+/// Since that can change without anyone reviewing it, trusting it with an
+/// exact entry only trusts what was trusted, and it's checked again when that
+/// changes, see [TrustedScripts].
+/// What the first activation after trusting it sees is recorded without
+/// asking.
 pub(super) async fn ensure_environment_trust(
     config: &mut Config,
     flox: &Flox,
     env_ref: &RemoteEnvironmentRef,
     env_included: bool,
     manifest_contents: &String,
+    followed_scripts: &[String],
 ) -> Result<()> {
     let trust = resolve_trust(&config.flox.trusted_environments, env_ref);
     let env_config_key = format!("trusted_environments.{env_ref}");
@@ -1688,11 +1705,41 @@ pub(super) async fn ensure_environment_trust(
         return Ok(());
     }
 
+    let trusted_scripts = TrustedScripts::new(flox, env_ref);
+    let trusts = |env_ref: &RemoteEnvironmentRef| {
+        matches!(
+            config.flox.trusted_environments.get(env_ref),
+            Some(EnvironmentTrust::Trust)
+        )
+    };
+    // Trusting everything from the owner trusts whatever it runs
+    let trusts_exactly = trusts(env_ref) && !trusts(&owner_wildcard(env_ref));
+    if !followed_scripts.is_empty() && !trusts_exactly {
+        trusted_scripts.forget()?;
+    }
+    let mut scripts_changed = false;
+
     // Configured trust does not depend on the current credential or FloxHub
     // availability, so honor it before loading credentials or resolving identity.
     if matches!(trust, Some(EnvironmentTrust::Trust)) {
-        debug!("{env_prefixed_name} is trusted by config");
-        return Ok(());
+        if followed_scripts.is_empty() || !trusts_exactly {
+            debug!("{env_prefixed_name} is trusted by config");
+            return Ok(());
+        }
+        let trusted = trusted_scripts.read()?;
+        if trusted.is_empty() {
+            trusted_scripts.record(followed_scripts)?;
+            debug!("{env_prefixed_name} is trusted by config, recorded its scripts");
+            return Ok(());
+        }
+        if followed_scripts
+            .iter()
+            .all(|scripts| trusted.contains(scripts))
+        {
+            debug!("{env_prefixed_name} is trusted by config");
+            return Ok(());
+        }
+        scripts_changed = true;
     }
 
     // Load the credential before trusting its identity: a saved handle alone
@@ -1752,8 +1799,13 @@ pub(super) async fn ensure_environment_trust(
         }
     }
 
+    let problem = if scripts_changed {
+        format!("The {env_prefixed_name} changed since you trusted it.")
+    } else {
+        format!("The {env_prefixed_name} is not trusted.")
+    };
     let message = formatdoc! {"
-        The {env_prefixed_name} is not trusted.
+        {problem}
 
         flox environments do not run in a sandbox.
         Activation hooks can run arbitrary code on your machine.
@@ -1761,6 +1813,13 @@ pub(super) async fn ensure_environment_trust(
 
     if Dialog::can_prompt() {
         message::warning(message);
+    } else if scripts_changed {
+        bail!(formatdoc! {"
+            {message}
+
+            Activate the environment in an interactive terminal to review the changes,
+            run 'flox config --set {env_config_key} trust' to trust them,
+            or activate it with '--trust' to trust them for this activation."})
     } else {
         bail!("{message}")
     }
@@ -1797,6 +1856,7 @@ pub(super) async fn ensure_environment_trust(
                 )
                 .context("Could not write token to config")?;
                 let _ = mem::replace(config, Config::parse()?);
+                trusted_scripts.record(followed_scripts)?;
                 info!("Trusted {env_prefixed_name} (saved choice)",);
                 return Ok(());
             },
@@ -1808,6 +1868,7 @@ pub(super) async fn ensure_environment_trust(
                 )
                 .context("Could not write token to config")?;
                 let _ = mem::replace(config, Config::parse()?);
+                trusted_scripts.forget()?;
                 bail!("Denied {env_prefixed_name} (saved choice).");
             },
             Choices::TrustOrg => {
@@ -1826,6 +1887,98 @@ pub(super) async fn ensure_environment_trust(
                 return Ok(());
             },
             Choices::ShowConfig => eprintln!("{}", manifest_contents),
+        }
+    }
+}
+
+/// Hash of what a version of an included environment runs on activation:
+/// its hook and profile scripts, variables, services and packages.
+///
+/// Upgrades of the packages it installs don't change it,
+/// and neither do the sections that only apply to builds and containers.
+pub(super) fn included_scripts_hash(manifest: &Manifest<TypedOnly>) -> Result<String> {
+    let manifest = manifest.clone().migrate_typed_only(None)?;
+    let manifest = manifest.as_latest_schema();
+    let runs = serde_json::to_vec(&(
+        &manifest.hook,
+        &manifest.profile,
+        &manifest.vars,
+        &manifest.services,
+        &manifest.install,
+    ))?;
+    Ok(blake3_hex(&runs))
+}
+
+/// The hashes of what a followed included environment runs that the user
+/// trusted with an exact `trusted_environments` entry, see
+/// [included_scripts_hash].
+///
+/// They belong to that decision: changing whether the environment is trusted
+/// forgets them, and so does trusting everything from its owner.
+/// The most recent ones are kept, so that going back to a version that was
+/// trusted doesn't ask again.
+///
+/// They're kept in the state directory rather than the config, so that older
+/// versions of Flox can still read the config.
+/// Each environment has its own file, so that activations recording
+/// different environments don't overwrite each other.
+pub(super) struct TrustedScripts {
+    path: PathBuf,
+}
+
+impl TrustedScripts {
+    const KEPT: usize = 10;
+
+    fn dir(flox: &Flox) -> PathBuf {
+        flox.state_dir.join("trusted-included-scripts")
+    }
+
+    pub(super) fn new(flox: &Flox, env_ref: &RemoteEnvironmentRef) -> Self {
+        // Owners and names aren't necessarily valid file names
+        Self {
+            path: Self::dir(flox).join(blake3_hex(env_ref.to_string().as_bytes())),
+        }
+    }
+
+    /// The trusted hashes, oldest first
+    fn read(&self) -> Result<Vec<String>> {
+        match fs::read_to_string(&self.path) {
+            Ok(contents) => Ok(contents.lines().map(String::from).collect()),
+            Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(Vec::new()),
+            Err(err) => Err(err).context("Could not read which scripts you trusted"),
+        }
+    }
+
+    fn record(&self, scripts: &[String]) -> Result<()> {
+        if scripts.is_empty() {
+            return Ok(());
+        }
+        let mut trusted = self.read()?;
+        trusted.retain(|trusted| !scripts.contains(trusted));
+        trusted.extend(scripts.iter().cloned());
+        let kept = &trusted[trusted.len().saturating_sub(Self::KEPT)..];
+        if let Some(parent) = self.path.parent() {
+            fs::create_dir_all(parent).context("Could not record which scripts you trusted")?;
+        }
+        write_atomically(&self.path, kept.join("\n"))
+            .context("Could not record which scripts you trusted")
+    }
+
+    pub(super) fn forget(&self) -> Result<()> {
+        match fs::remove_file(&self.path) {
+            Err(err) if err.kind() != io::ErrorKind::NotFound => {
+                Err(err).context("Could not forget which scripts you trusted")
+            },
+            _ => Ok(()),
+        }
+    }
+
+    pub(super) fn forget_all(flox: &Flox) -> Result<()> {
+        match fs::remove_dir_all(Self::dir(flox)) {
+            Err(err) if err.kind() != io::ErrorKind::NotFound => {
+                Err(err).context("Could not forget which scripts you trusted")
+            },
+            _ => Ok(()),
         }
     }
 }
@@ -2284,9 +2437,16 @@ mod wildcard_trust_tests {
                 }),
             ] {
                 flox.set_auth_context(context).unwrap();
-                super::ensure_environment_trust(&mut config, &flox, &env_ref, true, &String::new())
-                    .await
-                    .unwrap();
+                super::ensure_environment_trust(
+                    &mut config,
+                    &flox,
+                    &env_ref,
+                    true,
+                    &String::new(),
+                    &[],
+                )
+                .await
+                .unwrap();
             }
         }
         request.assert_calls(0);
@@ -2417,5 +2577,162 @@ mod auth_context_from_config_tests {
 
         assert!(!credential.cached_facts().logged_in);
         assert!(credential.is_unauthenticated());
+    }
+}
+
+#[cfg(test)]
+mod followed_include_trust_tests {
+    use flox_config::{Config, EnvironmentTrust};
+    use flox_core::data::environment_ref::RemoteEnvironmentRef;
+    use flox_manifest::Manifest;
+    use flox_manifest::interfaces::AsTypedOnlyManifest;
+    use flox_manifest::test_helpers::with_latest_schema;
+    use flox_rust_sdk::flox::Flox;
+    use flox_rust_sdk::flox::test_helpers::flox_instance;
+
+    use super::{TrustedScripts, ensure_environment_trust, included_scripts_hash};
+
+    /// Config with each of `entries`
+    fn config_with(entries: &[(&str, EnvironmentTrust)]) -> Config {
+        let mut config = Config::default();
+        for (env_ref, trust) in entries {
+            let (owner, name) = env_ref.split_once('/').unwrap();
+            config.flox.trusted_environments.insert(
+                RemoteEnvironmentRef::new(owner, name).unwrap(),
+                trust.clone(),
+            );
+        }
+        config
+    }
+
+    async fn ensure_followed_trust(
+        config: &mut Config,
+        flox: &Flox,
+        scripts: &[&str],
+    ) -> anyhow::Result<()> {
+        let scripts: Vec<String> = scripts.iter().map(|scripts| scripts.to_string()).collect();
+        ensure_environment_trust(
+            config,
+            flox,
+            &RemoteEnvironmentRef::new("owner", "env").unwrap(),
+            true,
+            &String::new(),
+            &scripts,
+        )
+        .await
+    }
+
+    fn record(flox: &Flox, scripts: &str) {
+        trusted_scripts(flox)
+            .record(&[scripts.to_string()])
+            .unwrap();
+    }
+
+    fn trusted_scripts(flox: &Flox) -> TrustedScripts {
+        TrustedScripts::new(flox, &RemoteEnvironmentRef::new("owner", "env").unwrap())
+    }
+
+    /// A followed include that's trusted always is trusted with the scripts
+    /// first seen, and only those.
+    /// The tests can't prompt, so asking again fails.
+    #[tokio::test]
+    async fn trusted_followed_include_is_checked_again_when_its_scripts_change() {
+        let (flox, _tempdir) = flox_instance();
+        let mut config = config_with(&[("owner/env", EnvironmentTrust::Trust)]);
+
+        ensure_followed_trust(&mut config, &flox, &["first"])
+            .await
+            .unwrap();
+        ensure_followed_trust(&mut config, &flox, &["first"])
+            .await
+            .unwrap();
+        let err = ensure_followed_trust(&mut config, &flox, &["changed"])
+            .await
+            .unwrap_err();
+        assert!(
+            err.to_string().contains("changed since you trusted it"),
+            "{err}"
+        );
+        assert_eq!(trusted_scripts(&flox).read().unwrap(), vec!["first"]);
+    }
+
+    /// Going back to scripts that were trusted, e.g. when the latest changes
+    /// don't build, doesn't ask again, but each followed version has to be
+    /// trusted
+    #[tokio::test]
+    async fn trusted_followed_include_keeps_earlier_trusted_scripts() {
+        let (flox, _tempdir) = flox_instance();
+        let mut config = config_with(&[("owner/env", EnvironmentTrust::Trust)]);
+        record(&flox, "first");
+        record(&flox, "second");
+
+        ensure_followed_trust(&mut config, &flox, &["first"])
+            .await
+            .unwrap();
+        ensure_followed_trust(&mut config, &flox, &["first", "second"])
+            .await
+            .unwrap();
+        ensure_followed_trust(&mut config, &flox, &["first", "changed"])
+            .await
+            .unwrap_err();
+    }
+
+    /// Trusting everything from an owner covers changes to the scripts of
+    /// its followed environments, also when one of them is trusted exactly
+    #[tokio::test]
+    async fn owner_trust_covers_changed_scripts_of_followed_include() {
+        let (flox, _tempdir) = flox_instance();
+        let mut config = config_with(&[
+            ("owner/env", EnvironmentTrust::Trust),
+            ("owner/*", EnvironmentTrust::Trust),
+        ]);
+        record(&flox, "first");
+
+        ensure_followed_trust(&mut config, &flox, &["changed"])
+            .await
+            .unwrap();
+        assert_eq!(trusted_scripts(&flox).read().unwrap(), Vec::<String>::new());
+    }
+
+    /// Denying a followed include forgets the scripts trusted before, so
+    /// trusting it again trusts the scripts it has then
+    #[tokio::test]
+    async fn denying_followed_include_forgets_its_trusted_scripts() {
+        let (flox, _tempdir) = flox_instance();
+        record(&flox, "first");
+
+        let mut config = config_with(&[("owner/env", EnvironmentTrust::Deny)]);
+        ensure_followed_trust(&mut config, &flox, &["changed"])
+            .await
+            .unwrap_err();
+        let mut config = config_with(&[("owner/env", EnvironmentTrust::Trust)]);
+        ensure_followed_trust(&mut config, &flox, &["changed"])
+            .await
+            .unwrap();
+        assert_eq!(trusted_scripts(&flox).read().unwrap(), vec!["changed"]);
+    }
+
+    /// Everything a followed include runs on activation is covered,
+    /// but not what only applies to builds
+    #[test]
+    fn included_scripts_hash_covers_what_activation_runs() {
+        let hash = |body: &str| {
+            let manifest = Manifest::parse_toml_typed(with_latest_schema(body))
+                .unwrap()
+                .as_typed_only();
+            included_scripts_hash(&manifest).unwrap()
+        };
+        let base = hash("");
+
+        for runs in [
+            "[hook]\non-activate = \"echo\"",
+            "[profile]\ncommon = \"echo\"",
+            "[vars]\nX = \"$(echo)\"",
+            "[services.s]\ncommand = \"echo\"",
+            "[install]\nhello.pkg-path = \"hello\"",
+        ] {
+            assert_ne!(hash(runs), base, "{runs}");
+        }
+        assert_eq!(hash("[build.b]\ncommand = \"echo\""), base);
     }
 }

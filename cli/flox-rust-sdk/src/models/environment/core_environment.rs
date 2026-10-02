@@ -1463,6 +1463,42 @@ pub struct FollowedIncludes {
     pub upstream_changes: Vec<RemoteEnvironmentRef>,
 }
 
+/// An environment included from FloxHub, directly or by an included
+/// environment in turn, as an environment uses it
+#[derive(Clone, Debug, PartialEq)]
+pub struct IncludedRemoteEnvironment {
+    pub env_ref: RemoteEnvironmentRef,
+    /// The manifests of the versions in use,
+    /// more than one only if it's included more than once
+    pub manifests: Vec<Manifest<TypedOnly>>,
+    /// Those of `manifests` that can change without the composing
+    /// environment's lockfile changing, because the latest generation is used
+    /// without 'flox include upgrade'
+    pub followed: Vec<Manifest<TypedOnly>>,
+}
+
+impl IncludedRemoteEnvironment {
+    /// The environments included from FloxHub directly by `lockfile`,
+    /// which aren't followed
+    pub fn direct_includes(lockfile: &Lockfile) -> Vec<Self> {
+        lockfile
+            .compose
+            .iter()
+            .flat_map(|compose| &compose.include)
+            .filter_map(|locked| {
+                let IncludeDescriptor::Remote { remote, .. } = &locked.descriptor else {
+                    return None;
+                };
+                Some(Self {
+                    env_ref: remote.clone(),
+                    manifests: vec![locked.manifest.clone()],
+                    followed: Vec::new(),
+                })
+            })
+            .collect()
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct UnreadableInclude {
     pub name: String,

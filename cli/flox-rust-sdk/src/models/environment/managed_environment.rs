@@ -11,7 +11,13 @@ use flox_manifest::{Manifest, ManifestError, Migrated, Validated};
 use thiserror::Error;
 use tracing::{debug, instrument};
 
-use super::core_environment::{CoreEnvironment, FollowMode, FollowedIncludes, UpgradeResult};
+use super::core_environment::{
+    CoreEnvironment,
+    FollowMode,
+    FollowedIncludes,
+    IncludedRemoteEnvironment,
+    UpgradeResult,
+};
 use super::fetcher::IncludeFetcher;
 use super::followed_includes::{self, FollowedLockfiles, Following};
 use super::generations::{
@@ -242,6 +248,20 @@ impl Environment for ManagedEnvironment {
             ..
         } = self.follow_includes(flox, mode)?;
         Ok((lock_result, followed))
+    }
+
+    fn included_remote_environments(
+        &self,
+        flox: &Flox,
+        lockfile: &Lockfile,
+    ) -> Result<Vec<IncludedRemoteEnvironment>, EnvironmentError> {
+        // Even if it doesn't follow its includes, e.g. when a generation is
+        // activated, it may include directories
+        Ok(self.include_fetcher.included_remote_environments(
+            flox,
+            lockfile,
+            self.follows_includes(),
+        ))
     }
 
     fn fetch_included_remote_environments(&mut self, flox: &Flox) -> Result<(), EnvironmentError> {

@@ -28,7 +28,13 @@ use indoc::formatdoc;
 use itertools::Itertools;
 use tracing::debug;
 
-use super::core_environment::{CoreEnvironment, FollowMode, FollowedIncludes, UpgradeResult};
+use super::core_environment::{
+    CoreEnvironment,
+    FollowMode,
+    FollowedIncludes,
+    IncludedRemoteEnvironment,
+    UpgradeResult,
+};
 use super::fetcher::{FetchedIncludes, IncludeFetcher};
 use super::followed_includes::{self, FollowedLockfiles, Following};
 use super::uninstall::UninstallSpec;
@@ -303,6 +309,16 @@ impl Environment for PathEnvironment {
             ..
         } = self.follow_includes(flox, mode)?;
         Ok((lock_result, followed))
+    }
+
+    fn included_remote_environments(
+        &self,
+        flox: &Flox,
+        lockfile: &Lockfile,
+    ) -> Result<Vec<IncludedRemoteEnvironment>, EnvironmentError> {
+        Ok(self
+            .include_fetcher()?
+            .included_remote_environments(flox, lockfile, true))
     }
 
     fn fetch_included_remote_environments(&mut self, flox: &Flox) -> Result<(), EnvironmentError> {
@@ -918,7 +934,7 @@ pub mod tests {
     use std::io::Write;
 
     use flox_core::data::environment_ref::RemoteEnvironmentRef;
-    use flox_manifest::interfaces::AsLatestSchema;
+    use flox_manifest::interfaces::{AsLatestSchema, AsTypedOnlyManifest};
     use flox_manifest::lockfile::LockedPackage;
     use flox_manifest::parsed::Inner;
     use flox_manifest::parsed::common::KnownSchemaVersion;
@@ -2147,6 +2163,89 @@ pub mod tests {
 
         let (_, followed) = follow(&mut composer, &flox, FollowMode::Lock);
         assert_eq!(followed.upstream_changes, vec![]);
+    }
+
+    /// The environments included from FloxHub in use include those that
+    /// included directories include in turn: as following merges them if the
+    /// directory is followed, and as the directory's lockfile has them if
+    /// it's pinned. A directory that's included both ways is listed both ways.
+    #[test]
+    fn included_remote_environments_include_those_included_in_turn() {
+        let (flox, tempdir) = flox_instance_with_optional_floxhub(Some(&"owner".parse().unwrap()));
+        let mut remote = mock_remote_environment(
+            &flox,
+            &with_latest_schema("[vars]\nremote = \"v1\""),
+            "owner".parse().unwrap(),
+            Some("remote"),
+        );
+        locked_path_environment(
+            &flox,
+            &tempdir,
+            "b",
+            &with_latest_schema(
+                "[include]\nenvironments = [{ remote = \"owner/remote\", auto-upgrade = true }]",
+            ),
+        );
+        let mut followed = locked_path_environment(
+            &flox,
+            &tempdir,
+            "followed",
+            &with_latest_schema("[include]\nenvironments = [{ dir = \"../b\" }]"),
+        );
+        let mut pinned = locked_path_environment(
+            &flox,
+            &tempdir,
+            "pinned",
+            &with_latest_schema(
+                "[include]\nenvironments = [{ dir = \"../b\", auto-upgrade = false }]",
+            ),
+        );
+        let mut both = locked_path_environment(
+            &flox,
+            &tempdir,
+            "both",
+            &with_latest_schema(
+                "[include]\nenvironments = [{ dir = \"../pinned\" }, { dir = \"../followed\" }]",
+            ),
+        );
+        let v1 = remote.manifest(&flox).unwrap().as_typed_only();
+        remote
+            .edit(&flox, with_latest_schema("[vars]\nremote = \"v2\""))
+            .unwrap();
+        remote.push(&flox, true).unwrap();
+        let v2 = remote.manifest(&flox).unwrap().as_typed_only();
+
+        let (lockfile, _) = follow(&mut followed, &flox, FollowMode::Lock);
+        assert_eq!(
+            followed
+                .included_remote_environments(&flox, &lockfile)
+                .unwrap(),
+            vec![IncludedRemoteEnvironment {
+                env_ref: "owner/remote".parse().unwrap(),
+                manifests: vec![v2.clone()],
+                followed: vec![v2.clone()],
+            }]
+        );
+        let (lockfile, _) = follow(&mut pinned, &flox, FollowMode::Lock);
+        assert_eq!(
+            pinned
+                .included_remote_environments(&flox, &lockfile)
+                .unwrap(),
+            vec![IncludedRemoteEnvironment {
+                env_ref: "owner/remote".parse().unwrap(),
+                manifests: vec![v1.clone()],
+                followed: vec![],
+            }]
+        );
+        let (lockfile, _) = follow(&mut both, &flox, FollowMode::Lock);
+        assert_eq!(
+            both.included_remote_environments(&flox, &lockfile).unwrap(),
+            vec![IncludedRemoteEnvironment {
+                env_ref: "owner/remote".parse().unwrap(),
+                manifests: vec![v1, v2.clone()],
+                followed: vec![v2],
+            }]
+        );
     }
 
     /// An include cycle in an existing lockfile, which earlier versions could

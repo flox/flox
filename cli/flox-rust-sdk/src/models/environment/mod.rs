@@ -58,6 +58,7 @@ pub use core_environment::{
     EditResult,
     FollowMode,
     FollowedIncludes,
+    IncludedRemoteEnvironment,
     NotAppliedIncludes,
     SingleSystemUpgradeDiff,
     UnreadableInclude,
@@ -173,6 +174,20 @@ pub trait Environment: Send {
         _mode: FollowMode,
     ) -> Result<(LockResult, FollowedIncludes), EnvironmentError> {
         Ok((self.lockfile(flox)?, FollowedIncludes::default()))
+    }
+
+    /// The environments included from FloxHub that `lockfile`, the lockfile
+    /// in use, uses: directly, and through the directories it includes,
+    /// recursively.
+    ///
+    /// An environment that's included more than once is listed once,
+    /// with each version in use.
+    fn included_remote_environments(
+        &self,
+        _flox: &Flox,
+        lockfile: &Lockfile,
+    ) -> Result<Vec<IncludedRemoteEnvironment>, EnvironmentError> {
+        Ok(IncludedRemoteEnvironment::direct_includes(lockfile))
     }
 
     /// Fetch the environments included from FloxHub, which following reads

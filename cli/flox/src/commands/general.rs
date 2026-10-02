@@ -5,6 +5,7 @@ use std::str::FromStr;
 use anyhow::{Context, Result};
 use bpaf::Bpaf;
 use flox_config::{Config, FLOX_CONFIG_FILE, ReadWriteError};
+use flox_core::data::environment_ref::RemoteEnvironmentRef;
 use flox_rust_sdk::flox::Flox;
 use fslock::LockFile;
 use indoc::indoc;
@@ -14,6 +15,7 @@ use tokio::fs;
 use toml_edit::{Key, TomlError};
 use tracing::{debug, instrument};
 
+use super::TrustedScripts;
 use crate::subcommand_metric;
 use crate::utils::message;
 use crate::utils::metrics::{
@@ -94,6 +96,7 @@ impl ConfigArgs {
                     },
                     _ => (),
                 }
+                TrustedScripts::forget_all(&flox)?;
             },
             ConfigArgs::Set(ConfigSet { key, value, .. }) => {
                 let parsed_value = match Value::from_str(value) {
@@ -111,10 +114,12 @@ impl ConfigArgs {
                     },
                 };
 
-                update_config(&flox.config_dir, key, Some(parsed_value))?
+                update_config(&flox.config_dir, key, Some(parsed_value))?;
+                forget_trusted_scripts(&flox, key)?;
             },
             ConfigArgs::Delete(ConfigDelete { key, .. }) => {
-                update_config::<()>(&flox.config_dir, key, None)?
+                update_config::<()>(&flox.config_dir, key, None)?;
+                forget_trusted_scripts(&flox, key)?;
             },
         }
         Ok(())
@@ -141,6 +146,22 @@ pub struct ConfigDelete {
     /// Delete config key
     #[bpaf(long("delete"), argument("key"))]
     key: String,
+}
+
+/// Changing whether environments are trusted forgets the scripts recorded for
+/// trusting them, see [TrustedScripts]
+fn forget_trusted_scripts(flox: &Flox, key: &str) -> Result<()> {
+    let query = parse_toml_key(key).context("Could not parse key")?;
+    match query.as_slice() {
+        [table] if table.get() == "trusted_environments" => TrustedScripts::forget_all(flox),
+        [table, env_ref] if table.get() == "trusted_environments" => {
+            match env_ref.get().parse::<RemoteEnvironmentRef>() {
+                Ok(env_ref) => TrustedScripts::new(flox, &env_ref).forget(),
+                Err(_) => Ok(()),
+            }
+        },
+        _ => Ok(()),
+    }
 }
 
 /// wrapper around [Config::write_to]

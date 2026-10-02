@@ -17,15 +17,14 @@ use flox_core::activate::context::{
 };
 use flox_core::activate::vars::FLOX_ACTIVATIONS_VERBOSITY_VAR;
 use flox_core::activations::activation_state_dir_path;
-use flox_core::data::System;
 use flox_core::data::environment_ref::DEFAULT_NAME;
+use flox_core::data::{CanonicalPath, System};
 use flox_core::hook_actions::{PROMPT_HOOK_VERSION_ENV, prompt_hook_version_mismatched};
 use flox_core::traceable_path;
 use flox_events::{CliEnvironmentActivatePayload, EventKind, EventsHub, LifecycleFields};
 use flox_manifest::interfaces::{AsLatestSchema, AsWritableManifest, WriteManifest};
-use flox_manifest::lockfile::Lockfile;
+use flox_manifest::lockfile::{LOCKFILE_FILENAME, Lockfile};
 use flox_manifest::parsed::Inner;
-use flox_manifest::parsed::latest::IncludeDescriptor;
 use flox_manifest::{Manifest, MigratedTypedOnly};
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::floxmeta_branch::BranchOrd;
@@ -36,6 +35,7 @@ use flox_rust_sdk::models::environment::{
     Environment,
     EnvironmentError,
     FollowMode,
+    IncludedRemoteEnvironment,
     SingleSystemUpgradeDiff,
     UpgradeResult,
 };
@@ -63,6 +63,7 @@ use crate::commands::{
     SHELL_COMPLETION_COMMAND,
     SHELL_COMPLETION_FILE,
     ensure_environment_trust,
+    included_scripts_hash,
     lockfile_reporting_followed_includes,
     render_composition_manifest,
     uninitialized_environment_description,
@@ -274,6 +275,7 @@ impl Activate {
                 &env.manifest_without_migrating(&flox)?
                     .as_writable()
                     .to_string(),
+                &[],
             )
             .await?;
         }
@@ -388,6 +390,25 @@ impl ActivateOptions {
 
         // Read before locking, which may re-lock and overwrite it.
         let old_lockfile = concrete_environment.existing_lockfile(&flox)?;
+        // Trust is checked before following builds the latest changes to
+        // included environments into the environment, so that a version that
+        // isn't trusted is never linked into it.
+        let (trusted_lock_result, _) =
+            concrete_environment.lockfile_following_includes(&flox, FollowMode::Lock)?;
+        let lockfile_changed = matches!(trusted_lock_result, LockResult::Changed(_));
+        let trusted_lockfile = Lockfile::from(trusted_lock_result);
+        let trusted_includes = if self.trust {
+            Vec::new()
+        } else {
+            ensure_included_environments_trust(
+                &mut config,
+                &flox,
+                &concrete_environment,
+                &trusted_lockfile,
+                &[],
+            )
+            .await?
+        };
         // The services command already reported following for its
         // activations, and auto-activation on every prompt stays quiet.
         let lock_result = if check_upgrades.is_some() && !self.from_prompt_hook {
@@ -405,14 +426,12 @@ impl ActivateOptions {
             );
             lock_result
         };
-        let lockfile = match lock_result {
-            LockResult::Changed(lockfile) => {
-                message::print_overridden_manifest_fields(&lockfile);
-                message::print_default_systems_changed(old_lockfile.as_ref(), &lockfile);
-                lockfile
-            },
-            LockResult::Unchanged(lockfile) => lockfile,
-        };
+        // Following above already locked any changes
+        let lockfile = Lockfile::from(lock_result);
+        if lockfile_changed {
+            message::print_overridden_manifest_fields(&lockfile);
+            message::print_default_systems_changed(old_lockfile.as_ref(), &lockfile);
+        }
         let manifest = &lockfile.migrated_manifest()?;
 
         // After locking, so the setting and the lockfile the notice compares
@@ -486,23 +505,6 @@ impl ActivateOptions {
             }
         }
 
-        if !self.trust
-            && let Some(compose) = &lockfile.compose
-        {
-            for include in &compose.include {
-                if let IncludeDescriptor::Remote { ref remote, .. } = include.descriptor {
-                    ensure_environment_trust(
-                        &mut config,
-                        &flox,
-                        remote,
-                        true,
-                        &render_composition_manifest(&include.manifest)?,
-                    )
-                    .await?;
-                }
-            }
-        }
-
         // breadcrumb metric to estimate use of composition
         let has_includes = lockfile.compose.is_some();
         subcommand_metric!("activate", "has_includes" = has_includes);
@@ -573,6 +575,24 @@ impl ActivateOptions {
                 mode_link_path.display()
             )
         })?;
+
+        // Following again can build other versions of included environments
+        // than the ones checked above, e.g. those in the lockfile if the latest
+        // changes don't build, or ones fetched in the background in the meantime
+        if !self.trust {
+            let rendered_lockfile =
+                Lockfile::read_from_file(&CanonicalPath::new(store_path.join(LOCKFILE_FILENAME))?)?;
+            if rendered_lockfile != trusted_lockfile {
+                ensure_included_environments_trust(
+                    &mut config,
+                    &flox,
+                    &concrete_environment,
+                    &rendered_lockfile,
+                    &trusted_includes,
+                )
+                .await?;
+            }
+        }
 
         let interpreter_path = {
             let path = FLOX_INTERPRETER.clone();
@@ -940,6 +960,46 @@ impl ActivateOptions {
 
         prompt_envs.join(" ")
     }
+}
+
+/// Check trust of the environments included from FloxHub that `lockfile`,
+/// the lockfile in use, merges, including those that the directories it
+/// includes include in turn, since what they run is merged in too.
+///
+/// Returns them, and skips those in `checked` already.
+async fn ensure_included_environments_trust(
+    config: &mut Config,
+    flox: &Flox,
+    environment: &ConcreteEnvironment,
+    lockfile: &Lockfile,
+    checked: &[IncludedRemoteEnvironment],
+) -> Result<Vec<IncludedRemoteEnvironment>> {
+    let included = environment.included_remote_environments(flox, lockfile)?;
+    for included in included
+        .iter()
+        .filter(|included| !checked.contains(included))
+    {
+        let followed_scripts = included
+            .followed
+            .iter()
+            .map(included_scripts_hash)
+            .collect::<Result<Vec<_>>>()?;
+        let manifests = included
+            .manifests
+            .iter()
+            .map(render_composition_manifest)
+            .collect::<Result<Vec<_>>>()?;
+        ensure_environment_trust(
+            config,
+            flox,
+            &included.env_ref,
+            true,
+            &manifests.join("\n"),
+            &followed_scripts,
+        )
+        .await?;
+    }
+    Ok(included)
 }
 
 /// Fail closed rather than run any activation from a different Flox version

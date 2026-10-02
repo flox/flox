@@ -8,7 +8,7 @@ use flox_manifest::parsed::latest::{AutoUpgrade, IncludeDescriptor};
 use flox_manifest::{Manifest, TypedOnly};
 use itertools::Itertools;
 
-use super::core_environment::CoreEnvironment;
+use super::core_environment::{CoreEnvironment, IncludedRemoteEnvironment};
 use super::{
     ConcreteEnvironment,
     DotFlox,
@@ -567,6 +567,144 @@ impl IncludeFetcher {
         generations.metadata().map_or(true, |metadata| {
             !metadata.generations().contains_key(&generation.into())
         })
+    }
+
+    /// The environments included from FloxHub that `lockfile`, the lockfile
+    /// in use, merges: directly, and through the directories it includes,
+    /// recursively.
+    ///
+    /// Each is listed with the versions that `lockfile` merges, noting those
+    /// that can change without `lockfile` changing if `following`, i.e. if
+    /// `lockfile` is the copy of an environment that follows its includes.
+    /// `lockfile` doesn't record what an included directory includes, so
+    /// that's read from the directory: as following merges it if the version
+    /// in use is the directory's latest, and from the directory's lockfile
+    /// otherwise.
+    pub(crate) fn included_remote_environments(
+        &self,
+        flox: &Flox,
+        lockfile: &Lockfile,
+        following: bool,
+    ) -> Vec<IncludedRemoteEnvironment> {
+        let fetcher = self.reading_last_fetched_remotes();
+        let includes = lockfile
+            .compose
+            .iter()
+            .flat_map(|compose| &compose.include)
+            .map(|locked| {
+                let followed = following && fetcher.follows_version_in_use(flox, locked);
+                (locked.clone(), followed)
+            })
+            .collect();
+        let mut remotes = Vec::new();
+        fetcher.collect_included_remote_environments(
+            flox,
+            includes,
+            &mut HashSet::new(),
+            &mut remotes,
+        );
+        remotes
+    }
+
+    /// Whether `locked`, an include in a lockfile in use, can change without
+    /// that lockfile changing.
+    ///
+    /// For an included directory, that's if `locked` is its latest version,
+    /// so the version in use is the one following computes.
+    fn follows_version_in_use(&self, flox: &Flox, locked: &LockedInclude) -> bool {
+        match &locked.descriptor {
+            IncludeDescriptor::Remote { .. } => {
+                self.is_auto_upgraded(&locked.descriptor).unwrap_or(false)
+            },
+            IncludeDescriptor::Local { .. } => matches!(
+                self.fetch_if_auto_upgraded(flox, &locked.descriptor),
+                Ok(Some(latest)) if latest.is_recorded_by(locked)
+            ),
+        }
+    }
+
+    /// Add the environments included from FloxHub by `includes`, which are
+    /// in use and paired with whether they're followed, to `remotes`
+    fn collect_included_remote_environments(
+        &self,
+        flox: &Flox,
+        includes: Vec<(LockedInclude, bool)>,
+        visited: &mut HashSet<(PathBuf, bool)>,
+        remotes: &mut Vec<IncludedRemoteEnvironment>,
+    ) {
+        for (locked, followed) in includes {
+            let dir = match &locked.descriptor {
+                IncludeDescriptor::Remote { remote, .. } => {
+                    let listed = match remotes.iter().position(|listed| &listed.env_ref == remote) {
+                        Some(index) => &mut remotes[index],
+                        None => {
+                            remotes.push(IncludedRemoteEnvironment {
+                                env_ref: remote.clone(),
+                                manifests: Vec::new(),
+                                followed: Vec::new(),
+                            });
+                            remotes.last_mut().expect("just pushed")
+                        },
+                    };
+                    if followed && !listed.followed.contains(&locked.manifest) {
+                        listed.followed.push(locked.manifest.clone());
+                    }
+                    if !listed.manifests.contains(&locked.manifest) {
+                        listed.manifests.push(locked.manifest);
+                    }
+                    continue;
+                },
+                IncludeDescriptor::Local { dir, .. } => dir,
+            };
+            // A directory reached both pinned and followed is listed both ways
+            let Some((fetcher, env_dir, lockfile)) = self.included_lockfile(dir, followed, visited)
+            else {
+                continue;
+            };
+            let nested = if followed {
+                CoreEnvironment::new(env_dir, fetcher.clone())
+                    .check_auto_upgraded_includes(flox, &lockfile)
+                    .includes
+                    .into_iter()
+                    .map(|nested| {
+                        let followed = fetcher.follows_version_in_use(flox, &nested);
+                        (nested, followed)
+                    })
+                    .collect()
+            } else {
+                // The version in use was locked from an earlier version of
+                // the directory, as far as it can be told
+                lockfile
+                    .compose
+                    .into_iter()
+                    .flat_map(|compose| compose.include)
+                    .map(|nested| (nested, false))
+                    .collect()
+            };
+            fetcher.collect_included_remote_environments(flox, nested, visited, remotes);
+        }
+    }
+
+    /// A fetcher for the environment in an included directory, its
+    /// environment directory and its lockfile, unless it can't be read or was
+    /// already visited, as followed or not
+    fn included_lockfile(
+        &self,
+        dir: &Path,
+        followed: bool,
+        visited: &mut HashSet<(PathBuf, bool)>,
+    ) -> Option<(Self, PathBuf, Lockfile)> {
+        let path = self.expand_include_dir(dir).ok()?;
+        let dot_flox = DotFlox::open_in(&path).ok()?;
+        if !visited.insert((dot_flox.path.clone(), followed)) {
+            return None;
+        }
+        let env_dir = dot_flox.path.join(ENV_DIR_NAME);
+        let lockfile =
+            Lockfile::read_from_file(&CanonicalPath::new(env_dir.join(LOCKFILE_FILENAME)).ok()?)
+                .ok()?;
+        let fetcher = self.for_included(path, CanonicalPath::new(&dot_flox.path).ok()?);
+        Some((fetcher, env_dir, lockfile))
     }
 
     /// The latest generation of an environment on FloxHub as last fetched,
