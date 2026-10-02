@@ -243,14 +243,14 @@ fn render_command_providers(command: &str, result: &ByCommandResult) -> Result<S
         n => format!(" — {n} exact matches (*)"),
     };
     let plural = if total == 1 { "" } else { "s" };
-    let mut tw = TabWriter::new(Vec::new()).padding(1);
+    let mut tw = TabWriter::new(Vec::new()).padding(2);
     writeln!(
         tw,
         "{total} package{plural} provide '{command}'{exact_str}:"
     )?;
     for p in providers {
         let marker = if p.exact_name_match { " *" } else { "  " };
-        writeln!(tw, " {marker} {:<12}\t({})", p.pname, p.attr_path)?;
+        writeln!(tw, " {marker} {}\t({})", p.pname, p.attr_path)?;
     }
 
     let table = String::from_utf8(tw.into_inner()?)?;
@@ -296,8 +296,8 @@ mod tests {
         assert!(!output.contains("2 exact"), "output: {output}");
     }
 
-    // render_command_providers: package names longer than the minimum width
-    // widen the column rather than pushing their attr paths out of line.
+    // render_command_providers: the package column widens to fit the longest
+    // name, so attr paths stay aligned.
     #[test]
     fn render_aligns_long_package_names() {
         let result = make_result(
@@ -311,8 +311,8 @@ mod tests {
         let output = render_command_providers("python3", &result).unwrap();
         assert_eq!(output, indoc! {"
             2 packages provide 'python3' — 1 exact match (*):
-              * python3         (python3)
-                python3-minimal (python3Minimal)"});
+              * python3          (python3)
+                python3-minimal  (python3Minimal)"});
     }
 
     // render_command_providers: zero exact matches — "0 exact matches" in header.
