@@ -58,6 +58,14 @@ fn generator() -> progenitor::Generator {
         "crate::types::LockedInputEntry",
         vec![].into_iter(),
     );
+    // The server's schema defaults a missing v2 `version` to 2. Keep the
+    // vendored schema intact while letting the handwritten lookup gate see
+    // whether the response actually carried the field.
+    settings.with_replacement(
+        "BuildInputsLookupResponseV2",
+        "crate::types::BuildInputsLookupResponseV2",
+        vec![].into_iter(),
+    );
     settings.with_inner_type(parse_quote! { crate::hooks::RequestHooks });
     progenitor::Generator::new(&settings)
 }

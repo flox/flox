@@ -298,8 +298,8 @@ mod tests {
                 "not_lockable": {"nixpkgs.python3Packages.*": {"kind": "base_catalog"}}
             }}
         }))
-        .expect("generated v2 model parses the wire response");
-        assert_eq!(response.version, 2);
+        .expect("v2 model parses the wire response");
+        assert_eq!(response.version, Some(2));
         assert_eq!(
             response.groups[LOOKUP_GROUP_KEY].not_lockable["nixpkgs.python3Packages.*"].kind,
             "base_catalog"

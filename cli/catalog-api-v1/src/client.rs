@@ -209,46 +209,6 @@ built repeatedly.*/
             value.clone()
         }
     }
-    ///Opt-in response for lookup clients that understand base references.
-    ///
-    /// <details><summary>JSON schema</summary>
-    ///
-    /// ```json
-    ///{
-    ///  "title": "BuildInputsLookupResponseV2",
-    ///  "description": "Opt-in response for lookup clients that understand base references.",
-    ///  "type": "object",
-    ///  "required": [
-    ///    "groups",
-    ///    "version"
-    ///  ],
-    ///  "properties": {
-    ///    "groups": {
-    ///      "title": "Groups",
-    ///      "type": "object",
-    ///      "additionalProperties": {
-    ///        "$ref": "#/components/schemas/GroupResultV2"
-    ///      }
-    ///    },
-    ///    "version": {
-    ///      "title": "Version",
-    ///      "type": "integer"
-    ///    }
-    ///  }
-    ///}
-    /// ```
-    /// </details>
-    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
-    pub struct BuildInputsLookupResponseV2 {
-        pub groups: ::std::collections::HashMap<::std::string::String, GroupResultV2>,
-        pub version: i64,
-    }
-    impl ::std::convert::From<&BuildInputsLookupResponseV2>
-    for BuildInputsLookupResponseV2 {
-        fn from(value: &BuildInputsLookupResponseV2) -> Self {
-            value.clone()
-        }
-    }
     ///Reference to a specific build by catalog, attr_path, and revision.
     ///
     /// <details><summary>JSON schema</summary>
@@ -6406,7 +6366,7 @@ Sends a `POST` request to `/api/v1/catalog/build-inputs/lookup`
         &'a self,
         body: &'a types::BuildInputsLookupRequest,
     ) -> Result<
-        ResponseValue<types::BuildInputsLookupResponseV2>,
+        ResponseValue<crate::types::BuildInputsLookupResponseV2>,
         Error<types::ErrorResponse>,
     > {
         let url = format!("{}/api/v1/catalog/build-inputs/lookup", self.baseurl);

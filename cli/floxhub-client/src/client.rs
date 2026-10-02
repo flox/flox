@@ -631,7 +631,7 @@ impl CatalogClientTrait for FloxhubClient {
             .map_err(|err| FloxhubClientError::Other(err.to_string()))?;
 
         let response = response.into_inner();
-        if response.version != 2 {
+        if response.version != Some(2) {
             return Err(FloxhubClientError::Other(
                 "catalog lookup did not return a v2 response".to_string(),
             ));
@@ -1088,7 +1088,7 @@ pub mod tests {
 
         let response = client.build_inputs_lookup(request).await.unwrap();
         mock.assert();
-        assert_eq!(response.version, 2);
+        assert_eq!(response.version, Some(2));
         assert_eq!(
             response.groups["default"].not_lockable["nixpkgs.hello"].kind,
             "base_catalog"
@@ -1101,8 +1101,9 @@ pub mod tests {
         let mock = server.mock(|when, then| {
             when.method("POST")
                 .path("/api/v1/catalog/build-inputs/lookup");
-            then.status(200)
-                .json_body(json!({"groups": {"default": {"lock": {}}}}));
+            then.status(200).json_body(json!({"groups": {"default": {
+                "lock": {}, "matched": {}, "unresolvable": [], "not_lockable": {}
+            }}}));
         });
         let client = FloxhubClient::new(client_config(server.base_url().as_str())).unwrap();
         let request: BuildInputsLookupRequest = serde_json::from_value(json!({
@@ -1110,7 +1111,13 @@ pub mod tests {
             "response_version": 2
         }))
         .unwrap();
-        assert!(client.build_inputs_lookup(request).await.is_err());
+        let error = client.build_inputs_lookup(request).await.unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("catalog lookup did not return a v2 response"),
+            "{error}"
+        );
         mock.assert();
     }
 

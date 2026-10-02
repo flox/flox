@@ -13,7 +13,7 @@ pub mod types {
     pub use crate::client::types::*;
     pub use crate::error::MessageType;
 
-    use std::collections::BTreeMap;
+    use std::collections::{BTreeMap, HashMap};
 
     use serde::{Deserialize, Serialize};
     /// Progenitor doesn't know how to use a discriminator as a tag, so add this
@@ -64,6 +64,15 @@ pub mod types {
         pub source: LockedGitSource,
         #[serde(default)]
         pub version: Option<String>,
+    }
+
+    /// Preserve absence of the response envelope version so the lookup
+    /// client can reject it instead of accepting the server schema's default.
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    pub struct BuildInputsLookupResponseV2 {
+        pub groups: HashMap<String, GroupResultV2>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub version: Option<i64>,
     }
 }
 
