@@ -68,7 +68,8 @@ pub trait ManifestBuilder {
     /// call.
     ///
     /// `catalog_lockfile` is the catalog lock the build's NEF evals consume,
-    /// created by the CLI (a temporary file with materialized catalogs) and passed through as `CATALOG_LOCKFILE`. Required
+    /// created by the CLI (a temporary file with materialized catalogs) and
+    /// passed through as `CATALOG_LOCKFILE`. Required
     /// whenever the project has Nix expression builds.
     ///
     /// `expression_build_nixpkgs` is required under the same condition: [None]
