@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use flox_core::activate::mode::ActivateMode;
 use flox_core::data::System;
 #[cfg(any(test, feature = "tests"))]
-use flox_test_utils::proptest::{optional_string, optional_vec_of_strings};
+use flox_test_utils::proptest::{btree_map_strategy, optional_string, optional_vec_of_strings};
 #[cfg(any(test, feature = "tests"))]
 use proptest::prelude::*;
 use schemars::JsonSchema;
@@ -39,7 +39,7 @@ pub use crate::parsed::v1_16_0::{
     ServiceStartCondition,
     Services,
 };
-use crate::parsed::{Inner, SkipSerializing};
+use crate::parsed::{Inner, SkipSerializing, impl_into_inner};
 use crate::{Manifest, ManifestError, Parsed, TypedOnly};
 
 /// Not meant for writing manifest files, only for reading them.
@@ -76,6 +76,12 @@ pub struct ManifestV1_18_0 {
     #[serde(default)]
     #[serde(skip_serializing_if = "Install::skip_serializing")]
     pub install: Install,
+    /// Settings shared by every package in a package group, keyed by
+    /// group name.
+    #[serde(default)]
+    #[serde(rename = "pkg-groups")]
+    #[serde(skip_serializing_if = "PkgGroups::skip_serializing")]
+    pub pkg_groups: PkgGroups,
     /// Variables that are exported to the shell environment upon activation.
     #[serde(default)]
     #[serde(skip_serializing_if = "Vars::skip_serializing")]
@@ -125,6 +131,7 @@ impl Default for ManifestV1_18_0 {
             description: Default::default(),
             minimum_cli_version: Default::default(),
             install: Default::default(),
+            pkg_groups: Default::default(),
             vars: Default::default(),
             hook: Default::default(),
             profile: Default::default(),
@@ -155,8 +162,8 @@ impl SchemaVersion for ManifestV1_18_0 {
 }
 
 /// Manifest options for V1_18_0: identical to `common::Options` except that
-/// `activate` is the V1_18_0 [`ActivateOptions`]. Earlier schema versions keep
-/// using `common::Options`.
+/// `activate` is the V1_18_0 [`ActivateOptions`] and `stability` is added.
+/// Earlier schema versions keep using `common::Options`.
 #[skip_serializing_none]
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash, JsonSchema)]
 #[cfg_attr(any(test, feature = "tests"), derive(proptest_derive::Arbitrary))]
@@ -184,6 +191,17 @@ pub struct Options {
     #[serde(default)]
     #[serde(skip_serializing_if = "ActivateOptions::skip_serializing")]
     pub activate: ActivateOptions,
+    /// The catalog stability that every package group resolves against,
+    /// e.g. `stable`, unless the group sets its own under
+    /// `[pkg-groups.<name>]`.
+    ///
+    /// The catalog validates the value; when unset, groups without their
+    /// own stability resolve against the catalog's default.
+    #[cfg_attr(
+        any(test, feature = "tests"),
+        proptest(strategy = "optional_string(5)")
+    )]
+    pub stability: Option<String>,
 }
 
 /// Activation options for V1_18_0: adds `upgrade-notifications`.
@@ -211,8 +229,8 @@ impl SkipSerializing for ActivateOptions {
 }
 
 // Conversion from the common type, used by the V1_17_0 -> V1_18_0 migration.
-// The new `upgrade_notifications` field defaults to None, which is what makes
-// the migration lossless.
+// The new `upgrade_notifications` and `stability` fields default to None, which
+// is what makes the migration lossless.
 impl From<crate::parsed::common::Options> for Options {
     fn from(options: crate::parsed::common::Options) -> Self {
         let crate::parsed::common::Options {
@@ -231,6 +249,48 @@ impl From<crate::parsed::common::Options> for Options {
                 mode: activate.mode,
                 upgrade_notifications: None,
             },
+            stability: None,
         }
     }
+}
+
+/// Settings for package groups, keyed by the group name that packages
+/// reference with `pkg-group`.
+///
+/// Every package in a group is resolved together against a single catalog
+/// page, so settings that constrain resolution belong to the group rather
+/// than to individual packages.
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, JsonSchema)]
+#[cfg_attr(any(test, feature = "tests"), derive(proptest_derive::Arbitrary))]
+pub struct PkgGroups(
+    #[cfg_attr(
+        any(test, feature = "tests"),
+        proptest(strategy = "btree_map_strategy::<PkgGroup>(5, 3)")
+    )]
+    pub(crate) BTreeMap<String, PkgGroup>,
+);
+
+impl_into_inner!(PkgGroups, BTreeMap<String, PkgGroup>);
+
+impl SkipSerializing for PkgGroups {
+    fn skip_serializing(&self) -> bool {
+        self.0.is_empty()
+    }
+}
+
+#[skip_serializing_none]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, JsonSchema)]
+#[cfg_attr(any(test, feature = "tests"), derive(proptest_derive::Arbitrary))]
+#[serde(deny_unknown_fields)]
+pub struct PkgGroup {
+    /// The catalog stability to resolve the group's packages against,
+    /// e.g. `stable` or `staging`.
+    ///
+    /// The catalog validates the value; when unset, the group takes
+    /// `options.stability`, and without that the catalog's default.
+    #[cfg_attr(
+        any(test, feature = "tests"),
+        proptest(strategy = "optional_string(5)")
+    )]
+    pub stability: Option<String>,
 }

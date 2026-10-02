@@ -269,6 +269,7 @@ impl ShallowMerger {
                 mode: merged_activate_mode,
                 upgrade_notifications: merged_activate_upgrade_notifications,
             },
+            stability: None,
         };
 
         warnings.extend(
@@ -440,6 +441,7 @@ impl ManifestMergeTrait for ShallowMerger {
             ),
             minimum_cli_version,
             install,
+            pkg_groups: Default::default(),
             vars,
             hook,
             profile,
@@ -623,7 +625,7 @@ mod tests {
                 mode: options2.activate.mode.or(options1.activate.mode),
                 upgrade_notifications: options2.activate.upgrade_notifications.or(options1.activate.upgrade_notifications),
             };
-            let expected = Options { systems, allow, semver, cuda_detection, activate };
+            let expected = Options { systems, allow, semver, cuda_detection, activate, stability: None };
             prop_assert_eq!(merged, expected);
         }
 

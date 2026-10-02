@@ -400,7 +400,7 @@ with_latest_schema() {
   if [ -z "$body" ]; then
     printf "schema-version = \"1.18.0\"\n"
   else
-    printf "schema-version = \"1.16.0\"\n\n%s" "$body"
+    printf "schema-version = \"1.18.0\"\n\n%s" "$body"
   fi
 }
 
