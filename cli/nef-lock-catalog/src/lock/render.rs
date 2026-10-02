@@ -268,7 +268,7 @@ build failed: 2 inputs could not be resolved.
             "the readable entry must carry its own remedy inline, got: {rendered}"
         );
         assert!(
-            !rendered.contains("acme.secret\n     Publish"),
+            !rendered.contains("acme.secret (unresolvable)\n     Publish"),
             "the private entry must never carry the readable entry's remedy, got: {rendered}"
         );
         assert!(
