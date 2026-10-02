@@ -465,6 +465,72 @@ EOF
   assert_output "$hello_store_path/bin/hello"
 }
 
+# bats test_tags=edit:stability
+@test "'flox edit' changing a pkg-group's stability re-resolves its packages" {
+  skip_x86_64_darwin_replay
+  "$FLOX_BIN" init
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/ripgrep_lts.yaml" \
+    "$FLOX_BIN" edit -f <(with_latest_schema '
+[install]
+ripgrep.pkg-path = "ripgrep"
+
+[pkg-groups.toplevel]
+stability = "lts"
+')
+  # 'lts' trails 'unstable' by months, so the two resolve against different
+  # nixpkgs revisions even when a package's version is the same in both.
+  lts_rev="$(recorded_resolved_rev "$GENERATED_DATA/resolve/ripgrep_lts.yaml")"
+  unstable_rev="$(recorded_resolved_rev "$GENERATED_DATA/resolve/ripgrep_lts_to_unstable.yaml")"
+  assert_not_equal "$lts_rev" "$unstable_rev"
+
+  sed 's/^stability = "lts"$/stability = "unstable"/' "$MANIFEST_PATH" > "$TMP_MANIFEST_PATH"
+  # The recording only matches a request that sets the new stability and
+  # doesn't keep the packages locked against the old one.
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/ripgrep_lts_to_unstable.yaml" \
+    run "$FLOX_BIN" edit -f "$TMP_MANIFEST_PATH"
+  assert_success
+
+  run jq -c '[.packages[] | {install_id, rev}] | unique' "$PROJECT_DIR/.flox/env/manifest.lock"
+  assert_success
+  assert_output "[{\"install_id\":\"ripgrep\",\"rev\":\"$unstable_rev\"}]"
+}
+
+# bats test_tags=edit:stability
+@test "'flox edit' warns about pkg-group settings that no package uses" {
+  "$FLOX_BIN" init
+
+  run "$FLOX_BIN" edit -f <(with_latest_schema '
+[install]
+
+[pkg-groups.legcy]
+stability = "lts"
+')
+  assert_success
+  assert_output --partial "No package is in pkg-group 'legcy', so 'pkg-groups.legcy' has no effect."
+}
+
+# bats test_tags=edit:stability
+@test "'flox edit' explains a stability the catalog doesn't provide" {
+  skip_x86_64_darwin_replay
+  "$FLOX_BIN" init
+
+  RUST_BACKTRACE=0 \
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/ripgrep_unknown_stability.yaml" \
+    run "$FLOX_BIN" edit -f <(with_latest_schema '
+[install]
+ripgrep.pkg-path = "ripgrep"
+
+[pkg-groups.toplevel]
+stability = "lst"
+')
+  assert_failure
+  assert_output - << EOF
+✘ ERROR: Stability 'lst' for pkg-group 'toplevel' does not exist.
+Available stabilities are: unstable, staging, stable, lts
+Change 'pkg-groups.toplevel.stability' with 'flox edit'.
+EOF
+}
+
 # ---------------------------------------------------------------------------- #
 
 # bats test_tags=edit:schema-upgrade
