@@ -1841,6 +1841,7 @@ pub mod tests {
                 unfree: None,
                 version: None,
             },
+            direct_inputs: None,
             dot_flox_dir: ".flox".to_string(),
             factory_build_token: factory_build_token.map(str::to_string),
             locked_base_catalog_url: None,

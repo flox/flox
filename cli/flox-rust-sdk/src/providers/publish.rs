@@ -2234,7 +2234,7 @@ pub mod tests {
                 &catalog_name,
                 package_created,
                 &build_metadata,
-                &BTreeMap::new(),
+                &PackageClosure::default(),
                 None,
                 false,
                 Some("factory:abc123"),
