@@ -1,6 +1,4 @@
-# CLAUDE.md
-
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+# AGENTS.md
 
 ## Project Overview
 
@@ -229,7 +227,7 @@ stream. The wire contract — envelope shape, naming, stability and
 privacy rules — is documented in `cli/flox-events/README.md`, and the
 step-by-step procedure for adding an event or field is the
 `adding-metrics-events` skill
-(`.claude/skills/adding-metrics-events/SKILL.md`). Event and field names are frozen once
+(`.agents/skills/adding-metrics-events/SKILL.md`). Event and field names are frozen once
 shipped: renames and type changes break downstream consumers silently.
 A failing golden test in that crate is a contract signal — read the
 README before touching the expected JSON.
