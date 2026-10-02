@@ -22,7 +22,8 @@ use super::core_environment::{
     UnreadableInclude,
 };
 use super::fetcher::IncludeFetcher;
-use super::{CACHE_DIR_NAME, EnvironmentError, RenderedEnvironmentLinks};
+use super::floxmeta_branch::fetch_remote_sync_branch;
+use super::{CACHE_DIR_NAME, EnvironmentError, ManagedPointer, RenderedEnvironmentLinks};
 use crate::data::System;
 use crate::flox::Flox;
 use crate::providers::buildenv::{BuildEnvError, BuildEnvOutputs};
@@ -206,6 +207,9 @@ impl FollowedLockfiles {
 /// The `auto-upgrade` field of each include decides whether it's
 /// followed, see [AutoUpgrade].
 /// Only changes that the included environments have locked are used.
+/// Environments included from FloxHub are read as they were last fetched,
+/// so following never contacts FloxHub; the background upgrade check fetches
+/// them.
 /// Changes that can't be read or locked keep the versions in use before,
 /// and changes that don't build together with this environment fall back
 /// to the environment's lockfile, as [FollowedIncludes] reports.
@@ -225,6 +229,8 @@ pub(super) fn follow_includes(
         followed,
         copy: None,
     };
+    let following = env_view.reading_last_fetched_remotes();
+    let upstream_changes = following.upstream_changes(flox, committed);
     let may_auto_upgrade = locked_includes(committed).is_some_and(|includes| {
         includes
             .iter()
@@ -232,7 +238,10 @@ pub(super) fn follow_includes(
     });
     if !may_auto_upgrade {
         copies.remove(&flox.system);
-        return Ok(locked_without_copy(FollowedIncludes::default()));
+        return Ok(locked_without_copy(FollowedIncludes {
+            upstream_changes,
+            ..Default::default()
+        }));
     }
 
     let base = lockfile_hash(committed);
@@ -241,7 +250,7 @@ pub(super) fn follow_includes(
         .filter(|cached| cached.base == base);
     // Changes are checked against the versions in use
     let in_use = cached.as_ref().filter(|cached| !cached.build.failed());
-    let check = env_view
+    let check = following
         .check_auto_upgraded_includes(flox, in_use.map_or(committed, |copy| &copy.lockfile));
     let mut followed = FollowedIncludes {
         unreadable: check
@@ -252,6 +261,7 @@ pub(super) fn follow_includes(
                 reason: Arc::new(err),
             })
             .collect(),
+        upstream_changes,
         ..Default::default()
     };
 
@@ -265,7 +275,7 @@ pub(super) fn follow_includes(
         Some(cached.clone())
     } else {
         let seed = in_use.map_or(committed, |copy| &copy.lockfile);
-        match env_view.lock_with_latest_includes(flox, seed, check.changed.clone()) {
+        match following.lock_with_latest_includes(flox, seed, check.changed.clone()) {
             Ok(lockfile) => {
                 is_new = true;
                 Some(FollowedLockfile {
@@ -474,4 +484,24 @@ pub(super) fn follows_include_named(
             debug!(include = name, %err, "could not tell whether the include is followed");
             false
         })
+}
+
+/// Fetch the environments included from FloxHub by `lockfile`, and by the path
+/// environments it includes, which following reads as they were last fetched.
+///
+/// The background upgrade check runs this, so failing to fetch one is only
+/// logged.
+pub(super) fn fetch_included_remotes(
+    flox: &Flox,
+    include_fetcher: &IncludeFetcher,
+    lockfile: &Lockfile,
+) {
+    for remote in include_fetcher.remote_includes(lockfile) {
+        let pointer =
+            ManagedPointer::new(remote.owner().clone(), remote.name().clone(), &flox.floxhub);
+        match fetch_remote_sync_branch(flox, &pointer) {
+            Ok(_) => debug!(%remote, "fetched included environment"),
+            Err(err) => debug!(%remote, %err, "could not fetch included environment"),
+        }
+    }
 }

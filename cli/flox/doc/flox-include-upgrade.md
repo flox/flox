@@ -48,6 +48,9 @@ already uses the latest changes to the environments it includes with
 with `dir`, but keeps them out of its lockfile and its generations.
 This command saves the changes in use to the lockfile, and gets the latest
 contents of other included environments, such as those included with `remote`.
+It fetches environments included with `remote` from FloxHub, so it saves their
+latest generation even if commands still use an earlier one, which is fetched
+in the background.
 Package upgrades locked by an environment that an included environment includes
 in turn are saved too, unless that included environment's lockfile was written
 by an older version of Flox, which doesn't record them.

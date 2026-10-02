@@ -330,6 +330,69 @@ pub(crate) fn fetch_remote_generations(
     Ok(Generations::new(floxmeta.git, rev))
 }
 
+/// Fetch the latest generations of an environment on FloxHub into its shared
+/// sync branch, so that following can read them as last fetched.
+///
+/// Unlike [fetch_remote_generations], the transfer doesn't hold the floxmeta
+/// lock, which commands in the foreground wait for, so a slow fetch in the
+/// background doesn't block them: it fetches into a separate ref, and only
+/// moves the sync branch to it under the lock.
+pub(crate) fn fetch_remote_sync_branch(
+    flox: &Flox,
+    pointer: &ManagedPointer,
+) -> Result<(), FloxmetaBranchError> {
+    let floxmeta = match FloxMeta::open_local(flox, pointer) {
+        Ok(floxmeta) => floxmeta,
+        // Cloning a missing floxmeta repository needs the lock throughout
+        Err(FloxMetaError::NotFound(_)) => {
+            fetch_remote_generations(flox, pointer)?;
+            return Ok(());
+        },
+        Err(err) => return Err(FloxmetaBranchError::OpenFloxmeta(err)),
+    };
+    let remote_branch = remote_branch_name(pointer);
+    let fetched_ref = format!("refs/flox/fetched/{remote_branch}");
+    floxmeta
+        .git
+        .fetch_ref("dynamicorigin", &format!("+{remote_branch}:{fetched_ref}"))
+        .map_err(|err| match err {
+            GitRemoteCommandError::AccessDenied => FloxmetaBranchError::AccessDenied,
+            GitRemoteCommandError::RefNotFound(_) => FloxmetaBranchError::UpstreamNotFound {
+                env_ref: pointer.clone().into(),
+                upstream: pointer.floxhub_base_url.to_string(),
+                user: flox.auth_context.handle(),
+            },
+            err => FloxmetaBranchError::Fetch(err),
+        })?;
+    let _lock = acquire_floxmeta_lock(&floxmeta_dir(flox, &pointer.owner))?;
+    floxmeta
+        .git
+        .reset_branch(&remote_branch, &fetched_ref)
+        .map_err(FloxmetaBranchError::BranchSetup)
+}
+
+/// The generations of an environment on FloxHub as last fetched into its
+/// shared sync branch, read without contacting FloxHub.
+///
+/// Returns [None] if they haven't been fetched on this machine yet.
+/// This doesn't wait for the floxmeta lock, since git updates the branch
+/// atomically, so a fetch that hangs in the background can't block it.
+pub(crate) fn last_fetched_remote_generations(
+    flox: &Flox,
+    pointer: &ManagedPointer,
+) -> Result<Option<Generations>, FloxmetaBranchError> {
+    let floxmeta = match FloxMeta::open_local(flox, pointer) {
+        Ok(floxmeta) => floxmeta,
+        Err(FloxMetaError::NotFound(_)) => return Ok(None),
+        Err(err) => return Err(FloxmetaBranchError::OpenFloxmeta(err)),
+    };
+    match floxmeta.git.branch_hash(&remote_branch_name(pointer)) {
+        Ok(rev) => Ok(Some(Generations::new(floxmeta.git, rev))),
+        Err(GitCommandBranchHashError::DoesNotExist) => Ok(None),
+        Err(err) => Err(FloxmetaBranchError::GitBranchHash(err)),
+    }
+}
+
 /// Acquire exclusive lock on floxmeta directory
 #[tracing::instrument(fields(
     progress = "Waiting for lock to open or create Flox remote metadata"

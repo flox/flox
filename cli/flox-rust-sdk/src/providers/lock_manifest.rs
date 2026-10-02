@@ -5,6 +5,7 @@ use std::str::FromStr;
 
 use flox_core::Version;
 use flox_core::data::System;
+use flox_core::data::environment_ref::RemoteEnvironmentRef;
 use flox_manifest::compose::shallow::ShallowMerger;
 use flox_manifest::compose::{CompositeManifest, ManifestMerger, MergeError};
 use flox_manifest::interfaces::{
@@ -144,6 +145,11 @@ pub enum RecoverableMergeError {
 
     #[error("remote environments cannot include local environments")]
     RemoteCannotIncludeLocal,
+
+    /// Following read an environment included from FloxHub as it was last
+    /// fetched, but it hasn't been fetched on this machine yet
+    #[error("environment '{0}' hasn't been fetched from FloxHub yet")]
+    RemoteNotFetched(RemoteEnvironmentRef),
 
     /// The `.flox` directories of the environments in the cycle,
     /// starting and ending with the same environment

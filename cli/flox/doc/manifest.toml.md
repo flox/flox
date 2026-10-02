@@ -759,8 +759,15 @@ The fields in these include descriptors are as follows:
   Set it to `false` to keep using the version of a path environment that is
   in the lockfile.
   Set it to `true` to use the latest generation of an environment included
-  with `remote`, which is fetched from FloxHub each time a command uses the
-  composing environment and so needs network access.
+  with `remote`.
+  Commands use the generation that was last fetched from FloxHub instead of
+  fetching it: `flox activate` fetches it in the background when it checks for
+  upgrades, about once a day, and the next command after that uses it.
+  A generation that's older than the one in the lockfile isn't used.
+  Using a new generation can still need network access, to resolve packages
+  that it shares a package group with the composing environment for, and to
+  download them.
+  Adding the include and running `flox include upgrade` fetch it right away.
   For a directory that holds an environment pulled from FloxHub, `true` uses
   its current local generation, as long as it has no changes that aren't in a
   generation yet.
@@ -815,6 +822,12 @@ changes to included environments.
 All other included environments, and all environments included by an
 environment activated with `flox activate -r` or at a specific generation, are
 only updated when you run [`flox include upgrade`](./flox-include-upgrade.md).
+When FloxHub has a newer generation of an environment included with `remote`
+without `auto-upgrade` than the one in the lockfile, as last fetched in the
+background, commands that use the composing environment say so and suggest
+`flox include upgrade`, unless upgrade notifications are turned off with
+`options.activate.upgrade-notifications` or the `upgrade_notifications`
+setting.
 
 ### Merge semantics
 

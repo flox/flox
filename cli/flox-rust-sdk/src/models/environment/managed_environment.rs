@@ -244,6 +244,16 @@ impl Environment for ManagedEnvironment {
         Ok((lock_result, followed))
     }
 
+    fn fetch_included_remote_environments(&mut self, flox: &Flox) -> Result<(), EnvironmentError> {
+        if !self.follows_includes() {
+            return Ok(());
+        }
+        if let Some(lockfile) = self.existing_lockfile(flox)? {
+            followed_includes::fetch_included_remotes(flox, &self.include_fetcher, &lockfile);
+        }
+        Ok(())
+    }
+
     fn check_followed_includes(
         &mut self,
         flox: &Flox,

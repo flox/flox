@@ -637,6 +637,56 @@ EOF
   assert_equal "$(cat composer/.flox/env/manifest.lock)" "$lockfile_before"
 }
 
+@test "a remote include with auto-upgrade is followed once the background check fetches it" {
+  setup_composer_with_remote_include
+  MANIFEST_CONTENTS="$(cat << "EOF"
+    schema-version = "1.18.0"
+
+    [include]
+    environments = [
+      { remote = "owner/remote", auto-upgrade = true },
+    ]
+EOF
+  )"
+  echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f - -d composer
+  (
+    export FLOX_DATA_DIR="$BATS_TEST_TMPDIR/elsewhere/data"
+    export FLOX_CACHE_DIR="$BATS_TEST_TMPDIR/elsewhere/cache"
+    edit_remote
+  )
+
+  # Following doesn't contact FloxHub
+  run "$FLOX_BIN" list -c -d composer
+  assert_success
+  assert_output --partial 'remote = "v1"'
+  refute_output --partial "aren't in the lockfile yet"
+
+  unset _FLOX_TESTING_DISABLE_BG_SIDE_EFFECTS # allow the background check
+  "$FLOX_BIN" activate --trust -d composer -c true
+  timeout 20s bash -c '
+    until "$FLOX_BIN" list -c -d composer 2> /dev/null | grep -q "remote = \"v2\""; do
+      sleep 0.2
+    done
+  '
+  run "$FLOX_BIN" list -c -d composer
+  assert_success
+  assert_output --partial "- 'remote'"
+
+  wait_for_activations "$PROJECT_DIR/composer" || return 1
+}
+
+@test "list reports changes on FloxHub to a remote include without auto-upgrade" {
+  setup_composer_with_remote_include
+  # Fetches the new generation, as the background check would
+  edit_remote
+
+  run --separate-stderr "$FLOX_BIN" list -c -d composer
+  assert_success
+  assert_output --partial 'remote = "v1"'
+  assert_regex "$stderr" "Included environment 'owner/remote' has changes on FloxHub."
+  assert_regex "$stderr" "Run 'flox include upgrade -d .*/composer' to get them."
+}
+
 @test "include upgrade reports no changes for remote environments" {
   setup_composer_with_remote_include
   run "$FLOX_BIN" include upgrade -d composer

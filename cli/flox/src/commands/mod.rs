@@ -1940,7 +1940,14 @@ pub(crate) fn lockfile_reporting_followed_includes(
     flox: &Flox,
     mode: FollowMode,
 ) -> Result<LockResult, EnvironmentError> {
-    let (lock_result, followed_includes) = environment.lockfile_following_includes(flox, mode)?;
+    let (lock_result, mut followed_includes) =
+        environment.lockfile_following_includes(flox, mode)?;
+    // Changes on FloxHub are upgrade notifications, which can be turned off
+    if !followed_includes.upstream_changes.is_empty()
+        && Config::parse().is_ok_and(|config| config.flox.upgrade_notifications == Some(false))
+    {
+        followed_includes.upstream_changes.clear();
+    }
     message::print_followed_includes(
         &followed_includes,
         &save_followed_changes_command(environment, flox),

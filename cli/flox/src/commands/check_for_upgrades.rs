@@ -76,9 +76,28 @@ impl CheckForUpgrades {
             &flox,
             &mut environment,
             Duration::seconds(self.check_timeout),
-        )?;
+        );
+        // Commands follow included environments as last fetched, so that
+        // following never fetches them, and they're fetched whatever else
+        // fails to update.
+        let fetch_included_environments = |environment: &mut ConcreteEnvironment| {
+            if let Err(err) = environment.fetch_included_remote_environments(&flox) {
+                debug!(%err, "could not fetch included environments");
+            }
+        };
+        let check_exit_branch = match check_exit_branch {
+            Ok(exit_branch) => exit_branch,
+            Err(err) => {
+                fetch_included_environments(&mut environment);
+                return Err(err);
+            },
+        };
         match check_exit_branch {
-            ExitBranch::Checked => update_remote_environment_state(&flox, &environment)?,
+            ExitBranch::Checked => {
+                let updated = update_remote_environment_state(&flox, &environment);
+                fetch_included_environments(&mut environment);
+                updated?;
+            },
             // `check_exit_branch` determined,
             // that we are already concurrently checking for updates (LockTaken)
             // or we have `AlreadyChecked` for updates recently (within self.check_timeout)

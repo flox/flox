@@ -3,6 +3,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use flox_core::data::environment_ref::RemoteEnvironmentRef;
 use flox_core::{WriteError, write_atomically};
 use flox_manifest::compose::ManifestMerger;
 use flox_manifest::compose::shallow::ShallowMerger;
@@ -24,7 +25,7 @@ use flox_manifest::lockfile::{
     LockfileError,
 };
 use flox_manifest::parsed::common::KnownSchemaVersion;
-use flox_manifest::parsed::latest::ManifestLatest;
+use flox_manifest::parsed::latest::{IncludeDescriptor, ManifestLatest};
 use flox_manifest::raw::{ModifyPackages, PackageToInstall, TomlEditError};
 use flox_manifest::{
     MANIFEST_FILENAME,
@@ -198,11 +199,22 @@ impl<State> CoreEnvironment<State> {
                 .include_fetcher
                 .fetch_if_auto_upgraded(flox, &locked.descriptor)
             {
-                Ok(Some(latest)) if !latest.is_recorded_by(locked) => {
+                Ok(Some(latest))
+                    if !latest.is_recorded_by(locked) && !self.fetched_before(flox, locked) =>
+                {
                     check.changed.push(locked.name.clone());
                     check.includes.push(latest);
                 },
                 Ok(_) => check.includes.push(locked.clone()),
+                // The background upgrade check fetches it,
+                // so the locked version is kept until then.
+                Err(EnvironmentError::Recoverable(RecoverableMergeError::RemoteNotFetched(
+                    remote,
+                ))) => {
+                    debug!(%remote, "included environment hasn't been fetched yet");
+                    check.not_fetched.push(remote);
+                    check.includes.push(locked.clone());
+                },
                 Err(err) => {
                     check.unreadable.push((locked.name.clone(), err));
                     check.includes.push(locked.clone());
@@ -210,6 +222,83 @@ impl<State> CoreEnvironment<State> {
             }
         }
         check
+    }
+
+    /// Whether an environment included from FloxHub was last fetched before
+    /// the generation that `locked` records, e.g. when a teammate saved a
+    /// newer generation in the lockfile, so reading it as last fetched would
+    /// go back to an older one.
+    fn fetched_before(&self, flox: &Flox, locked: &LockedInclude) -> bool {
+        let (IncludeDescriptor::Remote { remote, .. }, Some(generation)) =
+            (&locked.descriptor, locked.generation)
+        else {
+            return false;
+        };
+        self.include_fetcher
+            .last_fetched_lacks_generation(flox, remote, generation)
+    }
+
+    /// A view of this environment that reads environments included from
+    /// FloxHub as they were last fetched, without contacting FloxHub
+    pub(crate) fn reading_last_fetched_remotes(&self) -> CoreEnvironment {
+        CoreEnvironment::new(
+            &self.env_dir,
+            self.include_fetcher.reading_last_fetched_remotes(),
+        )
+    }
+
+    /// Environments included from FloxHub in `lockfile` without following
+    /// them, that have a newer generation than the locked one,
+    /// as last fetched from FloxHub
+    pub(crate) fn upstream_changes(
+        &self,
+        flox: &Flox,
+        lockfile: &Lockfile,
+    ) -> Vec<RemoteEnvironmentRef> {
+        let Some(compose) = &lockfile.compose else {
+            return Vec::new();
+        };
+        let notifies = lockfile.migrated_manifest().is_ok_and(|manifest| {
+            manifest
+                .as_latest_schema()
+                .options
+                .activate
+                .upgrade_notifications
+                .unwrap_or(true)
+        });
+        if !notifies {
+            return Vec::new();
+        }
+        compose
+            .include
+            .iter()
+            .filter_map(|locked| {
+                let IncludeDescriptor::Remote {
+                    remote,
+                    generation: None,
+                    ..
+                } = &locked.descriptor
+                else {
+                    return None;
+                };
+                if self
+                    .include_fetcher
+                    .is_auto_upgraded(&locked.descriptor)
+                    .unwrap_or(true)
+                {
+                    return None;
+                }
+                let (_, generation) = self
+                    .include_fetcher
+                    .last_fetched_remote(flox, remote)
+                    .inspect_err(|err| debug!(%remote, %err, "could not read included environment"))
+                    .ok()?;
+                // Lockfiles from older versions of Flox don't record the
+                // generation, and comparing manifests can't tell a newer
+                // generation from one fetched before the lockfile was saved
+                (generation > locked.generation?).then(|| remote.clone())
+            })
+            .collect()
     }
 
     /// The merged manifest of this environment with the latest changes to the
@@ -233,6 +322,16 @@ impl<State> CoreEnvironment<State> {
                 return Err(err);
             }
             debug!(name, %err, "using locked version of unreadable include");
+        }
+        // An environment included from FloxHub below this one that this
+        // machine hasn't fetched can't be followed, so the environment that
+        // includes this one keeps its own copy instead of an older one
+        if matches!(unreadable_includes, UnreadableIncludes::Fail)
+            && let Some(remote) = check.not_fetched.first()
+        {
+            return Err(EnvironmentError::Recoverable(
+                RecoverableMergeError::RemoteNotFetched(remote.clone()),
+            ));
         }
         if check.changed.is_empty() {
             return Ok((lockfile.manifest.clone(), lockfile));
@@ -1359,6 +1458,9 @@ pub struct FollowedIncludes {
     /// Included environments whose latest changes don't build with this
     /// environment, so the environment's lockfile is used instead
     pub not_built: Option<NotAppliedIncludes>,
+    /// Environments included from FloxHub without following them,
+    /// that have a newer generation on FloxHub, as last fetched
+    pub upstream_changes: Vec<RemoteEnvironmentRef>,
 }
 
 #[derive(Clone, Debug)]
@@ -1395,6 +1497,9 @@ pub(crate) struct AutoUpgradedIncludesCheck {
     pub changed: Vec<String>,
     /// Included environments that couldn't be read, by name
     pub unreadable: Vec<(String, EnvironmentError)>,
+    /// Environments included from FloxHub that haven't been fetched on this
+    /// machine yet, which keep their locked versions
+    pub not_fetched: Vec<RemoteEnvironmentRef>,
 }
 
 /// Whether `err` is an include cycle, possibly found while fetching a nested

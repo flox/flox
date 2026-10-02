@@ -175,6 +175,15 @@ pub trait Environment: Send {
         Ok((self.lockfile(flox)?, FollowedIncludes::default()))
     }
 
+    /// Fetch the environments included from FloxHub, which following reads
+    /// as they were last fetched.
+    ///
+    /// The background upgrade check runs this.
+    /// Only environments that follow their included environments need it.
+    fn fetch_included_remote_environments(&mut self, _flox: &Flox) -> Result<(), EnvironmentError> {
+        Ok(())
+    }
+
     /// Check whether the lockfile has the latest changes to the included
     /// environments that are followed, without writing anything.
     ///

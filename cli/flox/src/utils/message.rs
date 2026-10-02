@@ -404,6 +404,19 @@ pub(crate) fn print_followed_includes(followed: &FollowedIncludes, include_upgra
             reason = errors::format_error(&not_locked.reason).trim_end(),
         });
     }
+    match followed.upstream_changes.as_slice() {
+        [] => {},
+        [remote] => info(formatdoc! {"
+            Included environment '{remote}' has changes on FloxHub.
+            Run '{include_upgrade}' to get them."}),
+        remotes => info(format!(
+            "{}\nRun '{include_upgrade}' to get them.",
+            format_include_names(
+                "Included environments have changes on FloxHub:",
+                &remotes.iter().map(ToString::to_string).collect::<Vec<_>>(),
+            )
+        )),
+    }
     if let Some(not_built) = &followed.not_built {
         warning(formatdoc! {"
             {header}

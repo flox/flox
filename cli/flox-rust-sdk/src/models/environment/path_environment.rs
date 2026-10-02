@@ -305,6 +305,13 @@ impl Environment for PathEnvironment {
         Ok((lock_result, followed))
     }
 
+    fn fetch_included_remote_environments(&mut self, flox: &Flox) -> Result<(), EnvironmentError> {
+        if let Some(lockfile) = self.existing_lockfile(flox)? {
+            followed_includes::fetch_included_remotes(flox, &self.include_fetcher()?, &lockfile);
+        }
+        Ok(())
+    }
+
     fn check_followed_includes(
         &mut self,
         flox: &Flox,
@@ -910,6 +917,7 @@ pub mod tests {
     use std::fs::{self, OpenOptions};
     use std::io::Write;
 
+    use flox_core::data::environment_ref::RemoteEnvironmentRef;
     use flox_manifest::interfaces::AsLatestSchema;
     use flox_manifest::lockfile::LockedPackage;
     use flox_manifest::parsed::Inner;
@@ -925,15 +933,19 @@ pub mod tests {
     use tempfile::TempDir;
 
     use super::*;
-    use crate::flox::test_helpers::flox_instance;
+    use crate::flox::test_helpers::{flox_instance, flox_instance_with_optional_floxhub};
     use crate::models::env_registry::{env_registry_path, read_environment_registry};
     use crate::models::environment::core_environment::NotAppliedIncludes;
+    use crate::models::environment::floxmeta_branch::remote_branch_name;
     use crate::models::environment::path_environment::test_helpers::{
         new_path_environment,
         new_path_environment_from_env_files,
         new_path_environment_from_env_files_in,
         new_path_environment_in,
     };
+    use crate::models::environment::remote_environment::RemoteEnvironment;
+    use crate::models::environment::remote_environment::test_helpers::mock_remote_environment;
+    use crate::models::floxmeta::{FloxMeta, floxmeta_dir};
     use crate::providers::lock_manifest::RecoverableMergeError;
     use crate::utils::serialize_json_with_newline;
 
@@ -1971,6 +1983,170 @@ pub mod tests {
             locked_vars(&rendered_lockfile(&composer)),
             vars_map(&[("composer", "v1"), ("included", "v2")])
         );
+    }
+
+    /// A composer at `<tempdir>/composer` that includes `owner/remote` with
+    /// `include_options`, and the included environment on FloxHub
+    fn composer_including_remote(
+        flox: &Flox,
+        tempdir: &TempDir,
+        include_options: &str,
+    ) -> (PathEnvironment, RemoteEnvironment) {
+        let remote = mock_remote_environment(
+            flox,
+            &with_latest_schema("[vars]\nremote = \"v1\""),
+            "owner".parse().unwrap(),
+            Some("remote"),
+        );
+        let composer = locked_path_environment(
+            flox,
+            tempdir,
+            "composer",
+            &with_latest_schema(format!(
+                "[include]\nenvironments = [{{ remote = \"owner/remote\"{include_options} }}]"
+            )),
+        );
+        (composer, remote)
+    }
+
+    /// Following reads an environment included from FloxHub as it was last
+    /// fetched, without contacting FloxHub, and uses its new generation once
+    /// the background upgrade check fetches it.
+    #[test]
+    fn lockfile_follows_remote_include_as_last_fetched() {
+        let (flox, tempdir) = flox_instance_with_optional_floxhub(Some(&"owner".parse().unwrap()));
+        let (mut composer, mut remote) =
+            composer_including_remote(&flox, &tempdir, ", auto-upgrade = true");
+        remote
+            .edit(&flox, with_latest_schema("[vars]\nremote = \"v2\""))
+            .unwrap();
+        remote.push(&flox, true).unwrap();
+        // Like a machine that hasn't fetched the new generation
+        fs::remove_dir_all(floxmeta_dir(&flox, &"owner".parse().unwrap())).unwrap();
+
+        let (lockfile, followed) = follow(&mut composer, &flox, FollowMode::Lock);
+        assert_eq!(followed_names(&followed), (vec![], vec![], vec![], vec![]));
+        assert_eq!(locked_vars(&lockfile), vars_map(&[("remote", "v1")]));
+
+        composer.fetch_included_remote_environments(&flox).unwrap();
+        let (lockfile, followed) = follow(&mut composer, &flox, FollowMode::Lock);
+        assert_eq!(
+            followed_names(&followed),
+            (vec!["remote"], vec![], vec![], vec![])
+        );
+        assert_eq!(locked_vars(&lockfile), vars_map(&[("remote", "v2")]));
+    }
+
+    /// An environment included from FloxHub that isn't followed is reported
+    /// when the generation last fetched is newer than the locked one.
+    #[test]
+    fn lockfile_reports_new_generation_of_remote_include_that_is_not_followed() {
+        let (flox, tempdir) = flox_instance_with_optional_floxhub(Some(&"owner".parse().unwrap()));
+        let (mut composer, mut remote) = composer_including_remote(&flox, &tempdir, "");
+        let (_, followed) = follow(&mut composer, &flox, FollowMode::Lock);
+        assert_eq!(followed.upstream_changes, vec![]);
+
+        remote
+            .edit(&flox, with_latest_schema("[vars]\nremote = \"v2\""))
+            .unwrap();
+        remote.push(&flox, true).unwrap();
+        composer.fetch_included_remote_environments(&flox).unwrap();
+
+        let (lockfile, followed) = follow(&mut composer, &flox, FollowMode::Lock);
+        assert_eq!(followed.upstream_changes, vec![
+            "owner/remote".parse::<RemoteEnvironmentRef>().unwrap()
+        ]);
+        assert_eq!(locked_vars(&lockfile), vars_map(&[("remote", "v1")]));
+    }
+
+    /// A sync branch fetched before the generation that the lockfile records,
+    /// e.g. on a machine that fetched before a teammate saved a newer one,
+    /// doesn't take the composer back to an older generation.
+    #[test]
+    fn lockfile_keeps_remote_include_locked_at_generation_newer_than_last_fetched() {
+        let (flox, tempdir) = flox_instance_with_optional_floxhub(Some(&"owner".parse().unwrap()));
+        let (mut composer, mut remote) =
+            composer_including_remote(&flox, &tempdir, ", auto-upgrade = true");
+        let pointer = remote.pointer().clone();
+        let floxmeta = FloxMeta::open_local(&flox, &pointer).unwrap();
+        let sync_branch = remote_branch_name(&pointer);
+        let fetched_before = floxmeta.git.branch_hash(&sync_branch).unwrap();
+        remote
+            .edit(&flox, with_latest_schema("[vars]\nremote = \"v2\""))
+            .unwrap();
+        remote.push(&flox, true).unwrap();
+        new_command(&mut composer);
+        composer.include_upgrade(&flox, vec![]).unwrap();
+
+        floxmeta
+            .git
+            .reset_branch(&sync_branch, &fetched_before)
+            .unwrap();
+        let (lockfile, followed) = follow(&mut composer, &flox, FollowMode::Lock);
+        assert_eq!(followed_names(&followed), (vec![], vec![], vec![], vec![]));
+        assert_eq!(locked_vars(&lockfile), vars_map(&[("remote", "v2")]));
+    }
+
+    /// A -> B -> owner/remote: when this machine hasn't fetched the remote
+    /// environment, A keeps the version of B in its lockfile rather than B
+    /// with the older version of the remote environment in B's lockfile.
+    #[test]
+    fn lockfile_keeps_path_include_whose_remote_include_was_not_fetched() {
+        let (flox, tempdir) = flox_instance_with_optional_floxhub(Some(&"owner".parse().unwrap()));
+        let mut remote = mock_remote_environment(
+            &flox,
+            &with_latest_schema("[vars]\nremote = \"v1\""),
+            "owner".parse().unwrap(),
+            Some("remote"),
+        );
+        locked_path_environment(
+            &flox,
+            &tempdir,
+            "b",
+            &with_latest_schema(
+                "[include]\nenvironments = [{ remote = \"owner/remote\", auto-upgrade = true }]",
+            ),
+        );
+        let mut a = locked_path_environment(
+            &flox,
+            &tempdir,
+            "a",
+            &with_latest_schema("[include]\nenvironments = [{ dir = \"../b\" }]"),
+        );
+        remote
+            .edit(&flox, with_latest_schema("[vars]\nremote = \"v2\""))
+            .unwrap();
+        remote.push(&flox, true).unwrap();
+        new_command(&mut a);
+        a.include_upgrade(&flox, vec![]).unwrap();
+
+        fs::remove_dir_all(floxmeta_dir(&flox, &"owner".parse().unwrap())).unwrap();
+        let (lockfile, followed) = follow(&mut a, &flox, FollowMode::Lock);
+        assert_eq!(followed_names(&followed), (vec![], vec![], vec![], vec![]));
+        assert_eq!(locked_vars(&lockfile), vars_map(&[("remote", "v2")]));
+    }
+
+    /// The notice about new generations on FloxHub is an upgrade notification,
+    /// which an environment can turn off
+    #[test]
+    fn lockfile_does_not_report_new_generations_without_upgrade_notifications() {
+        let (flox, tempdir) = flox_instance_with_optional_floxhub(Some(&"owner".parse().unwrap()));
+        let (mut composer, mut remote) = composer_including_remote(&flox, &tempdir, "");
+        edit_and_lock(
+            &mut composer,
+            &flox,
+            &with_latest_schema(
+                "[include]\nenvironments = [{ remote = \"owner/remote\" }]\n[options]\nactivate.upgrade-notifications = false",
+            ),
+        );
+        remote
+            .edit(&flox, with_latest_schema("[vars]\nremote = \"v2\""))
+            .unwrap();
+        remote.push(&flox, true).unwrap();
+        composer.fetch_included_remote_environments(&flox).unwrap();
+
+        let (_, followed) = follow(&mut composer, &flox, FollowMode::Lock);
+        assert_eq!(followed.upstream_changes, vec![]);
     }
 
     /// An include cycle in an existing lockfile, which earlier versions could

@@ -1,9 +1,9 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use flox_core::data::environment_ref::RemoteEnvironmentRef;
-use flox_manifest::lockfile::{LockedInclude, Lockfile};
+use flox_manifest::lockfile::{LOCKFILE_FILENAME, LockedInclude, Lockfile};
 use flox_manifest::parsed::latest::{AutoUpgrade, IncludeDescriptor};
 use flox_manifest::{Manifest, TypedOnly};
 use itertools::Itertools;
@@ -19,7 +19,10 @@ use super::{
 };
 use crate::data::CanonicalPath;
 use crate::flox::Flox;
-use crate::models::environment::floxmeta_branch::fetch_remote_generations;
+use crate::models::environment::floxmeta_branch::{
+    fetch_remote_generations,
+    last_fetched_remote_generations,
+};
 use crate::models::environment::generations::GenerationsError;
 use crate::models::environment::managed_environment::ManagedEnvironmentError;
 use crate::models::environment::{Environment, ManagedPointer, UnreadableIncludes};
@@ -39,7 +42,7 @@ pub struct FetchedIncludes(Arc<Mutex<FetchedIncludesInner>>);
 struct FetchedIncludesInner {
     /// The lockfiles of remote environments and the generations they're
     /// from, by environment and requested generation
-    remote: HashMap<(RemoteEnvironmentRef, Option<usize>), (Lockfile, usize)>,
+    remote: HashMap<RemoteKey, (Lockfile, usize)>,
     /// Local environments, by `.flox` directory and how their own
     /// unreadable includes were handled
     local: HashMap<(PathBuf, UnreadableIncludes), LocalFetch>,
@@ -70,15 +73,11 @@ impl FetchedIncludes {
             .expect("fetched includes lock should not be poisoned")
     }
 
-    fn remote(&self, key: &(RemoteEnvironmentRef, Option<usize>)) -> Option<(Lockfile, usize)> {
+    fn remote(&self, key: &RemoteKey) -> Option<(Lockfile, usize)> {
         self.lock().remote.get(key).cloned()
     }
 
-    fn insert_remote(
-        &self,
-        key: (RemoteEnvironmentRef, Option<usize>),
-        fetched: (Lockfile, usize),
-    ) {
+    fn insert_remote(&self, key: RemoteKey, fetched: (Lockfile, usize)) {
         self.lock().remote.insert(key, fetched);
     }
 
@@ -130,6 +129,20 @@ impl FetchedIncludes {
     }
 }
 
+/// A remote environment that was fetched: the environment, the generation
+/// requested, and where it was read from
+type RemoteKey = (RemoteEnvironmentRef, Option<usize>, RemoteSource);
+
+/// Where environments included from FloxHub are read from
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+enum RemoteSource {
+    /// Fetch them from FloxHub
+    FloxHub,
+    /// Read them as they were last fetched, without contacting FloxHub,
+    /// which the background upgrade check does
+    LastFetched,
+}
+
 /// Context required to fetch an environment include
 #[derive(Clone, Debug)]
 pub struct IncludeFetcher {
@@ -138,6 +151,7 @@ pub struct IncludeFetcher {
     /// fetched, outermost first, used to detect include cycles
     composers: Vec<CanonicalPath>,
     fetched: FetchedIncludes,
+    remote_source: RemoteSource,
 }
 
 /// The included environment as fetched,
@@ -161,6 +175,7 @@ impl IncludeFetcher {
             base_directory,
             composers: Vec::new(),
             fetched: FetchedIncludes::default(),
+            remote_source: RemoteSource::FloxHub,
         }
     }
 
@@ -172,6 +187,21 @@ impl IncludeFetcher {
             base_directory: Some(base_directory),
             composers: vec![dot_flox],
             fetched: FetchedIncludes::default(),
+            remote_source: RemoteSource::FloxHub,
+        }
+    }
+
+    /// A fetcher that reads included environments from FloxHub as they were
+    /// last fetched, without contacting FloxHub.
+    ///
+    /// Commands follow included environments with it, so following never
+    /// needs the network.
+    /// Reading one that hasn't been fetched on this machine yet fails with
+    /// [RecoverableMergeError::RemoteNotFetched].
+    pub(crate) fn reading_last_fetched_remotes(&self) -> Self {
+        Self {
+            remote_source: RemoteSource::LastFetched,
+            ..self.clone()
         }
     }
 
@@ -191,6 +221,7 @@ impl IncludeFetcher {
             base_directory: Some(base_directory),
             composers,
             fetched: self.fetched.clone(),
+            remote_source: self.remote_source,
         }
     }
 
@@ -429,15 +460,24 @@ impl IncludeFetcher {
         generation: Option<usize>,
     ) -> Result<(Lockfile, usize, String), EnvironmentError> {
         let name = name.clone().unwrap_or_else(|| remote.name().to_string());
-        let key = (remote.clone(), generation);
+        let key = (remote.clone(), generation, self.remote_source);
         if let Some((lockfile, generation)) = self.fetched.remote(&key) {
             return Ok((lockfile, generation, name));
         }
 
         let pointer =
             ManagedPointer::new(remote.owner().clone(), remote.name().clone(), &flox.floxhub);
-        let generations = fetch_remote_generations(flox, &pointer)
-            .map_err(ManagedEnvironmentError::FloxmetaBranch)?;
+        let generations = match self.remote_source {
+            RemoteSource::FloxHub => fetch_remote_generations(flox, &pointer)
+                .map_err(ManagedEnvironmentError::FloxmetaBranch)?,
+            RemoteSource::LastFetched => last_fetched_remote_generations(flox, &pointer)
+                .map_err(ManagedEnvironmentError::FloxmetaBranch)?
+                .ok_or_else(|| {
+                    EnvironmentError::Recoverable(RecoverableMergeError::RemoteNotFetched(
+                        remote.clone(),
+                    ))
+                })?,
+        };
         let fetched = match generation {
             Some(generation) => generations
                 .lockfile(generation)
@@ -455,6 +495,90 @@ impl IncludeFetcher {
         self.fetched.insert_remote(key, fetched.clone());
         let (lockfile, generation) = fetched;
         Ok((lockfile, generation, name))
+    }
+
+    /// The environments included from FloxHub without a pinned generation by
+    /// `lockfile`, and by the path environments it includes, recursively, as
+    /// their lockfiles record them
+    pub(crate) fn remote_includes(&self, lockfile: &Lockfile) -> HashSet<RemoteEnvironmentRef> {
+        let mut remotes = HashSet::new();
+        self.collect_remote_includes(lockfile, &mut HashSet::new(), &mut remotes);
+        remotes
+    }
+
+    fn collect_remote_includes(
+        &self,
+        lockfile: &Lockfile,
+        visited: &mut HashSet<PathBuf>,
+        remotes: &mut HashSet<RemoteEnvironmentRef>,
+    ) {
+        let Some(compose) = &lockfile.compose else {
+            return;
+        };
+        for locked in &compose.include {
+            match &locked.descriptor {
+                IncludeDescriptor::Remote {
+                    remote,
+                    generation: None,
+                    ..
+                } => {
+                    remotes.insert(remote.clone());
+                },
+                IncludeDescriptor::Remote { .. } => {},
+                IncludeDescriptor::Local { dir, .. } => {
+                    let Ok(path) = self.expand_include_dir(dir) else {
+                        continue;
+                    };
+                    let Ok(dot_flox) = DotFlox::open_in(&path) else {
+                        continue;
+                    };
+                    // An environment pulled from FloxHub follows its includes too
+                    if !visited.insert(dot_flox.path.clone()) {
+                        continue;
+                    }
+                    let lockfile_path = dot_flox.path.join(ENV_DIR_NAME).join(LOCKFILE_FILENAME);
+                    let Some(lockfile) = CanonicalPath::new(lockfile_path)
+                        .ok()
+                        .and_then(|path| Lockfile::read_from_file(&path).ok())
+                    else {
+                        continue;
+                    };
+                    IncludeFetcher::new(Some(path))
+                        .collect_remote_includes(&lockfile, visited, remotes);
+                },
+            }
+        }
+    }
+
+    /// Whether the generations of an environment on FloxHub as last fetched
+    /// don't include `generation`, because they were fetched before it was
+    /// created, or haven't been fetched on this machine at all
+    pub(crate) fn last_fetched_lacks_generation(
+        &self,
+        flox: &Flox,
+        remote: &RemoteEnvironmentRef,
+        generation: usize,
+    ) -> bool {
+        let pointer =
+            ManagedPointer::new(remote.owner().clone(), remote.name().clone(), &flox.floxhub);
+        let Ok(Some(generations)) = last_fetched_remote_generations(flox, &pointer) else {
+            return true;
+        };
+        generations.metadata().map_or(true, |metadata| {
+            !metadata.generations().contains_key(&generation.into())
+        })
+    }
+
+    /// The latest generation of an environment on FloxHub as last fetched,
+    /// and its lockfile, without contacting FloxHub
+    pub(crate) fn last_fetched_remote(
+        &self,
+        flox: &Flox,
+        remote: &RemoteEnvironmentRef,
+    ) -> Result<(Lockfile, usize), EnvironmentError> {
+        self.reading_last_fetched_remotes()
+            .fetch_remote(flox, remote, &None, None)
+            .map(|(lockfile, generation, _)| (lockfile, generation))
     }
 
     /// For directories that aren't absolute, join them to the base_directory
